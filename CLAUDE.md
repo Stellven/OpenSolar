@@ -82,6 +82,15 @@
 @Guard            → 规范检查
 @Secretary        → 记录整理
 @BenchmarkReporter → 测试报告 (结构化性能报告)
+@SM               → Skill 市场 (搜索/安装 Skills)
+```
+
+**@SM 快捷命令：**
+```
+@SM 搜 <关键词>    搜索 skill
+@SM 装 <URL>       安装 skill
+@SM 热门           查看热门
+@SM 列表           已安装列表
 ```
 
 **识别规则:** 消息以 `@Agent` 开头时，直接调用该 Agent，跳过流程调度。

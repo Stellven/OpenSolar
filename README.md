@@ -71,7 +71,7 @@
 
 `//` = 并行 | `→` = 串行
 
-### 12 个 Agent
+### 13 个 Agent
 
 | 层级 | Agent | 模型 | 职责 |
 |------|-------|------|------|
@@ -87,6 +87,7 @@
 | 支撑 | Guard | Sonnet | **版本完整性 + 算子追踪** |
 | 支撑 | Secretary | Sonnet | 记录整理、Agent 评估 |
 | 支撑 | BenchmarkReporter | Sonnet | **结构化测试报告** |
+| 工具 | SkillMarket (@SM) | Sonnet | **Skill 搜索/安装** |
 
 ### @Agent 直达
 
