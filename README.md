@@ -97,10 +97,24 @@
 | Bug修复 | Coder → Tester |
 | 文档 | Docs |
 
-## 12 个 Skill
+## @Agent 直达
+
+输入 `@` 列出可用 Agent，直接调用跳过流程调度：
+
+```
+@Solar      → 完整流程      @Coder    → 代码实现
+@Researcher → 技术调研      @Tester   → 测试
+@Architect  → 架构设计      @Reviewer → 代码审查
+@PM         → 产品验收      @Docs     → 文档
+```
+
+示例: `@Researcher 调研 SIMD 向量化优化技术`
+
+## 13 个 Skill
 
 | Skill | 用途 |
 |-------|------|
+| `/agent` | 🎯 列出/激活 Agent |
 | `/save` | 💾 保存会话状态 |
 | `/restore` | 🔄 快速恢复会话 |
 | `/commit` | Git 提交 |
