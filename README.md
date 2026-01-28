@@ -1,6 +1,14 @@
 # Solar v2.0: Multi-Agent Development Framework
 
-> 五阶段流程 | 并行优先 | 快速失败
+> 五阶段流程 | 并行优先 | 快速失败 | 多模式切换
+
+## 🚀 快速启动
+
+| 说 | 启动模式 |
+|-----|----------|
+| "我要开发" | 🛠️ Solar 开发模式 |
+| "我要办公" | 📋 Clawbot 办公模式 |
+| "我要研究" | 🔬 研究模式 |
 
 ## 核心理念
 
@@ -110,10 +118,11 @@
 
 示例: `@Researcher 调研 SIMD 向量化优化技术`
 
-## 13 个 Skill
+## 14 个 Skill
 
 | Skill | 用途 |
 |-------|------|
+| `/mode` | 🔀 切换工作模式 (dev/office/research) |
 | `/agent` | 🎯 列出/激活 Agent |
 | `/save` | 💾 保存会话状态 |
 | `/restore` | 🔄 快速恢复会话 |
