@@ -97,7 +97,7 @@
 | Bug修复 | Coder → Tester |
 | 文档 | Docs |
 
-## 9 个 Skill
+## 12 个 Skill
 
 | Skill | 用途 |
 |-------|------|
@@ -110,6 +110,9 @@
 | `/build` | 构建项目 |
 | `/benchmark` | 性能测试 |
 | `/docs` | 生成文档 |
+| `/webapp-testing` | 🎭 Playwright UI 测试 |
+| `/mcp-builder` | 🔧 创建 MCP 服务器 |
+| `/skill-creator` | ✨ 交互式创建 Skill |
 
 ## 💾 会话恢复 (新特性)
 
