@@ -69,17 +69,19 @@
 用户输入 `@` 时，列出可用 Agent：
 
 ```
-@Solar      → 完整流程
-@Researcher → 技术调研
-@Architect  → 架构设计
-@PM         → 产品验收
-@Coder      → 代码实现
-@Tester     → 测试
-@Reviewer   → 代码审查
-@Docs       → 文档
-@Ops        → 构建部署
-@Guard      → 规范检查
-@Secretary  → 记录整理
+@Solar            → 完整流程
+@Researcher       → 技术调研
+@Architect        → 架构设计
+@PM               → 产品验收
+@Reporter         → 技术报告 (详细项目报告)
+@Coder            → 代码实现
+@Tester           → 测试
+@Reviewer         → 代码审查
+@Docs             → 文档
+@Ops              → 构建部署
+@Guard            → 规范检查
+@Secretary        → 记录整理
+@BenchmarkReporter → 测试报告 (结构化性能报告)
 ```
 
 **识别规则:** 消息以 `@Agent` 开头时，直接调用该 Agent，跳过流程调度。
