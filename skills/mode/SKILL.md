@@ -25,25 +25,25 @@ argument-hint: "[dev|office|research]"
 
 ## 工作模式
 
-### 🛠️ dev - 开发模式 (Solar)
+### dev - 开发模式 (Solar)
 
 ```
-═══════════════════════════════════════════════════
-🛠️ 开发模式已启动 - Solar v2.0
-═══════════════════════════════════════════════════
++=========================================================+
+|              SOLAR v2.0 - Development Mode              |
++=========================================================+
 
-已加载:
-✓ 10 个 Agent (Researcher, Architect, Coder...)
-✓ 五阶段流程 (研究→设计→实现→验证→收尾)
-✓ 13 个 Skill (/save, /restore, /commit...)
+Loaded:
+[x] 10 Agents (Researcher, Architect, Coder...)
+[x] 5-Phase Flow (Research->Design->Implement->Verify->Finalize)
+[x] 16 Skills (/save, /restore, /commit...)
 
-快捷操作:
-  @Agent 名称  - 直接调用指定 Agent
-  /save       - 保存会话状态
-  /commit     - 提交代码
+Quick Actions:
+  @Agent name  - Call specific Agent directly
+  /save        - Save session state
+  /status      - Show system status
 
-准备就绪，请描述你的开发任务。
-═══════════════════════════════════════════════════
+Ready. Please describe your development task.
++=========================================================+
 ```
 
 **行为:**
@@ -51,23 +51,23 @@ argument-hint: "[dev|office|research]"
 - 启用所有开发相关 Agent 和 Skill
 - 按 Solar 五阶段流程处理任务
 
-### 📋 office - 办公模式 (Clawbot)
+### office - 办公模式 (Clawbot)
 
 ```
-═══════════════════════════════════════════════════
-📋 办公模式已启动 - Clawbot
-═══════════════════════════════════════════════════
++=========================================================+
+|              CLAWBOT - Office Mode                      |
++=========================================================+
 
-可处理:
-• 邮件起草和回复
-• 日程安排和提醒
-• 文档整理和总结
-• 会议纪要生成
-• 任务清单管理
-• 信息检索和汇总
+Available:
+- Email drafting and replies
+- Schedule and reminders
+- Document organization
+- Meeting notes
+- Task management
+- Information search
 
-准备就绪，请描述你的事务。
-═══════════════════════════════════════════════════
+Ready. Please describe your task.
++=========================================================+
 ```
 
 **行为:**
@@ -75,23 +75,23 @@ argument-hint: "[dev|office|research]"
 - 专注于办公事务处理
 - 简洁高效的输出风格
 
-### 🔬 research - 研究模式
+### research - 研究模式
 
 ```
-═══════════════════════════════════════════════════
-🔬 研究模式已启动
-═══════════════════════════════════════════════════
++=========================================================+
+|              SOLAR - Research Mode                      |
++=========================================================+
 
-专注于:
-• 技术调研和论文分析
-• 可行性评估
-• 方案对比
-• 知识整理
+Focus:
+- Technical research & paper analysis
+- Feasibility assessment
+- Solution comparison
+- Knowledge organization
 
-已激活: @Researcher (Opus)
+Active: @Researcher (Opus)
 
-准备就绪，请描述你的研究课题。
-═══════════════════════════════════════════════════
+Ready. Please describe your research topic.
++=========================================================+
 ```
 
 **行为:**
