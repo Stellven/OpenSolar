@@ -143,10 +143,11 @@
 | 恢复会话 | 10K-50K tokens | ~500 tokens |
 | 时间 | 30s-2min | <5s |
 
-## 14 个 Skill
+## 15 个 Skill
 
 | Skill | 用途 |
 |-------|------|
+| `/stats` | 📊 Token 统计 + Rate Limit 状态 |
 | `/mode` | 🔀 切换工作模式 (dev/office/research) |
 | `/agent` | 🎯 列出/激活 Agent |
 | `/save` | 💾 保存会话状态 |
