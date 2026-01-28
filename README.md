@@ -80,11 +80,11 @@
 | 决策 | PM | Opus | 产品竞争力、功能验收 |
 | 决策 | Secretary | Sonnet | 记录整理、Agent 评估 |
 | 执行 | Coder | Sonnet | 代码实现、重构 |
-| 执行 | Tester | Sonnet | 测试编写、执行 |
+| 执行 | Tester | Sonnet | 测试 + **性能回归检查** |
 | 执行 | Reviewer | Sonnet | 代码审查、安全检查 |
 | 支撑 | Docs | Sonnet | 文档生成、更新 |
 | 支撑 | Ops | Sonnet | 构建、部署、基准测试 |
-| 支撑 | Guard | Haiku | 规范检查、质量门禁 |
+| 支撑 | Guard | Sonnet | **版本完整性 + 算子追踪** |
 
 ### @Agent 直达
 
