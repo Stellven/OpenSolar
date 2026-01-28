@@ -1,12 +1,12 @@
 ---
-name: checkpoint
+name: save
 description: 保存当前会话状态，用于崩溃后快速恢复
 user-invocable: true
 disable-model-invocation: false
 argument-hint: "[摘要描述]"
 ---
 
-# /checkpoint - 会话检查点
+# /save - 会话检查点
 
 ## 功能
 
@@ -35,7 +35,7 @@ argument-hint: "[摘要描述]"
    # Session Checkpoint
 
    > 保存时间: [时间戳]
-   > 恢复命令: `/resume`
+   > 恢复命令: `/restore`
 
    ## 任务摘要
    [一段话描述当前任务和进展]
@@ -65,7 +65,7 @@ argument-hint: "[摘要描述]"
 
 ## 自动触发
 
-以下情况应主动调用 `/checkpoint`:
+以下情况应主动调用 `/save`:
 - 完成一个阶段 (P1/P2/P3/P4/P5)
 - 做出重要决策
 - 遇到需要用户确认的问题

@@ -1,12 +1,12 @@
 ---
-name: resume
+name: restore
 description: 快速恢复上次会话状态，最小化 token 消耗
 user-invocable: true
 disable-model-invocation: false
 argument-hint: ""
 ---
 
-# /resume - 快速恢复会话
+# /restore - 快速恢复会话
 
 ## 功能
 
@@ -88,4 +88,4 @@ ls .solar/history/
 # session_20240128_120515.md
 ```
 
-用户可指定: `/resume 20240128_143022`
+用户可指定: `/restore 20240128_143022`
