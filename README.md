@@ -86,10 +86,11 @@ cp -r Solar/hooks ~/.claude/
 cp Solar/CLAUDE.md ~/.claude/
 ```
 
-## 9 个 Agent
+## 10 个 Agent
 
 | 层级 | Agent | 模型 | 职责 |
 |------|-------|------|------|
+| 决策 | Researcher | Opus | 前沿技术调研、可行性分析 |
 | 决策 | Architect | Opus | 架构设计、技术评审 |
 | 决策 | PM | Opus | 产品竞争力、功能验收 |
 | 决策 | Secretary | Sonnet | 记录整理、Agent 评估 |
@@ -119,14 +120,15 @@ cp Solar/CLAUDE.md ~/.claude/
 **Solar 自动执行：**
 ```
 1. 判断复杂度: 复杂 (跨模块)
-2. 调用 Architect 评审方案
-3. 创建检查点
-4. 分解子任务，逐步执行
-5. 并行: Tester + Docs
-6. Reviewer 审查
-7. PM 验收
-8. Secretary 记录
-9. 报告完成
+2. Researcher 调研技术方案 (如需要)
+3. 调用 Architect 评审方案
+4. 创建检查点
+5. 分解子任务，逐步执行
+6. 并行: Tester + Docs
+7. Reviewer 审查
+8. PM 验收
+9. Secretary 记录
+10. 报告完成
 ```
 
 ## 与业界对比

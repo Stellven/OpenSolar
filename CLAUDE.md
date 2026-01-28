@@ -62,6 +62,7 @@ Edit  → 改文件 (不用 sed)
 
 | 条件 | Agent |
 |------|-------|
+| 需要前沿技术方案 | Researcher |
 | 3+ 模块改动 | Architect |
 | 代码完成 | Tester |
 | 准备提交 | Reviewer |
