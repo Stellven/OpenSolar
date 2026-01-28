@@ -74,7 +74,10 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/patchescamerababy/Solar.git
+git clone https://github.com/lisihao/Solar.git
+
+# 或使用安装脚本
+cd Solar && ./install.sh
 
 # 复制到 Claude Code 配置目录
 cp -r Solar/agents ~/.claude/
