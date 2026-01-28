@@ -55,8 +55,17 @@
 
   Commands: /save /restore /status /commit
 
+  +------------------+
+  | Rate: 45% 🟢 OK  |
+  +------------------+
+
   Ready. Describe your task.
 ```
+
+**Rate 状态显示规则：**
+- 启动时调用 /usage 获取当前 rate limit
+- 显示格式: `Rate: XX% [状态]`
+- 状态图标: 🟢 OK (<50%) | 🟡 WARN (50-80%) | 🔴 CRIT (>80%)
 
 ## 〇、@Agent 语法
 
