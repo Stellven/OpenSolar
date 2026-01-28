@@ -71,27 +71,30 @@
 
 `//` = 并行 | `→` = 串行
 
-### 10 个 Agent
+### 12 个 Agent
 
 | 层级 | Agent | 模型 | 职责 |
 |------|-------|------|------|
 | 决策 | Researcher | Opus | 前沿技术调研、可行性分析 |
 | 决策 | Architect | Opus | 架构设计、技术评审 |
 | 决策 | PM | Opus | 产品竞争力、功能验收 |
-| 决策 | Secretary | Sonnet | 记录整理、Agent 评估 |
+| 决策 | Reporter | Opus | **技术报告撰写** |
 | 执行 | Coder | Sonnet | 代码实现、重构 |
 | 执行 | Tester | Sonnet | 测试 + **性能回归检查** |
 | 执行 | Reviewer | Sonnet | 代码审查、安全检查 |
 | 支撑 | Docs | Sonnet | 文档生成、更新 |
 | 支撑 | Ops | Sonnet | 构建、部署、基准测试 |
 | 支撑 | Guard | Sonnet | **版本完整性 + 算子追踪** |
+| 支撑 | Secretary | Sonnet | 记录整理、Agent 评估 |
+| 支撑 | BenchmarkReporter | Sonnet | **结构化测试报告** |
 
 ### @Agent 直达
 
 ```
-@Solar      → 完整流程      @Coder    → 代码实现
-@Researcher → 技术调研      @Tester   → 测试
-@Architect  → 架构设计      @Reviewer → 代码审查
+@Solar      → 完整流程      @Coder     → 代码实现
+@Researcher → 技术调研      @Tester    → 测试
+@Architect  → 架构设计      @Reviewer  → 代码审查
+@Reporter   → 技术报告      @BenchmarkReporter → 测试报告
 @PM         → 产品验收      @Docs     → 文档
 ```
 
