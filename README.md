@@ -143,10 +143,11 @@
 | 恢复会话 | 10K-50K tokens | ~500 tokens |
 | 时间 | 30s-2min | <5s |
 
-## 16 个 Skill
+## 17 个 Skill
 
 | Skill | 用途 |
 |-------|------|
+| `/banner` | 🎨 显示 Solar 启动横幅 |
 | `/status` | ☀️ 太阳系视图 - 显示活跃 Agent 和调用关系 |
 | `/stats` | 📊 Token 统计 + Rate Limit 状态 |
 | `/mode` | 🔀 切换工作模式 (dev/office/research) |
