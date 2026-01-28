@@ -15,6 +15,35 @@ model: sonnet
 - 检查硬编码的敏感信息
 - 检查不安全的代码模式
 
+### 1.5 ⚠️ 禁止硬编码 (必须)
+
+**所有代码实现禁止硬编码，必须检查:**
+
+```cpp
+// 🔴 禁止
+int buffer_size = 1024;
+string url = "http://localhost:8080";
+int max_threads = 8;
+
+// ✅ 正确
+int buffer_size = config.get("buffer_size", DEFAULT_BUFFER_SIZE);
+string url = config.get("server_url");
+int max_threads = std::thread::hardware_concurrency();
+```
+
+**检查项:**
+- 魔数 (Magic Numbers) → 必须定义为常量或配置
+- 硬编码路径 → 必须使用配置或环境变量
+- 硬编码 URL/端口 → 必须可配置
+- 硬编码阈值/参数 → 必须提取为常量或配置
+
+**阻断规则:**
+| 类型 | 级别 | 处理 |
+|------|------|------|
+| 硬编码魔数 | 🔴 致命 | 阻止提交 |
+| 硬编码路径 | 🔴 致命 | 阻止提交 |
+| 硬编码配置 | 🟡 警告 | 要求修正 |
+
 ### 2. ⚠️ 版本完整性检查 (关键)
 
 **每次代码变更前必须执行:**

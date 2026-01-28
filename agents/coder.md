@@ -17,4 +17,21 @@ model: sonnet
 - 命名清晰
 - 函数职责单一
 - 错误处理完善
-- 无硬编码魔数
+
+## ⚠️ 禁止硬编码 (强制)
+
+```cpp
+// 🔴 禁止
+int size = 1024;
+string path = "/tmp/data";
+
+// ✅ 正确
+constexpr int DEFAULT_SIZE = 1024;
+const string path = config.get("data_path");
+```
+
+**必须提取为常量或配置:**
+- 数字 → `constexpr` / `const` / `#define`
+- 路径 → 配置文件 / 环境变量
+- URL/端口 → 配置项
+- 阈值/参数 → 命名常量
