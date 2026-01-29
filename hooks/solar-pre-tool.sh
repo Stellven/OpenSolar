@@ -22,7 +22,9 @@ fi
 # 读取状态
 PHASE=$(jq -r '.flow.current_phase // "P3"' "$STATE_FILE")
 AGENT=$(jq -r '.flow.current_agent // "Coder"' "$STATE_FILE")
-ANNOUNCED=$(jq -r '.agent_announcement.announced // false' "$STATE_FILE")
+# 注意：jq 的 // 操作符会把 false 当作 falsy，所以用 tostring
+ANNOUNCED=$(jq -r '.agent_announcement.announced | tostring' "$STATE_FILE" 2>/dev/null)
+[[ -z "$ANNOUNCED" ]] && ANNOUNCED="false"
 
 # 获取 Agent emoji
 get_emoji() {
