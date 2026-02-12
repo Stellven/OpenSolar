@@ -27,6 +27,33 @@
 
 ---
 
+### 对话降级为缓存 (第零原则)
+
+**决策**: 把 Claude 对话从"数据库"降级为"L0 缓存"，文件系统作为唯一真相源
+
+**存储层级**:
+- L0 Cache = Claude 对话 (最易失)
+- L1 Cache = 工作区文件 (持久)
+- L2 Cache = .solar/ 状态文件 (结构化)
+- WAL+CKP = git 历史 (不可变)
+
+**唯一真相源**:
+- .solar/STATE.md
+- .solar/DECISIONS.md
+- .solar/LOG/cmd.md | bench.md | errors.md
+- .solar/EXPERIMENTS/ (可选)
+
+**铁律**: 感觉要压缩 → 先写文件 → 再让它压
+
+**影响**:
+- 心智模型转变：对话丢了不可怕
+- 任何有价值信息必须落盘才算存在
+- git = WAL，每个 commit = checkpoint
+
+**回滚方案**: 无需回滚，这是认知层面的升级
+
+---
+
 ### Prompt 策略绕过小爱任务队列
 
 **决策**: 修改 email-monitor.sh 的 prompt 开头为"收到！立即执行命令。"

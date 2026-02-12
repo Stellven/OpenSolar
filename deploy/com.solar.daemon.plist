@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.solar.daemon</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/sihaoli/.bun/bin/bun</string>
+        <string>run</string>
+        <string>/Users/sihaoli/Solar/core/daemon/server.ts</string>
+        <string>start</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/sihaoli/Solar</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/sihaoli/.solar/logs/daemon-stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/sihaoli/.solar/logs/daemon-stderr.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>/Users/sihaoli</string>
+        <key>PATH</key>
+        <string>/Users/sihaoli/.bun/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+</dict>
+</plist>

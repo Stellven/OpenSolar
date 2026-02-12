@@ -28,3 +28,14 @@ openclaw agent --local --message "测试"
 openclaw agent --local --message "你好"
 # ✅ 成功: "我是小爱，你的智能邮件助手..."
 ```
+
+### 09:45 - 第零原则固化
+```bash
+# 更新 state-persistence.md 添加"对话是缓存"架构
+Edit ~/.claude/rules/state-persistence.md
+# ✅ 成功
+
+# 更新 DECISIONS.md 记录决策
+Edit .solar/DECISIONS.md
+# ✅ 成功
+```
