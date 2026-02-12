@@ -37,6 +37,7 @@
   - 冲刺节奏控制铁律 (sprint-rhythm.md)
   - LOG 目录结构 (.solar/LOG/cmd|bench|errors|todo.md)
   - 第零原则固化 (对话降级为缓存，文件是唯一真相源)
+  - 铁律实现修正: 不等"感觉"，每完成一步立即写文件
 - In-Progress: 无
 - Blocked:
   - 小爱切换 GLM-5: OpenClaw 模型库未收录 (等待上游更新)
