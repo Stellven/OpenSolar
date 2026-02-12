@@ -1,110 +1,122 @@
-# Solar v2.0: Multi-Agent Development Framework
+# Solar: AI Native Operating System
 
-> 五阶段流程 | 并行优先 | 快速失败 | 会话恢复 | 多模式切换
+> Token In → Token Out | 从计算本质重构的智能操作系统
 
-## 🚀 快速启动
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Agents](https://img.shields.io/badge/Agents-13-green.svg)](docs/agents.md)
+[![Skills](https://img.shields.io/badge/Skills-18-blue.svg)](docs/skills.md)
+
+## Why AI Native?
+
+**传统方案**: 在现有 OS 上叠加 AI 功能 (AI-Powered)
+**Solar**: 从计算本质为 AI 重新设计 (AI-Native)
+
+| 维度 | 传统 OS + AI | Solar (AI Native) |
+|------|-------------|-------------------|
+| 交互入口 | GUI/CLI | **语义意图** |
+| AI 角色 | 附加特性 | **内核一等公民** |
+| Token 效率 | 低（大量冗余） | **高（最短路径）** |
+| 执行模式 | 多层翻译 | **结构化 Action** |
+| 记忆系统 | 文件路径 | **语义索引** |
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      AI Native OS 架构                          │
+├─────────────────────────────────────────────────────────────────┤
+│  Intent Layer      │ 自然语言 / @Agent / /Skill                │
+│  ─────────────────────────────────────────────────────────────  │
+│  Semantic Parser   │ sys_agents + sys_skills + 路由规则        │
+│  ─────────────────────────────────────────────────────────────  │
+│  Execution Engine  │ 13 Agents + 五阶段流程 + Gate 检查        │
+│  ─────────────────────────────────────────────────────────────  │
+│  Self-Evolution    │ 互评系统 + 书记员 + 自动优化              │
+│  ─────────────────────────────────────────────────────────────  │
+│  UI Runtime        │ TVS ZenWhite 设计系统                     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Quick Start
 
 | 说 | 启动模式 | 描述 |
 |-----|----------|------|
-| "我要开发" | 🛠️ Solar | 10个Agent + 五阶段流程 |
-| "我要办公" | 📋 Clawbot | 邮件/日程/文档/任务处理 |
-| "我要研究" | 🔬 Research | 技术调研 + 可行性分析 |
+| "我要开发" | Solar Dev | 13个Agent + 五阶段流程 |
+| "我要办公" | Clawbot | 邮件/日程/文档/任务处理 |
+| "我要研究" | Research | 技术调研 + 可行性分析 |
 
-```
-/mode dev      # 开发模式
-/mode office   # 办公模式
-/mode research # 研究模式
-```
+```bash
+# 安装
+git clone https://github.com/anthropics/solar.git
+cd solar && ./install.sh
 
-## ✨ 核心特性
-
-| 特性 | 描述 |
-|------|------|
-| **五阶段流程** | 研究→设计→实现→验证→收尾，自动调度 |
-| **13个专业Agent** | Researcher/Architect/Coder/Tester 等 |
-| **@Agent 直达** | `@Researcher xxx` 直接调用指定 Agent |
-| **Agent 宣告** | 执行前输出 Task + Plan，可视化工作状态 |
-| **会话恢复** | `/save` `/restore` 崩溃后快速恢复 |
-| **多模式切换** | 开发/办公/研究模式一键切换 |
-| **Gate 检查** | 阶段门禁，失败自动重试 |
-| **Token 优化** | 会话恢复节省 90%+ tokens |
-
-## 架构
-
-```
-+---------------------------------------------------------------------+
-|                      User: "我要开发" / @Agent                       |
-+--------------------------------+------------------------------------+
-                                 |
-                                 v
-+---------------------------------------------------------------------+
-|                 Coordinator (Mode + Complexity Analysis)            |
-+--------------------------------+------------------------------------+
-                                 |
-        +------------------------+------------------------+
-        |                        |                        |
-        v                        v                        v
-   +-----------+          +-----------+          +-----------+
-   |   Solar   |          |  Clawbot  |          |  Research |
-   | Dev Mode  |          |Office Mode|          |   Mode    |
-   +-----+-----+          +-----------+          +-----------+
-         |
-         v
-+---------------------------------------------------------------------+
-|  P1 Research -> P2 Design -> P3 Implement -> P4 Verify -> P5 Final |
-|  Researcher    Architect     Coder          Tester//     Ops->PM   |
-|                +Guard        +Guard         Reviewer     ->Secretary|
-|                                             //Docs                  |
-+---------------------------------------------------------------------+
+# 使用
+@Coder 优化这个函数    # 直达 Agent
+/commit               # 调用 Skill
 ```
 
-## 🛠️ 开发模式 (Solar)
+## Core Features
+
+### Token First 原则
+
+```
+传统方式 (50+ tokens):
+  用户: "检查磁盘"
+  LLM: #!/bin/bash
+       df -h | grep -E "^/dev" | awk '{print $1,$5}'
+       # 检查使用率...
+
+AI Native (8 tokens):
+  用户: "检查磁盘"
+  LLM: { "skill": "check_disk", "path": "/" }
+```
+
+**减少 85%+ Token 消耗**，同时提升安全性。
+
+### 13 个专业 Agent
+
+| 层级 | Agent | 职责 |
+|------|-------|------|
+| 决策 | Researcher / Architect / PM / Reporter | 调研、设计、验收、报告 |
+| 执行 | Coder / Tester / Reviewer | 编码、测试、审查 |
+| 支撑 | Docs / Ops / Guard / Secretary | 文档、部署、守护、记录 |
+| 工具 | BenchmarkReporter / SkillMarket | 测试报告、技能市场 |
 
 ### 五阶段流程
 
-| 阶段 | Agent | 触发条件 | 产出 |
-|------|-------|----------|------|
-| P1 研究 | Researcher | 新技术/不确定方案 | 可行性报告 |
-| P2 设计 | Architect + Guard | 中等/复杂任务 | 架构方案 |
-| P3 实现 | Coder + Guard | 需要写代码 | 代码实现 |
-| P4 验证 | Tester // Reviewer // Docs | 代码完成 | 测试+审查+文档 |
-| P5 收尾 | Ops → PM → Secretary | 验证通过 | 部署+验收+记录 |
-
-`//` = 并行 | `→` = 串行
-
-### 13 个 Agent
-
-| 层级 | Agent | 模型 | 职责 |
-|------|-------|------|------|
-| 决策 | Researcher | Opus | 前沿技术调研、可行性分析 |
-| 决策 | Architect | Opus | 架构设计、技术评审 |
-| 决策 | PM | Opus | 产品竞争力、功能验收 |
-| 决策 | Reporter | Opus | **技术报告撰写** |
-| 执行 | Coder | Sonnet | 代码实现、重构 |
-| 执行 | Tester | Sonnet | 测试 + **性能回归检查** |
-| 执行 | Reviewer | Sonnet | 代码审查、安全检查 |
-| 支撑 | Docs | Sonnet | 文档生成、更新 |
-| 支撑 | Ops | Sonnet | 构建、部署、基准测试 |
-| 支撑 | Guard | Sonnet | **版本完整性 + 算子追踪** |
-| 支撑 | Secretary | Sonnet | 记录整理、Agent 评估 |
-| 支撑 | BenchmarkReporter | Sonnet | **结构化测试报告** |
-| 工具 | SkillMarket (@SM) | Sonnet | **Skill 搜索/安装** |
-
-### @Agent 直达
-
 ```
-@Solar      → 完整流程      @Coder     → 代码实现
-@Researcher → 技术调研      @Tester    → 测试
-@Architect  → 架构设计      @Reviewer  → 代码审查
-@Reporter   → 技术报告      @BenchmarkReporter → 测试报告
-@PM         → 产品验收      @Docs     → 文档
+P1 研究 → P2 设计 → P3 实现 → P4 验证 → P5 收尾
+    │         │         │         │         │
+    ▼         ▼         ▼         ▼         ▼
+Researcher  Architect  Coder   Tester//   Ops→PM
+  +Guard      +Guard           Reviewer   →Secretary
 ```
 
-示例: `@Researcher 调研 SIMD 向量化优化技术`
+`//` = 并行 | `→` = 串行 | Gate 检查确保质量
 
-### Agent 宣告 (Thinking Out Loud)
+### 自我演进系统
 
-每个 Agent 执行任务前必须输出宣告：
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Self-Evolution System                         │
+├─────────────────────────────────────────────────────────────────┤
+│  数据采集    │ Agent执行/Skill调用/阶段转换 → 自动记录          │
+│  互评系统    │ 25条规则: Reviewer评Coder, PM评Tester...         │
+│  书记员      │ 会议纪要 + 性能评估 + 优化建议                    │
+│  持续优化    │ 基于历史数据自动调优参数                          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 18 个 Skill
+
+| 类别 | Skill |
+|------|-------|
+| 开发 | `/commit` `/pr` `/review` `/test` `/build` `/benchmark` |
+| 文档 | `/docs` `/report` `/changelog` |
+| 系统 | `/status` `/stats` `/save` `/restore` |
+| 工具 | `/webapp-testing` `/mcp-builder` `/skill-creator` |
+
+## Agent 宣告
+
+每个 Agent 执行前必须输出宣告（Thinking Out Loud）:
 
 ```
 ┌─ 💻 Coder ──────────────────────────────────────┐
@@ -116,91 +128,94 @@
 └─────────────────────────────────────────────────┘
 ```
 
-**任务-Agent 映射:**
-
-| 任务类型 | Agent |
-|---------|-------|
-| 技术调研/可行性分析 | 🔬 Researcher |
-| 架构设计/方案评审 | 🏗️ Architect |
-| 代码实现/优化/修复 | 💻 Coder |
-| 测试/性能验证 | 🧪 Tester |
-| 代码审查/安全检查 | 👁️ Reviewer |
-| 构建/部署/基准测试 | ⚙️ Ops |
-
-### Gate 检查点
-
-| Gate | 位置 | 失败处理 |
-|------|------|----------|
-| G1 | P2 设计后 | 重新设计 (最多2次) |
-| G2 | P4 验证后 | 返回P3修改 (最多3次) |
-| G3 | P5 收尾后 | 迭代改进 |
-
-### 复杂度路由
-
-| 复杂度 | 判断标准 | Token | 流程 |
-|--------|----------|-------|------|
-| 简单 | <50行, 单文件 | 5K | 直接做 |
-| 中等 | 50-500行, 2-5文件 | 30K | P2→P3→P4 |
-| 复杂 | >500行, 跨模块 | 100K | P1→P2→P3→P4→P5 |
-
-## 📋 办公模式 (Clawbot)
-
-| 能力 | 描述 |
-|------|------|
-| 📧 邮件处理 | 起草、回复、摘要 |
-| 📅 日程管理 | 会议安排、提醒 |
-| 📝 文档处理 | 会议纪要、报告撰写 |
-| ✅ 任务管理 | 待办清单、优先级 |
-| 🔍 信息检索 | 搜索、汇总、对比 |
-
 ## Session Recovery
 
-解决 Claude Code 崩溃/重启后状态丢失问题。
-
 ```
-+------------------------------------------+
-|  Working --> /save --> .solar/session.md |
-|                                          |
-|  Crash/Restart                           |
-|                                          |
-|  /restore --> Read session.md (~500 tok) |
-|           [!] No re-reading source files |
-+------------------------------------------+
+┌─────────────────────────────────────────────────┐
+│  传统方式: 恢复会话 10K-50K tokens              │
+│  Solar:    /restore   ~500 tokens (节省 90%+)  │
+└─────────────────────────────────────────────────┘
 ```
 
-| 场景 | 传统方式 | Solar |
-|------|----------|-------|
-| 恢复会话 | 10K-50K tokens | ~500 tokens |
-| 时间 | 30s-2min | <5s |
+## Architecture
 
-## 18 个 Skill
+```
+                    ┌─────────────────┐
+                    │   User Intent   │
+                    │  自然语言输入    │
+                    └────────┬────────┘
+                             │
+              ┌──────────────┼──────────────┐
+              │              │              │
+              ▼              ▼              ▼
+        ┌──────────┐  ┌──────────┐  ┌──────────┐
+        │  Solar   │  │ Clawbot  │  │ Research │
+        │ Dev Mode │  │  Office  │  │   Mode   │
+        └────┬─────┘  └──────────┘  └──────────┘
+             │
+             ▼
+┌─────────────────────────────────────────────────────────┐
+│  Execution Engine                                        │
+│  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐               │
+│  │ P1  │→│ P2  │→│ P3  │→│ P4  │→│ P5  │               │
+│  │研究 │ │设计 │ │实现 │ │验证 │ │收尾 │               │
+│  └─────┘ └─────┘ └─────┘ └─────┘ └─────┘               │
+│     │       │       │       │       │                   │
+│  Researcher Architect Coder  Tester  Ops               │
+│            +Guard   +Guard  //Review  →PM              │
+│                             //Docs    →Secretary       │
+└─────────────────────────────────────────────────────────┘
+             │
+             ▼
+┌─────────────────────────────────────────────────────────┐
+│  Self-Evolution Layer                                    │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐              │
+│  │ sys_*    │  │ evo_*    │  │ 书记员   │              │
+│  │ 资源注册 │  │ 执行追踪 │  │ 汇总优化 │              │
+│  └──────────┘  └──────────┘  └──────────┘              │
+└─────────────────────────────────────────────────────────┘
+             │
+             ▼
+┌─────────────────────────────────────────────────────────┐
+│  TVS UI Runtime                                          │
+│  ZenWhite 设计系统 | 9种视觉风格 | Agent 宣告卡片        │
+└─────────────────────────────────────────────────────────┘
+```
 
-| Skill | 用途 |
-|-------|------|
-| `/banner` | 🎨 显示 Solar 启动横幅 |
-| `/report` | 📝 技术报告模板 (ADR/完整/精简) |
-| `/status` | ☀️ 太阳系视图 - 显示活跃 Agent 和调用关系 |
-| `/stats` | 📊 Token 统计 + Rate Limit 状态 |
-| `/mode` | 🔀 切换工作模式 (dev/office/research) |
-| `/agent` | 🎯 列出/激活 Agent |
-| `/save` | 💾 保存会话状态 |
-| `/restore` | 🔄 快速恢复会话 |
-| `/commit` | Git 提交 |
-| `/pr` | 创建 PR |
-| `/review` | 代码审查 |
-| `/test` | 运行测试 |
-| `/build` | 构建项目 |
-| `/benchmark` | 性能测试 |
-| `/docs` | 生成文档 |
-| `/webapp-testing` | 🎭 Playwright UI 测试 |
-| `/mcp-builder` | 🔧 创建 MCP 服务器 |
-| `/skill-creator` | ✨ 交互式创建 Skill |
+## Metadata System
 
-## 安装
+67 张系统表支撑智能路由与自我演进:
+
+| 类别 | 表 | 用途 |
+|------|-----|------|
+| 资源注册 | sys_agents, sys_skills, sys_hooks | 资源自省 |
+| 路由规则 | sys_routing_model/agent/tool | 智能选择 |
+| 执行追踪 | evo_agent_executions, evo_tool_calls | 数据采集 |
+| 互评系统 | evo_review_rules, evo_votes | 质量评估 |
+| 学习信号 | evo_learning_signals | 持续优化 |
+
+## vs 业界方案
+
+| 维度 | Solar | AutoGen | CrewAI | MetaGPT |
+|------|-------|---------|--------|---------|
+| AI Native 架构 | **Token First** | AI 叠加 | AI 叠加 | AI 叠加 |
+| 五阶段流程 | **P1→P5 Gate** | 无 | 无 | 部分 |
+| 自我演进 | **互评+书记员** | 无 | 无 | 无 |
+| 会话恢复 | **90%+ Token 节省** | 无 | 无 | 无 |
+| @Agent 直达 | **语义路由** | 无 | 无 | 无 |
+| 多模式切换 | **Dev/Office/Research** | 单模式 | 单模式 | 单模式 |
+
+## Documentation
+
+- [AI Native OS Architecture](docs/AI_NATIVE_OS_ARCHITECTURE.md) - 架构设计原理
+- [Workflow Design](docs/WORKFLOW_DESIGN.md) - 工作流程设计
+- [Metadata System](core/nerve/README.md) - 元数据系统
+
+## Installation
 
 ```bash
-git clone https://github.com/lisihao/Solar.git
-cd Solar && ./install.sh
+git clone https://github.com/anthropics/solar.git
+cd solar && ./install.sh
 ```
 
 或手动:
@@ -211,32 +226,10 @@ cp -r Solar/hooks ~/.claude/
 cp Solar/CLAUDE.md ~/.claude/
 ```
 
-## 与业界对比
-
-| 维度 | Solar | AutoGen | CrewAI | MetaGPT |
-|------|-------|---------|--------|---------|
-| 多模式切换 | ✅ | ❌ | ❌ | ❌ |
-| 五阶段流程 | ✅ | ❌ | ❌ | 部分 |
-| @Agent 直达 | ✅ | ❌ | ❌ | ❌ |
-| Agent 宣告 | ✅ | ❌ | ❌ | ❌ |
-| 会话恢复 | ✅ | ❌ | ❌ | ❌ |
-| 并行执行 | ✅ | 部分 | ❌ | ✅ |
-| Gate 检查 | ✅ | ❌ | ❌ | ❌ |
-| Token 优化 | ✅ | ❌ | ❌ | ❌ |
-| 技术研究 Agent | ✅ | ❌ | ❌ | ❌ |
-
-## 文档
-
-- [工作流程设计](docs/WORKFLOW_DESIGN.md)
-- [Clawbot 办公助手](frameworks/clawbot.md)
-
-## 许可证
+## License
 
 MIT
 
-## 致谢
+---
 
-- [Anthropic](https://www.anthropic.com/) - Claude Code
-- [OpenAI Swarm](https://github.com/openai/swarm) - 轻量级编排启发
-- [CrewAI](https://github.com/joaomdmoura/crewAI) - 角色设计启发
-- [MetaGPT](https://github.com/geekan/MetaGPT) - 多角色协作启发
+**Solar** — AI Native Operating System | Token In → Token Out

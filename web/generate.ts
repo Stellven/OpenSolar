@@ -30,6 +30,16 @@ const CONFIG = {
 
 // ==================== 数据读取 ====================
 
+interface HNTopic {
+  id: number;
+  title: string;
+  url: string;
+  score: number;
+  author: string;
+  comments: number;
+  fetched_at: string;
+}
+
 interface DashboardData {
   version: string;
   timestamp: string;
@@ -40,6 +50,8 @@ interface DashboardData {
   phases: Array<{ phase: string; label: string; count: number; rate: number }>;
   activity: Array<{ time: string; actor: string; action: string; status: string }>;
   metrics: { invocations: number; successRate: number; latency: number; tokens: number; cost: number };
+  hnTopics: HNTopic[];
+  hnLastUpdate: string | null;
 }
 
 function readData(): DashboardData {
@@ -78,6 +90,8 @@ function readData(): DashboardData {
       { time: formatTime(new Date(now.getTime() - 120000)), actor: "P3→P4", action: "transition", status: "info" },
     ],
     metrics: { invocations: 523, successRate: 97.8, latency: 2.4, tokens: 1250000, cost: 12.5 },
+    hnTopics: [],
+    hnLastUpdate: null,
   };
 
   // 尝试从数据库读取
@@ -135,6 +149,21 @@ function readData(): DashboardData {
           action: i.success ? "completed" : "failed",
           status: i.success ? "success" : "error",
         }));
+      }
+    } catch {}
+
+    // 读取 HN Topics
+    try {
+      const hnTopics = db.query(`
+        SELECT id, title, url, score, author, comments, fetched_at
+        FROM hn_topics
+        WHERE fetched_at = (SELECT MAX(fetched_at) FROM hn_topics)
+        ORDER BY score DESC
+        LIMIT 15
+      `).all() as HNTopic[];
+      if (hnTopics.length > 0) {
+        defaultData.hnTopics = hnTopics;
+        defaultData.hnLastUpdate = hnTopics[0]?.fetched_at || null;
       }
     } catch {}
 
@@ -291,6 +320,25 @@ function generateHTML(data: DashboardData): string {
         </div>
       </div>
     </div>
+
+    ${data.hnTopics.length > 0 ? `
+    <div class="card" style="margin-top: 20px;">
+      <h3>📡 Hacker News Top Stories ${data.hnLastUpdate ? `<span style="float:right;font-weight:normal;text-transform:none;">更新: ${new Date(data.hnLastUpdate).toLocaleString("zh-CN")}</span>` : ""}</h3>
+      <table>
+        <thead><tr><th>#</th><th>Title</th><th>Score</th><th>💬</th></tr></thead>
+        <tbody>
+          ${data.hnTopics.slice(0, 10).map((t, i) => `
+            <tr>
+              <td>${i + 1}</td>
+              <td><a href="${t.url || `https://news.ycombinator.com/item?id=${t.id}`}" target="_blank" style="color:var(--ink);text-decoration:none;">${t.title.length > 50 ? t.title.slice(0, 50) + "..." : t.title}</a></td>
+              <td style="color:var(--acc);font-weight:600;">${t.score}</td>
+              <td>${t.comments}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+    ` : ""}
 
     <footer>
       Powered by TVS v0.4.0 · ${style} · Auto-refresh ${CONFIG.refreshInterval / 1000}s
