@@ -25,13 +25,14 @@
   - 小爱邮件监控修复 (prompt 策略调整)
   - 诊断失忆根因 (上下文当内存)
   - 创建抗失忆三文件架构 (STATE.md + DECISIONS.md + CLAUDE.md 更新)
+  - git commit ec4af22 提交架构
 - In-Progress:
-  - 验证新架构有效性
+  - 待验证：新会话启动时能否正确读取态势
 - Blocked: 无
 
 # Next Actions (Exact)
 - [x] 创建 .solar/STATE.md (本文件)
 - [x] 创建 .solar/DECISIONS.md
 - [x] 更新 CLAUDE.md 加入铁律指令
-- [ ] git add -A && git commit -m "feat: 抗失忆工作流 - STATE/DECISIONS 架构"
+- [x] git commit -m "feat: 抗失忆工作流" (ec4af22)
 - [ ] 验证：新会话启动时能否正确读取态势
