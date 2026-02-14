@@ -64,42 +64,72 @@ cd ~/Solar
 
 ### Step 5: MCP 配置 (重要!)
 
-Brain Router 需要 MCP 配置文件：
+**Brain Router 是 Solar 开发的 MCP server**，用于调用多个大模型。需要两个配置文件：
 
-**位置**: `~/.gemini/antigravity/mcp_config.json`
+#### 5.1 创建 MCP 配置文件
+
+**位置**: `~/.mcp.json`
 
 如果有源机器：
 ```bash
-scp source-user@source-host:~/.gemini/antigravity/mcp_config.json ~/.gemini/antigravity/
+scp source-user@source-host:~/.mcp.json ~/
+scp source-user@source-host:~/.solar/brain-router/.env ~/.solar/brain-router/
 ```
 
-如果从零开始，创建配置文件：
+如果从零开始：
 ```bash
-mkdir -p ~/.gemini/antigravity
-cat > ~/.gemini/antigravity/mcp_config.json << 'EOF'
+# 创建 MCP 配置
+cat > ~/.mcp.json << 'EOF'
 {
-  "brain-router": {
-    "command": "bun",
-    "args": ["run", "/Users/USERNAME/.claude/core/solar-farm/brain-router-server.ts"],
-    "env": {
-      "GEMINI_API_KEY": "your-gemini-api-key",
-      "DEEPSEEK_API_KEY": "your-deepseek-api-key",
-      "GLM_API_KEY": "your-glm-api-key"
+  "mcpServers": {
+    "playwright": {
+      "command": "playwright-mcp",
+      "args": []
+    },
+    "brain-router": {
+      "command": "python3",
+      "args": [
+        "/Users/USERNAME/.solar/brain-router/src/mcp/server.py"
+      ],
+      "env": {}
+    },
+    "are": {
+      "command": "bun",
+      "args": [
+        "/Users/USERNAME/.claude/core/are/mcp-server.ts"
+      ],
+      "env": {}
     }
   }
 }
 EOF
+
+# 替换 USERNAME 为你的用户名
+sed -i '' "s/USERNAME/$USER/g" ~/.mcp.json
+```
+
+#### 5.2 创建 Brain Router API Keys
+
+**位置**: `~/.solar/brain-router/.env`
+
+```bash
+cat > ~/.solar/brain-router/.env << 'EOF'
+ZHIPU_API_KEY="<REDACTED>"
+DEEPSEEK_API_KEY=your-deepseek-api-key
+GOOGLE_API_KEY="<REDACTED>"
+EOF
 ```
 
 **替换占位符**:
-- `USERNAME` → 你的用户名
-- `your-*-api-key` → 对应的 API Key
+- `your-zhipu-api-key` → 智谱 GLM API Key (https://open.bigmodel.cn)
+- `your-deepseek-api-key` → DeepSeek API Key (https://platform.deepseek.com)
+- `your-google-api-key` → Google Gemini API Key (https://aistudio.google.com/apikey)
 
 ### Step 6: 验证安装
 
 ```bash
 # 检查 CLI 工具
-which things remindctl himalaya openclaw bun
+which things remindctl himalaya openclaw bun python3
 
 # 检查数据库
 sqlite3 ~/.solar/solar.db ".tables" | head -5
@@ -108,6 +138,13 @@ sqlite3 ~/.solar/solar.db ".tables" | head -5
 ls -la ~/.claude/skills/ | head -5
 ls -la ~/.claude/rules/ | head -5
 cat ~/.claude/CLAUDE.md | head -10
+
+# 检查 MCP 配置
+test -f ~/.mcp.json && echo "✓ MCP 配置存在" || echo "✗ MCP 配置缺失"
+test -f ~/.solar/brain-router/.env && echo "✓ Brain Router 配置存在" || echo "✗ Brain Router 配置缺失"
+
+# 测试 Brain Router (可选)
+cd ~/.solar/brain-router && python3 -c "from src.mcp.server import MODELS; print(f'✓ Brain Router 可导入，支持 {len(MODELS)} 个模型')" 2>/dev/null || echo "⚠ Brain Router 导入失败"
 ```
 
 ### Step 7: 启动 Solar
@@ -156,6 +193,21 @@ ls $(brew --prefix)/bin/things
 ```bash
 echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
+```
+
+### Q: MCP 配置在哪里？
+
+**Brain Router 的 MCP 配置文件位置：**
+```
+~/.mcp.json
+```
+
+**详细配置方法参考 `SETUP.md`**
+
+如果从源机器同步：
+```bash
+scp source-user@source-host:~/.mcp.json ~/
+scp source-user@source-host:~/.solar/brain-router/.env ~/.solar/brain-router/
 ```
 
 ## 最小化安装 (只用核心功能)
