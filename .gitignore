@@ -1,0 +1,54 @@
+# 密钥和隐私信息
+secrets/
+*.key
+*.pem
+*.env
+.env*
+*_secret*
+*_private*
+
+# 数据库（本地数据，不推送）
+*.db
+*.sqlite
+*.sqlite3
+.solar/solar.db
+
+# 缓存和临时文件
+*.log
+*.tmp
+.DS_Store
+node_modules/
+bun.lockb
+*.cache
+
+# 用户私有配置
+.solar/STATE.md
+.solar/DECISIONS.md
+.solar/LOG/
+.solar/session.md
+
+# 备份文件
+*.backup
+*.bak
+*~
+
+# IDE
+.vscode/
+.idea/
+
+# 构建产物
+dist/
+build/
+target/
+*.o
+*.so
+*.dylib
+
+# 测试覆盖
+coverage/
+*.cover
+
+# 其他
+paste-cache/
+file-history/
+shell-snapshots/
