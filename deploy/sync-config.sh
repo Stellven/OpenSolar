@@ -31,6 +31,7 @@ echo "2️⃣  同步核心配置文件..."
 scp ~/.claude/modes.md \
     ~/.claude/personality-anchor.txt \
     ~/.claude/skills-index.md \
+    ~/.claude/CLAUDE.md \
     $TARGET:~/.claude/
 
 # 同步 Solar 项目
