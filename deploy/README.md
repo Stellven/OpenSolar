@@ -1,6 +1,34 @@
 # Solar 部署指南
 
-## 快速部署到新机器
+## 🆕 从零开始 (新用户)
+
+**如果你是第一次使用 Solar，完全从零开始：**
+
+详见 **[SETUP.md](./SETUP.md)** - 完整的从零到一设置指南
+
+**快速步骤：**
+
+```bash
+# 1. Clone 仓库
+git clone git@github.com:YOUR_USERNAME/Solar.git ~/Solar
+cd ~/Solar
+
+# 2. 安装依赖 (Homebrew/Bun/CLI工具)
+./deploy/install-deps.sh
+
+# 3. 初始化数据库
+./deploy/init-database.sh
+
+# 4. 配置 MCP (重要!)
+# 创建 ~/.gemini/antigravity/mcp_config.json
+# 参考 SETUP.md 的 MCP 配置章节
+
+# 5. 启动 Claude Code，执行 /solar
+```
+
+---
+
+## 📋 已有配置机器之间同步
 
 ### 方式一：完整同步（推荐）
 
@@ -13,7 +41,7 @@ cd ~/Solar
 ```
 
 这会自动：
-- ✅ 同步所有配置文件（skills/rules/agents/hooks）
+- ✅ 同步所有配置文件（skills/rules/agents/hooks/CLAUDE.md）
 - ✅ 同步 Solar 代码
 - ✅ 初始化数据库
 
@@ -70,13 +98,34 @@ rsync -av source-machine:~/.claude/ ~/.claude/
 - **不推送到 git**：`~/.claude/` 是用户级配置，可能包含私密信息
 - **同步方式**：使用 `sync-config.sh` 或手动 rsync
 
+## 部署脚本说明
+
+| 脚本 | 用途 | 使用场景 |
+|------|------|----------|
+| `install-deps.sh` | 安装系统依赖 | **新机器首次安装** |
+| `init-database.sh` | 初始化数据库 | 新机器或数据库损坏 |
+| `sync-config.sh` | 同步配置文件 | 已有机器间同步 |
+
+## 必需依赖清单
+
+| 依赖 | 必需? | 用途 | 安装方式 |
+|------|------|------|----------|
+| Bun | ✅ 必需 | 运行 TypeScript 脚本 | `curl -fsSL https://bun.sh/install \| bash` |
+| things.sh | ⚠️ 办公功能 | Things 3 任务管理 | `brew install things.sh` |
+| remindctl | ⚠️ 办公功能 | Apple Reminders | `brew install keith/formulae/remindctl` |
+| himalaya | ⚠️ 办公功能 | 邮件 CLI | `brew install himalaya` |
+| openclaw | ⚠️ 小爱功能 | AI 助手 | `npm install -g @openclaw/cli` |
+| MCP配置 | ✅ 必需 | Brain Router | 参考 SETUP.md |
+
+**最小化安装**: 只安装 Bun + MCP 配置即可使用核心功能
+
 ## 常见问题
 
 **Q: 为什么 git clone 后缺少文件？**
 
 A: `~/.claude/` 配置目录和 `~/.solar/` 数据目录不在 git 仓库里，需要：
-- 使用 `sync-config.sh` 同步
-- 或者手动复制/rsync
+- 使用 `sync-config.sh` 同步（从已有机器）
+- 或者从零开始安装（参考 SETUP.md）
 
 **Q: 数据库初始化失败？**
 
@@ -89,5 +138,22 @@ A: 检查：
 
 A: 检查是否完整同步了 `~/.claude/skills/` 目录：
 ```bash
-ls ~/.claude/skills/ | wc -l  # 应该是 76 个
+ls ~/.claude/skills/ | wc -l  # 应该是 76+ 个
 ```
+
+**Q: MCP 配置在哪里？**
+
+A: Brain Router 的 MCP 配置文件位置：
+```
+~/.gemini/antigravity/mcp_config.json
+```
+
+详细配置方法参考 `SETUP.md`
+
+**Q: 从零开始需要多久？**
+
+A:
+- 安装依赖: ~10 分钟 (首次安装 Homebrew 较慢)
+- 配置 API Keys: ~5 分钟
+- 同步配置: ~2 分钟
+- 总计: **15-20 分钟**
