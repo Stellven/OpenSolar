@@ -20,7 +20,7 @@ cd ~/Solar
 ./deploy/init-database.sh
 
 # 4. 配置 MCP (重要!)
-# 创建 ~/.gemini/antigravity/mcp_config.json
+# 创建 ~/.mcp.json 和 ~/.solar/brain-router/.env
 # 参考 SETUP.md 的 MCP 配置章节
 
 # 5. 启动 Claude Code，执行 /solar
@@ -145,7 +145,8 @@ ls ~/.claude/skills/ | wc -l  # 应该是 76+ 个
 
 A: Brain Router 的 MCP 配置文件位置：
 ```
-~/.gemini/antigravity/mcp_config.json
+~/.mcp.json
+~/.solar/brain-router/.env
 ```
 
 详细配置方法参考 `SETUP.md`
