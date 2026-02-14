@@ -262,18 +262,14 @@ Researcher  Architect  Coder   Tester//   Ops→PM
 
 ## Installation
 
+**一键部署:**
+
 ```bash
 git clone https://github.com/anthropics/solar.git
 cd solar && ./install.sh
 ```
 
-或手动:
-```bash
-cp -r Solar/agents ~/.claude/
-cp -r Solar/skills ~/.claude/
-cp -r Solar/hooks ~/.claude/
-cp Solar/CLAUDE.md ~/.claude/
-```
+**详细文档:** 完整部署指南（包括 OpenClaw/小爱 AI 秘书集成）见 [DEPLOY.md](DEPLOY.md)
 
 ## License
 
