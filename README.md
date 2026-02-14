@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Agents](https://img.shields.io/badge/Agents-13-green.svg)](docs/agents.md)
-[![Skills](https://img.shields.io/badge/Skills-18-blue.svg)](docs/skills.md)
+[![Skills](https://img.shields.io/badge/Skills-38-blue.svg)](docs/skills.md)
 
 ## Why AI Native?
 
@@ -52,6 +52,48 @@ cd solar && ./install.sh
 @Coder 优化这个函数    # 直达 Agent
 /commit               # 调用 Skill
 ```
+
+## What's New (2026-02)
+
+### 🔥 抗失忆工作流 - STATE/DECISIONS 架构
+
+传统 AI 会话的最大问题：上下文压缩导致失忆。Solar 通过文件系统持久化彻底解决：
+
+```
+第零原则: 对话是缓存，文件是唯一真相源
+
+.solar/STATE.md      - 当前作战态势 (Mission/Constraints/Progress/Next Actions)
+.solar/DECISIONS.md  - 决策日志 (追加式，永不压缩)
+.solar/LOG/          - 命令历史、基准数据、错误记录
+```
+
+**效果**: 即使会话压缩，读取 STATE.md 即可恢复完整上下文。
+
+### 🏃 冲刺节奏控制 - 20~60 分钟工作块
+
+每个任务拆解为可检查点的冲刺块：
+- **开场 30 秒**: 读 STATE.md，复述 Mission/Next Actions
+- **执行 10-40 分钟**: 只做 Next Actions，不跑题不发散
+- **收尾 2 分钟**: 更新 Progress + git checkpoint
+
+### 🧬 Skin-Check v2.0 - 本地模型实现
+
+AI 驱动的皮肤健康检测系统：
+- **Phase 2.1**: CoreML + MobileNetV3 本地分类 (~30ms, 100x faster)
+- **Phase 2.2**: YOLOv8 病灶检测 + 严重程度评估
+- **Phase 2.3**: SQLite 历史追踪 + 30天趋势分析
+
+性能：$0.002/次 → $0/次，3-5s → ~30ms
+
+### 📊 Solar Web Dashboard
+
+极简监控面板，实时展示系统状态和性能指标。
+
+### 🚀 Token 优化 -42%
+
+会话恢复从 16K tokens → 9K tokens，节省 42% 成本。
+
+---
 
 ## Core Features
 
@@ -105,14 +147,16 @@ Researcher  Architect  Coder   Tester//   Ops→PM
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 18 个 Skill
+### 38 个 Skill
 
 | 类别 | Skill |
 |------|-------|
 | 开发 | `/commit` `/pr` `/review` `/test` `/build` `/benchmark` |
 | 文档 | `/docs` `/report` `/changelog` |
-| 系统 | `/status` `/stats` `/save` `/restore` |
-| 工具 | `/webapp-testing` `/mcp-builder` `/skill-creator` |
+| 系统 | `/status` `/stats` `/save` `/restore` `/ontology` |
+| 工具 | `/webapp-testing` `/mcp-builder` `/skill-creator` `/shortcut-builder` |
+| 办公 | `/office` `/email-search` `/office-notes` `/office-tasks` `/office-reminders` |
+| 健康 | `/skin-check` - AI 皮肤检测 (本地模型 + 专家评审) |
 
 ## Agent 宣告
 
@@ -166,25 +210,30 @@ Researcher  Architect  Coder   Tester//   Ops→PM
 │                             //Docs    →Secretary       │
 └─────────────────────────────────────────────────────────┘
              │
+             ├──► ┌─────────────────────────────────────┐
+             │    │  State Persistence (抗失忆)         │
+             │    │  .solar/STATE.md + DECISIONS.md     │
+             │    │  对话是缓存，文件是唯一真相源        │
+             │    └─────────────────────────────────────┘
              ▼
 ┌─────────────────────────────────────────────────────────┐
 │  Self-Evolution Layer                                    │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐              │
 │  │ sys_*    │  │ evo_*    │  │ 书记员   │              │
-│  │ 资源注册 │  │ 执行追踪 │  │ 汇总优化 │              │
+│  │ 191 表   │  │ 执行追踪 │  │ 汇总优化 │              │
 │  └──────────┘  └──────────┘  └──────────┘              │
 └─────────────────────────────────────────────────────────┘
              │
              ▼
 ┌─────────────────────────────────────────────────────────┐
-│  TVS UI Runtime                                          │
-│  ZenWhite 设计系统 | 9种视觉风格 | Agent 宣告卡片        │
+│  TVS UI Runtime + Web Dashboard                         │
+│  ZenWhite 设计系统 | 9种视觉风格 | 实时监控面板          │
 └─────────────────────────────────────────────────────────┘
 ```
 
 ## Metadata System
 
-67 张系统表支撑智能路由与自我演进:
+191 张系统表支撑智能路由与自我演进:
 
 | 类别 | 表 | 用途 |
 |------|-----|------|
