@@ -1,73 +1,88 @@
 # Solar Session Checkpoint
 
-> 自动生成于: 2026-02-12
+> 自动生成于: 2026-02-12 (下午更新)
 > 使用 `/restore` 快速恢复此会话
 
 ## Mission
 
-验证并确认小爱秘书的人格系统是否正确配置，确保 ENFP-A × ESFJ 融合型人格能自动生效。
+小爱每日智能任务系统开发 + Token 开销分析
 
-## 本次完成 (2026-02-12)
+## 本次完成 (2026-02-12 下午)
 
-### 小爱人格系统分析
+### 1. 小爱每日任务 - GLM-5 集成
 
-**关键发现**:
-1. 小爱是**大模型驱动**（GLM-4.7），不是固定流程
-2. OpenClaw 框架会自动加载 SOUL.md 作为人格定义
-3. 之前设计的 ENFP-A × ESFJ 人格模型**已自动生效**，无需额外注入
+**已完成**:
+- email-classifier.ts 已更新，学术邮件分析调用 GLM-5
+- glm5-call.ts CLI 工具已创建 (小爱调用 GLM-5 的桥接)
+- 手动测试通过：50封邮件分类，15封归类，邮件发送成功
+- launchd 定时任务已配置 (每天 8:00 AM)
 
-**分析路径**:
-- `~/.openclaw/openclaw.json` - 确认使用 GLM-4.7
-- `~/.openclaw/workspace/AGENTS.md` - 发现自动加载 SOUL.md 机制
-- `~/.openclaw/workspace/SOUL.md` - 已包含完整人格定义
+**文件位置**:
+```
+~/.openclaw/workspace/skills/daily-digest/
+├── main.ts              # 主调度器
+├── email-classifier.ts  # 邮件分类 + GLM-5 学术分析
+└── tech-briefing.ts     # 科技简报
 
-### 小爱人格参数
+~/.openclaw/workspace/tools/
+└── glm5-call.ts         # GLM-5 CLI 工具
 
-```yaml
-人格类型: ENFP-A × ESFJ Hybrid (元气小秘书)
-Big Five:
-  O (开放性): 0.85  # 好奇心强
-  C (尽责性): 0.80  # 可靠不掉链子
-  E (外向性): 0.90  # 热情洋溢
-  A (宜人性): 0.88  # 温暖亲切
-  N (神经质): 0.15  # 情绪稳定
+~/Library/LaunchAgents/
+└── com.solar.xiaoai.daily-digest.plist  # 定时任务
 ```
 
-### 相关文件位置
+### 2. Token 开销分析 (7日)
 
-| 文件 | 作用 |
-|------|------|
-| `~/.openclaw/workspace/SOUL.md` | 小爱人格定义 |
-| `~/.openclaw/workspace/TOOLS.md` | 工具配置 + 触发词 |
-| `~/.openclaw/workspace/AGENTS.md` | 启动行为定义 |
-| `~/.claude/core/xiaoai-insight/` | Insight v2.0 洞察分析 |
+**主脑 (Claude Opus 4.5)**:
+- 2/3-2/7 共 ~900K tokens, ~$20+
+- 负责编排决策
+
+**牛马 (Workers) 7日汇总**:
+| 模型 | Tokens | 调用数 | 成本 |
+|------|--------|--------|------|
+| glm-4-plus | 698K | 384 | $0.51 |
+| deepseek-r1 | 168K | 97 | $0.31 |
+| deepseek-v3 | 129K | 64 | $0.08 |
+| gemini-2.5-pro | 60K | 104 | $0.07 |
+| glm-5 | 4K | 3 | $0.008 |
+
+**洞察**:
+- 主脑:牛马 成本比 ≈ 18:1
+- glm-4-plus 是劳模 (65% 牛马调用)
+- 2/5 用量峰值 (478K tokens)
 
 ## Progress
 
-- [x] 读取小爱系统配置
-- [x] 分析 OpenClaw 人格加载机制
-- [x] 确认 SOUL.md 自动生效
-- [x] 向用户汇报结论
+- [x] email-classifier.ts 集成 GLM-5
+- [x] 手动测试每日任务系统
+- [x] 7日 Token 开销分析
+- [x] 趋势图 + 洞察
 
 ## Decisions
 
-- [2026-02-12] 确认无需额外注入人格：OpenClaw AGENTS.md 已定义自动读取 SOUL.md
+- [2026-02-12] GLM-5 用于学术邮件分析，通过 CLI 桥接 (OpenClaw 不原生支持)
+- [2026-02-12] 当前 主脑:牛马 成本比合理，符合 Solar Farm 原则
 
 ## Next Actions
 
-- [ ] 可选：让用户测试小爱，验证人格是否表现正确
-- [ ] 可选：优化 IDENTITY.md 增加人格摘要
+- [ ] 观察明天 8:00 AM 自动执行结果
+- [ ] 如需优化：可添加更多邮件分类规则
+- [ ] 可选：添加 Claude 使用量自动同步到 sys_claude_usage
 
 ## 项目状态
 
 - **分支**: main
 - **工作目录**: /Users/sihaoli/Solar
+- **当前模型**: Claude Opus 4.5
 
 ## 会话摘要
 
-本次会话分析了小爱秘书的人格系统实现机制。确认小爱是大模型驱动（GLM-4.7），OpenClaw 框架会自动读取 SOUL.md 作为系统提示词的一部分，因此之前设计的 ENFP-A × ESFJ 人格模型会自动生效。
+本次会话：
+1. 完成小爱每日任务的 GLM-5 集成，用于学术邮件智能分析
+2. 手动测试通过，邮件分类和发送正常
+3. 分析了 7 日 Token 开销，主脑和牛马用量符合预期
 
-_最后更新: 2026-02-12_
+_最后更新: 2026-02-12 下午_
 
 ---
 *此文件由 /save 命令更新*

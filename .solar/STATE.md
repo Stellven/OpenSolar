@@ -38,9 +38,17 @@
   - LOG 目录结构 (.solar/LOG/cmd|bench|errors|todo.md)
   - 第零原则固化 (对话降级为缓存，文件是唯一真相源)
   - 铁律实现修正: 不等"感觉"，每完成一步立即写文件
+  - "先读后写"强制机制 ✅ (state-read-tracker.sh + state-read-enforcer.sh)
+  - Task-Specific SOP 体系 ✅ (5类任务SOP + ARCH.md + RFC模板 + 实验注册表)
+  - 报告工程化流水线模板 ✅ (STATE/OUTLINE/SOURCES/NOTES/CLAIMS)
+  - /insight 集成 REPORT 模板 ✅ (initReportDir + 各Phase检查点)
+  - /insight 升级四专家 ✅ (增加 GLM-5 马王，角色 synthesizer)
+  - insight-v2.ts max_tokens 修复 ✅ (DeepSeek V3 限制 8192，四专家全正常)
+  - Phase 1.5 研究搜索阶段 ✅ (WebSearch 生成查询 + 收集文献 + SOURCES.md)
+  - RAG架构深度洞察测试通过 ✅ (92篇文献, 4专家大纲, 互评, 综合5章节)
+  - 小爱切换 GLM-5 ✅ (通过 MCP 实现，绕过 OpenClaw 模型库限制)
 - In-Progress: 无
-- Blocked:
-  - 小爱切换 GLM-5: OpenClaw 模型库未收录 (等待上游更新)
+- Blocked: 无
 
 # Next Actions (Exact)
 - [ ] 推广到其他项目 (可选)
