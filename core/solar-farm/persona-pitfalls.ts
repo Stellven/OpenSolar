@@ -40,7 +40,8 @@ export const PERSONA_PITFALLS: PitfallConfig[] = [
     description: '长对话中人格逐渐丢失，输出变得机械',
     countermeasure: '长对话定期刷新人格参数',
     implementation: '对话轮次>5时触发人格刷新提醒',
-    priority: 'P2'
+    priority: 'DONE',
+    file: 'persona-drift-guard.ts'
   },
   {
     name: '语气影响准确率',
