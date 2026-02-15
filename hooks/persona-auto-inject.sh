@@ -17,27 +17,33 @@ PROMPT_SUMMARY=$(echo "$CLAUDE_PROMPT" | head -c 100 | tr '\n' ' ')
 detect_persona() {
     local prompt="$1"
 
+    # 高风险优先检测
+    if echo "$prompt" | grep -qiE '删除|生产|发布|上线|重要|关键|最终|确认|批准|合并'; then
+        echo "highRisk:governor"
+        return
+    fi
+
     # 学术研究关键词
-    if echo "$prompt" | grep -qiE '论文|研究|文献|学术|分析|调查'; then
+    if echo "$prompt" | grep -qiE '论文|研究|文献|学术|分析|调查|继续研究|深入研究|看看.*研究|研究下'; then
         echo "research:critic"
         return
     fi
 
     # 方案设计关键词
-    if echo "$prompt" | grep -qiE '设计|方案|架构|规划|策略'; then
+    if echo "$prompt" | grep -qiE '设计|方案|架构|规划|策略|更好方案|优化.*方案|重新设计|改进|再优化|优化一下'; then
         echo "design:architect"
         return
     fi
 
     # 代码开发关键词
-    if echo "$prompt" | grep -qiE '代码|编程|实现|开发|bug|测试'; then
+    if echo "$prompt" | grep -qiE '代码|编程|实现|开发|bug|测试|写个|做个|帮我写|帮我做'; then
         echo "coding:builder"
         return
     fi
 
-    # 高风险关键词
-    if echo "$prompt" | grep -qiE '删除|生产|发布|上线|重要|关键'; then
-        echo "highRisk:governor"
+    # 评估审查关键词
+    if echo "$prompt" | grep -qiE '评估|对比|审查|检查|review|看看.*问题|找.*问题'; then
+        echo "design:riskOfficer"
         return
     fi
 
@@ -46,7 +52,7 @@ detect_persona() {
 }
 
 # 检测到的是调用 brain-router 的意图
-if echo "$CLAUDE_PROMPT" | grep -qiE 'brain.router|complete|调.*牛马|调.*专家|调.*模型'; then
+if echo "$CLAUDE_PROMPT" | grep -qiE 'brain.router|complete|调.*牛马|调.*专家|调.*模型|继续研究|更好方案|再优化|优化一下|改进|重新设计|分析下|研究下|看看.*怎么|帮我.*想|评估|对比|审查|检查'; then
     PERSONA=$(detect_persona "$CLAUDE_PROMPT")
     TEAM=$(echo "$PERSONA" | cut -d: -f1)
     ROLE=$(echo "$PERSONA" | cut -d: -f2)
