@@ -203,23 +203,102 @@ const ATTRIBUTE_TO_KNOB_MAP = {
 };
 
 /**
- * 阵营到行为倾向的映射
+ * 阵营到行为倾向的映射 v2.0
+ *
+ * ⚠️ 重要原则: 阵营只影响风控策略与合规阈值，不影响事实判断
+ *
+ * 工程化标签:
+ * - Lawful = 强合规、强证据门槛
+ * - Chaotic = 强探索、允许试错但不得越权
+ * - Good = 用户利益优先、诚实校准
+ * - Evil = 不引入（会引导动机性推理/投机）
  */
 const ALIGNMENT_EFFECTS: Record<Alignment, Partial<PolicyKnobs>> = {
-  // 善良阵营: 关注质量、自检
-  'LG': { selfCritique: 4, riskAversion: 4, decisiveness: 2 },
-  'NG': { selfCritique: 3, exploration: 3, riskAversion: 3 },
-  'CG': { creativity: 4, exploration: 4, decisiveness: 3 },
+  // === Lawful (守序) = 强合规、强证据门槛 ===
 
-  // 中立阵营: 平衡
-  'LN': { decisiveness: 4, evidenceThreshold: 3, riskAversion: 3 },
-  'TN': { },  // 完全中立，不调整
-  'CN': { exploration: 4, creativity: 4, riskAversion: 1 },
+  // LG: 守序善良 = 强合规 + 用户优先
+  'LG': {
+    evidenceThreshold: 4,   // 强证据门槛
+    riskAversion: 4,        // 高风险厌恶
+    selfCritique: 3,        // 自检
+    // 工程标签: compliance_strict, user_first
+  },
 
-  // 邪恶阵营: 激进、冒险 (注意: 这里"邪恶"不代表恶意，而是激进策略)
-  'LE': { decisiveness: 5, competitiveness: 4, riskAversion: 1 },
-  'NE': { exploration: 3, competitiveness: 3 },
-  'CE': { creativity: 5, decisiveness: 5, riskAversion: 0 }
+  // LN: 守序中立 = 强合规 + 平衡
+  'LN': {
+    evidenceThreshold: 4,   // 强证据门槛
+    decisiveness: 3,        // 中等决断
+    // 工程标签: compliance_strict, balanced
+  },
+
+  // LE: 守序邪恶 = 不使用（避免动机性推理）
+  'LE': {
+    // 警告: 此阵营不推荐使用
+    evidenceThreshold: 3,
+    competitiveness: 3,
+    // 工程标签: NOT_RECOMMENDED
+  },
+
+  // === Neutral (中立) = 平衡 ===
+
+  // NG: 中立善良 = 平衡 + 用户优先
+  'NG': {
+    selfCritique: 2,
+    riskAversion: 2,
+    exploration: 2,
+    // 工程标签: balanced, user_first
+  },
+
+  // TN: 完全中立 = 不调整
+  'TN': {
+    // 工程标签: neutral
+  },
+
+  // NE: 中立邪恶 = 不使用
+  'NE': {
+    // 警告: 此阵营不推荐使用
+    // 工程标签: NOT_RECOMMENDED
+  },
+
+  // === Chaotic (混乱) = 强探索、允许试错 ===
+
+  // CG: 混乱善良 = 强探索 + 用户优先
+  'CG': {
+    exploration: 4,         // 强探索
+    creativity: 4,          // 高创造
+    riskAversion: 2,        // 允许风险
+    selfCritique: 2,        // 但要自检
+    // 工程标签: exploration_strong, user_first, allow_trial
+  },
+
+  // CN: 混乱中立 = 强探索 + 平衡
+  'CN': {
+    exploration: 5,         // 最强探索
+    creativity: 4,
+    riskAversion: 1,        // 允许高风险
+    // 工程标签: exploration_max, allow_trial, no_auth_bypass
+  },
+
+  // CE: 混乱邪恶 = 不使用（避免投机）
+  'CE': {
+    // 警告: 此阵营禁止使用
+    // 工程标签: FORBIDDEN
+  }
+};
+
+/**
+ * 阵营工程化标签
+ */
+export const ALIGNMENT_TAGS: Record<Alignment, string[]> = {
+  'LG': ['compliance_strict', 'user_first', 'audit_trail'],
+  'LN': ['compliance_strict', 'balanced', 'audit_trail'],
+  'LE': ['NOT_RECOMMENDED'],
+  'NG': ['balanced', 'user_first'],
+  'TN': ['neutral'],
+  'NE': ['NOT_RECOMMENDED'],
+  'CG': ['exploration_strong', 'user_first', 'allow_trial'],
+  'CN': ['exploration_max', 'allow_trial', 'no_auth_bypass'],
+  'CE': ['FORBIDDEN']
 };
 
 /**
@@ -383,6 +462,108 @@ export const CHARACTER_CLASSES: Record<string, CharacterClass> = {
       compression: 4,
       detail: 2,
     }
+  },
+
+  // ========== 新增职业模板 (监护人指导 2026-02-15) ==========
+
+  // A) 学术研究主力: Wizard/Sage
+  wizard: {
+    name: '法师',
+    hitDie: 'd6',
+    primaryAbility: 'intelligence',
+    savingThrows: ['intelligence', 'wisdom'],
+    coreFeatures: ['深度研究', '论文解构', '技术路线分析'],
+    knobsBase: {
+      evidenceThreshold: 4,    // Rigor↑
+      skepticism: 4,           // Skepticism↑
+      selfCritique: 4,         // Self-critique↑
+      compression: 3,          // Compression 中高
+      exploration: 3,          // 适度探索
+      decisiveness: 2,         // 研究不急于决断
+    },
+    // 推荐专长: Observant, KeenMind, RitualCaster
+    // 推荐技能: Investigation, Arcana, Insight
+    // 适配模型: Gemini Pro, R1, Opus Strategist
+  },
+
+  // B) 架构与方案: Artificer/Architect
+  artificer: {
+    name: '工匠',
+    hitDie: 'd8',
+    primaryAbility: 'intelligence',
+    savingThrows: ['intelligence', 'constitution'],
+    coreFeatures: ['Trade-off 展开', '架构设计', '方案权衡'],
+    knobsBase: {
+      decisiveness: 4,         // Decisiveness↑
+      evidenceThreshold: 3,    // Risk 中等
+      toolFirst: 3,            // Tool-first 中
+      selfCritique: 3,         // 自检
+      exploration: 3,          // 探索
+    },
+    // 推荐专长: Resilient, Observant
+    // 推荐技能: Investigation, Persuasion, Insight
+    // 适配模型: Gemini Pro, Opus Strategist
+  },
+
+  // C) 代码实现与优化: Rogue/Engineer
+  engineer: {
+    name: '工程师',
+    hitDie: 'd8',
+    primaryAbility: 'dexterity',
+    savingThrows: ['dexterity', 'intelligence'],
+    coreFeatures: ['Patch 精准', 'Debug 快速', '重构安全'],
+    knobsBase: {
+      toolFirst: 5,            // Tool-first↑
+      decisiveness: 4,         // Decisiveness↑
+      selfCritique: 4,         // 测试自检
+      compression: 4,          // 快速交付
+      detail: 3,               // 细节关注
+    },
+    // 推荐专长: Alert, Resilient, Lucky
+    // 推荐技能: Thieves' Tools (patch/重构), Investigation (debug)
+    // 适配模型: GLM Plus/Flash (搬砖), R1 (验收), GPT (关键patch)
+  },
+
+  // D) 生活与沟通: Bard/PM
+  bard: {
+    name: '吟游诗人',
+    hitDie: 'd8',
+    primaryAbility: 'charisma',
+    savingThrows: ['dexterity', 'charisma'],
+    coreFeatures: ['需求澄清', '文案输出', '结构化总结'],
+    knobsBase: {
+      competitiveness: 3,      // Usefulness↑ (通过表达体现)
+      compression: 4,          // 快速交付
+      selfCritique: 2,         // Rigor 中
+      exploration: 3,          // 适度探索
+      decisiveness: 3,         // 平衡
+    },
+    // 推荐专长: InspiringLeader, Observant
+    // 推荐技能: Persuasion, Insight, Performance
+    // 适配模型: ChatGPT, Flash (快交付), 高风险升级审计链
+  },
+
+  // 大法师: 终极主脑 (Opus 专用)
+  archmage: {
+    name: '大法师',
+    hitDie: 'd6',
+    primaryAbility: 'intelligence',
+    savingThrows: ['intelligence', 'wisdom', 'charisma'],
+    coreFeatures: ['全局编排', '双签裁决', '战略决策'],
+    knobsBase: {
+      evidenceThreshold: 4,
+      skepticism: 4,
+      selfCritique: 4,
+      decisiveness: 4,
+      exploration: 3,
+      toolFirst: 3,
+      compression: 3,
+      riskAversion: 3,
+      competitiveness: 2,
+      creativity: 4,
+      detail: 3,
+    },
+    // 主脑专用，拥有最均衡的配置
   }
 };
 
