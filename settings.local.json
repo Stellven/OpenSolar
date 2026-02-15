@@ -108,7 +108,9 @@
       "Bash(cargo test:*)",
       "Bash(/Users/lisihao/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo build --release)",
       "Bash(/Users/lisihao/Solar/core/search/target/release/solar-search:*)",
-      "Bash(~/Solar/core/search/target/release/solar-search:*)"
+      "Bash(~/Solar/core/search/target/release/solar-search:*)",
+      "Bash(__NEW_LINE_585539562a36547a__ echo \"\")",
+      "Bash(__NEW_LINE_c57475d0441e2053__ echo \"\")"
     ]
   },
   "enableAllProjectMcpServers": true,
