@@ -57,13 +57,21 @@ enum Commands {
         #[arg(short, long, default_value = "10")]
         limit: usize,
 
-        /// Filter by document type (conversation, memory, code, document)
+        /// Filter by document type (conversation, memory, code, document, artifact, source, claim)
         #[arg(short = 't', long)]
         doc_type: Option<String>,
 
         /// Filter by project
         #[arg(short, long)]
         project: Option<String>,
+
+        /// Filter by task ID (Cortex Query support)
+        #[arg(long)]
+        task_id: Option<String>,
+
+        /// Filter by kind (Cortex artifact type)
+        #[arg(long)]
+        kind: Option<String>,
 
         /// Output format (pretty, json)
         #[arg(short, long, default_value = "pretty")]
@@ -139,12 +147,13 @@ enum IndexSource {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // Setup logging
+    // Setup logging - write to stderr to keep stdout clean for JSON output
     let level = if cli.verbose { Level::DEBUG } else { Level::INFO };
     FmtSubscriber::builder()
         .with_max_level(level)
         .with_target(false)
         .compact()
+        .with_writer(std::io::stderr)
         .init();
 
     // Get index path
@@ -160,9 +169,11 @@ async fn main() -> Result<()> {
             limit,
             doc_type,
             project,
+            task_id,
+            kind,
             format,
         } => {
-            cmd_query(&index_path, &query, limit, doc_type, project, &format)?;
+            cmd_query(&index_path, &query, limit, doc_type, project, task_id, kind, &format)?;
         }
 
         Commands::Recent {
@@ -279,6 +290,8 @@ fn cmd_query(
     limit: usize,
     doc_type: Option<String>,
     project: Option<String>,
+    task_id: Option<String>,
+    kind: Option<String>,
     format: &str,
 ) -> Result<()> {
     let index = SolarIndex::open_or_create(index_path)?;
@@ -295,6 +308,14 @@ fn cmd_query(
 
     if let Some(p) = project {
         options = options.project(p);
+    }
+
+    if let Some(tid) = task_id {
+        options = options.task_id(tid);
+    }
+
+    if let Some(k) = kind {
+        options = options.kind(k);
     }
 
     let results = search(&index, query, options)?;
