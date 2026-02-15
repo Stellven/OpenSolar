@@ -256,13 +256,95 @@ bun neutral-hedge.ts history
 
 | 文件 | 说明 |
 |------|------|
-| `persona-router.ts` | 六旋钮 + 十二角色 + 五编队 |
+| `persona-router.ts` | 十旋钮 + 十二角色 + 五编队 |
 | `neutral-hedge.ts` | 中性对冲机制 |
+| `task-router.ts` | 任务类型 → 旋钮映射 |
+| `model-persona-matrix.ts` | 多模型多人格矩阵 |
 | `niumao-anchors.ts` | 牛马人格定义 (Big Five) |
 | `call-niuma.ts` | 调牛马带人格 |
 
+## 七、多模型多人格矩阵
+
+### 7.1 双主脑架构
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    DUAL MAIN BRAIN                              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  【战略家】claude-opus-4-5                                      │
+│  • 规划路线图、分配预算                                         │
+│  • 角色: architect                                              │
+│  • 旋钮: rigor=4, decisiveness=4, exploration=4                 │
+│                                                                 │
+│  【治理官】gemini-2.5-pro                                       │
+│  • 怀疑门禁、质量门控                                           │
+│  • 角色: governor                                               │
+│  • 旋钮: rigor=5, skepticism=5, riskAversion=5                  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 7.2 成本级 (P1-P5)
+
+| 级别 | 模型 | 成本/1K | 用途 |
+|------|------|---------|------|
+| P1 战略 | claude-opus-4-5 | $0.015/$0.075 | 战略决策、主脑编排 |
+| P2 综合 | gpt-4o | $0.0025/$0.01 | 综合任务、协调 |
+| P3 专家 | gemini-pro/deepseek | $0.001-0.002 | 复杂分析、架构设计 |
+| P4 主力 | glm-4-plus/glm-5 | $0.0005-0.001 | 日常编码、一般任务 |
+| P5 便宜 | glm-flash/gemini-flash | $0.0001-0.0002 | 简单任务、快速响应 |
+
+### 7.3 专家组 vs 工人组
+
+**专家组 (强约束 - 6人)**
+| 角色 | 模型 | 触发词 |
+|------|------|--------|
+| 审判官 | gemini-2.5-pro | review, audit |
+| 创想家 | gemini-3-pro | innovate, brainstorm |
+| 智囊 | deepseek-r1 | analyze, research |
+| 稳健派 | gemini-2.5-pro | risk, safety |
+| 探索派 | deepseek-v3 | design, architect |
+| 综合官 | gpt-4o | coordinate, integrate |
+
+**工人组 (弱约束 - 3人)**
+| 角色 | 模型 | 触发词 |
+|------|------|--------|
+| 探索者 | gemini-flash | search, fetch |
+| 建设者 | glm-4-plus | implement, code |
+| 小快手 | glm-flash | quick, simple |
+
+### 7.4 编队模板
+
+```
+research:  scout → extractor → critic → synthesizer → governor
+design:    explorer → architect → riskOfficer → synthesizer → governor
+coding:    spec → builder → verifier
+daily:     concierge
+critical:  critic + riskOfficer (parallel) → governor (需neutral对冲)
+```
+
+### 7.5 CLI 使用
+
+```bash
+# 查看所有模型
+bun model-persona-matrix.ts models
+
+# 查看双主脑
+bun model-persona-matrix.ts brain
+
+# 查看编队
+bun model-persona-matrix.ts teams
+
+# 选择模型
+bun model-persona-matrix.ts select code medium
+
+# 完整矩阵
+bun model-persona-matrix.ts matrix
+```
+
 ---
 
-*Persona Engineering Guide v1.0*
+*Persona Engineering Guide v2.0*
 *建立于: 2026-02-15*
 *来源: 用户洞察 + 学术研究*
