@@ -433,6 +433,14 @@ async fn cmd_daemon(index_path: &PathBuf, interval: u64) -> Result<()> {
                     item.role.as_deref(),
                     item.project.as_deref(),
                     item.metadata.as_deref(),
+                    // Schema Optimization v0.3 新增参数
+                    item.artifact_id.map(|id| id as u64),
+                    item.content_path.as_deref(),
+                    item.score,
+                    item.kind.as_deref(),
+                    item.tags.as_deref(),
+                    item.task_id.as_deref(),
+                    item.citation_key.as_deref(),
                 ) {
                     Ok(_) => success_ids.push(item.id),
                     Err(e) => {
@@ -490,6 +498,14 @@ fn cmd_process(index_path: &PathBuf, batch: usize) -> Result<()> {
             item.role.as_deref(),
             item.project.as_deref(),
             item.metadata.as_deref(),
+            // Schema Optimization v0.3 新增参数
+            item.artifact_id.map(|id| id as u64),
+            item.content_path.as_deref(),
+            item.score,
+            item.kind.as_deref(),
+            item.tags.as_deref(),
+            item.task_id.as_deref(),
+            item.citation_key.as_deref(),
         ) {
             Ok(_) => {
                 queue.mark_indexed(&[item.id])?;

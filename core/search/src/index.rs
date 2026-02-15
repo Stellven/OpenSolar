@@ -94,6 +94,14 @@ impl SolarIndex {
         role: Option<&str>,
         project: Option<&str>,
         metadata: Option<&str>,
+        // Schema Optimization v0.3 新增参数
+        artifact_id: Option<u64>,
+        content_path: Option<&str>,
+        score: Option<f64>,
+        kind: Option<&str>,
+        tags: Option<&str>,
+        task_id: Option<&str>,
+        citation_key: Option<&str>,
     ) -> Result<()> {
         let mut doc = TantivyDocument::new();
 
@@ -118,6 +126,29 @@ impl SolarIndex {
         }
         if let Some(m) = metadata {
             doc.add_text(self.fields.metadata, m);
+        }
+
+        // Schema Optimization v0.3 新增字段
+        if let Some(aid) = artifact_id {
+            doc.add_u64(self.fields.artifact_id, aid);
+        }
+        if let Some(cp) = content_path {
+            doc.add_text(self.fields.content_path, cp);
+        }
+        if let Some(s) = score {
+            doc.add_f64(self.fields.score, s);
+        }
+        if let Some(k) = kind {
+            doc.add_text(self.fields.kind, k);
+        }
+        if let Some(t) = tags {
+            doc.add_text(self.fields.tags, t);
+        }
+        if let Some(tid) = task_id {
+            doc.add_text(self.fields.task_id, tid);
+        }
+        if let Some(ck) = citation_key {
+            doc.add_text(self.fields.citation_key, ck);
         }
 
         writer.add_document(doc)?;
@@ -251,6 +282,14 @@ pub fn index_single_jsonl(
                         role,
                         project.as_deref(),
                         Some(&line), // Store full JSON as metadata
+                        // Schema Optimization v0.3: 新增参数 (JSONL 无这些字段)
+                        None, // artifact_id
+                        None, // content_path
+                        None, // score
+                        None, // kind
+                        None, // tags
+                        None, // task_id
+                        None, // citation_key
                     )?;
 
                     count += 1;
