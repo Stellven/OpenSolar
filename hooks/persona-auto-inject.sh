@@ -52,7 +52,7 @@ detect_persona() {
 }
 
 # 检测到的是调用 brain-router 的意图
-if echo "$CLAUDE_PROMPT" | grep -qiE 'brain.router|complete|调.*牛马|调.*专家|调.*模型|继续研究|更好方案|再优化|优化一下|改进|重新设计|分析下|研究下|看看.*怎么|帮我.*想|评估|对比|审查|检查'; then
+if echo "$CLAUDE_PROMPT" | grep -qiE 'brain.router|complete|牛马|专家|模型|继续研究|更好方案|再优化|优化一下|改进|重新设计|分析下|研究下|看看.*怎么|帮我.*想|评估|对比|审查|检查'; then
     PERSONA=$(detect_persona "$CLAUDE_PROMPT")
     TEAM=$(echo "$PERSONA" | cut -d: -f1)
     ROLE=$(echo "$PERSONA" | cut -d: -f2)
