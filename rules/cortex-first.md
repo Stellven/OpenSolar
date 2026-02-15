@@ -2,18 +2,19 @@
 
 > **来源: 2026-02-13 监护人亲授**
 > **核心: 设计/开发前必须先查Cortex，基于证据决策**
+> **更新: 2026-02-15 统一查询入口**
 
 ## 铁律定义
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    CORTEX FIRST PROTOCOL                         │
+│                    CORTEX FIRST PROTOCOL v3.0                    │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │   任何设计方案/开发任务开始前，必须:                            │
 │                                                                 │
-│   1. 先查Cortex中枢神经                                         │
-│   2. 查已有方案/结论/评估                                       │
+│   1. 先查统一入口 Unified Query                                 │
+│   2. 查已有方案/结论/评估/知识图谱                              │
 │   3. 基于证据决策                                               │
 │   4. 无证据才调用/Insight研究                                   │
 │                                                                 │
@@ -26,22 +27,46 @@
 
 ## 强制检查清单
 
-设计方案/开发前，必须执行：
+设计方案/开发前，**第一步**执行：
 
 ```bash
-# 1. 查已有方案
-bun cortex.ts query "SELECT * FROM cortex_sources WHERE title LIKE '%关键词%'"
+# 统一查询入口 (同时查 Cortex + Knowledge)
+bun ~/.claude/core/cortex/unified-query.ts search "关键词" 10
+```
 
-# 2. 查已有结论
-bun cortex.ts query "SELECT * FROM cortex_claims WHERE claim_text LIKE '%关键词%'"
+**场景化命令：**
 
-# 3. 查历史评估
-bun cortex.ts query "SELECT * FROM cortex_evals WHERE task_id IN (
-  SELECT task_id FROM cortex_tasks WHERE topic LIKE '%关键词%'
-)"
+| 场景 | 命令 |
+|------|------|
+| 日常查询 | `bun unified-query.ts search "xxx" 10` |
+| 需要证据链 | `bun unified-query.ts evidence "xxx"` |
+| 查知识图谱 | `bun unified-query.ts graph "xxx"` |
+| 查看统计 | `bun unified-query.ts stats` |
 
-# 4. 查完整产出
-bun cortex.ts task <task_id>
+## 统一查询架构
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Unified Query 统一入口                        │
+│                                                                 │
+│   bun unified-query.ts search "memory" 10                       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   ┌─────────────────────┐    ┌─────────────────────┐           │
+│   │   Cortex Query      │    │   Knowledge Query   │           │
+│   │   (深度洞察产出)     │    │   (知识图谱)        │           │
+│   │                     │    │                     │           │
+│   │ • Tantivy 召回      │    │ • 实体 entities     │           │
+│   │ • SQLite 门禁       │    │ • 关系 relations    │           │
+│   │ • FS 装配          │    │ • 结论 claims        │           │
+│   │ • evidence_pack    │    │                     │           │
+│   │                     │    │                     │           │
+│   │ 90 artifacts        │    │ 128 entities        │           │
+│   │ 482 sources         │    │ 1343 relations      │           │
+│   │ 3 claims            │    │ 111 claims          │           │
+│   └─────────────────────┘    └─────────────────────┘           │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ## 决策流程
@@ -50,95 +75,90 @@ bun cortex.ts task <task_id>
 User需求: "设计XXX系统"
        │
        ▼
-┌─────────────────┐
-│ 查Cortex        │ ← 必须先查
-└────────┬────────┘
-         │
-    ┌────┴────┐
-    ▼         ▼
-[有证据]   [无证据]
-    │         │
-    ▼         ▼
-基于证据   调用/Insight
-设计方案   研究
-    │         │
-    │         ▼
-    │    Insight产出
-    │    写入Cortex
-    │         │
-    └────┬────┘
-         ▼
-    设计方案
+┌─────────────────────┐
+│ Unified Query       │ ← 一条命令搞定
+│ search "xxx" 10     │
+└────────┬────────────┘
          │
          ▼
-     实现
+   ┌─────────────────────────────────────┐
+   │ Cortex: sources/claims/artifacts    │
+   │ Knowledge: entities/relations/claims│
+   └────────┬────────────────────────────┘
+            │
+       ┌────┴────┐
+       ▼         ▼
+   [有证据]   [无证据]
+       │         │
+       ▼         ▼
+   基于证据   调用/Insight
+   设计方案   研究
+       │         │
+       │         ▼
+       │    Insight产出
+       │    写入Cortex
+       │         │
+       └────┬────┘
+            ▼
+       设计方案
+            │
+            ▼
+        实现
 ```
 
 ## 证据类型
 
-| 证据类型 | 表 | 说明 |
-|---------|-----|------|
-| 参考资料 | cortex_sources | 论文/文章/先验知识 |
-| 结论论点 | cortex_claims | 已验证的结论 |
-| 评估结果 | cortex_evals | 专家互评 |
-| 设计方案 | cortex_artifacts | 完整产出 |
+| 证据类型 | 来源 | 说明 |
+|---------|------|------|
+| 参考资料 | Cortex | 论文/文章/先验知识 |
+| 结论论点 | Cortex | 已验证的结论 |
+| 评估结果 | Cortex | 专家互评 |
+| 设计方案 | Cortex | 完整产出 |
+| 知识实体 | Knowledge | 人名/技术/概念/组织 |
+| 知识关系 | Knowledge | 实体间关联网络 |
+| 知识结论 | Knowledge | 高置信度结论 (≥0.7) |
 
-## 查询模板
+## 查询模式
 
-### 查某主题的所有证据
+### 模式1: 统一搜索 (默认)
 
-```sql
-SELECT
-  s.citation_key,
-  s.title,
-  s.finding,
-  s.credibility
-FROM cortex_sources s
-JOIN cortex_tasks t ON s.task_id = t.task_id
-WHERE t.topic LIKE '%记忆系统%'
-ORDER BY s.credibility DESC;
+```bash
+bun unified-query.ts search "GPU推理优化" 10
+
+# 输出示例:
+# 🔍 统一查询结果 (93ms)
+#    来源: Cortex 5 | 知识库 3
+#
+# 📚 Cortex 参考资料:
+#    1. [85%] GPU推理优化最佳实践
+#       本文总结了 GPU 推理优化的关键技巧...
+#
+# 👤 知识图谱实体:
+#    [technology] CUDA: NVIDIA 的并行计算平台...
+#    [concept] Flash Attention: 高效注意力计算方法...
 ```
 
-### 查某主题的结论
+### 模式2: 深度证据 (需要 evidence_pack)
 
-```sql
-SELECT
-  c.claim_text,
-  c.supporting_sources,
-  c.confidence
-FROM cortex_claims c
-JOIN cortex_tasks t ON c.task_id = t.task_id
-WHERE t.topic LIKE '%记忆系统%'
-ORDER BY c.confidence DESC;
+```bash
+bun unified-query.ts evidence "AI Agent 记忆机制"
+
+# 额外输出:
+# 📊 Evidence Pack:
+#    来源: 5 | 结论: 3 | 平均可信度: 0.85
+#    引用链: artifact_1 → source_3 → claim_2
 ```
 
-### 查某主题的评估
+### 模式3: 知识图谱
 
-```sql
-SELECT
-  e.reviewer_model,
-  e.score,
-  e.verdict,
-  e.suggestions
-FROM cortex_evals e
-JOIN cortex_tasks t ON e.task_id = t.task_id
-WHERE t.topic LIKE '%记忆系统%'
-ORDER BY e.score DESC;
-```
+```bash
+bun unified-query.ts graph "Transformer"
 
-## 人类先验路由
-
-**我的主观经验/观点不直接注入prompt，而是先存入Cortex：**
-
-```typescript
-// 不要这样做
-const prompt = `设计记忆系统。我认为应该用三层架构...`;
-
-// 而是这样做
-await saveSolarPrior('记忆系统架构', '三层架构：Episodic/Semantic/Procedural');
-
-// 然后显式引用
-const prompt = `设计记忆系统。参考: solar_prior_memory_arch`;
+# 输出:
+# 🔗 实体关系:
+#    Transformer --[basis_for]--> BERT
+#    Transformer --[basis_for]--> GPT
+#    Attention --[core_mechanism]--> Transformer
 ```
 
 ## 违反检测
@@ -152,26 +172,25 @@ const prompt = `设计记忆系统。参考: solar_prior_memory_arch`;
 
 **正确模式：**
 
-- "根据Cortex中的XXX证据..."
-- "查询cortex_sources后发现..."
-- "/Insight研究后得出结论..."
-- "基于cortex_evals评分..."
+- "根据 Unified Query 结果..."
+- "查询 Cortex 发现..."
+- "Knowledge Graph 显示..."
+- "/Insight 研究后得出结论..."
 
 ## 自检问题
 
 开始设计/开发前，问自己：
 
-- [ ] 我查Cortex了吗？
-- [ ] 有相关证据吗？
-- [ ] 证据质量如何（credibility/confidence/score）？
-- [ ] 无证据时，我调用/Insight了吗？
-- [ ] /Insight产出写入Cortex了吗？
+- [ ] 我执行 `unified-query.ts search` 了吗？
+- [ ] 有相关证据吗？(Cortex sources / Knowledge claims)
+- [ ] 证据质量如何？（credibility/confidence ≥ 0.7）
+- [ ] 无证据时，我调用/Insight 了吗？
 - [ ] 我的决策基于证据还是主观？
 
 ## 与其他规则的关系
 
+- **Cortex First**: 先查中枢神经（最高优先级）
 - **Data First**: 先查数据资产
-- **Cortex First**: 先查中枢神经（数据资产的一部分）
 - **REE First**: 先查可执行资源
 - **Research First**: 研究业界实践
 
@@ -182,21 +201,23 @@ const prompt = `设计记忆系统。参考: solar_prior_memory_arch`;
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                                                                 │
-│   🧠 Cortex First 铁律                                          │
+│   🧠 Cortex First 铁律 v3.0                                     │
 │                                                                 │
-│   1. 设计/开发前先查Cortex (MUST)                               │
-│   2. 基于证据决策 (MUST)                                        │
-│   3. 无证据调用/Insight (MUST)                                  │
-│   4. 主观经验先入库再引用 (MUST)                                │
+│   1. 一条命令: unified-query.ts search "关键词" (MUST)          │
+│   2. 同时覆盖 Cortex + Knowledge (MUST)                         │
+│   3. 基于证据决策 (MUST)                                        │
+│   4. 无证据调用/Insight (MUST)                                  │
+│   5. 证据质量 ≥ 0.7 才可信 (SHOULD)                             │
 │                                                                 │
+│   Unified Query = 唯一真相源入口                                │
 │   证据驱动 > 主观判断                                           │
-│   Cortex = 唯一真相源                                           │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-*Cortex First Protocol v1.0*
+*Cortex First Protocol v3.0*
 *建立于: 2026-02-13*
+*更新于: 2026-02-15 (统一查询入口 unified-query.ts)*
 *监护人指示: 第一时间查中枢神经和知识库*
