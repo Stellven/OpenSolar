@@ -1,0 +1,141 @@
+{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "PROXY_MANAGED",
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:15721"
+  },
+  "includeCoAuthoredBy": false,
+  "skipDangerousModePermissionPrompt": true,
+  "enabledPlugins": {
+    "swift-lsp@claude-plugins-official": true
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/personality-anchor-hook.sh"
+      },
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/asset-reminder.sh"
+      },
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/cortex-hook.sh"
+      },
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/knowledge-auto-inject.sh"
+      },
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/persona-auto-inject.sh"
+      },
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/intent-learning-hook.sh"
+      },
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/learning-capture.sh"
+      },
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/memory-influence.sh"
+      },
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/ree-first-hook.sh"
+      },
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/mid-refresh.sh"
+      },
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/identity-reminder.sh"
+      },
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/executor-reminder.sh"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/state-read-enforcer.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/experience-reminder.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|Read|Bash|Grep|Glob|Task|WebSearch|WebFetch|TodoWrite|Skill|AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/state-read-tracker.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/post-tool-dispatcher.sh"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/solar-session-start.sh"
+      },
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/context-preload.sh"
+      },
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/perf-auto-refresh.sh"
+      },
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/state-inject.sh"
+      }
+    ],
+    "SessionEnd": [
+      {
+        "type": "command",
+        "command": "/Users/lisihao/Solar/hooks/session-end-save.sh"
+      },
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/session-reflect.sh"
+      },
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/ses-session-end.sh"
+      },
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/enhanced-memory-writer.sh"
+      },
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/session-refresh-assets.sh"
+      },
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/state-session-end.sh"
+      },
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/state-auto-updater.sh"
+      }
+    ]
+  }
+}
