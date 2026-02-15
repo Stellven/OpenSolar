@@ -30,6 +30,43 @@ const EXPERT_TO_PERSONA: Record<string, string> = {
   'glm-5': 'glm_5_champion_workhorse'
 };
 
+// 专家模型 ID 到厂商的映射 (避免同厂商互评)
+const EXPERT_VENDOR: Record<string, string> = {
+  'gemini-2.5-pro': 'google',
+  'gemini-3-pro-preview': 'google',
+  'deepseek-r1': 'deepseek',
+  'deepseek-v3': 'deepseek',
+  'glm-5': 'zhipu',
+  'glm-4-plus': 'zhipu',
+  'glm-4-flash': 'zhipu'
+};
+
+/**
+ * 生成跨厂商评审配对
+ * 确保评审者和被评审者来自不同厂商
+ */
+function generateCrossVendorPairs(expertIds: string[]): Array<{reviewer: string, target: string}> {
+  const pairs: Array<{reviewer: string, target: string}> = [];
+
+  for (const reviewerId of expertIds) {
+    const reviewerVendor = EXPERT_VENDOR[reviewerId] || 'unknown';
+    // 找到所有不同厂商的专家
+    const differentVendorTargets = expertIds.filter(id => {
+      const targetVendor = EXPERT_VENDOR[id] || 'unknown';
+      return targetVendor !== reviewerVendor;
+    });
+
+    if (differentVendorTargets.length > 0) {
+      // 选择第一个不同厂商的专家作为评审目标
+      // 可以用 ELO 或随机来选择，这里用顺序选择
+      const targetId = differentVendorTargets[0];
+      pairs.push({ reviewer: reviewerId, target: targetId });
+    }
+  }
+
+  return pairs;
+}
+
 // 角色 → 偏好的专家类型映射
 const ROLE_TO_EXPERT_TYPE: Record<string, string[]> = {
   'author': ['gemini-2.5-pro', 'deepseek-v3', 'glm-5'],      // 作者角色：严谨分析 + 创意表达 + 配合执行
@@ -1402,9 +1439,10 @@ ${sources.sources.map((s: any, i: number) => `${i + 1}. ${s.title}\n   来源: $
     const outlines = this.cortex.getArtifacts(this.taskId, 2, 'outline');
     const expertIds = Object.keys(EXPERTS);
 
-    for (let i = 0; i < expertIds.length; i++) {
-      const reviewerId = expertIds[i];
-      const targetId = expertIds[(i + 1) % expertIds.length];  // 循环评审
+    // 使用跨厂商配对，避免同厂商互评
+    const pairs = generateCrossVendorPairs(expertIds);
+
+    for (const { reviewer: reviewerId, target: targetId } of pairs) {
       const reviewer = EXPERTS[reviewerId];
       const target = EXPERTS[targetId];
 
