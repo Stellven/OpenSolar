@@ -1,0 +1,21 @@
+# Large/generated files
+projects/
+plugins/
+cache/
+file-history/
+paste-cache/
+shell-snapshots/
+*.jsonl
+*.db
+*.sqlite
+*.log
+
+# OS files
+.DS_Store
+*.swp
+
+# Secrets
+.env
+*-key*
+*-secret*
+*-token*
