@@ -27,6 +27,13 @@ pub struct SearchResult {
     pub score: f32,
     /// Content snippet with query terms highlighted
     pub snippet: Option<String>,
+    // === Schema Optimization v0.3 新增 ===
+    /// Artifact kind (source/claim/outline/draft/review/final)
+    pub kind: Option<String>,
+    /// Artifact ID for SQLite joins
+    pub artifact_id: Option<u64>,
+    /// FS path to full content
+    pub content_path: Option<String>,
 }
 
 /// Search options
@@ -44,6 +51,10 @@ pub struct SearchOptions {
     pub after: Option<u64>,
     /// Maximum timestamp
     pub before: Option<u64>,
+    /// Filter by task ID (Cortex support)
+    pub task_id: Option<String>,
+    /// Filter by kind (Cortex artifact type)
+    pub kind: Option<String>,
 }
 
 impl SearchOptions {
@@ -81,6 +92,16 @@ impl SearchOptions {
 
     pub fn before(mut self, timestamp: u64) -> Self {
         self.before = Some(timestamp);
+        self
+    }
+
+    pub fn task_id(mut self, task_id: impl Into<String>) -> Self {
+        self.task_id = Some(task_id.into());
+        self
+    }
+
+    pub fn kind(mut self, kind: impl Into<String>) -> Self {
+        self.kind = Some(kind.into());
         self
     }
 }
@@ -159,6 +180,20 @@ fn build_filtered_query(
         clauses.push((Occur::Must, Box::new(term_query)));
     }
 
+    // Filter by task_id (Cortex support)
+    if let Some(task_id) = &options.task_id {
+        let term = Term::from_field_text(fields.task_id, task_id);
+        let term_query = TermQuery::new(term, IndexRecordOption::Basic);
+        clauses.push((Occur::Must, Box::new(term_query)));
+    }
+
+    // Filter by kind (Cortex artifact type)
+    if let Some(kind) = &options.kind {
+        let term = Term::from_field_text(fields.kind, kind);
+        let term_query = TermQuery::new(term, IndexRecordOption::Basic);
+        clauses.push((Occur::Must, Box::new(term_query)));
+    }
+
     // Note: timestamp range filtering would need a RangeQuery
     // For now, we'll filter in post-processing if needed
 
@@ -221,6 +256,10 @@ fn doc_to_result(
         project: get_text("project"),
         score,
         snippet: Some(snippet),
+        // Schema Optimization v0.3 新增
+        kind: get_text("kind"),
+        artifact_id: Some(get_u64("artifact_id")).filter(|&v| v > 0),
+        content_path: get_text("content_path"),
     }))
 }
 
