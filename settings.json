@@ -72,6 +72,15 @@
             "command": "~/.claude/hooks/experience-reminder.sh"
           }
         ]
+      },
+      {
+        "matcher": "mcp__brain-router__complete|mcp__brain-router__chat",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/persona-enforcer.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [

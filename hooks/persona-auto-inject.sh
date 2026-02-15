@@ -3,15 +3,27 @@
 # Persona Auto-Inject Hook
 # 在调用 brain-router 前自动注入人格旋钮
 #
-# 触发: PreToolUse 检测到 mcp__brain-router__complete
+# 触发: UserPromptSubmit 检测关键词
 #
 
 # 日志文件
 LOG_FILE="/tmp/persona-inject.log"
+DEBUG_FILE="/tmp/persona-inject.debug"
 
 # 获取当前时间和prompt摘要
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-PROMPT_SUMMARY=$(echo "$CLAUDE_PROMPT" | head -c 100 | tr '\n' ' ')
+
+# 获取 prompt (兼容多种环境变量名)
+PROMPT="${CLAUDE_PROMPT:-${CLAUDE_INPUT:-${PROMPT:-}}}"
+PROMPT_SUMMARY=$(echo "$PROMPT" | head -c 100 | tr '\n' ' ')
+
+# 调试日志
+debug_log() {
+    echo "[$TIMESTAMP] $1" >> "$DEBUG_FILE"
+}
+
+debug_log "Hook triggered. PROMPT length: ${#PROMPT}"
+debug_log "PROMPT preview: $PROMPT_SUMMARY"
 
 # 检测任务类型并推荐人格
 detect_persona() {
@@ -52,10 +64,13 @@ detect_persona() {
 }
 
 # 检测到的是调用 brain-router 的意图
-if echo "$CLAUDE_PROMPT" | grep -qiE 'brain.router|complete|牛马|专家|模型|继续研究|更好方案|再优化|优化一下|改进|重新设计|分析下|研究下|看看.*怎么|帮我.*想|评估|对比|审查|检查'; then
-    PERSONA=$(detect_persona "$CLAUDE_PROMPT")
+if echo "$PROMPT" | grep -qiE 'brain.router|complete|牛马|专家|模型|继续研究|更好方案|再优化|优化一下|改进|重新设计|分析下|研究下|看看.*怎么|帮我.*想|评估|对比|审查|检查'; then
+    PERSONA=$(detect_persona "$PROMPT")
     TEAM=$(echo "$PERSONA" | cut -d: -f1)
     ROLE=$(echo "$PERSONA" | cut -d: -f2)
+
+    debug_log "Matched trigger keywords"
+    debug_log "Detected: TEAM=$TEAM, ROLE=$ROLE"
 
     # 输出提醒
     cat << EOF
@@ -83,6 +98,9 @@ EOF
 
     # 记录日志
     echo "[$TIMESTAMP] Detected: $TEAM:$ROLE | Prompt: $PROMPT_SUMMARY..." >> "$LOG_FILE"
+    debug_log "Logged to $LOG_FILE"
+else
+    debug_log "No trigger keywords matched"
 fi
 
 exit 0
