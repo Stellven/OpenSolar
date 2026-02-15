@@ -46,6 +46,14 @@ pub struct QueueItem {
     pub status: String,
     pub retry_count: i32,
     pub created_at: String,
+    // Schema Optimization v0.3 新增字段
+    pub artifact_id: Option<i64>,
+    pub content_path: Option<String>,
+    pub score: Option<f64>,
+    pub kind: Option<String>,
+    pub tags: Option<String>,
+    pub task_id: Option<String>,
+    pub citation_key: Option<String>,
 }
 
 /// Index queue manager
@@ -116,7 +124,8 @@ impl IndexQueue {
     pub fn get_pending(&self, limit: usize) -> Result<Vec<QueueItem>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, doc_type, source_id, content, title, source_path,
-                    timestamp, role, project, metadata, status, retry_count, created_at
+                    timestamp, role, project, metadata, status, retry_count, created_at,
+                    artifact_id, content_path, score, kind, tags, task_id, citation_key
              FROM tantivy_queue
              WHERE status = 'pending'
              ORDER BY created_at ASC
@@ -139,6 +148,14 @@ impl IndexQueue {
                     status: row.get(10)?,
                     retry_count: row.get(11)?,
                     created_at: row.get(12)?,
+                    // Schema Optimization v0.3 新增字段
+                    artifact_id: row.get(13)?,
+                    content_path: row.get(14)?,
+                    score: row.get(15)?,
+                    kind: row.get(16)?,
+                    tags: row.get(17)?,
+                    task_id: row.get(18)?,
+                    citation_key: row.get(19)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;

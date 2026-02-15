@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS tantivy_queue (
     source_id TEXT NOT NULL,          -- Unique ID from source system
 
     -- Content
-    content TEXT NOT NULL,            -- Main text to index
+    content TEXT NOT NULL,            -- Main text to index (snippet for artifacts)
     title TEXT,                       -- Optional title
     source_path TEXT,                 -- Source file path
 
@@ -24,6 +24,15 @@ CREATE TABLE IF NOT EXISTS tantivy_queue (
     retry_count INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     indexed_at DATETIME,
+
+    -- Schema Optimization v0.3 新增字段
+    artifact_id INTEGER,              -- Numeric artifact ID for efficient joins
+    content_path TEXT,                -- FS path to full content
+    score REAL,                       -- Credibility score (0.0 - 1.0)
+    kind TEXT,                        -- Artifact kind: outline, draft, review, final
+    tags TEXT,                        -- Comma-separated tags
+    task_id TEXT,                     -- Explicit task_id for Cortex artifacts
+    citation_key TEXT,                -- Citation key for references
 
     -- Unique constraint to prevent duplicates
     UNIQUE(doc_type, source_id)

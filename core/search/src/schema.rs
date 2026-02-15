@@ -20,6 +20,15 @@ pub enum DocType {
     Registry,
     /// Statistics and logs
     Stats,
+    // === Cortex Query v0.2 新增 ===
+    /// Cortex artifacts (prompts, outlines, drafts, reports)
+    Artifact,
+    /// Cortex reference sources
+    Source,
+    /// Cortex claims/conclusions
+    Claim,
+    /// Knowledge network entities
+    Knowledge,
 }
 
 impl DocType {
@@ -31,6 +40,10 @@ impl DocType {
             DocType::Document => "document",
             DocType::Registry => "registry",
             DocType::Stats => "stats",
+            DocType::Artifact => "artifact",
+            DocType::Source => "source",
+            DocType::Claim => "claim",
+            DocType::Knowledge => "knowledge",
         }
     }
 
@@ -42,6 +55,10 @@ impl DocType {
             "document" => Some(DocType::Document),
             "registry" => Some(DocType::Registry),
             "stats" => Some(DocType::Stats),
+            "artifact" => Some(DocType::Artifact),
+            "source" => Some(DocType::Source),
+            "claim" => Some(DocType::Claim),
+            "knowledge" => Some(DocType::Knowledge),
             _ => None,
         }
     }
@@ -84,6 +101,31 @@ pub fn build_schema() -> Schema {
     // Additional metadata as JSON string
     schema_builder.add_text_field("metadata", STORED);
 
+    // === Cortex Query v0.2 新增字段 ===
+
+    // Credibility score (0.0 - 1.0) for artifacts/sources/claims
+    schema_builder.add_f64_field("score", STORED | FAST);
+
+    // Artifact kind: 'source' | 'claim' | 'outline' | 'draft' | 'review' | 'final'
+    schema_builder.add_text_field("kind", STRING | STORED);
+
+    // Tags (comma-separated, searchable)
+    schema_builder.add_text_field("tags", TEXT | STORED);
+
+    // Explicit task_id for Cortex artifacts
+    schema_builder.add_text_field("task_id", STRING | STORED);
+
+    // Citation key for references
+    schema_builder.add_text_field("citation_key", STRING | STORED);
+
+    // === Schema Optimization v0.3 ===
+
+    // Numeric artifact ID for efficient SQLite joins (extracted from id string)
+    schema_builder.add_u64_field("artifact_id", STORED | FAST);
+
+    // FS path to full content (for "装配" phase)
+    schema_builder.add_text_field("content_path", STRING | STORED);
+
     schema_builder.build()
 }
 
@@ -98,6 +140,15 @@ pub struct SchemaFields {
     pub role: tantivy::schema::Field,
     pub project: tantivy::schema::Field,
     pub metadata: tantivy::schema::Field,
+    // Cortex Query v0.2 新增
+    pub score: tantivy::schema::Field,
+    pub kind: tantivy::schema::Field,
+    pub tags: tantivy::schema::Field,
+    pub task_id: tantivy::schema::Field,
+    pub citation_key: tantivy::schema::Field,
+    // Schema Optimization v0.3 新增
+    pub artifact_id: tantivy::schema::Field,
+    pub content_path: tantivy::schema::Field,
 }
 
 impl SchemaFields {
@@ -112,6 +163,15 @@ impl SchemaFields {
             role: schema.get_field("role").unwrap(),
             project: schema.get_field("project").unwrap(),
             metadata: schema.get_field("metadata").unwrap(),
+            // Cortex Query v0.2 新增
+            score: schema.get_field("score").unwrap(),
+            kind: schema.get_field("kind").unwrap(),
+            tags: schema.get_field("tags").unwrap(),
+            task_id: schema.get_field("task_id").unwrap(),
+            citation_key: schema.get_field("citation_key").unwrap(),
+            // Schema Optimization v0.3 新增
+            artifact_id: schema.get_field("artifact_id").unwrap(),
+            content_path: schema.get_field("content_path").unwrap(),
         }
     }
 }
