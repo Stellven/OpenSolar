@@ -27,6 +27,12 @@
   - 置信度评分 (0-1) 标注编译状态可靠性
   - Human Override Manager 处理手动 STATE.md 修改优先级
   - 审核专家：技术宅(Gemini 2.5 Pro)、千里马(Gemini 3 Pro)、思考驼(DeepSeek R1)
+- [2026-02-15] **ELO 评估系统上线**：
+  - 基于小爱深度洞察分析的架构优化建议，引入 ELO 模型评估老专家
+  - 数据源：LMSYS Chatbot Arena + 各厂商公开 Benchmark (MMLU/HumanEval/MATH/GPQA)
+  - 初始 ELO：千里马 1420 | 学霸班长 1410 | 技术宅 1395 | 思考驼 1380 | 鬼才码农 1345 | 老实人 1280 | 小快手 1220
+  - 集成到 brain-router MCP：elo_rankings / elo_match / elo_history
+  - 后续通过实际调用迭代优化 ELO 参数
 
 # Progress
 
@@ -34,9 +40,13 @@
 
 **Blocked**: 无
 
-**本周完成** (2026-02-11):
-- /insight 状态持久化修复 ✅ (checkpoint + 断点恢复)
-- ThunderMLX FlashAttention 演示 ✅ (阶段性验收)
+**本周完成** (2026-02-15):
+- ✅ ELO 评估系统上线 (benchmark 数据 + 引擎 + MCP 集成)
+- ✅ 上下文溢出恢复：从断点继续任务
+
+**上周完成** (2026-02-11):
+- /insight 状态持久化修复 (checkpoint + 断点恢复)
+- ThunderMLX FlashAttention 演示 (阶段性验收)
 - /insight v3.0 升级 (八阶段+四专家互评)
 - CLAUDE.md Token 优化 (-76%体积)
 - 人格注入机制 (personality-injector.sh + 考核日志)
@@ -45,6 +55,7 @@
 <details>
 <summary>历史完成 (点击展开)</summary>
 
+- ELO 评估系统 (老专家评分)
 - Docker Sandbox
 - Intent Engine
 - Solar Web Dashboard
@@ -57,9 +68,9 @@
 
 
 <!-- AUTO-PROGRESS -->
-**自动进度追踪** (2026/2/11):
-- 当前: /insight 状态持久化修复 ✅ 已完成
-- 上次: ThunderMLX 演示 ✅ (阶段性验收)
+**自动进度追踪** (2026/2/15):
+- 当前: ELO 评估系统 ✅ 已完成
+- 上次: 上下文溢出恢复 + 继续任务
 <!-- /AUTO-PROGRESS -->
 # Next Actions (Exact)
 
@@ -67,8 +78,15 @@
 
 可选方向 (Current Plan):
 1. DistributedScheduler - 任务调度与智能路由
-2. 强化长时运行能力
-3. 身份验证 - 监护人白名单机制
+2. ELO 自动评分 - 每次调用后自动记录对局
+3. 强化长时运行能力
+4. 身份验证 - 监护人白名单机制
+
+## ELO 后续优化 (可选)
+
+- [ ] 自动记录：brain-router 调用完成后自动触发 ELO 记录
+- [ ] 质量评分：基于输出质量自动计算 score_a
+- [ ] 定期报告：每日/每周生成 ELO 变化报告
 
 ## 待办归档 (已完成项)
 
@@ -87,5 +105,6 @@
 - [x] 实现 Lite Layer 3: 简化版 State Updater
 - [x] Hook 集成
 - [x] STATE.md 自动更新三机制
+- [x] ELO 评估系统 (benchmark 数据 + 引擎 + MCP 集成)
 
 </details>

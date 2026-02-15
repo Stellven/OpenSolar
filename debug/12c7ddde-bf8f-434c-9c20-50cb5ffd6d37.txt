@@ -1,0 +1,160 @@
+2026-02-13T23:56:00.191Z [ERROR] Failed to save config with lock: Error: ENOENT: no such file or directory, lstat '/Users/lisihao/.claude.json'
+2026-02-13T23:56:00.191Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.7909.1771026960191
+2026-02-13T23:56:00.191Z [DEBUG] Setting permissions for new file: 600
+2026-02-13T23:56:00.192Z [DEBUG] Temp file written successfully, size: 50 bytes
+2026-02-13T23:56:00.192Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.7909.1771026960191 to /Users/lisihao/.claude.json
+2026-02-13T23:56:00.192Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-13T23:56:00.192Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-13T23:56:00.192Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-13T23:56:00.192Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-13T23:56:00.192Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-13T23:56:00.193Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.7909.1771026960193
+2026-02-13T23:56:00.193Z [DEBUG] Preserving file permissions: 100600
+2026-02-13T23:56:00.193Z [DEBUG] Temp file written successfully, size: 130 bytes
+2026-02-13T23:56:00.193Z [DEBUG] Applied original permissions to temp file
+2026-02-13T23:56:00.193Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.7909.1771026960193 to /Users/lisihao/.claude.json
+2026-02-13T23:56:00.193Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-13T23:56:00.195Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.7909.1771026960195
+2026-02-13T23:56:00.195Z [DEBUG] Preserving file permissions: 100600
+2026-02-13T23:56:00.195Z [DEBUG] Temp file written successfully, size: 166 bytes
+2026-02-13T23:56:00.195Z [DEBUG] Applied original permissions to temp file
+2026-02-13T23:56:00.195Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.7909.1771026960195 to /Users/lisihao/.claude.json
+2026-02-13T23:56:00.195Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-13T23:56:00.198Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-13T23:56:00.208Z [DEBUG] [ToolSearch:optimistic] mode=tst-auto, ENABLE_TOOL_SEARCH=undefined, result=true
+2026-02-13T23:56:00.208Z [DEBUG] [STARTUP] Running setup()...
+2026-02-13T23:56:00.212Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/lisihao/.claude/skills, project=[]
+2026-02-13T23:56:00.212Z [DEBUG] Error log sink initialized
+2026-02-13T23:56:00.217Z [DEBUG] [STARTUP] setup() completed in 9ms
+2026-02-13T23:56:00.217Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-02-13T23:56:00.218Z [DEBUG] Loaded 0 unique skills (0 unconditional, 0 conditional, managed: 0, user: 0, project: 0, additional: 0, legacy commands: 0)
+2026-02-13T23:56:00.219Z [DEBUG] [Claude in Chrome] Found chrome profiles: Default
+2026-02-13T23:56:00.219Z [DEBUG] Found 0 plugins (0 enabled, 0 disabled)
+2026-02-13T23:56:00.219Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-13T23:56:00.219Z [DEBUG] Total plugin skills loaded: 0
+2026-02-13T23:56:00.219Z [DEBUG] Total plugin commands loaded: 0
+2026-02-13T23:56:00.219Z [DEBUG] Registered 0 hooks from 0 plugins
+2026-02-13T23:56:00.219Z [DEBUG] Total plugin agents loaded: 0
+2026-02-13T23:56:00.219Z [DEBUG] getSkills returning: 0 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-13T23:56:00.220Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.7909.1771026960220
+2026-02-13T23:56:00.220Z [DEBUG] Preserving file permissions: 100600
+2026-02-13T23:56:00.220Z [DEBUG] Temp file written successfully, size: 243 bytes
+2026-02-13T23:56:00.220Z [DEBUG] Applied original permissions to temp file
+2026-02-13T23:56:00.220Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.7909.1771026960220 to /Users/lisihao/.claude.json
+2026-02-13T23:56:00.220Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-13T23:56:00.221Z [DEBUG] [STARTUP] Commands and agents loaded in 4ms
+2026-02-13T23:56:00.224Z [DEBUG] [STARTUP] Running showSetupScreens()...
+2026-02-13T23:56:00.227Z [DEBUG] [keybindings] KeybindingSetup initialized with 102 bindings, 0 warnings
+2026-02-13T23:56:00.245Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-02-13T23:56:00.248Z [DEBUG] [Claude in Chrome] Extension not found in any browser
+2026-02-13T23:56:00.248Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.7909.1771026960248
+2026-02-13T23:56:00.248Z [DEBUG] Preserving file permissions: 100600
+2026-02-13T23:56:00.248Z [DEBUG] Temp file written successfully, size: 286 bytes
+2026-02-13T23:56:00.248Z [DEBUG] Applied original permissions to temp file
+2026-02-13T23:56:00.248Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.7909.1771026960248 to /Users/lisihao/.claude.json
+2026-02-13T23:56:00.249Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-13T23:56:00.287Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.7909.1771026960287
+2026-02-13T23:56:00.287Z [DEBUG] Preserving file permissions: 100600
+2026-02-13T23:56:00.287Z [DEBUG] Temp file written successfully, size: 327 bytes
+2026-02-13T23:56:00.287Z [DEBUG] Applied original permissions to temp file
+2026-02-13T23:56:00.287Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.7909.1771026960287 to /Users/lisihao/.claude.json
+2026-02-13T23:56:00.287Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-13T23:56:00.369Z [DEBUG] High write ratio: blit=928, write=1041 (52.9% writes), screen=36x120
+2026-02-13T23:56:00.407Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.7909.1771026960407
+2026-02-13T23:56:00.407Z [DEBUG] Preserving file permissions: 100600
+2026-02-13T23:56:00.407Z [DEBUG] Temp file written successfully, size: 399 bytes
+2026-02-13T23:56:00.407Z [DEBUG] Applied original permissions to temp file
+2026-02-13T23:56:00.407Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.7909.1771026960407 to /Users/lisihao/.claude.json
+2026-02-13T23:56:00.408Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-13T23:56:00.408Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.7909.1771026960408
+2026-02-13T23:56:00.408Z [DEBUG] Preserving file permissions: 100600
+2026-02-13T23:56:00.408Z [DEBUG] Temp file written successfully, size: 427 bytes
+2026-02-13T23:56:00.408Z [DEBUG] Applied original permissions to temp file
+2026-02-13T23:56:00.408Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.7909.1771026960408 to /Users/lisihao/.claude.json
+2026-02-13T23:56:00.408Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-13T23:56:00.409Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.7909.1771026960409
+2026-02-13T23:56:00.409Z [DEBUG] Preserving file permissions: 100600
+2026-02-13T23:56:00.409Z [DEBUG] Temp file written successfully, size: 479 bytes
+2026-02-13T23:56:00.409Z [DEBUG] Applied original permissions to temp file
+2026-02-13T23:56:00.409Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.7909.1771026960409 to /Users/lisihao/.claude.json
+2026-02-13T23:56:00.409Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-13T23:56:00.409Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.7909.1771026960409
+2026-02-13T23:56:00.409Z [DEBUG] Preserving file permissions: 100600
+2026-02-13T23:56:00.409Z [DEBUG] Temp file written successfully, size: 619 bytes
+2026-02-13T23:56:00.409Z [DEBUG] Applied original permissions to temp file
+2026-02-13T23:56:00.409Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.7909.1771026960409 to /Users/lisihao/.claude.json
+2026-02-13T23:56:00.410Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-13T23:56:00.410Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.7909.1771026960410
+2026-02-13T23:56:00.410Z [DEBUG] Preserving file permissions: 100600
+2026-02-13T23:56:00.410Z [DEBUG] Temp file written successfully, size: 658 bytes
+2026-02-13T23:56:00.410Z [DEBUG] Applied original permissions to temp file
+2026-02-13T23:56:00.410Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.7909.1771026960410 to /Users/lisihao/.claude.json
+2026-02-13T23:56:00.410Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-13T23:56:00.410Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.7909.1771026960410
+2026-02-13T23:56:00.410Z [DEBUG] Preserving file permissions: 100600
+2026-02-13T23:56:00.411Z [DEBUG] Temp file written successfully, size: 697 bytes
+2026-02-13T23:56:00.411Z [DEBUG] Applied original permissions to temp file
+2026-02-13T23:56:00.411Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.7909.1771026960410 to /Users/lisihao/.claude.json
+2026-02-13T23:56:00.411Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-13T23:56:00.411Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.7909.1771026960411
+2026-02-13T23:56:00.411Z [DEBUG] Preserving file permissions: 100600
+2026-02-13T23:56:00.411Z [DEBUG] Temp file written successfully, size: 735 bytes
+2026-02-13T23:56:00.412Z [DEBUG] Applied original permissions to temp file
+2026-02-13T23:56:00.412Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.7909.1771026960411 to /Users/lisihao/.claude.json
+2026-02-13T23:56:00.412Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-13T23:56:00.412Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.7909.1771026960412
+2026-02-13T23:56:00.412Z [DEBUG] Preserving file permissions: 100600
+2026-02-13T23:56:00.412Z [DEBUG] Temp file written successfully, size: 767 bytes
+2026-02-13T23:56:00.412Z [DEBUG] Applied original permissions to temp file
+2026-02-13T23:56:00.412Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.7909.1771026960412 to /Users/lisihao/.claude.json
+2026-02-13T23:56:00.412Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-13T23:56:00.413Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.7909.1771026960413
+2026-02-13T23:56:00.413Z [DEBUG] Preserving file permissions: 100600
+2026-02-13T23:56:00.413Z [DEBUG] Temp file written successfully, size: 797 bytes
+2026-02-13T23:56:00.413Z [DEBUG] Applied original permissions to temp file
+2026-02-13T23:56:00.413Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.7909.1771026960413 to /Users/lisihao/.claude.json
+2026-02-13T23:56:00.413Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-13T23:56:00.413Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.7909.1771026960413
+2026-02-13T23:56:00.413Z [DEBUG] Preserving file permissions: 100600
+2026-02-13T23:56:00.413Z [DEBUG] Temp file written successfully, size: 830 bytes
+2026-02-13T23:56:00.413Z [DEBUG] Applied original permissions to temp file
+2026-02-13T23:56:00.413Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.7909.1771026960413 to /Users/lisihao/.claude.json
+2026-02-13T23:56:00.413Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-13T23:56:00.414Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.7909.1771026960414
+2026-02-13T23:56:00.414Z [DEBUG] Preserving file permissions: 100600
+2026-02-13T23:56:00.414Z [DEBUG] Temp file written successfully, size: 882 bytes
+2026-02-13T23:56:00.414Z [DEBUG] Applied original permissions to temp file
+2026-02-13T23:56:00.414Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.7909.1771026960414 to /Users/lisihao/.claude.json
+2026-02-13T23:56:00.414Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-13T23:56:00.414Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.7909.1771026960414
+2026-02-13T23:56:00.414Z [DEBUG] Preserving file permissions: 100600
+2026-02-13T23:56:00.414Z [DEBUG] Temp file written successfully, size: 918 bytes
+2026-02-13T23:56:00.414Z [DEBUG] Applied original permissions to temp file
+2026-02-13T23:56:00.414Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.7909.1771026960414 to /Users/lisihao/.claude.json
+2026-02-13T23:56:00.414Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-13T23:56:00.415Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.7909.1771026960415
+2026-02-13T23:56:00.415Z [DEBUG] Preserving file permissions: 100600
+2026-02-13T23:56:00.415Z [DEBUG] Temp file written successfully, size: 948 bytes
+2026-02-13T23:56:00.415Z [DEBUG] Applied original permissions to temp file
+2026-02-13T23:56:00.415Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.7909.1771026960415 to /Users/lisihao/.claude.json
+2026-02-13T23:56:00.415Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-13T23:56:00.415Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.7909.1771026960415
+2026-02-13T23:56:00.415Z [DEBUG] Preserving file permissions: 100600
+2026-02-13T23:56:00.415Z [DEBUG] Temp file written successfully, size: 984 bytes
+2026-02-13T23:56:00.415Z [DEBUG] Applied original permissions to temp file
+2026-02-13T23:56:00.415Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.7909.1771026960415 to /Users/lisihao/.claude.json
+2026-02-13T23:56:00.415Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-13T23:56:02.180Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.7909.1771026962180
+2026-02-13T23:56:02.181Z [DEBUG] Preserving file permissions: 100600
+2026-02-13T23:56:02.181Z [DEBUG] Temp file written successfully, size: 984 bytes
+2026-02-13T23:56:02.181Z [DEBUG] Applied original permissions to temp file
+2026-02-13T23:56:02.181Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.7909.1771026962180 to /Users/lisihao/.claude.json
+2026-02-13T23:56:02.181Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-13T23:56:02.182Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.7909.1771026962182
+2026-02-13T23:56:02.182Z [DEBUG] Preserving file permissions: 100600
+2026-02-13T23:56:02.182Z [DEBUG] Temp file written successfully, size: 984 bytes
+2026-02-13T23:56:02.182Z [DEBUG] Applied original permissions to temp file
+2026-02-13T23:56:02.182Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.7909.1771026962182 to /Users/lisihao/.claude.json
+2026-02-13T23:56:02.182Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-13T23:56:02.187Z [DEBUG] Full reset (shrink->below): prevHeight=36, nextHeight=28, viewport=30
+2026-02-13T23:57:21.906Z [DEBUG] Full reset (shrink->below): prevHeight=31, nextHeight=28, viewport=30

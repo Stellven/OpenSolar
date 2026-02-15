@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.solar.{{SKILL_COMMAND}}</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{BUN_PATH}}</string>
+        <string>run</string>
+        <string>{{SKILL_PATH}}/fetch.ts</string>
+        <string>--save</string>
+    </array>
+
+    <key>StartInterval</key>
+    <integer>{{INTERVAL_SECONDS}}</integer>
+
+    <key>StandardOutPath</key>
+    <string>{{HOME}}/.solar/logs/{{SKILL_COMMAND}}.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>{{HOME}}/.solar/logs/{{SKILL_COMMAND}}.error.log</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>{{BUN_PATH_DIR}}:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>

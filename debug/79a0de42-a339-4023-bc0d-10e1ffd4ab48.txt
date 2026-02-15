@@ -1,0 +1,42 @@
+2026-02-14T16:17:15.967Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-14T16:17:15.968Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-14T16:17:15.968Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-14T16:17:15.968Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-14T16:17:15.974Z [DEBUG] Applying permission update: Adding 42 allow rule(s) to destination 'localSettings': ["Bash(git clone:*)","Bash(curl:*)","Bash(git config:*)","Bash(brew install:*)","Bash(gh auth setup-git:*)","Bash(gh auth login:*)","Bash(gh auth status:*)","Bash(git pull:*)","Bash(~/Solar/install.sh)","Bash(solar)","Bash(~/Solar/bin/solar)","Bash(~/Solar/bin/solar init)","Bash(~/Solar/bin/solar:*)","Bash(~/Solar/install-core.sh)","Bash(bash)","Bash(export BUN_INSTALL=\"$HOME/.bun\")","Bash(export PATH:*)","Bash(~/.claude/solar/bin/solar daemon start)","Bash(himalaya envelope list -s 3)","Bash(sqlite3:*)","Bash(sw_vers:*)","Bash(sysctl:*)","Bash(ls:*)","Bash(echo:*)","Bash(nc:*)","Bash(~/.claude/solar/bin/solar:*)","Bash(top:*)","Bash(bun:*)","Bash(ps:*)","Bash(~/.bun/bin/bun:*)","Bash(things show:*)","Bash(remindctl list:*)","Bash(~/.claude/solar/bin/solar-daemon:*)","Bash(wc:*)","WebSearch","Bash(xargs kill -9)","Bash(openclaw:*)","Bash(~/.zshrc)","Bash(export PATH=\"$BUN_INSTALL/bin:$PATH\")","Bash(source:*)","Bash(zsh -c 'source ~/.zshrc && which bun && bun --version')","Bash(launchctl:*)"]
+2026-02-14T16:17:15.975Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-14T16:17:15.984Z [DEBUG] [ToolSearch:optimistic] mode=tst-auto, ENABLE_TOOL_SEARCH=undefined, result=true
+2026-02-14T16:17:15.984Z [DEBUG] [STARTUP] Running setup()...
+2026-02-14T16:17:15.988Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/lisihao/.claude/skills, project=[]
+2026-02-14T16:17:15.999Z [DEBUG] Passes: Cache stale, returning cached data and refreshing in background
+2026-02-14T16:17:15.999Z [DEBUG] Error log sink initialized
+2026-02-14T16:17:16.002Z [DEBUG] [STARTUP] setup() completed in 18ms
+2026-02-14T16:17:16.002Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-02-14T16:17:16.010Z [DEBUG] Loaded 76 unique skills (76 unconditional, 0 conditional, managed: 0, user: 76, project: 0, additional: 0, legacy commands: 0)
+2026-02-14T16:17:16.011Z [DEBUG] [Claude in Chrome] Found chrome profiles: Default, Profile 1
+2026-02-14T16:17:16.019Z [DEBUG] Found 0 plugins (0 enabled, 0 disabled)
+2026-02-14T16:17:16.020Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-14T16:17:16.020Z [DEBUG] Total plugin skills loaded: 0
+2026-02-14T16:17:16.020Z [DEBUG] Total plugin commands loaded: 0
+2026-02-14T16:17:16.020Z [DEBUG] Registered 0 hooks from 0 plugins
+2026-02-14T16:17:16.020Z [DEBUG] getSkills returning: 76 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-14T16:17:16.021Z [DEBUG] [Claude in Chrome] Extension not found in any browser
+2026-02-14T16:17:16.026Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg)
+2026-02-14T16:17:16.034Z [DEBUG] Total plugin agents loaded: 0
+2026-02-14T16:17:16.035Z [DEBUG] [STARTUP] Commands and agents loaded in 33ms
+2026-02-14T16:17:16.036Z [DEBUG] [STARTUP] Running showSetupScreens()...
+2026-02-14T16:17:16.038Z [DEBUG] [keybindings] KeybindingSetup initialized with 102 bindings, 0 warnings
+2026-02-14T16:17:16.053Z [DEBUG] [keybindings] Watching for changes to /Users/lisihao/.claude/keybindings.json
+2026-02-14T16:17:16.203Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.23708.1771085836203
+2026-02-14T16:17:16.203Z [DEBUG] Preserving file permissions: 100600
+2026-02-14T16:17:16.203Z [DEBUG] Temp file written successfully, size: 6309 bytes
+2026-02-14T16:17:16.203Z [DEBUG] Applied original permissions to temp file
+2026-02-14T16:17:16.203Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.23708.1771085836203 to /Users/lisihao/.claude.json
+2026-02-14T16:17:16.203Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-14T16:17:16.267Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.23708.1771085836267
+2026-02-14T16:17:16.267Z [DEBUG] Preserving file permissions: 100600
+2026-02-14T16:17:16.267Z [DEBUG] Temp file written successfully, size: 6309 bytes
+2026-02-14T16:17:16.267Z [DEBUG] Applied original permissions to temp file
+2026-02-14T16:17:16.267Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.23708.1771085836267 to /Users/lisihao/.claude.json
+2026-02-14T16:17:16.267Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-14T16:17:16.267Z [DEBUG] Passes eligibility cached for org 4b64fec2-dab6-4cd3-854f-5b8cb2ded5ae: true
+2026-02-14T16:19:24.015Z [DEBUG] Skipping SessionEnd:other hook execution - workspace trust not accepted

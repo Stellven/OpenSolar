@@ -1,0 +1,159 @@
+2026-02-14T12:59:15.319Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-14T12:59:15.321Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-14T12:59:15.321Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-14T12:59:15.321Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-14T12:59:15.327Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-14T12:59:15.340Z [DEBUG] [ToolSearch:optimistic] mode=tst-auto, ENABLE_TOOL_SEARCH=undefined, result=true
+2026-02-14T12:59:15.340Z [DEBUG] [STARTUP] Running setup()...
+2026-02-14T12:59:15.344Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/lisihao/.claude/skills, project=[]
+2026-02-14T12:59:15.344Z [DEBUG] Passes: Cache stale, returning cached data and refreshing in background
+2026-02-14T12:59:15.344Z [DEBUG] Error log sink initialized
+2026-02-14T12:59:15.348Z [DEBUG] [STARTUP] setup() completed in 8ms
+2026-02-14T12:59:15.348Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-02-14T12:59:15.352Z [DEBUG] Loaded 0 unique skills (0 unconditional, 0 conditional, managed: 0, user: 0, project: 0, additional: 0, legacy commands: 0)
+2026-02-14T12:59:15.353Z [DEBUG] [Claude in Chrome] Found chrome profiles: Default, Profile 1
+2026-02-14T12:59:15.369Z [DEBUG] Found 0 plugins (0 enabled, 0 disabled)
+2026-02-14T12:59:15.369Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-14T12:59:15.369Z [DEBUG] Total plugin skills loaded: 0
+2026-02-14T12:59:15.369Z [DEBUG] Total plugin commands loaded: 0
+2026-02-14T12:59:15.369Z [DEBUG] Registered 0 hooks from 0 plugins
+2026-02-14T12:59:15.369Z [DEBUG] Total plugin agents loaded: 0
+2026-02-14T12:59:15.370Z [DEBUG] getSkills returning: 0 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-14T12:59:15.370Z [DEBUG] [STARTUP] Commands and agents loaded in 22ms
+2026-02-14T12:59:15.371Z [DEBUG] [STARTUP] Running showSetupScreens()...
+2026-02-14T12:59:15.381Z [DEBUG] [keybindings] KeybindingSetup initialized with 102 bindings, 0 warnings
+2026-02-14T12:59:15.394Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-02-14T12:59:15.396Z [DEBUG] Git remote URL: null
+2026-02-14T12:59:15.396Z [DEBUG] No git remote URL found
+2026-02-14T12:59:15.396Z [DEBUG] Not in a GitHub repository, skipping path mapping update
+2026-02-14T12:59:15.396Z [DEBUG] [keybindings] Watching for changes to /Users/lisihao/.claude/keybindings.json
+2026-02-14T12:59:15.404Z [DEBUG] [Claude in Chrome] Extension not found in any browser
+2026-02-14T12:59:15.634Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.2743.1771073955634
+2026-02-14T12:59:15.634Z [DEBUG] Preserving file permissions: 100600
+2026-02-14T12:59:15.634Z [DEBUG] Temp file written successfully, size: 5605 bytes
+2026-02-14T12:59:15.634Z [DEBUG] Applied original permissions to temp file
+2026-02-14T12:59:15.634Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.2743.1771073955634 to /Users/lisihao/.claude.json
+2026-02-14T12:59:15.635Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-14T12:59:15.635Z [DEBUG] Passes eligibility cached for org 4b64fec2-dab6-4cd3-854f-5b8cb2ded5ae: true
+2026-02-14T12:59:15.698Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.2743.1771073955698
+2026-02-14T12:59:15.699Z [DEBUG] Preserving file permissions: 100600
+2026-02-14T12:59:15.699Z [DEBUG] Temp file written successfully, size: 5603 bytes
+2026-02-14T12:59:15.699Z [DEBUG] Applied original permissions to temp file
+2026-02-14T12:59:15.699Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.2743.1771073955698 to /Users/lisihao/.claude.json
+2026-02-14T12:59:15.699Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-14T12:59:22.382Z [DEBUG] Writing to temp file: /Users/lisihao/.claude/settings.json.tmp.2743.1771073962382
+2026-02-14T12:59:22.382Z [DEBUG] Preserving file permissions: 100644
+2026-02-14T12:59:22.383Z [DEBUG] Temp file written successfully, size: 192 bytes
+2026-02-14T12:59:22.383Z [DEBUG] Applied original permissions to temp file
+2026-02-14T12:59:22.383Z [DEBUG] Renaming /Users/lisihao/.claude/settings.json.tmp.2743.1771073962382 to /Users/lisihao/.claude/settings.json
+2026-02-14T12:59:22.384Z [DEBUG] File /Users/lisihao/.claude/settings.json written atomically
+2026-02-14T12:59:22.385Z [DEBUG] [STARTUP] showSetupScreens() completed in 7014ms
+2026-02-14T12:59:22.385Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-02-14T12:59:22.386Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-02-14T12:59:22.386Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-02-14T12:59:22.388Z [DEBUG] Total LSP servers loaded: 0
+2026-02-14T12:59:22.388Z [DEBUG] [STARTUP] MCP configs loaded in 7061ms
+2026-02-14T12:59:22.392Z [DEBUG] [Reconnection] computeInitialTeamContext: No teammate context set (not a teammate)
+2026-02-14T12:59:22.394Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.2743.1771073962394
+2026-02-14T12:59:22.394Z [DEBUG] Preserving file permissions: 100600
+2026-02-14T12:59:22.394Z [DEBUG] Temp file written successfully, size: 5603 bytes
+2026-02-14T12:59:22.394Z [DEBUG] Applied original permissions to temp file
+2026-02-14T12:59:22.394Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.2743.1771073962394 to /Users/lisihao/.claude.json
+2026-02-14T12:59:22.394Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-14T12:59:22.395Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 0 server(s)
+2026-02-14T12:59:22.395Z [DEBUG] LSP manager initialized with 0 servers
+2026-02-14T12:59:22.396Z [DEBUG] Getting matching hook commands for SessionStart with query: startup
+2026-02-14T12:59:22.396Z [DEBUG] Found 0 hook matchers in settings
+2026-02-14T12:59:22.396Z [DEBUG] Matched 0 unique hooks for query "startup" (0 before deduplication)
+2026-02-14T12:59:22.396Z [DEBUG] installed_plugins.json doesn't exist, returning empty V2 object
+2026-02-14T12:59:22.396Z [DEBUG] Initialized versioned plugins system with 0 plugins
+2026-02-14T12:59:22.408Z [DEBUG] LSP server manager initialized successfully
+2026-02-14T12:59:22.408Z [DEBUG] LSP notification handlers registered successfully for all 0 server(s)
+2026-02-14T12:59:22.417Z [DEBUG] [keybindings] KeybindingSetup initialized with 102 bindings, 0 warnings
+2026-02-14T12:59:22.445Z [DEBUG] [REPL:mount] REPL mounted, disabled=false
+2026-02-14T12:59:22.445Z [DEBUG] Official marketplace auto-install skipped: already_attempted
+2026-02-14T12:59:22.446Z [DEBUG] performStartupChecks called
+2026-02-14T12:59:22.446Z [DEBUG] Starting background plugin installations
+2026-02-14T12:59:22.446Z [DEBUG] performBackgroundPluginInstallations called
+2026-02-14T12:59:22.447Z [DEBUG] No CLAUDE.md/rules files found
+2026-02-14T12:59:22.448Z [DEBUG] Watching for changes in setting files /Users/lisihao/.claude/settings.json, /Users/lisihao/.claude/settings.local.json...
+2026-02-14T12:59:22.448Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-14T12:59:22.467Z [DEBUG] [claudeai-mcp] Checking gate (cached)...
+2026-02-14T12:59:22.467Z [DEBUG] [claudeai-mcp] Gate returned: true
+2026-02-14T12:59:22.467Z [DEBUG] [claudeai-mcp] Fetching from https://api.anthropic.com/v1/mcp_servers?limit=1000
+2026-02-14T12:59:22.468Z [DEBUG] Loaded plugins - Enabled: 0, Disabled: 0, Commands: 0, Agents: 0, Errors: 0
+2026-02-14T12:59:22.468Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T12:59:22.468Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T12:59:22.469Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T12:59:22.489Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-14T12:59:22.489Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (21 tools)
+2026-02-14T12:59:22.489Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T12:59:22.489Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T12:59:22.489Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T12:59:22.490Z [DEBUG] Setting installation status: 0 marketplaces, 0 installable plugins, 0 uninstallable plugins
+2026-02-14T12:59:22.654Z [DEBUG] Org fast mode: disabled (extra_usage_disabled)
+2026-02-14T12:59:22.666Z [DEBUG] [claudeai-mcp] Fetched 0 servers
+2026-02-14T12:59:39.577Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.2743.1771073979577
+2026-02-14T12:59:39.577Z [DEBUG] Preserving file permissions: 100600
+2026-02-14T12:59:39.578Z [DEBUG] Temp file written successfully, size: 5647 bytes
+2026-02-14T12:59:39.578Z [DEBUG] Applied original permissions to temp file
+2026-02-14T12:59:39.578Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.2743.1771073979577 to /Users/lisihao/.claude.json
+2026-02-14T12:59:39.578Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-14T12:59:39.580Z [DEBUG] Stats cache does not exist, returning empty cache
+2026-02-14T12:59:39.580Z [DEBUG] Stats cache empty, processing all historical data in background
+2026-02-14T12:59:39.854Z [DEBUG] Successfully refreshed marketplace: claude-plugins-official
+2026-02-14T12:59:39.854Z [DEBUG] Plugin autoupdate: checking installed plugins
+2026-02-14T12:59:43.876Z [DEBUG] [useDeferredValue] Messages deferred by 2 (0→2)
+2026-02-14T12:59:43.899Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-14T12:59:43.901Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-14T12:59:43.903Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.2743.1771073983903
+2026-02-14T12:59:43.903Z [DEBUG] Preserving file permissions: 100600
+2026-02-14T12:59:43.903Z [DEBUG] Temp file written successfully, size: 5669 bytes
+2026-02-14T12:59:43.903Z [DEBUG] Applied original permissions to temp file
+2026-02-14T12:59:43.903Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.2743.1771073983903 to /Users/lisihao/.claude.json
+2026-02-14T12:59:43.903Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-14T12:59:43.904Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.2743.1771073983904
+2026-02-14T12:59:43.904Z [DEBUG] Preserving file permissions: 100600
+2026-02-14T12:59:43.904Z [DEBUG] Temp file written successfully, size: 5669 bytes
+2026-02-14T12:59:43.904Z [DEBUG] Applied original permissions to temp file
+2026-02-14T12:59:43.904Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.2743.1771073983904 to /Users/lisihao/.claude.json
+2026-02-14T12:59:43.904Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-14T12:59:43.905Z [DEBUG] [useDeferredValue] Messages deferred by 2 (0→2)
+2026-02-14T12:59:43.906Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-14T12:59:46.851Z [DEBUG] Getting matching hook commands for SessionEnd with query: prompt_input_exit
+2026-02-14T12:59:46.851Z [DEBUG] Found 0 hook matchers in settings
+2026-02-14T12:59:46.851Z [DEBUG] Matched 0 unique hooks for query "prompt_input_exit" (0 before deduplication)
+2026-02-14T12:59:46.856Z [DEBUG] FileHistory: Added snapshot for 9f5cef0d-6b3b-4ef2-bd96-8cb8cb0bf1cb, tracking 0 files
+2026-02-14T12:59:46.857Z [DEBUG] LSP server manager shut down successfully
+2026-02-14T12:59:46.858Z [DEBUG] Metrics opt-out check failed: No API key available
+2026-02-14T12:59:46.858Z [DEBUG] Metrics check failed, defaulting to disabled
+2026-02-14T12:59:46.858Z [DEBUG] Metrics export disabled by organization setting
+2026-02-14T12:59:46.858Z [DEBUG] BigQuery metrics exporter flush complete
+2026-02-14T12:59:46.858Z [DEBUG] BigQuery metrics exporter flush complete
+2026-02-14T12:59:46.858Z [DEBUG] BigQuery metrics exporter shutdown complete
+2026-02-14T12:59:46.859Z [DEBUG] [useDeferredValue] Messages deferred by 3 (2→5)
+2026-02-14T12:59:46.867Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-14T12:59:46.870Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.2743.1771073986870
+2026-02-14T12:59:46.870Z [DEBUG] Preserving file permissions: 100600
+2026-02-14T12:59:46.870Z [DEBUG] Temp file written successfully, size: 5669 bytes
+2026-02-14T12:59:46.870Z [DEBUG] Applied original permissions to temp file
+2026-02-14T12:59:46.870Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.2743.1771073986870 to /Users/lisihao/.claude.json
+2026-02-14T12:59:46.870Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-14T12:59:46.871Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.2743.1771073986871
+2026-02-14T12:59:46.871Z [DEBUG] Preserving file permissions: 100600
+2026-02-14T12:59:46.871Z [DEBUG] Temp file written successfully, size: 5669 bytes
+2026-02-14T12:59:46.871Z [DEBUG] Applied original permissions to temp file
+2026-02-14T12:59:46.871Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.2743.1771073986871 to /Users/lisihao/.claude.json
+2026-02-14T12:59:46.871Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-14T12:59:46.872Z [DEBUG] [useDeferredValue] Messages deferred by 3 (2→5)
+2026-02-14T12:59:46.874Z [DEBUG] Stopped caffeinate, allowing sleep

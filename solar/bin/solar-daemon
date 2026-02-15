@@ -1,0 +1,196 @@
+#!/bin/bash
+# Solar Daemon 管理脚本
+# Usage: solar-daemon {start|stop|status|restart|logs}
+
+# 确保 Bun 在 PATH 中
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
+
+SOLAR_HOME="${HOME}/.solar"
+SOCKET_PATH="/tmp/solar.sock"
+PID_FILE="${SOLAR_HOME}/daemon.pid"
+LOG_FILE="${SOLAR_HOME}/daemon.log"
+DAEMON_SCRIPT="${HOME}/.claude/solar/core/daemon/server.ts"
+
+# 确保目录存在
+mkdir -p "${SOLAR_HOME}"
+mkdir -p "${SOLAR_HOME}/cache"
+mkdir -p "${SOLAR_HOME}/plugins"
+
+# 颜色定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+log_success() {
+    echo -e "${GREEN}[OK]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+is_running() {
+    if [ -f "$PID_FILE" ]; then
+        local pid=$(cat "$PID_FILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+get_pid() {
+    if [ -f "$PID_FILE" ]; then
+        cat "$PID_FILE"
+    fi
+}
+
+start_daemon() {
+    if is_running; then
+        log_warn "Daemon already running (PID: $(get_pid))"
+        return 1
+    fi
+
+    log_info "Starting Solar Daemon..."
+
+    # 清理旧的 socket
+    [ -e "$SOCKET_PATH" ] && rm -f "$SOCKET_PATH"
+
+    # 启动 daemon
+    nohup bun run "$DAEMON_SCRIPT" >> "$LOG_FILE" 2>&1 &
+    local pid=$!
+    echo $pid > "$PID_FILE"
+
+    # 等待启动
+    sleep 1
+
+    if is_running; then
+        log_success "Daemon started (PID: $pid)"
+        log_info "Socket: $SOCKET_PATH"
+        log_info "Log: $LOG_FILE"
+        return 0
+    else
+        log_error "Failed to start daemon"
+        rm -f "$PID_FILE"
+        return 1
+    fi
+}
+
+stop_daemon() {
+    if ! is_running; then
+        log_warn "Daemon is not running"
+        return 0
+    fi
+
+    local pid=$(get_pid)
+    log_info "Stopping Solar Daemon (PID: $pid)..."
+
+    # 发送 SIGTERM
+    kill "$pid" 2>/dev/null
+
+    # 等待进程退出
+    local count=0
+    while kill -0 "$pid" 2>/dev/null && [ $count -lt 10 ]; do
+        sleep 1
+        count=$((count + 1))
+    done
+
+    # 强制终止
+    if kill -0 "$pid" 2>/dev/null; then
+        log_warn "Force killing daemon..."
+        kill -9 "$pid" 2>/dev/null
+    fi
+
+    # 清理
+    rm -f "$PID_FILE"
+    rm -f "$SOCKET_PATH"
+
+    log_success "Daemon stopped"
+}
+
+status_daemon() {
+    if is_running; then
+        local pid=$(get_pid)
+        log_success "Daemon is running (PID: $pid)"
+
+        # 尝试获取状态
+        if [ -e "$SOCKET_PATH" ]; then
+            echo ""
+            echo "Querying daemon status..."
+            # 使用 curl 通过 unix socket 查询
+            curl -s --unix-socket "$SOCKET_PATH" http://localhost/status 2>/dev/null | jq . 2>/dev/null || echo "  (Unable to query status)"
+        fi
+    else
+        log_warn "Daemon is not running"
+        return 1
+    fi
+}
+
+restart_daemon() {
+    stop_daemon
+    sleep 1
+    start_daemon
+}
+
+show_logs() {
+    if [ -f "$LOG_FILE" ]; then
+        tail -f "$LOG_FILE"
+    else
+        log_warn "Log file not found: $LOG_FILE"
+    fi
+}
+
+show_help() {
+    echo "Solar Daemon Management"
+    echo ""
+    echo "Usage: $0 {start|stop|status|restart|logs}"
+    echo ""
+    echo "Commands:"
+    echo "  start    Start the daemon"
+    echo "  stop     Stop the daemon"
+    echo "  status   Show daemon status"
+    echo "  restart  Restart the daemon"
+    echo "  logs     Tail the daemon log"
+    echo ""
+    echo "Files:"
+    echo "  PID:     $PID_FILE"
+    echo "  Log:     $LOG_FILE"
+    echo "  Socket:  $SOCKET_PATH"
+}
+
+# 主逻辑
+case "$1" in
+    start)
+        start_daemon
+        ;;
+    stop)
+        stop_daemon
+        ;;
+    status)
+        status_daemon
+        ;;
+    restart)
+        restart_daemon
+        ;;
+    logs)
+        show_logs
+        ;;
+    help|--help|-h)
+        show_help
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|status|restart|logs}"
+        exit 1
+        ;;
+esac

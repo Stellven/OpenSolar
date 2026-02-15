@@ -1755,6 +1755,66 @@ ${chapters.map((ch, idx) => `      <div class="chapter">
       console.log('   cortex_claims 表不存在，跳过');
     }
 
+    // ========== Step 2.2: 查知识库 (knowledge_entities/relations/claims) ==========
+    console.log('📚 查询知识库 (Knowledge Network)...');
+    const knowledgeEvidence = {
+      entities: [] as Array<{ name: string; type: string; description: string }>,
+      relations: [] as Array<{ from: string; to: string; type: string }>,
+      claims: [] as Array<{ text: string; confidence: number }>
+    };
+
+    try {
+      // 查知识实体
+      const entities = db.query(`
+        SELECT name, type, description
+        FROM knowledge_entities
+        WHERE name LIKE ? OR description LIKE ?
+        ORDER BY importance DESC
+        LIMIT 10
+      `).all(`%${topic}%`, `%${topic}%`) as any[];
+      knowledgeEvidence.entities = entities.map(e => ({
+        name: e.name,
+        type: e.type,
+        description: (e.description || '').substring(0, 100)
+      }));
+      console.log(`   找到 ${knowledgeEvidence.entities.length} 个知识实体`);
+    } catch (e) {
+      console.log('   knowledge_entities 表不存在，跳过');
+    }
+
+    try {
+      // 查知识结论
+      const kclaims = db.query(`
+        SELECT claim_text, confidence
+        FROM knowledge_claims
+        WHERE claim_text LIKE ?
+        ORDER BY confidence DESC
+        LIMIT 5
+      `).all(`%${topic}%`) as any[];
+      knowledgeEvidence.claims = kclaims.map(c => ({
+        text: c.claim_text.substring(0, 200),
+        confidence: c.confidence || 0.7
+      }));
+      console.log(`   找到 ${knowledgeEvidence.claims.length} 个知识结论`);
+    } catch (e) {
+      console.log('   knowledge_claims 表不存在，跳过');
+    }
+
+    // 将知识库证据加入 session 引用
+    if (knowledgeEvidence.entities.length > 0 || knowledgeEvidence.claims.length > 0) {
+      console.log(`   💡 知识库补充: ${knowledgeEvidence.entities.length} 实体, ${knowledgeEvidence.claims.length} 结论`);
+      // 保存到 session 的 references 中，供后续使用
+      if (this.session) {
+        this.session.references.push({
+          type: 'knowledge_base',
+          title: `知识库: ${topic}`,
+          source: 'solar_knowledge',
+          relevance: 0.9,
+          summary: `实体: ${knowledgeEvidence.entities.slice(0, 3).map(e => e.name).join(', ')}; 结论: ${knowledgeEvidence.claims.slice(0, 2).map(c => c.text.substring(0, 50)).join('; ')}`
+        });
+      }
+    }
+
     // ========== Step 2.5: WebSearch 搜索网络资料 (v2.1 新增) ==========
     console.log('🌐 WebSearch 搜索网络资料...');
     let webSearchResults: WebSearchResult[] = [];
@@ -5448,6 +5508,85 @@ ${r.chunkReviews.map(cr => `**块 ${cr.chunkIndex + 1}/${reportChunks.length}:**
   }
 
   /**
+   * 从最终报告提取关键论点 (v2.4)
+   * 设计来源: 2026-02-14 知识库诊断 - 修复 cortex_claims 为空的问题
+   */
+  private extractClaimsFromReport(): Array<{
+    text: string;
+    supporting_sources: string[];
+    counter_sources?: string[];
+    expert_model?: string;
+    confidence: number;
+  }> {
+    const claims: Array<{
+      text: string;
+      supporting_sources: string[];
+      counter_sources?: string[];
+      expert_model?: string;
+      confidence: number;
+    }> = [];
+
+    if (!this.session) return claims;
+
+    // 1. 从 session.references 获取来源列表
+    const sourceKeys = (this.session.references || []).map(ref =>
+      ref.title.toLowerCase().replace(/\s+/g, '_').substring(0, 50)
+    );
+
+    // 2. 从最终报告的结论/摘要部分提取论点
+    const finalReportPath = `${this.persistence['outputDir']}/${this.session.sessionId}/final-report.md`;
+    try {
+      const reportContent = readFileSync(finalReportPath, 'utf-8');
+
+      // 提取"结论"或"核心发现"章节的要点
+      const conclusionMatch = reportContent.match(
+        /##\s*(结论|核心发现|关键结论|主要发现|Summary|Conclusion)[\s\S]*?(?=\n##|$)/gi
+      );
+
+      if (conclusionMatch) {
+        const conclusionText = conclusionMatch[0];
+
+        // 匹配列表项 (- 开头的行)
+        const bulletPoints = conclusionText.match(/^[\s]*[-*]\s*.+$/gm) || [];
+
+        for (const point of bulletPoints.slice(0, 5)) {  // 最多取5个关键论点
+          const claimText = point.replace(/^[\s]*[-*]\s*/, '').trim();
+          if (claimText.length > 20 && claimText.length < 500) {
+            claims.push({
+              text: claimText,
+              supporting_sources: sourceKeys.slice(0, 3),  // 关联前3个来源
+              expert_model: 'insight-agent-v2',
+              confidence: 0.75  // 默认置信度
+            });
+          }
+        }
+      }
+
+      // 3. 如果没找到结论章节，从摘要提取
+      if (claims.length === 0) {
+        const abstractMatch = reportContent.match(/##\s*(摘要|Abstract)[\s\S]*?(?=\n##|$)/i);
+        if (abstractMatch) {
+          const abstractText = abstractMatch[0].replace(/##\s*(摘要|Abstract)/i, '').trim();
+          // 按句子分割，取前3个
+          const sentences = abstractText.split(/[。.!?！？]/).filter(s => s.trim().length > 30);
+          for (const sentence of sentences.slice(0, 3)) {
+            claims.push({
+              text: sentence.trim(),
+              supporting_sources: sourceKeys.slice(0, 3),
+              expert_model: 'insight-agent-v2',
+              confidence: 0.7
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('  ⚠️ 读取最终报告失败，跳过 claims 提取:', error);
+    }
+
+    return claims;
+  }
+
+  /**
    * 持久化到 Cortex 知识库 (v2.3)
    * 铁律：设计/开发前先查 Cortex，完成后写入 Cortex
    */
@@ -5510,7 +5649,24 @@ ${r.chunkReviews.map(cr => `**块 ${cr.chunkIndex + 1}/${reportChunks.length}:**
         evalCount++;
       }
 
-      console.log(`  ✅ Cortex 持久化完成: ${sourceCount} sources, ${evalCount} evals`);
+      // 3. 持久化 Claims (从最终报告提取关键论点)
+      // 设计来源: 2026-02-14 知识库诊断 - 修复 cortex_claims 为空的问题
+      const claims = this.extractClaimsFromReport();
+      let claimCount = 0;
+      for (const claim of claims) {
+        await this.cortex.addClaim(
+          taskId,
+          {
+            text: claim.text,
+            supporting_sources: claim.supporting_sources,
+            counter_sources: claim.counter_sources || []
+          },
+          claim.expert_model
+        );
+        claimCount++;
+      }
+
+      console.log(`  ✅ Cortex 持久化完成: ${sourceCount} sources, ${evalCount} evals, ${claimCount} claims`);
     } catch (error) {
       // 持久化失败不应阻塞整个流程
       console.warn('  ⚠️ Cortex 持久化失败 (非阻塞):', error);

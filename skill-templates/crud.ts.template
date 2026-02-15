@@ -1,0 +1,214 @@
+#!/usr/bin/env bun
+/**
+ * {{SKILL_NAME}} - {{SKILL_DESCRIPTION}}
+ *
+ * 自动生成自: skill-templates/crud.ts.template
+ * 生成时间: {{GENERATED_AT}}
+ *
+ * 功能: 数据增删改查
+ *
+ * 使用:
+ *   bun run {{SKILL_PATH}}/crud.ts list
+ *   bun run {{SKILL_PATH}}/crud.ts add "item"
+ *   bun run {{SKILL_PATH}}/crud.ts get <id>
+ *   bun run {{SKILL_PATH}}/crud.ts update <id> "new value"
+ *   bun run {{SKILL_PATH}}/crud.ts delete <id>
+ */
+
+import { Database } from "bun:sqlite";
+import { homedir } from "os";
+import { existsSync } from "fs";
+
+// ==================== 配置 ====================
+
+const CONFIG = {
+  name: "{{SKILL_NAME}}",
+  dbPath: `${homedir()}/.solar/solar.db`,
+  tableName: "{{TABLE_NAME}}",
+};
+
+// ==================== 类型定义 ====================
+
+interface {{DATA_TYPE}} {
+  id: number;
+{{DATA_FIELDS}}
+  created_at: string;
+  updated_at: string;
+}
+
+// ==================== 数据库操作 ====================
+
+function initDB(db: Database) {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS ${CONFIG.tableName} (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+{{TABLE_SCHEMA}}
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+}
+
+function list(db: Database, limit: number = 50): {{DATA_TYPE}}[] {
+  return db.query(`
+    SELECT * FROM ${CONFIG.tableName}
+    ORDER BY updated_at DESC
+    LIMIT ?
+  `).all(limit) as {{DATA_TYPE}}[];
+}
+
+function get(db: Database, id: number): {{DATA_TYPE}} | null {
+  return db.query(`
+    SELECT * FROM ${CONFIG.tableName} WHERE id = ?
+  `).get(id) as {{DATA_TYPE}} | null;
+}
+
+function add(db: Database, data: Partial<{{DATA_TYPE}}>): number {
+  const result = db.run(`
+    INSERT INTO ${CONFIG.tableName} ({{INSERT_COLUMNS}})
+    VALUES ({{INSERT_PLACEHOLDERS}})
+  `, {{INSERT_PARAMS}});
+  return Number(result.lastInsertRowid);
+}
+
+function update(db: Database, id: number, data: Partial<{{DATA_TYPE}}>): boolean {
+  const result = db.run(`
+    UPDATE ${CONFIG.tableName}
+    SET {{UPDATE_SET}}, updated_at = datetime('now')
+    WHERE id = ?
+  `, {{UPDATE_PARAMS}}, id);
+  return result.changes > 0;
+}
+
+function remove(db: Database, id: number): boolean {
+  const result = db.run(`DELETE FROM ${CONFIG.tableName} WHERE id = ?`, id);
+  return result.changes > 0;
+}
+
+// ==================== TVS 输出 ====================
+
+function printList(items: {{DATA_TYPE}}[]) {
+  console.log(`
+┌─────────────────────────────────────────────────────────────────┐
+│                     {{SKILL_EMOJI}} {{SKILL_TITLE}} LIST                     │
+├─────────────────────────────────────────────────────────────────┤
+│  Total: ${items.length.toString().padEnd(55)}│
+├─────────────────────────────────────────────────────────────────┤`);
+
+  if (items.length === 0) {
+    console.log(`│  (empty)                                                        │`);
+  } else {
+    items.forEach((item) => {
+      const line = formatItem(item);
+      console.log(`│${line.padEnd(65)}│`);
+    });
+  }
+
+  console.log(`└─────────────────────────────────────────────────────────────────┘
+
+────────────────────────────────────────────────────────────────────
+Powered by TVS v0.4.0 · Style: zenwhite.terminal
+可选风格: monolith | aurora | cyberpunk | liquid.dark | swiss ...
+切换风格: /theme <style> | 查看所有: /theme list`);
+}
+
+function printItem(item: {{DATA_TYPE}} | null, action: string) {
+  if (!item) {
+    console.log("Item not found.");
+    return;
+  }
+  console.log(`
+┌─────────────────────────────────────────────────────────────────┐
+│                     {{SKILL_EMOJI}} ${action.toUpperCase().padEnd(45)}│
+├─────────────────────────────────────────────────────────────────┤
+│  ID: ${item.id.toString().padEnd(58)}│
+{{PRINT_FIELDS}}
+│  Created: ${item.created_at.padEnd(53)}│
+│  Updated: ${item.updated_at.padEnd(53)}│
+└─────────────────────────────────────────────────────────────────┘
+
+────────────────────────────────────────────────────────────────────
+Powered by TVS v0.4.0 · Style: zenwhite.terminal
+可选风格: monolith | aurora | cyberpunk | liquid.dark | swiss ...
+切换风格: /theme <style> | 查看所有: /theme list`);
+}
+
+function formatItem(item: {{DATA_TYPE}}): string {
+  {{FORMAT_LOGIC}}
+}
+
+// ==================== 主程序 ====================
+
+async function main() {
+  const args = process.argv.slice(2);
+  const command = args[0] || "list";
+
+  if (!existsSync(CONFIG.dbPath)) {
+    console.error(`Database not found: ${CONFIG.dbPath}`);
+    process.exit(1);
+  }
+
+  const db = new Database(CONFIG.dbPath);
+  initDB(db);
+
+  switch (command) {
+    case "list":
+    case "ls":
+      printList(list(db));
+      break;
+
+    case "get":
+      if (!args[1]) {
+        console.error("Usage: get <id>");
+        process.exit(1);
+      }
+      printItem(get(db, parseInt(args[1])), "GET");
+      break;
+
+    case "add":
+    case "create":
+      if (!args[1]) {
+        console.error("Usage: add <value>");
+        process.exit(1);
+      }
+      const newId = add(db, { {{ADD_DATA}} });
+      console.log(`✓ Created item #${newId}`);
+      printItem(get(db, newId), "CREATED");
+      break;
+
+    case "update":
+    case "edit":
+      if (!args[1] || !args[2]) {
+        console.error("Usage: update <id> <value>");
+        process.exit(1);
+      }
+      if (update(db, parseInt(args[1]), { {{UPDATE_DATA}} })) {
+        console.log(`✓ Updated item #${args[1]}`);
+        printItem(get(db, parseInt(args[1])), "UPDATED");
+      } else {
+        console.log(`✗ Item #${args[1]} not found`);
+      }
+      break;
+
+    case "delete":
+    case "rm":
+      if (!args[1]) {
+        console.error("Usage: delete <id>");
+        process.exit(1);
+      }
+      if (remove(db, parseInt(args[1]))) {
+        console.log(`✓ Deleted item #${args[1]}`);
+      } else {
+        console.log(`✗ Item #${args[1]} not found`);
+      }
+      break;
+
+    default:
+      console.log(`Unknown command: ${command}`);
+      console.log("Available: list, get, add, update, delete");
+  }
+
+  db.close();
+}
+
+main().catch(console.error);

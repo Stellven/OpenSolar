@@ -1,0 +1,151 @@
+#!/usr/bin/env bun
+/**
+ * {{SKILL_NAME}} - {{SKILL_DESCRIPTION}}
+ *
+ * 自动生成自: skill-templates/monitor.ts.template
+ * 生成时间: {{GENERATED_AT}}
+ *
+ * 功能:
+ * - 定时抓取数据
+ * - 存储到 SQLite
+ * - TVS 格式展示
+ *
+ * 使用:
+ *   bun run {{SKILL_PATH}}/fetch.ts              # 抓取并显示
+ *   bun run {{SKILL_PATH}}/fetch.ts --save       # 抓取并保存
+ *   bun run {{SKILL_PATH}}/fetch.ts --history    # 查看历史
+ */
+
+import { Database } from "bun:sqlite";
+import { homedir } from "os";
+import { existsSync } from "fs";
+
+// ==================== 配置 ====================
+
+const CONFIG = {
+  name: "{{SKILL_NAME}}",
+  apiUrl: "{{API_URL}}",
+  dbPath: `${homedir()}/.solar/solar.db`,
+  tableName: "{{TABLE_NAME}}",
+  fetchCount: {{FETCH_COUNT}},
+  intervalHours: {{INTERVAL_HOURS}},
+};
+
+// ==================== 类型定义 ====================
+
+interface {{DATA_TYPE}} {
+{{DATA_FIELDS}}
+}
+
+// ==================== 数据抓取 ====================
+
+async function fetchData(): Promise<{{DATA_TYPE}}[]> {
+  try {
+    const res = await fetch(CONFIG.apiUrl);
+    const data = await res.json();
+    {{PARSE_LOGIC}}
+    return results.slice(0, CONFIG.fetchCount);
+  } catch (e) {
+    console.error("Fetch error:", e);
+    return [];
+  }
+}
+
+// ==================== 数据库操作 ====================
+
+function initDB(db: Database) {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS ${CONFIG.tableName} (
+{{TABLE_SCHEMA}}
+      fetched_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_${CONFIG.tableName}_fetched ON ${CONFIG.tableName}(fetched_at DESC)`);
+}
+
+function saveData(db: Database, items: {{DATA_TYPE}}[]) {
+  const stmt = db.prepare(`
+    INSERT OR REPLACE INTO ${CONFIG.tableName} ({{INSERT_COLUMNS}}, fetched_at)
+    VALUES ({{INSERT_PLACEHOLDERS}}, datetime('now'))
+  `);
+  for (const item of items) {
+    stmt.run({{INSERT_VALUES}});
+  }
+}
+
+function getHistory(db: Database, hours: number = 24) {
+  return db.query(`
+    SELECT * FROM ${CONFIG.tableName}
+    WHERE fetched_at > datetime('now', '-${hours} hours')
+    ORDER BY fetched_at DESC
+    LIMIT 100
+  `).all();
+}
+
+// ==================== TVS 输出 ====================
+
+function printTVS(items: {{DATA_TYPE}}[]) {
+  const now = new Date().toLocaleString("zh-CN");
+  console.log(`
+┌─────────────────────────────────────────────────────────────────┐
+│                     {{SKILL_EMOJI}} {{SKILL_TITLE}}                          │
+├─────────────────────────────────────────────────────────────────┤
+│  更新时间: ${now.padEnd(47)}│
+├─────────────────────────────────────────────────────────────────┤`);
+
+  items.slice(0, 15).forEach((item, i) => {
+    const line = formatItem(item, i + 1);
+    console.log(`│${line.padEnd(65)}│`);
+  });
+
+  console.log(`└─────────────────────────────────────────────────────────────────┘
+
+────────────────────────────────────────────────────────────────────
+Powered by TVS v0.4.0 · Style: zenwhite.terminal
+可选风格: monolith | aurora | cyberpunk | liquid.dark | swiss ...
+切换风格: /theme <style> | 查看所有: /theme list`);
+}
+
+function formatItem(item: {{DATA_TYPE}}, rank: number): string {
+  {{FORMAT_LOGIC}}
+}
+
+// ==================== 主程序 ====================
+
+async function main() {
+  const args = process.argv.slice(2);
+  const shouldSave = args.includes("--save");
+  const showHistory = args.includes("--history");
+
+  if (!existsSync(CONFIG.dbPath)) {
+    console.error(`Database not found: ${CONFIG.dbPath}`);
+    process.exit(1);
+  }
+
+  const db = new Database(CONFIG.dbPath);
+  initDB(db);
+
+  if (showHistory) {
+    const history = getHistory(db);
+    console.log(`History: ${history.length} records`);
+    return;
+  }
+
+  console.log(`Fetching ${CONFIG.name} data...`);
+  const items = await fetchData();
+
+  if (shouldSave && items.length > 0) {
+    saveData(db, items);
+    console.log(`Saved ${items.length} items to database.`);
+  }
+
+  if (items.length > 0) {
+    printTVS(items);
+  } else {
+    console.log("No data fetched.");
+  }
+
+  db.close();
+}
+
+main().catch(console.error);

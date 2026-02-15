@@ -1,0 +1,31 @@
+{
+  "version": "V58",
+  "date": "2026-01-28",
+  "scale_factor": 1,
+  "geometric_mean": 3.24,
+  "queries": {
+    "Q1": {"speedup": 8.39, "duckdb_ms": 34.94, "thunder_ms": 4.16},
+    "Q2": {"speedup": 2.47, "duckdb_ms": 5.68, "thunder_ms": 2.30},
+    "Q3": {"speedup": 2.50, "duckdb_ms": 12.50, "thunder_ms": 5.00},
+    "Q4": {"speedup": 3.45, "duckdb_ms": 14.21, "thunder_ms": 4.12},
+    "Q5": {"speedup": 2.10, "duckdb_ms": 11.55, "thunder_ms": 5.50},
+    "Q6": {"speedup": 2.75, "duckdb_ms": 4.40, "thunder_ms": 1.60},
+    "Q7": {"speedup": 3.24, "duckdb_ms": 14.26, "thunder_ms": 4.40},
+    "Q8": {"speedup": 1.78, "duckdb_ms": 10.50, "thunder_ms": 5.90},
+    "Q9": {"speedup": 1.79, "duckdb_ms": 35.80, "thunder_ms": 20.00},
+    "Q10": {"speedup": 2.81, "duckdb_ms": 25.33, "thunder_ms": 9.02},
+    "Q11": {"speedup": 2.17, "duckdb_ms": 4.35, "thunder_ms": 2.00},
+    "Q12": {"speedup": 5.61, "duckdb_ms": 22.43, "thunder_ms": 4.00},
+    "Q13": {"speedup": 2.49, "duckdb_ms": 38.70, "thunder_ms": 15.54},
+    "Q14": {"speedup": 4.98, "duckdb_ms": 11.45, "thunder_ms": 2.30},
+    "Q15": {"speedup": 3.58, "duckdb_ms": 7.16, "thunder_ms": 2.00},
+    "Q16": {"speedup": 1.70, "duckdb_ms": 11.90, "thunder_ms": 7.00},
+    "Q17": {"speedup": 1.88, "duckdb_ms": 9.40, "thunder_ms": 5.00},
+    "Q18": {"speedup": 4.82, "duckdb_ms": 28.90, "thunder_ms": 6.00},
+    "Q19": {"speedup": 6.74, "duckdb_ms": 31.01, "thunder_ms": 4.60},
+    "Q20": {"speedup": 2.11, "duckdb_ms": 12.66, "thunder_ms": 6.00},
+    "Q21": {"speedup": 22.73, "duckdb_ms": 44.28, "thunder_ms": 1.95},
+    "Q22": {"speedup": 8.49, "duckdb_ms": 10.70, "thunder_ms": 1.26}
+  },
+  "notes": "V58 是历史最佳版本，用作性能回归检测的 baseline"
+}

@@ -1,0 +1,44 @@
+2026-02-14T14:44:19.115Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-14T14:44:19.116Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-14T14:44:19.116Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-14T14:44:19.116Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-14T14:44:19.122Z [DEBUG] Applying permission update: Adding 27 allow rule(s) to destination 'localSettings': ["Bash(git clone:*)","Bash(curl:*)","Bash(git config:*)","Bash(brew install:*)","Bash(gh auth setup-git:*)","Bash(gh auth login:*)","Bash(gh auth status:*)","Bash(git pull:*)","Bash(~/Solar/install.sh)","Bash(solar)","Bash(~/Solar/bin/solar)","Bash(~/Solar/bin/solar init)","Bash(~/Solar/bin/solar:*)","Bash(~/Solar/install-core.sh)","Bash(bash)","Bash(export BUN_INSTALL=\"$HOME/.bun\")","Bash(export PATH:*)","Bash(~/.claude/solar/bin/solar daemon start)","Bash(himalaya envelope list -s 3)","Bash(sqlite3:*)","Bash(sw_vers:*)","Bash(sysctl:*)","Bash(ls:*)","Bash(echo:*)","Bash(nc:*)","Bash(~/.claude/solar/bin/solar:*)","Bash(top:*)"]
+2026-02-14T14:44:19.122Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-14T14:44:19.131Z [DEBUG] [ToolSearch:optimistic] mode=tst-auto, ENABLE_TOOL_SEARCH=undefined, result=true
+2026-02-14T14:44:19.132Z [DEBUG] [STARTUP] Running setup()...
+2026-02-14T14:44:19.136Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/lisihao/.claude/skills, project=[]
+2026-02-14T14:44:19.143Z [WARN] Failed to parse YAML frontmatter in /Users/lisihao/.claude/skills/email-to-calendar/SKILL.md: Nested mappings are not allowed in compact mappings at line 3, column 14:
+
+description: Extract calendar events from emails and create calendar entries. S…
+             ^
+2026-02-14T14:44:19.145Z [WARN] Failed to parse YAML frontmatter in /Users/lisihao/.claude/skills/obsidian-daily/SKILL.md: Implicit keys need to be on a single line at line 3, column 1:
+
+description: Manage Obsidian Daily Notes via obsidian-cli. Create and open dail…
+<<<<<<< Updated upstream
+^
+2026-02-14T14:44:19.148Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-14T14:44:19.148Z [DEBUG] Error log sink initialized
+2026-02-14T14:44:19.152Z [DEBUG] [STARTUP] setup() completed in 20ms
+2026-02-14T14:44:19.152Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-02-14T14:44:19.155Z [DEBUG] Loaded 38 unique skills (38 unconditional, 0 conditional, managed: 0, user: 38, project: 0, additional: 0, legacy commands: 0)
+2026-02-14T14:44:19.156Z [DEBUG] [Claude in Chrome] Found chrome profiles: Default, Profile 1
+2026-02-14T14:44:19.163Z [DEBUG] Found 0 plugins (0 enabled, 0 disabled)
+2026-02-14T14:44:19.163Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-14T14:44:19.163Z [DEBUG] Total plugin skills loaded: 0
+2026-02-14T14:44:19.163Z [DEBUG] Total plugin commands loaded: 0
+2026-02-14T14:44:19.163Z [DEBUG] Registered 0 hooks from 0 plugins
+2026-02-14T14:44:19.163Z [DEBUG] getSkills returning: 38 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-14T14:44:19.164Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg)
+2026-02-14T14:44:19.164Z [DEBUG] [Claude in Chrome] Extension not found in any browser
+2026-02-14T14:44:19.173Z [DEBUG] Total plugin agents loaded: 0
+2026-02-14T14:44:19.176Z [DEBUG] [STARTUP] Commands and agents loaded in 24ms
+2026-02-14T14:44:19.177Z [DEBUG] [STARTUP] Running showSetupScreens()...
+2026-02-14T14:44:19.179Z [DEBUG] [keybindings] KeybindingSetup initialized with 102 bindings, 0 warnings
+2026-02-14T14:44:19.193Z [DEBUG] [keybindings] Watching for changes to /Users/lisihao/.claude/keybindings.json
+2026-02-14T14:44:19.523Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.11826.1771080259523
+2026-02-14T14:44:19.523Z [DEBUG] Preserving file permissions: 100600
+2026-02-14T14:44:19.523Z [DEBUG] Temp file written successfully, size: 5549 bytes
+2026-02-14T14:44:19.523Z [DEBUG] Applied original permissions to temp file
+2026-02-14T14:44:19.523Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.11826.1771080259523 to /Users/lisihao/.claude.json
+2026-02-14T14:44:19.523Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-14T14:44:52.325Z [DEBUG] Skipping SessionEnd:other hook execution - workspace trust not accepted

@@ -1,0 +1,1163 @@
+2026-02-15T12:58:57.459Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-15T12:58:57.459Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-15T12:58:57.459Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-15T12:58:57.459Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-15T12:58:57.480Z [DEBUG] Applying permission update: Adding 94 allow rule(s) to destination 'localSettings': ["Bash(git clone:*)","Bash(curl:*)","Bash(git config:*)","Bash(brew install:*)","Bash(gh auth setup-git:*)","Bash(gh auth login:*)","Bash(gh auth status:*)","Bash(git pull:*)","Bash(~/Solar/install.sh)","Bash(solar)","Bash(~/Solar/bin/solar)","Bash(~/Solar/bin/solar init)","Bash(~/Solar/bin/solar:*)","Bash(~/Solar/install-core.sh)","Bash(bash)","Bash(export BUN_INSTALL=\"$HOME/.bun\")","Bash(export PATH:*)","Bash(~/.claude/solar/bin/solar daemon start)","Bash(himalaya envelope list -s 3)","Bash(sqlite3:*)","Bash(sw_vers:*)","Bash(sysctl:*)","Bash(ls:*)","Bash(echo:*)","Bash(nc:*)","Bash(~/.claude/solar/bin/solar:*)","Bash(top:*)","Bash(bun:*)","Bash(ps:*)","Bash(~/.bun/bin/bun:*)","Bash(things show:*)","Bash(remindctl list:*)","Bash(~/.claude/solar/bin/solar-daemon:*)","Bash(wc:*)","WebSearch","Bash(xargs kill -9)","Bash(openclaw:*)","Bash(~/.zshrc)","Bash(export PATH=\"$BUN_INSTALL/bin:$PATH\")","Bash(source:*)","Bash(zsh -c 'source ~/.zshrc && which bun && bun --version')","Bash(launchctl:*)","Bash(sudo reboot)","Bash(osascript -e 'tell app \"\"System Events\"\" to restart')","Bash(npm run demo)","Bash(npx tsx:*)","Bash(grep:*)","Bash(pkill:*)","Bash([ -n \"$GOOGLE_API_KEY\" ])","Bash([ -n \"$DEEPSEEK_API_KEY\" ])","Bash([ -n \"$ZHIPU_API_KEY\" ])","Bash(python3:*)","Bash(swift:*)","Bash(find:*)","Bash(head -20 echo echo 图片数量: find ~/Solar/Skin-check/Acne04/acne_1024 -name *.jpg -o -name *.png)","Bash(cd ~/Solar/Skin-check/Acne04 __NEW_LINE_a4087104496918c3__ echo \"=== 目录结构 ===\" ls -la echo \"\" __NEW_LINE_a4087104496918c3__ echo \"=== acne_1024 目录 ===\" ls acne_1024/)","Bash(xargs:*)","Bash(~/.openclaw/workspace/TOOLS.md:*)","Bash(~/.claude/core/xiaoai-insight/insight-runner.sh:*)","Bash(__NEW_LINE_6e6a2c141186e373__ echo \"\")","Bash(# 修复分类器:*)","mcp__are__stats","Bash(env)","Bash(git add:*)","Bash(git commit:*)","Bash(sort -k2 -rn)","Bash(pip3 show:*)","Bash(pip3 install:*)","Bash(git -C ~/.claude/hooks log --oneline -5)","Bash(git checkout:*)","Bash(rsync:*)","Bash(scp:*)","Bash(chmod:*)","Bash(~/.claude/skills/skin-check/phase2/scripts/check-training.sh:*)","Bash(mount:*)","Bash(ln:*)","Bash(git push:*)","Bash(git reset:*)","Bash(while read img)","Bash(do echo '=== 测试: $\\(basename $img\\) ===' bun local-classifier.ts $img)","Bash(cat:*)","Bash(~/.solar/elo/benchmark_data.json)","Bash(mcp__playwright__browser_navigate url=\"https://www.xiaohongshu.com/explore\")","Bash(imagesnap:*)","Bash(/opt/homebrew/bin/imagesnap:*)","Bash(for img in ~/Desktop/selfie_*.jpg)","Bash(do echo \"测试: $img\" python3 ~/.claude/skills/makeup-advisor/ar_makeup.py \"$img\" natural \"/tmp/test_makeup.jpg\")","Bash(open:*)","Bash(SOURCE_IMG=\"/Users/lisihao/Desktop/selfie_2026-02-14T04-32-26-240Z.jpg\")","Bash(__NEW_LINE_8b260d861a440b1e__ echo \"🔍 分析面部特征...\")","Bash(__NEW_LINE_472f50d6c9709502__ echo \"📚 生成个性化化妆教程...\")","Bash(__NEW_LINE_a0d3aca2fd4660d0__ echo \"📚 生成个性化化妆教程...\")","Bash(mdfind:*)","Bash(head -5 find ~ -maxdepth 3 -type d -name *know*)"]
+2026-02-15T12:58:57.480Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-15T12:58:57.490Z [DEBUG] [ToolSearch:optimistic] mode=tst-auto, ENABLE_TOOL_SEARCH=undefined, result=true
+2026-02-15T12:58:57.490Z [DEBUG] [STARTUP] Running setup()...
+2026-02-15T12:58:57.495Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/lisihao/.claude/skills, project=[]
+2026-02-15T12:58:57.504Z [DEBUG] Passes: Cache stale, returning cached data and refreshing in background
+2026-02-15T12:58:57.505Z [DEBUG] Error log sink initialized
+2026-02-15T12:58:57.508Z [DEBUG] [STARTUP] setup() completed in 18ms
+2026-02-15T12:58:57.508Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-02-15T12:58:57.515Z [DEBUG] Loaded 79 unique skills (79 unconditional, 0 conditional, managed: 0, user: 79, project: 0, additional: 0, legacy commands: 0)
+2026-02-15T12:58:57.516Z [DEBUG] [Claude in Chrome] Found chrome profiles: Default, Profile 1
+2026-02-15T12:58:57.523Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg)
+2026-02-15T12:58:57.523Z [DEBUG] Found 0 plugins (0 enabled, 0 disabled)
+2026-02-15T12:58:57.524Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-15T12:58:57.524Z [DEBUG] Total plugin skills loaded: 0
+2026-02-15T12:58:57.524Z [DEBUG] Total plugin commands loaded: 0
+2026-02-15T12:58:57.524Z [DEBUG] Registered 0 hooks from 0 plugins
+2026-02-15T12:58:57.524Z [DEBUG] getSkills returning: 79 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-15T12:58:57.526Z [DEBUG] [Claude in Chrome] Extension not found in any browser
+2026-02-15T12:58:57.533Z [DEBUG] Total plugin agents loaded: 0
+2026-02-15T12:58:57.534Z [DEBUG] [STARTUP] Commands and agents loaded in 26ms
+2026-02-15T12:58:57.535Z [DEBUG] [STARTUP] Running showSetupScreens()...
+2026-02-15T12:58:57.538Z [DEBUG] [keybindings] KeybindingSetup initialized with 102 bindings, 0 warnings
+2026-02-15T12:58:57.554Z [DEBUG] [keybindings] Watching for changes to /Users/lisihao/.claude/keybindings.json
+2026-02-15T12:58:57.730Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.80821.1771160337730
+2026-02-15T12:58:57.730Z [DEBUG] Preserving file permissions: 100600
+2026-02-15T12:58:57.730Z [DEBUG] Temp file written successfully, size: 8734 bytes
+2026-02-15T12:58:57.730Z [DEBUG] Applied original permissions to temp file
+2026-02-15T12:58:57.730Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.80821.1771160337730 to /Users/lisihao/.claude.json
+2026-02-15T12:58:57.730Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-15T12:58:57.731Z [DEBUG] Passes eligibility cached for org 4b64fec2-dab6-4cd3-854f-5b8cb2ded5ae: true
+2026-02-15T12:58:57.890Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.80821.1771160337890
+2026-02-15T12:58:57.890Z [DEBUG] Preserving file permissions: 100600
+2026-02-15T12:58:57.890Z [DEBUG] Temp file written successfully, size: 8732 bytes
+2026-02-15T12:58:57.890Z [DEBUG] Applied original permissions to temp file
+2026-02-15T12:58:57.890Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.80821.1771160337890 to /Users/lisihao/.claude.json
+2026-02-15T12:58:57.890Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-15T12:58:58.371Z [DEBUG] Writing to temp file: /Users/lisihao/.claude/settings.local.json.tmp.80821.1771160338371
+2026-02-15T12:58:58.371Z [DEBUG] Preserving file permissions: 100644
+2026-02-15T12:58:58.372Z [DEBUG] Temp file written successfully, size: 3819 bytes
+2026-02-15T12:58:58.372Z [DEBUG] Applied original permissions to temp file
+2026-02-15T12:58:58.372Z [DEBUG] Renaming /Users/lisihao/.claude/settings.local.json.tmp.80821.1771160338371 to /Users/lisihao/.claude/settings.local.json
+2026-02-15T12:58:58.372Z [DEBUG] File /Users/lisihao/.claude/settings.local.json written atomically
+2026-02-15T12:58:58.420Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-02-15T12:58:58.420Z [DEBUG] [STARTUP] showSetupScreens() completed in 885ms
+2026-02-15T12:58:58.420Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-02-15T12:58:58.420Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-02-15T12:58:58.420Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-02-15T12:58:58.428Z [DEBUG] High write ratio: blit=0, write=1856 (100.0% writes), screen=62x120
+2026-02-15T12:58:58.431Z [DEBUG] Total LSP servers loaded: 0
+2026-02-15T12:58:58.431Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 0 server(s)
+2026-02-15T12:58:58.431Z [DEBUG] LSP manager initialized with 0 servers
+2026-02-15T12:58:58.431Z [DEBUG] LSP server manager initialized successfully
+2026-02-15T12:58:58.431Z [DEBUG] LSP notification handlers registered successfully for all 0 server(s)
+2026-02-15T12:58:58.431Z [DEBUG] Git remote URL: null
+2026-02-15T12:58:58.431Z [DEBUG] No git remote URL found
+2026-02-15T12:58:58.431Z [DEBUG] Not in a GitHub repository, skipping path mapping update
+2026-02-15T12:59:01.726Z [DEBUG] [STARTUP] MCP configs loaded in 4246ms
+2026-02-15T12:59:01.733Z [DEBUG] MCP server "playwright": Starting connection with timeout of 30000ms
+2026-02-15T12:59:01.738Z [DEBUG] MCP server "brain-router": Starting connection with timeout of 30000ms
+2026-02-15T12:59:01.740Z [DEBUG] MCP server "are": Starting connection with timeout of 30000ms
+2026-02-15T12:59:01.759Z [DEBUG] [Reconnection] computeInitialTeamContext: No teammate context set (not a teammate)
+2026-02-15T12:59:01.760Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.80821.1771160341760
+2026-02-15T12:59:01.760Z [DEBUG] Preserving file permissions: 100600
+2026-02-15T12:59:01.760Z [DEBUG] Temp file written successfully, size: 8732 bytes
+2026-02-15T12:59:01.760Z [DEBUG] Applied original permissions to temp file
+2026-02-15T12:59:01.760Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.80821.1771160341760 to /Users/lisihao/.claude.json
+2026-02-15T12:59:01.760Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-15T12:59:01.762Z [DEBUG] Getting matching hook commands for SessionStart with query: startup
+2026-02-15T12:59:01.762Z [DEBUG] Found 0 hook matchers in settings
+2026-02-15T12:59:01.762Z [DEBUG] Matched 0 unique hooks for query "startup" (0 before deduplication)
+2026-02-15T12:59:01.764Z [DEBUG] Loaded 1 installed plugins from /Users/lisihao/.claude/plugins/installed_plugins.json
+2026-02-15T12:59:01.764Z [DEBUG] Initialized versioned plugins system with 1 plugins
+2026-02-15T12:59:01.781Z [DEBUG] [keybindings] KeybindingSetup initialized with 102 bindings, 0 warnings
+2026-02-15T12:59:01.805Z [DEBUG] Full reset (shrink->below): prevHeight=62, nextHeight=19, viewport=30
+2026-02-15T12:59:01.807Z [DEBUG] [REPL:mount] REPL mounted, disabled=false
+2026-02-15T12:59:01.808Z [DEBUG] Official marketplace auto-install skipped: already_attempted
+2026-02-15T12:59:01.809Z [DEBUG] performStartupChecks called
+2026-02-15T12:59:01.809Z [DEBUG] Starting background plugin installations
+2026-02-15T12:59:01.809Z [DEBUG] performBackgroundPluginInstallations called
+2026-02-15T12:59:01.810Z [DEBUG] Loaded 67 CLAUDE.md/rules files:
+  [User] /Users/lisihao/.claude/CLAUDE.md (3267 chars)
+  [User] /Users/lisihao/.claude/rules/00-core-laws.md (1821 chars)
+  [User] /Users/lisihao/.claude/rules/00-essential.md (1749 chars)
+  [User] /Users/lisihao/.claude/rules/01-three-core-laws.md (6865 chars)
+  [User] /Users/lisihao/.claude/rules/ab-test-execution.md (4146 chars)
+  [User] /Users/lisihao/.claude/rules/agent-skill-unification.md (4535 chars)
+  [User] /Users/lisihao/.claude/rules/auto-favorites.md (1255 chars)
+  [User] /Users/lisihao/.claude/rules/benchmark-economy.md (3251 chars)
+  [User] /Users/lisihao/.claude/rules/borrow-before-verify.md (2366 chars)
+  [User] /Users/lisihao/.claude/rules/browser-automation.md (960 chars)
+  [User] /Users/lisihao/.claude/rules/call-niuma-with-personality.md (3762 chars)
+  [User] /Users/lisihao/.claude/rules/capability-evolution.md (10947 chars)
+  [User] /Users/lisihao/.claude/rules/cattle-verification.md (3242 chars)
+  [User] /Users/lisihao/.claude/rules/coding-standards.md (248 chars)
+  [User] /Users/lisihao/.claude/rules/core-principles.md (949 chars)
+  [User] /Users/lisihao/.claude/rules/cortex-first.md (4537 chars)
+  [User] /Users/lisihao/.claude/rules/data-first.md (4348 chars)
+  [User] /Users/lisihao/.claude/rules/data-ledger-first.md (2783 chars)
+  [User] /Users/lisihao/.claude/rules/delegate-first.md (2931 chars)
+  [User] /Users/lisihao/.claude/rules/delegate-insight-to-xiaoai.md (2799 chars)
+  [User] /Users/lisihao/.claude/rules/delegate-to-xiaoai.md (5759 chars)
+  [User] /Users/lisihao/.claude/rules/do-it-right-first-time.md (3147 chars)
+  [User] /Users/lisihao/.claude/rules/documentation.md (227 chars)
+  [User] /Users/lisihao/.claude/rules/dual-personality-experiment.md (5316 chars)
+  [User] /Users/lisihao/.claude/rules/expert-team-for-self.md (6278 chars)
+  [User] /Users/lisihao/.claude/rules/feedback-loop.md (3600 chars)
+  [User] /Users/lisihao/.claude/rules/first-law.md (3502 chars)
+  [User] /Users/lisihao/.claude/rules/glm-mode-behavior.md (3094 chars)
+  [User] /Users/lisihao/.claude/rules/guardian-confirm.md (4852 chars)
+  [User] /Users/lisihao/.claude/rules/guardian-data-first-enforcement.md (6517 chars)
+  [User] /Users/lisihao/.claude/rules/guardian-data-first.md (3847 chars)
+  [User] /Users/lisihao/.claude/rules/infrastructure-as-tables.md (5249 chars)
+  [User] /Users/lisihao/.claude/rules/intent-engine.md (2655 chars)
+  [User] /Users/lisihao/.claude/rules/large-context-strategy.md (3586 chars)
+  [User] /Users/lisihao/.claude/rules/learning-evidence.md (1200 chars)
+  [User] /Users/lisihao/.claude/rules/macos-integration.md (1632 chars)
+  [User] /Users/lisihao/.claude/rules/master-brain-persona.md (649 chars)
+  [User] /Users/lisihao/.claude/rules/memory-loop.md (5075 chars)
+  [User] /Users/lisihao/.claude/rules/multi-expert-analysis.md (3515 chars)
+  [User] /Users/lisihao/.claude/rules/parallel-task-fallback.md (1392 chars)
+  [User] /Users/lisihao/.claude/rules/performance-testing.md (881 chars)
+  [User] /Users/lisihao/.claude/rules/personality-in-output.md (2007 chars)
+  [User] /Users/lisihao/.claude/rules/personality-retention.md (4509 chars)
+  [User] /Users/lisihao/.claude/rules/plan-before-execute.md (4454 chars)
+  [User] /Users/lisihao/.claude/rules/pre-action-checklist.md (2708 chars)
+  [User] /Users/lisihao/.claude/rules/proclamation-mechanism.md (6793 chars)
+  [User] /Users/lisihao/.claude/rules/promise-execute.md (2871 chars)
+  [User] /Users/lisihao/.claude/rules/prompt-template-v3.md (2525 chars)
+  [User] /Users/lisihao/.claude/rules/read-before-act.md (1920 chars)
+  [User] /Users/lisihao/.claude/rules/ree-first.md (4457 chars)
+  [User] /Users/lisihao/.claude/rules/ree-lessons.md (3956 chars)
+  [User] /Users/lisihao/.claude/rules/research-first.md (1217 chars)
+  [User] /Users/lisihao/.claude/rules/resource-execution-engine.md (4151 chars)
+  [User] /Users/lisihao/.claude/rules/schema-first.md (1566 chars)
+  [User] /Users/lisihao/.claude/rules/security.md (219 chars)
+  [User] /Users/lisihao/.claude/rules/self-changelog.md (1790 chars)
+  [User] /Users/lisihao/.claude/rules/solar-farm.md (4057 chars)
+  [User] /Users/lisihao/.claude/rules/solar-protocol.md (9002 chars)
+  [User] /Users/lisihao/.claude/rules/sprint-rhythm.md (4565 chars)
+  [User] /Users/lisihao/.claude/rules/state-machine-first.md (2888 chars)
+  [User] /Users/lisihao/.claude/rules/state-persistence.md (8154 chars)
+  [User] /Users/lisihao/.claude/rules/task-reflection.md (7600 chars)
+  [User] /Users/lisihao/.claude/rules/task-sop.md (3084 chars)
+  [User] /Users/lisihao/.claude/rules/testing.md (285 chars)
+  [User] /Users/lisihao/.claude/rules/token-efficiency.md (1276 chars)
+  [User] /Users/lisihao/.claude/rules/tvs-rendering.md (9194 chars)
+  [User] /Users/lisihao/.claude/rules/webfetch-tips.md (231 chars)
+2026-02-15T12:59:01.816Z [DEBUG] Watching for changes in setting files /Users/lisihao/.claude/settings.json, /Users/lisihao/.claude/settings.local.json...
+2026-02-15T12:59:01.817Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-15T12:59:01.818Z [DEBUG] [claudeai-mcp] Checking gate (cached)...
+2026-02-15T12:59:01.818Z [DEBUG] [claudeai-mcp] Gate returned: true
+2026-02-15T12:59:01.818Z [DEBUG] [claudeai-mcp] Fetching from https://api.anthropic.com/v1/mcp_servers?limit=1000
+2026-02-15T12:59:01.818Z [DEBUG] Loaded plugins - Enabled: 0, Disabled: 0, Commands: 0, Agents: 0, Errors: 0
+2026-02-15T12:59:01.835Z [ERROR] MCP server "brain-router" Server stderr: Traceback (most recent call last):
+  File "/Users/lisihao/.solar/brain-router/src/mcp/server.py", line 16, in <module>
+    import httpx
+ModuleNotFoundError: No module named 'httpx'
+2026-02-15T12:59:01.835Z [DEBUG] MCP server "brain-router": Connection failed after 98ms: MCP error -32000: Connection closed
+2026-02-15T12:59:01.835Z [ERROR] MCP server "brain-router" Connection failed: MCP error -32000: Connection closed
+2026-02-15T12:59:01.840Z [DEBUG] Setting installation status: 0 marketplaces, 0 installable plugins, 0 uninstallable plugins
+2026-02-15T12:59:01.840Z [DEBUG] Watching for changes in skill/command directories: /Users/lisihao/.claude/skills, /Users/lisihao/.claude/skills...
+2026-02-15T12:59:01.842Z [ERROR] MCP server "are" Server stderr: ARE MCP Server running
+2026-02-15T12:59:01.842Z [DEBUG] MCP server "are": Successfully connected to undefined server in 102ms
+2026-02-15T12:59:01.842Z [DEBUG] MCP server "are": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"are-orchestrator","version":"1.0.0"}}
+2026-02-15T12:59:01.900Z [DEBUG] Org fast mode: disabled (extra_usage_disabled)
+2026-02-15T12:59:01.905Z [DEBUG] [claudeai-mcp] Fetched 0 servers
+2026-02-15T12:59:02.068Z [DEBUG] MCP server "playwright": Successfully connected to undefined server in 340ms
+2026-02-15T12:59:02.068Z [DEBUG] MCP server "playwright": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Playwright","version":"0.0.68"}}
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.072Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.073Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.073Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.073Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.073Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.073Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.073Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.073Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.073Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.073Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.073Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.073Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.073Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.073Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.073Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.073Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.073Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.073Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.073Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.073Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.073Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.073Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.073Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.073Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.165Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.165Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.165Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.165Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.165Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.166Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.166Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.166Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.166Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.166Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.166Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.166Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.166Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.166Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.166Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.173Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.173Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.173Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.173Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.173Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.173Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.173Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.173Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.173Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.173Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.176Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.176Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.176Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.176Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.176Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.177Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.177Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.177Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.177Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.177Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.177Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.177Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.177Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.177Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.177Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.181Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.181Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.181Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.181Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.181Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.181Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.181Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.181Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.181Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.181Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.181Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.181Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.181Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.181Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.181Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.182Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.182Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.182Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.182Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.182Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.182Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.182Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.182Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.182Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.182Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.183Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.183Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.183Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.183Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.183Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.183Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.183Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.183Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.183Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.183Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.184Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.184Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.184Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.184Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.184Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.185Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.185Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.185Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.185Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.185Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.185Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.185Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.185Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.185Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.185Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.186Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.186Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.186Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.186Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.186Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.186Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.186Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.186Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.186Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.186Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.187Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.187Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.187Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.187Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.187Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.187Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.187Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.187Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.187Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.187Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.188Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.188Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.188Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.188Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.188Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.189Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.189Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.189Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.189Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.189Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.189Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.189Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.189Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.189Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.189Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.189Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.189Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-15T12:59:02.189Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.189Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.189Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.218Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.218Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 15)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.218Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_navigate_back
+2026-02-15T12:59:02.240Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.240Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 0)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.240Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__are__orchestrate
+2026-02-15T12:59:02.250Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.250Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 5)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.250Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_resize
+2026-02-15T12:59:02.261Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.261Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 13)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.261Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_type
+2026-02-15T12:59:02.263Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.263Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 12)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.263Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_press_key
+2026-02-15T12:59:02.263Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.263Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 16)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.263Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_network_requests
+2026-02-15T12:59:02.263Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.263Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 17)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.263Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_run_code
+2026-02-15T12:59:02.269Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.269Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 18)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.269Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_take_screenshot
+2026-02-15T12:59:02.275Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.275Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 1)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.275Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__are__execute_plan
+2026-02-15T12:59:02.275Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.275Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 2)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.275Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__are__list_plans
+2026-02-15T12:59:02.276Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.276Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 3)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.276Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__are__stats
+2026-02-15T12:59:02.284Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.284Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 10)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.284Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_fill_form
+2026-02-15T12:59:02.284Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.284Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 11)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.284Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_install
+2026-02-15T12:59:02.289Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.289Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 7)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.289Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_handle_dialog
+2026-02-15T12:59:02.289Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.289Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 6)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.289Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_console_messages
+2026-02-15T12:59:02.289Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.289Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 8)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.289Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_evaluate
+2026-02-15T12:59:02.292Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.292Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 9)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.292Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_file_upload
+2026-02-15T12:59:02.293Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.293Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 4)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.293Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_close
+2026-02-15T12:59:02.293Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.293Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 25)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.293Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_wait_for
+2026-02-15T12:59:02.293Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.293Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 24)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.293Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_tabs
+2026-02-15T12:59:02.293Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.293Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 19)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.293Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_snapshot
+2026-02-15T12:59:02.293Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.293Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 22)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.293Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_hover
+2026-02-15T12:59:02.293Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.293Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 20)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.293Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_click
+2026-02-15T12:59:02.295Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.295Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 14)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.295Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_navigate
+2026-02-15T12:59:02.295Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.295Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 23)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.295Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_select_option
+2026-02-15T12:59:02.299Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.299Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async Promise.all (index 21)
+    at async Cp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:13637)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:503)
+2026-02-15T12:59:02.299Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_drag
+2026-02-15T12:59:02.299Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.299Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.299Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.333Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.333Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (26 tools)
+2026-02-15T12:59:02.333Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.333Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.333Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.370Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.370Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:6247:14218
+    at async v_z (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:6247:13646)
+    at async Dp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:6247:12368)
+2026-02-15T12:59:02.370Z [DEBUG] countToolDefinitionTokens returned null for 26 tools: mcp__are__orchestrate, mcp__are__execute_plan, mcp__are__list_plans, mcp__are__stats, mcp__playwrigh...
+2026-02-15T12:59:02.371Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: analyzeMcp]
+2026-02-15T12:59:02.390Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.390Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.390Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.463Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:3741
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2624
+    at async Oz9 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:963:2787)
+    at async LR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2557)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10195)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+2026-02-15T12:59:02.463Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (21 tools)
+2026-02-15T12:59:02.463Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:02.463Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:02.463Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:02.522Z [DEBUG] countTokensWithFallback: haiku fallback failed: 404 status code (no body)
+2026-02-15T12:59:02.523Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async IR7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:4563)
+    at async yp1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10467)
+    at async kc (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3386:10891)
+    at async wAq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3403:554)
+2026-02-15T12:59:02.523Z [DEBUG] countToolDefinitionTokens returned null for 21 tools: Task, TaskOutput, Bash, Glob, Grep, ExitPlanMode, Read, Edit, Write, NotebookEdit, WebFetch, WebSear...
+2026-02-15T12:59:06.771Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-15T12:59:06.771Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-15T12:59:06.771Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-15T12:59:06.771Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-15T12:59:06.773Z [DEBUG] Sending 39 skills via attachment (initial, 39 total sent)
+2026-02-15T12:59:06.777Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-15T12:59:06.777Z [DEBUG] Found 0 hook matchers in settings
+2026-02-15T12:59:06.777Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-15T12:59:06.778Z [DEBUG] FileHistory: Added snapshot for 998599af-d08b-4bf2-8885-9767b9b1bad0, tracking 0 files
+2026-02-15T12:59:06.779Z [DEBUG] [useDeferredValue] Messages deferred by 2 (0→2)
+2026-02-15T12:59:06.790Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-15T12:59:06.792Z [DEBUG] [SystemPrompt] path=simple proactive=false
+2026-02-15T12:59:06.794Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-15T12:59:06.795Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.78c; cc_entrypoint=cli; cch=00000;
+2026-02-15T12:59:06.796Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:06.796Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:06.797Z [DEBUG] Total plugin output styles loaded: 0
+2026-02-15T12:59:06.797Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:06.801Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.80821.1771160346801
+2026-02-15T12:59:06.801Z [DEBUG] Preserving file permissions: 100600
+2026-02-15T12:59:06.801Z [DEBUG] Temp file written successfully, size: 8732 bytes
+2026-02-15T12:59:06.801Z [DEBUG] Applied original permissions to temp file
+2026-02-15T12:59:06.801Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.80821.1771160346801 to /Users/lisihao/.claude.json
+2026-02-15T12:59:06.802Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-15T12:59:06.803Z [DEBUG] autocompact: tokens=531 threshold=167000 effectiveWindow=180000
+2026-02-15T12:59:06.803Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-15T12:59:06.806Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.80821.1771160346806
+2026-02-15T12:59:06.806Z [DEBUG] Preserving file permissions: 100600
+2026-02-15T12:59:06.806Z [DEBUG] Temp file written successfully, size: 8732 bytes
+2026-02-15T12:59:06.806Z [DEBUG] Applied original permissions to temp file
+2026-02-15T12:59:06.806Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.80821.1771160346806 to /Users/lisihao/.claude.json
+2026-02-15T12:59:06.806Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-15T12:59:06.807Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.c31; cc_entrypoint=cli; cch=00000;
+2026-02-15T12:59:06.807Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:06.807Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:06.807Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:06.811Z [DEBUG] [useDeferredValue] Messages deferred by 2 (0→2)
+2026-02-15T12:59:06.815Z [DEBUG] Stats cache does not exist, returning empty cache
+2026-02-15T12:59:06.815Z [DEBUG] Stats cache empty, processing all historical data in background
+2026-02-15T12:59:06.909Z [ERROR] API error (attempt 1/11): 404 404 status code (no body)
+2026-02-15T12:59:06.909Z [WARN] Streaming endpoint returned 404, falling back to non-streaming mode
+2026-02-15T12:59:06.909Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:06.909Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:06.909Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:06.933Z [DEBUG] Stats cache saved successfully (lastComputedDate: 2026-02-14)
+2026-02-15T12:59:06.933Z [DEBUG] Stats cache updated with 15 sessions
+2026-02-15T12:59:06.984Z [ERROR] API error (attempt 1/11): 404 404 status code (no body)
+2026-02-15T12:59:06.984Z [WARN] Streaming endpoint returned 404, falling back to non-streaming mode
+2026-02-15T12:59:06.984Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-15T12:59:06.984Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-15T12:59:06.984Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-15T12:59:06.991Z [ERROR] API error (attempt 1/11): 404 404 status code (no body)
+2026-02-15T12:59:06.991Z [ERROR] Non-streaming fallback also failed: 404 status code (no body)
+2026-02-15T12:59:06.992Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Rw6.model (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5641:4971)
+    at async Rw6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:909:101168)
+    at async nJq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5641:5171)
+    at async aJq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5646:9788)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5641:4363
+    at async f_A (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2399)
+2026-02-15T12:59:06.992Z [ERROR] SyntaxError: SyntaxError: Unexpected token 'T', "There's an"... is not valid JSON
+    at JSON.parse (<anonymous>)
+    at file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:54:1088
+    at K (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:7612)
+    at LC7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:1344:7638)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-02-15T12:59:07.035Z [DEBUG] Successfully refreshed marketplace: claude-plugins-official
+2026-02-15T12:59:07.035Z [DEBUG] Plugin autoupdate: checking installed plugins
+2026-02-15T12:59:07.036Z [DEBUG] Using provided version for swift-lsp@claude-plugins-official: 1.0.0
+2026-02-15T12:59:07.106Z [ERROR] API error (attempt 1/11): 404 404 status code (no body)
+2026-02-15T12:59:07.106Z [ERROR] Non-streaming fallback also failed: 404 status code (no body)
+2026-02-15T12:59:07.106Z [ERROR] Error: Error: 404 status code (no body)
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8893)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Rw6.model (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5641:4971)
+    at async Rw6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:909:101168)
+    at async nJq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5641:5171)
+    at async aJq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5646:9788)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5641:4632
+    at async f_A (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2399)
+2026-02-15T12:59:07.108Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-15T12:59:07.108Z [DEBUG] Found 0 hook matchers in settings
+2026-02-15T12:59:07.108Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-15T12:59:07.110Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.80821.1771160347110
+2026-02-15T12:59:07.110Z [DEBUG] Preserving file permissions: 100600
+2026-02-15T12:59:07.110Z [DEBUG] Temp file written successfully, size: 8732 bytes
+2026-02-15T12:59:07.110Z [DEBUG] Applied original permissions to temp file
+2026-02-15T12:59:07.110Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.80821.1771160347110 to /Users/lisihao/.claude.json
+2026-02-15T12:59:07.110Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-15T12:59:07.111Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.80821.1771160347111
+2026-02-15T12:59:07.111Z [DEBUG] Preserving file permissions: 100600
+2026-02-15T12:59:07.111Z [DEBUG] Temp file written successfully, size: 8732 bytes
+2026-02-15T12:59:07.111Z [DEBUG] Applied original permissions to temp file
+2026-02-15T12:59:07.111Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.80821.1771160347111 to /Users/lisihao/.claude.json
+2026-02-15T12:59:07.111Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-15T12:59:07.111Z [DEBUG] [useDeferredValue] Messages deferred by 1 (2→3)
+2026-02-15T12:59:07.114Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-15T12:59:21.749Z [DEBUG] Using raw settings from /Users/lisihao/.claude/settings.json due to validation failure
+2026-02-15T12:59:21.749Z [DEBUG] Writing to temp file: /Users/lisihao/.claude/settings.json.tmp.80821.1771160361749
+2026-02-15T12:59:21.749Z [DEBUG] Preserving file permissions: 100644
+2026-02-15T12:59:21.750Z [DEBUG] Temp file written successfully, size: 3276 bytes
+2026-02-15T12:59:21.750Z [DEBUG] Applied original permissions to temp file
+2026-02-15T12:59:21.750Z [DEBUG] Renaming /Users/lisihao/.claude/settings.json.tmp.80821.1771160361749 to /Users/lisihao/.claude/settings.json
+2026-02-15T12:59:21.750Z [DEBUG] File /Users/lisihao/.claude/settings.json written atomically
+2026-02-15T12:59:21.754Z [DEBUG] FileHistory: Making snapshot for message f7ab914e-ed15-48f4-8f18-482a82da8d9a
+2026-02-15T12:59:21.754Z [DEBUG] FileHistory: Added snapshot for f7ab914e-ed15-48f4-8f18-482a82da8d9a, tracking 0 files
+2026-02-15T12:59:21.755Z [DEBUG] [useDeferredValue] Messages deferred by 3 (3→6)
+2026-02-15T12:59:21.764Z [DEBUG] High write ratio: blit=0, write=1242 (100.0% writes), screen=27x120
+2026-02-15T12:59:21.764Z [DEBUG] Full reset (shrink->below): prevHeight=35, nextHeight=27, viewport=30
+2026-02-15T12:59:21.770Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-15T12:59:21.770Z [DEBUG] [useDeferredValue] Messages deferred by 3 (3→6)
+2026-02-15T12:59:21.772Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-15T12:59:21.773Z [DEBUG] [useDeferredValue] Messages deferred by 3 (3→6)
+2026-02-15T12:59:21.774Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-15T12:59:29.024Z [DEBUG] Getting matching hook commands for SessionEnd with query: prompt_input_exit
+2026-02-15T12:59:29.024Z [DEBUG] Found 0 hook matchers in settings
+2026-02-15T12:59:29.024Z [DEBUG] Matched 0 unique hooks for query "prompt_input_exit" (0 before deduplication)

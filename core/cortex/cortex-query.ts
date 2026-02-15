@@ -498,6 +498,7 @@ export class CortexQuery {
 
   /**
    * 同步 Cortex 数据到 Tantivy
+   * Schema Optimization v0.3: 使用 snippet + 新字段
    */
   async syncToTantivy(): Promise<{ synced: number; errors: string[] }> {
     const errors: string[] = [];
@@ -517,23 +518,32 @@ export class CortexQuery {
     if (existsSync(this.tantivyBinary)) {
       for (const artifact of artifacts) {
         try {
-          // 添加到 Tantivy 队列
+          // 提取 snippet (用于搜索，而非存储完整内容)
+          const snippet = this.extractSnippet(artifact.content_json, 500);
+
+          // 添加到 Tantivy 队列 (Schema Optimization v0.3: 使用新字段)
           this.db.run(`
-            INSERT OR REPLACE INTO tantivy_queue (doc_type, source_id, content, title, source, timestamp, project, metadata, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+            INSERT OR REPLACE INTO tantivy_queue (
+              doc_type, source_id, content, title, source_path, timestamp, project, metadata, status,
+              artifact_id, content_path, score, kind, task_id, citation_key
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)
           `, [
             'artifact',
-            String(artifact.artifact_id),
-            JSON.stringify(artifact.content_json),
+            `artifact_${artifact.artifact_id}`,  // source_id 带前缀
+            snippet,                               // content 只存 snippet
             artifact.topic || artifact.artifact_type,
             artifact.file_path || '',
             artifact.ts_ms || Date.now(),
             artifact.task_id,
-            JSON.stringify({
-              kind: artifact.kind || artifact.artifact_type,
-              score: artifact.score,
-              citation_key: artifact.citation_key
-            })
+            JSON.stringify({}),                    // metadata 简化
+            // Schema Optimization v0.3 新增字段
+            artifact.artifact_id,                  // artifact_id (numeric)
+            artifact.content_path || artifact.file_path || '',  // content_path
+            artifact.score || 0.5,                 // score
+            artifact.kind || artifact.artifact_type,  // kind
+            artifact.task_id,                      // task_id
+            artifact.citation_key || null          // citation_key
           ]);
           synced++;
         } catch (e) {
@@ -545,6 +555,36 @@ export class CortexQuery {
     }
 
     return { synced, errors };
+  }
+
+  /**
+   * 从 content_json 提取文本片段 (用于索引)
+   */
+  private extractSnippet(contentJson: any, maxLength: number = 500): string {
+    let text = '';
+
+    try {
+      const content = typeof contentJson === 'string' ? JSON.parse(contentJson) : contentJson;
+
+      if (content.outline) {
+        text = String(content.outline);
+      } else if (content.content) {
+        text = String(content.content);
+      } else if (content.finding) {
+        text = String(content.finding);
+      } else if (content.claim_text) {
+        text = String(content.claim_text);
+      } else if (content.prompt) {
+        text = String(content.prompt);
+      } else {
+        text = JSON.stringify(content);
+      }
+    } catch {
+      text = String(contentJson);
+    }
+
+    // 截断到指定长度
+    return text.substring(0, maxLength);
   }
 
   /**

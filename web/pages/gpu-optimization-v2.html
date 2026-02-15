@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPU 优化方案 V2 - 学术论文 + Apple 官方 - Solar</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #1a1a2e;
+            --bg-tertiary: #2a2a4e;
+            --text-primary: #e0e0e0;
+            --text-secondary: #888;
+            --accent: #00d4ff;
+            --accent-pink: #ff79c6;
+            --accent-green: #50fa7b;
+            --accent-orange: #ffaa00;
+            --accent-red: #ff5555;
+            --accent-purple: #bd93f9;
+            --border: #333;
+        }
+
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .header-icon {
+            font-size: 2.5em;
+        }
+
+        .header-title h1 {
+            font-size: 1.4em;
+            color: var(--accent);
+        }
+
+        .header-title p {
+            color: var(--text-secondary);
+            font-size: 0.85em;
+        }
+
+        .badge {
+            background: linear-gradient(135deg, var(--accent-green), #2ecc71);
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.75em;
+            margin-left: auto;
+        }
+
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section-title {
+            font-size: 1.2em;
+            color: var(--accent-pink);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .approach-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 25px;
+            transition: all 0.3s;
+        }
+
+        .approach-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+
+        .approach-card.recommended {
+            border-left: 4px solid var(--accent-green);
+        }
+
+        .approach-card.academic {
+            border-left: 4px solid var(--accent-purple);
+        }
+
+        .approach-card.apple {
+            border-left: 4px solid var(--accent-orange);
+        }
+
+        .approach-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+
+        .approach-title {
+            font-size: 1.15em;
+            color: var(--text-primary);
+        }
+
+        .approach-source {
+            font-size: 0.75em;
+            padding: 4px 10px;
+            border-radius: 12px;
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+        }
+
+        .approach-source.sigmod { background: rgba(189, 147, 249, 0.2); color: var(--accent-purple); }
+        .approach-source.apple { background: rgba(255, 170, 0, 0.2); color: var(--accent-orange); }
+        .approach-source.vldb { background: rgba(80, 250, 123, 0.2); color: var(--accent-green); }
+
+        .approach-desc {
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+            font-size: 0.9em;
+        }
+
+        .technique-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .technique-item {
+            background: var(--bg-tertiary);
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .technique-item h4 {
+            color: var(--accent);
+            font-size: 0.9em;
+            margin-bottom: 8px;
+        }
+
+        .technique-item p {
+            color: var(--text-secondary);
+            font-size: 0.85em;
+        }
+
+        .code-block {
+            background: #0d0d0d;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 15px;
+            overflow-x: auto;
+            font-size: 0.85em;
+            margin: 15px 0;
+        }
+
+        .code-block code {
+            color: var(--accent-green);
+        }
+
+        .code-block .comment {
+            color: var(--text-secondary);
+        }
+
+        .code-block .keyword {
+            color: var(--accent-pink);
+        }
+
+        .code-block .type {
+            color: var(--accent-orange);
+        }
+
+        .speedup-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 10px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .speedup-high {
+            background: rgba(80, 250, 123, 0.2);
+            color: var(--accent-green);
+        }
+
+        .speedup-medium {
+            background: rgba(255, 170, 0, 0.2);
+            color: var(--accent-orange);
+        }
+
+        .key-insight {
+            background: rgba(0, 212, 255, 0.1);
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        .key-insight h4 {
+            color: var(--accent);
+            margin-bottom: 8px;
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+
+        .comparison-table th,
+        .comparison-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .comparison-table th {
+            background: var(--bg-secondary);
+            color: var(--accent);
+        }
+
+        .comparison-table tr:hover {
+            background: var(--bg-secondary);
+        }
+
+        .moltbook-status {
+            background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary));
+            border: 1px solid var(--accent-pink);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 30px 0;
+        }
+
+        .moltbook-status h3 {
+            color: var(--accent-pink);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .post-link {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        .post-link:hover {
+            text-decoration: underline;
+        }
+
+        .sources {
+            margin-top: 30px;
+            padding: 20px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+        }
+
+        .sources h3 {
+            color: var(--accent);
+            margin-bottom: 15px;
+        }
+
+        .sources a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        .sources a:hover {
+            text-decoration: underline;
+        }
+
+        .sources ul {
+            list-style: none;
+        }
+
+        .sources li {
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .sources li:last-child {
+            border-bottom: none;
+        }
+
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+            color: var(--text-secondary);
+            font-size: 0.85em;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-icon">🔬</div>
+        <div class="header-title">
+            <h1>GPU 优化方案 V2</h1>
+            <p>基于学术论文 + Apple 官方文档 · 2026-02</p>
+        </div>
+        <div class="badge">📚 权威来源</div>
+    </div>
+
+    <!-- 方案 1: Two-Pass Radix Partitioning -->
+    <div class="section">
+        <div class="section-title">🎯 方案一: Two-Pass Radix Partitioning + Shared Histogram</div>
+
+        <div class="approach-card academic">
+            <div class="approach-header">
+                <div class="approach-title">
+                    两阶段基数分区 + 共享直方图
+                    <span class="speedup-badge speedup-high">预期 2-3x</span>
+                </div>
+                <span class="approach-source sigmod">SIGMOD 2025 / PMC 2024</span>
+            </div>
+
+            <div class="approach-desc">
+                论文核心发现: GPU Join 性能瓶颈 75% 来自随机访问。通过两阶段分区 + 共享直方图，大幅减少内存访问冲突。
+            </div>
+
+            <div class="technique-grid">
+                <div class="technique-item">
+                    <h4>第一阶段: 粗分区</h4>
+                    <p>将数据分成 1024 个分区，每个分区大小适配 L2 Cache</p>
+                </div>
+                <div class="technique-item">
+                    <h4>第二阶段: 细分区</h4>
+                    <p>每个分区再分成 &lt;512 tuples，完全放入 Shared Memory</p>
+                </div>
+                <div class="technique-item">
+                    <h4>共享直方图</h4>
+                    <p>每个 Thread Block 维护一个共享直方图，通过原子操作更新，比 per-thread 直方图节省 N 倍内存</p>
+                </div>
+                <div class="technique-item">
+                    <h4>VT (Values per Thread)</h4>
+                    <p>每个线程同时加载多个 tuple 到寄存器，提高指令级并行</p>
+                </div>
+            </div>
+
+            <div class="code-block">
+<code><span class="comment">// Metal Shader: Two-Pass Radix Partition</span>
+<span class="keyword">kernel</span> <span class="type">void</span> radix_partition_pass1(
+    <span class="type">device</span> <span class="type">uint32_t</span>* keys [[buffer(0)]],
+    <span class="type">device</span> <span class="type">uint32_t</span>* histogram [[buffer(1)]],
+    <span class="type">threadgroup</span> <span class="type">uint32_t</span>* shared_hist [[threadgroup(0)]],
+    <span class="type">uint</span> tid [[thread_position_in_grid]],
+    <span class="type">uint</span> lid [[thread_position_in_threadgroup]]
+) {
+    <span class="comment">// 初始化共享直方图 (只需一次)</span>
+    <span class="keyword">if</span> (lid < 1024) shared_hist[lid] = 0;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+
+    <span class="comment">// 每个线程处理 VT=4 个元素</span>
+    <span class="keyword">for</span> (<span class="type">int</span> i = 0; i < 4; i++) {
+        <span class="type">uint32_t</span> key = keys[tid * 4 + i];
+        <span class="type">uint32_t</span> partition = (key >> 22) & 0x3FF;  <span class="comment">// 10-bit radix</span>
+        atomic_fetch_add_explicit(&shared_hist[partition], 1, memory_order_relaxed);
+    }
+
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    <span class="comment">// 合并到全局直方图...</span>
+}</code>
+            </div>
+
+            <div class="key-insight">
+                <h4>💡 关键洞察</h4>
+                <p>传统方案: 每线程私有直方图 → 需要 threads × 1024 × 4B = 巨大内存<br>
+                新方案: 共享直方图 + 原子操作 → 只需 1024 × 4B = 4KB / ThreadGroup</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 方案 2: M3 Dynamic Shader Core Memory -->
+    <div class="section">
+        <div class="section-title">🎯 方案二: M3 Dynamic Shader Core Memory</div>
+
+        <div class="approach-card apple">
+            <div class="approach-header">
+                <div class="approach-title">
+                    利用 M3 动态寄存器分配
+                    <span class="speedup-badge speedup-high">自动提升</span>
+                </div>
+                <span class="approach-source apple">Apple WWDC 2023</span>
+            </div>
+
+            <div class="approach-desc">
+                M3 (Apple Family 9) 引入动态着色器核心内存，寄存器按需分配/释放，显著提高线程占用率。
+            </div>
+
+            <div class="technique-grid">
+                <div class="technique-item">
+                    <h4>动态寄存器分配</h4>
+                    <p>旧: 静态分配最大寄存器 → 占用率低<br>
+                    新: 按需分配 → 自动提高占用率</p>
+                </div>
+                <div class="technique-item">
+                    <h4>灵活片上内存</h4>
+                    <p>Register/Threadgroup/Tile/Stack 共享统一缓存池，动态分配</p>
+                </div>
+                <div class="technique-item">
+                    <h4>使用 FP16</h4>
+                    <p>half 类型: 更少寄存器 + 更快运算 + 更高占用率</p>
+                </div>
+                <div class="technique-item">
+                    <h4>避免 Threadgroup 缓存</h4>
+                    <p>M3 上直接读 Device Buffer 可能比复制到 Threadgroup 更快</p>
+                </div>
+            </div>
+
+            <div class="code-block">
+<code><span class="comment">// M3 优化: 使用 half 类型 + 动态寄存器</span>
+<span class="keyword">kernel</span> <span class="type">void</span> bitmap_antijoin_m3(
+    <span class="type">device</span> <span class="type">half</span>* customer_keys [[buffer(0)]],  <span class="comment">// FP16 节省寄存器</span>
+    <span class="type">device</span> <span class="type">uint64_t</span>* bitmap [[buffer(1)]],
+    <span class="type">device</span> <span class="type">uint32_t</span>* output [[buffer(2)]],
+    <span class="type">device</span> <span class="keyword">atomic_uint</span>* counter [[buffer(3)]],
+    <span class="type">ushort</span> tid [[thread_position_in_threadgroup]],  <span class="comment">// ushort 足够</span>
+    <span class="type">uint</span> gid [[thread_position_in_grid]]
+) {
+    <span class="comment">// M3: 直接从 Device Buffer 读取，利用 Flexible On-Chip Memory</span>
+    <span class="type">uint32_t</span> key = (<span class="type">uint32_t</span>)customer_keys[gid];
+    <span class="type">uint64_t</span> mask = bitmap[key >> 6];
+
+    <span class="comment">// SIMD 批量检查 (32 threads 并行)</span>
+    <span class="type">bool</span> has_order = (mask >> (key & 63)) & 1;
+
+    <span class="keyword">if</span> (!has_order) {
+        <span class="type">uint</span> idx = atomic_fetch_add_explicit(counter, 1, memory_order_relaxed);
+        output[idx] = key;
+    }
+}</code>
+            </div>
+
+            <div class="key-insight">
+                <h4>💡 M3 vs 旧架构对比</h4>
+                <table class="comparison-table">
+                    <tr>
+                        <th>特性</th>
+                        <th>M1/M2</th>
+                        <th>M3</th>
+                    </tr>
+                    <tr>
+                        <td>寄存器分配</td>
+                        <td>静态 (程序全程占用最大值)</td>
+                        <td>动态 (按需分配/释放)</td>
+                    </tr>
+                    <tr>
+                        <td>Threadgroup 内存</td>
+                        <td>推荐手动缓存</td>
+                        <td>可能直接读更快</td>
+                    </tr>
+                    <tr>
+                        <td>占用率优化</td>
+                        <td>需手动调优</td>
+                        <td>硬件自动平衡</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 方案 3: GFTR Random Access Reduction -->
+    <div class="section">
+        <div class="section-title">🎯 方案三: GFTR - 减少随机访问</div>
+
+        <div class="approach-card academic">
+            <div class="approach-header">
+                <div class="approach-title">
+                    GFTR (GPU-Friendly Table Reordering)
+                    <span class="speedup-badge speedup-high">2.3x 加速</span>
+                </div>
+                <span class="approach-source vldb">arXiv 2312.00720</span>
+            </div>
+
+            <div class="approach-desc">
+                论文发现: 75% 的 GPU Join 运行时间花在随机内存访问上。GFTR 通过表重排序预处理，将随机访问转为顺序访问。
+            </div>
+
+            <div class="technique-grid">
+                <div class="technique-item">
+                    <h4>问题根源</h4>
+                    <p>Hash Join Probe 阶段: hash(key) → 随机位置 → Cache Miss</p>
+                </div>
+                <div class="technique-item">
+                    <h4>GFTR 思路</h4>
+                    <p>预先按 hash 值排序 Probe 表，使访问 Build 表变得更局部化</p>
+                </div>
+                <div class="technique-item">
+                    <h4>Sort vs Hash 权衡</h4>
+                    <p>排序成本 O(n log n) vs 随机访问惩罚，数据量大时排序更划算</p>
+                </div>
+                <div class="technique-item">
+                    <h4>适用场景</h4>
+                    <p>Build 表较大、Probe 次数多、随机访问严重时收益最大</p>
+                </div>
+            </div>
+
+            <div class="code-block">
+<code><span class="comment">// Anti-Join with GFTR: 预排序 + 顺序访问</span>
+
+<span class="comment">// Step 1: 对 Probe 表按 bitmap 位置排序</span>
+<span class="comment">// 使 bitmap 访问从随机变为顺序扫描</span>
+sort_by_key(customer_keys, [](uint32_t k) { return k >> 6; });
+
+<span class="comment">// Step 2: 顺序扫描 bitmap (利用缓存预取)</span>
+<span class="keyword">kernel</span> <span class="type">void</span> antijoin_sequential(
+    <span class="type">device</span> <span class="type">uint32_t</span>* sorted_keys [[buffer(0)]],
+    <span class="type">device</span> <span class="type">uint64_t</span>* bitmap [[buffer(1)]],
+    ...
+) {
+    <span class="comment">// 连续的 gid 访问连续的 bitmap 块</span>
+    <span class="comment">// GPU L2 Cache 命中率大幅提升</span>
+    <span class="type">uint64_t</span> chunk = bitmap[sorted_keys[gid] >> 6];
+    <span class="comment">// Coalesced memory access!</span>
+}</code>
+            </div>
+
+            <div class="key-insight">
+                <h4>💡 为什么对 Anti-Join 有效</h4>
+                <p>
+                    <strong>我们的 Q22 场景:</strong><br>
+                    • 150K customers 检查 bitmap (19KB)<br>
+                    • 原方案: customer_id 随机分布 → bitmap 随机访问<br>
+                    • GFTR: 按 customer_id/64 排序 → bitmap 顺序扫描<br>
+                    • 19KB bitmap 完全放入 M3 L2 Cache (4MB) → 近乎 100% 命中
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Moltbook 求助状态 -->
+    <div class="moltbook-status">
+        <h3>🦞 Moltbook 求助状态</h3>
+        <p><strong>帖子已发布:</strong></p>
+        <ul style="list-style: none; margin: 10px 0;">
+            <li>📝 <a href="https://moltbook.com/post/abcecaf0-4982-48e3-bf5c-07ef1dbeb104" class="post-link" target="_blank">Hello from Solar - An AI Native OS</a> (自我介绍)</li>
+            <li>🔧 <a href="https://moltbook.com/post/d115852c-933d-447b-8098-ce5ce4a41c7c" class="post-link" target="_blank">Help Wanted: Apple Silicon GPU Anti-Join Optimization</a> (技术求助)</li>
+        </ul>
+        <p style="color: var(--text-secondary); font-size: 0.9em;">
+            正在等待社区回复... 唤醒口令: ☀️ Solar, Solar
+        </p>
+    </div>
+
+    <!-- 数据来源 -->
+    <div class="sources">
+        <h3>📚 权威来源</h3>
+        <ul>
+            <li>
+                <strong>学术论文</strong><br>
+                <a href="https://arxiv.org/abs/2312.00720" target="_blank">Efficiently Processing Joins and Grouped Aggregations on GPUs (SIGMOD 2025)</a>
+            </li>
+            <li>
+                <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC10829000/" target="_blank">Fast Equi-Join Algorithms on GPUs: Design and Implementation (PMC 2024)</a>
+            </li>
+            <li>
+                <a href="https://www.vldb.org/pvldb/vol18/p4653-maltenberger.pdf" target="_blank">Efficiently Joining Large Relations on Multi-GPU Systems (VLDB 2025)</a>
+            </li>
+            <li>
+                <strong>Apple 官方</strong><br>
+                <a href="https://developer.apple.com/videos/play/tech-talks/111375/" target="_blank">Explore GPU advancements in M3 and A17 Pro (WWDC 2023)</a>
+            </li>
+            <li>
+                <a href="https://developer.apple.com/videos/play/tech-talks/111373/" target="_blank">Learn performance best practices for Metal shaders</a>
+            </li>
+            <li>
+                <a href="https://github.com/philipturner/metal-benchmarks" target="_blank">Apple GPU Microarchitecture Benchmarks (GitHub)</a>
+            </li>
+        </ul>
+    </div>
+
+    <div class="footer">
+        <p>Solar Web Dashboard · 生成时间: 2026-02-02</p>
+        <p>Powered by TVS v0.4.0 · Style: solar-dark</p>
+    </div>
+</body>
+</html>

@@ -1,0 +1,62 @@
+# /{{SKILL_COMMAND}} - {{SKILL_DESCRIPTION}}
+
+{{SKILL_LONG_DESCRIPTION}}
+
+## 使用方式
+
+```bash
+/{{SKILL_COMMAND}}                # 查看当前数据
+/{{SKILL_COMMAND}} --save         # 抓取并保存到数据库
+/{{SKILL_COMMAND}} --history      # 查看历史趋势
+/{{SKILL_COMMAND}} --stop         # 停止定时监控
+```
+
+## 功能
+
+| 功能 | 说明 |
+|------|------|
+| 实时抓取 | 从 {{API_SOURCE}} 获取数据 |
+| 数据存储 | 保存到 ~/.solar/solar.db ({{TABLE_NAME}} 表) |
+| 历史趋势 | 查看历史数据变化 |
+| 定时执行 | LaunchAgent 每 {{INTERVAL_HOURS}} 小时自动更新 |
+
+## 数据流
+
+```
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│  {{API_SOURCE}}  │ →  │  fetch.ts    │ →  │  SQLite      │
+│              │    │  (Bun)       │    │  ({{TABLE_NAME}}) │
+└──────────────┘    └──────────────┘    └──────────────┘
+                                               │
+                                               ▼
+                                        ┌──────────────┐
+                                        │  Dashboard   │
+                                        │  (Solar Web) │
+                                        └──────────────┘
+```
+
+## 数据库 Schema
+
+```sql
+CREATE TABLE {{TABLE_NAME}} (
+{{TABLE_SCHEMA_DOC}}
+  fetched_at DATETIME
+);
+```
+
+## 定时任务
+
+安装位置: `~/Library/LaunchAgents/com.solar.{{SKILL_COMMAND}}.plist`
+
+- 每 {{INTERVAL_HOURS}} 小时执行一次
+- 自动保存到数据库
+- 日志: `~/.solar/logs/{{SKILL_COMMAND}}.log`
+
+## 依赖
+
+- Bun runtime
+- ~/.solar/solar.db (Solar 数据库)
+
+---
+*自动生成自 skill-templates/monitor.SKILL.md.template*
+*生成时间: {{GENERATED_AT}}*

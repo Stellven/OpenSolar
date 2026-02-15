@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solar Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #1a1a2e;
+            --bg-tertiary: #2a2a4e;
+            --text-primary: #e0e0e0;
+            --text-secondary: #888;
+            --accent: #00d4ff;
+            --accent-dim: rgba(0, 212, 255, 0.2);
+            --border: #333;
+            --tab-height: 40px;
+            --sidebar-width: 200px;
+        }
+
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* 顶部栏 */
+        .header {
+            height: 50px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            justify-content: space-between;
+        }
+
+        .header-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-title h1 {
+            font-size: 18px;
+            color: var(--accent);
+            font-weight: normal;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .header-btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .header-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        /* 主容器 */
+        .main-container {
+            display: flex;
+            height: calc(100vh - 50px);
+        }
+
+        /* 侧边栏 */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .sidebar-section {
+            padding: 15px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .sidebar-section-title {
+            padding: 0 15px 10px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .sidebar-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 15px;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-size: 13px;
+        }
+
+        .sidebar-item:hover {
+            background: var(--accent-dim);
+        }
+
+        .sidebar-item.active {
+            background: var(--accent-dim);
+            border-left: 3px solid var(--accent);
+        }
+
+        .sidebar-item-icon {
+            width: 20px;
+            text-align: center;
+        }
+
+        /* 内容区 */
+        .content-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* 标签栏 */
+        .tab-bar {
+            height: var(--tab-height);
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: flex-end;
+            padding: 0 10px;
+            overflow-x: auto;
+            flex-shrink: 0;
+        }
+
+        .tab-bar::-webkit-scrollbar {
+            height: 4px;
+        }
+
+        .tab-bar::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 2px;
+        }
+
+        .tab {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-bottom: none;
+            border-radius: 6px 6px 0 0;
+            cursor: pointer;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-right: 2px;
+            min-width: 120px;
+            max-width: 200px;
+            transition: all 0.2s;
+            position: relative;
+            top: 1px;
+        }
+
+        .tab:hover {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+
+        .tab.active {
+            background: var(--bg-primary);
+            color: var(--accent);
+            border-color: var(--accent);
+            border-bottom-color: var(--bg-primary);
+        }
+
+        .tab-title {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .tab-close {
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 3px;
+            opacity: 0.5;
+            transition: all 0.2s;
+        }
+
+        .tab-close:hover {
+            opacity: 1;
+            background: rgba(255, 68, 68, 0.3);
+            color: #ff4444;
+        }
+
+        .tab-pinned .tab-close {
+            display: none;
+        }
+
+        /* 内容面板 */
+        .content-panels {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .panel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: none;
+        }
+
+        .panel.active {
+            display: block;
+        }
+
+        .panel iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: var(--bg-primary);
+        }
+
+        /* 欢迎页 */
+        .welcome-page {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .welcome-logo {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+
+        .welcome-title {
+            font-size: 24px;
+            color: var(--accent);
+            margin-bottom: 10px;
+        }
+
+        .welcome-subtitle {
+            color: var(--text-secondary);
+            margin-bottom: 40px;
+        }
+
+        .quick-links {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        .quick-link {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .quick-link:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+
+        .quick-link-icon {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .quick-link-title {
+            font-size: 13px;
+        }
+
+        /* 加载状态 */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-secondary);
+        }
+
+        .loading-spinner {
+            width: 30px;
+            height: 30px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* 状态栏 */
+        .status-bar {
+            height: 24px;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 15px;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #00ff88;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-title">
+            <span style="font-size: 24px;">☀️</span>
+            <h1>Solar Dashboard</h1>
+        </div>
+        <div class="header-actions">
+            <button class="header-btn" onclick="refreshCurrentPage()" title="刷新当前页面 (Cmd+R)">🔄 刷新</button>
+            <button class="header-btn" onclick="refreshAllTabs()" title="刷新所有打开的页面">🔄 全部刷新</button>
+            <button class="header-btn" onclick="toggleAutoRefresh()" id="autoRefreshBtn" title="自动刷新">⏱️ 自动</button>
+            <button class="header-btn" onclick="openInNewTab()">↗️ 新窗口</button>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <aside class="sidebar" id="sidebar">
+            <!-- 动态加载分类和页面 -->
+        </aside>
+
+        <main class="content-area">
+            <div class="tab-bar" id="tabBar">
+                <!-- 动态加载标签 -->
+            </div>
+
+            <div class="content-panels" id="contentPanels">
+                <!-- 欢迎页 -->
+                <div class="panel active" id="panel-welcome">
+                    <div class="welcome-page">
+                        <div class="welcome-logo">☀️</div>
+                        <h2 class="welcome-title">Solar Dashboard</h2>
+                        <p class="welcome-subtitle">从左侧选择页面，或点击快捷入口</p>
+                        <div class="quick-links" id="quickLinks">
+                            <!-- 动态加载快捷链接 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <footer class="status-bar">
+        <div class="status-indicator">
+            <span class="status-dot"></span>
+            <span>Solar Dashboard v1.0</span>
+        </div>
+        <div id="statusText">准备就绪</div>
+    </footer>
+
+    <script>
+        // ============================================================================
+        // 状态管理
+        // ============================================================================
+
+        const state = {
+            pages: [],
+            categories: [],
+            openTabs: [],
+            activeTab: 'welcome',
+            autoRefresh: false,
+            autoRefreshInterval: null,
+            autoRefreshSeconds: 30,
+        };
+
+        // API 基础路径
+        const API_BASE = '/api';
+
+        // ============================================================================
+        // 初始化
+        // ============================================================================
+
+        async function init() {
+            try {
+                await loadPages();
+                renderSidebar();
+                renderQuickLinks();
+
+                // 恢复上次的标签状态
+                const savedTabs = localStorage.getItem('solar-dashboard-tabs');
+                if (savedTabs) {
+                    const tabs = JSON.parse(savedTabs);
+                    for (const pageId of tabs) {
+                        const page = state.pages.find(p => p.page_id === pageId);
+                        if (page) {
+                            openTab(page, false);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Init error:', error);
+                setStatus('加载失败: ' + error.message);
+            }
+        }
+
+        // ============================================================================
+        // API 调用
+        // ============================================================================
+
+        async function loadPages() {
+            try {
+                // 加载页面
+                const pagesRes = await fetch(`${API_BASE}/pages`);
+                const pagesData = await pagesRes.json();
+                state.pages = pagesData.data || [];
+
+                // 加载分类
+                const catsRes = await fetch(`${API_BASE}/categories`);
+                const catsData = await catsRes.json();
+                state.categories = catsData.data || [];
+
+                setStatus(`已加载 ${state.pages.length} 个页面`);
+            } catch (error) {
+                // Fallback: 从本地文件加载
+                console.warn('API unavailable, using fallback');
+                await loadPagesFromFile();
+            }
+        }
+
+        async function loadPagesFromFile() {
+            try {
+                const response = await fetch('/pages.json');
+                const data = await response.json();
+                state.pages = data.pages || [];
+                state.categories = data.categories || [];
+            } catch {
+                // 使用默认数据
+                state.pages = [];
+                state.categories = [
+                    { category_id: 'system', name: '系统', icon: '⚙️' },
+                    { category_id: 'architecture', name: '架构', icon: '🏗️' },
+                    { category_id: 'report', name: '报告', icon: '📊' },
+                ];
+            }
+        }
+
+        async function recordPageView(pageId) {
+            try {
+                await fetch(`${API_BASE}/pages/${pageId}/view`, { method: 'POST' });
+            } catch {
+                // 忽略统计错误
+            }
+        }
+
+        // ============================================================================
+        // 渲染
+        // ============================================================================
+
+        function renderSidebar() {
+            const sidebar = document.getElementById('sidebar');
+
+            // 按分类分组
+            const grouped = {};
+            for (const page of state.pages) {
+                const cat = page.category || 'general';
+                if (!grouped[cat]) {
+                    grouped[cat] = [];
+                }
+                grouped[cat].push(page);
+            }
+
+            let html = '';
+
+            // 固定的页面
+            const pinned = state.pages.filter(p => p.pinned);
+            if (pinned.length > 0) {
+                html += `
+                    <div class="sidebar-section">
+                        <div class="sidebar-section-title">📌 固定</div>
+                        ${pinned.map(p => renderSidebarItem(p)).join('')}
+                    </div>
+                `;
+            }
+
+            // 按分类显示
+            for (const cat of state.categories) {
+                const pages = grouped[cat.category_id] || [];
+                if (pages.length === 0) continue;
+
+                html += `
+                    <div class="sidebar-section">
+                        <div class="sidebar-section-title">${cat.icon} ${cat.name}</div>
+                        ${pages.filter(p => !p.pinned).map(p => renderSidebarItem(p)).join('')}
+                    </div>
+                `;
+            }
+
+            sidebar.innerHTML = html;
+        }
+
+        function renderSidebarItem(page) {
+            const isActive = state.activeTab === page.page_id;
+            return `
+                <div class="sidebar-item ${isActive ? 'active' : ''}"
+                     data-page-id="${page.page_id}"
+                     onclick="openTabById('${page.page_id}')"
+                     ondblclick="forceRefreshPage('${page.page_id}')"
+                     title="单击打开，双击刷新">
+                    <span class="sidebar-item-icon">${page.icon || '📄'}</span>
+                    <span>${page.title}</span>
+                </div>
+            `;
+        }
+
+        function forceRefreshPage(pageId) {
+            // 双击强制刷新页面
+            const page = state.pages.find(p => p.page_id === pageId);
+            if (!page) return;
+
+            // 确保标签已打开
+            const existing = state.openTabs.find(t => t.page_id === pageId);
+            if (!existing) {
+                openTab(page, true);
+                return;
+            }
+
+            // 激活并刷新
+            activateTab(pageId);
+            const iframe = document.getElementById(`iframe-${pageId}`);
+            if (iframe) {
+                iframe.src = page.source_path + '?t=' + Date.now() + '&nocache=1';
+                setStatus(`已强制刷新: ${page.title}`);
+            }
+        }
+
+        function openTabById(pageId) {
+            const page = state.pages.find(p => p.page_id === pageId);
+            if (page) {
+                openTab(page);
+            }
+        }
+
+        function renderQuickLinks() {
+            const container = document.getElementById('quickLinks');
+            const pinned = state.pages.filter(p => p.pinned).slice(0, 4);
+            const recent = state.pages.slice(0, 4);
+            const links = pinned.length > 0 ? pinned : recent;
+
+            container.innerHTML = links.map(p => `
+                <div class="quick-link" onclick="openTabById('${p.page_id}')">
+                    <div class="quick-link-icon">${p.icon || '📄'}</div>
+                    <div class="quick-link-title">${p.title}</div>
+                </div>
+            `).join('');
+        }
+
+        function renderTabs() {
+            const tabBar = document.getElementById('tabBar');
+
+            tabBar.innerHTML = state.openTabs.map(tab => `
+                <div class="tab ${state.activeTab === tab.page_id ? 'active' : ''} ${tab.pinned ? 'tab-pinned' : ''}"
+                     onclick="activateTab('${tab.page_id}')">
+                    <span>${tab.icon || '📄'}</span>
+                    <span class="tab-title">${tab.title}</span>
+                    <span class="tab-close" onclick="event.stopPropagation(); closeTab('${tab.page_id}')">×</span>
+                </div>
+            `).join('');
+        }
+
+        // ============================================================================
+        // 标签操作
+        // ============================================================================
+
+        function openTab(page, activate = true) {
+            // 检查是否已打开
+            const existing = state.openTabs.find(t => t.page_id === page.page_id);
+
+            if (!existing) {
+                state.openTabs.push(page);
+                createPanel(page);
+            }
+
+            if (activate) {
+                activateTab(page.page_id);
+            }
+
+            renderTabs();
+            saveTabs();
+        }
+
+        function activateTab(pageId) {
+            if (state.activeTab === pageId) return; // 避免重复激活
+
+            state.activeTab = pageId;
+
+            // 更新面板显示
+            document.querySelectorAll('.panel').forEach(p => {
+                p.classList.remove('active');
+            });
+
+            const panel = document.getElementById(`panel-${pageId}`);
+            if (panel) {
+                panel.classList.add('active');
+            }
+
+            // 更新侧边栏高亮 (只更新 active 类，不重新渲染)
+            document.querySelectorAll('.sidebar-item').forEach(item => {
+                if (item.dataset.pageId === pageId) {
+                    item.classList.add('active');
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+
+            renderTabs();
+
+            // 记录访问
+            if (pageId !== 'welcome') {
+                recordPageView(pageId);
+            }
+        }
+
+        function closeTab(pageId) {
+            const index = state.openTabs.findIndex(t => t.page_id === pageId);
+            if (index === -1) return;
+
+            // 移除标签
+            state.openTabs.splice(index, 1);
+
+            // 移除面板
+            const panel = document.getElementById(`panel-${pageId}`);
+            if (panel) {
+                panel.remove();
+            }
+
+            // 如果关闭的是当前标签，切换到其他标签
+            if (state.activeTab === pageId) {
+                if (state.openTabs.length > 0) {
+                    const newActive = state.openTabs[Math.max(0, index - 1)];
+                    activateTab(newActive.page_id);
+                } else {
+                    activateTab('welcome');
+                }
+            }
+
+            renderTabs();
+            saveTabs();
+        }
+
+        function createPanel(page) {
+            const container = document.getElementById('contentPanels');
+
+            // 检查是否已存在
+            if (document.getElementById(`panel-${page.page_id}`)) {
+                return;
+            }
+
+            const panel = document.createElement('div');
+            panel.className = 'panel';
+            panel.id = `panel-${page.page_id}`;
+
+            // 根据 source_type 加载内容
+            if (page.source_type === 'file' || page.source_type === 'url') {
+                // 直接创建 iframe (带 cache-busting)
+                const iframe = document.createElement('iframe');
+                iframe.src = page.source_path + '?t=' + Date.now();
+                iframe.style.width = '100%';
+                iframe.style.height = '100%';
+                iframe.style.border = 'none';
+                iframe.style.background = 'var(--bg-primary)';
+                iframe.id = `iframe-${page.page_id}`;
+                panel.appendChild(iframe);
+            } else if (page.source_type === 'html') {
+                panel.innerHTML = page.source_path;
+            }
+
+            container.appendChild(panel);
+        }
+
+        // ============================================================================
+        // 工具函数
+        // ============================================================================
+
+        function saveTabs() {
+            const tabIds = state.openTabs.map(t => t.page_id);
+            localStorage.setItem('solar-dashboard-tabs', JSON.stringify(tabIds));
+        }
+
+        function setStatus(text) {
+            document.getElementById('statusText').textContent = text;
+        }
+
+        function refreshPages() {
+            location.reload();
+        }
+
+        function refreshCurrentPage() {
+            if (state.activeTab === 'welcome') return;
+
+            const iframe = document.getElementById(`iframe-${state.activeTab}`);
+            if (iframe) {
+                const page = state.pages.find(p => p.page_id === state.activeTab);
+                if (page) {
+                    // 强制刷新 iframe (cache-busting + no-cache)
+                    const newSrc = page.source_path + '?t=' + Date.now() + '&nocache=1';
+                    iframe.src = newSrc;
+                    setStatus(`已刷新: ${page.title}`);
+                }
+            }
+        }
+
+        function refreshAllTabs() {
+            let refreshed = 0;
+            for (const tab of state.openTabs) {
+                const iframe = document.getElementById(`iframe-${tab.page_id}`);
+                if (iframe) {
+                    const newSrc = tab.source_path + '?t=' + Date.now() + '&nocache=1';
+                    iframe.src = newSrc;
+                    refreshed++;
+                }
+            }
+            setStatus(`已刷新 ${refreshed} 个页面`);
+        }
+
+        function toggleAutoRefresh() {
+            state.autoRefresh = !state.autoRefresh;
+            const btn = document.getElementById('autoRefreshBtn');
+
+            if (state.autoRefresh) {
+                // 启动自动刷新
+                state.autoRefreshInterval = setInterval(() => {
+                    if (state.activeTab !== 'welcome') {
+                        refreshCurrentPage();
+                    }
+                }, state.autoRefreshSeconds * 1000);
+                btn.style.color = 'var(--accent)';
+                btn.style.borderColor = 'var(--accent)';
+                btn.textContent = `⏱️ ${state.autoRefreshSeconds}s`;
+                setStatus(`自动刷新已启动 (每${state.autoRefreshSeconds}秒)`);
+            } else {
+                // 停止自动刷新
+                if (state.autoRefreshInterval) {
+                    clearInterval(state.autoRefreshInterval);
+                    state.autoRefreshInterval = null;
+                }
+                btn.style.color = '';
+                btn.style.borderColor = '';
+                btn.textContent = '⏱️ 自动';
+                setStatus('自动刷新已停止');
+            }
+        }
+
+        // 键盘快捷键
+        document.addEventListener('keydown', (e) => {
+            // Cmd+R 或 Ctrl+R 刷新当前页面
+            if ((e.metaKey || e.ctrlKey) && e.key === 'r') {
+                e.preventDefault();
+                refreshCurrentPage();
+            }
+            // Cmd+Shift+R 刷新所有页面
+            if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'R') {
+                e.preventDefault();
+                refreshAllTabs();
+            }
+        });
+
+        function openInNewTab() {
+            if (state.activeTab !== 'welcome') {
+                const page = state.pages.find(p => p.page_id === state.activeTab);
+                if (page) {
+                    window.open(page.source_path, '_blank');
+                }
+            }
+        }
+
+        // ============================================================================
+        // 启动
+        // ============================================================================
+
+        init();
+    </script>
+</body>
+</html>

@@ -1,0 +1,221 @@
+#!/bin/bash
+# Solar CLI - 统一命令入口
+# Usage: solar <command> [options]
+
+SOLAR_HOME="${HOME}/.solar"
+SOLAR_BIN="${HOME}/.claude/solar/bin"
+
+# 颜色定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+show_banner() {
+    echo -e "${YELLOW}"
+    echo "  ╭──────────────────────────────────────────────────────────────╮"
+    echo "  │                                                              │"
+    echo "  │    ☀️  S O L A R  v3.0    ·    Multi-Agent Dev Framework     │"
+    echo "  │                                                              │"
+    echo "  ╰──────────────────────────────────────────────────────────────╯"
+    echo -e "${NC}"
+}
+
+show_help() {
+    show_banner
+    echo "Usage: solar <command> [options]"
+    echo ""
+    echo -e "${CYAN}Daemon Commands:${NC}"
+    echo "  daemon start     Start the Solar daemon"
+    echo "  daemon stop      Stop the Solar daemon"
+    echo "  daemon status    Show daemon status"
+    echo "  daemon restart   Restart the daemon"
+    echo "  daemon logs      View daemon logs"
+    echo ""
+    echo -e "${CYAN}Plugin Commands:${NC}"
+    echo "  plugin list      List installed plugins"
+    echo "  plugin install   Install a plugin"
+    echo "  plugin uninstall Remove a plugin"
+    echo "  plugin enable    Enable a plugin"
+    echo "  plugin disable   Disable a plugin"
+    echo ""
+    echo -e "${CYAN}Status Commands:${NC}"
+    echo "  status           Show system status"
+    echo "  stats            Show token usage statistics"
+    echo ""
+    echo -e "${CYAN}Config Commands:${NC}"
+    echo "  init             Initialize Solar configuration"
+    echo "  config           View/edit configuration"
+    echo ""
+    echo -e "${CYAN}UI Commands:${NC}"
+    echo "  ui               Start Agent Dashboard (full layout)"
+    echo "  ui compact       Start compact dashboard"
+    echo "  ui minimal       Start minimal dashboard"
+    echo "  ui banner        Show Solar banner"
+    echo ""
+    echo -e "${CYAN}Other Commands:${NC}"
+    echo "  help             Show this help message"
+    echo "  version          Show version information"
+    echo ""
+}
+
+cmd_init() {
+    echo -e "${BLUE}Initializing Solar...${NC}"
+
+    # 创建目录
+    mkdir -p "${SOLAR_HOME}"
+    mkdir -p "${SOLAR_HOME}/cache"
+    mkdir -p "${SOLAR_HOME}/plugins/skills"
+    mkdir -p "${SOLAR_HOME}/plugins/hooks"
+    mkdir -p "${SOLAR_HOME}/plugins/agents"
+    mkdir -p "${SOLAR_HOME}/plugins/models"
+    mkdir -p "${SOLAR_HOME}/plugins/custom"
+
+    # 复制配置模板
+    if [ ! -f "${SOLAR_HOME}/.env" ]; then
+        cp "${HOME}/.claude/solar/templates/env.template" "${SOLAR_HOME}/.env"
+        echo -e "${GREEN}Created${NC} ${SOLAR_HOME}/.env"
+        echo -e "${YELLOW}Please edit this file to add your API keys${NC}"
+    else
+        echo -e "${YELLOW}Config already exists:${NC} ${SOLAR_HOME}/.env"
+    fi
+
+    # 初始化数据库
+    if command -v bun &> /dev/null; then
+        echo -e "${BLUE}Initializing database...${NC}"
+        bun run -e "
+            const { getStateManager } = require('${HOME}/.claude/solar/core/nerve/state-manager.ts');
+            const state = getStateManager();
+            console.log('Database initialized at:', '${SOLAR_HOME}/solar.db');
+            state.close();
+        " 2>/dev/null || echo -e "${YELLOW}Database will be initialized on first daemon start${NC}"
+    fi
+
+    echo ""
+    echo -e "${GREEN}Solar initialized!${NC}"
+    echo ""
+    echo "Next steps:"
+    echo "  1. Edit ${SOLAR_HOME}/.env to add your API keys"
+    echo "  2. Run 'solar daemon start' to start the daemon"
+    echo ""
+}
+
+cmd_status() {
+    local socket="/tmp/solar.sock"
+
+    if [ ! -e "$socket" ]; then
+        echo -e "${YELLOW}Daemon is not running${NC}"
+        return 1
+    fi
+
+    echo -e "${BLUE}Querying daemon status...${NC}"
+    curl -s --unix-socket "$socket" http://localhost/status | jq .
+}
+
+cmd_stats() {
+    local socket="/tmp/solar.sock"
+
+    if [ ! -e "$socket" ]; then
+        echo -e "${YELLOW}Daemon is not running${NC}"
+        return 1
+    fi
+
+    echo -e "${BLUE}Token Usage Statistics${NC}"
+    echo ""
+
+    # Today's usage
+    echo -e "${CYAN}Today:${NC}"
+    curl -s --unix-socket "$socket" http://localhost/stats/today | jq .
+
+    echo ""
+
+    # Weekly usage
+    echo -e "${CYAN}Last 7 days:${NC}"
+    curl -s --unix-socket "$socket" "http://localhost/stats/tokens?days=7" | jq .
+}
+
+cmd_plugin_list() {
+    local socket="/tmp/solar.sock"
+
+    if [ ! -e "$socket" ]; then
+        echo -e "${YELLOW}Daemon is not running${NC}"
+        return 1
+    fi
+
+    echo -e "${BLUE}Installed Plugins${NC}"
+    curl -s --unix-socket "$socket" http://localhost/plugins | jq .
+}
+
+# 主逻辑
+case "$1" in
+    daemon)
+        shift
+        "${SOLAR_BIN}/solar-daemon" "$@"
+        ;;
+    init)
+        cmd_init
+        ;;
+    status)
+        cmd_status
+        ;;
+    stats)
+        cmd_stats
+        ;;
+    plugin)
+        shift
+        case "$1" in
+            list)
+                cmd_plugin_list
+                ;;
+            *)
+                echo "Usage: solar plugin {list|install|uninstall|enable|disable}"
+                ;;
+        esac
+        ;;
+    ui)
+        shift
+        SOLAR_DIR="$(dirname "$(dirname "$(realpath "$0")")")"
+        cd "${SOLAR_DIR}"
+        case "$1" in
+            compact)
+                echo -e "${BLUE}Starting Solar Dashboard (compact)...${NC}"
+                npx tsx demos/agent-dashboard.ts --layout=compact
+                ;;
+            minimal)
+                echo -e "${BLUE}Starting Solar Dashboard (minimal)...${NC}"
+                npx tsx demos/agent-dashboard.ts --layout=minimal
+                ;;
+            monitor)
+                echo -e "${BLUE}Starting Solar Dashboard (monitor)...${NC}"
+                npx tsx demos/agent-dashboard.ts --layout=monitor
+                ;;
+            dev)
+                echo -e "${BLUE}Starting Solar Dashboard (dev)...${NC}"
+                npx tsx demos/agent-dashboard.ts --layout=dev
+                ;;
+            banner)
+                npx tsx -e "
+                    import { renderBanner } from './core/ui/index.ts';
+                    console.log(renderBanner({ project: 'Solar', phase: 'P3' }));
+                "
+                ;;
+            *)
+                echo -e "${BLUE}Starting Solar Dashboard...${NC}"
+                npx tsx demos/agent-dashboard.ts --layout=full
+                ;;
+        esac
+        ;;
+    help|--help|-h|"")
+        show_help
+        ;;
+    version|--version|-v)
+        echo "Solar v3.0.0"
+        ;;
+    *)
+        echo -e "${RED}Unknown command: $1${NC}"
+        echo "Run 'solar help' for usage"
+        exit 1
+        ;;
+esac

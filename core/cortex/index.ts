@@ -153,20 +153,126 @@ export class Cortex {
     contentJson: object,
     expertModel?: string,
     tokens?: number,
-    latency?: number
+    latency?: number,
+    options?: {
+      kind?: string;
+      score?: number;
+      status?: string;
+      sourceType?: string;
+      citationKey?: string;
+    }
   ): number {
+    const ts = Date.now();
+
+    // 计算内容 hash
+    const contentStr = JSON.stringify(contentJson);
+    const hash = this.computeHash(contentStr);
+
     // 持久化到文件系统
-    const fileName = `${taskId}_phase${phase}_${artifactType}_${Date.now()}.json`;
+    const fileName = `${taskId}_phase${phase}_${artifactType}_${ts}.json`;
     const filePath = join(this.artifactsDir, fileName);
     writeFileSync(filePath, JSON.stringify(contentJson, null, 2));
 
-    // 保存到数据库
-    const result = this.db.run(`
-      INSERT INTO cortex_artifacts (task_id, phase, artifact_type, expert_model, content_json, file_path, token_count, latency_ms)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, [taskId, phase, artifactType, expertModel, JSON.stringify(contentJson), filePath, tokens, latency]);
+    // 生成 meta.json
+    const metaPath = join(this.artifactsDir, `${fileName}.meta.json`);
+    const metaData = {
+      artifact_id: fileName.replace('.json', ''),
+      task_id: taskId,
+      kind: options?.kind || artifactType,
+      hash: `sha256:${hash}`,
+      created_at: new Date(ts).toISOString(),
+      generator: expertModel ? { model: expertModel } : undefined,
+      version: 1
+    };
+    writeFileSync(metaPath, JSON.stringify(metaData, null, 2));
 
-    return Number(result.lastInsertRowid);
+    // 保存到数据库 (包含新字段)
+    const result = this.db.run(`
+      INSERT INTO cortex_artifacts (
+        task_id, phase, artifact_type, expert_model, content_json, file_path,
+        token_count, latency_ms, kind, ts_ms, score, status, source_type,
+        content_path, hash, citation_key
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      taskId, phase, artifactType, expertModel, JSON.stringify(contentJson), filePath,
+      tokens, latency, options?.kind || artifactType, ts, options?.score || 0.5,
+      options?.status || 'active', options?.sourceType, filePath, hash, options?.citationKey
+    ]);
+
+    const artifactId = Number(result.lastInsertRowid);
+
+    // 自动同步到 Tantivy 队列
+    this.syncToSearchQueue(artifactId, taskId, artifactType, contentStr, expertModel, ts, options);
+
+    return artifactId;
+  }
+
+  /**
+   * 计算 SHA256 hash
+   */
+  private computeHash(content: string): string {
+    // 简单实现：使用 Bun 的内置 hash
+    // 注意：Bun 有 bun:crypto 但为了简单用内置 hash
+    let hash = 0;
+    for (let i = 0; i < content.length; i++) {
+      const char = content.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return Math.abs(hash).toString(16).padStart(16, '0');
+  }
+
+  /**
+   * 同步到搜索队列
+   * Schema Optimization v0.3: 使用 snippet + 新字段
+   */
+  private syncToSearchQueue(
+    artifactId: number,
+    taskId: string,
+    artifactType: string,
+    content: string,
+    expertModel?: string,
+    ts?: number,
+    options?: any
+  ): void {
+    try {
+      // 检查 tantivy_queue 表是否存在
+      const tableExists = this.db.query(`
+        SELECT name FROM sqlite_master WHERE type='table' AND name='tantivy_queue'
+      `).get();
+
+      if (tableExists) {
+        // 提取 snippet (Schema Optimization v0.3)
+        const snippet = content.substring(0, 500);
+
+        this.db.run(`
+          INSERT OR REPLACE INTO tantivy_queue (
+            doc_type, source_id, content, title, source_path, timestamp, project, metadata, status,
+            artifact_id, content_path, score, kind, task_id, citation_key
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)
+        `, [
+          'artifact',
+          `artifact_${artifactId}`,  // source_id 带前缀
+          snippet,                     // content 只存 snippet
+          `${artifactType} - ${taskId}`,
+          options?.content_path || '',
+          ts || Date.now(),
+          taskId,
+          JSON.stringify({ expert_model: expertModel }),
+          // Schema Optimization v0.3 新增字段
+          artifactId,                   // artifact_id (numeric)
+          options?.content_path || '',  // content_path
+          options?.score || 0.5,        // score
+          options?.kind || artifactType, // kind
+          taskId,                       // task_id
+          options?.citation_key || null // citation_key
+        ]);
+      }
+    } catch (e) {
+      // 静默失败，不影响主流程
+    }
   }
 
   getArtifacts(taskId: string, phase?: number, artifactType?: string): any[] {
@@ -184,6 +290,46 @@ export class Cortex {
 
     query += ` ORDER BY created_at`;
     return this.db.query(query).all(...params) as any[];
+  }
+
+  /**
+   * 验证 artifact 内容完整性
+   */
+  verifyArtifact(artifactId: number): { valid: boolean; hash_db: string; hash_file: string; error?: string } {
+    const artifact = this.db.query(`
+      SELECT hash, file_path, content_json FROM cortex_artifacts WHERE artifact_id = ?
+    `).get(artifactId) as any;
+
+    if (!artifact) {
+      return { valid: false, hash_db: '', hash_file: '', error: 'Artifact not found' };
+    }
+
+    const hashDb = artifact.hash || '';
+    const contentStr = JSON.stringify(JSON.parse(artifact.content_json));
+    const hashFile = this.computeHash(contentStr);
+
+    return {
+      valid: hashDb === hashFile,
+      hash_db: hashDb,
+      hash_file: hashFile
+    };
+  }
+
+  /**
+   * 读取 artifact 的 meta.json
+   */
+  getArtifactMeta(artifactId: number): any {
+    const artifact = this.db.query(`
+      SELECT file_path FROM cortex_artifacts WHERE artifact_id = ?
+    `).get(artifactId) as any;
+
+    if (!artifact) return null;
+
+    const metaPath = `${artifact.file_path}.meta.json`;
+    if (existsSync(metaPath)) {
+      return JSON.parse(readFileSync(metaPath, 'utf-8'));
+    }
+    return null;
   }
 
   // ============================================================
@@ -207,16 +353,17 @@ export class Cortex {
   // 论点管理
   // ============================================================
 
-  addClaim(taskId: string, claim: Claim, expertModel?: string): number {
+  addClaim(taskId: string, claim: Claim & { confidence?: number }, expertModel?: string): number {
     const result = this.db.run(`
-      INSERT INTO cortex_claims (task_id, claim_text, supporting_sources, counter_sources, expert_model)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO cortex_claims (task_id, claim_text, supporting_sources, counter_sources, expert_model, confidence)
+      VALUES (?, ?, ?, ?, ?, ?)
     `, [
       taskId,
       claim.text,
       JSON.stringify(claim.supporting_sources),
-      JSON.stringify(claim.counter_sources),
-      expertModel
+      JSON.stringify(claim.counter_sources || []),
+      expertModel,
+      claim.confidence || 0.75
     ]);
 
     return Number(result.lastInsertRowid);

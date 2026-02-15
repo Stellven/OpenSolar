@@ -1,0 +1,64 @@
+---
+name: commit
+description: Git 提交流程，自动分析变更并生成提交信息
+user-invocable: true
+disable-model-invocation: false
+argument-hint: "[message]"
+---
+
+# Git 提交流程
+
+## 步骤
+
+1. 运行 `git status` 查看变更
+2. 运行 `git diff --staged` 查看暂存内容
+3. 如果有未暂存的变更，询问用户是否添加
+4. 分析变更，生成提交信息
+5. 执行提交
+
+## 提交信息格式
+
+```
+<type>: <简短描述>
+
+<详细说明>
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+```
+
+## 提交类型
+
+- feat: 新功能
+- fix: 修复
+- docs: 文档
+- refactor: 重构
+- test: 测试
+- perf: 性能优化
+- style: 格式调整
+- chore: 杂项
+
+## 注意事项
+
+- 不要提交 .env 等敏感文件
+- 确保测试通过后再提交
+- 提交信息要简洁明了
+
+## 性能检查 (ThunderDuck 项目强制)
+
+**如果变更包含以下文件，必须先运行 `/benchmark tpch`:**
+
+```
+*optimizer*.cpp
+*operators_v*.cpp
+*operators_v*.h
+*applicability*
+```
+
+**检查流程:**
+
+1. 检查 `git diff --staged` 是否包含性能敏感文件
+2. 如果包含，询问用户是否已运行 `/benchmark tpch`
+3. 如果回归 >5%，阻止提交
+4. 用户确认后才能继续
+
+**来源:** 2026-02-02 TPC-H 回归事件教训

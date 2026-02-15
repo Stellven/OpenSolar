@@ -1,22 +1,74 @@
 /**
- * Persona Router v2.0 - 极简版
+ * Persona Router v3.0 - 两层人格模型
  *
- * 核心设计：6个旋钮 + 3层配置 + neutral对冲
+ * A层：叙事层（人类心理学框架）
+ * B层：控制面（AI性能旋钮）
+ *
+ * 来源: 用户洞察 + 学术研究
  */
 
 // ============================================================
-// 一、6个关键旋钮
+// A层：叙事层（人类心理学框架）
+// ============================================================
+
+export interface NarrativeLayer {
+  // Big Five / OCEAN
+  bigFive: {
+    openness: number;        // 开放性 (0-1)
+    conscientiousness: number; // 尽责性 (0-1)
+    extraversion: number;    // 外向性 (0-1)
+    agreeableness: number;   // 宜人性 (0-1)
+    neuroticism: number;     // 神经质 (0-1)
+  };
+
+  // HEXACO 扩展
+  hexaco?: {
+    honestyHumility: number; // 诚实-谦逊 (0-1) - 抑制自嗨/忽悠/过度自信
+  };
+
+  // Regulatory Focus
+  regulatoryFocus: {
+    promotion: number;       // 促进型 (0-1) - 追求收益
+    prevention: number;      // 预防型 (0-1) - 避免损失
+  };
+
+  // Construal Level
+  construalLevel: 'abstract' | 'concrete' | 'mixed'; // 高层抽象 vs 低层细节
+
+  // Values (Schwartz)
+  values?: string[];         // e.g., ['security', 'achievement', 'self-direction']
+}
+
+// ============================================================
+// B层：控制面（10个可度量旋钮，0-5 分制）
+// ============================================================
+
+export interface ControlKnobs {
+  rigor: number;             // 证据洁癖 (0-5): 引用、可验证、列假设
+  skepticism: number;        // 怀疑强度 (0-5): 主动找反例、挑漏洞
+  exploration: number;       // 发散度 (0-5): 给多少备选路线
+  decisiveness: number;      // 决断性 (0-5): 不完备信息下拍板+fallback
+  riskAversion: number;      // 风险厌恶 (0-5): 越高越保守
+  toolFirst: number;         // 工具倾向 (0-5): 主动上网/跑代码/写测试
+  compression: number;       // 压缩率 (0-5): 同样信息用多少token
+  selfCritique: number;      // 自检强度 (0-5): 自测、单元测试、反思
+  socialEmpathy: number;     // 人类体验 (0-5): 生活类任务关键
+  competitiveness: number;   // 竞技性 (0-5): PK欲望，互评赛制用
+}
+
+// ============================================================
+// 兼容旧版 Knobs (映射到新版)
 // ============================================================
 
 export interface Knobs {
-  divergent: number;         // 发散 (0-1)
-  convergent: number;        // 收敛 (0-1)
-  promotion: number;         // 促进 (0-1)
-  prevention: number;        // 预防 (0-1)
-  evidence_threshold: number;// 证据门槛 (0-1)
-  skepticism: number;        // 怀疑强度 (0-1)
-  confidence_calibration: number; // 自信校准 (0-1)
-  speed_budget: number;      // 速度预算 (0-1)
+  divergent: number;         // → exploration
+  convergent: number;        // → 5 - exploration
+  promotion: number;         // → regulatoryFocus.promotion
+  prevention: number;        // → regulatoryFocus.prevention
+  evidence_threshold: number;// → rigor / 5
+  skepticism: number;        // → skepticism / 5
+  confidence_calibration: number; // → decisiveness / 5
+  speed_budget: number;      // → (5 - compression) / 5
 }
 
 // ============================================================
@@ -79,99 +131,179 @@ export interface PersonaConfig {
 }
 
 // ============================================================
-// 四、标准角色（12个）
+// 四、标准角色（12个）- 使用10旋钮系统
 // ============================================================
 
-export const ROLES: Record<string, PersonaConfig> = {
+export interface RoleConfig {
+  // 叙事层
+  narrative: Partial<NarrativeLayer>;
+  // 控制面
+  knobs: ControlKnobs;
+  // 风格
+  style: {
+    tone: string;
+    length: 'brief' | 'medium' | 'detailed';
+    format: 'markdown' | 'json' | 'code';
+  };
+}
+
+export const ROLES_V3: Record<string, RoleConfig> = {
 
   // === 学术研究 ===
   scout: {
-    style: { tone: '好奇开放', length: 'brief', format: 'markdown' },
-    cognitive: { evidenceRequired: false, counterExample: false, uncertaintyLabel: false, confidenceRange: [0.3, 0.7] },
-    actuation: { parallel: true, retries: 2 },
-    knobs: { divergent: 0.9, promotion: 0.8, speed_budget: 0.8 }
+    narrative: {
+      bigFive: { openness: 0.9, conscientiousness: 0.5, extraversion: 0.7, agreeableness: 0.6, neuroticism: 0.3 },
+      regulatoryFocus: { promotion: 0.8, prevention: 0.3 },
+      construalLevel: 'abstract'
+    },
+    knobs: { rigor: 1, skepticism: 1, exploration: 5, decisiveness: 3, riskAversion: 1, toolFirst: 4, compression: 4, selfCritique: 1, socialEmpathy: 2, competitiveness: 2 },
+    style: { tone: '好奇开放', length: 'brief', format: 'markdown' }
   },
 
   extractor: {
-    style: { tone: '冷静结构化', length: 'medium', format: 'json' },
-    cognitive: { evidenceRequired: false, counterExample: false, uncertaintyLabel: true, confidenceRange: [0.5, 0.8] },
-    actuation: { parallel: true, retries: 1 },
-    knobs: { convergent: 0.7, speed_budget: 0.7 }
+    narrative: {
+      bigFive: { openness: 0.6, conscientiousness: 0.8, extraversion: 0.4, agreeableness: 0.7, neuroticism: 0.3 },
+      regulatoryFocus: { promotion: 0.5, prevention: 0.5 },
+      construalLevel: 'concrete'
+    },
+    knobs: { rigor: 2, skepticism: 1, exploration: 2, decisiveness: 3, riskAversion: 2, toolFirst: 3, compression: 3, selfCritique: 2, socialEmpathy: 1, competitiveness: 1 },
+    style: { tone: '冷静结构化', length: 'medium', format: 'json' }
   },
 
   critic: {
-    style: { tone: '严谨批判', length: 'detailed', format: 'markdown' },
-    cognitive: { evidenceRequired: true, counterExample: true, uncertaintyLabel: true, confidenceRange: [0.7, 0.95] },
-    actuation: { parallel: false, retries: 3 },
-    knobs: { skepticism: 0.9, evidence_threshold: 0.85, prevention: 0.8 }
+    narrative: {
+      bigFive: { openness: 0.5, conscientiousness: 0.9, extraversion: 0.3, agreeableness: 0.3, neuroticism: 0.4 },
+      hexaco: { honestyHumility: 0.8 },
+      regulatoryFocus: { promotion: 0.2, prevention: 0.9 },
+      construalLevel: 'concrete'
+    },
+    knobs: { rigor: 5, skepticism: 5, exploration: 1, decisiveness: 2, riskAversion: 4, toolFirst: 2, compression: 2, selfCritique: 4, socialEmpathy: 1, competitiveness: 4 },
+    style: { tone: '严谨批判', length: 'detailed', format: 'markdown' }
   },
 
   synthesizer: {
-    style: { tone: '专业结构化', length: 'detailed', format: 'markdown' },
-    cognitive: { evidenceRequired: true, counterExample: false, uncertaintyLabel: true, confidenceRange: [0.6, 0.9] },
-    actuation: { parallel: false, retries: 2 },
-    knobs: { convergent: 0.8, evidence_threshold: 0.7 }
+    narrative: {
+      bigFive: { openness: 0.7, conscientiousness: 0.8, extraversion: 0.5, agreeableness: 0.7, neuroticism: 0.2 },
+      regulatoryFocus: { promotion: 0.5, prevention: 0.5 },
+      construalLevel: 'abstract'
+    },
+    knobs: { rigor: 3, skepticism: 2, exploration: 3, decisiveness: 4, riskAversion: 2, toolFirst: 2, compression: 2, selfCritique: 3, socialEmpathy: 3, competitiveness: 2 },
+    style: { tone: '专业结构化', length: 'detailed', format: 'markdown' }
   },
 
   // === 方案设计 ===
   explorer: {
-    style: { tone: '大胆创新', length: 'medium', format: 'markdown' },
-    cognitive: { evidenceRequired: false, counterExample: false, uncertaintyLabel: false, confidenceRange: [0.3, 0.7] },
-    actuation: { parallel: true, retries: 1 },
-    knobs: { divergent: 0.95, promotion: 0.9, speed_budget: 0.7 }
+    narrative: {
+      bigFive: { openness: 0.95, conscientiousness: 0.5, extraversion: 0.8, agreeableness: 0.5, neuroticism: 0.3 },
+      regulatoryFocus: { promotion: 0.9, prevention: 0.2 },
+      construalLevel: 'abstract'
+    },
+    knobs: { rigor: 1, skepticism: 1, exploration: 5, decisiveness: 3, riskAversion: 1, toolFirst: 3, compression: 3, selfCritique: 1, socialEmpathy: 2, competitiveness: 3 },
+    style: { tone: '大胆创新', length: 'medium', format: 'markdown' }
   },
 
   architect: {
-    style: { tone: '专业系统', length: 'detailed', format: 'markdown' },
-    cognitive: { evidenceRequired: true, counterExample: false, uncertaintyLabel: true, confidenceRange: [0.6, 0.9] },
-    actuation: { parallel: false, retries: 2 },
-    knobs: { convergent: 0.7, evidence_threshold: 0.7, prevention: 0.5 }
+    narrative: {
+      bigFive: { openness: 0.8, conscientiousness: 0.8, extraversion: 0.5, agreeableness: 0.6, neuroticism: 0.2 },
+      regulatoryFocus: { promotion: 0.5, prevention: 0.5 },
+      construalLevel: 'abstract'
+    },
+    knobs: { rigor: 4, skepticism: 2, exploration: 3, decisiveness: 4, riskAversion: 2, toolFirst: 3, compression: 2, selfCritique: 3, socialEmpathy: 2, competitiveness: 2 },
+    style: { tone: '专业系统', length: 'detailed', format: 'markdown' }
   },
 
   riskOfficer: {
-    style: { tone: '审慎诚实', length: 'medium', format: 'markdown' },
-    cognitive: { evidenceRequired: true, counterExample: true, uncertaintyLabel: true, confidenceRange: [0.7, 0.95] },
-    actuation: { parallel: false, retries: 3 },
-    knobs: { prevention: 0.95, skepticism: 0.85 }
+    narrative: {
+      bigFive: { openness: 0.4, conscientiousness: 0.9, extraversion: 0.3, agreeableness: 0.5, neuroticism: 0.5 },
+      hexaco: { honestyHumility: 0.9 },
+      regulatoryFocus: { promotion: 0.1, prevention: 0.95 },
+      construalLevel: 'concrete'
+    },
+    knobs: { rigor: 5, skepticism: 4, exploration: 1, decisiveness: 2, riskAversion: 5, toolFirst: 2, compression: 2, selfCritique: 5, socialEmpathy: 1, competitiveness: 2 },
+    style: { tone: '审慎诚实', length: 'medium', format: 'markdown' }
   },
 
   // === 代码开发 ===
   spec: {
-    style: { tone: '严谨无歧义', length: 'detailed', format: 'markdown' },
-    cognitive: { evidenceRequired: true, counterExample: false, uncertaintyLabel: true, confidenceRange: [0.7, 0.95] },
-    actuation: { parallel: false, retries: 2 },
-    knobs: { convergent: 0.9, evidence_threshold: 0.8, prevention: 0.7 }
+    narrative: {
+      bigFive: { openness: 0.5, conscientiousness: 0.95, extraversion: 0.3, agreeableness: 0.5, neuroticism: 0.2 },
+      regulatoryFocus: { promotion: 0.3, prevention: 0.7 },
+      construalLevel: 'concrete'
+    },
+    knobs: { rigor: 4, skepticism: 2, exploration: 1, decisiveness: 3, riskAversion: 3, toolFirst: 2, compression: 2, selfCritique: 3, socialEmpathy: 1, competitiveness: 1 },
+    style: { tone: '严谨无歧义', length: 'detailed', format: 'markdown' }
   },
 
   builder: {
-    style: { tone: '务实高效', length: 'brief', format: 'code' },
-    cognitive: { evidenceRequired: false, counterExample: false, uncertaintyLabel: false, confidenceRange: [0.4, 0.8] },
-    actuation: { parallel: true, retries: 2 },
-    knobs: { speed_budget: 0.9, promotion: 0.8 }
+    narrative: {
+      bigFive: { openness: 0.6, conscientiousness: 0.7, extraversion: 0.5, agreeableness: 0.7, neuroticism: 0.3 },
+      regulatoryFocus: { promotion: 0.7, prevention: 0.3 },
+      construalLevel: 'concrete'
+    },
+    knobs: { rigor: 2, skepticism: 1, exploration: 2, decisiveness: 4, riskAversion: 1, toolFirst: 5, compression: 4, selfCritique: 2, socialEmpathy: 2, competitiveness: 3 },
+    style: { tone: '务实高效', length: 'brief', format: 'code' }
   },
 
   verifier: {
-    style: { tone: '严谨怀疑', length: 'medium', format: 'markdown' },
-    cognitive: { evidenceRequired: true, counterExample: true, uncertaintyLabel: true, confidenceRange: [0.8, 0.98] },
-    actuation: { parallel: false, retries: 3 },
-    knobs: { skepticism: 0.95, evidence_threshold: 0.9, prevention: 0.9 }
+    narrative: {
+      bigFive: { openness: 0.4, conscientiousness: 0.95, extraversion: 0.2, agreeableness: 0.4, neuroticism: 0.4 },
+      hexaco: { honestyHumility: 0.7 },
+      regulatoryFocus: { promotion: 0.1, prevention: 0.9 },
+      construalLevel: 'concrete'
+    },
+    knobs: { rigor: 5, skepticism: 5, exploration: 1, decisiveness: 2, riskAversion: 4, toolFirst: 5, compression: 2, selfCritique: 5, socialEmpathy: 1, competitiveness: 3 },
+    style: { tone: '严谨怀疑', length: 'medium', format: 'markdown' }
   },
 
   // === 生活/通用 ===
   concierge: {
-    style: { tone: '亲和快捷', length: 'brief', format: 'markdown' },
-    cognitive: { evidenceRequired: false, counterExample: false, uncertaintyLabel: false, confidenceRange: [0.4, 0.8] },
-    actuation: { parallel: true, retries: 1 },
-    knobs: { speed_budget: 0.9, promotion: 0.7 }
+    narrative: {
+      bigFive: { openness: 0.5, conscientiousness: 0.6, extraversion: 0.7, agreeableness: 0.8, neuroticism: 0.3 },
+      regulatoryFocus: { promotion: 0.6, prevention: 0.3 },
+      construalLevel: 'concrete'
+    },
+    knobs: { rigor: 1, skepticism: 1, exploration: 2, decisiveness: 4, riskAversion: 1, toolFirst: 4, compression: 5, selfCritique: 1, socialEmpathy: 5, competitiveness: 1 },
+    style: { tone: '亲和快捷', length: 'brief', format: 'markdown' }
   },
 
   governor: {
-    style: { tone: '客观审慎', length: 'medium', format: 'markdown' },
-    cognitive: { evidenceRequired: true, counterExample: true, uncertaintyLabel: true, confidenceRange: [0.85, 0.99] },
-    actuation: { parallel: false, retries: 3 },
-    knobs: { prevention: 0.95, skepticism: 0.9, evidence_threshold: 0.9, convergent: 0.9 }
+    narrative: {
+      bigFive: { openness: 0.5, conscientiousness: 0.95, extraversion: 0.3, agreeableness: 0.5, neuroticism: 0.2 },
+      hexaco: { honestyHumility: 0.9 },
+      regulatoryFocus: { promotion: 0.3, prevention: 0.8 },
+      construalLevel: 'abstract'
+    },
+    knobs: { rigor: 5, skepticism: 4, exploration: 1, decisiveness: 3, riskAversion: 4, toolFirst: 2, compression: 2, selfCritique: 5, socialEmpathy: 2, competitiveness: 1 },
+    style: { tone: '客观审慎', length: 'medium', format: 'markdown' }
   }
 };
+
+// 兼容旧版 ROLES
+export const ROLES: Record<string, PersonaConfig> = Object.fromEntries(
+  Object.entries(ROLES_V3).map(([name, config]) => [
+    name,
+    {
+      style: config.style,
+      cognitive: {
+        evidenceRequired: config.knobs.rigor >= 3,
+        counterExample: config.knobs.skepticism >= 4,
+        uncertaintyLabel: config.knobs.skepticism >= 3,
+        confidenceRange: [0.3 + config.knobs.rigor * 0.1, 0.7 + config.knobs.rigor * 0.05] as [number, number]
+      },
+      actuation: { parallel: config.knobs.exploration >= 3, retries: Math.ceil(config.knobs.selfCritique / 2) },
+      knobs: {
+        divergent: config.knobs.exploration / 5,
+        convergent: (5 - config.knobs.exploration) / 5,
+        promotion: config.narrative.regulatoryFocus?.promotion || 0.5,
+        prevention: config.narrative.regulatoryFocus?.prevention || 0.5,
+        evidence_threshold: config.knobs.rigor / 5,
+        skepticism: config.knobs.skepticism / 5,
+        confidence_calibration: config.knobs.decisiveness / 5,
+        speed_budget: (5 - config.knobs.compression) / 5
+      }
+    }
+  ])
+) as Record<string, PersonaConfig>;
 
 // ============================================================
 // 五、编队模板
@@ -186,63 +318,27 @@ export const TEAMS = {
 };
 
 // ============================================================
-// 六、Neutral 对冲机制
+// 六、Neutral 对冲机制 (使用 neutral-hedge.ts 实现)
 // ============================================================
+
+export { runHedge as neutralHedge, scoreStability, buildNeutralPrompt, buildPersonaPrompt, type HedgeResult }
+  from './neutral-hedge';
 
 /**
  * 高风险任务：跑两份，选更稳的
  *
  * 用法：
- *   const result = await neutralHedge(task, 'critic');
- *   // 会同时调 critic + neutral，返回更保守的结果
+ *   import { neutralHedge } from './persona-router';
+ *   const result = await neutralHedge(task, 'critic', 'glm-4-plus', executor);
+ *   // 会同时调 critic人格 + 中性版，返回更稳定的结果
+ *
+ * 评分维度：
+ *   - 证据 (0.25): 数据/引用/来源/测试/验证
+ *   - 不确定 (0.15): 待验证/可能/推测
+ *   - 风险 (0.20): 隐患/缺陷/局限/边界
+ *   - 反例 (0.15): 但是/然而/例外/edge case
+ *   - 结构 (0.15): markdown格式化程度
  */
-export async function neutralHedge(
-  task: string,
-  primaryRole: string,
-  executor: (role: string, task: string) => Promise<string>
-): Promise<{ result: string; picked: 'primary' | 'neutral' | 'merged'; reason: string }> {
-
-  // 并行跑两份
-  const [primary, neutral] = await Promise.all([
-    executor(primaryRole, task),
-    executor('governor', task)  // neutral = governor 人格
-  ]);
-
-  // 选更稳的：证据更多、不确定标注更全、风险提示更明确
-  const primaryScore = scoreStability(primary);
-  const neutralScore = scoreStability(neutral);
-
-  if (neutralScore > primaryScore + 0.1) {
-    return { result: neutral, picked: 'neutral', reason: 'neutral更稳' };
-  }
-  if (primaryScore > neutralScore + 0.1) {
-    return { result: primary, picked: 'primary', reason: 'primary更稳' };
-  }
-
-  // 差不多则合并
-  return {
-    result: mergeResults(primary, neutral),
-    picked: 'merged',
-    reason: '两者接近，合并'
-  };
-}
-
-function scoreStability(text: string): number {
-  let score = 0.5;
-  // 证据词
-  if (/证据|数据|引用|来源|根据/.test(text)) score += 0.15;
-  // 不确定标注
-  if (/不确定|待验证|需要确认|可能|推测/.test(text)) score += 0.1;
-  // 风险提示
-  if (/风险|注意|可能.*问题|需要.*复核/.test(text)) score += 0.15;
-  // 反例
-  if (/反例|但是|然而|另一种可能/.test(text)) score += 0.1;
-  return Math.min(1, score);
-}
-
-function mergeResults(a: string, b: string): string {
-  return `${a}\n\n---\n\n【Governor补充】\n${b}`;
-}
 
 // ============================================================
 // 七、快速工具函数
@@ -253,7 +349,7 @@ export function selectTeam(type: 'research' | 'design' | 'coding' | 'life_low' |
   return TEAMS[type];
 }
 
-/** 根据角色生成prompt */
+/** 根据角色生成prompt (旧版兼容) */
 export function buildPrompt(role: string): string {
   const r = ROLES[role];
   if (!r) return '';
@@ -266,4 +362,173 @@ export function buildPrompt(role: string): string {
 `.trim();
 }
 
-export default { ROUTING, ROLES, TEAMS, Knobs, neutralHedge, selectTeam, buildPrompt };
+/** 根据角色生成 V3 prompt (带10旋钮) */
+export function buildPromptV3(role: string, task?: string): string {
+  const config = ROLES_V3[role];
+  if (!config) return '';
+
+  const k = config.knobs;
+  const n = config.narrative;
+
+  const lines: string[] = [];
+
+  // 角色定义
+  lines.push(`【${role}】`);
+  lines.push(`风格: ${config.style.tone}，${config.style.length}`);
+  lines.push('');
+
+  // 控制面旋钮 (核心!)
+  lines.push('控制面 (0-5分):');
+  lines.push(`  证据洁癖: ${k.rigor} ${k.rigor >= 4 ? '(必须引用来源)' : k.rigor >= 2 ? '(优先引用)' : '(可选)'}`);
+  lines.push(`  怀疑强度: ${k.skepticism} ${k.skepticism >= 4 ? '(必须找反例)' : k.skepticism >= 2 ? '(尝试找反例)' : '(可选)'}`);
+  lines.push(`  发散度: ${k.exploration} ${k.exploration >= 4 ? '(多方案)' : k.exploration >= 2 ? '(2-3个方案)' : '(聚焦一个)'}`);
+  lines.push(`  决断性: ${k.decisiveness} ${k.decisiveness >= 4 ? '(快速拍板)' : '(谨慎决策)'}`);
+  lines.push(`  风险厌恶: ${k.riskAversion} ${k.riskAversion >= 4 ? '(极度保守)' : k.riskAversion >= 2 ? '(适度谨慎)' : '(可接受风险)'}`);
+  lines.push(`  工具倾向: ${k.toolFirst} ${k.toolFirst >= 4 ? '(主动调用工具)' : '(按需调用)'}`);
+  lines.push(`  压缩率: ${k.compression} ${k.compression >= 4 ? '(极简)' : '(适中)'}`);
+  lines.push(`  自检强度: ${k.selfCritique} ${k.selfCritique >= 4 ? '(必须自检)' : '(建议自检)'}`);
+  lines.push('');
+
+  // 叙事层 (可选)
+  if (n.hexaco?.honestyHumility && n.hexaco.honestyHumility >= 0.7) {
+    lines.push('⚠️ 硬约束: 禁止自嗨/过度承诺，如实报告不确定性和局限');
+  }
+
+  if (n.regulatoryFocus) {
+    const focus = n.regulatoryFocus.promotion > n.regulatoryFocus.prevention ? '促进型' : '预防型';
+    lines.push(`关注点: ${focus}`);
+  }
+
+  if (task) {
+    lines.push('');
+    lines.push('任务:');
+    lines.push(task);
+  }
+
+  return lines.join('\n');
+}
+
+/** 获取角色的旋钮向量 */
+export function getKnobsVector(role: string): ControlKnobs | null {
+  return ROLES_V3[role]?.knobs || null;
+}
+
+/** 对比两个角色的旋钮差异 */
+export function compareRoles(a: string, b: string): string {
+  const ka = ROLES_V3[a]?.knobs;
+  const kb = ROLES_V3[b]?.knobs;
+
+  if (!ka || !kb) return '角色不存在';
+
+  const lines: string[] = [];
+  lines.push(`\n📊 角色对比: ${a} vs ${b}\n`);
+  lines.push('| 旋钮 | ' + a + ' | ' + b + ' | 差异 |');
+  lines.push('|------|-------|-------|------|');
+
+  const keys: (keyof ControlKnobs)[] = ['rigor', 'skepticism', 'exploration', 'decisiveness', 'riskAversion', 'toolFirst', 'compression', 'selfCritique', 'socialEmpathy', 'competitiveness'];
+
+  for (const key of keys) {
+    const va = ka[key];
+    const vb = kb[key];
+    const diff = va - vb;
+    const diffStr = diff > 0 ? `+${diff}` : `${diff}`;
+    lines.push(`| ${key} | ${va} | ${vb} | ${diffStr} |`);
+  }
+
+  return lines.join('\n');
+}
+
+// ============================================================
+// CLI
+// ============================================================
+
+if (import.meta.main) {
+  const cmd = process.argv[2];
+
+  switch (cmd) {
+    case 'roles': {
+      console.log('\n📋 可用角色:\n');
+      Object.entries(ROLES_V3).forEach(([name, config]) => {
+        const k = config.knobs;
+        console.log(`  ${name.padEnd(12)} - ${config.style.tone}`);
+        console.log(`               证据${k.rigor} 怀疑${k.skepticism} 发散${k.exploration} 决断${k.decisiveness} 风险${k.riskAversion}`);
+      });
+      break;
+    }
+
+    case 'knobs': {
+      const role = process.argv[3];
+      if (!role) {
+        console.log('用法: bun persona-router.ts knobs <role>');
+        break;
+      }
+      const k = ROLES_V3[role]?.knobs;
+      if (!k) {
+        console.log(`角色 ${role} 不存在`);
+        break;
+      }
+      console.log(`\n📊 ${role} 旋钮向量 (0-5):\n`);
+      Object.entries(k).forEach(([key, value]) => {
+        const bar = '█'.repeat(value) + '░'.repeat(5 - value);
+        console.log(`  ${key.padEnd(15)} [${bar}] ${value}`);
+      });
+      break;
+    }
+
+    case 'compare': {
+      const a = process.argv[3];
+      const b = process.argv[4];
+      if (!a || !b) {
+        console.log('用法: bun persona-router.ts compare <role1> <role2>');
+        break;
+      }
+      console.log(compareRoles(a, b));
+      break;
+    }
+
+    case 'prompt': {
+      const role = process.argv[3];
+      const task = process.argv.slice(4).join(' ') || undefined;
+      if (!role) {
+        console.log('用法: bun persona-router.ts prompt <role> [task]');
+        break;
+      }
+      console.log(buildPromptV3(role, task));
+      break;
+    }
+
+    case 'teams': {
+      console.log('\n👥 编队模板:\n');
+      Object.entries(TEAMS).forEach(([name, roles]) => {
+        console.log(`  ${name}: ${roles.join(' → ')}`);
+      });
+      break;
+    }
+
+    default:
+      console.log(`
+🎭 Persona Router v3.0 - 两层人格模型
+
+用法:
+  bun persona-router.ts roles              # 列出所有角色
+  bun persona-router.ts knobs <role>       # 查看角色旋钮
+  bun persona-router.ts compare <a> <b>    # 对比两个角色
+  bun persona-router.ts prompt <role> [task] # 生成角色prompt
+  bun persona-router.ts teams              # 查看编队模板
+
+10个旋钮 (0-5分):
+  rigor          证据洁癖 - 引用/可验证/列假设
+  skepticism     怀疑强度 - 找反例/挑漏洞
+  exploration    发散度 - 备选路线数量
+  decisiveness   决断性 - 不完备信息下拍板
+  riskAversion   风险厌恶 - 保守程度
+  toolFirst      工具倾向 - 主动调用工具
+  compression    压缩率 - token效率
+  selfCritique   自检强度 - 自测/反思
+  socialEmpathy  人类体验 - 生活任务
+  competitiveness 竞技性 - PK欲望
+`);
+  }
+}
+
+export default { ROUTING, ROLES, ROLES_V3, TEAMS, selectTeam, buildPrompt, buildPromptV3, getKnobsVector, compareRoles };

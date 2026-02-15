@@ -1,0 +1,96 @@
+#!/usr/bin/env bun
+/**
+ * {{SKILL_NAME}} - {{SKILL_DESCRIPTION}}
+ *
+ * 自动生成自: skill-templates/fetch.ts.template
+ * 生成时间: {{GENERATED_AT}}
+ *
+ * 功能: 从 API 获取数据并展示
+ */
+
+// ==================== 配置 ====================
+
+const CONFIG = {
+  name: "{{SKILL_NAME}}",
+  apiUrl: "{{API_URL}}",
+  headers: {{HEADERS}},
+};
+
+// ==================== 类型定义 ====================
+
+interface {{DATA_TYPE}} {
+{{DATA_FIELDS}}
+}
+
+// ==================== 数据抓取 ====================
+
+async function fetchData(): Promise<{{DATA_TYPE}}[]> {
+  try {
+    const res = await fetch(CONFIG.apiUrl, {
+      headers: CONFIG.headers,
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+
+    const data = await res.json();
+    {{PARSE_LOGIC}}
+    return results;
+  } catch (e) {
+    console.error("Fetch error:", e);
+    return [];
+  }
+}
+
+// ==================== TVS 输出 ====================
+
+function printTVS(items: {{DATA_TYPE}}[]) {
+  const now = new Date().toLocaleString("zh-CN");
+  console.log(`
+┌─────────────────────────────────────────────────────────────────┐
+│                     {{SKILL_EMOJI}} {{SKILL_TITLE}}                          │
+├─────────────────────────────────────────────────────────────────┤
+│  获取时间: ${now.padEnd(47)}│
+│  数据条数: ${items.length.toString().padEnd(47)}│
+├─────────────────────────────────────────────────────────────────┤`);
+
+  items.slice(0, 20).forEach((item, i) => {
+    const line = formatItem(item, i + 1);
+    console.log(`│${line.padEnd(65)}│`);
+  });
+
+  console.log(`└─────────────────────────────────────────────────────────────────┘
+
+────────────────────────────────────────────────────────────────────
+Powered by TVS v0.4.0 · Style: zenwhite.terminal
+可选风格: monolith | aurora | cyberpunk | liquid.dark | swiss ...
+切换风格: /theme <style> | 查看所有: /theme list`);
+}
+
+function formatItem(item: {{DATA_TYPE}}, rank: number): string {
+  {{FORMAT_LOGIC}}
+}
+
+// ==================== 主程序 ====================
+
+async function main() {
+  const args = process.argv.slice(2);
+  const outputJson = args.includes("--json");
+
+  console.log(`Fetching ${CONFIG.name} data...`);
+  const items = await fetchData();
+
+  if (items.length === 0) {
+    console.log("No data fetched.");
+    return;
+  }
+
+  if (outputJson) {
+    console.log(JSON.stringify(items, null, 2));
+  } else {
+    printTVS(items);
+  }
+}
+
+main().catch(console.error);

@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ThunderDuck GPU 优化方法 - Solar</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #1a1a2e;
+            --bg-tertiary: #2a2a4e;
+            --text-primary: #e0e0e0;
+            --text-secondary: #888;
+            --accent: #00d4ff;
+            --accent-pink: #ff79c6;
+            --accent-green: #50fa7b;
+            --accent-orange: #ffaa00;
+            --accent-red: #ff5555;
+            --border: #333;
+        }
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+        .header h1 {
+            font-size: 1.5em;
+            color: var(--accent);
+        }
+        .header p { color: var(--text-secondary); font-size: 0.9em; }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        .summary-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+        }
+        .summary-card.highlight { border-color: var(--accent); }
+        .summary-value { font-size: 2em; font-weight: bold; color: var(--accent); }
+        .summary-label { font-size: 0.85em; color: var(--text-secondary); margin-top: 5px; }
+
+        .section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .section-header {
+            background: var(--bg-tertiary);
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .section-title { font-size: 1.1em; color: var(--accent-pink); }
+        .section-content { padding: 20px; }
+
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid var(--border); }
+        th { color: var(--text-secondary); font-weight: normal; font-size: 0.9em; }
+        td { font-size: 0.95em; }
+        tr:hover { background: var(--bg-tertiary); }
+
+        .tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75em;
+            margin-right: 5px;
+        }
+        .tag-high { background: rgba(80, 250, 123, 0.2); color: var(--accent-green); }
+        .tag-medium { background: rgba(255, 170, 0, 0.2); color: var(--accent-orange); }
+        .tag-low { background: rgba(136, 136, 136, 0.2); color: var(--text-secondary); }
+
+        .code-block {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 15px;
+            margin: 10px 0;
+            overflow-x: auto;
+            font-size: 0.85em;
+        }
+        .code-block pre { margin: 0; white-space: pre-wrap; }
+
+        .architecture-diagram {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 20px;
+            margin: 15px 0;
+            font-size: 0.9em;
+            overflow-x: auto;
+        }
+
+        .method-card {
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+        }
+        .method-title {
+            color: var(--accent);
+            font-size: 1.1em;
+            margin-bottom: 10px;
+        }
+        .method-desc { color: var(--text-secondary); margin-bottom: 15px; }
+        .method-benefit {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--accent-green);
+        }
+
+        .pipeline-step {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .pipeline-step:last-child { border-bottom: none; }
+        .step-num {
+            width: 30px;
+            height: 30px;
+            background: var(--accent);
+            color: var(--bg-primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        .step-content { flex: 1; }
+        .step-title { color: var(--text-primary); margin-bottom: 5px; }
+        .step-desc { color: var(--text-secondary); font-size: 0.9em; }
+
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+            color: var(--text-secondary);
+            font-size: 0.85em;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <span style="font-size: 2em;">⚡</span>
+        <div>
+            <h1>ThunderDuck GPU 优化方法</h1>
+            <p>Apple Silicon UMA 架构 · Metal GPU 加速 · TPC-H 基准测试</p>
+        </div>
+    </div>
+
+    <!-- 核心发现 -->
+    <div class="summary-grid">
+        <div class="summary-card highlight">
+            <div class="summary-value">8</div>
+            <div class="summary-label">高收益查询 (3-10x)</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-value">9</div>
+            <div class="summary-label">中收益查询 (1.5-3x)</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-value">5</div>
+            <div class="summary-label">低收益查询 (&lt;1.5x)</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-value" style="color: var(--accent-green);">5.5x</div>
+            <div class="summary-label">预期几何平均提升</div>
+        </div>
+    </div>
+
+    <!-- Apple Silicon UMA 优势 -->
+    <div class="section">
+        <div class="section-header">
+            <span>🍎</span>
+            <span class="section-title">Apple Silicon UMA 架构优势</span>
+        </div>
+        <div class="section-content">
+            <div class="architecture-diagram">
+<pre>
+┌─────────────────────────────────────────────────────────────────┐
+│                    LPDDR5 统一内存 (100-546 GB/s)               │
+│                                                                 │
+│    ┌──────────────────────────────────────────────────────┐    │
+│    │              MTLResourceStorageModeShared            │    │
+│    │                     (零拷贝缓冲区)                     │    │
+│    └──────────────────────────────────────────────────────┘    │
+│              ▲                    ▲                    ▲        │
+│              │                    │                    │        │
+│    ┌─────────┴─────┐    ┌────────┴────────┐    ┌──────┴─────┐ │
+│    │  CPU Cores    │    │   GPU Cores     │    │    ANE     │ │
+│    │  (P+E cores)  │    │   (10-40)       │    │  (16 TOPS) │ │
+│    └───────────────┘    └─────────────────┘    └────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
+</pre>
+            </div>
+            <table>
+                <tr>
+                    <th>场景</th>
+                    <th>传统 GPU (PCIe)</th>
+                    <th>Apple UMA</th>
+                    <th>优势</th>
+                </tr>
+                <tr>
+                    <td>6M 行 × 8 列 (384MB)</td>
+                    <td>~300ms 传输</td>
+                    <td style="color: var(--accent-green);">0ms</td>
+                    <td><span class="tag tag-high">100%</span></td>
+                </tr>
+                <tr>
+                    <td>CPU 构建 + GPU 探测</td>
+                    <td>需要两次传输</td>
+                    <td style="color: var(--accent-green);">零传输</td>
+                    <td><span class="tag tag-high">200%</span></td>
+                </tr>
+                <tr>
+                    <td>增量更新</td>
+                    <td>全量重传</td>
+                    <td style="color: var(--accent-green);">直接修改</td>
+                    <td><span class="tag tag-high">N×</span></td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- 高收益 GPU 优化方法 -->
+    <div class="section">
+        <div class="section-header">
+            <span>🚀</span>
+            <span class="section-title">高收益 GPU 优化方法</span>
+        </div>
+        <div class="section-content">
+            <div class="method-card">
+                <div class="method-title">1. GPU SIMD Reduce (Q1, Q6)</div>
+                <div class="method-desc">利用 Metal simd_sum/simd_ballot 进行 32 线程并行归约，避免原子操作瓶颈</div>
+                <div class="code-block">
+<pre>// SIMD Group 归约 (32→1)
+float sum = simd_sum(value);
+
+// 仅 lane 0 执行原子加
+if (simd_lane == 0) {
+    atomic_fetch_add_explicit(result, sum, memory_order_relaxed);
+}</pre>
+                </div>
+                <div class="method-benefit">
+                    <span>📈</span>
+                    <span>Q6 预期: 2.08x → 5-8x (提升 150%)</span>
+                </div>
+            </div>
+
+            <div class="method-card">
+                <div class="method-title">2. GPU Bitmap Anti-Join (Q22)</div>
+                <div class="method-desc">使用 24KB Bitmap 替代 Hash Table 进行 Anti-Join，完全适合 GPU L2 缓存</div>
+                <div class="code-block">
+<pre>// 构建 orders Bitmap (1.5M orderkey → 24KB)
+for (size_t i = 0; i < ord.count; ++i) {
+    int32_t ck = ord.o_custkey[i];
+    has_order_bitmap[ck >> 6] |= (1ULL << (ck & 63));
+}
+
+// SIMD 批量检查 - 每次处理 64 个 customer
+simd_ballot 收集通过行</pre>
+                </div>
+                <div class="method-benefit">
+                    <span>📈</span>
+                    <span>Q22 预期: 0.97x → 8-15x (从负收益到大幅加速)</span>
+                </div>
+            </div>
+
+            <div class="method-card">
+                <div class="method-title">3. 融合 Filter + Aggregate (Q1, Q6)</div>
+                <div class="method-desc">单 Kernel 完成过滤和聚合，避免中间结果物化</div>
+                <div class="code-block">
+<pre>kernel void fused_filter_agg(...) {
+    // 向量化谓词评估
+    bool pass = (shipdate[gid] >= params.date_min) &
+                (shipdate[gid] < params.date_max) &
+                (discount[gid] >= params.disc_min);
+
+    // 条件计算
+    float value = pass ? (extprice[gid] * discount[gid]) : 0.0f;
+
+    // SIMD 归约 + 原子累加
+    float sum = simd_sum(value);
+    if (simd_lane == 0) atomic_fetch_add(result, sum);
+}</pre>
+                </div>
+                <div class="method-benefit">
+                    <span>📈</span>
+                    <span>减少 50% 内存带宽，提升 2-3x</span>
+                </div>
+            </div>
+
+            <div class="method-card">
+                <div class="method-title">4. GPU 列式零拷贝存储</div>
+                <div class="method-desc">MTLResourceStorageModeShared 实现 CPU/GPU 共享内存，无需数据传输</div>
+                <div class="code-block">
+<pre>// 从 CPU 创建，GPU 直接访问
+mtl_buffer_ = [device newBufferWithLength:count * sizeof(T)
+                                  options:MTLResourceStorageModeShared];
+data_ = static_cast<T*>([mtl_buffer_ contents]);
+
+// CPU 写入 → GPU 立即可见，无需同步</pre>
+                </div>
+                <div class="method-benefit">
+                    <span>📈</span>
+                    <span>消除 PCIe 传输瓶颈，理论 100% 加速</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 查询评估矩阵 -->
+    <div class="section">
+        <div class="section-header">
+            <span>📊</span>
+            <span class="section-title">TPC-H 22 查询 GPU 加速评估</span>
+        </div>
+        <div class="section-content">
+            <table>
+                <tr>
+                    <th>查询</th>
+                    <th>主要操作</th>
+                    <th>当前</th>
+                    <th>GPU 潜力</th>
+                    <th>推荐策略</th>
+                    <th>预期</th>
+                </tr>
+                <tr>
+                    <td><strong>Q1</strong></td>
+                    <td>Filter + Agg</td>
+                    <td>9.15x</td>
+                    <td><span class="tag tag-high">⭐⭐⭐⭐⭐</span></td>
+                    <td>GPU Reduce</td>
+                    <td style="color: var(--accent-green);">12-15x</td>
+                </tr>
+                <tr>
+                    <td><strong>Q6</strong></td>
+                    <td>Filter + Agg</td>
+                    <td>2.08x</td>
+                    <td><span class="tag tag-high">⭐⭐⭐⭐⭐</span></td>
+                    <td>GPU 全量</td>
+                    <td style="color: var(--accent-green);">5-10x</td>
+                </tr>
+                <tr>
+                    <td><strong>Q22</strong></td>
+                    <td>ANTI JOIN</td>
+                    <td>8.49x</td>
+                    <td><span class="tag tag-high">⭐⭐⭐⭐⭐</span></td>
+                    <td>GPU Bitmap</td>
+                    <td style="color: var(--accent-green);">10-15x</td>
+                </tr>
+                <tr>
+                    <td><strong>Q4</strong></td>
+                    <td>SEMI JOIN</td>
+                    <td>3.90x</td>
+                    <td><span class="tag tag-medium">⭐⭐⭐⭐</span></td>
+                    <td>GPU Probe</td>
+                    <td>5-6x</td>
+                </tr>
+                <tr>
+                    <td><strong>Q12</strong></td>
+                    <td>2-JOIN + Agg</td>
+                    <td>5.43x</td>
+                    <td><span class="tag tag-medium">⭐⭐⭐⭐</span></td>
+                    <td>GPU Filter</td>
+                    <td>7-9x</td>
+                </tr>
+                <tr>
+                    <td><strong>Q14</strong></td>
+                    <td>2-JOIN + Agg</td>
+                    <td>4.98x</td>
+                    <td><span class="tag tag-medium">⭐⭐⭐⭐</span></td>
+                    <td>GPU DirectArray</td>
+                    <td>6-8x</td>
+                </tr>
+                <tr>
+                    <td><strong>Q19</strong></td>
+                    <td>OR Filter</td>
+                    <td>6.63x</td>
+                    <td><span class="tag tag-medium">⭐⭐⭐⭐</span></td>
+                    <td>GPU Filter</td>
+                    <td>8-10x</td>
+                </tr>
+                <tr>
+                    <td><strong>Q21</strong></td>
+                    <td>EXISTS + NOT EXISTS</td>
+                    <td>23.41x</td>
+                    <td><span class="tag tag-medium">⭐⭐⭐⭐</span></td>
+                    <td>GPU Bitmap EXISTS</td>
+                    <td>25-28x</td>
+                </tr>
+                <tr>
+                    <td>Q8</td>
+                    <td>8-JOIN</td>
+                    <td>1.06x</td>
+                    <td><span class="tag tag-low">⭐</span></td>
+                    <td>保持 CPU</td>
+                    <td>-</td>
+                </tr>
+                <tr>
+                    <td>Q17</td>
+                    <td>相关子查询</td>
+                    <td>1.06x</td>
+                    <td><span class="tag tag-low">⭐⭐</span></td>
+                    <td>CPU 解关联</td>
+                    <td>-</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- GPU Pipeline 执行框架 -->
+    <div class="section">
+        <div class="section-header">
+            <span>🔧</span>
+            <span class="section-title">GPU Pipeline 执行框架</span>
+        </div>
+        <div class="section-content">
+            <div class="architecture-diagram">
+<pre>
+┌─────────────────────────────────────────────────────────────────┐
+│                    Query Pipeline Executor                       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐     │
+│  │ Filter  │───▶│  Join   │───▶│ Aggregate│───▶│  Sort   │     │
+│  │  (GPU)  │    │ (Hybrid)│    │  (GPU)  │    │  (GPU)  │     │
+│  └─────────┘    └─────────┘    └─────────┘    └─────────┘     │
+│       │              │              │              │            │
+│       ▼              ▼              ▼              ▼            │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │              UMA Intermediate Buffers                    │   │
+│  │         (MTLResourceStorageModeShared)                   │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+</pre>
+            </div>
+
+            <div class="pipeline-step">
+                <div class="step-num">1</div>
+                <div class="step-content">
+                    <div class="step-title">GPU Filter Stage</div>
+                    <div class="step-desc">simd_ballot 生成掩码 → 并行压缩写入 → 原子计数器分配位置</div>
+                </div>
+            </div>
+            <div class="pipeline-step">
+                <div class="step-num">2</div>
+                <div class="step-content">
+                    <div class="step-title">Hybrid Join Stage</div>
+                    <div class="step-desc">CPU 构建 Hash Table (共享内存) → GPU 并行 Probe</div>
+                </div>
+            </div>
+            <div class="pipeline-step">
+                <div class="step-num">3</div>
+                <div class="step-content">
+                    <div class="step-title">GPU Aggregate Stage</div>
+                    <div class="step-desc">Threadgroup 内部预聚合 → simd_sum 归约 → 原子累加全局结果</div>
+                </div>
+            </div>
+            <div class="pipeline-step">
+                <div class="step-num">4</div>
+                <div class="step-content">
+                    <div class="step-title">GPU Radix Sort Stage</div>
+                    <div class="step-desc">并行基数排序 → Top-K 堆选择</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 实现优先级 -->
+    <div class="section">
+        <div class="section-header">
+            <span>📅</span>
+            <span class="section-title">实现优先级</span>
+        </div>
+        <div class="section-content">
+            <table>
+                <tr>
+                    <th>阶段</th>
+                    <th>任务</th>
+                    <th>目标查询</th>
+                    <th>预期收益</th>
+                </tr>
+                <tr>
+                    <td><span class="tag tag-high">Phase 1</span></td>
+                    <td>UMA 列存储 + Pipeline 抽象 + SIMD Reduce</td>
+                    <td>Q1, Q6</td>
+                    <td>基础框架</td>
+                </tr>
+                <tr>
+                    <td><span class="tag tag-medium">Phase 2</span></td>
+                    <td>GPU Filter + GPU Aggregate + GPU Bitmap</td>
+                    <td>Q6, Q12, Q19, Q22</td>
+                    <td>2-5x</td>
+                </tr>
+                <tr>
+                    <td><span class="tag tag-low">Phase 3</span></td>
+                    <td>GPU Radix Sort + GPU Hash Probe + Pipeline 融合</td>
+                    <td>Q3, Q10, Q18</td>
+                    <td>1.5-3x</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>ThunderDuck GPU 加速深度分析 · Apple Silicon M4</p>
+        <p style="margin-top: 5px; color: var(--accent);">Generated by Solar · Co-Authored-By: Claude Opus 4.5</p>
+    </div>
+</body>
+</html>

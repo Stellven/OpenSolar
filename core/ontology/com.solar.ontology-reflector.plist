@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.solar.ontology-reflector</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/sihaoli/.bun/bin/bun</string>
+        <string>run</string>
+        <string>/Users/sihaoli/Solar/core/ontology/scheduler.ts</string>
+        <string>--trigger</string>
+        <string>daily_reflection</string>
+    </array>
+
+    <!-- 每天凌晨 4 点执行反思 -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>4</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/sihaoli/.solar/logs/ontology-reflector.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/sihaoli/.solar/logs/ontology-reflector.error.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>/Users/sihaoli</string>
+        <key>PATH</key>
+        <string>/Users/sihaoli/.bun/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
