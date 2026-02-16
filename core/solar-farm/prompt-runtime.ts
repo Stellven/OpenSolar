@@ -116,6 +116,14 @@ export interface SchemaField {
 }
 
 /**
+ * Few-shot 示例 - 展示期望的输出格式
+ */
+export interface FewShotExample {
+  input: string;    // 输入任务描述 (简短)
+  output: string;   // 期望的输出格式 (示例)
+}
+
+/**
  * 角色补丁：KNOBS + OUTPUT_SCHEMA + RULES
  *
  * 每个角色只需要一个短补丁，叠加到 SYSTEM_CORE 上
@@ -123,8 +131,9 @@ export interface SchemaField {
 export interface RolePatch {
   name: string;
   knobs: KnobConfig;
-  outputSchema: string[];      // 人类可读的输出格式描述
-  schemaFields?: SchemaField[]; // JSON Schema 字段定义 (可选，用于结构化输出)
+  outputSchema: string[];       // 人类可读的输出格式描述
+  schemaFields?: SchemaField[];  // JSON Schema 字段定义 (可选，用于结构化输出)
+  fewShotExample?: FewShotExample; // Few-shot 示例 (可选，提升一致性)
   rules: string[];
 }
 
@@ -154,6 +163,34 @@ export const ROLE_PATCHES: Record<string, RolePatch> = {
       'Always include tests/repro. No tests => incomplete.',
       'If uncertain, implement a guardrail + TODO with verification steps.',
     ],
+    fewShotExample: {
+      input: 'Add input validation to function foo(x)',
+      output: `PLAN:
+- Check x is not null/undefined
+- Check x is correct type
+- Throw descriptive error if invalid
+
+PATCH:
+function foo(x) {
+  if (x == null) throw new Error('x is required');
+  if (typeof x !== 'number') throw new Error('x must be number');
+  if (x < 0) throw new Error('x must be >= 0');
+  // original logic...
+}
+
+TESTS:
+test('foo throws on null', () => expect(() => foo(null)).toThrow());
+test('foo throws on string', () => expect(() => foo('a')).toThrow());
+test('foo throws on negative', () => expect(() => foo(-1)).toThrow());
+test('foo accepts valid input', () => expect(foo(5)).toBeDefined());
+
+RISKS:
+1. Existing callers may not handle new errors
+2. Type coercion edge cases (e.g., foo('5'))
+3. Performance impact on hot path
+
+FALLBACK: If errors cause issues, add try-catch in callers with logging`,
+    },
   },
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -182,6 +219,29 @@ export const ROLE_PATCHES: Record<string, RolePatch> = {
       'Assume the draft is wrong until proven correct.',
       'Every "fail" must include a minimal reproduction or a specific falsifiable test.',
     ],
+    fewShotExample: {
+      input: 'Verify: function getUser(id) { return users.find(u => u.id == id); }',
+      output: `VERDICT: fail
+
+CRITICAL ISSUES:
+1. [HIGH] Type coercion: == allows '1' to match 1, may cause security issues
+2. [HIGH] No null check: crashes if users is undefined
+3. [MED] Silent failure: returns undefined instead of throwing
+
+COUNTEREXAMPLES:
+1. getUser('1') matches user with id=1 (type confusion)
+2. getUser(null) matches user with id=null or 0
+3. getUser() returns undefined (missing arg)
+4. users undefined → TypeError
+
+FIX SUGGESTIONS:
+1. Use === instead of ==
+2. Add: if (!users) throw new Error('users not initialized')
+3. Add: if (id === undefined) throw new Error('id required')
+
+CONFIDENCE: 0.95
+WOULD_CHANGE_MIND: If this is internal-only code with trusted inputs`,
+    },
   },
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -212,6 +272,34 @@ export const ROLE_PATCHES: Record<string, RolePatch> = {
       'Interfaces must be testable.',
       'Rollback plan is mandatory.',
     ],
+    fewShotExample: {
+      input: 'Design: Caching layer for API responses',
+      output: `GOAL: Reduce API latency and backend load for read-heavy endpoints
+NON-GOALS: Write-through caching, distributed cache sync
+
+OPTIONS:
+| Option      | Latency | Complexity | Cost   |
+|-------------|---------|------------|--------|
+| A) In-mem   | 1ms     | Low        | $0     |
+| B) Redis    | 5ms     | Medium     | $50/mo |
+| C) CDN      | 50ms    | High       | $20/mo |
+
+RECOMMENDATION: Start with A) In-memory LRU cache
+- Rationale: 80% of traffic is reads, simple to implement
+- Migrate to Redis if cache hit ratio < 90%
+
+INTERFACES:
+- cache.get(key) -> value | null
+- cache.set(key, value, ttl)
+- cache.invalidate(pattern)
+
+RISKS:
+1. Cache stampede on miss → Use lock/queue
+2. Memory exhaustion → Set max size + LRU eviction
+3. Stale data → TTL 5min + manual invalidation
+
+ROLLBACK: Disable cache via feature flag, all requests go to backend`,
+    },
   },
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -240,6 +328,33 @@ export const ROLE_PATCHES: Record<string, RolePatch> = {
       'Prefer solutions with tests / evidence / minimal assumptions.',
       'If A and B are close, output "tie" + what evidence would break the tie.',
     ],
+    fewShotExample: {
+      input: 'Compare: A) Quick sort vs B) Merge sort for general use',
+      output: `WINNER: tie
+
+RUBRIC (0-10):
+| Dimension   | A | B |
+|-------------|---|---|
+| Correctness | 9 | 10|
+| Rigor       | 8 | 9 |
+| Completeness| 8 | 9 |
+| Usefulness  | 9 | 8 |
+| Efficiency  | 10| 7 |
+| Risk        | 6 | 9 |
+
+KEY REASONS:
+- A faster in practice (O(n log n) avg, cache-friendly)
+- B guaranteed O(n log n), stable sort
+- A has O(n²) worst case (pivot selection matters)
+- B needs O(n) extra space
+- Use case matters more than "general"
+
+AUDIT FLAGS:
+- Neither solution includes actual benchmarks
+- Both assume integer/string comparison
+
+TIE_BREAKER: Run benchmarks on actual data distribution`,
+    },
   },
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -268,6 +383,32 @@ export const ROLE_PATCHES: Record<string, RolePatch> = {
       'Document failures - they are valuable.',
       'End with clear next steps, not vague conclusions.',
     ],
+    fewShotExample: {
+      input: 'Why is API slow? Explore possible causes',
+      output: `HYPOTHESES:
+1. Database query N+1 problem
+2. Missing index on frequently queried column
+3. Network latency between services
+4. Memory pressure causing GC pauses
+5. Lock contention in hot path
+
+EXPLORATION RESULTS:
+- Tried: Added logging → saw 2s gap in DB calls → likely H1
+- Tried: EXPLAIN on query → full table scan → confirms H2
+- Tried: curl from same machine → still slow → H3 unlikely
+- Not tried: Memory profiling (need access)
+
+SURPRISING FINDINGS:
+- Query uses function on indexed column: WHERE LOWER(email) = x
+- This prevents index usage! Not just missing index.
+
+NEXT EXPERIMENTS:
+1. Create functional index: CREATE INDEX ON users(LOWER(email))
+2. Rewrite query to avoid function on column
+3. Profile memory after fixing query
+
+CONFIDENCE: {H1: 0.3, H2: 0.8, H3: 0.1, H4: 0.2, H5: 0.1}`,
+    },
   },
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -296,6 +437,55 @@ export const ROLE_PATCHES: Record<string, RolePatch> = {
       'Creative doesn\'t mean untested - always include proof.',
       'If creative approach fails, have conventional fallback ready.',
     ],
+    fewShotExample: {
+      input: 'Implement a rate limiter',
+      output: `CREATIVE APPROACH: Token bucket with sliding window + adaptive refill
+- Instead of fixed refill rate, adapt based on system load
+- Use sliding window for smoother limits vs fixed windows
+
+IMPLEMENTATION:
+class AdaptiveRateLimiter {
+  constructor(maxTokens, refillRate) {
+    this.tokens = maxTokens;
+    this.maxTokens = maxTokens;
+    this.refillRate = refillRate;
+    this.lastRefill = Date.now();
+  }
+
+  tryConsume(cost = 1) {
+    this.#refill();
+    if (this.tokens >= cost) {
+      this.tokens -= cost;
+      return true;
+    }
+    return false;
+  }
+
+  #refill() {
+    const now = Date.now();
+    const elapsed = (now - this.lastRefill) / 1000;
+    this.tokens = Math.min(this.maxTokens, this.tokens + elapsed * this.refillRate);
+    this.lastRefill = now;
+  }
+}
+
+TRADE-OFFS:
++ Smoother rate limiting (no burst at window edge)
++ Memory efficient (single counter per key)
+- Slightly more CPU per request
+- Harder to reason about exact limits
+
+TESTS:
+const limiter = new AdaptiveRateLimiter(5, 1); // 5 tokens, 1/sec
+assert(limiter.tryConsume(5) === true);  // burst OK
+assert(limiter.tryConsume(1) === false); // exhausted
+await sleep(1000);
+assert(limiter.tryConsume(1) === true);  // refilled ~1
+
+ALTERNATIVE: Fixed window counter (Redis INCR + TTL)
+- Simpler but allows burst at window boundaries
+- Use if exact limits > smooth behavior`,
+    },
   },
 };
 
@@ -833,6 +1023,15 @@ export function compilePromptV2(options: CompileV2Options): CompiledPrompt {
       const enumStr = field.enum ? ` {${field.enum.join('|')}}` : '';
       parts.push(`  ${field.name}: ${field.type}${enumStr} (${required}) - ${field.description}`);
     }
+    parts.push('');
+  }
+
+  // FEW_SHOT - 示例输出 (如果定义了)
+  if (patch.fewShotExample) {
+    parts.push('EXAMPLE (follow this format):');
+    parts.push(`Task: ${patch.fewShotExample.input}`);
+    parts.push('---');
+    parts.push(patch.fewShotExample.output);
     parts.push('');
   }
 
