@@ -1,0 +1,13 @@
+{
+  "name": "cortex-mcp-server",
+  "version": "1.0.0",
+  "description": "Cortex 中枢神经 MCP Server - 统一知识查询",
+  "type": "module",
+  "main": "server.ts",
+  "scripts": {
+    "start": "bun run server.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}
