@@ -25,8 +25,10 @@ if [[ "$TOOL_NAME" == *"brain-router"* ]] || [[ "$TOOL_NAME" == *"complete"* ]];
     log "Detected brain-router call"
 
     # 检查是否有人格参数
-    # 正确的调用应该包含 system 参数，且 system 中包含 Big Five 或人格关键词
-    if echo "$TOOL_INPUT" | grep -qiE 'Big Five|人格|traits|O:|C:|E:|A:|N:|buildPrompt|personaPrompt'; then
+    # 支持两种格式:
+    # - v1.x: Big Five, traits, O:/C:/E:/A:/N:
+    # - v2.0: SYSTEM CORE, HARD RULES, KNOBS:, ROLE:, OUTPUT_SCHEMA:
+    if echo "$TOOL_INPUT" | grep -qiE 'SYSTEM CORE|HARD RULES|KNOBS:|ROLE:|OUTPUT_SCHEMA|Big Five|人格|traits|O:|C:|E:|A:|N:|buildPrompt|personaPrompt|compilePromptV2'; then
         log "✅ PASS: Persona detected in system prompt"
     else
         # 违规：没有注入人格
@@ -45,13 +47,14 @@ if [[ "$TOOL_NAME" == *"brain-router"* ]] || [[ "$TOOL_NAME" == *"complete"* ]];
 │                                                                 │
 │  这违反了 Solar 铁律: 调牛马必须带人格                          │
 │                                                                 │
-│  正确做法:                                                      │
+│  正确做法 (v2.0):                                               │
 │  ─────────────────────────────────────────────────────────────  │
-│  import { buildPrompt } from '~/.claude/core/solar-farm/persona-router';
-│  const personaPrompt = buildPrompt('builder'); // 或其他角色    │
+│  import { compilePromptV2 } from '~/.claude/core/solar-farm/prompt-runtime';
+│  const { system } = compilePromptV2({ role: 'builder' });       │
+│  // 或: bun prompt-runtime.ts role builder --level=5            │
 │  mcp__brain-router__complete({                                  │
 │    model: 'glm-4-plus',                                         │
-│    system: personaPrompt,  // ← 必须注入！                      │
+│    system,  // ← 自动包含 SYSTEM CORE + ROLE PATCH              │
 │    prompt: '...'                                                │
 │  });                                                            │
 │  ─────────────────────────────────────────────────────────────  │

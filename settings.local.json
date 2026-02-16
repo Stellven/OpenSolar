@@ -115,7 +115,12 @@
       "Bash(git rev-list:*)",
       "Bash(git cat-file:*)",
       "Bash(sort:*)",
-      "Bash(git remote add:*)"
+      "Bash(git remote add:*)",
+      "Bash(git init:*)",
+      "Bash(jq:*)",
+      "Bash(ffprobe:*)",
+      "Bash(brew list:*)",
+      "Bash(brew search:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

@@ -1112,6 +1112,7 @@ if (import.meta.main) {
         'gemini-2-pro': 'verifier',
         'gemini-2.5-pro': 'verifier',
         'gemini-2.5-flash': 'builder',
+        'gemini-2-flash': 'builder',  // 闪电侠
         // 千里马 - 创新探索
         'gemini-3-pro-preview': 'explorer',
         'gemini-3-flash-preview': 'explorer',
@@ -1124,15 +1125,11 @@ if (import.meta.main) {
         'glm-5': 'architect',
         // 小快手 - 批量执行
         'glm-4-flash': 'builder',
-        // 闪电侠 - 批量执行
-        'gemini-2-flash': 'builder',
-        // GPT 系列
+        // OpenAI 系列
         'gpt-4o': 'architect',
         'gpt-4o-mini': 'builder',
-        // Claude 系列
-        'claude-sonnet-4-5': 'architect',
-        'claude-opus-4-5': 'judge',
-        'claude-opus-4-6': 'judge',
+        'o1': 'architect',        // 深度推理
+        'o1-mini': 'builder',     // 快速推理
       };
 
       try {
@@ -1187,12 +1184,12 @@ if (import.meta.main) {
 
       const MODEL_TO_ROLE: Record<string, keyof typeof ROLE_PATCHES> = {
         'gemini-2-pro': 'verifier', 'gemini-2.5-pro': 'verifier',
-        'gemini-2.5-flash': 'builder',
+        'gemini-2.5-flash': 'builder', 'gemini-2-flash': 'builder',
         'gemini-3-pro-preview': 'explorer', 'gemini-3-flash-preview': 'explorer',
         'deepseek-v3': 'creator', 'deepseek-r1': 'judge',
         'glm-4-plus': 'builder', 'glm-5': 'architect', 'glm-4-flash': 'builder',
-        'gemini-2-flash': 'builder',
         'gpt-4o': 'architect', 'gpt-4o-mini': 'builder',
+        'o1': 'architect', 'o1-mini': 'builder',
         'claude-sonnet-4-5': 'architect', 'claude-opus-4-5': 'judge', 'claude-opus-4-6': 'judge',
       };
 
