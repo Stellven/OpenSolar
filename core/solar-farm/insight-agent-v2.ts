@@ -124,15 +124,16 @@ export interface Reference {
 
 /**
  * 获取专家人格提示 (统一入口)
- * 所有专家人格参数来自 niumao-anchors.ts v3.0
+ * 🎮 统一使用 D&D KNOBS 人格格式
+ * 数据源: niumao-anchors.json (由 prompt-runtime.ts sync 生成)
  */
 function getExpertPersona(modelId: string): { system: string; traits: string; nickname: string } {
   const info = getExpertInfo(modelId);
   if (info) {
     return {
-      system: info.systemPrompt,
-      traits: `${info.anchor.role.nickname}，O=${info.anchor.traits.O} C=${info.anchor.traits.C}`,
-      nickname: info.anchor.role.nickname
+      system: info.systemPrompt,  // D&D KNOBS 格式的完整 prompt
+      traits: `${info.nickname}，角色=${info.ddRole || '未知'}，${info.knobs || ''}`,
+      nickname: info.nickname
     };
   }
   // 降级：返回通用提示
@@ -6457,9 +6458,18 @@ ${s.content}
 
   /**
    * 构建人格化的 System Prompt
-   * 注入 Big Five + 行为准则
+   * 🎮 优先使用 D&D KNOBS 格式，降级到 Big Five
    */
   private buildPersonaSystemPrompt(persona: any): string {
+    // 优先使用 D&D KNOBS 格式 (从 expert-personality.ts)
+    if (persona.model) {
+      const ddPrompt = generateExpertSystemPrompt(persona.model);
+      if (ddPrompt && ddPrompt.includes('KNOBS')) {
+        return ddPrompt;  // D&D KNOBS 格式
+      }
+    }
+
+    // 降级：使用 Big Five 格式 (兼容旧数据)
     const bigFive = JSON.parse(persona.big_five_json || '{}');
 
     return `你是 ${persona.role}。

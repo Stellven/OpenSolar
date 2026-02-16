@@ -1,15 +1,18 @@
 /**
- * Solar Farm - 牛马调用封装
+ * Solar Farm - 牛马调用封装 v2.0
  *
+ * 🎮 统一使用 D&D KNOBS 人格格式
  * 自动注入人格锚点，确保每次调用牛马时都带上正确的人格参数
  *
- * @version 1.0.0
- * @created 2026-02-07
+ * 数据源: niumao-anchors.json (由 prompt-runtime.ts sync 生成)
+ *
+ * @version 2.0.0
+ * @updated 2026-02-16 - 从 Big Five 迁移到 D&D KNOBS
  */
 
-import { MODEL_TO_ANCHOR, getNiumaAnchor } from './niumao-anchors';
-import { generatePersonalityAnchorText, PersonalityAnchor } from './personality-anchor';
-import { getPerformanceContext } from './perf-injector';
+import { readFileSync, existsSync } from 'fs';
+import { homedir } from 'os';
+import { join } from 'path';
 
 // ============================================================
 // 类型定义
@@ -24,12 +27,69 @@ export interface NiumaCallOptions {
 
 export interface NiumaCallResult {
   model: string;
-  system: string;          // 生成的完整 system prompt
+  system: string;          // 生成的完整 system prompt (D&D KNOBS)
   prompt: string;          // 生成的完整 prompt
   personalityInjected: boolean;
   performanceInjected: boolean;
-  performanceRank?: number;  // 当前排名
-  performanceTier?: string;  // 当前段位
+  performanceRank?: number;
+  performanceTier?: string;
+  ddRole?: string;         // D&D 角色类型
+  knobs?: string;          // KNOBS 参数
+}
+
+/** JSON 文件中的人格条目结构 */
+interface NiumaJsonEntry {
+  nickname: string;
+  system_prompt: string;
+  role: string;
+  knobs?: string;
+  token_estimate?: number;
+  version?: string;
+}
+
+// ============================================================
+// 人格数据加载 (从 JSON)
+// ============================================================
+
+const NIUMAO_JSON_PATH = join(homedir(), '.claude', 'core', 'solar-farm', 'niumao-anchors.json');
+let _niumaoCache: Record<string, NiumaJsonEntry> | null = null;
+
+/**
+ * 加载人格数据 (带缓存)
+ */
+function loadNiumaoData(): Record<string, NiumaJsonEntry> {
+  if (_niumaoCache) {
+    return _niumaoCache;
+  }
+
+  if (!existsSync(NIUMAO_JSON_PATH)) {
+    console.error(`⚠️ niumao-anchors.json 不存在: ${NIUMAO_JSON_PATH}`);
+    return {};
+  }
+
+  try {
+    const content = readFileSync(NIUMAO_JSON_PATH, 'utf-8');
+    _niumaoCache = JSON.parse(content);
+    return _niumaoCache!;
+  } catch (e) {
+    console.error(`⚠️ 加载 niumao-anchors.json 失败:`, e);
+    return {};
+  }
+}
+
+/**
+ * 刷新缓存 (当 JSON 文件更新时调用)
+ */
+export function refreshNiumoCache(): void {
+  _niumaoCache = null;
+}
+
+/**
+ * 获取人格条目
+ */
+function getNiumoEntry(model: string): NiumaJsonEntry | undefined {
+  const data = loadNiumaoData();
+  return data[model];
 }
 
 // ============================================================
@@ -37,7 +97,7 @@ export interface NiumaCallResult {
 // ============================================================
 
 /**
- * 构建牛马调用参数，自动注入人格锚点
+ * 构建牛马调用参数，自动注入 D&D KNOBS 人格锚点
  *
  * @example
  * const { system, prompt } = buildNiumaCall({
@@ -52,28 +112,28 @@ export interface NiumaCallResult {
 export function buildNiumaCall(options: NiumaCallOptions): NiumaCallResult {
   const { model, task, context, outputFormat } = options;
 
-  // 获取牛马人格锚点
-  const anchor = getNiumaAnchor(model);
-  let personalityText = '';
+  // 获取牛马人格 (D&D KNOBS 格式)
+  const entry = getNiumoEntry(model);
+  let systemPrompt = '';
   let personalityInjected = false;
+  let ddRole: string | undefined;
+  let knobs: string | undefined;
 
-  if (anchor) {
-    personalityText = generatePersonalityAnchorText(anchor);
+  if (entry) {
+    // 直接使用 JSON 中的 system_prompt (D&D KNOBS 格式)
+    systemPrompt = entry.system_prompt;
     personalityInjected = true;
+    ddRole = entry.role;
+    knobs = entry.knobs;
   } else {
     // 未知模型，使用通用提示
-    personalityText = `你是 ${model}，一个专业的 AI 助手。`;
+    systemPrompt = `你是 ${model}，一个专业的 AI 助手。请提供准确、专业的技术分析和建议。`;
   }
 
   // 构建 system prompt
-  const systemParts = [personalityText];
+  const systemParts = [systemPrompt];
 
-  // 注入绩效排名 (内卷驱动)
-  const perfContext = getPerformanceContext(model);
-  if (perfContext.text) {
-    systemParts.push(`\n${perfContext.text}`);
-  }
-
+  // 添加上下文和输出格式
   if (context) {
     systemParts.push(`\n## 上下文\n${context}`);
   }
@@ -87,14 +147,19 @@ export function buildNiumaCall(options: NiumaCallOptions): NiumaCallResult {
   // 构建 prompt
   const prompt = `## 任务\n${task}`;
 
+  // 简化的绩效注入 (保留接口兼容性)
+  const performanceInjected = false;
+
   return {
     model,
     system,
     prompt,
     personalityInjected,
-    performanceInjected: !!perfContext.rank,
-    performanceRank: perfContext.rank?.rank,
-    performanceTier: perfContext.rank?.tier
+    performanceInjected,
+    performanceRank: undefined,
+    performanceTier: undefined,
+    ddRole,
+    knobs
   };
 }
 
@@ -102,18 +167,28 @@ export function buildNiumaCall(options: NiumaCallOptions): NiumaCallResult {
  * 获取牛马昵称
  */
 export function getNiumaNickname(model: string): string {
-  const anchor = getNiumaAnchor(model);
-  return anchor?.name || model;
+  const entry = getNiumoEntry(model);
+  return entry?.nickname || model;
+}
+
+/**
+ * 获取牛马 D&D 角色
+ */
+export function getNiumaRole(model: string): string {
+  const entry = getNiumoEntry(model);
+  return entry?.role || 'unknown';
 }
 
 /**
  * 列出所有可用牛马
  */
-export function listAvailableNiuma(): Array<{ model: string; nickname: string; role: string }> {
-  return Object.entries(MODEL_TO_ANCHOR).map(([model, anchor]) => ({
+export function listAvailableNiuma(): Array<{ model: string; nickname: string; role: string; knobs?: string }> {
+  const data = loadNiumaoData();
+  return Object.entries(data).map(([model, entry]) => ({
     model,
-    nickname: anchor.name,
-    role: anchor.role.roleDescription
+    nickname: entry.nickname,
+    role: entry.role,
+    knobs: entry.knobs
   }));
 }
 
@@ -125,12 +200,12 @@ if (import.meta.main) {
   const args = process.argv.slice(2);
 
   if (args[0] === 'list') {
-    console.log('\n🐂🐴 可用牛马列表:\n');
+    console.log('\n🐂🐴 可用牛马列表 (D&D KNOBS 格式):\n');
     const niumas = listAvailableNiuma();
     niumas.forEach(n => {
-      console.log(`  ${n.nickname.padEnd(8)} | ${n.model.padEnd(20)} | ${n.role}`);
+      console.log(`  ${n.nickname.padEnd(8)} | ${n.model.padEnd(22)} | ${n.role}`);
     });
-    console.log();
+    console.log(`\n共 ${niumas.length} 个模型\n`);
   } else if (args[0] === 'test' && args[1]) {
     const model = args[1];
     const result = buildNiumaCall({
@@ -141,11 +216,14 @@ if (import.meta.main) {
     });
 
     console.log(`\n🧪 测试调用 ${getNiumaNickname(model)} (${model}):\n`);
-    console.log('=== System Prompt ===');
-    console.log(result.system);
+    console.log(`D&D 角色: ${result.ddRole || '未知'}`);
+    console.log(`KNOBS: ${result.knobs || '无'}`);
+    console.log('\n=== System Prompt (前500字) ===');
+    console.log(result.system.substring(0, 500) + '...');
     console.log('\n=== Prompt ===');
     console.log(result.prompt);
-    console.log(`\n人格注入: ${result.personalityInjected ? '✅' : '❌'}\n`);
+    console.log(`\n人格注入: ${result.personalityInjected ? '✅' : '❌'}`);
+    console.log(`格式: ${result.system.includes('KNOBS') ? '✅ D&D KNOBS' : '❌ 旧格式'}\n`);
   } else {
     console.log(`
 用法:

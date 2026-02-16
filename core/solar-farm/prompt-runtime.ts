@@ -1416,6 +1416,7 @@ if (import.meta.main) {
         'gemini-2.5-flash': 'builder',
         'gemini-2-flash': 'builder',  // 闪电侠
         // 探索派 - 创新探索
+        'gemini-3-pro': 'explorer',       // 新增
         'gemini-3-pro-preview': 'explorer',
         'gemini-3-flash-preview': 'explorer',
         // 创想家 - 创意编码
@@ -1424,14 +1425,18 @@ if (import.meta.main) {
         'deepseek-r1': 'judge',
         // 建设者 - 批量执行
         'glm-4-plus': 'builder',
-        'glm-5': 'architect',
+        'glm-4.7': 'builder',           // 新增
+        'glm-5': 'architect',           // 智囊
+        'zhipu/glm-5': 'architect',     // 新增
         // 小快手 - 批量执行
         'glm-4-flash': 'builder',
         // OpenAI 系列
+        'gpt-4': 'architect',             // 新增
         'gpt-4o': 'architect',
         'gpt-4o-mini': 'builder',
         'o1': 'architect',        // 深度推理
         'o1-mini': 'builder',     // 快速推理
+        'chatgpt': 'builder',             // 新增
       };
 
       try {

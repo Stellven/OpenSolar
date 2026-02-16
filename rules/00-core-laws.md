@@ -100,11 +100,11 @@
 
 ```
 调用 brain-router 时:
-- 自动注入 niumao-anchors.json 中的人格参数
-- 包含 Big Five、禁止项、必须项
+- 自动注入 niumao-anchors.json 中的 D&D KNOBS 人格
+- 包含 10 个可调节旋钮 + 6 种角色类型
 - 不需要手写 system prompt
 
-已自动化: server.py 会自动读取并注入
+已自动化: prompt-runtime.ts sync 生成 JSON
 ```
 
 ---

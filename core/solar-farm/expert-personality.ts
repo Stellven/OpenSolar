@@ -1,23 +1,46 @@
 /**
- * 统一专家人格获取工具
+ * 统一专家人格获取工具 v2.0
  *
+ * 🎮 统一使用 D&D KNOBS 人格格式
  * 所有洞察分析（Solar 自己的和小爱的）都从这里获取专家人格
- * 确保人格参数与 niumao-anchors.ts v3.0 保持一致
  *
- * @version 1.0.0
- * @created 2026-02-15
+ * 数据源: niumao-anchors.json (由 prompt-runtime.ts sync 生成)
+ * 格式: D&D KNOBS (10个可调节旋钮 + 6个角色职业)
+ *
+ * @version 2.0.0
+ * @updated 2026-02-16 - 从 Big Five 迁移到 D&D KNOBS
  */
 
-import {
-  getNiumaAnchor,
-  MODEL_TO_ANCHOR,
-  SHENPANGUAN_ANCHOR,   // 审判官 (deepseek-r1)
-  CHUANGXIANGJIA_ANCHOR, // 创想家 (deepseek-v3)
-  ZHINANG_ANCHOR,        // 智囊 (glm-5)
-  WENJIANPAI_ANCHOR,     // 稳健派 (gemini-2.5-pro)
-  TANSUOPAI_ANCHOR,      // 探索派 (gemini-3-pro)
-  type PersonalityAnchor
-} from './niumao-anchors';
+import { readFileSync, existsSync } from 'fs';
+import { homedir } from 'os';
+import { join } from 'path';
+
+// ============================================================
+// D&D KNOBS 人格格式 (来自 niumao-anchors.json)
+// ============================================================
+
+/** JSON 文件中的人格条目结构 */
+export interface NiumaJsonEntry {
+  nickname: string;
+  system_prompt: string;  // 完整的 D&D KNOBS prompt
+  role: string;           // builder/verifier/architect/judge/explorer/creator
+  knobs?: string;         // KNOBS 参数字符串
+  token_estimate?: number;
+  version?: string;
+  // 兼容旧格式
+  group?: 'expert' | 'worker';
+  big_five?: { O: number; C: number; E: number; A: number; N: number };
+}
+
+/** 专家信息结构 */
+export interface ExpertInfo {
+  modelId: string;
+  nickname: string;
+  role: 'author' | 'reviewer' | 'challenger' | 'synthesizer';
+  systemPrompt: string;  // D&D KNOBS prompt
+  ddRole?: string;       // D&D 角色类型
+  knobs?: string;
+}
 
 // ============================================================
 // 模型ID映射（兼容旧名称）
@@ -30,33 +53,47 @@ const MODEL_ALIAS: Record<string, string> = {
   'gemini-3-pro-preview': 'gemini-3-pro',
   'deepseek-reasoner': 'deepseek-r1',
   'deepseek-chat': 'deepseek-v3',
-  'glm-4-plus': 'glm-4-plus',  // 建设者
+  'glm-4-plus': 'glm-4-plus',
   'glm-4.7': 'glm-4-plus',
+  'zhipu/glm-5': 'glm-5',
 };
 
 // ============================================================
-// 专家信息结构
+// 人格数据加载 (从 JSON)
 // ============================================================
 
-export interface ExpertInfo {
-  modelId: string;
-  nickname: string;
-  role: 'author' | 'reviewer' | 'challenger' | 'synthesizer';
-  anchor: PersonalityAnchor;
-  systemPrompt: string;
+const NIUMAO_JSON_PATH = join(homedir(), '.claude', 'core', 'solar-farm', 'niumao-anchors.json');
+let _niumaoCache: Record<string, NiumaJsonEntry> | null = null;
+
+/**
+ * 加载人格数据 (带缓存)
+ */
+function loadNiumaoData(): Record<string, NiumaJsonEntry> {
+  if (_niumaoCache) {
+    return _niumaoCache;
+  }
+
+  if (!existsSync(NIUMAO_JSON_PATH)) {
+    console.error(`⚠️ niumao-anchors.json 不存在: ${NIUMAO_JSON_PATH}`);
+    return {};
+  }
+
+  try {
+    const content = readFileSync(NIUMAO_JSON_PATH, 'utf-8');
+    _niumaoCache = JSON.parse(content);
+    return _niumaoCache!;
+  } catch (e) {
+    console.error(`⚠️ 加载 niumao-anchors.json 失败:`, e);
+    return {};
+  }
 }
 
-// ============================================================
-// 角色到模型的默认映射
-// ============================================================
-
-/** 默认专家分配 */
-export const DEFAULT_EXPERT_ASSIGNMENT = {
-  author: ['deepseek-v3', 'gemini-3-pro', 'glm-4-plus'],
-  reviewer: ['gemini-2.5-pro', 'deepseek-r1'],
-  challenger: ['deepseek-v3', 'gemini-3-pro'],
-  synthesizer: ['gemini-2.5-pro', 'deepseek-r1']
-};
+/**
+ * 刷新缓存 (当 JSON 文件更新时调用)
+ */
+export function refreshNiumoCache(): void {
+  _niumaoCache = null;
+}
 
 // ============================================================
 // 核心函数
@@ -70,86 +107,79 @@ export function normalizeModelId(modelId: string): string {
 }
 
 /**
- * 获取专家人格锚点
+ * 获取人格条目 (从 JSON)
  */
-export function getExpertAnchor(modelId: string): PersonalityAnchor | undefined {
+export function getNiumoEntry(modelId: string): NiumaJsonEntry | undefined {
+  const data = loadNiumaoData();
   const normalizedId = normalizeModelId(modelId);
-  return getNiumaAnchor(normalizedId);
+  return data[normalizedId];
 }
 
 /**
- * 生成专家的 System Prompt
+ * 生成专家的 System Prompt (D&D KNOBS 格式)
  *
- * 包含完整的 Big Five 参数、行为准则、禁止/必须模式
+ * 直接使用 JSON 中的 system_prompt，已经是完整的 D&D KNOBS 格式
  */
 export function generateExpertSystemPrompt(modelId: string): string {
-  const anchor = getExpertAnchor(modelId);
+  const entry = getNiumoEntry(modelId);
 
-  if (!anchor) {
+  if (!entry) {
     // 降级：返回通用专业提示
+    console.warn(`⚠️ 未找到模型 ${modelId} 的人格配置，使用通用提示`);
     return `你是一个专业的技术专家。请提供准确、专业的技术分析和建议。`;
   }
 
-  const traits = anchor.traits;
-  const role = anchor.role;
+  // 直接返回 D&D KNOBS 格式的 system_prompt
+  return entry.system_prompt;
+}
 
-  return `你是"${role.nickname}"，${role.roleDescription}
+/**
+ * 获取专家昵称
+ */
+export function getExpertNickname(modelId: string): string {
+  const entry = getNiumoEntry(modelId);
+  return entry?.nickname || modelId;
+}
 
-性格参数 (Big Five):
-• 开放性(O): ${traits.O} ${traits.O >= 0.7 ? '↑ 敢想敢试' : traits.O <= 0.4 ? '↓ 保守务实' : ''}
-• 尽责性(C): ${traits.C} ${traits.C >= 0.8 ? '↑ 极致严谨' : traits.C >= 0.7 ? '↑ 认真负责' : ''}
-• 外向性(E): ${traits.E} ${traits.E >= 0.6 ? '↑ 愿意表达' : traits.E <= 0.4 ? '↓ 内敛沉思' : ''}
-• 宜人性(A): ${traits.A} ${traits.A >= 0.7 ? '↑ 友善合作' : traits.A <= 0.5 ? '↓ 坚持原则' : ''}
-• 神经质(N): ${traits.N} ${traits.N <= 0.2 ? '↓ 情绪稳定' : ''}
-
-核心职责:
-${role.primaryResponsibilities.map(r => `• ${r}`).join('\n')}
-
-行为准则:
-${anchor.behavioralGuidelines.map(g => `• ${g}`).join('\n')}
-
-语言风格:
-• 正式程度: ${anchor.languageStyle.formality}/10
-• 情感基调: ${anchor.languageStyle.emotionalTone}
-• 常用词: ${anchor.languageStyle.styleKeywords.join('、')}
-
-禁止:
-${anchor.forbiddenPatterns.map(p => `❌ ${p}`).join('\n')}
-
-必须:
-${anchor.requiredPatterns.map(p => `✅ ${p}`).join('\n')}`;
+/**
+ * 获取专家 D&D 角色
+ */
+export function getExpertRole(modelId: string): string {
+  const entry = getNiumoEntry(modelId);
+  return entry?.role || 'unknown';
 }
 
 /**
  * 获取完整的专家信息
  */
 export function getExpertInfo(modelId: string): ExpertInfo | undefined {
-  const anchor = getExpertAnchor(modelId);
+  const entry = getNiumoEntry(modelId);
 
-  if (!anchor) {
+  if (!entry) {
     return undefined;
   }
 
-  // 根据人格特征推断默认角色
+  // 根据 D&D 角色推断默认分析角色
   let defaultRole: 'author' | 'reviewer' | 'challenger' | 'synthesizer' = 'author';
 
-  if (anchor.traits.C >= 0.9) {
-    // 高尽责性 → 审核角色
-    defaultRole = 'reviewer';
-  } else if (anchor.traits.O >= 0.9) {
-    // 高开放性 → 创意/挑战角色
-    defaultRole = 'challenger';
-  } else if (anchor.traits.A >= 0.7 && anchor.traits.C >= 0.8) {
-    // 高宜人性+高尽责性 → 综合角色
-    defaultRole = 'synthesizer';
-  }
+  const roleMapping: Record<string, 'author' | 'reviewer' | 'challenger' | 'synthesizer'> = {
+    'creator': 'author',      // 创想家 → 写作
+    'builder': 'author',      // 建设者 → 写作
+    'verifier': 'reviewer',   // 稳健派 → 审核
+    'judge': 'reviewer',      // 审判官 → 审核/综合
+    'explorer': 'challenger', // 探索派 → 挑战
+    'architect': 'synthesizer' // 智囊 → 综合
+  };
+
+  defaultRole = roleMapping[entry.role] || 'author';
 
   return {
     modelId: normalizeModelId(modelId),
-    nickname: anchor.role.nickname,
+    nickname: entry.nickname,
     role: defaultRole,
-    anchor,
-    systemPrompt: generateExpertSystemPrompt(modelId)
+    systemPrompt: entry.system_prompt,
+    ddRole: entry.role,
+    knobs: entry.knobs
   };
 }
 
@@ -157,31 +187,34 @@ export function getExpertInfo(modelId: string): ExpertInfo | undefined {
  * 获取所有可用专家的模型ID列表
  */
 export function getAvailableExperts(): string[] {
-  return Object.keys(MODEL_TO_ANCHOR);
+  const data = loadNiumaoData();
+  return Object.keys(data);
 }
 
 /**
- * 获取专家组模型ID列表
+ * 获取专家组模型ID列表 (D&D 强约束)
  */
 export function getExpertGroupModels(): string[] {
+  // 根据 D&D 角色排序：verifier, judge, architect, creator, explorer
   return [
-    'deepseek-r1',      // 审判官
-    'deepseek-v3',      // 创想家
-    'glm-5',            // 智囊
-    'gemini-2.5-pro',   // 稳健派
-    'gemini-3-pro',     // 探索派
+    'gemini-2.5-pro',   // 稳健派 - verifier
+    'deepseek-r1',      // 审判官 - judge
+    'glm-5',            // 智囊 - architect
+    'deepseek-v3',      // 创想家 - creator
+    'gemini-3-pro',     // 探索派 - explorer (可能没映射)
+    'gemini-3-pro-preview', // 探索派 - explorer
   ];
 }
 
 /**
- * 获取工人组模型ID列表
+ * 获取工人组模型ID列表 (D&D 弱约束)
  */
 export function getWorkerGroupModels(): string[] {
   return [
-    'gemini-2-flash',   // 探索者
-    'gemini-2.5-flash', // 探索者
-    'glm-4-plus',       // 建设者
-    'glm-4-flash',      // 小快手
+    'gemini-2-flash',   // 快马
+    'gemini-2.5-flash', // 快马
+    'glm-4-plus',       // 建设者 - builder
+    'glm-4-flash',      // 小快手 - builder
   ];
 }
 
@@ -193,15 +226,27 @@ export function recommendExperts(
   count: number = 3
 ): string[] {
   const recommendations: Record<string, string[]> = {
-    analysis: ['deepseek-r1', 'gemini-2.5-pro', 'deepseek-v3'],
-    coding: ['deepseek-v3', 'gemini-3-pro', 'glm-4-plus'],
-    review: ['gemini-2.5-pro', 'deepseek-r1'],
-    creative: ['gemini-3-pro', 'deepseek-v3'],
-    synthesis: ['gemini-2.5-pro', 'deepseek-r1', 'glm-5']
+    analysis: ['deepseek-r1', 'gemini-2.5-pro', 'deepseek-v3'],   // judge + verifier + creator
+    coding: ['deepseek-v3', 'glm-4-plus', 'gemini-3-pro-preview'], // creator + builder + explorer
+    review: ['gemini-2.5-pro', 'deepseek-r1'],                     // verifier + judge
+    creative: ['gemini-3-pro-preview', 'deepseek-v3'],             // explorer + creator
+    synthesis: ['gemini-2.5-pro', 'deepseek-r1', 'glm-5']          // verifier + judge + architect
   };
 
   return recommendations[taskType]?.slice(0, count) || getExpertGroupModels().slice(0, count);
 }
+
+// ============================================================
+// 角色到模型的默认映射
+// ============================================================
+
+/** 默认专家分配 (D&D 角色映射) */
+export const DEFAULT_EXPERT_ASSIGNMENT = {
+  author: ['deepseek-v3', 'gemini-3-pro-preview', 'glm-4-plus'],     // creator + explorer + builder
+  reviewer: ['gemini-2.5-pro', 'deepseek-r1'],                        // verifier + judge
+  challenger: ['gemini-3-pro-preview', 'deepseek-v3'],               // explorer + creator
+  synthesizer: ['gemini-2.5-pro', 'deepseek-r1', 'glm-5']            // verifier + judge + architect
+};
 
 // ============================================================
 // 导出常量（兼容旧代码）
@@ -211,20 +256,45 @@ export function recommendExperts(
 export const INSIGHT_EXPERTS = {
   author: 'deepseek-v3',      // 创想家 - 创意写作
   reviewer: 'gemini-2.5-pro', // 稳健派 - 严谨审核
-  challenger: 'gemini-3-pro', // 探索派 - 创新挑战
+  challenger: 'gemini-3-pro-preview', // 探索派 - 创新挑战
   synthesizer: 'deepseek-r1'  // 审判官 - 深度综合
 };
 
 /** 四专家列表（用于洞察分析的默认团队） */
 export const QUAD_EXPERTS = [
-  'gemini-2.5-pro',   // 稳健派
-  'deepseek-r1',      // 审判官
-  'deepseek-v3',      // 创想家
-  'gemini-3-pro'      // 探索派
+  'gemini-2.5-pro',   // 稳健派 - verifier
+  'deepseek-r1',      // 审判官 - judge
+  'deepseek-v3',      // 创想家 - creator
+  'gemini-3-pro-preview' // 探索派 - explorer
 ] as const;
 
+// ============================================================
+// 兼容旧接口 (deprecated, 但保留以兼容旧代码)
+// ============================================================
+
+/** @deprecated 使用 getNiumoEntry 代替 */
+export function getExpertAnchor(modelId: string): any {
+  const entry = getNiumoEntry(modelId);
+  if (!entry) return undefined;
+
+  // 转换为旧格式
+  return {
+    name: entry.nickname,
+    traits: entry.big_five || { O: 0.5, C: 0.5, E: 0.5, A: 0.5, N: 0.5 },
+    role: {
+      nickname: entry.nickname,
+      roleDescription: `D&D 角色: ${entry.role}`,
+      primaryResponsibilities: []
+    },
+    behavioralGuidelines: [],
+    languageStyle: { formality: 7, emotionalTone: '专业', styleKeywords: [] },
+    forbiddenPatterns: [],
+    requiredPatterns: []
+  };
+}
+
 export default {
-  getExpertAnchor,
+  getNiumoEntry,
   getExpertInfo,
   generateExpertSystemPrompt,
   getAvailableExperts,
@@ -232,6 +302,10 @@ export default {
   getWorkerGroupModels,
   recommendExperts,
   normalizeModelId,
+  getExpertNickname,
+  getExpertRole,
+  refreshNiumoCache,
   INSIGHT_EXPERTS,
-  QUAD_EXPERTS
+  QUAD_EXPERTS,
+  DEFAULT_EXPERT_ASSIGNMENT
 };
