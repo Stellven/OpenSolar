@@ -441,6 +441,18 @@ const API_CONFIGS: Record<string, { url: string; keyEnv: string; modelId: string
     modelId: 'gemini-2.5-pro',
     maxTokens: 16384
   },
+  'gemini-3-pro': {
+    url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro:generateContent',
+    keyEnv: 'GOOGLE_API_KEY',
+    modelId: 'gemini-3-pro',
+    maxTokens: 16384
+  },
+  'gemini-3-pro-preview': {
+    url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro:generateContent',
+    keyEnv: 'GOOGLE_API_KEY',
+    modelId: 'gemini-3-pro',
+    maxTokens: 16384
+  },
   'deepseek-r1': {
     url: 'https://api.deepseek.com/v1/chat/completions',
     keyEnv: 'DEEPSEEK_API_KEY',
