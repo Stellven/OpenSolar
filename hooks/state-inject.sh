@@ -4,9 +4,9 @@
 # Phase 2: Master Brain 身份注入 (2026-02-10)
 #
 # 核心原理（专家共识）：
-# 1. 千里马建议: 利用 Recency Bias，注入到 Prompt 末尾
-# 2. 技术宅建议: 作为 <system_state> 结构化注入
-# 3. 思考驼建议: 外部强制，不依赖 LLM "记得读"
+# 1. 探索派建议: 利用 Recency Bias，注入到 Prompt 末尾
+# 2. 稳健派建议: 作为 <system_state> 结构化注入
+# 3. 审判官建议: 外部强制，不依赖 LLM "记得读"
 #
 # 此 Hook 在 SessionStart 列表最后执行，确保状态信息获得最高注意力权重
 

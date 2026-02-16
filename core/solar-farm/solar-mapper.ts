@@ -7,7 +7,7 @@
  *
  * @version 1.0.0
  * @created 2026-02-07
- * @authors 千里马(gemini-3-pro), 思考驼(deepseek-r1)
+ * @authors 探索派(gemini-3-pro), 审判官(deepseek-r1)
  */
 
 import { randomUUID } from 'crypto';
@@ -40,10 +40,10 @@ export interface SubTask {
 
 /** 任务类型 → 牛马优先级映射 (昵称 → 模型ID会在 batch 中转换) */
 export const MODEL_PREFERENCE_BY_TYPE: Record<TaskType, string[]> = {
-  analysis: ['deepseek-r1', 'gemini-3-pro-preview', 'deepseek-v3'],  // 思考驼、千里马、鬼才码农
-  creative: ['gemini-3-pro-preview', 'gemini-2.5-flash', 'deepseek-v3'],  // 千里马、闪电侠、鬼才码农
-  coding: ['deepseek-v3', 'gemini-2.5-pro'],  // 鬼才码农、技术宅
-  simple: ['glm-4-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'glm-4-plus']  // 小快手、闪电侠、技术宅、老实人
+  analysis: ['deepseek-r1', 'gemini-3-pro-preview', 'deepseek-v3'],  // 审判官、探索派、创想家
+  creative: ['gemini-3-pro-preview', 'gemini-2.5-flash', 'deepseek-v3'],  // 探索派、闪电侠、创想家
+  coding: ['deepseek-v3', 'gemini-2.5-pro'],  // 创想家、稳健派
+  simple: ['glm-4-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'glm-4-plus']  // 小快手、闪电侠、稳健派、建设者
 };
 
 export interface MapperResult {
@@ -127,7 +127,7 @@ export class SolarMapper {
   /**
    * 1. Decompose: 生成分解调用（由主脑执行）
    *
-   * 返回调用千里马的参数，主脑执行后得到实体列表
+   * 返回调用探索派的参数，主脑执行后得到实体列表
    */
   getDecomposeCall(goal: string): { model: string; system: string; prompt: string } {
     console.log(`🔥 [Decompose] 生成分解调用: ${goal}`);
@@ -227,10 +227,10 @@ export class SolarMapper {
    * 3. Batch: 根据任务类型智能分配牛马
    *
    * 使用 MODEL_PREFERENCE_BY_TYPE 根据 taskType 选择最合适的牛马：
-   * - analysis → 思考驼/千里马/鬼才码农 (深度分析)
-   * - coding   → 鬼才码农/技术宅 (代码能力)
-   * - creative → 千里马/闪电侠/鬼才码农 (创造力)
-   * - simple   → 小快手/闪电侠/老实人 (成本低)
+   * - analysis → 审判官/探索派/创想家 (深度分析)
+   * - coding   → 创想家/稳健派 (代码能力)
+   * - creative → 探索派/闪电侠/创想家 (创造力)
+   * - simple   → 小快手/闪电侠/建设者 (成本低)
    */
   batch(tasks: SubTask[]): SubTask[] {
     console.log(`⚖️ [Batch] 正在为 ${tasks.length} 个任务分配牛马...`);
@@ -273,8 +273,8 @@ export class SolarMapper {
 
   /** 规划专家配置 */
   private readonly PLANNING_EXPERTS = [
-    { model: 'gemini-3-pro-preview', nickname: '千里马', style: '创新探索' },
-    { model: 'deepseek-r1', nickname: '思考驼', style: '深度推理' }
+    { model: 'gemini-3-pro-preview', nickname: '探索派', style: '创新探索' },
+    { model: 'deepseek-r1', nickname: '审判官', style: '深度推理' }
   ];
 
   /**
@@ -291,11 +291,11 @@ export class SolarMapper {
 |------|------|------|------|
 | 小快手 | glm-4-flash | 简单任务，速度快 | 最低 |
 | 闪电侠 | gemini-2.5-flash | 长文档，多模态 | 低 |
-| 老实人 | glm-4-plus | 日常编码，友善 | 中 |
-| 技术宅 | gemini-2.5-pro | 严谨审查，高一致性 | 中高 |
-| 千里马 | gemini-3-pro-preview | 创新探索，热情高效 | 高 |
-| 鬼才码农 | deepseek-v3 | 创意编码，中文好 | 高 |
-| 思考驼 | deepseek-r1 | 深度推理，自我觉察 | 高 |
+| 建设者 | glm-4-plus | 日常编码，友善 | 中 |
+| 稳健派 | gemini-2.5-pro | 严谨审查，高一致性 | 中高 |
+| 探索派 | gemini-3-pro-preview | 创新探索，热情高效 | 高 |
+| 创想家 | deepseek-v3 | 创意编码，中文好 | 高 |
+| 审判官 | deepseek-r1 | 深度推理，自我觉察 | 高 |
 `;
 
     const taskList = entities.map((e, i) => `${i + 1}. ${e}`).join('\n');
@@ -314,9 +314,9 @@ ${taskList}
 ${niumaList}
 
 ## 分配原则
-- 分析/深度任务 → 思考驼/千里马
-- 编码任务 → 鬼才码农/技术宅
-- 创意任务 → 千里马/鬼才码农
+- 分析/深度任务 → 审判官/探索派
+- 编码任务 → 创想家/稳健派
+- 创意任务 → 探索派/创想家
 - 简单任务 → 小快手/闪电侠 (省钱)
 
 ## 输出格式
@@ -538,7 +538,7 @@ for each task in plan.tasks:
   }
 
   /**
-   * 5. Aggregate: 聚合结果 + 调用思考驼生成总结
+   * 5. Aggregate: 聚合结果 + 调用审判官生成总结
    */
   async aggregate(goal: string, results: Map<string, string>): Promise<string> {
     console.log(`✨ [Aggregate] 正在聚合 ${results.size} 个结果...`);
@@ -549,7 +549,7 @@ for each task in plan.tasks:
       table += `| ${entity} | ${content.substring(0, 50)}... |\n`;
     }
 
-    // 调用思考驼生成总结
+    // 调用审判官生成总结
     const { system, prompt } = buildNiumaCall({
       model: 'deepseek-r1',
       task: `基于以下执行结果，为目标"${goal}"生成简洁的总结报告：\n\n${table}`,
@@ -585,7 +585,7 @@ for each task in plan.tasks:
    */
   step1_decompose(goal: string): { model: string; system: string; prompt: string; nickname: string } {
     const call = this.getDecomposeCall(goal);
-    return { ...call, nickname: '千里马' };
+    return { ...call, nickname: '探索派' };
   }
 
   /**
@@ -767,14 +767,14 @@ if (import.meta.main) {
     → 合并专家建议，生成最终执行计划
 
 完整流程 (快速版):
-  1. step1 → 千里马分解 → 实体列表
+  1. step1 → 探索派分解 → 实体列表
   2. step2 → 本地规划 → 执行计划
   3. 主脑执行
 
 完整流程 (多专家版):
-  1. step1 → 千里马分解 → 实体列表
+  1. step1 → 探索派分解 → 实体列表
   2. step2-expert → 生成两个专家调用
-  3. 主脑并行调用千里马 + 思考驼
+  3. 主脑并行调用探索派 + 审判官
   4. step3 → 合并建议 → 执行计划
   5. 主脑执行
 `);

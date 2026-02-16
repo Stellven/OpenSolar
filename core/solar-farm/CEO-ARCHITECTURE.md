@@ -1,7 +1,7 @@
 # Solar CEO意识系统 - 架构设计文档
 
 > **版本**: v2.0 (Self-Evolution Edition)
-> **作者**: 千里马 (gemini-3-pro-preview) + CEO验收
+> **作者**: 探索派 (gemini-3-pro-preview) + CEO验收
 > **日期**: 2026-02-08
 > **密级**: 核心机密
 
@@ -77,7 +77,7 @@
       │             │             │             │
       ▼             ▼             ▼             ▼
 ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐
-│ 思考驼  │   │ 技术宅  │   │ 千里马  │   │鬼才码农 │
+│ 审判官  │   │ 稳健派  │   │ 探索派  │   │创想家 │
 │deepseek │   │ gemini  │   │ gemini  │   │deepseek │
 │   -r1   │   │2.5-pro  │   │3-pro    │   │  -v3    │
 │[深度推理]│   │[严谨审查]│   │[创新探索]│   │[创意编码]│
@@ -131,9 +131,9 @@
 {
   "experts": {
     "deepseek-r1": {
-      "nickname": "思考驼",
+      "nickname": "审判官",
       "tag": "E推",
-      "system": "你是思考驼，Solar系统的深度推理专家。Big Five: O0.95/C0.85/E0.3/A0.7/N0.2..."
+      "system": "你是审判官，Solar系统的深度推理专家。Big Five: O0.95/C0.85/E0.3/A0.7/N0.2..."
     }
   }
 }

@@ -1,12 +1,18 @@
 {
   "version": 2,
-  "lastComputedDate": "2026-02-14",
+  "lastComputedDate": "2026-02-15",
   "dailyActivity": [
     {
       "date": "2026-02-14",
       "messageCount": 15021,
       "sessionCount": 15,
       "toolCallCount": 1333
+    },
+    {
+      "date": "2026-02-15",
+      "messageCount": 15163,
+      "sessionCount": 10,
+      "toolCallCount": 2255
     }
   ],
   "dailyModelTokens": [
@@ -17,13 +23,19 @@
         "glm-4.7": 44511,
         "deepseek-reasoner": 38804
       }
+    },
+    {
+      "date": "2026-02-15",
+      "tokensByModel": {
+        "glm-5": 1605529
+      }
     }
   ],
   "modelUsage": {
     "glm-5": {
-      "inputTokens": 1210050,
-      "outputTokens": 132801,
-      "cacheReadInputTokens": 33943680,
+      "inputTokens": 2578321,
+      "outputTokens": 370059,
+      "cacheReadInputTokens": 94112128,
       "cacheCreationInputTokens": 0,
       "webSearchRequests": 0,
       "costUSD": 0,
@@ -51,24 +63,26 @@
       "maxOutputTokens": 0
     }
   },
-  "totalSessions": 15,
-  "totalMessages": 15021,
+  "totalSessions": 25,
+  "totalMessages": 30184,
   "longestSession": {
-    "sessionId": "d3229dc8-8aef-4223-b90b-4631bb7a1d9b",
-    "duration": 40194137,
-    "messageCount": 33,
-    "timestamp": "2026-02-14T00:26:15.354Z"
+    "sessionId": "b0fbc42c-eb29-4ce2-9695-95035430c316",
+    "duration": 81018012,
+    "messageCount": 6522,
+    "timestamp": "2026-02-15T13:06:05.837Z"
   },
   "firstSessionDate": "2026-02-14T00:26:15.354Z",
   "hourCounts": {
-    "7": 1,
-    "8": 1,
-    "9": 2,
+    "7": 4,
+    "8": 4,
+    "9": 3,
     "10": 1,
     "11": 5,
     "14": 1,
     "18": 1,
-    "19": 3
+    "19": 3,
+    "21": 1,
+    "22": 2
   },
   "totalSpeculationTimeSavedMs": 0
 }

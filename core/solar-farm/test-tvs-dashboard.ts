@@ -53,11 +53,11 @@ console.log(`   总字数: ${totalWords}\n`);
 const getModelNickname = (model: string | undefined): string => {
   if (!model) return '未知';
   const nicknames: Record<string, string> = {
-    'glm-5': '老实人 GLM-5',
-    'gemini-2.5-pro': '技术宅',
-    'gemini-3-pro-preview': '千里马',
-    'deepseek-v3': '鬼才码农',
-    'deepseek-r1': '思考驼'
+    'glm-5': '建设者 GLM-5',
+    'gemini-2.5-pro': '稳健派',
+    'gemini-3-pro-preview': '探索派',
+    'deepseek-v3': '创想家',
+    'deepseek-r1': '审判官'
   };
   return nicknames[model] || model;
 };

@@ -75,7 +75,7 @@ function extractReportInfo(reportDir: string) {
     let reviewer = '交响乐团';
     let quality = avgScore;
 
-    const authorMatch = chContent.match(/我就是(千里马|鬼才码农|老实人|技术宅|思考驼|GLM-5|GLM-4|闪电侠)/);
+    const authorMatch = chContent.match(/我就是(探索派|创想家|建设者|稳健派|审判官|GLM-5|GLM-4|闪电侠)/);
     if (authorMatch) {
       author = authorMatch[1];
     }
@@ -124,7 +124,7 @@ function extractReportInfo(reportDir: string) {
 
   // 提取专家团队（从内容中推断）
   const expertSet = new Set<string>();
-  const expertMatches = content.matchAll(/(千里马|鬼才码农|老实人|技术宅|思考驼|GLM-5|GLM-4)/g);
+  const expertMatches = content.matchAll(/(探索派|创想家|建设者|稳健派|审判官|GLM-5|GLM-4)/g);
   for (const match of expertMatches) {
     expertSet.add(match[1]);
   }

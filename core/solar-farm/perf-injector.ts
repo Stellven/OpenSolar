@@ -5,7 +5,7 @@
  *
  * @version 1.0.0
  * @created 2026-02-08
- * @author 鬼才码农 (deepseek-v3) + CEO验收
+ * @author 创想家 (deepseek-v3) + CEO验收
  */
 
 import { Database } from 'bun:sqlite';
@@ -68,11 +68,11 @@ const CODING_PUA_PROMPT = `
  * 写代码的牛马名单 - 需要注入PUA的模型
  */
 const CODING_NIUMA_IDS = [
-  'deepseek-v3',    // 鬼才码农 - 创意编码
-  'glm-4-plus',     // 老实人 - 日常编码
+  'deepseek-v3',    // 创想家 - 创意编码
+  'glm-4-plus',     // 建设者 - 日常编码
   'glm-4-flash',    // 小快手 - 简单任务
-  'gemini-2.5-pro', // 技术宅 - 严谨实现
-  'gemini-3-pro-preview', // 千里马 - 复杂项目
+  'gemini-2.5-pro', // 稳健派 - 严谨实现
+  'gemini-3-pro-preview', // 探索派 - 复杂项目
 ];
 
 // ============================================================

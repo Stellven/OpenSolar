@@ -40,23 +40,23 @@
 ### 深度分析类 (技术调研、论文解读)
 
 ```
-思考驼 (deepseek-r1)   - 深度推理、本质洞察
-千里马 (gemini-3-pro)  - 创新方案、多维权衡
-鬼才码农 (deepseek-v3) - 实现思路、代码结构
+审判官 (deepseek-r1)   - 深度推理、本质洞察
+探索派 (gemini-3-pro)  - 创新方案、多维权衡
+创想家 (deepseek-v3) - 实现思路、代码结构
 ```
 
 ### 架构设计类
 
 ```
-技术宅 (gemini-2.5-pro) - 严谨审查、一致性
-千里马 (gemini-3-pro)   - 创新探索、方案设计
-思考驼 (deepseek-r1)    - 深层分析、风险评估
+稳健派 (gemini-2.5-pro) - 严谨审查、一致性
+探索派 (gemini-3-pro)   - 创新探索、方案设计
+审判官 (deepseek-r1)    - 深层分析、风险评估
 ```
 
 ### 快速评估类 (简单方案对比)
 
 ```
-老实人 (glm-4-plus)  - 日常分析
+建设者 (glm-4-plus)  - 日常分析
 闪电侠 (gemini-flash) - 快速总结
 ```
 
@@ -99,17 +99,17 @@ await mcp__brain_router__complete({
 await Promise.all([
   mcp__brain_router__complete({
     model: "deepseek-r1",
-    system: "你是思考驼，擅长深度推理...",
+    system: "你是审判官，擅长深度推理...",
     prompt: "分析这个技术的本质和风险..."
   }),
   mcp__brain_router__complete({
     model: "gemini-3-pro-preview",
-    system: "你是千里马，擅长创新探索...",
+    system: "你是探索派，擅长创新探索...",
     prompt: "分析这个技术的应用方案..."
   }),
   mcp__brain_router__complete({
     model: "deepseek-v3",
-    system: "你是鬼才码农，擅长实现思路...",
+    system: "你是创想家，擅长实现思路...",
     prompt: "分析这个技术的代码实现..."
   })
 ]);
@@ -128,8 +128,8 @@ await Promise.all([
 
 ```
 任务: 分析 MLX 优化
-错误: 只调用了思考驼一个专家
-正确: 应该并行调用 思考驼 + 千里马 + 鬼才码农
+错误: 只调用了审判官一个专家
+正确: 应该并行调用 审判官 + 探索派 + 创想家
 
 用户反馈:
 "你这个只用一个，我觉得不好"

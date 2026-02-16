@@ -141,7 +141,10 @@
       "Bash(./.build/release/interpolate -i benchmark/input/1.mp4 -o benchmark/output/parallel_test.mp4 --parallel)",
       "Bash(./.build/release/interpolate:*)",
       "Bash(.build/release/benchmark:*)",
-      "Bash(xcrun coremlcompiler compile:*)"
+      "Bash(xcrun coremlcompiler compile:*)",
+      "Bash(/usr/local/bin/ffprobe:*)",
+      "Bash(/opt/homebrew/bin/ffprobe -v error -select_streams v:0 -show_entries stream=width,height,nb_frames,duration -of csv=p=0 benchmark/output/ai_upscale_test.mp4)",
+      "Bash(cd /Users/lisihao/ThunderAIGC/ThunderAIGC/benchmark/models/realesrgan ./realesrgan-ncnn-vulkan --help)"
     ]
   },
   "enableAllProjectMcpServers": true,

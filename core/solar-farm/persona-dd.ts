@@ -907,7 +907,7 @@ if (import.meta.main) {
     case 'compile': {
       // 示例: 编译一个角色
       const exampleSheet: DnDCharacterSheet = {
-        name: '技术宅',
+        name: '稳健派',
         modelId: 'gemini-2.5-pro',
         class: CHARACTER_CLASSES.judge,
         level: { level: 5, xp: 6500, xpToNext: 14000, proficiencyBonus: 3 },
@@ -949,7 +949,7 @@ if (import.meta.main) {
 
     case 'prompt': {
       const exampleSheet: DnDCharacterSheet = {
-        name: '技术宅',
+        name: '稳健派',
         modelId: 'gemini-2.5-pro',
         class: CHARACTER_CLASSES.judge,
         level: { level: 5, xp: 6500, xpToNext: 14000, proficiencyBonus: 3 },

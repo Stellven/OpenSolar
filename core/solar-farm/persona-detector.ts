@@ -5,7 +5,7 @@
  *
  * @version 1.0.0
  * @created 2026-02-07
- * @authors 技术宅(gemini-2.5-pro), 千里马(gemini-3-pro), 思考驼(deepseek-r1), 老实人(glm-4-plus)
+ * @authors 稳健派(gemini-2.5-pro), 探索派(gemini-3-pro), 审判官(deepseek-r1), 建设者(glm-4-plus)
  */
 
 import { PersonalityAnchor, JINGANG_BARBIE_ANCHOR } from './personality-anchor';

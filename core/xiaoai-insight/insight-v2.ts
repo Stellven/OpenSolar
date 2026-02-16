@@ -48,6 +48,18 @@ const EXPERT_VENDOR: Record<string, string> = {
 };
 
 /**
+ * 章节综合者动态分配映射 (2026-02-16 监护人确认)
+ * 根据章节内容类型选择最合适的综合者
+ */
+const SYNTHESIZER_MAP: Record<number, { model: string; role: string; reason: string }> = {
+  1: { model: 'glm-5',          role: '智囊',    reason: '背景与动机 - 需要战略分析视角' },
+  2: { model: 'gemini-3-pro',   role: '探索派',  reason: '技术前沿/现状 - 需要前沿探索视角' },
+  3: { model: 'deepseek-v3',    role: '创想家',  reason: '架构设计 - 需要创新架构思维' },
+  4: { model: 'glm-5',          role: '智囊',    reason: '实施路径 - 需要可行性分析视角' },
+  5: { model: 'gemini-3-pro',   role: '探索派',  reason: '风险与展望 - 需要前瞻性思维' }
+};
+
+/**
  * 生成跨厂商评审配对
  * 确保评审者和被评审者来自不同厂商
  */
@@ -198,8 +210,15 @@ function recordPersonaMatch(
 interface TaskCapsule {
   taskId: string;
   topic: string;
+  requester?: string;
   currentPhase: number;
   phaseStatus: Record<number, 'pending' | 'in_progress' | 'completed'>;
+  // Phase 5 细粒度进度
+  phase5Progress?: {
+    completedSections: number[];  // 已完成的 section_order 列表
+    totalSections: number;        // 总章节数
+    currentSection: number;       // 当前处理的 section_order (0 表示未开始)
+  };
   expertScores: Record<string, number>;
   eloSnapshot: { persona_id: string; elo_rating: number }[];
   evidenceSummary: { sourceCount: number; topKeywords: string[] };
@@ -722,9 +741,72 @@ export class InsightEngine {
   private cortex: Cortex;
   private taskId: string = '';
   private topic: string = '';
+  private requester: string = '';
+  private capsule: TaskCapsule | null = null;
 
   constructor() {
     this.cortex = new Cortex();
+  }
+
+  /**
+   * 初始化或更新任务胶囊
+   */
+  private initCapsule(): void {
+    this.capsule = {
+      taskId: this.taskId,
+      topic: this.topic,
+      requester: this.requester,
+      currentPhase: 0,
+      phaseStatus: {},
+      phase5Progress: { completedSections: [], totalSections: 0, currentSection: 0 },
+      expertScores: {},
+      eloSnapshot: [],
+      evidenceSummary: { sourceCount: 0, topKeywords: [] },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    saveTaskCapsule(this.capsule);
+  }
+
+  /**
+   * 更新胶囊状态并持久化
+   */
+  private updateCapsule(updates: Partial<TaskCapsule>): void {
+    if (!this.capsule) {
+      this.capsule = {
+        taskId: this.taskId,
+        topic: this.topic,
+        requester: this.requester,
+        currentPhase: 0,
+        phaseStatus: {},
+        phase5Progress: { completedSections: [], totalSections: 0, currentSection: 0 },
+        expertScores: {},
+        eloSnapshot: [],
+        evidenceSummary: { sourceCount: 0, topKeywords: [] },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+    }
+    this.capsule = { ...this.capsule, ...updates, updatedAt: new Date().toISOString() };
+    saveTaskCapsule(this.capsule);
+  }
+
+  /**
+   * 标记 Phase 5 某章节完成
+   */
+  private markSectionComplete(sectionOrder: number, totalSections: number): void {
+    const completed = this.capsule?.phase5Progress?.completedSections || [];
+    if (!completed.includes(sectionOrder)) {
+      completed.push(sectionOrder);
+    }
+    this.updateCapsule({
+      phase5Progress: {
+        completedSections: completed,
+        totalSections,
+        currentSection: sectionOrder
+      }
+    });
+    console.log(`  💾 进度已保存: ${completed.length}/${totalSections} 章节`);
   }
 
   // ============================================================
@@ -1032,12 +1114,16 @@ ${section.sources?.map(s => `- @${s}`).join('\n') || '- 待定'}
    */
   async run(topic: string, requester?: string): Promise<string> {
     this.topic = topic;
+    this.requester = requester || process.env.USER || 'unknown';
 
     // 创建任务
     this.taskId = this.cortex.createTask('insight', topic, requester, {
       experts: Object.keys(EXPERTS),
       phases: 8  // 增加 Phase 8: CEO 总结
     });
+
+    // 初始化胶囊
+    this.initCapsule();
 
     console.log(`\n${'='.repeat(60)}`);
     console.log(`🔬 开始洞察分析: ${topic}`);
@@ -1050,8 +1136,10 @@ ${section.sources?.map(s => `- @${s}`).join('\n') || '- 待定'}
     try {
       // Phase 1: 生成大纲提示词
       this.updateReportState(1, 'in_progress');
+      this.updateCapsule({ currentPhase: 1, phaseStatus: { ...this.capsule?.phaseStatus, 1: 'in_progress' } });
       await this.phase1_generateOutlinePrompt();
       this.updateReportState(1, 'completed');
+      this.updateCapsule({ phaseStatus: { ...this.capsule?.phaseStatus, 1: 'completed' } });
 
       // Phase 1.5: 研究搜索阶段 (使用 Gemini Google Search)
       console.log('\n' + '─'.repeat(50));
@@ -1060,38 +1148,52 @@ ${section.sources?.map(s => `- @${s}`).join('\n') || '- 待定'}
 
       // Phase 2: 四专家生成大纲
       this.updateReportState(2, 'in_progress');
+      this.updateCapsule({ currentPhase: 2, phaseStatus: { ...this.capsule?.phaseStatus, 2: 'in_progress' } });
       await this.phase2_expertsGenerateOutlines();
       this.updateReportState(2, 'completed');
+      this.updateCapsule({ phaseStatus: { ...this.capsule?.phaseStatus, 2: 'completed' } });
 
       // Phase 3: 四专家互评
       this.updateReportState(3, 'in_progress');
+      this.updateCapsule({ currentPhase: 3, phaseStatus: { ...this.capsule?.phaseStatus, 3: 'in_progress' } });
       await this.phase3_crossReview();
       this.updateReportState(3, 'completed');
+      this.updateCapsule({ phaseStatus: { ...this.capsule?.phaseStatus, 3: 'completed' } });
 
       // Phase 4: Gemini 综合大纲 + 拆解章节
       this.updateReportState(4, 'in_progress');
+      this.updateCapsule({ currentPhase: 4, phaseStatus: { ...this.capsule?.phaseStatus, 4: 'in_progress' } });
       await this.phase4_synthesizeAndSplit();
       this.updateReportState(4, 'completed');
+      this.updateCapsule({ phaseStatus: { ...this.capsule?.phaseStatus, 4: 'completed' } });
 
       // Phase 5: 逐章节写作
       this.updateReportState(5, 'in_progress');
+      this.updateCapsule({ currentPhase: 5, phaseStatus: { ...this.capsule?.phaseStatus, 5: 'in_progress' } });
       await this.phase5_writeChapters();
       this.updateReportState(5, 'completed');
+      this.updateCapsule({ phaseStatus: { ...this.capsule?.phaseStatus, 5: 'completed' } });
 
       // Phase 6: 合并初稿
       this.updateReportState(6, 'in_progress');
+      this.updateCapsule({ currentPhase: 6, phaseStatus: { ...this.capsule?.phaseStatus, 6: 'in_progress' } });
       await this.phase6_mergeDraft();
       this.updateReportState(6, 'completed');
+      this.updateCapsule({ phaseStatus: { ...this.capsule?.phaseStatus, 6: 'completed' } });
 
       // Phase 7: 生成结构化输出
       this.updateReportState(7, 'in_progress');
+      this.updateCapsule({ currentPhase: 7, phaseStatus: { ...this.capsule?.phaseStatus, 7: 'in_progress' } });
       await this.phase7_generateStructuredOutput();
       this.updateReportState(7, 'completed');
+      this.updateCapsule({ phaseStatus: { ...this.capsule?.phaseStatus, 7: 'completed' } });
 
       // Phase 8: CEO 总结 (Solar 作为 CEO 对报告进行总结点评)
       this.updateReportState(8, 'in_progress');
+      this.updateCapsule({ currentPhase: 8, phaseStatus: { ...this.capsule?.phaseStatus, 8: 'in_progress' } });
       await this.phase8_ceoSummary();
       this.updateReportState(8, 'completed');
+      this.updateCapsule({ phaseStatus: { ...this.capsule?.phaseStatus, 8: 'completed' } });
 
       // 完成任务
       this.cortex.completeTask(this.taskId);
@@ -1106,53 +1208,235 @@ ${section.sources?.map(s => `- @${s}`).join('\n') || '- 待定'}
 
     } catch (error) {
       console.error(`\n❌ 洞察分析失败: ${error}`);
+      // 保存当前进度，便于恢复
+      this.updateCapsule({
+        phaseStatus: { ...this.capsule?.phaseStatus, [this.capsule?.currentPhase || 0]: 'in_progress' }
+      });
+      console.log(`💾 进度已保存，可使用 --resume ${this.taskId} 恢复`);
       throw error;
     }
   }
 
   /**
-   * Phase 1: 小爱调用 Gemini 生成大纲提示词
+   * 从胶囊恢复任务 - 真正的断点续跑
+   */
+  async resume(capsule: TaskCapsule): Promise<string> {
+    this.taskId = capsule.taskId;
+    this.topic = capsule.topic;
+    this.requester = capsule.requester || 'unknown';
+    this.capsule = capsule;
+
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`🔄 恢复洞察分析: ${this.topic}`);
+    console.log(`📋 任务ID: ${this.taskId}`);
+    console.log(`📊 当前进度: Phase ${capsule.currentPhase}`);
+    if (capsule.phase5Progress && capsule.phase5Progress.completedSections.length > 0) {
+      console.log(`📝 Phase 5 进度: ${capsule.phase5Progress.completedSections.length}/${capsule.phase5Progress.totalSections} 章节`);
+    }
+    console.log(`${'='.repeat(60)}\n`);
+
+    try {
+      // 根据当前 Phase 状态恢复
+      const phaseStatus = capsule.phaseStatus || {};
+
+      // Phase 1
+      if (phaseStatus[1] !== 'completed') {
+        this.updateReportState(1, 'in_progress');
+        this.updateCapsule({ currentPhase: 1, phaseStatus: { ...phaseStatus, 1: 'in_progress' } });
+        await this.phase1_generateOutlinePrompt();
+        this.updateReportState(1, 'completed');
+        this.updateCapsule({ phaseStatus: { ...this.capsule?.phaseStatus, 1: 'completed' } });
+      }
+
+      // Phase 1.5 (总是运行，幂等的)
+      console.log('\n' + '─'.repeat(50));
+      await this.phase1_5_research();
+      console.log('─'.repeat(50));
+
+      // Phase 2
+      if (phaseStatus[2] !== 'completed') {
+        this.updateReportState(2, 'in_progress');
+        this.updateCapsule({ currentPhase: 2, phaseStatus: { ...this.capsule?.phaseStatus, 2: 'in_progress' } });
+        await this.phase2_expertsGenerateOutlines();
+        this.updateReportState(2, 'completed');
+        this.updateCapsule({ phaseStatus: { ...this.capsule?.phaseStatus, 2: 'completed' } });
+      }
+
+      // Phase 3
+      if (phaseStatus[3] !== 'completed') {
+        this.updateReportState(3, 'in_progress');
+        this.updateCapsule({ currentPhase: 3, phaseStatus: { ...this.capsule?.phaseStatus, 3: 'in_progress' } });
+        await this.phase3_crossReview();
+        this.updateReportState(3, 'completed');
+        this.updateCapsule({ phaseStatus: { ...this.capsule?.phaseStatus, 3: 'completed' } });
+      }
+
+      // Phase 4
+      if (phaseStatus[4] !== 'completed') {
+        this.updateReportState(4, 'in_progress');
+        this.updateCapsule({ currentPhase: 4, phaseStatus: { ...this.capsule?.phaseStatus, 4: 'in_progress' } });
+        await this.phase4_synthesizeAndSplit();
+        this.updateReportState(4, 'completed');
+        this.updateCapsule({ phaseStatus: { ...this.capsule?.phaseStatus, 4: 'completed' } });
+      }
+
+      // Phase 5 (支持章节级恢复)
+      if (phaseStatus[5] !== 'completed') {
+        this.updateReportState(5, 'in_progress');
+        this.updateCapsule({ currentPhase: 5, phaseStatus: { ...this.capsule?.phaseStatus, 5: 'in_progress' } });
+        await this.phase5_writeChapters(capsule.phase5Progress?.completedSections || []);
+        this.updateReportState(5, 'completed');
+        this.updateCapsule({ phaseStatus: { ...this.capsule?.phaseStatus, 5: 'completed' } });
+      }
+
+      // Phase 6
+      if (phaseStatus[6] !== 'completed') {
+        this.updateReportState(6, 'in_progress');
+        this.updateCapsule({ currentPhase: 6, phaseStatus: { ...this.capsule?.phaseStatus, 6: 'in_progress' } });
+        await this.phase6_mergeDraft();
+        this.updateReportState(6, 'completed');
+        this.updateCapsule({ phaseStatus: { ...this.capsule?.phaseStatus, 6: 'completed' } });
+      }
+
+      // Phase 7
+      if (phaseStatus[7] !== 'completed') {
+        this.updateReportState(7, 'in_progress');
+        this.updateCapsule({ currentPhase: 7, phaseStatus: { ...this.capsule?.phaseStatus, 7: 'in_progress' } });
+        await this.phase7_generateStructuredOutput();
+        this.updateReportState(7, 'completed');
+        this.updateCapsule({ phaseStatus: { ...this.capsule?.phaseStatus, 7: 'completed' } });
+      }
+
+      // Phase 8
+      if (phaseStatus[8] !== 'completed') {
+        this.updateReportState(8, 'in_progress');
+        this.updateCapsule({ currentPhase: 8, phaseStatus: { ...this.capsule?.phaseStatus, 8: 'in_progress' } });
+        await this.phase8_ceoSummary();
+        this.updateReportState(8, 'completed');
+        this.updateCapsule({ phaseStatus: { ...this.capsule?.phaseStatus, 8: 'completed' } });
+      }
+
+      // 完成任务
+      this.cortex.completeTask(this.taskId);
+
+      console.log(`\n${'='.repeat(60)}`);
+      console.log(`✅ 洞察分析完成`);
+      console.log(`📋 任务ID: ${this.taskId}`);
+      console.log(`📁 产物目录: ${getTaskDir(this.taskId)}`);
+      console.log(`${'='.repeat(60)}\n`);
+
+      return this.taskId;
+
+    } catch (error) {
+      console.error(`\n❌ 恢复失败: ${error}`);
+      this.updateCapsule({
+        phaseStatus: { ...this.capsule?.phaseStatus, [this.capsule?.currentPhase || 0]: 'in_progress' }
+      });
+      console.log(`💾 进度已保存，可再次使用 --resume ${this.taskId} 恢复`);
+      throw error;
+    }
+  }
+
+  /**
+   * Phase 1: 生成大纲提示词 (两步流程: 探索派生成 + 创想家补充)
+   * 2026-02-16 监护人确认: 探索派为主，创想家补充（不删改，只补充）
    */
   private async phase1_generateOutlinePrompt(): Promise<void> {
     console.log('\n📝 Phase 1: 生成大纲提示词\n');
     this.cortex.updateTaskPhase(this.taskId, 1, 'in_progress');
 
-    const prompt = `请为以下主题设计一个深度技术分析报告的大纲提示词（工程化风格，非散文）。
+    // Step 1: 探索派 (gemini-3-pro) 生成大纲提示词
+    console.log('  🚀 Step 1: 探索派生成大纲提示词...');
+
+    const prompt = `请为以下主题设计一个深度技术分析报告的大纲提示词（前沿探索风格，敢于突破常规）。
 
 主题: ${this.topic}
 
 要求:
 1. 提示词应引导专家生成结构化的技术分析大纲
-2. 章节划分遵循工程论文结构: 背景与问题定义 → 技术方案分析 → 对比评估 → 实践建议 → 结论
+2. 章节划分可以突破传统，但要有逻辑主线
 3. 每个章节必须包含:
    - 明确的技术分析目标
-   - 要求的定量指标类型（性能/成本/复杂度等）
-   - 需要的对比维度（方案A vs B vs C）
-4. 要求专家引用: 论文/RFC/技术文档/benchmark 数据
+   - 前沿技术的探索方向
+   - 创新性的对比维度
+4. 要求专家引用: 最新论文/RFC/技术文档/benchmark 数据
 5. 要求输出格式包含: 对比表格、架构图、代码示例、性能数据
-6. 禁止出现"发展前景"、"意义深远"等空泛章节
+6. 鼓励探索前沿方向、创新方案、未来趋势
+7. 禁止空泛章节，但可以包含"未来展望"类有实质内容的部分
 
-请输出一个能产出理工科风格报告的大纲生成提示词。`;
+请输出一个能产出具有前瞻性和创新性报告的大纲生成提示词。`;
 
-    const result = await callExpert('gemini-2.5-pro', prompt);
+    const step1Result = await callExpert('gemini-3-pro', prompt);
+
+    // 保存 Step 1 成本
+    const step1Cost = estimateCost('gemini-3-pro', step1Result.inputTokens, step1Result.outputTokens);
+    this.cortex.recordCost(this.taskId, 1, 'gemini-3-pro', step1Result.inputTokens, step1Result.outputTokens, step1Cost);
+
+    console.log(`     ✅ 探索派完成 (${step1Result.outputTokens} tokens)`);
+
+    // Step 2: 创想家 (deepseek-v3) 补充大纲提示词
+    console.log('  💡 Step 2: 创想家补充大纲提示词...');
+
+    const supplementPrompt = `你是一位富有创意的技术架构师。以下是一个技术报告的大纲提示词，请**补充**（不是修改，不是删除，是补充）你的创意想法。
+
+【原始大纲提示词】
+${step1Result.content}
+
+【你的任务】
+1. 在现有基础上补充你想到的创新视角
+2. 添加可能被忽略的前沿技术方向
+3. 补充跨领域的思考角度（如：借鉴生物学、社会学、经济学等）
+4. 增加可能有争议但值得探讨的观点
+5. 提供你独特的创意火花
+
+【输出格式】
+请直接在原大纲后面添加一个章节：
+---
+## 补充：创想家的视角
+
+### 创新技术方向
+[补充的创新技术方向...]
+
+### 跨领域启发
+[跨领域的思考角度...]
+
+### 争议性探讨
+[值得探讨的争议点...]
+
+### 创意火花
+[你的独特创意...]
+---
+
+注意：只补充，不修改上面已有的任何内容！`;
+
+    const step2Result = await callExpert('deepseek-v3', supplementPrompt);
+
+    // 保存 Step 2 成本
+    const step2Cost = estimateCost('deepseek-v3', step2Result.inputTokens, step2Result.outputTokens);
+    this.cortex.recordCost(this.taskId, 1, 'deepseek-v3', step2Result.inputTokens, step2Result.outputTokens, step2Cost);
+
+    console.log(`     ✅ 创想家完成 (${step2Result.outputTokens} tokens)`);
+
+    // 合并两步结果
+    const combinedPrompt = step1Result.content + '\n\n' + step2Result.content;
+    const totalInputTokens = step1Result.inputTokens + step2Result.inputTokens;
+    const totalOutputTokens = step1Result.outputTokens + step2Result.outputTokens;
+    const totalLatencyMs = step1Result.latencyMs + step2Result.latencyMs;
 
     // 保存到文件系统
-    const filePath = saveDocument(this.taskId, 1, 'outline_prompt', result.content, 'gemini');
+    const filePath = saveDocument(this.taskId, 1, 'outline_prompt', combinedPrompt, 'gemini+deepseek');
 
     // 保存元数据到 Cortex
     this.cortex.saveArtifact(
       this.taskId, 1, 'outline_prompt',
-      { prompt: result.content, generated_by: 'gemini-2.5-pro' },
-      'gemini-2.5-pro',
-      result.inputTokens + result.outputTokens,
-      result.latencyMs
+      { prompt: combinedPrompt, generated_by: 'gemini-3-pro + deepseek-v3 (supplement)' },
+      'gemini-3-pro+deepseek-v3',
+      totalInputTokens + totalOutputTokens,
+      totalLatencyMs
     );
 
-    // 记录成本
-    const cost = estimateCost('gemini-2.5-pro', result.inputTokens, result.outputTokens);
-    this.cortex.recordCost(this.taskId, 1, 'gemini-2.5-pro', result.inputTokens, result.outputTokens, cost);
-
-    console.log(`  ✅ 大纲提示词已生成 (${result.outputTokens} tokens, ${result.latencyMs}ms)`);
+    console.log(`  ✅ 大纲提示词已生成 (探索派 + 创想家补充)`);
+    console.log(`     📊 总计: ${totalOutputTokens} tokens, ${totalLatencyMs}ms`);
     console.log(`  📁 ${filePath}`);
 
     this.cortex.updateTaskPhase(this.taskId, 1, 'completed');
@@ -1673,9 +1957,13 @@ ${evalsText}
 
   /**
    * Phase 5: 每章节四专家写作 + 互评 + 综合
+   * @param skipSections 已完成的章节号列表（用于断点恢复）
    */
-  private async phase5_writeChapters(): Promise<void> {
+  private async phase5_writeChapters(skipSections: number[] = []): Promise<void> {
     console.log('\n📝 Phase 5: 逐章节写作\n');
+    if (skipSections.length > 0) {
+      console.log(`  ⏭️ 跳过已完成章节: ${skipSections.join(', ')}\n`);
+    }
     this.cortex.updateTaskPhase(this.taskId, 5, 'in_progress');
 
     // 获取 Phase 1.5 的研究文献 (如果有)
@@ -1700,8 +1988,24 @@ ${sources.sources.map((s: any, i: number) => `[${i + 1}] ${s.title} - ${s.url}`)
 
     const outline = this.cortex.getOutline(this.taskId);
     const expertIds = Object.keys(EXPERTS);
+    const totalSections = outline.length;
+
+    // 更新总章节数
+    this.updateCapsule({
+      phase5Progress: {
+        ...this.capsule?.phase5Progress,
+        totalSections,
+        completedSections: skipSections
+      } as TaskCapsule['phase5Progress']
+    });
 
     for (const section of outline) {
+      // 检查是否需要跳过（已完成）
+      if (skipSections.includes(section.section_order)) {
+        console.log(`  ⏭️ 章节 ${section.section_order}: ${section.section_title} (已完成，跳过)`);
+        continue;
+      }
+
       console.log(`\n  📖 章节 ${section.section_order}: ${section.section_title}\n`);
 
       const drafts: { expertId: string; content: string; draftId: number }[] = [];
@@ -1750,8 +2054,15 @@ ${sources.sources.map((s: any, i: number) => `[${i + 1}] ${s.title} - ${s.url}`)
       // 互评 (简化版，只取平均分)
       console.log(`     👁️ 互评中...`);
 
-      // Gemini 综合章节
-      console.log(`     🔬 ${GEMINI_SYNTHESIZER.nickname} 综合章节...`);
+      // 动态选择综合者 (根据章节类型)
+      const synthesizerConfig = SYNTHESIZER_MAP[section.section_order] || SYNTHESIZER_MAP[1];
+      const synthesizerModel = synthesizerConfig.model;
+      const synthesizerRole = synthesizerConfig.role;
+      const synthesizerReason = synthesizerConfig.reason;
+      const synthesizerExpert = EXPERTS[synthesizerModel];
+
+      console.log(`     🔬 ${synthesizerRole} (${synthesizerExpert.nickname}) 综合章节...`);
+      console.log(`        理由: ${synthesizerReason}`);
 
       let draftsText = '';
       for (const draft of drafts) {
@@ -1759,20 +2070,22 @@ ${sources.sources.map((s: any, i: number) => `[${i + 1}] ${s.title} - ${s.url}`)
         draftsText += `\n【${expert.nickname}的版本】\n${draft.content.slice(0, 2000)}...\n`;
       }
 
-      const synthesizePrompt = `请综合以下三位专家撰写的章节内容，生成最终技术报告版本（工程化风格）。
+      const synthesizePrompt = `请综合以下三位专家撰写的章节内容，生成最终技术报告版本。
 
 【章节标题】${section.section_title}
 【章节目标】${section.goal}
+【综合者角色】${synthesizerRole} - ${synthesizerReason}
 
 【三位专家的版本】
 ${draftsText}
 
-综合要求（理工科标准）:
+综合要求:
 1. 保留所有专家版本中的定量数据、性能指标、benchmark 结果
 2. 合并对比表格，去重后形成统一的技术对比矩阵
 3. 保留最佳的架构图/流程图/代码示例
 4. 技术结论必须明确: 推荐方案A还是B，给出依据（数据+推理）
 5. 冲突观点用"争议点"小节单独列出，附各方论据
+6. 结合你的角色特点（${synthesizerRole}），给出独特视角的综合结论
 
 禁止:
 - 用"各有优势"、"需要权衡"等和稀泥式结论
@@ -1780,35 +2093,40 @@ ${draftsText}
 - 把技术内容改写成散文`;
 
       try {
-        const result = await callExpert('gemini-2.5-pro', synthesizePrompt);
+        const result = await callExpert(synthesizerModel, synthesizePrompt);
 
         // 保存综合版本到文件系统
         const filePath = saveDocument(
           this.taskId, 5,
-          `section_${section.section_order}_final`,
+          `section_${section.section_order}_final_synthesized`,
           result.content,
-          'synthesized'
+          synthesizerModel
         );
 
         // 保存为最终版本
         const finalDraftId = this.cortex.saveDraft(
           this.taskId,
           section.section_id,
-          'gemini-2.5-pro',
+          synthesizerModel,
           result.content,
           2  // version 2 = synthesized
         );
         this.cortex.setFinalDraft(finalDraftId);
 
         // 记录成本
-        const cost = estimateCost('gemini-2.5-pro', result.inputTokens, result.outputTokens);
-        this.cortex.recordCost(this.taskId, 5, 'gemini-2.5-pro', result.inputTokens, result.outputTokens, cost);
+        const cost = estimateCost(synthesizerModel, result.inputTokens, result.outputTokens);
+        this.cortex.recordCost(this.taskId, 5, synthesizerModel, result.inputTokens, result.outputTokens, cost);
 
-        console.log(`     ✅ 综合完成`);
+        console.log(`     ✅ ${synthesizerRole} 综合完成`);
         console.log(`     📁 ${filePath}`);
+
+        // 标记章节完成并保存进度
+        this.markSectionComplete(section.section_order, totalSections);
 
       } catch (error) {
         console.log(`     ❌ 综合失败: ${error}`);
+        // 即使失败也保存进度，下次可以重试这个章节
+        throw error;
       }
     }
 
@@ -1942,11 +2260,12 @@ ${draftsText}
 
     // 构建专家团队信息
     const expertRoles: Record<string, string> = {
-      'gemini-2.5-pro': '技术宅 (gemini-2.5-pro) · 严谨审核 · 架构分析',
-      'deepseek-r1': '思考驼 (deepseek-r1) · 深度推理 · 认知科学视角',
-      'deepseek-v3': '鬼才码农 (deepseek-v3) · 创意挑战 · 颠覆性观点',
-      'glm-5': '马王 (glm-5) · 综合调和 · 共识与分歧',
-      'glm-4-plus': '老实人 (glm-4-plus) · 日常编码 · 友善配合'
+      'gemini-2.5-pro': '稳健派 (gemini-2.5-pro) · 严谨务实 · 质量把关',
+      'gemini-3-pro': '探索派 (gemini-3-pro) · 前沿探索 · 创新方案',
+      'deepseek-r1': '审判官 (deepseek-r1) · 深度推理 · 红队验证',
+      'deepseek-v3': '创想家 (deepseek-v3) · 创意编码 · 突破常规',
+      'glm-5': '智囊 (glm-5) · 战略分析 · 决策支持',
+      'glm-4-plus': '建设者 (glm-4-plus) · 日常编码 · 友善配合'
     };
 
     // 获取章节标题列表
@@ -1966,10 +2285,11 @@ ${draftsText}
 │                    ${this.topic} · 四专家会审                        │
 ├─────────────────────────────────────────────────────────────────────────┤
 │  专家团队                                                               │
-│  ├─ 技术宅 (gemini-2.5-pro) · 严谨审核 · 架构分析                      │
-│  ├─ 思考驼 (deepseek-r1) · 深度推理 · 认知科学视角                     │
-│  ├─ 鬼才码农 (deepseek-v3) · 创意挑战 · 颠覆性观点                     │
-│  └─ 马王 (glm-5) · 综合调和 · 共识与分歧                               │
+│  ├─ 稳健派 (gemini-2.5-pro) · 严谨务实 · 质量把关                      │
+│  ├─ 探索派 (gemini-3-pro) · 前沿探索 · 创新方案                        │
+│  ├─ 审判官 (deepseek-r1) · 深度推理 · 红队验证                         │
+│  ├─ 创想家 (deepseek-v3) · 创意编码 · 突破常规                         │
+│  └─ 智囊 (glm-5) · 战略分析 · 决策支持                                 │
 └─────────────────────────────────────────────────────────────────────────┘
 \`\`\`
 
@@ -1994,7 +2314,7 @@ ${Object.entries(expertStats).map(([modelId, stats]) => {
 > ${outline.map((s: any) => `${s.section_order}. ${s.section_title}`).join(' | ')}
 >
 > 专家团队从技术实现、认知科学、创新探索等多个视角进行了深入分析，
-> 最终由马王进行综合调和，形成共识与分歧的平衡观点。
+> 最终由智囊进行综合调和，形成共识与分歧的平衡观点。
 
 ---
 
@@ -2097,17 +2417,15 @@ async function main() {
   const engine = new InsightEngine();
 
   if (resumeTaskId) {
-    // 恢复模式
-    console.log(`🔄 恢复任务: ${resumeTaskId}`);
+    // 恢复模式 - 真正的断点续跑
     const capsule = restoreTaskCapsule(resumeTaskId);
     if (!capsule) {
       console.error(`❌ 未找到任务胶囊: ${resumeTaskId}`);
+      console.log(`\n💡 提示: 任务ID可能不存在或已被清理`);
       process.exit(1);
     }
-    console.log(`📋 主题: ${capsule.topic}`);
-    console.log(`📊 当前进度: Phase ${capsule.currentPhase}`);
-    // TODO: 实现恢复逻辑，从 capsule.currentPhase 继续
-    console.log(`\n💡 提示: 恢复功能需要进一步实现，当前仅展示胶囊状态`);
+    // 调用 resume 方法继续执行
+    await engine.resume(capsule);
   } else {
     // 正常模式
     const taskId = await engine.run(topic, requester);

@@ -6,7 +6,7 @@
  *
  * @version 1.0.0
  * @created 2026-02-08
- * @author Solar (主脑编排) + DeepSeek-V3 (鬼才码农实现)
+ * @author Solar (主脑编排) + DeepSeek-V3 (创想家实现)
  */
 
 import { buildNiumaCall, getNiumaNickname } from './call-niuma';
@@ -84,19 +84,19 @@ export type InsightPhase =
 const EXPERT_TEAM = {
   // 深度分析类
   deep: [
-    { id: 'deepseek-r1', name: '思考驼', strength: '深度推理、本质洞察' },
-    { id: 'gemini-3-pro-preview', name: '千里马', strength: '创新方案、多维权衡' },
-    { id: 'deepseek-v3', name: '鬼才码农', strength: '实现思路、代码结构' },
+    { id: 'deepseek-r1', name: '审判官', strength: '深度推理、本质洞察' },
+    { id: 'gemini-3-pro-preview', name: '探索派', strength: '创新方案、多维权衡' },
+    { id: 'deepseek-v3', name: '创想家', strength: '实现思路、代码结构' },
   ],
   // 架构设计类
   architecture: [
-    { id: 'gemini-2.5-pro', name: '技术宅', strength: '严谨审查、一致性' },
-    { id: 'gemini-3-pro-preview', name: '千里马', strength: '创新探索、方案设计' },
-    { id: 'deepseek-r1', name: '思考驼', strength: '深层分析、风险评估' },
+    { id: 'gemini-2.5-pro', name: '稳健派', strength: '严谨审查、一致性' },
+    { id: 'gemini-3-pro-preview', name: '探索派', strength: '创新探索、方案设计' },
+    { id: 'deepseek-r1', name: '审判官', strength: '深层分析、风险评估' },
   ],
   // 快速评估类
   quick: [
-    { id: 'glm-4-plus', name: '老实人', strength: '日常分析' },
+    { id: 'glm-4-plus', name: '建设者', strength: '日常分析' },
     { id: 'gemini-2-flash', name: '闪电侠', strength: '快速总结' },
   ],
 };
@@ -305,7 +305,7 @@ ${perfContext.rank ? `当前绩效排名: 第${perfContext.rank.rank}名/${perfC
 
     const startTime = Date.now();
 
-    // 使用思考驼进行深度提炼
+    // 使用审判官进行深度提炼
     const expertSummary = this.expertOpinions
       .map(e => `${e.expertName}: ${e.analysis}`)
       .join('\n\n');
@@ -345,7 +345,7 @@ ${expertSummary}
 
     const startTime = Date.now();
 
-    // 使用技术宅进行严谨验证
+    // 使用稳健派进行严谨验证
     const call = buildNiumaCall({
       model: 'gemini-2.5-pro',
       task: `验证以下洞察的可靠性：

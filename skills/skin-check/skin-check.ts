@@ -243,28 +243,28 @@ async function expertReview(analysis: SkinAnalysis): Promise<ExpertReview[]> {
 
   const experts = [
     {
-      name: "技术宅",
+      name: "稳健派",
       model: "gemini-2.5-pro",
       role: "严谨医学分析",
-      system: "你是技术宅，一个严谨务实的皮肤科专家。从医学角度分析皮肤问题。"
+      system: "你是稳健派，一个严谨务实的皮肤科专家。从医学角度分析皮肤问题。"
     },
     {
-      name: "思考驼",
+      name: "审判官",
       model: "deepseek-r1",
       role: "深度推理",
-      system: "你是思考驼，擅长深度推理。从生活习惯、作息等多角度分析皮肤问题的根源。"
+      system: "你是审判官，擅长深度推理。从生活习惯、作息等多角度分析皮肤问题的根源。"
     },
     {
-      name: "马王",
+      name: "智囊",
       model: "glm-5",
       role: "生活建议",
-      system: "你是马王，中文友好的护肤顾问。给出实用的日常护理建议和产品推荐。"
+      system: "你是智囊，中文友好的护肤顾问。给出实用的日常护理建议和产品推荐。"
     },
     {
-      name: "千里马",
+      name: "探索派",
       model: "gemini-3-pro-preview",
       role: "综合评估",
-      system: "你是千里马，擅长权衡和综合评估。给出平衡的整体建议。"
+      system: "你是探索派，擅长权衡和综合评估。给出平衡的整体建议。"
     }
   ];
 
@@ -284,10 +284,10 @@ async function expertReview(analysis: SkinAnalysis): Promise<ExpertReview[]> {
         // API key 缺失时使用模拟回复
         if (error.message.includes("未设置")) {
           const mockReplies: Record<string, string> = {
-            "技术宅": "建议增加清洁频率，使用温和型洁面产品。色斑可能需要专业美白治疗。毛孔问题可通过定期去角质改善。",
-            "思考驼": "皮肤出油和毛孔粗大可能与作息、饮食相关。建议规律作息、多喝水、减少油炸食品摄入。压力也会影响皮肤状态。",
-            "马王": "推荐使用含烟酰胺成分的精华液淡化色斑，水杨酸产品收缩毛孔。日常注意防晒（SPF30+），选择清爽型乳液。",
-            "千里马": "整体状况良好，属于常见的混合性皮肤。注意T区和U区分区护理，保持清洁和保湿平衡。无需过度担心，坚持日常护理即可。"
+            "稳健派": "建议增加清洁频率，使用温和型洁面产品。色斑可能需要专业美白治疗。毛孔问题可通过定期去角质改善。",
+            "审判官": "皮肤出油和毛孔粗大可能与作息、饮食相关。建议规律作息、多喝水、减少油炸食品摄入。压力也会影响皮肤状态。",
+            "智囊": "推荐使用含烟酰胺成分的精华液淡化色斑，水杨酸产品收缩毛孔。日常注意防晒（SPF30+），选择清爽型乳液。",
+            "探索派": "整体状况良好，属于常见的混合性皮肤。注意T区和U区分区护理，保持清洁和保湿平衡。无需过度担心，坚持日常护理即可。"
           };
           return {
             expert: expert.name,
@@ -390,10 +390,10 @@ ${report.concerns.length > 0
 
 function getExpertEmoji(expertName: string): string {
   const emojiMap: Record<string, string> = {
-    "技术宅": "🔬",
-    "思考驼": "🐪",
-    "马王": "🐴",
-    "千里马": "🦄"
+    "稳健派": "🔬",
+    "审判官": "🐪",
+    "智囊": "🐴",
+    "探索派": "🦄"
   };
   return emojiMap[expertName] || "👤";
 }

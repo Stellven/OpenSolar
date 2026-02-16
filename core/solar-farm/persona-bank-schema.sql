@@ -188,7 +188,7 @@ END;
 -- 种子数据：初始人格配置
 -- ============================================================
 
--- 技术宅 (Gemini 2.5 Pro) - 严谨审核
+-- 稳健派 (Gemini 2.5 Pro) - 严谨审核
 INSERT OR IGNORE INTO sys_persona_configs
 (persona_id, model, role, big_five_json, behavioral_guidelines, language_style, status)
 VALUES (
@@ -201,7 +201,7 @@ VALUES (
     'active'
 );
 
--- 思考驼 (DeepSeek R1) - 深度推理
+-- 审判官 (DeepSeek R1) - 深度推理
 INSERT OR IGNORE INTO sys_persona_configs
 (persona_id, model, role, big_five_json, behavioral_guidelines, language_style, status)
 VALUES (
@@ -214,7 +214,7 @@ VALUES (
     'active'
 );
 
--- 鬼才码农 (DeepSeek V3) - 创意实现
+-- 创想家 (DeepSeek V3) - 创意实现
 INSERT OR IGNORE INTO sys_persona_configs
 (persona_id, model, role, big_five_json, behavioral_guidelines, language_style, status)
 VALUES (
@@ -227,7 +227,7 @@ VALUES (
     'active'
 );
 
--- 千里马 (Gemini 3 Pro) - 创新探索
+-- 探索派 (Gemini 3 Pro) - 创新探索
 INSERT OR IGNORE INTO sys_persona_configs
 (persona_id, model, role, big_five_json, behavioral_guidelines, language_style, status)
 VALUES (

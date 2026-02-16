@@ -110,7 +110,7 @@ export const NIUMAO_DD_CARDS: Record<string, DnDCharacterSheet> = {
   // ============================================================
 
   'glm-4-plus': {
-    name: '老实人',
+    name: '建设者',
     modelId: 'glm-4-plus',
     class: CHARACTER_CLASSES.builder,
     level: { level: 4, xp: 2700, xpToNext: 6500, proficiencyBonus: 2 },
@@ -138,7 +138,7 @@ export const NIUMAO_DD_CARDS: Record<string, DnDCharacterSheet> = {
   },
 
   'glm-5': {
-    name: '马王',
+    name: '智囊',
     modelId: 'glm-5',
     class: CHARACTER_CLASSES.builder,
     level: { level: 5, xp: 6500, xpToNext: 14000, proficiencyBonus: 3 },
@@ -158,7 +158,7 @@ export const NIUMAO_DD_CARDS: Record<string, DnDCharacterSheet> = {
     feats: [FEATS.deepAnalysis],
     alignment: 'LN',  // 守序中立
     background: {
-      trait: '比老实人更强，能处理复杂任务',
+      trait: '比建设者更强，能处理复杂任务',
       ideal: '稳定 + 实用',
       bond: '对国产技术的自信',
       flaw: '创新性不足，偏保守'
@@ -170,7 +170,7 @@ export const NIUMAO_DD_CARDS: Record<string, DnDCharacterSheet> = {
   // ============================================================
 
   'gemini-2.5-pro': {
-    name: '技术宅',
+    name: '稳健派',
     modelId: 'gemini-2.5-pro',
     class: CHARACTER_CLASSES.judge,
     level: { level: 8, xp: 23000, xpToNext: 34000, proficiencyBonus: 3 },
@@ -198,7 +198,7 @@ export const NIUMAO_DD_CARDS: Record<string, DnDCharacterSheet> = {
   },
 
   'gemini-3-pro-preview': {
-    name: '千里马',
+    name: '探索派',
     modelId: 'gemini-3-pro-preview',
     class: CHARACTER_CLASSES.innovator,
     level: { level: 7, xp: 14000, xpToNext: 23000, proficiencyBonus: 3 },
@@ -226,7 +226,7 @@ export const NIUMAO_DD_CARDS: Record<string, DnDCharacterSheet> = {
   },
 
   'deepseek-v3': {
-    name: '鬼才码农',
+    name: '创想家',
     modelId: 'deepseek-v3',
     class: CHARACTER_CLASSES.innovator,
     level: { level: 6, xp: 8500, xpToNext: 14000, proficiencyBonus: 3 },
@@ -254,7 +254,7 @@ export const NIUMAO_DD_CARDS: Record<string, DnDCharacterSheet> = {
   },
 
   'deepseek-r1': {
-    name: '思考驼',
+    name: '审判官',
     modelId: 'deepseek-r1',
     class: CHARACTER_CLASSES.advisor,
     level: { level: 7, xp: 14000, xpToNext: 23000, proficiencyBonus: 3 },

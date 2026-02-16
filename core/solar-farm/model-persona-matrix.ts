@@ -66,7 +66,7 @@ export const MODEL_PROFILES: Record<string, ModelProfile> = {
   // === 主力牛马 (P4 日常编码) ===
   'glm-4-plus': {
     modelId: 'glm-4-plus',
-    nickname: '老实人',
+    nickname: '建设者',
     costInput: 0.0005,
     costOutput: 0.0015,
     contextWindow: 128000,
@@ -76,7 +76,7 @@ export const MODEL_PROFILES: Record<string, ModelProfile> = {
 
   'glm-5': {
     modelId: 'glm-5',
-    nickname: '马王',
+    nickname: '智囊',
     costInput: 0.001,
     costOutput: 0.003,
     contextWindow: 128000,
@@ -87,7 +87,7 @@ export const MODEL_PROFILES: Record<string, ModelProfile> = {
   // === 技术专家 (P3 复杂分析) ===
   'gemini-2.5-pro': {
     modelId: 'gemini-2.5-pro',
-    nickname: '技术宅',
+    nickname: '稳健派',
     costInput: 0.00125,
     costOutput: 0.005,
     contextWindow: 1000000,
@@ -97,7 +97,7 @@ export const MODEL_PROFILES: Record<string, ModelProfile> = {
 
   'gemini-3-pro-preview': {
     modelId: 'gemini-3-pro-preview',
-    nickname: '千里马',
+    nickname: '探索派',
     costInput: 0.00125,
     costOutput: 0.005,
     contextWindow: 1000000,
@@ -107,7 +107,7 @@ export const MODEL_PROFILES: Record<string, ModelProfile> = {
 
   'deepseek-v3': {
     modelId: 'deepseek-v3',
-    nickname: '鬼才码农',
+    nickname: '创想家',
     costInput: 0.0014,
     costOutput: 0.0028,
     contextWindow: 64000,
@@ -117,7 +117,7 @@ export const MODEL_PROFILES: Record<string, ModelProfile> = {
 
   'deepseek-r1': {
     modelId: 'deepseek-r1',
-    nickname: '思考驼',
+    nickname: '审判官',
     costInput: 0.0014,
     costOutput: 0.0028,
     contextWindow: 64000,
@@ -175,7 +175,7 @@ export const DUAL_MAIN_BRAIN = {
 
   // 治理官：怀疑门禁、质量门控
   auditor: {
-    model: 'gemini-2.5-pro',  // 技术宅，一致性最高
+    model: 'gemini-2.5-pro',  // 稳健派，一致性最高
     role: 'governor',
     knobs: {
       rigor: 5,
@@ -262,7 +262,7 @@ export const WORKER_GROUP = {
 
   // 建设者：编码实现
   builder: {
-    model: 'glm-4-plus',  // 老实人
+    model: 'glm-4-plus',  // 建设者
     role: 'builder',
     knobs: ROLES_V3.builder.knobs,
     trigger: ['implement', 'code', 'build']

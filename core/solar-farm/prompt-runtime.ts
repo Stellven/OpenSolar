@@ -1410,19 +1410,19 @@ if (import.meta.main) {
 
       // 模型 → 角色映射 (v2.0)
       const MODEL_TO_ROLE: Record<string, keyof typeof ROLE_PATCHES> = {
-        // 技术宅 - 严谨审查
+        // 稳健派 - 严谨审查
         'gemini-2-pro': 'verifier',
         'gemini-2.5-pro': 'verifier',
         'gemini-2.5-flash': 'builder',
         'gemini-2-flash': 'builder',  // 闪电侠
-        // 千里马 - 创新探索
+        // 探索派 - 创新探索
         'gemini-3-pro-preview': 'explorer',
         'gemini-3-flash-preview': 'explorer',
-        // 鬼才码农 - 创意编码
+        // 创想家 - 创意编码
         'deepseek-v3': 'creator',
-        // 思考驼 - 深度推理/裁判
+        // 审判官 - 深度推理/裁判
         'deepseek-r1': 'judge',
-        // 老实人 - 批量执行
+        // 建设者 - 批量执行
         'glm-4-plus': 'builder',
         'glm-5': 'architect',
         // 小快手 - 批量执行

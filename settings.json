@@ -94,6 +94,10 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/post-tool-dispatcher.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/personality-injector.sh"
           }
         ]
       }

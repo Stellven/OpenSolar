@@ -3,9 +3,9 @@
  *
  * 七阶段架构 + 三层持久化 + 专家互评
  *
- * 架构设计: 技术宅 (Gemini 2.5 Pro)
- * 风险评估: 思考驼 (DeepSeek R1)
- * 代码实现: 鬼才码农 (DeepSeek V3)
+ * 架构设计: 稳健派 (Gemini 2.5 Pro)
+ * 风险评估: 审判官 (DeepSeek R1)
+ * 代码实现: 创想家 (DeepSeek V3)
  *
  * @version 2.0.0
  * @created 2026-02-08
@@ -46,7 +46,7 @@ import {
 } from '../insight-agent/state-manager';
 
 // ============================================================
-// 类型定义 (来自技术宅设计)
+// 类型定义 (来自稳健派设计)
 // ============================================================
 
 export interface InsightSession {
@@ -106,7 +106,7 @@ export interface PerformanceRecord {
 
 /**
  * 参考文献接口 (v2.1 新增)
- * 设计来源: 鬼才码农 (deepseek-v3)
+ * 设计来源: 创想家 (deepseek-v3)
  */
 export interface Reference {
   url?: string;
@@ -462,9 +462,10 @@ const MODEL_CONFIGS: Record<string, ModelConfig> = {
     apiKeyEnv: 'GOOGLE_API_KEY',
     maxTokens: 16384
   },
+  // 别名: gemini-2-flash -> gemini-2.5-flash (闪电侠/探索者)
   'gemini-2-flash': {
     provider: 'google',
-    modelId: 'gemini-2.0-flash',
+    modelId: 'gemini-2.5-flash',
     apiKeyEnv: 'GOOGLE_API_KEY',
     maxTokens: 8192
   }
@@ -883,7 +884,7 @@ class WebSearchClient {
 
 // ============================================================
 // 绩效注入系统 (v2.1 新增)
-// 设计来源: 鬼才码农 (deepseek-v3)
+// 设计来源: 创想家 (deepseek-v3)
 // 功能: 将历史绩效注入专家系统提示词，形成激励反馈闭环
 // ============================================================
 
@@ -1102,7 +1103,7 @@ ${competitionInfo}
 
 // ============================================================
 // 参考文献工具函数 (v2.1 新增)
-// 设计来源: 千里马 (gemini-3-pro-preview)
+// 设计来源: 探索派 (gemini-3-pro-preview)
 // 功能: 为写作专家过滤和格式化相关参考文献
 // ============================================================
 
@@ -1637,12 +1638,12 @@ ${chapters.map((ch, idx) => `      <div class="chapter">
   private getModelNickname(model: string | undefined): string {
     if (!model) return '未知';
     const nicknames: Record<string, string> = {
-      'glm-5': '老实人 GLM-5',
-      'glm-4-plus': '老实人 GLM-4',
-      'gemini-2.5-pro': '技术宅',
-      'gemini-3-pro-preview': '千里马',
-      'deepseek-v3': '鬼才码农',
-      'deepseek-r1': '思考驼'
+      'glm-5': '建设者 GLM-5',
+      'glm-4-plus': '建设者 GLM-4',
+      'gemini-2.5-pro': '稳健派',
+      'gemini-3-pro-preview': '探索派',
+      'deepseek-v3': '创想家',
+      'deepseek-r1': '审判官'
     };
     return nicknames[model] || model;
   }
@@ -1880,8 +1881,8 @@ ${webContext}
 }
 `;
 
-    // ========== Step 4: 调用思考驼进行深度规划 ==========
-    console.log('🐪 调用思考驼 (deepseek-r1) 进行深度规划...');
+    // ========== Step 4: 调用审判官进行深度规划 ==========
+    console.log('🐪 调用审判官 (deepseek-r1) 进行深度规划...');
     const persona = EXPERT_PERSONAS['deepseek-r1'];
     const planningResult = await BrainRouterClient.callWithRetry({
       model: 'deepseek-r1',
@@ -2189,8 +2190,8 @@ ${cortexOutlineContext}
 
     // ========== Step 2: 并行调用两个专家生成大纲 ==========
     console.log('🔄 并行调用专家生成大纲...');
-    console.log('   千里马 (gemini-3-pro): 创新视角');
-    console.log('   鬼才码农 (deepseek-v3): 创意结构');
+    console.log('   探索派 (gemini-3-pro): 创新视角');
+    console.log('   创想家 (deepseek-v3): 创意结构');
 
     const [outline1, outline2] = await Promise.all([
       BrainRouterClient.callWithRetry({
@@ -2205,15 +2206,15 @@ ${cortexOutlineContext}
       })
     ]);
 
-    // ========== Step 3: 技术宅作为挑战者审核 ==========
-    console.log('🔍 技术宅审核两份大纲...');
+    // ========== Step 3: 稳健派作为挑战者审核 ==========
+    console.log('🔍 稳健派审核两份大纲...');
     const reviewPrompt = `
 你是"挑战者"，请严格审核以下两份大纲：
 
-【大纲A - 千里马】
+【大纲A - 探索派】
 ${outline1}
 
-【大纲B - 鬼才码农】
+【大纲B - 创想家】
 ${outline2}
 
 评估标准：
@@ -2251,7 +2252,7 @@ ${outline2}
     // 🎯 Brain Separation: Result Compression - 立即压缩大纲结果
     console.log('🗜️ 压缩大纲结果 (Brain Separation)...');
 
-    // 压缩 outline1 (千里马)
+    // 压缩 outline1 (探索派)
     let compressedOutline1: string;
     try {
       const jsonMatch = outline1.match(/```json\s*([\s\S]*?)\s*```/) || outline1.match(/\{[\s\S]*\}/);
@@ -2259,7 +2260,7 @@ ${outline2}
         const data = JSON.parse(jsonMatch[1] || jsonMatch[0]);
         const chapters = data.chapters || data.outline?.chapters || [];
         compressedOutline1 = JSON.stringify({
-          expert: '千里马',
+          expert: '探索派',
           chapterCount: chapters.length,
           totalWords: chapters.reduce((sum: number, ch: any) => sum + (ch.wordCount || 0), 0),
           chapters: chapters.map((ch: any) => ({
@@ -2267,15 +2268,15 @@ ${outline2}
             wordCount: ch.wordCount || 0
           }))
         }, null, 2);
-        console.log(`   ✅ 千里马大纲压缩: ${chapters.length} 章节`);
+        console.log(`   ✅ 探索派大纲压缩: ${chapters.length} 章节`);
       } else {
-        compressedOutline1 = JSON.stringify({ expert: '千里马', raw: outline1.substring(0, 500) + '...' }, null, 2);
+        compressedOutline1 = JSON.stringify({ expert: '探索派', raw: outline1.substring(0, 500) + '...' }, null, 2);
       }
     } catch (e) {
-      compressedOutline1 = JSON.stringify({ expert: '千里马', error: '解析失败', raw: outline1.substring(0, 500) + '...' }, null, 2);
+      compressedOutline1 = JSON.stringify({ expert: '探索派', error: '解析失败', raw: outline1.substring(0, 500) + '...' }, null, 2);
     }
 
-    // 压缩 outline2 (鬼才码农)
+    // 压缩 outline2 (创想家)
     let compressedOutline2: string;
     try {
       const jsonMatch = outline2.match(/```json\s*([\s\S]*?)\s*```/) || outline2.match(/\{[\s\S]*\}/);
@@ -2283,7 +2284,7 @@ ${outline2}
         const data = JSON.parse(jsonMatch[1] || jsonMatch[0]);
         const chapters = data.chapters || data.outline?.chapters || [];
         compressedOutline2 = JSON.stringify({
-          expert: '鬼才码农',
+          expert: '创想家',
           chapterCount: chapters.length,
           totalWords: chapters.reduce((sum: number, ch: any) => sum + (ch.wordCount || 0), 0),
           chapters: chapters.map((ch: any) => ({
@@ -2291,15 +2292,15 @@ ${outline2}
             wordCount: ch.wordCount || 0
           }))
         }, null, 2);
-        console.log(`   ✅ 鬼才码农大纲压缩: ${chapters.length} 章节`);
+        console.log(`   ✅ 创想家大纲压缩: ${chapters.length} 章节`);
       } else {
-        compressedOutline2 = JSON.stringify({ expert: '鬼才码农', raw: outline2.substring(0, 500) + '...' }, null, 2);
+        compressedOutline2 = JSON.stringify({ expert: '创想家', raw: outline2.substring(0, 500) + '...' }, null, 2);
       }
     } catch (e) {
-      compressedOutline2 = JSON.stringify({ expert: '鬼才码农', error: '解析失败', raw: outline2.substring(0, 500) + '...' }, null, 2);
+      compressedOutline2 = JSON.stringify({ expert: '创想家', error: '解析失败', raw: outline2.substring(0, 500) + '...' }, null, 2);
     }
 
-    // 压缩 finalOutline (技术宅)
+    // 压缩 finalOutline (稳健派)
     let compressedFinalOutline: string;
     try {
       const jsonMatch = finalOutline.match(/```json\s*([\s\S]*?)\s*```/) || finalOutline.match(/\{[\s\S]*\}/);
@@ -2308,7 +2309,7 @@ ${outline2}
         const evaluation = data.evaluation || {};
         const chapters = data.finalOutline?.chapters || data.chapters || [];
         compressedFinalOutline = JSON.stringify({
-          expert: '技术宅',
+          expert: '稳健派',
           evaluation: {
             outlineA: { score: evaluation.outlineA?.score || 0, prosCount: evaluation.outlineA?.pros?.length || 0 },
             outlineB: { score: evaluation.outlineB?.score || 0, prosCount: evaluation.outlineB?.pros?.length || 0 }
@@ -2321,21 +2322,21 @@ ${outline2}
             wordCount: ch.wordCount || 0
           }))
         }, null, 2);
-        console.log(`   ✅ 技术宅最终大纲压缩: ${chapters.length} 章节, 评分 A:${evaluation.outlineA?.score || 0} B:${evaluation.outlineB?.score || 0}`);
+        console.log(`   ✅ 稳健派最终大纲压缩: ${chapters.length} 章节, 评分 A:${evaluation.outlineA?.score || 0} B:${evaluation.outlineB?.score || 0}`);
       } else {
-        compressedFinalOutline = JSON.stringify({ expert: '技术宅', raw: finalOutline.substring(0, 500) + '...' }, null, 2);
+        compressedFinalOutline = JSON.stringify({ expert: '稳健派', raw: finalOutline.substring(0, 500) + '...' }, null, 2);
       }
     } catch (e) {
-      compressedFinalOutline = JSON.stringify({ expert: '技术宅', error: '解析失败', raw: finalOutline.substring(0, 500) + '...' }, null, 2);
+      compressedFinalOutline = JSON.stringify({ expert: '稳健派', error: '解析失败', raw: finalOutline.substring(0, 500) + '...' }, null, 2);
     }
 
     // ========== Step 4: 记录三个大纲到 insight_outlines ==========
     console.log('💾 记录大纲到数据库 (Brain Separation - 压缩版本)...');
     try {
       const outlines = [
-        { expertModel: 'gemini-3-pro-preview', expertNickname: '千里马', content: compressedOutline1, role: 'generator' },
-        { expertModel: 'deepseek-v3', expertNickname: '鬼才码农', content: compressedOutline2, role: 'generator' },
-        { expertModel: 'gemini-2.5-pro', expertNickname: '技术宅', content: compressedFinalOutline, role: 'challenger' }
+        { expertModel: 'gemini-3-pro-preview', expertNickname: '探索派', content: compressedOutline1, role: 'generator' },
+        { expertModel: 'deepseek-v3', expertNickname: '创想家', content: compressedOutline2, role: 'generator' },
+        { expertModel: 'gemini-2.5-pro', expertNickname: '稳健派', content: compressedFinalOutline, role: 'challenger' }
       ];
 
       for (let i = 0; i < outlines.length; i++) {
@@ -2399,8 +2400,8 @@ ${outline2}
     await this.persistence.saveSession(this.session);
 
     // 保存所有大纲到文件 (Brain Separation - 压缩版本)
-    this.persistence.saveChapterToFile(this.session.sessionId, 'outline_A_千里马', compressedOutline1);
-    this.persistence.saveChapterToFile(this.session.sessionId, 'outline_B_鬼才码农', compressedOutline2);
+    this.persistence.saveChapterToFile(this.session.sessionId, 'outline_A_探索派', compressedOutline1);
+    this.persistence.saveChapterToFile(this.session.sessionId, 'outline_B_创想家', compressedOutline2);
     this.persistence.saveChapterToFile(this.session.sessionId, 'outline_final', compressedFinalOutline);
 
     // v2.1: 写入中枢神经 (CortexWriter)
@@ -2537,7 +2538,7 @@ ${outline2}
 
   /**
    * 写入语义记忆 (三层持久化 - Layer 3: Cortex)
-   * 设计来源: 鬼才码农 (deepseek-v3)
+   * 设计来源: 创想家 (deepseek-v3)
    */
   private async writeToMemory(
     insightId: string,
@@ -2594,7 +2595,7 @@ ${outline2}
 
   // ============================================================
   // CortexWriter: 阶段专用记忆写入方法
-  // 设计来源: 思考驼 (deepseek-r1) - 每阶段写入中枢神经
+  // 设计来源: 审判官 (deepseek-r1) - 每阶段写入中枢神经
   // ============================================================
 
   /**
@@ -3245,7 +3246,7 @@ ${outline2}
 
   // ============================================================
   // crossEvaluateDispatch: 调度阶段交叉互评
-  // 设计来源: 技术宅 (gemini-2.5-pro) - 严谨一致、高可靠
+  // 设计来源: 稳健派 (gemini-2.5-pro) - 严谨一致、高可靠
   // ============================================================
 
   /**
@@ -3265,7 +3266,7 @@ ${outline2}
     suggestions: string;
     success: boolean;
   }>> {
-    // 技术宅设计: 选择互补型专家组合
+    // 稳健派设计: 选择互补型专家组合
     // gemini-2.5-pro (C:1.0 严谨) + deepseek-r1 (O:0.8 深思)
     const reviewExperts = [
       { model: 'gemini-2.5-pro', role: '一致性审核', focus: '结构合理性与规则遵循' },
@@ -3370,7 +3371,7 @@ ${scheduleSummary}
 
   /**
    * 生成专家审核回退意见 (当专家调用失败时使用)
-   * 设计来源: 鬼才码农 (deepseek-v3) - Phase 6 多专家交响乐团
+   * 设计来源: 创想家 (deepseek-v3) - Phase 6 多专家交响乐团
    */
   private generateFallbackReview(role: string): string {
     const fallbackTemplates: Record<string, string> = {
@@ -3681,7 +3682,7 @@ ${scheduleSummary}
     }
 
     // Step 3.5: 调度方案交叉互评
-    // 设计来源: 技术宅 (gemini-2.5-pro) - 模块化、可测试、严谨一致
+    // 设计来源: 稳健派 (gemini-2.5-pro) - 模块化、可测试、严谨一致
     console.log('\n   🎯 调度互评: crossEvaluateDispatch...');
 
     // ✨ Brain Separation: Compressed Context - 只发送统计摘要给 worker brains
@@ -4455,12 +4456,12 @@ ${chapter.content?.substring(0, 3000) || '(无内容)'}
   }
 
   // ============================================================
-  // 阶段6: 综合 (Synthesis) - 思考驼全文审核 v2.1
+  // 阶段6: 综合 (Synthesis) - 审判官全文审核 v2.1
   // ============================================================
   async stage6_synthesis(): Promise<string> {
     if (!this.session) throw new Error('请先执行 stage5_reviewing');
 
-    console.log('\n🔗 阶段6: 内容综合 (思考驼主导)');
+    console.log('\n🔗 阶段6: 内容综合 (审判官主导)');
 
     // ========== Step 0: Evidence First - 查 Cortex 知识库 (Principle 5) ==========
     console.log('🔍 Evidence First: 查询 Cortex 知识库...');
@@ -4725,7 +4726,7 @@ ${chapter.content?.substring(0, 3000) || '(无内容)'}
     } catch (e) { /* 忽略 */ }
 
     // ========== Step 3: 多专家交响乐团模式审核 ==========
-    // 设计来源: 思考驼 (deepseek-r1) + 鬼才码农 (deepseek-v3)
+    // 设计来源: 审判官 (deepseek-r1) + 创想家 (deepseek-v3)
     console.log('  🎼 交响乐团模式: 多专家并行审核...');
 
     // 专家团队配置 (加权评分)
@@ -4930,8 +4931,8 @@ ${referencesSection}
 | 平均质量 | ${avgScore.toFixed(1)}/10 |
 | 参考文献 | ${this.session.references.length} 条 |
 | 生成引擎 | InsightAgent v2.1 |
-| 规划专家 | deepseek-r1 (思考驼) |
-| 综合专家 | deepseek-r1 (思考驼) |
+| 规划专家 | deepseek-r1 (审判官) |
+| 综合专家 | deepseek-r1 (审判官) |
 | 润色风格 | Solar 双面娇娃 💪🌸 |
 `;
 
@@ -5365,7 +5366,7 @@ ${r.chunkReviews.map(cr => `**块 ${cr.chunkIndex + 1}/${reportChunks.length}:**
       }
     } catch (e) { /* 忽略 */ }
 
-    // ========== Step 3: 添加规划者 (思考驼) ==========
+    // ========== Step 3: 添加规划者 (审判官) ==========
     if (!modelStats['deepseek-r1']) {
       modelStats['deepseek-r1'] = {
         scores: [9], tasks: 0, roles: new Set(),
@@ -6502,7 +6503,7 @@ InsightAgent v2.0 - 洞察报告生成引擎
 特性:
   • 七阶段流程: 规划 → 大纲 → 调度 → 写作 → 审核 → 综合 → 收尾
   • 专家互评: 不同模型交叉审核，避免自吹自擂
-  • 挑战者机制: 技术宅担任挑战者，严格把关
+  • 挑战者机制: 稳健派担任挑战者，严格把关
   • 三层持久化: SQLite + FileSystem + Cortex
   • 断点续传: 任务中断后可从上次阶段恢复
   • 绩效追踪: 记录每个牛马的表现
