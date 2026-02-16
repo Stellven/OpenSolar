@@ -13,7 +13,7 @@
 import { Database } from "bun:sqlite";
 import { homedir } from "os";
 import { join } from "path";
-import { mkdirSync, writeFileSync, existsSync, readdirSync, statSync } from "fs";
+import { mkdirSync, writeFileSync, existsSync, readdirSync, statSync, readFileSync } from "fs";
 
 const DB_PATH = `${homedir()}/.solar/solar.db`;
 const CORTEX_ROOT = `${homedir()}/.solar/cortex`;
@@ -327,6 +327,7 @@ function generateDashboard(db: Database) {
     entities: 0,
     relations: 0,
     artifacts: 0,
+    files: 0,
   };
 
   try {
@@ -338,11 +339,19 @@ function generateDashboard(db: Database) {
     // Ignore
   }
 
+  // 计算 token 统计 (简化版)
+  const tokenStats = analyzeTokens();
+
   const today = new Date().toISOString().split("T")[0];
+
+  // 生成利用率进度条
+  const utilizationBar = generateProgressBar(tokenStats.utilization, 100, 20);
 
   const content = `---
 type: dashboard
 generated: ${today}
+tokens: ${tokenStats.total}
+utilization: ${tokenStats.utilization.toFixed(1)}
 ---
 
 # Cortex Dashboard
@@ -357,7 +366,28 @@ generated: ${today}
 | 知识实体 | ${stats.entities} |
 | 关系连接 | ${stats.relations} |
 | 分析产物 | ${stats.artifacts} |
-| **总计** | **${stats.sources + stats.entities + stats.relations + stats.artifacts}** |
+| 文件总数 | ${tokenStats.files} |
+| **数据总计** | **${stats.sources + stats.entities + stats.relations + stats.artifacts}** |
+
+## 🎯 Token 使用 (Letta-style)
+
+| 指标 | 值 |
+|------|------|
+| **Total Tokens** | ${tokenStats.total.toLocaleString()} |
+| **Context Window** | 200,000 |
+| **Utilization** | ${tokenStats.utilization.toFixed(1)}% |
+
+${utilizationBar}
+
+### 按类型分布
+
+| 类型 | Tokens | 占比 |
+|------|--------|------|
+| Reference | ${tokenStats.byType.reference.toLocaleString()} | ${((tokenStats.byType.reference / tokenStats.total) * 100).toFixed(1)}% |
+| Entity | ${tokenStats.byType.entity.toLocaleString()} | ${((tokenStats.byType.entity / tokenStats.total) * 100).toFixed(1)}% |
+| System | ${tokenStats.byType.system.toLocaleString()} | ${((tokenStats.byType.system / tokenStats.total) * 100 || 0).toFixed(1)}% |
+
+${tokenStats.utilization > 80 ? "⚠️ **需要摘要**: Context utilization > 80%\n" : ""}${tokenStats.utilization > 60 && tokenStats.utilization <= 80 ? "💡 **监控中**: Context utilization 60-80%\n" : ""}
 
 ## 📁 目录结构
 
@@ -374,6 +404,19 @@ cortex/
 └── stats/         # 统计信息
 \`\`\`
 
+## 🔧 管理命令
+
+\`\`\`bash
+# 查看详细 token 报告
+bun ~/.claude/core/cortex/cortex-files/token-tracker.ts stats
+
+# 编译为 LLM context
+bun ~/.claude/core/cortex/cortex-files/compiler.ts compile
+
+# 批量摘要 (降低 token)
+bun ~/.claude/core/cortex/cortex-files/summarizer.ts batch --apply
+\`\`\`
+
 ## 🔄 最近更新
 
 查看 Git 历史了解最近变更:
@@ -385,6 +428,80 @@ cd ~/.solar/cortex && git log --oneline -10
 
   writeFileSync(join(CORTEX_ROOT, "stats", "DASHBOARD.md"), content, "utf-8");
   console.log("📊 Dashboard 已生成");
+}
+
+// Token 分析 (内联简化版)
+interface TokenAnalysis {
+  total: number;
+  files: number;
+  utilization: number;
+  byType: {
+    system: number;
+    reference: number;
+    entity: number;
+    artifact: number;
+    memory: number;
+  };
+}
+
+function analyzeTokens(): TokenAnalysis {
+  const result: TokenAnalysis = {
+    total: 0,
+    files: 0,
+    utilization: 0,
+    byType: { system: 0, reference: 0, entity: 0, artifact: 0, memory: 0 },
+  };
+
+  const dirTypeMap: Record<string, string> = {
+    system: "system",
+    "knowledge/research": "reference",
+    "knowledge/architecture": "reference",
+    "knowledge/patterns": "reference",
+    "knowledge/lessons": "reference",
+    "knowledge/entities/technologies": "entity",
+    "knowledge/entities/people": "entity",
+    "knowledge/entities/concepts": "entity",
+    artifacts: "artifact",
+    memory: "memory",
+  };
+
+  for (const [dir, type] of Object.entries(dirTypeMap)) {
+    const fullPath = join(CORTEX_ROOT, dir);
+    if (!existsSync(fullPath)) continue;
+
+    const files = readdirSync(fullPath).filter((f) => f.endsWith(".md"));
+
+    for (const file of files) {
+      const filePath = join(fullPath, file);
+      const content = readFileSync(filePath, "utf-8");
+      const body = content.replace(/^---\n[\s\S]*?\n---\n?/, "");
+
+      // 简化 token 估算
+      const chineseChars = (body.match(/[\u4e00-\u9fa5]/g) || []).length;
+      const otherChars = body.length - chineseChars;
+      const tokens = Math.ceil(chineseChars / 1.5 + otherChars / 4);
+
+      result.total += tokens;
+      result.files++;
+      result.byType[type as keyof typeof result.byType] += tokens;
+    }
+  }
+
+  result.utilization = (result.total / 200000) * 100;
+  return result;
+}
+
+function generateProgressBar(value: number, max: number, width: number): string {
+  const filled = Math.round((value / max) * width);
+  const empty = width - filled;
+  const bar = "█".repeat(Math.min(filled, width)) + "░".repeat(empty);
+
+  let status = "";
+  if (value > 80) status = "🔴";
+  else if (value > 60) status = "🟡";
+  else status = "🟢";
+
+  return `${status} \`${bar}\` ${value.toFixed(1)}%`;
 }
 
 function gitCommit(stats: SyncStats) {
