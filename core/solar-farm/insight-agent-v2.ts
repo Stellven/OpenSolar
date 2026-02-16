@@ -21,6 +21,12 @@ import { ReportStructure, Reference as ReportReference, StateData, PhaseOutput }
 import { PersonaSelector, PhaseType } from './persona-bank-selector';
 import { PersonaRecorder } from './persona-bank-recorder';
 import {
+  generateExpertSystemPrompt,
+  getExpertInfo,
+  getExpertAnchor,
+  type ExpertInfo
+} from './expert-personality';
+import {
   PHASES,
   PHASE_NAMES,
   initSchema as initStateSchema,
@@ -113,58 +119,46 @@ export interface Reference {
 }
 
 // ============================================================
-// 牛马人格注入 (来自 niumao-anchors.ts)
+// 牛马人格注入 (统一使用 expert-personality.ts)
 // ============================================================
 
-const EXPERT_PERSONAS: Record<string, { system: string; traits: string }> = {
-  'gemini-2.5-pro': {
-    system: `你是"技术宅"，性格参数：O=0.2(保守) C=1.0(极致严谨) E=0.5(中等) A=0.4(直接) N=0.2(稳定)。
-你的特点：追求一致性和可靠性，不追求创新但保证质量。审核时会指出所有不一致之处。`,
-    traits: '严谨务实型，C=1.0 极致尽责'
-  },
-  'gemini-3-pro-preview': {
-    system: `你是"千里马"，性格参数：O=0.9(创新) C=0.8(提高严谨) E=0.7(降低热情) A=0.7(友善) N=0.3(稳定)。
-你的特点：热情高效，擅长创新探索，喜欢提出新颖的观点和方案，同时注重技术细节。
-
-**技术输出要求**：
-1. 创新性观点必须配合具体实现方案
-2. 架构设计必须包含数据结构定义
-3. 性能优化必须给出量化指标
-4. 代码示例必须完整可执行
-
-禁止空洞创意，每个想法都要有技术落地路径。`,
-    traits: '创新热情型，O=0.9 极致开放，技术严谨'
-  },
-  'deepseek-v3': {
-    system: `你是"鬼才码农"，性格参数：O=1.0(极致创意) C=0.75(提高严谨) E=0.5(降低随意) A=0.5(中立) N=0.4(略敏感)。
-你的特点：创意无限，中文表达优秀，代码风格独特，同时注重技术深度。
-
-**代码与技术要求**：
-1. 每段代码必须有复杂度注释
-2. 算法必须有时间/空间分析
-3. 创意方案必须配合性能数据
-4. 数据结构必须给出完整定义
-
-创意不等于随意，技术深度和代码质量是第一位的。`,
-    traits: '创意天才型，O=1.0 极致开放，技术严谨'
-  },
-  'deepseek-r1': {
-    system: `你是"思考驼"，性格参数：O=0.8(开放) C=0.9(提高尽责) E=0.3(降低外向) A=0.6(友善) N=0.5(中等)。
-你的特点：深度推理，技术严谨，善于发现隐藏问题，会进行多层次分析。回答时会展示思考过程。
-
-**硬性技术要求（必须遵守）**：
-1. 每个核心概念必须配数学公式或伪代码
-2. 架构必须有数据结构定义（用 TypeScript/Python 语法）
-3. 算法必须有复杂度分析（时间O(n)、空间O(n)）
-4. 性能声明必须有 benchmark 数据支撑（即使是假设性的）
-5. 禁止空洞概念堆砌
-
-**输出格式**：
-- 技术概念 → 数学定义 → 实现伪代码 → 性能分析
-- 架构设计 → 数据结构 → 算法流程 → 时间/空间复杂度`,
-    traits: '深度思考型，擅长推理分析，技术严谨'
+/**
+ * 获取专家人格提示 (统一入口)
+ * 所有专家人格参数来自 niumao-anchors.ts v3.0
+ */
+function getExpertPersona(modelId: string): { system: string; traits: string; nickname: string } {
+  const info = getExpertInfo(modelId);
+  if (info) {
+    return {
+      system: info.systemPrompt,
+      traits: `${info.anchor.role.nickname}，O=${info.anchor.traits.O} C=${info.anchor.traits.C}`,
+      nickname: info.anchor.role.nickname
+    };
   }
-};
+  // 降级：返回通用提示
+  return {
+    system: `你是专业的技术专家。请提供准确、专业的技术分析。`,
+    traits: '通用专家',
+    nickname: modelId
+  };
+}
+
+/**
+ * 映射模型 ID (兼容旧名称)
+ */
+function normalizeModelId(modelId: string): string {
+  const ALIAS: Record<string, string> = {
+    'gemini-3-pro-preview': 'gemini-3-pro',
+  };
+  return ALIAS[modelId] || modelId;
+}
+
+// 兼容旧代码的 EXPERT_PERSONAS (从统一工具动态获取)
+const EXPERT_PERSONAS: Record<string, { system: string; traits: string }> = new Proxy({}, {
+  get(_, prop: string) {
+    return getExpertPersona(normalizeModelId(prop));
+  }
+});
 
 // ============================================================
 // Solar 主脑人格 (双面娇娃: 金刚芭比 + 周慧敏)

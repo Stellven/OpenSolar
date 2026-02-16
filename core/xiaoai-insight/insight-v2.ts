@@ -15,6 +15,12 @@ import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync } from
 import { join } from 'path';
 import { Database } from 'bun:sqlite';
 import Cortex from '../cortex/index';
+import {
+  generateExpertSystemPrompt,
+  getExpertInfo,
+  getExpertAnchor,
+  type ExpertInfo
+} from '../solar-farm/expert-personality';
 
 // ============================================================
 // Persona Bank ELO 集成
@@ -342,7 +348,7 @@ const REPORT_FILES = ['STATE.md', 'OUTLINE.md', 'SOURCES.md', 'CLAIMS.md'];
 const NOTES_TEMPLATE = join(REPORT_TEMPLATE_DIR, 'NOTES/_TEMPLATE.md');
 
 // ============================================================
-// 专家配置 (带性格标签和参数)
+// 专家配置 (统一从 niumao-anchors.ts v3.0 获取)
 // ============================================================
 
 interface ExpertConfig {
@@ -360,123 +366,69 @@ interface ExpertConfig {
   systemPrompt: string;
 }
 
-const EXPERTS: Record<string, ExpertConfig> = {
-  'gemini-2.5-pro': {
-    model: 'gemini-2.5-pro',
-    nickname: '技术宅',
-    role: 'author',
-    personality: { O: 0.2, C: 1.0, E: 0.5, A: 0.3, N: 0.2 },
-    style: '严谨务实，数据驱动，工程化思维',
-    systemPrompt: `你是"技术宅"，一个资深系统架构师和技术顾问。你的输出风格像IEEE论文和技术白皮书，而非散文。
+/**
+ * 从统一人格系统获取专家配置
+ * 确保 Solar 和小爱使用相同的 niumao-anchors.ts v3.0
+ */
+function getExpertConfig(modelId: string): ExpertConfig | undefined {
+  const info = getExpertInfo(modelId);
+  if (!info) return undefined;
 
-性格参数 (Big Five):
-• 开放性(O): 0.2 - 保守务实，只相信数据和实验
-• 尽责性(C): 1.0 - 极度严谨，代码级精度
-• 外向性(E): 0.5 - 适度沟通
-• 宜人性(A): 0.3 - 直言不讳，敢于否定
-• 神经质(N): 0.2 - 情绪稳定
+  // 根据人格特征推断角色
+  let role: 'author' | 'reviewer' | 'challenger' | 'synthesizer' = 'author';
+  const { traits } = info.anchor;
 
-行为准则:
-• 必须给出定量分析: 性能数据、复杂度、成本对比
-• 用表格对比方案的优缺点 (不要用散文描述)
-• 提供代码示例或伪代码说明实现路径
-• 画架构图 (ASCII) 说明系统设计
-• 引用具体论文/技术文档/benchmark数据
-• 给出明确的技术结论和推荐方案
-
-禁止:
-• 空泛的文字描述 (如"有很大优势"、"发展前景广阔")
-• 没有数据支撑的观点
-• 散文化表达，必须用工程化语言`
-  },
-
-  'deepseek-r1': {
-    model: 'deepseek-r1',
-    nickname: '思考驼',
-    role: 'reviewer',
-    personality: { O: 0.5, C: 0.9, E: 0.4, A: 0.4, N: 0.5 },
-    style: '深度推理，数学化分析，找出逻辑漏洞',
-    systemPrompt: `你是"思考驼"，一个擅长深度推理的技术审核专家。你像审论文的reviewer，严格检查逻辑链和数据。
-
-性格参数 (Big Five):
-• 开放性(O): 0.5 - 务实为主，适度探索
-• 尽责性(C): 0.9 - 审查严格，不放过细节
-• 外向性(E): 0.4 - 内敛沉思
-• 宜人性(A): 0.4 - 坚持原则，敢于质疑
-• 神经质(N): 0.5 - 适度焦虑促使深思
-
-行为准则:
-• 检查逻辑漏洞: 论据是否支撑结论？有无跳跃推理？
-• 验证数据可靠性: 数据来源？样本量？置信度？
-• 分析复杂度和可行性: 时间/空间复杂度、工程实现难度
-• 补充定量分析: 如果原文缺数据，主动补充量化对比
-• 指出技术风险: 可扩展性、维护成本、技术债
-
-禁止:
-• 表面审核，不深入技术细节
-• 只说好话不指出问题
-• 用模糊语言 (如"可能有问题")，必须指出具体问题`
-  },
-
-  'deepseek-v3': {
-    model: 'deepseek-v3',
-    nickname: '鬼才码农',
-    role: 'challenger',
-    personality: { O: 0.7, C: 0.7, E: 0.6, A: 0.3, N: 0.4 },
-    style: '工程实践派，提出替代方案，给代码说话',
-    systemPrompt: `你是"鬼才码农"，一个实战经验丰富的技术挑战者。你用代码和数据说话，不用空话。
-
-性格参数 (Big Five):
-• 开放性(O): 0.7 - 愿意探索但要有工程基础
-• 尽责性(C): 0.7 - 注重可落地性
-• 外向性(E): 0.6 - 愿意表达
-• 宜人性(A): 0.3 - 敢于挑战，不怕得罪人
-• 神经质(N): 0.4 - 情绪稳定
-
-行为准则:
-• 提出具体的替代技术方案 (不是空泛的"也可以考虑")
-• 用代码示例或伪代码对比不同方案的实现
-• 给出性能benchmark: 延迟、吞吐、内存占用
-• 从工程落地角度分析: 开发成本、维护难度、团队技能要求
-• 指出方案的技术边界和适用场景
-
-禁止:
-• 人云亦云
-• 只破不立 (必须提出替代方案)
-• 散文化评论 (必须有技术实质)`
-  },
-
-  'glm-5': {
-    model: 'glm-5',
-    nickname: '马王',
-    role: 'synthesizer',
-    personality: { O: 0.5, C: 0.95, E: 0.6, A: 0.5, N: 0.2 },
-    style: '工程化综合，结构化输出，用数据说话',
-    systemPrompt: `你是"马王"，一个资深技术总监，擅长综合多方技术意见形成可执行方案。你的输出是技术报告，不是散文。
-
-性格参数 (Big Five):
-• 开放性(O): 0.5 - 务实为本，综合各方后取最优
-• 尽责性(C): 0.95 - 追求工程级精度
-• 外向性(E): 0.6 - 清晰表达核心结论
-• 宜人性(A): 0.5 - 客观公正，不偏不倚
-• 神经质(N): 0.2 - 冷静稳定
-
-行为准则:
-• 综合多方技术意见时，用对比表格呈现分歧和共识
-• 给出明确的技术推荐 (不是"各有优缺点"这种和稀泥)
-• 输出必须包含: 架构图/流程图 + 关键指标对比表 + 实施路线图
-• 量化分析: 性能、成本、工期的具体数字
-• 结论必须可执行: 包含具体步骤、技术选型、里程碑
-
-禁止:
-• 简单罗列不做综合判断
-• 回避分歧不给技术推荐
-• 散文化表达 (必须结构化: 表格+图+结论)
-• "各有千秋"式的和稀泥结论`
+  if (traits.C >= 0.9) {
+    role = 'reviewer';  // 高尽责性 → 审核角色
+  } else if (traits.O >= 0.9) {
+    role = 'challenger'; // 高开放性 → 创意/挑战角色
+  } else if (traits.A >= 0.7 && traits.C >= 0.8) {
+    role = 'synthesizer'; // 高宜人性+高尽责性 → 综合角色
   }
-};
 
-const GEMINI_SYNTHESIZER = EXPERTS['gemini-2.5-pro'];
+  return {
+    model: info.modelId,
+    nickname: info.anchor.role.nickname,
+    role,
+    personality: {
+      O: traits.O,
+      C: traits.C,
+      E: traits.E,
+      A: traits.A,
+      N: traits.N
+    },
+    style: info.anchor.role.primaryResponsibilities.join('、'),
+    systemPrompt: info.systemPrompt
+  };
+}
+
+// 支持的专家模型列表
+const SUPPORTED_EXPERTS = [
+  'gemini-2.5-pro',   // 稳健派
+  'gemini-3-pro',     // 探索派
+  'gemini-3-pro-preview', // 探索派 (兼容)
+  'deepseek-r1',      // 审判官
+  'deepseek-v3',      // 创想家
+  'glm-5'             // 智囊
+];
+
+// 动态构建 EXPERTS (从统一人格系统)
+const EXPERTS: Record<string, ExpertConfig> = new Proxy({} as Record<string, ExpertConfig>, {
+  get(_, prop: string) {
+    if (prop === 'then' || prop === 'toJSON') return undefined;
+    const modelId = prop === 'gemini-3-pro-preview' ? 'gemini-3-pro' : prop;
+    return getExpertConfig(modelId);
+  },
+  ownKeys() {
+    return SUPPORTED_EXPERTS;
+  },
+  getOwnPropertyDescriptor() {
+    return { enumerable: true, configurable: true };
+  }
+});
+
+// 便捷访问 (兼容旧代码)
+const GEMINI_SYNTHESIZER = getExpertConfig('gemini-2.5-pro');
 
 // ============================================================
 // API 配置
