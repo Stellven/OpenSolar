@@ -27537,3 +27537,1510 @@ rg: /Users/lisihao/.Trash: IO error for operation on /Users/lisihao/.Trash: Oper
 2026-02-16T01:31:44.836Z [DEBUG] Restarting caffeinate to maintain sleep prevention
 2026-02-16T01:31:44.836Z [DEBUG] Stopped caffeinate, allowing sleep
 2026-02-16T01:31:44.840Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-16T01:33:13.143Z [ERROR] API error (attempt 1/11): undefined Request timed out.
+2026-02-16T01:33:13.187Z [DEBUG] High write ratio: blit=0, write=9695 (100.0% writes), screen=205x141
+2026-02-16T01:33:13.187Z [DEBUG] Full reset (scrollback changes): scrollbackRows=161, firstChangeY=14
+  prev: "──────────────────────────────────────────────────── ctrl+e to show 84 previous messages ────────────────────────────────────────────────────"
+  next: "──────────────────────────────────────────────────── ctrl+e to show 82 previous messages ────────────────────────────────────────────────────"
+2026-02-16T01:33:37.580Z [DEBUG] Metrics opt-out check failed: No API key available
+2026-02-16T01:33:37.580Z [DEBUG] Metrics check failed, defaulting to disabled
+2026-02-16T01:33:37.580Z [DEBUG] Metrics export disabled by organization setting
+2026-02-16T01:35:44.838Z [DEBUG] Restarting caffeinate to maintain sleep prevention
+2026-02-16T01:35:44.844Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-16T01:36:43.038Z [DEBUG] High write ratio: blit=0, write=144340 (100.0% writes), screen=1269x141
+2026-02-16T01:36:43.094Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-16T01:36:43.094Z [DEBUG] [claudeai-mcp] Checking gate (cached)...
+2026-02-16T01:36:43.094Z [DEBUG] [claudeai-mcp] Gate returned: true
+2026-02-16T01:36:43.094Z [DEBUG] [claudeai-mcp] Fetching from https://api.anthropic.com/v1/mcp_servers?limit=1000
+2026-02-16T01:36:43.179Z [DEBUG] High write ratio: blit=20, write=144350 (100.0% writes), screen=1269x141
+2026-02-16T01:36:43.179Z [DEBUG] Full reset (scrollback changes): scrollbackRows=1221, firstChangeY=5
+  prev: "│           ▗ ▗   ▖ ▖           │ Recent activity                                                                                           │"
+  next: "│                               │ Recent activity                                                                                           │"
+2026-02-16T01:36:43.285Z [DEBUG] [claudeai-mcp] Fetched 0 servers
+2026-02-16T01:36:44.042Z [DEBUG] High write ratio: blit=0, write=9697 (100.0% writes), screen=205x141
+2026-02-16T01:36:44.042Z [DEBUG] Full reset (scrollback changes): scrollbackRows=1221, firstChangeY=5
+  prev: "│                               │ Recent activity                                                                                           │"
+  next: "│           ▗ ▗   ▖ ▖           │ Recent activity                                                                                           │"
+2026-02-16T01:36:44.071Z [DEBUG] High write ratio: blit=20, write=9680 (99.8% writes), screen=205x141
+2026-02-16T01:36:44.071Z [DEBUG] Full reset (scrollback changes): scrollbackRows=157, firstChangeY=5
+  prev: "│           ▗ ▗   ▖ ▖           │ Recent activity                                                                                           │"
+  next: "│                               │ Recent activity                                                                                           │"
+2026-02-16T01:36:54.211Z [DEBUG] executePreToolHooks called for tool: mcp__are__orchestrate
+2026-02-16T01:36:54.213Z [DEBUG] Getting matching hook commands for PreToolUse with query: mcp__are__orchestrate
+2026-02-16T01:36:54.213Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:36:54.213Z [DEBUG] Matched 0 unique hooks for query "mcp__are__orchestrate" (0 before deduplication)
+2026-02-16T01:36:54.214Z [DEBUG] Permission suggestions for mcp__are__orchestrate: [
+  {
+    "type": "addRules",
+    "rules": [
+      {
+        "toolName": "mcp__are__orchestrate"
+      }
+    ],
+    "behavior": "allow",
+    "destination": "localSettings"
+  }
+]
+2026-02-16T01:36:54.214Z [DEBUG] executePermissionRequestHooks called for tool: mcp__are__orchestrate
+2026-02-16T01:36:54.215Z [DEBUG] Getting matching hook commands for PermissionRequest with query: mcp__are__orchestrate
+2026-02-16T01:36:54.215Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:36:54.215Z [DEBUG] Matched 0 unique hooks for query "mcp__are__orchestrate" (0 before deduplication)
+2026-02-16T01:36:54.215Z [DEBUG] [useDeferredValue] Messages deferred by 1 (112→113)
+2026-02-16T01:36:54.223Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-16T01:36:54.224Z [DEBUG] [useDeferredValue] Messages deferred by 1 (112→113)
+2026-02-16T01:37:03.933Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:03.933Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:03.933Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:03.933Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:03.933Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:03.933Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:03.933Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:03.933Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:03.933Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:03.933Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:03.933Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:03.933Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:03.933Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:03.933Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:03.933Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:04.025Z [DEBUG] High write ratio: blit=0, write=144926 (100.0% writes), screen=1285x141
+2026-02-16T01:37:04.051Z [DEBUG] [claudeai-mcp] Checking gate (cached)...
+2026-02-16T01:37:04.051Z [DEBUG] [claudeai-mcp] Gate returned: true
+2026-02-16T01:37:04.051Z [DEBUG] [claudeai-mcp] Fetching from https://api.anthropic.com/v1/mcp_servers?limit=1000
+2026-02-16T01:37:04.122Z [DEBUG] High write ratio: blit=20, write=144924 (100.0% writes), screen=1285x141
+2026-02-16T01:37:04.122Z [DEBUG] Full reset (scrollback changes): scrollbackRows=1237, firstChangeY=5
+  prev: "│           ▗ ▗   ▖ ▖           │ Recent activity                                                                                           │"
+  next: "│                               │ Recent activity                                                                                           │"
+2026-02-16T01:37:04.153Z [DEBUG] [claudeai-mcp] Fetched 0 servers
+2026-02-16T01:37:16.054Z [DEBUG] Getting matching hook commands for Notification with query: permission_prompt
+2026-02-16T01:37:16.054Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:37:16.054Z [DEBUG] Matched 0 unique hooks for query "permission_prompt" (0 before deduplication)
+2026-02-16T01:37:22.555Z [DEBUG] Persisting permission update: addRules to source 'localSettings'
+2026-02-16T01:37:22.555Z [DEBUG] Persisting 1 allow rule(s) to localSettings
+2026-02-16T01:37:22.558Z [DEBUG] Writing to temp file: /Users/lisihao/.claude/settings.local.json.tmp.36765.1771205842558
+2026-02-16T01:37:22.558Z [DEBUG] Preserving file permissions: 100644
+2026-02-16T01:37:22.559Z [DEBUG] Temp file written successfully, size: 4927 bytes
+2026-02-16T01:37:22.559Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:37:22.559Z [DEBUG] Renaming /Users/lisihao/.claude/settings.local.json.tmp.36765.1771205842558 to /Users/lisihao/.claude/settings.local.json
+2026-02-16T01:37:22.559Z [DEBUG] File /Users/lisihao/.claude/settings.local.json written atomically
+2026-02-16T01:37:22.561Z [DEBUG] Applying permission update: Adding 1 allow rule(s) to destination 'localSettings': ["mcp__are__orchestrate"]
+2026-02-16T01:37:22.562Z [DEBUG] MCP server "are": Calling MCP tool: orchestrate
+2026-02-16T01:37:22.575Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-16T01:37:22.576Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-16T01:37:22.579Z [DEBUG] MCP server "are": Tool 'orchestrate' completed successfully in 17ms
+2026-02-16T01:37:22.581Z [DEBUG] Getting matching hook commands for PostToolUse with query: mcp__are__orchestrate
+2026-02-16T01:37:22.581Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:37:22.581Z [DEBUG] Matched 0 unique hooks for query "mcp__are__orchestrate" (0 before deduplication)
+2026-02-16T01:37:22.581Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:37:22.581Z [DEBUG] LSP Diagnostics: Checking registry - 5 pending
+2026-02-16T01:37:22.581Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:37:22.581Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:37:22.582Z [DEBUG] autocompact: tokens=905029 threshold=167000 effectiveWindow=180000
+2026-02-16T01:37:22.584Z [DEBUG] Getting matching hook commands for PreCompact with query: auto
+2026-02-16T01:37:22.584Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:37:22.584Z [DEBUG] Matched 0 unique hooks for query "auto" (0 before deduplication)
+2026-02-16T01:37:22.584Z [DEBUG] Forked agent [compact] received message: type=assistant
+2026-02-16T01:37:22.584Z [DEBUG] Forked agent [compact] finished: 1 messages, types=[assistant], totalUsage: input=0 output=0 cacheRead=0 cacheCreate=0
+2026-02-16T01:37:22.584Z [ERROR] Error: Error: Conversation too long. Press esc twice to go up a few messages and try again.
+    at fG1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3234:934)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async tt4 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3319:2536)
+    at async iR (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3412:7362)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:7388:3605
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:7388:4408
+    at async FZz (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:7378:26279)
+    at async Ik6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:7378:24919)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:7388:8146
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:7371:5397
+2026-02-16T01:37:22.585Z [DEBUG] [useDeferredValue] Messages deferred by 3 (113→116)
+2026-02-16T01:37:22.589Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-16T01:37:22.591Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:22.591Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:22.591Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:22.591Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:22.591Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:22.591Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:22.591Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:22.591Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:22.591Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:22.591Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:22.591Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:22.591Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:22.591Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:22.591Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:22.591Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:22.657Z [DEBUG] High write ratio: blit=0, write=144987 (100.0% writes), screen=1282x141
+2026-02-16T01:37:26.880Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:26.880Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:26.880Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:26.880Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:26.880Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:26.880Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:26.880Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:26.880Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:26.880Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:26.880Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:26.880Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:26.881Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:26.881Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:26.881Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:26.881Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:26.892Z [DEBUG] High write ratio: blit=0, write=2005 (100.0% writes), screen=47x141
+2026-02-16T01:37:26.892Z [DEBUG] Full reset (shrink->below): prevHeight=1282, nextHeight=47, viewport=49
+2026-02-16T01:37:26.915Z [DEBUG] High write ratio: blit=20, write=1988 (99.0% writes), screen=47x141
+2026-02-16T01:37:28.603Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:28.603Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:28.603Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:28.603Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:28.603Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:28.603Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:28.603Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:28.603Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:28.603Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:28.603Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:28.603Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:28.603Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:28.603Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:28.603Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:28.603Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:37:28.692Z [DEBUG] High write ratio: blit=0, write=144985 (100.0% writes), screen=1282x141
+2026-02-16T01:37:28.716Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-16T01:37:28.716Z [DEBUG] [claudeai-mcp] Checking gate (cached)...
+2026-02-16T01:37:28.716Z [DEBUG] [claudeai-mcp] Gate returned: true
+2026-02-16T01:37:28.716Z [DEBUG] [claudeai-mcp] Fetching from https://api.anthropic.com/v1/mcp_servers?limit=1000
+2026-02-16T01:37:28.792Z [DEBUG] High write ratio: blit=20, write=144995 (100.0% writes), screen=1283x141
+2026-02-16T01:37:28.818Z [DEBUG] [claudeai-mcp] Fetched 0 servers
+2026-02-16T01:37:46.425Z [DEBUG] [SystemPrompt] path=simple proactive=false
+2026-02-16T01:37:46.427Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771205866427
+2026-02-16T01:37:46.427Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:37:46.428Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:37:46.428Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:37:46.428Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771205866427 to /Users/lisihao/.claude.json
+2026-02-16T01:37:46.428Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:37:46.433Z [DEBUG] Getting matching hook commands for PreCompact with query: manual
+2026-02-16T01:37:46.433Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:37:46.433Z [DEBUG] Matched 0 unique hooks for query "manual" (0 before deduplication)
+2026-02-16T01:37:46.434Z [DEBUG] Forked agent [compact] received message: type=assistant
+2026-02-16T01:37:46.434Z [DEBUG] Forked agent [compact] finished: 1 messages, types=[assistant], totalUsage: input=0 output=0 cacheRead=0 cacheCreate=0
+2026-02-16T01:37:46.434Z [ERROR] Error: Error: Conversation too long. Press esc twice to go up a few messages and try again.
+    at fG1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3234:934)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Object.coY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3534:47)
+    at async xyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2283:3670)
+    at async cQ4 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2283:1055)
+    at async M0z (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:7239:2484)
+    at async FE6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:7237:3745)
+    at async FZz (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:7378:25767)
+    at async Ik6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:7378:24919)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:7388:8146
+2026-02-16T01:37:46.434Z [ERROR] Error: Error: Error during compaction: Error: Conversation too long. Press esc twice to go up a few messages and try again.
+    at Object.coY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:3535:185)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async xyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2283:3670)
+    at async cQ4 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2283:1055)
+    at async M0z (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:7239:2484)
+    at async FE6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:7237:3745)
+    at async FZz (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:7378:25767)
+    at async Ik6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:7378:24919)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:7388:8146
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:7371:5397
+2026-02-16T01:37:46.434Z [DEBUG] FileHistory: Making snapshot for message 0b7ca667-b344-4cef-87e8-0fea2a772b77
+2026-02-16T01:37:46.435Z [DEBUG] FileHistory: Added snapshot for 0b7ca667-b344-4cef-87e8-0fea2a772b77, tracking 27 files
+2026-02-16T01:37:46.435Z [DEBUG] [useDeferredValue] Messages deferred by 3 (116→119)
+2026-02-16T01:37:46.446Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-16T01:37:46.447Z [DEBUG] [useDeferredValue] Messages deferred by 3 (116→119)
+2026-02-16T01:37:46.448Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-16T01:37:46.448Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-16T01:37:46.448Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.a10; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:37:46.448Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:37:46.448Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:37:46.448Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:37:46.450Z [DEBUG] [useDeferredValue] Messages deferred by 3 (116→119)
+2026-02-16T01:37:46.453Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-16T01:37:46.456Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:46.456Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:46.456Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:46.456Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:46.456Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:46.456Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:46.456Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:46.456Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:46.456Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:46.456Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:46.456Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:46.456Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:46.456Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:46.456Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:46.456Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at A6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86654)
+    at Zi1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86495)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81853)
+    at D6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6326)
+    at Immediate.ZqA [as _onImmediate] (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:710:13515)
+2026-02-16T01:37:46.534Z [DEBUG] High write ratio: blit=0, write=145146 (100.0% writes), screen=1286x141
+2026-02-16T01:37:47.786Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:38:02.977Z [DEBUG] [onCancel] focusedInputDialog=message-selector streamMode=requesting
+2026-02-16T01:38:03.058Z [DEBUG] High write ratio: blit=0, write=145117 (100.0% writes), screen=1285x141
+2026-02-16T01:38:03.060Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-16T01:38:03.087Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:38:03.087Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:38:03.087Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:38:03.087Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:38:03.087Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:38:03.087Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:38:03.087Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:38:03.087Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:38:03.087Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:38:03.087Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:38:03.087Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:38:03.087Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:38:03.087Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:38:03.087Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:38:03.087Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at GyY (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:2281:49141)
+    at dK (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:20892)
+    at U2 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:39409)
+    at vl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:50096)
+    at eF (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:86682)
+    at K61 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85651)
+    at Il (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:85473)
+    at yl (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:81862)
+    at h6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:6447)
+    at m1 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:717:4939)
+2026-02-16T01:38:03.183Z [DEBUG] High write ratio: blit=0, write=152092 (100.0% writes), screen=1421x141
+2026-02-16T01:38:03.229Z [DEBUG] High write ratio: blit=0, write=7992 (100.0% writes), screen=158x141
+2026-02-16T01:38:03.229Z [DEBUG] Full reset (scrollback changes): scrollbackRows=1373, firstChangeY=5
+  prev: "│           ▗ ▗   ▖ ▖           │ Recent activity                                                                                           │"
+  next: "│                               │ Recent activity                                                                                           │"
+2026-02-16T01:38:04.027Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:38:04.027Z [DEBUG] LSP Diagnostics: Checking registry - 5 pending
+2026-02-16T01:38:04.027Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:38:04.027Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:38:04.030Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-16T01:38:04.030Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:38:04.030Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-16T01:38:04.030Z [DEBUG] FileHistory: Making snapshot for message 0cc95ba4-f6d4-4fa7-963d-373e4ee1d680
+2026-02-16T01:38:04.031Z [DEBUG] FileHistory: Added snapshot for 0cc95ba4-f6d4-4fa7-963d-373e4ee1d680, tracking 27 files
+2026-02-16T01:38:04.032Z [DEBUG] [useDeferredValue] Messages deferred by 1 (1→2)
+2026-02-16T01:38:04.034Z [DEBUG] Full reset (shrink->below): prevHeight=158, nextHeight=24, viewport=49
+2026-02-16T01:38:04.038Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-16T01:38:04.038Z [DEBUG] [useDeferredValue] Messages deferred by 1 (1→2)
+2026-02-16T01:38:04.039Z [DEBUG] [SystemPrompt] path=simple proactive=false
+2026-02-16T01:38:04.039Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-16T01:38:04.040Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.fd5; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:38:04.040Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:38:04.040Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:38:04.040Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:38:04.041Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771205884041
+2026-02-16T01:38:04.041Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:38:04.041Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:38:04.041Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:38:04.041Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771205884041 to /Users/lisihao/.claude.json
+2026-02-16T01:38:04.041Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:38:04.042Z [DEBUG] autocompact: tokens=1791 threshold=167000 effectiveWindow=180000
+2026-02-16T01:38:04.043Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:38:04.045Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771205884045
+2026-02-16T01:38:04.045Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:38:04.045Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:38:04.045Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:38:04.045Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771205884045 to /Users/lisihao/.claude.json
+2026-02-16T01:38:04.045Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:38:04.046Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.834; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:38:04.046Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:38:04.046Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:38:04.046Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:38:04.050Z [DEBUG] [useDeferredValue] Messages deferred by 1 (1→2)
+2026-02-16T01:38:04.085Z [DEBUG] High write ratio: blit=2397, write=19173 (88.9% writes), screen=163x141
+2026-02-16T01:38:06.024Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:38:07.221Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:38:11.797Z [DEBUG] [useDeferredValue] Messages deferred by 1 (2→3)
+2026-02-16T01:38:12.867Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-16T01:38:12.870Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-16T01:38:12.871Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:38:12.871Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-16T01:38:12.874Z [DEBUG] [useDeferredValue] Messages deferred by 2 (3→5)
+2026-02-16T01:38:12.894Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-16T01:38:12.894Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:38:12.894Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-16T01:38:12.937Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:38:12.937Z [DEBUG] LSP Diagnostics: Checking registry - 5 pending
+2026-02-16T01:38:12.937Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:38:12.937Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:38:12.960Z [DEBUG] autocompact: tokens=101576 threshold=167000 effectiveWindow=180000
+2026-02-16T01:38:12.960Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:38:12.963Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771205892963
+2026-02-16T01:38:12.963Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:38:12.963Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:38:12.963Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:38:12.963Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771205892963 to /Users/lisihao/.claude.json
+2026-02-16T01:38:12.963Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:38:12.963Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.834; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:38:12.964Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:38:12.964Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:38:12.964Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:38:12.968Z [DEBUG] [useDeferredValue] Messages deferred by 3 (5→8)
+2026-02-16T01:38:19.291Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:38:25.802Z [DEBUG] [useDeferredValue] Messages deferred by 1 (8→9)
+2026-02-16T01:38:27.670Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-16T01:38:27.674Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-16T01:38:27.674Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:38:27.674Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:38:27.678Z [DEBUG] [useDeferredValue] Messages deferred by 2 (9→11)
+2026-02-16T01:38:29.680Z [DEBUG] [useDeferredValue] Messages deferred by 1 (11→12)
+2026-02-16T01:38:30.061Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-16T01:38:30.061Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.005; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:38:30.061Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:38:30.061Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:38:30.062Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-16T01:38:30.062Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:38:30.062Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:38:30.062Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:38:30.063Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:38:30.063Z [DEBUG] LSP Diagnostics: Checking registry - 5 pending
+2026-02-16T01:38:30.063Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:38:30.063Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:38:30.063Z [DEBUG] autocompact: tokens=103498 threshold=167000 effectiveWindow=180000
+2026-02-16T01:38:30.063Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:38:30.065Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771205910065
+2026-02-16T01:38:30.065Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:38:30.065Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:38:30.065Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:38:30.065Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771205910065 to /Users/lisihao/.claude.json
+2026-02-16T01:38:30.065Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:38:30.065Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.834; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:38:30.065Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:38:30.065Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:38:30.065Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:38:30.068Z [DEBUG] [useDeferredValue] Messages deferred by 1 (12→13)
+2026-02-16T01:38:30.093Z [DEBUG] High write ratio: blit=0, write=20234 (100.0% writes), screen=176x141
+2026-02-16T01:38:30.753Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:38:36.024Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:38:37.582Z [DEBUG] Metrics opt-out check failed: No API key available
+2026-02-16T01:38:37.583Z [DEBUG] Metrics check failed, defaulting to disabled
+2026-02-16T01:38:37.583Z [DEBUG] Metrics export disabled by organization setting
+2026-02-16T01:38:45.337Z [DEBUG] [useDeferredValue] Messages deferred by 1 (13→14)
+2026-02-16T01:38:54.961Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-16T01:38:54.964Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-16T01:38:54.965Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:38:54.965Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:38:54.971Z [DEBUG] [useDeferredValue] Messages deferred by 2 (14→16)
+2026-02-16T01:38:54.983Z [DEBUG] [useDeferredValue] Messages deferred by 2 (14→16)
+2026-02-16T01:38:55.121Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-16T01:38:55.121Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.25e; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:38:55.121Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:38:55.121Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:38:55.122Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-16T01:38:55.122Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:38:55.122Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:38:55.122Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:38:55.122Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:38:55.122Z [DEBUG] LSP Diagnostics: Checking registry - 5 pending
+2026-02-16T01:38:55.122Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:38:55.122Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:38:55.136Z [DEBUG] autocompact: tokens=104510 threshold=167000 effectiveWindow=180000
+2026-02-16T01:38:55.137Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:38:55.138Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771205935138
+2026-02-16T01:38:55.138Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:38:55.138Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:38:55.138Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:38:55.138Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771205935138 to /Users/lisihao/.claude.json
+2026-02-16T01:38:55.138Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:38:55.138Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.834; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:38:55.138Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:38:55.138Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:38:55.138Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:38:55.141Z [DEBUG] [useDeferredValue] Messages deferred by 1 (16→17)
+2026-02-16T01:38:56.501Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:38:57.514Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:39:03.868Z [DEBUG] [useDeferredValue] Messages deferred by 1 (17→18)
+2026-02-16T01:39:16.043Z [DEBUG] High write ratio: blit=0, write=25105 (100.0% writes), screen=318x141
+2026-02-16T01:39:16.077Z [DEBUG] High write ratio: blit=20, write=25088 (99.9% writes), screen=318x141
+2026-02-16T01:39:16.077Z [DEBUG] Full reset (scrollback changes): scrollbackRows=270, firstChangeY=5
+  prev: "│           ▗ ▗   ▖ ▖           │ Recent activity                                                                                           │"
+  next: "│                               │ Recent activity                                                                                           │"
+2026-02-16T01:39:18.825Z [DEBUG] High write ratio: blit=0, write=21428 (100.0% writes), screen=203x141
+2026-02-16T01:39:18.825Z [DEBUG] Full reset (scrollback changes): scrollbackRows=270, firstChangeY=5
+  prev: "│                               │ Recent activity                                                                                           │"
+  next: "│           ▗ ▗   ▖ ▖           │ Recent activity                                                                                           │"
+2026-02-16T01:39:18.835Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-16T01:39:18.835Z [DEBUG] [claudeai-mcp] Checking gate (cached)...
+2026-02-16T01:39:18.835Z [DEBUG] [claudeai-mcp] Gate returned: true
+2026-02-16T01:39:18.835Z [DEBUG] [claudeai-mcp] Fetching from https://api.anthropic.com/v1/mcp_servers?limit=1000
+2026-02-16T01:39:18.863Z [DEBUG] High write ratio: blit=20, write=21438 (99.9% writes), screen=203x141
+2026-02-16T01:39:18.863Z [DEBUG] Full reset (scrollback changes): scrollbackRows=155, firstChangeY=5
+  prev: "│           ▗ ▗   ▖ ▖           │ Recent activity                                                                                           │"
+  next: "│                               │ Recent activity                                                                                           │"
+2026-02-16T01:39:19.046Z [DEBUG] [claudeai-mcp] Fetched 0 servers
+2026-02-16T01:39:39.093Z [WARN] Streaming stall detected: 35.1s gap between events (stall #1)
+2026-02-16T01:39:39.094Z [DEBUG] executePreToolHooks called for tool: Write
+2026-02-16T01:39:39.098Z [DEBUG] Getting matching hook commands for PreToolUse with query: Write
+2026-02-16T01:39:39.098Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:39:39.098Z [DEBUG] Matched 0 unique hooks for query "Write" (0 before deduplication)
+2026-02-16T01:39:39.100Z [DEBUG] FileHistory: Tracked file modification for /Users/lisihao/ThunderAIGC/ThunderAIGC/docs/baseline-report.md
+2026-02-16T01:39:39.101Z [DEBUG] Writing to temp file: /Users/lisihao/ThunderAIGC/ThunderAIGC/docs/baseline-report.md.tmp.36765.1771205979101
+2026-02-16T01:39:39.101Z [DEBUG] Temp file written successfully, size: 2068 bytes
+2026-02-16T01:39:39.101Z [DEBUG] Renaming /Users/lisihao/ThunderAIGC/ThunderAIGC/docs/baseline-report.md.tmp.36765.1771205979101 to /Users/lisihao/ThunderAIGC/ThunderAIGC/docs/baseline-report.md
+2026-02-16T01:39:39.101Z [DEBUG] File /Users/lisihao/ThunderAIGC/ThunderAIGC/docs/baseline-report.md written atomically
+2026-02-16T01:39:39.106Z [DEBUG] Getting matching hook commands for PostToolUse with query: Write
+2026-02-16T01:39:39.106Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:39:39.106Z [DEBUG] Matched 1 unique hooks for query "Write" (1 before deduplication)
+2026-02-16T01:39:39.107Z [DEBUG] [useDeferredValue] Messages deferred by 2 (18→20)
+2026-02-16T01:39:39.113Z [DEBUG] [lspRecommendation] Looking for LSP plugins for .md
+2026-02-16T01:39:39.114Z [WARN] Streaming completed with 1 stall(s), total stall time: 35.1s
+2026-02-16T01:39:39.115Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:39:39.115Z [DEBUG] LSP Diagnostics: Checking registry - 5 pending
+2026-02-16T01:39:39.115Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:39:39.115Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:39:39.136Z [DEBUG] autocompact: tokens=105843 threshold=167000 effectiveWindow=180000
+2026-02-16T01:39:39.136Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:39:39.139Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771205979139
+2026-02-16T01:39:39.139Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:39:39.139Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:39:39.139Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:39:39.139Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771205979139 to /Users/lisihao/.claude.json
+2026-02-16T01:39:39.139Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:39:39.140Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.834; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:39:39.140Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:39:39.140Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:39:39.140Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:39:39.144Z [DEBUG] [useDeferredValue] Messages deferred by 5 (18→23)
+2026-02-16T01:39:42.594Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:39:49.640Z [DEBUG] [useDeferredValue] Messages deferred by 1 (23→24)
+2026-02-16T01:39:50.589Z [DEBUG] executePreToolHooks called for tool: Glob
+2026-02-16T01:39:50.593Z [DEBUG] Getting matching hook commands for PreToolUse with query: Glob
+2026-02-16T01:39:50.593Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:39:50.594Z [DEBUG] Matched 0 unique hooks for query "Glob" (0 before deduplication)
+2026-02-16T01:39:50.598Z [DEBUG] [useDeferredValue] Messages deferred by 2 (24→26)
+2026-02-16T01:39:50.618Z [DEBUG] Getting matching hook commands for PostToolUse with query: Glob
+2026-02-16T01:39:50.618Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:39:50.618Z [DEBUG] Matched 1 unique hooks for query "Glob" (1 before deduplication)
+2026-02-16T01:39:50.619Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:39:50.619Z [DEBUG] LSP Diagnostics: Checking registry - 5 pending
+2026-02-16T01:39:50.619Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:39:50.619Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:39:50.619Z [DEBUG] autocompact: tokens=106042 threshold=167000 effectiveWindow=180000
+2026-02-16T01:39:50.619Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:39:50.622Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771205990622
+2026-02-16T01:39:50.622Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:39:50.622Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:39:50.622Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:39:50.622Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771205990622 to /Users/lisihao/.claude.json
+2026-02-16T01:39:50.623Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:39:50.623Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.834; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:39:50.623Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:39:50.623Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:39:50.624Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:39:50.629Z [DEBUG] [useDeferredValue] Messages deferred by 4 (26→30)
+2026-02-16T01:39:54.133Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:39:56.534Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-16T01:39:56.537Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-16T01:39:56.537Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:39:56.537Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-16T01:39:56.542Z [DEBUG] [useDeferredValue] Messages deferred by 2 (30→32)
+2026-02-16T01:39:56.558Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-16T01:39:56.558Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:39:56.558Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-16T01:39:56.596Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:39:56.596Z [DEBUG] LSP Diagnostics: Checking registry - 5 pending
+2026-02-16T01:39:56.596Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:39:56.596Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:39:56.625Z [DEBUG] autocompact: tokens=106673 threshold=167000 effectiveWindow=180000
+2026-02-16T01:39:56.625Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:39:56.628Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771205996628
+2026-02-16T01:39:56.628Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:39:56.628Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:39:56.628Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:39:56.628Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771205996628 to /Users/lisihao/.claude.json
+2026-02-16T01:39:56.628Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:39:56.629Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.834; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:39:56.629Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:39:56.629Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:39:56.629Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:39:56.635Z [DEBUG] [useDeferredValue] Messages deferred by 3 (32→35)
+2026-02-16T01:39:59.962Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:40:03.237Z [DEBUG] [useDeferredValue] Messages deferred by 1 (35→36)
+2026-02-16T01:40:17.322Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-16T01:40:17.326Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-16T01:40:17.326Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:40:17.326Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-16T01:40:17.330Z [DEBUG] Writing to temp file: /Users/lisihao/ThunderAIGC/ThunderAIGC/.solar/STATE.md.tmp.36765.1771206017330
+2026-02-16T01:40:17.330Z [DEBUG] Preserving file permissions: 100644
+2026-02-16T01:40:17.330Z [DEBUG] Temp file written successfully, size: 1415 bytes
+2026-02-16T01:40:17.330Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:40:17.330Z [DEBUG] Renaming /Users/lisihao/ThunderAIGC/ThunderAIGC/.solar/STATE.md.tmp.36765.1771206017330 to /Users/lisihao/ThunderAIGC/ThunderAIGC/.solar/STATE.md
+2026-02-16T01:40:17.331Z [DEBUG] File /Users/lisihao/ThunderAIGC/ThunderAIGC/.solar/STATE.md written atomically
+2026-02-16T01:40:17.334Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-16T01:40:17.334Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:40:17.334Z [DEBUG] Matched 1 unique hooks for query "Edit" (1 before deduplication)
+2026-02-16T01:40:17.335Z [DEBUG] [useDeferredValue] Messages deferred by 2 (36→38)
+2026-02-16T01:40:17.342Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:40:17.342Z [DEBUG] LSP Diagnostics: Checking registry - 5 pending
+2026-02-16T01:40:17.342Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:40:17.342Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:40:17.343Z [DEBUG] autocompact: tokens=107618 threshold=167000 effectiveWindow=180000
+2026-02-16T01:40:17.344Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:40:17.349Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771206017349
+2026-02-16T01:40:17.349Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:40:17.349Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:40:17.349Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:40:17.349Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771206017349 to /Users/lisihao/.claude.json
+2026-02-16T01:40:17.349Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:40:17.350Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.834; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:40:17.350Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:40:17.350Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:40:17.350Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:40:17.356Z [DEBUG] [useDeferredValue] Messages deferred by 5 (36→41)
+2026-02-16T01:40:20.926Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:40:24.254Z [DEBUG] executePreToolHooks called for tool: WebSearch
+2026-02-16T01:40:24.257Z [DEBUG] Getting matching hook commands for PreToolUse with query: WebSearch
+2026-02-16T01:40:24.257Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:40:24.257Z [DEBUG] Matched 0 unique hooks for query "WebSearch" (0 before deduplication)
+2026-02-16T01:40:24.258Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-16T01:40:24.258Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.7a1; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:40:24.258Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:40:24.258Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:40:24.259Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:40:24.263Z [DEBUG] [useDeferredValue] Messages deferred by 2 (41→43)
+2026-02-16T01:40:24.274Z [DEBUG] [useDeferredValue] Messages deferred by 2 (41→43)
+2026-02-16T01:40:25.580Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:40:25.589Z [ERROR] Error streaming, falling back to non-streaming mode: {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"20260216094025415b332ca1f24f1d"}
+2026-02-16T01:40:25.590Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:40:25.590Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:40:25.590Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:40:26.006Z [ERROR] API error (attempt 1/11): 400 400 {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"20260216094025a6d24f4b8a0b44ba"}
+2026-02-16T01:40:26.007Z [ERROR] Error in API request: 400 {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"20260216094025a6d24f4b8a0b44ba"}
+2026-02-16T01:40:26.008Z [ERROR] Error: Error: 400 {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"20260216094025a6d24f4b8a0b44ba"}
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8788)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Rw6.model (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5641:4971)
+    at async Rw6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:909:101168)
+    at async nJq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5641:5171)
+    at async aJq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5646:9071)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5641:4632
+    at async f_A (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2399)
+2026-02-16T01:40:26.015Z [DEBUG] Getting matching hook commands for PostToolUse with query: WebSearch
+2026-02-16T01:40:26.015Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:40:26.015Z [DEBUG] Matched 0 unique hooks for query "WebSearch" (0 before deduplication)
+2026-02-16T01:40:26.016Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:40:26.016Z [DEBUG] LSP Diagnostics: Checking registry - 5 pending
+2026-02-16T01:40:26.016Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:40:26.016Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:40:26.017Z [DEBUG] autocompact: tokens=107767 threshold=167000 effectiveWindow=180000
+2026-02-16T01:40:26.018Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:40:26.028Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771206026028
+2026-02-16T01:40:26.028Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:40:26.028Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:40:26.028Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:40:26.028Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771206026028 to /Users/lisihao/.claude.json
+2026-02-16T01:40:26.028Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:40:26.030Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.834; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:40:26.030Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:40:26.030Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:40:26.030Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:40:26.037Z [DEBUG] [useDeferredValue] Messages deferred by 1 (43→44)
+2026-02-16T01:40:29.670Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:40:35.190Z [ERROR] Error streaming, falling back to non-streaming mode: Content block input is not a string
+2026-02-16T01:40:35.190Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:40:35.190Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:40:35.190Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:40:35.202Z [DEBUG] [useDeferredValue] Messages deferred by 2 (44→46)
+2026-02-16T01:40:57.580Z [DEBUG] Detected change to /Users/lisihao/.claude/settings.local.json
+2026-02-16T01:40:57.588Z [DEBUG] Settings changed from localSettings, updating app state
+2026-02-16T01:40:57.590Z [DEBUG] Replacing all allow rules for destination 'userSettings' with 0 rule(s): []
+2026-02-16T01:40:57.590Z [DEBUG] Replacing all deny rules for destination 'userSettings' with 0 rule(s): []
+2026-02-16T01:40:57.590Z [DEBUG] Replacing all ask rules for destination 'userSettings' with 0 rule(s): []
+2026-02-16T01:40:57.590Z [DEBUG] Replacing all allow rules for destination 'projectSettings' with 0 rule(s): []
+2026-02-16T01:40:57.590Z [DEBUG] Replacing all deny rules for destination 'projectSettings' with 0 rule(s): []
+2026-02-16T01:40:57.590Z [DEBUG] Replacing all ask rules for destination 'projectSettings' with 0 rule(s): []
+2026-02-16T01:40:57.590Z [DEBUG] Replacing all allow rules for destination 'localSettings' with 0 rule(s): []
+2026-02-16T01:40:57.590Z [DEBUG] Replacing all deny rules for destination 'localSettings' with 0 rule(s): []
+2026-02-16T01:40:57.590Z [DEBUG] Replacing all ask rules for destination 'localSettings' with 0 rule(s): []
+2026-02-16T01:40:57.590Z [DEBUG] Replacing all allow rules for destination 'localSettings' with 124 rule(s): ["Bash(git clone:*)","Bash(curl:*)","Bash(git config:*)","Bash(brew install:*)","Bash(gh auth setup-git:*)","Bash(gh auth login:*)","Bash(gh auth status:*)","Bash(git pull:*)","Bash(~/Solar/install.sh)","Bash(solar)","Bash(~/Solar/bin/solar)","Bash(~/Solar/bin/solar init)","Bash(~/Solar/bin/solar:*)","Bash(~/Solar/install-core.sh)","Bash(bash)","Bash(export BUN_INSTALL=\"$HOME/.bun\")","Bash(export PATH:*)","Bash(~/.claude/solar/bin/solar daemon start)","Bash(himalaya envelope list -s 3)","Bash(sqlite3:*)","Bash(sw_vers:*)","Bash(sysctl:*)","Bash(ls:*)","Bash(echo:*)","Bash(nc:*)","Bash(~/.claude/solar/bin/solar:*)","Bash(top:*)","Bash(bun:*)","Bash(ps:*)","Bash(~/.bun/bin/bun:*)","Bash(things show:*)","Bash(remindctl list:*)","Bash(~/.claude/solar/bin/solar-daemon:*)","Bash(wc:*)","WebSearch","Bash(xargs kill -9)","Bash(openclaw:*)","Bash(~/.zshrc)","Bash(export PATH=\"$BUN_INSTALL/bin:$PATH\")","Bash(source:*)","Bash(zsh -c 'source ~/.zshrc && which bun && bun --version')","Bash(launchctl:*)","Bash(sudo reboot)","Bash(osascript -e 'tell app \"\"System Events\"\" to restart')","Bash(npm run demo)","Bash(npx tsx:*)","Bash(grep:*)","Bash(pkill:*)","Bash([ -n \"$GOOGLE_API_KEY\" ])","Bash([ -n \"$DEEPSEEK_API_KEY\" ])","Bash([ -n \"$ZHIPU_API_KEY\" ])","Bash(python3:*)","Bash(swift:*)","Bash(find:*)","Bash(head -20 echo echo 图片数量: find ~/Solar/Skin-check/Acne04/acne_1024 -name *.jpg -o -name *.png)","Bash(cd ~/Solar/Skin-check/Acne04 __NEW_LINE_a4087104496918c3__ echo \"=== 目录结构 ===\" ls -la echo \"\" __NEW_LINE_a4087104496918c3__ echo \"=== acne_1024 目录 ===\" ls acne_1024/)","Bash(xargs:*)","Bash(~/.openclaw/workspace/TOOLS.md:*)","Bash(~/.claude/core/xiaoai-insight/insight-runner.sh:*)","Bash(__NEW_LINE_6e6a2c141186e373__ echo \"\")","Bash(# 修复分类器:*)","mcp__are__stats","Bash(env)","Bash(git add:*)","Bash(git commit:*)","Bash(sort -k2 -rn)","Bash(pip3 show:*)","Bash(pip3 install:*)","Bash(git -C ~/.claude/hooks log --oneline -5)","Bash(git checkout:*)","Bash(rsync:*)","Bash(scp:*)","Bash(chmod:*)","Bash(~/.claude/skills/skin-check/phase2/scripts/check-training.sh:*)","Bash(mount:*)","Bash(ln:*)","Bash(git push:*)","Bash(git reset:*)","Bash(while read img)","Bash(do echo '=== 测试: $\\(basename $img\\) ===' bun local-classifier.ts $img)","Bash(cat:*)","Bash(~/.solar/elo/benchmark_data.json)","Bash(mcp__playwright__browser_navigate url=\"https://www.xiaohongshu.com/explore\")","Bash(imagesnap:*)","Bash(/opt/homebrew/bin/imagesnap:*)","Bash(for img in ~/Desktop/selfie_*.jpg)","Bash(do echo \"测试: $img\" python3 ~/.claude/skills/makeup-advisor/ar_makeup.py \"$img\" natural \"/tmp/test_makeup.jpg\")","Bash(open:*)","Bash(SOURCE_IMG=\"/Users/lisihao/Desktop/selfie_2026-02-14T04-32-26-240Z.jpg\")","Bash(__NEW_LINE_8b260d861a440b1e__ echo \"🔍 分析面部特征...\")","Bash(__NEW_LINE_472f50d6c9709502__ echo \"📚 生成个性化化妆教程...\")","Bash(__NEW_LINE_a0d3aca2fd4660d0__ echo \"📚 生成个性化化妆教程...\")","Bash(mdfind:*)","Bash(head -5 find ~ -maxdepth 3 -type d -name *know*)","Bash(~/.solar/STATE.md:*)","Bash(cargo check:*)","Bash(GATE_POLICY=loose bun:*)","Bash(GATE_POLICY=strict bun:*)","Bash(GATE_POLICY=none bun:*)","Bash(cargo --version:*)","Bash(sh -s -- -y)","Bash(cargo build:*)","Bash(~/Solar/core/search/target/release/solar-search query --help)","Bash(~/Solar/core/search/target/release/solar-search stats:*)","Bash(cargo test:*)","Bash(/Users/lisihao/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo build --release)","Bash(/Users/lisihao/Solar/core/search/target/release/solar-search:*)","Bash(~/Solar/core/search/target/release/solar-search:*)","Bash(__NEW_LINE_585539562a36547a__ echo \"\")","Bash(__NEW_LINE_c57475d0441e2053__ echo \"\")","Bash(git count-objects:*)","Bash(git rev-list:*)","Bash(git cat-file:*)","Bash(sort:*)","Bash(git remote add:*)","Bash(git init:*)","Bash(jq:*)","Bash(ffprobe:*)","Bash(brew list:*)","Bash(brew search:*)","mcp__are__orchestrate","Bash(for role in builder verifier architect judge explorer creator)","Bash(do echo -n \"$role: \")","Bash(done)"]
+2026-02-16T01:40:57.610Z [DEBUG] High write ratio: blit=1251, write=24429 (95.1% writes), screen=259x141

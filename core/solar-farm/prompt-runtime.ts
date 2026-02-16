@@ -104,6 +104,18 @@ CHECKLIST (apply every time):
 // ============================================================
 
 /**
+ * JSON Schema 字段定义
+ */
+export interface SchemaField {
+  name: string;
+  type: 'string' | 'array' | 'object' | 'number' | 'boolean';
+  description: string;
+  required: boolean;
+  enum?: string[];
+  items?: SchemaField;
+}
+
+/**
  * 角色补丁：KNOBS + OUTPUT_SCHEMA + RULES
  *
  * 每个角色只需要一个短补丁，叠加到 SYSTEM_CORE 上
@@ -111,7 +123,8 @@ CHECKLIST (apply every time):
 export interface RolePatch {
   name: string;
   knobs: KnobConfig;
-  outputSchema: string[];
+  outputSchema: string[];      // 人类可读的输出格式描述
+  schemaFields?: SchemaField[]; // JSON Schema 字段定义 (可选，用于结构化输出)
   rules: string[];
 }
 
@@ -128,6 +141,13 @@ export const ROLE_PATCHES: Record<string, RolePatch> = {
       '2) PATCH (code or pseudo-code)',
       '3) TESTS (unit tests or reproduction steps)',
       '4) RISKS (top 3) + FALLBACK (1)',
+    ],
+    schemaFields: [
+      { name: 'plan', type: 'array', description: 'Implementation steps (<=8 bullets)', required: true },
+      { name: 'patch', type: 'string', description: 'Code or pseudo-code for the solution', required: true },
+      { name: 'tests', type: 'string', description: 'Unit tests or reproduction steps', required: true },
+      { name: 'risks', type: 'array', description: 'Top 3 risks identified', required: true },
+      { name: 'fallback', type: 'string', description: 'Fallback plan if primary fails', required: false },
     ],
     rules: [
       'Prefer simplest working solution.',
@@ -150,6 +170,14 @@ export const ROLE_PATCHES: Record<string, RolePatch> = {
       '4) FIX SUGGESTIONS (minimal change first)',
       '5) CONFIDENCE + WHAT WOULD CHANGE MY MIND',
     ],
+    schemaFields: [
+      { name: 'verdict', type: 'string', description: 'Verification result', required: true, enum: ['pass', 'fail', 'needs_info'] },
+      { name: 'issues', type: 'array', description: 'Critical issues found (ranked by severity)', required: true },
+      { name: 'counterexamples', type: 'array', description: 'Edge cases that break the solution (>=3)', required: true },
+      { name: 'fixes', type: 'array', description: 'Fix suggestions (minimal change first)', required: false },
+      { name: 'confidence', type: 'number', description: 'Confidence level 0-1', required: true },
+      { name: 'would_change_mind', type: 'string', description: 'What evidence would change verdict', required: false },
+    ],
     rules: [
       'Assume the draft is wrong until proven correct.',
       'Every "fail" must include a minimal reproduction or a specific falsifiable test.',
@@ -170,6 +198,15 @@ export const ROLE_PATCHES: Record<string, RolePatch> = {
       '4) INTERFACES / BOUNDARIES',
       '5) RISK + MITIGATION + ROLLBACK',
     ],
+    schemaFields: [
+      { name: 'goal', type: 'string', description: 'Primary goal of the design', required: true },
+      { name: 'non_goals', type: 'array', description: 'Explicit out-of-scope items', required: true },
+      { name: 'options', type: 'array', description: '2-3 options with trade-offs', required: true },
+      { name: 'recommendation', type: 'string', description: 'Recommended option with rationale', required: true },
+      { name: 'interfaces', type: 'array', description: 'API/module boundaries', required: true },
+      { name: 'risks', type: 'array', description: 'Identified risks', required: true },
+      { name: 'rollback', type: 'string', description: 'Rollback plan', required: true },
+    ],
     rules: [
       'Every option must have explicit trade-offs.',
       'Interfaces must be testable.',
@@ -189,6 +226,13 @@ export const ROLE_PATCHES: Record<string, RolePatch> = {
       '2) RUBRIC SCORES (Correctness, Rigor, Completeness, Usefulness, Efficiency, Risk)',
       '3) KEY REASONS (<=6 bullets)',
       '4) AUDIT FLAGS (hallucination risk, missing tests, etc.)',
+    ],
+    schemaFields: [
+      { name: 'winner', type: 'string', description: 'Winner of comparison', required: true, enum: ['A', 'B', 'tie'] },
+      { name: 'rubric', type: 'object', description: 'Scores per rubric dimension (0-10)', required: true },
+      { name: 'reasons', type: 'array', description: 'Key reasons for decision (<=6 bullets)', required: true },
+      { name: 'audit_flags', type: 'array', description: 'Issues detected (hallucination, missing tests)', required: true },
+      { name: 'tie_breaker', type: 'string', description: 'What evidence would break a tie', required: false },
     ],
     rules: [
       'Blind review: ignore style, rank only by rubric.',
@@ -212,6 +256,13 @@ export const ROLE_PATCHES: Record<string, RolePatch> = {
       '4) NEXT EXPERIMENTS (what to try next)',
       '5) CONFIDENCE (per hypothesis)',
     ],
+    schemaFields: [
+      { name: 'hypotheses', type: 'array', description: '3-5 hypotheses to explore', required: true },
+      { name: 'exploration', type: 'array', description: 'What was tried and results', required: true },
+      { name: 'findings', type: 'array', description: 'Unexpected discoveries', required: false },
+      { name: 'next_experiments', type: 'array', description: 'What to try next', required: true },
+      { name: 'confidence', type: 'object', description: 'Confidence per hypothesis (0-1)', required: true },
+    ],
     rules: [
       'Quantity over quality in exploration phase.',
       'Document failures - they are valuable.',
@@ -232,6 +283,13 @@ export const ROLE_PATCHES: Record<string, RolePatch> = {
       '3) TRADE-OFFS (what we gain vs lose)',
       '4) TESTS (proof it works)',
       '5) ALTERNATIVE (conventional fallback)',
+    ],
+    schemaFields: [
+      { name: 'approach', type: 'string', description: 'What makes this approach novel', required: true },
+      { name: 'implementation', type: 'string', description: 'Working code', required: true },
+      { name: 'tradeoffs', type: 'array', description: 'What we gain vs lose', required: true },
+      { name: 'tests', type: 'string', description: 'Proof it works', required: true },
+      { name: 'alternative', type: 'string', description: 'Conventional fallback if creative fails', required: true },
     ],
     rules: [
       'Provide at least one creative solution.',
@@ -760,12 +818,23 @@ export function compilePromptV2(options: CompileV2Options): CompiledPrompt {
   parts.push('# KNOBS含义: rigor=验证次数 skepticism=质疑假设 explore=发散程度 decide=决断速度 risk=风险规避 tool=工具优先 compress=输出简洁 check=自检强度 empathy=用户视角 compete=表现欲');
   parts.push('');
 
-  // OUTPUT_SCHEMA
+  // OUTPUT_SCHEMA - 人类可读描述
   parts.push('OUTPUT_SCHEMA:');
   for (const line of patch.outputSchema) {
     parts.push(`  ${line}`);
   }
   parts.push('');
+
+  // JSON_SCHEMA - 结构化输出定义 (如果定义了)
+  if (patch.schemaFields && patch.schemaFields.length > 0) {
+    parts.push('JSON_SCHEMA:');
+    for (const field of patch.schemaFields) {
+      const required = field.required ? '必填' : '可选';
+      const enumStr = field.enum ? ` {${field.enum.join('|')}}` : '';
+      parts.push(`  ${field.name}: ${field.type}${enumStr} (${required}) - ${field.description}`);
+    }
+    parts.push('');
+  }
 
   // RULES
   parts.push('RULES:');
