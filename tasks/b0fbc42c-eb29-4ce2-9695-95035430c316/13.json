@@ -1,0 +1,9 @@
+{
+  "id": "13",
+  "subject": "集成到 waifuExtension 替换 CLI 调用",
+  "description": "Phase 2: 集成工作\n\n1. 在 waifuExtension 中创建 RIFECoreML 类\n2. 替换 ShellManager CLI 调用\n3. 实现内存零拷贝管道\n4. 错误处理和降级逻辑\n\n验收标准:\n- 帧插值功能正常\n- 无外部 CLI 依赖\n- 内存占用 < 500MB",
+  "activeForm": "集成 Core ML 到 waifuExtension",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

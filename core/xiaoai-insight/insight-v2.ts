@@ -442,15 +442,15 @@ const API_CONFIGS: Record<string, { url: string; keyEnv: string; modelId: string
     maxTokens: 16384
   },
   'gemini-3-pro': {
-    url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro:generateContent',
+    url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent',
     keyEnv: 'GOOGLE_API_KEY',
-    modelId: 'gemini-3-pro',
+    modelId: 'gemini-3-pro-preview',
     maxTokens: 16384
   },
   'gemini-3-pro-preview': {
-    url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro:generateContent',
+    url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent',
     keyEnv: 'GOOGLE_API_KEY',
-    modelId: 'gemini-3-pro',
+    modelId: 'gemini-3-pro-preview',
     maxTokens: 16384
   },
   'deepseek-r1': {

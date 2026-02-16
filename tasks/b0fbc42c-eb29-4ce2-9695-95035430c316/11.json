@@ -1,0 +1,9 @@
+{
+  "id": "11",
+  "subject": "获取 RIFE PyTorch 模型并转换 Core ML",
+  "description": "Phase 1: 模型转换\n\n1. 克隆官方 RIFE 仓库: megvii-research/ECCV2020-RIFE\n2. 下载预训练权重 RIFE_HD.pth\n3. 导出为 ONNX 格式\n4. 转换为 Core ML (.mlmodel)\n5. 量化为 FP16\n6. 验证输出质量 (PSNR/SSIM 对比)\n\n验收标准:\n- Core ML 模型可加载\n- 输出质量无明显下降 (PSNR > 30dB)",
+  "activeForm": "转换 RIFE 模型到 Core ML",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

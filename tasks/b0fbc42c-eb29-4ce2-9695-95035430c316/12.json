@@ -1,0 +1,9 @@
+{
+  "id": "12",
+  "subject": "实现 Metal Warping Shader",
+  "description": "无需实现 - grid_sample 在 Core ML 中原生支持，无需自定义 Metal Shader",
+  "activeForm": "实现 Metal Warping Shader",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

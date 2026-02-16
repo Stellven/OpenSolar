@@ -132,6 +132,7 @@
 | 洞察分析：<主题> | → /insight 快速洞察 (对话内3专家) |
 | 深入洞察 <主题> | → /insight 完整报告 (八阶段四专家+分章持久化) |
 | 深度洞察：<主题> | → `bun ~/.claude/core/solar-farm/insight-agent-v2.ts "<主题>" 3 --force` |
+| 小爱/呼叫小爱 | → /xiaoai 调用小爱处理日常事务 |
 
 ## @Agent
 `@Researcher` `@Architect` `@PM` `@Reporter` `@Coder` `@Tester` `@Reviewer` `@Docs` `@Ops` `@Guard` `@Secretary` `@BenchmarkReporter` `@SM`

@@ -38,11 +38,12 @@ export class GmailListener {
     if (this.running) return;
     this.running = true;
 
-    // Check himalaya is available
+    // Check himalaya is available (use full path for launchd)
+    const himalayaPath = '/opt/homebrew/bin/himalaya';
     try {
-      await $`himalaya --version`.quiet();
+      await $`${himalayaPath} --version`.quiet();
     } catch {
-      console.error('[Gmail] himalaya not found. Install with: brew install himalaya');
+      console.error('[Gmail] himalaya not found at ' + himalayaPath);
       this.running = false;
       return;
     }
@@ -71,7 +72,8 @@ export class GmailListener {
 
     try {
       // List recent envelopes (himalaya v1.x API)
-      const result = await $`himalaya envelope list --folder INBOX -o json`.quiet();
+      const himalayaPath = '/opt/homebrew/bin/himalaya';
+      const result = await $`${himalayaPath} envelope list --folder INBOX -o json`.quiet();
       const output = result.stdout.toString();
 
       if (!output.trim()) {
@@ -116,8 +118,9 @@ export class GmailListener {
       // Get email body
       let body = email.subject; // Default to subject if body fetch fails
 
+      const himalayaPath = '/opt/homebrew/bin/himalaya';
       try {
-        const bodyResult = await $`himalaya message read ${email.id} --no-headers --preview`.quiet();
+        const bodyResult = await $`${himalayaPath} message read ${email.id} --no-headers --preview`.quiet();
         body = bodyResult.stdout.toString().slice(0, 2000); // Limit body size
       } catch {
         // Use subject as content

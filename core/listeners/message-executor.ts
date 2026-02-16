@@ -88,10 +88,32 @@ export class MessageExecutor {
     `).run(task.task_id);
 
     try {
-      // 3. 获取线程上下文 (如果是回复邮件)
+      // 3. 检查是否是深度洞察请求
+      const insightResult = await this.checkAndRunInsight(task);
+      if (insightResult) {
+        // 深度洞察已执行，更新状态并返回
+        this.db.prepare(`
+          UPDATE bl_message_tasks
+          SET status = 'done',
+              result = ?,
+              completed_at = datetime('now')
+          WHERE task_id = ?
+        `).run(insightResult, task.task_id);
+
+        await sendNtfy({
+          title: `🔬 深度洞察完成`,
+          message: insightResult.slice(0, 100),
+          tags: ['brain'],
+        });
+
+        console.log(`[Executor] ✓ 深度洞察完成: ${task.task_id}`);
+        return true;
+      }
+
+      // 4. 获取线程上下文 (如果是回复邮件)
       const context = await this.getThreadContext(task);
 
-      // 4. 执行任务
+      // 5. 执行任务
       const result = await this.executeTask(task, context);
 
       // 5. 发送 ntfy 通知
@@ -239,20 +261,112 @@ ${context}
 
 请根据用户指令处理，给出简洁的回复。如果是分析任务，给出分析结果；如果是设计任务，给出设计方案。`;
 
-    // 调用 Claude (通过 claude CLI)
+    // 调用 OpenClaw (小爱) 处理，让小爱调度老专家
     try {
-      const result = await Bun.spawn(['claude', '-p', prompt], {
+      // 优先使用 OpenClaw，让小爱调用老专家分析
+      const result = await Bun.spawn([
+        'openclaw', 'agent', '--local', '--agent', 'main',
+        '--message', prompt
+      ], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+        env: { ...process.env, PATH: '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/Users/lisihao/n/bin' }
+      });
+
+      const output = await new Response(result.stdout).text();
+      const errorOutput = await new Response(result.stderr).text();
+
+      if (output.trim()) {
+        console.log(`[Executor] OpenClaw 处理成功`);
+        return output.trim();
+      }
+
+      // OpenClaw 失败，降级到 Claude
+      console.warn('[Executor] OpenClaw 返回空，尝试 Claude');
+      const claudeResult = await Bun.spawn(['claude', '-p', prompt], {
         stdout: 'pipe',
         stderr: 'pipe',
       });
 
-      const output = await new Response(result.stdout).text();
-      return output.trim() || '任务已处理';
+      const claudeOutput = await new Response(claudeResult.stdout).text();
+      return claudeOutput.trim() || '任务已处理';
 
-    } catch (e) {
+    } catch (e: any) {
       // 降级: 返回简单确认
-      console.warn('[Executor] Claude 调用失败，使用降级回复');
+      console.warn('[Executor] 模型调用失败:', e.message);
       return `收到您的消息: "${instruction.slice(0, 50)}..."\n\n已记录，稍后处理。`;
+    }
+  }
+
+  /**
+   * 检查并执行深度洞察分析
+   * @returns 如果匹配并执行了深度洞察，返回结果；否则返回 null
+   */
+  private async checkAndRunInsight(task: QueuedTask): Promise<string | null> {
+    // 深度洞察触发关键词
+    const insightKeywords = [
+      '深度洞察', '洞察分析', '深入分析', '深度分析',
+      '帮我研究', '深入洞察', '洞察一下', '调研一下'
+    ];
+
+    // 检查是否匹配
+    const content = task.content.toLowerCase();
+    const matched = insightKeywords.some(kw => content.includes(kw.toLowerCase()));
+
+    if (!matched) {
+      return null;
+    }
+
+    console.log(`[Executor] 🔬 检测到深度洞察请求`);
+
+    // 提取主题
+    let topic = task.content;
+    // 尝试从邮件格式中提取
+    const subjectMatch = task.content.match(/Subject: (.+?)(?:\n|$)/);
+    if (subjectMatch) {
+      topic = subjectMatch[1];
+    }
+    // 去掉触发关键词
+    for (const kw of insightKeywords) {
+      topic = topic.replace(new RegExp(kw, 'gi'), '').replace(/[：:]/g, '').trim();
+    }
+
+    console.log(`[Executor] 🧠 启动深度洞察分析: ${topic.slice(0, 50)}...`);
+
+    // 直接调用 insight-runner.sh（绕过分发器，因为主题已不含关键词）
+    const insightRunnerPath = `${process.env.HOME}/.claude/core/xiaoai-insight/insight-runner.sh`;
+
+    try {
+      const result = Bun.spawn([insightRunnerPath, topic, '昊哥'], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+        env: {
+          ...process.env,
+          PATH: '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/Users/lisihao/.bun/bin:/Users/lisihao/n/bin',
+          HOME: process.env.HOME
+        }
+      });
+
+      const output = await new Response(result.stdout).text();
+      const exitCode = await result.exited;
+
+      if (exitCode === 0 && output.trim()) {
+        return output.trim();
+      }
+
+      // 如果失败，返回简单确认
+      const errOutput = await new Response(result.stderr).text();
+      console.warn('[Executor] 深度洞察执行失败:', errOutput.slice(0, 200));
+      return `🔬 已收到您的深度洞察请求: "${topic.slice(0, 50)}"
+
+深度洞察分析已启动，预计需要 5-15 分钟。
+完成后会发送通知。
+
+提示：您也可以直接对我说"深度洞察：${topic}"来启动分析。`;
+
+    } catch (e: any) {
+      console.error('[Executor] 深度洞察执行错误:', e.message);
+      return null; // 降级为普通处理
     }
   }
 
