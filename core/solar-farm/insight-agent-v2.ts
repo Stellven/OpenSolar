@@ -458,9 +458,9 @@ const MODEL_CONFIGS: Record<string, ModelConfig> = {
   },
   'gemini-3-pro-preview': {
     provider: 'google',
-    modelId: 'gemini-2.5-pro',
+    modelId: 'gemini-3-pro-preview',
     apiKeyEnv: 'GOOGLE_API_KEY',
-    maxTokens: 8192
+    maxTokens: 16384
   },
   'gemini-2-flash': {
     provider: 'google',

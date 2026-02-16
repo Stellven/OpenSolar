@@ -140,7 +140,8 @@
       "Bash(./.build/release/interpolate -i benchmark/videos/540p_short.mp4 -o benchmark/output/parallel_test.mp4 --parallel)",
       "Bash(./.build/release/interpolate -i benchmark/input/1.mp4 -o benchmark/output/parallel_test.mp4 --parallel)",
       "Bash(./.build/release/interpolate:*)",
-      "Bash(.build/release/benchmark:*)"
+      "Bash(.build/release/benchmark:*)",
+      "Bash(xcrun coremlcompiler compile:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
