@@ -26574,3 +26574,966 @@ rg: /Users/lisihao/.Trash: IO error for operation on /Users/lisihao/.Trash: Oper
 2026-02-16T01:17:13.771Z [DEBUG] Stream started - received first chunk
 2026-02-16T01:17:13.867Z [DEBUG] [claudeai-mcp] Fetched 0 servers
 2026-02-16T01:17:46.373Z [DEBUG] Forked agent [compact] received message: type=assistant
+2026-02-16T01:18:27.813Z [DEBUG] Forked agent [compact] received message: type=assistant
+2026-02-16T01:18:27.821Z [DEBUG] Getting matching hook commands for SubagentStop with query:
+2026-02-16T01:18:27.821Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:18:27.821Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-16T01:18:27.821Z [DEBUG] Forked agent [compact] finished: 2 messages, types=[assistant, assistant], totalUsage: input=1059 output=2673 cacheRead=167232 cacheCreate=0
+2026-02-16T01:18:27.837Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:18:27.837Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:18:27.837Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:18:27.841Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:18:27.841Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:18:27.841Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:18:27.842Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:18:27.842Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:18:27.842Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:18:29.419Z [DEBUG] Getting matching hook commands for SessionStart with query: compact
+2026-02-16T01:18:29.419Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:18:29.419Z [DEBUG] Matched 0 unique hooks for query "compact" (0 before deduplication)
+2026-02-16T01:18:29.421Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:18:29.429Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771204709429
+2026-02-16T01:18:29.429Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:18:29.429Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:18:29.429Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:18:29.429Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771204709429 to /Users/lisihao/.claude.json
+2026-02-16T01:18:29.430Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:18:29.432Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.910; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:18:29.433Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:18:29.433Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:18:29.433Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:18:29.557Z [DEBUG] High write ratio: blit=0, write=1503 (100.0% writes), screen=30x141
+2026-02-16T01:18:29.557Z [DEBUG] Full reset (shrink->below): prevHeight=1598, nextHeight=30, viewport=49
+2026-02-16T01:18:31.792Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:18:37.534Z [DEBUG] Metrics opt-out check failed: No API key available
+2026-02-16T01:18:37.534Z [DEBUG] Metrics check failed, defaulting to disabled
+2026-02-16T01:18:37.534Z [DEBUG] Metrics export disabled by organization setting
+2026-02-16T01:18:56.941Z [DEBUG] [useDeferredValue] Messages deferred by 1 (8→9)
+2026-02-16T01:18:59.373Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-16T01:18:59.376Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-16T01:18:59.376Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:18:59.376Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-16T01:18:59.378Z [DEBUG] [useDeferredValue] Messages deferred by 2 (9→11)
+2026-02-16T01:18:59.385Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-16T01:18:59.385Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:18:59.385Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-16T01:18:59.436Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:18:59.436Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-16T01:18:59.436Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:18:59.436Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:18:59.492Z [DEBUG] Sending 39 skills via attachment (initial, 39 total sent)
+2026-02-16T01:18:59.493Z [DEBUG] autocompact: tokens=116031 threshold=167000 effectiveWindow=180000
+2026-02-16T01:18:59.493Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:18:59.495Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771204739495
+2026-02-16T01:18:59.495Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:18:59.495Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:18:59.495Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:18:59.495Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771204739495 to /Users/lisihao/.claude.json
+2026-02-16T01:18:59.495Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:18:59.495Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.910; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:18:59.496Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:18:59.496Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:18:59.496Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:18:59.499Z [DEBUG] [useDeferredValue] Messages deferred by 4 (11→15)
+2026-02-16T01:19:02.787Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:19:06.872Z [DEBUG] [useDeferredValue] Messages deferred by 1 (15→16)
+2026-02-16T01:19:12.133Z [DEBUG] [useDeferredValue] Messages deferred by 1 (16→17)
+2026-02-16T01:19:12.139Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-16T01:19:12.140Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-16T01:19:12.140Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:19:12.141Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-16T01:19:12.143Z [DEBUG] Writing to temp file: /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift.tmp.36765.1771204752143
+2026-02-16T01:19:12.143Z [DEBUG] Preserving file permissions: 100755
+2026-02-16T01:19:12.144Z [DEBUG] Temp file written successfully, size: 8632 bytes
+2026-02-16T01:19:12.144Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:19:12.144Z [DEBUG] Renaming /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift.tmp.36765.1771204752143 to /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift
+2026-02-16T01:19:12.144Z [DEBUG] File /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift written atomically
+2026-02-16T01:19:12.144Z [DEBUG] [LSP PROTOCOL plugin:swift-lsp:sourcekit-lsp] Sending notification 'textDocument/didChange'.
+2026-02-16T01:19:12.144Z [DEBUG] [LSP PROTOCOL plugin:swift-lsp:sourcekit-lsp] Sending notification 'textDocument/didSave'.
+2026-02-16T01:19:12.146Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-16T01:19:12.146Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:19:12.146Z [DEBUG] Matched 1 unique hooks for query "Edit" (1 before deduplication)
+2026-02-16T01:19:12.146Z [DEBUG] [useDeferredValue] Messages deferred by 2 (16→18)
+2026-02-16T01:19:12.148Z [DEBUG] LSP: Sent didChange for /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift
+2026-02-16T01:19:12.148Z [DEBUG] LSP: Sent didSave for /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift
+2026-02-16T01:19:12.223Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:19:12.223Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-16T01:19:12.223Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:19:12.223Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:19:12.224Z [DEBUG] autocompact: tokens=116875 threshold=167000 effectiveWindow=180000
+2026-02-16T01:19:12.224Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:19:12.228Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771204752228
+2026-02-16T01:19:12.228Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:19:12.228Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:19:12.228Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:19:12.228Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771204752228 to /Users/lisihao/.claude.json
+2026-02-16T01:19:12.228Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:19:12.229Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.910; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:19:12.229Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:19:12.229Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:19:12.229Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:19:12.235Z [DEBUG] [useDeferredValue] Messages deferred by 3 (18→21)
+2026-02-16T01:19:13.165Z [DEBUG] [LSP PROTOCOL plugin:swift-lsp:sourcekit-lsp] Received notification 'textDocument/publishDiagnostics'.
+2026-02-16T01:19:13.165Z [DEBUG] [PASSIVE DIAGNOSTICS] Handler invoked for plugin:swift-lsp:sourcekit-lsp! Params type: object
+2026-02-16T01:19:13.165Z [DEBUG] Received diagnostics from plugin:swift-lsp:sourcekit-lsp: 6 diagnostic(s) for file:///Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift
+2026-02-16T01:19:13.166Z [DEBUG] LSP Diagnostics: Registering 1 diagnostic file(s) from plugin:swift-lsp:sourcekit-lsp (ID: cf2b8e5f-f7f4-4a8b-8573-8ecdc9b8544a)
+2026-02-16T01:19:13.166Z [DEBUG] LSP Diagnostics: Registered 1 diagnostic file(s) from plugin:swift-lsp:sourcekit-lsp for async delivery
+2026-02-16T01:19:15.792Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:19:21.388Z [DEBUG] [useDeferredValue] Messages deferred by 1 (21→22)
+2026-02-16T01:19:21.397Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-16T01:19:21.399Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-16T01:19:21.399Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:19:21.399Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-16T01:19:21.400Z [DEBUG] [useDeferredValue] Messages deferred by 2 (21→23)
+2026-02-16T01:19:21.406Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-16T01:19:21.406Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:19:21.406Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-16T01:19:21.427Z [DEBUG] High write ratio: blit=0, write=3569 (100.0% writes), screen=57x141
+2026-02-16T01:19:21.457Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:19:21.457Z [DEBUG] LSP Diagnostics: Checking registry - 1 pending
+2026-02-16T01:19:21.457Z [DEBUG] LSP Diagnostics: Deduplication removed 6 duplicate diagnostic(s)
+2026-02-16T01:19:21.457Z [DEBUG] LSP Diagnostics: No new diagnostics to deliver (all filtered by deduplication)
+2026-02-16T01:19:21.457Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:19:21.457Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:19:21.473Z [DEBUG] autocompact: tokens=117375 threshold=167000 effectiveWindow=180000
+2026-02-16T01:19:21.473Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:19:21.475Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771204761475
+2026-02-16T01:19:21.475Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:19:21.476Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:19:21.476Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:19:21.476Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771204761475 to /Users/lisihao/.claude.json
+2026-02-16T01:19:21.476Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:19:21.476Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.910; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:19:21.477Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:19:21.477Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:19:21.477Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:19:21.481Z [DEBUG] [useDeferredValue] Messages deferred by 3 (23→26)
+2026-02-16T01:19:24.902Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:19:27.864Z [DEBUG] [useDeferredValue] Messages deferred by 1 (26→27)
+2026-02-16T01:20:26.694Z [WARN] Streaming stall detected: 58.2s gap between events (stall #1)
+2026-02-16T01:20:26.695Z [DEBUG] [useDeferredValue] Messages deferred by 1 (27→28)
+2026-02-16T01:20:26.732Z [DEBUG] High write ratio: blit=0, write=3580 (100.0% writes), screen=59x141
+2026-02-16T01:20:26.922Z [DEBUG] executePreToolHooks called for tool: Write
+2026-02-16T01:20:26.923Z [DEBUG] Getting matching hook commands for PreToolUse with query: Write
+2026-02-16T01:20:26.923Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:20:26.923Z [DEBUG] Matched 0 unique hooks for query "Write" (0 before deduplication)
+2026-02-16T01:20:26.924Z [DEBUG] Writing to temp file: /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift.tmp.36765.1771204826924
+2026-02-16T01:20:26.924Z [DEBUG] Preserving file permissions: 100755
+2026-02-16T01:20:26.925Z [DEBUG] Temp file written successfully, size: 9501 bytes
+2026-02-16T01:20:26.925Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:20:26.925Z [DEBUG] Renaming /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift.tmp.36765.1771204826924 to /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift
+2026-02-16T01:20:26.925Z [DEBUG] File /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift written atomically
+2026-02-16T01:20:26.925Z [DEBUG] [LSP PROTOCOL plugin:swift-lsp:sourcekit-lsp] Sending notification 'textDocument/didChange'.
+2026-02-16T01:20:26.925Z [DEBUG] [LSP PROTOCOL plugin:swift-lsp:sourcekit-lsp] Sending notification 'textDocument/didSave'.
+2026-02-16T01:20:26.935Z [DEBUG] Getting matching hook commands for PostToolUse with query: Write
+2026-02-16T01:20:26.935Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:20:26.935Z [DEBUG] Matched 1 unique hooks for query "Write" (1 before deduplication)
+2026-02-16T01:20:26.936Z [WARN] Streaming completed with 1 stall(s), total stall time: 58.2s
+2026-02-16T01:20:26.937Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:20:26.937Z [DEBUG] LSP Diagnostics: Checking registry - 1 pending
+2026-02-16T01:20:26.937Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:20:26.937Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:20:26.937Z [DEBUG] autocompact: tokens=122970 threshold=167000 effectiveWindow=180000
+2026-02-16T01:20:26.937Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:20:26.940Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771204826940
+2026-02-16T01:20:26.940Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:20:26.940Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:20:26.940Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:20:26.940Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771204826940 to /Users/lisihao/.claude.json
+2026-02-16T01:20:26.940Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:20:26.941Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.910; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:20:26.941Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:20:26.941Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:20:26.942Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:20:26.947Z [DEBUG] [useDeferredValue] Messages deferred by 4 (28→32)
+2026-02-16T01:20:26.948Z [DEBUG] LSP: Sent didChange for /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift
+2026-02-16T01:20:26.948Z [DEBUG] LSP: Sent didSave for /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift
+2026-02-16T01:20:26.970Z [DEBUG] High write ratio: blit=0, write=3580 (100.0% writes), screen=59x141
+2026-02-16T01:20:27.013Z [DEBUG] High write ratio: blit=7332, write=57138 (88.6% writes), screen=505x141
+2026-02-16T01:20:27.999Z [DEBUG] [LSP PROTOCOL plugin:swift-lsp:sourcekit-lsp] Received notification 'textDocument/publishDiagnostics'.
+2026-02-16T01:20:27.999Z [DEBUG] [PASSIVE DIAGNOSTICS] Handler invoked for plugin:swift-lsp:sourcekit-lsp! Params type: object
+2026-02-16T01:20:27.999Z [DEBUG] Received diagnostics from plugin:swift-lsp:sourcekit-lsp: 6 diagnostic(s) for file:///Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift
+2026-02-16T01:20:27.999Z [DEBUG] LSP Diagnostics: Registering 1 diagnostic file(s) from plugin:swift-lsp:sourcekit-lsp (ID: 01bbcde1-c1c1-4685-b2c5-5d844d5f1225)
+2026-02-16T01:20:27.999Z [DEBUG] LSP Diagnostics: Registered 1 diagnostic file(s) from plugin:swift-lsp:sourcekit-lsp for async delivery
+2026-02-16T01:20:30.397Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:20:35.185Z [DEBUG] [useDeferredValue] Messages deferred by 1 (32→33)
+2026-02-16T01:20:36.495Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-16T01:20:36.496Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-16T01:20:36.496Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:20:36.496Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:20:36.500Z [DEBUG] [useDeferredValue] Messages deferred by 2 (33→35)
+2026-02-16T01:20:36.699Z [DEBUG] Bash tool error (200ms): Shell command failed
+2026-02-16T01:20:36.700Z [DEBUG] Getting matching hook commands for PostToolUseFailure with query: Bash
+2026-02-16T01:20:36.700Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:20:36.700Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:20:36.700Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:20:36.700Z [DEBUG] LSP Diagnostics: Checking registry - 2 pending
+2026-02-16T01:20:36.700Z [DEBUG] LSP Diagnostics: Deduplication removed 6 duplicate diagnostic(s)
+2026-02-16T01:20:36.700Z [DEBUG] LSP Diagnostics: No new diagnostics to deliver (all filtered by deduplication)
+2026-02-16T01:20:36.700Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:20:36.700Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:20:36.700Z [DEBUG] autocompact: tokens=123869 threshold=167000 effectiveWindow=180000
+2026-02-16T01:20:36.700Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:20:36.702Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771204836702
+2026-02-16T01:20:36.702Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:20:36.702Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:20:36.702Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:20:36.702Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771204836702 to /Users/lisihao/.claude.json
+2026-02-16T01:20:36.702Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:20:36.702Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.910; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:20:36.702Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:20:36.702Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:20:36.702Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:20:36.705Z [DEBUG] [useDeferredValue] Messages deferred by 1 (35→36)
+2026-02-16T01:20:39.010Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:20:43.406Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-16T01:20:43.410Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-16T01:20:43.410Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:20:43.410Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:20:43.416Z [DEBUG] [useDeferredValue] Messages deferred by 2 (36→38)
+2026-02-16T01:20:43.612Z [DEBUG] Bash tool error (198ms): Shell command failed
+2026-02-16T01:20:43.612Z [DEBUG] Getting matching hook commands for PostToolUseFailure with query: Bash
+2026-02-16T01:20:43.612Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:20:43.612Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:20:43.613Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:20:43.613Z [DEBUG] LSP Diagnostics: Checking registry - 2 pending
+2026-02-16T01:20:43.613Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:20:43.613Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:20:43.613Z [DEBUG] autocompact: tokens=123981 threshold=167000 effectiveWindow=180000
+2026-02-16T01:20:43.613Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:20:43.614Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771204843614
+2026-02-16T01:20:43.614Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:20:43.614Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:20:43.614Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:20:43.614Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771204843614 to /Users/lisihao/.claude.json
+2026-02-16T01:20:43.614Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:20:43.615Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.910; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:20:43.615Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:20:43.615Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:20:43.615Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:20:43.618Z [DEBUG] [useDeferredValue] Messages deferred by 2 (38→40)
+2026-02-16T01:20:45.933Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:20:50.401Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-16T01:20:50.402Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-16T01:20:50.402Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:20:50.402Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:20:50.406Z [DEBUG] [useDeferredValue] Messages deferred by 2 (40→42)
+2026-02-16T01:20:50.601Z [DEBUG] Bash tool error (196ms): Shell command failed
+2026-02-16T01:20:50.602Z [DEBUG] Getting matching hook commands for PostToolUseFailure with query: Bash
+2026-02-16T01:20:50.602Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:20:50.602Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:20:50.602Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:20:50.602Z [DEBUG] LSP Diagnostics: Checking registry - 2 pending
+2026-02-16T01:20:50.602Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:20:50.602Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:20:50.602Z [DEBUG] autocompact: tokens=124173 threshold=167000 effectiveWindow=180000
+2026-02-16T01:20:50.603Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:20:50.604Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771204850604
+2026-02-16T01:20:50.604Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:20:50.604Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:20:50.604Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:20:50.604Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771204850604 to /Users/lisihao/.claude.json
+2026-02-16T01:20:50.604Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:20:50.605Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.910; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:20:50.605Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:20:50.605Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:20:50.605Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:20:50.607Z [DEBUG] [useDeferredValue] Messages deferred by 1 (42→43)
+2026-02-16T01:20:52.843Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:20:57.035Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-16T01:20:57.037Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-16T01:20:57.037Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:20:57.037Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:20:57.040Z [DEBUG] [useDeferredValue] Messages deferred by 2 (43→45)
+2026-02-16T01:20:57.172Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-16T01:20:57.172Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.0c8; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:20:57.172Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:20:57.172Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:20:57.172Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-16T01:20:57.172Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:20:57.172Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:20:57.172Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:20:57.173Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:20:57.173Z [DEBUG] LSP Diagnostics: Checking registry - 2 pending
+2026-02-16T01:20:57.173Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:20:57.173Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:20:57.173Z [DEBUG] autocompact: tokens=124341 threshold=167000 effectiveWindow=180000
+2026-02-16T01:20:57.173Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:20:57.175Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771204857175
+2026-02-16T01:20:57.175Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:20:57.175Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:20:57.175Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:20:57.175Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771204857175 to /Users/lisihao/.claude.json
+2026-02-16T01:20:57.175Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:20:57.175Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.910; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:20:57.175Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:20:57.175Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:20:57.175Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:20:57.178Z [DEBUG] [useDeferredValue] Messages deferred by 1 (45→46)
+2026-02-16T01:20:57.798Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:21:01.115Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:21:02.303Z [DEBUG] High write ratio: blit=0, write=61089 (100.0% writes), screen=521x141
+2026-02-16T01:21:02.303Z [DEBUG] Full reset (scrollback changes): scrollbackRows=477, firstChangeY=5
+  prev: "│                                               │ Recent activity                                                                           │"
+  next: "│                   ▗ ▗   ▖ ▖                   │ Recent activity                                                                           │"
+2026-02-16T01:21:02.358Z [DEBUG] High write ratio: blit=20, write=61072 (100.0% writes), screen=521x141
+2026-02-16T01:21:02.358Z [DEBUG] Full reset (scrollback changes): scrollbackRows=473, firstChangeY=5
+  prev: "│                   ▗ ▗   ▖ ▖                   │ Recent activity                                                                           │"
+  next: "│                                               │ Recent activity                                                                           │"
+2026-02-16T01:21:03.752Z [DEBUG] High write ratio: blit=0, write=61200 (100.0% writes), screen=525x141
+2026-02-16T01:21:03.767Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-16T01:21:03.768Z [DEBUG] [claudeai-mcp] Checking gate (cached)...
+2026-02-16T01:21:03.768Z [DEBUG] [claudeai-mcp] Gate returned: true
+2026-02-16T01:21:03.768Z [DEBUG] [claudeai-mcp] Fetching from https://api.anthropic.com/v1/mcp_servers?limit=1000
+2026-02-16T01:21:03.809Z [DEBUG] High write ratio: blit=20, write=61210 (100.0% writes), screen=525x141
+2026-02-16T01:21:03.809Z [DEBUG] Full reset (scrollback changes): scrollbackRows=477, firstChangeY=5
+  prev: "│                   ▗ ▗   ▖ ▖                   │ Recent activity                                                                           │"
+  next: "│                                               │ Recent activity                                                                           │"
+2026-02-16T01:21:03.923Z [DEBUG] [claudeai-mcp] Fetched 0 servers
+2026-02-16T01:21:07.622Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-16T01:21:07.625Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-16T01:21:07.625Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:21:07.625Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:21:07.629Z [DEBUG] Permission suggestions for Bash: [
+  {
+    "type": "setMode",
+    "mode": "acceptEdits",
+    "destination": "session"
+  }
+]
+2026-02-16T01:21:07.629Z [DEBUG] executePermissionRequestHooks called for tool: Bash
+2026-02-16T01:21:07.631Z [DEBUG] Getting matching hook commands for PermissionRequest with query: Bash
+2026-02-16T01:21:07.631Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:21:07.631Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:21:07.631Z [DEBUG] [useDeferredValue] Messages deferred by 2 (46→48)
+2026-02-16T01:21:07.639Z [DEBUG] [useDeferredValue] Messages deferred by 2 (46→48)
+2026-02-16T01:21:10.064Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-16T01:21:10.065Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-16T01:21:10.383Z [DEBUG] Bash tool error (334ms): Shell command failed
+2026-02-16T01:21:10.384Z [DEBUG] Getting matching hook commands for PostToolUseFailure with query: Bash
+2026-02-16T01:21:10.384Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:21:10.384Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:21:10.384Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:21:10.384Z [DEBUG] LSP Diagnostics: Checking registry - 2 pending
+2026-02-16T01:21:10.384Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:21:10.384Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:21:10.384Z [DEBUG] autocompact: tokens=125754 threshold=167000 effectiveWindow=180000
+2026-02-16T01:21:10.384Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:21:10.386Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771204870386
+2026-02-16T01:21:10.386Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:21:10.386Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:21:10.386Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:21:10.386Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771204870386 to /Users/lisihao/.claude.json
+2026-02-16T01:21:10.386Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:21:10.386Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.910; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:21:10.386Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:21:10.386Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:21:10.386Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:21:10.390Z [DEBUG] [useDeferredValue] Messages deferred by 1 (48→49)
+2026-02-16T01:21:13.962Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:21:19.305Z [DEBUG] [useDeferredValue] Messages deferred by 1 (49→50)
+2026-02-16T01:21:21.984Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-16T01:21:21.986Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-16T01:21:21.986Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:21:21.986Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:21:21.988Z [DEBUG] Permission suggestions for Bash: [
+  {
+    "type": "setMode",
+    "mode": "acceptEdits",
+    "destination": "session"
+  }
+]
+2026-02-16T01:21:21.988Z [DEBUG] executePermissionRequestHooks called for tool: Bash
+2026-02-16T01:21:21.989Z [DEBUG] Getting matching hook commands for PermissionRequest with query: Bash
+2026-02-16T01:21:21.989Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:21:21.989Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:21:21.990Z [DEBUG] [useDeferredValue] Messages deferred by 2 (50→52)
+2026-02-16T01:21:21.993Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-16T01:21:21.993Z [DEBUG] [useDeferredValue] Messages deferred by 2 (50→52)
+2026-02-16T01:21:27.996Z [DEBUG] Getting matching hook commands for Notification with query: permission_prompt
+2026-02-16T01:21:27.996Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:21:27.996Z [DEBUG] Matched 0 unique hooks for query "permission_prompt" (0 before deduplication)
+2026-02-16T01:22:29.344Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-16T01:22:29.345Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-16T01:22:29.511Z [DEBUG] Bash tool error (177ms): Shell command failed
+2026-02-16T01:22:29.512Z [DEBUG] Getting matching hook commands for PostToolUseFailure with query: Bash
+2026-02-16T01:22:29.512Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:22:29.512Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:22:29.512Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:22:29.512Z [DEBUG] LSP Diagnostics: Checking registry - 2 pending
+2026-02-16T01:22:29.512Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:22:29.512Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:22:29.512Z [DEBUG] autocompact: tokens=125903 threshold=167000 effectiveWindow=180000
+2026-02-16T01:22:29.512Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:22:29.514Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771204949514
+2026-02-16T01:22:29.514Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:22:29.514Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:22:29.514Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:22:29.514Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771204949514 to /Users/lisihao/.claude.json
+2026-02-16T01:22:29.514Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:22:29.514Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.910; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:22:29.514Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:22:29.514Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:22:29.515Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:22:29.517Z [DEBUG] [useDeferredValue] Messages deferred by 1 (52→53)
+2026-02-16T01:22:32.776Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:22:36.632Z [DEBUG] [useDeferredValue] Messages deferred by 1 (53→54)
+2026-02-16T01:23:37.433Z [WARN] Streaming stall detected: 60.1s gap between events (stall #1)
+2026-02-16T01:23:37.435Z [DEBUG] [useDeferredValue] Messages deferred by 1 (54→55)
+2026-02-16T01:23:37.466Z [DEBUG] executePreToolHooks called for tool: Write
+2026-02-16T01:23:37.470Z [DEBUG] Getting matching hook commands for PreToolUse with query: Write
+2026-02-16T01:23:37.470Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:23:37.470Z [DEBUG] Matched 0 unique hooks for query "Write" (0 before deduplication)
+2026-02-16T01:23:37.473Z [DEBUG] Writing to temp file: /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift.tmp.36765.1771205017473
+2026-02-16T01:23:37.473Z [DEBUG] Preserving file permissions: 100755
+2026-02-16T01:23:37.473Z [DEBUG] Temp file written successfully, size: 9057 bytes
+2026-02-16T01:23:37.473Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:23:37.473Z [DEBUG] Renaming /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift.tmp.36765.1771205017473 to /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift
+2026-02-16T01:23:37.474Z [DEBUG] File /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift written atomically
+2026-02-16T01:23:37.474Z [DEBUG] [LSP PROTOCOL plugin:swift-lsp:sourcekit-lsp] Sending notification 'textDocument/didChange'.
+2026-02-16T01:23:37.474Z [DEBUG] [LSP PROTOCOL plugin:swift-lsp:sourcekit-lsp] Sending notification 'textDocument/didSave'.
+2026-02-16T01:23:37.488Z [DEBUG] Getting matching hook commands for PostToolUse with query: Write
+2026-02-16T01:23:37.488Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:23:37.488Z [DEBUG] Matched 1 unique hooks for query "Write" (1 before deduplication)
+2026-02-16T01:23:37.489Z [WARN] Streaming completed with 1 stall(s), total stall time: 60.1s
+2026-02-16T01:23:37.489Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:23:37.489Z [DEBUG] LSP Diagnostics: Checking registry - 2 pending
+2026-02-16T01:23:37.489Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:23:37.489Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:23:37.490Z [DEBUG] autocompact: tokens=131301 threshold=167000 effectiveWindow=180000
+2026-02-16T01:23:37.490Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:23:37.492Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771205017492
+2026-02-16T01:23:37.492Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:23:37.492Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:23:37.493Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:23:37.493Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771205017492 to /Users/lisihao/.claude.json
+2026-02-16T01:23:37.493Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:23:37.494Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.910; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:23:37.494Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:23:37.494Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:23:37.494Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:23:37.499Z [DEBUG] [useDeferredValue] Messages deferred by 4 (55→59)
+2026-02-16T01:23:37.502Z [DEBUG] LSP: Sent didChange for /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift
+2026-02-16T01:23:37.502Z [DEBUG] LSP: Sent didSave for /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift
+2026-02-16T01:23:37.573Z [DEBUG] Metrics opt-out check failed: No API key available
+2026-02-16T01:23:37.573Z [DEBUG] Metrics check failed, defaulting to disabled
+2026-02-16T01:23:37.573Z [DEBUG] Metrics export disabled by organization setting
+2026-02-16T01:23:38.570Z [DEBUG] [LSP PROTOCOL plugin:swift-lsp:sourcekit-lsp] Received notification 'textDocument/publishDiagnostics'.
+2026-02-16T01:23:38.570Z [DEBUG] [PASSIVE DIAGNOSTICS] Handler invoked for plugin:swift-lsp:sourcekit-lsp! Params type: object
+2026-02-16T01:23:38.570Z [DEBUG] Received diagnostics from plugin:swift-lsp:sourcekit-lsp: 6 diagnostic(s) for file:///Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift
+2026-02-16T01:23:38.570Z [DEBUG] LSP Diagnostics: Registering 1 diagnostic file(s) from plugin:swift-lsp:sourcekit-lsp (ID: 2e51755e-6b6f-4f31-9f36-7c64d5a3d3b6)
+2026-02-16T01:23:38.571Z [DEBUG] LSP Diagnostics: Registered 1 diagnostic file(s) from plugin:swift-lsp:sourcekit-lsp for async delivery
+2026-02-16T01:23:41.431Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:23:48.903Z [DEBUG] [useDeferredValue] Messages deferred by 1 (59→60)
+2026-02-16T01:23:48.919Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-16T01:23:48.921Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-16T01:23:48.921Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:23:48.921Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:23:48.925Z [DEBUG] Permission suggestions for Bash: [
+  {
+    "type": "setMode",
+    "mode": "acceptEdits",
+    "destination": "session"
+  }
+]
+2026-02-16T01:23:48.925Z [DEBUG] executePermissionRequestHooks called for tool: Bash
+2026-02-16T01:23:48.927Z [DEBUG] Getting matching hook commands for PermissionRequest with query: Bash
+2026-02-16T01:23:48.927Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:23:48.927Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:23:48.931Z [DEBUG] [useDeferredValue] Messages deferred by 2 (59→61)
+2026-02-16T01:23:48.937Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-16T01:23:48.937Z [DEBUG] [useDeferredValue] Messages deferred by 2 (59→61)
+2026-02-16T01:23:48.940Z [DEBUG] [useDeferredValue] Messages deferred by 2 (59→61)
+2026-02-16T01:23:49.021Z [DEBUG] High write ratio: blit=0, write=119662 (100.0% writes), screen=1005x141
+2026-02-16T01:23:54.942Z [DEBUG] Getting matching hook commands for Notification with query: permission_prompt
+2026-02-16T01:23:54.942Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:23:54.942Z [DEBUG] Matched 0 unique hooks for query "permission_prompt" (0 before deduplication)
+2026-02-16T01:24:02.850Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-16T01:24:02.851Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-16T01:24:03.215Z [DEBUG] Bash tool error (372ms): Shell command failed
+2026-02-16T01:24:03.216Z [DEBUG] Getting matching hook commands for PostToolUseFailure with query: Bash
+2026-02-16T01:24:03.216Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:24:03.216Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:24:03.216Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:24:03.216Z [DEBUG] LSP Diagnostics: Checking registry - 3 pending
+2026-02-16T01:24:03.216Z [DEBUG] LSP Diagnostics: Deduplication removed 6 duplicate diagnostic(s)
+2026-02-16T01:24:03.216Z [DEBUG] LSP Diagnostics: No new diagnostics to deliver (all filtered by deduplication)
+2026-02-16T01:24:03.216Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:24:03.216Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:24:03.217Z [DEBUG] autocompact: tokens=133008 threshold=167000 effectiveWindow=180000
+2026-02-16T01:24:03.217Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:24:03.218Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771205043218
+2026-02-16T01:24:03.218Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:24:03.218Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:24:03.218Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:24:03.218Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771205043218 to /Users/lisihao/.claude.json
+2026-02-16T01:24:03.218Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:24:03.219Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.910; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:24:03.219Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:24:03.219Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:24:03.219Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:24:03.222Z [DEBUG] [useDeferredValue] Messages deferred by 1 (61→62)
+2026-02-16T01:24:06.573Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:24:09.763Z [DEBUG] [useDeferredValue] Messages deferred by 1 (62→63)
+2026-02-16T01:25:10.253Z [WARN] Streaming stall detected: 59.7s gap between events (stall #1)
+2026-02-16T01:25:10.254Z [DEBUG] [useDeferredValue] Messages deferred by 1 (63→64)
+2026-02-16T01:25:10.342Z [DEBUG] High write ratio: blit=0, write=120247 (100.0% writes), screen=1013x141
+2026-02-16T01:25:10.473Z [DEBUG] executePreToolHooks called for tool: Write
+2026-02-16T01:25:10.474Z [DEBUG] Getting matching hook commands for PreToolUse with query: Write
+2026-02-16T01:25:10.474Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:25:10.474Z [DEBUG] Matched 0 unique hooks for query "Write" (0 before deduplication)
+2026-02-16T01:25:10.475Z [DEBUG] Writing to temp file: /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift.tmp.36765.1771205110475
+2026-02-16T01:25:10.475Z [DEBUG] Preserving file permissions: 100755
+2026-02-16T01:25:10.475Z [DEBUG] Temp file written successfully, size: 9014 bytes
+2026-02-16T01:25:10.475Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:25:10.475Z [DEBUG] Renaming /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift.tmp.36765.1771205110475 to /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift
+2026-02-16T01:25:10.476Z [DEBUG] File /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift written atomically
+2026-02-16T01:25:10.476Z [DEBUG] [LSP PROTOCOL plugin:swift-lsp:sourcekit-lsp] Sending notification 'textDocument/didChange'.
+2026-02-16T01:25:10.476Z [DEBUG] [LSP PROTOCOL plugin:swift-lsp:sourcekit-lsp] Sending notification 'textDocument/didSave'.
+2026-02-16T01:25:10.478Z [DEBUG] Getting matching hook commands for PostToolUse with query: Write
+2026-02-16T01:25:10.478Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:25:10.478Z [DEBUG] Matched 1 unique hooks for query "Write" (1 before deduplication)
+2026-02-16T01:25:10.479Z [WARN] Streaming completed with 1 stall(s), total stall time: 59.7s
+2026-02-16T01:25:10.479Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:25:10.479Z [DEBUG] LSP Diagnostics: Checking registry - 3 pending
+2026-02-16T01:25:10.479Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:25:10.479Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:25:10.479Z [DEBUG] autocompact: tokens=138436 threshold=167000 effectiveWindow=180000
+2026-02-16T01:25:10.480Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:25:10.482Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771205110482
+2026-02-16T01:25:10.482Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:25:10.482Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:25:10.482Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:25:10.482Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771205110482 to /Users/lisihao/.claude.json
+2026-02-16T01:25:10.482Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:25:10.483Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.910; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:25:10.483Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:25:10.483Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:25:10.483Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:25:10.488Z [DEBUG] [useDeferredValue] Messages deferred by 5 (64→69)
+2026-02-16T01:25:10.542Z [DEBUG] High write ratio: blit=0, write=120247 (100.0% writes), screen=1013x141
+2026-02-16T01:25:10.543Z [DEBUG] LSP: Sent didChange for /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift
+2026-02-16T01:25:10.543Z [DEBUG] LSP: Sent didSave for /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift
+2026-02-16T01:25:11.613Z [DEBUG] [LSP PROTOCOL plugin:swift-lsp:sourcekit-lsp] Received notification 'textDocument/publishDiagnostics'.
+2026-02-16T01:25:11.613Z [DEBUG] [PASSIVE DIAGNOSTICS] Handler invoked for plugin:swift-lsp:sourcekit-lsp! Params type: object
+2026-02-16T01:25:11.613Z [DEBUG] Received diagnostics from plugin:swift-lsp:sourcekit-lsp: 6 diagnostic(s) for file:///Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift
+2026-02-16T01:25:11.613Z [DEBUG] LSP Diagnostics: Registering 1 diagnostic file(s) from plugin:swift-lsp:sourcekit-lsp (ID: 00801e04-5692-413f-ac3c-9985649bbc75)
+2026-02-16T01:25:11.613Z [DEBUG] LSP Diagnostics: Registered 1 diagnostic file(s) from plugin:swift-lsp:sourcekit-lsp for async delivery
+2026-02-16T01:25:14.058Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:25:20.838Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-16T01:25:20.843Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-16T01:25:20.843Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:25:20.843Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:25:20.847Z [DEBUG] Permission suggestions for Bash: [
+  {
+    "type": "setMode",
+    "mode": "acceptEdits",
+    "destination": "session"
+  }
+]
+2026-02-16T01:25:20.847Z [DEBUG] executePermissionRequestHooks called for tool: Bash
+2026-02-16T01:25:20.849Z [DEBUG] Getting matching hook commands for PermissionRequest with query: Bash
+2026-02-16T01:25:20.849Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:25:20.849Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:25:20.849Z [DEBUG] [useDeferredValue] Messages deferred by 2 (69→71)
+2026-02-16T01:25:20.858Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-16T01:25:20.858Z [DEBUG] [useDeferredValue] Messages deferred by 2 (69→71)
+2026-02-16T01:25:31.110Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-16T01:25:31.111Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-16T01:25:33.100Z [DEBUG] [useDeferredValue] Messages deferred by 1 (71→72)
+2026-02-16T01:25:33.326Z [DEBUG] Bash tool error (2230ms): Shell command failed
+2026-02-16T01:25:33.327Z [DEBUG] Getting matching hook commands for PostToolUseFailure with query: Bash
+2026-02-16T01:25:33.327Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:25:33.327Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:25:33.327Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:25:33.327Z [DEBUG] LSP Diagnostics: Checking registry - 4 pending
+2026-02-16T01:25:33.328Z [DEBUG] LSP Diagnostics: Deduplication removed 6 duplicate diagnostic(s)
+2026-02-16T01:25:33.328Z [DEBUG] LSP Diagnostics: No new diagnostics to deliver (all filtered by deduplication)
+2026-02-16T01:25:33.328Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:25:33.328Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:25:33.328Z [DEBUG] autocompact: tokens=142071 threshold=167000 effectiveWindow=180000
+2026-02-16T01:25:33.328Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:25:33.330Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771205133330
+2026-02-16T01:25:33.330Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:25:33.330Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:25:33.330Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:25:33.330Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771205133330 to /Users/lisihao/.claude.json
+2026-02-16T01:25:33.330Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:25:33.331Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.910; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:25:33.331Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:25:33.331Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:25:33.331Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:25:33.334Z [DEBUG] [useDeferredValue] Messages deferred by 1 (72→73)
+2026-02-16T01:25:33.386Z [DEBUG] High write ratio: blit=0, write=136867 (100.0% writes), screen=1151x141
+2026-02-16T01:25:36.863Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:25:43.363Z [DEBUG] [useDeferredValue] Messages deferred by 1 (73→74)
+2026-02-16T01:25:48.807Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-16T01:25:48.809Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-16T01:25:48.809Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:25:48.809Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-16T01:25:48.812Z [DEBUG] Writing to temp file: /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift.tmp.36765.1771205148812
+2026-02-16T01:25:48.812Z [DEBUG] Preserving file permissions: 100755
+2026-02-16T01:25:48.812Z [DEBUG] Temp file written successfully, size: 9077 bytes
+2026-02-16T01:25:48.813Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:25:48.813Z [DEBUG] Renaming /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift.tmp.36765.1771205148812 to /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift
+2026-02-16T01:25:48.813Z [DEBUG] File /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift written atomically
+2026-02-16T01:25:48.813Z [DEBUG] [LSP PROTOCOL plugin:swift-lsp:sourcekit-lsp] Sending notification 'textDocument/didChange'.
+2026-02-16T01:25:48.813Z [DEBUG] [LSP PROTOCOL plugin:swift-lsp:sourcekit-lsp] Sending notification 'textDocument/didSave'.
+2026-02-16T01:25:48.815Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-16T01:25:48.815Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:25:48.815Z [DEBUG] Matched 1 unique hooks for query "Edit" (1 before deduplication)
+2026-02-16T01:25:48.816Z [DEBUG] [useDeferredValue] Messages deferred by 2 (74→76)
+2026-02-16T01:25:48.822Z [DEBUG] LSP: Sent didChange for /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift
+2026-02-16T01:25:48.822Z [DEBUG] LSP: Sent didSave for /Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift
+2026-02-16T01:25:48.891Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:25:48.891Z [DEBUG] LSP Diagnostics: Checking registry - 4 pending
+2026-02-16T01:25:48.891Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:25:48.891Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:25:48.891Z [DEBUG] autocompact: tokens=142917 threshold=167000 effectiveWindow=180000
+2026-02-16T01:25:48.892Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:25:48.894Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771205148894
+2026-02-16T01:25:48.894Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:25:48.894Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:25:48.894Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:25:48.894Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771205148894 to /Users/lisihao/.claude.json
+2026-02-16T01:25:48.895Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:25:48.896Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.910; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:25:48.896Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:25:48.896Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:25:48.896Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:25:48.901Z [DEBUG] [useDeferredValue] Messages deferred by 3 (76→79)
+2026-02-16T01:25:49.884Z [DEBUG] [LSP PROTOCOL plugin:swift-lsp:sourcekit-lsp] Received notification 'textDocument/publishDiagnostics'.
+2026-02-16T01:25:49.884Z [DEBUG] [PASSIVE DIAGNOSTICS] Handler invoked for plugin:swift-lsp:sourcekit-lsp! Params type: object
+2026-02-16T01:25:49.884Z [DEBUG] Received diagnostics from plugin:swift-lsp:sourcekit-lsp: 6 diagnostic(s) for file:///Users/lisihao/ThunderAIGC/ThunderAIGC/scripts/baseline.swift
+2026-02-16T01:25:49.884Z [DEBUG] LSP Diagnostics: Registering 1 diagnostic file(s) from plugin:swift-lsp:sourcekit-lsp (ID: 7c64e141-c35a-43e6-a5b0-a6dda299bfb1)
+2026-02-16T01:25:49.884Z [DEBUG] LSP Diagnostics: Registered 1 diagnostic file(s) from plugin:swift-lsp:sourcekit-lsp for async delivery
+2026-02-16T01:25:52.486Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:25:57.153Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-16T01:25:57.155Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-16T01:25:57.155Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:25:57.155Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:25:57.161Z [DEBUG] [useDeferredValue] Messages deferred by 2 (79→81)
+2026-02-16T01:25:59.162Z [DEBUG] [useDeferredValue] Messages deferred by 1 (81→82)
+2026-02-16T01:25:59.201Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-16T01:25:59.201Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.c3e; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:25:59.202Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:25:59.202Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:25:59.202Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-16T01:25:59.202Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:25:59.202Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-16T01:25:59.202Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:25:59.204Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:25:59.204Z [DEBUG] LSP Diagnostics: Checking registry - 5 pending
+2026-02-16T01:25:59.204Z [DEBUG] LSP Diagnostics: Deduplication removed 6 duplicate diagnostic(s)
+2026-02-16T01:25:59.204Z [DEBUG] LSP Diagnostics: No new diagnostics to deliver (all filtered by deduplication)
+2026-02-16T01:25:59.204Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:25:59.204Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:25:59.204Z [DEBUG] autocompact: tokens=143842 threshold=167000 effectiveWindow=180000
+2026-02-16T01:25:59.204Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:25:59.206Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771205159206
+2026-02-16T01:25:59.206Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:25:59.206Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:25:59.206Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:25:59.206Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771205159206 to /Users/lisihao/.claude.json
+2026-02-16T01:25:59.206Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:25:59.207Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.910; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:25:59.207Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:25:59.207Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:25:59.207Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:25:59.210Z [DEBUG] [useDeferredValue] Messages deferred by 1 (82→83)
+2026-02-16T01:25:59.263Z [DEBUG] High write ratio: blit=0, write=139614 (100.0% writes), screen=1185x141
+2026-02-16T01:25:59.263Z [DEBUG] Full reset (scrollback changes): scrollbackRows=1143, firstChangeY=17
+  prev: "  ⎿  Read ../../scripts/baseline.swift (259 lines)                                                                                           "
+  next: "  ⎿  Read scripts/baseline.swift (259 lines)                                                                                                 "
+2026-02-16T01:26:00.654Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:26:01.795Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:26:13.582Z [DEBUG] [useDeferredValue] Messages deferred by 1 (83→84)
+2026-02-16T01:26:15.013Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-16T01:26:15.015Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-16T01:26:15.015Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:26:15.015Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-16T01:26:15.017Z [DEBUG] [useDeferredValue] Messages deferred by 2 (84→86)
+2026-02-16T01:26:15.026Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-16T01:26:15.026Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:26:15.026Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-16T01:26:15.582Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-16T01:26:15.584Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-16T01:26:15.584Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:26:15.584Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-16T01:26:15.587Z [DEBUG] [useDeferredValue] Messages deferred by 4 (86→90)
+2026-02-16T01:26:15.598Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-16T01:26:15.598Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:26:15.598Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-16T01:26:15.598Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:26:15.598Z [DEBUG] LSP Diagnostics: Checking registry - 5 pending
+2026-02-16T01:26:15.598Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:26:15.598Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:26:15.632Z [DEBUG] autocompact: tokens=145002 threshold=167000 effectiveWindow=180000
+2026-02-16T01:26:15.633Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:26:15.634Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771205175634
+2026-02-16T01:26:15.634Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:26:15.634Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:26:15.634Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:26:15.634Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771205175634 to /Users/lisihao/.claude.json
+2026-02-16T01:26:15.635Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:26:15.635Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.910; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:26:15.635Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:26:15.635Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:26:15.635Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:26:15.640Z [DEBUG] [useDeferredValue] Messages deferred by 3 (90→93)
+2026-02-16T01:26:19.531Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:26:37.688Z [DEBUG] [useDeferredValue] Messages deferred by 1 (93→94)
+2026-02-16T01:26:37.695Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-16T01:26:37.696Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-16T01:26:37.696Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:26:37.696Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-16T01:26:37.697Z [DEBUG] Writing to temp file: /Users/lisihao/ThunderAIGC/ThunderAIGC/.solar/STATE.md.tmp.36765.1771205197697
+2026-02-16T01:26:37.697Z [DEBUG] Preserving file permissions: 100644
+2026-02-16T01:26:37.698Z [DEBUG] Temp file written successfully, size: 1305 bytes
+2026-02-16T01:26:37.698Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:26:37.698Z [DEBUG] Renaming /Users/lisihao/ThunderAIGC/ThunderAIGC/.solar/STATE.md.tmp.36765.1771205197697 to /Users/lisihao/ThunderAIGC/ThunderAIGC/.solar/STATE.md
+2026-02-16T01:26:37.698Z [DEBUG] File /Users/lisihao/ThunderAIGC/ThunderAIGC/.solar/STATE.md written atomically
+2026-02-16T01:26:37.699Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-16T01:26:37.699Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:26:37.699Z [DEBUG] Matched 1 unique hooks for query "Edit" (1 before deduplication)
+2026-02-16T01:26:37.700Z [DEBUG] [useDeferredValue] Messages deferred by 2 (93→95)
+2026-02-16T01:26:37.866Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:26:37.866Z [DEBUG] LSP Diagnostics: Checking registry - 5 pending
+2026-02-16T01:26:37.866Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:26:37.866Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:26:37.866Z [DEBUG] autocompact: tokens=145926 threshold=167000 effectiveWindow=180000
+2026-02-16T01:26:37.867Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:26:37.870Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771205197870
+2026-02-16T01:26:37.870Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:26:37.871Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:26:37.871Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:26:37.871Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771205197870 to /Users/lisihao/.claude.json
+2026-02-16T01:26:37.871Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:26:37.872Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.910; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:26:37.872Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:26:37.872Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:26:37.872Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:26:37.878Z [DEBUG] [useDeferredValue] Messages deferred by 3 (95→98)
+2026-02-16T01:26:41.570Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:26:44.634Z [DEBUG] [useDeferredValue] Messages deferred by 1 (98→99)
+2026-02-16T01:26:58.055Z [DEBUG] [useDeferredValue] Messages deferred by 1 (99→100)
+2026-02-16T01:26:58.064Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-16T01:26:58.064Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:26:58.064Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-16T01:26:58.064Z [DEBUG] autocompact: tokens=146648 threshold=167000 effectiveWindow=180000
+2026-02-16T01:26:58.065Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:26:58.068Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771205218068
+2026-02-16T01:26:58.068Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:26:58.068Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:26:58.068Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:26:58.068Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771205218068 to /Users/lisihao/.claude.json
+2026-02-16T01:26:58.068Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:26:58.070Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.910; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:26:58.070Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:26:58.070Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:26:58.070Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:26:58.076Z [DEBUG] [useDeferredValue] Messages deferred by 2 (99→101)
+2026-02-16T01:26:58.080Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-16T01:27:02.012Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:27:14.076Z [DEBUG] Forked agent [prompt_suggestion] received message: type=assistant
+2026-02-16T01:27:14.367Z [DEBUG] Forked agent [prompt_suggestion] received message: type=assistant
+2026-02-16T01:27:14.371Z [DEBUG] Getting matching hook commands for SubagentStop with query:
+2026-02-16T01:27:14.371Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:27:14.371Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-16T01:27:14.371Z [DEBUG] Forked agent [prompt_suggestion] finished: 2 messages, types=[assistant, assistant], totalUsage: input=719 output=247 cacheRead=145920 cacheCreate=0
+2026-02-16T01:27:14.372Z [DEBUG] [Speculation] enabled=false
+2026-02-16T01:27:44.805Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:27:44.805Z [DEBUG] LSP Diagnostics: Checking registry - 5 pending
+2026-02-16T01:27:44.805Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:27:44.805Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:27:44.808Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-16T01:27:44.808Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:27:44.808Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-16T01:27:44.809Z [DEBUG] FileHistory: Making snapshot for message a8fd2812-ea7b-493e-9bed-bd678003fa8e
+2026-02-16T01:27:44.820Z [DEBUG] FileHistory: Added snapshot for a8fd2812-ea7b-493e-9bed-bd678003fa8e, tracking 27 files
+2026-02-16T01:27:44.821Z [DEBUG] [useDeferredValue] Messages deferred by 1 (101→102)
+2026-02-16T01:27:44.833Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-16T01:27:44.833Z [DEBUG] [SystemPrompt] path=simple proactive=false
+2026-02-16T01:27:44.834Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-16T01:27:44.834Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.c3a; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:27:44.834Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:27:44.834Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:27:44.834Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:27:44.835Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771205264835
+2026-02-16T01:27:44.835Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:27:44.835Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:27:44.835Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:27:44.835Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771205264835 to /Users/lisihao/.claude.json
+2026-02-16T01:27:44.835Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:27:44.836Z [DEBUG] autocompact: tokens=146378 threshold=167000 effectiveWindow=180000
+2026-02-16T01:27:44.837Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:27:44.839Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771205264839
+2026-02-16T01:27:44.839Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:27:44.839Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:27:44.839Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:27:44.839Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771205264839 to /Users/lisihao/.claude.json
+2026-02-16T01:27:44.839Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:27:44.840Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.910; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:27:44.840Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:27:44.840Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:27:44.840Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:27:44.846Z [DEBUG] [useDeferredValue] Messages deferred by 1 (101→102)
+2026-02-16T01:27:46.273Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:27:46.619Z [ERROR] SyntaxError: SyntaxError: Unexpected token '`', "```json
+{
+"... is not valid JSON
+    at JSON.parse (<anonymous>)
+    at file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:54:1088
+    at K (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:7612)
+    at LC7 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:1344:7638)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-02-16T01:27:48.903Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:27:54.966Z [DEBUG] [useDeferredValue] Messages deferred by 1 (102→103)
+2026-02-16T01:27:56.065Z [DEBUG] executePreToolHooks called for tool: WebSearch
+2026-02-16T01:27:56.068Z [DEBUG] Getting matching hook commands for PreToolUse with query: WebSearch
+2026-02-16T01:27:56.068Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:27:56.068Z [DEBUG] Matched 0 unique hooks for query "WebSearch" (0 before deduplication)
+2026-02-16T01:27:56.068Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-16T01:27:56.069Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.7a1; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:27:56.069Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:27:56.069Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:27:56.069Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:27:56.071Z [DEBUG] [useDeferredValue] Messages deferred by 2 (103→105)
+2026-02-16T01:27:56.712Z [DEBUG] executePreToolHooks called for tool: WebSearch
+2026-02-16T01:27:56.715Z [DEBUG] Getting matching hook commands for PreToolUse with query: WebSearch
+2026-02-16T01:27:56.715Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:27:56.715Z [DEBUG] Matched 0 unique hooks for query "WebSearch" (0 before deduplication)
+2026-02-16T01:27:56.716Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-16T01:27:56.716Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.7a1; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:27:56.716Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:27:56.716Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:27:56.716Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:27:56.718Z [DEBUG] [useDeferredValue] Messages deferred by 1 (105→106)
+2026-02-16T01:27:57.549Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:27:57.563Z [DEBUG] executePreToolHooks called for tool: WebSearch
+2026-02-16T01:27:57.565Z [DEBUG] Getting matching hook commands for PreToolUse with query: WebSearch
+2026-02-16T01:27:57.565Z [DEBUG] Found 0 hook matchers in settings
+2026-02-16T01:27:57.565Z [DEBUG] Matched 0 unique hooks for query "WebSearch" (0 before deduplication)
+2026-02-16T01:27:57.566Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-16T01:27:57.566Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.7a1; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:27:57.566Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:27:57.566Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:27:57.567Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:27:57.569Z [DEBUG] [useDeferredValue] Messages deferred by 1 (106→107)
+2026-02-16T01:27:57.578Z [DEBUG] [useDeferredValue] Messages deferred by 1 (106→107)
+2026-02-16T01:27:57.684Z [ERROR] Error streaming, falling back to non-streaming mode: {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"2026021609275731023a4987c14a36"}
+2026-02-16T01:27:57.684Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:27:57.684Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:27:57.684Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:27:57.819Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:27:57.846Z [ERROR] Error streaming, falling back to non-streaming mode: {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"20260216092757153c4318a2294513"}
+2026-02-16T01:27:57.846Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:27:57.846Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:27:57.846Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:27:58.115Z [ERROR] API error (attempt 1/11): 400 400 {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"202602160927578cc73eac41674831"}
+2026-02-16T01:27:58.116Z [ERROR] Error in API request: 400 {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"202602160927578cc73eac41674831"}
+2026-02-16T01:27:58.117Z [ERROR] Error: Error: 400 {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"202602160927578cc73eac41674831"}
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8788)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Rw6.model (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5641:4971)
+    at async Rw6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:909:101168)
+    at async nJq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5641:5171)
+    at async aJq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5646:9071)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5641:4632
+    at async f_A (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2399)
+2026-02-16T01:27:58.121Z [DEBUG] Getting matching hook commands for PostToolUse with query: WebSearch
+2026-02-16T01:27:58.121Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:27:58.121Z [DEBUG] Matched 0 unique hooks for query "WebSearch" (0 before deduplication)
+2026-02-16T01:27:58.122Z [DEBUG] [useDeferredValue] Messages deferred by 1 (107→108)
+2026-02-16T01:27:58.700Z [ERROR] API error (attempt 1/11): 400 400 {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"202602160927583499567974dd4032"}
+2026-02-16T01:27:58.700Z [ERROR] Error in API request: 400 {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"202602160927583499567974dd4032"}
+2026-02-16T01:27:58.700Z [ERROR] Error: Error: 400 {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"202602160927583499567974dd4032"}
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8788)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Rw6.model (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5641:4971)
+    at async Rw6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:909:101168)
+    at async nJq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5641:5171)
+    at async aJq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5646:9071)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5641:4632
+    at async f_A (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2399)
+2026-02-16T01:27:58.704Z [DEBUG] Getting matching hook commands for PostToolUse with query: WebSearch
+2026-02-16T01:27:58.704Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:27:58.704Z [DEBUG] Matched 0 unique hooks for query "WebSearch" (0 before deduplication)
+2026-02-16T01:27:58.705Z [DEBUG] [useDeferredValue] Messages deferred by 1 (108→109)
+2026-02-16T01:27:58.739Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:27:58.767Z [ERROR] Error streaming, falling back to non-streaming mode: {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"20260216092758e25d68a2f10c4852"}
+2026-02-16T01:27:58.767Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:27:58.767Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:27:58.767Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:27:59.279Z [ERROR] API error (attempt 1/11): 400 400 {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"20260216092758e46e7e20c3ec45b0"}
+2026-02-16T01:27:59.280Z [ERROR] Error in API request: 400 {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"20260216092758e46e7e20c3ec45b0"}
+2026-02-16T01:27:59.280Z [ERROR] Error: Error: 400 {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"20260216092758e46e7e20c3ec45b0"}
+    at Z4.generate (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:362:8788)
+    at ZS.makeStatusError (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:2195)
+    at ZS.makeRequest (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:401:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Rw6.model (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5641:4971)
+    at async Rw6 (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:909:101168)
+    at async nJq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5641:5171)
+    at async aJq (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5646:9071)
+    at async file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:5641:4632
+    at async f_A (file:///opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js:964:2399)
+2026-02-16T01:27:59.282Z [DEBUG] Getting matching hook commands for PostToolUse with query: WebSearch
+2026-02-16T01:27:59.282Z [DEBUG] Found 5 hook matchers in settings
+2026-02-16T01:27:59.282Z [DEBUG] Matched 0 unique hooks for query "WebSearch" (0 before deduplication)
+2026-02-16T01:27:59.283Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-16T01:27:59.283Z [DEBUG] LSP Diagnostics: Checking registry - 5 pending
+2026-02-16T01:27:59.283Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-16T01:27:59.283Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-16T01:27:59.283Z [DEBUG] autocompact: tokens=146816 threshold=167000 effectiveWindow=180000
+2026-02-16T01:27:59.284Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-16T01:27:59.287Z [DEBUG] Writing to temp file: /Users/lisihao/.claude.json.tmp.36765.1771205279287
+2026-02-16T01:27:59.287Z [DEBUG] Preserving file permissions: 100600
+2026-02-16T01:27:59.287Z [DEBUG] Temp file written successfully, size: 8781 bytes
+2026-02-16T01:27:59.287Z [DEBUG] Applied original permissions to temp file
+2026-02-16T01:27:59.287Z [DEBUG] Renaming /Users/lisihao/.claude.json.tmp.36765.1771205279287 to /Users/lisihao/.claude.json
+2026-02-16T01:27:59.287Z [DEBUG] File /Users/lisihao/.claude.json written atomically
+2026-02-16T01:27:59.289Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.42.910; cc_entrypoint=cli; cch=00000;
+2026-02-16T01:27:59.289Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:27:59.289Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:27:59.289Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:27:59.296Z [DEBUG] [useDeferredValue] Messages deferred by 2 (109→111)
+2026-02-16T01:28:02.319Z [DEBUG] Stream started - received first chunk
+2026-02-16T01:28:07.022Z [DEBUG] [useDeferredValue] Messages deferred by 1 (111→112)
+2026-02-16T01:28:08.729Z [ERROR] Error streaming, falling back to non-streaming mode: Content block input is not a string
+2026-02-16T01:28:08.729Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-16T01:28:08.729Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-16T01:28:08.729Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-16T01:28:08.737Z [DEBUG] [useDeferredValue] Messages deferred by 2 (112→114)
+2026-02-16T01:28:37.580Z [DEBUG] Metrics opt-out check failed: No API key available
+2026-02-16T01:28:37.580Z [DEBUG] Metrics check failed, defaulting to disabled
+2026-02-16T01:28:37.580Z [DEBUG] Metrics export disabled by organization setting
+2026-02-16T01:30:39.481Z [DEBUG] High write ratio: blit=0, write=9588 (100.0% writes), screen=209x141
+2026-02-16T01:30:39.481Z [DEBUG] Full reset (scrollback changes): scrollbackRows=1230, firstChangeY=2
+  prev: "│                                               │ Tips for getting started                                                                  │"
+  next: "│                               │ Tips for getting started                                                                                  │"
+2026-02-16T01:30:50.956Z [DEBUG] High write ratio: blit=0, write=144507 (100.0% writes), screen=1278x141
+2026-02-16T01:30:50.983Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-16T01:30:50.983Z [DEBUG] [claudeai-mcp] Checking gate (cached)...
+2026-02-16T01:30:50.983Z [DEBUG] [claudeai-mcp] Gate returned: true
+2026-02-16T01:30:50.983Z [DEBUG] [claudeai-mcp] Fetching from https://api.anthropic.com/v1/mcp_servers?limit=1000
+2026-02-16T01:30:51.058Z [DEBUG] High write ratio: blit=20, write=144517 (100.0% writes), screen=1278x141
+2026-02-16T01:30:51.058Z [DEBUG] Full reset (scrollback changes): scrollbackRows=1230, firstChangeY=5
+  prev: "│           ▗ ▗   ▖ ▖           │ Recent activity                                                                                           │"
+  next: "│                               │ Recent activity                                                                                           │"
+2026-02-16T01:30:51.171Z [DEBUG] [claudeai-mcp] Fetched 0 servers
+2026-02-16T01:31:03.639Z [DEBUG] High write ratio: blit=0, write=9589 (100.0% writes), screen=209x141
+2026-02-16T01:31:03.639Z [DEBUG] Full reset (scrollback changes): scrollbackRows=1230, firstChangeY=5
+  prev: "│                               │ Recent activity                                                                                           │"
+  next: "│           ▗ ▗   ▖ ▖           │ Recent activity                                                                                           │"
+2026-02-16T01:31:03.669Z [DEBUG] High write ratio: blit=20, write=9572 (99.8% writes), screen=209x141
+2026-02-16T01:31:03.669Z [DEBUG] Full reset (scrollback changes): scrollbackRows=161, firstChangeY=5
+  prev: "│           ▗ ▗   ▖ ▖           │ Recent activity                                                                                           │"
+  next: "│                               │ Recent activity                                                                                           │"
+2026-02-16T01:31:44.836Z [DEBUG] Restarting caffeinate to maintain sleep prevention
+2026-02-16T01:31:44.836Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-16T01:31:44.840Z [DEBUG] Started caffeinate to prevent sleep

@@ -594,10 +594,43 @@ export function compileKnobsFromSheet(sheet: DnDCharacterSheet): KnobConfig {
 }
 
 /**
- * 生成旋钮一行键值对
+ * KNOBS 参数解释 - 让模型理解每个参数的含义
  */
-export function formatKnobsLine(knobs: KnobConfig): string {
-  return `KNOBS: rigor=${knobs.rigor} skepticism=${knobs.skepticism} explore=${knobs.exploration} decide=${knobs.decisiveness} risk=${knobs.riskAversion} tool_first=${knobs.toolFirst} compress=${knobs.compression} self_check=${knobs.selfCritique} empathy=${knobs.socialEmpathy} compete=${knobs.competitiveness}`;
+const KNOB_EXPLANATIONS: Record<keyof KnobConfig, string> = {
+  rigor: '证据门槛',           // 多少证据才下结论
+  skepticism: '质疑假设',      // 对结论的怀疑程度
+  exploration: '探索广度',     // 发散 vs 聚焦
+  decisiveness: '决断速度',    // 快速决策 vs 充分分析
+  riskAversion: '风险规避',    // 保守 vs 激进
+  toolFirst: '工具优先',       // 先查工具 vs 先思考
+  compression: '输出简洁',     // 详细 vs 精简
+  selfCritique: '自检强度',    // 自我验证程度
+  socialEmpathy: '用户视角',   // 考虑用户感受
+  competitiveness: '表现欲',   // 追求高质量输出
+};
+
+/**
+ * 生成旋钮一行键值对 (带解释)
+ */
+export function formatKnobsLine(knobs: KnobConfig, withExplanations: boolean = true): string {
+  if (withExplanations) {
+    // 带解释版本: "rigor=3 (证据门槛)" 让模型理解含义
+    const parts = Object.entries(knobs).map(([key, value]) => {
+      const k = key as keyof KnobConfig;
+      const shortKey = k === 'exploration' ? 'explore' :
+                       k === 'decisiveness' ? 'decide' :
+                       k === 'riskAversion' ? 'risk' :
+                       k === 'toolFirst' ? 'tool' :
+                       k === 'selfCritique' ? 'check' :
+                       k === 'socialEmpathy' ? 'empathy' :
+                       k === 'competitiveness' ? 'compete' : k;
+      return `${shortKey}=${value}(${KNOB_EXPLANATIONS[k].slice(0,4)})`;
+    });
+    return `KNOBS: ${parts.join(' ')}`;
+  } else {
+    // 原始格式（无解释）
+    return `KNOBS: rigor=${knobs.rigor} skepticism=${knobs.skepticism} explore=${knobs.exploration} decide=${knobs.decisiveness} risk=${knobs.riskAversion} tool_first=${knobs.toolFirst} compress=${knobs.compression} self_check=${knobs.selfCritique} empathy=${knobs.socialEmpathy} compete=${knobs.competitiveness}`;
+  }
 }
 
 // ============================================================
@@ -722,8 +755,9 @@ export function compilePromptV2(options: CompileV2Options): CompiledPrompt {
   parts.push(`ROLE: ${patch.name} (L${level})`);
   parts.push('');
 
-  // KNOBS (已应用 Level 增量)
-  parts.push(formatKnobsLine(knobs));
+  // KNOBS (已应用 Level 增量) - 带简短解释
+  parts.push(formatKnobsLine(knobs, true));
+  parts.push('# KNOBS含义: rigor=验证次数 skepticism=质疑假设 explore=发散程度 decide=决断速度 risk=风险规避 tool=工具优先 compress=输出简洁 check=自检强度 empathy=用户视角 compete=表现欲');
   parts.push('');
 
   // OUTPUT_SCHEMA
