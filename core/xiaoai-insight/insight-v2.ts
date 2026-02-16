@@ -514,7 +514,18 @@ interface ExpertResponse {
 
 async function callExpert(expertId: string, prompt: string): Promise<ExpertResponse> {
   const config = API_CONFIGS[expertId];
+
+  // 防御性检查：确保配置存在
+  if (!config) {
+    throw new Error(`Unknown expert ID: ${expertId}. Not found in API_CONFIGS.`);
+  }
+
   const expert = EXPERTS[expertId];
+
+  if (!expert) {
+    throw new Error(`Unknown expert: ${expertId}. Not found in EXPERTS.`);
+  }
+
   const apiKey = process.env[config.keyEnv];
 
   if (!apiKey) {

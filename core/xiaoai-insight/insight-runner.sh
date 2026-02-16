@@ -7,6 +7,11 @@
 
 set -e
 
+# 加载环境变量
+if [ -f "$HOME/.solar/.env" ]; then
+    export $(grep -v '^#' "$HOME/.solar/.env" | xargs)
+fi
+
 # 配置
 INSIGHT_DIR="$HOME/.claude/core/xiaoai-insight"
 LOG_FILE="/tmp/xiaoai-insight.log"
