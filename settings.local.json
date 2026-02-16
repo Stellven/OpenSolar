@@ -114,7 +114,8 @@
       "Bash(git count-objects:*)",
       "Bash(git rev-list:*)",
       "Bash(git cat-file:*)",
-      "Bash(sort:*)"
+      "Bash(sort:*)",
+      "Bash(git remote add:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

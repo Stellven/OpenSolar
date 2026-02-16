@@ -616,6 +616,120 @@ if (import.meta.main) {
       break;
     }
 
+    case 'sync': {
+      // 将编译后的 prompt 同步到 niumao-anchors.json
+      const { readFileSync, writeFileSync } = require('fs');
+      const { homedir } = require('os');
+      const anchorsPath = process.argv[3] || `${homedir()}/.claude/core/solar-farm/niumao-anchors.json`;
+
+      console.log('\n🔄 同步 Prompt Runtime → niumao-anchors.json\n');
+
+      // 模型 → 模板映射
+      const MODEL_TO_TEMPLATE: Record<string, keyof typeof PROMPT_TEMPLATES> = {
+        // 技术宅 - 严谨审查
+        'gemini-2-pro': 'conservative',
+        'gemini-2.5-pro': 'conservative',
+        // 千里马 - 创新探索
+        'gemini-3-pro-preview': 'explorer',
+        'gemini-3-flash-preview': 'explorer',
+        // 鬼才码农 - 创意编码
+        'deepseek-v3': 'creator',
+        // 思考驼 - 深度推理
+        'deepseek-r1': 'judge',
+        // 老实人 - 批量执行
+        'glm-4-plus': 'builder',
+        'glm-5': 'advisor',
+        // 小快手 - 批量执行
+        'glm-4-flash': 'builder',
+        // 闪电侠 - 批量执行
+        'gemini-2-flash': 'builder',
+        'gemini-2.5-flash': 'builder',
+        // GPT 系列
+        'gpt-4o': 'advisor',
+        'gpt-4o-mini': 'builder',
+      };
+
+      try {
+        const anchors = JSON.parse(readFileSync(anchorsPath, 'utf-8'));
+        let updated = 0;
+
+        for (const [modelId, info] of Object.entries(anchors)) {
+          const template = MODEL_TO_TEMPLATE[modelId];
+          if (!template) {
+            console.log(`  ⏭️  ${modelId.padEnd(20)} → 无映射，跳过`);
+            continue;
+          }
+
+          const templateConfig = PROMPT_TEMPLATES[template];
+          const compiled = compilePrompt({
+            knobs: templateConfig.knobs,
+            feats: templateConfig.feats,
+            alignment: templateConfig.alignment,
+            taskType: 'universal',
+            enableAntiGaming: true,
+          });
+
+          // 保留原有昵称，更新 system_prompt
+          const nickname = (info as any).nickname || modelId;
+          (anchors as any)[modelId] = {
+            nickname,
+            system_prompt: compiled.system,
+            template,
+            knobs: compiled.knobsLine,
+            token_estimate: compiled.tokenEstimate,
+          };
+
+          console.log(`  ✅ ${modelId.padEnd(20)} → ${template} (~${compiled.tokenEstimate} tokens)`);
+          updated++;
+        }
+
+        writeFileSync(anchorsPath, JSON.stringify(anchors, null, 2), 'utf-8');
+        console.log(`\n✨ 同步完成！更新了 ${updated} 个模型\n`);
+        console.log(`📄 文件: ${anchorsPath}\n`);
+
+      } catch (err: any) {
+        console.error(`❌ 错误: ${err.message}`);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case 'for-model': {
+      // 为单个模型生成编译后的 prompt
+      const modelId = process.argv[3];
+      const taskType = (process.argv[4] || 'universal') as CompileOptions['taskType'];
+      const withPerf = process.argv[5] === '--perf';
+
+      if (!modelId) {
+        console.error('❌ 请指定模型 ID');
+        process.exit(1);
+      }
+
+      const MODEL_TO_TEMPLATE: Record<string, keyof typeof PROMPT_TEMPLATES> = {
+        'gemini-2-pro': 'conservative', 'gemini-2.5-pro': 'conservative',
+        'gemini-3-pro-preview': 'explorer', 'gemini-3-flash-preview': 'explorer',
+        'deepseek-v3': 'creator', 'deepseek-r1': 'judge',
+        'glm-4-plus': 'builder', 'glm-5': 'advisor', 'glm-4-flash': 'builder',
+        'gemini-2-flash': 'builder', 'gemini-2.5-flash': 'builder',
+        'gpt-4o': 'advisor', 'gpt-4o-mini': 'builder',
+      };
+
+      const template = MODEL_TO_TEMPLATE[modelId] || 'builder';
+      const templateConfig = PROMPT_TEMPLATES[template];
+
+      const result = compilePrompt({
+        knobs: templateConfig.knobs,
+        feats: templateConfig.feats,
+        alignment: templateConfig.alignment,
+        taskType,
+        perfFeedback: withPerf ? generateExamplePerfFeedback(taskType === 'universal' ? 'coding_debug' : taskType) : undefined,
+      });
+
+      // 输出纯 prompt（方便程序调用）
+      console.log(result.system);
+      break;
+    }
+
     default:
       console.log(`
 📝 Prompt Runtime v1.1 - 四段式 System Prompt 编译器
@@ -645,11 +759,20 @@ if (import.meta.main) {
   bun prompt-runtime.ts templates
     列出所有预设模板
 
+  bun prompt-runtime.ts sync [path]
+    同步编译后的 prompt 到 niumao-anchors.json
+    path 默认: ~/.claude/core/solar-farm/niumao-anchors.json
+
+  bun prompt-runtime.ts for-model <modelId> [taskType] [--perf]
+    为指定模型生成编译后的 prompt（纯输出，方便程序调用）
+
 示例:
   bun prompt-runtime.ts compile judge code
   bun prompt-runtime.ts compile judge code --perf
   bun prompt-runtime.ts checklist observant alert
   bun prompt-runtime.ts perf coding_debug
+  bun prompt-runtime.ts sync
+  bun prompt-runtime.ts for-model deepseek-r1 code --perf
 `);
   }
 }
