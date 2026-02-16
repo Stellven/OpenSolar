@@ -83,11 +83,15 @@ export interface SummaryOptions {
 }
 
 export const DEFAULT_OPTIONS: SummaryOptions = {
-  mode: "auto",
+  mode: "importance", // 默认使用 importanceEviction（不需要 LLM）
   promptType: "standard",
   maxLength: 100,
   model: "glm-4-flash", // 便宜的摘要模型
 };
+
+// LLM API 配置 (可选)
+const LLM_API_URL = process.env.LLM_API_URL || "http://localhost:3000/api/complete";
+const LLM_ENABLED = process.env.LLM_ENABLED !== "false"; // 默认尝试 LLM
 
 /**
  * 计算摘要的触发阈值
@@ -110,26 +114,37 @@ export async function staticBufferSummarize(
   options: Partial<SummaryOptions> = {}
 ): Promise<string> {
   const opts = { ...DEFAULT_OPTIONS, ...options };
-  const prompt = SUMMARY_PROMPTS[opts.promptType].replace("{content}", content);
 
-  // 调用 brain-router
-  const response = await fetch("http://localhost:3000/api/complete", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: opts.model,
-      prompt,
-      max_tokens: 150, // 100字摘要约 150 tokens
-    }),
-  });
-
-  if (!response.ok) {
-    // Fallback: 截取前 100 字
-    return content.slice(0, 200) + "...";
+  // 如果 LLM 未启用或不可用，使用 importanceEviction 作为 fallback
+  if (!LLM_ENABLED) {
+    return importanceEviction(content, 0.7, opts.maxLength * 2);
   }
 
-  const data = await response.json();
-  return data.completion || content.slice(0, 200);
+  const prompt = SUMMARY_PROMPTS[opts.promptType].replace("{content}", content);
+
+  try {
+    // 调用 LLM API
+    const response = await fetch(LLM_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: opts.model,
+        prompt,
+        max_tokens: 150, // 100字摘要约 150 tokens
+      }),
+    });
+
+    if (!response.ok) {
+      // Fallback: 使用 importanceEviction
+      return importanceEviction(content, 0.7, opts.maxLength * 2);
+    }
+
+    const data = await response.json();
+    return data.completion || importanceEviction(content, 0.7, opts.maxLength * 2);
+  } catch (e) {
+    // 网络错误或 API 不可用，使用 fallback
+    return importanceEviction(content, 0.7, opts.maxLength * 2);
+  }
 }
 
 /**

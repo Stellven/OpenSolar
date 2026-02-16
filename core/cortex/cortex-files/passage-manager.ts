@@ -20,6 +20,7 @@ import {
   existsSync,
   writeFileSync,
   mkdirSync,
+  unlinkSync,
 } from "fs";
 import { spawnSync } from "child_process";
 
@@ -255,30 +256,37 @@ async function dualWritePassages(
   db.close();
 
   // 2. 写入 Tantivy (如果可用)
+  // 注意: solar-search index jsonl 期望 Claude Code 对话格式
+  // 格式: {"uuid": "...", "message": {"content": "..."}, "type": "...", "timestamp": ...}
   if (existsSync(TANTIVY_BIN)) {
-    // 创建临时 JSONL 文件
+    const timestamp = Math.floor(Date.now() / 1000);
     const tmpFile = `/tmp/passages_${Date.now()}.jsonl`;
     const lines = passages.map((p) =>
       JSON.stringify({
-        id: p.passage_id,
-        content: p.content,
-        source_type: p.source_type,
-        importance: p.importance,
+        uuid: p.passage_id,
+        message: { content: p.content },
+        type: p.source_type,
+        timestamp: timestamp,
+        source: p.source_id,
       })
     );
     writeFileSync(tmpFile, lines.join("\n"), "utf-8");
 
-    // 调用 Tantivy 索引
-    const result = spawnSync(TANTIVY_BIN, ["index", "passages", tmpFile], {
+    // 调用 Tantivy 索引 (使用 jsonl 子命令)
+    const tantivyResult = spawnSync(TANTIVY_BIN, ["index", "jsonl", tmpFile], {
       encoding: "utf-8",
     });
 
-    if (result.status === 0) {
+    if (tantivyResult.status === 0) {
       result.tantivy = passages.length;
     }
 
     // 清理临时文件
-    // fs.unlinkSync(tmpFile);
+    try {
+      unlinkSync(tmpFile);
+    } catch (e) {
+      // 忽略清理错误
+    }
   }
 
   return result;
