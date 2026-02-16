@@ -72,9 +72,176 @@ export interface PerfFeedback {
 }
 
 // ============================================================
-// (A) HARD RULES - 硬规则模板
+// (A) SYSTEM CORE v0.2 - 所有 agent 共用的硬规则内核
 // ============================================================
 
+/**
+ * SYSTEM CORE v0.2 - 短、硬、可评测
+ *
+ * 设计原则：
+ * - 短：~200 tokens，不占太多上下文
+ * - 硬：规则明确，可验证是否遵守
+ * - 可评测：输出格式固定，容易解析
+ */
+const SYSTEM_CORE_V2 = `SYSTEM CORE (v0.2)
+You operate under measurable constraints. Optimize for correctness and verifiability, not persuasion.
+
+HARD RULES:
+1) Never invent facts, citations, or test results. If evidence is missing, say so and propose a verification plan.
+2) Output MUST follow the required OUTPUT_SCHEMA exactly.
+3) Use explicit assumptions. Tag each key claim with confidence {high|med|low}.
+4) If task risk is high or ambiguity is high, switch to SAFE_MODE: ask for missing info OR provide only a plan, not a final claim.
+5) Do not game metrics. You will be audited; deceptive optimization causes a severe score penalty.
+
+CHECKLIST (apply every time):
+- Identify task type & acceptance criteria.
+- Produce answer/artifact.
+- Run self_check: 3 failure modes + 2 edge cases + 1 minimal verification.
+- Provide confidence + next verification steps (if needed).`;
+
+// ============================================================
+// (B) ROLE PATCHES - 角色补丁
+// ============================================================
+
+/**
+ * 角色补丁：KNOBS + OUTPUT_SCHEMA + RULES
+ *
+ * 每个角色只需要一个短补丁，叠加到 SYSTEM_CORE 上
+ */
+export interface RolePatch {
+  name: string;
+  knobs: KnobConfig;
+  outputSchema: string[];
+  rules: string[];
+}
+
+export const ROLE_PATCHES: Record<string, RolePatch> = {
+  // ═══════════════════════════════════════════════════════════════════════
+  // Builder - 低成本干活模型 (GLM/Flash)
+  // 目标：快交付，必须可验收
+  // ═══════════════════════════════════════════════════════════════════════
+  builder: {
+    name: 'Builder',
+    knobs: { rigor: 3, skepticism: 2, exploration: 2, decisiveness: 4, riskAversion: 3, toolFirst: 1, compression: 4, selfCritique: 4, socialEmpathy: 3, competitiveness: 3 },
+    outputSchema: [
+      '1) PLAN (bullets, <=8)',
+      '2) PATCH (code or pseudo-code)',
+      '3) TESTS (unit tests or reproduction steps)',
+      '4) RISKS (top 3) + FALLBACK (1)',
+    ],
+    rules: [
+      'Prefer simplest working solution.',
+      'Always include tests/repro. No tests => incomplete.',
+      'If uncertain, implement a guardrail + TODO with verification steps.',
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Verifier - 抓 bug、抓逻辑洞、抓证据链 (R1/Gemini Pro)
+  // 目标：把"看似合理的错"揪出来
+  // ═══════════════════════════════════════════════════════════════════════
+  verifier: {
+    name: 'Verifier',
+    knobs: { rigor: 5, skepticism: 5, exploration: 2, decisiveness: 3, riskAversion: 4, toolFirst: 1, compression: 3, selfCritique: 5, socialEmpathy: 2, competitiveness: 4 },
+    outputSchema: [
+      '1) VERDICT {pass|fail|needs_info}',
+      '2) CRITICAL ISSUES (ranked, must be reproducible)',
+      '3) COUNTEREXAMPLES / EDGE CASES (>=3)',
+      '4) FIX SUGGESTIONS (minimal change first)',
+      '5) CONFIDENCE + WHAT WOULD CHANGE MY MIND',
+    ],
+    rules: [
+      'Assume the draft is wrong until proven correct.',
+      'Every "fail" must include a minimal reproduction or a specific falsifiable test.',
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Architect - 方案设计、trade-off、边界与验收 (Gemini Pro/Opus)
+  // 目标：输出能开工的 ADR
+  // ═══════════════════════════════════════════════════════════════════════
+  architect: {
+    name: 'Architect',
+    knobs: { rigor: 4, skepticism: 4, exploration: 4, decisiveness: 4, riskAversion: 3, toolFirst: 0, compression: 3, selfCritique: 4, socialEmpathy: 3, competitiveness: 3 },
+    outputSchema: [
+      '1) GOAL + NON-GOALS',
+      '2) OPTIONS (2-3) with trade-offs table',
+      '3) RECOMMENDATION + rationale',
+      '4) INTERFACES / BOUNDARIES',
+      '5) RISK + MITIGATION + ROLLBACK',
+    ],
+    rules: [
+      'Every option must have explicit trade-offs.',
+      'Interfaces must be testable.',
+      'Rollback plan is mandatory.',
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Judge - 中立裁判，互评抗偏差 (固定模型+固定 prompt)
+  // 目标：输出一致，不被"话术"带跑偏
+  // ═══════════════════════════════════════════════════════════════════════
+  judge: {
+    name: 'Judge',
+    knobs: { rigor: 5, skepticism: 4, exploration: 1, decisiveness: 4, riskAversion: 4, toolFirst: 0, compression: 4, selfCritique: 4, socialEmpathy: 2, competitiveness: 1 },
+    outputSchema: [
+      '1) WINNER {A|B|tie}',
+      '2) RUBRIC SCORES (Correctness, Rigor, Completeness, Usefulness, Efficiency, Risk)',
+      '3) KEY REASONS (<=6 bullets)',
+      '4) AUDIT FLAGS (hallucination risk, missing tests, etc.)',
+    ],
+    rules: [
+      'Blind review: ignore style, rank only by rubric.',
+      'Penalize unverifiable claims heavily.',
+      'Prefer solutions with tests / evidence / minimal assumptions.',
+      'If A and B are close, output "tie" + what evidence would break the tie.',
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Explorer - 前沿探索、创新方案 (Gemini 3 Pro)
+  // 目标：发散思维，探索可能性
+  // ═══════════════════════════════════════════════════════════════════════
+  explorer: {
+    name: 'Explorer',
+    knobs: { rigor: 2, skepticism: 2, exploration: 5, decisiveness: 3, riskAversion: 1, toolFirst: 5, compression: 2, selfCritique: 2, socialEmpathy: 3, competitiveness: 4 },
+    outputSchema: [
+      '1) HYPOTHESES (3-5 possibilities)',
+      '2) EXPLORATION RESULTS (what you tried, what worked/didn\'t)',
+      '3) SURPRISING FINDINGS (unexpected discoveries)',
+      '4) NEXT EXPERIMENTS (what to try next)',
+      '5) CONFIDENCE (per hypothesis)',
+    ],
+    rules: [
+      'Quantity over quality in exploration phase.',
+      'Document failures - they are valuable.',
+      'End with clear next steps, not vague conclusions.',
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Creator - 创意编码、突破常规 (DeepSeek V3)
+  // 目标：有创意但也可用
+  // ═══════════════════════════════════════════════════════════════════════
+  creator: {
+    name: 'Creator',
+    knobs: { rigor: 2, skepticism: 2, exploration: 5, decisiveness: 4, riskAversion: 1, toolFirst: 4, compression: 3, selfCritique: 2, socialEmpathy: 3, competitiveness: 4 },
+    outputSchema: [
+      '1) CREATIVE APPROACH (what\'s novel)',
+      '2) IMPLEMENTATION (working code)',
+      '3) TRADE-OFFS (what we gain vs lose)',
+      '4) TESTS (proof it works)',
+      '5) ALTERNATIVE (conventional fallback)',
+    ],
+    rules: [
+      'Provide at least one creative solution.',
+      'Creative doesn\'t mean untested - always include proof.',
+      'If creative approach fails, have conventional fallback ready.',
+    ],
+  },
+};
+
+// 旧模板保留（兼容）
 const HARD_RULES_TEMPLATES = {
   // 通用规则（所有 agent 必须遵守）
   universal: [
@@ -356,7 +523,88 @@ export function formatChecklist(feats: FeatConfig[]): string {
 }
 
 // ============================================================
-// 完整 Prompt 编译器
+// v2.0 编译器 - SYSTEM CORE + ROLE PATCH
+// ============================================================
+
+export interface CompileV2Options {
+  role: keyof typeof ROLE_PATCHES;  // 角色补丁
+  taskDescription?: string;          // 任务描述（可选）
+  perfFeedback?: PerfFeedback;       // 赛道绩效输入
+}
+
+/**
+ * 编译 v2.0 System Prompt - SYSTEM_CORE_V2 + ROLE_PATCH
+ *
+ * 设计目标：
+ * - 短：~300 tokens（之前 ~800）
+ * - 硬：规则明确可验证
+ * - 可评测：输出格式固定
+ */
+export function compilePromptV2(options: CompileV2Options): CompiledPrompt {
+  const { role, taskDescription, perfFeedback } = options;
+  const patch = ROLE_PATCHES[role];
+
+  if (!patch) {
+    throw new Error(`Unknown role: ${role}. Available: ${Object.keys(ROLE_PATCHES).join(', ')}`);
+  }
+
+  const parts: string[] = [];
+
+  // (A) SYSTEM CORE - 共用内核
+  parts.push(SYSTEM_CORE_V2);
+  parts.push('');
+
+  // (B) ROLE PATCH - 角色补丁
+  parts.push(`---`);
+  parts.push(`ROLE: ${patch.name}`);
+  parts.push('');
+
+  // KNOBS
+  parts.push(formatKnobsLine(patch.knobs));
+  parts.push('');
+
+  // OUTPUT_SCHEMA
+  parts.push('OUTPUT_SCHEMA:');
+  for (const line of patch.outputSchema) {
+    parts.push(`  ${line}`);
+  }
+  parts.push('');
+
+  // RULES
+  parts.push('RULES:');
+  for (const rule of patch.rules) {
+    parts.push(`- ${rule}`);
+  }
+
+  // (D) PERF_FEEDBACK - 赛道绩效输入
+  let perfContext = '';
+  if (perfFeedback) {
+    parts.push('');
+    parts.push(formatPerfFeedback(perfFeedback));
+    perfContext = formatPerfFeedback(perfFeedback);
+  }
+
+  // 任务描述（可选）
+  if (taskDescription) {
+    parts.push('');
+    parts.push('---');
+    parts.push('TASK:');
+    parts.push(taskDescription);
+  }
+
+  const system = parts.join('\n');
+  const tokenEstimate = Math.ceil(system.length / 4);
+
+  return {
+    system,
+    knobsLine: formatKnobsLine(patch.knobs),
+    tokenEstimate,
+    perfContext,
+  };
+}
+
+// ============================================================
+// v1.x 兼容编译器（保留）
 // ============================================================
 
 export interface CompileOptions {
@@ -616,37 +864,77 @@ if (import.meta.main) {
       break;
     }
 
+    case 'role': {
+      // v2.0 - 编译角色补丁
+      const role = process.argv[3] as keyof typeof ROLE_PATCHES;
+      const withPerf = process.argv[4] === '--perf';
+      const task = process.argv[5] || '';
+
+      if (!role || !ROLE_PATCHES[role]) {
+        console.log('\n🎭 可用角色补丁:\n');
+        for (const [id, patch] of Object.entries(ROLE_PATCHES)) {
+          const knobs = formatKnobsLine(patch.knobs);
+          console.log(`  ${id.padEnd(12)} → ${patch.name}`);
+          console.log(`               ${knobs}`);
+          console.log('');
+        }
+        console.log('用法: bun prompt-runtime.ts role <role> [--perf] ["任务描述"]');
+        break;
+      }
+
+      const result = compilePromptV2({
+        role,
+        taskDescription: task || undefined,
+        perfFeedback: withPerf ? generateExamplePerfFeedback('coding_debug') : undefined,
+      });
+
+      console.log('\n' + '='.repeat(60));
+      console.log(`🎭 Compiled Role: ${role}`);
+      console.log('='.repeat(60));
+      console.log('\n');
+      console.log(result.system);
+      console.log('\n');
+      console.log('─'.repeat(60));
+      console.log(`Token 估算: ~${result.tokenEstimate}`);
+      console.log(`旋钮: ${result.knobsLine}`);
+      break;
+    }
+
     case 'sync': {
-      // 将编译后的 prompt 同步到 niumao-anchors.json
+      // v2.0 - 将编译后的 prompt 同步到 niumao-anchors.json
       const { readFileSync, writeFileSync } = require('fs');
       const { homedir } = require('os');
       const anchorsPath = process.argv[3] || `${homedir()}/.claude/core/solar-farm/niumao-anchors.json`;
 
-      console.log('\n🔄 同步 Prompt Runtime → niumao-anchors.json\n');
+      console.log('\n🔄 同步 Prompt Runtime v2.0 → niumao-anchors.json\n');
 
-      // 模型 → 模板映射
-      const MODEL_TO_TEMPLATE: Record<string, keyof typeof PROMPT_TEMPLATES> = {
+      // 模型 → 角色映射 (v2.0)
+      const MODEL_TO_ROLE: Record<string, keyof typeof ROLE_PATCHES> = {
         // 技术宅 - 严谨审查
-        'gemini-2-pro': 'conservative',
-        'gemini-2.5-pro': 'conservative',
+        'gemini-2-pro': 'verifier',
+        'gemini-2.5-pro': 'verifier',
+        'gemini-2.5-flash': 'builder',
         // 千里马 - 创新探索
         'gemini-3-pro-preview': 'explorer',
         'gemini-3-flash-preview': 'explorer',
         // 鬼才码农 - 创意编码
         'deepseek-v3': 'creator',
-        // 思考驼 - 深度推理
+        // 思考驼 - 深度推理/裁判
         'deepseek-r1': 'judge',
         // 老实人 - 批量执行
         'glm-4-plus': 'builder',
-        'glm-5': 'advisor',
+        'glm-5': 'architect',
         // 小快手 - 批量执行
         'glm-4-flash': 'builder',
         // 闪电侠 - 批量执行
         'gemini-2-flash': 'builder',
-        'gemini-2.5-flash': 'builder',
         // GPT 系列
-        'gpt-4o': 'advisor',
+        'gpt-4o': 'architect',
         'gpt-4o-mini': 'builder',
+        // Claude 系列
+        'claude-sonnet-4-5': 'architect',
+        'claude-opus-4-5': 'judge',
+        'claude-opus-4-6': 'judge',
       };
 
       try {
@@ -654,32 +942,26 @@ if (import.meta.main) {
         let updated = 0;
 
         for (const [modelId, info] of Object.entries(anchors)) {
-          const template = MODEL_TO_TEMPLATE[modelId];
-          if (!template) {
+          const role = MODEL_TO_ROLE[modelId];
+          if (!role) {
             console.log(`  ⏭️  ${modelId.padEnd(20)} → 无映射，跳过`);
             continue;
           }
 
-          const templateConfig = PROMPT_TEMPLATES[template];
-          const compiled = compilePrompt({
-            knobs: templateConfig.knobs,
-            feats: templateConfig.feats,
-            alignment: templateConfig.alignment,
-            taskType: 'universal',
-            enableAntiGaming: true,
-          });
+          const compiled = compilePromptV2({ role });
 
           // 保留原有昵称，更新 system_prompt
           const nickname = (info as any).nickname || modelId;
           (anchors as any)[modelId] = {
             nickname,
             system_prompt: compiled.system,
-            template,
+            role,
             knobs: compiled.knobsLine,
             token_estimate: compiled.tokenEstimate,
+            version: 'v2.0',
           };
 
-          console.log(`  ✅ ${modelId.padEnd(20)} → ${template} (~${compiled.tokenEstimate} tokens)`);
+          console.log(`  ✅ ${modelId.padEnd(20)} → ${role} (~${compiled.tokenEstimate} tokens)`);
           updated++;
         }
 
@@ -695,34 +977,33 @@ if (import.meta.main) {
     }
 
     case 'for-model': {
-      // 为单个模型生成编译后的 prompt
+      // v2.0 - 为单个模型生成编译后的 prompt
       const modelId = process.argv[3];
-      const taskType = (process.argv[4] || 'universal') as CompileOptions['taskType'];
-      const withPerf = process.argv[5] === '--perf';
+      const withPerf = process.argv[4] === '--perf';
+      const task = process.argv[5] || '';
 
       if (!modelId) {
         console.error('❌ 请指定模型 ID');
         process.exit(1);
       }
 
-      const MODEL_TO_TEMPLATE: Record<string, keyof typeof PROMPT_TEMPLATES> = {
-        'gemini-2-pro': 'conservative', 'gemini-2.5-pro': 'conservative',
+      const MODEL_TO_ROLE: Record<string, keyof typeof ROLE_PATCHES> = {
+        'gemini-2-pro': 'verifier', 'gemini-2.5-pro': 'verifier',
+        'gemini-2.5-flash': 'builder',
         'gemini-3-pro-preview': 'explorer', 'gemini-3-flash-preview': 'explorer',
         'deepseek-v3': 'creator', 'deepseek-r1': 'judge',
-        'glm-4-plus': 'builder', 'glm-5': 'advisor', 'glm-4-flash': 'builder',
-        'gemini-2-flash': 'builder', 'gemini-2.5-flash': 'builder',
-        'gpt-4o': 'advisor', 'gpt-4o-mini': 'builder',
+        'glm-4-plus': 'builder', 'glm-5': 'architect', 'glm-4-flash': 'builder',
+        'gemini-2-flash': 'builder',
+        'gpt-4o': 'architect', 'gpt-4o-mini': 'builder',
+        'claude-sonnet-4-5': 'architect', 'claude-opus-4-5': 'judge', 'claude-opus-4-6': 'judge',
       };
 
-      const template = MODEL_TO_TEMPLATE[modelId] || 'builder';
-      const templateConfig = PROMPT_TEMPLATES[template];
+      const role = MODEL_TO_ROLE[modelId] || 'builder';
 
-      const result = compilePrompt({
-        knobs: templateConfig.knobs,
-        feats: templateConfig.feats,
-        alignment: templateConfig.alignment,
-        taskType,
-        perfFeedback: withPerf ? generateExamplePerfFeedback(taskType === 'universal' ? 'coding_debug' : taskType) : undefined,
+      const result = compilePromptV2({
+        role,
+        taskDescription: task || undefined,
+        perfFeedback: withPerf ? generateExamplePerfFeedback('coding_debug') : undefined,
       });
 
       // 输出纯 prompt（方便程序调用）
@@ -730,54 +1011,80 @@ if (import.meta.main) {
       break;
     }
 
+    case 'roles': {
+      // 列出所有角色补丁
+      console.log('\n🎭 角色补丁列表:\n');
+      for (const [id, patch] of Object.entries(ROLE_PATCHES)) {
+        console.log(`┌─ ${id.padEnd(12)} (${patch.name}) ──────────────────────────┐`);
+        console.log(`│ KNOBS: ${formatKnobsLine(patch.knobs).replace('KNOBS: ', '')}`);
+        console.log(`│ OUTPUT_SCHEMA:`);
+        for (const line of patch.outputSchema) {
+          console.log(`│   ${line}`);
+        }
+        console.log(`│ RULES:`);
+        for (const rule of patch.rules) {
+          console.log(`│   - ${rule}`);
+        }
+        console.log(`└${'─'.repeat(58)}┘`);
+        console.log('');
+      }
+      break;
+    }
+
     default:
       console.log(`
-📝 Prompt Runtime v1.1 - 四段式 System Prompt 编译器
+📝 Prompt Runtime v2.0 - SYSTEM CORE + ROLE PATCH
 
-三段式结构:
-  (A) HARD RULES - 硬规则 (含反刷分条款)
-  (B) KNOBS - 旋钮 (人格向量)
-  (C) CHECKLIST - 清单 (feat → 可执行动作)
+架构:
+  (A) SYSTEM CORE - 共用内核 (~200 tokens)
+  (B) ROLE PATCH - 角色补丁 (KNOBS + OUTPUT_SCHEMA + RULES)
   (D) PERF_FEEDBACK - 赛道绩效输入 (总控脑注入)
 
 用法:
-  bun prompt-runtime.ts compile <template> <taskType> [--perf]
-    template: judge | creator | advisor | conservative | explorer | builder
-    taskType: universal | research | code | architecture | review
-    --perf: 添加绩效反馈示例
+  bun prompt-runtime.ts role <role> [--perf] ["任务描述"]
+    编译角色补丁，输出完整 system prompt
+    role: builder | verifier | architect | judge | explorer | creator
 
-  bun prompt-runtime.ts knobs <template>
-    显示模板的旋钮配置
-
-  bun prompt-runtime.ts checklist [feat1 feat2 ...]
-    显示 Feat 执行清单
-
-  bun prompt-runtime.ts perf [lane]
-    显示绩效反馈示例
-    lane: coding_debug | research | architecture | review
-
-  bun prompt-runtime.ts templates
-    列出所有预设模板
+  bun prompt-runtime.ts roles
+    列出所有角色补丁详情
 
   bun prompt-runtime.ts sync [path]
     同步编译后的 prompt 到 niumao-anchors.json
     path 默认: ~/.claude/core/solar-farm/niumao-anchors.json
 
-  bun prompt-runtime.ts for-model <modelId> [taskType] [--perf]
+  bun prompt-runtime.ts for-model <modelId> [--perf] ["任务描述"]
     为指定模型生成编译后的 prompt（纯输出，方便程序调用）
 
+  # v1.x 兼容命令
+  bun prompt-runtime.ts compile <template> <taskType> [--perf]
+  bun prompt-runtime.ts knobs <template>
+  bun prompt-runtime.ts checklist [feat1 feat2 ...]
+  bun prompt-runtime.ts perf [lane]
+  bun prompt-runtime.ts templates
+
+角色补丁说明:
+  builder    - 低成本干活模型，快交付必须可验收
+  verifier   - 抓 bug、抓逻辑洞、抓证据链
+  architect  - 方案设计、trade-off、边界与验收
+  judge      - 中立裁判，互评抗偏差
+  explorer   - 前沿探索、创新方案
+  creator    - 创意编码、突破常规
+
 示例:
-  bun prompt-runtime.ts compile judge code
-  bun prompt-runtime.ts compile judge code --perf
-  bun prompt-runtime.ts checklist observant alert
-  bun prompt-runtime.ts perf coding_debug
+  bun prompt-runtime.ts role builder --perf "实现一个缓存"
+  bun prompt-runtime.ts roles
   bun prompt-runtime.ts sync
-  bun prompt-runtime.ts for-model deepseek-r1 code --perf
+  bun prompt-runtime.ts for-model deepseek-r1 --perf "代码审查"
 `);
   }
 }
 
 export default {
+  // v2.0 API
+  compilePromptV2,
+  ROLE_PATCHES,
+  SYSTEM_CORE_V2,
+  // v1.x 兼容
   compilePrompt,
   compileTemplate,
   compileKnobsFromSheet,
