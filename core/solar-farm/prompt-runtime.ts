@@ -1,12 +1,13 @@
 /**
- * Prompt Runtime v1.0 - 把人格系统编译成可执行的三段式 System Prompt
+ * Prompt Runtime v1.1 - 把人格系统编译成可执行的三段式 System Prompt
  *
  * 核心理念：Prompt = 微型运行时（policy runtime）
  *
- * 三段式结构：
- * (A) HARD RULES - 硬规则（不可违背）
+ * 四段式结构：
+ * (A) HARD RULES - 硬规则（不可违背，含反刷分条款）
  * (B) KNOBS - 旋钮（人格向量，一行键值对）
  * (C) CHECKLIST - 清单（feat 变成可执行动作）
+ * (D) PERF_FEEDBACK - 赛道绩效输入（总控脑注入）
  *
  * 编译目标：让"人格/属性/绩效"变成可观测、可调试、可比较的行为契约
  */
@@ -48,6 +49,26 @@ export interface CompiledPrompt {
   system: string;
   knobsLine: string;
   tokenEstimate: number;
+  perfContext?: string;  // 绩效反馈上下文（可单独注入）
+}
+
+/**
+ * 赛道绩效输入 - 由总控脑注入
+ *
+ * 设计原则:
+ * - 只给: 分位数、最近失败类型、必须改的行为
+ * - 不给: 对手具体漏洞、评分细节（会诱发投机）
+ */
+export interface PerfFeedback {
+  lane: string;              // 赛道: coding_debug, research, architecture, review
+  rankPercentile: number;    // 分位数 0-100
+  last10: {                  // 最近10次任务统计
+    correctness: number;     // 正确率 0-1
+    rigor: number;           // 严谨度 0-1
+    cost: number;            // 平均成本 $
+  };
+  topFailures: string[];     // 最近失败类型 Top3
+  nextFocus: string[];       // 必须改进的行为 Top3
 }
 
 // ============================================================
@@ -112,6 +133,109 @@ const HARD_RULES_TEMPLATES = {
     '- 禁止空洞评价（"不错"→改为具体说明）',
   ],
 };
+
+// ============================================================
+// 反刷分条款 - 写进 HARD RULES
+// ============================================================
+
+/**
+ * 反刷分条款 - 明确告诉模型会被审计
+ *
+ * 核心目的：抑制"竞技人格导致的胡说"
+ *
+ * 原则：
+ * - 你会被审计
+ * - "为了赢而编"会被重罚
+ * - 排名会下降
+ */
+const ANTI_GAMING_RULES = [
+  '## 反刷分审计',
+  '',
+  '⚠️ 你的每次输出都会被审计系统记录：',
+  '- 盲审互评 → 与其他专家交叉验证',
+  '- 客观测试 → 单测/benchmark/回归检测',
+  '- 一致性检查 → 置信度校准 (Brier Score)',
+  '',
+  '🚫 以下行为会导致排名下降：',
+  '- 为了"好看"而编造数据/证据',
+  '- 过度自信（声称100%但实际错误）',
+  '- 回避反例/失败模式',
+  '- 抄袭/迎合其他专家而不独立思考',
+  '',
+  '✅ 诚实比"赢"更重要：',
+  '- 不确定就说不确定',
+  '- 有反例就列出来',
+  '- 证据不足就标注 ⚠️',
+];
+
+// ============================================================
+// (D) PERF_FEEDBACK - 赛道绩效输入格式化
+// ============================================================
+
+/**
+ * 格式化绩效反馈为可注入的上下文
+ *
+ * 注入位置：user message 或 system tool context
+ */
+export function formatPerfFeedback(feedback: PerfFeedback): string {
+  const lines: string[] = [
+    '# PERF_FEEDBACK (你的赛道状态)',
+    '',
+    `lane: ${feedback.lane}`,
+    `rank_percentile: ${feedback.rankPercentile}%`,
+    '',
+    'last_10:',
+    `  correctness: ${feedback.last10.correctness.toFixed(2)}`,
+    `  rigor: ${feedback.last10.rigor.toFixed(2)}`,
+    `  avg_cost: $${feedback.last10.cost.toFixed(3)}`,
+    '',
+    `top_failures: [${feedback.topFailures.join(', ')}]`,
+    `next_focus: [${feedback.nextFocus.join(', ')}]`,
+    '',
+    '⚠️ 你需要针对 next_focus 中的问题改进',
+    '⚠️ 你的排名取决于真实质量，不是"看起来对"',
+  ];
+
+  return lines.join('\n');
+}
+
+/**
+ * 生成示例绩效反馈（用于测试）
+ */
+export function generateExamplePerfFeedback(lane: string): PerfFeedback {
+  const examples: Record<string, PerfFeedback> = {
+    coding_debug: {
+      lane: 'coding_debug',
+      rankPercentile: 62,
+      last10: { correctness: 0.71, rigor: 0.55, cost: 0.03 },
+      topFailures: ['missed_edge_case', 'no_min_repro', 'overconfident_claim'],
+      nextFocus: ['add_min_repro', 'add_unit_tests', 'calibrate_confidence'],
+    },
+    research: {
+      lane: 'research',
+      rankPercentile: 78,
+      last10: { correctness: 0.85, rigor: 0.72, cost: 0.08 },
+      topFailures: ['missing_sources', 'no_counterexamples', 'overgeneralization'],
+      nextFocus: ['cite_sources', 'list_limitations', 'distinguish_fact_opinion'],
+    },
+    architecture: {
+      lane: 'architecture',
+      rankPercentile: 45,
+      last10: { correctness: 0.65, rigor: 0.48, cost: 0.05 },
+      topFailures: ['no_rollback_plan', 'missing_tradeoffs', 'risk_ignored'],
+      nextFocus: ['add_alternatives', 'list_risks_mitigations', 'define_success_criteria'],
+    },
+    review: {
+      lane: 'review',
+      rankPercentile: 88,
+      last10: { correctness: 0.92, rigor: 0.85, cost: 0.02 },
+      topFailures: ['vague_feedback', 'missed_security_issue'],
+      nextFocus: ['give_specific_evidence', 'check_security_patterns'],
+    },
+  };
+
+  return examples[lane] || examples.coding_debug;
+}
 
 // ============================================================
 // (B) KNOBS - 旋钮编译器
@@ -242,13 +366,24 @@ export interface CompileOptions {
   feats?: string[];
   alignment?: string;
   customRules?: string[];
+  perfFeedback?: PerfFeedback;      // 赛道绩效输入
+  enableAntiGaming?: boolean;       // 是否启用反刷分条款 (默认 true)
 }
 
 /**
- * 编译完整的三段式 System Prompt
+ * 编译完整的四段式 System Prompt
  */
 export function compilePrompt(options: CompileOptions): CompiledPrompt {
-  const { characterSheet, knobs: customKnobs, taskType, feats = [], alignment, customRules = [] } = options;
+  const {
+    characterSheet,
+    knobs: customKnobs,
+    taskType,
+    feats = [],
+    alignment,
+    customRules = [],
+    perfFeedback,
+    enableAntiGaming = true,  // 默认启用反刷分
+  } = options;
 
   // 1. 编译旋钮
   let knobs: KnobConfig;
@@ -280,6 +415,12 @@ export function compilePrompt(options: CompileOptions): CompiledPrompt {
   if (customRules.length > 0) {
     parts.push('');
     parts.push(...customRules);
+  }
+
+  // 反刷分条款
+  if (enableAntiGaming) {
+    parts.push('');
+    parts.push(...ANTI_GAMING_RULES);
   }
 
   // (B) KNOBS
@@ -318,6 +459,14 @@ export function compilePrompt(options: CompileOptions): CompiledPrompt {
     parts.push('- ⚠️ 阵营只影响风控态度，不影响事实判断');
   }
 
+  // (D) PERF_FEEDBACK - 赛道绩效输入
+  let perfContext = '';
+  if (perfFeedback) {
+    parts.push('');
+    parts.push(formatPerfFeedback(perfFeedback));
+    perfContext = formatPerfFeedback(perfFeedback);
+  }
+
   const system = parts.join('\n');
 
   // Token 估算
@@ -327,6 +476,7 @@ export function compilePrompt(options: CompileOptions): CompiledPrompt {
     system,
     knobsLine: formatKnobsLine(knobs),
     tokenEstimate,
+    perfContext,
   };
 }
 
@@ -408,8 +558,16 @@ if (import.meta.main) {
     case 'compile': {
       const template = (process.argv[3] || 'judge') as keyof typeof PROMPT_TEMPLATES;
       const taskType = (process.argv[4] || 'universal') as CompileOptions['taskType'];
+      const withPerf = process.argv[5] === '--perf';
 
-      const result = compileTemplate(template, taskType);
+      const templateConfig = PROMPT_TEMPLATES[template];
+      const result = compilePrompt({
+        knobs: templateConfig.knobs,
+        feats: templateConfig.feats,
+        alignment: templateConfig.alignment,
+        taskType,
+        perfFeedback: withPerf ? generateExamplePerfFeedback(taskType === 'universal' ? 'coding_debug' : taskType) : undefined,
+      });
 
       console.log('\n' + '='.repeat(60));
       console.log(`📋 Compiled Prompt: ${template} / ${taskType}`);
@@ -442,6 +600,14 @@ if (import.meta.main) {
       break;
     }
 
+    case 'perf': {
+      const lane = process.argv[3] || 'coding_debug';
+      const feedback = generateExamplePerfFeedback(lane);
+      console.log('\n📊 绩效反馈示例:\n');
+      console.log(formatPerfFeedback(feedback));
+      break;
+    }
+
     case 'templates': {
       console.log('\n📚 预设模板:\n');
       for (const [name, config] of Object.entries(PROMPT_TEMPLATES)) {
@@ -452,12 +618,19 @@ if (import.meta.main) {
 
     default:
       console.log(`
-📝 Prompt Runtime v1.0 - 三段式 System Prompt 编译器
+📝 Prompt Runtime v1.1 - 四段式 System Prompt 编译器
+
+三段式结构:
+  (A) HARD RULES - 硬规则 (含反刷分条款)
+  (B) KNOBS - 旋钮 (人格向量)
+  (C) CHECKLIST - 清单 (feat → 可执行动作)
+  (D) PERF_FEEDBACK - 赛道绩效输入 (总控脑注入)
 
 用法:
-  bun prompt-runtime.ts compile <template> <taskType>
+  bun prompt-runtime.ts compile <template> <taskType> [--perf]
     template: judge | creator | advisor | conservative | explorer | builder
     taskType: universal | research | code | architecture | review
+    --perf: 添加绩效反馈示例
 
   bun prompt-runtime.ts knobs <template>
     显示模板的旋钮配置
@@ -465,12 +638,18 @@ if (import.meta.main) {
   bun prompt-runtime.ts checklist [feat1 feat2 ...]
     显示 Feat 执行清单
 
+  bun prompt-runtime.ts perf [lane]
+    显示绩效反馈示例
+    lane: coding_debug | research | architecture | review
+
   bun prompt-runtime.ts templates
     列出所有预设模板
 
 示例:
   bun prompt-runtime.ts compile judge code
+  bun prompt-runtime.ts compile judge code --perf
   bun prompt-runtime.ts checklist observant alert
+  bun prompt-runtime.ts perf coding_debug
 `);
   }
 }
