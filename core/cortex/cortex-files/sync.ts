@@ -572,12 +572,199 @@ function printStatus() {
   console.log();
 }
 
+// ============================================================
+// Summarization Integration
+// ============================================================
+
+interface SummarizeStats {
+  total: number;
+  summarized: number;
+  skipped: number;
+  tokensBefore: number;
+  tokensAfter: number;
+}
+
+async function runSummarization(): Promise<SummarizeStats> {
+  const result: SummarizeStats = {
+    total: 0,
+    summarized: 0,
+    skipped: 0,
+    tokensBefore: 0,
+    tokensAfter: 0,
+  };
+
+  // 计算 token (简化版)
+  const countFileTokens = (content: string): number => {
+    const body = content.replace(/^---\n[\s\S]*?\n---\n?/, "");
+    const chineseChars = (body.match(/[\u4e00-\u9fa5]/g) || []).length;
+    const otherChars = body.length - chineseChars;
+    return Math.ceil(chineseChars / 1.5 + otherChars / 4);
+  };
+
+  // 简单的截断摘要 (不调用 API)
+  const truncateSummary = (content: string, maxTokens: number): string => {
+    const maxChars = maxTokens * 2; // 保守估计
+    if (content.length <= maxChars) return content;
+
+    // 提取前 N 段
+    const paragraphs = content.split(/\n\n+/);
+    let result = "";
+    for (const p of paragraphs) {
+      if (result.length + p.length + 2 <= maxChars) {
+        result += p + "\n\n";
+      } else break;
+    }
+
+    return result.trim() || content.slice(0, maxChars);
+  };
+
+  const dirs = [
+    "knowledge/research",
+    "knowledge/architecture",
+    "knowledge/patterns",
+    "knowledge/lessons",
+  ];
+
+  for (const dir of dirs) {
+    const fullPath = join(CORTEX_ROOT, dir);
+    if (!existsSync(fullPath)) continue;
+
+    const files = readdirSync(fullPath).filter((f) => f.endsWith(".md"));
+
+    for (const file of files) {
+      result.total++;
+      const filePath = join(fullPath, file);
+      const content = readFileSync(filePath, "utf-8");
+
+      // 解析 frontmatter
+      const frontmatter = parseFrontmatter(content);
+      const limit = frontmatter.limit || 2000;
+      const body = content.replace(/^---\n[\s\S]*?\n---\n?/, "");
+
+      const tokens = countFileTokens(body);
+      result.tokensBefore += tokens;
+
+      if (tokens <= limit * 0.6) {
+        // 不需要摘要
+        result.skipped++;
+        result.tokensAfter += tokens;
+        continue;
+      }
+
+      // 执行摘要 (截断)
+      const summarized = truncateSummary(body, Math.floor(limit * 0.5));
+      const newTokens = countFileTokens(summarized);
+      result.tokensAfter += newTokens;
+      result.summarized++;
+
+      // 更新 frontmatter 的 description
+      const newDescription = summarized.slice(0, 100).replace(/\n/g, " ").trim();
+      const newFrontmatter = {
+        ...frontmatter,
+        description: newDescription,
+      };
+
+      const newContent = generateMarkdown(newFrontmatter, summarized);
+      writeFileSync(filePath, newContent, "utf-8");
+
+      console.log(`   ✓ ${file.slice(0, 40)}... (${tokens} → ${newTokens} tokens)`);
+    }
+  }
+
+  const saved = result.tokensBefore - result.tokensAfter;
+  const savedPct = ((saved / result.tokensBefore) * 100).toFixed(1);
+
+  console.log(`\n📊 摘要统计:`);
+  console.log(`   处理文件: ${result.total}`);
+  console.log(`   已摘要: ${result.summarized}`);
+  console.log(`   跳过: ${result.skipped}`);
+  console.log(`   Token 变化: ${result.tokensBefore.toLocaleString()} → ${result.tokensAfter.toLocaleString()}`);
+  console.log(`   节省: ${saved.toLocaleString()} tokens (${savedPct}%)`);
+
+  return result;
+}
+
+function parseFrontmatter(content: string): Record<string, any> {
+  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!match) return {};
+
+  const frontmatter: Record<string, any> = {};
+  const lines = match[1].split("\n");
+
+  for (const line of lines) {
+    const colonIdx = line.indexOf(":");
+    if (colonIdx === -1) continue;
+
+    const key = line.slice(0, colonIdx).trim();
+    let value: any = line.slice(colonIdx + 1).trim();
+
+    if (value === "true") value = true;
+    else if (value === "false") value = false;
+    else if (/^\d+$/.test(value)) value = parseInt(value);
+    else if (/^\[.*\]$/.test(value)) {
+      value = value
+        .slice(1, -1)
+        .split(",")
+        .map((s) => s.trim().replace(/^["']|["']$/g, ""));
+    } else {
+      value = value.replace(/^["']|["']$/g, "");
+    }
+
+    frontmatter[key] = value;
+  }
+
+  return frontmatter;
+}
+
+function generateMarkdown(
+  frontmatter: Record<string, any>,
+  body: string
+): string {
+  let fm = "---\n";
+  for (const [key, value] of Object.entries(frontmatter)) {
+    if (Array.isArray(value)) {
+      fm += `${key}: [${value.join(", ")}]\n`;
+    } else if (typeof value === "string" && (value.includes(":") || value.includes('"'))) {
+      fm += `${key}: "${value.replace(/"/g, '\\"')}"\n`;
+    } else {
+      fm += `${key}: ${value}\n`;
+    }
+  }
+  fm += "---\n\n";
+  return fm + body;
+}
+
 async function main() {
   const args = Bun.argv.slice(2);
   const mode = args[0] || "--status";
+  const shouldSummarize = args.includes("--summarize");
 
   if (mode === "--status") {
     printStatus();
+    return;
+  }
+
+  if (mode === "--help") {
+    console.log(`
+Usage:
+  bun sync.ts --full           # 全量同步
+  bun sync.ts --incremental    # 增量同步
+  bun sync.ts --status         # 查看状态
+  bun sync.ts --summarize      # 仅执行摘要
+  bun sync.ts --full --summarize  # 同步 + 摘要
+
+Examples:
+  # 基础同步
+  bun sync.ts --full
+
+  # 同步后自动摘要 (降低 token)
+  bun sync.ts --full --summarize
+    `);
+    return;
+  }
+
+  if (mode === "--summarize") {
+    await runSummarization();
     return;
   }
 
@@ -606,6 +793,12 @@ async function main() {
 
     // Git 提交
     gitCommit(stats);
+
+    // 可选：执行摘要
+    if (shouldSummarize) {
+      console.log("\n📝 执行摘要...");
+      await runSummarization();
+    }
 
     console.log("\n✅ 同步完成!");
     console.log(`   文件创建: ${stats.files_created}`);
