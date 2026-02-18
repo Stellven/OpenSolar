@@ -150,63 +150,24 @@ class KnowledgeExtractor {
   }
 
   private initTables(): void {
-    // 知识图谱 - 实体表
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS cortex_entities (
-        entity_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        type TEXT NOT NULL,
-        aliases JSON,
-        description TEXT,
-        first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
-        last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
-        mention_count INTEGER DEFAULT 1,
-        UNIQUE(name)
-      )
-    `);
+    // 使用系统标准的知识图谱表（已存在于数据库中）
+    // knowledge_entities: entity_id, name, type, description, aliases, metadata, importance, access_count
+    // knowledge_relations: relation_id, from_entity, to_entity, relation_type, evidence, confidence, source_doc
+    // knowledge_claims: claim_id, claim_text, supporting_entities, supporting_sources, confidence, domain
 
-    // 知识图谱 - 关系表
+    // 只创建知识融合记录表（辅助表）
     this.db.run(`
-      CREATE TABLE IF NOT EXISTS cortex_relations (
-        relation_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        from_entity TEXT NOT NULL,
-        to_entity TEXT NOT NULL,
-        relation_type TEXT NOT NULL,
-        evidence TEXT,
-        source_path TEXT,
-        confidence REAL DEFAULT 0.7,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(from_entity, to_entity, relation_type)
-      )
-    `);
-
-    // 知识点表 (关联到实体)
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS cortex_knowledge_points (
-        point_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        content TEXT NOT NULL,
-        source_path TEXT,
-        source_type TEXT,
-        importance INTEGER DEFAULT 5,
-        tags JSON,
-        entities JSON,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // 知识融合记录 (记录两个实体被关联的过程)
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS cortex_fusion_log (
+      CREATE TABLE IF NOT EXISTS knowledge_fusion_log (
         log_id INTEGER PRIMARY KEY AUTOINCREMENT,
         entity_a TEXT,
         entity_b TEXT,
-        fusion_type TEXT,  -- 'merged', 'related', 'same_as'
+        fusion_type TEXT,
         evidence TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    console.log('✅ 知识图谱表初始化完成');
+    console.log('✅ 使用系统标准知识图谱表 (knowledge_entities, knowledge_relations)');
   }
 
   // ============================================================
@@ -354,15 +315,15 @@ class KnowledgeExtractor {
   saveToKnowledgeBase(result: ExtractionResult, sourcePath: string): void {
     console.log('\n💾 存入知识库...');
 
-    // 1. 存储实体
+    // 1. 存储实体 -> knowledge_entities
     for (const entity of result.entities) {
       try {
         this.db.run(`
-          INSERT INTO cortex_entities (name, type, aliases, description, mention_count)
-          VALUES (?, ?, ?, ?, 1)
+          INSERT INTO knowledge_entities (name, type, aliases, description, importance)
+          VALUES (?, ?, ?, ?, 0.5)
           ON CONFLICT(name) DO UPDATE SET
-            mention_count = mention_count + 1,
-            last_updated = CURRENT_TIMESTAMP
+            access_count = access_count + 1,
+            updated_at = CURRENT_TIMESTAMP
         `, [entity.name, entity.type, JSON.stringify(entity.aliases), entity.description]);
       } catch (e) {
         // 忽略重复
@@ -370,32 +331,30 @@ class KnowledgeExtractor {
     }
     console.log(`  ✅ 存储 ${result.entities.length} 个实体`);
 
-    // 2. 存储关系
+    // 2. 存储关系 -> knowledge_relations
     for (const rel of result.relations) {
       try {
         this.db.run(`
-          INSERT INTO cortex_relations (from_entity, to_entity, relation_type, evidence, source_path, confidence)
+          INSERT INTO knowledge_relations (from_entity, to_entity, relation_type, evidence, confidence, source_doc)
           VALUES (?, ?, ?, ?, ?, ?)
           ON CONFLICT(from_entity, to_entity, relation_type) DO UPDATE SET
             evidence = excluded.evidence,
             confidence = MAX(confidence, excluded.confidence)
-        `, [rel.from, rel.to, rel.type, rel.evidence, sourcePath, rel.confidence]);
+        `, [rel.from, rel.to, rel.type, rel.evidence, rel.confidence, sourcePath]);
       } catch (e) {
         // 忽略重复
       }
     }
     console.log(`  ✅ 存储 ${result.relations.length} 个关系`);
 
-    // 3. 存储知识点
+    // 3. 存储知识点 -> knowledge_claims
     for (const insight of result.key_insights) {
       this.db.run(`
-        INSERT INTO cortex_knowledge_points (content, source_path, source_type, importance, tags, entities)
-        VALUES (?, ?, 'obsidian', 7, ?, ?)
+        INSERT INTO knowledge_claims (claim_text, supporting_entities, confidence)
+        VALUES (?, ?, 0.7)
       `, [
         insight,
-        sourcePath,
-        JSON.stringify(result.entities.map(e => e.name)),
-        JSON.stringify(result.entities.filter(e => e.type === 'concept').map(e => e.name))
+        JSON.stringify(result.entities.map(e => e.name))
       ]);
     }
     console.log(`  ✅ 存储 ${result.key_insights.length} 个知识点`);
@@ -413,16 +372,16 @@ class KnowledgeExtractor {
     const connections: Array<{ entity: string; relatedTo: string[]; connectionType: string }> = [];
 
     for (const entity of newEntities) {
-      // 查找已有的相关实体
+      // 查找已有的相关实体 -> knowledge_entities
       const related = this.db.query<{
         name: string;
         type: string;
-        mention_count: number;
+        access_count: number;
       }, [string, string]>(`
-        SELECT name, type, mention_count
-        FROM cortex_entities
+        SELECT name, type, access_count
+        FROM knowledge_entities
         WHERE name LIKE ? OR name LIKE ? OR ? LIKE '%' || name || '%'
-        ORDER BY mention_count DESC
+        ORDER BY access_count DESC
         LIMIT 5
       `).all(`%${entity.name}%`, `${entity.name}%`, entity.name);
 
@@ -525,19 +484,19 @@ class KnowledgeExtractor {
     relatedEntities: any[];
     knowledgePoints: any[];
   } {
-    // 查询实体
+    // 查询实体 -> knowledge_entities
     const entityData = this.db.query<{
       name: string;
       type: string;
       description: string;
-      mention_count: number;
+      access_count: number;
     }, [string]>(`
-      SELECT name, type, description, mention_count
-      FROM cortex_entities
+      SELECT name, type, description, access_count
+      FROM knowledge_entities
       WHERE name = ? OR name LIKE ?
     `).get(entity, `%${entity}%`);
 
-    // 查询关系
+    // 查询关系 -> knowledge_relations
     const relations = this.db.query<{
       from_entity: string;
       to_entity: string;
@@ -546,7 +505,7 @@ class KnowledgeExtractor {
       confidence: number;
     }, [string]>(`
       SELECT from_entity, to_entity, relation_type, evidence, confidence
-      FROM cortex_relations
+      FROM knowledge_relations
       WHERE from_entity = ? OR to_entity = ?
       ORDER BY confidence DESC
       LIMIT 20
@@ -556,26 +515,25 @@ class KnowledgeExtractor {
     const relatedEntities = this.db.query<{
       name: string;
       type: string;
-      mention_count: number;
+      access_count: number;
     }, [string, string]>(`
-      SELECT DISTINCT e.name, e.type, e.mention_count
-      FROM cortex_entities e
-      JOIN cortex_relations r ON (e.name = r.from_entity OR e.name = r.to_entity)
+      SELECT DISTINCT e.name, e.type, e.access_count
+      FROM knowledge_entities e
+      JOIN knowledge_relations r ON (e.name = r.from_entity OR e.name = r.to_entity)
       WHERE (r.from_entity = ? OR r.to_entity = ?) AND e.name != ?
-      ORDER BY e.mention_count DESC
+      ORDER BY e.access_count DESC
       LIMIT 10
     `).all(entity, entity, entity);
 
-    // 查询知识点
+    // 查询知识点 -> knowledge_claims
     const knowledgePoints = this.db.query<{
-      content: string;
-      source_path: string;
-      importance: number;
+      claim_text: string;
+      confidence: number;
     }, [string]>(`
-      SELECT content, source_path, importance
-      FROM cortex_knowledge_points
-      WHERE entities LIKE ?
-      ORDER BY importance DESC
+      SELECT claim_text, confidence
+      FROM knowledge_claims
+      WHERE supporting_entities LIKE ?
+      ORDER BY confidence DESC
       LIMIT 10
     `).all(`%${entity}%`);
 
@@ -595,27 +553,27 @@ class KnowledgeExtractor {
     totalEntities: number;
     totalRelations: number;
     totalKnowledgePoints: number;
-    topEntities: Array<{ name: string; mention_count: number }>;
+    topEntities: Array<{ name: string; access_count: number }>;
     topRelationTypes: Array<{ type: string; count: number }>;
   } {
     const totalEntities = this.db.query<{ count: number }, []>(`
-      SELECT COUNT(*) as count FROM cortex_entities
+      SELECT COUNT(*) as count FROM knowledge_entities
     `).get()?.count || 0;
 
     const totalRelations = this.db.query<{ count: number }, []>(`
-      SELECT COUNT(*) as count FROM cortex_relations
+      SELECT COUNT(*) as count FROM knowledge_relations
     `).get()?.count || 0;
 
     const totalKnowledgePoints = this.db.query<{ count: number }, []>(`
-      SELECT COUNT(*) as count FROM cortex_knowledge_points
+      SELECT COUNT(*) as count FROM knowledge_claims
     `).get()?.count || 0;
 
     const topEntities = this.db.query<{
       name: string;
-      mention_count: number;
+      access_count: number;
     }, []>(`
-      SELECT name, mention_count FROM cortex_entities
-      ORDER BY mention_count DESC LIMIT 10
+      SELECT name, access_count FROM knowledge_entities
+      ORDER BY access_count DESC LIMIT 10
     `).all();
 
     const topRelationTypes = this.db.query<{
@@ -623,7 +581,7 @@ class KnowledgeExtractor {
       count: number;
     }, []>(`
       SELECT relation_type as type, COUNT(*) as count
-      FROM cortex_relations
+      FROM knowledge_relations
       GROUP BY relation_type
       ORDER BY count DESC LIMIT 10
     `).all();
@@ -675,7 +633,7 @@ async function main() {
         console.log(`\n🔍 查询 "${entity}" 结果:`);
         if (queryResult.entity) {
           console.log(`\n📍 实体: ${queryResult.entity.name} (${queryResult.entity.type})`);
-          console.log(`   提及次数: ${queryResult.entity.mention_count}`);
+          console.log(`   访问次数: ${queryResult.entity.access_count}`);
         }
         console.log(`\n🔗 关系 (${queryResult.relations.length} 条):`);
         for (const r of queryResult.relations.slice(0, 5)) {
@@ -683,7 +641,7 @@ async function main() {
         }
         console.log(`\n📌 相关实体 (${queryResult.relatedEntities.length} 个):`);
         for (const e of queryResult.relatedEntities.slice(0, 5)) {
-          console.log(`   ${e.name} (${e.type}, 提及 ${e.mention_count} 次)`);
+          console.log(`   ${e.name} (${e.type}, 访问 ${e.access_count} 次)`);
         }
         break;
 
@@ -696,7 +654,7 @@ async function main() {
         console.log(`  总知识点: ${s.totalKnowledgePoints}`);
         console.log('\n  热门实体:');
         for (const e of s.topEntities.slice(0, 5)) {
-          console.log(`    ${e.name}: ${e.mention_count} 次`);
+          console.log(`    ${e.name}: ${e.access_count} 次`);
         }
         break;
     }
