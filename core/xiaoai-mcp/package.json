@@ -1,0 +1,12 @@
+{
+  "name": "xiaoai-mcp",
+  "version": "1.0.0",
+  "description": "XiaoAi MCP Server - Solar 的 AI 秘书",
+  "type": "module",
+  "scripts": {
+    "start": "bun run server.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}

@@ -14,6 +14,7 @@
 import { UtilityCollector } from '../utility-collector';
 import { EnhancedFailureDetector, FailureDetectionResult, FailureType } from '../enhanced-failure-detector';
 import { QUpdater } from '../q-updater';
+import { ImplicitRewardExtractor } from '../implicit-reward-extractor';
 
 interface ToolCallContext {
   toolName: string;
@@ -28,6 +29,7 @@ export class MEMRLPostToolHook {
   private collector: UtilityCollector;
   private enhancedDetector: EnhancedFailureDetector;
   private updater: QUpdater;
+  private implicitExtractor: ImplicitRewardExtractor;
   private enabled: boolean = true;
 
   constructor(
@@ -36,6 +38,7 @@ export class MEMRLPostToolHook {
     this.collector = new UtilityCollector(dbPath);
     this.enhancedDetector = new EnhancedFailureDetector(dbPath);
     this.updater = new QUpdater(dbPath);
+    this.implicitExtractor = new ImplicitRewardExtractor(dbPath);
   }
 
   /**
@@ -145,23 +148,41 @@ export class MEMRLPostToolHook {
   }
 
   /**
-   * 获取统计 (v2 - 包含增强型检测器)
+   * 获取统计 (v3 - 包含隐式奖励提取器)
    */
-  getStats(): {
+  async getStats(): Promise<{
     collector: { totalRecords: number; successCount: number; failureCount: number };
     enhanced: { total: number; byType: Record<string, number>; avgConfidence: number };
+    implicit: { totalExtracted: number; byType: Record<string, number>; avgReward: number };
     updater: ReturnType<QUpdater['getStats']>;
     balanceRatio: string;
-  } {
+    fusedQImpact: { beforeAvg: number; afterAvg: number; highQReduction: number };
+  }> {
     const cStats = this.collector.getStats();
     const eStats = this.enhancedDetector.getStats();
+    const iStats = await this.implicitExtractor.getStats();
     const uStats = this.updater.getStats();
 
     const totalSuccess = cStats.success;
-    const totalFailure = cStats.failure + eStats.total;
+    const totalFailure = cStats.failure + eStats.total + iStats.totalExtracted;
     const balanceRatio = totalFailure > 0
       ? `${(totalSuccess / totalFailure).toFixed(1)}:1`
       : '∞:1';
+
+    // 计算融合 Q 影响
+    const fusedQImpact = this.updater.db.prepare(`
+      SELECT
+        AVG(q_value) as before_avg,
+        AVG(0.7 * q_value + 0.3 * u_implicit) as after_avg,
+        SUM(CASE WHEN q_value >= 0.6 THEN 1 ELSE 0 END) as high_q_before,
+        SUM(CASE WHEN (0.7 * q_value + 0.3 * u_implicit) >= 0.6 THEN 1 ELSE 0 END) as high_q_after
+      FROM memrl_utility_store
+    `).get() as {
+      before_avg: number;
+      after_avg: number;
+      high_q_before: number;
+      high_q_after: number;
+    };
 
     return {
       collector: {
@@ -170,8 +191,18 @@ export class MEMRLPostToolHook {
         failureCount: cStats.failure
       },
       enhanced: eStats,
+      implicit: {
+        totalExtracted: iStats.totalExtracted,
+        byType: iStats.byType,
+        avgReward: iStats.avgReward
+      },
       updater: uStats,
-      balanceRatio
+      balanceRatio,
+      fusedQImpact: {
+        beforeAvg: fusedQImpact.before_avg,
+        afterAvg: fusedQImpact.after_avg,
+        highQReduction: fusedQImpact.high_q_before - fusedQImpact.high_q_after
+      }
     };
   }
 
@@ -179,6 +210,7 @@ export class MEMRLPostToolHook {
     this.collector.close();
     this.enhancedDetector.close();
     this.updater.close();
+    this.implicitExtractor.close();
   }
 }
 
@@ -189,8 +221,8 @@ if (import.meta.main) {
   const command = process.argv[2] || 'stats';
 
   if (command === 'stats') {
-    console.log('📊 MEMRL Hook 统计 (v2)\n');
-    const stats = hook.getStats();
+    console.log('📊 MEMRL Hook 统计 (v3)\n');
+    const stats = await hook.getStats();
 
     console.log('Utility Collector (传统):');
     console.log(`  总记录: ${stats.collector.totalRecords}`);
@@ -205,10 +237,23 @@ if (import.meta.main) {
       console.log(`    ${type}: ${count}`);
     }
 
+    console.log('\nImplicit Reward Extractor (v3 新增):');
+    console.log(`  总提取: ${stats.implicit.totalExtracted}`);
+    console.log(`  平均奖励: ${stats.implicit.avgReward.toFixed(3)}`);
+    console.log(`  按类型:`);
+    for (const [type, count] of Object.entries(stats.implicit.byType)) {
+      console.log(`    ${type}: ${count}`);
+    }
+
     console.log('\nQ-Updater:');
     console.log(`  总记录: ${stats.updater.totalRecords}`);
     console.log(`  平均 Q: ${stats.updater.avgQ.toFixed(3)}`);
     console.log(`  高 Q (≥0.6): ${stats.updater.highQ}`);
+
+    console.log('\n融合 Q 影响:');
+    console.log(`  融合前平均: ${stats.fusedQImpact.beforeAvg.toFixed(3)}`);
+    console.log(`  融合后平均: ${stats.fusedQImpact.afterAvg.toFixed(3)}`);
+    console.log(`  高 Q 减少: ${stats.fusedQImpact.highQReduction} 条`);
 
     console.log(`\n📊 数据平衡比: ${stats.balanceRatio}`);
   }

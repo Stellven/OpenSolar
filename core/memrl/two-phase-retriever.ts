@@ -10,6 +10,8 @@
  */
 
 import { Database } from 'bun:sqlite';
+import { QUpdater } from './q-updater';
+import { QUpdater } from './q-updater';
 
 interface Experience {
   id: number;
@@ -48,6 +50,7 @@ const DEFAULT_CONFIG: RetrievalConfig = {
 
 export class TwoPhaseRetriever {
   private db: Database;
+  private qUpdater: QUpdater;
   private config: RetrievalConfig;
 
   constructor(
@@ -55,6 +58,7 @@ export class TwoPhaseRetriever {
     config: Partial<RetrievalConfig> = {}
   ) {
     this.db = new Database(dbPath);
+    this.qUpdater = new QUpdater(dbPath);
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
 
@@ -65,6 +69,11 @@ export class TwoPhaseRetriever {
    * 相似度基于: intent_hash 匹配 + 时间衰减
    */
   phaseA_recall(intentHash: string): Experience[] {
+    // 边界检查
+    if (!intentHash) {
+      return this.getGlobalTopK().slice(0, this.config.recallTopK);
+    }
+
     // 1. 精确匹配 intent_hash
     const exactMatches = this.db.prepare(`
       SELECT
@@ -123,10 +132,13 @@ export class TwoPhaseRetriever {
       // 时间衰减分数
       const recencyScore = this.calculateRecencyScore(exp.updated_at);
 
+      // 获取融合 Q 值（v3 更新：结合隐式负面信号）
+      const fusedQ = this.qUpdater.getFusedQ(exp.intent_hash, exp.experience_id);
+
       // 综合分数
       const combinedScore =
         this.config.similarityWeight * similarityScore +
-        this.config.qValueWeight * exp.q_value * recencyScore;
+        this.config.qValueWeight * fusedQ * recencyScore;
 
       return {
         ...exp,
@@ -160,6 +172,8 @@ export class TwoPhaseRetriever {
 
   /**
    * 获取全局 Top-K (当无精确匹配时)
+   *
+   * v3 更新: 基于融合 Q 值排序
    */
   getGlobalTopK(): RetrievedExperience[] {
     const experiences = this.db.prepare(`
@@ -168,17 +182,20 @@ export class TwoPhaseRetriever {
         q_value, utility_total, update_count, evidence_json,
         created_at, updated_at
       FROM memrl_utility_store
-      WHERE q_value > 0.5
-      ORDER BY q_value DESC, update_count DESC
+      WHERE (0.7 * q_value + 0.3 * u_implicit) > 0.5
+      ORDER BY (0.7 * q_value + 0.3 * u_implicit) DESC, update_count DESC
       LIMIT ?
     `).all(this.config.finalTopK) as Experience[];
 
-    return experiences.map(exp => ({
-      ...exp,
-      similarity_score: 0,
-      recency_score: this.calculateRecencyScore(exp.updated_at),
-      combined_score: exp.q_value * this.calculateRecencyScore(exp.updated_at)
-    }));
+    return experiences.map(exp => {
+      const fusedQ = this.qUpdater.getFusedQ(exp.intent_hash, exp.experience_id);
+      return {
+        ...exp,
+        similarity_score: 0,
+        recency_score: this.calculateRecencyScore(exp.updated_at),
+        combined_score: fusedQ * this.calculateRecencyScore(exp.updated_at)
+      };
+    });
   }
 
   /**
@@ -224,6 +241,7 @@ export class TwoPhaseRetriever {
 
   close(): void {
     this.db.close();
+    this.qUpdater.close();
   }
 }
 

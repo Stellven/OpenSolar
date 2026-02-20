@@ -127,6 +127,50 @@ export class QUpdater {
   }
 
   /**
+   * 获取融合 Q 值（结合隐式负面信号）
+   *
+   * Q_fused = 0.7 × q_value + 0.3 × u_implicit
+   *
+   * 这样即使显式 Q 值高，如果有隐式负面信号也会拉低总分
+   */
+  getFusedQ(intentHash: string, experienceId?: string): number {
+    if (experienceId) {
+      const record = this.db.prepare(`
+        SELECT q_value, u_implicit
+        FROM memrl_utility_store
+        WHERE intent_hash = ? AND experience_id = ?
+      `).get(intentHash, experienceId) as { q_value: number; u_implicit: number } | undefined;
+
+      if (!record) return 0.5;
+
+      const qValue = record.q_value ?? 0.5;
+      const uImplicit = record.u_implicit ?? 0.5;
+      return 0.7 * qValue + 0.3 * uImplicit;
+    }
+
+    // 获取该意图的平均融合 Q 值
+    const result = this.db.prepare(`
+      SELECT AVG(0.7 * q_value + 0.3 * u_implicit) as avg_fused_q
+      FROM memrl_utility_store
+      WHERE intent_hash = ?
+    `).get(intentHash) as { avg_fused_q: number } | undefined;
+
+    return result?.avg_fused_q ?? 0.5;
+  }
+
+  /**
+   * 更新隐式 u_implicit 值（不影响显式 q_value）
+   */
+  updateImplicit(intentHash: string, experienceId: string, uImplicit: number): void {
+    this.db.prepare(`
+      UPDATE memrl_utility_store
+      SET u_implicit = ?,
+          updated_at = datetime('now')
+      WHERE intent_hash = ? AND experience_id = ?
+    `).run(uImplicit, intentHash, experienceId);
+  }
+
+  /**
    * 获取 Top-K 高 Q 值 Experience
    */
   getTopExperiences(intentHash: string, k: number = 5): Experience[] {
