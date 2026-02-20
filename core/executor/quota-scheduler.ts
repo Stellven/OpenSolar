@@ -117,7 +117,7 @@ export class QuotaScheduler {
     };
 
     const currentProcessing = this.db.prepare(`
-      SELECT COUNT(*) as count FROM bl_message_tasks WHERE status = 'running'
+      SELECT COUNT(*) as count FROM bl_message_tasks WHERE status = 'processing'
     `).get() as { count: number };
 
     const pendingTasks = this.db.prepare(`
@@ -260,9 +260,9 @@ export class QuotaScheduler {
       return null;
     }
 
-    // Update status to running
+    // Update status to processing
     this.db.prepare(`
-      UPDATE bl_message_tasks SET status = 'running' WHERE task_id = ?
+      UPDATE bl_message_tasks SET status = 'processing' WHERE task_id = ?
     `).run(taskId);
 
     const execution: TaskExecution = {
