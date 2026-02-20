@@ -91,6 +91,36 @@ if [[ -f "$STATE_FILE" ]]; then
     fi
 fi
 
+# ==================== 3.5 读取 STATE.md (作战态势) ====================
+GLOBAL_STATE_FILE="$HOME/.claude/.solar/STATE.md"
+STATE_MD_MSG=""
+if [[ -f "$GLOBAL_STATE_FILE" ]]; then
+    # 提取关键信息
+    MISSION=$(grep -A1 "^# Mission" "$GLOBAL_STATE_FILE" | tail -1 | head -c 100)
+    IN_PROGRESS=$(grep "^- In-Progress:" "$GLOBAL_STATE_FILE" | sed 's/- In-Progress: //' | head -c 80)
+    DONE_ITEMS=$(grep "^  - " "$GLOBAL_STATE_FILE" | head -5)
+    NEXT_ACTIONS=$(grep "^- \[ \]" "$GLOBAL_STATE_FILE" | head -3)
+    LAST_UPDATE=$(grep "Last updated:" "$GLOBAL_STATE_FILE" | sed 's/.*Last updated: //' | head -c 25)
+
+    if [[ -n "$MISSION" ]]; then
+        STATE_MD_MSG="【📋 作战态势 (STATE.md)】\\n"
+        STATE_MD_MSG+="Mission: $MISSION\\n"
+        if [[ -n "$DONE_ITEMS" ]]; then
+            STATE_MD_MSG+="Done:\\n$(echo "$DONE_ITEMS" | sed 's/^/  /')\\n"
+        fi
+        if [[ -n "$IN_PROGRESS" && "$IN_PROGRESS" != "无" ]]; then
+            STATE_MD_MSG+="进行中: $IN_PROGRESS\\n"
+        fi
+        if [[ -n "$NEXT_ACTIONS" ]]; then
+            STATE_MD_MSG+="下一步:\\n$(echo "$NEXT_ACTIONS" | sed 's/^/  /')\\n"
+        fi
+        if [[ -n "$LAST_UPDATE" ]]; then
+            STATE_MD_MSG+="更新: $LAST_UPDATE\\n"
+        fi
+        STATE_MD_MSG+="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n"
+    fi
+fi
+
 # 获取 Agent emoji
 get_emoji() {
     case "$1" in
@@ -132,6 +162,11 @@ if [[ -n "$TASK" && "$TASK" != "unknown" ]]; then
     MESSAGE+="任务: $TASK\\n"
     MESSAGE+="阶段: $PHASE | Agent: $EMOJI $AGENT\\n"
     MESSAGE+="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n"
+fi
+
+# 2.5 STATE.md 作战态势
+if [[ -n "$STATE_MD_MSG" ]]; then
+    MESSAGE+="$STATE_MD_MSG\\n"
 fi
 
 # 3. Checkpoint (如果有)
