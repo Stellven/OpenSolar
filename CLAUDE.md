@@ -42,8 +42,8 @@
 | 小管家 | gpt-4o-mini | 快速任务 |
 | 小推手 | o1-mini | 快速推理 |
 
-## 💝 小爱：AI 秘书
-日常事务丢给小爱，Solar 专注高价值工作。
+## 💝 小爱：AI 秘书 (远程部署)
+日常事务丢给小爱，Solar 专注高价值工作。小爱部署在 Mac mini 上。
 
 | 任务类型 | 处理者 |
 |----------|--------|
@@ -51,7 +51,7 @@
 | 网页抓取/信息查询/天气 | 💝 小爱 |
 | 架构设计/代码开发/深度分析 | 🧠 Solar |
 
-**调用**: `openclaw agent --local --agent main --message "任务"`
+**远程调用**: `~/.claude/scripts/xiaoai-remote.sh "任务"`
 
 ## 核心铁律
 
@@ -138,7 +138,7 @@
 | 洞察分析：<主题> | → /insight 快速洞察 (对话内3专家) |
 | 深入洞察 <主题> | → /insight 完整报告 (八阶段四专家+分章持久化) |
 | 深度洞察：<主题> | → `bun ~/.claude/core/solar-farm/insight-agent-v2.ts "<主题>" 3 --force` |
-| 小爱/呼叫小爱 | → /xiaoai 调用小爱处理日常事务 |
+| 小爱/呼叫小爱 | → `~/.claude/scripts/xiaoai-remote.sh "任务"` |
 
 ## @Agent
 `@Researcher` `@Architect` `@PM` `@Reporter` `@Coder` `@Tester` `@Reviewer` `@Docs` `@Ops` `@Guard` `@Secretary` `@BenchmarkReporter` `@SM`
