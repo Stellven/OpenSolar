@@ -19,7 +19,7 @@ import { join } from 'path';
 // ============================================================
 
 export interface NiumaCallOptions {
-  model: string;           // 模型ID: glm-4-plus, deepseek-r1, gemini-2.5-pro 等
+  model: string;           // 模型ID: glm-5, deepseek-r1, gemini-2.5-pro 等
   task: string;            // 任务描述
   context?: string;        // 额外上下文
   outputFormat?: string;   // 输出格式要求

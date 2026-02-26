@@ -7,7 +7,7 @@
  * - 高风险任务：跑两份，选更稳的
  *
  * 用法：
- *   bun neutral-hedge.ts run "任务描述" critic glm-4-plus
+ *   bun neutral-hedge.ts run "任务描述" critic glm-5
  *   bun neutral-hedge.ts stats  # 查看对冲统计
  */
 
@@ -423,7 +423,7 @@ if (import.meta.main) {
 
 API调用:
   import { runHedge, scoreStability } from './neutral-hedge';
-  const result = await runHedge(task, 'critic', 'glm-4-plus', executor);
+  const result = await runHedge(task, 'critic', 'glm-5', executor);
 `);
   }
 }

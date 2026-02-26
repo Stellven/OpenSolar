@@ -69,7 +69,7 @@ const CODING_PUA_PROMPT = `
  */
 const CODING_NIUMA_IDS = [
   'deepseek-v3',    // 创想家 - 创意编码
-  'glm-4-plus',     // 建设者 - 日常编码
+  'glm-5',     // 建设者 - 日常编码
   'glm-4-flash',    // 小快手 - 简单任务
   'gemini-2.5-pro', // 稳健派 - 严谨实现
   'gemini-3-pro-preview', // 探索派 - 复杂项目

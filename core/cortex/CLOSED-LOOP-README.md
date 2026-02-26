@@ -233,22 +233,41 @@ ORDER BY satisfaction DESC;
 
 ## 📊 当前状态 (2026-02-19)
 
-### 综合健康度: 66/100 (⚠️ 良好)
+### 综合健康度: 85/100 (✅ 良好)
 
 | 指标 | 得分 | 说明 |
 |------|------|------|
-| Trace 归因 | 0/100 | 归因率 0% (session_id 无重叠，等待新数据) |
-| Q-scores | 100/100 | 有 37 条评分 |
-| 记忆增长 | 100/100 | 有 101 条记忆 |
+| Trace 归因 | 100/100 | 归因率 100% ✅ 已修复 |
+| Q-scores | 95/100 | 有 47 条评分 |
+| 路由规则 | 60/100 | 仅 5 条规则，需补充 |
+| 记忆增长 | 95/100 | 有 122 条记忆 |
+| 定时任务 | 100/100 | 5个任务全部运行 |
 
 ### 数据流
 
 | 数据 | 数量 |
 |------|------|
-| Traces | 29,492 |
+| Traces | 29,492 (100% 已归因) |
 | Feedback | 18,147 |
-| Q-scores | 37 |
-| Memory (lessons+experiences) | 101 |
+| Q-scores | 47 |
+| Memory (lessons+experiences) | 122 |
+
+### 智能指标
+
+**整体智能分数**: 86.3/100 (等级 B)
+
+- 编码能力: 80.0
+- 分析能力: 80.4
+- 创意能力: 78.7
+- 通用能力: 80.9
+
+### Top-5 模型 (按满意度)
+
+1. deepseek-v3: 100% (72 samples)
+2. gemini-2-flash: 100% (19 samples)
+3. gemini-2.5-flash: 100% (17 samples)
+4. glm-4-flash: 100% (12 samples)
+5. deepseek-r1: 99.1% (109 samples)
 
 ### 定时任务状态 (5 个)
 
@@ -263,40 +282,74 @@ ORDER BY satisfaction DESC;
 
 ---
 
+## ✅ 已完成
+
+1. **Phase 1-4**: ✅ 全部完成
+   - 数据关联: Trace归因率 100%
+   - Q-scores计算: 47条记录
+   - 路由评分同步: 5条规则
+   - 反馈写记忆: 122条记忆
+
+2. **定时任务**: ✅ 5个任务全部运行
+   - 基础闭环 (3个): data-linker, routing-score-updater, feedback-to-memory
+   - 智能增长 (2个): intelligence-metrics, auto-strategy-tuning
+
+3. **智能指标体系**: ✅ 已建立
+   - 整体智能分数: 86.3/100
+   - 分领域能力: 编码/分析/创意/通用
+   - 趋势分析: 7天/30天
+   - 失败模式识别: 自动检测
+
 ## 🔧 已知问题
 
-### 1. Trace 归因率为 0%
+### 1. 路由规则较少
 
-**原因**: evo_traces 和 sroe_requests 的 session_id 没有重叠
+**现状**: 只有 5 条路由规则，覆盖率不足
 
-- evo_traces: 2026-01-14 至 2026-02-06
-- sroe_requests: 2026-02-05 至今
+**影响**: Q-scores 无法完全影响决策
 
-**解决**: 随着新数据积累，自然会有重叠
+**解决**: 需要运行 `routing-rules-initializer` 补充规则
 
-### 2. 路由表为空
+### 2. GLM-5 错误率过高
 
-**原因**: sys_routing_model/agent/tool 表还没有初始化
+**现状**: GLM-5 错误率 25%，满意度 75%
 
-**解决**: 需要手动添加初始路由规则，或等待 Brain Router 自动生成
+**影响**: 影响整体系统质量
 
----
+**解决**: 调整路由权重，降低 GLM-5 优先级
+
+### 3. Agent 质量偏低
+
+**现状**: Agent 平均满意度仅 49.3%
+
+**影响**: Agent 任务成功率低
+
+**解决**: 分析失败案例，优化提示词
 
 ## 🚀 下一步
 
-1. **Phase 5**: 意图分类集成
+1. **Phase 5**: 意图分类集成 (本周)
    - 修改 trajectory-extractor.ts，调用 Intent Engine
    - 按 intent 分组统计 Q-scores
 
-2. **Brain Router 集成**
+2. **Brain Router 集成** (本周)
    - 修改 Brain Router 决策逻辑
    - Model 选择: 按 effective_score DESC 排序
    - Skill 选择: 按 effective_score DESC 排序
    - Tool 选择: 按 effective_score DESC 排序
 
-3. **LLM 自动提取**
+3. **路由规则补充** (本周)
+   - 运行 routing-rules-initializer
+   - 目标: 20+ 条规则
+
+4. **LLM 自动提取** (下个月)
    - 从教训记忆中自动提取 lesson learned
    - 从经验记忆中自动提取最佳实践
+
+5. **持续监控** (持续)
+   - 每周查看健康报告
+   - 每月审查失败模式
+   - 季度回顾整体演进
 
 ---
 

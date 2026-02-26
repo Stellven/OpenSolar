@@ -317,7 +317,7 @@ export const TANSUOZHE_ANCHOR: PersonalityAnchor = {
   ]
 };
 
-/** 建设者 - 批量执行专家 (glm-4-plus / glm-4.7)
+/** 建设者 - 批量执行专家 (glm-5 / glm-4.7)
  * 角色: Builder / Batch Refactoring / Test Generation
  * 约束级别: 弱
  */
@@ -417,7 +417,7 @@ export const MODEL_GROUPS = {
   worker: [
     'gemini-2-flash',   // 探索者 - 快速信息提取
     'gemini-2.5-flash', // 探索者
-    'glm-4-plus',       // 建设者 - 批量执行
+    'glm-5',       // 建设者 - 批量执行
     'glm-4.7',          // 建设者
     'glm-4-flash'       // 小快手 - 跑腿工
   ]
@@ -439,7 +439,7 @@ export const MODEL_TO_ANCHOR: Record<string, PersonalityAnchor> = {
   // 工人组 (弱约束)
   'gemini-2-flash': TANSUOZHE_ANCHOR,       // 探索者 - 快速提取
   'gemini-2.5-flash': TANSUOZHE_ANCHOR,     // 探索者
-  'glm-4-plus': JIANSHEZHE_ANCHOR,          // 建设者 - 批量执行
+  'glm-5': JIANSHEZHE_ANCHOR,          // 建设者 - 批量执行
   'glm-4.7': JIANSHEZHE_ANCHOR,             // 建设者
   'glm-4-flash': XIAOKUAISHOU_ANCHOR,       // 小快手 - 跑腿工
 

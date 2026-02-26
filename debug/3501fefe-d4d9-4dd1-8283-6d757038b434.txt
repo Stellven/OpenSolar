@@ -1,0 +1,1836 @@
+2026-02-18T12:21:08.406Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-18T12:21:08.406Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-18T12:21:08.406Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-18T12:21:08.406Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-18T12:21:08.411Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-18T12:21:08.421Z [DEBUG] Found 0 plugins (0 enabled, 0 disabled)
+2026-02-18T12:21:08.421Z [DEBUG] [claudeai-mcp] Checking gate (cached)...
+2026-02-18T12:21:08.421Z [DEBUG] [claudeai-mcp] Gate returned: true
+2026-02-18T12:21:08.421Z [DEBUG] [claudeai-mcp] Fetching from https://api.anthropic.com/v1/mcp_servers?limit=1000
+2026-02-18T12:21:08.426Z [DEBUG] [ToolSearch:optimistic] mode=tst-auto, ENABLE_TOOL_SEARCH=undefined, result=true
+2026-02-18T12:21:08.426Z [DEBUG] [STARTUP] Running setup()...
+2026-02-18T12:21:08.428Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:21:08.444Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:21:08.444Z [DEBUG] Error log sink initialized
+2026-02-18T12:21:08.446Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:21:08.446Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:21:08.446Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:21:08.447Z [DEBUG] [STARTUP] setup() completed in 21ms
+2026-02-18T12:21:08.447Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-02-18T12:21:08.448Z [DEBUG] Registered 0 hooks from 0 plugins
+2026-02-18T12:21:08.449Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:21:08.449Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:21:08.453Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=/Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg)
+2026-02-18T12:21:08.470Z [DEBUG] Agent file /Users/sihaoli/.claude/agents/community.md is missing required 'name' in frontmatter
+2026-02-18T12:21:08.470Z [DEBUG] Failed to parse agent from /Users/sihaoli/.claude/agents/community.md: Missing required "name" field in frontmatter
+2026-02-18T12:21:08.470Z [DEBUG] Total plugin agents loaded: 0
+2026-02-18T12:21:08.471Z [DEBUG] [STARTUP] Commands and agents loaded in 24ms
+2026-02-18T12:21:08.471Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-02-18T12:21:08.471Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-02-18T12:21:08.471Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-02-18T12:21:08.471Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:21:08.471Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:21:08.471Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:21:08.472Z [DEBUG] Total LSP servers loaded: 0
+2026-02-18T12:21:08.472Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 0 server(s)
+2026-02-18T12:21:08.472Z [DEBUG] LSP manager initialized with 0 servers
+2026-02-18T12:21:08.472Z [DEBUG] LSP server manager initialized successfully
+2026-02-18T12:21:08.472Z [DEBUG] LSP notification handlers registered successfully for all 0 server(s)
+2026-02-18T12:21:08.472Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:21:08.588Z [DEBUG] Org fast mode: disabled (extra_usage_disabled)
+2026-02-18T12:21:08.594Z [DEBUG] [claudeai-mcp] Fetched 0 servers
+2026-02-18T12:21:08.594Z [DEBUG] [STARTUP] MCP configs loaded in 183ms
+2026-02-18T12:21:08.597Z [DEBUG] MCP server "playwright": Starting connection with timeout of 30000ms
+2026-02-18T12:21:08.598Z [DEBUG] MCP server "brain-router": Starting connection with timeout of 30000ms
+2026-02-18T12:21:08.599Z [DEBUG] MCP server "are": Starting connection with timeout of 30000ms
+2026-02-18T12:21:08.600Z [DEBUG] MCP server "playwright": Connection failed after 5ms: spawn playwright-mcp ENOENT
+2026-02-18T12:21:08.600Z [ERROR] MCP server "playwright" Connection failed: spawn playwright-mcp ENOENT
+2026-02-18T12:21:08.655Z [ERROR] MCP server "are" Server stderr: ARE MCP Server running
+2026-02-18T12:21:08.655Z [DEBUG] MCP server "are": Successfully connected to undefined server in 56ms
+2026-02-18T12:21:08.655Z [DEBUG] MCP server "are": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"are-orchestrator","version":"1.0.0"}}
+2026-02-18T12:21:08.668Z [ERROR] MCP server "brain-router" Server stderr: Traceback (most recent call last):
+  File "/Users/sihaoli/.solar/brain-router/src/mcp/server.py", line 63, in <module>
+    from ..sroe_tracker import get_tracker, RoutingInfo, RequestMetrics
+ImportError: attempted relative import with no known parent package
+2026-02-18T12:21:08.668Z [DEBUG] MCP server "brain-router": Connection failed after 70ms: MCP error -32000: Connection closed
+2026-02-18T12:21:08.668Z [ERROR] MCP server "brain-router" Connection failed: MCP error -32000: Connection closed
+2026-02-18T12:21:08.693Z [DEBUG] Loaded 2 installed plugins from /Users/sihaoli/.claude/plugins/installed_plugins.json
+2026-02-18T12:21:08.693Z [DEBUG] Initialized versioned plugins system with 2 plugins
+2026-02-18T12:21:08.694Z [DEBUG] Watching for changes in setting files /Users/sihaoli/.claude/settings.json...
+2026-02-18T12:21:08.705Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-02-18T12:21:08.707Z [DEBUG] Plugin autoupdate: skipped (auto-updater disabled)
+2026-02-18T12:21:08.707Z [DEBUG] Grove: Using fresh cached config
+2026-02-18T12:21:08.721Z [ERROR] Error: Error: ENOENT: no such file or directory, open '/Users/sihaoli/Solar/.claude/settings.json'
+    at Module.openSync (node:fs:555:18)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:816
+    at HX (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:49854)
+    at Object.readSync (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:750)
+    at OX (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:6208:105)
+    at PJ (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:6210:224)
+    at Bi8 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:214:2225)
+    at Immediate._onImmediate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:7332:4543)
+    at process.processImmediate (node:internal/timers:504:21)
+2026-02-18T12:21:08.721Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/sihaoli/Solar/.claude/settings.json
+2026-02-18T12:21:08.721Z [ERROR] Error: Error: ENOENT: no such file or directory, open '/Users/sihaoli/Solar/.claude/settings.local.json'
+    at Module.openSync (node:fs:555:18)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:816
+    at HX (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:49854)
+    at Object.readSync (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:750)
+    at OX (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:6208:105)
+    at PJ (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:6210:224)
+    at Bi8 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:214:2225)
+    at Immediate._onImmediate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:7332:4543)
+    at process.processImmediate (node:internal/timers:504:21)
+2026-02-18T12:21:08.721Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/sihaoli/Solar/.claude/settings.local.json
+2026-02-18T12:21:08.725Z [DEBUG] Watching for changes in skill/command directories: /Users/sihaoli/.claude/skills...
+2026-02-18T12:21:08.726Z [DEBUG] Stats cache is up to date
+2026-02-18T12:21:08.730Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:21:08.730Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:21:08.730Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:21:08.730Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:21:08.730Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:21:08.730Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:21:08.730Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:21:08.730Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:21:08.730Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:21:08.730Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:21:08.730Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:21:08.730Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:21:08.942Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:21:08.942Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:21:08.942Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:21:09.083Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: analyzeMcp]
+2026-02-18T12:21:09.110Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:21:09.110Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:21:09.110Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:21:09.185Z [DEBUG] Getting matching hook commands for SessionStart with query: startup
+2026-02-18T12:21:09.185Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:21:09.185Z [DEBUG] Matched 0 unique hooks for query "startup" (0 before deduplication)
+2026-02-18T12:21:09.187Z [DEBUG] installPluginsForHeadless: starting
+2026-02-18T12:21:09.187Z [DEBUG] Found 2 installed plugins (V2 format)
+2026-02-18T12:21:09.187Z [DEBUG] installPluginsForHeadless: no missing plugins or marketplaces configured
+2026-02-18T12:21:09.190Z [DEBUG] [SystemPrompt] path=simple proactive=false
+2026-02-18T12:21:09.193Z [DEBUG] Total plugin output styles loaded: 0
+2026-02-18T12:21:09.200Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-18T12:21:09.200Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-18T12:21:09.200Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-18T12:21:09.200Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-18T12:21:09.200Z [DEBUG] Sending 48 skills via attachment (initial, 48 total sent)
+2026-02-18T12:21:09.203Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-18T12:21:09.203Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:21:09.203Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-18T12:21:09.211Z [DEBUG] autocompact: tokens=1337 threshold=167000 effectiveWindow=180000
+2026-02-18T12:21:09.213Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-18T12:21:09.213Z [DEBUG] Using tool-based global cache marker on EnterPlanMode
+2026-02-18T12:21:09.217Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:21:09.221Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:21:09.221Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:21:09.222Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:21:14.971Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:21:18.249Z [DEBUG] executePreToolHooks called for tool: TodoWrite
+2026-02-18T12:21:18.250Z [DEBUG] Getting matching hook commands for PreToolUse with query: TodoWrite
+2026-02-18T12:21:18.250Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:21:18.250Z [DEBUG] Matched 0 unique hooks for query "TodoWrite" (0 before deduplication)
+2026-02-18T12:21:18.254Z [DEBUG] Getting matching hook commands for PostToolUse with query: TodoWrite
+2026-02-18T12:21:18.254Z [DEBUG] Found 5 hook matchers in settings
+2026-02-18T12:21:18.254Z [DEBUG] Matched 0 unique hooks for query "TodoWrite" (0 before deduplication)
+2026-02-18T12:21:18.262Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-18T12:21:18.262Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-18T12:21:18.262Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-18T12:21:18.262Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-18T12:21:18.262Z [DEBUG] autocompact: tokens=138121 threshold=167000 effectiveWindow=180000
+2026-02-18T12:21:18.263Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-18T12:21:18.263Z [DEBUG] Using tool-based global cache marker on EnterPlanMode
+2026-02-18T12:21:18.267Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:21:18.269Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:21:18.269Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:21:18.270Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:21:21.305Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:21:22.443Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-18T12:21:22.443Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-18T12:21:22.443Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:21:22.443Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-18T12:21:22.450Z [DEBUG] tree-sitter: WASM files not found
+2026-02-18T12:21:22.456Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-18T12:21:22.456Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-18T12:21:22.457Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.b09; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:21:22.458Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:21:22.458Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:21:22.458Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.b09; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:21:22.459Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:21:22.459Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:21:22.460Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:21:22.460Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:21:23.095Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:21:23.109Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:21:23.232Z [DEBUG] Creating shell snapshot for zsh (/bin/zsh)
+2026-02-18T12:21:23.232Z [DEBUG] Looking for shell config file: /Users/sihaoli/.zshrc
+2026-02-18T12:21:23.232Z [DEBUG] Snapshots directory: /Users/sihaoli/.claude/shell-snapshots
+2026-02-18T12:21:23.233Z [DEBUG] Creating snapshot at: /Users/sihaoli/.claude/shell-snapshots/snapshot-zsh-1771417283232-tunxux.sh
+2026-02-18T12:21:23.233Z [DEBUG] Shell binary exists: true
+2026-02-18T12:21:23.233Z [DEBUG] Execution timeout: 10000ms
+2026-02-18T12:21:23.312Z [DEBUG] Shell snapshot created successfully (4702 bytes)
+2026-02-18T12:21:23.312Z [DEBUG] No session environment scripts found
+2026-02-18T12:21:24.528Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-18T12:21:24.530Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.b09; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:21:24.531Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:21:24.531Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:21:24.532Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:21:24.533Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-18T12:21:24.533Z [DEBUG] Found 5 hook matchers in settings
+2026-02-18T12:21:24.533Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-18T12:21:24.535Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-18T12:21:24.535Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-18T12:21:24.535Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-18T12:21:24.535Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-18T12:21:24.536Z [DEBUG] autocompact: tokens=140751 threshold=167000 effectiveWindow=180000
+2026-02-18T12:21:24.537Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-18T12:21:24.537Z [DEBUG] Using tool-based global cache marker on EnterPlanMode
+2026-02-18T12:21:24.540Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:21:24.542Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:21:24.542Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:21:24.542Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:21:25.704Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:21:26.899Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:21:31.352Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-18T12:21:31.352Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-18T12:21:31.352Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:21:31.352Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-18T12:21:31.363Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-18T12:21:31.363Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-18T12:21:31.363Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-18T12:21:31.364Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.fc6; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:21:31.365Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:21:31.365Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:21:31.365Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.fc6; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:21:31.365Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:21:31.365Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:21:31.365Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.f66; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:21:31.367Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:21:31.367Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:21:31.368Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:21:31.368Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:21:31.368Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:21:31.898Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:21:31.915Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:21:31.934Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:21:42.568Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-18T12:21:42.572Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.fc6; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:21:42.572Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:21:42.572Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:21:42.573Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:21:42.578Z [DEBUG] Persisted tool result to /Users/sihaoli/.claude/projects/-Users-sihaoli-Solar/3501fefe-d4d9-4dd1-8283-6d757038b434/tool-results/toolu_01FiNrM7F8aVf6Kq9bxyrGhd.txt (95KB)
+2026-02-18T12:21:42.579Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-18T12:21:42.579Z [DEBUG] Found 5 hook matchers in settings
+2026-02-18T12:21:42.579Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-18T12:21:42.579Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-18T12:21:42.579Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-18T12:21:42.579Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:21:42.579Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-18T12:21:42.585Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-18T12:21:42.585Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-18T12:21:42.585Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.fc6; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:21:42.586Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:21:42.586Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:21:42.586Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.fc6; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:21:42.586Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:21:42.586Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:21:42.587Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:21:42.587Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:21:43.118Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:21:43.180Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:21:44.037Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:21:58.441Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-18T12:21:58.444Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.fc6; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:21:58.444Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:21:58.444Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:21:58.445Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:21:58.450Z [DEBUG] Persisted tool result to /Users/sihaoli/.claude/projects/-Users-sihaoli-Solar/3501fefe-d4d9-4dd1-8283-6d757038b434/tool-results/toolu_01QjKuLwkRfak9hX986cFYb7.txt (70.9KB)
+2026-02-18T12:21:58.450Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-18T12:21:58.450Z [DEBUG] Found 5 hook matchers in settings
+2026-02-18T12:21:58.450Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-18T12:21:58.451Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-18T12:21:58.451Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-18T12:21:58.451Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-18T12:21:58.451Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-18T12:21:58.452Z [DEBUG] autocompact: tokens=141661 threshold=167000 effectiveWindow=180000
+2026-02-18T12:21:58.452Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-18T12:21:58.452Z [DEBUG] Using tool-based global cache marker on EnterPlanMode
+2026-02-18T12:21:58.455Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:21:58.457Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:21:58.457Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:21:58.457Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:22:00.731Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:22:01.633Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-18T12:22:01.633Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-18T12:22:01.633Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:22:01.633Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-18T12:22:01.639Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:22:01.639Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:22:01.639Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:22:01.796Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:22:01.847Z [DEBUG] Read tool error (209ms): File content (44685 tokens) exceeds maximum allowed tokens (25000). Please use offset and limit parameters to read specific portions of the file, or use the GrepTool to search for specific content.
+2026-02-18T12:22:01.847Z [ERROR] MaxFileReadTokenExceededError: MaxFileReadTokenExceededError: File content (44685 tokens) exceeds maximum allowed tokens (25000). Please use offset and limit parameters to read specific portions of the file, or use the GrepTool to search for specific content.
+    at oa4 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3367:3405)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Object.call (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3376:2457)
+    at async tdY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3554:14093)
+2026-02-18T12:22:01.849Z [DEBUG] Getting matching hook commands for PostToolUseFailure with query: Read
+2026-02-18T12:22:01.849Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:22:01.849Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-18T12:22:02.522Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-18T12:22:02.522Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-18T12:22:02.522Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-18T12:22:02.522Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-18T12:22:02.523Z [DEBUG] autocompact: tokens=142561 threshold=167000 effectiveWindow=180000
+2026-02-18T12:22:02.524Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-18T12:22:02.524Z [DEBUG] Using tool-based global cache marker on EnterPlanMode
+2026-02-18T12:22:02.529Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:22:02.531Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:22:02.531Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:22:02.532Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:22:05.126Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:22:05.653Z [DEBUG] Detected change to /Users/sihaoli/.claude/settings.json
+2026-02-18T12:22:05.655Z [DEBUG] Settings changed from userSettings, updating app state
+2026-02-18T12:22:05.971Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-18T12:22:05.971Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-18T12:22:05.971Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:22:05.971Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-18T12:22:05.972Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:22:05.972Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:22:05.972Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:22:06.254Z [DEBUG] Read tool error (283ms): File content (44685 tokens) exceeds maximum allowed tokens (25000). Please use offset and limit parameters to read specific portions of the file, or use the GrepTool to search for specific content.
+2026-02-18T12:22:06.254Z [ERROR] MaxFileReadTokenExceededError: MaxFileReadTokenExceededError: File content (44685 tokens) exceeds maximum allowed tokens (25000). Please use offset and limit parameters to read specific portions of the file, or use the GrepTool to search for specific content.
+    at oa4 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3367:3405)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Object.call (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3376:2457)
+    at async tdY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3554:14093)
+2026-02-18T12:22:06.254Z [DEBUG] Getting matching hook commands for PostToolUseFailure with query: Read
+2026-02-18T12:22:06.254Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:22:06.254Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-18T12:22:06.255Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-18T12:22:06.255Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-18T12:22:06.255Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-18T12:22:06.255Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-18T12:22:06.255Z [DEBUG] autocompact: tokens=142811 threshold=167000 effectiveWindow=180000
+2026-02-18T12:22:06.256Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-18T12:22:06.256Z [DEBUG] Using tool-based global cache marker on EnterPlanMode
+2026-02-18T12:22:06.259Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:22:06.260Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:22:06.260Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:22:06.261Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:22:06.916Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/.gitignore
+2026-02-18T12:22:06.917Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:06.942Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:06.942Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:06.942Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:06.942Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:06.945Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:06.945Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:09.079Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:22:10.248Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-18T12:22:10.248Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-18T12:22:10.248Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:22:10.248Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-18T12:22:10.251Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:22:10.251Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:22:10.251Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:22:10.432Z [DEBUG] Read tool error (182ms): File content (32615 tokens) exceeds maximum allowed tokens (25000). Please use offset and limit parameters to read specific portions of the file, or use the GrepTool to search for specific content.
+2026-02-18T12:22:10.433Z [ERROR] MaxFileReadTokenExceededError: MaxFileReadTokenExceededError: File content (32615 tokens) exceeds maximum allowed tokens (25000). Please use offset and limit parameters to read specific portions of the file, or use the GrepTool to search for specific content.
+    at oa4 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3367:3405)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Object.call (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3376:2457)
+    at async tdY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3554:14093)
+2026-02-18T12:22:10.433Z [DEBUG] Getting matching hook commands for PostToolUseFailure with query: Read
+2026-02-18T12:22:10.433Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:22:10.433Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-18T12:22:10.434Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-18T12:22:10.434Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-18T12:22:10.434Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-18T12:22:10.434Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-18T12:22:10.435Z [DEBUG] Sending 48 skills via attachment (initial, 48 total sent)
+2026-02-18T12:22:10.436Z [DEBUG] autocompact: tokens=144066 threshold=167000 effectiveWindow=180000
+2026-02-18T12:22:10.436Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-18T12:22:10.436Z [DEBUG] Using tool-based global cache marker on EnterPlanMode
+2026-02-18T12:22:10.442Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:22:10.443Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:22:10.443Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:22:10.444Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:22:12.772Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:22:14.357Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-18T12:22:14.357Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-18T12:22:14.357Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:22:14.357Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-18T12:22:14.360Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:22:14.360Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:22:14.360Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:22:14.502Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-18T12:22:14.502Z [DEBUG] Found 5 hook matchers in settings
+2026-02-18T12:22:14.502Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-18T12:22:14.506Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-18T12:22:14.506Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-18T12:22:14.506Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-18T12:22:14.506Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-18T12:22:14.507Z [DEBUG] autocompact: tokens=156839 threshold=167000 effectiveWindow=180000
+2026-02-18T12:22:14.507Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-18T12:22:14.508Z [DEBUG] Using tool-based global cache marker on EnterPlanMode
+2026-02-18T12:22:14.511Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:22:14.513Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:22:14.513Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:22:14.513Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:22:16.786Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:22:18.437Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/deps/SKILL.md
+2026-02-18T12:22:18.438Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.460Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.460Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.460Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.460Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.464Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.464Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.464Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/diff/SKILL.md
+2026-02-18T12:22:18.464Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.471Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.471Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.471Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.471Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.473Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.473Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.473Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/docs/SKILL.md
+2026-02-18T12:22:18.473Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.478Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.478Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.478Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.478Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.479Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.479Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.479Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/alert/SKILL.md
+2026-02-18T12:22:18.479Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.485Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.485Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.485Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.485Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.487Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.487Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.487Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/banner/SKILL.md
+2026-02-18T12:22:18.487Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.493Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.493Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.493Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.493Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.494Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.494Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.495Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/analyze/SKILL.md
+2026-02-18T12:22:18.495Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.499Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.499Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.499Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.499Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.500Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.500Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.500Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/backup/SKILL.md
+2026-02-18T12:22:18.500Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.506Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.506Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.506Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.506Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.508Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.508Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.509Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/brain/SKILL.md
+2026-02-18T12:22:18.509Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.518Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.518Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.518Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.518Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.519Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.519Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.520Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/benchmark/SKILL.md
+2026-02-18T12:22:18.520Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.524Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.524Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.524Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.524Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.525Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.525Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.525Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/brain-update/SKILL.md
+2026-02-18T12:22:18.525Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.529Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.529Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.529Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.529Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.530Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.530Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.531Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/build/SKILL.md
+2026-02-18T12:22:18.531Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.538Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.538Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.538Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.538Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.540Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.540Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.540Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/bun-module-isolate/SKILL.md
+2026-02-18T12:22:18.540Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.544Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.544Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.544Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.544Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.546Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.546Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.546Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/backlog/SKILL.md
+2026-02-18T12:22:18.546Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.550Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.550Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.550Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.550Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.551Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.551Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.551Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/backlog/backlog.ts
+2026-02-18T12:22:18.551Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.557Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.557Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.557Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.557Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.559Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.559Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.559Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/imagen/scripts/generate_image.py
+2026-02-18T12:22:18.559Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.563Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.563Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.563Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.563Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.565Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.565Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.565Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/browser/SKILL.md
+2026-02-18T12:22:18.565Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.569Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.569Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.569Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.569Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.571Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.571Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.571Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/imessage-send/SKILL.md
+2026-02-18T12:22:18.571Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.574Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.575Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.575Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.575Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.575Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.575Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.575Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/insight/SKILL.md
+2026-02-18T12:22:18.575Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.579Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.579Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.579Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.579Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.580Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.580Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.580Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/learn/SKILL.md
+2026-02-18T12:22:18.580Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.584Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.584Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.584Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.584Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.585Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.585Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.585Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/log/SKILL.md
+2026-02-18T12:22:18.585Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.589Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.589Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.589Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.589Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.590Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.590Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.590Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/makeup-advisor/ar_makeup.py
+2026-02-18T12:22:18.590Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.594Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.594Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.594Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.594Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.594Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.594Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.594Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/makeup-advisor/face_analyzer.py
+2026-02-18T12:22:18.594Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.599Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.599Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.599Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.599Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.600Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.600Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.600Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/makeup-advisor/index.ts
+2026-02-18T12:22:18.600Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.604Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.604Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.604Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.604Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.605Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.605Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.605Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/makeup-advisor/SKILL.md
+2026-02-18T12:22:18.605Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.609Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.609Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.609Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.609Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.611Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.611Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.611Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/imessage-send/send.ts
+2026-02-18T12:22:18.611Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.615Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.615Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.615Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.615Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.617Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.617Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.617Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/makeup-advisor/trend_fetcher.ts
+2026-02-18T12:22:18.617Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.621Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.621Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.621Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.621Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.622Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.622Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.622Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/makeup-advisor/tutorial_generator.ts
+2026-02-18T12:22:18.622Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.626Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.626Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.626Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.626Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.628Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.628Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.628Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/makeup-advisor/makeup-advisor.ts
+2026-02-18T12:22:18.628Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.633Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.633Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.633Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.633Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.636Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.636Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.636Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/mcp-builder/SKILL.md
+2026-02-18T12:22:18.636Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.647Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.647Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.647Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.647Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.650Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.650Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.651Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/memory-review/SKILL.md
+2026-02-18T12:22:18.651Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.660Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.660Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.660Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.660Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.661Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.661Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.661Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/knowledge/SKILL.md
+2026-02-18T12:22:18.661Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.664Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.664Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.664Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.664Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.665Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.665Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.665Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/moltbook/SKILL.md
+2026-02-18T12:22:18.665Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.669Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.669Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.669Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.669Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.672Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.672Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.673Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/moltbook/INTERFACE.md
+2026-02-18T12:22:18.673Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.678Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.678Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.678Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.678Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.679Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.679Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.679Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/notebooklm/AUTHENTICATION.md
+2026-02-18T12:22:18.679Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.683Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.683Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.683Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.683Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.683Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.683Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.684Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/notebooklm/CHANGELOG.md
+2026-02-18T12:22:18.684Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.688Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.688Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.688Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.688Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.689Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.689Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.689Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/migrate/SKILL.md
+2026-02-18T12:22:18.689Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.697Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.697Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.697Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.697Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.698Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.698Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.699Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/notebooklm/README.md
+2026-02-18T12:22:18.699Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.702Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.702Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.702Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.702Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.703Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.703Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.703Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/mode/SKILL.md
+2026-02-18T12:22:18.703Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.706Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.706Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.706Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.706Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.708Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.708Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.708Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/cron/SKILL.md
+2026-02-18T12:22:18.708Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.717Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.717Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.717Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.717Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.720Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.720Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.721Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/email-search/SKILL.md
+2026-02-18T12:22:18.721Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.730Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.730Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.730Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.730Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.732Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.732Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.732Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/experience/SKILL.md
+2026-02-18T12:22:18.732Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.739Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.739Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.739Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.739Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.740Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.740Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.740Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/env/SKILL.md
+2026-02-18T12:22:18.740Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.743Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.743Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.743Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.743Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.744Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.744Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.744Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/favorites/SKILL.md
+2026-02-18T12:22:18.744Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.747Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.747Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.747Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.747Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.748Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.748Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.748Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/forget/SKILL.md
+2026-02-18T12:22:18.748Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.751Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.751Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.751Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.751Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.751Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.751Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.751Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/hn-monitor/fetch.ts
+2026-02-18T12:22:18.751Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.754Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.754Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.754Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.754Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.755Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.755Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.755Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/hn-monitor/SKILL.md
+2026-02-18T12:22:18.755Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.758Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.758Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.758Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.758Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.758Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.758Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.758Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/email-web/SKILL.md
+2026-02-18T12:22:18.758Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.763Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.763Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.763Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.763Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.763Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.763Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.763Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/frontend-design/SKILL.md
+2026-02-18T12:22:18.763Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.766Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.766Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.766Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.766Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.767Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.767Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.767Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/graph/SKILL.md
+2026-02-18T12:22:18.767Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.770Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.770Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.770Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.770Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.770Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.770Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.770Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/imagen/SKILL.md
+2026-02-18T12:22:18.770Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.773Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.773Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.773Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.773Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.774Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.774Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.774Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/http/SKILL.md
+2026-02-18T12:22:18.774Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.777Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.777Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.777Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.777Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.777Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.777Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.778Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/imagen/README.md
+2026-02-18T12:22:18.778Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.782Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.782Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.782Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.782Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.782Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.782Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.782Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/imagen/examples.md
+2026-02-18T12:22:18.782Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.786Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.786Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.786Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.786Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.786Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.786Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.787Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/changelog/SKILL.md
+2026-02-18T12:22:18.787Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.790Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.790Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.790Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.790Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.790Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.790Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.790Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/imagen/reference.md
+2026-02-18T12:22:18.790Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.793Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.793Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.793Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.793Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.794Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.794Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.794Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/commit/SKILL.md
+2026-02-18T12:22:18.794Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.797Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.797Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.797Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.797Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.798Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.798Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.798Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/call/SKILL.md
+2026-02-18T12:22:18.798Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.801Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.801Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.801Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.801Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.801Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.801Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.801Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/notebooklm/LICENSE
+2026-02-18T12:22:18.801Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.805Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.805Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.805Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.805Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.805Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.805Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:18.935Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/agent/SKILL.md
+2026-02-18T12:22:18.935Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:18.939Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:18.939Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:18.939Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:18.939Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:18.940Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:18.940Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:19.246Z [DEBUG] executePreToolHooks called for tool: TodoWrite
+2026-02-18T12:22:19.246Z [DEBUG] Getting matching hook commands for PreToolUse with query: TodoWrite
+2026-02-18T12:22:19.246Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:22:19.246Z [DEBUG] Matched 0 unique hooks for query "TodoWrite" (0 before deduplication)
+2026-02-18T12:22:19.247Z [DEBUG] Getting matching hook commands for PostToolUse with query: TodoWrite
+2026-02-18T12:22:19.247Z [DEBUG] Found 5 hook matchers in settings
+2026-02-18T12:22:19.247Z [DEBUG] Matched 0 unique hooks for query "TodoWrite" (0 before deduplication)
+2026-02-18T12:22:19.261Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-18T12:22:19.261Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-18T12:22:19.261Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-18T12:22:19.261Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-18T12:22:19.262Z [DEBUG] Sending 48 skills via attachment (initial, 48 total sent)
+2026-02-18T12:22:19.263Z [DEBUG] autocompact: tokens=168216 threshold=167000 effectiveWindow=180000
+2026-02-18T12:22:19.267Z [DEBUG] Getting matching hook commands for PreCompact with query: auto
+2026-02-18T12:22:19.267Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:22:19.267Z [DEBUG] Matched 0 unique hooks for query "auto" (0 before deduplication)
+2026-02-18T12:22:19.271Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-18T12:22:19.271Z [DEBUG] Using tool-based global cache marker on EnterPlanMode
+2026-02-18T12:22:19.275Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:22:19.276Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:22:19.276Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:22:19.277Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:22:19.806Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/notebooklm/data/auth_info.json
+2026-02-18T12:22:19.806Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:19.824Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:19.824Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:19.824Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:19.824Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:19.826Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:19.826Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:19.826Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/notebooklm/data/library.json
+2026-02-18T12:22:19.826Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:19.836Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:19.836Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:19.836Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:19.836Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:19.837Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:19.837Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.675Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/office-trello/SKILL.md
+2026-02-18T12:22:20.675Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.691Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.691Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.691Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.691Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.694Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.694Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.694Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/office-notes/SKILL.md
+2026-02-18T12:22:20.694Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.703Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.703Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.703Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.703Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.705Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.705Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.705Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/office-notion/SKILL.md
+2026-02-18T12:22:20.705Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.709Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.709Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.709Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.709Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.710Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.710Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.711Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/ontology/SKILL.md
+2026-02-18T12:22:20.711Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.715Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.715Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.715Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.715Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.716Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.716Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.716Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/office/SKILL.md
+2026-02-18T12:22:20.716Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.721Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.721Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.721Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.721Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.721Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.721Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.722Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/perf/SKILL.md
+2026-02-18T12:22:20.722Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.726Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.726Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.726Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.726Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.727Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.727Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.727Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/phase/SKILL.md
+2026-02-18T12:22:20.727Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.732Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.732Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.732Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.732Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.733Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.733Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.733Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/planning-with-files/reference.md
+2026-02-18T12:22:20.733Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.738Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.738Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.738Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.738Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.738Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.738Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.738Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/planning-with-files/examples.md
+2026-02-18T12:22:20.738Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.742Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.742Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.742Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.742Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.743Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.743Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.743Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/planning-with-files/SKILL.md
+2026-02-18T12:22:20.743Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.747Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.747Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.747Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.747Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.747Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.747Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.748Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/planning-with-files/scripts/check-complete.ps1
+2026-02-18T12:22:20.748Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.751Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.751Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.751Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.751Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.752Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.752Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.752Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/planning-with-files/scripts/check-complete.sh
+2026-02-18T12:22:20.752Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.758Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.758Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.758Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.758Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.758Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.758Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.758Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/planning-with-files/scripts/init-session.ps1
+2026-02-18T12:22:20.758Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.762Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.762Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.762Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.762Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.762Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.762Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.762Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/planning-with-files/scripts/init-session.sh
+2026-02-18T12:22:20.762Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.765Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.765Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.765Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.765Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.766Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.766Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.766Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/notebooklm/images/example_notebookchat.png
+2026-02-18T12:22:20.766Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.769Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.769Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.769Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.769Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.770Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.770Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.770Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/notebooklm/scripts/ask_question.py
+2026-02-18T12:22:20.770Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.774Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.774Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.774Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.774Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.774Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.774Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.774Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/notebooklm/scripts/auth_manager.py
+2026-02-18T12:22:20.774Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.777Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.777Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.777Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.777Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.778Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.778Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.778Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/notebooklm/scripts/browser_session.py
+2026-02-18T12:22:20.778Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.781Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.781Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.781Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.781Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.781Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.781Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.782Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/notebooklm/references/api_reference.md
+2026-02-18T12:22:20.782Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.784Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.784Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.784Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.784Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.785Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.785Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.785Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/notebooklm/references/troubleshooting.md
+2026-02-18T12:22:20.785Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.788Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.788Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.788Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.788Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.788Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.788Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.788Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/notebooklm/scripts/browser_utils.py
+2026-02-18T12:22:20.788Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.791Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.791Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.791Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.791Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.792Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.792Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.792Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/notebooklm/scripts/cleanup_manager.py
+2026-02-18T12:22:20.792Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.795Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.795Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.795Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.795Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.796Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.796Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.796Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/notebooklm/scripts/notebook_manager.py
+2026-02-18T12:22:20.796Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.802Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.802Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.802Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.802Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.803Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.803Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.803Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/notebooklm/scripts/run.py
+2026-02-18T12:22:20.803Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.806Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.806Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.806Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.806Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.807Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.807Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.807Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/notebooklm/scripts/config.py
+2026-02-18T12:22:20.807Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.810Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.810Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.810Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.810Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.810Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.810Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.810Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/notebooklm/scripts/setup_environment.py
+2026-02-18T12:22:20.810Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.818Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.818Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.818Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.818Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.821Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.821Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.821Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/notebooklm/references/usage_patterns.md
+2026-02-18T12:22:20.822Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.830Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.830Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.830Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.830Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.831Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.831Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.831Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/office-tasks/SKILL.md
+2026-02-18T12:22:20.831Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.834Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.834Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.834Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.834Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.836Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.836Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.836Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/office-reminders/SKILL.md
+2026-02-18T12:22:20.836Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.839Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.839Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.839Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.839Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.839Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.839Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.840Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/planning-with-files/templates/progress.md
+2026-02-18T12:22:20.840Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.842Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.842Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.842Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.842Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.843Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.843Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.843Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/planning-with-files/templates/findings.md
+2026-02-18T12:22:20.843Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.846Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.846Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.846Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.846Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.846Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.846Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.847Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/review/SKILL.md
+2026-02-18T12:22:20.847Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.849Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.849Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.849Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.849Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.850Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.850Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.850Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/planning-with-files/scripts/session-catchup.py
+2026-02-18T12:22:20.850Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.853Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.853Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.853Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.853Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.853Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.853Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.853Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/planning-with-files/templates/task_plan.md
+2026-02-18T12:22:20.853Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.859Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.859Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.859Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.859Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.860Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.860Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.860Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/self-eval/SKILL.md
+2026-02-18T12:22:20.860Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.863Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.863Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.863Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.863Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.864Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.864Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.864Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/save/SKILL.md
+2026-02-18T12:22:20.864Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.870Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.870Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.870Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.870Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.871Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.871Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.871Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/sandbox/SKILL.md
+2026-02-18T12:22:20.871Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.874Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.874Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.874Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.874Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.875Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.875Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.875Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/shortcut/SKILL.md
+2026-02-18T12:22:20.875Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.878Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.878Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.878Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.878Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.879Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.879Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.879Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/selfie/SKILL.md
+2026-02-18T12:22:20.879Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.882Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.882Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.882Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.882Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.882Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.882Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.882Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/selfie/selfie.ts
+2026-02-18T12:22:20.883Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.885Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.885Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.885Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.885Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.886Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.886Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.886Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skill-creator/SKILL.md
+2026-02-18T12:22:20.886Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.889Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.889Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.889Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.889Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.890Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.890Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.890Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/shortcut-builder/SKILL.md
+2026-02-18T12:22:20.890Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.893Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.893Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.893Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.893Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.894Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.894Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.894Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/shortcut-search/SKILL.md
+2026-02-18T12:22:20.894Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.897Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.897Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.897Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.897Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.898Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.898Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.898Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/SKILL.md
+2026-02-18T12:22:20.898Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.900Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.900Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.900Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.900Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.901Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.901Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.901Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/PHASE2-DESIGN.md
+2026-02-18T12:22:20.901Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.906Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.906Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.906Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.906Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.907Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.907Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.907Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/precise-edit/SKILL.md
+2026-02-18T12:22:20.907Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.910Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.910Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.910Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.910Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.911Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.911Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.911Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/skin-check.ts
+2026-02-18T12:22:20.911Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.914Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.914Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.914Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.914Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.915Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.915Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.915Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/notebooklm/scripts/__init__.py
+2026-02-18T12:22:20.915Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.918Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.918Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.918Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.918Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.919Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.919Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.919Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/search/SKILL.md
+2026-02-18T12:22:20.919Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.922Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.922Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.922Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.922Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.923Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.923Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.923Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/ppt/SKILL.md
+2026-02-18T12:22:20.923Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.926Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.926Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.926Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.926Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.927Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.927Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.927Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/pr/SKILL.md
+2026-02-18T12:22:20.927Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.930Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.930Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.930Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.930Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.931Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.931Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.931Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/ppt/ppt.ts
+2026-02-18T12:22:20.931Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.935Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.935Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.935Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.935Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.936Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.936Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.936Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/reflect/SKILL.md
+2026-02-18T12:22:20.936Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.939Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.939Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.939Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.939Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.940Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.940Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.940Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/report/SKILL.md
+2026-02-18T12:22:20.940Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.943Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.943Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.943Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.943Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.944Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.944Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.946Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/remember/remember.ts
+2026-02-18T12:22:20.946Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.949Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.949Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.949Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.949Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.950Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.950Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.950Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/restore/SKILL.md
+2026-02-18T12:22:20.950Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.953Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.953Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.953Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.953Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.953Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.953Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.953Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/recall/SKILL.md
+2026-02-18T12:22:20.954Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.957Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.957Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.957Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.957Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.957Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.957Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.957Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/queue/SKILL.md
+2026-02-18T12:22:20.957Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.960Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.960Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.960Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.960Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.961Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.961Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.961Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/ppt/ppt-pro.ts
+2026-02-18T12:22:20.961Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.964Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.964Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.964Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.964Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.965Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.965Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.965Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/remember/SKILL.md
+2026-02-18T12:22:20.965Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.968Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.968Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.968Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.968Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.969Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.969Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.969Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/history-tracker.ts
+2026-02-18T12:22:20.969Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.972Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.972Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.972Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.972Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.972Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.972Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.972Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/lesion-detector.ts
+2026-02-18T12:22:20.972Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.975Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.975Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.975Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.975Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.976Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.976Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.976Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/README.md
+2026-02-18T12:22:20.976Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.979Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.979Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.979Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.979Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.980Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.980Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.980Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/train_model.py
+2026-02-18T12:22:20.980Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.983Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.983Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.983Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.983Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.983Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.983Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.983Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/local-classifier.ts
+2026-02-18T12:22:20.983Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.986Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.986Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.986Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.986Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.987Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.987Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.987Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/skin-check-history.db
+2026-02-18T12:22:20.987Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.992Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.992Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.992Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.992Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.993Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.993Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.993Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/yolov8n.pt
+2026-02-18T12:22:20.993Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:20.996Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:20.996Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:20.996Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:20.996Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:20.997Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:20.997Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:20.997Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/skin-check-v2.ts
+2026-02-18T12:22:20.997Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:21.000Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:21.000Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:21.000Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:21.000Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:21.000Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:21.000Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:21.177Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/office-email/references/message-composition.md
+2026-02-18T12:22:21.177Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:21.194Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:21.194Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:21.194Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:21.194Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:21.195Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:21.195Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:21.196Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/office-email/SKILL.md
+2026-02-18T12:22:21.196Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:21.201Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:21.201Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:21.201Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:21.201Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:21.202Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:21.202Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:21.202Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/office-email/references/configuration.md
+2026-02-18T12:22:21.202Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:21.208Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:21.208Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:21.208Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:21.208Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:21.209Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:21.209Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:21.614Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:22:22.463Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/sp-brainstorming/SKILL.md
+2026-02-18T12:22:22.464Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.480Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.480Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.480Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.480Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.482Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.482Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.483Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/solar/SKILL.md
+2026-02-18T12:22:22.483Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.491Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.491Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.491Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.491Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.493Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.493Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.493Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/sp-code-review/SKILL.md
+2026-02-18T12:22:22.494Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.501Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.501Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.501Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.501Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.503Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.503Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.503Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/smi/smi.ts
+2026-02-18T12:22:22.503Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.510Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.510Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.510Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.510Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.511Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.511Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.511Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/sp-code-review/code-reviewer.md
+2026-02-18T12:22:22.511Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.518Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.518Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.518Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.518Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.520Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.520Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.521Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/sp-debugging/condition-based-waiting.md
+2026-02-18T12:22:22.524Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.531Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.531Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.531Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.531Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.533Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.533Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.533Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/smi/SKILL.md
+2026-02-18T12:22:22.533Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.540Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.540Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.540Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.540Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.541Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.541Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.541Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/sp-debugging/CREATION-LOG.md
+2026-02-18T12:22:22.541Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.549Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.549Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.549Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.549Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.550Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.550Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.550Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/sp-debugging/SKILL.md
+2026-02-18T12:22:22.550Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.553Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.553Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.553Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.553Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.554Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.554Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.554Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/sp-debugging/defense-in-depth.md
+2026-02-18T12:22:22.554Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.558Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.558Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.558Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.558Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.559Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.559Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.559Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/sp-debugging/test-academic.md
+2026-02-18T12:22:22.559Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.562Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.562Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.563Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.563Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.563Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.563Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.563Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/sp-debugging/test-pressure-1.md
+2026-02-18T12:22:22.563Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.566Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.566Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.566Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.566Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.567Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.567Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.567Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/sp-debugging/root-cause-tracing.md
+2026-02-18T12:22:22.567Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.570Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.570Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.570Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.570Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.571Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.571Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.571Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/sp-debugging/test-pressure-2.md
+2026-02-18T12:22:22.571Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.574Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.574Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.574Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.574Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.574Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.574Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.574Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/sp-debugging/test-pressure-3.md
+2026-02-18T12:22:22.574Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.578Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.578Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.578Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.578Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.578Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.578Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.578Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/sp-tdd/SKILL.md
+2026-02-18T12:22:22.578Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.581Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.581Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.581Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.581Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.582Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.582Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.582Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/sp-tdd/testing-anti-patterns.md
+2026-02-18T12:22:22.582Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.585Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.585Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.585Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.585Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.586Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.586Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.586Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/sql/SKILL.md
+2026-02-18T12:22:22.586Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.589Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.589Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.589Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.589Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.590Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.590Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.590Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/stats/SKILL.md
+2026-02-18T12:22:22.590Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.593Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.593Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.593Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.593Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.594Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.594Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.594Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/status/SKILL.md
+2026-02-18T12:22:22.594Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.597Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.597Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.597Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.597Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.597Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.597Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.597Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/template/SKILL.md
+2026-02-18T12:22:22.597Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.603Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.603Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.603Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.603Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.603Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.603Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.604Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/test/SKILL.md
+2026-02-18T12:22:22.604Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.609Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.609Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.609Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.609Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.612Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.612Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.612Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/theme/SKILL.md
+2026-02-18T12:22:22.612Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.620Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.620Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.620Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.620Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.623Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.623Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.623Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/vercel-deploy/SKILL.md
+2026-02-18T12:22:22.623Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.627Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.627Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.627Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.627Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.629Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.629Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.629Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/vercel-deploy/scripts/deploy.sh
+2026-02-18T12:22:22.629Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.634Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.634Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.634Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.634Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.635Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.636Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.636Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/watch/SKILL.md
+2026-02-18T12:22:22.636Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.638Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.638Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.638Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.638Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.640Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.640Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.640Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/weather/SKILL.md
+2026-02-18T12:22:22.640Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.643Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.643Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.643Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.643Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.645Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.645Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.645Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/webapp-testing/SKILL.md
+2026-02-18T12:22:22.645Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.649Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.649Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.649Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.649Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.650Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.650Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.650Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/weather/fetch.ts
+2026-02-18T12:22:22.650Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.652Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.652Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.652Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.652Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.653Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.653Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.653Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/xiaoai/SKILL.md
+2026-02-18T12:22:22.653Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.656Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.656Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.656Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.656Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.657Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.657Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.657Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/xiaoai/call.ts
+2026-02-18T12:22:22.657Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.660Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.660Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.660Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.660Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.660Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.660Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:22:22.660Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/websearch/SKILL.md
+2026-02-18T12:22:22.660Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:22:22.665Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:22:22.665Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:22:22.665Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:22:22.665Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:22:22.666Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:22:22.666Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:23:38.768Z [DEBUG] Forked agent [compact] received message: type=assistant
+2026-02-18T12:23:38.830Z [DEBUG] Getting matching hook commands for SubagentStop with query:
+2026-02-18T12:23:38.830Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:23:38.830Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-18T12:23:38.830Z [DEBUG] Forked agent [compact] finished: 1 messages, types=[assistant], totalUsage: input=3 output=3762 cacheRead=166936 cacheCreate=3097
+2026-02-18T12:23:38.834Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:23:38.834Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:23:38.834Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:23:39.180Z [DEBUG] Getting matching hook commands for SessionStart with query: compact
+2026-02-18T12:23:39.180Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:23:39.180Z [DEBUG] Matched 0 unique hooks for query "compact" (0 before deduplication)
+2026-02-18T12:23:39.182Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-18T12:23:39.183Z [DEBUG] Using tool-based global cache marker on EnterPlanMode
+2026-02-18T12:23:39.187Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.27c; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:23:39.188Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:23:39.188Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:23:39.189Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:23:42.970Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:23:45.868Z [DEBUG] executePreToolHooks called for tool: TodoWrite
+2026-02-18T12:23:45.869Z [DEBUG] Getting matching hook commands for PreToolUse with query: TodoWrite
+2026-02-18T12:23:45.869Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:23:45.869Z [DEBUG] Matched 0 unique hooks for query "TodoWrite" (0 before deduplication)
+2026-02-18T12:23:45.872Z [DEBUG] Getting matching hook commands for PostToolUse with query: TodoWrite
+2026-02-18T12:23:45.872Z [DEBUG] Found 5 hook matchers in settings
+2026-02-18T12:23:45.872Z [DEBUG] Matched 0 unique hooks for query "TodoWrite" (0 before deduplication)
+2026-02-18T12:23:45.881Z [WARN] [PROMPT CACHE BREAK] system prompt changed [source=sdk, call #9, cache read: 144532 → 16028, creation: 123441]
+2026-02-18T12:23:45.889Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-18T12:23:45.889Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-18T12:23:45.889Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-18T12:23:45.889Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-18T12:23:45.890Z [DEBUG] Sending 48 skills via attachment (initial, 48 total sent)
+2026-02-18T12:23:45.891Z [DEBUG] autocompact: tokens=140762 threshold=167000 effectiveWindow=180000
+2026-02-18T12:23:45.891Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-18T12:23:45.891Z [DEBUG] Using tool-based global cache marker on EnterPlanMode
+2026-02-18T12:23:45.894Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.27c; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:23:45.895Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:23:45.895Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:23:45.896Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:23:48.074Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:23:50.443Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-18T12:23:50.443Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-18T12:23:50.443Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:23:50.443Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-18T12:23:50.448Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-18T12:23:50.448Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-18T12:23:50.449Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.05b; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:23:50.449Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:23:50.449Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:23:50.449Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.05b; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:23:50.450Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:23:50.450Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:23:50.450Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:23:50.450Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:23:51.090Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:23:51.091Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:23:52.856Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-18T12:23:52.858Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.05b; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:23:52.858Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:23:52.858Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:23:52.859Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:23:52.860Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-18T12:23:52.860Z [DEBUG] Found 5 hook matchers in settings
+2026-02-18T12:23:52.860Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-18T12:23:52.861Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-18T12:23:52.861Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-18T12:23:52.861Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:23:52.861Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-18T12:23:52.865Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-18T12:23:52.866Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-18T12:23:52.866Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.05b; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:23:52.866Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:23:52.866Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:23:52.866Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.05b; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:23:52.867Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:23:52.867Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:23:52.867Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:23:52.867Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:23:53.348Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:23:53.420Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:23:53.537Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:23:54.534Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-18T12:23:54.535Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.05b; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:23:54.536Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:23:54.536Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:23:54.536Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:23:54.537Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-18T12:23:54.537Z [DEBUG] Found 5 hook matchers in settings
+2026-02-18T12:23:54.537Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-18T12:23:54.538Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-18T12:23:54.538Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-18T12:23:54.538Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:23:54.538Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-18T12:23:54.541Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-18T12:23:54.541Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-18T12:23:54.541Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.05b; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:23:54.541Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:23:54.541Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:23:54.542Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.05b; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:23:54.542Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:23:54.542Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:23:54.543Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:23:54.543Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:23:55.049Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:23:55.056Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:23:55.061Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:23:56.722Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-18T12:23:56.723Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.05b; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:23:56.724Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:23:56.724Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:23:56.725Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:23:56.725Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-18T12:23:56.725Z [DEBUG] Found 5 hook matchers in settings
+2026-02-18T12:23:56.725Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-18T12:23:56.728Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-18T12:23:56.728Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-18T12:23:56.728Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-18T12:23:56.728Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-18T12:23:56.729Z [DEBUG] Getting matching hook commands for SessionEnd with query: other
+2026-02-18T12:23:56.729Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:23:56.729Z [DEBUG] Matched 0 unique hooks for query "other" (0 before deduplication)

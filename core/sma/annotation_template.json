@@ -1,0 +1,25 @@
+{
+  "instructions": "请为每个对话轮次标注应该提取的知识三元组（subject, predicate, object）",
+  "format": {
+    "subject": "主语（实体）",
+    "predicate": "谓语（关系）",
+    "object": "宾语（实体/属性）"
+  },
+  "example": {
+    "userInput": "SMA 是什么？",
+    "aiOutput": "SMA 是 Solar Memory Architecture，三层记忆系统。",
+    "expectedTriples": [
+      {
+        "subject": "SMA",
+        "predicate": "是",
+        "object": "Solar Memory Architecture"
+      },
+      {
+        "subject": "SMA",
+        "predicate": "是",
+        "object": "三层记忆系统"
+      }
+    ]
+  },
+  "annotations": []
+}

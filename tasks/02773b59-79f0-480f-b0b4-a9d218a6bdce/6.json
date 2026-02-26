@@ -1,0 +1,9 @@
+{
+  "id": "6",
+  "subject": "注册知识库工具到系统表，确保跨会话可发现",
+  "description": "将 5 个知识库工具注册到 sys_scripts/sys_resources，并写入使用文档，确保新会话能通过 REE/Cortex 发现这些工具而不是重新开发。\n\n工具清单：\n1. knowledge-batch-extract.ts - 批量知识抽取\n2. knowledge-llm-extractor.ts - LLM 知识抽取器\n3. claims-enricher.ts - Claims 富化器\n4. knowledge-cleanup.ts - 知识库清理\n5. llm-api-client.ts - 直接 LLM API 客户端\n\n三步：\n1. 注册到 sys_scripts（REE 可发现）\n2. 注册到 sys_resources（资源可查）\n3. 写 README 到 cortex 目录（人可读）",
+  "activeForm": "Registering knowledge tools to system tables",
+  "status": "in_progress",
+  "blocks": [],
+  "blockedBy": []
+}

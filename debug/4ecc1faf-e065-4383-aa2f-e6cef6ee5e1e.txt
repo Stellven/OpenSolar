@@ -1,0 +1,504 @@
+2026-02-03T15:37:41.636Z [DEBUG] Watching for changes in setting files /Users/sihaoli/.claude...
+2026-02-03T15:37:41.638Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-03T15:37:41.638Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-03T15:37:41.638Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-03T15:37:41.638Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-03T15:37:41.646Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-02-03T15:37:41.646Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-02-03T15:37:41.646Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-02-03T15:37:41.647Z [DEBUG] Applying permission update: Adding 8 allow rule(s) to destination 'userSettings': ["Read(docs/**)","Read(src/**)","Read(include/**)","Read(test/**)","Read(benchmark/**)","WebFetch(domain:github.com)","WebFetch(domain:stackoverflow.com)","WebFetch(domain:cppreference.com)"]
+2026-02-03T15:37:41.647Z [DEBUG] Applying permission update: Adding 6 deny rule(s) to destination 'userSettings': ["Read(.env)","Read(.env.*)","Read(**/*secret*)","Read(**/*credential*)","Bash(rm -rf /)","Bash(rm -rf /*)"]
+2026-02-03T15:37:41.647Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-03T15:37:41.659Z [DEBUG] Loading plugin clangd-lsp from source: "./plugins/clangd-lsp"
+2026-02-03T15:37:41.659Z [DEBUG] Using provided version for clangd-lsp@claude-plugins-official: 1.0.0
+2026-02-03T15:37:41.659Z [DEBUG] Plugin clangd-lsp@claude-plugins-official version 1.0.0 already cached at /Users/sihaoli/.claude/plugins/cache/claude-plugins-official/clangd-lsp/1.0.0
+2026-02-03T15:37:41.659Z [DEBUG] Copied local plugin clangd-lsp to versioned cache: /Users/sihaoli/.claude/plugins/cache/claude-plugins-official/clangd-lsp/1.0.0
+2026-02-03T15:37:41.659Z [DEBUG] Plugin clangd-lsp has no entry.skills defined
+2026-02-03T15:37:41.660Z [DEBUG] Loading plugin rust-analyzer-lsp from source: "./plugins/rust-analyzer-lsp"
+2026-02-03T15:37:41.660Z [DEBUG] Using provided version for rust-analyzer-lsp@claude-plugins-official: 1.0.0
+2026-02-03T15:37:41.660Z [DEBUG] Plugin rust-analyzer-lsp@claude-plugins-official version 1.0.0 already cached at /Users/sihaoli/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0
+2026-02-03T15:37:41.660Z [DEBUG] Copied local plugin rust-analyzer-lsp to versioned cache: /Users/sihaoli/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0
+2026-02-03T15:37:41.660Z [DEBUG] Plugin rust-analyzer-lsp has no entry.skills defined
+2026-02-03T15:37:41.660Z [DEBUG] Found 2 plugins (2 enabled, 0 disabled)
+2026-02-03T15:37:41.661Z [DEBUG] [STARTUP] MCP configs loaded in 14ms
+2026-02-03T15:37:41.665Z [DEBUG] [STARTUP] Running setup()...
+2026-02-03T15:37:41.677Z [DEBUG] Stats cache is up to date
+2026-02-03T15:37:41.677Z [DEBUG] Plugin autoupdate: skipped (auto-updater disabled)
+2026-02-03T15:37:41.680Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-03T15:37:41.698Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-03T15:37:41.703Z [DEBUG] Loaded 2 installed plugins from /Users/sihaoli/.claude/plugins/installed_plugins.json
+2026-02-03T15:37:41.723Z [DEBUG] Error log sink initialized
+2026-02-03T15:37:41.724Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/todos/4ecc1faf-e065-4383-aa2f-e6cef6ee5e1e-agent-4ecc1faf-e065-4383-aa2f-e6cef6ee5e1e.json.tmp.28349.1770133061724
+2026-02-03T15:37:41.725Z [DEBUG] Temp file written successfully, size: 2 bytes
+2026-02-03T15:37:41.725Z [DEBUG] Renaming /Users/sihaoli/.claude/todos/4ecc1faf-e065-4383-aa2f-e6cef6ee5e1e-agent-4ecc1faf-e065-4383-aa2f-e6cef6ee5e1e.json.tmp.28349.1770133061724 to /Users/sihaoli/.claude/todos/4ecc1faf-e065-4383-aa2f-e6cef6ee5e1e-agent-4ecc1faf-e065-4383-aa2f-e6cef6ee5e1e.json
+2026-02-03T15:37:41.725Z [DEBUG] File /Users/sihaoli/.claude/todos/4ecc1faf-e065-4383-aa2f-e6cef6ee5e1e-agent-4ecc1faf-e065-4383-aa2f-e6cef6ee5e1e.json written atomically
+2026-02-03T15:37:41.739Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-02-03T15:37:41.739Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-02-03T15:37:41.739Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-02-03T15:37:41.739Z [DEBUG] Total plugin skills loaded: 0
+2026-02-03T15:37:41.739Z [DEBUG] Total plugin commands loaded: 0
+2026-02-03T15:37:41.739Z [DEBUG] Registered 0 hooks from 2 plugins
+2026-02-03T15:37:41.739Z [DEBUG] [STARTUP] setup() completed in 74ms
+2026-02-03T15:37:41.739Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-02-03T15:37:41.742Z [DEBUG] Loaded 49 unique skills (managed: 0, user: 49, project: 0, legacy commands: 0)
+2026-02-03T15:37:41.742Z [DEBUG] getSkills returning: 49 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-02-03T15:37:41.743Z [DEBUG] Loaded 1 LSP server(s) from plugin: clangd-lsp
+2026-02-03T15:37:41.770Z [DEBUG] [Claude in Chrome] Found chrome profiles: Default, Profile 1
+2026-02-03T15:37:41.771Z [DEBUG] Loaded 1 LSP server(s) from plugin: rust-analyzer-lsp
+2026-02-03T15:37:41.771Z [DEBUG] Total LSP servers loaded: 2
+2026-02-03T15:37:41.771Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 2 server(s)
+2026-02-03T15:37:41.771Z [DEBUG] Queued request handler for plugin:clangd-lsp:clangd.workspace/configuration (connection not ready)
+2026-02-03T15:37:41.771Z [DEBUG] Starting LSP server instance: plugin:clangd-lsp:clangd
+2026-02-03T15:37:41.777Z [DEBUG] Queued request handler for plugin:rust-analyzer-lsp:rust-analyzer.workspace/configuration (connection not ready)
+2026-02-03T15:37:41.777Z [DEBUG] Starting LSP server instance: plugin:rust-analyzer-lsp:rust-analyzer
+2026-02-03T15:37:41.781Z [DEBUG] LSP manager initialized with 2 servers
+2026-02-03T15:37:41.781Z [DEBUG] LSP server manager initialized successfully
+2026-02-03T15:37:41.781Z [DEBUG] Queued notification handler for plugin:clangd-lsp:clangd.textDocument/publishDiagnostics (connection not ready)
+2026-02-03T15:37:41.781Z [DEBUG] Registered diagnostics handler for plugin:clangd-lsp:clangd
+2026-02-03T15:37:41.781Z [DEBUG] Queued notification handler for plugin:rust-analyzer-lsp:rust-analyzer.textDocument/publishDiagnostics (connection not ready)
+2026-02-03T15:37:41.781Z [DEBUG] Registered diagnostics handler for plugin:rust-analyzer-lsp:rust-analyzer
+2026-02-03T15:37:41.781Z [DEBUG] LSP notification handlers registered successfully for all 2 server(s)
+2026-02-03T15:37:41.782Z [DEBUG] Applied queued notification handler for plugin:clangd-lsp:clangd.textDocument/publishDiagnostics
+2026-02-03T15:37:41.782Z [DEBUG] Applied queued request handler for plugin:clangd-lsp:clangd.workspace/configuration
+2026-02-03T15:37:41.782Z [DEBUG] LSP client started for plugin:clangd-lsp:clangd
+2026-02-03T15:37:41.782Z [DEBUG] Applied queued notification handler for plugin:rust-analyzer-lsp:rust-analyzer.textDocument/publishDiagnostics
+2026-02-03T15:37:41.782Z [DEBUG] Applied queued request handler for plugin:rust-analyzer-lsp:rust-analyzer.workspace/configuration
+2026-02-03T15:37:41.782Z [DEBUG] LSP client started for plugin:rust-analyzer-lsp:rust-analyzer
+2026-02-03T15:37:41.782Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Sending request 'initialize - (0)'.
+2026-02-03T15:37:41.782Z [DEBUG] [LSP PROTOCOL plugin:rust-analyzer-lsp:rust-analyzer] Sending request 'initialize - (0)'.
+2026-02-03T15:37:41.786Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=/Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg)
+2026-02-03T15:37:41.789Z [DEBUG] Watching for changes in skill/command directories: /Users/sihaoli/.claude/skills...
+2026-02-03T15:37:41.798Z [DEBUG] Agent file /Users/sihaoli/.claude/agents/community.md is missing required 'name' in frontmatter
+2026-02-03T15:37:41.798Z [DEBUG] Failed to parse agent from /Users/sihaoli/.claude/agents/community.md: Missing required "name" field in frontmatter
+2026-02-03T15:37:41.799Z [DEBUG] Total plugin agents loaded: 0
+2026-02-03T15:37:41.799Z [DEBUG] [STARTUP] Commands and agents loaded in 60ms
+2026-02-03T15:37:41.799Z [DEBUG] [STARTUP] Running showSetupScreens()...
+2026-02-03T15:37:41.800Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-02-03T15:37:41.801Z [DEBUG] Grove: Using fresh cached config
+2026-02-03T15:37:41.801Z [DEBUG] [render] initYoga starting
+2026-02-03T15:37:41.809Z [DEBUG] [Claude in Chrome] Extension not found in any browser
+2026-02-03T15:37:41.814Z [DEBUG] [render] initYoga complete
+2026-02-03T15:37:41.817Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-02-03T15:37:41.822Z [DEBUG] [LSP SERVER plugin:clangd-lsp:clangd] I[23:37:41.809] Apple clangd version 17.0.0 (clang-1700.6.3.2)
+I[23:37:41.810] Features: mac+xpc
+I[23:37:41.810] PID: 28472
+I[23:37:41.810] Working directory: /Users/sihaoli/Solar
+I[23:37:41.810] argv[0]: /Library/Developer/CommandLineTools/usr/bin/clangd
+I[23:37:41.810] argv[1]: --background-index
+I[23:37:41.810] Starting LSP over stdin/stdout
+I[23:37:41.810] <-- initialize(0)
+I[23:37:41.820] --> reply:initialize(0) 9 ms
+2026-02-03T15:37:41.826Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-02-03T15:37:41.827Z [DEBUG] Git remote URL: https://github.com/lisihao/Solar.git
+2026-02-03T15:37:41.827Z [DEBUG] Parsed repository: lisihao/Solar from https://github.com/lisihao/Solar.git
+2026-02-03T15:37:41.827Z [DEBUG] Parsed repository: lisihao/Solar from URL: https://github.com/lisihao/Solar.git
+2026-02-03T15:37:41.827Z [DEBUG] Path /Users/sihaoli/Solar already tracked for repo lisihao/solar
+2026-02-03T15:37:41.832Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Received response 'initialize - (0)' in 50ms.
+2026-02-03T15:37:41.832Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Sending notification 'initialized'.
+2026-02-03T15:37:41.847Z [DEBUG] LSP server plugin:clangd-lsp:clangd initialized
+2026-02-03T15:37:41.847Z [DEBUG] LSP server instance started: plugin:clangd-lsp:clangd
+2026-02-03T15:37:41.847Z [DEBUG] [LSP SERVER plugin:clangd-lsp:clangd] I[23:37:41.847] <-- initialized
+2026-02-03T15:37:42.383Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] error: Unknown binary 'rust-analyzer' in official toolchain 'stable-aarch64-apple-darwin'.
+2026-02-03T15:37:42.393Z [ERROR] Error: Error: LSP server plugin:rust-analyzer-lsp:rust-analyzer crashed with exit code 1
+    at ChildProcess.<anonymous> (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:1622:21508)
+    at ChildProcess.emit (node:events:508:28)
+    at ChildProcess.emit (node:domain:489:12)
+    at ChildProcess._handle.onexit (node:internal/child_process:294:12)
+2026-02-03T15:37:42.393Z [DEBUG] LSP server plugin:rust-analyzer-lsp:rust-analyzer connection closed
+2026-02-03T15:37:42.746Z [DEBUG] [STARTUP] showSetupScreens() completed in 946ms
+2026-02-03T15:37:42.746Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-03T15:37:42.746Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-03T15:37:42.746Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-03T15:37:42.748Z [DEBUG] MCP server "playwright": Starting connection with timeout of 30000ms
+2026-02-03T15:37:42.750Z [DEBUG] MCP server "brain-router": Starting connection with timeout of 30000ms
+2026-02-03T15:37:42.752Z [DEBUG] All plugins already exist, skipping migration
+2026-02-03T15:37:42.752Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-03T15:37:42.753Z [DEBUG] Initialized versioned plugins system with 2 plugins
+2026-02-03T15:37:42.755Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.28349.1770133062755
+2026-02-03T15:37:42.755Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:37:42.755Z [DEBUG] Temp file written successfully, size: 13190 bytes
+2026-02-03T15:37:42.755Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:37:42.755Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.28349.1770133062755 to /Users/sihaoli/.claude.json
+2026-02-03T15:37:42.755Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:37:42.759Z [DEBUG] Getting matching hook commands for SessionStart with query: startup
+2026-02-03T15:37:42.759Z [DEBUG] Found 1 hook matchers in settings
+2026-02-03T15:37:42.759Z [DEBUG] Matched 2 unique hooks for query "startup" (2 before deduplication)
+2026-02-03T15:37:42.811Z [DEBUG] Hooks: Checking initial response for async: {"continue": true}
+2026-02-03T15:37:42.811Z [DEBUG] Hooks: Parsed initial response: {"continue":true}
+2026-02-03T15:37:42.811Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:37:42.812Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:37:43.067Z [DEBUG] Session index: added 2, updated 3, removed 0 (total: 8)
+2026-02-03T15:37:43.071Z [DEBUG] MCP server "brain-router": Successfully connected to undefined server in 321ms
+2026-02-03T15:37:43.071Z [DEBUG] MCP server "brain-router": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"solar-brain-router","version":"1.0.0"}}
+2026-02-03T15:37:43.144Z [DEBUG] MCP server "playwright": Successfully connected to undefined server in 397ms
+2026-02-03T15:37:43.144Z [DEBUG] MCP server "playwright": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Playwright","version":"0.0.61"}}
+2026-02-03T15:37:43.147Z [DEBUG] Auto tool search disabled: 0 chars (threshold: 50000, 10% of context)
+2026-02-03T15:37:43.149Z [DEBUG] Skills and commands included in Skill tool: agent, banner, benchmark, browser, build, call, changelog, commit, docs, email-search, email-web, mcp-builder, office, himalaya, office-notes, notion, apple-reminders, things-mac, trello, ontology, phase, pr, precise-edit, report, restore, review, save, selfie, shortcut, shortcut-builder, shortcut-search, skill-creator, solar, stats, status, test, theme, webapp-testing
+2026-02-03T15:37:43.150Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-03T15:37:43.150Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-03T15:37:43.150Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-03T15:37:43.207Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.28349.1770133063207
+2026-02-03T15:37:43.207Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:37:43.207Z [DEBUG] Temp file written successfully, size: 13190 bytes
+2026-02-03T15:37:43.207Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:37:43.207Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.28349.1770133063207 to /Users/sihaoli/.claude.json
+2026-02-03T15:37:43.207Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:37:43.229Z [DEBUG] Hooks: Checking initial response for async: {"continue": true}
+2026-02-03T15:37:43.229Z [DEBUG] Hooks: Parsed initial response: {"continue":true}
+2026-02-03T15:37:43.229Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:37:43.229Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:37:43.230Z [DEBUG] [render] initYoga starting
+2026-02-03T15:37:43.230Z [DEBUG] [render] initYoga complete
+2026-02-03T15:37:43.233Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-02-03T15:37:43.258Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-02-03T15:37:43.258Z [DEBUG] [REPL:mount] REPL mounted, disabled=false
+2026-02-03T15:37:43.259Z [DEBUG] Official marketplace auto-install skipped: already_attempted
+2026-02-03T15:37:43.259Z [DEBUG] performStartupChecks called
+2026-02-03T15:37:43.259Z [DEBUG] Starting background plugin installations
+2026-02-03T15:37:43.259Z [DEBUG] performBackgroundPluginInstallations called
+2026-02-03T15:37:43.351Z [DEBUG] Found 2 enabled plugins
+2026-02-03T15:37:43.351Z [DEBUG] All plugins already exist, skipping migration
+2026-02-03T15:37:43.351Z [DEBUG] Found 2 installed plugins (V2 format)
+2026-02-03T15:37:43.357Z [DEBUG] Loaded plugins - Enabled: 2, Disabled: 0, Commands: 0, Agents: 0, Errors: 0
+2026-02-03T15:37:43.357Z [DEBUG] Found 0 missing plugins (not installed):
+2026-02-03T15:37:43.357Z [DEBUG] Setting installation status: 0 marketplaces, 0 installable plugins, 0 uninstallable plugins
+2026-02-03T15:37:43.455Z [DEBUG] MCP server "ide": Starting connection with timeout of 30000ms
+2026-02-03T15:37:43.456Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-03T15:37:43.466Z [DEBUG] MCP server "ide": Successfully connected to ws-ide server in 12ms
+2026-02-03T15:37:43.466Z [DEBUG] MCP server "ide": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Claude Code VSCode MCP","version":"2.1.27"}}
+2026-02-03T15:37:43.469Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.28349.1770133063469
+2026-02-03T15:37:43.469Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:37:43.469Z [DEBUG] Temp file written successfully, size: 13190 bytes
+2026-02-03T15:37:43.469Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:37:43.469Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.28349.1770133063469 to /Users/sihaoli/.claude.json
+2026-02-03T15:37:43.469Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:37:43.476Z [DEBUG] MCP server "ide": WebSocket transport closed/disconnected, attempting automatic reconnection
+2026-02-03T15:37:43.477Z [DEBUG] MCP server "ide": Starting connection with timeout of 30000ms
+2026-02-03T15:37:43.482Z [DEBUG] MCP server "ide": Successfully connected to ws-ide server in 6ms
+2026-02-03T15:37:43.482Z [DEBUG] MCP server "ide": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Claude Code VSCode MCP","version":"2.1.27"}}
+2026-02-03T15:37:43.491Z [DEBUG] MCP server "ide": WebSocket reconnection successful after 15ms (attempt 1)
+2026-02-03T15:37:44.607Z [DEBUG] MCP server "ide": WebSocket transport closed/disconnected, attempting automatic reconnection
+2026-02-03T15:37:44.609Z [DEBUG] MCP server "ide": Starting connection with timeout of 30000ms
+2026-02-03T15:37:44.629Z [DEBUG] MCP server "ide": Successfully connected to ws-ide server in 22ms
+2026-02-03T15:37:44.629Z [DEBUG] MCP server "ide": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Claude Code VSCode MCP","version":"2.1.27"}}
+2026-02-03T15:37:44.631Z [DEBUG] MCP server "ide": WebSocket reconnection successful after 24ms (attempt 1)
+2026-02-03T15:37:46.688Z [DEBUG] MCP server "ide": WebSocket transport closed/disconnected, attempting automatic reconnection
+2026-02-03T15:37:46.690Z [DEBUG] MCP server "ide": Starting connection with timeout of 30000ms
+2026-02-03T15:37:46.709Z [DEBUG] MCP server "ide": Successfully connected to ws-ide server in 21ms
+2026-02-03T15:37:46.709Z [DEBUG] MCP server "ide": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Claude Code VSCode MCP","version":"2.1.27"}}
+2026-02-03T15:37:46.711Z [DEBUG] MCP server "ide": WebSocket reconnection successful after 23ms (attempt 1)
+2026-02-03T15:37:50.747Z [DEBUG] MCP server "ide": WebSocket transport closed/disconnected, attempting automatic reconnection
+2026-02-03T15:37:50.749Z [DEBUG] MCP server "ide": Starting connection with timeout of 30000ms
+2026-02-03T15:37:50.772Z [DEBUG] MCP server "ide": Successfully connected to ws-ide server in 24ms
+2026-02-03T15:37:50.772Z [DEBUG] MCP server "ide": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Claude Code VSCode MCP","version":"2.1.27"}}
+2026-02-03T15:37:50.774Z [DEBUG] MCP server "ide": WebSocket reconnection successful after 26ms (attempt 1)
+2026-02-03T15:37:56.087Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-03T15:37:56.087Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-03T15:37:56.087Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-03T15:37:56.087Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-03T15:37:56.110Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-03T15:37:56.110Z [DEBUG] Found 1 hook matchers in settings
+2026-02-03T15:37:56.110Z [DEBUG] Matched 2 unique hooks for query "no match query" (2 before deduplication)
+2026-02-03T15:37:56.115Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-03T15:37:56.132Z [DEBUG] Hooks: Checking initial response for async: {"continue": true}
+2026-02-03T15:37:56.132Z [DEBUG] Hooks: Parsed initial response: {"continue":true}
+2026-02-03T15:37:56.132Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:37:56.133Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:37:56.142Z [DEBUG] Hooks: Checking initial response for async: {"continue": true}
+2026-02-03T15:37:56.142Z [DEBUG] Hooks: Parsed initial response: {"continue":true}
+2026-02-03T15:37:56.142Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:37:56.144Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:37:56.148Z [DEBUG] FileHistory: Added snapshot for bbef96dc-396e-41a2-99d6-926c723abaaf, tracking 0 files
+2026-02-03T15:37:56.154Z [DEBUG] MCP server "ide": Calling MCP tool: closeAllDiffTabs
+2026-02-03T15:37:56.155Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-03T15:37:56.160Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-03T15:37:56.160Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-03T15:37:56.161Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-03T15:37:56.162Z [DEBUG] Total plugin output styles loaded: 0
+2026-02-03T15:37:56.166Z [DEBUG] MCP server "ide": Tool 'closeAllDiffTabs' completed successfully in 12ms
+2026-02-03T15:37:56.176Z [DEBUG] Auto tool search disabled: 1469 chars (threshold: 50000, 10% of context)
+2026-02-03T15:37:56.184Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-03T15:37:56.184Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-03T15:37:56.184Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-03T15:37:56.797Z [ERROR] Error in non-streaming fallback: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"},"request_id":"req_011CXmPGkVf5rJv2258ngwvc"}
+2026-02-03T15:37:56.798Z [ERROR] Error: Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"},"request_id":"req_011CXmPGkVf5rJv2258ngwvc"}
+    at P2.generate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:917:2322)
+    at Jj.makeStatusError (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:934:2195)
+    at Jj.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:934:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+2026-02-03T15:37:56.801Z [ERROR] SyntaxError: SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+    at JSON.parse (<anonymous>)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:66:672
+    at B (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:6808)
+    at y22 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:1227:6806)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+2026-02-03T15:37:58.813Z [DEBUG] MCP server "ide": WebSocket transport closed/disconnected, attempting automatic reconnection
+2026-02-03T15:37:58.816Z [DEBUG] MCP server "ide": Starting connection with timeout of 30000ms
+2026-02-03T15:37:58.827Z [DEBUG] MCP server "ide": Successfully connected to ws-ide server in 13ms
+2026-02-03T15:37:58.827Z [DEBUG] MCP server "ide": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Claude Code VSCode MCP","version":"2.1.27"}}
+2026-02-03T15:37:58.830Z [DEBUG] MCP server "ide": WebSocket reconnection successful after 16ms (attempt 1)
+2026-02-03T15:38:01.327Z [ERROR] Error in non-streaming fallback: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"},"request_id":"req_011CXmPH5iYitBTsQ117nUWY"}
+2026-02-03T15:38:01.328Z [ERROR] Error: Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"},"request_id":"req_011CXmPH5iYitBTsQ117nUWY"}
+    at P2.generate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:917:2322)
+    at Jj.makeStatusError (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:934:2195)
+    at Jj.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:934:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+2026-02-03T15:38:01.347Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-03T15:38:01.347Z [DEBUG] Found 1 hook matchers in settings
+2026-02-03T15:38:01.347Z [DEBUG] Matched 6 unique hooks for query "no match query" (6 before deduplication)
+2026-02-03T15:38:01.362Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-02-03T15:38:01.363Z [DEBUG] Hooks: Checking initial response for async: {"decision": "approve"}
+2026-02-03T15:38:01.363Z [DEBUG] Hooks: Parsed initial response: {"decision":"approve"}
+2026-02-03T15:38:01.363Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:38:01.372Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:38:01.384Z [DEBUG] Hooks: Checking initial response for async: {
+  "decision": "approve",
+  "systemMessage": "【存储容量提醒】\n⚠️ 本地轨迹存储超限: 11963MB/500MB\n\n详情: ~/.solar/bin/trajectory-archive status"
+}
+2026-02-03T15:38:01.384Z [DEBUG] Hooks: Parsed initial response: {"decision":"approve","systemMessage":"【存储容量提醒】\n⚠️ 本地轨迹存储超限: 11963MB/500MB\n\n详情: ~/.solar/bin/trajectory-archive status"}
+2026-02-03T15:38:01.384Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:38:01.385Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:38:01.404Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-02-03T15:38:01.411Z [DEBUG] Hooks: Checking initial response for async: {
+  "decision": "approve",
+  "systemMessage": "【自演进提醒】今日尚未进行反思。建议使用 /reflect 对本次会话进行结构化反思。\n\n智慧法则检验:\n□ 知行合一 □ 实事求是 □ 中庸之道 □ 否定之否定 □ 实践检验\n\n今日学习: 0 条\n上次反思: 2026-02-02 14:27:42"
+}
+2026-02-03T15:38:01.411Z [DEBUG] Hooks: Parsed initial response: {"decision":"approve","systemMessage":"【自演进提醒】今日尚未进行反思。建议使用 /reflect 对本次会话进行结构化反思。\n\n智慧法则检验:\n□ 知行合一 □ 实事求是 □ 中庸之道 □ 否定之否定 □ 实践检验\n\n今日学习: 0 条\n上次反思: 2026-02-02 14:27:42"}
+2026-02-03T15:38:01.411Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:38:01.412Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:38:01.415Z [DEBUG] High write ratio: blit=441, write=766 (63.5% writes), screen=26x147
+2026-02-03T15:38:01.677Z [DEBUG] Hooks: Checking initial response for async: {"decision": "approve"}
+2026-02-03T15:38:01.677Z [DEBUG] Hooks: Parsed initial response: {"decision":"approve"}
+2026-02-03T15:38:01.677Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:38:01.677Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:38:01.686Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-03T15:38:01.692Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.28349.1770133081692
+2026-02-03T15:38:01.692Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:38:01.692Z [DEBUG] Temp file written successfully, size: 13190 bytes
+2026-02-03T15:38:01.692Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:38:01.692Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.28349.1770133081692 to /Users/sihaoli/.claude.json
+2026-02-03T15:38:01.692Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:38:01.697Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.28349.1770133081697
+2026-02-03T15:38:01.697Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:38:01.697Z [DEBUG] Temp file written successfully, size: 13190 bytes
+2026-02-03T15:38:01.697Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:38:01.697Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.28349.1770133081697 to /Users/sihaoli/.claude.json
+2026-02-03T15:38:01.697Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:38:01.735Z [DEBUG] High write ratio: blit=441, write=706 (61.6% writes), screen=24x147
+2026-02-03T15:38:06.835Z [DEBUG] High write ratio: blit=441, write=691 (61.0% writes), screen=23x147
+2026-02-03T15:38:09.536Z [DEBUG] High write ratio: blit=441, write=813 (64.8% writes), screen=28x147
+2026-02-03T15:38:09.549Z [DEBUG] MCP server "ide": Calling MCP tool: getDiagnostics
+2026-02-03T15:38:09.549Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-03T15:38:09.549Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-03T15:38:09.549Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-03T15:38:09.549Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-03T15:38:09.550Z [DEBUG] MCP server "ide": Tool 'getDiagnostics' failed after 0s: Not connected
+2026-02-03T15:38:09.576Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-03T15:38:09.576Z [DEBUG] Found 1 hook matchers in settings
+2026-02-03T15:38:09.576Z [DEBUG] Matched 2 unique hooks for query "no match query" (2 before deduplication)
+2026-02-03T15:38:09.579Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-03T15:38:09.585Z [DEBUG] Hooks: Checking initial response for async: {"continue": true}
+2026-02-03T15:38:09.585Z [DEBUG] Hooks: Parsed initial response: {"continue":true}
+2026-02-03T15:38:09.585Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:38:09.585Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:38:09.589Z [DEBUG] Hooks: Checking initial response for async: {"continue": true}
+2026-02-03T15:38:09.589Z [DEBUG] Hooks: Parsed initial response: {"continue":true}
+2026-02-03T15:38:09.589Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:38:09.590Z [DEBUG] High write ratio: blit=441, write=813 (64.8% writes), screen=28x147
+2026-02-03T15:38:09.590Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:38:09.591Z [DEBUG] FileHistory: Making snapshot for message c690f509-9d12-4e8b-adad-0e756dd9d6ea
+2026-02-03T15:38:09.591Z [DEBUG] FileHistory: Added snapshot for c690f509-9d12-4e8b-adad-0e756dd9d6ea, tracking 0 files
+2026-02-03T15:38:09.595Z [DEBUG] MCP server "ide": Calling MCP tool: closeAllDiffTabs
+2026-02-03T15:38:09.596Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-03T15:38:09.597Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-03T15:38:09.597Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-03T15:38:09.597Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-03T15:38:09.600Z [DEBUG] MCP server "ide": Tool 'closeAllDiffTabs' completed successfully in 5ms
+2026-02-03T15:38:09.603Z [DEBUG] Auto tool search disabled: 1469 chars (threshold: 50000, 10% of context)
+2026-02-03T15:38:09.609Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-03T15:38:09.609Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-03T15:38:09.609Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-03T15:38:09.641Z [DEBUG] High write ratio: blit=441, write=813 (64.8% writes), screen=28x147
+2026-02-03T15:38:10.678Z [ERROR] Error in non-streaming fallback: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"},"request_id":"req_011CXmPHmUU2m5xZ9kutWXcA"}
+2026-02-03T15:38:10.678Z [ERROR] Error: Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"},"request_id":"req_011CXmPHmUU2m5xZ9kutWXcA"}
+    at P2.generate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:917:2322)
+    at Jj.makeStatusError (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:934:2195)
+    at Jj.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:934:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+2026-02-03T15:38:10.679Z [ERROR] SyntaxError: SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+    at JSON.parse (<anonymous>)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:66:672
+    at B (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:6808)
+    at y22 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:1227:6806)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+2026-02-03T15:38:10.736Z [ERROR] Error in non-streaming fallback: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"},"request_id":"req_011CXmPHmWCqkSNc9g9uR1mE"}
+2026-02-03T15:38:10.736Z [ERROR] Error: Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"},"request_id":"req_011CXmPHmWCqkSNc9g9uR1mE"}
+    at P2.generate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:917:2322)
+    at Jj.makeStatusError (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:934:2195)
+    at Jj.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:934:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+2026-02-03T15:38:10.750Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-03T15:38:10.750Z [DEBUG] Found 1 hook matchers in settings
+2026-02-03T15:38:10.750Z [DEBUG] Matched 6 unique hooks for query "no match query" (6 before deduplication)
+2026-02-03T15:38:10.761Z [DEBUG] Hooks: Checking initial response for async: {"decision": "approve"}
+2026-02-03T15:38:10.761Z [DEBUG] Hooks: Parsed initial response: {"decision":"approve"}
+2026-02-03T15:38:10.761Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:38:10.762Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-02-03T15:38:10.766Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:38:10.778Z [DEBUG] Hooks: Checking initial response for async: {
+  "decision": "approve",
+  "systemMessage": "【存储容量提醒】\n⚠️ 本地轨迹存储超限: 11963MB/500MB\n\n详情: ~/.solar/bin/trajectory-archive status"
+}
+2026-02-03T15:38:10.778Z [DEBUG] Hooks: Parsed initial response: {"decision":"approve","systemMessage":"【存储容量提醒】\n⚠️ 本地轨迹存储超限: 11963MB/500MB\n\n详情: ~/.solar/bin/trajectory-archive status"}
+2026-02-03T15:38:10.778Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:38:10.779Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:38:10.785Z [DEBUG] High write ratio: blit=735, write=1065 (59.2% writes), screen=33x147
+2026-02-03T15:38:10.787Z [DEBUG] Hooks: Checking initial response for async: {"decision": "approve"}
+2026-02-03T15:38:10.787Z [DEBUG] Hooks: Parsed initial response: {"decision":"approve"}
+2026-02-03T15:38:10.787Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:38:10.789Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:38:10.793Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-02-03T15:38:10.796Z [DEBUG] Hooks: Checking initial response for async: {
+  "decision": "approve",
+  "systemMessage": "【自演进提醒】今日尚未进行反思。建议使用 /reflect 对本次会话进行结构化反思。\n\n智慧法则检验:\n□ 知行合一 □ 实事求是 □ 中庸之道 □ 否定之否定 □ 实践检验\n\n今日学习: 0 条\n上次反思: 2026-02-02 14:27:42"
+}
+2026-02-03T15:38:10.796Z [DEBUG] Hooks: Parsed initial response: {"decision":"approve","systemMessage":"【自演进提醒】今日尚未进行反思。建议使用 /reflect 对本次会话进行结构化反思。\n\n智慧法则检验:\n□ 知行合一 □ 实事求是 □ 中庸之道 □ 否定之否定 □ 实践检验\n\n今日学习: 0 条\n上次反思: 2026-02-02 14:27:42"}
+2026-02-03T15:38:10.796Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:38:10.798Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:38:10.809Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-03T15:38:10.812Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.28349.1770133090812
+2026-02-03T15:38:10.812Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:38:10.812Z [DEBUG] Temp file written successfully, size: 13190 bytes
+2026-02-03T15:38:10.812Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:38:10.812Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.28349.1770133090812 to /Users/sihaoli/.claude.json
+2026-02-03T15:38:10.812Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:38:10.813Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.28349.1770133090813
+2026-02-03T15:38:10.813Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:38:10.813Z [DEBUG] Temp file written successfully, size: 13190 bytes
+2026-02-03T15:38:10.813Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:38:10.813Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.28349.1770133090813 to /Users/sihaoli/.claude.json
+2026-02-03T15:38:10.813Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:38:35.130Z [DEBUG] High write ratio: blit=882, write=1066 (54.7% writes), screen=39x147
+2026-02-03T15:38:36.213Z [DEBUG] High write ratio: blit=882, write=1471 (62.5% writes), screen=44x147
+2026-02-03T15:38:36.221Z [DEBUG] MCP server "ide": Calling MCP tool: getDiagnostics
+2026-02-03T15:38:36.222Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-03T15:38:36.222Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-03T15:38:36.222Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-03T15:38:36.222Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-03T15:38:36.222Z [DEBUG] MCP server "ide": Tool 'getDiagnostics' failed after 0s: Not connected
+2026-02-03T15:38:36.232Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-03T15:38:36.232Z [DEBUG] Found 1 hook matchers in settings
+2026-02-03T15:38:36.232Z [DEBUG] Matched 2 unique hooks for query "no match query" (2 before deduplication)
+2026-02-03T15:38:36.234Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-03T15:38:36.240Z [DEBUG] Hooks: Checking initial response for async: {"continue": true}
+2026-02-03T15:38:36.240Z [DEBUG] Hooks: Parsed initial response: {"continue":true}
+2026-02-03T15:38:36.240Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:38:36.240Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:38:36.246Z [DEBUG] Hooks: Checking initial response for async: {"continue": true}
+2026-02-03T15:38:36.246Z [DEBUG] Hooks: Parsed initial response: {"continue":true}
+2026-02-03T15:38:36.246Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:38:36.246Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:38:36.246Z [DEBUG] FileHistory: Making snapshot for message 0c8ba0b2-6aa8-4c8b-9fe1-cae28d865a76
+2026-02-03T15:38:36.246Z [DEBUG] FileHistory: Added snapshot for 0c8ba0b2-6aa8-4c8b-9fe1-cae28d865a76, tracking 0 files
+2026-02-03T15:38:36.250Z [DEBUG] MCP server "ide": Calling MCP tool: closeAllDiffTabs
+2026-02-03T15:38:36.251Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-03T15:38:36.252Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-03T15:38:36.252Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-03T15:38:36.252Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-03T15:38:36.255Z [DEBUG] MCP server "ide": Tool 'closeAllDiffTabs' completed successfully in 5ms
+2026-02-03T15:38:36.261Z [DEBUG] High write ratio: blit=882, write=1450 (62.2% writes), screen=44x147
+2026-02-03T15:38:36.262Z [DEBUG] Auto tool search disabled: 1469 chars (threshold: 50000, 10% of context)
+2026-02-03T15:38:36.268Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-03T15:38:36.268Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-03T15:38:36.268Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-03T15:38:36.923Z [ERROR] Error in non-streaming fallback: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"},"request_id":"req_011CXmPKhwCVo9P8aLMTj7DQ"}
+2026-02-03T15:38:36.923Z [ERROR] Error: Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"},"request_id":"req_011CXmPKhwCVo9P8aLMTj7DQ"}
+    at P2.generate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:917:2322)
+    at Jj.makeStatusError (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:934:2195)
+    at Jj.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:934:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+2026-02-03T15:38:36.924Z [ERROR] SyntaxError: SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+    at JSON.parse (<anonymous>)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:66:672
+    at B (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:6808)
+    at y22 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:1227:6806)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+2026-02-03T15:38:37.054Z [ERROR] Error in non-streaming fallback: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"},"request_id":"req_011CXmPKiVCAYT8EE22f6UAB"}
+2026-02-03T15:38:37.054Z [ERROR] Error: Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"},"request_id":"req_011CXmPKiVCAYT8EE22f6UAB"}
+    at P2.generate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:917:2322)
+    at Jj.makeStatusError (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:934:2195)
+    at Jj.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:934:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+2026-02-03T15:38:37.080Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-03T15:38:37.080Z [DEBUG] Found 1 hook matchers in settings
+2026-02-03T15:38:37.080Z [DEBUG] Matched 6 unique hooks for query "no match query" (6 before deduplication)
+2026-02-03T15:38:37.092Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-02-03T15:38:37.092Z [DEBUG] Hooks: Checking initial response for async: {"decision": "approve"}
+2026-02-03T15:38:37.093Z [DEBUG] Hooks: Parsed initial response: {"decision":"approve"}
+2026-02-03T15:38:37.093Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:38:37.100Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:38:37.107Z [DEBUG] Hooks: Checking initial response for async: {
+  "decision": "approve",
+  "systemMessage": "【存储容量提醒】\n⚠️ 本地轨迹存储超限: 11963MB/500MB\n\n详情: ~/.solar/bin/trajectory-archive status"
+}
+2026-02-03T15:38:37.107Z [DEBUG] Hooks: Parsed initial response: {"decision":"approve","systemMessage":"【存储容量提醒】\n⚠️ 本地轨迹存储超限: 11963MB/500MB\n\n详情: ~/.solar/bin/trajectory-archive status"}
+2026-02-03T15:38:37.107Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:38:37.109Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:38:37.121Z [DEBUG] Hooks: Checking initial response for async: {"decision": "approve"}
+2026-02-03T15:38:37.121Z [DEBUG] Hooks: Parsed initial response: {"decision":"approve"}
+2026-02-03T15:38:37.121Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:38:37.121Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:38:37.125Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-02-03T15:38:37.131Z [DEBUG] Hooks: Checking initial response for async: {
+  "decision": "approve",
+  "systemMessage": "【自演进提醒】今日尚未进行反思。建议使用 /reflect 对本次会话进行结构化反思。\n\n智慧法则检验:\n□ 知行合一 □ 实事求是 □ 中庸之道 □ 否定之否定 □ 实践检验\n\n今日学习: 0 条\n上次反思: 2026-02-02 14:27:42"
+}
+2026-02-03T15:38:37.131Z [DEBUG] Hooks: Parsed initial response: {"decision":"approve","systemMessage":"【自演进提醒】今日尚未进行反思。建议使用 /reflect 对本次会话进行结构化反思。\n\n智慧法则检验:\n□ 知行合一 □ 实事求是 □ 中庸之道 □ 否定之否定 □ 实践检验\n\n今日学习: 0 条\n上次反思: 2026-02-02 14:27:42"}
+2026-02-03T15:38:37.131Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:38:37.132Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:38:37.141Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-03T15:38:37.144Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.28349.1770133117144
+2026-02-03T15:38:37.144Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:38:37.144Z [DEBUG] Temp file written successfully, size: 13190 bytes
+2026-02-03T15:38:37.144Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:38:37.144Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.28349.1770133117144 to /Users/sihaoli/.claude.json
+2026-02-03T15:38:37.144Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:38:37.146Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.28349.1770133117146
+2026-02-03T15:38:37.146Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:38:37.146Z [DEBUG] Temp file written successfully, size: 13190 bytes
+2026-02-03T15:38:37.146Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:38:37.146Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.28349.1770133117146 to /Users/sihaoli/.claude.json
+2026-02-03T15:38:37.146Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:38:48.641Z [DEBUG] Getting matching hook commands for SessionEnd with query: prompt_input_exit
+2026-02-03T15:38:48.641Z [DEBUG] Found 0 hook matchers in settings
+2026-02-03T15:38:48.641Z [DEBUG] Matched 0 unique hooks for query "prompt_input_exit" (0 before deduplication)
+2026-02-03T15:38:48.645Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Sending request 'shutdown - (1)'.
+2026-02-03T15:38:48.664Z [DEBUG] MCP server "ide": WebSocket transport closed/disconnected, attempting automatic reconnection
+2026-02-03T15:38:48.665Z [DEBUG] MCP server "ide": Starting connection with timeout of 30000ms
+2026-02-03T15:38:48.666Z [DEBUG] FileHistory: Making snapshot for message c56ffd9e-e81d-494a-a0ea-2df6b44f93d1
+2026-02-03T15:38:48.667Z [DEBUG] FileHistory: Added snapshot for c56ffd9e-e81d-494a-a0ea-2df6b44f93d1, tracking 0 files
+2026-02-03T15:38:48.670Z [DEBUG] UserCommandMessage rendering: "exit" (args: "none", isSkillFormat: false)
+2026-02-03T15:38:48.686Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-03T15:38:48.694Z [DEBUG] MCP server "ide": Successfully connected to ws-ide server in 30ms
+2026-02-03T15:38:48.694Z [DEBUG] MCP server "ide": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Claude Code VSCode MCP","version":"2.1.27"}}
+2026-02-03T15:38:48.695Z [DEBUG] [LSP SERVER plugin:clangd-lsp:clangd] I[23:38:48.683] <-- shutdown(1)
+I[23:38:48.683] --> reply:shutdown(1) 0 ms
+2026-02-03T15:38:48.696Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-03T15:38:48.699Z [DEBUG] MCP server "ide": WebSocket reconnection successful after 35ms (attempt 1)
+2026-02-03T15:38:48.700Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.28349.1770133128700
+2026-02-03T15:38:48.700Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:38:48.700Z [DEBUG] Temp file written successfully, size: 13190 bytes
+2026-02-03T15:38:48.700Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:38:48.700Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.28349.1770133128700 to /Users/sihaoli/.claude.json
+2026-02-03T15:38:48.700Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:38:48.702Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.28349.1770133128702
+2026-02-03T15:38:48.702Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:38:48.702Z [DEBUG] Temp file written successfully, size: 13190 bytes
+2026-02-03T15:38:48.702Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:38:48.702Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.28349.1770133128702 to /Users/sihaoli/.claude.json
+2026-02-03T15:38:48.702Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:38:48.706Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Received response 'shutdown - (1)' in 61ms.
+2026-02-03T15:38:48.706Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Sending notification 'exit'.
+2026-02-03T15:38:48.709Z [DEBUG] LSP client stopped for plugin:clangd-lsp:clangd
+2026-02-03T15:38:48.709Z [DEBUG] LSP server instance stopped: plugin:clangd-lsp:clangd
+2026-02-03T15:38:48.709Z [DEBUG] LSP server manager shut down successfully

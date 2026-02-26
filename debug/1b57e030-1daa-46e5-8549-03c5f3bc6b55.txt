@@ -1,0 +1,1759 @@
+2026-02-08T14:32:25.509Z [DEBUG] Watching for changes in setting files /Users/sihaoli/.claude, /Users/sihaoli/.claude, /Users/sihaoli/.claude...
+2026-02-08T14:32:25.511Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-08T14:32:25.511Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-08T14:32:25.511Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-08T14:32:25.511Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-08T14:32:25.516Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-02-08T14:32:25.516Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-02-08T14:32:25.516Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-02-08T14:32:25.517Z [DEBUG] Applying permission update: Adding 4 allow rule(s) to destination 'localSettings': ["Bash(curl:*)","Bash(tree:*)","Bash(xargs ls:*)","Bash(wc:*)"]
+2026-02-08T14:32:25.518Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-08T14:32:25.526Z [DEBUG] Found 0 plugins (0 enabled, 0 disabled)
+2026-02-08T14:32:25.526Z [DEBUG] Total LSP servers loaded: 0
+2026-02-08T14:32:25.526Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 0 server(s)
+2026-02-08T14:32:25.526Z [DEBUG] LSP manager initialized with 0 servers
+2026-02-08T14:32:25.526Z [DEBUG] [STARTUP] MCP configs loaded in 8ms
+2026-02-08T14:32:25.526Z [DEBUG] LSP server manager initialized successfully
+2026-02-08T14:32:25.526Z [DEBUG] LSP notification handlers registered successfully for all 0 server(s)
+2026-02-08T14:32:25.527Z [DEBUG] [STARTUP] Running setup()...
+2026-02-08T14:32:25.541Z [DEBUG] Stats cache is up to date
+2026-02-08T14:32:25.541Z [DEBUG] Plugin autoupdate: skipped (auto-updater disabled)
+2026-02-08T14:32:25.545Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-08T14:32:25.566Z [DEBUG] Passes: Cache stale, returning cached data and refreshing in background
+2026-02-08T14:32:25.570Z [DEBUG] Loaded 2 installed plugins from /Users/sihaoli/.claude/plugins/installed_plugins.json
+2026-02-08T14:32:25.605Z [DEBUG] Error log sink initialized
+2026-02-08T14:32:25.609Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json.tmp.68300.1770561145609
+2026-02-08T14:32:25.609Z [DEBUG] Temp file written successfully, size: 2 bytes
+2026-02-08T14:32:25.609Z [DEBUG] Renaming /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json.tmp.68300.1770561145609 to /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json
+2026-02-08T14:32:25.609Z [DEBUG] File /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json written atomically
+2026-02-08T14:32:25.612Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-08T14:32:25.612Z [DEBUG] Total plugin skills loaded: 0
+2026-02-08T14:32:25.612Z [DEBUG] Total plugin commands loaded: 0
+2026-02-08T14:32:25.612Z [DEBUG] Registered 0 hooks from 0 plugins
+2026-02-08T14:32:25.613Z [DEBUG] [STARTUP] setup() completed in 86ms
+2026-02-08T14:32:25.613Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-02-08T14:32:25.620Z [DEBUG] Loaded 74 unique skills (managed: 0, user: 74, project: 0, legacy commands: 0)
+2026-02-08T14:32:25.620Z [DEBUG] getSkills returning: 74 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-02-08T14:32:25.641Z [DEBUG] [Claude in Chrome] Found chrome profiles: Default, Profile 1
+2026-02-08T14:32:25.643Z [DEBUG] Watching for changes in skill/command directories: /Users/sihaoli/.claude/skills, /Users/sihaoli/.claude/skills...
+2026-02-08T14:32:25.647Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=/Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg)
+2026-02-08T14:32:25.650Z [DEBUG] [Claude in Chrome] Extension not found in any browser
+2026-02-08T14:32:25.668Z [DEBUG] Agent file /Users/sihaoli/.claude/agents/community.md is missing required 'name' in frontmatter
+2026-02-08T14:32:25.669Z [DEBUG] Failed to parse agent from /Users/sihaoli/.claude/agents/community.md: Missing required "name" field in frontmatter
+2026-02-08T14:32:25.669Z [DEBUG] Total plugin agents loaded: 0
+2026-02-08T14:32:25.669Z [DEBUG] [STARTUP] Commands and agents loaded in 56ms
+2026-02-08T14:32:25.669Z [DEBUG] [STARTUP] Running showSetupScreens()...
+2026-02-08T14:32:25.670Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-02-08T14:32:25.671Z [DEBUG] Grove: Using fresh cached config
+2026-02-08T14:32:25.671Z [DEBUG] [render] initYoga starting
+2026-02-08T14:32:25.676Z [DEBUG] [render] initYoga complete
+2026-02-08T14:32:25.679Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-02-08T14:32:25.684Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-02-08T14:32:25.684Z [DEBUG] Git remote URL: null
+2026-02-08T14:32:25.684Z [DEBUG] No git remote URL found
+2026-02-08T14:32:25.684Z [DEBUG] Not in a GitHub repository, skipping path mapping update
+2026-02-08T14:32:25.718Z [ERROR] Error: Error: Error parsing line in /Users/sihaoli/.claude/projects/-Users-sihaoli/2053e84d-a735-41e9-83c2-ec851d482461.jsonl: SyntaxError: Unexpected token 'y', "  try {","+   "... is not valid JSON
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:66:79
+    at Array.map (<anonymous>)
+    at Lb (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:66:26)
+    at async xo (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3257:1878)
+    at async wa2 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3257:6924)
+2026-02-08T14:32:25.735Z [DEBUG] Session index: added 1, updated 0, removed 0 (total: 24)
+2026-02-08T14:32:26.551Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770561146551
+2026-02-08T14:32:26.551Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T14:32:26.551Z [DEBUG] Temp file written successfully, size: 13551 bytes
+2026-02-08T14:32:26.551Z [DEBUG] Applied original permissions to temp file
+2026-02-08T14:32:26.551Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770561146551 to /Users/sihaoli/.claude.json
+2026-02-08T14:32:26.551Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T14:32:26.551Z [DEBUG] Passes eligibility cached for org 669066ca-0b9c-41aa-9570-f1703da565f1: true
+2026-02-08T14:32:26.554Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770561146554
+2026-02-08T14:32:26.554Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T14:32:26.554Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T14:32:26.555Z [DEBUG] Applied original permissions to temp file
+2026-02-08T14:32:26.555Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770561146554 to /Users/sihaoli/.claude.json
+2026-02-08T14:32:26.555Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T14:32:30.132Z [DEBUG] [STARTUP] showSetupScreens() completed in 4463ms
+2026-02-08T14:32:30.133Z [DEBUG] [render] initYoga starting
+2026-02-08T14:32:30.133Z [DEBUG] [render] initYoga complete
+2026-02-08T14:32:30.134Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-02-08T14:32:30.147Z [DEBUG] High write ratio: blit=0, write=1436 (100.0% writes), screen=38x133
+2026-02-08T14:32:30.154Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-02-08T14:32:30.196Z [DEBUG] High write ratio: blit=0, write=1436 (100.0% writes), screen=39x133
+2026-02-08T14:32:32.904Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:32:32.904Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:32:32.905Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-08T14:32:32.911Z [DEBUG] MCP server "playwright": Starting connection with timeout of 30000ms
+2026-02-08T14:32:32.914Z [DEBUG] MCP server "brain-router": Starting connection with timeout of 30000ms
+2026-02-08T14:32:32.915Z [DEBUG] MCP server "are": Starting connection with timeout of 30000ms
+2026-02-08T14:32:32.918Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:32:32.919Z [DEBUG] Initialized versioned plugins system with 2 plugins
+2026-02-08T14:32:32.922Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770561152922
+2026-02-08T14:32:32.922Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T14:32:32.923Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T14:32:32.923Z [DEBUG] Applied original permissions to temp file
+2026-02-08T14:32:32.923Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770561152922 to /Users/sihaoli/.claude.json
+2026-02-08T14:32:32.923Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T14:32:32.926Z [DEBUG] Getting matching hook commands for SessionStart with query: startup
+2026-02-08T14:32:32.926Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:32:32.926Z [DEBUG] Matched 0 unique hooks for query "startup" (0 before deduplication)
+2026-02-08T14:32:32.927Z [DEBUG] [render] initYoga starting
+2026-02-08T14:32:32.927Z [DEBUG] [render] initYoga complete
+2026-02-08T14:32:32.938Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-02-08T14:32:32.967Z [DEBUG] High write ratio: blit=0, write=1029 (100.0% writes), screen=18x133
+2026-02-08T14:32:32.977Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-02-08T14:32:32.977Z [DEBUG] [REPL:mount] REPL mounted, disabled=false
+2026-02-08T14:32:32.978Z [DEBUG] Official marketplace auto-install skipped: already_attempted
+2026-02-08T14:32:32.979Z [DEBUG] performStartupChecks called
+2026-02-08T14:32:32.979Z [DEBUG] Starting background plugin installations
+2026-02-08T14:32:32.979Z [DEBUG] performBackgroundPluginInstallations called
+2026-02-08T14:32:33.064Z [DEBUG] Setting installation status: 0 marketplaces, 0 installable plugins, 0 uninstallable plugins
+2026-02-08T14:32:33.064Z [DEBUG] Loaded plugins - Enabled: 0, Disabled: 0, Commands: 0, Agents: 0, Errors: 0
+2026-02-08T14:32:33.069Z [ERROR] MCP server "are" Server stderr: ARE MCP Server running
+2026-02-08T14:32:33.071Z [DEBUG] MCP server "are": Successfully connected to undefined server in 156ms
+2026-02-08T14:32:33.071Z [DEBUG] MCP server "are": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"are-orchestrator","version":"1.0.0"}}
+2026-02-08T14:32:33.096Z [DEBUG] High write ratio: blit=0, write=1081 (100.0% writes), screen=18x133
+2026-02-08T14:32:33.104Z [DEBUG] MCP server "ide": Starting connection with timeout of 30000ms
+2026-02-08T14:32:33.119Z [DEBUG] MCP server "brain-router": Successfully connected to undefined server in 205ms
+2026-02-08T14:32:33.119Z [DEBUG] MCP server "brain-router": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"solar-brain-router","version":"1.0.0"}}
+2026-02-08T14:32:33.129Z [DEBUG] MCP server "ide": Connection failed after 28ms: WebSocket is not open. Cannot send message.
+2026-02-08T14:32:33.129Z [ERROR] MCP server "ide" Connection failed: WebSocket is not open. Cannot send message.
+2026-02-08T14:32:33.131Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770561153131
+2026-02-08T14:32:33.131Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T14:32:33.131Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T14:32:33.131Z [DEBUG] Applied original permissions to temp file
+2026-02-08T14:32:33.131Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770561153131 to /Users/sihaoli/.claude.json
+2026-02-08T14:32:33.131Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T14:32:33.136Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-08T14:32:33.172Z [DEBUG] High write ratio: blit=0, write=1081 (100.0% writes), screen=18x133
+2026-02-08T14:32:33.293Z [DEBUG] MCP server "playwright": Successfully connected to undefined server in 385ms
+2026-02-08T14:32:33.293Z [DEBUG] MCP server "playwright": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Playwright","version":"0.0.61"}}
+2026-02-08T14:32:33.297Z [DEBUG] Auto tool search disabled: 0 chars (threshold: 50000, 10% of context)
+2026-02-08T14:32:33.299Z [DEBUG] Skills and commands included in Skill tool: agent, banner, benchmark, browser, build, call, changelog, commit, docs, email-search, email-web, mcp-builder, office, himalaya, office-notes, notion, apple-reminders, things-mac, trello, ontology, phase, pr, precise-edit, report, restore, review, save, selfie, shortcut, shortcut-builder, shortcut-search, skill-creator, solar, status, test, theme, webapp-testing
+2026-02-08T14:32:33.300Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:32:33.300Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:32:33.300Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:32:33.305Z [DEBUG] High write ratio: blit=0, write=1081 (100.0% writes), screen=18x133
+2026-02-08T14:32:34.192Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770561154192
+2026-02-08T14:32:34.192Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T14:32:34.193Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T14:32:34.193Z [DEBUG] Applied original permissions to temp file
+2026-02-08T14:32:34.193Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770561154192 to /Users/sihaoli/.claude.json
+2026-02-08T14:32:34.193Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T14:32:36.578Z [DEBUG] High write ratio: blit=0, write=1103 (100.0% writes), screen=22x133
+2026-02-08T14:32:36.586Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T14:32:36.586Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T14:32:36.586Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T14:32:36.586Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T14:32:36.605Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-08T14:32:36.605Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:32:36.605Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-08T14:32:36.606Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-08T14:32:36.611Z [DEBUG] FileHistory: Added snapshot for 11ef9684-33e6-41fb-a531-40cd72d72adc, tracking 0 files
+2026-02-08T14:32:36.616Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T14:32:36.619Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:32:36.619Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:32:36.619Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:32:36.620Z [DEBUG] Total plugin output styles loaded: 0
+2026-02-08T14:32:36.629Z [DEBUG] High write ratio: blit=0, write=1103 (100.0% writes), screen=22x133
+2026-02-08T14:32:36.630Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T14:32:36.635Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:32:36.635Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:32:36.635Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:32:36.677Z [DEBUG] High write ratio: blit=266, write=1095 (80.5% writes), screen=22x133
+2026-02-08T14:32:37.696Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:32:38.068Z [ERROR] Error in non-streaming fallback: Request was aborted.
+2026-02-08T14:32:38.069Z [ERROR] Error: Error: Request was aborted.
+    at Jj.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:934:3940)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+2026-02-08T14:32:38.082Z [DEBUG] High write ratio: blit=266, write=1086 (80.3% writes), screen=21x133
+2026-02-08T14:32:38.084Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-08T14:32:38.088Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770561158088
+2026-02-08T14:32:38.088Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T14:32:38.088Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T14:32:38.088Z [DEBUG] Applied original permissions to temp file
+2026-02-08T14:32:38.088Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770561158088 to /Users/sihaoli/.claude.json
+2026-02-08T14:32:38.088Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T14:32:38.090Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770561158090
+2026-02-08T14:32:38.090Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T14:32:38.090Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T14:32:38.090Z [DEBUG] Applied original permissions to temp file
+2026-02-08T14:32:38.090Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770561158090 to /Users/sihaoli/.claude.json
+2026-02-08T14:32:38.090Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T14:32:38.096Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770561158096
+2026-02-08T14:32:38.096Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T14:32:38.096Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T14:32:38.096Z [DEBUG] Applied original permissions to temp file
+2026-02-08T14:32:38.096Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770561158096 to /Users/sihaoli/.claude.json
+2026-02-08T14:32:38.096Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T14:32:38.130Z [DEBUG] High write ratio: blit=399, write=1037 (72.2% writes), screen=21x133
+2026-02-08T14:32:39.986Z [DEBUG] High write ratio: blit=399, write=1228 (75.5% writes), screen=26x133
+2026-02-08T14:32:39.992Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T14:32:39.992Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T14:32:39.992Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T14:32:39.992Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T14:32:40.003Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-08T14:32:40.003Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:32:40.003Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-08T14:32:40.006Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-08T14:32:40.006Z [DEBUG] FileHistory: Making snapshot for message 1cefcbe9-8a20-47f5-b243-c3fb160f24b1
+2026-02-08T14:32:40.007Z [DEBUG] FileHistory: Added snapshot for 1cefcbe9-8a20-47f5-b243-c3fb160f24b1, tracking 0 files
+2026-02-08T14:32:40.014Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T14:32:40.016Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:32:40.016Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:32:40.017Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:32:40.030Z [DEBUG] High write ratio: blit=399, write=1228 (75.5% writes), screen=26x133
+2026-02-08T14:32:40.030Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T14:32:40.035Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:32:40.035Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:32:40.035Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:32:40.066Z [DEBUG] High write ratio: blit=665, write=1220 (64.7% writes), screen=26x133
+2026-02-08T14:32:41.068Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:32:41.605Z [DEBUG] High write ratio: blit=53, write=1232 (95.9% writes), screen=26x133
+2026-02-08T14:32:43.193Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:32:54.603Z [DEBUG] High write ratio: blit=665, write=1238 (65.1% writes), screen=26x133
+2026-02-08T14:32:55.272Z [DEBUG] executePreToolHooks called for tool: Skill
+2026-02-08T14:32:55.277Z [DEBUG] High write ratio: blit=665, write=1272 (65.7% writes), screen=29x133
+2026-02-08T14:32:55.279Z [DEBUG] Getting matching hook commands for PreToolUse with query: Skill
+2026-02-08T14:32:55.279Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:32:55.279Z [DEBUG] Matched 0 unique hooks for query "Skill" (0 before deduplication)
+2026-02-08T14:32:55.291Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770561175291
+2026-02-08T14:32:55.291Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T14:32:55.291Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T14:32:55.291Z [DEBUG] Applied original permissions to temp file
+2026-02-08T14:32:55.291Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770561175291 to /Users/sihaoli/.claude.json
+2026-02-08T14:32:55.291Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T14:32:55.292Z [DEBUG] Metadata string for ontology:
+2026-02-08T14:32:55.292Z [DEBUG] <command-message>ontology</command-message>
+<command-name>/ontology</command-name>
+<command-args>load</command-args>
+2026-02-08T14:32:55.292Z [DEBUG] command-message tags in metadata: 1
+2026-02-08T14:32:55.297Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T14:32:55.297Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T14:32:55.297Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T14:32:55.297Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T14:32:55.300Z [DEBUG] processPromptSlashCommand creating 3 messages for ontology
+2026-02-08T14:32:55.301Z [DEBUG] Message 1: <command-message>ontology</command-message>
+<command-name>/ontology</command-name>
+<command-args>load</command-args>
+2026-02-08T14:32:55.301Z [DEBUG] Message 2 [META]: [{"type":"text","text":"Base directory for this skill: /Users/sihaoli/.claude/skills/ontology\n\n# /ontology - Solar 本体管理 v2.0\n\n> 核心升级：不只是\"加载\"，还要\"使用\"和\"保持\"\n\n## 三层机制\n\n```\n┌─────────────────
+2026-02-08T14:32:55.301Z [DEBUG] Message 3: [ATTACHMENT]
+2026-02-08T14:32:55.301Z [DEBUG] SkillTool returning 2 newMessages for skill ontology
+2026-02-08T14:32:55.301Z [DEBUG] newMessage 1: [{"type":"text","text":"Base directory for this skill: /Users/sihaoli/.claude/skills/ontology\n\n# /ontology - Solar 本体管理 v2.0\n\n> 核心升级：不只是\"加载\"，还要\...
+2026-02-08T14:32:55.309Z [DEBUG] Getting matching hook commands for PostToolUse with query: Skill
+2026-02-08T14:32:55.309Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:32:55.309Z [DEBUG] Matched 0 unique hooks for query "Skill" (0 before deduplication)
+2026-02-08T14:32:55.313Z [DEBUG] High write ratio: blit=665, write=1284 (65.9% writes), screen=29x133
+2026-02-08T14:32:55.313Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T14:32:55.313Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T14:32:55.313Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T14:32:55.313Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T14:32:55.323Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T14:32:55.328Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:32:55.328Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:32:55.328Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:32:55.354Z [DEBUG] High write ratio: blit=798, write=1254 (61.1% writes), screen=29x133
+2026-02-08T14:32:59.060Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:33:00.182Z [DEBUG] High write ratio: blit=1064, write=1231 (53.6% writes), screen=29x133
+2026-02-08T14:33:05.587Z [DEBUG] High write ratio: blit=1064, write=1280 (54.6% writes), screen=33x133
+2026-02-08T14:33:08.982Z [DEBUG] High write ratio: blit=798, write=1350 (62.8% writes), screen=37x133
+2026-02-08T14:33:08.983Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-08T14:33:08.987Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-08T14:33:08.987Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:33:08.987Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T14:33:08.998Z [DEBUG] tree-sitter: WASM files not found
+2026-02-08T14:33:09.004Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T14:33:09.004Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T14:33:09.004Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:33:09.004Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:33:09.004Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:33:09.004Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:33:09.005Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:33:09.005Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:33:09.015Z [DEBUG] High write ratio: blit=798, write=1350 (62.8% writes), screen=37x133
+2026-02-08T14:33:09.903Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:33:10.187Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:33:10.216Z [DEBUG] Creating shell snapshot for zsh (/bin/zsh)
+2026-02-08T14:33:10.216Z [DEBUG] Looking for shell config file: /Users/sihaoli/.zshrc
+2026-02-08T14:33:10.216Z [DEBUG] Snapshots directory: /Users/sihaoli/.claude/shell-snapshots
+2026-02-08T14:33:10.217Z [DEBUG] Creating snapshot at: /Users/sihaoli/.claude/shell-snapshots/snapshot-zsh-1770561190216-bnovw5.sh
+2026-02-08T14:33:10.217Z [DEBUG] Shell binary exists: true
+2026-02-08T14:33:10.217Z [DEBUG] Execution timeout: 10000ms
+2026-02-08T14:33:10.222Z [DEBUG] High write ratio: blit=798, write=1370 (63.2% writes), screen=37x133
+2026-02-08T14:33:10.299Z [DEBUG] Shell snapshot created successfully (5681 bytes)
+2026-02-08T14:33:10.300Z [DEBUG] No session environment scripts found
+2026-02-08T14:33:10.343Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T14:33:10.343Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:33:10.343Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:33:10.344Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:33:10.349Z [DEBUG] High write ratio: blit=798, write=1370 (63.2% writes), screen=37x133
+2026-02-08T14:33:10.352Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-08T14:33:10.352Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:33:10.352Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T14:33:10.356Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-08T14:33:10.360Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-08T14:33:10.360Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:33:10.360Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T14:33:10.369Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T14:33:10.369Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T14:33:10.370Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:33:10.370Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:33:10.370Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:33:10.370Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:33:10.370Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:33:10.370Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:33:10.408Z [DEBUG] High write ratio: blit=798, write=1560 (66.2% writes), screen=40x133
+2026-02-08T14:33:11.146Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:33:11.349Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:33:11.468Z [DEBUG] High write ratio: blit=1330, write=1357 (50.5% writes), screen=40x133
+2026-02-08T14:33:11.533Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:33:11.881Z [DEBUG] High write ratio: blit=1330, write=1357 (50.5% writes), screen=40x133
+2026-02-08T14:33:11.891Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T14:33:11.891Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:33:11.891Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:33:11.892Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:33:11.899Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-08T14:33:11.899Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:33:11.899Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T14:33:11.902Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T14:33:11.902Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T14:33:11.902Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T14:33:11.902Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T14:33:11.909Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T14:33:11.915Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:33:11.915Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:33:11.915Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:33:11.931Z [DEBUG] High write ratio: blit=798, write=1641 (67.3% writes), screen=43x133
+2026-02-08T14:33:12.747Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:33:13.986Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:33:14.952Z [DEBUG] High write ratio: blit=53, write=1694 (97.0% writes), screen=43x133
+2026-02-08T14:33:16.427Z [DEBUG] High write ratio: blit=0, write=3957 (100.0% writes), screen=118x133
+2026-02-08T14:33:16.454Z [DEBUG] High write ratio: blit=0, write=3957 (100.0% writes), screen=119x133
+2026-02-08T14:33:27.604Z [DEBUG] High write ratio: blit=0, write=1736 (100.0% writes), screen=43x133
+2026-02-08T14:33:27.604Z [DEBUG] Full reset (shrink->below): prevHeight=125, nextHeight=43, viewport=55
+2026-02-08T14:33:27.716Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-08T14:33:28.902Z [DEBUG] High write ratio: blit=0, write=4009 (100.0% writes), screen=122x133
+2026-02-08T14:33:28.964Z [DEBUG] High write ratio: blit=0, write=4009 (100.0% writes), screen=123x133
+2026-02-08T14:33:31.670Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-08T14:33:31.670Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:33:31.670Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-08T14:33:31.671Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T14:33:31.682Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:33:31.682Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:33:31.682Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:33:31.686Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-08T14:33:31.694Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770561211694
+2026-02-08T14:33:31.694Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T14:33:31.694Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T14:33:31.694Z [DEBUG] Applied original permissions to temp file
+2026-02-08T14:33:31.694Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770561211694 to /Users/sihaoli/.claude.json
+2026-02-08T14:33:31.694Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T14:33:31.696Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770561211696
+2026-02-08T14:33:31.696Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T14:33:31.696Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T14:33:31.697Z [DEBUG] Applied original permissions to temp file
+2026-02-08T14:33:31.697Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770561211696 to /Users/sihaoli/.claude.json
+2026-02-08T14:33:31.697Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T14:33:33.666Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:33:35.032Z [DEBUG] High write ratio: blit=0, write=3837 (100.0% writes), screen=85x133
+2026-02-08T14:33:35.032Z [DEBUG] Full reset (scrollback changes): scrollbackRows=69, changes=2910/8928, firstChangeY=2
+  prev: "│                                                     │ Tips for getting started                                                    │"
+  next: "│                                                    │ Tips for getting started                                                     │"
+2026-02-08T14:33:35.083Z [DEBUG] Full reset (scrollback changes): scrollbackRows=31, changes=507/507, firstChangeY=2
+  prev: "│                                                    │ Tips for getting started                                                     │"
+  next: "│                                                     │ Tips for getting started                                                    │"
+2026-02-08T14:33:35.121Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-08T14:33:38.431Z [DEBUG] Getting matching hook commands for SubagentStop with query: undefined
+2026-02-08T14:33:38.431Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:33:38.431Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-08T14:33:39.389Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T14:33:39.389Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T14:33:39.389Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T14:33:39.389Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T14:33:39.402Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-08T14:33:39.402Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:33:39.402Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-08T14:33:39.404Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-08T14:33:39.404Z [DEBUG] FileHistory: Making snapshot for message a6edc53d-b5b9-484a-81cb-bc6fded9b41c
+2026-02-08T14:33:39.404Z [DEBUG] FileHistory: Added snapshot for a6edc53d-b5b9-484a-81cb-bc6fded9b41c, tracking 0 files
+2026-02-08T14:33:39.409Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T14:33:39.411Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:33:39.411Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:33:39.411Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:33:39.420Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T14:33:39.430Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:33:39.430Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:33:39.430Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:33:40.285Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:33:44.861Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:33:51.441Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-08T14:33:51.446Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-08T14:33:51.446Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:33:51.446Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T14:33:51.459Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T14:33:51.459Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:33:51.459Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:33:51.459Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:33:52.375Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:33:52.519Z [DEBUG] Getting matching hook commands for PostToolUseFailure with query: Bash
+2026-02-08T14:33:52.520Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:33:52.520Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T14:33:52.523Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-08T14:33:52.526Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-08T14:33:52.526Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:33:52.526Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T14:33:52.533Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T14:33:52.533Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:33:52.533Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:33:52.533Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:33:54.166Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:33:54.309Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T14:33:54.309Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:33:54.309Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:33:54.310Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:33:54.319Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-08T14:33:54.319Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:33:54.319Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T14:33:54.323Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T14:33:54.323Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T14:33:54.323Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T14:33:54.323Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T14:33:54.333Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T14:33:54.338Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:33:54.338Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:33:54.338Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:33:55.003Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:33:57.386Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:34:04.821Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-08T14:34:04.821Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:34:04.821Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-08T14:34:04.821Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T14:34:04.832Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:34:04.832Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:34:04.832Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:34:04.837Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-08T14:34:04.845Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770561244845
+2026-02-08T14:34:04.845Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T14:34:04.845Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T14:34:04.845Z [DEBUG] Applied original permissions to temp file
+2026-02-08T14:34:04.845Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770561244845 to /Users/sihaoli/.claude.json
+2026-02-08T14:34:04.845Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T14:34:04.848Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770561244848
+2026-02-08T14:34:04.848Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T14:34:04.848Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T14:34:04.848Z [DEBUG] Applied original permissions to temp file
+2026-02-08T14:34:04.848Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770561244848 to /Users/sihaoli/.claude.json
+2026-02-08T14:34:04.848Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T14:34:07.257Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:34:14.655Z [DEBUG] Getting matching hook commands for SubagentStop with query: undefined
+2026-02-08T14:34:14.655Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:34:14.655Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-08T14:34:47.665Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T14:34:47.665Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T14:34:47.665Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T14:34:47.665Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T14:34:47.687Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-08T14:34:47.687Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:34:47.687Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-08T14:34:47.689Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-08T14:34:47.689Z [DEBUG] FileHistory: Making snapshot for message aab64679-4b2e-4d24-964e-1574dd05a440
+2026-02-08T14:34:47.689Z [DEBUG] FileHistory: Added snapshot for aab64679-4b2e-4d24-964e-1574dd05a440, tracking 0 files
+2026-02-08T14:34:47.693Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T14:34:47.695Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:34:47.695Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:34:47.695Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:34:47.707Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T14:34:47.714Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:34:47.714Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:34:47.714Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:34:48.839Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:34:50.197Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:34:58.394Z [DEBUG] High write ratio: blit=0, write=2943 (100.0% writes), screen=79x133
+2026-02-08T14:34:58.395Z [DEBUG] Full reset (scrollback changes): scrollbackRows=74, changes=2890/9692, firstChangeY=2
+  prev: "│                                                     │ Tips for getting started                                                    │"
+  next: "│                                                    │ Tips for getting started                                                     │"
+2026-02-08T14:34:58.444Z [DEBUG] Full reset (scrollback changes): scrollbackRows=25, changes=507/507, firstChangeY=2
+  prev: "│                                                    │ Tips for getting started                                                     │"
+  next: "│                                                     │ Tips for getting started                                                    │"
+2026-02-08T14:34:58.455Z [DEBUG] High write ratio: blit=0, write=2942 (100.0% writes), screen=80x133
+2026-02-08T14:35:00.393Z [DEBUG] High write ratio: blit=0, write=5405 (100.0% writes), screen=128x133
+2026-02-08T14:35:00.442Z [DEBUG] Full reset (scrollback changes): scrollbackRows=74, changes=507/519, firstChangeY=2
+  prev: "│                                                    │ Tips for getting started                                                     │"
+  next: "│                                                     │ Tips for getting started                                                    │"
+2026-02-08T14:35:00.523Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-08T14:35:01.214Z [DEBUG] High write ratio: blit=0, write=2942 (100.0% writes), screen=79x133
+2026-02-08T14:35:01.215Z [DEBUG] Full reset (scrollback changes): scrollbackRows=74, changes=2383/9185, firstChangeY=13
+  prev: "                                                                                                                                     "
+  next: "──────────────────────────────────────────────── ctrl+e to show 16 previous messages ────────────────────────────────────────────────"
+2026-02-08T14:35:01.230Z [DEBUG] High write ratio: blit=0, write=2942 (100.0% writes), screen=80x133
+2026-02-08T14:35:02.310Z [DEBUG] High write ratio: blit=0, write=3326 (100.0% writes), screen=93x133
+2026-02-08T14:35:05.526Z [DEBUG] npm view failed with code 1
+2026-02-08T14:35:05.526Z [DEBUG] npm stderr: (empty)
+2026-02-08T14:35:26.974Z [DEBUG] High write ratio: blit=0, write=6110 (100.0% writes), screen=143x133
+2026-02-08T14:35:27.031Z [DEBUG] Full reset (scrollback changes): scrollbackRows=89, changes=507/517, firstChangeY=2
+  prev: "│                                                    │ Tips for getting started                                                     │"
+  next: "│                                                     │ Tips for getting started                                                    │"
+2026-02-08T14:35:27.070Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-08T14:35:30.058Z [DEBUG] executePreToolHooks called for tool: mcp__brain-router__complete
+2026-02-08T14:35:30.062Z [DEBUG] Getting matching hook commands for PreToolUse with query: mcp__brain-router__complete
+2026-02-08T14:35:30.062Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:35:30.062Z [DEBUG] Matched 0 unique hooks for query "mcp__brain-router__complete" (0 before deduplication)
+2026-02-08T14:35:30.069Z [DEBUG] MCP server "brain-router": Calling MCP tool: complete
+2026-02-08T14:35:57.960Z [DEBUG] MCP server "brain-router": Tool 'complete' completed successfully in 27s
+2026-02-08T14:35:57.972Z [DEBUG] Getting matching hook commands for PostToolUse with query: mcp__brain-router__complete
+2026-02-08T14:35:57.972Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:35:57.972Z [DEBUG] Matched 0 unique hooks for query "mcp__brain-router__complete" (0 before deduplication)
+2026-02-08T14:35:57.980Z [DEBUG] executePreToolHooks called for tool: mcp__brain-router__complete
+2026-02-08T14:35:57.989Z [DEBUG] Getting matching hook commands for PreToolUse with query: mcp__brain-router__complete
+2026-02-08T14:35:57.989Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:35:57.989Z [DEBUG] Matched 0 unique hooks for query "mcp__brain-router__complete" (0 before deduplication)
+2026-02-08T14:35:57.997Z [DEBUG] MCP server "brain-router": Calling MCP tool: complete
+2026-02-08T14:36:11.171Z [DEBUG] High write ratio: blit=0, write=5631 (100.0% writes), screen=135x133
+2026-02-08T14:36:11.172Z [DEBUG] Full reset (scrollback changes): scrollbackRows=111, changes=5514/11573, firstChangeY=13
+  prev: "                                                                                                                                     "
+  next: "                                                 ctrl+e to show 25 previous messages                                                 "
+2026-02-08T14:36:25.435Z [DEBUG] MCP server "brain-router": Tool 'complete' completed successfully in 27s
+2026-02-08T14:36:25.450Z [DEBUG] Getting matching hook commands for PostToolUse with query: mcp__brain-router__complete
+2026-02-08T14:36:25.450Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:36:25.450Z [DEBUG] Matched 0 unique hooks for query "mcp__brain-router__complete" (0 before deduplication)
+2026-02-08T14:36:25.456Z [DEBUG] executePreToolHooks called for tool: mcp__brain-router__complete
+2026-02-08T14:36:25.461Z [DEBUG] Getting matching hook commands for PreToolUse with query: mcp__brain-router__complete
+2026-02-08T14:36:25.461Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:36:25.461Z [DEBUG] Matched 0 unique hooks for query "mcp__brain-router__complete" (0 before deduplication)
+2026-02-08T14:36:25.467Z [DEBUG] MCP server "brain-router": Calling MCP tool: complete
+2026-02-08T14:36:51.571Z [DEBUG] MCP server "brain-router": Tool 'complete' completed successfully in 26s
+2026-02-08T14:36:51.578Z [DEBUG] Getting matching hook commands for PostToolUse with query: mcp__brain-router__complete
+2026-02-08T14:36:51.578Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:36:51.578Z [DEBUG] Matched 0 unique hooks for query "mcp__brain-router__complete" (0 before deduplication)
+2026-02-08T14:36:51.583Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T14:36:51.583Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T14:36:51.583Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T14:36:51.583Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T14:36:51.594Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T14:36:51.602Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:36:51.602Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:36:51.602Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:36:57.251Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:37:06.526Z [DEBUG] High write ratio: blit=1323, write=4552 (77.5% writes), screen=136x133
+2026-02-08T14:37:27.377Z [DEBUG] High write ratio: blit=0, write=7450 (100.0% writes), screen=173x133
+2026-02-08T14:37:27.448Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-08T14:37:28.373Z [DEBUG] High write ratio: blit=0, write=7060 (100.0% writes), screen=196x133
+2026-02-08T14:37:28.424Z [DEBUG] High write ratio: blit=0, write=7059 (100.0% writes), screen=197x133
+2026-02-08T14:37:31.208Z [DEBUG] High write ratio: blit=3020, write=6650 (68.8% writes), screen=197x133
+2026-02-08T14:37:31.524Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-08T14:37:31.524Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:37:31.524Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-08T14:37:31.524Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T14:37:31.534Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:37:31.534Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:37:31.534Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:37:31.539Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-08T14:37:31.546Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770561451546
+2026-02-08T14:37:31.546Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T14:37:31.546Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T14:37:31.546Z [DEBUG] Applied original permissions to temp file
+2026-02-08T14:37:31.546Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770561451546 to /Users/sihaoli/.claude.json
+2026-02-08T14:37:31.546Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T14:37:31.549Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770561451549
+2026-02-08T14:37:31.549Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T14:37:31.549Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T14:37:31.549Z [DEBUG] Applied original permissions to temp file
+2026-02-08T14:37:31.549Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770561451549 to /Users/sihaoli/.claude.json
+2026-02-08T14:37:31.549Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T14:37:33.521Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:37:36.498Z [DEBUG] High write ratio: blit=258, write=6996 (96.4% writes), screen=197x133
+2026-02-08T14:37:39.902Z [DEBUG] Getting matching hook commands for SubagentStop with query: undefined
+2026-02-08T14:37:39.902Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:37:39.902Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-08T14:38:31.543Z [DEBUG] Getting matching hook commands for Notification with query: idle_prompt
+2026-02-08T14:38:31.543Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:38:31.543Z [DEBUG] Matched 0 unique hooks for query "idle_prompt" (0 before deduplication)
+2026-02-08T14:40:18.903Z [DEBUG] High write ratio: blit=3419, write=6639 (66.0% writes), screen=197x133
+2026-02-08T14:40:19.534Z [DEBUG] High write ratio: blit=0, write=10864 (100.0% writes), screen=245x133
+2026-02-08T14:40:19.569Z [DEBUG] Full reset (scrollback changes): scrollbackRows=191, changes=507/507, firstChangeY=2
+  prev: "│                                                    │ Tips for getting started                                                     │"
+  next: "│                                                     │ Tips for getting started                                                    │"
+2026-02-08T14:40:19.661Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-08T14:50:54.686Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T14:50:54.686Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T14:50:54.686Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T14:50:54.686Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T14:50:54.706Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-08T14:50:54.706Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:50:54.706Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-08T14:50:54.708Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-08T14:50:54.708Z [DEBUG] FileHistory: Making snapshot for message f0ded347-30fc-47d3-ad2f-4a3234b9a7c5
+2026-02-08T14:50:54.708Z [DEBUG] FileHistory: Added snapshot for f0ded347-30fc-47d3-ad2f-4a3234b9a7c5, tracking 0 files
+2026-02-08T14:50:54.714Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T14:50:54.716Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:50:54.716Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:50:54.716Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:50:54.720Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T14:50:54.730Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:50:54.730Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:50:54.730Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:50:56.677Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:51:07.873Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:51:20.326Z [DEBUG] executePreToolHooks called for tool: TodoWrite
+2026-02-08T14:51:20.336Z [DEBUG] Getting matching hook commands for PreToolUse with query: TodoWrite
+2026-02-08T14:51:20.336Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:51:20.336Z [DEBUG] Matched 0 unique hooks for query "TodoWrite" (0 before deduplication)
+2026-02-08T14:51:20.353Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json.tmp.68300.1770562280353
+2026-02-08T14:51:20.353Z [DEBUG] Preserving file permissions: 100644
+2026-02-08T14:51:20.353Z [DEBUG] Temp file written successfully, size: 465 bytes
+2026-02-08T14:51:20.353Z [DEBUG] Applied original permissions to temp file
+2026-02-08T14:51:20.353Z [DEBUG] Renaming /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json.tmp.68300.1770562280353 to /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json
+2026-02-08T14:51:20.354Z [DEBUG] File /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json written atomically
+2026-02-08T14:51:20.367Z [DEBUG] Getting matching hook commands for PostToolUse with query: TodoWrite
+2026-02-08T14:51:20.367Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:51:20.367Z [DEBUG] Matched 0 unique hooks for query "TodoWrite" (0 before deduplication)
+2026-02-08T14:51:20.375Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T14:51:20.375Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T14:51:20.375Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T14:51:20.375Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T14:51:20.391Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T14:51:20.400Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:51:20.400Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:51:20.400Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:51:35.323Z [ERROR] Error: Error: 1P event logging: 14 events failed to export
+    at oA0.queueFailedEvents (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:669:2038)
+    at async oA0.doExport (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:669:1195)
+2026-02-08T14:51:35.323Z [ERROR] Error: Error: {"stack":"Error: Failed to export 14 events\n    at oA0.doExport (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:669:1297)","message":"Failed to export 14 events","name":"Error"}
+    at aE0.error (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2336:34862)
+    at We1.error (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:663:8377)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:663:39402
+    at Tu3 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:663:39948)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:664:20245
+2026-02-08T14:52:00.006Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:52:17.820Z [DEBUG] executePreToolHooks called for tool: mcp__brain-router__complete
+2026-02-08T14:52:17.828Z [DEBUG] Getting matching hook commands for PreToolUse with query: mcp__brain-router__complete
+2026-02-08T14:52:17.828Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:52:17.829Z [DEBUG] Matched 0 unique hooks for query "mcp__brain-router__complete" (0 before deduplication)
+2026-02-08T14:52:17.838Z [DEBUG] MCP server "brain-router": Calling MCP tool: complete
+2026-02-08T14:52:37.803Z [ERROR] AxiosError: AxiosError: timeout of 5000ms exceeded
+    at t$.<anonymous> (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:44:10436)
+    at t$.emit (node:events:508:28)
+    at t$.emit (node:domain:489:12)
+    at Timeout.<anonymous> (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:43:3285)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7)
+    at v$A.request (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:46:2130)
+    at async vy0 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:5371:4236)
+2026-02-08T14:52:45.040Z [DEBUG] MCP server "brain-router": Tool 'complete' completed successfully in 27s
+2026-02-08T14:52:45.054Z [DEBUG] Getting matching hook commands for PostToolUse with query: mcp__brain-router__complete
+2026-02-08T14:52:45.054Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:52:45.054Z [DEBUG] Matched 0 unique hooks for query "mcp__brain-router__complete" (0 before deduplication)
+2026-02-08T14:52:45.062Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T14:52:45.062Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T14:52:45.062Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T14:52:45.062Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T14:52:45.074Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T14:52:45.080Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:52:45.080Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:52:45.080Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:52:54.504Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:53:05.103Z [DEBUG] executePreToolHooks called for tool: TodoWrite
+2026-02-08T14:53:05.107Z [DEBUG] Getting matching hook commands for PreToolUse with query: TodoWrite
+2026-02-08T14:53:05.107Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:53:05.107Z [DEBUG] Matched 0 unique hooks for query "TodoWrite" (0 before deduplication)
+2026-02-08T14:53:05.125Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json.tmp.68300.1770562385125
+2026-02-08T14:53:05.125Z [DEBUG] Preserving file permissions: 100644
+2026-02-08T14:53:05.126Z [DEBUG] Temp file written successfully, size: 467 bytes
+2026-02-08T14:53:05.126Z [DEBUG] Applied original permissions to temp file
+2026-02-08T14:53:05.126Z [DEBUG] Renaming /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json.tmp.68300.1770562385125 to /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json
+2026-02-08T14:53:05.126Z [DEBUG] File /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json written atomically
+2026-02-08T14:53:05.136Z [DEBUG] Getting matching hook commands for PostToolUse with query: TodoWrite
+2026-02-08T14:53:05.136Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:53:05.136Z [DEBUG] Matched 0 unique hooks for query "TodoWrite" (0 before deduplication)
+2026-02-08T14:53:05.141Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T14:53:05.141Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T14:53:05.141Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T14:53:05.141Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T14:53:05.152Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T14:53:05.160Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:53:05.160Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:53:05.160Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:53:11.091Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:53:46.987Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-08T14:53:46.987Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:53:46.987Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-08T14:53:46.996Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-08T14:53:46.999Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770562426999
+2026-02-08T14:53:46.999Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T14:53:46.999Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T14:53:47.000Z [DEBUG] Applied original permissions to temp file
+2026-02-08T14:53:47.000Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770562426999 to /Users/sihaoli/.claude.json
+2026-02-08T14:53:47.000Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T14:53:47.001Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770562427001
+2026-02-08T14:53:47.001Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T14:53:47.001Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T14:53:47.001Z [DEBUG] Applied original permissions to temp file
+2026-02-08T14:53:47.001Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770562427001 to /Users/sihaoli/.claude.json
+2026-02-08T14:53:47.001Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T14:54:47.001Z [DEBUG] Getting matching hook commands for Notification with query: idle_prompt
+2026-02-08T14:54:47.001Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:54:47.001Z [DEBUG] Matched 0 unique hooks for query "idle_prompt" (0 before deduplication)
+2026-02-08T14:55:37.007Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T14:55:37.007Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T14:55:37.007Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T14:55:37.007Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T14:55:37.024Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-08T14:55:37.024Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:55:37.025Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-08T14:55:37.026Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-08T14:55:37.026Z [DEBUG] FileHistory: Making snapshot for message cbba529f-946e-48ee-b63c-edb4d46cffe3
+2026-02-08T14:55:37.027Z [DEBUG] FileHistory: Added snapshot for cbba529f-946e-48ee-b63c-edb4d46cffe3, tracking 0 files
+2026-02-08T14:55:37.033Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T14:55:37.034Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:55:37.034Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:55:37.035Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:55:37.051Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T14:55:37.058Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:55:37.058Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:55:37.058Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:55:38.381Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:55:45.719Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:55:53.963Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-08T14:55:53.973Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-08T14:55:53.973Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:55:53.973Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T14:55:54.005Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T14:55:54.005Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T14:55:54.005Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:55:54.005Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:55:54.005Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:55:54.005Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:55:54.005Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:55:54.005Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:55:55.154Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:55:55.338Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:55:55.532Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T14:55:55.533Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:55:55.533Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:55:55.533Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:55:55.546Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-08T14:55:55.546Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:55:55.546Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T14:55:55.550Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T14:55:55.550Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T14:55:55.550Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T14:55:55.550Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T14:55:55.560Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T14:55:55.566Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:55:55.566Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:55:55.566Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:55:56.528Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:55:59.945Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:56:25.294Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-08T14:56:25.294Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:56:25.294Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-08T14:56:25.302Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-08T14:56:25.306Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770562585306
+2026-02-08T14:56:25.306Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T14:56:25.306Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T14:56:25.306Z [DEBUG] Applied original permissions to temp file
+2026-02-08T14:56:25.306Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770562585306 to /Users/sihaoli/.claude.json
+2026-02-08T14:56:25.306Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T14:56:25.307Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770562585307
+2026-02-08T14:56:25.307Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T14:56:25.307Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T14:56:25.307Z [DEBUG] Applied original permissions to temp file
+2026-02-08T14:56:25.307Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770562585307 to /Users/sihaoli/.claude.json
+2026-02-08T14:56:25.307Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T14:57:25.305Z [DEBUG] Getting matching hook commands for Notification with query: idle_prompt
+2026-02-08T14:57:25.305Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:57:25.305Z [DEBUG] Matched 0 unique hooks for query "idle_prompt" (0 before deduplication)
+2026-02-08T14:58:54.409Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T14:58:54.409Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T14:58:54.409Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T14:58:54.409Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T14:58:54.434Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-08T14:58:54.434Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:58:54.434Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-08T14:58:54.436Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-08T14:58:54.436Z [DEBUG] FileHistory: Making snapshot for message 54642d16-8dec-4399-a365-1139cc5888d3
+2026-02-08T14:58:54.437Z [DEBUG] FileHistory: Added snapshot for 54642d16-8dec-4399-a365-1139cc5888d3, tracking 0 files
+2026-02-08T14:58:54.447Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T14:58:54.448Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:58:54.448Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:58:54.448Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:58:54.455Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T14:58:54.465Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:58:54.465Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:58:54.465Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:58:55.840Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:59:04.041Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:59:08.834Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-08T14:59:08.834Z [DEBUG] executePreToolHooks called for tool: Glob
+2026-02-08T14:59:08.834Z [DEBUG] executePreToolHooks called for tool: Glob
+2026-02-08T14:59:08.834Z [DEBUG] executePreToolHooks called for tool: Glob
+2026-02-08T14:59:08.841Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-08T14:59:08.841Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:59:08.841Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T14:59:08.841Z [DEBUG] Getting matching hook commands for PreToolUse with query: Glob
+2026-02-08T14:59:08.841Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:59:08.841Z [DEBUG] Matched 0 unique hooks for query "Glob" (0 before deduplication)
+2026-02-08T14:59:08.841Z [DEBUG] Getting matching hook commands for PreToolUse with query: Glob
+2026-02-08T14:59:08.841Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:59:08.841Z [DEBUG] Matched 0 unique hooks for query "Glob" (0 before deduplication)
+2026-02-08T14:59:08.841Z [DEBUG] Getting matching hook commands for PreToolUse with query: Glob
+2026-02-08T14:59:08.841Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:59:08.841Z [DEBUG] Matched 0 unique hooks for query "Glob" (0 before deduplication)
+2026-02-08T14:59:08.915Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T14:59:08.916Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:59:08.916Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:59:08.916Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:59:08.933Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-08T14:59:08.933Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:59:08.933Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T14:59:10.582Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:59:17.378Z [DEBUG] Getting matching hook commands for PostToolUse with query: Glob
+2026-02-08T14:59:17.378Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:59:17.378Z [DEBUG] Matched 0 unique hooks for query "Glob" (0 before deduplication)
+2026-02-08T14:59:17.384Z [DEBUG] Getting matching hook commands for PostToolUse with query: Glob
+2026-02-08T14:59:17.384Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:59:17.384Z [DEBUG] Matched 0 unique hooks for query "Glob" (0 before deduplication)
+2026-02-08T14:59:17.391Z [DEBUG] Getting matching hook commands for PostToolUse with query: Glob
+2026-02-08T14:59:17.391Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:59:17.391Z [DEBUG] Matched 0 unique hooks for query "Glob" (0 before deduplication)
+2026-02-08T14:59:17.398Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T14:59:17.398Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T14:59:17.398Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T14:59:17.398Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T14:59:17.415Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T14:59:17.424Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:59:17.424Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:59:17.424Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:59:23.096Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:59:28.479Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-08T14:59:28.489Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-08T14:59:28.489Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:59:28.489Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T14:59:28.489Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-08T14:59:28.489Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-08T14:59:28.496Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-08T14:59:28.496Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:59:28.496Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-08T14:59:28.496Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-08T14:59:28.496Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:59:28.497Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-08T14:59:28.539Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-08T14:59:28.539Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:59:28.539Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-08T14:59:28.539Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-08T14:59:28.539Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:59:28.539Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-08T14:59:28.584Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T14:59:28.585Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:59:28.585Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:59:28.585Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:59:28.597Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-08T14:59:28.597Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:59:28.597Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T14:59:28.608Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T14:59:28.608Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T14:59:28.608Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T14:59:28.608Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T14:59:28.652Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T14:59:28.661Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:59:28.661Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:59:28.661Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:59:29.615Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:59:33.749Z [DEBUG] Stream started - received first chunk
+2026-02-08T14:59:41.300Z [DEBUG] High write ratio: blit=0, write=3628 (100.0% writes), screen=113x133
+2026-02-08T14:59:41.303Z [DEBUG] Full reset (scrollback changes): scrollbackRows=475, changes=52170/59352, firstChangeY=13
+  prev: "                                                                                                                                     "
+  next: "──────────────────────────────────────────────── ctrl+e to show 80 previous messages ────────────────────────────────────────────────"
+2026-02-08T14:59:41.359Z [DEBUG] High write ratio: blit=0, write=3628 (100.0% writes), screen=114x133
+2026-02-08T14:59:42.397Z [DEBUG] High write ratio: blit=0, write=3646 (100.0% writes), screen=115x133
+2026-02-08T14:59:42.407Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-08T14:59:42.407Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-08T14:59:42.410Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-08T14:59:42.410Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:59:42.410Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-08T14:59:42.410Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-08T14:59:42.410Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:59:42.410Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-08T14:59:42.427Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-08T14:59:42.427Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:59:42.427Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-08T14:59:42.427Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-08T14:59:42.427Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T14:59:42.427Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-08T14:59:42.430Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T14:59:42.430Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T14:59:42.430Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T14:59:42.430Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T14:59:42.451Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T14:59:42.456Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T14:59:42.456Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T14:59:42.456Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T14:59:53.037Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:00:02.561Z [DEBUG] High write ratio: blit=0, write=3683 (100.0% writes), screen=117x133
+2026-02-08T15:00:02.562Z [DEBUG] Full reset (scrollback changes): scrollbackRows=64, changes=1651/4171, firstChangeY=15
+  prev: "  ⎿  Found 0 files                                                                                                                   "
+  next: "                                                                                                                                     "
+2026-02-08T15:00:05.256Z [DEBUG] High write ratio: blit=0, write=3701 (100.0% writes), screen=118x133
+2026-02-08T15:00:05.276Z [DEBUG] executePreToolHooks called for tool: TodoWrite
+2026-02-08T15:00:05.282Z [DEBUG] Getting matching hook commands for PreToolUse with query: TodoWrite
+2026-02-08T15:00:05.282Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:00:05.282Z [DEBUG] Matched 0 unique hooks for query "TodoWrite" (0 before deduplication)
+2026-02-08T15:00:05.302Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json.tmp.68300.1770562805302
+2026-02-08T15:00:05.302Z [DEBUG] Preserving file permissions: 100644
+2026-02-08T15:00:05.302Z [DEBUG] Temp file written successfully, size: 383 bytes
+2026-02-08T15:00:05.302Z [DEBUG] Applied original permissions to temp file
+2026-02-08T15:00:05.302Z [DEBUG] Renaming /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json.tmp.68300.1770562805302 to /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json
+2026-02-08T15:00:05.302Z [DEBUG] File /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json written atomically
+2026-02-08T15:00:05.307Z [DEBUG] Getting matching hook commands for PostToolUse with query: TodoWrite
+2026-02-08T15:00:05.307Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:00:05.307Z [DEBUG] Matched 0 unique hooks for query "TodoWrite" (0 before deduplication)
+2026-02-08T15:00:05.309Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T15:00:05.309Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T15:00:05.309Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T15:00:05.309Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T15:00:05.316Z [DEBUG] Getting matching hook commands for PreCompact with query: auto
+2026-02-08T15:00:05.316Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:00:05.316Z [DEBUG] Matched 0 unique hooks for query "auto" (0 before deduplication)
+2026-02-08T15:00:05.317Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T15:00:05.317Z [DEBUG] Tool search disabled: MCPSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-08T15:00:05.318Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:00:05.318Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:00:05.318Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:00:11.519Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:00:16.651Z [DEBUG] High write ratio: blit=0, write=24178 (100.0% writes), screen=536x133
+2026-02-08T15:00:16.729Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-08T15:00:18.030Z [DEBUG] High write ratio: blit=0, write=1736 (100.0% writes), screen=45x133
+2026-02-08T15:00:18.030Z [DEBUG] Full reset (shrink->below): prevHeight=536, nextHeight=45, viewport=55
+2026-02-08T15:00:18.091Z [DEBUG] High write ratio: blit=0, write=1736 (100.0% writes), screen=46x133
+2026-02-08T15:00:19.292Z [DEBUG] High write ratio: blit=0, write=24174 (100.0% writes), screen=536x133
+2026-02-08T15:00:19.343Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-08T15:00:33.111Z [DEBUG] High write ratio: blit=0, write=1736 (100.0% writes), screen=45x133
+2026-02-08T15:00:33.111Z [DEBUG] Full reset (shrink->below): prevHeight=536, nextHeight=45, viewport=55
+2026-02-08T15:00:33.161Z [DEBUG] High write ratio: blit=0, write=1736 (100.0% writes), screen=46x133
+2026-02-08T15:00:34.256Z [DEBUG] High write ratio: blit=0, write=24176 (100.0% writes), screen=536x133
+2026-02-08T15:00:34.292Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-08T15:00:40.255Z [DEBUG] High write ratio: blit=0, write=1736 (100.0% writes), screen=46x133
+2026-02-08T15:00:40.255Z [DEBUG] Full reset (shrink->below): prevHeight=536, nextHeight=46, viewport=55
+2026-02-08T15:01:05.903Z [DEBUG] High write ratio: blit=0, write=24178 (100.0% writes), screen=536x133
+2026-02-08T15:01:05.961Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-08T15:01:07.369Z [DEBUG] High write ratio: blit=0, write=1736 (100.0% writes), screen=46x133
+2026-02-08T15:01:07.369Z [DEBUG] Full reset (shrink->below): prevHeight=536, nextHeight=46, viewport=55
+2026-02-08T15:01:09.023Z [DEBUG] High write ratio: blit=0, write=24177 (100.0% writes), screen=536x133
+2026-02-08T15:01:09.083Z [DEBUG] Full reset (scrollback changes): scrollbackRows=482, changes=507/517, firstChangeY=2
+  prev: "│                                                    │ Tips for getting started                                                     │"
+  next: "│                                                     │ Tips for getting started                                                    │"
+2026-02-08T15:01:09.119Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-08T15:01:30.368Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:01:30.368Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:01:30.369Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:01:30.369Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:01:30.369Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:01:30.369Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:01:31.593Z [DEBUG] Getting matching hook commands for SessionStart with query: compact
+2026-02-08T15:01:31.593Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:01:31.593Z [DEBUG] Matched 0 unique hooks for query "compact" (0 before deduplication)
+2026-02-08T15:01:31.594Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T15:01:31.602Z [DEBUG] High write ratio: blit=0, write=1593 (100.0% writes), screen=32x133
+2026-02-08T15:01:31.602Z [DEBUG] Full reset (shrink->below): prevHeight=536, nextHeight=32, viewport=55
+2026-02-08T15:01:31.604Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:01:31.604Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:01:31.604Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:01:31.652Z [DEBUG] High write ratio: blit=0, write=1593 (100.0% writes), screen=32x133
+2026-02-08T15:01:54.814Z [DEBUG] High write ratio: blit=0, write=1592 (100.0% writes), screen=33x133
+2026-02-08T15:01:57.040Z [DEBUG] High write ratio: blit=0, write=30810 (100.0% writes), screen=269x133
+2026-02-08T15:01:57.076Z [DEBUG] High write ratio: blit=0, write=30810 (100.0% writes), screen=270x133
+2026-02-08T15:01:58.450Z [DEBUG] High write ratio: blit=0, write=1589 (100.0% writes), screen=32x133
+2026-02-08T15:01:58.450Z [DEBUG] Full reset (shrink->below): prevHeight=270, nextHeight=32, viewport=55
+2026-02-08T15:01:58.509Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-08T15:02:00.480Z [DEBUG] High write ratio: blit=0, write=1589 (100.0% writes), screen=33x133
+2026-02-08T15:02:01.613Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:02:05.708Z [DEBUG] High write ratio: blit=966, write=1293 (57.2% writes), screen=33x133
+2026-02-08T15:02:06.827Z [DEBUG] High write ratio: blit=966, write=1276 (56.9% writes), screen=33x133
+2026-02-08T15:02:20.215Z [DEBUG] High write ratio: blit=966, write=1277 (56.9% writes), screen=33x133
+2026-02-08T15:02:21.149Z [DEBUG] High write ratio: blit=0, write=31021 (100.0% writes), screen=285x133
+2026-02-08T15:02:21.227Z [DEBUG] High write ratio: blit=0, write=31020 (100.0% writes), screen=286x133
+2026-02-08T15:02:33.917Z [DEBUG] High write ratio: blit=0, write=31020 (100.0% writes), screen=287x133
+2026-02-08T15:02:47.131Z [DEBUG] High write ratio: blit=0, write=5918 (100.0% writes), screen=110x133
+2026-02-08T15:02:47.132Z [DEBUG] Full reset (scrollback changes): scrollbackRows=233, changes=28587/35769, firstChangeY=13
+  prev: "                                                 ctrl+e to show 98 previous messages                                                 "
+  next: "════════════════════════════════════════════ Conversation compacted · ctrl+o for history ════════════════════════════════════════════"
+2026-02-08T15:02:47.196Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-08T15:02:54.439Z [DEBUG] Restarting caffeinate to maintain sleep prevention
+2026-02-08T15:02:54.439Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-08T15:02:54.441Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-08T15:02:57.778Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-08T15:02:57.785Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-08T15:02:57.785Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:02:57.785Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T15:02:57.808Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T15:02:57.808Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T15:02:57.809Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:02:57.809Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:02:57.809Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:02:57.809Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:02:57.809Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:02:57.809Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:02:59.176Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:03:01.640Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:03:01.721Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T15:03:01.722Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:03:01.722Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:03:01.722Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:03:01.729Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-08T15:03:01.729Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:03:01.729Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T15:03:01.733Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T15:03:01.733Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T15:03:01.733Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T15:03:01.733Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T15:03:01.782Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T15:03:01.790Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:03:01.790Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:03:01.790Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:03:02.657Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:03:07.338Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:03:25.323Z [DEBUG] executePreToolHooks called for tool: Write
+2026-02-08T15:03:25.331Z [DEBUG] Getting matching hook commands for PreToolUse with query: Write
+2026-02-08T15:03:25.331Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:03:25.331Z [DEBUG] Matched 0 unique hooks for query "Write" (0 before deduplication)
+2026-02-08T15:03:25.345Z [DEBUG] FileHistory: Tracked file modification for /Users/sihaoli/.claude/hooks/texture-inject.sh
+2026-02-08T15:03:25.351Z [DEBUG] [lspRecommendation] Looking for LSP plugins for .sh
+2026-02-08T15:03:26.347Z [DEBUG] rg error (signal=undefined, code=ABORT_ERR, stderr: ), 9086 results
+2026-02-08T15:03:26.347Z [ERROR] AbortError: AbortError: The operation was aborted
+    at abortChildProcess (node:child_process:759:27)
+    at AbortSignal.onAbortListener (node:child_process:829:7)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:845:20)
+    at AbortSignal.dispatchEvent (node:internal/event_target:778:26)
+    at runAbort (node:internal/abort_controller:488:10)
+    at abortSignal (node:internal/abort_controller:459:3)
+    at AbortController.abort (node:internal/abort_controller:507:5)
+    at Timeout._onTimeout (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4633:1999)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7)
+2026-02-08T15:03:26.351Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/hooks/texture-inject.sh.tmp.68300.1770563006351
+2026-02-08T15:03:26.351Z [DEBUG] Temp file written successfully, size: 1521 bytes
+2026-02-08T15:03:26.351Z [DEBUG] Renaming /Users/sihaoli/.claude/hooks/texture-inject.sh.tmp.68300.1770563006351 to /Users/sihaoli/.claude/hooks/texture-inject.sh
+2026-02-08T15:03:26.351Z [DEBUG] File /Users/sihaoli/.claude/hooks/texture-inject.sh written atomically
+2026-02-08T15:03:26.359Z [DEBUG] Getting matching hook commands for PostToolUse with query: Write
+2026-02-08T15:03:26.359Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:03:26.359Z [DEBUG] Matched 0 unique hooks for query "Write" (0 before deduplication)
+2026-02-08T15:03:26.368Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T15:03:26.368Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T15:03:26.368Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T15:03:26.368Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T15:03:26.380Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T15:03:26.386Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:03:26.386Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:03:26.386Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:03:34.276Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:03:36.057Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-08T15:03:36.063Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-08T15:03:36.063Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:03:36.063Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T15:03:36.078Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T15:03:36.078Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T15:03:36.078Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T15:03:36.079Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:03:36.079Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:03:36.079Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:03:36.079Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:03:36.079Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:03:36.079Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:03:36.079Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:03:36.079Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:03:36.079Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:03:37.695Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:03:38.146Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:03:39.596Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:03:46.079Z [ERROR] Error: Error: console.error: [33m⚠️  [BashTool] Pre-flight check is taking longer than expected. Run with ANTHROPIC_LOG=debug to check for failed or slow API requests.[39m
+
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:625:6574
+    at Ly3.B.write (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:567:11999)
+    at Console.value (node:internal/console/constructor:313:16)
+    at Console.warn (node:internal/console/constructor:437:26)
+    at Timeout._onTimeout (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4522:7133)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7)
+2026-02-08T15:03:54.696Z [ERROR] Error streaming, falling back to non-streaming mode: terminated
+2026-02-08T15:03:54.697Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:03:54.697Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:03:54.697Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:03:55.936Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T15:03:55.937Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:03:55.937Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:03:55.937Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:03:55.948Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-08T15:03:55.948Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:03:55.948Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T15:03:55.954Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T15:03:55.954Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T15:03:55.954Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T15:03:55.954Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T15:03:55.965Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T15:03:55.971Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:03:55.971Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:03:55.971Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:03:56.906Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:04:00.444Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:04:01.693Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-08T15:04:01.705Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-08T15:04:01.705Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:04:01.705Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-08T15:04:01.731Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-08T15:04:01.731Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:04:01.731Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-08T15:04:01.736Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T15:04:01.736Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T15:04:01.736Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T15:04:01.736Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T15:04:01.762Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T15:04:01.767Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:04:01.767Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:04:01.767Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:04:05.693Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:04:13.261Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-08T15:04:13.274Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-08T15:04:13.274Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:04:13.274Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-08T15:04:13.288Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/hooks/solar-session-start.sh.tmp.68300.1770563053288
+2026-02-08T15:04:13.288Z [DEBUG] Preserving file permissions: 100755
+2026-02-08T15:04:13.288Z [DEBUG] Temp file written successfully, size: 5839 bytes
+2026-02-08T15:04:13.288Z [DEBUG] Applied original permissions to temp file
+2026-02-08T15:04:13.288Z [DEBUG] Renaming /Users/sihaoli/.claude/hooks/solar-session-start.sh.tmp.68300.1770563053288 to /Users/sihaoli/.claude/hooks/solar-session-start.sh
+2026-02-08T15:04:13.288Z [DEBUG] File /Users/sihaoli/.claude/hooks/solar-session-start.sh written atomically
+2026-02-08T15:04:13.300Z [DEBUG] FileHistory: Tracked file modification for /Users/sihaoli/.claude/hooks/solar-session-start.sh
+2026-02-08T15:04:13.305Z [DEBUG] [lspRecommendation] Looking for LSP plugins for .sh
+2026-02-08T15:04:13.311Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-08T15:04:13.311Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:04:13.311Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-08T15:04:13.323Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T15:04:13.323Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T15:04:13.323Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T15:04:13.323Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T15:04:13.333Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T15:04:13.338Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:04:13.338Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:04:13.338Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:04:17.119Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:04:19.155Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-08T15:04:19.159Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-08T15:04:19.159Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:04:19.159Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-08T15:04:19.183Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-08T15:04:19.183Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:04:19.183Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-08T15:04:19.192Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T15:04:19.192Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T15:04:19.192Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T15:04:19.192Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T15:04:19.212Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T15:04:19.219Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:04:19.219Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:04:19.219Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:04:25.053Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:04:36.774Z [DEBUG] executePreToolHooks called for tool: Write
+2026-02-08T15:04:36.781Z [DEBUG] Getting matching hook commands for PreToolUse with query: Write
+2026-02-08T15:04:36.781Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:04:36.781Z [DEBUG] Matched 0 unique hooks for query "Write" (0 before deduplication)
+2026-02-08T15:04:36.797Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/hooks/identity-reminder.sh.tmp.68300.1770563076797
+2026-02-08T15:04:36.797Z [DEBUG] Preserving file permissions: 100755
+2026-02-08T15:04:36.797Z [DEBUG] Temp file written successfully, size: 1035 bytes
+2026-02-08T15:04:36.797Z [DEBUG] Applied original permissions to temp file
+2026-02-08T15:04:36.797Z [DEBUG] Renaming /Users/sihaoli/.claude/hooks/identity-reminder.sh.tmp.68300.1770563076797 to /Users/sihaoli/.claude/hooks/identity-reminder.sh
+2026-02-08T15:04:36.798Z [DEBUG] File /Users/sihaoli/.claude/hooks/identity-reminder.sh written atomically
+2026-02-08T15:04:36.805Z [DEBUG] FileHistory: Tracked file modification for /Users/sihaoli/.claude/hooks/identity-reminder.sh
+2026-02-08T15:04:36.813Z [DEBUG] [lspRecommendation] Looking for LSP plugins for .sh
+2026-02-08T15:04:36.816Z [DEBUG] Getting matching hook commands for PostToolUse with query: Write
+2026-02-08T15:04:36.816Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:04:36.816Z [DEBUG] Matched 0 unique hooks for query "Write" (0 before deduplication)
+2026-02-08T15:04:36.899Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T15:04:36.899Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T15:04:36.899Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T15:04:36.899Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T15:04:36.919Z [DEBUG] Getting matching hook commands for PreCompact with query: auto
+2026-02-08T15:04:36.919Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:04:36.919Z [DEBUG] Matched 0 unique hooks for query "auto" (0 before deduplication)
+2026-02-08T15:04:36.920Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T15:04:36.920Z [DEBUG] Tool search disabled: MCPSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-08T15:04:36.920Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:04:36.920Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:04:36.920Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:04:39.734Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:05:01.756Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770563101756
+2026-02-08T15:05:01.756Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T15:05:01.756Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T15:05:01.756Z [DEBUG] Applied original permissions to temp file
+2026-02-08T15:05:01.756Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770563101756 to /Users/sihaoli/.claude.json
+2026-02-08T15:05:01.756Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T15:05:14.608Z [DEBUG] High write ratio: blit=0, write=18455 (100.0% writes), screen=325x133
+2026-02-08T15:05:15.980Z [DEBUG] Full reset (scrollback changes): scrollbackRows=271, changes=30/40, firstChangeY=133
+  prev: "      156 -# ==================== 5. 加载相关记忆 (Memory Hook) ====================                                                 "
+  next: "      156 -# ==================== 5. 加载相关记忆 (Memory Hook) ====================                                                 "
+2026-02-08T15:05:16.946Z [DEBUG] High write ratio: blit=0, write=13019 (100.0% writes), screen=205x133
+2026-02-08T15:05:16.947Z [DEBUG] Full reset (scrollback changes): scrollbackRows=271, changes=24891/32073, firstChangeY=2
+  prev: "│                                                     │ Tips for getting started                                                    │"
+  next: "│                                                    │ Tips for getting started                                                     │"
+2026-02-08T15:05:17.003Z [DEBUG] High write ratio: blit=0, write=13018 (100.0% writes), screen=206x133
+2026-02-08T15:05:19.258Z [DEBUG] Full reset (scrollback changes): scrollbackRows=152, changes=27/38, firstChangeY=21
+  prev: "      156 -# ==================== 5. 加载相关记忆 (Memory Hook) ====================                                                 "
+  next: "      156 -# ==================== 5. 加载相关记忆 (Memory Hook) ====================                                                 "
+2026-02-08T15:05:38.451Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:05:38.451Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:05:38.452Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:05:38.452Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:05:38.452Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:05:38.452Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:05:39.986Z [DEBUG] Getting matching hook commands for SessionStart with query: compact
+2026-02-08T15:05:39.986Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:05:39.986Z [DEBUG] Matched 0 unique hooks for query "compact" (0 before deduplication)
+2026-02-08T15:05:39.989Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T15:05:40.001Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:05:40.001Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:05:40.001Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:05:40.067Z [DEBUG] High write ratio: blit=0, write=13018 (100.0% writes), screen=206x133
+2026-02-08T15:05:40.067Z [DEBUG] Full reset (scrollback changes): scrollbackRows=152, changes=27/38, firstChangeY=21
+  prev: "      156 -# ==================== 5. 加载相关记忆 (Memory Hook) ====================                                                 "
+  next: "      156 -# ==================== 5. 加载相关记忆 (Memory Hook) ====================                                                 "
+2026-02-08T15:05:45.551Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:05:48.227Z [DEBUG] High write ratio: blit=4059, write=10439 (72.0% writes), screen=218x133
+2026-02-08T15:05:48.408Z [DEBUG] Full reset (scrollback changes): scrollbackRows=164, changes=26/33, firstChangeY=60
+  prev: "      2 -# identity-reminder.sh - 人格防挤出提醒 v2.1                                                                                "
+  next: "      2 -# identity-reminder.sh - 人格防挤出提醒 v2.1                                                                                "
+2026-02-08T15:05:51.750Z [DEBUG] executePreToolHooks called for tool: Glob
+2026-02-08T15:05:51.759Z [DEBUG] executePreToolHooks called for tool: Glob
+2026-02-08T15:05:52.002Z [DEBUG] Getting matching hook commands for PreToolUse with query: Glob
+2026-02-08T15:05:52.002Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:05:52.002Z [DEBUG] Matched 0 unique hooks for query "Glob" (0 before deduplication)
+2026-02-08T15:05:52.002Z [DEBUG] Getting matching hook commands for PreToolUse with query: Glob
+2026-02-08T15:05:52.002Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:05:52.002Z [DEBUG] Matched 0 unique hooks for query "Glob" (0 before deduplication)
+2026-02-08T15:05:59.658Z [DEBUG] High write ratio: blit=0, write=1867 (100.0% writes), screen=41x133
+2026-02-08T15:05:59.658Z [DEBUG] Full reset (shrink->below): prevHeight=218, nextHeight=41, viewport=55
+2026-02-08T15:05:59.706Z [DEBUG] High write ratio: blit=399, write=1678 (80.8% writes), screen=41x133
+2026-02-08T15:05:59.802Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-08T15:06:00.627Z [DEBUG] High write ratio: blit=399, write=1679 (80.8% writes), screen=41x133
+2026-02-08T15:06:00.627Z [DEBUG] Getting matching hook commands for PostToolUse with query: Glob
+2026-02-08T15:06:00.627Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:06:00.627Z [DEBUG] Matched 0 unique hooks for query "Glob" (0 before deduplication)
+2026-02-08T15:06:00.631Z [DEBUG] Getting matching hook commands for PostToolUse with query: Glob
+2026-02-08T15:06:00.631Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:06:00.631Z [DEBUG] Matched 0 unique hooks for query "Glob" (0 before deduplication)
+2026-02-08T15:06:00.636Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T15:06:00.636Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T15:06:00.636Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T15:06:00.636Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T15:06:00.691Z [DEBUG] High write ratio: blit=399, write=1717 (81.1% writes), screen=43x133
+2026-02-08T15:06:00.698Z [DEBUG] High write ratio: blit=665, write=1677 (71.6% writes), screen=44x133
+2026-02-08T15:06:00.699Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T15:06:00.707Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:06:00.707Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:06:00.708Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:06:00.741Z [DEBUG] High write ratio: blit=665, write=1677 (71.6% writes), screen=44x133
+2026-02-08T15:06:04.499Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:06:07.703Z [DEBUG] High write ratio: blit=0, write=1397 (100.0% writes), screen=36x133
+2026-02-08T15:06:07.763Z [DEBUG] High write ratio: blit=0, write=1397 (100.0% writes), screen=37x133
+2026-02-08T15:06:08.924Z [DEBUG] executePreToolHooks called for tool: Glob
+2026-02-08T15:06:08.924Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-08T15:06:08.927Z [DEBUG] Getting matching hook commands for PreToolUse with query: Glob
+2026-02-08T15:06:08.927Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:06:08.927Z [DEBUG] Matched 0 unique hooks for query "Glob" (0 before deduplication)
+2026-02-08T15:06:08.927Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-08T15:06:08.927Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:06:08.927Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T15:06:08.971Z [DEBUG] High write ratio: blit=935, write=1219 (56.6% writes), screen=37x133
+2026-02-08T15:06:08.979Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T15:06:08.980Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:06:08.980Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:06:08.980Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:06:08.987Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-08T15:06:08.987Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:06:08.987Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T15:06:09.024Z [DEBUG] High write ratio: blit=935, write=1219 (56.6% writes), screen=37x133
+2026-02-08T15:06:10.301Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:06:15.337Z [DEBUG] High write ratio: blit=669, write=1255 (65.2% writes), screen=37x133
+2026-02-08T15:06:15.338Z [DEBUG] Getting matching hook commands for PostToolUse with query: Glob
+2026-02-08T15:06:15.338Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:06:15.338Z [DEBUG] Matched 0 unique hooks for query "Glob" (0 before deduplication)
+2026-02-08T15:06:15.345Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T15:06:15.345Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T15:06:15.345Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T15:06:15.345Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T15:06:15.376Z [DEBUG] High write ratio: blit=935, write=1219 (56.6% writes), screen=37x133
+2026-02-08T15:06:15.376Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T15:06:15.384Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:06:15.384Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:06:15.384Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:06:15.427Z [DEBUG] High write ratio: blit=935, write=1219 (56.6% writes), screen=37x133
+2026-02-08T15:06:20.534Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:06:26.121Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-08T15:06:26.126Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-08T15:06:26.126Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:06:26.126Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T15:06:26.126Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-08T15:06:26.130Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-08T15:06:26.130Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:06:26.130Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-08T15:06:26.156Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-08T15:06:26.156Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:06:26.156Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-08T15:06:26.468Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T15:06:26.468Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:06:26.468Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:06:26.468Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:06:26.478Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-08T15:06:26.478Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:06:26.478Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T15:06:26.481Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T15:06:26.481Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T15:06:26.481Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T15:06:26.481Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T15:06:26.501Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T15:06:26.506Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:06:26.506Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:06:26.506Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:06:27.295Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:06:35.136Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:06:41.557Z [DEBUG] High write ratio: blit=802, write=1219 (60.3% writes), screen=36x133
+2026-02-08T15:06:41.562Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-08T15:06:41.566Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-08T15:06:41.566Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:06:41.566Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-08T15:06:41.582Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-08T15:06:41.582Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:06:41.582Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-08T15:06:41.586Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T15:06:41.586Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T15:06:41.586Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T15:06:41.586Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T15:06:41.606Z [DEBUG] High write ratio: blit=802, write=1219 (60.3% writes), screen=36x133
+2026-02-08T15:06:41.606Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T15:06:41.611Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:06:41.611Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:06:41.611Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:06:41.650Z [DEBUG] High write ratio: blit=802, write=1219 (60.3% writes), screen=36x133
+2026-02-08T15:06:48.036Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:06:54.440Z [DEBUG] Restarting caffeinate to maintain sleep prevention
+2026-02-08T15:06:54.443Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-08T15:07:09.154Z [DEBUG] executePreToolHooks called for tool: Write
+2026-02-08T15:07:09.159Z [DEBUG] Getting matching hook commands for PreToolUse with query: Write
+2026-02-08T15:07:09.159Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:07:09.159Z [DEBUG] Matched 0 unique hooks for query "Write" (0 before deduplication)
+2026-02-08T15:07:09.166Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/hooks/mid-refresh.sh.tmp.68300.1770563229166
+2026-02-08T15:07:09.166Z [DEBUG] Temp file written successfully, size: 1467 bytes
+2026-02-08T15:07:09.166Z [DEBUG] Renaming /Users/sihaoli/.claude/hooks/mid-refresh.sh.tmp.68300.1770563229166 to /Users/sihaoli/.claude/hooks/mid-refresh.sh
+2026-02-08T15:07:09.166Z [DEBUG] File /Users/sihaoli/.claude/hooks/mid-refresh.sh written atomically
+2026-02-08T15:07:09.174Z [DEBUG] FileHistory: Tracked file modification for /Users/sihaoli/.claude/hooks/mid-refresh.sh
+2026-02-08T15:07:09.178Z [DEBUG] [lspRecommendation] Looking for LSP plugins for .sh
+2026-02-08T15:07:09.181Z [DEBUG] Getting matching hook commands for PostToolUse with query: Write
+2026-02-08T15:07:09.181Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:07:09.181Z [DEBUG] Matched 0 unique hooks for query "Write" (0 before deduplication)
+2026-02-08T15:07:09.184Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T15:07:09.184Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T15:07:09.184Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T15:07:09.184Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T15:07:09.193Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T15:07:09.198Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:07:09.198Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:07:09.198Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:07:11.392Z [DEBUG] High write ratio: blit=0, write=2821 (100.0% writes), screen=83x133
+2026-02-08T15:07:11.443Z [DEBUG] Full reset (scrollback changes): scrollbackRows=29, changes=507/517, firstChangeY=2
+  prev: "│                                                    │ Tips for getting started                                                     │"
+  next: "│                                                     │ Tips for getting started                                                    │"
+2026-02-08T15:07:11.504Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-08T15:07:14.014Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:07:17.993Z [DEBUG] High write ratio: blit=0, write=2899 (100.0% writes), screen=87x133
+2026-02-08T15:07:19.838Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-08T15:07:19.845Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-08T15:07:19.845Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:07:19.845Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T15:07:19.862Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T15:07:19.862Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:07:19.862Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:07:19.863Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:07:21.256Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:07:21.565Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T15:07:21.565Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:07:21.565Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:07:21.566Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:07:21.578Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-08T15:07:21.578Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:07:21.578Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T15:07:21.582Z [DEBUG] executePreToolHooks called for tool: TodoWrite
+2026-02-08T15:07:21.589Z [DEBUG] Getting matching hook commands for PreToolUse with query: TodoWrite
+2026-02-08T15:07:21.589Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:07:21.589Z [DEBUG] Matched 0 unique hooks for query "TodoWrite" (0 before deduplication)
+2026-02-08T15:07:21.604Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json.tmp.68300.1770563241604
+2026-02-08T15:07:21.604Z [DEBUG] Preserving file permissions: 100644
+2026-02-08T15:07:21.604Z [DEBUG] Temp file written successfully, size: 482 bytes
+2026-02-08T15:07:21.604Z [DEBUG] Applied original permissions to temp file
+2026-02-08T15:07:21.604Z [DEBUG] Renaming /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json.tmp.68300.1770563241604 to /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json
+2026-02-08T15:07:21.604Z [DEBUG] File /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json written atomically
+2026-02-08T15:07:21.612Z [DEBUG] Getting matching hook commands for PostToolUse with query: TodoWrite
+2026-02-08T15:07:21.612Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:07:21.612Z [DEBUG] Matched 0 unique hooks for query "TodoWrite" (0 before deduplication)
+2026-02-08T15:07:21.616Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T15:07:21.616Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T15:07:21.616Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T15:07:21.616Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T15:07:21.628Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T15:07:21.634Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:07:21.634Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:07:21.634Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:07:22.269Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:07:26.770Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:07:30.420Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-08T15:07:30.426Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-08T15:07:30.426Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:07:30.426Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-08T15:07:30.443Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/settings.json.tmp.68300.1770563250443
+2026-02-08T15:07:30.443Z [DEBUG] Preserving file permissions: 100644
+2026-02-08T15:07:30.443Z [DEBUG] Temp file written successfully, size: 2130 bytes
+2026-02-08T15:07:30.443Z [DEBUG] Applied original permissions to temp file
+2026-02-08T15:07:30.443Z [DEBUG] Renaming /Users/sihaoli/.claude/settings.json.tmp.68300.1770563250443 to /Users/sihaoli/.claude/settings.json
+2026-02-08T15:07:30.443Z [DEBUG] File /Users/sihaoli/.claude/settings.json written atomically
+2026-02-08T15:07:30.450Z [DEBUG] FileHistory: Tracked file modification for /Users/sihaoli/.claude/settings.json
+2026-02-08T15:07:30.458Z [DEBUG] [lspRecommendation] Looking for LSP plugins for .json
+2026-02-08T15:07:30.462Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-08T15:07:30.462Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:07:30.462Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-08T15:07:30.469Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T15:07:30.469Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T15:07:30.469Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T15:07:30.469Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T15:07:30.481Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T15:07:30.491Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:07:30.491Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:07:30.491Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:07:31.458Z [DEBUG] Detected change to /Users/sihaoli/.claude/settings.json
+2026-02-08T15:07:31.462Z [DEBUG] Settings changed from userSettings, updating AppState
+2026-02-08T15:07:31.463Z [DEBUG] Replacing all allow rules for destination 'localSettings' with 4 rule(s): ["Bash(curl:*)","Bash(tree:*)","Bash(xargs ls:*)","Bash(wc:*)"]
+2026-02-08T15:07:35.043Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:07:39.197Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-08T15:07:39.202Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-08T15:07:39.202Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:07:39.202Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-08T15:07:39.217Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/settings.json.tmp.68300.1770563259217
+2026-02-08T15:07:39.217Z [DEBUG] Preserving file permissions: 100644
+2026-02-08T15:07:39.217Z [DEBUG] Temp file written successfully, size: 2170 bytes
+2026-02-08T15:07:39.217Z [DEBUG] Applied original permissions to temp file
+2026-02-08T15:07:39.217Z [DEBUG] Renaming /Users/sihaoli/.claude/settings.json.tmp.68300.1770563259217 to /Users/sihaoli/.claude/settings.json
+2026-02-08T15:07:39.217Z [DEBUG] File /Users/sihaoli/.claude/settings.json written atomically
+2026-02-08T15:07:39.231Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-08T15:07:39.231Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:07:39.231Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-08T15:07:39.237Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T15:07:39.237Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T15:07:39.237Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T15:07:39.237Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T15:07:39.249Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T15:07:39.256Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:07:39.256Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:07:39.256Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:07:40.729Z [DEBUG] Detected change to /Users/sihaoli/.claude/settings.json
+2026-02-08T15:07:40.732Z [DEBUG] Settings changed from userSettings, updating AppState
+2026-02-08T15:07:40.733Z [DEBUG] Replacing all allow rules for destination 'localSettings' with 4 rule(s): ["Bash(curl:*)","Bash(tree:*)","Bash(xargs ls:*)","Bash(wc:*)"]
+2026-02-08T15:07:42.945Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:07:46.756Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-08T15:07:46.762Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-08T15:07:46.762Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:07:46.762Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T15:07:46.781Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T15:07:46.781Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T15:07:46.781Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:07:46.781Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:07:46.782Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:07:46.782Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:07:46.782Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:07:46.782Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:07:47.717Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:07:48.296Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:07:48.979Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T15:07:48.980Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:07:48.980Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:07:48.980Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:07:48.990Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-08T15:07:48.990Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:07:48.990Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T15:07:48.995Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T15:07:48.995Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T15:07:48.995Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T15:07:48.995Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T15:07:49.007Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T15:07:49.013Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:07:49.013Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:07:49.013Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:07:49.879Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:07:52.672Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:07:55.837Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-08T15:07:55.852Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-08T15:07:55.852Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:07:55.852Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T15:07:55.873Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T15:07:55.873Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:07:55.873Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:07:55.873Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:08:00.965Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:08:01.574Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T15:08:01.574Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:08:01.574Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:08:01.575Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:08:01.588Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-08T15:08:01.588Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:08:01.588Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-08T15:08:01.594Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T15:08:01.594Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T15:08:01.594Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T15:08:01.594Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T15:08:01.608Z [DEBUG] Getting matching hook commands for PreCompact with query: auto
+2026-02-08T15:08:01.608Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:08:01.608Z [DEBUG] Matched 0 unique hooks for query "auto" (0 before deduplication)
+2026-02-08T15:08:01.608Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T15:08:01.609Z [DEBUG] Tool search disabled: MCPSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-08T15:08:01.609Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:08:01.609Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:08:01.609Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:08:02.707Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:08:06.954Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:08:45.647Z [DEBUG] High write ratio: blit=0, write=3644 (100.0% writes), screen=78x133
+2026-02-08T15:08:45.648Z [DEBUG] Full reset (scrollback changes): scrollbackRows=74, changes=3801/10726, firstChangeY=13
+  prev: "                                             Conversation compacted · ctrl+o for history                                             "
+  next: "──────────────────────────────────────────────── ctrl+e to show 180 previous messages ───────────────────────────────────────────────"
+2026-02-08T15:08:45.687Z [DEBUG] High write ratio: blit=0, write=3644 (100.0% writes), screen=79x133
+2026-02-08T15:09:00.282Z [DEBUG] High write ratio: blit=0, write=5350 (100.0% writes), screen=127x133
+2026-02-08T15:09:00.332Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-08T15:09:03.021Z [DEBUG] High write ratio: blit=0, write=3644 (100.0% writes), screen=78x133
+2026-02-08T15:09:03.022Z [DEBUG] Full reset (scrollback changes): scrollbackRows=73, changes=3591/10501, firstChangeY=13
+  prev: "════════════════════════════════════════════ Conversation compacted · ctrl+o for history ════════════════════════════════════════════"
+  next: "──────────────────────────────────────────────── ctrl+e to show 180 previous messages ───────────────────────────────────────────────"
+2026-02-08T15:09:03.040Z [DEBUG] High write ratio: blit=0, write=3644 (100.0% writes), screen=79x133
+2026-02-08T15:09:04.921Z [DEBUG] High write ratio: blit=0, write=5351 (100.0% writes), screen=127x133
+2026-02-08T15:09:04.971Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-08T15:09:06.860Z [DEBUG] High write ratio: blit=0, write=5352 (100.0% writes), screen=128x133
+2026-02-08T15:09:24.935Z [ERROR] Error streaming, falling back to non-streaming mode: terminated
+2026-02-08T15:09:24.935Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:09:24.935Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:09:24.935Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:10:17.799Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:10:17.799Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:10:17.800Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:10:18.365Z [DEBUG] Getting matching hook commands for SessionStart with query: compact
+2026-02-08T15:10:18.365Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:10:18.365Z [DEBUG] Matched 0 unique hooks for query "compact" (0 before deduplication)
+2026-02-08T15:10:18.367Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T15:10:18.378Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:10:18.378Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:10:18.378Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:10:18.396Z [DEBUG] High write ratio: blit=0, write=1626 (100.0% writes), screen=33x133
+2026-02-08T15:10:18.396Z [DEBUG] Full reset (shrink->below): prevHeight=128, nextHeight=33, viewport=55
+2026-02-08T15:10:23.099Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:10:28.875Z [DEBUG] High write ratio: blit=1064, write=1232 (53.7% writes), screen=34x133
+2026-02-08T15:10:29.422Z [DEBUG] High write ratio: blit=1064, write=1276 (54.5% writes), screen=36x133
+2026-02-08T15:10:31.726Z [DEBUG] High write ratio: blit=399, write=1548 (79.5% writes), screen=36x133
+2026-02-08T15:10:31.726Z [DEBUG] executePreToolHooks called for tool: TodoWrite
+2026-02-08T15:10:31.731Z [DEBUG] Getting matching hook commands for PreToolUse with query: TodoWrite
+2026-02-08T15:10:31.731Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:10:31.732Z [DEBUG] Matched 0 unique hooks for query "TodoWrite" (0 before deduplication)
+2026-02-08T15:10:31.747Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json.tmp.68300.1770563431747
+2026-02-08T15:10:31.747Z [DEBUG] Preserving file permissions: 100644
+2026-02-08T15:10:31.747Z [DEBUG] Temp file written successfully, size: 2 bytes
+2026-02-08T15:10:31.747Z [DEBUG] Applied original permissions to temp file
+2026-02-08T15:10:31.747Z [DEBUG] Renaming /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json.tmp.68300.1770563431747 to /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json
+2026-02-08T15:10:31.747Z [DEBUG] File /Users/sihaoli/.claude/todos/1b57e030-1daa-46e5-8549-03c5f3bc6b55-agent-1b57e030-1daa-46e5-8549-03c5f3bc6b55.json written atomically
+2026-02-08T15:10:31.754Z [DEBUG] Getting matching hook commands for PostToolUse with query: TodoWrite
+2026-02-08T15:10:31.754Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:10:31.754Z [DEBUG] Matched 0 unique hooks for query "TodoWrite" (0 before deduplication)
+2026-02-08T15:10:31.758Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T15:10:31.758Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T15:10:31.758Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T15:10:31.758Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T15:10:31.763Z [DEBUG] High write ratio: blit=399, write=1582 (79.9% writes), screen=32x133
+2026-02-08T15:10:31.803Z [DEBUG] High write ratio: blit=399, write=1611 (80.1% writes), screen=33x133
+2026-02-08T15:10:31.805Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T15:10:31.815Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T15:10:31.815Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T15:10:31.815Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T15:10:31.842Z [DEBUG] High write ratio: blit=399, write=1611 (80.1% writes), screen=33x133
+2026-02-08T15:10:34.442Z [DEBUG] Stream started - received first chunk
+2026-02-08T15:10:53.469Z [DEBUG] High write ratio: blit=1463, write=3919 (72.8% writes), screen=85x133
+2026-02-08T15:10:53.496Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-08T15:10:53.496Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:10:53.496Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-08T15:10:53.511Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770563453511
+2026-02-08T15:10:53.511Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T15:10:53.511Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T15:10:53.511Z [DEBUG] Applied original permissions to temp file
+2026-02-08T15:10:53.511Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770563453511 to /Users/sihaoli/.claude.json
+2026-02-08T15:10:53.511Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T15:10:53.513Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770563453513
+2026-02-08T15:10:53.513Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T15:10:53.513Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T15:10:53.513Z [DEBUG] Applied original permissions to temp file
+2026-02-08T15:10:53.513Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770563453513 to /Users/sihaoli/.claude.json
+2026-02-08T15:10:53.513Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T15:11:25.361Z [DEBUG] High write ratio: blit=0, write=4270 (100.0% writes), screen=85x133
+2026-02-08T15:11:53.513Z [DEBUG] Getting matching hook commands for Notification with query: idle_prompt
+2026-02-08T15:11:53.513Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T15:11:53.513Z [DEBUG] Matched 0 unique hooks for query "idle_prompt" (0 before deduplication)
+2026-02-08T22:20:53.764Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T22:20:53.764Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T22:20:53.764Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T22:20:53.764Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T22:20:53.778Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-08T22:20:53.778Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T22:20:53.778Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-08T22:20:53.780Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-08T22:20:53.780Z [DEBUG] FileHistory: Making snapshot for message 4dbd6a03-663c-468a-b2bd-4fe2dd010b79
+2026-02-08T22:20:53.793Z [DEBUG] FileHistory: Added snapshot for 4dbd6a03-663c-468a-b2bd-4fe2dd010b79, tracking 5 files
+2026-02-08T22:20:53.801Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T22:20:53.803Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T22:20:53.803Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T22:20:53.820Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T22:20:53.826Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T22:20:53.836Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T22:20:53.836Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T22:20:53.836Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T22:20:55.802Z [DEBUG] Stream started - received first chunk
+2026-02-08T22:21:00.574Z [DEBUG] Stream started - received first chunk
+2026-02-08T22:21:16.544Z [DEBUG] High write ratio: blit=0, write=4282 (100.0% writes), screen=101x133
+2026-02-08T22:21:16.623Z [DEBUG] High write ratio: blit=0, write=4281 (100.0% writes), screen=102x133
+2026-02-08T22:21:18.206Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-08T22:21:18.206Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T22:21:18.206Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-08T22:21:18.213Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-08T22:21:18.218Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770589278218
+2026-02-08T22:21:18.218Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T22:21:18.219Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T22:21:18.219Z [DEBUG] Applied original permissions to temp file
+2026-02-08T22:21:18.219Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770589278218 to /Users/sihaoli/.claude.json
+2026-02-08T22:21:18.219Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T22:21:18.221Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770589278221
+2026-02-08T22:21:18.221Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T22:21:18.221Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T22:21:18.221Z [DEBUG] Applied original permissions to temp file
+2026-02-08T22:21:18.221Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770589278221 to /Users/sihaoli/.claude.json
+2026-02-08T22:21:18.221Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T22:21:23.963Z [DEBUG] High write ratio: blit=0, write=5014 (100.0% writes), screen=124x133
+2026-02-08T22:21:24.021Z [DEBUG] Full reset (scrollback changes): scrollbackRows=70, changes=507/507, firstChangeY=2
+  prev: "│                                                    │ Tips for getting started                                                     │"
+  next: "│                                                     │ Tips for getting started                                                    │"
+2026-02-08T22:21:24.074Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-08T22:21:24.914Z [DEBUG] High write ratio: blit=0, write=5062 (100.0% writes), screen=140x133
+2026-02-08T22:21:24.967Z [DEBUG] Full reset (scrollback changes): scrollbackRows=86, changes=507/507, firstChangeY=2
+  prev: "│                                                    │ Tips for getting started                                                     │"
+  next: "│                                                     │ Tips for getting started                                                    │"
+2026-02-08T22:21:26.132Z [DEBUG] High write ratio: blit=0, write=5012 (100.0% writes), screen=124x133
+2026-02-08T22:21:26.132Z [DEBUG] Full reset (scrollback changes): scrollbackRows=86, changes=3388/6927, firstChangeY=2
+  prev: "│                                                     │ Tips for getting started                                                    │"
+  next: "│                                                    │ Tips for getting started                                                     │"
+2026-02-08T22:21:26.184Z [DEBUG] Full reset (scrollback changes): scrollbackRows=70, changes=507/507, firstChangeY=2
+  prev: "│                                                    │ Tips for getting started                                                     │"
+  next: "│                                                     │ Tips for getting started                                                    │"
+2026-02-08T22:21:26.238Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-08T22:21:55.990Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T22:21:55.990Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T22:21:55.990Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T22:21:55.990Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T22:21:56.004Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-08T22:21:56.004Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T22:21:56.004Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-08T22:21:56.006Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-08T22:21:56.006Z [DEBUG] FileHistory: Making snapshot for message 2e97f6fd-8481-4f13-b526-23967c20cafa
+2026-02-08T22:21:56.006Z [DEBUG] FileHistory: Added snapshot for 2e97f6fd-8481-4f13-b526-23967c20cafa, tracking 5 files
+2026-02-08T22:21:56.012Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-08T22:21:56.013Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T22:21:56.013Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T22:21:56.013Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T22:21:56.026Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T22:21:56.033Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T22:21:56.033Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T22:21:56.033Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T22:21:56.938Z [DEBUG] Stream started - received first chunk
+2026-02-08T22:21:57.690Z [DEBUG] High write ratio: blit=0, write=5191 (100.0% writes), screen=130x133
+2026-02-08T22:22:00.338Z [DEBUG] Stream started - received first chunk
+2026-02-08T22:22:04.345Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-08T22:22:04.350Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-08T22:22:04.350Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T22:22:04.350Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-08T22:22:04.375Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-08T22:22:04.375Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T22:22:04.375Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-08T22:22:04.379Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T22:22:04.379Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T22:22:04.379Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T22:22:04.379Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T22:22:04.410Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T22:22:04.415Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T22:22:04.415Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T22:22:04.415Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T22:22:08.462Z [DEBUG] Stream started - received first chunk
+2026-02-08T22:22:21.315Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-08T22:22:21.319Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-08T22:22:21.319Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T22:22:21.319Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-08T22:22:21.328Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/hooks/solar-session-start.sh.tmp.68300.1770589341328
+2026-02-08T22:22:21.328Z [DEBUG] Preserving file permissions: 100755
+2026-02-08T22:22:21.329Z [DEBUG] Temp file written successfully, size: 6572 bytes
+2026-02-08T22:22:21.329Z [DEBUG] Applied original permissions to temp file
+2026-02-08T22:22:21.329Z [DEBUG] Renaming /Users/sihaoli/.claude/hooks/solar-session-start.sh.tmp.68300.1770589341328 to /Users/sihaoli/.claude/hooks/solar-session-start.sh
+2026-02-08T22:22:21.329Z [DEBUG] File /Users/sihaoli/.claude/hooks/solar-session-start.sh written atomically
+2026-02-08T22:22:21.338Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-08T22:22:21.338Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T22:22:21.338Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-08T22:22:21.354Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-08T22:22:21.354Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-08T22:22:21.354Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-08T22:22:21.354Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-08T22:22:21.379Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T22:22:21.385Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T22:22:21.385Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T22:22:21.385Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T22:22:24.907Z [DEBUG] Stream started - received first chunk
+2026-02-08T22:22:30.428Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-08T22:22:30.428Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T22:22:30.428Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-08T22:22:30.428Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-08T22:22:30.447Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-08T22:22:30.447Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-08T22:22:30.447Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-08T22:22:30.453Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-08T22:22:30.462Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770589350462
+2026-02-08T22:22:30.462Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T22:22:30.463Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T22:22:30.463Z [DEBUG] Applied original permissions to temp file
+2026-02-08T22:22:30.463Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770589350462 to /Users/sihaoli/.claude.json
+2026-02-08T22:22:30.463Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T22:22:30.464Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770589350464
+2026-02-08T22:22:30.464Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T22:22:30.464Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T22:22:30.464Z [DEBUG] Applied original permissions to temp file
+2026-02-08T22:22:30.464Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770589350464 to /Users/sihaoli/.claude.json
+2026-02-08T22:22:30.464Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T22:22:34.114Z [DEBUG] Stream started - received first chunk
+2026-02-08T22:22:40.378Z [DEBUG] Getting matching hook commands for SubagentStop with query: undefined
+2026-02-08T22:22:40.378Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T22:22:40.378Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-08T22:22:40.379Z [DEBUG] [Speculation] enabled=false
+2026-02-08T22:22:47.488Z [DEBUG] Full reset (scrollback changes): scrollbackRows=161, changes=4/11, firstChangeY=131
+  prev: "      156  # ==================== 5. 加载行为纹理 (首层) ====================                                                        "
+  next: "      156  # ==================== 5. 加载行为纹理 (首层) ====================                                                        "
+2026-02-08T22:22:50.508Z [DEBUG] Getting matching hook commands for SessionEnd with query: prompt_input_exit
+2026-02-08T22:22:50.508Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T22:22:50.508Z [DEBUG] Matched 0 unique hooks for query "prompt_input_exit" (0 before deduplication)
+2026-02-08T22:22:50.543Z [DEBUG] Cleaned up session snapshot: /Users/sihaoli/.claude/shell-snapshots/snapshot-zsh-1770561190216-bnovw5.sh
+2026-02-08T22:22:50.543Z [DEBUG] LSP server manager shut down successfully
+2026-02-08T22:22:50.544Z [DEBUG] FileHistory: Making snapshot for message 282e2ab3-3fb8-4f3d-aed7-40f2206d97ab
+2026-02-08T22:22:50.551Z [DEBUG] FileHistory: Added snapshot for 282e2ab3-3fb8-4f3d-aed7-40f2206d97ab, tracking 5 files
+2026-02-08T22:22:50.557Z [DEBUG] UserCommandMessage rendering: "exit" (args: "none", isSkillFormat: false)
+2026-02-08T22:22:50.571Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-08T22:22:50.579Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-08T22:22:50.583Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770589370583
+2026-02-08T22:22:50.583Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T22:22:50.583Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T22:22:50.583Z [DEBUG] Applied original permissions to temp file
+2026-02-08T22:22:50.583Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770589370583 to /Users/sihaoli/.claude.json
+2026-02-08T22:22:50.584Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T22:22:50.590Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68300.1770589370590
+2026-02-08T22:22:50.590Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T22:22:50.590Z [DEBUG] Temp file written successfully, size: 13550 bytes
+2026-02-08T22:22:50.590Z [DEBUG] Applied original permissions to temp file
+2026-02-08T22:22:50.590Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68300.1770589370590 to /Users/sihaoli/.claude.json
+2026-02-08T22:22:50.590Z [DEBUG] File /Users/sihaoli/.claude.json written atomically

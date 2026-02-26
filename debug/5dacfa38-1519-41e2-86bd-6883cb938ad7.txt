@@ -1,0 +1,4 @@
+2026-02-09T01:51:27.435Z [DEBUG] [Query.streamInput] Starting to process input stream
+2026-02-09T01:51:27.435Z [DEBUG] [Query.streamInput] Starting to process input stream
+2026-02-09T01:51:27.436Z [DEBUG] [Query.streamInput] Finished processing 0 messages from input stream
+2026-02-09T01:51:27.436Z [DEBUG] [Query] Calling transport.endInput() to close stdin to CLI process

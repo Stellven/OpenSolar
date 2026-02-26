@@ -206,7 +206,7 @@ async function callExpert(
         "Authorization": `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: "glm-4-plus",
+        model: "glm-5",
         messages: [
           { role: "system", content: system },
           { role: "user", content: context }

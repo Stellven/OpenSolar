@@ -1,0 +1,9 @@
+{
+  "id": "5",
+  "subject": "Phase 5: 验证与统计",
+  "description": "验证知识库质量指标，确保 co_occurs_in 为 0，关系类型多样性 15-20 种",
+  "activeForm": "Validating knowledge base quality",
+  "status": "in_progress",
+  "blocks": [],
+  "blockedBy": []
+}

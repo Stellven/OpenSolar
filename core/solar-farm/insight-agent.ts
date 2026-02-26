@@ -96,7 +96,7 @@ const EXPERT_TEAM = {
   ],
   // 快速评估类
   quick: [
-    { id: 'glm-4-plus', name: '建设者', strength: '日常分析' },
+    { id: 'glm-5', name: '建设者', strength: '日常分析' },
     { id: 'gemini-2-flash', name: '闪电侠', strength: '快速总结' },
   ],
 };
@@ -219,7 +219,7 @@ ${task.context ? `背景: ${task.context}` : ''}`,
     const startTime = Date.now();
 
     const call = buildNiumaCall({
-      model: 'glm-4-plus',
+      model: 'glm-5',
       task: `基于收集的信息，深入理解"${task.topic}"：
 1. 识别核心问题是什么
 2. 分析问题的根本原因
@@ -231,7 +231,7 @@ ${task.context ? `背景: ${task.context}` : ''}`,
 
     this.phases.push({
       phase: 'understanding',
-      model: 'glm-4-plus',
+      model: 'glm-5',
       output: call.prompt,
       tokens: 0,
       latencyMs: Date.now() - startTime,
@@ -383,7 +383,7 @@ ${insight}
     const format = task.outputFormat || 'markdown';
 
     const call = buildNiumaCall({
-      model: 'glm-4-plus',
+      model: 'glm-5',
       task: `将洞察结果格式化为${format}格式：
 
 ## 洞察内容
@@ -401,7 +401,7 @@ ${this.expertOpinions.map(e => `- ${e.expertName}: ${e.analysis}`).join('\n')}
 
     this.phases.push({
       phase: 'output',
-      model: 'glm-4-plus',
+      model: 'glm-5',
       output: call.prompt,
       tokens: 0,
       latencyMs: Date.now() - startTime,

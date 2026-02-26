@@ -625,6 +625,23 @@ export const FEATS: Record<string, Feat> = {
     }
   },
 
+  // 多模态精通: 图像、视频、表格等非文本内容处理专家
+  multimodalMastery: {
+    name: '多模态精通',
+    description: 'Master of image, video, table, et al including article and code generation',
+    trigger: ['image_input', 'video_input', 'table_input', 'chart_input', 'multimodal_task'],
+    effect: {
+      knobOverride: { exploration: 5, detail: 4 },
+      forcedBehavior: [
+        '优先分析视觉/结构化输入',
+        '提取图像中的文字、图表、关系',
+        '识别视频帧中的关键信息',
+        '解析表格结构和数据趋势',
+        '也负责生成文本文章和代码'
+      ]
+    }
+  },
+
   // ========== 新增策略专长 (2026-02-15) ==========
 
   // 观察者: 强制证据链

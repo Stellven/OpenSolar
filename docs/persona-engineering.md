@@ -292,7 +292,7 @@ bun neutral-hedge.ts history
 | P1 战略 | claude-opus-4-5 | $0.015/$0.075 | 战略决策、主脑编排 |
 | P2 综合 | gpt-4o | $0.0025/$0.01 | 综合任务、协调 |
 | P3 专家 | gemini-pro/deepseek | $0.001-0.002 | 复杂分析、架构设计 |
-| P4 主力 | glm-4-plus/glm-5 | $0.0005-0.001 | 日常编码、一般任务 |
+| P4 主力 | glm-5/glm-5 | $0.0005-0.001 | 日常编码、一般任务 |
 | P5 便宜 | glm-flash/gemini-flash | $0.0001-0.0002 | 简单任务、快速响应 |
 
 ### 7.3 专家组 vs 工人组
@@ -311,7 +311,7 @@ bun neutral-hedge.ts history
 | 角色 | 模型 | 触发词 |
 |------|------|--------|
 | 探索者 | gemini-flash | search, fetch |
-| 建设者 | glm-4-plus | implement, code |
+| 建设者 | glm-5 | implement, code |
 | 小快手 | glm-flash | quick, simple |
 
 ### 7.4 编队模板

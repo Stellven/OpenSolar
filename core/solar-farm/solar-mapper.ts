@@ -43,7 +43,7 @@ export const MODEL_PREFERENCE_BY_TYPE: Record<TaskType, string[]> = {
   analysis: ['deepseek-r1', 'gemini-3-pro-preview', 'deepseek-v3'],  // 审判官、探索派、创想家
   creative: ['gemini-3-pro-preview', 'gemini-2.5-flash', 'deepseek-v3'],  // 探索派、闪电侠、创想家
   coding: ['deepseek-v3', 'gemini-2.5-pro'],  // 创想家、稳健派
-  simple: ['glm-4-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'glm-4-plus']  // 小快手、闪电侠、稳健派、建设者
+  simple: ['glm-4-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'glm-5']  // 小快手、闪电侠、稳健派、建设者
 };
 
 export interface MapperResult {
@@ -291,7 +291,7 @@ export class SolarMapper {
 |------|------|------|------|
 | 小快手 | glm-4-flash | 简单任务，速度快 | 最低 |
 | 闪电侠 | gemini-2.5-flash | 长文档，多模态 | 低 |
-| 建设者 | glm-4-plus | 日常编码，友善 | 中 |
+| 建设者 | glm-5 | 日常编码，友善 | 中 |
 | 稳健派 | gemini-2.5-pro | 严谨审查，高一致性 | 中高 |
 | 探索派 | gemini-3-pro-preview | 创新探索，热情高效 | 高 |
 | 创想家 | deepseek-v3 | 创意编码，中文好 | 高 |
@@ -381,7 +381,7 @@ ${niumaList}
       'gemini-3-pro-preview': 6,
       'deepseek-v3': 5,
       'gemini-2.5-pro': 4,
-      'glm-4-plus': 3,
+      'glm-5': 3,
       'gemini-2.5-flash': 2,
       'glm-4-flash': 1       // 最弱
     };

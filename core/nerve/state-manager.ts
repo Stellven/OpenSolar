@@ -716,3 +716,185 @@ export function getStateManager(config?: StateManagerConfig): StateManager {
 export function getQueries(): SolarQueries {
   return new SolarQueries(getStateManager());
 }
+
+// ============================================================================
+// 桥接函数：兼容旧的 standalone API (for insight-agent-v2.ts)
+// ============================================================================
+
+export const PHASES = {
+  PLANNING: 0,
+  EXECUTION: 1,
+  VALIDATION: 2,
+  COMPLETE: 3
+};
+
+export const PHASE_NAMES = [
+  'Planning',
+  'Execution',
+  'Validation',
+  'Complete'
+];
+
+export interface CheckpointData {
+  phase: number;
+  data: any;
+  timestamp: number;
+}
+
+export interface InsightTask {
+  id: number;
+  sessionId: string;
+  topic: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function initSchema(db: any) {
+  // Schema initialization handled by StateManager
+  return getStateManager().getDb();
+}
+
+export function createTask(db: any, sessionId: string, topic: string): number {
+  const queries = getQueries();
+  const taskId = queries.createTask({
+    project: sessionId,
+    description: topic,
+    complexity: 'high'
+  });
+  return Number(taskId);
+}
+
+export function saveCheckpoint(db: any, sessionId: string, phase: number, data: CheckpointData): void {
+  const mgr = getStateManager();
+  const checkpointData = JSON.stringify(data);
+  mgr.getDb().run(
+    `INSERT OR REPLACE INTO checkpoints (session_id, phase, data, timestamp)
+     VALUES (?, ?, ?, ?)`,
+    [sessionId, phase, checkpointData, Date.now()]
+  );
+}
+
+export function loadCheckpoint(db: any, sessionId: string): CheckpointData | null {
+  const mgr = getStateManager();
+  const row = mgr.getDb().query(
+    `SELECT phase, data, timestamp FROM checkpoints
+     WHERE session_id = ?
+     ORDER BY timestamp DESC LIMIT 1`
+  ).get(sessionId) as any;
+
+  if (!row) return null;
+
+  return {
+    phase: row.phase,
+    data: JSON.parse(row.data),
+    timestamp: row.timestamp
+  };
+}
+
+export function getTask(db: any, taskId: number): InsightTask | null {
+  const mgr = getStateManager();
+  const row = mgr.getDb().query(
+    `SELECT id, project as sessionId, description as topic, status,
+            created_at as createdAt, updated_at as updatedAt
+     FROM tasks WHERE id = ?`
+  ).get(taskId) as any;
+
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    topic: row.topic,
+    status: row.status,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt
+  };
+}
+
+export function completeTask(db: any, taskId: number): void {
+  const mgr = getStateManager();
+  mgr.getDb().run(
+    `UPDATE tasks SET status = 'completed', updated_at = datetime('now')
+     WHERE id = ?`,
+    [taskId]
+  );
+}
+
+export function failTask(db: any, taskId: number, error: string): void {
+  const mgr = getStateManager();
+  mgr.getDb().run(
+    `UPDATE tasks SET status = 'failed', updated_at = datetime('now')
+     WHERE id = ?`,
+    [taskId]
+  );
+}
+
+export function saveReference(db: any, taskId: number, reference: any): void {
+  const mgr = getStateManager();
+  mgr.getDb().run(
+    `INSERT INTO references (task_id, reference_data, created_at)
+     VALUES (?, ?, datetime('now'))`,
+    [taskId, JSON.stringify(reference)]
+  );
+}
+
+export function hasSearched(db: any, taskId: number, query: string): boolean {
+  const mgr = getStateManager();
+  const row = mgr.getDb().query(
+    `SELECT COUNT(*) as count FROM search_history
+     WHERE task_id = ? AND query = ?`
+  ).get(taskId, query) as any;
+
+  return row && row.count > 0;
+}
+
+export function getPreviousSearchResult(db: any, taskId: number, query: string): any {
+  const mgr = getStateManager();
+  const row = mgr.getDb().query(
+    `SELECT result FROM search_history
+     WHERE task_id = ? AND query = ?
+     ORDER BY created_at DESC LIMIT 1`
+  ).get(taskId, query) as any;
+
+  if (!row) return null;
+
+  try {
+    return JSON.parse(row.result);
+  } catch {
+    return row.result;
+  }
+}
+
+export function checkUnfinishedTasks(db: any): InsightTask[] {
+  const mgr = getStateManager();
+  const rows = mgr.getDb().query(
+    `SELECT id, project as sessionId, description as topic, status,
+            created_at as createdAt, updated_at as updatedAt
+     FROM tasks
+     WHERE status NOT IN ('completed', 'failed')
+     ORDER BY created_at DESC`
+  ).all() as any[];
+
+  return rows.map(row => ({
+    id: row.id,
+    sessionId: row.sessionId,
+    topic: row.topic,
+    status: row.status,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt
+  }));
+}
+
+export function generateRecoveryPrompt(task: InsightTask): string {
+  return `
+检测到未完成的深度洞察任务:
+
+任务ID: ${task.id}
+主题: ${task.topic}
+状态: ${task.status}
+创建时间: ${task.createdAt}
+
+是否要继续这个任务？输入 'yes' 继续，或 'no' 开始新任务。
+  `.trim();
+}

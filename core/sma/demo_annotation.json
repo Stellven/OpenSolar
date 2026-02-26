@@ -1,0 +1,63 @@
+{
+  "instructions": "Phase 3 演示 - L2→L3 提取质量验证",
+  "format": {
+    "subject": "主语（实体）",
+    "predicate": "谓语（关系）",
+    "object": "宾语（实体/属性）"
+  },
+  "annotations": [
+    {
+      "turnId": 1,
+      "userInput": "SMA 是什么？",
+      "aiOutput": "SMA 是 Solar Memory Architecture，三层记忆系统。L1 是上下文窗口，L2 是无损会话记录，L3 是结构化知识。",
+      "expectedTriples": [
+        { "subject": "SMA", "predicate": "是", "object": "Solar Memory Architecture" },
+        { "subject": "SMA", "predicate": "是", "object": "三层记忆系统" },
+        { "subject": "L1", "predicate": "是", "object": "上下文窗口" },
+        { "subject": "L2", "predicate": "是", "object": "无损会话记录" },
+        { "subject": "L3", "predicate": "是", "object": "结构化知识" }
+      ]
+    },
+    {
+      "turnId": 2,
+      "userInput": "L2 可以做什么？",
+      "aiOutput": "L2 可以无损记录所有会话轨迹，使用 session_log 表存储。L2 有 session_id 和 turn_id 两个索引。",
+      "expectedTriples": [
+        { "subject": "L2", "predicate": "可以", "object": "无损记录所有会话轨迹" },
+        { "subject": "L2", "predicate": "使用", "object": "session_log 表" },
+        { "subject": "L2", "predicate": "有", "object": "session_id 索引" },
+        { "subject": "L2", "predicate": "有", "object": "turn_id 索引" }
+      ]
+    },
+    {
+      "turnId": 3,
+      "userInput": "L3 有什么优势？",
+      "aiOutput": "L3 有结构化存储，查询快速。L3 使用知识三元组表，支持语义检索。",
+      "expectedTriples": [
+        { "subject": "L3", "predicate": "有", "object": "结构化存储" },
+        { "subject": "L3", "predicate": "有", "object": "快速查询" },
+        { "subject": "L3", "predicate": "使用", "object": "知识三元组表" }
+      ]
+    },
+    {
+      "turnId": 4,
+      "userInput": "triggerConsolidation 是什么？",
+      "aiOutput": "triggerConsolidation 是 L2 到 L3 的知识固化函数。它可以从会话中提取三元组，使用正则表达式匹配模式。",
+      "expectedTriples": [
+        { "subject": "triggerConsolidation", "predicate": "是", "object": "L2 到 L3 的知识固化函数" },
+        { "subject": "triggerConsolidation", "predicate": "可以", "object": "从会话中提取三元组" }
+      ]
+    },
+    {
+      "turnId": 5,
+      "userInput": "memory-controller.ts 有什么功能？",
+      "aiOutput": "memory-controller.ts 有三个核心函数: logTurn 写入 L2，retrieveContext 检索记忆，triggerConsolidation 固化知识。",
+      "expectedTriples": [
+        { "subject": "memory-controller.ts", "predicate": "有", "object": "三个核心函数" },
+        { "subject": "logTurn", "predicate": "可以", "object": "写入 L2" },
+        { "subject": "retrieveContext", "predicate": "可以", "object": "检索记忆" },
+        { "subject": "triggerConsolidation", "predicate": "可以", "object": "固化知识" }
+      ]
+    }
+  ]
+}

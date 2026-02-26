@@ -149,7 +149,7 @@ export function loadCattleProfiles(): CattleProfile[] {
  */
 export function getCattleProfile(modelId: string): CattleProfile | undefined {
   const profiles = loadCattleProfiles();
-  // 支持模糊匹配: glm-4-plus, glm_4_plus, glm4plus
+  // 支持模糊匹配: glm-5, glm_4_plus, glm4plus
   const normalized = modelId.toLowerCase().replace(/[-_]/g, '');
   return profiles.find(p =>
     p.modelId.toLowerCase().replace(/[-_]/g, '') === normalized ||

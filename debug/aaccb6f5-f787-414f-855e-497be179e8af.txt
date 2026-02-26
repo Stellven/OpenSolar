@@ -1,0 +1,1120 @@
+2026-02-03T15:40:28.352Z [DEBUG] Watching for changes in setting files /Users/sihaoli/.claude...
+2026-02-03T15:40:28.354Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-03T15:40:28.354Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-03T15:40:28.354Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-03T15:40:28.354Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-03T15:40:28.357Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-02-03T15:40:28.357Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-02-03T15:40:28.357Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-02-03T15:40:28.358Z [DEBUG] Applying permission update: Adding 8 allow rule(s) to destination 'userSettings': ["Read(docs/**)","Read(src/**)","Read(include/**)","Read(test/**)","Read(benchmark/**)","WebFetch(domain:github.com)","WebFetch(domain:stackoverflow.com)","WebFetch(domain:cppreference.com)"]
+2026-02-03T15:40:28.358Z [DEBUG] Applying permission update: Adding 6 deny rule(s) to destination 'userSettings': ["Read(.env)","Read(.env.*)","Read(**/*secret*)","Read(**/*credential*)","Bash(rm -rf /)","Bash(rm -rf /*)"]
+2026-02-03T15:40:28.358Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-03T15:40:28.369Z [DEBUG] Loading plugin clangd-lsp from source: "./plugins/clangd-lsp"
+2026-02-03T15:40:28.369Z [DEBUG] Using provided version for clangd-lsp@claude-plugins-official: 1.0.0
+2026-02-03T15:40:28.369Z [DEBUG] Plugin clangd-lsp@claude-plugins-official version 1.0.0 already cached at /Users/sihaoli/.claude/plugins/cache/claude-plugins-official/clangd-lsp/1.0.0
+2026-02-03T15:40:28.369Z [DEBUG] Copied local plugin clangd-lsp to versioned cache: /Users/sihaoli/.claude/plugins/cache/claude-plugins-official/clangd-lsp/1.0.0
+2026-02-03T15:40:28.370Z [DEBUG] Plugin clangd-lsp has no entry.skills defined
+2026-02-03T15:40:28.370Z [DEBUG] Loading plugin rust-analyzer-lsp from source: "./plugins/rust-analyzer-lsp"
+2026-02-03T15:40:28.370Z [DEBUG] Using provided version for rust-analyzer-lsp@claude-plugins-official: 1.0.0
+2026-02-03T15:40:28.370Z [DEBUG] Plugin rust-analyzer-lsp@claude-plugins-official version 1.0.0 already cached at /Users/sihaoli/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0
+2026-02-03T15:40:28.370Z [DEBUG] Copied local plugin rust-analyzer-lsp to versioned cache: /Users/sihaoli/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0
+2026-02-03T15:40:28.370Z [DEBUG] Plugin rust-analyzer-lsp has no entry.skills defined
+2026-02-03T15:40:28.370Z [DEBUG] Found 2 plugins (2 enabled, 0 disabled)
+2026-02-03T15:40:28.371Z [DEBUG] [STARTUP] MCP configs loaded in 13ms
+2026-02-03T15:40:28.371Z [DEBUG] [STARTUP] Running setup()...
+2026-02-03T15:40:28.382Z [DEBUG] Stats cache is up to date
+2026-02-03T15:40:28.382Z [DEBUG] Plugin autoupdate: skipped (auto-updater disabled)
+2026-02-03T15:40:28.385Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-03T15:40:28.406Z [DEBUG] Loaded 2 installed plugins from /Users/sihaoli/.claude/plugins/installed_plugins.json
+2026-02-03T15:40:28.426Z [DEBUG] Error log sink initialized
+2026-02-03T15:40:28.429Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/todos/aaccb6f5-f787-414f-855e-497be179e8af-agent-aaccb6f5-f787-414f-855e-497be179e8af.json.tmp.33162.1770133228429
+2026-02-03T15:40:28.429Z [DEBUG] Temp file written successfully, size: 2 bytes
+2026-02-03T15:40:28.429Z [DEBUG] Renaming /Users/sihaoli/.claude/todos/aaccb6f5-f787-414f-855e-497be179e8af-agent-aaccb6f5-f787-414f-855e-497be179e8af.json.tmp.33162.1770133228429 to /Users/sihaoli/.claude/todos/aaccb6f5-f787-414f-855e-497be179e8af-agent-aaccb6f5-f787-414f-855e-497be179e8af.json
+2026-02-03T15:40:28.430Z [DEBUG] File /Users/sihaoli/.claude/todos/aaccb6f5-f787-414f-855e-497be179e8af-agent-aaccb6f5-f787-414f-855e-497be179e8af.json written atomically
+2026-02-03T15:40:28.440Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-02-03T15:40:28.440Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-02-03T15:40:28.440Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-02-03T15:40:28.440Z [DEBUG] Total plugin skills loaded: 0
+2026-02-03T15:40:28.440Z [DEBUG] Total plugin commands loaded: 0
+2026-02-03T15:40:28.440Z [DEBUG] Registered 0 hooks from 2 plugins
+2026-02-03T15:40:28.440Z [DEBUG] [STARTUP] setup() completed in 69ms
+2026-02-03T15:40:28.440Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-02-03T15:40:28.443Z [DEBUG] Loaded 49 unique skills (managed: 0, user: 49, project: 0, legacy commands: 0)
+2026-02-03T15:40:28.443Z [DEBUG] getSkills returning: 49 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-02-03T15:40:28.444Z [DEBUG] Loaded 1 LSP server(s) from plugin: clangd-lsp
+2026-02-03T15:40:28.460Z [DEBUG] [Claude in Chrome] Found chrome profiles: Default, Profile 1
+2026-02-03T15:40:28.460Z [DEBUG] Loaded 1 LSP server(s) from plugin: rust-analyzer-lsp
+2026-02-03T15:40:28.460Z [DEBUG] Total LSP servers loaded: 2
+2026-02-03T15:40:28.460Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 2 server(s)
+2026-02-03T15:40:28.460Z [DEBUG] Queued request handler for plugin:clangd-lsp:clangd.workspace/configuration (connection not ready)
+2026-02-03T15:40:28.460Z [DEBUG] Starting LSP server instance: plugin:clangd-lsp:clangd
+2026-02-03T15:40:28.461Z [DEBUG] Queued request handler for plugin:rust-analyzer-lsp:rust-analyzer.workspace/configuration (connection not ready)
+2026-02-03T15:40:28.461Z [DEBUG] Starting LSP server instance: plugin:rust-analyzer-lsp:rust-analyzer
+2026-02-03T15:40:28.464Z [DEBUG] LSP manager initialized with 2 servers
+2026-02-03T15:40:28.464Z [DEBUG] LSP server manager initialized successfully
+2026-02-03T15:40:28.464Z [DEBUG] Queued notification handler for plugin:clangd-lsp:clangd.textDocument/publishDiagnostics (connection not ready)
+2026-02-03T15:40:28.464Z [DEBUG] Registered diagnostics handler for plugin:clangd-lsp:clangd
+2026-02-03T15:40:28.464Z [DEBUG] Queued notification handler for plugin:rust-analyzer-lsp:rust-analyzer.textDocument/publishDiagnostics (connection not ready)
+2026-02-03T15:40:28.464Z [DEBUG] Registered diagnostics handler for plugin:rust-analyzer-lsp:rust-analyzer
+2026-02-03T15:40:28.464Z [DEBUG] LSP notification handlers registered successfully for all 2 server(s)
+2026-02-03T15:40:28.466Z [DEBUG] Applied queued notification handler for plugin:clangd-lsp:clangd.textDocument/publishDiagnostics
+2026-02-03T15:40:28.466Z [DEBUG] Applied queued request handler for plugin:clangd-lsp:clangd.workspace/configuration
+2026-02-03T15:40:28.466Z [DEBUG] LSP client started for plugin:clangd-lsp:clangd
+2026-02-03T15:40:28.466Z [DEBUG] Applied queued notification handler for plugin:rust-analyzer-lsp:rust-analyzer.textDocument/publishDiagnostics
+2026-02-03T15:40:28.466Z [DEBUG] Applied queued request handler for plugin:rust-analyzer-lsp:rust-analyzer.workspace/configuration
+2026-02-03T15:40:28.466Z [DEBUG] LSP client started for plugin:rust-analyzer-lsp:rust-analyzer
+2026-02-03T15:40:28.466Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Sending request 'initialize - (0)'.
+2026-02-03T15:40:28.467Z [DEBUG] [LSP PROTOCOL plugin:rust-analyzer-lsp:rust-analyzer] Sending request 'initialize - (0)'.
+2026-02-03T15:40:28.473Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=/Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg)
+2026-02-03T15:40:28.475Z [DEBUG] Watching for changes in skill/command directories: /Users/sihaoli/.claude/skills...
+2026-02-03T15:40:28.483Z [DEBUG] Session index: added 1, updated 0, removed 0 (total: 10)
+2026-02-03T15:40:28.484Z [DEBUG] [LSP SERVER plugin:clangd-lsp:clangd] I[23:40:28.477] Apple clangd version 17.0.0 (clang-1700.6.3.2)
+I[23:40:28.477] Features: mac+xpc
+I[23:40:28.477] PID: 33282
+I[23:40:28.477] Working directory: /Users/sihaoli/Solar
+I[23:40:28.477] argv[0]: /Library/Developer/CommandLineTools/usr/bin/clangd
+I[23:40:28.477] argv[1]: --background-index
+I[23:40:28.477] Starting LSP over stdin/stdout
+I[23:40:28.477] <-- initialize(0)
+I[23:40:28.484] --> reply:initialize(0) 6 ms
+2026-02-03T15:40:28.488Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Received response 'initialize - (0)' in 22ms.
+2026-02-03T15:40:28.488Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Sending notification 'initialized'.
+2026-02-03T15:40:28.489Z [DEBUG] LSP server plugin:clangd-lsp:clangd initialized
+2026-02-03T15:40:28.489Z [DEBUG] LSP server instance started: plugin:clangd-lsp:clangd
+2026-02-03T15:40:28.489Z [DEBUG] Agent file /Users/sihaoli/.claude/agents/community.md is missing required 'name' in frontmatter
+2026-02-03T15:40:28.489Z [DEBUG] Failed to parse agent from /Users/sihaoli/.claude/agents/community.md: Missing required "name" field in frontmatter
+2026-02-03T15:40:28.489Z [DEBUG] Total plugin agents loaded: 0
+2026-02-03T15:40:28.489Z [DEBUG] [STARTUP] Commands and agents loaded in 49ms
+2026-02-03T15:40:28.489Z [DEBUG] [STARTUP] Running showSetupScreens()...
+2026-02-03T15:40:28.490Z [DEBUG] [render] initYoga starting
+2026-02-03T15:40:28.494Z [DEBUG] [LSP SERVER plugin:clangd-lsp:clangd] I[23:40:28.489] <-- initialized
+2026-02-03T15:40:28.494Z [DEBUG] [Claude in Chrome] Extension not found in any browser
+2026-02-03T15:40:28.496Z [DEBUG] [render] initYoga complete
+2026-02-03T15:40:28.499Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-02-03T15:40:28.518Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-02-03T15:40:28.944Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.33162.1770133228944
+2026-02-03T15:40:28.944Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:40:28.944Z [DEBUG] Temp file written successfully, size: 12197 bytes
+2026-02-03T15:40:28.944Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:40:28.944Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.33162.1770133228944 to /Users/sihaoli/.claude.json
+2026-02-03T15:40:28.944Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:40:28.976Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] error: Unknown binary 'rust-analyzer' in official toolchain 'stable-aarch64-apple-darwin'.
+2026-02-03T15:40:28.976Z [DEBUG] LSP server plugin:rust-analyzer-lsp:rust-analyzer connection closed
+2026-02-03T15:40:28.984Z [ERROR] Error: Error: LSP server plugin:rust-analyzer-lsp:rust-analyzer crashed with exit code 1
+    at ChildProcess.<anonymous> (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:1622:21508)
+    at ChildProcess.emit (node:events:508:28)
+    at ChildProcess.emit (node:domain:489:12)
+    at ChildProcess._handle.onexit (node:internal/child_process:294:12)
+2026-02-03T15:40:29.166Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.202Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.235Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.268Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.301Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.335Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.368Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.401Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.434Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.467Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.500Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.533Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.566Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.599Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.632Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.665Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.698Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.731Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.764Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.796Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.830Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.862Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.896Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.928Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.961Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:29.993Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.027Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.060Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.092Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.125Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.158Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.191Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.223Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.256Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.289Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.321Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.354Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.387Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.420Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.453Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.485Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.518Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.550Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.584Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.619Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.651Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.684Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.716Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.748Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.780Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.813Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.845Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.878Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.910Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.942Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:30.975Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.007Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.040Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.072Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.104Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.137Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.170Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.203Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.236Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.269Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.302Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.334Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.366Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.398Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.431Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.464Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.497Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.529Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.562Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.595Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.627Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.660Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.693Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.727Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.759Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.791Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.824Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.856Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.888Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.921Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.953Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:31.986Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.019Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.051Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.084Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.117Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.149Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.182Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.215Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.248Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.281Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.314Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.347Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.379Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.412Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.445Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.478Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.511Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.544Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.576Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.609Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.642Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.674Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.708Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.740Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.773Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.806Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.838Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.871Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.903Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.935Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:32.968Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.001Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.035Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.067Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.100Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.133Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.166Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.199Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.232Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.264Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.298Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.331Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.363Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.396Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.428Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.460Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.494Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.526Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.559Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.591Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.624Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.656Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.690Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.722Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.755Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.789Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.822Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.854Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.887Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.920Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.953Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:33.986Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.019Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.051Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.084Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.116Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.150Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.183Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.215Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.248Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.281Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.314Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.346Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.379Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.412Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.445Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.478Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.510Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.543Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.575Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.607Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.639Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.673Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.705Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.739Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.772Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.805Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.837Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.870Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.902Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.935Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:34.968Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.000Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.033Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.066Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.098Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.131Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.131Z [DEBUG] Full reset (scrollback changes): scrollbackRows=20, changes=278/1305, firstChangeY=0
+  prev: "Welcome to Claude Code v2.1.12                                                                                                                     "
+  next: "Welcome to Claude Code v2.1.12                                                                                                                     "
+2026-02-03T15:40:35.168Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.201Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.234Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.267Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.299Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.332Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.365Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.398Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.430Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.463Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.496Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.528Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.561Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.594Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.627Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.660Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.693Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.726Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.759Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.792Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.824Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.856Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.889Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.923Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.955Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:35.989Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.021Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.053Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.086Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.119Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.151Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.183Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.215Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.248Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.281Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.313Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.346Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.378Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.410Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.444Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.477Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.477Z [DEBUG] Full reset (scrollback changes): scrollbackRows=20, changes=255/1314, firstChangeY=0
+  prev: "Welcome to Claude Code v2.1.12                                                                                                                     "
+  next: "Welcome to Claude Code v2.1.12                                                                                                                     "
+2026-02-03T15:40:36.511Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.545Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.578Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.611Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.644Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.677Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.709Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.742Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.774Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.808Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.841Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.874Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.907Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.940Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:36.972Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.004Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.036Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.069Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.103Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.135Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.168Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.201Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.236Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.268Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.301Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.335Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.368Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.400Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.433Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.465Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.465Z [DEBUG] Full reset (scrollback changes): scrollbackRows=20, changes=255/1314, firstChangeY=0
+  prev: "Welcome to Claude Code v2.1.12                                                                                                                     "
+  next: "Welcome to Claude Code v2.1.12                                                                                                                     "
+2026-02-03T15:40:37.500Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.534Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.566Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.599Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.632Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.665Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.665Z [DEBUG] Full reset (scrollback changes): scrollbackRows=20, changes=278/1305, firstChangeY=0
+  prev: "Welcome to Claude Code v2.1.12                                                                                                                     "
+  next: "Welcome to Claude Code v2.1.12                                                                                                                     "
+2026-02-03T15:40:37.699Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.731Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.764Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.798Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.830Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.863Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.896Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.930Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.962Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:37.995Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.027Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.059Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.092Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.125Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.158Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.190Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.222Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.254Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.287Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.320Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.320Z [DEBUG] Full reset (scrollback changes): scrollbackRows=20, changes=255/1260, firstChangeY=0
+  prev: "Welcome to Claude Code v2.1.12                                                                                                                     "
+  next: "Welcome to Claude Code v2.1.12                                                                                                                     "
+2026-02-03T15:40:38.354Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.386Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.419Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.452Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.484Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.517Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.550Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.582Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.615Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.648Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.680Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.713Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.745Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.778Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.810Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.843Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.876Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.908Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.940Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:38.973Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.007Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.039Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.072Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.105Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.138Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.170Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.204Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.237Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.270Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.303Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.336Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.336Z [DEBUG] Full reset (scrollback changes): scrollbackRows=20, changes=255/1260, firstChangeY=0
+  prev: "Welcome to Claude Code v2.1.12                                                                                                                     "
+  next: "Welcome to Claude Code v2.1.12                                                                                                                     "
+2026-02-03T15:40:39.371Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.404Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.436Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.470Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.503Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.535Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.567Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.601Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.634Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.666Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.699Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.731Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.763Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.796Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.829Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.861Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.893Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.926Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.959Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:39.992Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.024Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.057Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.090Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.123Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.155Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.188Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.221Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.221Z [DEBUG] Full reset (scrollback changes): scrollbackRows=20, changes=278/1305, firstChangeY=0
+  prev: "Welcome to Claude Code v2.1.12                                                                                                                     "
+  next: "Welcome to Claude Code v2.1.12                                                                                                                     "
+2026-02-03T15:40:40.255Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.288Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.321Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.354Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.387Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.420Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.453Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.486Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.519Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.552Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.585Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.617Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.650Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.682Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.714Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.747Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.780Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.813Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.846Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.879Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.911Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.944Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:40.976Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.009Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.041Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.073Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.106Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.138Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.171Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.203Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.237Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.269Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.303Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.335Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.368Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.402Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.434Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.466Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.498Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.531Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.564Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.596Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.629Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.662Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.694Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.726Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.759Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.792Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.824Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.857Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.890Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.924Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.956Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:41.988Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.021Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.055Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.088Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.121Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.153Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.187Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.220Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.252Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.285Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.317Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.351Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.383Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.415Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.449Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.482Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.515Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.548Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.580Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.614Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.646Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.679Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.712Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.745Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.777Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.810Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.842Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.876Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.909Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.942Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:42.974Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.007Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.039Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.073Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.106Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.139Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.172Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.204Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.204Z [DEBUG] Full reset (scrollback changes): scrollbackRows=20, changes=255/1314, firstChangeY=0
+  prev: "Welcome to Claude Code v2.1.12                                                                                                                     "
+  next: "Welcome to Claude Code v2.1.12                                                                                                                     "
+2026-02-03T15:40:43.238Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.271Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.303Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.336Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.368Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.401Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.433Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.465Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.499Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.531Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.563Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.596Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.629Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.662Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.694Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.726Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.759Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.792Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.824Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.857Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.890Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.922Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.954Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:43.986Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.018Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.051Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.083Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.115Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.148Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.180Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.212Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.244Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.277Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.311Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.343Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.376Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.408Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.441Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.473Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.506Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.538Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.571Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.604Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.637Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.670Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.702Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.734Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.767Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.800Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.832Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.864Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.897Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.929Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.962Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:44.994Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.027Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.060Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.093Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.126Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.158Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.159Z [DEBUG] Full reset (scrollback changes): scrollbackRows=20, changes=309/1365, firstChangeY=0
+  prev: "Welcome to Claude Code v2.1.12                                                                                                                     "
+  next: "Welcome to Claude Code v2.1.12                                                                                                                     "
+2026-02-03T15:40:45.193Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.225Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.258Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.291Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.323Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.355Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.388Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.421Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.454Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.486Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.518Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.551Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.583Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.616Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.648Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.681Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.715Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.748Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.781Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.813Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.845Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.877Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.909Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.942Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:45.975Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.007Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.040Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.074Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.106Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.139Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.171Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.204Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.236Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.269Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.301Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.333Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.366Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.398Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.432Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.464Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.496Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.528Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.560Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.593Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.625Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.658Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.690Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.722Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.754Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.787Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.819Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.851Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.884Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.916Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.948Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:46.981Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.014Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.047Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.079Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.113Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.145Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.177Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.209Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.242Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.274Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.307Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.339Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.371Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.403Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.436Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.468Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.500Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.533Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.565Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.598Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.630Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.663Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.695Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.728Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.761Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.793Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.825Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.857Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.889Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.922Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.955Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:47.955Z [DEBUG] Full reset (scrollback changes): scrollbackRows=20, changes=309/1365, firstChangeY=0
+  prev: "Welcome to Claude Code v2.1.12                                                                                                                     "
+  next: "Welcome to Claude Code v2.1.12                                                                                                                     "
+2026-02-03T15:40:47.990Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.023Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.055Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.088Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.120Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.152Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.186Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.219Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.252Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.252Z [DEBUG] Full reset (scrollback changes): scrollbackRows=20, changes=255/1314, firstChangeY=0
+  prev: "Welcome to Claude Code v2.1.12                                                                                                                     "
+  next: "Welcome to Claude Code v2.1.12                                                                                                                     "
+2026-02-03T15:40:48.286Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.318Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.352Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.384Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.417Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.450Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.483Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.515Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.548Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.581Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.614Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.614Z [DEBUG] Full reset (scrollback changes): scrollbackRows=20, changes=278/1305, firstChangeY=0
+  prev: "Welcome to Claude Code v2.1.12                                                                                                                     "
+  next: "Welcome to Claude Code v2.1.12                                                                                                                     "
+2026-02-03T15:40:48.648Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.681Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.714Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.746Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.779Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.811Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.843Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.876Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.910Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.943Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:48.975Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.008Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.040Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.074Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.074Z [DEBUG] Full reset (scrollback changes): scrollbackRows=20, changes=278/1305, firstChangeY=0
+  prev: "Welcome to Claude Code v2.1.12                                                                                                                     "
+  next: "Welcome to Claude Code v2.1.12                                                                                                                     "
+2026-02-03T15:40:49.108Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.141Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.173Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.205Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.237Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.269Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.302Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.335Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.369Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.369Z [DEBUG] Full reset (scrollback changes): scrollbackRows=20, changes=255/1314, firstChangeY=0
+  prev: "Welcome to Claude Code v2.1.12                                                                                                                     "
+  next: "Welcome to Claude Code v2.1.12                                                                                                                     "
+2026-02-03T15:40:49.403Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.436Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.469Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.501Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.533Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.565Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.598Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.598Z [DEBUG] Full reset (scrollback changes): scrollbackRows=20, changes=309/1365, firstChangeY=0
+  prev: "Welcome to Claude Code v2.1.12                                                                                                                     "
+  next: "Welcome to Claude Code v2.1.12                                                                                                                     "
+2026-02-03T15:40:49.632Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.666Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.698Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.731Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.763Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.796Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.828Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.860Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.893Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.926Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.958Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:49.990Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.023Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.055Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.087Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.119Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.152Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.184Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.216Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.248Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.281Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.315Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.347Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.348Z [DEBUG] Full reset (scrollback changes): scrollbackRows=20, changes=309/1365, firstChangeY=0
+  prev: "Welcome to Claude Code v2.1.12                                                                                                                     "
+  next: "Welcome to Claude Code v2.1.12                                                                                                                     "
+2026-02-03T15:40:50.382Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.414Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.447Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.479Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.511Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.543Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.577Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.610Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.642Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.642Z [DEBUG] Full reset (scrollback changes): scrollbackRows=20, changes=255/1314, firstChangeY=0
+  prev: "Welcome to Claude Code v2.1.12                                                                                                                     "
+  next: "Welcome to Claude Code v2.1.12                                                                                                                     "
+2026-02-03T15:40:50.677Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.709Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.742Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.774Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.807Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.839Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.872Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.905Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.905Z [DEBUG] Full reset (scrollback changes): scrollbackRows=20, changes=278/1305, firstChangeY=0
+  prev: "Welcome to Claude Code v2.1.12                                                                                                                     "
+  next: "Welcome to Claude Code v2.1.12                                                                                                                     "
+2026-02-03T15:40:50.940Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:50.972Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.005Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.037Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.070Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.103Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.135Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.167Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.199Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.232Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.265Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.297Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.330Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.362Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.394Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.428Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.460Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.493Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.525Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.557Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.589Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.622Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.654Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.687Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.720Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.752Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.785Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.817Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.850Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.883Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.916Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.949Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:51.981Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:52.014Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:52.047Z [DEBUG] High write ratio: blit=0, write=2104 (100.0% writes), screen=36x147
+2026-02-03T15:40:52.061Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.33162.1770133252061
+2026-02-03T15:40:52.061Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:40:52.061Z [DEBUG] Temp file written successfully, size: 12197 bytes
+2026-02-03T15:40:52.061Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:40:52.061Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.33162.1770133252061 to /Users/sihaoli/.claude.json
+2026-02-03T15:40:52.061Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:40:52.062Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.33162.1770133252062
+2026-02-03T15:40:52.062Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:40:52.062Z [DEBUG] Temp file written successfully, size: 12197 bytes
+2026-02-03T15:40:52.062Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:40:52.062Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.33162.1770133252062 to /Users/sihaoli/.claude.json
+2026-02-03T15:40:52.062Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:40:52.098Z [DEBUG] High write ratio: blit=0, write=1150 (100.0% writes), screen=26x147
+2026-02-03T15:40:52.099Z [DEBUG] Full reset (scrollback changes): scrollbackRows=20, changes=184/1843, firstChangeY=17
+  prev: " Let's get started.                                                                                                                                "
+  next: "                                                                                                                                                   "
+2026-02-03T15:41:00.813Z [ERROR] Error: Error: Failed to delete keychain entry
+    at Gs2 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3338:6963)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async JI9 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4626:626)
+    at async AS2 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4626:530)
+    at async E$0 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2362:67483)
+    at async eyA.startOAuthFlow (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2362:69045)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2367:29147
+2026-02-03T15:41:00.814Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.33162.1770133260814
+2026-02-03T15:41:00.814Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:41:00.814Z [DEBUG] Temp file written successfully, size: 12197 bytes
+2026-02-03T15:41:00.814Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:41:00.814Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.33162.1770133260814 to /Users/sihaoli/.claude.json
+2026-02-03T15:41:00.815Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:41:00.863Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.33162.1770133260863
+2026-02-03T15:41:00.863Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:41:00.863Z [DEBUG] Temp file written successfully, size: 12197 bytes
+2026-02-03T15:41:00.863Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:41:00.863Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.33162.1770133260863 to /Users/sihaoli/.claude.json
+2026-02-03T15:41:00.863Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:41:01.307Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.33162.1770133261307
+2026-02-03T15:41:01.307Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:41:01.308Z [DEBUG] Temp file written successfully, size: 12449 bytes
+2026-02-03T15:41:01.308Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:41:01.308Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.33162.1770133261307 to /Users/sihaoli/.claude.json
+2026-02-03T15:41:01.308Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:41:01.771Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.33162.1770133261771
+2026-02-03T15:41:01.771Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:41:01.771Z [DEBUG] Temp file written successfully, size: 12573 bytes
+2026-02-03T15:41:01.771Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:41:01.771Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.33162.1770133261771 to /Users/sihaoli/.claude.json
+2026-02-03T15:41:01.772Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:41:01.780Z [DEBUG] Getting matching hook commands for Notification with query: auth_success
+2026-02-03T15:41:01.780Z [DEBUG] Found 0 hook matchers in settings
+2026-02-03T15:41:01.780Z [DEBUG] Matched 0 unique hooks for query "auth_success" (0 before deduplication)
+2026-02-03T15:41:02.155Z [DEBUG] Metrics opt-out API response: enabled=true, vcsLinking=false
+2026-02-03T15:41:07.226Z [DEBUG] High write ratio: blit=0, write=1160 (100.0% writes), screen=28x147
+2026-02-03T15:41:08.502Z [DEBUG] High write ratio: blit=0, write=1146 (100.0% writes), screen=26x147
+2026-02-03T15:41:10.191Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.33162.1770133270191
+2026-02-03T15:41:10.191Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:41:10.192Z [DEBUG] Temp file written successfully, size: 12572 bytes
+2026-02-03T15:41:10.192Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:41:10.192Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.33162.1770133270191 to /Users/sihaoli/.claude.json
+2026-02-03T15:41:10.192Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:41:10.202Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-02-03T15:41:10.204Z [DEBUG] Grove: Using fresh cached config
+2026-02-03T15:41:10.205Z [DEBUG] [render] initYoga starting
+2026-02-03T15:41:10.206Z [DEBUG] [render] initYoga complete
+2026-02-03T15:41:10.211Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-02-03T15:41:10.216Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-02-03T15:41:10.224Z [DEBUG] Git remote URL: https://github.com/lisihao/Solar.git
+2026-02-03T15:41:10.224Z [DEBUG] Parsed repository: lisihao/Solar from https://github.com/lisihao/Solar.git
+2026-02-03T15:41:10.224Z [DEBUG] Parsed repository: lisihao/Solar from URL: https://github.com/lisihao/Solar.git
+2026-02-03T15:41:10.224Z [DEBUG] Path /Users/sihaoli/Solar already tracked for repo lisihao/solar
+2026-02-03T15:41:10.932Z [DEBUG] [STARTUP] showSetupScreens() completed in 42443ms
+2026-02-03T15:41:10.933Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-03T15:41:10.933Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-03T15:41:10.933Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-03T15:41:10.943Z [DEBUG] MCP server "playwright": Starting connection with timeout of 30000ms
+2026-02-03T15:41:10.949Z [DEBUG] MCP server "brain-router": Starting connection with timeout of 30000ms
+2026-02-03T15:41:10.955Z [DEBUG] All plugins already exist, skipping migration
+2026-02-03T15:41:10.955Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-03T15:41:10.956Z [DEBUG] Initialized versioned plugins system with 2 plugins
+2026-02-03T15:41:10.961Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.33162.1770133270961
+2026-02-03T15:41:10.961Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:41:10.961Z [DEBUG] Temp file written successfully, size: 12572 bytes
+2026-02-03T15:41:10.961Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:41:10.961Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.33162.1770133270961 to /Users/sihaoli/.claude.json
+2026-02-03T15:41:10.961Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:41:10.965Z [DEBUG] Getting matching hook commands for SessionStart with query: startup
+2026-02-03T15:41:10.965Z [DEBUG] Found 1 hook matchers in settings
+2026-02-03T15:41:10.965Z [DEBUG] Matched 2 unique hooks for query "startup" (2 before deduplication)
+2026-02-03T15:41:11.009Z [DEBUG] Hooks: Checking initial response for async: {"continue": true}
+2026-02-03T15:41:11.009Z [DEBUG] Hooks: Parsed initial response: {"continue":true}
+2026-02-03T15:41:11.009Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:41:11.010Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:41:11.062Z [DEBUG] Hooks: Checking initial response for async: {"continue": true}
+2026-02-03T15:41:11.062Z [DEBUG] Hooks: Parsed initial response: {"continue":true}
+2026-02-03T15:41:11.062Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:41:11.063Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:41:11.063Z [DEBUG] [render] initYoga starting
+2026-02-03T15:41:11.063Z [DEBUG] [render] initYoga complete
+2026-02-03T15:41:11.068Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-02-03T15:41:11.102Z [DEBUG] MCP server "brain-router": Successfully connected to undefined server in 154ms
+2026-02-03T15:41:11.102Z [DEBUG] MCP server "brain-router": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"solar-brain-router","version":"1.0.0"}}
+2026-02-03T15:41:11.107Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-02-03T15:41:11.107Z [DEBUG] [REPL:mount] REPL mounted, disabled=false
+2026-02-03T15:41:11.111Z [DEBUG] Official marketplace auto-install skipped: already_attempted
+2026-02-03T15:41:11.111Z [DEBUG] performStartupChecks called
+2026-02-03T15:41:11.112Z [DEBUG] Starting background plugin installations
+2026-02-03T15:41:11.112Z [DEBUG] performBackgroundPluginInstallations called
+2026-02-03T15:41:11.187Z [DEBUG] Found 2 enabled plugins
+2026-02-03T15:41:11.187Z [DEBUG] All plugins already exist, skipping migration
+2026-02-03T15:41:11.187Z [DEBUG] Found 2 installed plugins (V2 format)
+2026-02-03T15:41:11.188Z [DEBUG] Loaded plugins - Enabled: 2, Disabled: 0, Commands: 0, Agents: 0, Errors: 0
+2026-02-03T15:41:11.188Z [DEBUG] Found 0 missing plugins (not installed):
+2026-02-03T15:41:11.188Z [DEBUG] Setting installation status: 0 marketplaces, 0 installable plugins, 0 uninstallable plugins
+2026-02-03T15:41:11.301Z [DEBUG] MCP server "ide": Starting connection with timeout of 30000ms
+2026-02-03T15:41:11.302Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-03T15:41:11.311Z [DEBUG] MCP server "ide": Successfully connected to ws-ide server in 11ms
+2026-02-03T15:41:11.311Z [DEBUG] MCP server "ide": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Claude Code VSCode MCP","version":"2.1.27"}}
+2026-02-03T15:41:11.321Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.33162.1770133271321
+2026-02-03T15:41:11.321Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:41:11.321Z [DEBUG] Temp file written successfully, size: 12572 bytes
+2026-02-03T15:41:11.321Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:41:11.321Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.33162.1770133271321 to /Users/sihaoli/.claude.json
+2026-02-03T15:41:11.321Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:41:11.341Z [DEBUG] MCP server "playwright": Successfully connected to undefined server in 403ms
+2026-02-03T15:41:11.341Z [DEBUG] MCP server "playwright": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Playwright","version":"0.0.61"}}
+2026-02-03T15:41:11.347Z [DEBUG] Tool search disabled: MCPSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-03T15:41:11.350Z [DEBUG] Skills and commands included in Skill tool: agent, banner, benchmark, browser, build, call, changelog, commit, docs, email-search, email-web, mcp-builder, office, himalaya, office-notes, notion, apple-reminders, things-mac, trello, ontology, phase, pr, precise-edit, report, restore, review, save, selfie, shortcut, shortcut-builder, shortcut-search, skill-creator, solar, stats, status, test, theme, webapp-testing
+2026-02-03T15:41:11.351Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-03T15:41:11.351Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-03T15:41:11.351Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-03T15:41:15.473Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-03T15:41:15.473Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-03T15:41:15.473Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-03T15:41:15.473Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-03T15:41:15.491Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-03T15:41:15.491Z [DEBUG] Found 1 hook matchers in settings
+2026-02-03T15:41:15.491Z [DEBUG] Matched 2 unique hooks for query "no match query" (2 before deduplication)
+2026-02-03T15:41:15.494Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-03T15:41:15.500Z [DEBUG] Hooks: Checking initial response for async: {"continue": true}
+2026-02-03T15:41:15.500Z [DEBUG] Hooks: Parsed initial response: {"continue":true}
+2026-02-03T15:41:15.500Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:41:15.500Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:41:15.507Z [DEBUG] Hooks: Checking initial response for async: {"continue": true}
+2026-02-03T15:41:15.507Z [DEBUG] Hooks: Parsed initial response: {"continue":true}
+2026-02-03T15:41:15.507Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:41:15.507Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:41:15.517Z [DEBUG] FileHistory: Added snapshot for ab1da7e7-bec2-417e-8644-a6394c93cb56, tracking 0 files
+2026-02-03T15:41:15.522Z [DEBUG] MCP server "ide": Calling MCP tool: closeAllDiffTabs
+2026-02-03T15:41:15.523Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-03T15:41:15.526Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-03T15:41:15.526Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-03T15:41:15.526Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-03T15:41:15.527Z [DEBUG] Total plugin output styles loaded: 0
+2026-02-03T15:41:15.529Z [DEBUG] MCP server "ide": Tool 'closeAllDiffTabs' completed successfully in 7ms
+2026-02-03T15:41:15.535Z [DEBUG] Tool search disabled: MCPSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-03T15:41:15.540Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-03T15:41:15.540Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-03T15:41:15.540Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-03T15:41:16.252Z [ERROR] Error in non-streaming fallback: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"},"request_id":"req_011CXmPXT4aTk5Wnmw7iHXA3"}
+2026-02-03T15:41:16.252Z [ERROR] Error: Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"},"request_id":"req_011CXmPXT4aTk5Wnmw7iHXA3"}
+    at P2.generate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:917:2322)
+    at Jj.makeStatusError (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:934:2195)
+    at Jj.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:934:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+2026-02-03T15:41:16.266Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-03T15:41:16.266Z [DEBUG] Found 1 hook matchers in settings
+2026-02-03T15:41:16.266Z [DEBUG] Matched 6 unique hooks for query "no match query" (6 before deduplication)
+2026-02-03T15:41:16.281Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-02-03T15:41:16.281Z [DEBUG] Hooks: Checking initial response for async: {"decision": "approve"}
+2026-02-03T15:41:16.281Z [DEBUG] Hooks: Parsed initial response: {"decision":"approve"}
+2026-02-03T15:41:16.281Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:41:16.291Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:41:16.298Z [DEBUG] Hooks: Checking initial response for async: {
+  "decision": "approve",
+  "systemMessage": "【存储容量提醒】\n⚠️ 本地轨迹存储超限: 11963MB/500MB\n\n详情: ~/.solar/bin/trajectory-archive status"
+}
+2026-02-03T15:41:16.298Z [DEBUG] Hooks: Parsed initial response: {"decision":"approve","systemMessage":"【存储容量提醒】\n⚠️ 本地轨迹存储超限: 11963MB/500MB\n\n详情: ~/.solar/bin/trajectory-archive status"}
+2026-02-03T15:41:16.298Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:41:16.299Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:41:16.302Z [DEBUG] Hooks: Checking initial response for async: {"decision": "approve"}
+2026-02-03T15:41:16.303Z [DEBUG] Hooks: Parsed initial response: {"decision":"approve"}
+2026-02-03T15:41:16.303Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:41:16.304Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:41:16.312Z [DEBUG] Hooks: Checking initial response for async: {
+  "decision": "approve",
+  "systemMessage": "【自演进提醒】今日尚未进行反思。建议使用 /reflect 对本次会话进行结构化反思。\n\n智慧法则检验:\n□ 知行合一 □ 实事求是 □ 中庸之道 □ 否定之否定 □ 实践检验\n\n今日学习: 0 条\n上次反思: 2026-02-02 14:27:42"
+}
+2026-02-03T15:41:16.312Z [DEBUG] Hooks: Parsed initial response: {"decision":"approve","systemMessage":"【自演进提醒】今日尚未进行反思。建议使用 /reflect 对本次会话进行结构化反思。\n\n智慧法则检验:\n□ 知行合一 □ 实事求是 □ 中庸之道 □ 否定之否定 □ 实践检验\n\n今日学习: 0 条\n上次反思: 2026-02-02 14:27:42"}
+2026-02-03T15:41:16.312Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-02-03T15:41:16.313Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-02-03T15:41:16.316Z [DEBUG] High write ratio: blit=441, write=588 (57.1% writes), screen=18x147
+2026-02-03T15:41:16.319Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-02-03T15:41:16.330Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-03T15:41:16.335Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.33162.1770133276335
+2026-02-03T15:41:16.335Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:41:16.335Z [DEBUG] Temp file written successfully, size: 12572 bytes
+2026-02-03T15:41:16.335Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:41:16.335Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.33162.1770133276335 to /Users/sihaoli/.claude.json
+2026-02-03T15:41:16.336Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:41:16.337Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.33162.1770133276337
+2026-02-03T15:41:16.337Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:41:16.337Z [DEBUG] Temp file written successfully, size: 12572 bytes
+2026-02-03T15:41:16.337Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:41:16.337Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.33162.1770133276337 to /Users/sihaoli/.claude.json
+2026-02-03T15:41:16.337Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:41:16.374Z [DEBUG] High write ratio: blit=441, write=659 (59.9% writes), screen=23x147
+2026-02-03T15:41:16.504Z [ERROR] Error in non-streaming fallback: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"},"request_id":"req_011CXmPXUGWM4vnBddhdtTxr"}
+2026-02-03T15:41:16.504Z [ERROR] Error: Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"},"request_id":"req_011CXmPXUGWM4vnBddhdtTxr"}
+    at P2.generate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:917:2322)
+    at Jj.makeStatusError (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:934:2195)
+    at Jj.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:934:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+2026-02-03T15:41:16.505Z [ERROR] SyntaxError: SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+    at JSON.parse (<anonymous>)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:66:672
+    at B (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:6808)
+    at y22 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:1227:6806)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+2026-02-03T15:41:19.313Z [DEBUG] High write ratio: blit=441, write=641 (59.2% writes), screen=23x147
+2026-02-03T15:42:34.528Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/settings.json.tmp.33162.1770133354528
+2026-02-03T15:42:34.528Z [DEBUG] Preserving file permissions: 100644
+2026-02-03T15:42:34.530Z [DEBUG] Temp file written successfully, size: 3447 bytes
+2026-02-03T15:42:34.530Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:42:34.530Z [DEBUG] Renaming /Users/sihaoli/.claude/settings.json.tmp.33162.1770133354528 to /Users/sihaoli/.claude/settings.json
+2026-02-03T15:42:34.531Z [DEBUG] File /Users/sihaoli/.claude/settings.json written atomically
+2026-02-03T15:42:34.548Z [DEBUG] High write ratio: blit=441, write=691 (61.0% writes), screen=23x147
+2026-02-03T15:42:34.548Z [DEBUG] Full reset (scrollback changes): scrollbackRows=13, changes=22/1304, firstChangeY=2
+  prev: "▝▜█████▛▘  Opus 4.5 · Claude Max                                                                                                                   "
+  next: "▝▜█████▛▘  Sonnet 4.5 · Claude Max                                                                                                                 "
+2026-02-03T15:42:34.714Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-03T15:42:37.746Z [DEBUG] High write ratio: blit=441, write=673 (60.4% writes), screen=23x147
+2026-02-03T15:42:38.910Z [DEBUG] High write ratio: blit=441, write=839 (65.5% writes), screen=28x147
+2026-02-03T15:42:38.912Z [DEBUG] Telemetry flushed successfully
+2026-02-03T15:42:38.925Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-03T15:42:38.940Z [ERROR] Error: Error: Failed to delete keychain entry
+    at Gs2 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3338:6963)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async JI9 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4626:626)
+    at async AS2 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4626:530)
+    at async E$0 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2362:67483)
+    at async Object.call (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2362:68155)
+2026-02-03T15:42:38.941Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.33162.1770133358941
+2026-02-03T15:42:38.941Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:42:38.941Z [DEBUG] Temp file written successfully, size: 12572 bytes
+2026-02-03T15:42:38.941Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:42:38.941Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.33162.1770133358941 to /Users/sihaoli/.claude.json
+2026-02-03T15:42:38.941Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:42:39.002Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.33162.1770133359002
+2026-02-03T15:42:39.002Z [DEBUG] Preserving file permissions: 100600
+2026-02-03T15:42:39.002Z [DEBUG] Temp file written successfully, size: 12197 bytes
+2026-02-03T15:42:39.002Z [DEBUG] Applied original permissions to temp file
+2026-02-03T15:42:39.002Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.33162.1770133359002 to /Users/sihaoli/.claude.json
+2026-02-03T15:42:39.002Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-03T15:42:39.005Z [DEBUG] Full reset (scrollback changes): scrollbackRows=12, changes=514/1744, firstChangeY=2
+  prev: "▝▜█████▛▘  Sonnet 4.5 · Claude Max                                                                                                                 "
+  next: "▝▜█████▛▘  Sonnet 4.5 · API Usage Billing                                                                                                          "
+2026-02-03T15:42:39.204Z [DEBUG] Getting matching hook commands for SessionEnd with query: logout
+2026-02-03T15:42:39.204Z [DEBUG] Found 0 hook matchers in settings
+2026-02-03T15:42:39.204Z [DEBUG] Matched 0 unique hooks for query "logout" (0 before deduplication)

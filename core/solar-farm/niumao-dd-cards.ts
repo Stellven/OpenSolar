@@ -109,9 +109,9 @@ export const NIUMAO_DD_CARDS: Record<string, DnDCharacterSheet> = {
   // P4 主力牛马
   // ============================================================
 
-  'glm-4-plus': {
+  'glm-5': {
     name: '建设者',
-    modelId: 'glm-4-plus',
+    modelId: 'glm-5',
     class: CHARACTER_CLASSES.builder,
     level: { level: 4, xp: 2700, xpToNext: 6500, proficiencyBonus: 2 },
     attributes: {
@@ -222,6 +222,34 @@ export const NIUMAO_DD_CARDS: Record<string, DnDCharacterSheet> = {
       ideal: '探索边界，突破常规',
       bond: '对创新的热爱',
       flaw: '有时过于乐观，风险意识不足'
+    }
+  },
+
+  'gemini-3.1-pro': {
+    name: '前沿派',
+    modelId: 'gemini-3.1-pro',
+    class: CHARACTER_CLASSES.innovator,
+    level: { level: 9, xp: 25000, xpToNext: 38000, proficiencyBonus: 4 },
+    attributes: {
+      strength: 14,
+      dexterity: 16,       // 灵活创新
+      constitution: 18,    // 更强稳定性
+      intelligence: 18,    // 更高智力 (ARC-AGI-2 77.1%)
+      wisdom: 16,          // 更高智慧
+      charisma: 16
+    },
+    skills: [
+      { skill: '深度推理', modifier: 8, advantage: true, expertise: true },
+      { skill: '多模态分析', modifier: 7, advantage: true, expertise: true },
+      { skill: '创新方案', modifier: 7, advantage: true, expertise: false }
+    ],
+    feats: [FEATS.deepAnalysis, FEATS.multimodalMastery],
+    alignment: 'NG',  // 中立善良
+    background: {
+      trait: '深度推理，多模态理解，ARC-AGI-2 77.1%',
+      ideal: '真理探索，证据优先',
+      bond: '对深度理解的追求',
+      flaw: '思考过深，有时决策较慢'
     }
   },
 
@@ -554,7 +582,7 @@ if (import.meta.main) {
 
 可用模型:
   P5: glm-4-flash, gemini-2.5-flash, gemini-3-flash-preview
-  P4: glm-4-plus, glm-5
+  P4: glm-5, glm-5
   P3: gemini-2.5-pro, gemini-3-pro-preview, deepseek-v3, deepseek-r1
   P2: gpt-4o
   P1: claude-opus-4-5

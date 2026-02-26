@@ -1,0 +1,135 @@
+2026-02-18T12:19:49.901Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-18T12:19:49.901Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-18T12:19:49.901Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-18T12:19:49.901Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-18T12:19:49.906Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-18T12:19:49.916Z [DEBUG] Found 0 plugins (0 enabled, 0 disabled)
+2026-02-18T12:19:49.916Z [DEBUG] [claudeai-mcp] Checking gate (cached)...
+2026-02-18T12:19:49.916Z [DEBUG] [claudeai-mcp] Gate returned: true
+2026-02-18T12:19:49.916Z [DEBUG] [claudeai-mcp] Fetching from https://api.anthropic.com/v1/mcp_servers?limit=1000
+2026-02-18T12:19:49.920Z [DEBUG] [ToolSearch:optimistic] mode=tst-auto, ENABLE_TOOL_SEARCH=undefined, result=true
+2026-02-18T12:19:49.921Z [DEBUG] [STARTUP] Running setup()...
+2026-02-18T12:19:49.922Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-18T12:19:49.938Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:19:49.938Z [DEBUG] Error log sink initialized
+2026-02-18T12:19:49.941Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-18T12:19:49.941Z [DEBUG] Total plugin skills loaded: 0
+2026-02-18T12:19:49.941Z [DEBUG] Total plugin commands loaded: 0
+2026-02-18T12:19:49.941Z [DEBUG] [STARTUP] setup() completed in 20ms
+2026-02-18T12:19:49.941Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-02-18T12:19:49.942Z [DEBUG] Registered 0 hooks from 0 plugins
+2026-02-18T12:19:49.943Z [DEBUG] Loaded 91 unique skills (91 unconditional, 0 conditional, managed: 0, user: 91, project: 0, additional: 0, legacy commands: 0)
+2026-02-18T12:19:49.943Z [DEBUG] getSkills returning: 91 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-18T12:19:49.949Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=/Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg)
+2026-02-18T12:19:49.963Z [DEBUG] Agent file /Users/sihaoli/.claude/agents/community.md is missing required 'name' in frontmatter
+2026-02-18T12:19:49.963Z [DEBUG] Failed to parse agent from /Users/sihaoli/.claude/agents/community.md: Missing required "name" field in frontmatter
+2026-02-18T12:19:49.964Z [DEBUG] Total plugin agents loaded: 0
+2026-02-18T12:19:49.964Z [DEBUG] [STARTUP] Commands and agents loaded in 23ms
+2026-02-18T12:19:49.964Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-02-18T12:19:49.964Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-02-18T12:19:49.964Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-02-18T12:19:49.964Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:19:49.964Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:19:49.964Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-18T12:19:49.965Z [DEBUG] Total LSP servers loaded: 0
+2026-02-18T12:19:49.965Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 0 server(s)
+2026-02-18T12:19:49.965Z [DEBUG] LSP manager initialized with 0 servers
+2026-02-18T12:19:49.965Z [DEBUG] LSP server manager initialized successfully
+2026-02-18T12:19:49.965Z [DEBUG] LSP notification handlers registered successfully for all 0 server(s)
+2026-02-18T12:19:49.965Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:19:50.061Z [DEBUG] [claudeai-mcp] Fetched 0 servers
+2026-02-18T12:19:50.061Z [DEBUG] [STARTUP] MCP configs loaded in 155ms
+2026-02-18T12:19:50.063Z [DEBUG] MCP server "playwright": Starting connection with timeout of 30000ms
+2026-02-18T12:19:50.064Z [DEBUG] MCP server "brain-router": Starting connection with timeout of 30000ms
+2026-02-18T12:19:50.065Z [DEBUG] MCP server "are": Starting connection with timeout of 30000ms
+2026-02-18T12:19:50.065Z [DEBUG] MCP server "playwright": Connection failed after 4ms: spawn playwright-mcp ENOENT
+2026-02-18T12:19:50.065Z [ERROR] MCP server "playwright" Connection failed: spawn playwright-mcp ENOENT
+2026-02-18T12:19:50.133Z [ERROR] MCP server "are" Server stderr: ARE MCP Server running
+2026-02-18T12:19:50.133Z [DEBUG] MCP server "are": Successfully connected to undefined server in 69ms
+2026-02-18T12:19:50.133Z [DEBUG] MCP server "are": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"are-orchestrator","version":"1.0.0"}}
+2026-02-18T12:19:50.158Z [DEBUG] Org fast mode: disabled (extra_usage_disabled)
+2026-02-18T12:19:50.165Z [ERROR] MCP server "brain-router" Server stderr: Traceback (most recent call last):
+  File "/Users/sihaoli/.solar/brain-router/src/mcp/server.py", line 63, in <module>
+    from ..sroe_tracker import get_tracker, RoutingInfo, RequestMetrics
+ImportError: attempted relative import with no known parent package
+2026-02-18T12:19:50.165Z [DEBUG] MCP server "brain-router": Connection failed after 101ms: MCP error -32000: Connection closed
+2026-02-18T12:19:50.165Z [ERROR] MCP server "brain-router" Connection failed: MCP error -32000: Connection closed
+2026-02-18T12:19:50.195Z [DEBUG] Loaded 2 installed plugins from /Users/sihaoli/.claude/plugins/installed_plugins.json
+2026-02-18T12:19:50.195Z [DEBUG] Initialized versioned plugins system with 2 plugins
+2026-02-18T12:19:50.197Z [DEBUG] Watching for changes in setting files /Users/sihaoli/.claude/settings.json...
+2026-02-18T12:19:50.207Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-02-18T12:19:50.208Z [DEBUG] Plugin autoupdate: skipped (auto-updater disabled)
+2026-02-18T12:19:50.209Z [DEBUG] Grove: Using fresh cached config
+2026-02-18T12:19:50.226Z [ERROR] Error: Error: ENOENT: no such file or directory, open '/Users/sihaoli/Solar/.claude/settings.json'
+    at Module.openSync (node:fs:555:18)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:816
+    at HX (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:49854)
+    at Object.readSync (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:750)
+    at OX (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:6208:105)
+    at PJ (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:6210:224)
+    at Bi8 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:214:2225)
+    at Immediate._onImmediate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:7332:4543)
+    at process.processImmediate (node:internal/timers:504:21)
+2026-02-18T12:19:50.226Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/sihaoli/Solar/.claude/settings.json
+2026-02-18T12:19:50.226Z [ERROR] Error: Error: ENOENT: no such file or directory, open '/Users/sihaoli/Solar/.claude/settings.local.json'
+    at Module.openSync (node:fs:555:18)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:816
+    at HX (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:49854)
+    at Object.readSync (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:750)
+    at OX (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:6208:105)
+    at PJ (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:6210:224)
+    at Bi8 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:214:2225)
+    at Immediate._onImmediate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:7332:4543)
+    at process.processImmediate (node:internal/timers:504:21)
+2026-02-18T12:19:50.226Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/sihaoli/Solar/.claude/settings.local.json
+2026-02-18T12:19:50.229Z [DEBUG] Watching for changes in skill/command directories: /Users/sihaoli/.claude/skills...
+2026-02-18T12:19:50.230Z [DEBUG] Stats cache is up to date
+2026-02-18T12:19:50.240Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:19:50.240Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:19:50.240Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:19:50.240Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:19:50.240Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:19:50.240Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:19:50.240Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:19:50.240Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:19:50.240Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:19:50.240Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:19:50.240Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:19:50.240Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:19:50.346Z [DEBUG] Getting matching hook commands for SessionStart with query: startup
+2026-02-18T12:19:50.346Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:19:50.346Z [DEBUG] Matched 0 unique hooks for query "startup" (0 before deduplication)
+2026-02-18T12:19:50.347Z [DEBUG] installPluginsForHeadless: starting
+2026-02-18T12:19:50.347Z [DEBUG] Found 2 installed plugins (V2 format)
+2026-02-18T12:19:50.347Z [DEBUG] installPluginsForHeadless: no missing plugins or marketplaces configured
+2026-02-18T12:19:50.349Z [DEBUG] [SystemPrompt] path=simple proactive=false
+2026-02-18T12:19:50.350Z [DEBUG] Total plugin output styles loaded: 0
+2026-02-18T12:19:50.354Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-18T12:19:50.354Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-18T12:19:50.354Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-18T12:19:50.354Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-18T12:19:50.354Z [DEBUG] Sending 48 skills via attachment (initial, 48 total sent)
+2026-02-18T12:19:50.355Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-18T12:19:50.355Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:19:50.355Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-18T12:19:50.358Z [DEBUG] autocompact: tokens=1520 threshold=167000 effectiveWindow=180000
+2026-02-18T12:19:50.359Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:19:50.359Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:19:50.359Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:19:50.467Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-18T12:19:50.467Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: analyzeMcp]
+2026-02-18T12:19:50.468Z [DEBUG] Using tool-based global cache marker on EnterPlanMode
+2026-02-18T12:19:50.482Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-18T12:19:50.485Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:19:50.485Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:19:50.486Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-18T12:19:50.486Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-18T12:19:50.486Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:19:50.486Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-18T12:19:55.380Z [DEBUG] Stream started - received first chunk
+2026-02-18T12:20:04.194Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-18T12:20:04.194Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:20:04.194Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-18T12:20:04.196Z [DEBUG] Getting matching hook commands for SessionEnd with query: other
+2026-02-18T12:20:04.196Z [DEBUG] Found 0 hook matchers in settings
+2026-02-18T12:20:04.196Z [DEBUG] Matched 0 unique hooks for query "other" (0 before deduplication)

@@ -1,0 +1,12 @@
+2026-02-20T15:58:46.776Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-20T15:58:46.777Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-20T15:58:46.777Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-20T15:58:46.777Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-20T15:58:46.791Z [DEBUG] Found 0 plugins (0 enabled, 0 disabled)
+2026-02-20T15:58:46.791Z [DEBUG] [claudeai-mcp] Checking gate (cached)...
+2026-02-20T15:58:46.791Z [DEBUG] [claudeai-mcp] Gate returned: true
+2026-02-20T15:58:46.791Z [DEBUG] [claudeai-mcp] Fetching from https://api.anthropic.com/v1/mcp_servers?limit=1000
+2026-02-20T15:58:47.006Z [DEBUG] [claudeai-mcp] Fetched 0 servers
+2026-02-20T15:58:47.335Z [DEBUG] Getting matching hook commands for SessionEnd with query: other
+2026-02-20T15:58:47.335Z [DEBUG] Found 0 hook matchers in settings
+2026-02-20T15:58:47.335Z [DEBUG] Matched 0 unique hooks for query "other" (0 before deduplication)

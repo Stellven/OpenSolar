@@ -1,0 +1,239 @@
+2026-01-28T11:52:57.934Z [DEBUG] Watching for changes in setting files /Users/sihaoli/.claude...
+2026-01-28T11:52:57.936Z [DEBUG] [init] configureGlobalMTLS starting
+2026-01-28T11:52:57.936Z [DEBUG] [init] configureGlobalMTLS complete
+2026-01-28T11:52:57.936Z [DEBUG] [init] configureGlobalAgents starting
+2026-01-28T11:52:57.936Z [DEBUG] [init] configureGlobalAgents complete
+2026-01-28T11:52:57.939Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-01-28T11:52:57.939Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-01-28T11:52:57.939Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-01-28T11:52:57.940Z [DEBUG] Applying permission update: Adding 8 allow rule(s) to destination 'userSettings': ["Read(docs/**)","Read(src/**)","Read(include/**)","Read(test/**)","Read(benchmark/**)","WebFetch(domain:github.com)","WebFetch(domain:stackoverflow.com)","WebFetch(domain:cppreference.com)"]
+2026-01-28T11:52:57.940Z [DEBUG] Applying permission update: Adding 6 deny rule(s) to destination 'userSettings': ["Read(.env)","Read(.env.*)","Read(**/*secret*)","Read(**/*credential*)","Bash(rm -rf /)","Bash(rm -rf /*)"]
+2026-01-28T11:52:57.940Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-01-28T11:52:57.950Z [DEBUG] Loading plugin clangd-lsp from source: "./plugins/clangd-lsp"
+2026-01-28T11:52:57.950Z [DEBUG] Using provided version for clangd-lsp@claude-plugins-official: 1.0.0
+2026-01-28T11:52:57.950Z [DEBUG] Plugin clangd-lsp@claude-plugins-official version 1.0.0 already cached at /Users/sihaoli/.claude/plugins/cache/claude-plugins-official/clangd-lsp/1.0.0
+2026-01-28T11:52:57.950Z [DEBUG] Copied local plugin clangd-lsp to versioned cache: /Users/sihaoli/.claude/plugins/cache/claude-plugins-official/clangd-lsp/1.0.0
+2026-01-28T11:52:57.950Z [DEBUG] Plugin clangd-lsp has no entry.skills defined
+2026-01-28T11:52:57.951Z [DEBUG] Loading plugin rust-analyzer-lsp from source: "./plugins/rust-analyzer-lsp"
+2026-01-28T11:52:57.951Z [DEBUG] Using provided version for rust-analyzer-lsp@claude-plugins-official: 1.0.0
+2026-01-28T11:52:57.951Z [DEBUG] Plugin rust-analyzer-lsp@claude-plugins-official version 1.0.0 already cached at /Users/sihaoli/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0
+2026-01-28T11:52:57.951Z [DEBUG] Copied local plugin rust-analyzer-lsp to versioned cache: /Users/sihaoli/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0
+2026-01-28T11:52:57.951Z [DEBUG] Plugin rust-analyzer-lsp has no entry.skills defined
+2026-01-28T11:52:57.951Z [DEBUG] Found 2 plugins (2 enabled, 0 disabled)
+2026-01-28T11:52:57.951Z [DEBUG] [STARTUP] MCP configs loaded in 11ms
+2026-01-28T11:52:57.954Z [DEBUG] [STARTUP] Running setup()...
+2026-01-28T11:52:57.956Z [DEBUG] Stats cache is up to date
+2026-01-28T11:52:57.956Z [DEBUG] Plugin autoupdate: skipped (auto-updater disabled)
+2026-01-28T11:52:57.958Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T11:52:57.962Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T11:52:57.966Z [DEBUG] Loaded 2 installed plugins from /Users/sihaoli/.claude/plugins/installed_plugins.json
+2026-01-28T11:52:57.977Z [DEBUG] Error log sink initialized
+2026-01-28T11:52:57.977Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/todos/fa2155c8-3846-4806-9294-a4c7984066a8-agent-fa2155c8-3846-4806-9294-a4c7984066a8.json.tmp.45264.1769601177977
+2026-01-28T11:52:57.977Z [DEBUG] Temp file written successfully, size: 2 bytes
+2026-01-28T11:52:57.977Z [DEBUG] Renaming /Users/sihaoli/.claude/todos/fa2155c8-3846-4806-9294-a4c7984066a8-agent-fa2155c8-3846-4806-9294-a4c7984066a8.json.tmp.45264.1769601177977 to /Users/sihaoli/.claude/todos/fa2155c8-3846-4806-9294-a4c7984066a8-agent-fa2155c8-3846-4806-9294-a4c7984066a8.json
+2026-01-28T11:52:57.977Z [DEBUG] File /Users/sihaoli/.claude/todos/fa2155c8-3846-4806-9294-a4c7984066a8-agent-fa2155c8-3846-4806-9294-a4c7984066a8.json written atomically
+2026-01-28T11:52:57.981Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T11:52:57.981Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T11:52:57.981Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T11:52:57.981Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T11:52:57.981Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T11:52:57.981Z [DEBUG] Registered 0 hooks from 2 plugins
+2026-01-28T11:52:57.981Z [DEBUG] [STARTUP] setup() completed in 27ms
+2026-01-28T11:52:57.981Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-01-28T11:52:57.984Z [DEBUG] Loaded 16 unique skills (managed: 0, user: 16, project: 0, legacy commands: 0)
+2026-01-28T11:52:57.984Z [DEBUG] getSkills returning: 16 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T11:52:57.987Z [DEBUG] Loaded 1 LSP server(s) from plugin: clangd-lsp
+2026-01-28T11:52:57.993Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=/Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg)
+2026-01-28T11:52:57.993Z [DEBUG] [Claude in Chrome] Found chrome profiles: Default, Profile 1
+2026-01-28T11:52:57.993Z [DEBUG] Loaded 1 LSP server(s) from plugin: rust-analyzer-lsp
+2026-01-28T11:52:57.993Z [DEBUG] Total LSP servers loaded: 2
+2026-01-28T11:52:57.993Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 2 server(s)
+2026-01-28T11:52:57.993Z [DEBUG] Queued request handler for plugin:clangd-lsp:clangd.workspace/configuration (connection not ready)
+2026-01-28T11:52:57.994Z [DEBUG] Starting LSP server instance: plugin:clangd-lsp:clangd
+2026-01-28T11:52:57.994Z [DEBUG] Queued request handler for plugin:rust-analyzer-lsp:rust-analyzer.workspace/configuration (connection not ready)
+2026-01-28T11:52:57.994Z [DEBUG] Starting LSP server instance: plugin:rust-analyzer-lsp:rust-analyzer
+2026-01-28T11:52:57.995Z [DEBUG] LSP manager initialized with 2 servers
+2026-01-28T11:52:57.995Z [DEBUG] LSP server manager initialized successfully
+2026-01-28T11:52:57.995Z [DEBUG] Queued notification handler for plugin:clangd-lsp:clangd.textDocument/publishDiagnostics (connection not ready)
+2026-01-28T11:52:57.995Z [DEBUG] Registered diagnostics handler for plugin:clangd-lsp:clangd
+2026-01-28T11:52:57.995Z [DEBUG] Queued notification handler for plugin:rust-analyzer-lsp:rust-analyzer.textDocument/publishDiagnostics (connection not ready)
+2026-01-28T11:52:57.995Z [DEBUG] Registered diagnostics handler for plugin:rust-analyzer-lsp:rust-analyzer
+2026-01-28T11:52:57.995Z [DEBUG] LSP notification handlers registered successfully for all 2 server(s)
+2026-01-28T11:52:58.002Z [DEBUG] Applied queued notification handler for plugin:clangd-lsp:clangd.textDocument/publishDiagnostics
+2026-01-28T11:52:58.002Z [DEBUG] Applied queued request handler for plugin:clangd-lsp:clangd.workspace/configuration
+2026-01-28T11:52:58.002Z [DEBUG] LSP client started for plugin:clangd-lsp:clangd
+2026-01-28T11:52:58.003Z [DEBUG] Applied queued notification handler for plugin:rust-analyzer-lsp:rust-analyzer.textDocument/publishDiagnostics
+2026-01-28T11:52:58.003Z [DEBUG] Applied queued request handler for plugin:rust-analyzer-lsp:rust-analyzer.workspace/configuration
+2026-01-28T11:52:58.003Z [DEBUG] LSP client started for plugin:rust-analyzer-lsp:rust-analyzer
+2026-01-28T11:52:58.003Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Sending request 'initialize - (0)'.
+2026-01-28T11:52:58.003Z [DEBUG] [LSP PROTOCOL plugin:rust-analyzer-lsp:rust-analyzer] Sending request 'initialize - (0)'.
+2026-01-28T11:52:58.010Z [DEBUG] [LSP SERVER plugin:clangd-lsp:clangd] I[19:52:58.005] Apple clangd version 17.0.0 (clang-1700.6.3.2)
+I[19:52:58.005] Features: mac+xpc
+I[19:52:58.005] PID: 45330
+I[19:52:58.005] Working directory: /Users/sihaoli/ThunderDuck/src/core
+I[19:52:58.005] argv[0]: /Library/Developer/CommandLineTools/usr/bin/clangd
+I[19:52:58.005] argv[1]: --background-index
+I[19:52:58.005] Starting LSP over stdin/stdout
+I[19:52:58.005] <-- initialize(0)
+2026-01-28T11:52:58.010Z [DEBUG] Watching for changes in skill/command directories: /Users/sihaoli/.claude/skills...
+2026-01-28T11:52:58.015Z [DEBUG] Session index: added 1, updated 0, removed 0 (total: 3)
+2026-01-28T11:52:58.015Z [DEBUG] [LSP SERVER plugin:clangd-lsp:clangd] I[19:52:58.010] --> reply:initialize(0) 4 ms
+2026-01-28T11:52:58.019Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Received response 'initialize - (0)' in 16ms.
+2026-01-28T11:52:58.020Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Sending notification 'initialized'.
+2026-01-28T11:52:58.021Z [DEBUG] LSP server plugin:clangd-lsp:clangd initialized
+2026-01-28T11:52:58.021Z [DEBUG] LSP server instance started: plugin:clangd-lsp:clangd
+2026-01-28T11:52:58.022Z [DEBUG] [LSP SERVER plugin:clangd-lsp:clangd] I[19:52:58.021] <-- initialized
+2026-01-28T11:52:58.022Z [DEBUG] Total plugin agents loaded: 0
+2026-01-28T11:52:58.022Z [DEBUG] [STARTUP] Commands and agents loaded in 41ms
+2026-01-28T11:52:58.022Z [DEBUG] [STARTUP] Running showSetupScreens()...
+2026-01-28T11:52:58.022Z [DEBUG] [render] initYoga starting
+2026-01-28T11:52:58.026Z [DEBUG] [Claude in Chrome] Extension not found in any browser
+2026-01-28T11:52:58.027Z [DEBUG] [render] initYoga complete
+2026-01-28T11:52:58.030Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-01-28T11:52:58.036Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-01-28T11:52:58.036Z [DEBUG] Grove: Using fresh cached config
+2026-01-28T11:52:58.036Z [DEBUG] [render] initYoga starting
+2026-01-28T11:52:58.037Z [DEBUG] [render] initYoga complete
+2026-01-28T11:52:58.038Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-01-28T11:52:58.040Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-01-28T11:52:58.044Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-01-28T11:52:58.047Z [DEBUG] Git remote URL: https://github.com/lisihao/ThunderDuck.git
+2026-01-28T11:52:58.047Z [DEBUG] Parsed repository: lisihao/ThunderDuck from https://github.com/lisihao/ThunderDuck.git
+2026-01-28T11:52:58.047Z [DEBUG] Parsed repository: lisihao/ThunderDuck from URL: https://github.com/lisihao/ThunderDuck.git
+2026-01-28T11:52:58.047Z [DEBUG] Path /Users/sihaoli/ThunderDuck/src/core already tracked for repo lisihao/thunderduck
+2026-01-28T11:52:58.460Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] error: Unknown binary 'rust-analyzer' in official toolchain 'stable-aarch64-apple-darwin'.
+2026-01-28T11:52:58.461Z [DEBUG] LSP server plugin:rust-analyzer-lsp:rust-analyzer connection closed
+2026-01-28T11:52:58.468Z [ERROR] Error: Error: LSP server plugin:rust-analyzer-lsp:rust-analyzer crashed with exit code 1
+    at ChildProcess.<anonymous> (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:1622:21508)
+    at ChildProcess.emit (node:events:508:28)
+    at ChildProcess.emit (node:domain:489:12)
+    at ChildProcess._handle.onexit (node:internal/child_process:294:12)
+2026-01-28T11:52:58.607Z [DEBUG] [STARTUP] showSetupScreens() completed in 585ms
+2026-01-28T11:52:58.608Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-01-28T11:52:58.608Z [DEBUG] [API:auth] OAuth token check starting
+2026-01-28T11:52:58.609Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T11:52:58.612Z [DEBUG] All plugins already exist, skipping migration
+2026-01-28T11:52:58.612Z [DEBUG] [API:auth] OAuth token check complete
+2026-01-28T11:52:58.612Z [DEBUG] Initialized versioned plugins system with 2 plugins
+2026-01-28T11:52:58.615Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.45264.1769601178615
+2026-01-28T11:52:58.615Z [DEBUG] Preserving file permissions: 100600
+2026-01-28T11:52:58.615Z [DEBUG] Temp file written successfully, size: 9514 bytes
+2026-01-28T11:52:58.615Z [DEBUG] Applied original permissions to temp file
+2026-01-28T11:52:58.615Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.45264.1769601178615 to /Users/sihaoli/.claude.json
+2026-01-28T11:52:58.615Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-01-28T11:52:58.617Z [DEBUG] Getting matching hook commands for SessionStart with query: startup
+2026-01-28T11:52:58.617Z [DEBUG] Found 0 hook matchers in settings
+2026-01-28T11:52:58.617Z [DEBUG] Matched 0 unique hooks for query "startup" (0 before deduplication)
+2026-01-28T11:52:58.620Z [DEBUG] [render] initYoga starting
+2026-01-28T11:52:58.620Z [DEBUG] Skills and commands included in Skill tool: agent, benchmark, build, commit, docs, mcp-builder, pr, restore, review, save, skill-creator, stats, status, test, webapp-testing
+2026-01-28T11:52:58.621Z [DEBUG] [render] initYoga complete
+2026-01-28T11:52:58.622Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-01-28T11:52:58.622Z [DEBUG] [API:auth] OAuth token check starting
+2026-01-28T11:52:58.622Z [DEBUG] [API:auth] OAuth token check complete
+2026-01-28T11:52:58.627Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-01-28T11:52:58.655Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-01-28T11:52:58.655Z [DEBUG] [REPL:mount] REPL mounted, disabled=false
+2026-01-28T11:52:58.655Z [DEBUG] Official marketplace auto-install skipped: already_attempted
+2026-01-28T11:52:58.655Z [DEBUG] performStartupChecks called
+2026-01-28T11:52:58.656Z [DEBUG] Starting background plugin installations
+2026-01-28T11:52:58.656Z [DEBUG] performBackgroundPluginInstallations called
+2026-01-28T11:52:58.694Z [DEBUG] Found 2 enabled plugins
+2026-01-28T11:52:58.694Z [DEBUG] All plugins already exist, skipping migration
+2026-01-28T11:52:58.694Z [DEBUG] Found 2 installed plugins (V2 format)
+2026-01-28T11:52:58.694Z [DEBUG] Loaded plugins - Enabled: 2, Disabled: 0, Commands: 0, Agents: 0, Errors: 0
+2026-01-28T11:52:58.694Z [DEBUG] Found 0 missing plugins (not installed):
+2026-01-28T11:52:58.694Z [DEBUG] Setting installation status: 0 marketplaces, 0 installable plugins, 0 uninstallable plugins
+2026-01-28T11:52:58.708Z [DEBUG] MCP server "ide": Starting connection with timeout of 30000ms
+2026-01-28T11:52:58.726Z [DEBUG] Summarizing all 8 messages (~0 tokens)
+2026-01-28T11:52:58.734Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-01-28T11:52:58.736Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-01-28T11:52:58.736Z [DEBUG] [API:auth] OAuth token check starting
+2026-01-28T11:52:58.737Z [DEBUG] [API:auth] OAuth token check complete
+2026-01-28T11:52:58.750Z [DEBUG] MCP server "ide": Successfully connected to ws-ide server in 45ms
+2026-01-28T11:52:58.751Z [DEBUG] MCP server "ide": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Claude Code VSCode MCP","version":"2.1.20"}}
+2026-01-28T11:52:58.752Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.45264.1769601178752
+2026-01-28T11:52:58.752Z [DEBUG] Preserving file permissions: 100600
+2026-01-28T11:52:58.752Z [DEBUG] Temp file written successfully, size: 9514 bytes
+2026-01-28T11:52:58.752Z [DEBUG] Applied original permissions to temp file
+2026-01-28T11:52:58.752Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.45264.1769601178752 to /Users/sihaoli/.claude.json
+2026-01-28T11:52:58.753Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-01-28T11:52:58.755Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-01-28T11:52:59.723Z [DEBUG] Stream started - received first chunk
+2026-01-28T11:53:01.337Z [DEBUG] High write ratio: blit=0, write=1009 (100.0% writes), screen=22x148
+2026-01-28T11:53:01.347Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-01-28T11:53:01.347Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-01-28T11:53:01.348Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-01-28T11:53:01.348Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-01-28T11:53:01.369Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-01-28T11:53:01.369Z [DEBUG] Found 0 hook matchers in settings
+2026-01-28T11:53:01.369Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-01-28T11:53:01.371Z [DEBUG] Started caffeinate to prevent sleep
+2026-01-28T11:53:01.372Z [DEBUG] FileHistory: Added snapshot for 71413ff1-3b67-4a76-af1b-c4d417c05fe6, tracking 0 files
+2026-01-28T11:53:01.381Z [DEBUG] High write ratio: blit=0, write=1009 (100.0% writes), screen=22x148
+2026-01-28T11:53:01.381Z [DEBUG] MCP server "ide": Calling MCP tool: closeAllDiffTabs
+2026-01-28T11:53:01.382Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-01-28T11:53:01.384Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-01-28T11:53:01.384Z [DEBUG] [API:auth] OAuth token check starting
+2026-01-28T11:53:01.384Z [DEBUG] [API:auth] OAuth token check complete
+2026-01-28T11:53:01.385Z [DEBUG] Total plugin output styles loaded: 0
+2026-01-28T11:53:01.391Z [DEBUG] MCP server "ide": Tool 'closeAllDiffTabs' completed successfully in 10ms
+2026-01-28T11:53:01.395Z [DEBUG] Auto tool search disabled: 400 chars (threshold: 50000, 10% of context)
+2026-01-28T11:53:01.402Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-01-28T11:53:01.402Z [DEBUG] [API:auth] OAuth token check starting
+2026-01-28T11:53:01.402Z [DEBUG] [API:auth] OAuth token check complete
+2026-01-28T11:53:01.440Z [DEBUG] High write ratio: blit=296, write=1002 (77.2% writes), screen=22x148
+2026-01-28T11:53:02.721Z [DEBUG] Stream started - received first chunk
+2026-01-28T11:53:04.062Z [DEBUG] Stream started - received first chunk
+2026-01-28T11:53:05.362Z [DEBUG] High write ratio: blit=296, write=1013 (77.4% writes), screen=22x148
+2026-01-28T11:53:06.788Z [DEBUG] High write ratio: blit=296, write=1001 (77.2% writes), screen=22x148
+2026-01-28T11:53:10.425Z [DEBUG] High write ratio: blit=296, write=1595 (84.3% writes), screen=47x148
+2026-01-28T11:53:10.436Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-01-28T11:53:10.436Z [DEBUG] Found 1 hook matchers in settings
+2026-01-28T11:53:10.436Z [DEBUG] Matched 1 unique hooks for query "no match query" (1 before deduplication)
+2026-01-28T11:53:10.468Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-01-28T11:53:10.477Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-01-28T11:53:10.482Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.45264.1769601190482
+2026-01-28T11:53:10.482Z [DEBUG] Preserving file permissions: 100600
+2026-01-28T11:53:10.482Z [DEBUG] Temp file written successfully, size: 9514 bytes
+2026-01-28T11:53:10.482Z [DEBUG] Applied original permissions to temp file
+2026-01-28T11:53:10.482Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.45264.1769601190482 to /Users/sihaoli/.claude.json
+2026-01-28T11:53:10.482Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-01-28T11:53:10.487Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.45264.1769601190487
+2026-01-28T11:53:10.487Z [DEBUG] Preserving file permissions: 100600
+2026-01-28T11:53:10.487Z [DEBUG] Temp file written successfully, size: 9514 bytes
+2026-01-28T11:53:10.487Z [DEBUG] Applied original permissions to temp file
+2026-01-28T11:53:10.487Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.45264.1769601190487 to /Users/sihaoli/.claude.json
+2026-01-28T11:53:10.487Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-01-28T11:53:38.695Z [DEBUG] Getting matching hook commands for SessionEnd with query: prompt_input_exit
+2026-01-28T11:53:38.695Z [DEBUG] Found 0 hook matchers in settings
+2026-01-28T11:53:38.695Z [DEBUG] Matched 0 unique hooks for query "prompt_input_exit" (0 before deduplication)
+2026-01-28T11:53:38.698Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Sending request 'shutdown - (1)'.
+2026-01-28T11:53:38.702Z [DEBUG] MCP server "ide": WebSocket transport closed/disconnected, attempting automatic reconnection
+2026-01-28T11:53:38.703Z [DEBUG] MCP server "ide": Starting connection with timeout of 30000ms
+2026-01-28T11:53:38.705Z [DEBUG] FileHistory: Making snapshot for message 32cdee0b-e436-4778-aabf-6e95cd965dbd
+2026-01-28T11:53:38.705Z [DEBUG] FileHistory: Added snapshot for 32cdee0b-e436-4778-aabf-6e95cd965dbd, tracking 0 files
+2026-01-28T11:53:38.709Z [DEBUG] UserCommandMessage rendering: "exit" (args: "none", isSkillFormat: false)
+2026-01-28T11:53:38.720Z [DEBUG] Started caffeinate to prevent sleep
+2026-01-28T11:53:38.725Z [DEBUG] MCP server "ide": Successfully connected to ws-ide server in 23ms
+2026-01-28T11:53:38.725Z [DEBUG] MCP server "ide": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Claude Code VSCode MCP","version":"2.1.20"}}
+2026-01-28T11:53:38.727Z [DEBUG] [LSP SERVER plugin:clangd-lsp:clangd] I[19:53:38.718] <-- shutdown(1)
+I[19:53:38.718] --> reply:shutdown(1) 0 ms
+2026-01-28T11:53:38.727Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-01-28T11:53:38.728Z [DEBUG] MCP server "ide": WebSocket reconnection successful after 26ms (attempt 1)
+2026-01-28T11:53:38.728Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Received response 'shutdown - (1)' in 30ms.
+2026-01-28T11:53:38.728Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Sending notification 'exit'.
+2026-01-28T11:53:38.732Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.45264.1769601218732
+2026-01-28T11:53:38.732Z [DEBUG] Preserving file permissions: 100600
+2026-01-28T11:53:38.732Z [DEBUG] Temp file written successfully, size: 9514 bytes
+2026-01-28T11:53:38.732Z [DEBUG] Applied original permissions to temp file
+2026-01-28T11:53:38.732Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.45264.1769601218732 to /Users/sihaoli/.claude.json
+2026-01-28T11:53:38.732Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-01-28T11:53:38.734Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.45264.1769601218734
+2026-01-28T11:53:38.734Z [DEBUG] Preserving file permissions: 100600
+2026-01-28T11:53:38.734Z [DEBUG] Temp file written successfully, size: 9514 bytes
+2026-01-28T11:53:38.734Z [DEBUG] Applied original permissions to temp file
+2026-01-28T11:53:38.734Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.45264.1769601218734 to /Users/sihaoli/.claude.json
+2026-01-28T11:53:38.734Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-01-28T11:53:38.736Z [DEBUG] LSP client stopped for plugin:clangd-lsp:clangd
+2026-01-28T11:53:38.736Z [DEBUG] LSP server instance stopped: plugin:clangd-lsp:clangd
+2026-01-28T11:53:38.736Z [DEBUG] LSP server manager shut down successfully

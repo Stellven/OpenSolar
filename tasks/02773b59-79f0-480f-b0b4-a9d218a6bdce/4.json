@@ -1,0 +1,9 @@
+{
+  "id": "4",
+  "subject": "Phase 4: Claims 富化器 - claims-enricher.ts",
+  "description": "从 cortex_sources 生成高质量 cortex_claims",
+  "activeForm": "Building claims enricher",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

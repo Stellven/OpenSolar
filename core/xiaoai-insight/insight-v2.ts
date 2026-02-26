@@ -43,7 +43,7 @@ const EXPERT_VENDOR: Record<string, string> = {
   'deepseek-r1': 'deepseek',
   'deepseek-v3': 'deepseek',
   'glm-5': 'zhipu',
-  'glm-4-plus': 'zhipu',
+  'glm-5': 'zhipu',
   'glm-4-flash': 'zhipu'
 };
 
@@ -2265,7 +2265,7 @@ ${draftsText}
       'deepseek-r1': '审判官 (deepseek-r1) · 深度推理 · 红队验证',
       'deepseek-v3': '创想家 (deepseek-v3) · 创意编码 · 突破常规',
       'glm-5': '智囊 (glm-5) · 战略分析 · 决策支持',
-      'glm-4-plus': '建设者 (glm-4-plus) · 日常编码 · 友善配合'
+      'glm-5': '建设者 (glm-5) · 日常编码 · 友善配合'
     };
 
     // 获取章节标题列表

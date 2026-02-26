@@ -46,7 +46,7 @@
 **执行方式:**
 ```typescript
 mcp__brain-router__complete({
-  model: "glm-4-plus",
+  model: "glm-5",
   system: "你是专业的...",
   prompt: "任务描述"
 })
@@ -63,7 +63,7 @@ mcp__brain-router__complete({
 │                                                               │
 │  模式: economy → glm_only                                     │
 │  说明: 尽可能用GLM (编码/测试/审查都用GLM)                    │
-│  优先级: glm-4-plus → glm-4-flash                             │
+│  优先级: glm-5 → glm-4-flash                             │
 │                                                               │
 └───────────────────────────────────────────────────────────────┘
 ```

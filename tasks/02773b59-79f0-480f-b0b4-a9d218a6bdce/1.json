@@ -1,0 +1,9 @@
+{
+  "id": "1",
+  "subject": "Phase 1: 清理垃圾数据 - knowledge-cleanup.ts",
+  "description": "删除 co_occurs_in 垃圾关系、低质量 claims、孤立实体",
+  "activeForm": "Cleaning garbage data",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

@@ -1,0 +1,215 @@
+2026-02-14T18:25:13.785Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-14T18:25:13.786Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-14T18:25:13.786Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-14T18:25:13.786Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-14T18:25:13.791Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-14T18:25:13.803Z [DEBUG] Found 0 plugins (0 enabled, 0 disabled)
+2026-02-14T18:25:13.803Z [DEBUG] [claudeai-mcp] Checking gate (cached)...
+2026-02-14T18:25:13.803Z [DEBUG] [claudeai-mcp] Gate returned: true
+2026-02-14T18:25:13.803Z [DEBUG] [claudeai-mcp] Fetching from https://api.anthropic.com/v1/mcp_servers?limit=1000
+2026-02-14T18:25:13.807Z [DEBUG] [ToolSearch:optimistic] mode=tst-auto, ENABLE_TOOL_SEARCH=undefined, result=true
+2026-02-14T18:25:13.807Z [DEBUG] [STARTUP] Running setup()...
+2026-02-14T18:25:13.808Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-14T18:25:13.829Z [DEBUG] Passes: Cache stale, returning cached data and refreshing in background
+2026-02-14T18:25:13.829Z [DEBUG] Error log sink initialized
+2026-02-14T18:25:13.833Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-14T18:25:13.833Z [DEBUG] Total plugin skills loaded: 0
+2026-02-14T18:25:13.833Z [DEBUG] Total plugin commands loaded: 0
+2026-02-14T18:25:13.833Z [DEBUG] [STARTUP] setup() completed in 26ms
+2026-02-14T18:25:13.833Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-02-14T18:25:13.837Z [DEBUG] Registered 0 hooks from 0 plugins
+2026-02-14T18:25:13.838Z [DEBUG] Loaded 76 unique skills (76 unconditional, 0 conditional, managed: 0, user: 76, project: 0, additional: 0, legacy commands: 0)
+2026-02-14T18:25:13.838Z [DEBUG] getSkills returning: 76 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-14T18:25:13.851Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=/Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg)
+2026-02-14T18:25:13.860Z [DEBUG] Agent file /Users/sihaoli/.claude/agents/community.md is missing required 'name' in frontmatter
+2026-02-14T18:25:13.860Z [DEBUG] Failed to parse agent from /Users/sihaoli/.claude/agents/community.md: Missing required "name" field in frontmatter
+2026-02-14T18:25:13.861Z [DEBUG] Total plugin agents loaded: 0
+2026-02-14T18:25:13.861Z [DEBUG] [STARTUP] Commands and agents loaded in 28ms
+2026-02-14T18:25:13.861Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-02-14T18:25:13.861Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-02-14T18:25:13.861Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-02-14T18:25:13.861Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:13.861Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:13.862Z [DEBUG] Passes: Cache stale, returning cached data and refreshing in background
+2026-02-14T18:25:13.862Z [DEBUG] Passes: Reusing in-flight eligibility fetch
+2026-02-14T18:25:13.862Z [DEBUG] Total LSP servers loaded: 0
+2026-02-14T18:25:13.862Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 0 server(s)
+2026-02-14T18:25:13.862Z [DEBUG] LSP manager initialized with 0 servers
+2026-02-14T18:25:13.862Z [DEBUG] LSP server manager initialized successfully
+2026-02-14T18:25:13.862Z [DEBUG] LSP notification handlers registered successfully for all 0 server(s)
+2026-02-14T18:25:13.862Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:13.959Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68913.1771093513959
+2026-02-14T18:25:13.959Z [DEBUG] Preserving file permissions: 100600
+2026-02-14T18:25:13.959Z [DEBUG] Temp file written successfully, size: 16996 bytes
+2026-02-14T18:25:13.959Z [DEBUG] Applied original permissions to temp file
+2026-02-14T18:25:13.959Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68913.1771093513959 to /Users/sihaoli/.claude.json
+2026-02-14T18:25:13.959Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-14T18:25:13.960Z [DEBUG] [claudeai-mcp] Fetched 0 servers
+2026-02-14T18:25:13.960Z [DEBUG] [STARTUP] MCP configs loaded in 169ms
+2026-02-14T18:25:13.963Z [DEBUG] MCP server "playwright": Starting connection with timeout of 30000ms
+2026-02-14T18:25:13.965Z [DEBUG] MCP server "brain-router": Starting connection with timeout of 30000ms
+2026-02-14T18:25:13.966Z [DEBUG] MCP server "are": Starting connection with timeout of 30000ms
+2026-02-14T18:25:14.015Z [DEBUG] Org fast mode: disabled (extra_usage_disabled)
+2026-02-14T18:25:14.069Z [ERROR] MCP server "are" Server stderr: ARE MCP Server running
+2026-02-14T18:25:14.069Z [DEBUG] MCP server "are": Successfully connected to undefined server in 103ms
+2026-02-14T18:25:14.069Z [DEBUG] MCP server "are": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"are-orchestrator","version":"1.0.0"}}
+2026-02-14T18:25:14.095Z [ERROR] MCP server "brain-router" Server stderr: Traceback (most recent call last):
+  File "/Users/sihaoli/.solar/brain-router/src/mcp/server.py", line 63, in <module>
+    from ..sroe_tracker import get_tracker, RoutingInfo, RequestMetrics
+ImportError: attempted relative import with no known parent package
+2026-02-14T18:25:14.095Z [DEBUG] MCP server "brain-router": Connection failed after 130ms: MCP error -32000: Connection closed
+2026-02-14T18:25:14.095Z [ERROR] MCP server "brain-router" Connection failed: MCP error -32000: Connection closed
+2026-02-14T18:25:14.198Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.68913.1771093514198
+2026-02-14T18:25:14.198Z [DEBUG] Preserving file permissions: 100600
+2026-02-14T18:25:14.198Z [DEBUG] Temp file written successfully, size: 16996 bytes
+2026-02-14T18:25:14.198Z [DEBUG] Applied original permissions to temp file
+2026-02-14T18:25:14.198Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.68913.1771093514198 to /Users/sihaoli/.claude.json
+2026-02-14T18:25:14.198Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-14T18:25:14.198Z [DEBUG] Passes eligibility cached for org 4b64fec2-dab6-4cd3-854f-5b8cb2ded5ae: true
+2026-02-14T18:25:14.316Z [DEBUG] MCP server "playwright": Successfully connected to undefined server in 355ms
+2026-02-14T18:25:14.316Z [DEBUG] MCP server "playwright": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Playwright","version":"0.0.61"}}
+2026-02-14T18:25:14.356Z [DEBUG] Loaded 2 installed plugins from /Users/sihaoli/.claude/plugins/installed_plugins.json
+2026-02-14T18:25:14.356Z [DEBUG] Initialized versioned plugins system with 2 plugins
+2026-02-14T18:25:14.359Z [DEBUG] Watching for changes in setting files /Users/sihaoli/.claude/settings.json...
+2026-02-14T18:25:14.370Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-02-14T18:25:14.372Z [DEBUG] Plugin autoupdate: skipped (auto-updater disabled)
+2026-02-14T18:25:14.374Z [DEBUG] Grove: Using fresh cached config
+2026-02-14T18:25:14.386Z [ERROR] Error: Error: ENOENT: no such file or directory, open '/Users/sihaoli/Solar/core/listeners/.claude/settings.json'
+    at Module.openSync (node:fs:555:18)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:816
+    at HX (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:49854)
+    at Object.readSync (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:750)
+    at OX (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:6208:105)
+    at PJ (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:6210:224)
+    at Bi8 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:214:2225)
+    at Immediate._onImmediate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:7332:4543)
+    at process.processImmediate (node:internal/timers:504:21)
+2026-02-14T18:25:14.386Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/sihaoli/Solar/core/listeners/.claude/settings.json
+2026-02-14T18:25:14.387Z [ERROR] Error: Error: ENOENT: no such file or directory, open '/Users/sihaoli/Solar/core/listeners/.claude/settings.local.json'
+    at Module.openSync (node:fs:555:18)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:816
+    at HX (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:49854)
+    at Object.readSync (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:750)
+    at OX (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:6208:105)
+    at PJ (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:6210:224)
+    at Bi8 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:214:2225)
+    at Immediate._onImmediate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:7332:4543)
+    at process.processImmediate (node:internal/timers:504:21)
+2026-02-14T18:25:14.387Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/sihaoli/Solar/core/listeners/.claude/settings.local.json
+2026-02-14T18:25:14.391Z [DEBUG] Watching for changes in skill/command directories: /Users/sihaoli/.claude/skills...
+2026-02-14T18:25:14.393Z [DEBUG] Stats cache is up to date
+2026-02-14T18:25:14.437Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.437Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.437Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.437Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.437Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.437Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.437Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.437Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.437Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.437Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.437Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.437Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.437Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.437Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.437Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.437Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.437Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.437Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.437Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.437Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.437Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.438Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.438Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.438Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.438Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.438Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.438Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.438Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.438Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.438Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.438Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.438Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.438Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.438Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.438Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.438Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.438Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.554Z [DEBUG] Getting matching hook commands for SessionStart with query: startup
+2026-02-14T18:25:14.554Z [DEBUG] Found 0 hook matchers in settings
+2026-02-14T18:25:14.554Z [DEBUG] Matched 0 unique hooks for query "startup" (0 before deduplication)
+2026-02-14T18:25:14.555Z [DEBUG] installPluginsForHeadless: starting
+2026-02-14T18:25:14.555Z [DEBUG] Found 2 installed plugins (V2 format)
+2026-02-14T18:25:14.555Z [DEBUG] installPluginsForHeadless: no missing plugins or marketplaces configured
+2026-02-14T18:25:14.556Z [DEBUG] [SystemPrompt] path=simple proactive=false
+2026-02-14T18:25:14.559Z [DEBUG] Total plugin output styles loaded: 0
+2026-02-14T18:25:14.563Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-14T18:25:14.563Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-14T18:25:14.563Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-14T18:25:14.563Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-14T18:25:14.563Z [DEBUG] Sending 39 skills via attachment (initial, 39 total sent)
+2026-02-14T18:25:14.565Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-14T18:25:14.565Z [DEBUG] Found 0 hook matchers in settings
+2026-02-14T18:25:14.565Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-14T18:25:14.567Z [DEBUG] autocompact: tokens=590 threshold=167000 effectiveWindow=180000
+2026-02-14T18:25:14.568Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.568Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.568Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.749Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-14T18:25:14.750Z [DEBUG] Using tool-based global cache marker on EnterPlanMode
+2026-02-14T18:25:14.771Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=cli; cch=00000;
+2026-02-14T18:25:14.775Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.775Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.776Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:14.882Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: analyzeMcp]
+2026-02-14T18:25:14.886Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T18:25:14.886Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T18:25:14.886Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T18:25:17.705Z [DEBUG] Stream started - received first chunk
+2026-02-14T18:25:25.280Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-14T18:25:25.280Z [DEBUG] Found 0 hook matchers in settings
+2026-02-14T18:25:25.281Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-14T18:25:25.281Z [DEBUG] Getting matching hook commands for SessionEnd with query: other
+2026-02-14T18:25:25.281Z [DEBUG] Found 0 hook matchers in settings
+2026-02-14T18:25:25.281Z [DEBUG] Matched 0 unique hooks for query "other" (0 before deduplication)

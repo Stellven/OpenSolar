@@ -1419,12 +1419,13 @@ if (import.meta.main) {
         'gemini-3-pro': 'explorer',       // 新增
         'gemini-3-pro-preview': 'explorer',
         'gemini-3-flash-preview': 'explorer',
+        'gemini-3.1-pro': 'explorer',     // 前沿派 - ARC-AGI-2 77.1%
         // 创想家 - 创意编码
         'deepseek-v3': 'creator',
         // 审判官 - 深度推理/裁判
         'deepseek-r1': 'judge',
         // 建设者 - 批量执行
-        'glm-4-plus': 'builder',
+        'glm-5': 'builder',
         'glm-4.7': 'builder',           // 新增
         'glm-5': 'architect',           // 智囊
         'zhipu/glm-5': 'architect',     // 新增
@@ -1494,7 +1495,7 @@ if (import.meta.main) {
         'gemini-2.5-flash': 'builder', 'gemini-2-flash': 'builder',
         'gemini-3-pro-preview': 'explorer', 'gemini-3-flash-preview': 'explorer',
         'deepseek-v3': 'creator', 'deepseek-r1': 'judge',
-        'glm-4-plus': 'builder', 'glm-5': 'architect', 'glm-4-flash': 'builder',
+        'glm-5': 'builder', 'glm-5': 'architect', 'glm-4-flash': 'builder',
         'gpt-4o': 'architect', 'gpt-4o-mini': 'builder',
         'o1': 'architect', 'o1-mini': 'builder',
         'claude-sonnet-4-5': 'architect', 'claude-opus-4-5': 'judge', 'claude-opus-4-6': 'judge',

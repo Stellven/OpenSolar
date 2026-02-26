@@ -56,6 +56,11 @@ if [ -x "$HOOKS_DIR/personality-injector.sh" ]; then
     "$HOOKS_DIR/personality-injector.sh" 2>/dev/null || true
 fi
 
+# 10. Context Monitor (上下文监控 - 80%阈值触发摘要)
+if [ -x "$HOOKS_DIR/context-monitor.sh" ]; then
+    "$HOOKS_DIR/context-monitor.sh" 2>/dev/null || true
+fi
+
 # 清理
 rm -f "$TEMP_FILE"
 

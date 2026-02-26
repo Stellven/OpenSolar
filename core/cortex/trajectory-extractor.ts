@@ -8,6 +8,7 @@
 import { Database } from 'bun:sqlite';
 import fs from 'fs';
 import path from 'path';
+import { classifyIntent } from './intent-classifier';
 
 // 类型定义
 interface JsonlLine {
@@ -148,7 +149,7 @@ class TrajectoryExtractor {
     // 不同模型定价 (每1K tokens)
     const pricing: Record<string, { input: number; output: number }> = {
       'glm-5': { input: 0.001, output: 0.002 },
-      'glm-4-plus': { input: 0.0005, output: 0.0005 },
+      'glm-5': { input: 0.0005, output: 0.0005 },
       'gemini-2.5-pro': { input: 0.00125, output: 0.005 },
       'deepseek-v3': { input: 0.0014, output: 0.0028 },
       'claude-sonnet': { input: 0.003, output: 0.015 },
@@ -192,11 +193,14 @@ class TrajectoryExtractor {
       const assistantMsg = traceMessages.find(m => m.type === 'assistant');
       const model = assistantMsg?.message?.model;
 
+      const userQuery = this.extractUserQuery([userMsg]);
+      const intentResult = classifyIntent(userQuery);
+
       const trace: TraceData = {
         trace_id: userMsg.uuid || `trace_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         session_id: sessionId,
-        user_query: this.extractUserQuery([userMsg]),
-        intent: '{}',
+        user_query: userQuery,
+        intent: JSON.stringify(intentResult),
         started_at: userMsg.timestamp,
         ended_at: traceMessages.length > 1 ? traceMessages[traceMessages.length - 1].timestamp : null,
         latency_ms: traceMessages.length > 1

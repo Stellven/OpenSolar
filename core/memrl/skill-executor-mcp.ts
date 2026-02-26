@@ -55,7 +55,7 @@ export class SkillExecutorMCP {
     this.retriever = new SkillRetriever(dbPath);
     this.mcpCaller = options?.mcpCaller || null;
     this.httpEndpoint = options?.httpEndpoint || 'http://localhost:3000/api/brain-router/complete';
-    this.defaultModel = options?.defaultModel || 'glm-4-plus';
+    this.defaultModel = options?.defaultModel || 'glm-5';
   }
 
   /**
@@ -229,7 +229,7 @@ export class SkillExecutorMCP {
       default:
         // 根据复杂度选择
         if (skill.q_value >= 0.8) {
-          return 'glm-4-plus';   // 高成功率用标准模型
+          return 'glm-5';   // 高成功率用标准模型
         }
         return 'glm-4-flash';   // 低成功率用快模型试错
     }

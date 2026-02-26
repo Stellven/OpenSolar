@@ -1,0 +1,354 @@
+2026-02-11T21:15:27.130Z [DEBUG] Watching for changes in setting files /Users/sihaoli/.claude...
+2026-02-11T21:15:27.132Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-11T21:15:27.132Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-11T21:15:27.132Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-11T21:15:27.132Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-11T21:15:27.135Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-02-11T21:15:27.136Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-02-11T21:15:27.136Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-02-11T21:15:27.137Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-11T21:15:27.146Z [DEBUG] Found 0 plugins (0 enabled, 0 disabled)
+2026-02-11T21:15:27.146Z [DEBUG] Total LSP servers loaded: 0
+2026-02-11T21:15:27.146Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 0 server(s)
+2026-02-11T21:15:27.146Z [DEBUG] LSP manager initialized with 0 servers
+2026-02-11T21:15:27.146Z [DEBUG] [STARTUP] MCP configs loaded in 9ms
+2026-02-11T21:15:27.146Z [DEBUG] LSP server manager initialized successfully
+2026-02-11T21:15:27.146Z [DEBUG] LSP notification handlers registered successfully for all 0 server(s)
+2026-02-11T21:15:27.146Z [DEBUG] [STARTUP] Running setup()...
+2026-02-11T21:15:27.155Z [DEBUG] Stats cache is up to date
+2026-02-11T21:15:27.156Z [DEBUG] Plugin autoupdate: skipped (auto-updater disabled)
+2026-02-11T21:15:27.159Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-11T21:15:27.179Z [DEBUG] Passes: Cache stale, returning cached data and refreshing in background
+2026-02-11T21:15:27.183Z [DEBUG] Loaded 2 installed plugins from /Users/sihaoli/.claude/plugins/installed_plugins.json
+2026-02-11T21:15:27.211Z [DEBUG] Error log sink initialized
+2026-02-11T21:15:27.215Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/todos/1bc71e48-f950-4625-98dc-29dbc4350bac-agent-1bc71e48-f950-4625-98dc-29dbc4350bac.json.tmp.25465.1770844527215
+2026-02-11T21:15:27.215Z [DEBUG] Temp file written successfully, size: 2 bytes
+2026-02-11T21:15:27.215Z [DEBUG] Renaming /Users/sihaoli/.claude/todos/1bc71e48-f950-4625-98dc-29dbc4350bac-agent-1bc71e48-f950-4625-98dc-29dbc4350bac.json.tmp.25465.1770844527215 to /Users/sihaoli/.claude/todos/1bc71e48-f950-4625-98dc-29dbc4350bac-agent-1bc71e48-f950-4625-98dc-29dbc4350bac.json
+2026-02-11T21:15:27.215Z [DEBUG] File /Users/sihaoli/.claude/todos/1bc71e48-f950-4625-98dc-29dbc4350bac-agent-1bc71e48-f950-4625-98dc-29dbc4350bac.json written atomically
+2026-02-11T21:15:27.220Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-11T21:15:27.220Z [DEBUG] Total plugin skills loaded: 0
+2026-02-11T21:15:27.220Z [DEBUG] Total plugin commands loaded: 0
+2026-02-11T21:15:27.220Z [DEBUG] Registered 0 hooks from 0 plugins
+2026-02-11T21:15:27.220Z [DEBUG] [STARTUP] setup() completed in 74ms
+2026-02-11T21:15:27.220Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-02-11T21:15:27.228Z [DEBUG] Loaded 74 unique skills (managed: 0, user: 74, project: 0, legacy commands: 0)
+2026-02-11T21:15:27.228Z [DEBUG] getSkills returning: 74 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-02-11T21:15:27.232Z [ERROR] Error: Error: ENOENT: no such file or directory, open '/Users/sihaoli/Solar/.claude/settings.json'
+    at Module.openSync (node:fs:555:18)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:673
+    at xI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:34380)
+    at Object.readSync (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:607)
+    at vI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4629:105)
+    at hI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4631:204)
+    at rX9 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4625:1915)
+    at Immediate._onImmediate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:5358:3574)
+    at process.processImmediate (node:internal/timers:504:21)
+2026-02-11T21:15:27.232Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/sihaoli/Solar/.claude/settings.json
+2026-02-11T21:15:27.232Z [ERROR] Error: Error: ENOENT: no such file or directory, open '/Users/sihaoli/Solar/.claude/settings.local.json'
+    at Module.openSync (node:fs:555:18)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:673
+    at xI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:34380)
+    at Object.readSync (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:607)
+    at vI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4629:105)
+    at hI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4631:204)
+    at rX9 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4625:1915)
+    at Immediate._onImmediate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:5358:3574)
+    at process.processImmediate (node:internal/timers:504:21)
+2026-02-11T21:15:27.232Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/sihaoli/Solar/.claude/settings.local.json
+2026-02-11T21:15:27.263Z [DEBUG] [Claude in Chrome] Found chrome profiles: Default, Profile 1
+2026-02-11T21:15:27.265Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=/Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg)
+2026-02-11T21:15:27.265Z [DEBUG] Watching for changes in skill/command directories: /Users/sihaoli/.claude/skills...
+2026-02-11T21:15:27.285Z [DEBUG] Agent file /Users/sihaoli/.claude/agents/community.md is missing required 'name' in frontmatter
+2026-02-11T21:15:27.285Z [DEBUG] Failed to parse agent from /Users/sihaoli/.claude/agents/community.md: Missing required "name" field in frontmatter
+2026-02-11T21:15:27.286Z [DEBUG] Total plugin agents loaded: 0
+2026-02-11T21:15:27.286Z [DEBUG] [STARTUP] Commands and agents loaded in 66ms
+2026-02-11T21:15:27.286Z [DEBUG] [STARTUP] Running showSetupScreens()...
+2026-02-11T21:15:27.288Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-02-11T21:15:27.290Z [DEBUG] Grove: Using fresh cached config
+2026-02-11T21:15:27.290Z [DEBUG] [render] initYoga starting
+2026-02-11T21:15:27.303Z [DEBUG] [render] initYoga complete
+2026-02-11T21:15:27.307Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-02-11T21:15:27.313Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-02-11T21:15:27.313Z [DEBUG] Git remote URL: https://github.com/lisihao/Solar.git
+2026-02-11T21:15:27.313Z [DEBUG] Parsed repository: lisihao/Solar from https://github.com/lisihao/Solar.git
+2026-02-11T21:15:27.313Z [DEBUG] Parsed repository: lisihao/Solar from URL: https://github.com/lisihao/Solar.git
+2026-02-11T21:15:27.313Z [DEBUG] Path /Users/sihaoli/Solar already tracked for repo lisihao/solar
+2026-02-11T21:15:27.323Z [DEBUG] [Claude in Chrome] Extension not found in any browser
+2026-02-11T21:15:27.353Z [DEBUG] Session index: added 1, updated 2, removed 0 (total: 67)
+2026-02-11T21:15:27.729Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.25465.1770844527729
+2026-02-11T21:15:27.729Z [DEBUG] Preserving file permissions: 100600
+2026-02-11T21:15:27.730Z [DEBUG] Temp file written successfully, size: 14749 bytes
+2026-02-11T21:15:27.730Z [DEBUG] Applied original permissions to temp file
+2026-02-11T21:15:27.730Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.25465.1770844527729 to /Users/sihaoli/.claude.json
+2026-02-11T21:15:27.730Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-11T21:15:27.732Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.25465.1770844527732
+2026-02-11T21:15:27.732Z [DEBUG] Preserving file permissions: 100600
+2026-02-11T21:15:27.732Z [DEBUG] Temp file written successfully, size: 14748 bytes
+2026-02-11T21:15:27.732Z [DEBUG] Applied original permissions to temp file
+2026-02-11T21:15:27.732Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.25465.1770844527732 to /Users/sihaoli/.claude.json
+2026-02-11T21:15:27.732Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-11T21:15:27.734Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.25465.1770844527734
+2026-02-11T21:15:27.734Z [DEBUG] Preserving file permissions: 100600
+2026-02-11T21:15:27.734Z [DEBUG] Temp file written successfully, size: 14747 bytes
+2026-02-11T21:15:27.734Z [DEBUG] Applied original permissions to temp file
+2026-02-11T21:15:27.734Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.25465.1770844527734 to /Users/sihaoli/.claude.json
+2026-02-11T21:15:27.734Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-11T21:15:27.735Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.25465.1770844527735
+2026-02-11T21:15:27.735Z [DEBUG] Preserving file permissions: 100600
+2026-02-11T21:15:27.736Z [DEBUG] Temp file written successfully, size: 14746 bytes
+2026-02-11T21:15:27.736Z [DEBUG] Applied original permissions to temp file
+2026-02-11T21:15:27.736Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.25465.1770844527735 to /Users/sihaoli/.claude.json
+2026-02-11T21:15:27.736Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-11T21:15:27.820Z [DEBUG] [STARTUP] showSetupScreens() completed in 534ms
+2026-02-11T21:15:27.820Z [DEBUG] [render] initYoga starting
+2026-02-11T21:15:27.820Z [DEBUG] [render] initYoga complete
+2026-02-11T21:15:27.822Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-02-11T21:15:27.849Z [DEBUG] High write ratio: blit=0, write=1884 (100.0% writes), screen=62x145
+2026-02-11T21:15:27.861Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-02-11T21:15:28.143Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.25465.1770844528143
+2026-02-11T21:15:28.143Z [DEBUG] Preserving file permissions: 100600
+2026-02-11T21:15:28.143Z [DEBUG] Temp file written successfully, size: 14746 bytes
+2026-02-11T21:15:28.143Z [DEBUG] Applied original permissions to temp file
+2026-02-11T21:15:28.143Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.25465.1770844528143 to /Users/sihaoli/.claude.json
+2026-02-11T21:15:28.144Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-11T21:15:28.144Z [DEBUG] Passes eligibility cached for org 4b64fec2-dab6-4cd3-854f-5b8cb2ded5ae: true
+2026-02-11T21:15:30.527Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T21:15:30.527Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T21:15:30.529Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-11T21:15:30.541Z [DEBUG] MCP server "playwright": Starting connection with timeout of 30000ms
+2026-02-11T21:15:30.544Z [DEBUG] MCP server "brain-router": Starting connection with timeout of 30000ms
+2026-02-11T21:15:30.546Z [DEBUG] MCP server "are": Starting connection with timeout of 30000ms
+2026-02-11T21:15:30.549Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T21:15:30.550Z [DEBUG] Initialized versioned plugins system with 2 plugins
+2026-02-11T21:15:30.553Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.25465.1770844530553
+2026-02-11T21:15:30.553Z [DEBUG] Preserving file permissions: 100600
+2026-02-11T21:15:30.553Z [DEBUG] Temp file written successfully, size: 14746 bytes
+2026-02-11T21:15:30.553Z [DEBUG] Applied original permissions to temp file
+2026-02-11T21:15:30.553Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.25465.1770844530553 to /Users/sihaoli/.claude.json
+2026-02-11T21:15:30.553Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-11T21:15:30.557Z [DEBUG] Getting matching hook commands for SessionStart with query: startup
+2026-02-11T21:15:30.557Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T21:15:30.557Z [DEBUG] Matched 0 unique hooks for query "startup" (0 before deduplication)
+2026-02-11T21:15:30.559Z [DEBUG] [render] initYoga starting
+2026-02-11T21:15:30.559Z [DEBUG] [render] initYoga complete
+2026-02-11T21:15:30.569Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-02-11T21:15:30.601Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-02-11T21:15:30.601Z [DEBUG] [REPL:mount] REPL mounted, disabled=false
+2026-02-11T21:15:30.602Z [DEBUG] Official marketplace auto-install skipped: already_attempted
+2026-02-11T21:15:30.602Z [DEBUG] performStartupChecks called
+2026-02-11T21:15:30.602Z [DEBUG] Starting background plugin installations
+2026-02-11T21:15:30.602Z [DEBUG] performBackgroundPluginInstallations called
+2026-02-11T21:15:30.658Z [DEBUG] Setting installation status: 0 marketplaces, 0 installable plugins, 0 uninstallable plugins
+2026-02-11T21:15:30.659Z [DEBUG] Loaded plugins - Enabled: 0, Disabled: 0, Commands: 0, Agents: 0, Errors: 0
+2026-02-11T21:15:30.676Z [DEBUG] MCP server "ide": Starting connection with timeout of 30000ms
+2026-02-11T21:15:30.691Z [DEBUG] MCP server "ide": Successfully connected to ws-ide server in 16ms
+2026-02-11T21:15:30.691Z [DEBUG] MCP server "ide": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Claude Code VSCode MCP","version":"2.1.39"}}
+2026-02-11T21:15:30.713Z [ERROR] SyntaxError: SyntaxError: Expected double-quoted property name in JSON at position 196 (line 10 column 7)
+    at JSON.parse (<anonymous>)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:66:672
+    at B (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:6808)
+    at RK7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3667:5551)
+    at async G89 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3667:8330)
+2026-02-11T21:15:30.714Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.25465.1770844530714
+2026-02-11T21:15:30.714Z [DEBUG] Preserving file permissions: 100600
+2026-02-11T21:15:30.714Z [DEBUG] Temp file written successfully, size: 14746 bytes
+2026-02-11T21:15:30.714Z [DEBUG] Applied original permissions to temp file
+2026-02-11T21:15:30.714Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.25465.1770844530714 to /Users/sihaoli/.claude.json
+2026-02-11T21:15:30.714Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-11T21:15:30.736Z [DEBUG] MCP server "brain-router": Successfully connected to undefined server in 192ms
+2026-02-11T21:15:30.736Z [DEBUG] MCP server "brain-router": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"solar-brain-router","version":"1.0.0"}}
+2026-02-11T21:15:30.743Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-11T21:15:30.913Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.25465.1770844530913
+2026-02-11T21:15:30.913Z [DEBUG] Preserving file permissions: 100600
+2026-02-11T21:15:30.913Z [DEBUG] Temp file written successfully, size: 14783 bytes
+2026-02-11T21:15:30.913Z [DEBUG] Applied original permissions to temp file
+2026-02-11T21:15:30.913Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.25465.1770844530913 to /Users/sihaoli/.claude.json
+2026-02-11T21:15:30.913Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-11T21:15:30.955Z [DEBUG] MCP server "playwright": Successfully connected to undefined server in 419ms
+2026-02-11T21:15:30.955Z [DEBUG] MCP server "playwright": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Playwright","version":"0.0.61"}}
+2026-02-11T21:15:32.106Z [ERROR] MCP server "are" Server stderr: ARE MCP Server running
+2026-02-11T21:15:32.111Z [DEBUG] MCP server "are": Successfully connected to undefined server in 1565ms
+2026-02-11T21:15:32.111Z [DEBUG] MCP server "are": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"are-orchestrator","version":"1.0.0"}}
+2026-02-11T21:15:32.113Z [DEBUG] Auto tool search disabled: 0 chars (threshold: 50000, 10% of context)
+2026-02-11T21:15:32.114Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.25465.1770844532114
+2026-02-11T21:15:32.114Z [DEBUG] Preserving file permissions: 100600
+2026-02-11T21:15:32.114Z [DEBUG] Temp file written successfully, size: 14800 bytes
+2026-02-11T21:15:32.114Z [DEBUG] Applied original permissions to temp file
+2026-02-11T21:15:32.114Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.25465.1770844532114 to /Users/sihaoli/.claude.json
+2026-02-11T21:15:32.114Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-11T21:15:32.116Z [DEBUG] Skills and commands included in Skill tool: agent, banner, benchmark, browser, build, call, changelog, commit, docs, email-search, email-web, mcp-builder, office, himalaya, office-notes, notion, apple-reminders, things-mac, trello, ontology, phase, pr, precise-edit, report, restore, review, selfie, shortcut, shortcut-builder, shortcut-search, skill-creator, solar, status, test, theme, webapp-testing
+2026-02-11T21:15:32.117Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T21:15:32.117Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T21:15:32.117Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T21:15:32.401Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:32.433Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:32.466Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:32.498Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:32.530Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:32.562Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:32.594Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:32.626Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:32.658Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:32.690Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:32.722Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:32.754Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:32.786Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:32.820Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:32.852Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:32.884Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:32.916Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:32.948Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:32.980Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.012Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.044Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.076Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.108Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.140Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.172Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.204Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.236Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.268Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.300Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.332Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.364Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.396Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.428Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.460Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.492Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.524Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.556Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.588Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.621Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.653Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.685Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.717Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.749Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.781Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.813Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.845Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.877Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.909Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.941Z [DEBUG] High write ratio: blit=580, write=604 (51.0% writes), screen=14x145
+2026-02-11T21:15:33.973Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.006Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.038Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.070Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.102Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.134Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.166Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.198Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.230Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.262Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.294Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.326Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.358Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.390Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.422Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.454Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.486Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.518Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.550Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.582Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.614Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.646Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.678Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.710Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.742Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.774Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.806Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.838Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.870Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.902Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.934Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.966Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:34.998Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.030Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.062Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.094Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.126Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.158Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.190Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.222Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.254Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.286Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.318Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.350Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.382Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.414Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.446Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.478Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.510Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.542Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.574Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.606Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.638Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.670Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.702Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.734Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.766Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.798Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.830Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.863Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.895Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.927Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.959Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:35.991Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.023Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.055Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.087Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.119Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.151Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.183Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.215Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.247Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.279Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.311Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.343Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.375Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.407Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.439Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.471Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.503Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.535Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.567Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.599Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.631Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.663Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.695Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.727Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.759Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.791Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.823Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.855Z [DEBUG] High write ratio: blit=580, write=624 (51.8% writes), screen=14x145
+2026-02-11T21:15:36.894Z [DEBUG] Telemetry flushed successfully
+2026-02-11T21:15:36.899Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-11T21:15:36.908Z [ERROR] Error: Error: Failed to delete keychain entry
+    at Gs2 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3338:6963)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async JI9 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4626:626)
+    at async AS2 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4626:530)
+    at async E$0 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2362:67483)
+    at async Object.call (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2362:68155)
+2026-02-11T21:15:36.909Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.25465.1770844536909
+2026-02-11T21:15:36.909Z [DEBUG] Preserving file permissions: 100600
+2026-02-11T21:15:36.909Z [DEBUG] Temp file written successfully, size: 14800 bytes
+2026-02-11T21:15:36.909Z [DEBUG] Applied original permissions to temp file
+2026-02-11T21:15:36.909Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.25465.1770844536909 to /Users/sihaoli/.claude.json
+2026-02-11T21:15:36.909Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-11T21:15:36.945Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.25465.1770844536945
+2026-02-11T21:15:36.945Z [DEBUG] Preserving file permissions: 100600
+2026-02-11T21:15:36.946Z [DEBUG] Temp file written successfully, size: 14424 bytes
+2026-02-11T21:15:36.946Z [DEBUG] Applied original permissions to temp file
+2026-02-11T21:15:36.946Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.25465.1770844536945 to /Users/sihaoli/.claude.json
+2026-02-11T21:15:36.946Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-11T21:15:36.994Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-11T21:15:37.148Z [DEBUG] Getting matching hook commands for SessionEnd with query: logout
+2026-02-11T21:15:37.148Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T21:15:37.148Z [DEBUG] Matched 0 unique hooks for query "logout" (0 before deduplication)
+2026-02-11T21:15:37.186Z [DEBUG] MCP server "ide": WebSocket transport closed/disconnected, attempting automatic reconnection
+2026-02-11T21:15:37.186Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-11T21:15:37.186Z [DEBUG] LSP server manager shut down successfully
+2026-02-11T21:15:37.187Z [DEBUG] MCP server "ide": Starting connection with timeout of 30000ms
+2026-02-11T21:15:37.194Z [DEBUG] MCP server "ide": Successfully connected to ws-ide server in 7ms
+2026-02-11T21:15:37.194Z [DEBUG] MCP server "ide": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Claude Code VSCode MCP","version":"2.1.39"}}
+2026-02-11T21:15:37.195Z [DEBUG] MCP server "ide": WebSocket reconnection successful after 9ms (attempt 1)

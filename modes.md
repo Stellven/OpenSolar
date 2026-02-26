@@ -54,7 +54,7 @@
 **执行方式:**
 ```
 mcp__brain-router__complete({
-  model: "glm-4-plus",
+  model: "glm-5",
   system: "你是专业的...",
   prompt: "任务描述"
 })

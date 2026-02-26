@@ -1,0 +1,346 @@
+2026-01-31T08:37:10.914Z [DEBUG] Watching for changes in setting files /Users/sihaoli/.claude...
+2026-01-31T08:37:10.917Z [DEBUG] [init] configureGlobalMTLS starting
+2026-01-31T08:37:10.917Z [DEBUG] [init] configureGlobalMTLS complete
+2026-01-31T08:37:10.917Z [DEBUG] [init] configureGlobalAgents starting
+2026-01-31T08:37:10.917Z [DEBUG] [init] configureGlobalAgents complete
+2026-01-31T08:37:10.920Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-01-31T08:37:10.920Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-01-31T08:37:10.920Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-01-31T08:37:10.923Z [DEBUG] Applying permission update: Adding 8 allow rule(s) to destination 'userSettings': ["Read(docs/**)","Read(src/**)","Read(include/**)","Read(test/**)","Read(benchmark/**)","WebFetch(domain:github.com)","WebFetch(domain:stackoverflow.com)","WebFetch(domain:cppreference.com)"]
+2026-01-31T08:37:10.923Z [DEBUG] Applying permission update: Adding 6 deny rule(s) to destination 'userSettings': ["Read(.env)","Read(.env.*)","Read(**/*secret*)","Read(**/*credential*)","Bash(rm -rf /)","Bash(rm -rf /*)"]
+2026-01-31T08:37:10.925Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-01-31T08:37:10.942Z [DEBUG] Loading plugin clangd-lsp from source: "./plugins/clangd-lsp"
+2026-01-31T08:37:10.942Z [DEBUG] Using provided version for clangd-lsp@claude-plugins-official: 1.0.0
+2026-01-31T08:37:10.943Z [DEBUG] Plugin clangd-lsp@claude-plugins-official version 1.0.0 already cached at /Users/sihaoli/.claude/plugins/cache/claude-plugins-official/clangd-lsp/1.0.0
+2026-01-31T08:37:10.943Z [DEBUG] Copied local plugin clangd-lsp to versioned cache: /Users/sihaoli/.claude/plugins/cache/claude-plugins-official/clangd-lsp/1.0.0
+2026-01-31T08:37:10.943Z [DEBUG] Plugin clangd-lsp has no entry.skills defined
+2026-01-31T08:37:10.943Z [DEBUG] Loading plugin rust-analyzer-lsp from source: "./plugins/rust-analyzer-lsp"
+2026-01-31T08:37:10.943Z [DEBUG] Using provided version for rust-analyzer-lsp@claude-plugins-official: 1.0.0
+2026-01-31T08:37:10.943Z [DEBUG] Plugin rust-analyzer-lsp@claude-plugins-official version 1.0.0 already cached at /Users/sihaoli/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0
+2026-01-31T08:37:10.943Z [DEBUG] Copied local plugin rust-analyzer-lsp to versioned cache: /Users/sihaoli/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0
+2026-01-31T08:37:10.943Z [DEBUG] Plugin rust-analyzer-lsp has no entry.skills defined
+2026-01-31T08:37:10.943Z [DEBUG] Found 2 plugins (2 enabled, 0 disabled)
+2026-01-31T08:37:10.944Z [DEBUG] [STARTUP] MCP configs loaded in 19ms
+2026-01-31T08:37:10.949Z [DEBUG] [STARTUP] Running setup()...
+2026-01-31T08:37:10.955Z [DEBUG] Stats cache is up to date
+2026-01-31T08:37:10.955Z [DEBUG] Plugin autoupdate: skipped (auto-updater disabled)
+2026-01-31T08:37:10.957Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-31T08:37:10.972Z [DEBUG] Passes: Cache stale, returning cached data and refreshing in background
+2026-01-31T08:37:10.976Z [DEBUG] Loaded 2 installed plugins from /Users/sihaoli/.claude/plugins/installed_plugins.json
+2026-01-31T08:37:10.992Z [DEBUG] Error log sink initialized
+2026-01-31T08:37:10.993Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/todos/b9b1ce79-f310-4a2a-a01d-784fdd224cd6-agent-b9b1ce79-f310-4a2a-a01d-784fdd224cd6.json.tmp.90756.1769848630993
+2026-01-31T08:37:10.993Z [DEBUG] Temp file written successfully, size: 2 bytes
+2026-01-31T08:37:10.993Z [DEBUG] Renaming /Users/sihaoli/.claude/todos/b9b1ce79-f310-4a2a-a01d-784fdd224cd6-agent-b9b1ce79-f310-4a2a-a01d-784fdd224cd6.json.tmp.90756.1769848630993 to /Users/sihaoli/.claude/todos/b9b1ce79-f310-4a2a-a01d-784fdd224cd6-agent-b9b1ce79-f310-4a2a-a01d-784fdd224cd6.json
+2026-01-31T08:37:10.993Z [DEBUG] File /Users/sihaoli/.claude/todos/b9b1ce79-f310-4a2a-a01d-784fdd224cd6-agent-b9b1ce79-f310-4a2a-a01d-784fdd224cd6.json written atomically
+2026-01-31T08:37:10.999Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-31T08:37:10.999Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-31T08:37:10.999Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-31T08:37:10.999Z [DEBUG] Total plugin skills loaded: 0
+2026-01-31T08:37:10.999Z [DEBUG] Total plugin commands loaded: 0
+2026-01-31T08:37:10.999Z [DEBUG] Registered 0 hooks from 2 plugins
+2026-01-31T08:37:11.006Z [DEBUG] [STARTUP] setup() completed in 57ms
+2026-01-31T08:37:11.006Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-01-31T08:37:11.013Z [DEBUG] Loaded 38 unique skills (managed: 0, user: 38, project: 0, legacy commands: 0)
+2026-01-31T08:37:11.013Z [DEBUG] getSkills returning: 38 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-31T08:37:11.015Z [DEBUG] Loaded 1 LSP server(s) from plugin: clangd-lsp
+2026-01-31T08:37:11.033Z [DEBUG] [Claude in Chrome] Found chrome profiles: Default, Profile 1
+2026-01-31T08:37:11.033Z [DEBUG] Loaded 1 LSP server(s) from plugin: rust-analyzer-lsp
+2026-01-31T08:37:11.033Z [DEBUG] Total LSP servers loaded: 2
+2026-01-31T08:37:11.033Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 2 server(s)
+2026-01-31T08:37:11.033Z [DEBUG] Queued request handler for plugin:clangd-lsp:clangd.workspace/configuration (connection not ready)
+2026-01-31T08:37:11.033Z [DEBUG] Starting LSP server instance: plugin:clangd-lsp:clangd
+2026-01-31T08:37:11.036Z [DEBUG] Queued request handler for plugin:rust-analyzer-lsp:rust-analyzer.workspace/configuration (connection not ready)
+2026-01-31T08:37:11.036Z [DEBUG] Starting LSP server instance: plugin:rust-analyzer-lsp:rust-analyzer
+2026-01-31T08:37:11.041Z [DEBUG] LSP manager initialized with 2 servers
+2026-01-31T08:37:11.041Z [DEBUG] LSP server manager initialized successfully
+2026-01-31T08:37:11.041Z [DEBUG] Queued notification handler for plugin:clangd-lsp:clangd.textDocument/publishDiagnostics (connection not ready)
+2026-01-31T08:37:11.041Z [DEBUG] Registered diagnostics handler for plugin:clangd-lsp:clangd
+2026-01-31T08:37:11.041Z [DEBUG] Queued notification handler for plugin:rust-analyzer-lsp:rust-analyzer.textDocument/publishDiagnostics (connection not ready)
+2026-01-31T08:37:11.041Z [DEBUG] Registered diagnostics handler for plugin:rust-analyzer-lsp:rust-analyzer
+2026-01-31T08:37:11.041Z [DEBUG] LSP notification handlers registered successfully for all 2 server(s)
+2026-01-31T08:37:11.042Z [DEBUG] Applied queued notification handler for plugin:clangd-lsp:clangd.textDocument/publishDiagnostics
+2026-01-31T08:37:11.042Z [DEBUG] Applied queued request handler for plugin:clangd-lsp:clangd.workspace/configuration
+2026-01-31T08:37:11.042Z [DEBUG] LSP client started for plugin:clangd-lsp:clangd
+2026-01-31T08:37:11.042Z [DEBUG] Applied queued notification handler for plugin:rust-analyzer-lsp:rust-analyzer.textDocument/publishDiagnostics
+2026-01-31T08:37:11.042Z [DEBUG] Applied queued request handler for plugin:rust-analyzer-lsp:rust-analyzer.workspace/configuration
+2026-01-31T08:37:11.042Z [DEBUG] LSP client started for plugin:rust-analyzer-lsp:rust-analyzer
+2026-01-31T08:37:11.042Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Sending request 'initialize - (0)'.
+2026-01-31T08:37:11.042Z [DEBUG] [LSP PROTOCOL plugin:rust-analyzer-lsp:rust-analyzer] Sending request 'initialize - (0)'.
+2026-01-31T08:37:11.045Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=/Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg)
+2026-01-31T08:37:11.049Z [DEBUG] Watching for changes in skill/command directories: /Users/sihaoli/.claude/skills...
+2026-01-31T08:37:11.056Z [DEBUG] Session index: added 1, updated 0, removed 0 (total: 1)
+2026-01-31T08:37:11.062Z [DEBUG] Total plugin agents loaded: 0
+2026-01-31T08:37:11.062Z [DEBUG] [STARTUP] Commands and agents loaded in 56ms
+2026-01-31T08:37:11.062Z [DEBUG] [STARTUP] Running showSetupScreens()...
+2026-01-31T08:37:11.063Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-01-31T08:37:11.064Z [DEBUG] Grove: Using fresh cached config
+2026-01-31T08:37:11.064Z [DEBUG] [render] initYoga starting
+2026-01-31T08:37:11.069Z [DEBUG] [Claude in Chrome] Extension not found in any browser
+2026-01-31T08:37:11.072Z [DEBUG] [render] initYoga complete
+2026-01-31T08:37:11.076Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-01-31T08:37:11.082Z [DEBUG] [LSP SERVER plugin:clangd-lsp:clangd] I[16:37:11.073] Apple clangd version 17.0.0 (clang-1700.6.3.2)
+I[16:37:11.074] Features: mac+xpc
+I[16:37:11.074] PID: 90878
+I[16:37:11.074] Working directory: /Users/sihaoli/kanada
+I[16:37:11.074] argv[0]: /Library/Developer/CommandLineTools/usr/bin/clangd
+I[16:37:11.074] argv[1]: --background-index
+I[16:37:11.075] Starting LSP over stdin/stdout
+I[16:37:11.078] <-- initialize(0)
+2026-01-31T08:37:11.084Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-01-31T08:37:11.084Z [DEBUG] Git remote URL: https://github.com/lisihao/kanata.git
+2026-01-31T08:37:11.084Z [DEBUG] Parsed repository: lisihao/kanata from https://github.com/lisihao/kanata.git
+2026-01-31T08:37:11.084Z [DEBUG] Parsed repository: lisihao/kanata from URL: https://github.com/lisihao/kanata.git
+2026-01-31T08:37:11.087Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.90756.1769848631087
+2026-01-31T08:37:11.087Z [DEBUG] Preserving file permissions: 100600
+2026-01-31T08:37:11.087Z [DEBUG] Temp file written successfully, size: 10375 bytes
+2026-01-31T08:37:11.087Z [DEBUG] Applied original permissions to temp file
+2026-01-31T08:37:11.087Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.90756.1769848631087 to /Users/sihaoli/.claude.json
+2026-01-31T08:37:11.087Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-01-31T08:37:11.087Z [DEBUG] Added /Users/sihaoli/kanada to tracked paths for repo lisihao/kanata
+2026-01-31T08:37:11.091Z [DEBUG] [LSP SERVER plugin:clangd-lsp:clangd] I[16:37:11.091] --> reply:initialize(0) 12 ms
+2026-01-31T08:37:11.092Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Received response 'initialize - (0)' in 50ms.
+2026-01-31T08:37:11.092Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Sending notification 'initialized'.
+2026-01-31T08:37:11.092Z [DEBUG] LSP server plugin:clangd-lsp:clangd initialized
+2026-01-31T08:37:11.092Z [DEBUG] LSP server instance started: plugin:clangd-lsp:clangd
+2026-01-31T08:37:11.092Z [DEBUG] [LSP SERVER plugin:clangd-lsp:clangd] I[16:37:11.092] <-- initialized
+2026-01-31T08:37:11.526Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] error: Unknown binary 'rust-analyzer' in official toolchain 'stable-aarch64-apple-darwin'.
+2026-01-31T08:37:11.527Z [DEBUG] LSP server plugin:rust-analyzer-lsp:rust-analyzer connection closed
+2026-01-31T08:37:11.535Z [ERROR] Error: Error: LSP server plugin:rust-analyzer-lsp:rust-analyzer crashed with exit code 1
+    at ChildProcess.<anonymous> (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:1622:21508)
+    at ChildProcess.emit (node:events:508:28)
+    at ChildProcess.emit (node:domain:489:12)
+    at ChildProcess._handle.onexit (node:internal/child_process:294:12)
+2026-01-31T08:37:11.695Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.90756.1769848631695
+2026-01-31T08:37:11.695Z [DEBUG] Preserving file permissions: 100600
+2026-01-31T08:37:11.696Z [DEBUG] Temp file written successfully, size: 10375 bytes
+2026-01-31T08:37:11.696Z [DEBUG] Applied original permissions to temp file
+2026-01-31T08:37:11.696Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.90756.1769848631695 to /Users/sihaoli/.claude.json
+2026-01-31T08:37:11.696Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-01-31T08:37:11.696Z [DEBUG] Passes eligibility cached for org 4b64fec2-dab6-4cd3-854f-5b8cb2ded5ae: true
+2026-01-31T08:37:11.766Z [DEBUG] [STARTUP] showSetupScreens() completed in 704ms
+2026-01-31T08:37:11.767Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-01-31T08:37:11.767Z [DEBUG] [API:auth] OAuth token check starting
+2026-01-31T08:37:11.768Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-31T08:37:11.772Z [DEBUG] MCP server "playwright": Starting connection with timeout of 30000ms
+2026-01-31T08:37:11.777Z [DEBUG] All plugins already exist, skipping migration
+2026-01-31T08:37:11.777Z [DEBUG] [API:auth] OAuth token check complete
+2026-01-31T08:37:11.778Z [DEBUG] Initialized versioned plugins system with 2 plugins
+2026-01-31T08:37:11.781Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.90756.1769848631781
+2026-01-31T08:37:11.781Z [DEBUG] Preserving file permissions: 100600
+2026-01-31T08:37:11.782Z [DEBUG] Temp file written successfully, size: 10375 bytes
+2026-01-31T08:37:11.782Z [DEBUG] Applied original permissions to temp file
+2026-01-31T08:37:11.782Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.90756.1769848631781 to /Users/sihaoli/.claude.json
+2026-01-31T08:37:11.782Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-01-31T08:37:11.784Z [DEBUG] Getting matching hook commands for SessionStart with query: startup
+2026-01-31T08:37:11.784Z [DEBUG] Found 1 hook matchers in settings
+2026-01-31T08:37:11.784Z [DEBUG] Matched 1 unique hooks for query "startup" (1 before deduplication)
+2026-01-31T08:37:11.791Z [DEBUG] Summarizing all 11 messages (~636 tokens)
+2026-01-31T08:37:11.793Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-01-31T08:37:11.794Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-01-31T08:37:11.794Z [DEBUG] [API:auth] OAuth token check starting
+2026-01-31T08:37:11.794Z [DEBUG] [API:auth] OAuth token check complete
+2026-01-31T08:37:11.799Z [DEBUG] Hooks: Checking initial response for async: {"continue": true}
+2026-01-31T08:37:11.799Z [DEBUG] Hooks: Parsed initial response: {"continue":true}
+2026-01-31T08:37:11.799Z [DEBUG] Hooks: Initial response is not async, continuing normal processing
+2026-01-31T08:37:11.803Z [DEBUG] Successfully parsed and validated hook JSON output
+2026-01-31T08:37:11.804Z [DEBUG] [render] initYoga starting
+2026-01-31T08:37:11.804Z [DEBUG] [render] initYoga complete
+2026-01-31T08:37:11.808Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-01-31T08:37:11.835Z [DEBUG] High write ratio: blit=0, write=1025 (100.0% writes), screen=18x156
+2026-01-31T08:37:11.844Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-01-31T08:37:11.844Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-01-31T08:37:11.844Z [DEBUG] [API:auth] OAuth token check starting
+2026-01-31T08:37:11.845Z [DEBUG] [API:auth] OAuth token check complete
+2026-01-31T08:37:11.851Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-01-31T08:37:11.851Z [DEBUG] [REPL:mount] REPL mounted, disabled=false
+2026-01-31T08:37:11.852Z [DEBUG] Official marketplace auto-install skipped: already_attempted
+2026-01-31T08:37:11.852Z [DEBUG] performStartupChecks called
+2026-01-31T08:37:11.852Z [DEBUG] Starting background plugin installations
+2026-01-31T08:37:11.852Z [DEBUG] performBackgroundPluginInstallations called
+2026-01-31T08:37:11.901Z [DEBUG] Found 2 enabled plugins
+2026-01-31T08:37:11.901Z [DEBUG] All plugins already exist, skipping migration
+2026-01-31T08:37:11.901Z [DEBUG] Found 2 installed plugins (V2 format)
+2026-01-31T08:37:11.902Z [DEBUG] Loaded plugins - Enabled: 2, Disabled: 0, Commands: 0, Agents: 0, Errors: 0
+2026-01-31T08:37:11.902Z [DEBUG] Found 0 missing plugins (not installed):
+2026-01-31T08:37:11.902Z [DEBUG] Setting installation status: 0 marketplaces, 0 installable plugins, 0 uninstallable plugins
+2026-01-31T08:37:11.961Z [DEBUG] High write ratio: blit=0, write=1025 (100.0% writes), screen=18x156
+2026-01-31T08:37:11.966Z [DEBUG] MCP server "ide": Starting connection with timeout of 30000ms
+2026-01-31T08:37:11.981Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-01-31T08:37:11.982Z [DEBUG] MCP server "ide": Successfully connected to ws-ide server in 18ms
+2026-01-31T08:37:11.982Z [DEBUG] MCP server "ide": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Claude Code VSCode MCP","version":"2.1.27"}}
+2026-01-31T08:37:11.984Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.90756.1769848631984
+2026-01-31T08:37:11.984Z [DEBUG] Preserving file permissions: 100600
+2026-01-31T08:37:11.984Z [DEBUG] Temp file written successfully, size: 10375 bytes
+2026-01-31T08:37:11.984Z [DEBUG] Applied original permissions to temp file
+2026-01-31T08:37:11.984Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.90756.1769848631984 to /Users/sihaoli/.claude.json
+2026-01-31T08:37:11.984Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-01-31T08:37:12.026Z [DEBUG] High write ratio: blit=0, write=1043 (100.0% writes), screen=18x156
+2026-01-31T08:37:12.148Z [DEBUG] MCP server "playwright": Successfully connected to undefined server in 379ms
+2026-01-31T08:37:12.148Z [DEBUG] MCP server "playwright": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Playwright","version":"0.0.61"}}
+2026-01-31T08:37:12.152Z [DEBUG] Auto tool search disabled: 0 chars (threshold: 50000, 10% of context)
+2026-01-31T08:37:12.154Z [DEBUG] Skills and commands included in Skill tool: agent, banner, benchmark, browser, build, call, changelog, commit, docs, email-search, email-web, mcp-builder, office, himalaya, office-notes, notion, apple-reminders, things-mac, trello, phase, pr, report, restore, review, save, selfie, shortcut, shortcut-builder, shortcut-search, skill-creator, solar, stats, status, test, theme, webapp-testing
+2026-01-31T08:37:12.155Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-01-31T08:37:12.155Z [DEBUG] [API:auth] OAuth token check starting
+2026-01-31T08:37:12.155Z [DEBUG] [API:auth] OAuth token check complete
+2026-01-31T08:37:12.159Z [DEBUG] High write ratio: blit=0, write=1043 (100.0% writes), screen=18x156
+2026-01-31T08:37:12.191Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.90756.1769848632191
+2026-01-31T08:37:12.191Z [DEBUG] Preserving file permissions: 100600
+2026-01-31T08:37:12.192Z [DEBUG] Temp file written successfully, size: 10375 bytes
+2026-01-31T08:37:12.192Z [DEBUG] Applied original permissions to temp file
+2026-01-31T08:37:12.192Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.90756.1769848632191 to /Users/sihaoli/.claude.json
+2026-01-31T08:37:12.192Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-01-31T08:37:12.924Z [DEBUG] Stream started - received first chunk
+2026-01-31T08:37:13.036Z [DEBUG] High write ratio: blit=0, write=1043 (100.0% writes), screen=18x156
+2026-01-31T08:37:13.165Z [DEBUG] Summarizing all 18 messages (~959 tokens)
+2026-01-31T08:37:13.166Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-01-31T08:37:13.166Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-01-31T08:37:13.166Z [DEBUG] [API:auth] OAuth token check starting
+2026-01-31T08:37:13.167Z [DEBUG] [API:auth] OAuth token check complete
+2026-01-31T08:37:14.551Z [DEBUG] Stream started - received first chunk
+2026-01-31T08:37:14.553Z [DEBUG] Stream started - received first chunk
+2026-01-31T08:37:14.555Z [DEBUG] Summarizing all 18 messages (~959 tokens)
+2026-01-31T08:37:14.556Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-01-31T08:37:14.557Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-01-31T08:37:14.557Z [DEBUG] [API:auth] OAuth token check starting
+2026-01-31T08:37:14.557Z [DEBUG] [API:auth] OAuth token check complete
+2026-01-31T08:37:15.675Z [DEBUG] Stream started - received first chunk
+2026-01-31T08:37:15.685Z [DEBUG] Summarizing all 24 messages (~1447 tokens)
+2026-01-31T08:37:15.685Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-01-31T08:37:15.686Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-01-31T08:37:15.686Z [DEBUG] [API:auth] OAuth token check starting
+2026-01-31T08:37:15.686Z [DEBUG] [API:auth] OAuth token check complete
+2026-01-31T08:37:16.699Z [DEBUG] Stream started - received first chunk
+2026-01-31T08:37:16.715Z [DEBUG] Summarizing all 29 messages (~1828 tokens)
+2026-01-31T08:37:16.716Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-01-31T08:37:16.716Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-01-31T08:37:16.716Z [DEBUG] [API:auth] OAuth token check starting
+2026-01-31T08:37:16.716Z [DEBUG] [API:auth] OAuth token check complete
+2026-01-31T08:37:17.600Z [DEBUG] Stream started - received first chunk
+2026-01-31T08:37:18.237Z [DEBUG] Summarizing all 41 messages (~2253 tokens)
+2026-01-31T08:37:18.237Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-01-31T08:37:18.238Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-01-31T08:37:18.238Z [DEBUG] [API:auth] OAuth token check starting
+2026-01-31T08:37:18.238Z [DEBUG] [API:auth] OAuth token check complete
+2026-01-31T08:37:19.255Z [DEBUG] Stream started - received first chunk
+2026-01-31T08:37:19.626Z [DEBUG] Summarizing all 46 messages (~2431 tokens)
+2026-01-31T08:37:19.626Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-01-31T08:37:19.627Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-01-31T08:37:19.627Z [DEBUG] [API:auth] OAuth token check starting
+2026-01-31T08:37:19.627Z [DEBUG] [API:auth] OAuth token check complete
+2026-01-31T08:37:19.991Z [DEBUG] High write ratio: blit=0, write=1097 (100.0% writes), screen=18x156
+2026-01-31T08:37:20.031Z [DEBUG] High write ratio: blit=72, write=1025 (93.4% writes), screen=18x156
+2026-01-31T08:37:21.002Z [DEBUG] Stream started - received first chunk
+2026-01-31T08:37:21.004Z [DEBUG] Summarizing all 51 messages (~2615 tokens)
+2026-01-31T08:37:21.004Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-01-31T08:37:21.005Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-01-31T08:37:21.005Z [DEBUG] [API:auth] OAuth token check starting
+2026-01-31T08:37:21.005Z [DEBUG] [API:auth] OAuth token check complete
+2026-01-31T08:37:22.087Z [DEBUG] Stream started - received first chunk
+2026-01-31T08:37:27.987Z [DEBUG] High write ratio: blit=0, write=1011 (100.0% writes), screen=18x156
+2026-01-31T08:37:33.193Z [DEBUG] High write ratio: blit=0, write=1013 (100.0% writes), screen=18x156
+2026-01-31T08:37:35.875Z [DEBUG] High write ratio: blit=0, write=1013 (100.0% writes), screen=18x156
+2026-01-31T08:37:39.344Z [DEBUG] High write ratio: blit=0, write=1013 (100.0% writes), screen=18x156
+2026-01-31T08:37:39.949Z [DEBUG] High write ratio: blit=0, write=1013 (100.0% writes), screen=18x156
+2026-01-31T08:37:44.545Z [DEBUG] High write ratio: blit=0, write=1013 (100.0% writes), screen=18x156
+2026-01-31T09:09:05.377Z [DEBUG] npm view failed with code 1
+2026-01-31T09:09:05.378Z [DEBUG] npm stderr: (empty)
+2026-01-31T09:52:31.794Z [DEBUG] npm view failed with code 1
+2026-01-31T09:52:31.794Z [DEBUG] npm stderr: (empty)
+2026-01-31T10:24:56.718Z [DEBUG] npm view failed with code 1
+2026-01-31T10:24:56.718Z [DEBUG] npm stderr: (empty)
+2026-01-31T10:57:59.643Z [DEBUG] npm view failed with code 1
+2026-01-31T10:57:59.643Z [DEBUG] npm stderr: (empty)
+2026-01-31T11:38:23.555Z [DEBUG] npm view failed with code 1
+2026-01-31T11:38:23.555Z [DEBUG] npm stderr: (empty)
+2026-01-31T12:17:30.040Z [DEBUG] npm view failed with code 1
+2026-01-31T12:17:30.040Z [DEBUG] npm stderr: (empty)
+2026-01-31T13:48:46.315Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/moltbook/SKILL.md
+2026-01-31T13:48:46.322Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-31T13:48:46.345Z [DEBUG] Passes: Cache stale, returning cached data and refreshing in background
+2026-01-31T13:48:46.345Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-31T13:48:46.345Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-31T13:48:46.345Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-31T13:48:46.345Z [DEBUG] Total plugin skills loaded: 0
+2026-01-31T13:48:46.345Z [DEBUG] Total plugin commands loaded: 0
+2026-01-31T13:48:46.370Z [DEBUG] Loaded 39 unique skills (managed: 0, user: 39, project: 0, legacy commands: 0)
+2026-01-31T13:48:46.373Z [DEBUG] getSkills returning: 39 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-31T13:48:46.418Z [DEBUG] High write ratio: blit=156, write=968 (86.1% writes), screen=18x156
+2026-01-31T13:48:47.088Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.90756.1769867327088
+2026-01-31T13:48:47.088Z [DEBUG] Preserving file permissions: 100600
+2026-01-31T13:48:47.088Z [DEBUG] Temp file written successfully, size: 10454 bytes
+2026-01-31T13:48:47.088Z [DEBUG] Applied original permissions to temp file
+2026-01-31T13:48:47.088Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.90756.1769867327088 to /Users/sihaoli/.claude.json
+2026-01-31T13:48:47.088Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-01-31T13:48:47.088Z [DEBUG] Passes eligibility cached for org 4b64fec2-dab6-4cd3-854f-5b8cb2ded5ae: true
+2026-01-31T13:49:17.730Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/learn/SKILL.md
+2026-01-31T13:49:17.730Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-31T13:49:17.738Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-31T13:49:17.738Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-31T13:49:17.738Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-31T13:49:17.738Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-31T13:49:17.738Z [DEBUG] Total plugin skills loaded: 0
+2026-01-31T13:49:17.738Z [DEBUG] Total plugin commands loaded: 0
+2026-01-31T13:49:17.738Z [DEBUG] Loaded 40 unique skills (managed: 0, user: 40, project: 0, legacy commands: 0)
+2026-01-31T13:49:17.738Z [DEBUG] getSkills returning: 40 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-31T13:49:17.744Z [DEBUG] High write ratio: blit=156, write=968 (86.1% writes), screen=18x156
+2026-01-31T13:50:04.311Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/memory-review/SKILL.md
+2026-01-31T13:50:04.311Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-31T13:50:04.321Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-31T13:50:04.321Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-31T13:50:04.321Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-31T13:50:04.321Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-31T13:50:04.321Z [DEBUG] Total plugin skills loaded: 0
+2026-01-31T13:50:04.321Z [DEBUG] Total plugin commands loaded: 0
+2026-01-31T13:50:04.322Z [DEBUG] Loaded 41 unique skills (managed: 0, user: 41, project: 0, legacy commands: 0)
+2026-01-31T13:50:04.323Z [DEBUG] getSkills returning: 41 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-31T13:50:04.338Z [DEBUG] High write ratio: blit=156, write=968 (86.1% writes), screen=18x156
+2026-01-31T14:01:16.960Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/moltbook/INTERFACE.md
+2026-01-31T14:01:16.961Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-31T14:01:16.974Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-31T14:01:16.974Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-31T14:01:16.974Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-31T14:01:16.974Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-31T14:01:16.974Z [DEBUG] Total plugin skills loaded: 0
+2026-01-31T14:01:16.974Z [DEBUG] Total plugin commands loaded: 0
+2026-01-31T14:01:16.976Z [DEBUG] Loaded 41 unique skills (managed: 0, user: 41, project: 0, legacy commands: 0)
+2026-01-31T14:01:16.977Z [DEBUG] getSkills returning: 41 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-31T14:01:16.998Z [DEBUG] High write ratio: blit=156, write=968 (86.1% writes), screen=18x156
+2026-01-31T15:29:17.790Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/brain-update/SKILL.md
+2026-01-31T15:29:17.793Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-31T15:29:17.810Z [DEBUG] Passes: Cache stale, returning cached data and refreshing in background
+2026-01-31T15:29:17.810Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-31T15:29:17.810Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-31T15:29:17.810Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-31T15:29:17.810Z [DEBUG] Total plugin skills loaded: 0
+2026-01-31T15:29:17.810Z [DEBUG] Total plugin commands loaded: 0
+2026-01-31T15:29:17.826Z [DEBUG] Loaded 42 unique skills (managed: 0, user: 42, project: 0, legacy commands: 0)
+2026-01-31T15:29:17.827Z [DEBUG] getSkills returning: 42 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-31T15:29:17.870Z [DEBUG] High write ratio: blit=156, write=968 (86.1% writes), screen=18x156
+2026-01-31T15:29:18.338Z [DEBUG] Failed to fetch and cache passes eligibility
+2026-01-31T15:29:18.338Z [ERROR] AxiosError: AxiosError: Request failed with status code 401
+    at aP (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:39:1137)
+    at IncomingMessage.<anonymous> (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:44:9852)
+    at IncomingMessage.emit (node:events:520:35)
+    at IncomingMessage.emit (node:domain:489:12)
+    at endReadableNT (node:internal/streams/readable:1701:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+    at v$A.request (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:46:2130)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async aK7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3667:23775)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3667:24693
+2026-01-31T15:52:39.527Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/reflect/SKILL.md
+2026-01-31T15:52:39.530Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-31T15:52:39.579Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-31T15:52:39.580Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-31T15:52:39.580Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-31T15:52:39.580Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-31T15:52:39.580Z [DEBUG] Total plugin skills loaded: 0
+2026-01-31T15:52:39.580Z [DEBUG] Total plugin commands loaded: 0
+2026-01-31T15:52:39.612Z [DEBUG] Loaded 43 unique skills (managed: 0, user: 43, project: 0, legacy commands: 0)
+2026-01-31T15:52:39.619Z [DEBUG] getSkills returning: 43 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-31T15:52:39.699Z [DEBUG] High write ratio: blit=156, write=968 (86.1% writes), screen=18x156
+2026-01-31T15:54:28.105Z [DEBUG] Detected change to /Users/sihaoli/.claude/settings.json
+2026-01-31T15:54:28.121Z [DEBUG] Settings changed from userSettings, updating AppState
+2026-01-31T15:54:28.122Z [DEBUG] Replacing all allow rules for destination 'userSettings' with 8 rule(s): ["Read(docs/**)","Read(src/**)","Read(include/**)","Read(test/**)","Read(benchmark/**)","WebFetch(domain:github.com)","WebFetch(domain:stackoverflow.com)","WebFetch(domain:cppreference.com)"]
+2026-01-31T15:54:28.122Z [DEBUG] Replacing all deny rules for destination 'userSettings' with 6 rule(s): ["Read(.env)","Read(.env.*)","Read(**/*secret*)","Read(**/*credential*)","Bash(rm -rf /)","Bash(rm -rf /*)"]
+2026-01-31T15:54:28.150Z [DEBUG] High write ratio: blit=0, write=1013 (100.0% writes), screen=18x156

@@ -1,0 +1,9 @@
+{
+  "id": "3",
+  "subject": "Phase 3: 批量处理器 - knowledge-batch-extract.ts",
+  "description": "从 sys_favorites 批量抽取知识，支持断点续传",
+  "activeForm": "Building batch processor",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

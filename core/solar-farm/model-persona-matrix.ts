@@ -64,8 +64,8 @@ export const MODEL_PROFILES: Record<string, ModelProfile> = {
   },
 
   // === 主力牛马 (P4 日常编码) ===
-  'glm-4-plus': {
-    modelId: 'glm-4-plus',
+  'glm-5': {
+    modelId: 'glm-5',
     nickname: '建设者',
     costInput: 0.0005,
     costOutput: 0.0015,
@@ -103,6 +103,16 @@ export const MODEL_PROFILES: Record<string, ModelProfile> = {
     contextWindow: 1000000,
     specialties: ['创新探索', '架构设计', '权衡取舍'],
     personality: { O: 0.9, C: 0.7, E: 0.9, A: 0.7, N: 0.3 }
+  },
+
+  'gemini-3.1-pro': {
+    modelId: 'gemini-3.1-pro',
+    nickname: '前沿派',
+    costInput: 0.00125,
+    costOutput: 0.005,
+    contextWindow: 1000000,
+    specialties: ['深度推理', '多模态分析', 'ARC-AGI-2 77.1%'],
+    personality: { O: 0.9, C: 0.85, E: 0.7, A: 0.7, N: 0.2 }
   },
 
   'deepseek-v3': {
@@ -262,7 +272,7 @@ export const WORKER_GROUP = {
 
   // 建设者：编码实现
   builder: {
-    model: 'glm-4-plus',  // 建设者
+    model: 'glm-5',  // 建设者
     role: 'builder',
     knobs: ROLES_V3.builder.knobs,
     trigger: ['implement', 'code', 'build']
@@ -315,7 +325,7 @@ export const TEAM_TEMPLATES = {
     name: 'Coding Team',
     members: [
       { role: 'spec', model: 'gemini-2.5-pro' },
-      { role: 'builder', model: 'glm-4-plus' },
+      { role: 'builder', model: 'glm-5' },
       { role: 'verifier', model: 'deepseek-r1' }
     ],
     workflow: 'spec → builder → verifier',
@@ -367,7 +377,7 @@ export const COST_TIERS = {
     useCase: '复杂分析、架构设计'
   },
   P4: {  // 主力级
-    models: ['glm-4-plus', 'glm-5'],
+    models: ['glm-5', 'glm-5'],
     maxCostPerTask: 0.01,
     useCase: '日常编码、一般任务'
   },
@@ -455,7 +465,7 @@ export function selectModelForTask(
 
   // 默认用主力
   return {
-    model: 'glm-4-plus',
+    model: 'glm-5',
     role: 'builder',
     knobs: ROLES_V3.builder.knobs,
     reason: '默认使用主力牛马'

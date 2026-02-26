@@ -5,7 +5,7 @@
 # 日志：记录每次注入，供考核用
 
 COUNTER_FILE="/tmp/solar_personality_counter"
-INJECT_INTERVAL=5  # 每5轮注入一次
+INJECT_INTERVAL=3  # 每3轮注入一次
 DB_FILE="$HOME/.solar/solar.db"
 SESSION_ID="${CLAUDE_SESSION_ID:-$(date +%Y%m%d_%H%M%S)}"
 

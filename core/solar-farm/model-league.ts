@@ -575,7 +575,7 @@ if (import.meta.main) {
 
     case 'feedback': {
       const feedback: PerformanceFeedback = {
-        modelId: 'glm-4-plus',
+        modelId: 'glm-5',
         taskType: 'coding',
         percentile: 82,
         strengths: ['代码质量高', '覆盖率好', '文档清晰'],

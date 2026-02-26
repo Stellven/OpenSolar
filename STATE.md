@@ -30,6 +30,6 @@
 # Next Actions (Exact)
 - [ ] 重启 Claude Code
 - [ ] 测试调用 mcp__brain-router__list_models
-- [ ] 运行 CONTROL 组：调用 glm-4-plus 实现 LRU Cache（无 emotion）
-- [ ] 运行 EMOTION 组：调用 glm-4-plus 实现 LRU Cache（有 emotion）
+- [ ] 运行 CONTROL 组：调用 glm-5 实现 LRU Cache（无 emotion）
+- [ ] 运行 EMOTION 组：调用 glm-5 实现 LRU Cache（有 emotion）
 - [ ] 评分对比并得出结论

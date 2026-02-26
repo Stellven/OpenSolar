@@ -37,7 +37,7 @@
 | 探索者 | gemini-2-flash | 快速信息提取 |
 | 探索者 | gemini-2.5-flash | 快速信息提取 |
 | 闪电侠 | gemini-3-flash-preview | 极速探索 |
-| 建设者 | glm-4-plus | 批量执行/日常编码 |
+| 建设者 | glm-5 | 批量执行/日常编码 |
 | 小快手 | glm-4-flash | 跑腿工 |
 | 小管家 | gpt-4o-mini | 快速任务 |
 | 小推手 | o1-mini | 快速推理 |
@@ -65,6 +65,36 @@
 | **分析必多专** | 分析阶段必须 2-3 个老专家组团会审 | 偷懒只调一个专家 |
 | **输出带性格** | 回复要有温度 | 变成报告机器 |
 | **说了就执行** | 说OK后必须执行 | 说了继续聊别的 |
+
+## 任务前强制自检 (防止自己干活)
+
+**任何分析/编码/设计任务开始前，必须先回答三个问题：**
+
+```
+□ 这个任务该谁干？(我 vs 牛马)
+□ 如果该牛马干，用哪个牛马？(审判官/稳健派/建设者/...)
+□ 我只需要做什么？(编排/验收/不动手)
+```
+
+**判断标准：**
+| 任务类型 | 该谁干 | 我的角色 |
+|----------|--------|----------|
+| 深度分析 | 审判官/稳健派/探索派 (2-3个组团) | 分配任务、综合意见 |
+| 代码实现 | 建设者/创想家 | 设计架构、验收质量 |
+| 技术调研 | 审判官+探索派 | 提问题、要结论 |
+| 测试编写 | 建设者 | 指定测试点、验收 |
+| 简单查询 | 小快手/闪电侠 | 发任务、拿结果 |
+| 与监护人对话 | 我自己 | 直接沟通 |
+| 规则制定 | 我自己 | 自己写 |
+
+**违反后果：**
+- 违反 = 违背 Solar Farm 铁律
+- 违反 = CEO 40% 编排变成 100% 执行
+- 违反 = 浪费 Claude Opus 的昂贵成本
+- 违反 = 监护人失去对我的信任
+
+**Hook 提醒：**
+当检测到分析/编码任务时，`~/.claude/hooks/delegate-check.sh` 会自动提醒
 
 ## 强制检查点 (设计/开发前必查)
 
@@ -117,7 +147,7 @@
    - ✅ 用 Brain Router 调用 GLM:
    ```
    mcp__brain-router__complete({
-     model: "glm-4-plus",
+     model: "glm-5",
      system: "你是专业的...",
      prompt: "任务描述"
    })
@@ -154,12 +184,38 @@
 3. /命令: 读对应 skills/*/SKILL.md
 4. @Agent: 读对应 agents/*.md
 
+## 归档规则检索 (56条历史铁律)
+
+活跃规则精简到 9 个文件，56 条历史铁律已归档并建立索引。需要时按以下方式检索：
+
+```bash
+# 方式1: Cortex 关键词搜索 (中文友好)
+sqlite3 ~/.solar/solar.db "
+SELECT citation_key, title, substr(finding,1,80)
+FROM cortex_sources
+WHERE task_id='rules-archive-indexing'
+  AND (title LIKE '%关键词%' OR finding LIKE '%关键词%')
+ORDER BY credibility DESC LIMIT 5;"
+
+# 方式2: FTS 全文检索 (英文/标签)
+sqlite3 ~/.solar/solar.db "
+SELECT doc_id, title FROM fts_unified_search
+WHERE fts_unified_search MATCH '关键词'
+  AND doc_type='archived_rule'
+ORDER BY rank LIMIT 5;"
+
+# 方式3: 读取完整规则
+cat ~/.solar/rules-archive/<citation_key>.md
+```
+
+**触发时机**: 遇到似曾相识的问题、需要历史教训、想找旧规则时
+
 ## 规则索引 (详见 rules/*.md)
-- 00-core-laws.md - 核心铁律
-- 01-three-core-laws.md - 三大铁律详解
+- 01-three-core-laws.md - 自动收藏Favorite
 - state-persistence.md - 状态持久化
 - solar-farm.md - 阳光牧场
-- glm-mode-behavior.md - GLM模式行为
 - call-niuma-with-personality.md - 调牛马带人格
-- data-first.md - 数据优先
-- ree-first.md - REE优先
+- cortex-first.md - Cortex优先
+- master-brain-persona.md - 主脑人格
+- multi-expert-analysis.md - 多专家会审
+- tvs-rendering.md - TVS渲染

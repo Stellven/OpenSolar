@@ -1,0 +1,77 @@
+2026-02-08T22:22:53.584Z [DEBUG] Watching for changes in setting files /Users/sihaoli/.claude, /Users/sihaoli/.claude, /Users/sihaoli/.claude...
+2026-02-08T22:22:53.585Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-08T22:22:53.585Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-08T22:22:53.585Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-08T22:22:53.585Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-08T22:22:53.589Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-02-08T22:22:53.589Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-02-08T22:22:53.589Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-02-08T22:22:53.590Z [DEBUG] Applying permission update: Adding 4 allow rule(s) to destination 'localSettings': ["Bash(curl:*)","Bash(tree:*)","Bash(xargs ls:*)","Bash(wc:*)"]
+2026-02-08T22:22:53.590Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-08T22:22:53.598Z [DEBUG] Found 0 plugins (0 enabled, 0 disabled)
+2026-02-08T22:22:53.598Z [DEBUG] Total LSP servers loaded: 0
+2026-02-08T22:22:53.598Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 0 server(s)
+2026-02-08T22:22:53.598Z [DEBUG] LSP manager initialized with 0 servers
+2026-02-08T22:22:53.598Z [DEBUG] [STARTUP] MCP configs loaded in 8ms
+2026-02-08T22:22:53.599Z [DEBUG] LSP server manager initialized successfully
+2026-02-08T22:22:53.599Z [DEBUG] LSP notification handlers registered successfully for all 0 server(s)
+2026-02-08T22:22:53.599Z [DEBUG] [STARTUP] Running setup()...
+2026-02-08T22:22:53.608Z [DEBUG] Stats cache is up to date
+2026-02-08T22:22:53.608Z [DEBUG] Plugin autoupdate: skipped (auto-updater disabled)
+2026-02-08T22:22:53.612Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-08T22:22:53.633Z [DEBUG] Passes: Cache stale, returning cached data and refreshing in background
+2026-02-08T22:22:53.639Z [DEBUG] Loaded 2 installed plugins from /Users/sihaoli/.claude/plugins/installed_plugins.json
+2026-02-08T22:22:53.673Z [DEBUG] Error log sink initialized
+2026-02-08T22:22:53.676Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/todos/bc3a82ab-7636-4d89-b14e-a6204df71466-agent-bc3a82ab-7636-4d89-b14e-a6204df71466.json.tmp.87655.1770589373676
+2026-02-08T22:22:53.677Z [DEBUG] Temp file written successfully, size: 2 bytes
+2026-02-08T22:22:53.677Z [DEBUG] Renaming /Users/sihaoli/.claude/todos/bc3a82ab-7636-4d89-b14e-a6204df71466-agent-bc3a82ab-7636-4d89-b14e-a6204df71466.json.tmp.87655.1770589373676 to /Users/sihaoli/.claude/todos/bc3a82ab-7636-4d89-b14e-a6204df71466-agent-bc3a82ab-7636-4d89-b14e-a6204df71466.json
+2026-02-08T22:22:53.677Z [DEBUG] File /Users/sihaoli/.claude/todos/bc3a82ab-7636-4d89-b14e-a6204df71466-agent-bc3a82ab-7636-4d89-b14e-a6204df71466.json written atomically
+2026-02-08T22:22:53.679Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-08T22:22:53.679Z [DEBUG] Total plugin skills loaded: 0
+2026-02-08T22:22:53.679Z [DEBUG] Total plugin commands loaded: 0
+2026-02-08T22:22:53.680Z [DEBUG] Registered 0 hooks from 0 plugins
+2026-02-08T22:22:53.680Z [DEBUG] [STARTUP] setup() completed in 81ms
+2026-02-08T22:22:53.680Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-02-08T22:22:53.687Z [DEBUG] Loaded 74 unique skills (managed: 0, user: 74, project: 0, legacy commands: 0)
+2026-02-08T22:22:53.687Z [DEBUG] getSkills returning: 74 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-02-08T22:22:53.705Z [DEBUG] [Claude in Chrome] Found chrome profiles: Default, Profile 1
+2026-02-08T22:22:53.707Z [DEBUG] Watching for changes in skill/command directories: /Users/sihaoli/.claude/skills, /Users/sihaoli/.claude/skills...
+2026-02-08T22:22:53.713Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=/Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg)
+2026-02-08T22:22:53.714Z [DEBUG] [Claude in Chrome] Extension not found in any browser
+2026-02-08T22:22:53.729Z [DEBUG] Agent file /Users/sihaoli/.claude/agents/community.md is missing required 'name' in frontmatter
+2026-02-08T22:22:53.729Z [DEBUG] Failed to parse agent from /Users/sihaoli/.claude/agents/community.md: Missing required "name" field in frontmatter
+2026-02-08T22:22:53.729Z [DEBUG] Total plugin agents loaded: 0
+2026-02-08T22:22:53.729Z [DEBUG] [STARTUP] Commands and agents loaded in 49ms
+2026-02-08T22:22:53.729Z [DEBUG] [STARTUP] Running showSetupScreens()...
+2026-02-08T22:22:53.730Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-02-08T22:22:53.731Z [DEBUG] Grove: Using fresh cached config
+2026-02-08T22:22:53.731Z [DEBUG] [render] initYoga starting
+2026-02-08T22:22:53.738Z [DEBUG] [render] initYoga complete
+2026-02-08T22:22:53.741Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-02-08T22:22:53.746Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-02-08T22:22:53.746Z [DEBUG] Git remote URL: null
+2026-02-08T22:22:53.746Z [DEBUG] No git remote URL found
+2026-02-08T22:22:53.746Z [DEBUG] Not in a GitHub repository, skipping path mapping update
+2026-02-08T22:22:53.782Z [ERROR] Error: Error: Error parsing line in /Users/sihaoli/.claude/projects/-Users-sihaoli/2053e84d-a735-41e9-83c2-ec851d482461.jsonl: SyntaxError: Unexpected token 'y', "  try {","+   "... is not valid JSON
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:66:79
+    at Array.map (<anonymous>)
+    at Lb (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:66:26)
+    at async xo (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3257:1878)
+    at async wa2 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3257:6924)
+2026-02-08T22:22:53.800Z [DEBUG] Session index: added 1, updated 1, removed 0 (total: 25)
+2026-02-08T22:22:54.318Z [DEBUG] [STARTUP] showSetupScreens() completed in 589ms
+2026-02-08T22:22:54.318Z [DEBUG] [render] initYoga starting
+2026-02-08T22:22:54.318Z [DEBUG] [render] initYoga complete
+2026-02-08T22:22:54.320Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-02-08T22:22:54.345Z [DEBUG] High write ratio: blit=0, write=1436 (100.0% writes), screen=38x133
+2026-02-08T22:22:54.355Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-02-08T22:22:54.356Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.87655.1770589374356
+2026-02-08T22:22:54.356Z [DEBUG] Preserving file permissions: 100600
+2026-02-08T22:22:54.356Z [DEBUG] Temp file written successfully, size: 14148 bytes
+2026-02-08T22:22:54.356Z [DEBUG] Applied original permissions to temp file
+2026-02-08T22:22:54.356Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.87655.1770589374356 to /Users/sihaoli/.claude.json
+2026-02-08T22:22:54.356Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-08T22:22:54.356Z [DEBUG] Passes eligibility cached for org 669066ca-0b9c-41aa-9570-f1703da565f1: true
+2026-02-08T22:23:03.872Z [DEBUG] Getting matching hook commands for SessionEnd with query: other
+2026-02-08T22:23:03.872Z [DEBUG] Found 0 hook matchers in settings
+2026-02-08T22:23:03.872Z [DEBUG] Matched 0 unique hooks for query "other" (0 before deduplication)

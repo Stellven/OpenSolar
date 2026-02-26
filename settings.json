@@ -1,154 +1,142 @@
 {
   "env": {
-    "ANTHROPIC_AUTH_TOKEN": "PROXY_MANAGED",
-    "ANTHROPIC_BASE_URL": "http://127.0.0.1:15721"
-  },
-  "includeCoAuthoredBy": false,
-  "skipDangerousModePermissionPrompt": true,
-  "enabledPlugins": {
-    "swift-lsp@claude-plugins-official": true
+    "ANTHROPIC_AUTH_TOKEN": "cee4edb0bb554b709623d2c2d63c4065.q0unUsiCytMqBo07",
+    "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/anthropic",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-5",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-5",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-5",
+    "ANTHROPIC_MODEL": "glm-5",
+    "ANTHROPIC_REASONING_MODEL": "glm-5"
   },
   "hooks": {
-    "UserPromptSubmit": [
+    "PostToolUse": [
       {
-        "type": "command",
-        "command": "~/.claude/hooks/personality-anchor-hook.sh"
-      },
-      {
-        "type": "command",
-        "command": "~/.claude/hooks/asset-reminder.sh"
-      },
-      {
-        "type": "command",
-        "command": "~/.claude/hooks/cortex-hook.sh"
-      },
-      {
-        "type": "command",
-        "command": "~/.claude/hooks/knowledge-auto-inject.sh"
-      },
-      {
-        "type": "command",
-        "command": "~/.claude/hooks/persona-auto-inject.sh"
-      },
-      {
-        "type": "command",
-        "command": "~/.claude/hooks/intent-learning-hook.sh"
-      },
-      {
-        "type": "command",
-        "command": "~/.claude/hooks/learning-capture.sh"
-      },
-      {
-        "type": "command",
-        "command": "~/.claude/hooks/memory-influence.sh"
-      },
-      {
-        "type": "command",
-        "command": "~/.claude/hooks/ree-first-hook.sh"
-      },
-      {
-        "type": "command",
-        "command": "~/.claude/hooks/mid-refresh.sh"
-      },
-      {
-        "type": "command",
-        "command": "~/.claude/hooks/identity-reminder.sh"
-      },
-      {
-        "type": "command",
-        "command": "~/.claude/hooks/executor-reminder.sh"
+        "hooks": [
+          {
+            "command": "~/.claude/hooks/state-read-tracker.sh",
+            "type": "command"
+          },
+          {
+            "command": "~/.claude/hooks/post-tool-dispatcher.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "Write|Edit|Read|Bash|Grep|Glob|Task|WebSearch|WebFetch|TodoWrite|Skill|AskUserQuestion"
       }
     ],
     "PreToolUse": [
       {
-        "matcher": "Write|Edit",
         "hooks": [
           {
-            "type": "command",
-            "command": "~/.claude/hooks/state-read-enforcer.sh"
+            "command": "~/.claude/hooks/state-read-enforcer.sh",
+            "type": "command"
           },
           {
-            "type": "command",
-            "command": "~/.claude/hooks/experience-reminder.sh"
+            "command": "~/.claude/hooks/experience-reminder.sh",
+            "type": "command"
           }
-        ]
-      },
-      {
-        "matcher": "mcp__brain-router__complete|mcp__brain-router__chat",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/persona-enforcer.sh"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit|Read|Bash|Grep|Glob|Task|WebSearch|WebFetch|TodoWrite|Skill|AskUserQuestion",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/state-read-tracker.sh"
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/post-tool-dispatcher.sh"
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/personality-injector.sh"
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "type": "command",
-        "command": "~/.claude/hooks/solar-session-start.sh"
-      },
-      {
-        "type": "command",
-        "command": "~/.claude/hooks/context-preload.sh"
-      },
-      {
-        "type": "command",
-        "command": "~/.claude/hooks/perf-auto-refresh.sh"
-      },
-      {
-        "type": "command",
-        "command": "~/.claude/hooks/state-inject.sh"
+        ],
+        "matcher": "Write|Edit"
       }
     ],
     "SessionEnd": [
       {
-        "type": "command",
-        "command": "/Users/lisihao/Solar/hooks/session-end-save.sh"
+        "command": "/Users/sihaoli/Solar/hooks/session-end-save.sh",
+        "type": "command"
       },
       {
-        "type": "command",
-        "command": "~/.claude/hooks/session-reflect.sh"
+        "command": "~/.claude/hooks/session-reflect.sh",
+        "type": "command"
       },
       {
-        "type": "command",
-        "command": "~/.claude/hooks/ses-session-end.sh"
+        "command": "~/.claude/hooks/ses-session-end.sh",
+        "type": "command"
       },
       {
-        "type": "command",
-        "command": "~/.claude/hooks/enhanced-memory-writer.sh"
+        "command": "~/.claude/hooks/enhanced-memory-writer.sh",
+        "type": "command"
       },
       {
-        "type": "command",
-        "command": "~/.claude/hooks/session-refresh-assets.sh"
+        "command": "~/.claude/hooks/session-refresh-assets.sh",
+        "type": "command"
       },
       {
-        "type": "command",
-        "command": "~/.claude/hooks/state-session-end.sh"
+        "command": "~/.claude/hooks/state-session-end.sh",
+        "type": "command"
       },
       {
-        "type": "command",
-        "command": "~/.claude/hooks/state-auto-updater.sh"
+        "command": "~/.claude/hooks/state-auto-updater.sh",
+        "type": "command"
+      },
+      {
+        "command": "~/.claude/hooks/feedback-loop-hook.sh",
+        "type": "command"
+      }
+    ],
+    "SessionStart": [
+      {
+        "command": "~/.claude/hooks/solar-session-start.sh",
+        "type": "command"
+      },
+      {
+        "command": "~/.claude/hooks/context-preload.sh",
+        "type": "command"
+      },
+      {
+        "command": "~/.claude/hooks/perf-auto-refresh.sh",
+        "type": "command"
+      },
+      {
+        "command": "~/.claude/hooks/state-inject.sh",
+        "type": "command"
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "command": "~/.claude/hooks/personality-anchor-hook.sh",
+        "type": "command"
+      },
+      {
+        "command": "~/.claude/hooks/asset-reminder.sh",
+        "type": "command"
+      },
+      {
+        "command": "~/.claude/hooks/cortex-hook.sh",
+        "type": "command"
+      },
+      {
+        "command": "~/.claude/hooks/intent-learning-hook.sh",
+        "type": "command"
+      },
+      {
+        "command": "~/.claude/hooks/learning-capture.sh",
+        "type": "command"
+      },
+      {
+        "command": "~/.claude/hooks/memory-influence.sh",
+        "type": "command"
+      },
+      {
+        "command": "~/.claude/hooks/ree-first-hook.sh",
+        "type": "command"
+      },
+      {
+        "command": "~/.claude/hooks/mid-refresh.sh",
+        "type": "command"
+      },
+      {
+        "command": "~/.claude/hooks/identity-reminder.sh",
+        "type": "command"
+      },
+      {
+        "command": "~/.claude/hooks/executor-reminder.sh",
+        "type": "command"
+      },
+      {
+        "command": "~/.claude/hooks/skill-rag-dispatcher.sh",
+        "type": "command"
       }
     ]
-  }
+  },
+  "model": "sonnet"
 }

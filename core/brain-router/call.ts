@@ -18,10 +18,10 @@ const SOLAR_DB = `${HOME}/.solar/solar.db`;
 const MODEL_ALIASES: Record<string, string> = {
   // GLM 系列
   'glm-4-flash': 'glm-4-flash',
-  'glm-4-plus': 'glm-4-plus',
+  'glm-5': 'glm-5',
   'glm-5': 'glm-5',
   '小快手': 'glm-4-flash',
-  '建设者': 'glm-4-plus',
+  '建设者': 'glm-5',
   '智囊': 'glm-5',
 
   // Gemini 系列
@@ -207,7 +207,7 @@ async function main() {
     console.log('用法: bun call.ts <model> <prompt> [system]');
     console.log('');
     console.log('模型别名:');
-    console.log('  GLM: glm-4-flash (小快手), glm-4-plus (建设者), glm-5 (智囊)');
+    console.log('  GLM: glm-4-flash (小快手), glm-5 (建设者), glm-5 (智囊)');
     console.log('  Gemini: gemini-2.5-pro (稳健派), gemini-3-pro (探索派)');
     console.log('  DeepSeek: deepseek-v3 (创想家), deepseek-r1 (审判官)');
     console.log('  OpenAI: gpt-4o (综合官), gpt-4o-mini (小管家)');

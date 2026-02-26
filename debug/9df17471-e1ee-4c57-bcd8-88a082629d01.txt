@@ -1,0 +1,663 @@
+2026-01-28T13:13:12.154Z [DEBUG] Watching for changes in setting files /Users/sihaoli/.claude...
+2026-01-28T13:13:12.156Z [DEBUG] [init] configureGlobalMTLS starting
+2026-01-28T13:13:12.156Z [DEBUG] [init] configureGlobalMTLS complete
+2026-01-28T13:13:12.156Z [DEBUG] [init] configureGlobalAgents starting
+2026-01-28T13:13:12.156Z [DEBUG] [init] configureGlobalAgents complete
+2026-01-28T13:13:12.159Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-01-28T13:13:12.159Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-01-28T13:13:12.159Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-01-28T13:13:12.160Z [DEBUG] Applying permission update: Adding 8 allow rule(s) to destination 'userSettings': ["Read(docs/**)","Read(src/**)","Read(include/**)","Read(test/**)","Read(benchmark/**)","WebFetch(domain:github.com)","WebFetch(domain:stackoverflow.com)","WebFetch(domain:cppreference.com)"]
+2026-01-28T13:13:12.161Z [DEBUG] Applying permission update: Adding 6 deny rule(s) to destination 'userSettings': ["Read(.env)","Read(.env.*)","Read(**/*secret*)","Read(**/*credential*)","Bash(rm -rf /)","Bash(rm -rf /*)"]
+2026-01-28T13:13:12.161Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-01-28T13:13:12.171Z [DEBUG] Loading plugin clangd-lsp from source: "./plugins/clangd-lsp"
+2026-01-28T13:13:12.171Z [DEBUG] Using provided version for clangd-lsp@claude-plugins-official: 1.0.0
+2026-01-28T13:13:12.171Z [DEBUG] Plugin clangd-lsp@claude-plugins-official version 1.0.0 already cached at /Users/sihaoli/.claude/plugins/cache/claude-plugins-official/clangd-lsp/1.0.0
+2026-01-28T13:13:12.171Z [DEBUG] Copied local plugin clangd-lsp to versioned cache: /Users/sihaoli/.claude/plugins/cache/claude-plugins-official/clangd-lsp/1.0.0
+2026-01-28T13:13:12.172Z [DEBUG] Plugin clangd-lsp has no entry.skills defined
+2026-01-28T13:13:12.172Z [DEBUG] Loading plugin rust-analyzer-lsp from source: "./plugins/rust-analyzer-lsp"
+2026-01-28T13:13:12.172Z [DEBUG] Using provided version for rust-analyzer-lsp@claude-plugins-official: 1.0.0
+2026-01-28T13:13:12.172Z [DEBUG] Plugin rust-analyzer-lsp@claude-plugins-official version 1.0.0 already cached at /Users/sihaoli/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0
+2026-01-28T13:13:12.172Z [DEBUG] Copied local plugin rust-analyzer-lsp to versioned cache: /Users/sihaoli/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0
+2026-01-28T13:13:12.172Z [DEBUG] Plugin rust-analyzer-lsp has no entry.skills defined
+2026-01-28T13:13:12.172Z [DEBUG] Found 2 plugins (2 enabled, 0 disabled)
+2026-01-28T13:13:12.173Z [DEBUG] [STARTUP] MCP configs loaded in 12ms
+2026-01-28T13:13:12.177Z [DEBUG] [STARTUP] Running setup()...
+2026-01-28T13:13:12.183Z [DEBUG] Stats cache is up to date
+2026-01-28T13:13:12.183Z [DEBUG] Plugin autoupdate: skipped (auto-updater disabled)
+2026-01-28T13:13:12.185Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T13:13:12.190Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T13:13:12.193Z [DEBUG] Loaded 2 installed plugins from /Users/sihaoli/.claude/plugins/installed_plugins.json
+2026-01-28T13:13:12.207Z [DEBUG] Error log sink initialized
+2026-01-28T13:13:12.208Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/todos/9df17471-e1ee-4c57-bcd8-88a082629d01-agent-9df17471-e1ee-4c57-bcd8-88a082629d01.json.tmp.75256.1769605992208
+2026-01-28T13:13:12.208Z [DEBUG] Temp file written successfully, size: 2 bytes
+2026-01-28T13:13:12.208Z [DEBUG] Renaming /Users/sihaoli/.claude/todos/9df17471-e1ee-4c57-bcd8-88a082629d01-agent-9df17471-e1ee-4c57-bcd8-88a082629d01.json.tmp.75256.1769605992208 to /Users/sihaoli/.claude/todos/9df17471-e1ee-4c57-bcd8-88a082629d01-agent-9df17471-e1ee-4c57-bcd8-88a082629d01.json
+2026-01-28T13:13:12.208Z [DEBUG] File /Users/sihaoli/.claude/todos/9df17471-e1ee-4c57-bcd8-88a082629d01-agent-9df17471-e1ee-4c57-bcd8-88a082629d01.json written atomically
+2026-01-28T13:13:12.217Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T13:13:12.217Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T13:13:12.217Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T13:13:12.217Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T13:13:12.217Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T13:13:12.217Z [DEBUG] Registered 0 hooks from 2 plugins
+2026-01-28T13:13:12.218Z [DEBUG] [STARTUP] setup() completed in 41ms
+2026-01-28T13:13:12.218Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-01-28T13:13:12.220Z [DEBUG] Loaded 16 unique skills (managed: 0, user: 16, project: 0, legacy commands: 0)
+2026-01-28T13:13:12.220Z [DEBUG] getSkills returning: 16 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T13:13:12.222Z [DEBUG] Loaded 1 LSP server(s) from plugin: clangd-lsp
+2026-01-28T13:13:12.236Z [DEBUG] [Claude in Chrome] Found chrome profiles: Default, Profile 1
+2026-01-28T13:13:12.236Z [DEBUG] Loaded 1 LSP server(s) from plugin: rust-analyzer-lsp
+2026-01-28T13:13:12.236Z [DEBUG] Total LSP servers loaded: 2
+2026-01-28T13:13:12.236Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 2 server(s)
+2026-01-28T13:13:12.237Z [DEBUG] Queued request handler for plugin:clangd-lsp:clangd.workspace/configuration (connection not ready)
+2026-01-28T13:13:12.237Z [DEBUG] Starting LSP server instance: plugin:clangd-lsp:clangd
+2026-01-28T13:13:12.238Z [DEBUG] Queued request handler for plugin:rust-analyzer-lsp:rust-analyzer.workspace/configuration (connection not ready)
+2026-01-28T13:13:12.238Z [DEBUG] Starting LSP server instance: plugin:rust-analyzer-lsp:rust-analyzer
+2026-01-28T13:13:12.239Z [DEBUG] LSP manager initialized with 2 servers
+2026-01-28T13:13:12.239Z [DEBUG] LSP server manager initialized successfully
+2026-01-28T13:13:12.239Z [DEBUG] Queued notification handler for plugin:clangd-lsp:clangd.textDocument/publishDiagnostics (connection not ready)
+2026-01-28T13:13:12.239Z [DEBUG] Registered diagnostics handler for plugin:clangd-lsp:clangd
+2026-01-28T13:13:12.239Z [DEBUG] Queued notification handler for plugin:rust-analyzer-lsp:rust-analyzer.textDocument/publishDiagnostics (connection not ready)
+2026-01-28T13:13:12.239Z [DEBUG] Registered diagnostics handler for plugin:rust-analyzer-lsp:rust-analyzer
+2026-01-28T13:13:12.239Z [DEBUG] LSP notification handlers registered successfully for all 2 server(s)
+2026-01-28T13:13:12.240Z [DEBUG] Applied queued notification handler for plugin:clangd-lsp:clangd.textDocument/publishDiagnostics
+2026-01-28T13:13:12.240Z [DEBUG] Applied queued request handler for plugin:clangd-lsp:clangd.workspace/configuration
+2026-01-28T13:13:12.240Z [DEBUG] LSP client started for plugin:clangd-lsp:clangd
+2026-01-28T13:13:12.240Z [DEBUG] Applied queued notification handler for plugin:rust-analyzer-lsp:rust-analyzer.textDocument/publishDiagnostics
+2026-01-28T13:13:12.240Z [DEBUG] Applied queued request handler for plugin:rust-analyzer-lsp:rust-analyzer.workspace/configuration
+2026-01-28T13:13:12.240Z [DEBUG] LSP client started for plugin:rust-analyzer-lsp:rust-analyzer
+2026-01-28T13:13:12.240Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Sending request 'initialize - (0)'.
+2026-01-28T13:13:12.240Z [DEBUG] [LSP PROTOCOL plugin:rust-analyzer-lsp:rust-analyzer] Sending request 'initialize - (0)'.
+2026-01-28T13:13:12.243Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=/Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg)
+2026-01-28T13:13:12.246Z [DEBUG] Watching for changes in skill/command directories: /Users/sihaoli/.claude/skills...
+2026-01-28T13:13:12.252Z [DEBUG] Session index: added 1, updated 0, removed 0 (total: 7)
+2026-01-28T13:13:12.253Z [DEBUG] [LSP SERVER plugin:clangd-lsp:clangd] I[21:13:12.251] Apple clangd version 17.0.0 (clang-1700.6.3.2)
+I[21:13:12.251] Features: mac+xpc
+I[21:13:12.251] PID: 75350
+I[21:13:12.251] Working directory: /Users/sihaoli/ThunderDuck/src/core
+I[21:13:12.251] argv[0]: /Library/Developer/CommandLineTools/usr/bin/clangd
+I[21:13:12.251] argv[1]: --background-index
+I[21:13:12.251] Starting LSP over stdin/stdout
+I[21:13:12.251] <-- initialize(0)
+2026-01-28T13:13:12.256Z [DEBUG] Total plugin agents loaded: 0
+2026-01-28T13:13:12.257Z [DEBUG] [STARTUP] Commands and agents loaded in 39ms
+2026-01-28T13:13:12.257Z [DEBUG] [STARTUP] Running showSetupScreens()...
+2026-01-28T13:13:12.257Z [DEBUG] [render] initYoga starting
+2026-01-28T13:13:12.260Z [DEBUG] [LSP SERVER plugin:clangd-lsp:clangd] I[21:13:12.256] --> reply:initialize(0) 5 ms
+2026-01-28T13:13:12.261Z [DEBUG] [Claude in Chrome] Extension not found in any browser
+2026-01-28T13:13:12.261Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Received response 'initialize - (0)' in 21ms.
+2026-01-28T13:13:12.261Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Sending notification 'initialized'.
+2026-01-28T13:13:12.262Z [DEBUG] [render] initYoga complete
+2026-01-28T13:13:12.263Z [DEBUG] LSP server plugin:clangd-lsp:clangd initialized
+2026-01-28T13:13:12.263Z [DEBUG] LSP server instance started: plugin:clangd-lsp:clangd
+2026-01-28T13:13:12.265Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-01-28T13:13:12.271Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-01-28T13:13:12.272Z [DEBUG] Grove: Using fresh cached config
+2026-01-28T13:13:12.272Z [DEBUG] [render] initYoga starting
+2026-01-28T13:13:12.272Z [DEBUG] [render] initYoga complete
+2026-01-28T13:13:12.273Z [DEBUG] [LSP SERVER plugin:clangd-lsp:clangd] I[21:13:12.263] <-- initialized
+2026-01-28T13:13:12.274Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-01-28T13:13:12.276Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-01-28T13:13:12.281Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-01-28T13:13:12.282Z [DEBUG] Git remote URL: https://github.com/lisihao/ThunderDuck.git
+2026-01-28T13:13:12.283Z [DEBUG] Parsed repository: lisihao/ThunderDuck from https://github.com/lisihao/ThunderDuck.git
+2026-01-28T13:13:12.283Z [DEBUG] Parsed repository: lisihao/ThunderDuck from URL: https://github.com/lisihao/ThunderDuck.git
+2026-01-28T13:13:12.283Z [DEBUG] Path /Users/sihaoli/ThunderDuck/src/core already tracked for repo lisihao/thunderduck
+2026-01-28T13:13:12.727Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] error: Unknown binary 'rust-analyzer' in official toolchain 'stable-aarch64-apple-darwin'.
+2026-01-28T13:13:12.727Z [DEBUG] LSP server plugin:rust-analyzer-lsp:rust-analyzer connection closed
+2026-01-28T13:13:12.735Z [ERROR] Error: Error: LSP server plugin:rust-analyzer-lsp:rust-analyzer crashed with exit code 1
+    at ChildProcess.<anonymous> (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:1622:21508)
+    at ChildProcess.emit (node:events:508:28)
+    at ChildProcess.emit (node:domain:489:12)
+    at ChildProcess._handle.onexit (node:internal/child_process:294:12)
+2026-01-28T13:13:13.074Z [DEBUG] [STARTUP] showSetupScreens() completed in 817ms
+2026-01-28T13:13:13.077Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-01-28T13:13:13.077Z [DEBUG] [API:auth] OAuth token check starting
+2026-01-28T13:13:13.078Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T13:13:13.085Z [DEBUG] All plugins already exist, skipping migration
+2026-01-28T13:13:13.085Z [DEBUG] [API:auth] OAuth token check complete
+2026-01-28T13:13:13.086Z [DEBUG] Initialized versioned plugins system with 2 plugins
+2026-01-28T13:13:13.092Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.75256.1769605993092
+2026-01-28T13:13:13.092Z [DEBUG] Preserving file permissions: 100600
+2026-01-28T13:13:13.092Z [DEBUG] Temp file written successfully, size: 9517 bytes
+2026-01-28T13:13:13.092Z [DEBUG] Applied original permissions to temp file
+2026-01-28T13:13:13.092Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.75256.1769605993092 to /Users/sihaoli/.claude.json
+2026-01-28T13:13:13.093Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-01-28T13:13:13.096Z [DEBUG] Getting matching hook commands for SessionStart with query: startup
+2026-01-28T13:13:13.096Z [DEBUG] Found 0 hook matchers in settings
+2026-01-28T13:13:13.096Z [DEBUG] Matched 0 unique hooks for query "startup" (0 before deduplication)
+2026-01-28T13:13:13.102Z [DEBUG] [render] initYoga starting
+2026-01-28T13:13:13.102Z [DEBUG] Skills and commands included in Skill tool: agent, benchmark, build, commit, docs, mcp-builder, pr, restore, review, save, skill-creator, stats, status, test, webapp-testing
+2026-01-28T13:13:13.102Z [DEBUG] [render] initYoga complete
+2026-01-28T13:13:13.104Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-01-28T13:13:13.104Z [DEBUG] [API:auth] OAuth token check starting
+2026-01-28T13:13:13.105Z [DEBUG] [API:auth] OAuth token check complete
+2026-01-28T13:13:13.111Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-01-28T13:13:13.147Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-01-28T13:13:13.147Z [DEBUG] [REPL:mount] REPL mounted, disabled=false
+2026-01-28T13:13:13.148Z [DEBUG] Official marketplace auto-install skipped: already_attempted
+2026-01-28T13:13:13.148Z [DEBUG] performStartupChecks called
+2026-01-28T13:13:13.148Z [DEBUG] Starting background plugin installations
+2026-01-28T13:13:13.148Z [DEBUG] performBackgroundPluginInstallations called
+2026-01-28T13:13:13.188Z [DEBUG] Found 2 enabled plugins
+2026-01-28T13:13:13.188Z [DEBUG] All plugins already exist, skipping migration
+2026-01-28T13:13:13.188Z [DEBUG] Found 2 installed plugins (V2 format)
+2026-01-28T13:13:13.188Z [DEBUG] Loaded plugins - Enabled: 2, Disabled: 0, Commands: 0, Agents: 0, Errors: 0
+2026-01-28T13:13:13.188Z [DEBUG] Found 0 missing plugins (not installed):
+2026-01-28T13:13:13.188Z [DEBUG] Setting installation status: 0 marketplaces, 0 installable plugins, 0 uninstallable plugins
+2026-01-28T13:13:13.203Z [DEBUG] MCP server "ide": Starting connection with timeout of 30000ms
+2026-01-28T13:13:13.208Z [DEBUG] Summarizing all 8 messages (~0 tokens)
+2026-01-28T13:13:13.210Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-01-28T13:13:13.212Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-01-28T13:13:13.212Z [DEBUG] [API:auth] OAuth token check starting
+2026-01-28T13:13:13.212Z [DEBUG] [API:auth] OAuth token check complete
+2026-01-28T13:13:13.222Z [DEBUG] MCP server "ide": Successfully connected to ws-ide server in 21ms
+2026-01-28T13:13:13.222Z [DEBUG] MCP server "ide": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Claude Code VSCode MCP","version":"2.1.20"}}
+2026-01-28T13:13:13.224Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.75256.1769605993224
+2026-01-28T13:13:13.224Z [DEBUG] Preserving file permissions: 100600
+2026-01-28T13:13:13.224Z [DEBUG] Temp file written successfully, size: 9517 bytes
+2026-01-28T13:13:13.224Z [DEBUG] Applied original permissions to temp file
+2026-01-28T13:13:13.224Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.75256.1769605993224 to /Users/sihaoli/.claude.json
+2026-01-28T13:13:13.224Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-01-28T13:13:13.232Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-01-28T13:13:13.267Z [DEBUG] High write ratio: blit=0, write=1007 (100.0% writes), screen=18x148
+2026-01-28T13:13:14.048Z [DEBUG] Stream started - received first chunk
+2026-01-28T13:13:16.259Z [DEBUG] High write ratio: blit=0, write=1014 (100.0% writes), screen=22x148
+2026-01-28T13:13:16.272Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-01-28T13:13:16.272Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-01-28T13:13:16.272Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-01-28T13:13:16.272Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-01-28T13:13:16.300Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-01-28T13:13:16.300Z [DEBUG] Found 0 hook matchers in settings
+2026-01-28T13:13:16.300Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-01-28T13:13:16.301Z [DEBUG] Started caffeinate to prevent sleep
+2026-01-28T13:13:16.302Z [DEBUG] FileHistory: Added snapshot for 203564aa-2a56-4308-afa5-c413d9b8c884, tracking 0 files
+2026-01-28T13:13:16.306Z [DEBUG] High write ratio: blit=0, write=1014 (100.0% writes), screen=22x148
+2026-01-28T13:13:16.307Z [DEBUG] MCP server "ide": Calling MCP tool: closeAllDiffTabs
+2026-01-28T13:13:16.307Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-01-28T13:13:16.309Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-01-28T13:13:16.309Z [DEBUG] [API:auth] OAuth token check starting
+2026-01-28T13:13:16.309Z [DEBUG] [API:auth] OAuth token check complete
+2026-01-28T13:13:16.311Z [DEBUG] Total plugin output styles loaded: 0
+2026-01-28T13:13:16.312Z [DEBUG] MCP server "ide": Tool 'closeAllDiffTabs' completed successfully in 5ms
+2026-01-28T13:13:16.316Z [DEBUG] Auto tool search disabled: 400 chars (threshold: 50000, 10% of context)
+2026-01-28T13:13:16.322Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-01-28T13:13:16.322Z [DEBUG] [API:auth] OAuth token check starting
+2026-01-28T13:13:16.322Z [DEBUG] [API:auth] OAuth token check complete
+2026-01-28T13:13:16.362Z [DEBUG] High write ratio: blit=296, write=1007 (77.3% writes), screen=22x148
+2026-01-28T13:13:17.142Z [DEBUG] Stream started - received first chunk
+2026-01-28T13:13:20.048Z [DEBUG] Stream started - received first chunk
+2026-01-28T13:13:21.223Z [DEBUG] High write ratio: blit=296, write=1000 (77.2% writes), screen=22x148
+2026-01-28T13:13:21.298Z [DEBUG] High write ratio: blit=296, write=1000 (77.2% writes), screen=22x148
+2026-01-28T13:13:28.878Z [DEBUG] High write ratio: blit=296, write=2247 (88.4% writes), screen=49x148
+2026-01-28T13:13:28.909Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-01-28T13:13:28.909Z [DEBUG] Found 1 hook matchers in settings
+2026-01-28T13:13:28.909Z [DEBUG] Matched 1 unique hooks for query "no match query" (1 before deduplication)
+2026-01-28T13:13:28.940Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-01-28T13:13:28.948Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-01-28T13:13:28.952Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.75256.1769606008952
+2026-01-28T13:13:28.952Z [DEBUG] Preserving file permissions: 100600
+2026-01-28T13:13:28.952Z [DEBUG] Temp file written successfully, size: 9517 bytes
+2026-01-28T13:13:28.952Z [DEBUG] Applied original permissions to temp file
+2026-01-28T13:13:28.952Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.75256.1769606008952 to /Users/sihaoli/.claude.json
+2026-01-28T13:13:28.952Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-01-28T13:13:28.957Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.75256.1769606008957
+2026-01-28T13:13:28.957Z [DEBUG] Preserving file permissions: 100600
+2026-01-28T13:13:28.957Z [DEBUG] Temp file written successfully, size: 9517 bytes
+2026-01-28T13:13:28.957Z [DEBUG] Applied original permissions to temp file
+2026-01-28T13:13:28.957Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.75256.1769606008957 to /Users/sihaoli/.claude.json
+2026-01-28T13:13:28.957Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-01-28T13:14:28.952Z [DEBUG] Getting matching hook commands for Notification with query: idle_prompt
+2026-01-28T13:14:28.952Z [DEBUG] Found 0 hook matchers in settings
+2026-01-28T13:14:28.952Z [DEBUG] Matched 0 unique hooks for query "idle_prompt" (0 before deduplication)
+2026-01-28T13:16:07.515Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/banner/SKILL.md
+2026-01-28T13:16:07.515Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T13:16:07.518Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T13:16:07.518Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T13:16:07.518Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T13:16:07.518Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T13:16:07.518Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T13:16:07.518Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T13:16:07.518Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T13:16:07.518Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T13:16:27.740Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.75256.1769606187740
+2026-01-28T13:16:27.740Z [DEBUG] Preserving file permissions: 100600
+2026-01-28T13:16:27.740Z [DEBUG] Temp file written successfully, size: 9619 bytes
+2026-01-28T13:16:27.740Z [DEBUG] Applied original permissions to temp file
+2026-01-28T13:16:27.740Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.75256.1769606187740 to /Users/sihaoli/.claude.json
+2026-01-28T13:16:27.740Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-01-28T13:16:27.741Z [DEBUG] Metadata string for banner:
+2026-01-28T13:16:27.741Z [DEBUG] <command-message>banner</command-message>
+<command-name>/banner</command-name>
+2026-01-28T13:16:27.741Z [DEBUG] command-message tags in metadata: 1
+2026-01-28T13:16:27.745Z [DEBUG] MCP server "ide": Calling MCP tool: getDiagnostics
+2026-01-28T13:16:27.746Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-01-28T13:16:27.746Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-01-28T13:16:27.746Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-01-28T13:16:27.746Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-01-28T13:16:27.749Z [DEBUG] Started caffeinate to prevent sleep
+2026-01-28T13:16:27.756Z [DEBUG] MCP server "ide": Tool 'getDiagnostics' completed successfully in 11ms
+2026-01-28T13:16:27.756Z [DEBUG] processPromptSlashCommand creating 3 messages for banner
+2026-01-28T13:16:27.756Z [DEBUG] Message 1: <command-message>banner</command-message>
+<command-name>/banner</command-name>
+2026-01-28T13:16:27.756Z [DEBUG] Message 2 [META]: [{"type":"text","text":"Base directory for this skill: /Users/sihaoli/.claude/skills/banner\n\n# /banner - 显示 Solar 横幅\n\n## 功能\n\n随时显示 Solar 启动横幅和当前状态。\n\n## 显示内容\n\n```\n\n  ╭───────────────────────
+2026-01-28T13:16:27.756Z [DEBUG] Message 3: [ATTACHMENT]
+2026-01-28T13:16:27.761Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-01-28T13:16:27.761Z [DEBUG] Found 0 hook matchers in settings
+2026-01-28T13:16:27.761Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-01-28T13:16:27.762Z [DEBUG] FileHistory: Making snapshot for message 10b36323-bf13-4a00-adc4-44575323537e
+2026-01-28T13:16:27.762Z [DEBUG] FileHistory: Added snapshot for 10b36323-bf13-4a00-adc4-44575323537e, tracking 0 files
+2026-01-28T13:16:27.764Z [DEBUG] UserCommandMessage rendering: "banner" (args: "none", isSkillFormat: false)
+2026-01-28T13:16:27.766Z [DEBUG] MCP server "ide": Calling MCP tool: closeAllDiffTabs
+2026-01-28T13:16:27.768Z [DEBUG] MCP server "ide": Tool 'closeAllDiffTabs' completed successfully in 2ms
+2026-01-28T13:16:27.771Z [DEBUG] Auto tool search disabled: 400 chars (threshold: 50000, 10% of context)
+2026-01-28T13:16:27.772Z [DEBUG] Skills and commands included in Skill tool: agent, banner, benchmark, build, commit, docs, mcp-builder, pr, restore, review, save, skill-creator, stats, status, test, webapp-testing
+2026-01-28T13:16:27.779Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-01-28T13:16:27.779Z [DEBUG] [API:auth] OAuth token check starting
+2026-01-28T13:16:27.779Z [DEBUG] [API:auth] OAuth token check complete
+2026-01-28T13:16:27.819Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-01-28T13:16:30.525Z [DEBUG] Stream started - received first chunk
+2026-01-28T13:16:33.952Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-01-28T13:16:33.952Z [DEBUG] Found 1 hook matchers in settings
+2026-01-28T13:16:33.952Z [DEBUG] Matched 1 unique hooks for query "no match query" (1 before deduplication)
+2026-01-28T13:16:33.953Z [DEBUG] Auto tool search disabled: 400 chars (threshold: 50000, 10% of context)
+2026-01-28T13:16:33.962Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-01-28T13:16:33.962Z [DEBUG] [API:auth] OAuth token check starting
+2026-01-28T13:16:33.962Z [DEBUG] [API:auth] OAuth token check complete
+2026-01-28T13:16:33.986Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-01-28T13:16:33.993Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-01-28T13:16:33.998Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.75256.1769606193998
+2026-01-28T13:16:33.998Z [DEBUG] Preserving file permissions: 100600
+2026-01-28T13:16:33.998Z [DEBUG] Temp file written successfully, size: 9619 bytes
+2026-01-28T13:16:33.998Z [DEBUG] Applied original permissions to temp file
+2026-01-28T13:16:33.998Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.75256.1769606193998 to /Users/sihaoli/.claude.json
+2026-01-28T13:16:33.998Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-01-28T13:16:34.003Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.75256.1769606194003
+2026-01-28T13:16:34.003Z [DEBUG] Preserving file permissions: 100600
+2026-01-28T13:16:34.003Z [DEBUG] Temp file written successfully, size: 9619 bytes
+2026-01-28T13:16:34.003Z [DEBUG] Applied original permissions to temp file
+2026-01-28T13:16:34.003Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.75256.1769606194003 to /Users/sihaoli/.claude.json
+2026-01-28T13:16:34.003Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-01-28T13:16:36.778Z [DEBUG] Stream started - received first chunk
+2026-01-28T13:16:37.306Z [DEBUG] Getting matching hook commands for SubagentStop with query: undefined
+2026-01-28T13:16:37.306Z [DEBUG] Found 0 hook matchers in settings
+2026-01-28T13:16:37.306Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-01-28T13:16:37.307Z [DEBUG] [Speculation] enabled=false
+2026-01-28T13:16:59.498Z [DEBUG] UserCommandMessage rendering: "banner" (args: "none", isSkillFormat: false)
+2026-01-28T13:17:33.996Z [DEBUG] Getting matching hook commands for Notification with query: idle_prompt
+2026-01-28T13:17:33.996Z [DEBUG] Found 0 hook matchers in settings
+2026-01-28T13:17:33.996Z [DEBUG] Matched 0 unique hooks for query "idle_prompt" (0 before deduplication)
+2026-01-28T13:47:02.561Z [DEBUG] npm view failed with code 1
+2026-01-28T13:47:02.561Z [DEBUG] npm stderr: (empty)
+2026-01-28T14:43:26.790Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/agent/SKILL.md
+2026-01-28T14:43:26.790Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:43:26.793Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:43:26.793Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:43:26.793Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:26.793Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:26.793Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:43:26.793Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:43:26.794Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:43:26.794Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:43:27.291Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/benchmark/SKILL.md
+2026-01-28T14:43:27.292Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:43:27.294Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:43:27.294Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:43:27.294Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.294Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.294Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:43:27.294Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:43:27.294Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:43:27.294Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:43:27.295Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/banner/SKILL.md
+2026-01-28T14:43:27.295Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:43:27.297Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:43:27.297Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:43:27.297Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.297Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.297Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:43:27.297Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:43:27.297Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:43:27.297Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:43:27.298Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/commit/SKILL.md
+2026-01-28T14:43:27.298Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:43:27.299Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:43:27.299Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:43:27.299Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.299Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.299Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:43:27.299Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:43:27.299Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:43:27.299Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:43:27.304Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/build/SKILL.md
+2026-01-28T14:43:27.304Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:43:27.305Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:43:27.305Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:43:27.305Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.305Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.305Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:43:27.305Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:43:27.306Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:43:27.306Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:43:27.306Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/docs/SKILL.md
+2026-01-28T14:43:27.306Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:43:27.307Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:43:27.307Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:43:27.307Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.307Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.307Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:43:27.307Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:43:27.308Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:43:27.308Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:43:27.308Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/save/SKILL.md
+2026-01-28T14:43:27.308Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:43:27.309Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:43:27.309Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:43:27.309Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.309Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.309Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:43:27.309Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:43:27.309Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:43:27.309Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:43:27.310Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/review/SKILL.md
+2026-01-28T14:43:27.310Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:43:27.311Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:43:27.311Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:43:27.311Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.311Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.311Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:43:27.311Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:43:27.311Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:43:27.311Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:43:27.312Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/restore/SKILL.md
+2026-01-28T14:43:27.312Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:43:27.313Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:43:27.313Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:43:27.313Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.313Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.313Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:43:27.313Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:43:27.313Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:43:27.313Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:43:27.313Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/stats/SKILL.md
+2026-01-28T14:43:27.313Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:43:27.315Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:43:27.315Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:43:27.315Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.315Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.315Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:43:27.315Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:43:27.315Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:43:27.315Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:43:27.316Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/test/SKILL.md
+2026-01-28T14:43:27.316Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:43:27.317Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:43:27.317Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:43:27.317Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.317Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.317Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:43:27.317Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:43:27.317Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:43:27.317Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:43:27.317Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skill-creator/SKILL.md
+2026-01-28T14:43:27.317Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:43:27.319Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:43:27.319Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:43:27.319Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.319Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.319Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:43:27.319Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:43:27.319Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:43:27.319Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:43:27.319Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/mode/SKILL.md
+2026-01-28T14:43:27.319Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:43:27.320Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:43:27.320Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:43:27.320Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.320Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.320Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:43:27.320Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:43:27.320Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:43:27.320Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:43:27.321Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/status/SKILL.md
+2026-01-28T14:43:27.321Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:43:27.322Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:43:27.322Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:43:27.322Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.322Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.322Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:43:27.322Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:43:27.322Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:43:27.322Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:43:27.323Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/mcp-builder/SKILL.md
+2026-01-28T14:43:27.323Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:43:27.323Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:43:27.323Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:43:27.323Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.323Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.323Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:43:27.323Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:43:27.324Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:43:27.324Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:43:27.326Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/webapp-testing/SKILL.md
+2026-01-28T14:43:27.326Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:43:27.327Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:43:27.327Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:43:27.327Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.327Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.327Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:43:27.327Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:43:27.327Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:43:27.327Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:43:27.328Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/pr/SKILL.md
+2026-01-28T14:43:27.328Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:43:27.329Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:43:27.329Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:43:27.329Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.329Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:43:27.329Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:43:27.329Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:43:27.329Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:43:27.329Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:53:43.807Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/agent/SKILL.md
+2026-01-28T14:53:43.808Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:53:43.811Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:53:43.811Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:53:43.811Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.811Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.811Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:53:43.811Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:53:43.811Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:53:43.812Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:53:43.814Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/banner/SKILL.md
+2026-01-28T14:53:43.814Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:53:43.815Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:53:43.815Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:53:43.815Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.815Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.815Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:53:43.815Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:53:43.816Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:53:43.816Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:53:43.823Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/build/SKILL.md
+2026-01-28T14:53:43.823Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:53:43.826Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:53:43.826Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:53:43.826Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.826Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.826Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:53:43.826Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:53:43.826Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:53:43.826Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:53:43.826Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/docs/SKILL.md
+2026-01-28T14:53:43.826Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:53:43.828Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:53:43.828Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:53:43.828Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.828Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.828Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:53:43.828Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:53:43.828Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:53:43.828Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:53:43.828Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/commit/SKILL.md
+2026-01-28T14:53:43.828Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:53:43.829Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:53:43.829Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:53:43.829Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.829Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.829Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:53:43.829Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:53:43.829Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:53:43.829Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:53:43.830Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/mcp-builder/SKILL.md
+2026-01-28T14:53:43.830Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:53:43.831Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:53:43.831Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:53:43.831Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.831Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.831Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:53:43.831Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:53:43.831Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:53:43.831Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:53:43.831Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/mode/SKILL.md
+2026-01-28T14:53:43.831Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:53:43.832Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:53:43.832Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:53:43.832Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.832Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.832Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:53:43.832Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:53:43.832Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:53:43.833Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:53:43.833Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/benchmark/SKILL.md
+2026-01-28T14:53:43.833Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:53:43.834Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:53:43.834Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:53:43.834Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.834Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.834Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:53:43.834Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:53:43.834Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:53:43.834Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:53:43.834Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/pr/SKILL.md
+2026-01-28T14:53:43.834Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:53:43.835Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:53:43.835Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:53:43.835Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.835Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.835Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:53:43.835Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:53:43.836Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:53:43.836Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:53:43.836Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/review/SKILL.md
+2026-01-28T14:53:43.836Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:53:43.837Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:53:43.837Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:53:43.837Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.837Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.837Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:53:43.837Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:53:43.837Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:53:43.837Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:53:43.839Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/restore/SKILL.md
+2026-01-28T14:53:43.839Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:53:43.839Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:53:43.839Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:53:43.839Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.839Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.839Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:53:43.839Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:53:43.840Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:53:43.840Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:53:43.840Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/status/SKILL.md
+2026-01-28T14:53:43.840Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:53:43.841Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:53:43.841Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:53:43.841Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.841Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.841Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:53:43.841Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:53:43.841Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:53:43.841Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:53:43.841Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/test/SKILL.md
+2026-01-28T14:53:43.841Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:53:43.843Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:53:43.843Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:53:43.843Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.843Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.843Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:53:43.843Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:53:43.843Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:53:43.843Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:53:43.843Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skill-creator/SKILL.md
+2026-01-28T14:53:43.843Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:53:43.844Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:53:43.844Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:53:43.844Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.844Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.844Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:53:43.844Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:53:43.844Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:53:43.844Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:53:43.845Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/webapp-testing/SKILL.md
+2026-01-28T14:53:43.845Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:53:43.846Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:53:43.846Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:53:43.846Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.846Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.846Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:53:43.846Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:53:43.846Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:53:43.846Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:53:43.846Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/stats/SKILL.md
+2026-01-28T14:53:43.846Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:53:43.847Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:53:43.847Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:53:43.847Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.847Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.847Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:53:43.847Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:53:43.847Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:53:43.847Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T14:53:43.847Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/save/SKILL.md
+2026-01-28T14:53:43.847Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-01-28T14:53:43.848Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-01-28T14:53:43.848Z [DEBUG] getPluginSkills: Processing 2 enabled plugins
+2026-01-28T14:53:43.848Z [DEBUG] Checking plugin clangd-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.848Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-01-28T14:53:43.848Z [DEBUG] Total plugin skills loaded: 0
+2026-01-28T14:53:43.848Z [DEBUG] Total plugin commands loaded: 0
+2026-01-28T14:53:43.849Z [DEBUG] Loaded 17 unique skills (managed: 0, user: 17, project: 0, legacy commands: 0)
+2026-01-28T14:53:43.849Z [DEBUG] getSkills returning: 17 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-01-28T15:04:25.826Z [DEBUG] UserCommandMessage rendering: "banner" (args: "none", isSkillFormat: false)
+2026-01-28T15:04:31.286Z [DEBUG] Getting matching hook commands for SessionEnd with query: prompt_input_exit
+2026-01-28T15:04:31.286Z [DEBUG] Found 0 hook matchers in settings
+2026-01-28T15:04:31.286Z [DEBUG] Matched 0 unique hooks for query "prompt_input_exit" (0 before deduplication)
+2026-01-28T15:04:31.288Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Sending request 'shutdown - (1)'.
+2026-01-28T15:04:31.305Z [DEBUG] MCP server "ide": WebSocket transport closed/disconnected, attempting automatic reconnection
+2026-01-28T15:04:31.308Z [DEBUG] MCP server "ide": Starting connection with timeout of 30000ms
+2026-01-28T15:04:31.309Z [DEBUG] FileHistory: Making snapshot for message 27612beb-70ac-4031-b85e-fcc56682e5ca
+2026-01-28T15:04:31.310Z [DEBUG] FileHistory: Added snapshot for 27612beb-70ac-4031-b85e-fcc56682e5ca, tracking 0 files
+2026-01-28T15:04:31.312Z [DEBUG] UserCommandMessage rendering: "exit" (args: "none", isSkillFormat: false)
+2026-01-28T15:04:31.324Z [DEBUG] Started caffeinate to prevent sleep
+2026-01-28T15:04:31.331Z [DEBUG] MCP server "ide": Successfully connected to ws-ide server in 25ms
+2026-01-28T15:04:31.331Z [DEBUG] MCP server "ide": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Claude Code VSCode MCP","version":"2.1.20"}}
+2026-01-28T15:04:31.333Z [DEBUG] [LSP SERVER plugin:clangd-lsp:clangd] I[23:04:31.321] <-- shutdown(1)
+I[23:04:31.321] --> reply:shutdown(1) 0 ms
+2026-01-28T15:04:31.335Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-01-28T15:04:31.336Z [DEBUG] MCP server "ide": WebSocket reconnection successful after 31ms (attempt 1)
+2026-01-28T15:04:31.337Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.75256.1769612671336
+2026-01-28T15:04:31.337Z [DEBUG] Preserving file permissions: 100600
+2026-01-28T15:04:31.337Z [DEBUG] Temp file written successfully, size: 9619 bytes
+2026-01-28T15:04:31.337Z [DEBUG] Applied original permissions to temp file
+2026-01-28T15:04:31.337Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.75256.1769612671336 to /Users/sihaoli/.claude.json
+2026-01-28T15:04:31.337Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-01-28T15:04:31.338Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Received response 'shutdown - (1)' in 50ms.
+2026-01-28T15:04:31.338Z [DEBUG] [LSP PROTOCOL plugin:clangd-lsp:clangd] Sending notification 'exit'.
+2026-01-28T15:04:31.343Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.75256.1769612671343
+2026-01-28T15:04:31.343Z [DEBUG] Preserving file permissions: 100600
+2026-01-28T15:04:31.343Z [DEBUG] Temp file written successfully, size: 9619 bytes
+2026-01-28T15:04:31.343Z [DEBUG] Applied original permissions to temp file
+2026-01-28T15:04:31.343Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.75256.1769612671343 to /Users/sihaoli/.claude.json
+2026-01-28T15:04:31.343Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-01-28T15:04:31.344Z [DEBUG] LSP client stopped for plugin:clangd-lsp:clangd
+2026-01-28T15:04:31.344Z [DEBUG] LSP server instance stopped: plugin:clangd-lsp:clangd
+2026-01-28T15:04:31.344Z [DEBUG] LSP server manager shut down successfully

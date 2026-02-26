@@ -229,7 +229,7 @@ if (import.meta.main) {
   switch (cmd) {
     case 'run': {
       const taskType = process.argv[3] || 'code';
-      const model = process.argv[4] || 'glm-4-plus';
+      const model = process.argv[4] || 'glm-5';
       const task = TEST_TASKS[taskType as keyof typeof TEST_TASKS] || taskType;
 
       console.log('\n🧪 运行 A/B 测试...\n');
@@ -253,7 +253,7 @@ if (import.meta.main) {
     case 'task': {
       // 自定义任务
       const task = process.argv[3];
-      const model = process.argv[4] || 'glm-4-plus';
+      const model = process.argv[4] || 'glm-5';
       const roles = (process.argv[5] || 'builder,verifier').split(',');
 
       if (!task) {
@@ -287,7 +287,7 @@ if (import.meta.main) {
   bun prompt-ab-test.ts run <taskType> [model]
     运行预设任务对比
     taskType: code | review | research | architecture
-    model: 默认 glm-4-plus
+    model: 默认 glm-5
 
   bun prompt-ab-test.ts task "<任务>" [model] [roles]
     运行自定义任务
@@ -297,7 +297,7 @@ if (import.meta.main) {
     列出预设测试任务
 
 示例:
-  bun prompt-ab-test.ts run code glm-4-plus
+  bun prompt-ab-test.ts run code glm-5
   bun prompt-ab-test.ts run review deepseek-r1
   bun prompt-ab-test.ts task "实现一个缓存" gemini-2.5-flash "builder,creator"
 `);

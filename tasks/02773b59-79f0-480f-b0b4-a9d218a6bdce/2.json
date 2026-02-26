@@ -1,0 +1,9 @@
+{
+  "id": "2",
+  "subject": "Phase 2: LLM 知识抽取器 - knowledge-llm-extractor.ts",
+  "description": "新建基于 brain-router HTTP API 的 LLM 知识抽取器，注入 D&D KNOBS 人格",
+  "activeForm": "Building LLM knowledge extractor",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

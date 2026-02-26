@@ -521,7 +521,7 @@ if (import.meta.main) {
 
     case 'bandit': {
       const arms: BanditArm[] = [
-        { variantId: 'glm-4-plus_builder', mu: 0.7, sigma: 0.1, cost: 0.001, latency: 1000, trials: 100 },
+        { variantId: 'glm-5_builder', mu: 0.7, sigma: 0.1, cost: 0.001, latency: 1000, trials: 100 },
         { variantId: 'gemini-pro_judge', mu: 0.8, sigma: 0.15, cost: 0.005, latency: 2000, trials: 50 },
         { variantId: 'deepseek-r1_advisor', mu: 0.85, sigma: 0.2, cost: 0.01, latency: 3000, trials: 20 },
       ];

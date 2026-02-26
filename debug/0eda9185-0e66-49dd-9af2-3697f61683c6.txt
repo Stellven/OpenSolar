@@ -1,0 +1,261 @@
+2026-02-14T19:58:00.012Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-14T19:58:00.012Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-14T19:58:00.012Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-14T19:58:00.013Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-14T19:58:00.018Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-14T19:58:00.029Z [DEBUG] Found 0 plugins (0 enabled, 0 disabled)
+2026-02-14T19:58:00.029Z [DEBUG] [claudeai-mcp] Checking gate (cached)...
+2026-02-14T19:58:00.029Z [DEBUG] [claudeai-mcp] Gate returned: true
+2026-02-14T19:58:00.029Z [DEBUG] [claudeai-mcp] Fetching from https://api.anthropic.com/v1/mcp_servers?limit=1000
+2026-02-14T19:58:00.034Z [DEBUG] [ToolSearch:optimistic] mode=tst-auto, ENABLE_TOOL_SEARCH=undefined, result=true
+2026-02-14T19:58:00.034Z [DEBUG] [STARTUP] Running setup()...
+2026-02-14T19:58:00.036Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-14T19:58:00.065Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-14T19:58:00.065Z [DEBUG] Error log sink initialized
+2026-02-14T19:58:00.079Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-14T19:58:00.079Z [DEBUG] Total plugin skills loaded: 0
+2026-02-14T19:58:00.079Z [DEBUG] Total plugin commands loaded: 0
+2026-02-14T19:58:00.081Z [DEBUG] Registered 0 hooks from 0 plugins
+2026-02-14T19:58:00.082Z [DEBUG] Loaded 76 unique skills (76 unconditional, 0 conditional, managed: 0, user: 76, project: 0, additional: 0, legacy commands: 0)
+2026-02-14T19:58:00.082Z [DEBUG] getSkills returning: 76 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-14T19:58:00.091Z [DEBUG] [STARTUP] setup() completed in 57ms
+2026-02-14T19:58:00.091Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-02-14T19:58:00.136Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=/Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg)
+2026-02-14T19:58:00.164Z [DEBUG] Agent file /Users/sihaoli/.claude/agents/community.md is missing required 'name' in frontmatter
+2026-02-14T19:58:00.164Z [DEBUG] Failed to parse agent from /Users/sihaoli/.claude/agents/community.md: Missing required "name" field in frontmatter
+2026-02-14T19:58:00.164Z [DEBUG] Total plugin agents loaded: 0
+2026-02-14T19:58:00.165Z [DEBUG] [STARTUP] Commands and agents loaded in 74ms
+2026-02-14T19:58:00.165Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-02-14T19:58:00.165Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-02-14T19:58:00.165Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-02-14T19:58:00.165Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T19:58:00.165Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T19:58:00.165Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-14T19:58:00.166Z [DEBUG] Total LSP servers loaded: 0
+2026-02-14T19:58:00.166Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 0 server(s)
+2026-02-14T19:58:00.166Z [DEBUG] LSP manager initialized with 0 servers
+2026-02-14T19:58:00.166Z [DEBUG] LSP server manager initialized successfully
+2026-02-14T19:58:00.166Z [DEBUG] LSP notification handlers registered successfully for all 0 server(s)
+2026-02-14T19:58:00.166Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T19:58:00.252Z [DEBUG] [claudeai-mcp] Fetched 0 servers
+2026-02-14T19:58:00.252Z [DEBUG] [STARTUP] MCP configs loaded in 234ms
+2026-02-14T19:58:00.255Z [DEBUG] MCP server "playwright": Starting connection with timeout of 30000ms
+2026-02-14T19:58:00.256Z [DEBUG] MCP server "brain-router": Starting connection with timeout of 30000ms
+2026-02-14T19:58:00.257Z [DEBUG] MCP server "are": Starting connection with timeout of 30000ms
+2026-02-14T19:58:00.258Z [DEBUG] MCP server "playwright": Connection failed after 5ms: spawn playwright-mcp ENOENT
+2026-02-14T19:58:00.258Z [ERROR] MCP server "playwright" Connection failed: spawn playwright-mcp ENOENT
+2026-02-14T19:58:00.286Z [DEBUG] Org fast mode: disabled (extra_usage_disabled)
+2026-02-14T19:58:00.338Z [ERROR] MCP server "are" Server stderr: ARE MCP Server running
+2026-02-14T19:58:00.338Z [DEBUG] MCP server "are": Successfully connected to undefined server in 81ms
+2026-02-14T19:58:00.338Z [DEBUG] MCP server "are": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"are-orchestrator","version":"1.0.0"}}
+2026-02-14T19:58:00.415Z [ERROR] MCP server "brain-router" Server stderr: Traceback (most recent call last):
+  File "/Users/sihaoli/.solar/brain-router/src/mcp/server.py", line 63, in <module>
+    from ..sroe_tracker import get_tracker, RoutingInfo, RequestMetrics
+ImportError: attempted relative import with no known parent package
+2026-02-14T19:58:00.415Z [DEBUG] MCP server "brain-router": Connection failed after 159ms: MCP error -32000: Connection closed
+2026-02-14T19:58:00.415Z [ERROR] MCP server "brain-router" Connection failed: MCP error -32000: Connection closed
+2026-02-14T19:58:00.459Z [DEBUG] Loaded 2 installed plugins from /Users/sihaoli/.claude/plugins/installed_plugins.json
+2026-02-14T19:58:00.459Z [DEBUG] Initialized versioned plugins system with 2 plugins
+2026-02-14T19:58:00.461Z [DEBUG] Watching for changes in setting files /Users/sihaoli/.claude/settings.json...
+2026-02-14T19:58:00.471Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-02-14T19:58:00.472Z [DEBUG] Plugin autoupdate: skipped (auto-updater disabled)
+2026-02-14T19:58:00.473Z [DEBUG] Grove: Using fresh cached config
+2026-02-14T19:58:00.492Z [ERROR] Error: Error: ENOENT: no such file or directory, open '/Users/sihaoli/Solar/.claude/settings.json'
+    at Module.openSync (node:fs:555:18)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:816
+    at HX (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:49854)
+    at Object.readSync (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:750)
+    at OX (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:6208:105)
+    at PJ (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:6210:224)
+    at Bi8 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:214:2225)
+    at Immediate._onImmediate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:7332:4543)
+    at process.processImmediate (node:internal/timers:504:21)
+2026-02-14T19:58:00.492Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/sihaoli/Solar/.claude/settings.json
+2026-02-14T19:58:00.492Z [ERROR] Error: Error: ENOENT: no such file or directory, open '/Users/sihaoli/Solar/.claude/settings.local.json'
+    at Module.openSync (node:fs:555:18)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:816
+    at HX (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:49854)
+    at Object.readSync (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:750)
+    at OX (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:6208:105)
+    at PJ (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:6210:224)
+    at Bi8 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:214:2225)
+    at Immediate._onImmediate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:7332:4543)
+    at process.processImmediate (node:internal/timers:504:21)
+2026-02-14T19:58:00.492Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/sihaoli/Solar/.claude/settings.local.json
+2026-02-14T19:58:00.505Z [DEBUG] Watching for changes in skill/command directories: /Users/sihaoli/.claude/skills...
+2026-02-14T19:58:00.507Z [DEBUG] Stats cache is up to date
+2026-02-14T19:58:00.550Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T19:58:00.550Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T19:58:00.550Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T19:58:00.550Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T19:58:00.550Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T19:58:00.550Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T19:58:00.550Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T19:58:00.550Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T19:58:00.550Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T19:58:00.550Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T19:58:00.550Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T19:58:00.550Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T19:58:00.621Z [DEBUG] Getting matching hook commands for SessionStart with query: startup
+2026-02-14T19:58:00.621Z [DEBUG] Found 0 hook matchers in settings
+2026-02-14T19:58:00.621Z [DEBUG] Matched 0 unique hooks for query "startup" (0 before deduplication)
+2026-02-14T19:58:00.622Z [DEBUG] installPluginsForHeadless: starting
+2026-02-14T19:58:00.622Z [DEBUG] Found 2 installed plugins (V2 format)
+2026-02-14T19:58:00.622Z [DEBUG] installPluginsForHeadless: no missing plugins or marketplaces configured
+2026-02-14T19:58:00.624Z [DEBUG] [SystemPrompt] path=simple proactive=false
+2026-02-14T19:58:00.626Z [DEBUG] Total plugin output styles loaded: 0
+2026-02-14T19:58:00.629Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-14T19:58:00.629Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-14T19:58:00.629Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-14T19:58:00.629Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-14T19:58:00.629Z [DEBUG] Sending 39 skills via attachment (initial, 39 total sent)
+2026-02-14T19:58:00.630Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-14T19:58:00.630Z [DEBUG] Found 0 hook matchers in settings
+2026-02-14T19:58:00.630Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-14T19:58:00.632Z [DEBUG] autocompact: tokens=806 threshold=167000 effectiveWindow=180000
+2026-02-14T19:58:00.633Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T19:58:00.633Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T19:58:00.633Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T19:58:00.780Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-14T19:58:00.780Z [DEBUG] Using tool-based global cache marker on EnterPlanMode
+2026-02-14T19:58:00.796Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-14T19:58:00.801Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T19:58:00.801Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T19:58:00.802Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T19:58:00.808Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: analyzeMcp]
+2026-02-14T19:58:00.810Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T19:58:00.810Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T19:58:00.810Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T19:58:03.163Z [DEBUG] Stream started - received first chunk
+2026-02-14T19:58:05.884Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-14T19:58:05.885Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-14T19:58:05.885Z [DEBUG] Found 0 hook matchers in settings
+2026-02-14T19:58:05.885Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-14T19:58:05.897Z [DEBUG] tree-sitter: WASM files not found
+2026-02-14T19:58:05.903Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-14T19:58:05.903Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-14T19:58:05.903Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-14T19:58:05.904Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.b09; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-14T19:58:05.904Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T19:58:05.904Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T19:58:05.904Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.b09; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-14T19:58:05.904Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T19:58:05.904Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T19:58:05.905Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.b09; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-14T19:58:05.905Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T19:58:05.905Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T19:58:05.906Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T19:58:05.906Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T19:58:05.906Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T19:58:06.334Z [DEBUG] Stream started - received first chunk
+2026-02-14T19:58:06.432Z [DEBUG] Stream started - received first chunk
+2026-02-14T19:58:06.518Z [DEBUG] Stream started - received first chunk
+2026-02-14T19:58:06.595Z [DEBUG] Creating shell snapshot for zsh (/bin/zsh)
+2026-02-14T19:58:06.595Z [DEBUG] Looking for shell config file: /Users/sihaoli/.zshrc
+2026-02-14T19:58:06.595Z [DEBUG] Snapshots directory: /Users/sihaoli/.claude/shell-snapshots
+2026-02-14T19:58:06.596Z [DEBUG] Creating snapshot at: /Users/sihaoli/.claude/shell-snapshots/snapshot-zsh-1771099086595-5tjtqk.sh
+2026-02-14T19:58:06.596Z [DEBUG] Shell binary exists: true
+2026-02-14T19:58:06.596Z [DEBUG] Execution timeout: 10000ms
+2026-02-14T19:58:06.698Z [DEBUG] Shell snapshot created successfully (4702 bytes)
+2026-02-14T19:58:06.699Z [DEBUG] No session environment scripts found
+2026-02-14T19:58:12.711Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-14T19:58:12.714Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.b09; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-14T19:58:12.715Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T19:58:12.715Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T19:58:12.716Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T19:58:12.717Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-14T19:58:12.717Z [DEBUG] Found 5 hook matchers in settings
+2026-02-14T19:58:12.717Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-14T19:58:12.722Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-14T19:58:12.722Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-14T19:58:12.722Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-14T19:58:12.722Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-14T19:58:12.724Z [DEBUG] autocompact: tokens=133791 threshold=167000 effectiveWindow=180000
+2026-02-14T19:58:12.724Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-14T19:58:12.725Z [DEBUG] Using tool-based global cache marker on EnterPlanMode
+2026-02-14T19:58:12.728Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-14T19:58:12.729Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T19:58:12.729Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T19:58:12.730Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T19:58:13.230Z [DEBUG] Stream started - received first chunk
+2026-02-14T19:58:14.755Z [DEBUG] Stream started - received first chunk
+2026-02-14T19:58:17.086Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-14T19:58:17.086Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-14T19:58:17.086Z [DEBUG] Found 0 hook matchers in settings
+2026-02-14T19:58:17.086Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-14T19:58:17.092Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-14T19:58:17.092Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-14T19:58:17.093Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.b09; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-14T19:58:17.093Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T19:58:17.093Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T19:58:17.094Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.b09; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-14T19:58:17.094Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T19:58:17.094Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T19:58:17.095Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T19:58:17.095Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T19:58:17.549Z [DEBUG] Stream started - received first chunk
+2026-02-14T19:58:18.272Z [DEBUG] Stream started - received first chunk
+2026-02-14T19:58:24.489Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-14T19:58:24.490Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.b09; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-14T19:58:24.491Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T19:58:24.491Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T19:58:24.492Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T19:58:24.492Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-14T19:58:24.492Z [DEBUG] Found 5 hook matchers in settings
+2026-02-14T19:58:24.492Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-14T19:58:24.495Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-14T19:58:24.495Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-14T19:58:24.495Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-14T19:58:24.495Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-14T19:58:24.495Z [DEBUG] autocompact: tokens=136433 threshold=167000 effectiveWindow=180000
+2026-02-14T19:58:24.496Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-14T19:58:24.496Z [DEBUG] Using tool-based global cache marker on EnterPlanMode
+2026-02-14T19:58:24.501Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-14T19:58:24.503Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T19:58:24.503Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T19:58:24.504Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T19:58:25.349Z [DEBUG] Stream started - received first chunk
+2026-02-14T19:58:26.753Z [DEBUG] Stream started - received first chunk
+2026-02-14T19:58:28.913Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-14T19:58:28.913Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-14T19:58:28.913Z [DEBUG] Found 0 hook matchers in settings
+2026-02-14T19:58:28.913Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-14T19:58:28.917Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-14T19:58:28.917Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-14T19:58:28.918Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.b09; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-14T19:58:28.918Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T19:58:28.918Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T19:58:28.919Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.b09; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-14T19:58:28.919Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T19:58:28.919Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T19:58:28.920Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T19:58:28.920Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T19:58:29.347Z [DEBUG] Stream started - received first chunk
+2026-02-14T19:58:30.846Z [DEBUG] Stream started - received first chunk
+2026-02-14T19:58:36.593Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-14T19:58:36.594Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.b09; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-14T19:58:36.595Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T19:58:36.595Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T19:58:36.596Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T19:58:36.596Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-14T19:58:36.596Z [DEBUG] Found 5 hook matchers in settings
+2026-02-14T19:58:36.596Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-14T19:58:36.599Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-14T19:58:36.599Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-14T19:58:36.599Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-14T19:58:36.599Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-14T19:58:36.600Z [DEBUG] autocompact: tokens=138866 threshold=167000 effectiveWindow=180000
+2026-02-14T19:58:36.601Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-14T19:58:36.601Z [DEBUG] Using tool-based global cache marker on EnterPlanMode
+2026-02-14T19:58:36.604Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=sdk-cli; cch=00000;
+2026-02-14T19:58:36.606Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-14T19:58:36.607Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-14T19:58:36.607Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-14T19:58:37.142Z [DEBUG] Stream started - received first chunk
+2026-02-14T19:58:38.948Z [DEBUG] Stream started - received first chunk
+2026-02-14T19:59:00.790Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-14T19:59:00.790Z [DEBUG] Found 0 hook matchers in settings
+2026-02-14T19:59:00.790Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-14T19:59:00.793Z [DEBUG] Getting matching hook commands for SessionEnd with query: other
+2026-02-14T19:59:00.793Z [DEBUG] Found 0 hook matchers in settings
+2026-02-14T19:59:00.793Z [DEBUG] Matched 0 unique hooks for query "other" (0 before deduplication)

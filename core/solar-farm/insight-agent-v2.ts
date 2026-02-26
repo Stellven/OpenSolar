@@ -43,7 +43,7 @@ import {
   generateRecoveryPrompt,
   type CheckpointData,
   type InsightTask
-} from '../insight-agent/state-manager';
+} from '../nerve/state-manager';
 
 // ============================================================
 // 类型定义 (来自稳健派设计)
@@ -437,9 +437,9 @@ const MODEL_CONFIGS: Record<string, ModelConfig> = {
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
     maxTokens: 4096
   },
-  'glm-4-plus': {
+  'glm-5': {
     provider: 'zhipu',
-    modelId: 'glm-4-plus',
+    modelId: 'glm-5',
     apiKeyEnv: 'ZHIPU_API_KEY',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
     maxTokens: 4096
@@ -574,37 +574,38 @@ ${perf.bestRole !== perf.worstRole ? `- 待提升: ${perf.worstRole}` : ''}
   static async call(config: BrainRouterCall): Promise<string> {
     const { model, system, prompt } = config;
 
-    // v2.1: 绩效注入 - 将历史绩效追加到 system prompt
+    // v2.2: D&D KNOBS 人格注入 + 绩效注入
+    const ddKnobsPrompt = generateExpertSystemPrompt(model);
     const performanceInjection = this.generatePerformanceInjection(model);
-    const enhancedSystem = performanceInjection
-      ? `${system}\n\n${performanceInjection}`
-      : system;
+
+    // 合并顺序: D&D KNOBS → 原 system → 绩效反馈
+    let finalSystem = ddKnobsPrompt;
+    if (system) {
+      finalSystem += `\n\n${system}`;
+    }
+    if (performanceInjection) {
+      finalSystem += `\n\n${performanceInjection}`;
+    }
 
     console.log(`🤖 调用牛马: ${model}`);
-    console.log(`   System: ${enhancedSystem.substring(0, 50)}...`);
+    console.log(`   🎭 D&D KNOBS 注入: ✅`);
+    console.log(`   System: ${finalSystem.substring(0, 50)}...`);
     console.log(`   Prompt: ${prompt.substring(0, 50)}...`);
     if (performanceInjection) {
-      console.log(`   📊 绩效注入: 已启用`);
+      console.log(`   📊 绩效注入: ✅`);
     }
 
-    // 获取模型配置
-    const modelConfig = MODEL_CONFIGS[model];
-    if (!modelConfig) {
-      throw new Error(`未知模型: ${model}，可用模型: ${Object.keys(MODEL_CONFIGS).join(', ')}`);
-    }
-
-    // 获取 API Key
-    const apiKey = process.env[modelConfig.apiKeyEnv];
-    if (!apiKey) {
-      throw new Error(`缺少 API Key: 请设置环境变量 ${modelConfig.apiKeyEnv}`);
-    }
-
-    // 根据 provider 选择调用方式
-    if (modelConfig.provider === 'google') {
-      return await this.callGoogleAPI(modelConfig, apiKey, enhancedSystem, prompt);
-    } else {
-      // OpenAI-compatible API (DeepSeek, GLM, OpenAI)
-      return await this.callOpenAICompatibleAPI(modelConfig, apiKey, enhancedSystem, prompt);
+    // v2.2: 使用 brain-router MCP 统一调用
+    try {
+      const result = await mcp__brain_router__complete({
+        model: model,
+        system: finalSystem,
+        prompt: prompt
+      });
+      return result || `[No response from ${model}]`;
+    } catch (error) {
+      console.error(`❌ brain-router 调用失败: ${error}`);
+      throw new Error(`brain-router 调用 ${model} 失败: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -1640,7 +1641,7 @@ ${chapters.map((ch, idx) => `      <div class="chapter">
     if (!model) return '未知';
     const nicknames: Record<string, string> = {
       'glm-5': '建设者 GLM-5',
-      'glm-4-plus': '建设者 GLM-4',
+      'glm-5': '建设者 GLM-4',
       'gemini-2.5-pro': '稳健派',
       'gemini-3-pro-preview': '探索派',
       'deepseek-v3': '创想家',

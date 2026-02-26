@@ -1,0 +1,590 @@
+2026-02-11T13:38:45.757Z [DEBUG] Watching for changes in setting files /Users/sihaoli/.claude...
+2026-02-11T13:38:45.760Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-11T13:38:45.760Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-11T13:38:45.760Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-11T13:38:45.760Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-11T13:38:45.764Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-02-11T13:38:45.764Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-02-11T13:38:45.764Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-02-11T13:38:45.765Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-11T13:38:45.779Z [DEBUG] Found 0 plugins (0 enabled, 0 disabled)
+2026-02-11T13:38:45.779Z [DEBUG] Total LSP servers loaded: 0
+2026-02-11T13:38:45.779Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 0 server(s)
+2026-02-11T13:38:45.779Z [DEBUG] LSP manager initialized with 0 servers
+2026-02-11T13:38:45.779Z [DEBUG] LSP server manager initialized successfully
+2026-02-11T13:38:45.779Z [DEBUG] LSP notification handlers registered successfully for all 0 server(s)
+2026-02-11T13:38:45.779Z [DEBUG] [STARTUP] MCP configs loaded in 14ms
+2026-02-11T13:38:45.791Z [DEBUG] [STARTUP] Running setup()...
+2026-02-11T13:38:45.816Z [DEBUG] Stats cache is up to date
+2026-02-11T13:38:45.816Z [DEBUG] Plugin autoupdate: skipped (auto-updater disabled)
+2026-02-11T13:38:45.820Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-11T13:38:45.847Z [DEBUG] Passes: Cache stale, returning cached data and refreshing in background
+2026-02-11T13:38:45.850Z [DEBUG] Loaded 2 installed plugins from /Users/sihaoli/.claude/plugins/installed_plugins.json
+2026-02-11T13:38:45.885Z [DEBUG] Error log sink initialized
+2026-02-11T13:38:45.886Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/todos/114950fe-caee-4e7b-943b-9aaa34b3d4b7-agent-114950fe-caee-4e7b-943b-9aaa34b3d4b7.json.tmp.16886.1770817125886
+2026-02-11T13:38:45.886Z [DEBUG] Temp file written successfully, size: 2 bytes
+2026-02-11T13:38:45.886Z [DEBUG] Renaming /Users/sihaoli/.claude/todos/114950fe-caee-4e7b-943b-9aaa34b3d4b7-agent-114950fe-caee-4e7b-943b-9aaa34b3d4b7.json.tmp.16886.1770817125886 to /Users/sihaoli/.claude/todos/114950fe-caee-4e7b-943b-9aaa34b3d4b7-agent-114950fe-caee-4e7b-943b-9aaa34b3d4b7.json
+2026-02-11T13:38:45.886Z [DEBUG] File /Users/sihaoli/.claude/todos/114950fe-caee-4e7b-943b-9aaa34b3d4b7-agent-114950fe-caee-4e7b-943b-9aaa34b3d4b7.json written atomically
+2026-02-11T13:38:45.892Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-11T13:38:45.892Z [DEBUG] Total plugin skills loaded: 0
+2026-02-11T13:38:45.892Z [DEBUG] Total plugin commands loaded: 0
+2026-02-11T13:38:45.892Z [DEBUG] Registered 0 hooks from 0 plugins
+2026-02-11T13:38:45.892Z [DEBUG] [STARTUP] setup() completed in 101ms
+2026-02-11T13:38:45.892Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-02-11T13:38:45.898Z [DEBUG] Loaded 74 unique skills (managed: 0, user: 74, project: 0, legacy commands: 0)
+2026-02-11T13:38:45.898Z [DEBUG] getSkills returning: 74 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-02-11T13:38:45.901Z [ERROR] Error: Error: ENOENT: no such file or directory, open '/Users/sihaoli/Solar/.claude/settings.json'
+    at Module.openSync (node:fs:555:18)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:673
+    at xI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:34380)
+    at Object.readSync (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:607)
+    at vI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4629:105)
+    at hI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4631:204)
+    at rX9 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4625:1915)
+    at Immediate._onImmediate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:5358:3574)
+    at process.processImmediate (node:internal/timers:504:21)
+2026-02-11T13:38:45.901Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/sihaoli/Solar/.claude/settings.json
+2026-02-11T13:38:45.901Z [ERROR] Error: Error: ENOENT: no such file or directory, open '/Users/sihaoli/Solar/.claude/settings.local.json'
+    at Module.openSync (node:fs:555:18)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:673
+    at xI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:34380)
+    at Object.readSync (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:607)
+    at vI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4629:105)
+    at hI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4631:204)
+    at rX9 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4625:1915)
+    at Immediate._onImmediate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:5358:3574)
+    at process.processImmediate (node:internal/timers:504:21)
+2026-02-11T13:38:45.901Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/sihaoli/Solar/.claude/settings.local.json
+2026-02-11T13:38:45.925Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=/Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg)
+2026-02-11T13:38:45.927Z [DEBUG] Watching for changes in skill/command directories: /Users/sihaoli/.claude/skills...
+2026-02-11T13:38:45.951Z [DEBUG] Agent file /Users/sihaoli/.claude/agents/community.md is missing required 'name' in frontmatter
+2026-02-11T13:38:45.951Z [DEBUG] Failed to parse agent from /Users/sihaoli/.claude/agents/community.md: Missing required "name" field in frontmatter
+2026-02-11T13:38:45.951Z [DEBUG] Total plugin agents loaded: 0
+2026-02-11T13:38:45.951Z [DEBUG] [STARTUP] Commands and agents loaded in 59ms
+2026-02-11T13:38:45.952Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T13:38:45.952Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T13:38:45.954Z [DEBUG] Passes: Cache stale, returning cached data and refreshing in background
+2026-02-11T13:38:45.954Z [DEBUG] Passes: Reusing in-flight eligibility fetch
+2026-02-11T13:38:45.956Z [DEBUG] MCP server "playwright": Starting connection with timeout of 30000ms
+2026-02-11T13:38:45.957Z [DEBUG] MCP server "brain-router": Starting connection with timeout of 30000ms
+2026-02-11T13:38:45.957Z [DEBUG] MCP server "are": Starting connection with timeout of 30000ms
+2026-02-11T13:38:45.958Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T13:38:45.961Z [DEBUG] MCP server "playwright": Connection failed after 6ms: spawn playwright-mcp ENOENT
+2026-02-11T13:38:45.961Z [ERROR] MCP server "playwright" Connection failed: spawn playwright-mcp ENOENT
+2026-02-11T13:38:46.016Z [DEBUG] Session index: added 1, updated 2, removed 0 (total: 66)
+2026-02-11T13:38:46.094Z [DEBUG] MCP server "brain-router": Successfully connected to undefined server in 137ms
+2026-02-11T13:38:46.094Z [DEBUG] MCP server "brain-router": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"solar-brain-router","version":"1.0.0"}}
+2026-02-11T13:41:13.027Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.16886.1770817273027
+2026-02-11T13:41:13.027Z [DEBUG] Preserving file permissions: 100600
+2026-02-11T13:41:13.027Z [DEBUG] Temp file written successfully, size: 14689 bytes
+2026-02-11T13:41:13.027Z [DEBUG] Applied original permissions to temp file
+2026-02-11T13:41:13.027Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.16886.1770817273027 to /Users/sihaoli/.claude.json
+2026-02-11T13:41:13.028Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-11T13:41:13.028Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.16886.1770817273028
+2026-02-11T13:41:13.028Z [DEBUG] Preserving file permissions: 100600
+2026-02-11T13:41:13.028Z [DEBUG] Temp file written successfully, size: 14690 bytes
+2026-02-11T13:41:13.029Z [DEBUG] Applied original permissions to temp file
+2026-02-11T13:41:13.029Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.16886.1770817273028 to /Users/sihaoli/.claude.json
+2026-02-11T13:41:13.029Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-11T13:41:13.029Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.16886.1770817273029
+2026-02-11T13:41:13.029Z [DEBUG] Preserving file permissions: 100600
+2026-02-11T13:41:13.029Z [DEBUG] Temp file written successfully, size: 14691 bytes
+2026-02-11T13:41:13.029Z [DEBUG] Applied original permissions to temp file
+2026-02-11T13:41:13.029Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.16886.1770817273029 to /Users/sihaoli/.claude.json
+2026-02-11T13:41:13.029Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-11T13:41:13.030Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.16886.1770817273030
+2026-02-11T13:41:13.030Z [DEBUG] Preserving file permissions: 100600
+2026-02-11T13:41:13.030Z [DEBUG] Temp file written successfully, size: 14692 bytes
+2026-02-11T13:41:13.030Z [DEBUG] Applied original permissions to temp file
+2026-02-11T13:41:13.030Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.16886.1770817273030 to /Users/sihaoli/.claude.json
+2026-02-11T13:41:13.030Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-11T13:41:13.030Z [DEBUG] Failed to fetch and cache passes eligibility
+2026-02-11T13:41:13.030Z [ERROR] AxiosError: AxiosError: timeout of 5000ms exceeded
+    at t$.<anonymous> (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:44:10436)
+    at t$.emit (node:events:508:20)
+    at t$.emit (node:domain:489:12)
+    at Timeout.<anonymous> (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:43:3285)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7)
+    at v$A.request (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:46:2130)
+    at runNextTicks (node:internal/process/task_queues:65:5)
+    at listOnTimeout (node:internal/timers:567:9)
+    at process.processTimers (node:internal/timers:541:7)
+    at async aK7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3667:23775)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3667:24693
+2026-02-11T13:41:13.030Z [ERROR] AxiosError: AxiosError: timeout of 5000ms exceeded
+    at t$.<anonymous> (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:44:10436)
+    at t$.emit (node:events:508:20)
+    at t$.emit (node:domain:489:12)
+    at Timeout.<anonymous> (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:43:3285)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7)
+    at v$A.request (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:46:2130)
+    at runNextTicks (node:internal/process/task_queues:65:5)
+    at listOnTimeout (node:internal/timers:567:9)
+    at process.processTimers (node:internal/timers:541:7)
+    at async _x3 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:385:22415)
+    at async G (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:385:21239)
+    at async Tx3 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:385:22640)
+    at async Sx3 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:385:23586)
+2026-02-11T13:41:13.031Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.16886.1770817273031
+2026-02-11T13:41:13.031Z [DEBUG] Preserving file permissions: 100600
+2026-02-11T13:41:13.031Z [DEBUG] Temp file written successfully, size: 14655 bytes
+2026-02-11T13:41:13.031Z [DEBUG] Applied original permissions to temp file
+2026-02-11T13:41:13.031Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.16886.1770817273031 to /Users/sihaoli/.claude.json
+2026-02-11T13:41:13.031Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-11T13:41:13.033Z [DEBUG] MCP server "are": Connection timeout triggered after 147076ms (limit: 30000ms)
+2026-02-11T13:41:13.033Z [DEBUG] MCP server "are": Connection failed after 147076ms: Connection to MCP server "are" timed out after 30000ms
+2026-02-11T13:41:13.033Z [ERROR] MCP server "are" Connection failed: Connection to MCP server "are" timed out after 30000ms
+2026-02-11T13:41:13.035Z [DEBUG] Initialized versioned plugins system with 2 plugins
+2026-02-11T13:41:13.036Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-02-11T13:41:13.037Z [DEBUG] Grove: Using fresh cached config
+2026-02-11T13:41:13.039Z [DEBUG] Auto tool search disabled: 0 chars (threshold: 50000, 10% of context)
+2026-02-11T13:41:13.039Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.16886.1770817273039
+2026-02-11T13:41:13.039Z [DEBUG] Preserving file permissions: 100600
+2026-02-11T13:41:13.039Z [DEBUG] Temp file written successfully, size: 14638 bytes
+2026-02-11T13:41:13.039Z [DEBUG] Applied original permissions to temp file
+2026-02-11T13:41:13.039Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.16886.1770817273039 to /Users/sihaoli/.claude.json
+2026-02-11T13:41:13.039Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-11T13:41:13.042Z [DEBUG] Skills and commands included in Skill tool: agent, banner, benchmark, browser, build, call, changelog, commit, docs, email-search, email-web, mcp-builder, office, himalaya, office-notes, notion, apple-reminders, things-mac, trello, ontology, phase, pr, precise-edit, report, restore, review, selfie, shortcut, shortcut-builder, shortcut-search, skill-creator, solar, status, test, theme, webapp-testing
+2026-02-11T13:41:13.042Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T13:41:13.042Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T13:41:13.042Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T13:41:14.959Z [ERROR] Error: Error: Client network socket disconnected before secure TLS connection was established
+    at B8A.from (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:26:8256)
+    at t$.<anonymous> (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:44:10016)
+    at t$.emit (node:events:508:20)
+    at t$.emit (node:domain:489:12)
+    at bw1.<computed> (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:43:1117)
+    at ClientRequest.emit (node:events:520:22)
+    at ClientRequest.emit (node:domain:489:12)
+    at emitErrorEvent (node:_http_client:108:11)
+    at TLSSocket.socketErrorListener (node:_http_client:575:5)
+    at TLSSocket.emit (node:events:508:20)
+    at v$A.request (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:46:2130)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async sY1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2296:14565)
+    at async iDA (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2296:14789)
+    at async Promise.all (index 0)
+    at async W79 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3924:22248)
+    at async GO9 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:5378:966)
+2026-02-11T13:41:14.959Z [DEBUG] Failed to fetch Grove notice config: Error: Client network socket disconnected before secure TLS connection was established
+2026-02-11T13:41:14.959Z [DEBUG] Getting matching hook commands for SessionStart with query: startup
+2026-02-11T13:41:14.959Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T13:41:14.959Z [DEBUG] Matched 0 unique hooks for query "startup" (0 before deduplication)
+2026-02-11T13:41:14.968Z [DEBUG] Total plugin output styles loaded: 0
+2026-02-11T13:41:14.971Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-11T13:41:14.971Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-11T13:41:14.971Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-11T13:41:14.971Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-11T13:41:14.973Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-11T13:41:14.973Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T13:41:14.973Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-11T13:41:14.974Z [DEBUG] Auto tool search disabled: 309 chars (threshold: 50000, 10% of context)
+2026-02-11T13:41:14.977Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T13:41:14.977Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T13:41:14.977Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T13:41:14.977Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.16886.1770817274977
+2026-02-11T13:41:14.977Z [DEBUG] Preserving file permissions: 100600
+2026-02-11T13:41:14.977Z [DEBUG] Temp file written successfully, size: 14639 bytes
+2026-02-11T13:41:14.977Z [DEBUG] Applied original permissions to temp file
+2026-02-11T13:41:14.977Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.16886.1770817274977 to /Users/sihaoli/.claude.json
+2026-02-11T13:41:14.977Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-11T13:41:14.981Z [ERROR] Error: Error: 1P event logging: 10 events failed to export
+    at oA0.queueFailedEvents (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:669:2038)
+    at async oA0.doExport (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:669:1195)
+2026-02-11T13:41:14.981Z [ERROR] Error: Error: {"stack":"Error: Failed to export 10 events\n    at oA0.doExport (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:669:1297)","message":"Failed to export 10 events","name":"Error"}
+    at aE0.error (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2336:34862)
+    at We1.error (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:663:8377)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:663:39402
+    at Tu3 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:663:39948)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:664:20245
+2026-02-11T13:41:19.831Z [DEBUG] Stream started - received first chunk
+2026-02-11T13:41:22.508Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-11T13:41:22.509Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-11T13:41:22.509Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T13:41:22.509Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-11T13:41:22.514Z [DEBUG] tree-sitter: WASM files not found
+2026-02-11T13:41:22.518Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T13:41:22.518Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T13:41:22.518Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T13:41:22.518Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T13:41:22.519Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T13:41:22.519Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T13:41:22.519Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T13:41:22.519Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T13:41:23.216Z [DEBUG] Stream started - received first chunk
+2026-02-11T13:41:23.441Z [DEBUG] Stream started - received first chunk
+2026-02-11T13:41:23.544Z [DEBUG] Creating shell snapshot for zsh (/bin/zsh)
+2026-02-11T13:41:23.544Z [DEBUG] Looking for shell config file: /Users/sihaoli/.zshrc
+2026-02-11T13:41:23.544Z [DEBUG] Snapshots directory: /Users/sihaoli/.claude/shell-snapshots
+2026-02-11T13:41:23.545Z [DEBUG] Creating snapshot at: /Users/sihaoli/.claude/shell-snapshots/snapshot-zsh-1770817283544-ra8n0p.sh
+2026-02-11T13:41:23.545Z [DEBUG] Shell binary exists: true
+2026-02-11T13:41:23.545Z [DEBUG] Execution timeout: 10000ms
+2026-02-11T13:41:23.684Z [DEBUG] Shell snapshot created successfully (4676 bytes)
+2026-02-11T13:41:23.685Z [DEBUG] No session environment scripts found
+2026-02-11T13:41:23.713Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T13:41:23.714Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T13:41:23.714Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T13:41:23.714Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T13:41:23.715Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-11T13:41:23.715Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T13:41:23.715Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-11T13:41:23.726Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-11T13:41:23.726Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-11T13:41:23.726Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-11T13:41:23.726Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-11T13:41:23.727Z [DEBUG] Auto tool search disabled: 309 chars (threshold: 50000, 10% of context)
+2026-02-11T13:41:23.728Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T13:41:23.728Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T13:41:23.728Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T13:41:24.477Z [DEBUG] Stream started - received first chunk
+2026-02-11T13:41:26.211Z [DEBUG] Stream started - received first chunk
+2026-02-11T13:41:26.895Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-11T13:41:26.896Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-11T13:41:26.896Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T13:41:26.896Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-11T13:41:26.898Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T13:41:26.898Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T13:41:26.899Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T13:41:26.899Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T13:41:26.900Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T13:41:26.900Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T13:41:26.900Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T13:41:26.900Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T13:41:27.682Z [DEBUG] Stream started - received first chunk
+2026-02-11T13:41:27.921Z [DEBUG] Stream started - received first chunk
+2026-02-11T13:41:28.349Z [DEBUG] Getting matching hook commands for PostToolUseFailure with query: Bash
+2026-02-11T13:41:28.349Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T13:41:28.349Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-11T13:41:28.361Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-11T13:41:28.361Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-11T13:41:28.361Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-11T13:41:28.361Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-11T13:41:28.362Z [DEBUG] Auto tool search disabled: 309 chars (threshold: 50000, 10% of context)
+2026-02-11T13:41:28.364Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T13:41:28.364Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T13:41:28.364Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T13:41:31.130Z [DEBUG] Stream started - received first chunk
+2026-02-11T13:41:31.733Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-11T13:41:31.734Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-11T13:41:31.734Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T13:41:31.734Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-11T13:41:31.736Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T13:41:31.736Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T13:41:31.737Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T13:41:31.737Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T13:41:31.737Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T13:41:31.737Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T13:41:31.738Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T13:41:31.738Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T13:41:32.491Z [DEBUG] Stream started - received first chunk
+2026-02-11T13:41:32.714Z [DEBUG] Stream started - received first chunk
+2026-02-11T13:57:39.812Z [ERROR] Error: Error: {"stack":"Error: Operation timed out.\n    at Timeout.<anonymous> (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:663:111522)\n    at listOnTimeout (node:internal/timers:605:17)\n    at process.processTimers (node:internal/timers:541:7)","message":"Operation timed out.","name":"Error"}
+    at aE0.error (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2336:34862)
+    at We1.error (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:663:8377)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:663:39402
+    at Tu3 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:663:39948)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:664:19805
+    at runNextTicks (node:internal/process/task_queues:65:5)
+    at process.processTimers (node:internal/timers:538:9)
+2026-02-11T13:57:39.828Z [ERROR] Error: Error: 1P event logging: 35 events failed to export
+    at oA0.queueFailedEvents (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:669:2038)
+    at async oA0.doExport (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:669:1195)
+2026-02-11T13:57:39.829Z [ERROR] Error: Error: {"stack":"Error: Failed to export 35 events\n    at oA0.doExport (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:669:1297)","message":"Failed to export 35 events","name":"Error"}
+    at aE0.error (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2336:34862)
+    at We1.error (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:663:8377)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:663:39402
+    at Tu3 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:663:39948)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:664:20245
+2026-02-11T13:57:40.805Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T13:57:40.809Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T13:57:40.809Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T13:57:40.810Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T13:57:40.815Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-11T13:57:40.815Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T13:57:40.815Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-11T13:57:40.845Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-11T13:57:40.845Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-11T13:57:40.845Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-11T13:57:40.845Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-11T13:57:40.848Z [DEBUG] Auto tool search disabled: 309 chars (threshold: 50000, 10% of context)
+2026-02-11T13:57:40.851Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T13:57:40.851Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T13:57:40.852Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T13:57:42.061Z [DEBUG] Stream started - received first chunk
+2026-02-11T14:14:38.066Z [ERROR] Error: Error: 1P event logging: 20 events failed to export
+    at oA0.queueFailedEvents (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:669:2038)
+    at async oA0.doExport (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:669:1195)
+2026-02-11T14:14:38.066Z [ERROR] Error: Error: {"stack":"Error: Failed to export 20 events\n    at oA0.doExport (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:669:1297)","message":"Failed to export 20 events","name":"Error"}
+    at aE0.error (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2336:34862)
+    at We1.error (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:663:8377)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:663:39402
+    at Tu3 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:663:39948)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:664:20245
+2026-02-11T14:14:41.110Z [DEBUG] Stream started - received first chunk
+2026-02-11T14:14:41.727Z [DEBUG] executePreToolHooks called for tool: TaskOutput
+2026-02-11T14:14:41.728Z [DEBUG] Getting matching hook commands for PreToolUse with query: TaskOutput
+2026-02-11T14:14:41.728Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T14:14:41.728Z [DEBUG] Matched 0 unique hooks for query "TaskOutput" (0 before deduplication)
+2026-02-11T14:23:05.647Z [DEBUG] Getting matching hook commands for PostToolUse with query: TaskOutput
+2026-02-11T14:23:05.647Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T14:23:05.647Z [DEBUG] Matched 0 unique hooks for query "TaskOutput" (0 before deduplication)
+2026-02-11T14:23:05.722Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-11T14:23:05.722Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-11T14:23:05.722Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-11T14:23:05.722Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-11T14:23:05.730Z [DEBUG] Auto tool search disabled: 309 chars (threshold: 50000, 10% of context)
+2026-02-11T14:23:05.736Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T14:23:05.736Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T14:23:05.737Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T14:23:06.073Z [ERROR] Error: Error: 1P event logging: 7 events failed to export
+    at oA0.queueFailedEvents (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:669:2038)
+    at async oA0.doExport (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:669:1195)
+2026-02-11T14:23:06.074Z [ERROR] Error: Error: {"stack":"Error: Failed to export 7 events\n    at oA0.doExport (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:669:1297)","message":"Failed to export 7 events","name":"Error"}
+    at aE0.error (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2336:34862)
+    at We1.error (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:663:8377)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:663:39402
+    at Tu3 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:663:39948)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:664:20245
+2026-02-11T14:23:08.576Z [DEBUG] Stream started - received first chunk
+2026-02-11T14:23:08.877Z [DEBUG] executePreToolHooks called for tool: KillShell
+2026-02-11T14:23:08.878Z [DEBUG] Getting matching hook commands for PreToolUse with query: KillShell
+2026-02-11T14:23:08.878Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T14:23:08.878Z [DEBUG] Matched 0 unique hooks for query "KillShell" (0 before deduplication)
+2026-02-11T14:23:08.879Z [DEBUG] LocalBashTask b408855 kill requested
+2026-02-11T14:23:08.884Z [DEBUG] Getting matching hook commands for PostToolUse with query: KillShell
+2026-02-11T14:23:08.884Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T14:23:08.884Z [DEBUG] Matched 0 unique hooks for query "KillShell" (0 before deduplication)
+2026-02-11T14:23:08.908Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-11T14:23:08.908Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-11T14:23:08.908Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-11T14:23:08.908Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-11T14:23:08.912Z [DEBUG] Auto tool search disabled: 309 chars (threshold: 50000, 10% of context)
+2026-02-11T14:23:08.914Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T14:23:08.914Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T14:23:08.914Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T14:23:11.583Z [DEBUG] Stream started - received first chunk
+2026-02-11T14:23:12.346Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-11T14:23:12.347Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-11T14:23:12.347Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T14:23:12.347Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-11T14:23:12.349Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T14:23:12.350Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T14:23:12.351Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T14:23:12.351Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T14:23:12.351Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T14:23:12.351Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T14:23:12.352Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T14:23:12.352Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T14:23:13.301Z [DEBUG] Stream started - received first chunk
+2026-02-11T14:23:14.335Z [DEBUG] Stream started - received first chunk
+2026-02-11T14:23:14.485Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T14:23:14.486Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T14:23:14.486Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T14:23:14.487Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T14:23:14.489Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-11T14:23:14.489Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T14:23:14.489Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-11T14:23:14.509Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-11T14:23:14.509Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-11T14:23:14.509Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-11T14:23:14.509Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-11T14:23:14.511Z [DEBUG] Auto tool search disabled: 309 chars (threshold: 50000, 10% of context)
+2026-02-11T14:23:14.512Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T14:23:14.512Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T14:23:14.513Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T14:23:15.299Z [DEBUG] Stream started - received first chunk
+2026-02-11T14:23:17.612Z [DEBUG] Stream started - received first chunk
+2026-02-11T14:23:19.045Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-11T14:23:19.046Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-11T14:23:19.046Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T14:23:19.046Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-11T14:23:19.048Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T14:23:19.049Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T14:23:19.049Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T14:23:19.049Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T14:23:19.050Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T14:23:19.050Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T14:23:19.050Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T14:23:19.050Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T14:23:19.804Z [DEBUG] Stream started - received first chunk
+2026-02-11T14:23:20.146Z [DEBUG] Stream started - received first chunk
+2026-02-11T14:23:20.279Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T14:23:20.280Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T14:23:20.280Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T14:23:20.281Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T14:23:20.282Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-11T14:23:20.282Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T14:23:20.282Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-11T14:23:20.297Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-11T14:23:20.297Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-11T14:23:20.297Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-11T14:23:20.297Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-11T14:23:20.299Z [DEBUG] Auto tool search disabled: 309 chars (threshold: 50000, 10% of context)
+2026-02-11T14:23:20.300Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T14:23:20.300Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T14:23:20.301Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T14:23:21.012Z [DEBUG] Stream started - received first chunk
+2026-02-11T14:23:22.715Z [DEBUG] Stream started - received first chunk
+2026-02-11T14:23:23.750Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-11T14:23:23.750Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-11T14:23:23.750Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T14:23:23.750Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-11T14:23:23.753Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T14:23:23.753Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T14:23:23.754Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T14:23:23.754Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T14:23:23.754Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T14:23:23.755Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T14:23:23.755Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T14:23:23.755Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T14:23:23.755Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T14:23:23.755Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T14:23:23.755Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T14:23:23.755Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T14:23:24.489Z [DEBUG] Stream started - received first chunk
+2026-02-11T14:23:24.588Z [DEBUG] Stream started - received first chunk
+2026-02-11T14:23:24.831Z [DEBUG] Stream started - received first chunk
+2026-02-11T14:23:25.013Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T14:23:25.013Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T14:23:25.013Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T14:23:25.014Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T14:23:25.015Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-11T14:23:25.015Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T14:23:25.015Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-11T14:23:25.031Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-11T14:23:25.031Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-11T14:23:25.031Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-11T14:23:25.031Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-11T14:23:25.032Z [DEBUG] Auto tool search disabled: 309 chars (threshold: 50000, 10% of context)
+2026-02-11T14:23:25.034Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T14:23:25.034Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T14:23:25.034Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T14:23:25.675Z [DEBUG] Stream started - received first chunk
+2026-02-11T14:23:27.570Z [DEBUG] Stream started - received first chunk
+2026-02-11T14:23:28.353Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-11T14:23:28.354Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-11T14:23:28.354Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T14:23:28.354Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-11T14:23:28.356Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T14:23:28.356Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T14:23:28.357Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T14:23:28.357Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T14:23:28.357Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T14:23:28.357Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T14:23:28.358Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T14:23:28.358Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T14:23:29.281Z [DEBUG] Stream started - received first chunk
+2026-02-11T14:23:29.410Z [DEBUG] Stream started - received first chunk
+2026-02-11T21:13:00.482Z [ERROR] Error streaming, falling back to non-streaming mode: terminated
+2026-02-11T21:13:00.485Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T21:13:00.485Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T21:13:00.518Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T21:13:02.301Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T21:13:02.303Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T21:13:02.303Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T21:13:02.303Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T21:13:02.305Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-11T21:13:02.305Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T21:13:02.305Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-11T21:13:02.324Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-11T21:13:02.324Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-11T21:13:02.324Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-11T21:13:02.324Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-11T21:13:02.326Z [DEBUG] Auto tool search disabled: 309 chars (threshold: 50000, 10% of context)
+2026-02-11T21:13:02.329Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T21:13:02.329Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T21:13:02.329Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T21:13:03.194Z [DEBUG] Stream started - received first chunk
+2026-02-11T21:13:06.391Z [DEBUG] Stream started - received first chunk
+2026-02-11T21:13:07.468Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-11T21:13:07.469Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-11T21:13:07.469Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T21:13:07.469Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-11T21:13:07.471Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T21:13:07.471Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T21:13:07.472Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T21:13:07.472Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T21:13:07.472Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T21:13:07.472Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T21:13:07.472Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T21:13:07.472Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T21:13:08.237Z [DEBUG] Stream started - received first chunk
+2026-02-11T21:13:08.817Z [DEBUG] Stream started - received first chunk
+2026-02-11T21:13:09.044Z [DEBUG] Getting matching hook commands for PostToolUseFailure with query: Bash
+2026-02-11T21:13:09.044Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T21:13:09.044Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-11T21:13:09.058Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-11T21:13:09.058Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-11T21:13:09.058Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-11T21:13:09.058Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-12T01:38:40.067Z [DEBUG] Detected change to /Users/sihaoli/.claude/settings.json
+2026-02-12T01:38:46.146Z [DEBUG] Detected change to /Users/sihaoli/.claude/settings.json
+2026-02-12T02:04:09.531Z [DEBUG] MCP server "brain-router": UNKNOWN connection closed after 44723s (cleanly)
+2026-02-12T02:04:09.532Z [DEBUG] MCP server "brain-router": Cleared connection cache for reconnection
+2026-02-12T09:14:58.580Z [DEBUG] Detected change to /Users/sihaoli/.claude/settings.json
+2026-02-12T09:17:03.185Z [DEBUG] Detected change to /Users/sihaoli/.claude/settings.json
+2026-02-12T20:48:20.756Z [DEBUG] Detected change to /Users/sihaoli/.claude/settings.json
+2026-02-12T21:08:47.801Z [DEBUG] Detected change to /Users/sihaoli/.claude/settings.json
+2026-02-13T01:37:07.460Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/imessage-send/send.ts
+2026-02-13T01:37:20.478Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/imessage-send/SKILL.md
+2026-02-13T01:37:29.280Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/imessage-send/send.ts
+2026-02-14T04:13:41.565Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/SKILL.md
+2026-02-14T04:14:33.868Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/skin-check.ts
+2026-02-14T04:14:42.478Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/skin-check.ts
+2026-02-14T04:19:33.820Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/skin-check.ts
+2026-02-14T04:20:16.096Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/skin-check.ts
+2026-02-14T04:20:29.466Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/SKILL.md
+2026-02-14T04:24:20.807Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/selfie/selfie.ts
+2026-02-14T04:24:57.799Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/skin-check.ts
+2026-02-14T04:25:08.786Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/skin-check.ts
+2026-02-14T04:25:28.980Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/skin-check.ts
+2026-02-14T04:25:34.192Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/skin-check.ts
+2026-02-14T04:25:57.181Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/skin-check.ts
+2026-02-14T04:27:24.602Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/skin-check.ts
+2026-02-14T04:28:04.221Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/skin-check.ts
+2026-02-14T04:28:26.046Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/skin-check.ts
+2026-02-14T04:28:32.020Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/skin-check.ts
+2026-02-14T04:29:10.370Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/skin-check.ts
+2026-02-14T04:29:21.919Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/skin-check.ts
+2026-02-14T04:29:46.443Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/skin-check.ts
+2026-02-14T04:31:26.315Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/skin-check.ts
+2026-02-14T04:32:14.960Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/skin-check.ts
+2026-02-14T04:32:22.888Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/skin-check.ts
+2026-02-14T04:40:32.114Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/skin-check.ts
+2026-02-14T04:45:04.097Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/PHASE2-DESIGN.md
+2026-02-14T04:51:47.944Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/local-classifier.ts
+2026-02-14T04:52:46.468Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/skin-check-v2.ts
+2026-02-14T04:53:00.863Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/README.md
+2026-02-14T04:53:02.654Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/local-classifier.ts
+2026-02-14T04:53:02.654Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/skin-check-v2.ts
+2026-02-14T04:53:35.186Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/skin-check-v2.ts
+2026-02-14T04:53:40.184Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/README.md
+2026-02-14T04:56:06.058Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/lesion-detector.ts
+2026-02-14T04:56:23.273Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/skin-check-v2.ts
+2026-02-14T04:56:28.562Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/skin-check-v2.ts
+2026-02-14T04:56:33.895Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/skin-check-v2.ts
+2026-02-14T04:56:35.831Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/skin-check-v2.ts
+2026-02-14T04:56:42.088Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/skin-check-v2.ts
+2026-02-14T04:56:45.617Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/README.md
+2026-02-14T04:57:39.625Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/history-tracker.ts
+2026-02-14T04:57:42.957Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/skin-check-v2.ts
+2026-02-14T04:57:50.145Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/skin-check-v2.ts
+2026-02-14T04:57:55.207Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/README.md
+2026-02-14T04:58:01.968Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/skin-check-history.db
+2026-02-14T04:58:12.117Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/skin-check-history.db
+2026-02-14T04:58:13.168Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/skin-check-history.db
+2026-02-14T04:58:14.213Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/skin-check-history.db
+2026-02-14T04:58:31.469Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/skin-check-history.db
+2026-02-14T12:00:34.671Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/phase2/README.md
+2026-02-14T12:04:58.514Z [DEBUG] Detected skill change: /Users/sihaoli/.claude/skills/skin-check/.gitignore
+2026-02-14T12:05:27.768Z [DEBUG] Detected change to /Users/sihaoli/.claude/settings.json
+2026-02-14T19:07:10.382Z [DEBUG] Getting matching hook commands for SessionEnd with query: other
+2026-02-14T19:07:10.382Z [DEBUG] Found 0 hook matchers in settings
+2026-02-14T19:07:10.383Z [DEBUG] Matched 0 unique hooks for query "other" (0 before deduplication)
+2026-02-14T19:07:10.631Z [DEBUG] Cleaned up session snapshot: /Users/sihaoli/.claude/shell-snapshots/snapshot-zsh-1770817283544-ra8n0p.sh
+2026-02-14T19:07:10.631Z [DEBUG] LSP server manager shut down successfully
+2026-02-14T19:07:10.789Z [DEBUG] Getting matching hook commands for SessionEnd with query: other
+2026-02-14T19:07:10.789Z [DEBUG] Found 0 hook matchers in settings
+2026-02-14T19:07:10.789Z [DEBUG] Matched 0 unique hooks for query "other" (0 before deduplication)

@@ -1,0 +1,56 @@
+2026-02-12T09:20:43.702Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-12T09:20:43.703Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-12T09:20:43.703Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-12T09:20:43.703Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-12T09:20:43.708Z [DEBUG] Applying permission update: Adding 4 allow rule(s) to destination 'localSettings': ["Bash(curl:*)","Bash(tree:*)","Bash(xargs ls:*)","Bash(wc:*)"]
+2026-02-12T09:20:43.708Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-12T09:20:43.719Z [DEBUG] [ToolSearch:optimistic] mode=tst-auto, ENABLE_TOOL_SEARCH=undefined, result=true
+2026-02-12T09:20:43.719Z [DEBUG] [STARTUP] Running setup()...
+2026-02-12T09:20:43.719Z [DEBUG] Found 0 plugins (0 enabled, 0 disabled)
+2026-02-12T09:20:43.721Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-12T09:20:43.740Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-12T09:20:43.740Z [DEBUG] Error log sink initialized
+2026-02-12T09:20:43.745Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-12T09:20:43.745Z [DEBUG] Total plugin skills loaded: 0
+2026-02-12T09:20:43.745Z [DEBUG] Total plugin commands loaded: 0
+2026-02-12T09:20:43.748Z [DEBUG] Registered 0 hooks from 0 plugins
+2026-02-12T09:20:43.748Z [DEBUG] Loaded 74 unique skills (74 unconditional, 0 conditional, managed: 0, user: 74, project: 0, additional: 0, legacy commands: 0)
+2026-02-12T09:20:43.749Z [DEBUG] getSkills returning: 74 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-12T09:20:43.750Z [DEBUG] [Claude in Chrome] Found chrome profiles: Default, Profile 1
+2026-02-12T09:20:43.754Z [DEBUG] [Claude in Chrome] Extension not found in any browser
+2026-02-12T09:20:43.766Z [DEBUG] [STARTUP] setup() completed in 47ms
+2026-02-12T09:20:43.766Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-02-12T09:20:44.042Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=/Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg)
+2026-02-12T09:20:44.050Z [DEBUG] Agent file /Users/sihaoli/.claude/agents/community.md is missing required 'name' in frontmatter
+2026-02-12T09:20:44.050Z [DEBUG] Failed to parse agent from /Users/sihaoli/.claude/agents/community.md: Missing required "name" field in frontmatter
+2026-02-12T09:20:44.051Z [DEBUG] Total plugin agents loaded: 0
+2026-02-12T09:20:44.051Z [DEBUG] [STARTUP] Commands and agents loaded in 285ms
+2026-02-12T09:20:44.051Z [DEBUG] Layout engine: yoga
+2026-02-12T09:20:44.059Z [DEBUG] [STARTUP] Running showSetupScreens()...
+2026-02-12T09:20:44.060Z [DEBUG] Grove: Using fresh cached config
+2026-02-12T09:20:44.073Z [DEBUG] [keybindings] KeybindingSetup initialized with 101 bindings, 0 warnings
+2026-02-12T09:20:44.078Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-02-12T09:20:44.079Z [DEBUG] Git remote URL: null
+2026-02-12T09:20:44.079Z [DEBUG] No git remote URL found
+2026-02-12T09:20:44.079Z [DEBUG] Not in a GitHub repository, skipping path mapping update
+2026-02-12T09:20:44.080Z [DEBUG] [keybindings] Watching for changes to /Users/sihaoli/.claude/keybindings.json
+2026-02-12T09:20:44.385Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.31527.1770888044385
+2026-02-12T09:20:44.385Z [DEBUG] Preserving file permissions: 100600
+2026-02-12T09:20:44.386Z [DEBUG] Temp file written successfully, size: 15457 bytes
+2026-02-12T09:20:44.386Z [DEBUG] Applied original permissions to temp file
+2026-02-12T09:20:44.386Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.31527.1770888044385 to /Users/sihaoli/.claude.json
+2026-02-12T09:20:44.386Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-12T09:20:45.186Z [DEBUG] [STARTUP] showSetupScreens() completed in 1127ms
+2026-02-12T09:20:45.186Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-02-12T09:20:45.186Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-02-12T09:20:45.186Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-02-12T09:20:45.210Z [DEBUG] High write ratio: blit=0, write=1916 (100.0% writes), screen=61x180
+2026-02-12T09:20:45.213Z [DEBUG] Total LSP servers loaded: 0
+2026-02-12T09:20:45.213Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 0 server(s)
+2026-02-12T09:20:45.213Z [DEBUG] LSP manager initialized with 0 servers
+2026-02-12T09:20:45.213Z [DEBUG] LSP server manager initialized successfully
+2026-02-12T09:20:45.214Z [DEBUG] LSP notification handlers registered successfully for all 0 server(s)
+2026-02-12T09:20:47.991Z [DEBUG] Getting matching hook commands for SessionEnd with query: other
+2026-02-12T09:20:47.991Z [DEBUG] Found 0 hook matchers in settings
+2026-02-12T09:20:47.991Z [DEBUG] Matched 0 unique hooks for query "other" (0 before deduplication)
+2026-02-12T09:20:47.996Z [DEBUG] LSP server manager shut down successfully

@@ -1,0 +1,457 @@
+2026-02-09T20:38:15.854Z [DEBUG] Watching for changes in setting files /Users/sihaoli/.claude...
+2026-02-09T20:38:15.856Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-09T20:38:15.856Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-09T20:38:15.856Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-09T20:38:15.856Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-09T20:38:15.859Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-02-09T20:38:15.859Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-02-09T20:38:15.859Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-02-09T20:38:15.861Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-09T20:38:15.868Z [DEBUG] Found 0 plugins (0 enabled, 0 disabled)
+2026-02-09T20:38:15.868Z [DEBUG] Total LSP servers loaded: 0
+2026-02-09T20:38:15.869Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 0 server(s)
+2026-02-09T20:38:15.869Z [DEBUG] LSP manager initialized with 0 servers
+2026-02-09T20:38:15.869Z [DEBUG] [STARTUP] MCP configs loaded in 8ms
+2026-02-09T20:38:15.869Z [DEBUG] LSP server manager initialized successfully
+2026-02-09T20:38:15.869Z [DEBUG] LSP notification handlers registered successfully for all 0 server(s)
+2026-02-09T20:38:15.869Z [DEBUG] [STARTUP] Running setup()...
+2026-02-09T20:38:15.881Z [DEBUG] Stats cache is up to date
+2026-02-09T20:38:15.881Z [DEBUG] Plugin autoupdate: skipped (auto-updater disabled)
+2026-02-09T20:38:15.884Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-09T20:38:15.910Z [DEBUG] Loaded 2 installed plugins from /Users/sihaoli/.claude/plugins/installed_plugins.json
+2026-02-09T20:38:15.944Z [DEBUG] Error log sink initialized
+2026-02-09T20:38:15.946Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/todos/fa0a2bef-698b-4dec-ba02-7de024d7f0a9-agent-fa0a2bef-698b-4dec-ba02-7de024d7f0a9.json.tmp.53417.1770669495946
+2026-02-09T20:38:15.947Z [DEBUG] Temp file written successfully, size: 2 bytes
+2026-02-09T20:38:15.947Z [DEBUG] Renaming /Users/sihaoli/.claude/todos/fa0a2bef-698b-4dec-ba02-7de024d7f0a9-agent-fa0a2bef-698b-4dec-ba02-7de024d7f0a9.json.tmp.53417.1770669495946 to /Users/sihaoli/.claude/todos/fa0a2bef-698b-4dec-ba02-7de024d7f0a9-agent-fa0a2bef-698b-4dec-ba02-7de024d7f0a9.json
+2026-02-09T20:38:15.947Z [DEBUG] File /Users/sihaoli/.claude/todos/fa0a2bef-698b-4dec-ba02-7de024d7f0a9-agent-fa0a2bef-698b-4dec-ba02-7de024d7f0a9.json written atomically
+2026-02-09T20:38:15.951Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-09T20:38:15.951Z [DEBUG] Total plugin skills loaded: 0
+2026-02-09T20:38:15.951Z [DEBUG] Total plugin commands loaded: 0
+2026-02-09T20:38:15.951Z [DEBUG] Registered 0 hooks from 0 plugins
+2026-02-09T20:38:15.951Z [DEBUG] [STARTUP] setup() completed in 82ms
+2026-02-09T20:38:15.951Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-02-09T20:38:15.954Z [DEBUG] Loaded 74 unique skills (managed: 0, user: 74, project: 0, legacy commands: 0)
+2026-02-09T20:38:15.954Z [DEBUG] getSkills returning: 74 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-02-09T20:38:15.965Z [ERROR] Error: Error: ENOENT: no such file or directory, open '/Users/sihaoli/Solar/.claude/settings.json'
+    at Module.openSync (node:fs:559:18)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:673
+    at xI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:34380)
+    at Object.readSync (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:607)
+    at vI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4629:105)
+    at hI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4631:204)
+    at rX9 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4625:1915)
+    at Immediate._onImmediate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:5358:3574)
+    at process.processImmediate (node:internal/timers:504:21)
+2026-02-09T20:38:15.965Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/sihaoli/Solar/.claude/settings.json
+2026-02-09T20:38:15.965Z [ERROR] Error: Error: ENOENT: no such file or directory, open '/Users/sihaoli/Solar/.claude/settings.local.json'
+    at Module.openSync (node:fs:559:18)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:673
+    at xI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:34380)
+    at Object.readSync (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:607)
+    at vI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4629:105)
+    at hI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4631:204)
+    at rX9 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4625:1915)
+    at Immediate._onImmediate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:5358:3574)
+    at process.processImmediate (node:internal/timers:504:21)
+2026-02-09T20:38:15.965Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/sihaoli/Solar/.claude/settings.local.json
+2026-02-09T20:38:15.987Z [DEBUG] [Claude in Chrome] Found chrome profiles: Default, Profile 1
+2026-02-09T20:38:15.988Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=/Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg)
+2026-02-09T20:38:15.991Z [DEBUG] Watching for changes in skill/command directories: /Users/sihaoli/.claude/skills...
+2026-02-09T20:38:16.016Z [DEBUG] Agent file /Users/sihaoli/.claude/agents/community.md is missing required 'name' in frontmatter
+2026-02-09T20:38:16.016Z [DEBUG] Failed to parse agent from /Users/sihaoli/.claude/agents/community.md: Missing required "name" field in frontmatter
+2026-02-09T20:38:16.016Z [DEBUG] Total plugin agents loaded: 0
+2026-02-09T20:38:16.017Z [DEBUG] [STARTUP] Commands and agents loaded in 66ms
+2026-02-09T20:38:16.017Z [DEBUG] [STARTUP] Running showSetupScreens()...
+2026-02-09T20:38:16.017Z [DEBUG] [render] initYoga starting
+2026-02-09T20:38:16.030Z [DEBUG] Session index: added 1, updated 1, removed 0 (total: 27)
+2026-02-09T20:38:16.033Z [DEBUG] [render] initYoga complete
+2026-02-09T20:38:16.035Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-02-09T20:38:16.052Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-02-09T20:38:16.064Z [DEBUG] [Claude in Chrome] Extension not found in any browser
+2026-02-09T20:38:16.423Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.53417.1770669496423
+2026-02-09T20:38:16.423Z [DEBUG] Preserving file permissions: 100600
+2026-02-09T20:38:16.423Z [DEBUG] Temp file written successfully, size: 14428 bytes
+2026-02-09T20:38:16.423Z [DEBUG] Applied original permissions to temp file
+2026-02-09T20:38:16.423Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.53417.1770669496423 to /Users/sihaoli/.claude.json
+2026-02-09T20:38:16.423Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-09T20:38:16.668Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:16.704Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:16.737Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:16.770Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:16.802Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:16.836Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:16.869Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:16.902Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:16.935Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:16.967Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.000Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.033Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.066Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.099Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.132Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.164Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.198Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.230Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.263Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.296Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.328Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.362Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.395Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.428Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.460Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.493Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.525Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.557Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.590Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.622Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.654Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.686Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.718Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.750Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.782Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.814Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.847Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.879Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.911Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.943Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:17.975Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.007Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.040Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.072Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.104Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.138Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.171Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.203Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.236Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.270Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.303Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.336Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.369Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.401Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.433Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.466Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.498Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.531Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.563Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.595Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.627Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.659Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.691Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.724Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.757Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.790Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.822Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.855Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.888Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.920Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.952Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:18.984Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:19.017Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:19.049Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:19.082Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:19.114Z [DEBUG] High write ratio: blit=0, write=2074 (100.0% writes), screen=36x142
+2026-02-09T20:38:19.147Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.53417.1770669499147
+2026-02-09T20:38:19.147Z [DEBUG] Preserving file permissions: 100600
+2026-02-09T20:38:19.147Z [DEBUG] Temp file written successfully, size: 14428 bytes
+2026-02-09T20:38:19.147Z [DEBUG] Applied original permissions to temp file
+2026-02-09T20:38:19.147Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.53417.1770669499147 to /Users/sihaoli/.claude.json
+2026-02-09T20:38:19.147Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-09T20:38:19.148Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.53417.1770669499148
+2026-02-09T20:38:19.148Z [DEBUG] Preserving file permissions: 100600
+2026-02-09T20:38:19.148Z [DEBUG] Temp file written successfully, size: 14428 bytes
+2026-02-09T20:38:19.148Z [DEBUG] Applied original permissions to temp file
+2026-02-09T20:38:19.148Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.53417.1770669499148 to /Users/sihaoli/.claude.json
+2026-02-09T20:38:19.148Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-09T20:38:19.151Z [DEBUG] High write ratio: blit=0, write=1150 (100.0% writes), screen=26x142
+2026-02-09T20:38:19.187Z [DEBUG] High write ratio: blit=0, write=1150 (100.0% writes), screen=26x142
+2026-02-09T20:38:28.576Z [ERROR] Error: Error: Failed to delete keychain entry
+    at Gs2 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3338:6963)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async JI9 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4626:626)
+    at async AS2 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4626:530)
+    at async E$0 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2362:67483)
+    at async eyA.startOAuthFlow (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2362:69045)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2367:29147
+2026-02-09T20:38:28.578Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.53417.1770669508578
+2026-02-09T20:38:28.578Z [DEBUG] Preserving file permissions: 100600
+2026-02-09T20:38:28.578Z [DEBUG] Temp file written successfully, size: 14428 bytes
+2026-02-09T20:38:28.578Z [DEBUG] Applied original permissions to temp file
+2026-02-09T20:38:28.578Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.53417.1770669508578 to /Users/sihaoli/.claude.json
+2026-02-09T20:38:28.578Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-09T20:38:28.626Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.53417.1770669508626
+2026-02-09T20:38:28.626Z [DEBUG] Preserving file permissions: 100600
+2026-02-09T20:38:28.626Z [DEBUG] Temp file written successfully, size: 14428 bytes
+2026-02-09T20:38:28.626Z [DEBUG] Applied original permissions to temp file
+2026-02-09T20:38:28.626Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.53417.1770669508626 to /Users/sihaoli/.claude.json
+2026-02-09T20:38:28.626Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-09T20:38:29.258Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.53417.1770669509258
+2026-02-09T20:38:29.258Z [DEBUG] Preserving file permissions: 100600
+2026-02-09T20:38:29.259Z [DEBUG] Temp file written successfully, size: 14680 bytes
+2026-02-09T20:38:29.259Z [DEBUG] Applied original permissions to temp file
+2026-02-09T20:38:29.259Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.53417.1770669509258 to /Users/sihaoli/.claude.json
+2026-02-09T20:38:29.259Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-09T20:38:29.741Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.53417.1770669509741
+2026-02-09T20:38:29.741Z [DEBUG] Preserving file permissions: 100600
+2026-02-09T20:38:29.741Z [DEBUG] Temp file written successfully, size: 14804 bytes
+2026-02-09T20:38:29.741Z [DEBUG] Applied original permissions to temp file
+2026-02-09T20:38:29.741Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.53417.1770669509741 to /Users/sihaoli/.claude.json
+2026-02-09T20:38:29.742Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-09T20:38:29.745Z [DEBUG] Getting matching hook commands for Notification with query: auth_success
+2026-02-09T20:38:29.745Z [DEBUG] Found 0 hook matchers in settings
+2026-02-09T20:38:29.745Z [DEBUG] Matched 0 unique hooks for query "auth_success" (0 before deduplication)
+2026-02-09T20:38:30.162Z [DEBUG] Metrics opt-out API response: enabled=true, vcsLinking=false
+2026-02-09T20:38:32.930Z [DEBUG] High write ratio: blit=0, write=1160 (100.0% writes), screen=28x142
+2026-02-09T20:38:34.695Z [DEBUG] High write ratio: blit=0, write=1146 (100.0% writes), screen=26x142
+2026-02-09T20:38:38.120Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.53417.1770669518120
+2026-02-09T20:38:38.120Z [DEBUG] Preserving file permissions: 100600
+2026-02-09T20:38:38.120Z [DEBUG] Temp file written successfully, size: 14803 bytes
+2026-02-09T20:38:38.120Z [DEBUG] Applied original permissions to temp file
+2026-02-09T20:38:38.120Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.53417.1770669518120 to /Users/sihaoli/.claude.json
+2026-02-09T20:38:38.121Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-09T20:38:38.127Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-02-09T20:38:38.128Z [DEBUG] Grove: Cache stale, returning cached data and refreshing in background
+2026-02-09T20:38:38.129Z [DEBUG] [render] initYoga starting
+2026-02-09T20:38:38.130Z [DEBUG] [render] initYoga complete
+2026-02-09T20:38:38.134Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-02-09T20:38:38.137Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-02-09T20:38:38.149Z [DEBUG] Git remote URL: https://github.com/lisihao/Solar.git
+2026-02-09T20:38:38.149Z [DEBUG] Parsed repository: lisihao/Solar from https://github.com/lisihao/Solar.git
+2026-02-09T20:38:38.149Z [DEBUG] Parsed repository: lisihao/Solar from URL: https://github.com/lisihao/Solar.git
+2026-02-09T20:38:38.149Z [DEBUG] Path /Users/sihaoli/Solar already tracked for repo lisihao/solar
+2026-02-09T20:38:38.686Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.53417.1770669518686
+2026-02-09T20:38:38.686Z [DEBUG] Preserving file permissions: 100600
+2026-02-09T20:38:38.686Z [DEBUG] Temp file written successfully, size: 14803 bytes
+2026-02-09T20:38:38.686Z [DEBUG] Applied original permissions to temp file
+2026-02-09T20:38:38.686Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.53417.1770669518686 to /Users/sihaoli/.claude.json
+2026-02-09T20:38:38.686Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-09T20:38:38.687Z [DEBUG] [STARTUP] showSetupScreens() completed in 22670ms
+2026-02-09T20:38:38.687Z [DEBUG] [render] initYoga starting
+2026-02-09T20:38:38.687Z [DEBUG] [render] initYoga complete
+2026-02-09T20:38:38.687Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-02-09T20:38:38.692Z [DEBUG] High write ratio: blit=0, write=1445 (100.0% writes), screen=38x142
+2026-02-09T20:38:38.699Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-02-09T20:38:40.219Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:38:40.219Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:38:40.221Z [DEBUG] Passes: Cache stale, returning cached data and refreshing in background
+2026-02-09T20:38:40.231Z [DEBUG] MCP server "playwright": Starting connection with timeout of 30000ms
+2026-02-09T20:38:40.236Z [DEBUG] MCP server "brain-router": Starting connection with timeout of 30000ms
+2026-02-09T20:38:40.239Z [DEBUG] MCP server "are": Starting connection with timeout of 30000ms
+2026-02-09T20:38:40.243Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-09T20:38:40.244Z [DEBUG] Initialized versioned plugins system with 2 plugins
+2026-02-09T20:38:40.249Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.53417.1770669520249
+2026-02-09T20:38:40.249Z [DEBUG] Preserving file permissions: 100600
+2026-02-09T20:38:40.249Z [DEBUG] Temp file written successfully, size: 14803 bytes
+2026-02-09T20:38:40.249Z [DEBUG] Applied original permissions to temp file
+2026-02-09T20:38:40.249Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.53417.1770669520249 to /Users/sihaoli/.claude.json
+2026-02-09T20:38:40.249Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-09T20:38:40.252Z [DEBUG] Getting matching hook commands for SessionStart with query: startup
+2026-02-09T20:38:40.252Z [DEBUG] Found 0 hook matchers in settings
+2026-02-09T20:38:40.252Z [DEBUG] Matched 0 unique hooks for query "startup" (0 before deduplication)
+2026-02-09T20:38:40.253Z [DEBUG] [render] initYoga starting
+2026-02-09T20:38:40.254Z [DEBUG] [render] initYoga complete
+2026-02-09T20:38:40.265Z [DEBUG] [keybindings] KeybindingSetup initialized with 45 bindings, 0 warnings
+2026-02-09T20:38:40.300Z [DEBUG] [keybindings] Skipping file watcher - user customization disabled
+2026-02-09T20:38:40.300Z [DEBUG] [REPL:mount] REPL mounted, disabled=false
+2026-02-09T20:38:40.302Z [DEBUG] Official marketplace auto-install skipped: already_attempted
+2026-02-09T20:38:40.302Z [DEBUG] performStartupChecks called
+2026-02-09T20:38:40.302Z [DEBUG] Starting background plugin installations
+2026-02-09T20:38:40.302Z [DEBUG] performBackgroundPluginInstallations called
+2026-02-09T20:38:40.360Z [DEBUG] Setting installation status: 0 marketplaces, 0 installable plugins, 0 uninstallable plugins
+2026-02-09T20:38:40.406Z [DEBUG] Loaded plugins - Enabled: 0, Disabled: 0, Commands: 0, Agents: 0, Errors: 0
+2026-02-09T20:38:40.411Z [ERROR] MCP server "are" Server stderr: ARE MCP Server running
+2026-02-09T20:38:40.418Z [DEBUG] MCP server "ide": Starting connection with timeout of 30000ms
+2026-02-09T20:38:40.420Z [DEBUG] MCP server "are": Successfully connected to undefined server in 182ms
+2026-02-09T20:38:40.420Z [DEBUG] MCP server "are": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"are-orchestrator","version":"1.0.0"}}
+2026-02-09T20:38:40.422Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-09T20:38:40.430Z [DEBUG] MCP server "brain-router": Successfully connected to undefined server in 195ms
+2026-02-09T20:38:40.430Z [DEBUG] MCP server "brain-router": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"solar-brain-router","version":"1.0.0"}}
+2026-02-09T20:38:40.437Z [DEBUG] MCP server "ide": Successfully connected to ws-ide server in 21ms
+2026-02-09T20:38:40.437Z [DEBUG] MCP server "ide": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Claude Code VSCode MCP","version":"2.1.37"}}
+2026-02-09T20:38:40.446Z [DEBUG] Summarizing all 7 messages (~0 tokens)
+2026-02-09T20:38:40.447Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-09T20:38:40.448Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:38:40.448Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:38:40.448Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-09T20:38:40.460Z [ERROR] SyntaxError: SyntaxError: Expected double-quoted property name in JSON at position 196 (line 10 column 7)
+    at JSON.parse (<anonymous>)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:66:672
+    at B (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:6808)
+    at RK7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3667:5551)
+    at async G89 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3667:8330)
+2026-02-09T20:38:40.461Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.53417.1770669520461
+2026-02-09T20:38:40.461Z [DEBUG] Preserving file permissions: 100600
+2026-02-09T20:38:40.461Z [DEBUG] Temp file written successfully, size: 14803 bytes
+2026-02-09T20:38:40.461Z [DEBUG] Applied original permissions to temp file
+2026-02-09T20:38:40.461Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.53417.1770669520461 to /Users/sihaoli/.claude.json
+2026-02-09T20:38:40.461Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-09T20:38:40.597Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.53417.1770669520597
+2026-02-09T20:38:40.597Z [DEBUG] Preserving file permissions: 100600
+2026-02-09T20:38:40.597Z [DEBUG] Temp file written successfully, size: 14803 bytes
+2026-02-09T20:38:40.597Z [DEBUG] Applied original permissions to temp file
+2026-02-09T20:38:40.597Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.53417.1770669520597 to /Users/sihaoli/.claude.json
+2026-02-09T20:38:40.597Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-09T20:38:40.607Z [DEBUG] MCP server "playwright": Successfully connected to undefined server in 381ms
+2026-02-09T20:38:40.607Z [DEBUG] MCP server "playwright": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Playwright","version":"0.0.61"}}
+2026-02-09T20:38:40.610Z [DEBUG] Tool search disabled: MCPSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-09T20:38:40.612Z [DEBUG] Skills and commands included in Skill tool: agent, banner, benchmark, browser, build, call, changelog, commit, docs, email-search, email-web, mcp-builder, office, himalaya, office-notes, notion, apple-reminders, things-mac, trello, ontology, phase, pr, precise-edit, report, restore, review, selfie, shortcut, shortcut-builder, shortcut-search, skill-creator, solar, status, test, theme, webapp-testing
+2026-02-09T20:38:40.612Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:38:40.612Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:38:40.612Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-09T20:38:40.699Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.53417.1770669520699
+2026-02-09T20:38:40.699Z [DEBUG] Preserving file permissions: 100600
+2026-02-09T20:38:40.699Z [DEBUG] Temp file written successfully, size: 14803 bytes
+2026-02-09T20:38:40.699Z [DEBUG] Applied original permissions to temp file
+2026-02-09T20:38:40.699Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.53417.1770669520699 to /Users/sihaoli/.claude.json
+2026-02-09T20:38:40.699Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-09T20:38:40.699Z [DEBUG] Passes eligibility cached for org 4b64fec2-dab6-4cd3-854f-5b8cb2ded5ae: true
+2026-02-09T20:38:41.457Z [DEBUG] Stream started - received first chunk
+2026-02-09T20:38:41.611Z [DEBUG] Summarizing all 11 messages (~2238 tokens)
+2026-02-09T20:38:41.611Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-09T20:38:41.612Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:38:41.612Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:38:41.613Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-09T20:38:42.861Z [DEBUG] Stream started - received first chunk
+2026-02-09T20:38:43.060Z [DEBUG] Summarizing all 12 messages (~2238 tokens)
+2026-02-09T20:38:43.061Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-09T20:38:43.062Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:38:43.062Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:38:43.062Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-09T20:38:43.775Z [DEBUG] Stream started - received first chunk
+2026-02-09T20:38:43.896Z [DEBUG] Summarizing all 15 messages (~2886 tokens)
+2026-02-09T20:38:43.896Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-09T20:38:43.897Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:38:43.897Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:38:43.897Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-09T20:38:44.613Z [DEBUG] Stream started - received first chunk
+2026-02-09T20:38:44.774Z [DEBUG] Summarizing all 27 messages (~7811 tokens)
+2026-02-09T20:38:44.775Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-09T20:38:44.776Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:38:44.776Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:38:44.776Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-09T20:38:45.772Z [DEBUG] Stream started - received first chunk
+2026-02-09T20:38:45.932Z [DEBUG] Summarizing all 39 messages (~11672 tokens)
+2026-02-09T20:38:45.933Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-09T20:38:45.934Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:38:45.934Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:38:45.934Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-09T20:38:47.430Z [DEBUG] Stream started - received first chunk
+2026-02-09T20:38:47.687Z [DEBUG] Summarizing all 43 messages (~13806 tokens)
+2026-02-09T20:38:47.687Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-09T20:38:47.689Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:38:47.689Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:38:47.689Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-09T20:38:48.548Z [DEBUG] Stream started - received first chunk
+2026-02-09T20:38:48.717Z [DEBUG] Summarizing all 47 messages (~16038 tokens)
+2026-02-09T20:38:48.717Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-09T20:38:48.718Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:38:48.718Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:38:48.718Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-09T20:38:49.896Z [DEBUG] Stream started - received first chunk
+2026-02-09T20:38:50.078Z [DEBUG] Summarizing all 56 messages (~19277 tokens)
+2026-02-09T20:38:50.078Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-09T20:38:50.079Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:38:50.079Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:38:50.079Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-09T20:38:51.061Z [DEBUG] Stream started - received first chunk
+2026-02-09T20:38:51.263Z [DEBUG] Summarizing all 71 messages (~24746 tokens)
+2026-02-09T20:38:51.263Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-09T20:38:51.265Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:38:51.265Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:38:51.265Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-09T20:38:52.333Z [DEBUG] Stream started - received first chunk
+2026-02-09T20:38:52.564Z [DEBUG] Summarizing all 7 messages (~0 tokens)
+2026-02-09T20:38:52.564Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-09T20:38:52.565Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:38:52.565Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:38:52.565Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-09T20:38:53.519Z [DEBUG] Stream started - received first chunk
+2026-02-09T20:38:53.933Z [DEBUG] Summarizing all 10 messages (~1297 tokens)
+2026-02-09T20:38:53.934Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-09T20:38:53.935Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:38:53.935Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:38:53.935Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-09T20:38:54.694Z [DEBUG] Stream started - received first chunk
+2026-02-09T20:38:55.173Z [DEBUG] Summarizing all 13 messages (~3277 tokens)
+2026-02-09T20:38:55.173Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-09T20:38:55.175Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:38:55.175Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:38:55.175Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-09T20:38:55.946Z [DEBUG] Stream started - received first chunk
+2026-02-09T20:38:56.179Z [DEBUG] Summarizing all 15 messages (~4370 tokens)
+2026-02-09T20:38:56.179Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-09T20:38:56.180Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:38:56.180Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:38:56.180Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-09T20:38:57.283Z [DEBUG] Stream started - received first chunk
+2026-02-09T20:38:57.447Z [DEBUG] Summarizing all 20 messages (~8771 tokens)
+2026-02-09T20:38:57.447Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-09T20:38:57.448Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:38:57.448Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:38:57.448Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-09T20:38:58.432Z [DEBUG] Stream started - received first chunk
+2026-02-09T20:38:58.528Z [DEBUG] Summarizing all 21 messages (~8771 tokens)
+2026-02-09T20:38:58.528Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-09T20:38:58.529Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:38:58.529Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:38:58.529Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-09T20:38:59.330Z [DEBUG] Stream started - received first chunk
+2026-02-09T20:38:59.569Z [DEBUG] Summarizing all 6 messages (~0 tokens)
+2026-02-09T20:38:59.569Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-09T20:38:59.570Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:38:59.570Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:38:59.571Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-09T20:39:00.377Z [DEBUG] Stream started - received first chunk
+2026-02-09T20:39:00.559Z [DEBUG] Summarizing all 14 messages (~1368 tokens)
+2026-02-09T20:39:00.559Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-09T20:39:00.560Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:39:00.560Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:39:00.561Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-09T20:39:01.329Z [DEBUG] Stream started - received first chunk
+2026-02-09T20:39:01.560Z [DEBUG] Summarizing all 15 messages (~1368 tokens)
+2026-02-09T20:39:01.560Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-09T20:39:01.561Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:39:01.561Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:39:01.561Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-09T20:39:02.632Z [DEBUG] Stream started - received first chunk
+2026-02-09T20:39:02.882Z [DEBUG] Summarizing all 16 messages (~1368 tokens)
+2026-02-09T20:39:02.882Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-09T20:39:02.883Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:39:02.883Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:39:02.884Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-09T20:39:03.590Z [DEBUG] Stream started - received first chunk
+2026-02-09T20:39:03.820Z [DEBUG] Summarizing all 7 messages (~0 tokens)
+2026-02-09T20:39:03.820Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-09T20:39:03.821Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:39:03.821Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:39:03.821Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-09T20:39:03.942Z [DEBUG] Getting matching hook commands for SessionEnd with query: prompt_input_exit
+2026-02-09T20:39:03.942Z [DEBUG] Found 0 hook matchers in settings
+2026-02-09T20:39:03.942Z [DEBUG] Matched 0 unique hooks for query "prompt_input_exit" (0 before deduplication)
+2026-02-09T20:39:03.976Z [DEBUG] MCP server "ide": WebSocket transport closed/disconnected, attempting automatic reconnection
+2026-02-09T20:39:03.976Z [DEBUG] LSP server manager shut down successfully
+2026-02-09T20:39:03.977Z [DEBUG] MCP server "ide": Starting connection with timeout of 30000ms
+2026-02-09T20:39:03.979Z [DEBUG] FileHistory: Added snapshot for bd4a56d1-1100-4f47-85a9-70102b8efe2c, tracking 0 files
+2026-02-09T20:39:03.982Z [DEBUG] UserCommandMessage rendering: "exit" (args: "none", isSkillFormat: false)
+2026-02-09T20:39:03.996Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-09T20:39:04.005Z [DEBUG] MCP server "ide": Successfully connected to ws-ide server in 29ms
+2026-02-09T20:39:04.005Z [DEBUG] MCP server "ide": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Claude Code VSCode MCP","version":"2.1.37"}}
+2026-02-09T20:39:04.008Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-09T20:39:04.011Z [DEBUG] MCP server "ide": WebSocket reconnection successful after 35ms (attempt 1)
+2026-02-09T20:39:04.016Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.53417.1770669544016
+2026-02-09T20:39:04.016Z [DEBUG] Preserving file permissions: 100600
+2026-02-09T20:39:04.016Z [DEBUG] Temp file written successfully, size: 14803 bytes
+2026-02-09T20:39:04.016Z [DEBUG] Applied original permissions to temp file
+2026-02-09T20:39:04.016Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.53417.1770669544016 to /Users/sihaoli/.claude.json
+2026-02-09T20:39:04.016Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-09T20:39:04.018Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.53417.1770669544018
+2026-02-09T20:39:04.018Z [DEBUG] Preserving file permissions: 100600
+2026-02-09T20:39:04.018Z [DEBUG] Temp file written successfully, size: 14803 bytes
+2026-02-09T20:39:04.018Z [DEBUG] Applied original permissions to temp file
+2026-02-09T20:39:04.018Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.53417.1770669544018 to /Users/sihaoli/.claude.json
+2026-02-09T20:39:04.018Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-09T20:39:04.597Z [DEBUG] Stream started - received first chunk
+2026-02-09T20:39:04.788Z [DEBUG] Summarizing all 10 messages (~6739 tokens)
+2026-02-09T20:39:04.788Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-09T20:39:04.789Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-09T20:39:04.789Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-09T20:39:04.789Z [DEBUG] [API:auth] OAuth token check complete

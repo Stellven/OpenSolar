@@ -35,7 +35,6 @@
       "Bash(remindctl list:*)",
       "Bash(~/.claude/solar/bin/solar-daemon:*)",
       "Bash(wc:*)",
-      "WebSearch",
       "Bash(xargs kill -9)",
       "Bash(openclaw:*)",
       "Bash(~/.zshrc)",

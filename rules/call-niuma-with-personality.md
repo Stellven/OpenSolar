@@ -1,158 +1,188 @@
-# Solar 铁律: 调牛马必须带人格 (Call Niuma with Personality)
+# Solar 铁律: 调牛马带人格
 
-> **来源: 2026-02-08 机制断裂诊断**
-> **问题: 每次重启都忘了注入人格，直接调 brain-router**
-
-## 铁律定义
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│              CALL NIUMA WITH PERSONALITY                         │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│   调用任何牛马 (GLM/Gemini/DeepSeek) 时，必须注入人格           │
-│                                                                 │
-│   ❌ 禁止: 直接调 mcp__brain-router__complete                   │
-│   ❌ 禁止: 简单 system prompt "你是专业的工程师"                │
-│   ✅ 必须: 使用 buildNiumaCall() 或手动注入完整人格             │
-│                                                                 │
-│   完整人格包括 (D&D KNOBS 格式):                                │
-│   • KNOBS: 10 个可调节旋钮 (rigor/skepticism/explore/...)       │
-│   • ROLE: 6 种角色 (builder/verifier/architect/judge/...)       │
-│   • LEVEL: 1-5 级，影响 KNOBS 强度                              │
-│   • CHECKLIST: LEVEL/FEAT 解锁的检查项                          │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-## 为什么必须注入人格
-
-```
-没有人格的牛马:
-• 输出风格不可预测
-• 没有一致性
-• 可能迎合、可能敷衍
-• 无法追踪是谁干的
-
-有人格的牛马:
-• 输出风格稳定
-• 一致性可验证
-• 有明确边界
-• 绩效可追踪
-```
+> 调用任何牛马必须注入 D&D KNOBS 人格
 
 ## 调用方式
 
-### 方式一: 使用 buildNiumaCall (推荐)
-
+**推荐**: `buildNiumaCall()` (自动注入)
 ```typescript
 import { buildNiumaCall } from '~/.claude/core/solar-farm/call-niuma';
-
-const { system, prompt, personalityInjected } = buildNiumaCall({
-  model: 'gemini-2.5-pro',
-  task: '分析这段代码的性能问题',
-  context: codeContent,
-  outputFormat: 'markdown'
-});
-
-// 调用
-await mcp__brain-router__complete({
-  model: 'gemini-2.5-pro',
-  system,
-  prompt
-});
+const { system, prompt } = buildNiumaCall({ model, task, context, outputFormat });
+await mcp__brain-router__complete({ model, system, prompt });
 ```
 
-### 方式二: 手动注入人格
-
-如果没法用 TypeScript，至少包含以下内容：
-
+**手动注入最低要求**:
 ```
 你是 [昵称]，D&D 角色是 [builder/verifier/architect/judge/explorer/creator]
-
-KNOBS (10 个可调节旋钮):
-• rigor=X (严谨度: 证据门槛)
-• skepticism=X (质疑度: 假设检验)
-• explore=X (探索度: 创新广度)
-• decide=X (决断度: 决策速度)
-• risk=X (风险度: 风险规避)
-• tool=X (工具度: 工具优先)
-• compression=X (简洁度: 输出精简)
-• check=X (检查度: 自检强度)
-• empathy=X (共情度: 用户视角)
-• compete=X (竞争度: 表现欲望)
-
-LEVEL=X (1-5 级，影响旋钮强度)
+KNOBS: rigor=X, skepticism=X, explore=X, decide=X, risk=X,
+       tool=X, compression=X, check=X, empathy=X, compete=X
+LEVEL=X (1-5)
 ```
 
-## 牛马人格速查 (D&D KNOBS)
+## 牛马 D&D 速查
 
-| 牛马 | 昵称 | D&D 角色 | 特点 |
-|------|------|----------|------|
-| gemini-2.5-pro | 稳健派 | verifier | 严谨、一致性高 |
-| gemini-3-pro | 探索派 | explorer | 创新、热情 |
-| deepseek-v3 | 创想家 | creator | 创意、中文好 |
-| deepseek-r1 | 审判官 | judge | 深度推理、质疑假设 |
-| glm-5 | 智囊 | architect | 战略分析、决策支持 |
-| glm-4-plus | 建设者 | builder | 日常编码、配合度高 |
-| glm-4-flash | 小快手 | builder | 速度快 |
-| gpt-4 | 综合官 | architect | 内容整合、教学解释 |
-
-**KNOBS 10 旋钮**: rigor, skepticism, explore, decide, risk, tool, compression, check, empathy, compete
+| 牛马 | 昵称 | 角色 | 特点 |
+|------|------|------|------|
+| gemini-2.5-pro | 稳健派 | verifier | 严谨一致 |
+| gemini-3-pro | 探索派 | explorer | 创新热情 |
+| deepseek-v3 | 创想家 | creator | 创意中文 |
+| deepseek-r1 | 审判官 | judge | 深推质疑 |
+| glm-5 | 智囊 | architect | 战略决策 |
+| glm-5 | 建设者 | builder | 日常编码 |
 
 完整定义: `~/.claude/core/solar-farm/niumao-anchors.json`
 
-## 自检清单
+## 约束注入机制 (Constraint Injection)
 
-调用牛马前，问自己：
+> **来源**: Plan-and-Act 研究，约束感知的提示工程
+> **目的**: 确保牛马严格遵守任务约束，避免越界行为
 
-- [ ] 我用了 buildNiumaCall 吗？
-- [ ] 如果没有，我手动注入了 D&D KNOBS 参数吗？
-- [ ] 有 D&D 角色类型 (builder/verifier/architect/judge/explorer/creator) 吗？
-- [ ] 有 KNOBS 旋钮参数吗？
+### 什么是约束
 
-**任何一项没做到 = 违反铁律**
+约束是任务执行时**必须遵守**的限制条件，通常存储在 `.solar/STATE.md` 的 `Constraints` 部分：
 
-## 违反后果
-
-```
-2026-02-08 违反案例:
-• 调用4个专家分析 Agent Cluster
-• 只给了 "你是稳健派，一个严谨务实的技术顾问"
-• 没有 D&D KNOBS 参数，没有角色类型
-• 监护人当场抓现行
+```markdown
+# Constraints
+- 不破坏现有 API 接口
+- 性能不能回退超过 5%
+- 不引入新的外部依赖
+- 必须保持向后兼容
 ```
 
-## 机制加固
+### 为什么需要约束注入
 
-### 1. 规则文件 (本文件)
-此文件确保规则明确存在。
+**问题**: 牛马（LLM）可能：
+- 为了"优化"而破坏接口
+- 为了"简洁"而引入新依赖
+- 为了"性能"而牺牲兼容性
 
-### 2. 上下文预加载
-SessionStart 时显示牛马人格速查表。
+**解决**: 在调用牛马时，将约束明确注入到 system prompt 中，并要求牛马在输出中证明检查了约束。
 
-### 3. Hook 提醒
-当检测到直接调用 brain-router 时提醒。
+### 约束注入模板
 
-## 铁律总结
+```typescript
+// 从 STATE.md 读取约束
+const constraints = await readConstraintsFromState();
 
+// 构建约束注入的 system prompt
+const systemPrompt = `你是 [昵称]，D&D 角色是 [角色类型]
+KNOBS: rigor=X, skepticism=X, explore=X, ...
+LEVEL=X
+
+**约束条件（必须严格遵守）：**
+${constraints.map(c => `- ${c}`).join('\n')}
+
+**输出要求：**
+在你的回复末尾，必须包含 "约束检查" 部分，证明你检查了上述所有约束。
+
+格式：
+\`\`\`
+约束检查：
+✓ [约束1] - 通过 [如何遵守的]
+✓ [约束2] - 通过 [如何遵守的]
+\`\`\`
+`;
+
+// 调用牛马
+await mcp__brain_router__complete({
+  model: "glm-5",
+  system: systemPrompt,
+  prompt: "任务描述..."
+});
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                                                                 │
-│   🐂 调牛马带人格铁律                                           │
-│                                                                 │
-│   1. 调牛马必须用 buildNiumaCall 或手动注入 (MUST)              │
-│   2. 人格必须包含 D&D KNOBS + 角色类型 (MUST)                   │
-│   3. 简单 system prompt 不算注入 (禁止)                         │
-│   4. 直接调 brain-router 不带人格 (禁止)                        │
-│                                                                 │
-│   没有人格的牛马 = 失控的牛马                                   │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+
+### 读取约束的辅助函数
+
+```typescript
+/**
+ * 从 STATE.md 读取约束条件
+ */
+async function readConstraintsFromState(): Promise<string[]> {
+  const stateContent = await Deno.readTextFile('.solar/STATE.md');
+
+  // 提取 Constraints 部分
+  const constraintsMatch = stateContent.match(/# Constraints\n([\s\S]*?)(?=\n#|$)/);
+  if (!constraintsMatch) return [];
+
+  // 解析约束列表
+  const constraintLines = constraintsMatch[1]
+    .split('\n')
+    .filter(line => line.trim().startsWith('-'))
+    .map(line => line.replace(/^-\s*/, '').trim());
+
+  return constraintLines;
+}
 ```
 
----
+### 失败模式注入 (与约束配合)
 
-*Call Niuma with Personality v1.0*
-*建立于: 2026-02-08*
-*来源: 机制断裂诊断 - 每次重启都忘了注入人格*
+如果任务之前失败过，将失败分析结果也注入到提示中：
+
+```typescript
+import { analyzeFailurePatterns, generateFailureReport } from '~/.claude/core/failure-analyzer';
+
+// 分析历史失败
+const failureReport = generateFailureReport(executionHistory);
+
+// 注入到提示
+const systemPrompt = `...
+
+**失败模式分析：**
+${failureReport}
+
+注意：请避免重复相同类型的错误。
+`;
+```
+
+### 完整示例：调用牛马执行有约束的任务
+
+```typescript
+import { buildNiumaCall } from '~/.claude/core/solar-farm/call-niuma';
+import { analyzeFailurePatterns } from '~/.claude/core/failure-analyzer';
+
+async function executeConstrainedTask(
+  model: string,
+  task: string,
+  executionHistory: ExecutionStep[] = []
+) {
+  // 1. 读取约束
+  const constraints = await readConstraintsFromState();
+
+  // 2. 分析失败模式（如果有历史）
+  const failurePatterns = executionHistory.length > 0
+    ? analyzeFailurePatterns(executionHistory)
+    : new Map();
+
+  // 3. 构建约束感知的提示
+  const { system, prompt } = buildNiumaCall({
+    model,
+    task,
+    constraints,  // 传入约束
+    failurePatterns: Array.from(failurePatterns.values())
+  });
+
+  // 4. 调用牛马
+  const result = await mcp__brain_router__complete({
+    model,
+    system,
+    prompt
+  });
+
+  // 5. 验证约束检查
+  if (!result.includes('约束检查')) {
+    console.warn('⚠️ 牛马输出缺少约束检查部分！');
+  }
+
+  return result;
+}
+```
+
+### 自检清单
+
+调用牛马执行重要任务前：
+
+- [ ] STATE.md 中定义了约束吗？
+- [ ] 约束已注入到 system prompt 吗？
+- [ ] 要求牛马输出约束检查了吗？
+- [ ] 如果有失败历史，失败模式已注入吗？
+- [ ] 牛马输出包含约束检查部分吗？

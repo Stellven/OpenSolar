@@ -29,13 +29,13 @@ COMPLETE_SIGNALS=(
     "build success"
 )
 
-# 每 10 次工具调用提醒一次
-if [[ $((COUNT % 10)) -eq 0 ]]; then
+# 每 3 次工具调用提醒一次
+if [[ $((COUNT % 3)) -eq 0 ]]; then
     if [[ ! -f "$STATE_REMINDER_FILE" ]] || [[ $(find "$STATE_REMINDER_FILE" -mmin +5 2>/dev/null) ]]; then
         cat << 'REMINDER'
 
 ┌─ 💾 STATE.md 检查点提醒 ─────────────────────────┐
-│ 已执行 10+ 次工具调用                            │
+│ 已执行 3+ 次工具调用                             │
 │ 建议检查 STATE.md 是否需要更新 Progress          │
 └──────────────────────────────────────────────────┘
 

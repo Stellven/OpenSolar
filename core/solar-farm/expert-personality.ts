@@ -53,8 +53,8 @@ const MODEL_ALIAS: Record<string, string> = {
   'gemini-3-pro-preview': 'gemini-3-pro',
   'deepseek-reasoner': 'deepseek-r1',
   'deepseek-chat': 'deepseek-v3',
-  'glm-4-plus': 'glm-4-plus',
-  'glm-4.7': 'glm-4-plus',
+  'glm-5': 'glm-5',
+  'glm-4.7': 'glm-5',
   'zhipu/glm-5': 'glm-5',
 };
 
@@ -213,7 +213,7 @@ export function getWorkerGroupModels(): string[] {
   return [
     'gemini-2-flash',   // 快马
     'gemini-2.5-flash', // 快马
-    'glm-4-plus',       // 建设者 - builder
+    'glm-5',       // 建设者 - builder
     'glm-4-flash',      // 小快手 - builder
   ];
 }
@@ -227,7 +227,7 @@ export function recommendExperts(
 ): string[] {
   const recommendations: Record<string, string[]> = {
     analysis: ['deepseek-r1', 'gemini-2.5-pro', 'deepseek-v3'],   // judge + verifier + creator
-    coding: ['deepseek-v3', 'glm-4-plus', 'gemini-3-pro-preview'], // creator + builder + explorer
+    coding: ['deepseek-v3', 'glm-5', 'gemini-3-pro-preview'], // creator + builder + explorer
     review: ['gemini-2.5-pro', 'deepseek-r1'],                     // verifier + judge
     creative: ['gemini-3-pro-preview', 'deepseek-v3'],             // explorer + creator
     synthesis: ['gemini-2.5-pro', 'deepseek-r1', 'glm-5']          // verifier + judge + architect
@@ -242,7 +242,7 @@ export function recommendExperts(
 
 /** 默认专家分配 (D&D 角色映射) */
 export const DEFAULT_EXPERT_ASSIGNMENT = {
-  author: ['deepseek-v3', 'gemini-3-pro-preview', 'glm-4-plus'],     // creator + explorer + builder
+  author: ['deepseek-v3', 'gemini-3-pro-preview', 'glm-5'],     // creator + explorer + builder
   reviewer: ['gemini-2.5-pro', 'deepseek-r1'],                        // verifier + judge
   challenger: ['gemini-3-pro-preview', 'deepseek-v3'],               // explorer + creator
   synthesizer: ['gemini-2.5-pro', 'deepseek-r1', 'glm-5']            // verifier + judge + architect

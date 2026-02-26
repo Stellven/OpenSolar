@@ -400,7 +400,7 @@ export function buildAnalysisPrompt(
  * );
  *
  * await mcp__brain_router__complete({
- *   model: 'glm-4-plus',
+ *   model: 'glm-5',
  *   system,
  *   prompt
  * });

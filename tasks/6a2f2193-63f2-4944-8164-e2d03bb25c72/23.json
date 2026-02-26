@@ -1,0 +1,9 @@
+{
+  "id": "23",
+  "subject": "Execute P0 Skill-RAG improvements",
+  "description": "P0 Playbook Matcher改进: P0-1 ✅ q_value已更新 | P0-2 关键词扩展 | P0-3 客户端中文分词",
+  "activeForm": "Executing P0-2 keyword expansion and P0-3 Chinese tokenization",
+  "status": "in_progress",
+  "blocks": [],
+  "blockedBy": []
+}

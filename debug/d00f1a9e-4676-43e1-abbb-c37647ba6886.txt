@@ -1,0 +1,32 @@
+2026-02-16T15:06:50.560Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-16T15:06:50.561Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-16T15:06:50.561Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-16T15:06:50.561Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-16T15:06:50.566Z [DEBUG] Applying permission update: Adding 4 allow rule(s) to destination 'localSettings': ["Bash(curl:*)","Bash(tree:*)","Bash(xargs ls:*)","Bash(wc:*)"]
+2026-02-16T15:06:50.566Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-16T15:06:50.576Z [DEBUG] [ToolSearch:optimistic] mode=tst-auto, ENABLE_TOOL_SEARCH=undefined, result=true
+2026-02-16T15:06:50.577Z [DEBUG] [STARTUP] Running setup()...
+2026-02-16T15:06:50.577Z [DEBUG] Found 0 plugins (0 enabled, 0 disabled)
+2026-02-16T15:06:50.578Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-16T15:06:50.587Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-16T15:06:50.587Z [DEBUG] Error log sink initialized
+2026-02-16T15:06:50.590Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-16T15:06:50.590Z [DEBUG] Total plugin skills loaded: 0
+2026-02-16T15:06:50.590Z [DEBUG] Total plugin commands loaded: 0
+2026-02-16T15:06:50.590Z [DEBUG] [STARTUP] setup() completed in 13ms
+2026-02-16T15:06:50.590Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-02-16T15:06:50.592Z [DEBUG] Registered 0 hooks from 0 plugins
+2026-02-16T15:06:50.593Z [DEBUG] Loaded 76 unique skills (76 unconditional, 0 conditional, managed: 0, user: 76, project: 0, additional: 0, legacy commands: 0)
+2026-02-16T15:06:50.593Z [DEBUG] getSkills returning: 76 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-16T15:06:50.593Z [DEBUG] [Claude in Chrome] Found chrome profiles: Default, Profile 1
+2026-02-16T15:06:50.601Z [DEBUG] [Claude in Chrome] Extension not found in any browser
+2026-02-16T15:06:50.609Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=/Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg)
+2026-02-16T15:06:50.616Z [DEBUG] Agent file /Users/sihaoli/.claude/agents/community.md is missing required 'name' in frontmatter
+2026-02-16T15:06:50.616Z [DEBUG] Failed to parse agent from /Users/sihaoli/.claude/agents/community.md: Missing required "name" field in frontmatter
+2026-02-16T15:06:50.617Z [DEBUG] Total plugin agents loaded: 0
+2026-02-16T15:06:50.617Z [DEBUG] [STARTUP] Commands and agents loaded in 27ms
+2026-02-16T15:06:50.617Z [DEBUG] Layout engine: yoga
+2026-02-16T15:06:50.622Z [DEBUG] [STARTUP] Running showSetupScreens()...
+2026-02-16T15:06:50.624Z [DEBUG] [keybindings] KeybindingSetup initialized with 101 bindings, 0 warnings
+2026-02-16T15:06:50.637Z [DEBUG] [keybindings] Watching for changes to /Users/sihaoli/.claude/keybindings.json
+2026-02-16T15:08:03.963Z [DEBUG] Skipping SessionEnd:other hook execution - workspace trust not accepted

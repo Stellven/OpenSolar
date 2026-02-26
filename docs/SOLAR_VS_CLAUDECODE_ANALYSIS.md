@@ -164,7 +164,7 @@ Solar 是运行在 Claude Code 之上的 **AI Native OS**:
 ├──────────────┼────────────────┼───────────┼───────────┼──────────┤
 │ glm-4-flash  │ 小快手         │ builder   │ 128K      │ $0.0001  │
 │ gemini-flash │ 闪电侠         │ builder   │ 1M        │ $0.00015 │
-│ glm-4-plus   │ 建设者         │ builder   │ 128K      │ $0.0005  │
+│ glm-5   │ 建设者         │ builder   │ 128K      │ $0.0005  │
 │ gemini-2.5   │ 稳健派         │ verifier  │ 1M        │ $0.00125 │
 │ gemini-3-pro │ 探索派         │ explorer  │ 1M        │ $0.00125 │
 │ deepseek-v3  │ 创想家         │ creator   │ 64K       │ $0.0014  │
@@ -201,7 +201,7 @@ KNOBS 维度:
 
 审判官 (deepseek-r1) KNOBS: rigor=5, skepticism=5, explore=1
 探索派 (gemini-3-pro) KNOBS: rigor=2, skepticism=2, explore=5
-建设者 (glm-4-plus)   KNOBS: rigor=3, skepticism=2, explore=3
+建设者 (glm-5)   KNOBS: rigor=3, skepticism=2, explore=3
 
 ### 3.3 组织架构
 

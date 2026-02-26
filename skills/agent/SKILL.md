@@ -57,8 +57,10 @@ argument-hint: "[@Agent名称]"
 
 1. **验证 Agent 名称** - 检查是否在列表中
 2. **加载 Agent 定义** - 读取 `agents/{name}.md`
-3. **切换上下文** - 按该 Agent 的角色和约束执行
-4. **标记输出** - 响应前标注当前 Agent
+3. **检测执行模式** - 根据 `delegation_mode` 决定执行方式：
+   - `delegation_mode: mcp` → 自动执行 (调用 agent-executor.ts)
+   - `delegation_mode: legacy` → 角色扮演模式
+4. **执行并输出** - 标注 Agent 并展示结果
 
 ## 输出标记
 
@@ -80,8 +82,37 @@ argument-hint: "[@Agent名称]"
 - `@Coder` - 单独调用 Coder
 - ... (所有 Agent)
 
+## 自动执行机制 (MCP Delegation)
+
+当 Agent 配置为 `delegation_mode: mcp` 时，自动执行多专家会审：
+
+```bash
+# 自动调用 agent-executor.ts
+bun ~/.claude/core/agents/agent-executor.ts <AgentName> "<用户任务>"
+
+# 示例: @Reporter 按大纲写第六章
+# → bun agent-executor.ts Reporter "按大纲写第六章"
+# → 自动并行调用 deepseek-v3 (creator) + gemini-2.5-pro (verifier)
+# → 注入完整 D&D KNOBS 人格参数
+# → 综合专家输出并验收
+```
+
+**执行流程：**
+1. 解析 Agent YAML 定义 (delegation_mode, mcp_tool, default_models)
+2. 为每个 model 注入 D&D KNOBS 人格 (通过 buildNiumaCall)
+3. 并行调用多个专家 (通过 brain-router MCP)
+4. 综合输出并验收 (基于 OUTPUT_SCHEMA)
+5. 展示会审结果
+
+**支持的 MCP Agents：**
+- @Reporter (deepseek-v3 + gemini-2.5-pro)
+- @PM (gemini-2.5-pro + deepseek-r1 + glm-5)
+- @Ops (glm-5 + gemini-2.5-pro)
+- @Guard (gemini-2.5-pro + deepseek-r1)
+
 ## 注意事项
 
-- 单独调用 Agent 会跳过 Solar 的阶段流程
-- 如需完整流程，使用 `@Solar` 或不指定 Agent
+- MCP Agents 会自动执行多专家会审，无需手动调用
+- Legacy Agents 保持角色扮演模式
+- 如需完整 Solar 流程，使用 `@Solar`
 - Agent 名称不区分大小写

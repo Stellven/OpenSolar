@@ -185,13 +185,14 @@ export const MODEL_PRICING_2026_02 = {
   'gemini-2.5-flash': { provider: 'google', input: 0.30, output: 2.50 },
   'gemini-3-pro-preview': { provider: 'google', input: 1.25, output: 10 },
   'gemini-3-flash-preview': { provider: 'google', input: 0.30, output: 2.50 },
+  'gemini-3.1-pro': { provider: 'google', input: 1.25, output: 10 }, // ARC-AGI-2 77.1%, HLE 44.4%
 
   // DeepSeek
   'deepseek-v3': { provider: 'deepseek', input: 0.55, cacheHit: 0.14, output: 2.19 },
   'deepseek-r1': { provider: 'deepseek', input: 0.55, cacheHit: 0.14, output: 2.19 },
 
   // 智谱 GLM
-  'glm-4-plus': { provider: 'zhipu', input: 0.6, cachedInput: 0.11, output: 2.2 },
+  'glm-5': { provider: 'zhipu', input: 0.6, cachedInput: 0.11, output: 2.2 },
   'glm-4-flash': { provider: 'zhipu', input: 0.07, cachedInput: 0.01, output: 0.4 },
   'glm-4-flashx': { provider: 'zhipu', input: 0.07, cachedInput: 0.01, output: 0.4 },
   'glm-5': { provider: 'zhipu', input: 0.6, cachedInput: 0.11, output: 2.2 },

@@ -171,7 +171,7 @@ const MODEL_BASELINES: ModelBaseline[] = [
 
   // ===== GLM 系列 =====
   {
-    model_id: 'glm-4-plus',
+    model_id: 'glm-5',
     model_name: 'GLM-4-Plus',
     provider: '智谱AI',
     satisfaction: 0.78,

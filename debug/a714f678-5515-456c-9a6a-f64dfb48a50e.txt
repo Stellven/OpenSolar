@@ -1,0 +1,312 @@
+2026-02-12T09:21:00.010Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-12T09:21:00.011Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-12T09:21:00.011Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-12T09:21:00.011Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-12T09:21:00.016Z [DEBUG] Applying permission update: Adding 4 allow rule(s) to destination 'localSettings': ["Bash(curl:*)","Bash(tree:*)","Bash(xargs ls:*)","Bash(wc:*)"]
+2026-02-12T09:21:00.016Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-12T09:21:00.025Z [DEBUG] [ToolSearch:optimistic] mode=tst-auto, ENABLE_TOOL_SEARCH=undefined, result=true
+2026-02-12T09:21:00.026Z [DEBUG] [STARTUP] Running setup()...
+2026-02-12T09:21:00.026Z [DEBUG] Found 0 plugins (0 enabled, 0 disabled)
+2026-02-12T09:21:00.027Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-12T09:21:00.036Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-12T09:21:00.036Z [DEBUG] Error log sink initialized
+2026-02-12T09:21:00.040Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-12T09:21:00.040Z [DEBUG] Total plugin skills loaded: 0
+2026-02-12T09:21:00.040Z [DEBUG] Total plugin commands loaded: 0
+2026-02-12T09:21:00.043Z [DEBUG] Registered 0 hooks from 0 plugins
+2026-02-12T09:21:00.043Z [DEBUG] Loaded 74 unique skills (74 unconditional, 0 conditional, managed: 0, user: 74, project: 0, additional: 0, legacy commands: 0)
+2026-02-12T09:21:00.043Z [DEBUG] getSkills returning: 74 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-12T09:21:00.045Z [DEBUG] [Claude in Chrome] Found chrome profiles: Default, Profile 1
+2026-02-12T09:21:00.050Z [DEBUG] [Claude in Chrome] Extension not found in any browser
+2026-02-12T09:21:00.053Z [DEBUG] [STARTUP] setup() completed in 27ms
+2026-02-12T09:21:00.053Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-02-12T09:21:00.064Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=/Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg)
+2026-02-12T09:21:00.071Z [DEBUG] Agent file /Users/sihaoli/.claude/agents/community.md is missing required 'name' in frontmatter
+2026-02-12T09:21:00.071Z [DEBUG] Failed to parse agent from /Users/sihaoli/.claude/agents/community.md: Missing required "name" field in frontmatter
+2026-02-12T09:21:00.072Z [DEBUG] Total plugin agents loaded: 0
+2026-02-12T09:21:00.072Z [DEBUG] [STARTUP] Commands and agents loaded in 19ms
+2026-02-12T09:21:00.072Z [DEBUG] Layout engine: yoga
+2026-02-12T09:21:00.077Z [DEBUG] [STARTUP] Running showSetupScreens()...
+2026-02-12T09:21:00.077Z [DEBUG] Grove: Using fresh cached config
+2026-02-12T09:21:00.086Z [DEBUG] [keybindings] KeybindingSetup initialized with 101 bindings, 0 warnings
+2026-02-12T09:21:00.091Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-02-12T09:21:00.091Z [DEBUG] Git remote URL: null
+2026-02-12T09:21:00.091Z [DEBUG] No git remote URL found
+2026-02-12T09:21:00.091Z [DEBUG] Not in a GitHub repository, skipping path mapping update
+2026-02-12T09:21:00.092Z [DEBUG] [keybindings] Watching for changes to /Users/sihaoli/.claude/keybindings.json
+2026-02-12T09:21:00.677Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.31607.1770888060677
+2026-02-12T09:21:00.677Z [DEBUG] Preserving file permissions: 100600
+2026-02-12T09:21:00.678Z [DEBUG] Temp file written successfully, size: 15457 bytes
+2026-02-12T09:21:00.678Z [DEBUG] Applied original permissions to temp file
+2026-02-12T09:21:00.678Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.31607.1770888060677 to /Users/sihaoli/.claude.json
+2026-02-12T09:21:00.678Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-12T09:21:00.857Z [DEBUG] [STARTUP] showSetupScreens() completed in 780ms
+2026-02-12T09:21:00.857Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-02-12T09:21:00.857Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-02-12T09:21:00.857Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-02-12T09:21:00.884Z [DEBUG] High write ratio: blit=0, write=1916 (100.0% writes), screen=61x180
+2026-02-12T09:21:00.888Z [DEBUG] Total LSP servers loaded: 0
+2026-02-12T09:21:00.888Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 0 server(s)
+2026-02-12T09:21:00.888Z [DEBUG] LSP manager initialized with 0 servers
+2026-02-12T09:21:00.888Z [DEBUG] LSP server manager initialized successfully
+2026-02-12T09:21:00.888Z [DEBUG] LSP notification handlers registered successfully for all 0 server(s)
+2026-02-12T09:21:03.171Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.171Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.172Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-12T09:21:03.174Z [DEBUG] [STARTUP] MCP configs loaded in 3158ms
+2026-02-12T09:21:03.180Z [DEBUG] MCP server "playwright": Starting connection with timeout of 30000ms
+2026-02-12T09:21:03.183Z [DEBUG] MCP server "brain-router": Starting connection with timeout of 30000ms
+2026-02-12T09:21:03.186Z [DEBUG] MCP server "are": Starting connection with timeout of 30000ms
+2026-02-12T09:21:03.233Z [DEBUG] [Reconnection] computeInitialTeamContext: No teammate context set (not a teammate)
+2026-02-12T09:21:03.234Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.31607.1770888063234
+2026-02-12T09:21:03.234Z [DEBUG] Preserving file permissions: 100600
+2026-02-12T09:21:03.234Z [DEBUG] Temp file written successfully, size: 15458 bytes
+2026-02-12T09:21:03.234Z [DEBUG] Applied original permissions to temp file
+2026-02-12T09:21:03.234Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.31607.1770888063234 to /Users/sihaoli/.claude.json
+2026-02-12T09:21:03.234Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-12T09:21:03.235Z [DEBUG] Getting matching hook commands for SessionStart with query: startup
+2026-02-12T09:21:03.235Z [DEBUG] Found 0 hook matchers in settings
+2026-02-12T09:21:03.235Z [DEBUG] Matched 0 unique hooks for query "startup" (0 before deduplication)
+2026-02-12T09:21:03.236Z [DEBUG] Loaded 2 installed plugins from /Users/sihaoli/.claude/plugins/installed_plugins.json
+2026-02-12T09:21:03.236Z [DEBUG] Initialized versioned plugins system with 2 plugins
+2026-02-12T09:21:03.247Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.257Z [DEBUG] [keybindings] KeybindingSetup initialized with 101 bindings, 0 warnings
+2026-02-12T09:21:03.285Z [DEBUG] High write ratio: blit=0, write=1318 (100.0% writes), screen=17x180
+2026-02-12T09:21:03.285Z [DEBUG] Full reset (shrink->below): prevHeight=61, nextHeight=17, viewport=50
+2026-02-12T09:21:03.288Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.31607.1770888063288
+2026-02-12T09:21:03.288Z [DEBUG] Preserving file permissions: 100600
+2026-02-12T09:21:03.288Z [DEBUG] Temp file written successfully, size: 15458 bytes
+2026-02-12T09:21:03.288Z [DEBUG] Applied original permissions to temp file
+2026-02-12T09:21:03.288Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.31607.1770888063288 to /Users/sihaoli/.claude.json
+2026-02-12T09:21:03.288Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-12T09:21:03.289Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.31607.1770888063289
+2026-02-12T09:21:03.289Z [DEBUG] Preserving file permissions: 100600
+2026-02-12T09:21:03.289Z [DEBUG] Temp file written successfully, size: 15458 bytes
+2026-02-12T09:21:03.289Z [DEBUG] Applied original permissions to temp file
+2026-02-12T09:21:03.289Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.31607.1770888063289 to /Users/sihaoli/.claude.json
+2026-02-12T09:21:03.289Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-12T09:21:03.292Z [DEBUG] [REPL:mount] REPL mounted, disabled=false
+2026-02-12T09:21:03.295Z [DEBUG] Official marketplace auto-install skipped: already_attempted
+2026-02-12T09:21:03.296Z [DEBUG] performStartupChecks called
+2026-02-12T09:21:03.296Z [DEBUG] Starting background plugin installations
+2026-02-12T09:21:03.296Z [DEBUG] performBackgroundPluginInstallations called
+2026-02-12T09:21:03.299Z [DEBUG] Loaded 65 CLAUDE.md/rules files:
+  [User] /Users/sihaoli/.claude/CLAUDE.md (2448 chars)
+  [User] /Users/sihaoli/.claude/rules/00-core-laws.md (1821 chars)
+  [User] /Users/sihaoli/.claude/rules/01-three-core-laws.md (6865 chars)
+  [User] /Users/sihaoli/.claude/rules/ab-test-execution.md (4146 chars)
+  [User] /Users/sihaoli/.claude/rules/agent-skill-unification.md (4535 chars)
+  [User] /Users/sihaoli/.claude/rules/auto-favorites.md (1255 chars)
+  [User] /Users/sihaoli/.claude/rules/benchmark-economy.md (3251 chars)
+  [User] /Users/sihaoli/.claude/rules/borrow-before-verify.md (2366 chars)
+  [User] /Users/sihaoli/.claude/rules/browser-automation.md (960 chars)
+  [User] /Users/sihaoli/.claude/rules/call-niuma-with-personality.md (3762 chars)
+  [User] /Users/sihaoli/.claude/rules/capability-evolution.md (10947 chars)
+  [User] /Users/sihaoli/.claude/rules/cattle-verification.md (3242 chars)
+  [User] /Users/sihaoli/.claude/rules/coding-standards.md (248 chars)
+  [User] /Users/sihaoli/.claude/rules/core-principles.md (949 chars)
+  [User] /Users/sihaoli/.claude/rules/data-first.md (4348 chars)
+  [User] /Users/sihaoli/.claude/rules/data-ledger-first.md (2783 chars)
+  [User] /Users/sihaoli/.claude/rules/delegate-first.md (2931 chars)
+  [User] /Users/sihaoli/.claude/rules/delegate-insight-to-xiaoai.md (2799 chars)
+  [User] /Users/sihaoli/.claude/rules/delegate-to-xiaoai.md (5759 chars)
+  [User] /Users/sihaoli/.claude/rules/do-it-right-first-time.md (3147 chars)
+  [User] /Users/sihaoli/.claude/rules/documentation.md (227 chars)
+  [User] /Users/sihaoli/.claude/rules/dual-personality-experiment.md (5316 chars)
+  [User] /Users/sihaoli/.claude/rules/expert-team-for-self.md (6278 chars)
+  [User] /Users/sihaoli/.claude/rules/feedback-loop.md (3600 chars)
+  [User] /Users/sihaoli/.claude/rules/first-law.md (3502 chars)
+  [User] /Users/sihaoli/.claude/rules/glm-mode-behavior.md (3094 chars)
+  [User] /Users/sihaoli/.claude/rules/guardian-confirm.md (4852 chars)
+  [User] /Users/sihaoli/.claude/rules/guardian-data-first-enforcement.md (6517 chars)
+  [User] /Users/sihaoli/.claude/rules/guardian-data-first.md (3847 chars)
+  [User] /Users/sihaoli/.claude/rules/infrastructure-as-tables.md (5249 chars)
+  [User] /Users/sihaoli/.claude/rules/intent-engine.md (2655 chars)
+  [User] /Users/sihaoli/.claude/rules/large-context-strategy.md (3586 chars)
+  [User] /Users/sihaoli/.claude/rules/learning-evidence.md (1200 chars)
+  [User] /Users/sihaoli/.claude/rules/macos-integration.md (1632 chars)
+  [User] /Users/sihaoli/.claude/rules/master-brain-persona.md (639 chars)
+  [User] /Users/sihaoli/.claude/rules/memory-loop.md (5075 chars)
+  [User] /Users/sihaoli/.claude/rules/multi-expert-analysis.md (3515 chars)
+  [User] /Users/sihaoli/.claude/rules/parallel-task-fallback.md (1392 chars)
+  [User] /Users/sihaoli/.claude/rules/performance-testing.md (881 chars)
+  [User] /Users/sihaoli/.claude/rules/personality-in-output.md (2007 chars)
+  [User] /Users/sihaoli/.claude/rules/personality-retention.md (4509 chars)
+  [User] /Users/sihaoli/.claude/rules/plan-before-execute.md (4454 chars)
+  [User] /Users/sihaoli/.claude/rules/pre-action-checklist.md (2708 chars)
+  [User] /Users/sihaoli/.claude/rules/proclamation-mechanism.md (6793 chars)
+  [User] /Users/sihaoli/.claude/rules/promise-execute.md (2871 chars)
+  [User] /Users/sihaoli/.claude/rules/prompt-template-v3.md (2525 chars)
+  [User] /Users/sihaoli/.claude/rules/read-before-act.md (1920 chars)
+  [User] /Users/sihaoli/.claude/rules/ree-first.md (4457 chars)
+  [User] /Users/sihaoli/.claude/rules/ree-lessons.md (3956 chars)
+  [User] /Users/sihaoli/.claude/rules/research-first.md (1217 chars)
+  [User] /Users/sihaoli/.claude/rules/resource-execution-engine.md (4151 chars)
+  [User] /Users/sihaoli/.claude/rules/schema-first.md (1566 chars)
+  [User] /Users/sihaoli/.claude/rules/security.md (219 chars)
+  [User] /Users/sihaoli/.claude/rules/self-changelog.md (1790 chars)
+  [User] /Users/sihaoli/.claude/rules/solar-farm.md (4057 chars)
+  [User] /Users/sihaoli/.claude/rules/solar-protocol.md (9002 chars)
+  [User] /Users/sihaoli/.claude/rules/sprint-rhythm.md (4565 chars)
+  [User] /Users/sihaoli/.claude/rules/state-machine-first.md (2888 chars)
+  [User] /Users/sihaoli/.claude/rules/state-persistence.md (8154 chars)
+  [User] /Users/sihaoli/.claude/rules/task-reflection.md (7600 chars)
+  [User] /Users/sihaoli/.claude/rules/task-sop.md (3084 chars)
+  [User] /Users/sihaoli/.claude/rules/testing.md (285 chars)
+  [User] /Users/sihaoli/.claude/rules/token-efficiency.md (1276 chars)
+  [User] /Users/sihaoli/.claude/rules/tvs-rendering.md (9194 chars)
+  [User] /Users/sihaoli/.claude/rules/webfetch-tips.md (231 chars)
+2026-02-12T09:21:03.309Z [DEBUG] Watching for changes in setting files /Users/sihaoli/.claude/settings.json, /Users/sihaoli/.claude/settings.local.json...
+2026-02-12T09:21:03.312Z [DEBUG] [claudeai-mcp] Checking gate (cached)...
+2026-02-12T09:21:03.312Z [DEBUG] [claudeai-mcp] Gate returned: true
+2026-02-12T09:21:03.312Z [DEBUG] [claudeai-mcp] Missing user:mcp_servers scope (scopes=user:inference,user:profile,user:sessions:claude_code)
+2026-02-12T09:21:03.314Z [DEBUG] Setting installation status: 0 marketplaces, 0 installable plugins, 0 uninstallable plugins
+2026-02-12T09:21:03.315Z [DEBUG] Loaded plugins - Enabled: 0, Disabled: 0, Commands: 0, Agents: 0, Errors: 0
+2026-02-12T09:21:03.323Z [DEBUG] High write ratio: blit=20, write=1354 (98.5% writes), screen=17x180
+2026-02-12T09:21:03.331Z [ERROR] MCP server "are" Server stderr: ARE MCP Server running
+2026-02-12T09:21:03.331Z [DEBUG] MCP server "are": Successfully connected to undefined server in 146ms
+2026-02-12T09:21:03.331Z [DEBUG] MCP server "are": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"are-orchestrator","version":"1.0.0"}}
+2026-02-12T09:21:03.332Z [DEBUG] Watching for changes in skill/command directories: /Users/sihaoli/.claude/skills, /Users/sihaoli/.claude/skills...
+2026-02-12T09:21:03.343Z [DEBUG] MCP server "brain-router": Successfully connected to undefined server in 160ms
+2026-02-12T09:21:03.343Z [DEBUG] MCP server "brain-router": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"solar-brain-router","version":"1.0.0"}}
+2026-02-12T09:21:03.447Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-12T09:21:03.544Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.31607.1770888063544
+2026-02-12T09:21:03.544Z [DEBUG] Preserving file permissions: 100600
+2026-02-12T09:21:03.545Z [DEBUG] Temp file written successfully, size: 15458 bytes
+2026-02-12T09:21:03.545Z [DEBUG] Applied original permissions to temp file
+2026-02-12T09:21:03.545Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.31607.1770888063544 to /Users/sihaoli/.claude.json
+2026-02-12T09:21:03.545Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-12T09:21:03.578Z [DEBUG] MCP server "playwright": Successfully connected to undefined server in 402ms
+2026-02-12T09:21:03.578Z [DEBUG] MCP server "playwright": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Playwright","version":"0.0.61"}}
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.582Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:03.789Z [DEBUG] Org fast mode: disabled (extra_usage_disabled)
+2026-02-12T09:21:05.063Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:05.063Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:05.063Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:05.848Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: analyzeMcp]
+2026-02-12T09:21:05.861Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-12T09:21:05.861Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-12T09:21:05.861Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-12T09:21:12.278Z [DEBUG] Getting matching hook commands for SessionEnd with query: prompt_input_exit
+2026-02-12T09:21:12.278Z [DEBUG] Found 0 hook matchers in settings
+2026-02-12T09:21:12.278Z [DEBUG] Matched 0 unique hooks for query "prompt_input_exit" (0 before deduplication)
+2026-02-12T09:21:12.315Z [DEBUG] FileHistory: Added snapshot for a1d0c92c-2e60-4895-b2ca-4bc359663928, tracking 0 files
+2026-02-12T09:21:12.316Z [DEBUG] LSP server manager shut down successfully
+2026-02-12T09:21:12.317Z [DEBUG] [useDeferredValue] Messages deferred by 3 (0→3)
+2026-02-12T09:21:12.328Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-12T09:21:12.329Z [DEBUG] Plugin autoupdate: skipped (auto-updater disabled)
+2026-02-12T09:21:12.333Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.31607.1770888072333
+2026-02-12T09:21:12.333Z [DEBUG] Preserving file permissions: 100600
+2026-02-12T09:21:12.333Z [DEBUG] Temp file written successfully, size: 15459 bytes
+2026-02-12T09:21:12.333Z [DEBUG] Applied original permissions to temp file
+2026-02-12T09:21:12.333Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.31607.1770888072333 to /Users/sihaoli/.claude.json
+2026-02-12T09:21:12.333Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-12T09:21:12.334Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.31607.1770888072334
+2026-02-12T09:21:12.334Z [DEBUG] Preserving file permissions: 100600
+2026-02-12T09:21:12.334Z [DEBUG] Temp file written successfully, size: 15459 bytes
+2026-02-12T09:21:12.334Z [DEBUG] Applied original permissions to temp file
+2026-02-12T09:21:12.334Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.31607.1770888072334 to /Users/sihaoli/.claude.json
+2026-02-12T09:21:12.334Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-12T09:21:12.336Z [DEBUG] [useDeferredValue] Messages deferred by 3 (0→3)
+2026-02-12T09:21:12.337Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-12T09:21:12.339Z [DEBUG] [useDeferredValue] Messages deferred by 3 (0→3)
+2026-02-12T09:21:12.340Z [DEBUG] [useDeferredValue] Messages deferred by 3 (0→3)
+2026-02-12T09:21:12.348Z [DEBUG] Stats cache is up to date

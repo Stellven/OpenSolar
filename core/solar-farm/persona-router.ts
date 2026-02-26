@@ -84,7 +84,7 @@ export const ROUTING = {
 
   // 需要"速度/并行/产量"的 → 快模型 + Builder
   speed: {
-    models: ['gemini-flash', 'glm-4-plus', 'glm-flash'],
+    models: ['gemini-flash', 'glm-5', 'glm-flash'],
     knobs: { speed_budget: 0.9, divergent: 0.6, promotion: 0.7 }
   },
 
@@ -329,7 +329,7 @@ export { runHedge as neutralHedge, scoreStability, buildNeutralPrompt, buildPers
  *
  * 用法：
  *   import { neutralHedge } from './persona-router';
- *   const result = await neutralHedge(task, 'critic', 'glm-4-plus', executor);
+ *   const result = await neutralHedge(task, 'critic', 'glm-5', executor);
  *   // 会同时调 critic人格 + 中性版，返回更稳定的结果
  *
  * 评分维度：

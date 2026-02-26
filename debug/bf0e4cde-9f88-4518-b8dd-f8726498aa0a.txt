@@ -1,0 +1,315 @@
+2026-02-11T11:37:43.247Z [DEBUG] Watching for changes in setting files /Users/sihaoli/.claude...
+2026-02-11T11:37:43.249Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-11T11:37:43.249Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-11T11:37:43.249Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-11T11:37:43.249Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-11T11:37:43.253Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-02-11T11:37:43.253Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-02-11T11:37:43.253Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-02-11T11:37:43.254Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-11T11:37:43.264Z [DEBUG] Found 0 plugins (0 enabled, 0 disabled)
+2026-02-11T11:37:43.264Z [DEBUG] Total LSP servers loaded: 0
+2026-02-11T11:37:43.264Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 0 server(s)
+2026-02-11T11:37:43.264Z [DEBUG] LSP manager initialized with 0 servers
+2026-02-11T11:37:43.264Z [DEBUG] LSP server manager initialized successfully
+2026-02-11T11:37:43.264Z [DEBUG] LSP notification handlers registered successfully for all 0 server(s)
+2026-02-11T11:37:43.264Z [DEBUG] [STARTUP] MCP configs loaded in 10ms
+2026-02-11T11:37:43.268Z [DEBUG] [STARTUP] Running setup()...
+2026-02-11T11:37:43.276Z [DEBUG] Stats cache is up to date
+2026-02-11T11:37:43.276Z [DEBUG] Plugin autoupdate: skipped (auto-updater disabled)
+2026-02-11T11:37:43.280Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-11T11:37:43.300Z [DEBUG] Passes: Cache stale, returning cached data and refreshing in background
+2026-02-11T11:37:43.306Z [DEBUG] Loaded 2 installed plugins from /Users/sihaoli/.claude/plugins/installed_plugins.json
+2026-02-11T11:37:43.339Z [DEBUG] Error log sink initialized
+2026-02-11T11:37:43.340Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude/todos/bf0e4cde-9f88-4518-b8dd-f8726498aa0a-agent-bf0e4cde-9f88-4518-b8dd-f8726498aa0a.json.tmp.86478.1770809863340
+2026-02-11T11:37:43.340Z [DEBUG] Temp file written successfully, size: 2 bytes
+2026-02-11T11:37:43.340Z [DEBUG] Renaming /Users/sihaoli/.claude/todos/bf0e4cde-9f88-4518-b8dd-f8726498aa0a-agent-bf0e4cde-9f88-4518-b8dd-f8726498aa0a.json.tmp.86478.1770809863340 to /Users/sihaoli/.claude/todos/bf0e4cde-9f88-4518-b8dd-f8726498aa0a-agent-bf0e4cde-9f88-4518-b8dd-f8726498aa0a.json
+2026-02-11T11:37:43.340Z [DEBUG] File /Users/sihaoli/.claude/todos/bf0e4cde-9f88-4518-b8dd-f8726498aa0a-agent-bf0e4cde-9f88-4518-b8dd-f8726498aa0a.json written atomically
+2026-02-11T11:37:43.345Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-11T11:37:43.345Z [DEBUG] Total plugin skills loaded: 0
+2026-02-11T11:37:43.345Z [DEBUG] Total plugin commands loaded: 0
+2026-02-11T11:37:43.346Z [DEBUG] Registered 0 hooks from 0 plugins
+2026-02-11T11:37:43.346Z [DEBUG] [STARTUP] setup() completed in 78ms
+2026-02-11T11:37:43.346Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-02-11T11:37:43.354Z [DEBUG] Loaded 74 unique skills (managed: 0, user: 74, project: 0, legacy commands: 0)
+2026-02-11T11:37:43.354Z [DEBUG] getSkills returning: 74 skill dir commands, 0 plugin skills, 0 bundled skills
+2026-02-11T11:37:43.356Z [ERROR] Error: Error: ENOENT: no such file or directory, open '/Users/sihaoli/Solar/core/listeners/.claude/settings.json'
+    at Module.openSync (node:fs:555:18)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:673
+    at xI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:34380)
+    at Object.readSync (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:607)
+    at vI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4629:105)
+    at hI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4631:204)
+    at rX9 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4625:1915)
+    at Immediate._onImmediate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:5358:3574)
+    at process.processImmediate (node:internal/timers:504:21)
+2026-02-11T11:37:43.356Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/sihaoli/Solar/core/listeners/.claude/settings.json
+2026-02-11T11:37:43.356Z [ERROR] Error: Error: ENOENT: no such file or directory, open '/Users/sihaoli/Solar/core/listeners/.claude/settings.local.json'
+    at Module.openSync (node:fs:555:18)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:673
+    at xI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:34380)
+    at Object.readSync (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:9:607)
+    at vI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4629:105)
+    at hI (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4631:204)
+    at rX9 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:4625:1915)
+    at Immediate._onImmediate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:5358:3574)
+    at process.processImmediate (node:internal/timers:504:21)
+2026-02-11T11:37:43.356Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/sihaoli/Solar/core/listeners/.claude/settings.local.json
+2026-02-11T11:37:43.378Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=/Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg)
+2026-02-11T11:37:43.381Z [DEBUG] Watching for changes in skill/command directories: /Users/sihaoli/.claude/skills...
+2026-02-11T11:37:43.388Z [DEBUG] Session index: added 1, updated 0, removed 0 (total: 18)
+2026-02-11T11:37:43.393Z [DEBUG] Agent file /Users/sihaoli/.claude/agents/community.md is missing required 'name' in frontmatter
+2026-02-11T11:37:43.393Z [DEBUG] Failed to parse agent from /Users/sihaoli/.claude/agents/community.md: Missing required "name" field in frontmatter
+2026-02-11T11:37:43.393Z [DEBUG] Total plugin agents loaded: 0
+2026-02-11T11:37:43.393Z [DEBUG] [STARTUP] Commands and agents loaded in 47ms
+2026-02-11T11:37:43.394Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T11:37:43.394Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T11:37:43.394Z [DEBUG] Passes: Cache stale, returning cached data and refreshing in background
+2026-02-11T11:37:43.395Z [DEBUG] Passes: Reusing in-flight eligibility fetch
+2026-02-11T11:37:43.397Z [DEBUG] MCP server "playwright": Starting connection with timeout of 30000ms
+2026-02-11T11:37:43.398Z [DEBUG] MCP server "brain-router": Starting connection with timeout of 30000ms
+2026-02-11T11:37:43.399Z [DEBUG] MCP server "are": Starting connection with timeout of 30000ms
+2026-02-11T11:37:43.400Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T11:37:43.473Z [ERROR] MCP server "are" Server stderr: ARE MCP Server running
+2026-02-11T11:37:43.479Z [DEBUG] MCP server "are": Successfully connected to undefined server in 80ms
+2026-02-11T11:37:43.479Z [DEBUG] MCP server "are": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"are-orchestrator","version":"1.0.0"}}
+2026-02-11T11:37:43.535Z [DEBUG] MCP server "brain-router": Successfully connected to undefined server in 137ms
+2026-02-11T11:37:43.535Z [DEBUG] MCP server "brain-router": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"solar-brain-router","version":"1.0.0"}}
+2026-02-11T11:37:43.731Z [DEBUG] MCP server "playwright": Successfully connected to undefined server in 336ms
+2026-02-11T11:37:43.731Z [DEBUG] MCP server "playwright": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Playwright","version":"0.0.61"}}
+2026-02-11T11:37:43.736Z [DEBUG] Initialized versioned plugins system with 2 plugins
+2026-02-11T11:37:43.737Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-02-11T11:37:43.738Z [DEBUG] Grove: Using fresh cached config
+2026-02-11T11:37:43.743Z [DEBUG] Auto tool search disabled: 0 chars (threshold: 50000, 10% of context)
+2026-02-11T11:37:43.747Z [DEBUG] Skills and commands included in Skill tool: agent, banner, benchmark, browser, build, call, changelog, commit, docs, email-search, email-web, mcp-builder, office, himalaya, office-notes, notion, apple-reminders, things-mac, trello, ontology, phase, pr, precise-edit, report, restore, review, selfie, shortcut, shortcut-builder, shortcut-search, skill-creator, solar, status, test, theme, webapp-testing
+2026-02-11T11:37:43.748Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T11:37:43.748Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T11:37:43.748Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T11:37:43.967Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.86478.1770809863967
+2026-02-11T11:37:43.967Z [DEBUG] Preserving file permissions: 100600
+2026-02-11T11:37:43.967Z [DEBUG] Temp file written successfully, size: 14790 bytes
+2026-02-11T11:37:43.968Z [DEBUG] Applied original permissions to temp file
+2026-02-11T11:37:43.968Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.86478.1770809863967 to /Users/sihaoli/.claude.json
+2026-02-11T11:37:43.968Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-11T11:37:44.052Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.86478.1770809864052
+2026-02-11T11:37:44.052Z [DEBUG] Preserving file permissions: 100600
+2026-02-11T11:37:44.052Z [DEBUG] Temp file written successfully, size: 14790 bytes
+2026-02-11T11:37:44.052Z [DEBUG] Applied original permissions to temp file
+2026-02-11T11:37:44.052Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.86478.1770809864052 to /Users/sihaoli/.claude.json
+2026-02-11T11:37:44.053Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-11T11:37:44.053Z [DEBUG] Passes eligibility cached for org 4b64fec2-dab6-4cd3-854f-5b8cb2ded5ae: true
+2026-02-11T11:37:44.430Z [DEBUG] Getting matching hook commands for SessionStart with query: startup
+2026-02-11T11:37:44.430Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T11:37:44.430Z [DEBUG] Matched 0 unique hooks for query "startup" (0 before deduplication)
+2026-02-11T11:37:44.446Z [DEBUG] Total plugin output styles loaded: 0
+2026-02-11T11:37:44.451Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-11T11:37:44.451Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-11T11:37:44.451Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-11T11:37:44.451Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-11T11:37:44.455Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-11T11:37:44.455Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T11:37:44.455Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-11T11:37:44.461Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-11T11:37:44.465Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T11:37:44.465Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T11:37:44.465Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T11:37:49.039Z [DEBUG] Stream started - received first chunk
+2026-02-11T11:37:51.458Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-11T11:37:51.459Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-11T11:37:51.459Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T11:37:51.459Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-11T11:37:51.464Z [DEBUG] tree-sitter: WASM files not found
+2026-02-11T11:37:51.468Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T11:37:51.468Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T11:37:51.469Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T11:37:51.469Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T11:37:51.469Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T11:37:51.469Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T11:37:51.469Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T11:37:51.470Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T11:37:52.909Z [DEBUG] Stream started - received first chunk
+2026-02-11T11:37:58.177Z [DEBUG] Stream started - received first chunk
+2026-02-11T11:37:58.270Z [DEBUG] Permission suggestions for Bash: [
+  {
+    "type": "addRules",
+    "rules": [
+      {
+        "toolName": "Bash",
+        "ruleContent": "himalaya envelope list:*"
+      }
+    ],
+    "behavior": "allow",
+    "destination": "localSettings"
+  }
+]
+2026-02-11T11:37:58.299Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-11T11:37:58.299Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-11T11:37:58.299Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-11T11:37:58.299Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-11T11:37:58.302Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-11T11:37:58.305Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T11:37:58.305Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T11:37:58.305Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T11:38:01.249Z [DEBUG] Stream started - received first chunk
+2026-02-11T11:38:01.907Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-11T11:38:01.908Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-11T11:38:01.908Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T11:38:01.908Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-11T11:38:01.912Z [DEBUG] Permission suggestions for Bash: [
+  {
+    "type": "addRules",
+    "rules": [
+      {
+        "toolName": "Bash",
+        "ruleContent": "himalaya envelope list:*"
+      }
+    ],
+    "behavior": "allow",
+    "destination": "localSettings"
+  }
+]
+2026-02-11T11:38:01.930Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-11T11:38:01.930Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-11T11:38:01.930Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-11T11:38:01.930Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-11T11:38:01.931Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-11T11:38:01.933Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T11:38:01.933Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T11:38:01.933Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T11:38:05.140Z [DEBUG] Stream started - received first chunk
+2026-02-11T11:38:05.539Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-11T11:38:05.541Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-11T11:38:05.541Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T11:38:05.541Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-11T11:38:05.546Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T11:38:05.548Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T11:38:05.548Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T11:38:05.548Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T11:38:06.562Z [DEBUG] Stream started - received first chunk
+2026-02-11T11:38:06.640Z [DEBUG] Permission suggestions for Bash: [
+  {
+    "type": "addRules",
+    "rules": [
+      {
+        "toolName": "Bash",
+        "ruleContent": "himalaya envelope list:*"
+      }
+    ],
+    "behavior": "allow",
+    "destination": "localSettings"
+  }
+]
+2026-02-11T11:38:06.664Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-11T11:38:06.664Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-11T11:38:06.664Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-11T11:38:06.664Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-11T11:38:06.666Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-11T11:38:06.669Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T11:38:06.669Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T11:38:06.669Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T11:38:09.442Z [DEBUG] Stream started - received first chunk
+2026-02-11T11:38:10.058Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-11T11:38:10.059Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-11T11:38:10.059Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T11:38:10.059Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-11T11:38:10.061Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T11:38:10.062Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T11:38:10.062Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T11:38:10.062Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T11:38:10.985Z [DEBUG] Stream started - received first chunk
+2026-02-11T11:38:11.065Z [DEBUG] Permission suggestions for Bash: [
+  {
+    "type": "addRules",
+    "rules": [
+      {
+        "toolName": "Bash",
+        "ruleContent": "himalaya envelope list:*"
+      }
+    ],
+    "behavior": "allow",
+    "destination": "localSettings"
+  }
+]
+2026-02-11T11:38:11.100Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-11T11:38:11.100Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-11T11:38:11.100Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-11T11:38:11.100Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-11T11:38:11.103Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-11T11:38:11.107Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T11:38:11.107Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T11:38:11.107Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T11:38:13.600Z [DEBUG] Stream started - received first chunk
+2026-02-11T11:38:15.106Z [DEBUG] executePreToolHooks called for tool: Skill
+2026-02-11T11:38:15.106Z [DEBUG] Getting matching hook commands for PreToolUse with query: Skill
+2026-02-11T11:38:15.106Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T11:38:15.106Z [DEBUG] Matched 0 unique hooks for query "Skill" (0 before deduplication)
+2026-02-11T11:38:15.107Z [DEBUG] Permission suggestions for Skill: [
+  {
+    "type": "addRules",
+    "rules": [
+      {
+        "toolName": "Skill",
+        "ruleContent": "office-email"
+      }
+    ],
+    "behavior": "allow",
+    "destination": "localSettings"
+  },
+  {
+    "type": "addRules",
+    "rules": [
+      {
+        "toolName": "Skill",
+        "ruleContent": "office-email:*"
+      }
+    ],
+    "behavior": "allow",
+    "destination": "localSettings"
+  }
+]
+2026-02-11T11:38:15.131Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-11T11:38:15.131Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-11T11:38:15.131Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-11T11:38:15.131Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-11T11:38:15.133Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-11T11:38:15.136Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T11:38:15.136Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T11:38:15.136Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T11:38:17.941Z [DEBUG] Stream started - received first chunk
+2026-02-11T11:38:18.569Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-11T11:38:18.569Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-11T11:38:18.569Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T11:38:18.569Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-11T11:38:18.571Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-11T11:38:18.571Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T11:38:18.571Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T11:38:18.572Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T11:38:20.465Z [DEBUG] Stream started - received first chunk
+2026-02-11T11:38:20.550Z [DEBUG] Permission suggestions for Bash: [
+  {
+    "type": "addRules",
+    "rules": [
+      {
+        "toolName": "Bash",
+        "ruleContent": "himalaya envelope:*"
+      }
+    ],
+    "behavior": "allow",
+    "destination": "localSettings"
+  }
+]
+2026-02-11T11:38:20.583Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-11T11:38:20.583Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-11T11:38:20.583Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-11T11:38:20.583Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-11T11:38:20.585Z [DEBUG] Auto tool search disabled: 1289 chars (threshold: 50000, 10% of context)
+2026-02-11T11:38:20.589Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-11T11:38:20.589Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-11T11:38:20.589Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-11T11:38:23.175Z [DEBUG] Stream started - received first chunk
+2026-02-11T11:38:25.814Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-11T11:38:25.814Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T11:38:25.814Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-11T11:38:25.818Z [DEBUG] Getting matching hook commands for SessionEnd with query: other
+2026-02-11T11:38:25.818Z [DEBUG] Found 0 hook matchers in settings
+2026-02-11T11:38:25.818Z [DEBUG] Matched 0 unique hooks for query "other" (0 before deduplication)

@@ -1,0 +1,1212 @@
+2026-02-21T20:21:46.848Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-21T20:21:46.850Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-21T20:21:46.850Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-21T20:21:46.850Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-21T20:21:46.877Z [DEBUG] Applying permission update: Adding 143 allow rule(s) to destination 'localSettings': ["Bash(git clone:*)","Bash(curl:*)","Bash(git config:*)","Bash(brew install:*)","Bash(gh auth setup-git:*)","Bash(gh auth login:*)","Bash(gh auth status:*)","Bash(git pull:*)","Bash(~/Solar/install.sh)","Bash(solar)","Bash(~/Solar/bin/solar)","Bash(~/Solar/bin/solar init)","Bash(~/Solar/bin/solar:*)","Bash(~/Solar/install-core.sh)","Bash(bash)","Bash(export BUN_INSTALL=\"$HOME/.bun\")","Bash(export PATH:*)","Bash(~/.claude/solar/bin/solar daemon start)","Bash(himalaya envelope list -s 3)","Bash(sqlite3:*)","Bash(sw_vers:*)","Bash(sysctl:*)","Bash(ls:*)","Bash(echo:*)","Bash(nc:*)","Bash(~/.claude/solar/bin/solar:*)","Bash(top:*)","Bash(bun:*)","Bash(ps:*)","Bash(~/.bun/bin/bun:*)","Bash(things show:*)","Bash(remindctl list:*)","Bash(~/.claude/solar/bin/solar-daemon:*)","Bash(wc:*)","Bash(xargs kill -9)","Bash(openclaw:*)","Bash(~/.zshrc)","Bash(export PATH=\"$BUN_INSTALL/bin:$PATH\")","Bash(source:*)","Bash(zsh -c 'source ~/.zshrc && which bun && bun --version')","Bash(launchctl:*)","Bash(sudo reboot)","Bash(osascript -e 'tell app \"\"System Events\"\" to restart')","Bash(npm run demo)","Bash(npx tsx:*)","Bash(grep:*)","Bash(pkill:*)","Bash([ -n \"$GOOGLE_API_KEY\" ])","Bash([ -n \"$DEEPSEEK_API_KEY\" ])","Bash([ -n \"$ZHIPU_API_KEY\" ])","Bash(python3:*)","Bash(swift:*)","Bash(find:*)","Bash(head -20 echo echo 图片数量: find ~/Solar/Skin-check/Acne04/acne_1024 -name *.jpg -o -name *.png)","Bash(cd ~/Solar/Skin-check/Acne04 __NEW_LINE_a4087104496918c3__ echo \"=== 目录结构 ===\" ls -la echo \"\" __NEW_LINE_a4087104496918c3__ echo \"=== acne_1024 目录 ===\" ls acne_1024/)","Bash(xargs:*)","Bash(~/.openclaw/workspace/TOOLS.md:*)","Bash(~/.claude/core/xiaoai-insight/insight-runner.sh:*)","Bash(__NEW_LINE_6e6a2c141186e373__ echo \"\")","Bash(# 修复分类器:*)","mcp__are__stats","Bash(env)","Bash(git add:*)","Bash(git commit:*)","Bash(sort -k2 -rn)","Bash(pip3 show:*)","Bash(pip3 install:*)","Bash(git -C ~/.claude/hooks log --oneline -5)","Bash(git checkout:*)","Bash(rsync:*)","Bash(scp:*)","Bash(chmod:*)","Bash(~/.claude/skills/skin-check/phase2/scripts/check-training.sh:*)","Bash(mount:*)","Bash(ln:*)","Bash(git push:*)","Bash(git reset:*)","Bash(while read img)","Bash(do echo '=== 测试: $\\(basename $img\\) ===' bun local-classifier.ts $img)","Bash(cat:*)","Bash(~/.solar/elo/benchmark_data.json)","Bash(mcp__playwright__browser_navigate url=\"https://www.xiaohongshu.com/explore\")","Bash(imagesnap:*)","Bash(/opt/homebrew/bin/imagesnap:*)","Bash(for img in ~/Desktop/selfie_*.jpg)","Bash(do echo \"测试: $img\" python3 ~/.claude/skills/makeup-advisor/ar_makeup.py \"$img\" natural \"/tmp/test_makeup.jpg\")","Bash(open:*)","Bash(SOURCE_IMG=\"/Users/lisihao/Desktop/selfie_2026-02-14T04-32-26-240Z.jpg\")","Bash(__NEW_LINE_8b260d861a440b1e__ echo \"🔍 分析面部特征...\")","Bash(__NEW_LINE_472f50d6c9709502__ echo \"📚 生成个性化化妆教程...\")","Bash(__NEW_LINE_a0d3aca2fd4660d0__ echo \"📚 生成个性化化妆教程...\")","Bash(mdfind:*)","Bash(head -5 find ~ -maxdepth 3 -type d -name *know*)","Bash(~/.solar/STATE.md:*)","Bash(cargo check:*)","Bash(GATE_POLICY=loose bun:*)","Bash(GATE_POLICY=strict bun:*)","Bash(GATE_POLICY=none bun:*)","Bash(cargo --version:*)","Bash(sh -s -- -y)","Bash(cargo build:*)","Bash(~/Solar/core/search/target/release/solar-search query --help)","Bash(~/Solar/core/search/target/release/solar-search stats:*)","Bash(cargo test:*)","Bash(/Users/lisihao/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo build --release)","Bash(/Users/lisihao/Solar/core/search/target/release/solar-search:*)","Bash(~/Solar/core/search/target/release/solar-search:*)","Bash(__NEW_LINE_585539562a36547a__ echo \"\")","Bash(__NEW_LINE_c57475d0441e2053__ echo \"\")","Bash(git count-objects:*)","Bash(git rev-list:*)","Bash(git cat-file:*)","Bash(sort:*)","Bash(git remote add:*)","Bash(git init:*)","Bash(jq:*)","Bash(ffprobe:*)","Bash(brew list:*)","Bash(brew search:*)","mcp__are__orchestrate","Bash(for role in builder verifier architect judge explorer creator)","Bash(do echo -n \"$role: \")","Bash(done)","Bash(/tmp/test_glm.ts:*)","Bash(.build/debug/interpolate --help)","Bash(.build/debug/interpolate:*)","Bash(tail:*)","Bash(ffmpeg:*)","Bash(xcodebuild:*)","Bash(swiftc:*)","Bash(.build/release/interpolate --help)","Bash(.build/release/interpolate:*)","Bash(.build/release/upscale4k --help)","Bash(.build/release/upscale4k:*)","Bash(.build/release/ane-benchmark)","Bash(./.build/release/interpolate -i benchmark/videos/540p_short.mp4 -o benchmark/output/parallel_test.mp4 --parallel)","Bash(./.build/release/interpolate -i benchmark/input/1.mp4 -o benchmark/output/parallel_test.mp4 --parallel)","Bash(./.build/release/interpolate:*)","Bash(.build/release/benchmark:*)","Bash(xcrun coremlcompiler compile:*)","Bash(/usr/local/bin/ffprobe:*)","Bash(/opt/homebrew/bin/ffprobe -v error -select_streams v:0 -show_entries stream=width,height,nb_frames,duration -of csv=p=0 benchmark/output/ai_upscale_test.mp4)","Bash(cd /Users/lisihao/ThunderAIGC/ThunderAIGC/benchmark/models/realesrgan ./realesrgan-ncnn-vulkan --help)"]
+2026-02-21T20:21:46.877Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-21T20:21:46.922Z [DEBUG] [ToolSearch:optimistic] mode=tst-auto, ENABLE_TOOL_SEARCH=undefined, result=true
+2026-02-21T20:21:46.924Z [DEBUG] [STARTUP] Running setup()...
+2026-02-21T20:21:46.924Z [DEBUG] Found 0 plugins (0 enabled, 0 disabled)
+2026-02-21T20:21:46.933Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-21T20:21:47.006Z [DEBUG] Passes: Using fresh cached eligibility data
+2026-02-21T20:21:47.006Z [DEBUG] Error log sink initialized
+2026-02-21T20:21:47.020Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-21T20:21:47.020Z [DEBUG] Total plugin skills loaded: 0
+2026-02-21T20:21:47.020Z [DEBUG] Total plugin commands loaded: 0
+2026-02-21T20:21:47.022Z [DEBUG] [STARTUP] setup() completed in 98ms
+2026-02-21T20:21:47.022Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-02-21T20:21:47.031Z [DEBUG] Registered 0 hooks from 0 plugins
+2026-02-21T20:21:47.037Z [DEBUG] Loaded 93 unique skills (93 unconditional, 0 conditional, managed: 0, user: 93, project: 0, additional: 0, legacy commands: 0)
+2026-02-21T20:21:47.037Z [DEBUG] getSkills returning: 93 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-21T20:21:47.047Z [DEBUG] [Claude in Chrome] Found chrome profiles: Default, Profile 1
+2026-02-21T20:21:47.092Z [DEBUG] [Claude in Chrome] Extension not found in any browser
+2026-02-21T20:21:47.111Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=/Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg)
+2026-02-21T20:21:47.132Z [DEBUG] Agent file /Users/sihaoli/.claude/agents/community.md is missing required 'name' in frontmatter
+2026-02-21T20:21:47.132Z [DEBUG] Failed to parse agent from /Users/sihaoli/.claude/agents/community.md: Missing required "name" field in frontmatter
+2026-02-21T20:21:47.135Z [DEBUG] Total plugin agents loaded: 0
+2026-02-21T20:21:47.135Z [DEBUG] [STARTUP] Commands and agents loaded in 113ms
+2026-02-21T20:21:47.136Z [DEBUG] Layout engine: yoga
+2026-02-21T20:21:47.165Z [DEBUG] [STARTUP] Running showSetupScreens()...
+2026-02-21T20:21:47.210Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-02-21T20:21:47.213Z [DEBUG] [STARTUP] showSetupScreens() completed in 48ms
+2026-02-21T20:21:47.213Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-02-21T20:21:47.213Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-02-21T20:21:47.213Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-02-21T20:21:47.226Z [DEBUG] Total LSP servers loaded: 0
+2026-02-21T20:21:47.226Z [DEBUG] [STARTUP] MCP configs loaded in 349ms
+2026-02-21T20:21:47.234Z [DEBUG] MCP server "playwright": Starting connection with timeout of 30000ms
+2026-02-21T20:21:47.240Z [DEBUG] MCP server "brain-router": Starting connection with timeout of 30000ms
+2026-02-21T20:21:47.244Z [DEBUG] MCP server "are": Starting connection with timeout of 30000ms
+2026-02-21T20:21:47.694Z [DEBUG] [Reconnection] computeInitialTeamContext: No teammate context set (not a teammate)
+2026-02-21T20:21:47.702Z [DEBUG] Writing to temp file: /Users/sihaoli/.claude.json.tmp.1522.1771705307702
+2026-02-21T20:21:47.703Z [DEBUG] Preserving file permissions: 100600
+2026-02-21T20:21:47.707Z [DEBUG] Temp file written successfully, size: 21318 bytes
+2026-02-21T20:21:47.707Z [DEBUG] Applied original permissions to temp file
+2026-02-21T20:21:47.707Z [DEBUG] Renaming /Users/sihaoli/.claude.json.tmp.1522.1771705307702 to /Users/sihaoli/.claude.json
+2026-02-21T20:21:47.707Z [DEBUG] File /Users/sihaoli/.claude.json written atomically
+2026-02-21T20:21:47.735Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 0 server(s)
+2026-02-21T20:21:47.735Z [DEBUG] LSP manager initialized with 0 servers
+2026-02-21T20:21:47.737Z [DEBUG] Getting matching hook commands for SessionStart with query: startup
+2026-02-21T20:21:47.737Z [DEBUG] Found 0 hook matchers in settings
+2026-02-21T20:21:47.738Z [DEBUG] Matched 0 unique hooks for query "startup" (0 before deduplication)
+2026-02-21T20:21:47.742Z [DEBUG] Loaded 1 installed plugins from /Users/sihaoli/.claude/plugins/installed_plugins.json
+2026-02-21T20:21:47.742Z [DEBUG] Initialized versioned plugins system with 1 plugins
+2026-02-21T20:21:47.813Z [DEBUG] LSP server manager initialized successfully
+2026-02-21T20:21:47.814Z [DEBUG] LSP notification handlers registered successfully for all 0 server(s)
+2026-02-21T20:21:47.874Z [DEBUG] [keybindings] KeybindingSetup initialized with 101 bindings, 0 warnings
+2026-02-21T20:21:48.166Z [DEBUG] [REPL:mount] REPL mounted, disabled=false
+2026-02-21T20:21:48.176Z [DEBUG] Official marketplace auto-install skipped: already_attempted
+2026-02-21T20:21:48.178Z [DEBUG] performStartupChecks called
+2026-02-21T20:21:48.183Z [DEBUG] Starting background plugin installations
+2026-02-21T20:21:48.188Z [DEBUG] performBackgroundPluginInstallations called
+2026-02-21T20:21:48.203Z [DEBUG] Loaded 66 CLAUDE.md/rules files:
+  [User] /Users/sihaoli/.claude/CLAUDE.md (3778 chars)
+  [User] /Users/sihaoli/.claude/rules/00-core-laws.md (1844 chars)
+  [User] /Users/sihaoli/.claude/rules/01-three-core-laws.md (6845 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/00-essential.md (1748 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/ab-test-execution.md (4146 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/agent-skill-unification.md (4535 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/auto-favorites.md (1255 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/benchmark-economy.md (3251 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/borrow-before-verify.md (2366 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/browser-automation.md (960 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/capability-evolution.md (10947 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/cattle-verification.md (3242 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/coding-standards.md (248 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/core-principles.md (949 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/data-first.md (4348 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/data-ledger-first.md (2783 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/delegate-first.md (2930 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/delegate-insight-to-xiaoai.md (2799 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/do-it-right-first-time.md (3147 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/documentation.md (227 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/dual-personality-experiment.md (5316 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/expert-team-for-self.md (6278 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/feedback-loop.md (3600 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/first-law.md (3502 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/glm-mode-behavior.md (3094 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/guardian-confirm.md (4852 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/guardian-data-first-enforcement.md (6517 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/guardian-data-first.md (3847 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/infrastructure-as-tables.md (5249 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/intent-engine.md (2655 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/large-context-strategy.md (3586 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/learning-evidence.md (1200 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/macos-integration.md (1632 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/memory-loop.md (5075 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/parallel-task-fallback.md (1392 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/performance-testing.md (881 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/personality-in-output.md (2007 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/personality-retention.md (4509 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/plan-before-execute.md (4454 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/pre-action-checklist.md (2708 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/proclamation-mechanism.md (6793 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/promise-execute.md (2871 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/prompt-template-v3.md (2525 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/read-before-act.md (1920 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/ree-first.md (4457 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/ree-lessons.md (3956 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/research-first.md (1217 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/resource-execution-engine.md (4151 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/schema-first.md (1566 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/security.md (219 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/self-changelog.md (1790 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/solar-protocol.md (9001 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/sprint-rhythm.md (4565 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/state-machine-first.md (2888 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/task-reflection.md (7600 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/task-sop.md (3084 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/testing.md (285 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/token-efficiency.md (1276 chars)
+  [User] /Users/sihaoli/.claude/rules/archive/webfetch-tips.md (231 chars)
+  [User] /Users/sihaoli/.claude/rules/call-niuma-with-personality.md (4010 chars)
+  [User] /Users/sihaoli/.claude/rules/cortex-first.md (6259 chars)
+  [User] /Users/sihaoli/.claude/rules/master-brain-persona.md (5829 chars)
+  [User] /Users/sihaoli/.claude/rules/multi-expert-analysis.md (3512 chars)
+  [User] /Users/sihaoli/.claude/rules/solar-farm.md (4056 chars)
+  [User] /Users/sihaoli/.claude/rules/state-persistence.md (9240 chars)
+  [User] /Users/sihaoli/.claude/rules/tvs-rendering.md (9194 chars)
+2026-02-21T20:21:48.216Z [DEBUG] Watching for changes in setting files /Users/sihaoli/.claude/settings.json, /Users/sihaoli/.claude/settings.local.json...
+2026-02-21T20:21:48.225Z [DEBUG] Git remote URL: null
+2026-02-21T20:21:48.225Z [DEBUG] No git remote URL found
+2026-02-21T20:21:48.226Z [DEBUG] Not in a GitHub repository, skipping path mapping update
+2026-02-21T20:21:48.231Z [DEBUG] [claudeai-mcp] Checking gate (cached)...
+2026-02-21T20:21:48.231Z [DEBUG] [claudeai-mcp] Gate returned: true
+2026-02-21T20:21:48.231Z [DEBUG] [claudeai-mcp] Missing user:mcp_servers scope (scopes=user:inference,user:profile,user:sessions:claude_code)
+2026-02-21T20:21:48.234Z [DEBUG] Setting installation status: 0 marketplaces, 0 installable plugins, 0 uninstallable plugins
+2026-02-21T20:21:48.236Z [DEBUG] Loaded plugins - Enabled: 0, Disabled: 0, Commands: 0, Agents: 0, Errors: 0
+2026-02-21T20:21:48.306Z [DEBUG] [keybindings] Watching for changes to /Users/sihaoli/.claude/keybindings.json
+2026-02-21T20:21:48.347Z [DEBUG] MCP server "brain-router": Successfully connected to undefined server in 1108ms
+2026-02-21T20:21:48.348Z [DEBUG] MCP server "brain-router": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"solar-brain-router","version":"1.0.0"}}
+2026-02-21T20:21:48.349Z [DEBUG] MCP server "are": Successfully connected to undefined server in 1106ms
+2026-02-21T20:21:48.349Z [DEBUG] MCP server "are": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"are-orchestrator","version":"1.0.0"}}
+2026-02-21T20:21:48.441Z [DEBUG] Watching for changes in skill/command directories: /Users/sihaoli/.claude/skills, /Users/sihaoli/.claude/skills...
+2026-02-21T20:21:48.942Z [DEBUG] Org fast mode: disabled (extra_usage_disabled)
+2026-02-21T20:21:48.982Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-21T20:21:49.547Z [DEBUG] MCP server "playwright": Successfully connected to undefined server in 2319ms
+2026-02-21T20:21:49.547Z [DEBUG] MCP server "playwright": Connection established with capabilities: {"hasTools":true,"hasPrompts":false,"hasResources":false,"serverVersion":{"name":"Playwright","version":"0.0.61"}}
+2026-02-21T20:21:49.574Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.574Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.574Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.574Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.574Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.574Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.574Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.574Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.574Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.574Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.574Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.574Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.574Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.574Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.575Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.575Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.575Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.575Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.575Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.575Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.575Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.575Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.575Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.575Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.575Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.575Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.575Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.575Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.575Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.575Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.575Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.575Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.575Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.575Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.575Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.575Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.575Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.575Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.575Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.575Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.576Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.576Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.576Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.576Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.576Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.576Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.576Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.576Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.576Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.576Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.576Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.576Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.576Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.576Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.576Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.576Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.576Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.576Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.576Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.576Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.576Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.576Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.577Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.577Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.577Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:49.577Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:49.577Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.578Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.578Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.578Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.578Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.578Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.578Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.578Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.578Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.579Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.579Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.579Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.579Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.579Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.579Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.580Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.580Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.580Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.580Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.580Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.580Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.580Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.580Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.580Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.580Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.580Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.580Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.580Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.581Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.581Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.581Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.581Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:49.581Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.058Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 3)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.058Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.060Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.060Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.060Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.075Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 5)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.075Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.076Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.076Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.076Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.079Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 6)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.079Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.079Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.079Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.079Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.080Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 4)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.080Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.080Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.080Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.080Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.086Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 2)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.087Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.087Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.087Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.087Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.088Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 7)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.088Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.088Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.088Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.088Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.135Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 1)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.137Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.137Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.137Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.137Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.146Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 0)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.146Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.147Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.147Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.147Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.226Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 9)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.226Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.226Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.226Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.226Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.231Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 29)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.231Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.231Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.231Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.231Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.234Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 13)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.234Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.235Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.235Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.235Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.237Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 24)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.237Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.237Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.238Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.238Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.246Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 25)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.246Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.246Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.246Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.247Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.249Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 31)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.249Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.249Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.249Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.249Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.255Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 22)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.255Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.255Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.255Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.255Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.258Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 28)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.258Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.258Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.258Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.258Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.259Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 19)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.259Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.259Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.259Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.259Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.260Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 14)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.260Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.260Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.260Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.260Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.264Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 32)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.264Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.264Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.264Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.264Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.265Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 18)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.265Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.265Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.265Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.266Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.268Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 10)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.268Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.268Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.268Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.268Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.273Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 21)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.273Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.273Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.273Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.273Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.273Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 8)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.273Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.273Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.273Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.273Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.275Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 30)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.275Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.275Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.275Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.275Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.278Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 17)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.278Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.278Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.278Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.278Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.291Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 20)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.291Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.291Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.291Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.291Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.305Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 16)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.305Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.305Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.305Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.305Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.306Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 27)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.306Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.306Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.306Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.306Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.310Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 26)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.310Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.310Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.310Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.310Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.312Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 23)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.313Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.313Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.313Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.313Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.314Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 11)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.314Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.314Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.314Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.314Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.320Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 12)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.320Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.320Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.320Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.320Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.334Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 15)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+2026-02-21T20:21:50.334Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (1 tools)
+2026-02-21T20:21:50.335Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.335Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.335Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:50.553Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.555Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 1)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.556Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__brain-router__list_models
+2026-02-21T20:21:50.575Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.576Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 2)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.576Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__brain-router__check_availability
+2026-02-21T20:21:50.576Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.576Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 0)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.576Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__brain-router__complete
+2026-02-21T20:21:50.577Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.577Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 4)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.577Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__brain-router__switch_mode
+2026-02-21T20:21:50.577Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.577Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 7)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.577Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__are__orchestrate
+2026-02-21T20:21:50.582Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.582Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 3)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.583Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__brain-router__sroe_stats
+2026-02-21T20:21:50.584Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.584Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 5)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.584Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__brain-router__list_modes
+2026-02-21T20:21:50.594Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.594Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 6)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.594Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__brain-router__current_mode
+2026-02-21T20:21:50.651Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.652Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 9)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.652Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__are__list_plans
+2026-02-21T20:21:50.653Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.653Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 32)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.653Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_wait_for
+2026-02-21T20:21:50.657Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.657Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 24)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.657Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_run_code
+2026-02-21T20:21:50.666Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.671Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 13)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.671Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_console_messages
+2026-02-21T20:21:50.674Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.674Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 20)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.674Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_type
+2026-02-21T20:21:50.686Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.686Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 17)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.686Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_fill_form
+2026-02-21T20:21:50.687Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.687Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 16)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.687Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_file_upload
+2026-02-21T20:21:50.697Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.698Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 28)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.698Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_drag
+2026-02-21T20:21:50.698Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.699Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 14)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.699Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_handle_dialog
+2026-02-21T20:21:50.703Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.703Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 19)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.703Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_press_key
+2026-02-21T20:21:50.703Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.703Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 30)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.703Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_select_option
+2026-02-21T20:21:50.712Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.713Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 31)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.713Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_tabs
+2026-02-21T20:21:50.713Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.713Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 10)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.713Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__are__stats
+2026-02-21T20:21:50.713Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.713Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 29)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.713Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_hover
+2026-02-21T20:21:50.715Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.715Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 25)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.715Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_take_screenshot
+2026-02-21T20:21:50.715Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.715Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 22)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.715Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_navigate_back
+2026-02-21T20:21:50.725Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.725Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 21)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.725Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_navigate
+2026-02-21T20:21:50.734Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.734Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 26)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.734Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_snapshot
+2026-02-21T20:21:50.748Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.748Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 8)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.748Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__are__execute_plan
+2026-02-21T20:21:50.759Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.759Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 27)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.759Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_click
+2026-02-21T20:21:50.766Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.766Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 18)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.766Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_install
+2026-02-21T20:21:50.766Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.766Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 15)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.766Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_evaluate
+2026-02-21T20:21:50.770Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.770Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 12)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.770Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_resize
+2026-02-21T20:21:50.791Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.791Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 23)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.791Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_network_requests
+2026-02-21T20:21:50.791Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:50.791Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async Promise.all (index 11)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13637)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:50.791Z [DEBUG] countToolDefinitionTokens returned null for 1 tools: mcp__playwright__browser_close
+2026-02-21T20:21:50.795Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:50.795Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:50.795Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:51.264Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:6225:14196
+    at async YHz (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:6225:13624)
+2026-02-21T20:21:51.264Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (33 tools)
+2026-02-21T20:21:51.265Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:51.265Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:51.265Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:51.763Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:51.763Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:6225:14196
+    at async YHz (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:6225:13624)
+    at async LU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:6225:12346)
+    at async dU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:13814)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:503)
+2026-02-21T20:21:51.763Z [DEBUG] countToolDefinitionTokens returned null for 33 tools: mcp__brain-router__complete, mcp__brain-router__list_models, mcp__brain-router__check_availability, ...
+2026-02-21T20:21:51.764Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: analyzeMcp]
+2026-02-21T20:21:51.795Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:51.796Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:51.796Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:52.275Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:3741
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2624
+    at async w99 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:960:3930)
+    at async NL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2557)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10195)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:554)
+2026-02-21T20:21:52.275Z [DEBUG] countTokensWithFallback: API returned null, trying haiku fallback (21 tools)
+2026-02-21T20:21:52.275Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:52.275Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:52.275Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:52.697Z [DEBUG] countTokensWithFallback: haiku fallback failed: Connection error.
+2026-02-21T20:21:52.697Z [ERROR] Error: Error: Connection error.
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:4542)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async RL7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:4563)
+    at async pU1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10467)
+    at async Yc (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3530:10891)
+    at async n1q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3547:554)
+2026-02-21T20:21:52.697Z [DEBUG] countToolDefinitionTokens returned null for 21 tools: Task, TaskOutput, Bash, Glob, Grep, ExitPlanMode, Read, Edit, Write, NotebookEdit, WebFetch, WebSear...
+2026-02-21T20:21:53.074Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-21T20:21:53.075Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-21T20:21:53.076Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-21T20:21:53.076Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-21T20:21:53.079Z [DEBUG] Sending 48 skills via attachment (initial, 48 total sent)
+2026-02-21T20:21:53.088Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-21T20:21:53.088Z [DEBUG] Found 0 hook matchers in settings
+2026-02-21T20:21:53.088Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-21T20:21:53.089Z [DEBUG] FileHistory: Added snapshot for 979ddd00-9547-497f-8c76-d7e2bcaaed93, tracking 0 files
+2026-02-21T20:21:53.092Z [DEBUG] [useDeferredValue] Messages deferred by 2 (0→2)
+2026-02-21T20:21:53.126Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-21T20:21:53.129Z [DEBUG] Plugin autoupdate: skipped (auto-updater disabled)
+2026-02-21T20:21:53.135Z [DEBUG] [SystemPrompt] path=simple proactive=false
+2026-02-21T20:21:53.139Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-21T20:21:53.141Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.5df; cc_entrypoint=cli; cch=00000;
+2026-02-21T20:21:53.143Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:53.143Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:53.144Z [DEBUG] Total plugin output styles loaded: 0
+2026-02-21T20:21:53.145Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:53.157Z [ERROR] API error (attempt 1/11): undefined Connection error.
+2026-02-21T20:21:53.177Z [DEBUG] autocompact: tokens=1032 threshold=167000 effectiveWindow=180000
+2026-02-21T20:21:53.177Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-21T20:21:53.177Z [DEBUG] Using tool-based global cache marker on TaskList
+2026-02-21T20:21:53.185Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=cli; cch=00000;
+2026-02-21T20:21:53.190Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-21T20:21:53.190Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-21T20:21:53.191Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-21T20:21:53.207Z [DEBUG] [useDeferredValue] Messages deferred by 2 (0→2)
+2026-02-21T20:21:53.215Z [ERROR] API error (attempt 1/11): undefined Connection error.
+2026-02-21T20:21:53.217Z [DEBUG] [useDeferredValue] Messages deferred by 3 (0→3)
+2026-02-21T20:21:53.232Z [DEBUG] Stats cache is up to date
+2026-02-21T20:21:53.680Z [ERROR] API error (attempt 2/11): undefined Connection error.
+2026-02-21T20:21:53.756Z [ERROR] API error (attempt 2/11): undefined Connection error.
+2026-02-21T20:21:53.757Z [DEBUG] [useDeferredValue] Messages deferred by 1 (3→4)
+2026-02-21T20:21:54.752Z [ERROR] API error (attempt 3/11): undefined Connection error.
+2026-02-21T20:21:54.887Z [ERROR] API error (attempt 3/11): undefined Connection error.
+2026-02-21T20:21:54.887Z [DEBUG] [useDeferredValue] Messages deferred by 1 (4→5)
+2026-02-21T20:21:56.942Z [ERROR] API error (attempt 4/11): undefined Connection error.
+2026-02-21T20:21:57.271Z [ERROR] API error (attempt 4/11): undefined Connection error.
+2026-02-21T20:21:57.273Z [DEBUG] [useDeferredValue] Messages deferred by 1 (5→6)
+2026-02-21T20:22:01.705Z [ERROR] API error (attempt 5/11): undefined Connection error.
+2026-02-21T20:22:01.964Z [ERROR] API error (attempt 5/11): undefined Connection error.
+2026-02-21T20:22:01.971Z [DEBUG] [useDeferredValue] Messages deferred by 1 (6→7)
+2026-02-21T20:22:02.166Z [DEBUG] [useDeferredValue] Messages deferred by 1 (6→7)
+2026-02-21T20:22:09.922Z [ERROR] API error (attempt 6/11): undefined Connection error.
+2026-02-21T20:22:10.769Z [ERROR] API error (attempt 6/11): undefined Connection error.
+2026-02-21T20:22:10.772Z [DEBUG] [useDeferredValue] Messages deferred by 1 (7→8)
+2026-02-21T20:22:15.845Z [DEBUG] Getting matching hook commands for SessionEnd with query: other
+2026-02-21T20:22:15.845Z [DEBUG] Found 0 hook matchers in settings
+2026-02-21T20:22:15.845Z [DEBUG] Matched 0 unique hooks for query "other" (0 before deduplication)

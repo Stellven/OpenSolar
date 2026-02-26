@@ -1,0 +1,17 @@
+2026-02-11T02:44:52.589Z [DEBUG] Watching for changes in setting files /Users/sihaoli/.claude...
+2026-02-11T02:44:52.591Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-11T02:44:52.591Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-11T02:44:52.591Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-11T02:44:52.591Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-11T02:44:52.594Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-02-11T02:44:52.594Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-02-11T02:44:52.594Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-02-11T02:44:52.595Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-11T02:44:52.605Z [DEBUG] Found 0 plugins (0 enabled, 0 disabled)
+2026-02-11T02:44:52.605Z [DEBUG] Total LSP servers loaded: 0
+2026-02-11T02:44:52.606Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 0 server(s)
+2026-02-11T02:44:52.606Z [DEBUG] LSP manager initialized with 0 servers
+2026-02-11T02:44:52.606Z [DEBUG] LSP server manager initialized successfully
+2026-02-11T02:44:52.606Z [DEBUG] LSP notification handlers registered successfully for all 0 server(s)
+2026-02-11T02:44:52.606Z [DEBUG] [STARTUP] MCP configs loaded in 11ms
+2026-02-11T02:44:52.609Z [DEBUG] Watching for changes in skill/command directories: /Users/sihaoli/.claude/skills...
