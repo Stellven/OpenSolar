@@ -24,12 +24,24 @@
 - Done: 创建 /tmp/emotion-prompt-ab-comparison.md
 - Done: MCP 配置诊断（mcp.json 存在且正确）
 - Done: 确认 brain-router 服务已连接（claude mcp list）
-- Blocked: MCP 工具调用失败（需要重启 Claude Code）
-- In-Progress: 等待重启后测试 MCP 调用
+- Done: 读取 auto-capture 系统相关文件（了解自动捕获架构）
+  • auto-capture-batch-extract.ts - 批量知识抽取
+  • auto-capture-test.ts - 端到端测试
+  • auto-capture-detector.ts - 自动产物检测器
+  • auto-capture-wrapper.ts - 自动捕获包装器
+  • auto-capture.ts - 核心模块
+- Blocked: EmotionPrompt A/B 测试被 MCP 工具调用问题阻塞（需重启 Claude Code）
+- In-Progress: 等待监护人明确下一步任务方向
 
 # Next Actions (Exact)
+## EmotionPrompt 任务（如果继续）:
 - [ ] 重启 Claude Code
 - [ ] 测试调用 mcp__brain-router__list_models
 - [ ] 运行 CONTROL 组：调用 glm-5 实现 LRU Cache（无 emotion）
 - [ ] 运行 EMOTION 组：调用 glm-5 实现 LRU Cache（有 emotion）
 - [ ] 评分对比并得出结论
+
+## Auto-Capture 任务（如果是新任务）:
+- [ ] 明确任务目标：是要改进系统？还是只是了解架构？
+- [ ] 如果需要改进，使用 unified-query.ts 查询 Cortex 相关经验
+- [ ] 基于证据设计改进方案
