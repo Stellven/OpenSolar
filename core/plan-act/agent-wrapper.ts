@@ -189,9 +189,33 @@ export function validateConstraintChecks(
 }
 
 /**
- * 调用 Agent（模拟 - 实际需要 MCP）
+ * Agent 调用函数类型（由外部注入）
+ */
+export type AgentCaller = (params: AgentCallParams) => Promise<unknown>;
+
+// 全局 Agent 调用器（可被外部注入）
+let globalAgentCaller: AgentCaller | null = null;
+
+/**
+ * 设置 Agent 调用器（集成时调用）
  *
- * 注意：这是一个桩实现，实际使用时需要调用 brain-router MCP
+ * @param caller - Agent 调用函数
+ */
+export function setAgentCaller(caller: AgentCaller): void {
+  globalAgentCaller = caller;
+}
+
+/**
+ * 获取当前 Agent 调用器
+ */
+export function getAgentCaller(): AgentCaller | null {
+  return globalAgentCaller;
+}
+
+/**
+ * 调用 Agent
+ *
+ * 优先使用注入的调用器，否则返回模拟结果
  *
  * @param params - Agent 调用参数
  * @returns Agent 输出
@@ -205,19 +229,26 @@ export async function callAgent(params: AgentCallParams): Promise<unknown> {
     params.planContext
   );
 
-  // 这里应该调用 mcp__brain-router__complete
-  // 但由于这是 TypeScript 文件，我们返回一个模拟结果
-  // 实际使用时，这个函数会被注入 MCP 调用能力
+  // 如果有注入的调用器，使用它
+  if (globalAgentCaller) {
+    console.log(`[AgentWrapper] Calling ${params.agent} with model ${model}`);
+    return globalAgentCaller(params);
+  }
 
-  console.log(`[AgentWrapper] Calling ${params.agent} with model ${model}`);
-  console.log(`[AgentWrapper] Task: ${params.task.slice(0, 50)}...`);
+  // 否则返回模拟结果（用于测试）
+  console.log(`[AgentWrapper] [MOCK] Calling ${params.agent} with model ${model}`);
+  console.log(`[AgentWrapper] [MOCK] Task: ${params.task.slice(0, 50)}...`);
 
-  // 模拟调用结果
   return {
     model,
     agent: params.agent,
     output: `[${params.agent}] 执行完成: ${params.task}`,
-    note: '这是模拟输出，实际使用时需要调用 MCP'
+    constraintsChecked: params.constraints.map(c => ({
+      constraint: c,
+      passed: true,
+      reason: '模拟检查通过'
+    })),
+    note: 'MOCK 输出 - 需要注入真实调用器'
   };
 }
 
