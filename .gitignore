@@ -19,3 +19,6 @@ shell-snapshots/
 *-key*
 *-secret*
 *-token*
+.venv/
+*.pyc
+__pycache__/
