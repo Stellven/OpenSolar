@@ -189,6 +189,9 @@
 | 深入洞察 <主题> | → /insight 完整报告 (八阶段四专家+分章持久化) |
 | 深度洞察：<主题> | → `bun ~/.claude/core/solar-farm/insight-agent-v2.ts "<主题>" 3 --force` |
 | 小爱/呼叫小爱 | → `~/.claude/scripts/xiaoai-remote.sh "任务"` |
+| /plan <任务> | → `bun ~/.claude/core/plan-act/plan-act-adapter.ts execute "<任务>"` |
+| /plan preview <任务> | → `bun ~/.claude/core/plan-act/plan-act-adapter.ts plan "<任务>"` |
+| /plan metrics | → `bun ~/.claude/core/plan-act/plan-act-adapter.ts metrics` |
 
 ## @Agent
 `@Researcher` `@Architect` `@PM` `@Reporter` `@Coder` `@Tester` `@Reviewer` `@Docs` `@Ops` `@Guard` `@Secretary` `@BenchmarkReporter` `@SM`
