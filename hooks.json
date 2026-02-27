@@ -1,0 +1,8 @@
+{
+  "SessionEnd": [
+    {
+      "name": "sma-auto-consolidate",
+      "command": "/Users/sihaoli/.claude/hooks/sma-auto-consolidate.sh"
+    }
+  ]
+}

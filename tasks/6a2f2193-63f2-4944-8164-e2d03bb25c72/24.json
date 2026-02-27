@@ -1,0 +1,9 @@
+{
+  "id": "24",
+  "subject": "完成 Nerve 系统激活 - L2→L3 知识提取",
+  "description": "**当前状态（部分完成）**：\n- ✅ 数据库基础设施完整运行（28表、576实体、812关系、1145结论）\n- ✅ L2 自动记录对话（4686条）\n- ✅ **Evolution Council 已激活并提供解决方案**\n  - 集成 llm-api-client 完成\n  - 测试验证成功（session:1772156847133:5ykak8ad8, 成本 $0.10）\n  - 已产出\"自适应令牌管理\"策略应对 L2→L3 token 超限问题\n- ⏳ L2→L3 自动提取待执行（等待基础设施：knowledge_records 表）\n\n**已完成**：\n✅ 激活 Evolution Council 自动决策功能（2026-02-24）\n\n**待完成**：\n1. 创建 knowledge_records 表等基础设施\n2. 执行 Evolution Council 提出的四阶段优化策略：\n   - Phase 1: 数据预处理与 token 评估\n   - Phase 2: 动态分批算法验证\n   - Phase 3: 全量处理 4686 条记录\n   - Phase 4: 封装为标准服务\n3. 测试 Memory Controller 的 link/evolve 高级功能\n\n**预期收益**（基于 Council 策略）：\n- 节省 ~$125 USD（token 消耗减少 30-50%）\n- 消除超限错误\n- 提升知识提取质量\n\n**优先级**：P1（核心记忆系统）",
+  "activeForm": "完成 Nerve 系统激活",
+  "status": "in_progress",
+  "blocks": [],
+  "blockedBy": []
+}
