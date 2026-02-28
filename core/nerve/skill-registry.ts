@@ -333,7 +333,7 @@ const BUILTIN_INTENTS: SkillDefinition[] = [
     name: 'Plan-and-Act',
     type: 'intent',
     description: '多步骤任务自动规划与执行',
-    triggers: ['实现一个', '开发一个', '写一个', '做个', '帮我实现', '帮我开发', '重构', '集成', '修复这个', '调试'],
+    triggers: ['实现一个', '开发一个', '写一个', '写个', '做个', '做个', '帮我实现', '帮我开发', '帮我写', '重构', '集成', '修复这个', '调试'],
     delegationMode: 'internal',
     defaultModels: ['glm-5', 'gemini-2.5-pro'],
     metadata: {
