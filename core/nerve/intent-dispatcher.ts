@@ -18,6 +18,8 @@ import {
   type SkillDefinition,
   type DelegationMode
 } from './skill-registry';
+import { buildDAG, renderASCII, renderCompact, type DAGGraph } from '../plan-act/dag-visualizer';
+import type { Plan } from '../plan-act/types';
 
 // ============ 类型定义 ============
 
@@ -34,6 +36,8 @@ export interface ExecutionResult {
     system: string;
     prompt: string;
   }>;
+  dag?: DAGGraph;                 // DAG 图（Plan-and-Act 时返回）
+  plan?: Plan;                    // Plan 对象
 }
 
 // ============ 执行器映射 ============
@@ -114,6 +118,12 @@ const EXECUTORS: Record<DelegationMode, ExecutorConfig> = {
           const { executePlanWithMCP } = await import('../plan-act/real-executor');
           const result = await executePlanWithMCP(userInput, constraints);
 
+          // 构建 DAG
+          const dag = buildDAG(result.plan);
+
+          // 显示 ASCII DAG
+          console.log(renderCompact(dag));
+
           return {
             success: true,
             skill,
@@ -125,7 +135,9 @@ const EXECUTORS: Record<DelegationMode, ExecutorConfig> = {
               model: call.model,
               system: call.system,
               prompt: call.prompt
-            }))
+            })),
+            dag,
+            plan: result.plan
           };
         } catch (error) {
           return {
