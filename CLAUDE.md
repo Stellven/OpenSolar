@@ -243,38 +243,55 @@ cat ~/.solar/rules-archive/<citation_key>.md
 - multi-expert-analysis.md - 多专家会审
 - tvs-rendering.md - TVS渲染
 
-## 技能动态检索 (自动触发)
+## 技能分层检索 (MCP v2.0)
 
-> 每次回复前，根据用户意图自动检索相关技能
+> 三层架构：Core（始终加载）+ Domain（按意图）+ Utility（精确匹配）
 
-### 触发流程
+### ⚡ 强制触发规则
+
+**收到以下类型消息时，必须调用 MCP 工具检索技能：**
+
+| 触发词 | 调用 MCP |
+|--------|----------|
+| 设计/实现/开发/优化/重构/调试/测试 | `mcp__skill_retriever__retrieve_layered` |
+| Python/React/K8s/Docker/安全/API | `mcp__skill_retriever__retrieve_layered` |
+| 权衡/决策/分析/根因 | `mcp__skill_retriever__retrieve_layered` |
+
+### 调用方式
 
 ```
-用户消息到达
-    ↓
-bun ~/.claude/core/skill-retriever.ts search "<用户消息>"
-    ↓
-获取 Top-K 相关技能
-    ↓
-读取技能 SKILL.md 内容
-    ↓
-注入到当前上下文
-    ↓
-生成回复
+mcp__skill_retriever__retrieve_layered({
+  query: "<用户消息>",
+  max_domain: 9,
+  max_utility: 3
+})
 ```
 
-### 自动调用命令
+### 返回结构
 
-收到用户消息后，**自动执行**：
+```json
+{
+  "layers": {
+    "core": { "count": 14, "skills": ["systems-thinking", ...] },
+    "domain": { "count": 3, "skills": ["python-patterns", ...] },
+    "utility": { "count": 0, "skills": [] }
+  },
+  "total": 17
+}
+```
 
-```bash
-bun ~/.claude/core/skill-retriever.ts search "<用户意图>" 2>/dev/null
+### 三层架构
+
+```
+Core Layer (14)     → 元技能 + Solar 核心，始终加载
+Domain Layer (58)   → 8 大领域，按意图动态检索
+Utility Layer (1423)→ 冷启动，精确匹配
 ```
 
 ### 技能优先级
 
 1. **元技能** (最高) - systems-thinking, evaluating-trade-offs 等
-2. **领域技能** - python-patterns, kubernetes-specialist 等  
+2. **领域技能** - python-patterns, kubernetes-specialist 等
 3. **工具技能** - 具体工具使用
 
 ### 典型场景
@@ -282,9 +299,17 @@ bun ~/.claude/core/skill-retriever.ts search "<用户意图>" 2>/dev/null
 | 用户说 | 自动加载 |
 |--------|----------|
 | "帮我权衡一下这个方案" | evaluating-trade-offs, decision-helper |
-| "这个 Bug 怎么查" | root-cause-analysis, debugging-strategies |
+| "这个 Bug 怎么查" | root-cause-analysis |
 | "优化 Python 性能" | python-performance-optimization, python-patterns |
-| "设计一个架构" | architect-reviewer, architecture-patterns |
+| "设计 K8s 安全部署" | kubernetes-specialist + security-audit-patterns |
+
+### 加载技能内容
+
+检索到技能后，使用 `mcp__skill_retriever__load_skill` 加载完整内容：
+
+```
+mcp__skill_retriever__load_skill({ skill_name: "systems-thinking" })
+```
 
 ### 注意事项
 
