@@ -1,9 +1,8 @@
 #!/bin/bash
-# Skill-RAG Auto-Dispatcher Hook
+# Skill-RAG Auto-Dispatcher Hook v2.0
 # 位置: UserPromptSubmit
-# 目的: 每次用户输入时自动匹配 Playbook，注入上下文提示
-# 修复断头1: 主脑不会自动调 matchPlaybooks()
-# v1.0 2026-02-24
+# 目的: 每次用户输入时自动检索相关技能，注入上下文提示
+# v2.0 2026-03-01 - 升级到三层架构
 
 set -euo pipefail
 
@@ -22,12 +21,28 @@ case "$USER_INPUT" in
   solar*|Solar*) exit 0 ;; # 启动词
 esac
 
-# 调用 auto-dispatcher hook 模式 (静默失败)
-RESULT=$(cd ~/.claude/core/solar-farm && bun auto-dispatcher.ts hook "$USER_INPUT" 2>/dev/null || echo "")
+# 检测技术关键词 (触发技能检索)
+TECH_KEYWORDS="设计|实现|开发|优化|重构|调试|测试|Python|React|Kubernetes|Docker|安全|API|权衡|决策|分析|根因|k8s|frontend|backend|database"
+if ! echo "$USER_INPUT" | grep -qE "$TECH_KEYWORDS"; then
+  exit 0
+fi
 
-# 有匹配结果才输出
-if [ -n "$RESULT" ] && echo "$RESULT" | grep -q "skill-rag-hint"; then
-  echo "$RESULT"
+# 调用新的技能分层系统
+RESULT=$(cd ~/.claude/core && bun skill-layer-system.ts retrieve "$USER_INPUT" 2>/dev/null || echo "")
+
+# 有匹配结果才输出提示
+if [ -n "$RESULT" ] && echo "$RESULT" | grep -q "领域层"; then
+  # 提取 Domain 技能
+  DOMAIN_SKILLS=$(echo "$RESULT" | grep -A 5 "=== 领域层 ===" | grep "^  " | head -3 | tr '\n' ',' | sed 's/,$//' | sed 's/  //g')
+
+  if [ -n "$DOMAIN_SKILLS" ]; then
+    cat << EOF
+{
+  "type": "skill-rag-hint",
+  "message": "💡 检测到技术问题，建议调用技能检索:\n   mcp__skill_retriever__retrieve_layered({ query: \"$USER_INPUT\" })\n\n   相关技能: $DOMAIN_SKILLS"
+}
+EOF
+  fi
 fi
 
 exit 0
