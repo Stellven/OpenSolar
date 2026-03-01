@@ -242,3 +242,53 @@ cat ~/.solar/rules-archive/<citation_key>.md
 - master-brain-persona.md - 主脑人格
 - multi-expert-analysis.md - 多专家会审
 - tvs-rendering.md - TVS渲染
+
+## 技能动态检索 (自动触发)
+
+> 每次回复前，根据用户意图自动检索相关技能
+
+### 触发流程
+
+```
+用户消息到达
+    ↓
+bun ~/.claude/core/skill-retriever.ts search "<用户消息>"
+    ↓
+获取 Top-K 相关技能
+    ↓
+读取技能 SKILL.md 内容
+    ↓
+注入到当前上下文
+    ↓
+生成回复
+```
+
+### 自动调用命令
+
+收到用户消息后，**自动执行**：
+
+```bash
+bun ~/.claude/core/skill-retriever.ts search "<用户意图>" 2>/dev/null
+```
+
+### 技能优先级
+
+1. **元技能** (最高) - systems-thinking, evaluating-trade-offs 等
+2. **领域技能** - python-patterns, kubernetes-specialist 等  
+3. **工具技能** - 具体工具使用
+
+### 典型场景
+
+| 用户说 | 自动加载 |
+|--------|----------|
+| "帮我权衡一下这个方案" | evaluating-trade-offs, decision-helper |
+| "这个 Bug 怎么查" | root-cause-analysis, debugging-strategies |
+| "优化 Python 性能" | python-performance-optimization, python-patterns |
+| "设计一个架构" | architect-reviewer, architecture-patterns |
+
+### 注意事项
+
+- 最多加载 3-5 个技能，避免上下文膨胀
+- 元技能优先级高于领域技能
+- 总 token 控制在 4000 以内
+

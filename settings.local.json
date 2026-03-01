@@ -150,6 +150,7 @@
   "enabledMcpjsonServers": [
     "playwright",
     "brain-router",
-    "are"
+    "are",
+    "skill-retriever"
   ]
 }
