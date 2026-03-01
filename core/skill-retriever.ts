@@ -35,33 +35,95 @@ const META_SKILLS = [
   "decision-helper",
 ];
 
-// 意图 → 技能映射
+// 意图 → 技能映射（扩展版 P1）
 const INTENT_SKILL_MAP: Record<string, string[]> = {
   // 元技能触发
   "复杂问题": ["systems-thinking", "problem-definition"],
   "权衡": ["evaluating-trade-offs", "decision-helper"],
   "决策": ["evaluating-trade-offs", "decision-helper", "firstprinciples"],
   "根因": ["root-cause-analysis", "sequential-thinking"],
-  "调试": ["root-cause-analysis", "debugging-strategies"],
+  "调试": ["root-cause-analysis", "debugging-strategies", "debugging"],
+  "调试bug": ["debugging-strategies", "root-cause-analysis", "error-detective"],
   "架构": ["architect-reviewer", "architecture-patterns", "evaluating-trade-offs"],
-  "设计": ["architecture-patterns", "domain-driven-design"],
+  "设计": ["architecture-patterns", "api-design-principles"],
   "分析": ["root-cause-analysis", "systems-thinking", "evaluating-trade-offs"],
-  
-  // 领域技能触发
+  "排查": ["root-cause-analysis", "debugging-strategies"],
+  "错误": ["error-detective", "error-resolver", "debugging-strategies"],
+  "异常": ["error-detective", "exception-handling"],
+  "优化": ["performance-optimization-patterns", "python-performance-optimization"],
+
+  // Python 生态
   "python": ["python-patterns", "python-architect", "python-performance-optimization"],
-  "react": ["react-patterns", "react-architect"],
-  "kubernetes": ["kubernetes-specialist", "kubernetes-architect"],
+  "django": ["django-patterns", "django-developer"],
+  "fastapi": ["fastapi-development", "fastapi-endpoint"],
+  "flask": ["flask-api-development"],
+
+  // JavaScript/TypeScript 生态
+  "react": ["react-patterns", "react-architect", "react-specialist"],
+  "vue": ["vue-application-structure", "vue-expert"],
+  "nextjs": ["nextjs-best-practices", "nextjs-developer"],
+  "nodejs": ["nodejs-best-practices", "nodejs-backend-patterns"],
+  "typescript": ["typescript-expert", "typescript-pro"],
+  "javascript": ["javascript-patterns", "javascript-pro"],
+
+  // 基础设施
+  "kubernetes": ["kubernetes-specialist", "kubernetes-deployment"],
+  "k8s": ["kubernetes-specialist", "kubernetes-deployment"],
+  "docker": ["docker-patterns", "docker-containerization"],
   "terraform": ["terraform-engineer", "terraform-module-library"],
-  "测试": ["e2e-testing-patterns", "unit-testing-patterns", "playwright-testing"],
-  "安全": ["security-audit-patterns", "auth-implementation-patterns"],
+  "aws": ["aws-serverless", "aws-ec2-setup"],
+  "azure": ["azure-functions", "azure-app-service"],
+
+  // 开发实践
+  "测试": ["e2e-testing-patterns", "unit-testing-patterns", "testing-patterns"],
+  "单元测试": ["unit-testing-patterns", "python-testing-patterns"],
+  "e2e": ["e2e-testing-patterns", "playwright-testing"],
+  "安全": ["security-audit-patterns", "security-best-practices"],
+  "auth": ["auth-implementation-patterns", "oauth-implementation"],
+  "认证": ["auth-implementation-patterns", "jwt-implementation"],
+
+  // 数据
   "数据库": ["postgres-patterns", "database-migration-patterns"],
-  "api": ["api-design-principles", "rest-api-designer"],
-  "性能": ["python-performance-optimization", "performance-optimization-patterns"],
-  "重构": ["refactoring-patterns", "legacy-modernizer"],
-  "文档": ["technical-writing", "api-documenter"],
-  "git": ["git-advanced-workflows", "github-actions-patterns"],
+  "sql": ["sql-patterns", "sql-query-optimization"],
+  "postgres": ["postgres-patterns", "postgres-pro"],
+  "redis": ["redis-patterns", "caching-strategy"],
+  "mongodb": ["mongodb-patterns", "nosql-database-design"],
+
+  // API
+  "api": ["api-design-principles", "api-patterns", "rest-api-design"],
+  "rest": ["rest-api-design", "api-design-principles"],
+  "graphql": ["graphql-architect", "graphql-implementation"],
+  "grpc": ["grpc-service-development"],
+
+  // DevOps
+  "git": ["git-advanced-workflows", "git-workflow-strategy"],
+  "github": ["github-actions-patterns", "github-workflow-automation"],
   "ci": ["cicd-pipeline-patterns", "github-actions-patterns"],
-  "部署": ["cicd-pipeline-patterns", "vercel-deploy"],
+  "cd": ["cicd-pipeline-patterns", "deployment-patterns"],
+  "cicd": ["cicd-pipeline-patterns", "github-actions-patterns"],
+  "部署": ["deployment-patterns", "vercel-deploy", "netlify-deploy"],
+
+  // 代码质量
+  "重构": ["refactoring-patterns", "legacy-modernizer"],
+  "code review": ["code-review-patterns", "code-reviewer"],
+  "代码审查": ["code-review-patterns", "reviewer"],
+  "文档": ["technical-writing", "documentation-engineer"],
+
+  // AI/ML
+  "ai": ["ai-engineer", "ai-product"],
+  "ml": ["machine-learning-engineer", "ml-engineer"],
+  "llm": ["llm-architect", "building-with-llms"],
+  "rag": ["rag-engineer", "rag-implementation"],
+
+  // 移动端
+  "ios": ["ios-swift-development", "swiftui-patterns"],
+  "android": ["android-kotlin-development"],
+  "flutter": ["flutter-development", "flutter-expert"],
+
+  // 性能
+  "性能": ["performance-optimization-patterns", "python-performance-optimization"],
+  "优化性能": ["performance-optimization-patterns", "performance-profiling"],
+  "慢查询": ["sql-query-optimization", "database-query-optimization"],
 };
 
 // 扫描所有技能
