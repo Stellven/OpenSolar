@@ -1,0 +1,154 @@
+# Solar Skill Tree v1.0
+# 6 大分类 + 96 技能映射
+# 创建时间: 2026-02-28
+
+categories:
+  development:
+    name: "🛠️ Development"
+    description: "开发工具：构建、测试、提交、代码审查"
+    skills:
+      - build
+      - test
+      - commit
+      - pr
+      - review
+      - code-review
+      - sp-code-review
+      - sp-tdd
+      - sp-debugging
+      - docs
+      - changelog
+      - vercel-deploy
+      - precise-edit
+      - diff
+      - deps
+      - migrate
+
+  productivity:
+    name: "📱 Productivity"
+    description: "办公效率：邮件、日程、任务、快捷指令"
+    skills:
+      - office
+      - office-email
+      - office-notes
+      - office-tasks
+      - office-reminders
+      - office-notion
+      - office-trello
+      - email-search
+      - email-web
+      - imessage-send
+      - call
+      - shortcut
+      - shortcut-builder
+      - shortcut-search
+      - calendar
+      - weather
+
+  research:
+    name: "🧠 Research"
+    description: "研究分析：洞察、学习、知识管理"
+    skills:
+      - insight
+      - sp-brainstorming
+      - notebooklm
+      - brain
+      - brain-update
+      - search
+      - websearch
+      - learn
+      - experience
+      - recall
+      - knowledge
+      - analyze
+      - graph
+      - favorites
+
+  creation:
+    name: "🎨 Creation"
+    description: "内容创作：设计、图像、报告"
+    skills:
+      - frontend-design
+      - imagen
+      - report
+      - selfie
+      - skin-check
+      - ppt
+      - banner
+      - theme
+      - makeup-advisor
+
+  automation:
+    name: "🔧 Automation"
+    description: "自动化：浏览器、MCP、监控"
+    skills:
+      - browser
+      - webapp-testing
+      - mcp-builder
+      - agent
+      - cron
+      - watch
+      - queue
+      - sandbox
+      - hn-monitor
+      - http
+
+  system:
+    name: "⚙️ System"
+    description: "系统管理：配置、状态、备份"
+    skills:
+      - solar
+      - status
+      - phase
+      - ontology
+      - restore
+      - save
+      - remember
+      - forget
+      - memory-review
+      - install
+      - env
+      - backup
+      - log
+      - stats
+      - alert
+      - perf
+      - self-eval
+      - mode
+      - planning-with-files
+
+# 技能标签（用于检索增强）
+tags:
+  git: [commit, pr, review, changelog]
+  email: [office-email, email-search, email-web]
+  apple: [office-notes, office-reminders, shortcut, shortcut-builder, imessage-send]
+  browser: [browser, webapp-testing]
+  ai: [insight, brain, notebooklm, imagen, skin-check]
+  mcp: [mcp-builder]
+  test: [test, sp-tdd, webapp-testing, benchmark]
+  docs: [docs, report, changelog]
+
+# 关键词映射（自然语言 → 技能）
+keywords:
+  "提交代码": commit
+  "git commit": commit
+  "发邮件": office-email
+  "查邮件": email-search
+  "打电话": call
+  "发短信": imessage-send
+  "拍照": selfie
+  "皮肤检测": skin-check
+  "测试": test
+  "构建": build
+  "部署": vercel-deploy
+  "文档": docs
+  "写报告": report
+  "浏览器": browser
+  "网页操作": browser
+  "洞察": insight
+  "分析": analyze
+  "设计": frontend-design
+  "生成图片": imagen
+  "快捷指令": shortcut
+  "恢复状态": restore
+  "保存": save

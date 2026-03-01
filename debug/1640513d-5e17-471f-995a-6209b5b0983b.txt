@@ -1,0 +1,909 @@
+2026-02-28T00:53:33.664Z [DEBUG] [onCancel] focusedInputDialog=undefined streamMode=responding
+2026-02-28T00:53:33.668Z [WARN] [PROMPT CACHE BREAK] unknown cause [source=repl_main_thread, call #315, cache read: 108928 → 0, creation: 0]
+2026-02-28T00:53:33.671Z [DEBUG] [useDeferredValue] Messages deferred by 1 (306→307)
+2026-02-28T00:53:33.685Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-28T00:53:33.687Z [DEBUG] Getting matching hook commands for SessionEnd with query: clear
+2026-02-28T00:53:33.687Z [DEBUG] Found 0 hook matchers in settings
+2026-02-28T00:53:33.687Z [DEBUG] Matched 0 unique hooks for query "clear" (0 before deduplication)
+2026-02-28T00:53:33.687Z [DEBUG] Cleared all session hooks for session 8652b1e0-ce42-4b92-aaea-4bb93ae6e954
+2026-02-28T00:53:33.688Z [DEBUG] Getting matching hook commands for SessionStart with query: clear
+2026-02-28T00:53:33.688Z [DEBUG] Found 0 hook matchers in settings
+2026-02-28T00:53:33.688Z [DEBUG] Matched 0 unique hooks for query "clear" (0 before deduplication)
+2026-02-28T00:53:33.688Z [DEBUG] FileHistory: Added snapshot for 81be670d-7b70-425d-9f88-311b07f62cea, tracking 0 files
+2026-02-28T00:53:33.715Z [ERROR] Error: Error: Tool mcp__brain-router__complete not found
+    at n74 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:1955:11645)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at h11 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:85659)
+    at Ol (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:85481)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81870)
+    at B6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6446)
+    at p1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:4938)
+2026-02-28T00:53:33.715Z [ERROR] Error: Error: Tool mcp__brain-router__complete not found
+    at n74 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:1955:11645)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at h11 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:85659)
+    at Ol (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:85481)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81870)
+    at B6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6446)
+    at p1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:4938)
+2026-02-28T00:53:33.717Z [ERROR] Error: Error: Tool mcp__brain-router__complete not found
+    at n74 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:1955:11645)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at h11 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:85659)
+    at Ol (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:85481)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81870)
+    at B6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6446)
+    at p1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:4938)
+2026-02-28T00:53:33.793Z [DEBUG] High write ratio: blit=0, write=80687 (100.0% writes), screen=1266x119
+2026-02-28T00:53:33.793Z [DEBUG] Full reset (scrollback changes): scrollbackRows=1294, firstChangeY=3
+  prev: "  ▘▘ ▝▝    ~/.claude                                                                                                   "
+  next: "  ▘▘ ▝▝    /Users/sihaoli                                                                                              "
+2026-02-28T00:53:33.810Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-28T00:53:33.815Z [DEBUG] [claudeai-mcp] Checking gate (cached)...
+2026-02-28T00:53:33.815Z [DEBUG] [claudeai-mcp] Gate returned: true
+2026-02-28T00:53:33.815Z [DEBUG] [claudeai-mcp] Fetching from https://api.anthropic.com/v1/mcp_servers?limit=1000
+2026-02-28T00:53:33.847Z [DEBUG] High write ratio: blit=1129, write=80471 (98.6% writes), screen=1264x119
+2026-02-28T00:53:33.847Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-28T00:53:33.871Z [DEBUG] Full reset (shrink->below): prevHeight=1264, nextHeight=14, viewport=47
+2026-02-28T00:53:33.955Z [DEBUG] [claudeai-mcp] Fetched 2 servers
+2026-02-28T00:53:37.157Z [DEBUG] AutoUpdaterWrapper: Installation type: npm-global
+2026-02-28T00:53:41.278Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/sihaoli/.claude/skills, project=[]
+2026-02-28T00:53:41.307Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-28T00:53:41.307Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-28T00:53:41.307Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-28T00:53:41.307Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-28T00:53:41.307Z [DEBUG] getPluginSkills: Processing 0 enabled plugins
+2026-02-28T00:53:41.307Z [DEBUG] Total plugin skills loaded: 0
+2026-02-28T00:53:41.307Z [DEBUG] Total plugin commands loaded: 0
+2026-02-28T00:53:41.309Z [DEBUG] Loaded 94 unique skills (94 unconditional, 0 conditional, managed: 0, user: 94, project: 0, additional: 0, legacy commands: 0)
+2026-02-28T00:53:41.309Z [DEBUG] getSkills returning: 94 skill dir commands, 0 plugin skills, 2 bundled skills
+2026-02-28T00:53:41.310Z [DEBUG] Sending 48 skills via attachment (initial, 48 total sent)
+2026-02-28T00:53:41.310Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-28T00:53:41.310Z [DEBUG] Found 0 hook matchers in settings
+2026-02-28T00:53:41.311Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-28T00:53:41.311Z [DEBUG] FileHistory: Making snapshot for message 5f01c840-f0c6-4c90-aab8-78d0ee2fbf6d
+2026-02-28T00:53:41.311Z [DEBUG] FileHistory: Added snapshot for 5f01c840-f0c6-4c90-aab8-78d0ee2fbf6d, tracking 0 files
+2026-02-28T00:53:41.311Z [DEBUG] [useDeferredValue] Messages deferred by 2 (3→5)
+2026-02-28T00:53:41.316Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-28T00:53:41.317Z [DEBUG] [SystemPrompt] path=simple proactive=false
+2026-02-28T00:53:41.317Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-28T00:53:41.318Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.6d6; cc_entrypoint=cli; cch=00000;
+2026-02-28T00:53:41.318Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-28T00:53:41.318Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-28T00:53:41.318Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-28T00:53:41.318Z [DEBUG] autocompact: tokens=1295 threshold=167000 effectiveWindow=180000
+2026-02-28T00:53:41.319Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-28T00:53:41.319Z [DEBUG] Using tool-based global cache marker on TaskList
+2026-02-28T00:53:41.321Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=cli; cch=00000;
+2026-02-28T00:53:41.321Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-28T00:53:41.321Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-28T00:53:41.322Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-28T00:53:41.324Z [DEBUG] [useDeferredValue] Messages deferred by 2 (3→5)
+2026-02-28T00:53:41.343Z [DEBUG] High write ratio: blit=1071, write=1760 (62.2% writes), screen=34x119
+2026-02-28T00:53:43.289Z [DEBUG] Stream started - received first chunk
+2026-02-28T00:53:44.944Z [DEBUG] Stream started - received first chunk
+2026-02-28T00:53:49.592Z [DEBUG] Stream started - received first chunk
+2026-02-28T00:53:50.504Z [DEBUG] Stream started - received first chunk
+2026-02-28T00:53:50.927Z [ERROR] SyntaxError: SyntaxError: Unexpected token '`', "```json
+{
+"... is not valid JSON
+    at JSON.parse (<anonymous>)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:54:1088
+    at K (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:7612)
+    at NR7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:1176:5128)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-02-28T00:54:07.636Z [DEBUG] [useDeferredValue] Messages deferred by 1 (5→6)
+2026-02-28T00:54:12.991Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-28T00:54:12.992Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-28T00:54:12.992Z [DEBUG] Found 0 hook matchers in settings
+2026-02-28T00:54:12.992Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-28T00:54:13.000Z [DEBUG] [useDeferredValue] Messages deferred by 2 (6→8)
+2026-02-28T00:54:13.071Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-28T00:54:13.072Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.05b; cc_entrypoint=cli; cch=00000;
+2026-02-28T00:54:13.072Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-28T00:54:13.072Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-28T00:54:13.072Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-28T00:54:13.072Z [DEBUG] Found 5 hook matchers in settings
+2026-02-28T00:54:13.072Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-28T00:54:13.072Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-28T00:54:13.073Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-28T00:54:13.073Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-28T00:54:13.073Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-28T00:54:13.073Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-28T00:54:13.073Z [DEBUG] autocompact: tokens=34856 threshold=167000 effectiveWindow=180000
+2026-02-28T00:54:13.073Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-28T00:54:13.073Z [DEBUG] Using tool-based global cache marker on TaskList
+2026-02-28T00:54:13.074Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=cli; cch=00000;
+2026-02-28T00:54:13.075Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-28T00:54:13.075Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-28T00:54:13.075Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-28T00:54:13.076Z [DEBUG] [useDeferredValue] Messages deferred by 1 (8→9)
+2026-02-28T00:54:17.103Z [DEBUG] Stream started - received first chunk
+2026-02-28T00:54:22.419Z [DEBUG] Stream started - received first chunk
+2026-02-28T00:54:26.816Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-28T00:54:26.817Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-28T00:54:26.817Z [DEBUG] Found 0 hook matchers in settings
+2026-02-28T00:54:26.817Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-28T00:54:26.822Z [DEBUG] [useDeferredValue] Messages deferred by 2 (9→11)
+2026-02-28T00:54:26.826Z [DEBUG] [useDeferredValue] Messages deferred by 2 (9→11)
+2026-02-28T00:54:26.888Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-28T00:54:26.888Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.05b; cc_entrypoint=cli; cch=00000;
+2026-02-28T00:54:26.888Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-28T00:54:26.888Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-28T00:54:26.888Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-28T00:54:26.888Z [DEBUG] Found 5 hook matchers in settings
+2026-02-28T00:54:26.888Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-28T00:54:26.888Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-28T00:54:26.889Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-28T00:54:26.889Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-28T00:54:26.889Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-28T00:54:26.889Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-28T00:54:26.889Z [DEBUG] autocompact: tokens=35756 threshold=167000 effectiveWindow=180000
+2026-02-28T00:54:26.889Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-28T00:54:26.889Z [DEBUG] Using tool-based global cache marker on TaskList
+2026-02-28T00:54:26.890Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=cli; cch=00000;
+2026-02-28T00:54:26.891Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-28T00:54:26.891Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-28T00:54:26.891Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-28T00:54:26.892Z [DEBUG] [useDeferredValue] Messages deferred by 1 (11→12)
+2026-02-28T00:54:28.144Z [DEBUG] Stream started - received first chunk
+2026-02-28T00:54:29.828Z [DEBUG] Stream started - received first chunk
+2026-02-28T00:54:37.636Z [DEBUG] [useDeferredValue] Messages deferred by 1 (12→13)
+2026-02-28T00:55:00.537Z [DEBUG] [useDeferredValue] Messages deferred by 1 (13→14)
+2026-02-28T00:55:00.544Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-28T00:55:00.544Z [DEBUG] Found 0 hook matchers in settings
+2026-02-28T00:55:00.545Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-28T00:55:00.545Z [DEBUG] autocompact: tokens=37109 threshold=167000 effectiveWindow=180000
+2026-02-28T00:55:00.547Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-28T00:55:00.547Z [DEBUG] Using tool-based global cache marker on TaskList
+2026-02-28T00:55:00.550Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=cli; cch=00000;
+2026-02-28T00:55:00.552Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-28T00:55:00.552Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-28T00:55:00.552Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-28T00:55:00.557Z [DEBUG] [useDeferredValue] Messages deferred by 2 (13→15)
+2026-02-28T00:55:00.559Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-28T00:55:05.567Z [DEBUG] Stream started - received first chunk
+2026-02-28T00:55:16.443Z [DEBUG] Forked agent [prompt_suggestion] received message: type=assistant
+2026-02-28T00:55:16.570Z [DEBUG] Forked agent [prompt_suggestion] received message: type=assistant
+2026-02-28T00:55:16.573Z [DEBUG] Getting matching hook commands for SubagentStop with query:
+2026-02-28T00:55:16.573Z [DEBUG] Found 0 hook matchers in settings
+2026-02-28T00:55:16.573Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-28T00:55:16.573Z [DEBUG] Forked agent [prompt_suggestion] finished: 2 messages, types=[assistant, assistant], totalUsage: input=1004 output=191 cacheRead=36096 cacheCreate=0
+2026-02-28T00:55:16.574Z [DEBUG] [Speculation] enabled=false
+2026-02-28T00:56:00.561Z [DEBUG] Getting matching hook commands for Notification with query: idle_prompt
+2026-02-28T00:56:00.561Z [DEBUG] Found 0 hook matchers in settings
+2026-02-28T00:56:00.561Z [DEBUG] Matched 0 unique hooks for query "idle_prompt" (0 before deduplication)
+2026-02-28T00:56:31.814Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-28T00:56:31.814Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-28T00:56:31.814Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-28T00:56:31.814Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-28T00:56:31.815Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-28T00:56:31.815Z [DEBUG] Found 0 hook matchers in settings
+2026-02-28T00:56:31.815Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-28T00:56:31.815Z [DEBUG] FileHistory: Making snapshot for message cc0080fd-af98-4826-ab8c-a2db9cdfe3f2
+2026-02-28T00:56:31.816Z [DEBUG] FileHistory: Added snapshot for cc0080fd-af98-4826-ab8c-a2db9cdfe3f2, tracking 0 files
+2026-02-28T00:56:31.816Z [DEBUG] [useDeferredValue] Messages deferred by 1 (15→16)
+2026-02-28T00:56:31.832Z [DEBUG] Started caffeinate to prevent sleep
+2026-02-28T00:56:31.833Z [DEBUG] [SystemPrompt] path=simple proactive=false
+2026-02-28T00:56:31.833Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-28T00:56:31.833Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.933; cc_entrypoint=cli; cch=00000;
+2026-02-28T00:56:31.834Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-28T00:56:31.834Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-28T00:56:31.834Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-28T00:56:31.834Z [DEBUG] autocompact: tokens=36836 threshold=167000 effectiveWindow=180000
+2026-02-28T00:56:31.836Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-28T00:56:31.836Z [DEBUG] Using tool-based global cache marker on TaskList
+2026-02-28T00:56:31.839Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=cli; cch=00000;
+2026-02-28T00:56:31.840Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-28T00:56:31.840Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-28T00:56:31.841Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-28T00:56:31.844Z [DEBUG] [useDeferredValue] Messages deferred by 1 (15→16)
+2026-02-28T00:56:33.645Z [DEBUG] Stream started - received first chunk
+2026-02-28T00:56:34.115Z [ERROR] SyntaxError: SyntaxError: Unexpected token '`', "```json
+{
+"... is not valid JSON
+    at JSON.parse (<anonymous>)
+    at file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:54:1088
+    at K (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:8:7612)
+    at NR7 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:1176:5128)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-02-28T00:56:37.581Z [DEBUG] Stream started - received first chunk
+2026-02-28T00:56:41.416Z [DEBUG] [useDeferredValue] Messages deferred by 1 (16→17)
+2026-02-28T00:56:41.421Z [DEBUG] [useDeferredValue] Messages deferred by 1 (16→17)
+2026-02-28T00:56:42.742Z [DEBUG] executePreToolHooks called for tool: WebSearch
+2026-02-28T00:56:42.743Z [DEBUG] Getting matching hook commands for PreToolUse with query: WebSearch
+2026-02-28T00:56:42.743Z [DEBUG] Found 0 hook matchers in settings
+2026-02-28T00:56:42.743Z [DEBUG] Matched 0 unique hooks for query "WebSearch" (0 before deduplication)
+2026-02-28T00:56:42.744Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-28T00:56:42.745Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.170; cc_entrypoint=cli; cch=00000;
+2026-02-28T00:56:42.745Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-28T00:56:42.745Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-28T00:56:42.745Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-28T00:56:42.749Z [DEBUG] [useDeferredValue] Messages deferred by 2 (17→19)
+2026-02-28T00:56:42.756Z [DEBUG] [useDeferredValue] Messages deferred by 2 (17→19)
+2026-02-28T00:56:43.972Z [DEBUG] Stream started - received first chunk
+2026-02-28T00:56:44.023Z [ERROR] Error streaming, falling back to non-streaming mode: {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"202602280856435b19a336148242ec"}
+2026-02-28T00:56:44.024Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-28T00:56:44.024Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-28T00:56:44.024Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-28T00:56:44.649Z [ERROR] API error (attempt 1/11): 400 400 {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"20260228085644f553d6bfe34d4204"}
+2026-02-28T00:56:44.650Z [ERROR] Error in API request: 400 {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"20260228085644f553d6bfe34d4204"}
+2026-02-28T00:56:44.650Z [ERROR] Error: Error: 400 {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"20260228085644f553d6bfe34d4204"}
+    at E4.generate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:354:8788)
+    at aC.makeStatusError (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:2195)
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async G_q.u26.model (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:5780:4269)
+    at async u26 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:905:99323)
+    at async G_q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:5780:4469)
+    at async f_q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:5785:7752)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:5780:3930
+    at async yOA (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2399)
+2026-02-28T00:56:44.653Z [DEBUG] Getting matching hook commands for PostToolUse with query: WebSearch
+2026-02-28T00:56:44.653Z [DEBUG] Found 5 hook matchers in settings
+2026-02-28T00:56:44.653Z [DEBUG] Matched 0 unique hooks for query "WebSearch" (0 before deduplication)
+2026-02-28T00:56:44.654Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-28T00:56:44.654Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-28T00:56:44.654Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-28T00:56:44.654Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-28T00:56:44.655Z [DEBUG] autocompact: tokens=37019 threshold=167000 effectiveWindow=180000
+2026-02-28T00:56:44.655Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-28T00:56:44.655Z [DEBUG] Using tool-based global cache marker on TaskList
+2026-02-28T00:56:44.659Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=cli; cch=00000;
+2026-02-28T00:56:44.661Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-28T00:56:44.661Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-28T00:56:44.661Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-28T00:56:44.666Z [DEBUG] [useDeferredValue] Messages deferred by 1 (19→20)
+2026-02-28T00:56:46.024Z [DEBUG] Stream started - received first chunk
+2026-02-28T00:56:53.687Z [ERROR] Error streaming, falling back to non-streaming mode: Content block input is not a string
+2026-02-28T00:56:53.688Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-28T00:56:53.688Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-28T00:56:53.688Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-28T00:56:53.693Z [DEBUG] [useDeferredValue] Messages deferred by 2 (20→22)
+2026-02-28T00:57:00.245Z [DEBUG] executePreToolHooks called for tool: WebSearch
+2026-02-28T00:57:00.246Z [DEBUG] Getting matching hook commands for PreToolUse with query: WebSearch
+2026-02-28T00:57:00.246Z [DEBUG] Found 0 hook matchers in settings
+2026-02-28T00:57:00.246Z [DEBUG] Matched 0 unique hooks for query "WebSearch" (0 before deduplication)
+2026-02-28T00:57:00.247Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-28T00:57:00.247Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.170; cc_entrypoint=cli; cch=00000;
+2026-02-28T00:57:00.247Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-28T00:57:00.247Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-28T00:57:00.248Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-28T00:57:00.282Z [DEBUG] High write ratio: blit=0, write=4548 (100.0% writes), screen=123x119
+2026-02-28T00:57:01.331Z [DEBUG] Stream started - received first chunk
+2026-02-28T00:57:01.400Z [ERROR] Error streaming, falling back to non-streaming mode: {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"20260228085701aebade3ed8ee4aee"}
+2026-02-28T00:57:01.401Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-28T00:57:01.401Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-28T00:57:01.401Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-28T00:57:02.737Z [ERROR] API error (attempt 1/11): 400 400 {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"202602280857026b8ee4adbe094712"}
+2026-02-28T00:57:02.737Z [ERROR] Error in API request: 400 {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"202602280857026b8ee4adbe094712"}
+2026-02-28T00:57:02.737Z [ERROR] Error: Error: 400 {"type":"error","error":{"message":"API 调用参数有误，请检查文档。","code":"1210"},"request_id":"202602280857026b8ee4adbe094712"}
+    at E4.generate (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:354:8788)
+    at aC.makeStatusError (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:2195)
+    at aC.makeRequest (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:393:5420)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async G_q.u26.model (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:5780:4269)
+    at async u26 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:905:99323)
+    at async G_q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:5780:4469)
+    at async f_q (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:5785:7752)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:5780:3930
+    at async yOA (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:961:2399)
+2026-02-28T00:57:02.740Z [DEBUG] Getting matching hook commands for PostToolUse with query: WebSearch
+2026-02-28T00:57:02.740Z [DEBUG] Found 5 hook matchers in settings
+2026-02-28T00:57:02.740Z [DEBUG] Matched 0 unique hooks for query "WebSearch" (0 before deduplication)
+2026-02-28T00:57:02.741Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-28T00:57:02.741Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-28T00:57:02.741Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-28T00:57:02.741Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-28T00:57:02.741Z [DEBUG] autocompact: tokens=37172 threshold=167000 effectiveWindow=180000
+2026-02-28T00:57:02.742Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-28T00:57:02.742Z [DEBUG] Using tool-based global cache marker on TaskList
+2026-02-28T00:57:02.746Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=cli; cch=00000;
+2026-02-28T00:57:02.748Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-28T00:57:02.748Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-28T00:57:02.748Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-28T00:57:02.755Z [DEBUG] [useDeferredValue] Messages deferred by 1 (21→22)
+2026-02-28T00:57:02.784Z [DEBUG] High write ratio: blit=0, write=4592 (100.0% writes), screen=124x119
+2026-02-28T00:57:07.302Z [DEBUG] Stream started - received first chunk
+2026-02-28T00:57:17.488Z [DEBUG] [useDeferredValue] Messages deferred by 1 (22→23)
+2026-02-28T00:57:17.520Z [DEBUG] High write ratio: blit=0, write=4603 (100.0% writes), screen=124x119
+2026-02-28T00:57:18.848Z [DEBUG] [useDeferredValue] Messages deferred by 1 (23→24)
+2026-02-28T00:57:18.857Z [DEBUG] executePreToolHooks called for tool: mcp__playwright__browser_navigate
+2026-02-28T00:57:18.859Z [DEBUG] Getting matching hook commands for PreToolUse with query: mcp__playwright__browser_navigate
+2026-02-28T00:57:18.859Z [DEBUG] Found 0 hook matchers in settings
+2026-02-28T00:57:18.859Z [DEBUG] Matched 0 unique hooks for query "mcp__playwright__browser_navigate" (0 before deduplication)
+2026-02-28T00:57:18.860Z [DEBUG] MCP server "playwright": Calling MCP tool: browser_navigate
+2026-02-28T00:57:18.863Z [DEBUG] [useDeferredValue] Messages deferred by 3 (23→26)
+2026-02-28T00:57:18.893Z [DEBUG] High write ratio: blit=0, write=4740 (100.0% writes), screen=129x119
+2026-02-28T00:57:19.000Z [ERROR] MCP server "playwright" ### Error
+Error: browserType.launchPersistentContext: Failed to launch the browser process.
+Browser logs:
+
+<launching> /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints,AutomationControlled --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --user-data-dir=/Users/sihaoli/Library/Caches/ms-playwright/mcp-chrome-8ed4dd3 --remote-debugging-port=55544 about:blank
+<launched> pid=3419
+[pid=3419][out] 正在现有的浏览器会话中打开。
+[pid=3419] <process did exit: exitCode=0, signal=null>
+[pid=3419] starting temporary directories cleanup
+Call log:
+[2m  - <launching> /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints,AutomationControlled --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --user-data-dir=/Users/sihaoli/Library/Caches/ms-playwright/mcp-chrome-8ed4dd3 --remote-debugging-port=55544 about:blank[22m
+[2m  - <launched> pid=3419[22m
+[2m  - [pid=3419][out] 正在现有的浏览器会话中打开。[22m
+[2m  - [pid=3419] <process did exit: exitCode=0, signal=null>[22m
+[2m  - [pid=3419] starting temporary directories cleanup[22m
+[2m  - [pid=3419] <gracefully close start>[22m
+[2m  - [pid=3419] <kill>[22m
+[2m  - [pid=3419] <skipped force kill spawnedProcess.killed=false processClosed=true>[22m
+[2m  - [pid=3419] finished temporary directories cleanup[22m
+[2m  - [pid=3419] <gracefully close end>[22m
+2026-02-28T00:57:19.000Z [DEBUG] MCP server "playwright": Tool 'browser_navigate' failed after 0s: ### Error
+Error: browserType.launchPersistentContext: Failed to launch the browser process.
+Browser logs:
+
+<launching> /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints,AutomationControlled --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --user-data-dir=/Users/sihaoli/Library/Caches/ms-playwright/mcp-chrome-8ed4dd3 --remote-debugging-port=55544 about:blank
+<launched> pid=3419
+[pid=3419][out] 正在现有的浏览器会话中打开。
+[pid=3419] <process did exit: exitCode=0, signal=null>
+[pid=3419] starting temporary directories cleanup
+Call log:
+[2m  - <launching> /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints,AutomationControlled --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --user-data-dir=/Users/sihaoli/Library/Caches/ms-playwright/mcp-chrome-8ed4dd3 --remote-debugging-port=55544 about:blank[22m
+[2m  - <launched> pid=3419[22m
+[2m  - [pid=3419][out] 正在现有的浏览器会话中打开。[22m
+[2m  - [pid=3419] <process did exit: exitCode=0, signal=null>[22m
+[2m  - [pid=3419] starting temporary directories cleanup[22m
+[2m  - [pid=3419] <gracefully close start>[22m
+[2m  - [pid=3419] <kill>[22m
+[2m  - [pid=3419] <skipped force kill spawnedProcess.killed=false processClosed=true>[22m
+[2m  - [pid=3419] finished temporary directories cleanup[22m
+[2m  - [pid=3419] <gracefully close end>[22m
+2026-02-28T00:57:19.000Z [DEBUG] mcp__playwright__browser_navigate tool error (141ms): ### Error
+Error: browserType.launchPersistentContext: Failed to launch the browser process.
+Browser logs:
+
+<launching> /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --disable-field-tria
+2026-02-28T00:57:19.000Z [ERROR] TelemetrySafeError: TelemetrySafeError: ### Error
+Error: browserType.launchPersistentContext: Failed to launch the browser process.
+Browser logs:
+
+<launching> /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints,AutomationControlled --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --user-data-dir=/Users/sihaoli/Library/Caches/ms-playwright/mcp-chrome-8ed4dd3 --remote-debugging-port=55544 about:blank
+<launched> pid=3419
+[pid=3419][out] 正在现有的浏览器会话中打开。
+[pid=3419] <process did exit: exitCode=0, signal=null>
+[pid=3419] starting temporary directories cleanup
+Call log:
+[2m  - <launching> /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints,AutomationControlled --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --user-data-dir=/Users/sihaoli/Library/Caches/ms-playwright/mcp-chrome-8ed4dd3 --remote-debugging-port=55544 about:blank[22m
+[2m  - <launched> pid=3419[22m
+[2m  - [pid=3419][out] 正在现有的浏览器会话中打开。[22m
+[2m  - [pid=3419] <process did exit: exitCode=0, signal=null>[22m
+[2m  - [pid=3419] starting temporary directories cleanup[22m
+[2m  - [pid=3419] <gracefully close start>[22m
+[2m  - [pid=3419] <kill>[22m
+[2m  - [pid=3419] <skipped force kill spawnedProcess.killed=false processClosed=true>[22m
+[2m  - [pid=3419] finished temporary directories cleanup[22m
+[2m  - [pid=3419] <gracefully close end>[22m
+
+    at Da4 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3152:7361)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Object.call (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3152:22483)
+    at async tdY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3554:14093)
+2026-02-28T00:57:19.001Z [DEBUG] Getting matching hook commands for PostToolUseFailure with query: mcp__playwright__browser_navigate
+2026-02-28T00:57:19.001Z [DEBUG] Found 0 hook matchers in settings
+2026-02-28T00:57:19.001Z [DEBUG] Matched 0 unique hooks for query "mcp__playwright__browser_navigate" (0 before deduplication)
+2026-02-28T00:57:19.001Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-28T00:57:19.001Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-28T00:57:19.001Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-28T00:57:19.001Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-28T00:57:19.002Z [DEBUG] autocompact: tokens=38196 threshold=167000 effectiveWindow=180000
+2026-02-28T00:57:19.002Z [DEBUG] Tool search disabled via experiment (tengu_tst_kx7): below threshold, deferred tools present [source: query]
+2026-02-28T00:57:19.002Z [DEBUG] Using tool-based global cache marker on TaskList
+2026-02-28T00:57:19.003Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.c39; cc_entrypoint=cli; cch=00000;
+2026-02-28T00:57:19.003Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-28T00:57:19.003Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-28T00:57:19.004Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-28T00:57:19.005Z [DEBUG] [useDeferredValue] Messages deferred by 2 (26→28)
+2026-02-28T00:57:19.032Z [DEBUG] High write ratio: blit=0, write=6515 (100.0% writes), screen=154x119
+2026-02-28T00:57:23.120Z [DEBUG] Stream started - received first chunk
+2026-02-28T00:57:25.449Z [DEBUG] [useDeferredValue] Messages deferred by 1 (28→29)
+2026-02-28T00:57:25.497Z [DEBUG] High write ratio: blit=0, write=6509 (100.0% writes), screen=154x119
+2026-02-28T00:57:27.084Z [ERROR] Error streaming, falling back to non-streaming mode: Content block input is not a string
+2026-02-28T00:57:27.084Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-28T00:57:27.084Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-28T00:57:27.084Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-28T00:57:27.091Z [DEBUG] [useDeferredValue] Messages deferred by 2 (29→31)
+2026-02-28T00:57:27.125Z [DEBUG] High write ratio: blit=0, write=6686 (100.0% writes), screen=163x119
+2026-02-28T00:57:30.379Z [DEBUG] Metrics opt-out check failed: No API key available
+2026-02-28T00:57:30.379Z [DEBUG] Metrics check failed, defaulting to disabled
+2026-02-28T00:57:30.379Z [DEBUG] Metrics export disabled by organization setting
+2026-02-28T00:58:06.138Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-28T00:58:06.140Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-28T00:58:06.140Z [DEBUG] Found 0 hook matchers in settings
+2026-02-28T00:58:06.140Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-28T00:58:06.157Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:06.157Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:06.158Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:06.158Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:06.158Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:06.158Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:06.158Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:06.158Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:06.181Z [DEBUG] High write ratio: blit=0, write=6752 (100.0% writes), screen=162x119
+2026-02-28T00:58:08.154Z [DEBUG] [useDeferredValue] Messages deferred by 1 (29→30)
+2026-02-28T00:58:08.160Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:08.160Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:08.160Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:08.160Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:08.161Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:08.161Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:08.161Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:08.161Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:08.185Z [DEBUG] High write ratio: blit=0, write=6784 (100.0% writes), screen=163x119
+2026-02-28T00:58:09.156Z [DEBUG] [useDeferredValue] Messages deferred by 1 (30→31)
+2026-02-28T00:58:09.160Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:09.160Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:09.160Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:09.160Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:09.161Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:09.161Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:09.161Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:09.161Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:09.185Z [DEBUG] High write ratio: blit=0, write=6784 (100.0% writes), screen=163x119
+2026-02-28T00:58:10.158Z [DEBUG] [useDeferredValue] Messages deferred by 1 (31→32)
+2026-02-28T00:58:10.162Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:10.162Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:10.162Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:10.162Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:10.163Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:10.163Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:10.163Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:10.163Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:10.186Z [DEBUG] High write ratio: blit=0, write=6784 (100.0% writes), screen=163x119
+2026-02-28T00:58:10.983Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-02-28T00:58:10.983Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.39.9ee; cc_entrypoint=cli; cch=00000;
+2026-02-28T00:58:10.984Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-28T00:58:10.984Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-28T00:58:10.984Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-28T00:58:10.984Z [DEBUG] Found 5 hook matchers in settings
+2026-02-28T00:58:10.984Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-28T00:58:10.984Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-28T00:58:10.985Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-28T00:58:10.985Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-28T00:58:10.985Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-28T00:58:10.985Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-28T00:58:10.985Z [DEBUG] autocompact: tokens=214864 threshold=167000 effectiveWindow=180000
+2026-02-28T00:58:10.985Z [DEBUG] Getting matching hook commands for PreCompact with query: auto
+2026-02-28T00:58:10.985Z [DEBUG] Found 0 hook matchers in settings
+2026-02-28T00:58:10.985Z [DEBUG] Matched 0 unique hooks for query "auto" (0 before deduplication)
+2026-02-28T00:58:10.986Z [DEBUG] Forked agent [compact] received message: type=assistant
+2026-02-28T00:58:10.986Z [DEBUG] Forked agent [compact] finished: 1 messages, types=[assistant], totalUsage: input=0 output=0 cacheRead=0 cacheCreate=0
+2026-02-28T00:58:10.986Z [ERROR] Error: Error: Conversation too long. Press esc twice to go up a few messages and try again.
+    at MW1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3378:934)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Qs4 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3463:2536)
+    at async fR (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:3556:7360)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:7500:3543
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:7500:4328
+    at async CPz (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:7490:25747)
+    at async mE6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:7490:24387)
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:7500:7821
+    at async file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:7483:5397
+2026-02-28T00:58:10.987Z [DEBUG] [useDeferredValue] Messages deferred by 4 (32→36)
+2026-02-28T00:58:10.991Z [DEBUG] High write ratio: blit=0, write=6706 (100.0% writes), screen=161x119
+2026-02-28T00:58:10.991Z [DEBUG] Stopped caffeinate, allowing sleep
+2026-02-28T00:58:10.993Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:10.993Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:10.993Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:10.993Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:10.993Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:10.993Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:10.993Z [ERROR] Error: Error: Unable to render message type: server_tool_use
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:10.993Z [ERROR] Error: Error: Unable to render message type: tool_result
+    at $VY (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:2056:48618)
+    at qK (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:20891)
+    at FH (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:39408)
+    at zx (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:50098)
+    at xF (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86690)
+    at e1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86662)
+    at Il1 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:86503)
+    at zl (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:81861)
+    at T6 (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:713:6325)
+    at Immediate.V4A [as _onImmediate] (file:///Users/sihaoli/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js:706:13516)
+2026-02-28T00:58:11.014Z [DEBUG] High write ratio: blit=0, write=6847 (100.0% writes), screen=165x119
+2026-02-28T00:58:16.749Z [DEBUG] Stream started - received first chunk

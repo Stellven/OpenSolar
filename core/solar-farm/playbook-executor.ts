@@ -46,14 +46,70 @@ export interface ExecutionResult {
 }
 
 // ============================================================
-// 模型选择
+// 模型选择 (方案B: 数据驱动 + Fallback)
 // ============================================================
 
 /**
+ * 推断 playbook 的 task_type
+ * 用于查询 model_task_performance
+ */
+function inferTaskType(playbook: PlaybookMatch): string {
+  const keywords = playbook.trigger_keywords.join(' ').toLowerCase();
+  const name = playbook.name.toLowerCase();
+  const desc = playbook.description.toLowerCase();
+  const combined = `${keywords} ${name} ${desc}`;
+
+  // 映射规则 (优先级从高到低，与 sroe_requests 的 task_type 对齐)
+  // Review/审查 → analysis (需要深度分析)
+  if (/review|审查|检查|code.?review/.test(combined)) return 'analysis';
+  // Debug/调试 → analysis (需要推理)
+  if (/debug|调试|error|错误|排查|diagnos|bug|失败|报错/.test(combined)) return 'analysis';
+  // 性能优化 → analysis
+  if (/perf|性能|optim|优化/.test(combined)) return 'analysis';
+  // 架构设计 → architecture
+  if (/架构|设计|architect|design|api/.test(combined)) return 'architecture';
+  // 洞察/研究 → analysis
+  if (/分析|analy|洞察|研究|research/.test(combined)) return 'analysis';
+  // 代码实现 → coding
+  if (/代码|code|编程|实现|coding|开发/.test(combined)) return 'coding';
+  // 中文写作 → chinese
+  if (/中文|写作|writing|文章/.test(combined)) return 'chinese';
+  // 推理 → reasoning
+  if (/推理|reasoning|逻辑|思考/.test(combined)) return 'reasoning';
+
+  // Default
+  return 'general';
+}
+
+/**
+ * 从 model_task_performance 查询最佳模型
+ * 返回 null 表示没有足够数据
+ */
+function getBestModelFromPerformance(taskType: string, minSamples: number = 3): string | null {
+  const db = new Database(DB_PATH, { readonly: true });
+  try {
+    const row = db.query(`
+      SELECT model_id
+      FROM model_task_performance
+      WHERE task_type = ? AND sample_count >= ?
+      ORDER BY avg_quality DESC, sample_count DESC
+      LIMIT 1
+    `).get(taskType, minSamples) as { model_id: string } | undefined;
+
+    return row?.model_id ?? null;
+  } finally {
+    db.close();
+  }
+}
+
+/**
  * Select best model based on playbook task type
- * Maps trigger keywords + name + description to model strengths
  *
- * Uses regex on combined text (keywords + name + desc) for comprehensive matching.
+ * 方案B: 数据驱动 + 硬编码 Fallback
+ * 1. 先从 model_task_performance 查询历史最佳模型
+ * 2. 如果没有足够数据，fallback 到硬编码规则
+ *
+ * Uses regex on combined text (keywords + name + desc) for task type inference.
  * This is the canonical selectModel — auto-dispatcher imports this.
  */
 export function selectModel(playbook: PlaybookMatch): string {
@@ -62,6 +118,17 @@ export function selectModel(playbook: PlaybookMatch): string {
   const desc = playbook.description.toLowerCase();
   const combined = `${keywords} ${name} ${desc}`;
 
+  // Step 1: 推断 task_type
+  const taskType = inferTaskType(playbook);
+
+  // Step 2: 尝试从历史表现中选择 (minSamples=3 确保统计显著性)
+  const dataDrivenModel = getBestModelFromPerformance(taskType, 3);
+  if (dataDrivenModel) {
+    // 有足够历史数据，使用数据驱动选择
+    return dataDrivenModel;
+  }
+
+  // Step 3: Fallback 到硬编码规则 (无足够数据时)
   // Review/code review → 稳健派 (high rigor)
   if (/review|审查|code.?review|检查/.test(combined)) return 'gemini-2.5-pro';
   // Debug/error → 审判官 (deep reasoning)

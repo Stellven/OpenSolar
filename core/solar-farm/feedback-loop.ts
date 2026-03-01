@@ -308,6 +308,143 @@ export function backfillQualityScores(limit: number = 1000): { processed: number
 }
 
 // ============================================================
+// 方案B: 按任务类型聚合反馈 (不依赖 skill_id)
+// ============================================================
+
+export interface TaskTypePerformance {
+  model_id: string;
+  task_type: string;
+  sample_count: number;
+  success_count: number;
+  avg_quality: number;
+  avg_latency_ms: number | null;
+  avg_tps: number | null;
+}
+
+export interface AggregateResult {
+  processed: number;
+  updated_models: number;
+  performance_rows: TaskTypePerformance[];
+  elapsed_ms: number;
+}
+
+/**
+ * 方案B: 按 task_type + selected_model 聚合反馈
+ *
+ * 不依赖 skill_id，直接利用所有请求学习模型在不同任务类型上的表现。
+ * 这解决了 97.7% 请求没有 skill_id 的问题。
+ *
+ * @param backfillFirst - 是否先回填 quality_score
+ */
+export function aggregateByTaskType(backfillFirst: boolean = true): AggregateResult {
+  const start = Date.now();
+  const db = new Database(DB_PATH);
+
+  try {
+    ensureSchema(db);
+
+    // Step 1: Backfill quality_score if requested
+    let processed = 0;
+    if (backfillFirst) {
+      const unscored = db.query(`
+        SELECT request_id, finish_reason, error_type, error_message,
+               latency_ms, response_tokens, tps
+        FROM sroe_requests
+        WHERE quality_score IS NULL
+      `).all() as any[];
+
+      for (const row of unscored) {
+        const quality = calculateQuality({
+          finish_reason: row.finish_reason,
+          error_type: row.error_type,
+          error_message: row.error_message,
+          latency_ms: row.latency_ms,
+          response_tokens: row.response_tokens,
+          tps: row.tps
+        });
+        db.run(
+          `UPDATE sroe_requests SET quality_score = ? WHERE request_id = ?`,
+          [quality.quality_score, row.request_id]
+        );
+        processed++;
+      }
+    }
+
+    // Step 2: Aggregate by model + task_type
+    const aggregates = db.query(`
+      SELECT
+        selected_model as model_id,
+        task_type,
+        COUNT(*) as sample_count,
+        SUM(CASE WHEN quality_score >= 0.5 THEN 1 ELSE 0 END) as success_count,
+        AVG(quality_score) as avg_quality,
+        AVG(latency_ms) as avg_latency_ms,
+        AVG(tps) as avg_tps
+      FROM sroe_requests
+      WHERE quality_score IS NOT NULL
+      GROUP BY selected_model, task_type
+    `).all() as TaskTypePerformance[];
+
+    // Step 3: Upsert to model_task_performance
+    let updatedModels = 0;
+    for (const row of aggregates) {
+      db.run(`
+        INSERT INTO model_task_performance
+          (model_id, task_type, sample_count, success_count, avg_quality, avg_latency_ms, avg_tps, last_updated)
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(model_id, task_type) DO UPDATE SET
+          sample_count = excluded.sample_count,
+          success_count = excluded.success_count,
+          avg_quality = excluded.avg_quality,
+          avg_latency_ms = excluded.avg_latency_ms,
+          avg_tps = excluded.avg_tps,
+          last_updated = datetime('now')
+      `, [row.model_id, row.task_type, row.sample_count, row.success_count,
+          row.avg_quality, row.avg_latency_ms, row.avg_tps]);
+      updatedModels++;
+    }
+
+    return {
+      processed,
+      updated_models: updatedModels,
+      performance_rows: aggregates,
+      elapsed_ms: Date.now() - start
+    };
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * 获取模型在特定任务类型上的推荐排序
+ */
+export function getModelRanking(taskType: string): Array<{
+  model_id: string;
+  avg_quality: number;
+  sample_count: number;
+  success_rate: number;
+}> {
+  const db = new Database(DB_PATH, { readonly: true });
+  try {
+    return db.query(`
+      SELECT
+        model_id,
+        avg_quality,
+        sample_count,
+        CASE WHEN sample_count > 0
+          THEN CAST(success_count AS REAL) / sample_count
+          ELSE 0
+        END as success_rate
+      FROM model_task_performance
+      WHERE task_type = ?
+      ORDER BY avg_quality DESC, sample_count DESC
+    `).all(taskType) as any[];
+  } finally {
+    db.close();
+  }
+}
+
+// ============================================================
 // CLI
 // ============================================================
 
@@ -317,12 +454,14 @@ if (import.meta.main) {
 
   if (cmd === '--help' || cmd === 'help') {
     console.log(`
-Feedback Loop v1.0 — 反馈闭环引擎
+Feedback Loop v2.0 — 反馈闭环引擎 (方案B 增强)
 
 用法:
   bun feedback-loop.ts run [limit]     # 处理未评分的有 skill_id 的请求
   bun feedback-loop.ts dry [limit]     # 干跑，不写数据库
   bun feedback-loop.ts backfill [limit] # 回填所有请求的 quality_score
+  bun feedback-loop.ts aggregate        # 方案B: 按 task_type 聚合 (推荐)
+  bun feedback-loop.ts ranking <task>   # 查看特定任务类型的模型排名
   bun feedback-loop.ts stats           # 查看反馈闭环统计
 `);
     process.exit(0);
@@ -370,6 +509,63 @@ Feedback Loop v1.0 — 反馈闭环引擎
     console.log(`\n🔄 回填 quality_score (最多 ${limit} 条)...`);
     const result = backfillQualityScores(limit);
     console.log(`  处理: ${result.processed} 条 | 耗时: ${result.elapsed_ms}ms`);
+    process.exit(0);
+  }
+
+  // 方案B: 按 task_type 聚合
+  if (cmd === 'aggregate') {
+    console.log(`\n🔄 方案B: 按 task_type + model 聚合反馈...`);
+    const result = aggregateByTaskType(true);
+    console.log(`  回填: ${result.processed} 条 | 更新: ${result.updated_models} 个模型-任务组合`);
+    console.log(`  耗时: ${result.elapsed_ms}ms`);
+
+    if (result.performance_rows.length > 0) {
+      console.log(`\n📊 模型-任务表现 (Top 10):\n`);
+      const sorted = [...result.performance_rows].sort((a, b) => b.avg_quality - a.avg_quality);
+      for (const row of sorted.slice(0, 10)) {
+        const successRate = row.sample_count > 0 ? (row.success_count / row.sample_count * 100).toFixed(0) : '0';
+        console.log(`  [${row.task_type}] ${row.model_id}: ${row.sample_count}次, 质量=${row.avg_quality.toFixed(3)}, 成功率=${successRate}%`);
+      }
+    }
+    process.exit(0);
+  }
+
+  if (cmd === 'aggregate') {
+    console.log(`\n🔄 方案B: 按任务类型聚合反馈...`);
+    const result = aggregateByTaskType(true);
+    console.log(`  回填评分: ${result.processed} 条`);
+    console.log(`  更新模型: ${result.updated_models} 个`);
+    console.log(`  耗时: ${result.elapsed_ms}ms`);
+
+    if (result.performance_rows.length > 0) {
+      console.log(`\n  📊 模型表现排名 (按任务类型):`);
+      const grouped = new Map<string, typeof result.performance_rows>();
+      for (const row of result.performance_rows) {
+        if (!grouped.has(row.task_type)) grouped.set(row.task_type, []);
+        grouped.get(row.task_type)!.push(row);
+      }
+      for (const [taskType, rows] of grouped) {
+        console.log(`\n  [${taskType}]`);
+        for (const row of rows.slice(0, 5)) {
+          const successRate = row.sample_count > 0 ? (row.success_count / row.sample_count * 100).toFixed(0) : '0';
+          console.log(`    ${row.model_id}: ${row.sample_count}次, 质量=${row.avg_quality?.toFixed(3)}, 成功率=${successRate}%`);
+        }
+      }
+    }
+    process.exit(0);
+  }
+
+  if (cmd === 'ranking') {
+    const taskType = args[1] || 'coding';
+    console.log(`\n📊 模型排名 [${taskType}]:\n`);
+    const ranking = getModelRanking(taskType);
+    if (ranking.length === 0) {
+      console.log(`  暂无数据，请先运行: bun feedback-loop.ts aggregate`);
+    } else {
+      for (const row of ranking) {
+        console.log(`  ${row.model_id}: ${row.sample_count}次, 质量=${row.avg_quality.toFixed(3)}, 成功率=${(row.success_rate * 100).toFixed(0)}%`);
+      }
+    }
     process.exit(0);
   }
 

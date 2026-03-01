@@ -50,10 +50,10 @@ const MODEL_ALIASES: Record<string, string> = {
   '小管家': 'gpt-4o-mini',
 };
 
-// API 端点
+// API 端点 (统一使用 ZHIPU_API_KEY, GOOGLE_API_KEY, DEEPSEEK_API_KEY, OPENAI_API_KEY)
 const API_ENDPOINTS: Record<string, { url: string; keyEnv: string }> = {
-  'glm': { url: 'https://open.bigmodel.cn/api/paas/v4/chat/completions', keyEnv: 'GLM_API_KEY' },
-  'gemini': { url: 'https://generativelanguage.googleapis.com/v1beta/models', keyEnv: 'GEMINI_API_KEY' },
+  'glm': { url: 'https://open.bigmodel.cn/api/coding/paas/v4/chat/completions', keyEnv: 'ZHIPU_API_KEY' },
+  'gemini': { url: 'https://generativelanguage.googleapis.com/v1beta/models', keyEnv: 'GOOGLE_API_KEY' },
   'deepseek': { url: 'https://api.deepseek.com/v1/chat/completions', keyEnv: 'DEEPSEEK_API_KEY' },
   'gpt': { url: 'https://api.openai.com/v1/chat/completions', keyEnv: 'OPENAI_API_KEY' },
   'o1': { url: 'https://api.openai.com/v1/chat/completions', keyEnv: 'OPENAI_API_KEY' },
@@ -68,14 +68,14 @@ function getModelProvider(model: string): string {
 }
 
 async function callGLM(model: string, prompt: string, systemPrompt?: string): Promise<string> {
-  const apiKey = process.env.GLM_API_KEY;
+  const apiKey = process.env.ZHIPU_API_KEY;
   if (!apiKey) {
-    throw new Error('GLM_API_KEY 环境变量未设置');
+    throw new Error('ZHIPU_API_KEY 环境变量未设置');
   }
 
   const actualModel = MODEL_ALIASES[model] || model;
 
-  const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
+  const response = await fetch('https://open.bigmodel.cn/api/coding/paas/v4/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -101,9 +101,9 @@ async function callGLM(model: string, prompt: string, systemPrompt?: string): Pr
 }
 
 async function callGemini(model: string, prompt: string, systemPrompt?: string): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GOOGLE_API_KEY;
   if (!apiKey) {
-    throw new Error('GEMINI_API_KEY 环境变量未设置');
+    throw new Error('GOOGLE_API_KEY 环境变量未设置');
   }
 
   const actualModel = MODEL_ALIASES[model] || model;

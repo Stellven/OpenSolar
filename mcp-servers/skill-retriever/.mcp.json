@@ -1,0 +1,7 @@
+{
+  "skill-retriever": {
+    "command": "bun",
+    "args": ["run", "/Users/sihaoli/.claude/mcp-servers/skill-retriever/index.ts"],
+    "env": {}
+  }
+}

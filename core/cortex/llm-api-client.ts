@@ -214,7 +214,7 @@ export async function callLLM(
 
     case 'zhipu':
       return callOpenAICompatible(
-        'https://open.bigmodel.cn/api/paas/v4',
+        'https://open.bigmodel.cn/api/coding/paas/v4',
         keys.ZHIPU_API_KEY,
         route.apiModel,
         systemPrompt,

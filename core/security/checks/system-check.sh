@@ -95,7 +95,7 @@ check_backlog() {
 check_db_size() {
     local size_mb=$(du -m "$DB_PATH" 2>/dev/null | cut -f1)
 
-    if [ -n "$size_mb" ] && [ "$size_mb" -gt 500 ]; then
+    if [ -n "$size_mb" ] && [ "$size_mb" -gt 2000 ]; then
         log "数据库过大: ${size_mb}MB"
         log_event "system_error" "warning" "db_check" "数据库文件过大: ${size_mb}MB" "{\"size_mb\":$size_mb}"
         send_alert "warning" "数据库文件过大: ${size_mb}MB，建议清理"
