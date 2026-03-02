@@ -569,6 +569,49 @@ Feedback Loop v2.0 — 反馈闭环引擎 (方案B 增强)
     process.exit(0);
   }
 
+  // P2: 用户反馈记录
+  if (cmd === 'feedback') {
+    const requestId = args[1];
+    const score = parseFloat(args[2]);
+    const dimension = args[3] || 'quality';
+
+    if (!requestId || isNaN(score)) {
+      console.log(`用法: bun feedback-loop.ts feedback <request_id> <score> [dimension]`);
+      console.log(`示例: bun feedback-loop.ts feedback req-123 8 quality`);
+      console.log(`      bun feedback-loop.ts feedback req-456 5 speed`);
+      process.exit(1);
+    }
+
+    if (score < 0 || score > 10) {
+      console.log(`❌ 分数必须在 0-10 之间`);
+      process.exit(1);
+    }
+
+    const result = recordHumanFeedback({
+      request_id: requestId,
+      human_score: score,
+      dimension,
+      confidence: 'high'  // 用户直接打分，置信度高
+    });
+
+    if (result.recorded) {
+      console.log(`\n✅ ${result.message}`);
+      console.log(`   校准已应用: ${result.calibration_applied}`);
+    } else {
+      console.log(`\n❌ ${result.message}`);
+    }
+    process.exit(0);
+  }
+
+  // P2: 应用用户反馈校准
+  if (cmd === 'calibrate') {
+    console.log(`\n🔄 应用用户反馈校准...`);
+    const result = applyHumanFeedbackCalibration();
+    console.log(`  反馈数: ${result.feedback_count}`);
+    console.log(`  模型更新: ${result.models_updated}`);
+    process.exit(0);
+  }
+
   // Default: run or dry
   const dryRun = cmd === 'dry';
   const limit = parseInt(args[1] || '100');
@@ -594,5 +637,152 @@ Feedback Loop v2.0 — 反馈闭环引擎 (方案B 增强)
     for (const r of summary.results.slice(0, 5)) {
       console.log(`    [${r.quality.quality_score.toFixed(3)}] ${r.skill_id} — ${r.quality.reasoning}`);
     }
+  }
+}
+
+// ============================================================
+// P2: 用户反馈收集机制
+// ============================================================
+
+export interface HumanFeedback {
+  request_id: string;
+  human_score: number;      // 0-10
+  dimension?: string;        // quality/speed/helpfulness/accuracy
+  annotator_id?: string;
+  confidence?: 'high' | 'medium' | 'low';
+}
+
+/**
+ * 记录用户反馈
+ *
+ * 用法:
+ *   bun feedback-loop.ts feedback <request_id> <score> [dimension]
+ *
+ * 示例:
+ *   bun feedback-loop.ts feedback req-123 8 quality
+ */
+export function recordHumanFeedback(feedback: HumanFeedback): {
+  recorded: boolean;
+  calibration_applied: boolean;
+  message: string;
+} {
+  const db = new Database(DB_PATH);
+
+  try {
+    // 1. 检查 request_id 是否存在
+    const request = db.query(`
+      SELECT request_id, selected_model, task_type, quality_score
+      FROM sroe_requests
+      WHERE request_id = ?
+    `).get(feedback.request_id) as {
+      request_id: string;
+      selected_model: string;
+      task_type: string;
+      quality_score: number | null;
+    } | undefined;
+
+    if (!request) {
+      return {
+        recorded: false,
+        calibration_applied: false,
+        message: `请求 ${feedback.request_id} 不存在`
+      };
+    }
+
+    // 2. 生成反馈 ID
+    const feedbackId = `fb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    // 3. 计算分数差异 (human - auto)
+    const autoScore = request.quality_score ? request.quality_score * 10 : null; // 转换为 0-10
+    const scoreDiff = autoScore !== null ? feedback.human_score - autoScore : null;
+
+    // 4. 插入反馈记录
+    db.query(`
+      INSERT INTO sroe_human_feedback (
+        feedback_id, request_id, timestamp,
+        human_score, dimension,
+        auto_score, score_difference,
+        annotator_id, annotation_confidence,
+        used_for_calibration
+      ) VALUES (?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, FALSE)
+    `).run(
+      feedbackId,
+      feedback.request_id,
+      feedback.human_score,
+      feedback.dimension || 'quality',
+      autoScore,
+      scoreDiff,
+      feedback.annotator_id || 'user',
+      feedback.confidence || 'medium'
+    );
+
+    // 5. 用用户反馈更新 sroe_requests 的 quality_score
+    // 用户反馈权重更高 (0.7 human + 0.3 auto)
+    const humanScoreNormalized = feedback.human_score / 10; // 转换为 0-1
+    let newQualityScore: number;
+
+    if (request.quality_score !== null) {
+      newQualityScore = 0.7 * humanScoreNormalized + 0.3 * request.quality_score;
+    } else {
+      newQualityScore = humanScoreNormalized;
+    }
+
+    db.query(`
+      UPDATE sroe_requests
+      SET quality_score = ?
+      WHERE request_id = ?
+    `).run(newQualityScore, feedback.request_id);
+
+    return {
+      recorded: true,
+      calibration_applied: true,
+      message: `反馈已记录: ${feedback.human_score}/10 → 质量评分 ${newQualityScore.toFixed(3)}`
+    };
+
+  } catch (e) {
+    return {
+      recorded: false,
+      calibration_applied: false,
+      message: `记录失败: ${e}`
+    };
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * 批量应用用户反馈校准
+ * 重新聚合 model_task_performance，使用包含用户反馈的数据
+ */
+export function applyHumanFeedbackCalibration(): {
+  feedback_count: number;
+  models_updated: number;
+} {
+  const db = new Database(DB_PATH);
+
+  try {
+    // 统计已校准的反馈数
+    const countResult = db.query(`
+      SELECT COUNT(*) as cnt FROM sroe_human_feedback
+    `).get() as { cnt: number };
+    const feedbackCount = countResult.cnt;
+
+    // 标记所有反馈为已用于校准
+    db.query(`
+      UPDATE sroe_human_feedback
+      SET used_for_calibration = TRUE
+      WHERE used_for_calibration = FALSE
+    `).run();
+
+    // 重新运行聚合（会包含更新后的 quality_score）
+    const result = aggregateByTaskType(false);
+
+    return {
+      feedback_count: feedbackCount,
+      models_updated: result.updated_models
+    };
+
+  } finally {
+    db.close();
   }
 }

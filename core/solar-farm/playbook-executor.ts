@@ -52,6 +52,8 @@ export interface ExecutionResult {
 /**
  * 推断 playbook 的 task_type
  * 用于查询 model_task_performance
+ *
+ * 与 brain-router feature_extractor.py 的 TASK_TYPE_PATTERNS 对齐
  */
 function inferTaskType(playbook: PlaybookMatch): string {
   const keywords = playbook.trigger_keywords.join(' ').toLowerCase();
@@ -60,22 +62,45 @@ function inferTaskType(playbook: PlaybookMatch): string {
   const combined = `${keywords} ${name} ${desc}`;
 
   // 映射规则 (优先级从高到低，与 sroe_requests 的 task_type 对齐)
+
+  // Architecture - 架构设计 (高权重)
+  if (/架构|设计模式|重构|refactor|架构师|architect|design|schema|api.?design/.test(combined)) return 'architecture';
+
+  // Optimization - 性能优化 (单独分类，区别于 analysis)
+  if (/优化|性能|optim|performance|加速|speed|效率|efficiency|simd|向量化/.test(combined)) return 'optimization';
+
+  // Math - 数学/计算
+  if (/数学|计算|公式|math|calculate|算法|algorithm|证明|proof/.test(combined)) return 'math';
+
   // Review/审查 → analysis (需要深度分析)
-  if (/review|审查|检查|code.?review/.test(combined)) return 'analysis';
+  if (/review|审查|检查|code.?review|评审/.test(combined)) return 'analysis';
+
   // Debug/调试 → analysis (需要推理)
   if (/debug|调试|error|错误|排查|diagnos|bug|失败|报错/.test(combined)) return 'analysis';
-  // 性能优化 → analysis
-  if (/perf|性能|optim|优化/.test(combined)) return 'analysis';
-  // 架构设计 → architecture
-  if (/架构|设计|architect|design|api/.test(combined)) return 'architecture';
-  // 洞察/研究 → analysis
-  if (/分析|analy|洞察|研究|research/.test(combined)) return 'analysis';
-  // 代码实现 → coding
-  if (/代码|code|编程|实现|coding|开发/.test(combined)) return 'coding';
-  // 中文写作 → chinese
-  if (/中文|写作|writing|文章/.test(combined)) return 'chinese';
-  // 推理 → reasoning
-  if (/推理|reasoning|逻辑|思考/.test(combined)) return 'reasoning';
+
+  // Research/洞察 → analysis
+  if (/分析|analy|洞察|研究|research|调研|探索|investigat/.test(combined)) return 'analysis';
+
+  // Testing - 测试
+  if (/测试|test|验证|verify|benchmark|基准|e2e|unit.?test/.test(combined)) return 'testing';
+
+  // DevOps - 部署/运维
+  if (/部署|deploy|构建|build|运维|ops|docker|k8s|ci|cd|pipeline/.test(combined)) return 'devops';
+
+  // Documentation - 文档
+  if (/文档|注释|doc|comment|说明|readme|文章|report/.test(combined)) return 'documentation';
+
+  // Coding - 代码实现
+  if (/代码|code|编程|实现|coding|开发|implement|function|class/.test(combined)) return 'coding';
+
+  // Chinese - 中文写作
+  if (/中文|写作|writing|文章|翻译|translate/.test(combined)) return 'chinese';
+
+  // Reasoning - 推理
+  if (/推理|reasoning|逻辑|思考|logic/.test(combined)) return 'reasoning';
+
+  // Simple - 简单任务
+  if (/简单|快速|simple|quick|小|minor|一行|改名|rename/.test(combined)) return 'simple';
 
   // Default
   return 'general';
@@ -103,6 +128,89 @@ function getBestModelFromPerformance(taskType: string, minSamples: number = 3): 
 }
 
 /**
+ * 获取某任务类型的所有可用模型（用于探索）
+ */
+function getAvailableModelsForTask(taskType: string): string[] {
+  const db = new Database(DB_PATH, { readonly: true });
+  try {
+    const rows = db.query(`
+      SELECT DISTINCT model_id
+      FROM model_task_performance
+      WHERE task_type = ?
+      ORDER BY sample_count DESC
+      LIMIT 5
+    `).all(taskType) as { model_id: string }[];
+    return rows.map(r => r.model_id);
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Epsilon-Greedy 探索策略
+ *
+ * @param bestModel 当前最佳模型
+ * @param taskType 任务类型
+ * @param epsilon 探索概率 (0-1)，默认 0.1
+ * @returns 最终选择的模型
+ */
+function epsilonGreedyExplore(
+  bestModel: string,
+  taskType: string,
+  epsilon: number = 0.1
+): string {
+  // 随机数 > epsilon 时，使用最佳模型（开发）
+  if (Math.random() > epsilon) {
+    return bestModel;
+  }
+
+  // 探索：从该任务类型的可用模型中随机选择
+  const availableModels = getAvailableModelsForTask(taskType);
+
+  // 如果没有其他可用模型，返回最佳模型
+  if (availableModels.length <= 1) {
+    return bestModel;
+  }
+
+  // 过滤掉最佳模型，从其他模型中随机选择
+  const otherModels = availableModels.filter(m => m !== bestModel);
+  if (otherModels.length === 0) {
+    return bestModel;
+  }
+
+  const randomIndex = Math.floor(Math.random() * otherModels.length);
+  return otherModels[randomIndex];
+}
+
+/**
+ * 获取当前探索率（可配置，支持动态调整）
+ * 后期可以根据数据量自动降低探索率
+ */
+function getExplorationRate(taskType: string): number {
+  const db = new Database(DB_PATH, { readonly: true });
+  try {
+    // 查询该任务类型的总样本数
+    const row = db.query(`
+      SELECT SUM(sample_count) as total_samples
+      FROM model_task_performance
+      WHERE task_type = ?
+    `).get(taskType) as { total_samples: number | null };
+
+    const totalSamples = row?.total_samples || 0;
+
+    // 动态调整：数据越多，探索率越低
+    // 0-50 样本: 20% 探索
+    // 50-200 样本: 10% 探索
+    // 200+ 样本: 5% 探索
+    if (totalSamples < 50) return 0.20;
+    if (totalSamples < 200) return 0.10;
+    return 0.05;
+  } finally {
+    db.close();
+  }
+}
+
+/**
  * Select best model based on playbook task type
  *
  * 方案B: 数据驱动 + 硬编码 Fallback
@@ -124,27 +232,47 @@ export function selectModel(playbook: PlaybookMatch): string {
   // Step 2: 尝试从历史表现中选择 (minSamples=3 确保统计显著性)
   const dataDrivenModel = getBestModelFromPerformance(taskType, 3);
   if (dataDrivenModel) {
-    // 有足够历史数据，使用数据驱动选择
-    return dataDrivenModel;
+    // Step 2a: 应用 Epsilon-Greedy 探索策略
+    const epsilon = getExplorationRate(taskType);
+    const finalModel = epsilonGreedyExplore(dataDrivenModel, taskType, epsilon);
+
+    // 如果探索选择了不同模型，记录日志（可选）
+    if (finalModel !== dataDrivenModel) {
+      console.log(`🔍 [MemRL] 探索: ${taskType} -> ${finalModel} (最佳: ${dataDrivenModel}, ε=${epsilon})`);
+    }
+
+    return finalModel;
   }
 
   // Step 3: Fallback 到硬编码规则 (无足够数据时)
+  // Architecture → 探索派 (creative exploration)
+  if (/架构|设计模式|重构|refactor|architect|design|schema|api.?design/.test(combined)) return 'gemini-3-pro-preview';
+  // Math → 审判官 (deep reasoning)
+  if (/数学|计算|公式|math|calculate|算法|algorithm|证明|proof/.test(combined)) return 'deepseek-r1';
   // Review/code review → 稳健派 (high rigor)
-  if (/review|审查|code.?review|检查/.test(combined)) return 'gemini-2.5-pro';
+  if (/review|审查|code.?review|检查|评审/.test(combined)) return 'gemini-2.5-pro';
   // Debug/error → 审判官 (deep reasoning)
   if (/debug|调试|error|错误|排查|diagnos|bug|失败|报错/.test(combined)) return 'deepseek-r1';
-  // Design/architecture → 探索派 (creative exploration)
-  if (/design|设计|architect|架构|api/.test(combined)) return 'gemini-3-pro-preview';
   // Performance/optimization → 创想家 (creative solutions)
-  if (/perf|性能|optim|优化/.test(combined)) return 'deepseek-v3';
-  // Git/deploy → 建设者 (routine tasks)
-  if (/git|commit|deploy|部署|提交/.test(combined)) return 'glm-5';
+  if (/perf|性能|optim|优化|加速|simd|向量化/.test(combined)) return 'deepseek-v3';
+  // Testing → 稳健派 (quality focus)
+  if (/测试|test|验证|verify|benchmark|基准|e2e|unit.?test/.test(combined)) return 'gemini-2.5-pro';
+  // DevOps → 建设者 (routine tasks)
+  if (/部署|deploy|构建|build|运维|ops|docker|k8s|ci|cd|pipeline/.test(combined)) return 'glm-5';
+  // Documentation → 综合官 (clear communication)
+  if (/文档|注释|doc|comment|说明|readme|report/.test(combined)) return 'gpt-4o';
+  // Git/commit → 建设者
+  if (/git|commit|提交/.test(combined)) return 'glm-5';
   // Creative/brainstorm → 创想家
   if (/创意|creative|brainstorm/.test(combined)) return 'deepseek-v3';
   // Research/insight → 探索派
   if (/研究|洞察|insight|research|调研|探索/.test(combined)) return 'gemini-3-pro-preview';
   // Analysis (general) → 稳健派 (after more specific matches)
   if (/分析|analy/.test(combined)) return 'gemini-2.5-pro';
+  // Chinese writing → 智囊 (Chinese native)
+  if (/中文|写作|文章|翻译/.test(combined)) return 'glm-5';
+  // Simple tasks → 小快手 (fast, cheap)
+  if (/简单|快速|simple|quick|小|minor|一行|改名/.test(combined)) return 'glm-4-flash';
 
   // Default → 建设者 (reliable, cost-effective)
   return 'glm-5';
@@ -258,7 +386,8 @@ export function recordFeedback(
       ) VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       meta?.sessionId || `srag-${Date.now()}`,
-      execution.fallbackMode ? 'general' : 'skill_rag',
+      // 使用 inferTaskType 推断真正的任务类型，而不是硬编码 'skill_rag'
+      execution.selectedPlaybook ? inferTaskType(execution.selectedPlaybook) : 'general',
       execution.selectedPlaybook?.match_score || 0,
       execution.model,
       execution.fallbackMode
