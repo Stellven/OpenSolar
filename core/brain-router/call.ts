@@ -41,13 +41,19 @@ const MODEL_ALIASES: Record<string, string> = {
   '创想家': 'deepseek-chat',
   '审判官': 'deepseek-reasoner',
 
-  // 其他
+  // OpenAI API
   'gpt-4o': 'gpt-4o',
   'gpt-4o-mini': 'gpt-4o-mini',
   'o1': 'o1',
   'o1-mini': 'o1-mini',
   '综合官': 'gpt-4o',
   '小管家': 'gpt-4o-mini',
+
+  // ChatGPT 网页版 (使用订阅，无限使用)
+  'chatgpt-web': 'chatgpt-web',
+  'chatgpt-4o': 'chatgpt-4o',
+  'chatgpt-o1': 'chatgpt-o1',
+  'chatgpt-5.2': 'chatgpt-5.2',
 };
 
 // API 端点 (统一使用 ZHIPU_API_KEY, GOOGLE_API_KEY, DEEPSEEK_API_KEY, OPENAI_API_KEY)
@@ -63,6 +69,7 @@ function getModelProvider(model: string): string {
   if (model.startsWith('glm')) return 'glm';
   if (model.startsWith('gemini')) return 'gemini';
   if (model.startsWith('deepseek')) return 'deepseek';
+  if (model.startsWith('chatgpt')) return 'chatgpt-web';
   if (model.startsWith('gpt') || model.startsWith('o1')) return 'gpt';
   return 'glm'; // 默认
 }
@@ -200,6 +207,84 @@ async function callOpenAI(model: string, prompt: string, systemPrompt?: string):
   return data.choices[0]?.message?.content || '';
 }
 
+/**
+ * ChatGPT 网页版调用 (使用订阅，无限使用)
+ * 前置条件: 运行 ~/.claude/scripts/start-chrome-debug.sh
+ */
+async function callChatGPTWeb(model: string, prompt: string, systemPrompt?: string): Promise<string> {
+  const puppeteer = await import('puppeteer-core');
+
+  // 连接到调试模式的 Chrome
+  const browser = await puppeteer.connect({
+    browserURL: 'http://localhost:9222',
+    defaultViewport: null,
+  });
+
+  const pages = await browser.pages();
+  let page = pages.find((p) => p.url().includes('chatgpt.com'));
+
+  if (!page) {
+    page = await browser.newPage();
+    await page.goto('https://chatgpt.com', { waitUntil: 'networkidle2' });
+  }
+
+  // 检查登录状态
+  const buttonTexts = await page.evaluate(() => {
+    const buttons = document.querySelectorAll('button');
+    return Array.from(buttons).map(b => b.textContent);
+  });
+  if (buttonTexts.some(t => t?.includes('登录') || t?.includes('Log in'))) {
+    await browser.disconnect();
+    throw new Error('ChatGPT 未登录。请先在 Chrome 中登录 chatgpt.com');
+  }
+
+  // 合并 system prompt 到用户消息
+  const fullPrompt = systemPrompt
+    ? `${systemPrompt}\n\n---\n\n${prompt}`
+    : prompt;
+
+  // 输入问题
+  const input = await page.$('div[contenteditable="true"]');
+  if (!input) {
+    await browser.disconnect();
+    throw new Error('找不到 ChatGPT 输入框');
+  }
+
+  await input.click();
+  await page.keyboard.down('Meta');
+  await page.keyboard.press('a');
+  await page.keyboard.up('Meta');
+  await page.keyboard.type(fullPrompt, { delay: 10 });
+
+  // 发送
+  await page.keyboard.press('Enter');
+
+  // 等待回复
+  await new Promise(r => setTimeout(r, 3000));
+
+  try {
+    await page.waitForSelector('button[aria-label="停止生成"]', { timeout: 5000 });
+    await page.waitForSelector('button[aria-label="停止生成"]', { hidden: true, timeout: 120000 });
+  } catch {
+    // 可能没有停止按钮
+  }
+
+  await new Promise(r => setTimeout(r, 1000));
+
+  // 提取回复
+  const responses = await page.$$('div.markdown');
+  if (responses.length === 0) {
+    await browser.disconnect();
+    throw new Error('无法获取 ChatGPT 回复');
+  }
+
+  const lastResponse = responses[responses.length - 1];
+  const text = await lastResponse.evaluate((el) => el.textContent);
+
+  await browser.disconnect();
+  return text || '';
+}
+
 async function main() {
   const args = process.argv.slice(2);
 
@@ -243,6 +328,9 @@ async function main() {
         break;
       case 'gpt':
         result = await callOpenAI(model, prompt, systemPrompt);
+        break;
+      case 'chatgpt-web':
+        result = await callChatGPTWeb(model, prompt, systemPrompt);
         break;
       default:
         throw new Error(`未知模型提供商: ${provider}`);
