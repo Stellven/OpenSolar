@@ -158,25 +158,36 @@ export function retrieveSkills(request: RetrievalRequest): RetrievalResult {
 
   const whereClause = conditions.join(' AND ');
 
-  // 构建排序条件 - 名称匹配优先
-  let orderBy = `
-    CASE
-      WHEN name LIKE ? THEN 0
-      WHEN description LIKE ? THEN 1
-      ELSE 2
-    END,
-    q_value DESC,
-    (success_count * 1.0 / NULLIF(success_count + failure_count, 0)) DESC,
-    CASE scope WHEN 'general' THEN 1 ELSE 2 END
-  `;
+  // 构建排序条件 - 多关键词匹配分数
+  // 计算名称匹配的关键词数量，越多越靠前
+  const keywords = request.query?.split(/\s+/).filter(k => k.length >= 2) || [];
 
-  // 为排序添加第一个关键词参数
-  const firstKeyword = request.query?.split(/\s+/).filter(k => k.length >= 2)[0];
-  if (firstKeyword) {
-    const searchTerm = `%${firstKeyword}%`;
-    params.unshift(searchTerm, searchTerm);  // 添加到开头用于排序
+  let orderBy: string;
+  if (keywords.length > 0) {
+    // 动态构建：计算名称匹配的关键词数量
+    const nameMatchScore = keywords.map(kw => {
+      params.unshift(`%${kw}%`);
+      return `CASE WHEN name LIKE ? THEN 1 ELSE 0 END`;
+    }).join(' + ');
+
+    const descMatchScore = keywords.map(kw => {
+      params.unshift(`%${kw}%`);
+      return `CASE WHEN description LIKE ? THEN 1 ELSE 0 END`;
+    }).join(' + ');
+
+    orderBy = `
+      (${nameMatchScore}) DESC,
+      (${descMatchScore}) DESC,
+      q_value DESC,
+      (success_count * 1.0 / NULLIF(success_count + failure_count, 0)) DESC,
+      CASE scope WHEN 'general' THEN 1 ELSE 2 END
+    `;
   } else {
-    params.unshift('%%', '%%');  // 无关键词时不影响排序
+    orderBy = `
+      q_value DESC,
+      (success_count * 1.0 / NULLIF(success_count + failure_count, 0)) DESC,
+      CASE scope WHEN 'general' THEN 1 ELSE 2 END
+    `;
   }
 
   const stmt = db.prepare(`
