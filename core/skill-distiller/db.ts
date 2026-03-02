@@ -158,13 +158,31 @@ export function retrieveSkills(request: RetrievalRequest): RetrievalResult {
 
   const whereClause = conditions.join(' AND ');
 
+  // 构建排序条件 - 名称匹配优先
+  let orderBy = `
+    CASE
+      WHEN name LIKE ? THEN 0
+      WHEN description LIKE ? THEN 1
+      ELSE 2
+    END,
+    q_value DESC,
+    (success_count * 1.0 / NULLIF(success_count + failure_count, 0)) DESC,
+    CASE scope WHEN 'general' THEN 1 ELSE 2 END
+  `;
+
+  // 为排序添加第一个关键词参数
+  const firstKeyword = request.query?.split(/\s+/).filter(k => k.length >= 2)[0];
+  if (firstKeyword) {
+    const searchTerm = `%${firstKeyword}%`;
+    params.unshift(searchTerm, searchTerm);  // 添加到开头用于排序
+  } else {
+    params.unshift('%%', '%%');  // 无关键词时不影响排序
+  }
+
   const stmt = db.prepare(`
     SELECT * FROM sys_skill_bank
     WHERE ${whereClause}
-    ORDER BY
-      q_value DESC,
-      (success_count * 1.0 / NULLIF(success_count + failure_count, 0)) DESC,
-      CASE scope WHEN 'general' THEN 1 ELSE 2 END
+    ORDER BY ${orderBy}
     LIMIT ?
   `);
 
