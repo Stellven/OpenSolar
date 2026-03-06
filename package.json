@@ -11,6 +11,11 @@
   "scripts": {
     "dev": "bun run core/daemon/server.ts",
     "daemon": "bun run core/daemon/server.ts",
+    "extract:skills": "bun run scripts/extract-skills.ts",
+    "smoke:skills": "bun run scripts/smoke-skills.ts",
+    "smoke:health-monitor": "bun run scripts/smoke-health-monitor.ts",
+    "skills:reindex": "bun run scripts/rebuild-skills-index.ts",
+    "matrix:skills": "bun run scripts/generate-skills-matrix.ts",
     "ui-watcher": "bun run core/daemon/ui-watcher.ts",
     "dashboard": "bun run demos/agent-dashboard.ts",
     "dashboard:compact": "bun run demos/agent-dashboard.ts --layout=compact",

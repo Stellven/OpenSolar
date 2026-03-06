@@ -14,6 +14,7 @@ import { WorkflowEngine } from "./workflow";
 import { PluginHost } from "../plugin/host";
 import { watch } from "fs";
 import { unlinkSync, existsSync } from "fs";
+import { MessageExecutor } from "./message-executor";
 
 // ==================== 配置 ====================
 
@@ -45,6 +46,7 @@ export class SolarDaemon {
   private messageQueue: MessageQueue;
   private workflowEngine: WorkflowEngine;
   private pluginHost: PluginHost;
+  private messageExecutor: MessageExecutor;
   private server: ReturnType<typeof Bun.serve> | null = null;
   private startedAt: Date | null = null;
   private isShuttingDown = false;
@@ -61,6 +63,10 @@ export class SolarDaemon {
     this.messageQueue = new MessageQueue(this.state, this.queries);
     this.workflowEngine = new WorkflowEngine(this.state, this.queries);
     this.pluginHost = new PluginHost(this.config.pluginDir, this.state);
+    this.messageExecutor = new MessageExecutor({
+      listeners: { imessage: false, gmail: false, telegram: false },
+      scheduler: { interval: 5000, maxWorkers: 2 },
+    });
   }
 
   // ==================== 生命周期 ====================
@@ -84,6 +90,9 @@ export class SolarDaemon {
 
     // 启动 Socket 服务
     await this.startSocketServer();
+
+    // 启动消息执行器（编排执行链路）
+    await this.messageExecutor.start();
 
     // 加载插件
     await this.pluginHost.loadAll();
@@ -115,6 +124,9 @@ export class SolarDaemon {
 
     // 停止调度器
     this.scheduler.stopAll();
+
+    // 停止消息执行器
+    this.messageExecutor.stop();
 
     // 刷新消息队列
     await this.messageQueue.flush();
@@ -341,6 +353,120 @@ export class SolarDaemon {
       return Response.json({ output: `Rendered: ${template}` });
     }
 
+    // ========== Orchestrator API ==========
+    if (path === "/orchestrator/events" && method === "GET") {
+      const limit = parseInt(url.searchParams.get("limit") || "100");
+      const taskId = url.searchParams.get("taskId") || undefined;
+      const eventType = url.searchParams.get("type") || undefined;
+      const since = url.searchParams.get("since") || undefined;
+      return Response.json(this.messageExecutor.getOrchestrationEvents(limit, taskId, eventType, since));
+    }
+
+    if (path === "/orchestrator/state" && method === "GET") {
+      return Response.json(this.messageExecutor.getOrchestrationState());
+    }
+
+    if (path === "/orchestrator/tasks" && method === "GET") {
+      const limit = parseInt(url.searchParams.get("limit") || "50");
+      return Response.json(this.messageExecutor.listKnownTaskIds(limit));
+    }
+
+    if (path === "/orchestrator/graph" && method === "GET") {
+      const taskId = url.searchParams.get("taskId");
+      if (!taskId) {
+        return Response.json({ ok: false, error: "taskId is required" }, { status: 400 });
+      }
+      const graph = this.messageExecutor.getTaskGraph(taskId);
+      return Response.json({ ok: true, graph });
+    }
+
+    if (path === "/orchestrator/diagnostics" && method === "GET") {
+      const taskId = url.searchParams.get("taskId");
+      if (!taskId) {
+        return Response.json({ ok: false, error: "taskId is required" }, { status: 400 });
+      }
+      return Response.json({ ok: true, diagnostics: this.messageExecutor.getTaskDiagnostics(taskId) });
+    }
+
+    if (path === "/orchestrator/retry-policy" && method === "GET") {
+      return Response.json({ ok: true, policy: this.messageExecutor.getRetryPolicy() });
+    }
+
+    if (path === "/orchestrator/retry-policy" && method === "POST") {
+      const body = await req.json() as {
+        baseDelayMs?: number;
+        maxDelayMs?: number;
+        maxAttempts?: number;
+        jitterRatio?: number;
+        retryableErrorPatterns?: string[];
+      };
+      const policy = this.messageExecutor.updateRetryPolicy(body);
+      return Response.json({ ok: true, policy });
+    }
+
+    if (path === "/orchestrator/control" && method === "POST") {
+      const body = await req.json() as {
+        action: "pause" | "resume" | "reroute" | "debate" | "policy" | "retry" | "repair";
+        taskId: string;
+        nodeId?: string;
+        target?: string;
+        error?: string;
+        rounds?: number;
+        defaultDebateRounds?: number;
+        highRiskThreshold?: number;
+        voteMode?: "majority" | "weighted";
+      };
+
+      if (body.action !== "policy" && !body.taskId) {
+        return Response.json({ ok: false, error: "taskId is required" }, { status: 400 });
+      }
+
+      switch (body.action) {
+        case "pause":
+          this.messageExecutor.pauseTask(body.taskId);
+          return Response.json({ ok: true });
+        case "resume":
+          this.messageExecutor.resumeTask(body.taskId);
+          return Response.json({ ok: true });
+        case "reroute":
+          if (!body.nodeId || !body.target) {
+            return Response.json({ ok: false, error: "nodeId and target are required for reroute" }, { status: 400 });
+          }
+          this.messageExecutor.rerouteNode(body.taskId, body.nodeId, body.target);
+          return Response.json({ ok: true });
+        case "debate":
+          if (!body.rounds || body.rounds < 1) {
+            return Response.json({ ok: false, error: "rounds >= 1 is required for debate" }, { status: 400 });
+          }
+          this.messageExecutor.setDebateRounds(body.taskId, body.rounds, body.nodeId);
+          return Response.json({ ok: true });
+        case "policy":
+          this.messageExecutor.updateOrchestrationPolicy({
+            defaultDebateRounds: body.defaultDebateRounds,
+            highRiskThreshold: body.highRiskThreshold,
+            voteMode: body.voteMode,
+          });
+          return Response.json({ ok: true });
+        case "retry":
+          if (!body.nodeId) {
+            return Response.json({ ok: false, error: "nodeId is required for retry" }, { status: 400 });
+          }
+          return Response.json(this.messageExecutor.retryNode(body.taskId, body.nodeId));
+        case "repair":
+          if (!body.nodeId) {
+            return Response.json({ ok: false, error: "nodeId is required for repair" }, { status: 400 });
+          }
+          return Response.json(
+            this.messageExecutor.createRepairTask(body.taskId, body.nodeId, {
+              error: body.error,
+              branchSuggestion: body.target,
+            }),
+          );
+        default:
+          return Response.json({ ok: false, error: "unknown action" }, { status: 400 });
+      }
+    }
+
     return new Response("Not Found", { status: 404 });
   }
 
@@ -358,6 +484,7 @@ export class SolarDaemon {
       plugins: {
         loaded: this.pluginHost.getLoadedCount(),
       },
+      messageExecutor: this.messageExecutor.getStatus(),
       stats: {
         todayCost: this.state.get("token_usage.today_cost", 0),
         todayTokens: this.state.get("token_usage.today_tokens", 0),
