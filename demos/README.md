@@ -195,3 +195,66 @@ Powered by TVS v0.4.0 · Style: zenwhite.terminal
 4. **全程可视**: TVS 实时展示每个阶段
 5. **数据驱动**: 所有执行记录写入系统表
 6. **自我优化**: 基于历史数据自动调参
+
+---
+
+## Orchestrator Dashboard 健康总览
+
+`/orchestrator` 页面已支持健康总览卡片，默认展示：
+
+1. 队列量（pending/deferred/queued）
+2. 失败率（24h）
+3. 重试中节点数（pending_retry/retrying）
+4. 修复分支任务数（活跃）
+
+增强能力：
+
+1. 失败率（1h）
+2. 队列最老等待时长（分钟）
+3. 修复分支任务（24h）
+4. 状态灯（GOOD/WARN/BAD）
+5. 24h 小时级失败/完成趋势图
+6. 一键导出健康 JSON
+
+相关 API：
+
+1. `GET /api/orchestrator/health-summary`
+2. `GET /api/orchestrator/health-history?hours=24`
+3. `GET /api/orchestrator/health-config`
+4. `POST /api/orchestrator/health-config`
+5. `GET /api/orchestrator/health-drilldown?type=failures|repairs&limit=20`
+6. `GET /api/orchestrator/health-alerts?limit=50&includeResolved=0|1`
+7. `POST /api/orchestrator/health-actions/retry`
+8. `POST /api/orchestrator/health-actions/repair`
+
+说明：
+
+1. 健康阈值与巡检配置（包含快照保留天数、告警冷却、通知渠道）都存储在 `bl_orchestrator_health_config`。
+2. 健康快照落库到 `bl_orchestrator_health_snapshots`，默认保留 30 天（可配置）。
+3. 告警记录在 `bl_orchestrator_health_alerts`，支持面板展示与下钻联动。
+4. 巡检告警可桥接通知渠道：
+   - Email（`monitor.notifyEmailEnabled + monitor.notifyEmailTo`）
+   - Telegram（`monitor.notifyTelegramEnabled + monitor.notifyTelegramChatId`）
+
+---
+
+## 故障排查
+
+1. 健康面板一直显示 `N/A`
+   - 检查 dashboard 服务：`bun run core/dashboard/server.ts`
+   - 检查数据库是否存在：`~/.solar/solar.db`
+2. “一键重试/一键创建修复任务”失败
+   - 确认 daemon 在运行：`/tmp/solar.sock` 存在且可访问
+   - 手动探活：`curl --unix-socket /tmp/solar.sock http://localhost/health`
+3. 告警列表为空
+   - 先触发一次 `GET /api/orchestrator/health-summary`（会落快照并评估告警）
+   - 降低阈值后再次触发，验证是否生成告警
+4. Telegram 通知不发送
+   - 确认环境变量：`TELEGRAM_BOT_TOKEN`
+   - 配置 `monitor.notifyTelegramEnabled=true` 且 `notifyTelegramChatId` 非空
+5. Email 通知不发送
+   - macOS 下优先走 Mail.app；请确认已配置可发送账号
+   - 配置 `monitor.notifyEmailEnabled=true` 且 `notifyEmailTo` 非空
+6. 快照膨胀
+   - 调整 `monitor.snapshotRetentionDays`（默认 30）
+   - 触发一次健康采样后会自动执行清理
