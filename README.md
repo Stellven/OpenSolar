@@ -6,6 +6,28 @@
 [![Agents](https://img.shields.io/badge/Agents-13-green.svg)](docs/agents.md)
 [![Skills](https://img.shields.io/badge/Skills-38-blue.svg)](docs/skills.md)
 
+## ⚡ 一键安装（5 分钟）
+
+**复制下面整段，粘贴给你的 AI agent**（Claude / Codex / Cursor / Copilot / 通义灵码）：
+
+> 请帮我安装 Solar AI Native OS：
+> 1. 从 https://raw.githubusercontent.com/lisihao/Solar/main/INSTALL-AGENT.md 获取完整安装指南
+> 2. 严格按照该文件 8 个步骤引导我完成，每步告诉我做什么 + 跑什么命令 + 预期输出
+> 3. 任一步失败请提供回退方案，不要静默跳过
+> 4. 装完后跑 `~/.solar/bin/solar-harness doctor` 验证，显示无 warning 才算成功
+>
+> 现在开始第 1 步：系统检测（macOS Apple Silicon / Linux）。
+
+agent 收到后会自动：
+- 检测系统（macOS / Linux）+ 装依赖（brew / bash 5 / tmux / jq / python3）
+- git clone 三仓库到 `~/.claude` `~/Solar` `~/.solar`
+- 复制 `.env.template` 提示填 API key
+- 跑 doctor 自检
+
+完整指南: [INSTALL-AGENT.md](INSTALL-AGENT.md)
+
+---
+
 ## Why AI Native?
 
 **传统方案**: 在现有 OS 上叠加 AI 功能 (AI-Powered)
