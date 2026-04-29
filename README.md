@@ -26,6 +26,22 @@ agent 收到后会自动：
 
 完整指南: [INSTALL-AGENT.md](INSTALL-AGENT.md)
 
+## 📖 使用说明
+
+👉 **[完整用户使用指南 (USER-GUIDE.md)](./USER-GUIDE.md)** — 849 行全面文档
+
+涵盖：
+- 触发词大全（100+ 常用触发词）
+- 核心命令速查（18 个 bin 命令）
+- MCP 工具调用技巧
+- Skills 速查（Top 50 分类）
+- Sprint 工作流详解
+- 知识库使用指南
+- 故障排查 FAQ
+- 进阶定制方法
+
+快速参考：[TRIGGERS.md](./TRIGGERS.md) | [SPRINTS-HIGHLIGHTS.md](./SPRINTS-HIGHLIGHTS.md)
+
 ---
 
 ## Why AI Native?
