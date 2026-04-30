@@ -14,7 +14,7 @@
 
 import Database from 'bun:sqlite';
 import { $ } from 'bun';
-import { ReplySender } from '/Users/sihaoli/Solar/core/reply/reply-sender';
+import { ReplySender } from '../reply/reply-sender';
 
 const DB_PATH = `${process.env.HOME}/.solar/solar.db`;
 

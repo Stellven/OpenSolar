@@ -8,9 +8,9 @@ import Database from 'bun:sqlite';
 import { watch } from 'fs';
 import { readdir, readFile, unlink, mkdir } from 'fs/promises';
 import { join } from 'path';
-import { ReplySender, type ReplyType, type Channel } from '/Users/sihaoli/Solar/core/reply/reply-sender';
-import { SmartScheduler } from '/Users/sihaoli/Solar/core/executor/smart-scheduler';
-import { SecurityMonitor } from '/Users/sihaoli/Solar/core/security/security-monitor';
+import { ReplySender, type ReplyType, type Channel } from '../../reply/reply-sender';
+import { SmartScheduler } from '../../executor/smart-scheduler';
+import { SecurityMonitor } from '../security/security-monitor';
 
 const DB_PATH = `${process.env.HOME}/.solar/solar.db`;
 const IMESSAGE_DIR = `${process.env.HOME}/.solar/incoming/imessage`;

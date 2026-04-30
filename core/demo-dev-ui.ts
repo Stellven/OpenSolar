@@ -237,7 +237,7 @@ function renderHeader(): string {
 
 async function renderDashboard() {
   // Get git info
-  const git = createGitServer("/Users/sihaoli/ThunderDuck");
+  const git = createGitServer(process.env.PROJECT_ROOT || process.cwd());
   let gitInfo = { branch: "main", changes: 0, lastCommit: "feat: Solar v1.0" };
 
   try {
