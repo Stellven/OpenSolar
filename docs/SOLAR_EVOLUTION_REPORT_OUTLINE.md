@@ -386,7 +386,7 @@
          • 解决2: head -10000 限制
 
     6.4  DeepSeek API 集成
-         • 配置: sk-5afcf652ba934a609af1658fbed29dd0
+         • 配置: sk-EXAMPLE_NOT_REAL_xxxxxxxxxxxxx
          • 用途: 中文场景优化、性价比选择
 
 
