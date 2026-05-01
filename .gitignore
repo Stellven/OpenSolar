@@ -52,3 +52,8 @@ coverage/
 paste-cache/
 file-history/
 shell-snapshots/
+
+# OAuth secrets — 防意外提交
+client_secret_*.json
+*.googleusercontent.com.json
+*credentials*.json

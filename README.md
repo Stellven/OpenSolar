@@ -6,25 +6,67 @@
 [![Agents](https://img.shields.io/badge/Agents-13-green.svg)](docs/agents.md)
 [![Skills](https://img.shields.io/badge/Skills-38-blue.svg)](docs/skills.md)
 
-## ⚡ 一键安装（5 分钟）
+## ⚡ 一键安装（3 分钟）
 
-**复制下面整段，粘贴给你的 AI agent**（Claude / Codex / Cursor / Copilot / 通义灵码）：
+> **真实可执行最小路径** — 只承诺 L1 基础安装，不假装存在的功能。
 
-> 请帮我安装 Solar AI Native OS：
-> 1. 从 https://raw.githubusercontent.com/lisihao/Solar/main/INSTALL-AGENT.md 获取完整安装指南
-> 2. 严格按照该文件 8 个步骤引导我完成，每步告诉我做什么 + 跑什么命令 + 预期输出
-> 3. 任一步失败请提供回退方案，不要静默跳过
-> 4. 装完后跑 `~/.solar/bin/solar-harness doctor` 验证，显示无 warning 才算成功
+### 给人看：直接跑
+
+```bash
+git clone https://github.com/lisihao/Solar.git ~/Solar
+cd ~/Solar && ./install.sh
+```
+
+安装完成后会自动 verify 6 项,全 ✅ 表示成功。
+
+### 给 AI agent 看：复制整段粘贴给 Claude / Codex / Cursor / Copilot
+
+> 请帮我安装 Solar:
 >
-> 现在开始第 1 步：系统检测（macOS Apple Silicon / Linux）。
+> 1. 严格按 https://raw.githubusercontent.com/lisihao/Solar/main/INSTALL-AGENT.md 的 8 步执行
+> 2. 每步必须先报告"目的+命令+预期输出",我点头才执行
+> 3. 任一步失败立刻停下,告诉我失败的具体输出,不要静默跳过
+> 4. 装完后必须跑 `cd ~/Solar && ./install.sh` 末尾的 6 项自检,全 ✅ 才算成功
+> 5. 不要跑 `~/.solar/bin/solar-harness doctor` (该工具属于 L2 高级模式,当前未打包)
+>
+> 现在开始 Step 1:系统检测。
 
-agent 收到后会自动：
-- 检测系统（macOS / Linux）+ 装依赖（brew / bash 5 / tmux / jq / python3）
-- git clone 三仓库到 `~/.claude` `~/Solar` `~/.solar`
-- 复制 `.env.template` 提示填 API key
-- 跑 doctor 自检
+### 安装做了什么
 
-完整指南: [INSTALL-AGENT.md](INSTALL-AGENT.md)
+| 阶段 | 操作 | 产物 |
+|------|------|------|
+| 1. clone | 单仓库 `lisihao/Solar` 到 `~/Solar` | `~/Solar/` |
+| 2. 备份 | 现有 `~/.claude/` (如有) | `~/.claude/backup-<时间戳>/` |
+| 3. 复制 | `~/Solar/{CLAUDE.md, rules, skills, agents, hooks, core}` → `~/.claude/` | `~/.claude/` 内容 |
+| 4. 初始化 | 创建 `~/.solar/` + `solar.db` (如有 schema) | `~/.solar/solar.db` |
+| 5. 自检 | 6 项 verify 输出 PASS/FAIL | 退出码 0=成功 |
+
+### 验收 (装完跑这一条)
+
+```bash
+ls ~/.claude/CLAUDE.md ~/.claude/rules ~/.claude/skills ~/.claude/agents ~/.solar && \
+echo "✅ Solar L1 安装就位"
+```
+
+任一文件/目录不存在则失败,跳到 [INSTALL-AGENT.md Step 7 Troubleshoot](INSTALL-AGENT.md#step-7-troubleshoot)。
+
+### 必需 vs 可选
+
+- **必需** (L1 基础): `~/Solar` 仓库 + `./install.sh` → `~/.claude/` 配置就位 → 启动 Claude Code 输入 `solar` 看启动宣告
+- **可选** (L2 高级): Solar Harness 协调器 / Sprint / 牛马链路 — **当前未打包到本仓库**, 详见 [USER-GUIDE 第 9 节](USER-GUIDE.md)
+- **可选** (L3 项目): `~/Solar-MAX` 项目模式 — 独立大仓库, 详见 USER-GUIDE
+
+完整 8 步剧本: [INSTALL-AGENT.md](INSTALL-AGENT.md)
+
+### 维护者: 改动后自测
+
+修改 `install.sh` 或仓库结构后, 跑 fresh-install smoke (沙盒里独立验证, 不污染本机 `~/.claude/`):
+
+```bash
+./scripts/smoke-install.sh
+```
+
+输出 `✅ Solar L1 Smoke Test PASSED` 才能 push。
 
 ## 📖 使用说明
 
@@ -82,9 +124,9 @@ agent 收到后会自动：
 | "我要研究" | Research | 技术调研 + 可行性分析 |
 
 ```bash
-# 安装
-git clone https://github.com/anthropics/solar.git
-cd solar && ./install.sh
+# 安装 (与首页"一键安装"一致)
+git clone https://github.com/lisihao/Solar.git ~/Solar
+cd ~/Solar && ./install.sh
 
 # 使用
 @Coder 优化这个函数    # 直达 Agent
@@ -300,14 +342,11 @@ Researcher  Architect  Coder   Tester//   Ops→PM
 
 ## Installation
 
-**一键部署:**
+见首页 [⚡ 一键安装](#-一键安装3-分钟) — 唯一推荐路径。
 
-```bash
-git clone https://github.com/anthropics/solar.git
-cd solar && ./install.sh
-```
-
-**详细文档:** 完整部署指南（包括 OpenClaw/小爱 AI 秘书集成）见 [DEPLOY.md](DEPLOY.md)
+**详细 8 步剧本** (供 AI agent 执行): [INSTALL-AGENT.md](INSTALL-AGENT.md)
+**用户使用指南**: [USER-GUIDE.md](USER-GUIDE.md)
+**OpenClaw / 小爱 AI 秘书集成** (高级): [DEPLOY.md](DEPLOY.md)
 
 ## License
 
