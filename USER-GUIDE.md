@@ -58,31 +58,47 @@
 
 ## 2. 5 分钟快速上手
 
-### 安装
+### 安装 (L1 基础)
 
-详见 [INSTALL-AGENT.md](./INSTALL-AGENT.md)，核心步骤：
+与 [README 一键安装](./README.md#-一键安装3-分钟) 完全一致, 唯一推荐路径:
 
 ```bash
-# 1. 克隆仓库
-git clone https://github.com/lisihao/Solar ~/Solar
-cd ~/Solar
-
-# 2. 运行安装脚本
-./install.sh
-
-# 3. 验证安装
-solar-harness status
+git clone https://github.com/lisihao/Solar.git ~/Solar
+cd ~/Solar && ./install.sh
 ```
+
+`install.sh` 末尾会自动跑 6 项自检, 全 ✅ 表示成功。
+
+### 验证安装
+
+```bash
+ls ~/.claude/CLAUDE.md ~/.claude/rules ~/.claude/skills ~/.claude/agents ~/.solar && \
+  echo "✅ Solar L1 已就位"
+```
+
+> ⚠️ **不要跑** `solar-harness status` 或 `solar-harness doctor` — 这些工具属于 L2 高级模式, **当前未打包到本仓库**。详见本指南第 9 节。
+
+完整 8 步剧本 (供 AI agent 执行): [INSTALL-AGENT.md](./INSTALL-AGENT.md)
 
 ### 第一次对话
 
-启动 Claude Code 后，输入：
+启动 Claude Code 后,输入:
 
 ```
 solar
 ```
 
 Solar 会加载状态并宣告当前工作内容。
+
+### L1 vs L2 vs L3 安装层级
+
+| 层级 | 范围 | 状态 | 怎么装 |
+|------|------|------|--------|
+| **L1 基础** | CLAUDE.md + rules + skills + agents + hooks + core | ✅ 本仓库, install.sh 就够 | `./install.sh` |
+| **L2 高级** | Solar Harness 协调器 + Sprint 状态机 + 牛马链路 | ⚠️ 未打包,源码在作者本机 `~/.solar/harness/` | 暂无方法 |
+| **L3 项目** | Solar-MAX 五阶段流程 + Gate 模式 | ⚠️ 私有仓库 | 不对外开放 |
+
+**L1 已经能用大部分功能** (触发词、agents、skills、rules、CLAUDE.md 行为)。L2/L3 只在本地多机器部署时才需要。
 
 ### 常用操作
 
@@ -179,7 +195,11 @@ Solar 会加载状态并宣告当前工作内容。
 
 ## 4. 核心命令
 
-### solar-harness — 协调器管理
+### solar-harness — 协调器管理 (L2 高级模式, 需单独安装)
+
+> ⚠️ **本节命令在 L1 基础安装下不可用** — `~/.solar/bin/solar-harness` 当前不在 `lisihao/Solar` 仓库, 是作者本机的协调器系统。L1 用户可跳过本小节。
+
+如果你已经从其他来源装了 Solar Harness 到 `~/.solar/harness/`, 才能使用以下命令:
 
 ```bash
 # 查看协调器状态
@@ -692,7 +712,9 @@ bash -n ~/.claude/hooks/xxx.sh
 tail -f ~/.solar/harness/.coordinator.log
 ```
 
-### Q: Coordinator 卡死？
+### Q: Coordinator 卡死？(L2 高级模式)
+
+> 仅在已装 Solar Harness 时适用, L1 用户跳过。
 
 ```bash
 # 检查 tmux session
@@ -701,7 +723,7 @@ tmux ls
 # 检查进程
 ps aux | grep coordinator
 
-# 重启协调器
+# 重启协调器 (需 ~/.solar/bin/solar-harness)
 solar-harness doctor
 solar-harness restart
 ```
