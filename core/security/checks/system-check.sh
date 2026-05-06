@@ -4,6 +4,7 @@
 
 DB_PATH="$HOME/.solar/solar.db"
 LOG_FILE="$HOME/.solar/logs/security.log"
+ALERT_EMAIL="${SOLAR_ALERT_EMAIL:-guardian@example.com}"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [SYSTEM] $1" >> "$LOG_FILE"
@@ -29,7 +30,7 @@ send_alert() {
     osascript -e "display notification \"$message\" with title \"Solar 系统预警\" subtitle \"$level\"" 2>/dev/null
 
     if [[ "$level" == "critical" || "$level" == "emergency" ]]; then
-        echo "$message" | himalaya message write --to "lisihao@gmail.com" --subject "⚠️ Solar 系统预警: $level" 2>/dev/null || true
+        echo "$message" | himalaya message write --to "$ALERT_EMAIL" --subject "⚠️ Solar 系统预警: $level" 2>/dev/null || true
     fi
 
     log "ALERT: [$level] $message"

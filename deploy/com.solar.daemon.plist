@@ -7,9 +7,9 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/sihaoli/.bun/bin/bun</string>
+        <string>__HOME_DIR__/.bun/bin/bun</string>
         <string>run</string>
-        <string>/Users/sihaoli/Solar/core/daemon/server.ts</string>
+        <string>__SOLAR_HOME__/core/daemon/server.ts</string>
         <string>start</string>
     </array>
 
@@ -23,20 +23,20 @@
     </dict>
 
     <key>WorkingDirectory</key>
-    <string>/Users/sihaoli/Solar</string>
+    <string>__SOLAR_HOME__</string>
 
     <key>StandardOutPath</key>
-    <string>/Users/sihaoli/.solar/logs/daemon-stdout.log</string>
+    <string>__HOME_DIR__/.solar/logs/daemon-stdout.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/sihaoli/.solar/logs/daemon-stderr.log</string>
+    <string>__HOME_DIR__/.solar/logs/daemon-stderr.log</string>
 
     <key>EnvironmentVariables</key>
     <dict>
         <key>HOME</key>
-        <string>/Users/sihaoli</string>
+        <string>__HOME_DIR__</string>
         <key>PATH</key>
-        <string>/Users/sihaoli/.bun/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <string>__HOME_DIR__/.bun/bin:/usr/local/bin:/usr/bin:/bin</string>
     </dict>
 
     <key>ProcessType</key>

@@ -5,6 +5,7 @@
 DB_PATH="$HOME/.solar/solar.db"
 LOG_FILE="$HOME/.solar/logs/security.log"
 REPORT_FILE="$HOME/.solar/logs/daily-audit-$(date +%Y%m%d).txt"
+ALERT_EMAIL="${SOLAR_ALERT_EMAIL:-guardian@example.com}"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [AUDIT] $1" >> "$LOG_FILE"
@@ -15,7 +16,7 @@ send_report() {
     local body=$2
 
     # 发送邮件报告
-    echo "$body" | himalaya message write --to "lisihao@gmail.com" --subject "$subject" 2>/dev/null || true
+    echo "$body" | himalaya message write --to "$ALERT_EMAIL" --subject "$subject" 2>/dev/null || true
 
     # 桌面通知
     osascript -e "display notification \"每日安全审计已完成，报告已发送\" with title \"Solar 安全审计\"" 2>/dev/null

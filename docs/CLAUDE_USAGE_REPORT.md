@@ -311,7 +311,7 @@ Date       Sessions
 
 ### 6.1 TPC-H 基准测试结果
 
-基于 `/Users/sihaoli/.claude/data/tpch_baseline.json`:
+基于 `~/.claude/data/tpch_baseline.json`:
 
 | Query | DuckDB (ms) | Thunder (ms) | Speedup | 评级 |
 |-------|-------------|--------------|---------|------|

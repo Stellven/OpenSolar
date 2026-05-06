@@ -14,7 +14,8 @@
 
 import Database from 'bun:sqlite';
 import { $ } from 'bun';
-import { ReplySender } from '/Users/sihaoli/Solar/core/reply/reply-sender';
+import { ReplySender } from '../reply/reply-sender';
+import { getGuardianImessageHandle, getNotificationEmail } from '../config/privacy';
 
 const DB_PATH = `${process.env.HOME}/.solar/solar.db`;
 
@@ -54,8 +55,8 @@ const DEFAULT_CONFIG: AlertConfig = {
   minLevel: 'warning',
   channels: ['imessage', 'gmail'],
   cooldown: 300,  // 5分钟
-  guardianEmail: 'lisihao@gmail.com',
-  guardianPhone: undefined,
+  guardianEmail: getNotificationEmail(),
+  guardianPhone: getGuardianImessageHandle(),
 };
 
 // 风险级别权重
@@ -448,7 +449,7 @@ Solar Security Monitor`;
 if (import.meta.main) {
   const monitor = new SecurityMonitor({
     minLevel: 'warning',
-    guardianEmail: 'lisihao@gmail.com',
+    guardianEmail: getNotificationEmail(),
   });
 
   const args = process.argv.slice(2);

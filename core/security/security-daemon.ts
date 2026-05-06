@@ -14,6 +14,7 @@
 import Database from 'bun:sqlite';
 import { $ } from 'bun';
 import { SecurityMonitor } from './security-monitor';
+import { getNotificationEmail } from '../config/privacy';
 
 const DB_PATH = `${process.env.HOME}/.solar/solar.db`;
 
@@ -65,7 +66,7 @@ class SecurityDaemon {
   constructor() {
     this.db = new Database(DB_PATH);
     this.monitor = new SecurityMonitor({
-      guardianEmail: 'lisihao@gmail.com',
+      guardianEmail: getNotificationEmail(),
       minLevel: 'warning',
     });
     this.ensureTables();

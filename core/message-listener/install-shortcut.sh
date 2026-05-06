@@ -3,7 +3,7 @@
 
 SHORTCUT_NAME="Solar消息处理"
 SCRIPT_PATH="$HOME/Solar/core/message-listener/message-handler.ts"
-SENDER="695791816@qq.com"
+SENDER="${SOLAR_SHORTCUT_SENDER:-guardian-imessage@example.com}"
 
 # 生成 Shortcuts URL
 cat << 'EOF'

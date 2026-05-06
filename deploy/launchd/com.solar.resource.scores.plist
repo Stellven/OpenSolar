@@ -8,7 +8,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/sihaoli/Solar/core/resource/update-scores.sh</string>
+        <string>__SOLAR_HOME__/core/resource/update-scores.sh</string>
     </array>
 
     <!-- 每 1 小时执行一次 -->
@@ -19,9 +19,9 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/Users/sihaoli/.solar/logs/launchd-scores.log</string>
+    <string>__HOME_DIR__/.solar/logs/launchd-scores.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/sihaoli/.solar/logs/launchd-scores-error.log</string>
+    <string>__HOME_DIR__/.solar/logs/launchd-scores-error.log</string>
 </dict>
 </plist>

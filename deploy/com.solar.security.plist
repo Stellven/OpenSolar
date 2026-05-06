@@ -7,20 +7,20 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/sihaoli/.bun/bin/bun</string>
+        <string>__HOME_DIR__/.bun/bin/bun</string>
         <string>run</string>
-        <string>/Users/sihaoli/Solar/core/security/security-daemon.ts</string>
+        <string>__SOLAR_HOME__/core/security/security-daemon.ts</string>
     </array>
 
     <key>WorkingDirectory</key>
-    <string>/Users/sihaoli/Solar/core/security</string>
+    <string>__SOLAR_HOME__/core/security</string>
 
     <key>EnvironmentVariables</key>
     <dict>
         <key>HOME</key>
-        <string>/Users/sihaoli</string>
+        <string>__HOME_DIR__</string>
         <key>PATH</key>
-        <string>/Users/sihaoli/.bun/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <string>__HOME_DIR__/.bun/bin:/usr/local/bin:/usr/bin:/bin</string>
     </dict>
 
     <key>RunAtLoad</key>
@@ -33,10 +33,10 @@
     </dict>
 
     <key>StandardOutPath</key>
-    <string>/Users/sihaoli/.solar/logs/security.log</string>
+    <string>__HOME_DIR__/.solar/logs/security.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/sihaoli/.solar/logs/security-error.log</string>
+    <string>__HOME_DIR__/.solar/logs/security-error.log</string>
 
     <key>ProcessType</key>
     <string>Background</string>

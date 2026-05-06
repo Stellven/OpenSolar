@@ -65,7 +65,7 @@
     { "role": "user", "content": "装载Solar", "time": "14:30" },
     { "role": "assistant", "content": "Solar v3.0.0 已装载完成。Core Modules: nerve/, ui/...", "time": "14:28" },
     { "role": "user", "content": "打开项目Solar", "time": "14:00" },
-    { "role": "assistant", "content": "项目: Solar, 路径: /Users/sihaoli/Solar, 分支: main...", "time": "13:58" }
+    { "role": "assistant", "content": "项目: Solar, 路径: ~/Solar, 分支: main...", "time": "13:58" }
   ],
   "agents": [
     { "name": "Researcher", "emoji": "🔬", "status": "idle" },

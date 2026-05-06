@@ -184,7 +184,7 @@ echo "[Phase 5] 检查后台服务..."
 # 检查 memory-consolidator 服务
 if [[ ! -f "$LAUNCH_AGENTS/com.solar.memory-consolidator.plist" ]]; then
     echo "  • 创建记忆巩固服务..."
-    cat > "$LAUNCH_AGENTS/com.solar.memory-consolidator.plist" <<'PLIST'
+    cat > "$LAUNCH_AGENTS/com.solar.memory-consolidator.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -194,22 +194,22 @@ if [[ ! -f "$LAUNCH_AGENTS/com.solar.memory-consolidator.plist" ]]; then
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/sihaoli/Solar/core/ontology/memory-consolidator.sh</string>
+        <string>$HOME/Solar/core/ontology/memory-consolidator.sh</string>
     </array>
     <key>StartInterval</key>
     <integer>3600</integer>
     <key>RunAtLoad</key>
     <false/>
     <key>StandardOutPath</key>
-    <string>/Users/sihaoli/.solar/memory-consolidator.log</string>
+    <string>$HOME/.solar/memory-consolidator.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/sihaoli/.solar/memory-consolidator-err.log</string>
+    <string>$HOME/.solar/memory-consolidator-err.log</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
         <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
         <key>HOME</key>
-        <string>/Users/sihaoli</string>
+        <string>$HOME</string>
     </dict>
 </dict>
 </plist>
@@ -223,7 +223,7 @@ fi
 # 检查 personality-learner 服务
 if [[ ! -f "$LAUNCH_AGENTS/com.solar.personality-learner.plist" ]]; then
     echo "  • 创建人格学习服务..."
-    cat > "$LAUNCH_AGENTS/com.solar.personality-learner.plist" <<'PLIST'
+    cat > "$LAUNCH_AGENTS/com.solar.personality-learner.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -233,7 +233,7 @@ if [[ ! -f "$LAUNCH_AGENTS/com.solar.personality-learner.plist" ]]; then
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/sihaoli/Solar/core/ontology/personality-learner.sh</string>
+        <string>$HOME/Solar/core/ontology/personality-learner.sh</string>
     </array>
     <key>StartCalendarInterval</key>
     <dict>
@@ -243,15 +243,15 @@ if [[ ! -f "$LAUNCH_AGENTS/com.solar.personality-learner.plist" ]]; then
         <integer>0</integer>
     </dict>
     <key>StandardOutPath</key>
-    <string>/Users/sihaoli/.solar/personality-learner.log</string>
+    <string>$HOME/.solar/personality-learner.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/sihaoli/.solar/personality-learner-err.log</string>
+    <string>$HOME/.solar/personality-learner-err.log</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
         <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
         <key>HOME</key>
-        <string>/Users/sihaoli</string>
+        <string>$HOME</string>
     </dict>
 </dict>
 </plist>

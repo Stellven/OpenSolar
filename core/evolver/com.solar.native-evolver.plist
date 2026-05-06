@@ -8,7 +8,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/sihaoli/Solar/core/evolver/native-evolver.sh</string>
+        <string>__SOLAR_HOME__/core/evolver/native-evolver.sh</string>
     </array>
 
     <!-- 每天凌晨 3 点执行 -->
@@ -21,10 +21,10 @@
     </dict>
 
     <key>StandardOutPath</key>
-    <string>/Users/sihaoli/.solar/logs/native-evolver.stdout.log</string>
+    <string>__HOME_DIR__/.solar/logs/native-evolver.stdout.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/sihaoli/.solar/logs/native-evolver.stderr.log</string>
+    <string>__HOME_DIR__/.solar/logs/native-evolver.stderr.log</string>
 
     <key>RunAtLoad</key>
     <false/>

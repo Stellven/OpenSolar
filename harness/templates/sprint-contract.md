@@ -1,0 +1,26 @@
+# Sprint Contract — {{sprint_id}}
+Created: {{created_at}}
+Status: drafting
+Project: {{project_dir}}
+
+## 需求 (Requirements)
+{{requirements}}
+
+## Done 定义 (Definition of Done)
+{{done_criteria}}
+
+## 范围 (Scope)
+- 包含: {{scope_in}}
+- 不包含: {{scope_out}}
+
+## 约束 (Constraints)
+{{constraints}}
+
+## 实现文件清单 (Builder 完成后填写)
+{{file_list}}
+
+## 审判官评估维度 (Evaluation Dimensions)
+1. **功能完整性**: Done 定义逐条检查
+2. **代码质量**: 错误处理、边界条件、安全
+3. **合约合规**: 是否在范围内，没超范围
+4. **可维护性**: 命名、结构、注释合理性

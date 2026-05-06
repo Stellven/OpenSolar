@@ -8,7 +8,7 @@
 | **交付日期** | 2026-02-04 |
 | **实现者** | Claude Sonnet 4.5 (1M context) |
 | **监护人** | sihaoli |
-| **代码库** | /Users/sihaoli/Solar/core/hive |
+| **代码库** | ~/Solar/core/hive |
 
 ## 交付清单
 

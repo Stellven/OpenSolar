@@ -8,7 +8,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/sihaoli/Solar/core/security/checks/system-check.sh</string>
+        <string>__SOLAR_HOME__/core/security/checks/system-check.sh</string>
     </array>
 
     <!-- 每 1 小时执行一次 -->
@@ -19,9 +19,9 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/Users/sihaoli/.solar/logs/launchd-system.log</string>
+    <string>__HOME_DIR__/.solar/logs/launchd-system.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/sihaoli/.solar/logs/launchd-system-error.log</string>
+    <string>__HOME_DIR__/.solar/logs/launchd-system-error.log</string>
 </dict>
 </plist>

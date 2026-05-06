@@ -8,7 +8,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/sihaoli/Solar/core/security/checks/quota-check.sh</string>
+        <string>__SOLAR_HOME__/core/security/checks/quota-check.sh</string>
     </array>
 
     <!-- 每 5 分钟执行一次 -->
@@ -19,9 +19,9 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/Users/sihaoli/.solar/logs/launchd-quota.log</string>
+    <string>__HOME_DIR__/.solar/logs/launchd-quota.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/sihaoli/.solar/logs/launchd-quota-error.log</string>
+    <string>__HOME_DIR__/.solar/logs/launchd-quota-error.log</string>
 </dict>
 </plist>

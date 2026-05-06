@@ -8,7 +8,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/sihaoli/Solar/core/security/checks/access-check.sh</string>
+        <string>__SOLAR_HOME__/core/security/checks/access-check.sh</string>
     </array>
 
     <!-- 每 1 分钟执行一次 (高频) -->
@@ -19,9 +19,9 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/Users/sihaoli/.solar/logs/launchd-access.log</string>
+    <string>__HOME_DIR__/.solar/logs/launchd-access.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/sihaoli/.solar/logs/launchd-access-error.log</string>
+    <string>__HOME_DIR__/.solar/logs/launchd-access-error.log</string>
 </dict>
 </plist>

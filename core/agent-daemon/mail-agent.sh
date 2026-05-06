@@ -5,11 +5,12 @@
 set -euo pipefail
 
 # ==================== 配置 ====================
-GUARDIAN_EMAILS=("lisihao@gmail.com" "695791816@qq.com")
+IFS=',' read -r -a GUARDIAN_EMAILS <<< "${SOLAR_GUARDIAN_EMAILS:-guardian@example.com}"
 PROCESSED_FILE="$HOME/.solar/processed_mails.txt"
 LOG_FILE="$HOME/.solar/agent-daemon.log"
 LOCK_FILE="/tmp/solar-mail-agent.lock"
-IMESSAGE_ADDR="695791816@qq.com"
+IMESSAGE_ADDR="${SOLAR_GUARDIAN_IMESSAGE:-guardian-imessage@example.com}"
+MAIL_RECIPIENT="${SOLAR_ALERT_EMAIL:-${SOLAR_GUARDIAN_EMAIL:-${GUARDIAN_EMAILS[0]:-guardian@example.com}}}"
 
 # ==================== 初始化 ====================
 mkdir -p "$HOME/.solar"
@@ -81,13 +82,13 @@ send_email_reply() {
     if [[ -n "$attachment" && -f "$attachment" ]]; then
         # 带附件发送
         osascript -e "tell application \"Mail\" to set m to make new outgoing message with properties {subject:\"Re: Solar 执行结果\", content:\"$safe_content\", visible:false}" \
-                  -e "tell application \"Mail\" to tell m to make new to recipient at end of to recipients with properties {address:\"lisihao@gmail.com\"}" \
+                  -e "tell application \"Mail\" to tell m to make new to recipient at end of to recipients with properties {address:\"$MAIL_RECIPIENT\"}" \
                   -e "tell application \"Mail\" to tell m to make new attachment with properties {file name:POSIX file \"$attachment\"} at after last paragraph" \
                   -e "tell application \"Mail\" to send m" >/dev/null 2>&1 || log "邮件发送失败"
     else
         # 无附件发送
         osascript -e "tell application \"Mail\" to set m to make new outgoing message with properties {subject:\"Re: Solar 执行结果\", content:\"$safe_content\", visible:false}" \
-                  -e "tell application \"Mail\" to tell m to make new to recipient at end of to recipients with properties {address:\"lisihao@gmail.com\"}" \
+                  -e "tell application \"Mail\" to tell m to make new to recipient at end of to recipients with properties {address:\"$MAIL_RECIPIENT\"}" \
                   -e "tell application \"Mail\" to send m" >/dev/null 2>&1 || log "邮件发送失败"
     fi
 }

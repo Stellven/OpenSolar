@@ -9,6 +9,7 @@
  */
 
 import { $ } from 'bun';
+import { getFromEmail } from '../config/privacy';
 
 // 回复类型定义
 export type ReplyType =
@@ -165,7 +166,7 @@ export class ReplySender {
     } catch (e) {
       // 方法2: himalaya 备用
       try {
-        const rawMessage = `From: lisihao@gmail.com
+        const rawMessage = `From: ${getFromEmail()}
 To: ${recipient}
 Subject: ${subjectLine}
 
