@@ -5,7 +5,7 @@
 ### 准备
 
 ```bash
-cd /Users/sihaoli/Solar
+cd ~/Solar
 bun install  # 确保依赖已安装
 ```
 
@@ -222,7 +222,7 @@ bun core/hive/cli/node.ts status
 
 ```bash
 # 1. 准备
-cd /Users/sihaoli/Solar
+cd ~/Solar
 clear
 
 # 2. 显示验证

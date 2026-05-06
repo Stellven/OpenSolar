@@ -40,10 +40,10 @@
 ```json
 "SessionStart": [
   "~/.claude/hooks/solar-session-start.sh",
-  "/Users/sihaoli/Solar/hooks/auto-checkpoint.sh"
+  "~/Solar/hooks/auto-checkpoint.sh"
 ],
 "PeriodicCheck": [
-  "/Users/sihaoli/Solar/hooks/auto-checkpoint.sh"
+  "~/Solar/hooks/auto-checkpoint.sh"
 ],
 "periodic_check_interval": 1800
 ```
@@ -60,7 +60,7 @@
 **配置**:
 ```json
 "SessionEnd": [
-  "/Users/sihaoli/Solar/hooks/session-end-save.sh"
+  "~/Solar/hooks/session-end-save.sh"
 ]
 ```
 

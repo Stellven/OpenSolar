@@ -8,6 +8,7 @@
 import Database from 'bun:sqlite';
 import { ReplySender } from '../reply/reply-sender';
 import { sendNtfy } from '../notify/ntfy';
+import { getGuardianIdentifiers } from '../config/privacy';
 
 const DB_PATH = `${process.env.HOME}/.solar/solar.db`;
 
@@ -27,10 +28,12 @@ export class MessageExecutor {
   private db: Database;
   private replySender: ReplySender;
   private running: boolean = false;
+  private guardianIdentifiers: string[];
 
   constructor(dbPath: string = DB_PATH) {
     this.db = new Database(dbPath);
     this.replySender = new ReplySender();
+    this.guardianIdentifiers = getGuardianIdentifiers().map((value) => value.toLowerCase());
   }
 
   /**
@@ -57,12 +60,11 @@ export class MessageExecutor {
    * 处理下一个待执行任务
    */
   async processNext(): Promise<boolean> {
-    // 1. 获取最高优先级的待处理任务 (只处理监护人的邮件)
-    const task = this.db.prepare(`
+    // 1. 获取最高优先级的待处理任务
+    const candidates = this.db.prepare(`
       SELECT * FROM bl_message_tasks
       WHERE status = 'pending'
         AND source IN ('gmail', 'imessage', 'telegram')
-        AND (sender LIKE '%lisihao@gmail.com%' OR sender LIKE '%Sean Lee%')
       ORDER BY
         CASE priority
           WHEN 'high' THEN 1
@@ -71,8 +73,10 @@ export class MessageExecutor {
         END,
         CAST(priority AS INTEGER) DESC,
         created_at ASC
-      LIMIT 1
-    `).get() as QueuedTask | undefined;
+      LIMIT 50
+    `).all() as QueuedTask[];
+
+    const task = candidates.find((candidate) => this.isGuardianSender(candidate.sender));
 
     if (!task) {
       return false;
@@ -126,6 +130,11 @@ export class MessageExecutor {
       console.error(`[Executor] ✗ 失败: ${task.task_id} - ${error.message}`);
       return false;
     }
+  }
+
+  private isGuardianSender(sender: string): boolean {
+    const normalizedSender = sender.toLowerCase();
+    return this.guardianIdentifiers.some((identifier) => normalizedSender.includes(identifier));
   }
 
   /**

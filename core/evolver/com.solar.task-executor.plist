@@ -8,7 +8,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/sihaoli/Solar/core/evolver/task-executor.sh</string>
+        <string>__SOLAR_HOME__/core/evolver/task-executor.sh</string>
     </array>
 
     <!-- 每 5 分钟检查一次任务队列 -->
@@ -16,10 +16,10 @@
     <integer>300</integer>
 
     <key>StandardOutPath</key>
-    <string>/Users/sihaoli/.solar/logs/task-executor.stdout.log</string>
+    <string>__HOME_DIR__/.solar/logs/task-executor.stdout.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/sihaoli/.solar/logs/task-executor.stderr.log</string>
+    <string>__HOME_DIR__/.solar/logs/task-executor.stderr.log</string>
 
     <key>RunAtLoad</key>
     <true/>

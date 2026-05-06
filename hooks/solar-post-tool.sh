@@ -1,9 +1,23 @@
 #!/bin/bash
 # Solar Flow Engine - PostToolUse Hook
-# 工具调用后检测宣告并更新状态
+# 工具调用后：1. 记录到程序记忆 2. 检测宣告并更新状态
 
-STATE_FILE="$PWD/.solar/flow-state.json"
 INPUT=$(cat)
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
+TOOL_RESULT=$(echo "$INPUT" | jq -r '.tool_result // empty' 2>/dev/null)
+
+# ==================== 1. 记录工具使用到程序记忆 ====================
+# 判断成功/失败 (简单判断: 有 error 字样则失败)
+SUCCESS="true"
+if echo "$TOOL_RESULT" | grep -qi "error\|failed\|exception\|denied"; then
+    SUCCESS="false"
+fi
+
+# 异步记录，不阻塞
+(~/.claude/hooks/memory-record.sh "$TOOL_NAME" "$SUCCESS" 2>/dev/null) &
+
+# ==================== 2. 原有逻辑：流程状态检查 ====================
+STATE_FILE="$PWD/.solar/flow-state.json"
 
 # 如果没有状态文件，正常放行
 if [[ ! -f "$STATE_FILE" ]]; then

@@ -25,7 +25,7 @@ $ bun core/hive/cli/node.ts start --name="节点2"
 
 确保已安装依赖:
 ```bash
-cd /Users/sihaoli/Solar
+cd ~/Solar
 bun install
 ```
 

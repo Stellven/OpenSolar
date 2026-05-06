@@ -10,9 +10,9 @@
 set -e
 
 # ========== 配置 ==========
-REMOTE_USER="lisihao"
-REMOTE_HOST="192.168.50.194"
-REMOTE_TAILSCALE="100.122.223.55"  # 备用 Tailscale 地址
+REMOTE_USER="${SOLAR_REMOTE_USER:-your-user}"
+REMOTE_HOST="${SOLAR_REMOTE_HOST:-192.168.50.194}"
+REMOTE_TAILSCALE="${SOLAR_REMOTE_TAILSCALE:-100.122.223.55}"  # 备用 Tailscale 地址
 
 # 颜色
 RED='\033[0;31m'
@@ -388,5 +388,5 @@ echo "   1. 重新加载环境变量: source ~/.zshrc"
 echo "   2. 加载 LaunchAgents: launchctl load ~/Library/LaunchAgents/com.solar.*.plist"
 echo "   3. 重启 Claude Code (如果 MCP 配置有变化)"
 echo "   4. ⚠️  修正 .mcp.json 中的路径:"
-echo "      sed -i '' 's|/Users/lisihao|/Users/sihaoli|g' ~/.mcp.json"
+echo "      sed -i '' 's|/Users/OLD_USER|/Users/NEW_USER|g' ~/.mcp.json"
 echo ""

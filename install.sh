@@ -1,16 +1,23 @@
 #!/bin/bash
-# Solar 一键部署脚本 — L1 基础安装 (cp 模式)
+# Solar 一键部署脚本 — L1 + L2 全栈安装 (cp 模式)
 #
 # 行为:
-#   1. 备份 ~/.claude/ 现有内容 (如有)
-#   2. 把仓库内 CLAUDE.md/rules/skills/agents/hooks/core 复制到 ~/.claude/
-#   3. 创建 ~/.solar/ 目录 + 初始化 solar.db (如有 schema)
-#   4. 自检 verify
+#   L1 基础:
+#     1. 备份 ~/.claude/ 现有内容 (如有)
+#     2. 把仓库内 CLAUDE.md/rules/skills/agents/hooks/core 复制到 ~/.claude/
+#     3. 创建 ~/.solar/ 目录 + 初始化 solar.db (如有 schema)
+#   L2 高级:
+#     4. 把 harness/ → ~/.solar/harness/ + 创建 ~/.solar/bin/solar-harness 软链
+#     5. 把 mempalace/ → ~/.solar/mempalace/
+#     6. 把 codex-bridge/ → ~/.solar/codex-bridge/
+#   验收:
+#     7. 自检 12 项 verify
 #
 # 不做的事 (诚实):
 #   - 不 git clone 别的仓库
-#   - 不安装 ~/.solar/bin/solar-harness (该工具属于 L2 高级模式, 当前未打包)
 #   - 不写入 API keys (用户自己编辑 .env)
+#   - 不跑 Python 依赖 (mempalace 需 chromadb/mcp/sentence-transformers, 见 SKILLS-INSTALL.md)
+#   - 不安装 1500+ Skills (Anthropic Claude Code 自带 + 第三方仓库, 见 SKILLS-INSTALL.md 让 AI 装)
 
 set -e
 
@@ -18,7 +25,7 @@ SOLAR_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_DIR="$HOME/.claude"
 SOLAR_HOME="$HOME/.solar"
 
-echo "🚀 Solar 一键部署 (L1 基础安装)"
+echo "🚀 Solar 一键部署 (L1 + L2 全栈)"
 echo "================================"
 echo ""
 
@@ -39,11 +46,11 @@ if [ -f "$CLAUDE_DIR/CLAUDE.md" ]; then
     done
 fi
 
-# Step 3: 复制各部分
+# Step 3: L1 复制各部分到 ~/.claude/
 copy_dir() {
     local name="$1" src="$SOLAR_DIR/$1"
     if [ -d "$src" ]; then
-        echo "📋 复制 $name ..."
+        echo "📋 [L1] 复制 $name ..."
         mkdir -p "$CLAUDE_DIR/$name"
         cp -r "$src/"* "$CLAUDE_DIR/$name/" 2>/dev/null || true
         return 0
@@ -52,7 +59,7 @@ copy_dir() {
     return 1
 }
 
-echo "📋 复制 CLAUDE.md ..."
+echo "📋 [L1] 复制 CLAUDE.md ..."
 cp "$SOLAR_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
 
 copy_dir "rules"
@@ -64,21 +71,56 @@ copy_dir "core"
 # 给 hooks 加可执行权限
 chmod +x "$CLAUDE_DIR/hooks/"*.sh 2>/dev/null || true
 
-# Step 4: 创建 .solar/ + 初始化 db
+# Step 4: 创建 .solar/
 echo ""
-echo "📂 创建 $SOLAR_HOME ..."
-mkdir -p "$SOLAR_HOME"
+echo "📂 [L2] 创建 $SOLAR_HOME ..."
+mkdir -p "$SOLAR_HOME" "$SOLAR_HOME/bin"
 
+# 初始化 db
 if [ ! -f "$SOLAR_HOME/solar.db" ]; then
     if [ -f "$SOLAR_DIR/core/schema.sql" ]; then
-        echo "🗄️  初始化数据库..."
+        echo "🗄️  [L2] 初始化数据库..."
         sqlite3 "$SOLAR_HOME/solar.db" < "$SOLAR_DIR/core/schema.sql"
     else
         echo "ℹ️  无 schema.sql, 跳过 db 初始化 (Solar 启动时会自建)"
     fi
 fi
 
-# Step 5: 真实 verify 自检 (不假装 solar-harness 存在)
+# Step 5: L2 复制 harness/
+if [ -d "$SOLAR_DIR/harness" ]; then
+    echo "🔧 [L2] 复制 Solar Harness 协调器系统 ..."
+    mkdir -p "$SOLAR_HOME/harness"
+    rsync -a "$SOLAR_DIR/harness/" "$SOLAR_HOME/harness/"
+    chmod +x "$SOLAR_HOME/harness/"*.sh 2>/dev/null || true
+    chmod +x "$SOLAR_HOME/harness/lib/"*.sh 2>/dev/null || true
+    chmod +x "$SOLAR_HOME/harness/tests/"*.sh 2>/dev/null || true
+
+    # 创建 solar-harness 软链
+    if [ -f "$SOLAR_HOME/harness/solar-harness.sh" ]; then
+        ln -sf "$SOLAR_HOME/harness/solar-harness.sh" "$SOLAR_HOME/bin/solar-harness"
+        echo "🔗 [L2] $SOLAR_HOME/bin/solar-harness → solar-harness.sh"
+    fi
+else
+    echo "⚠️  仓库无 harness/, 跳过 L2 协调器安装"
+fi
+
+# Step 6: L2 复制 mempalace/
+if [ -d "$SOLAR_DIR/mempalace" ]; then
+    echo "🧠 [L2] 复制 MemPalace (语义记忆 L3) ..."
+    mkdir -p "$SOLAR_HOME/mempalace"
+    rsync -a "$SOLAR_DIR/mempalace/" "$SOLAR_HOME/mempalace/"
+    chmod +x "$SOLAR_HOME/mempalace/"*.py "$SOLAR_HOME/mempalace/"*.sh 2>/dev/null || true
+fi
+
+# Step 7: L2 复制 codex-bridge/
+if [ -d "$SOLAR_DIR/codex-bridge" ]; then
+    echo "🤝 [L2] 复制 Codex 协同协议 ..."
+    mkdir -p "$SOLAR_HOME/codex-bridge"
+    rsync -a "$SOLAR_DIR/codex-bridge/" "$SOLAR_HOME/codex-bridge/"
+    mkdir -p "$SOLAR_HOME/codex-bridge/from-codex" "$SOLAR_HOME/codex-bridge/to-codex"
+fi
+
+# Step 8: 真实 verify 自检
 echo ""
 echo "🔍 安装自检"
 echo "==========="
@@ -96,36 +138,53 @@ check() {
     fi
 }
 
-check "CLAUDE.md 已就位"         "test -f $CLAUDE_DIR/CLAUDE.md"
-check "CLAUDE.md 含 Solar 标识"  "grep -qE 'Solar' $CLAUDE_DIR/CLAUDE.md"
-check "~/.claude/rules/ 已就位"  "test -d $CLAUDE_DIR/rules && [ \$(ls $CLAUDE_DIR/rules 2>/dev/null | wc -l) -gt 0 ]"
-check "~/.claude/skills/ 已就位" "test -d $CLAUDE_DIR/skills"
-check "~/.claude/agents/ 已就位" "test -d $CLAUDE_DIR/agents"
-check "~/.solar/ 目录已建"        "test -d $SOLAR_HOME"
+# L1
+check "[L1] CLAUDE.md 已就位"          "test -f $CLAUDE_DIR/CLAUDE.md"
+check "[L1] CLAUDE.md 是 v2.0 完整版"  "[ \$(wc -l < $CLAUDE_DIR/CLAUDE.md) -gt 200 ]"
+check "[L1] ~/.claude/rules/ 就位"     "test -d $CLAUDE_DIR/rules && [ \$(ls $CLAUDE_DIR/rules 2>/dev/null | wc -l) -gt 5 ]"
+check "[L1] ~/.claude/agents/ 就位"    "test -d $CLAUDE_DIR/agents && [ \$(ls $CLAUDE_DIR/agents 2>/dev/null | wc -l) -gt 10 ]"
+check "[L1] ~/.claude/hooks/ 就位"     "test -d $CLAUDE_DIR/hooks && [ \$(ls $CLAUDE_DIR/hooks 2>/dev/null | wc -l) -gt 10 ]"
+check "[L1] ~/.solar/ 目录已建"         "test -d $SOLAR_HOME"
+
+# L2
+check "[L2] harness/coordinator.sh"         "test -f $SOLAR_HOME/harness/coordinator.sh"
+check "[L2] harness/chain-watcher.sh"       "test -f $SOLAR_HOME/harness/chain-watcher.sh"
+check "[L2] harness/personas/ 5 化身"        "[ \$(ls $SOLAR_HOME/harness/personas/ 2>/dev/null | wc -l) -ge 5 ]"
+check "[L2] solar-harness CLI 软链"          "test -L $SOLAR_HOME/bin/solar-harness"
+check "[L2] mempalace_mcp_server.py"        "test -f $SOLAR_HOME/mempalace/mempalace_mcp_server.py"
+check "[L2] codex-bridge/CODEX-PROTOCOL.md" "test -f $SOLAR_HOME/codex-bridge/CODEX-PROTOCOL.md"
 
 echo ""
+TOTAL=12
 if [ "$FAIL" -eq 0 ]; then
-    echo "✅ L1 基础安装完成 ($PASS/6 通过)"
+    echo "✅ Solar L1 + L2 安装完成 ($PASS/$TOTAL 通过)"
     echo ""
     echo "📝 下一步:"
-    echo "   1. (可选) 配置 API keys: cp $SOLAR_DIR/.env.template $SOLAR_DIR/.env"
-    echo "      然后编辑填入: ANTHROPIC_API_KEY / ZHIPU_API_KEY / DEEPSEEK_API_KEY"
-    echo "   2. 启动 Claude Code"
-    echo "   3. 输入 'solar' 看 Solar 启动宣告"
+    echo "  1. (可选) 配置 API keys: cp $SOLAR_DIR/.env.template $SOLAR_DIR/.env"
+    echo "     编辑填入: ANTHROPIC_API_KEY / ZHIPU_API_KEY / DEEPSEEK_API_KEY"
+    echo ""
+    echo "  2. (可选) Python 依赖 (MemPalace 需要):"
+    echo "     python3.11 -m pip install --user chromadb sentence-transformers langdetect mcp pyyaml"
+    echo ""
+    echo "  3. (推荐) 让你的 AI 装 Skills 增强:"
+    echo "     把 $SOLAR_DIR/SKILLS-INSTALL.md 给 AI agent (Claude/Cursor 等), 它会自动 clone 第三方 skills"
+    echo ""
+    echo "  4. 启动 Claude Code, 输入 'solar' 看启动宣告"
+    echo ""
+    echo "  5. (可选 L2) 启动 Solar Harness 协调器:"
+    echo "     $SOLAR_HOME/bin/solar-harness"
     echo ""
     echo "📚 完整文档: https://github.com/lisihao/Solar"
     echo "📖 用户指南: $SOLAR_DIR/USER-GUIDE.md"
-    echo ""
-    echo "ℹ️  L2 高级模式 (协调器/Sprint/牛马链路) 当前未打包到本仓库"
-    echo "   见 USER-GUIDE.md 第 9 节 \"远程模式 + Codex Pro\""
+    echo "🤖 AI 安装剧本: $SOLAR_DIR/INSTALL-AGENT.md"
+    echo "🔧 Skills 指南: $SOLAR_DIR/SKILLS-INSTALL.md"
     exit 0
 else
-    echo "❌ 安装自检失败 ($FAIL/6 项, $PASS/6 通过)"
+    echo "❌ 安装自检失败 ($FAIL/$TOTAL 项, $PASS/$TOTAL 通过)"
     echo ""
     echo "🆘 故障排查:"
-    echo "   - 检查仓库完整性: ls $SOLAR_DIR/CLAUDE.md $SOLAR_DIR/rules/ $SOLAR_DIR/skills/"
-    echo "   - 检查权限: ls -la $CLAUDE_DIR/"
-    echo "   - 重跑前清理: rm -rf $CLAUDE_DIR/CLAUDE.md $CLAUDE_DIR/rules"
-    echo "   - 提交 issue: https://github.com/lisihao/Solar/issues"
+    echo "  - 检查仓库完整性: ls $SOLAR_DIR/{CLAUDE.md,rules,agents,hooks,harness,mempalace,codex-bridge}"
+    echo "  - 检查权限: ls -la $CLAUDE_DIR/ $SOLAR_HOME/"
+    echo "  - 提交 issue: https://github.com/lisihao/Solar/issues"
     exit 1
 fi

@@ -12,6 +12,7 @@
     "dev": "bun run core/daemon/server.ts",
     "daemon": "bun run core/daemon/server.ts",
     "extract:skills": "bun run scripts/extract-skills.ts",
+    "knowledge:repair": "bun run scripts/repair-solar-knowledge-graph.ts",
     "smoke:skills": "bun run scripts/smoke-skills.ts",
     "smoke:health-monitor": "bun run scripts/smoke-health-monitor.ts",
     "skills:reindex": "bun run scripts/rebuild-skills-index.ts",

@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Solar Harness Product Brief",
+  "description": "Schema for PM-produced product briefs that guide sprint creation.",
+  "type": "object",
+  "required": [
+    "title", "source", "intent", "problem", "priority",
+    "lane_hint", "acceptance", "non_goals", "stop_rules", "handoff_to"
+  ],
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "description": "One-line summary of the requirement."
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Origin of the request (user, codex, auto-detection, etc.)."
+    },
+    "intent": {
+      "type": "string",
+      "minLength": 1,
+      "description": "User's true intent (not surface-level request)."
+    },
+    "problem": {
+      "type": "string",
+      "minLength": 1,
+      "description": "What problem needs to be solved."
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["P0", "P1", "P2", "P3"],
+      "description": "Priority level."
+    },
+    "lane_hint": {
+      "type": "string",
+      "enum": ["delivery", "lab", "strategy"],
+      "description": "Which lane should handle this: delivery (normal sprint), lab (experiments), strategy (architecture)."
+    },
+    "acceptance": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "Verifiable acceptance criteria."
+    },
+    "non_goals": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Explicitly out-of-scope items."
+    },
+    "stop_rules": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "Conditions under which iteration should stop."
+    },
+    "handoff_to": {
+      "type": "string",
+      "enum": ["planner", "architect", "observer"],
+      "description": "Which role receives this brief next."
+    }
+  },
+  "additionalProperties": true
+}

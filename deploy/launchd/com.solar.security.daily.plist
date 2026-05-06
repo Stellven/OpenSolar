@@ -8,7 +8,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/sihaoli/Solar/core/security/checks/daily-audit.sh</string>
+        <string>__SOLAR_HOME__/core/security/checks/daily-audit.sh</string>
     </array>
 
     <!-- 每天凌晨 3 点执行 -->
@@ -21,9 +21,9 @@
     </dict>
 
     <key>StandardOutPath</key>
-    <string>/Users/sihaoli/.solar/logs/launchd-daily.log</string>
+    <string>__HOME_DIR__/.solar/logs/launchd-daily.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/sihaoli/.solar/logs/launchd-daily-error.log</string>
+    <string>__HOME_DIR__/.solar/logs/launchd-daily-error.log</string>
 </dict>
 </plist>

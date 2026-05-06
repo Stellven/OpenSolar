@@ -7,9 +7,9 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/sihaoli/.bun/bin/bun</string>
+        <string>__HOME_DIR__/.bun/bin/bun</string>
         <string>run</string>
-        <string>/Users/sihaoli/Solar/core/evolver/optimize.ts</string>
+        <string>__SOLAR_HOME__/core/evolver/optimize.ts</string>
         <string>optimize</string>
     </array>
 
@@ -23,17 +23,17 @@
     </dict>
 
     <key>StandardOutPath</key>
-    <string>/Users/sihaoli/.solar/logs/evolver.log</string>
+    <string>__HOME_DIR__/.solar/logs/evolver.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/sihaoli/.solar/logs/evolver.error.log</string>
+    <string>__HOME_DIR__/.solar/logs/evolver.error.log</string>
 
     <key>EnvironmentVariables</key>
     <dict>
         <key>HOME</key>
-        <string>/Users/sihaoli</string>
+        <string>__HOME_DIR__</string>
         <key>PATH</key>
-        <string>/Users/sihaoli/.bun/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <string>__HOME_DIR__/.bun/bin:/usr/local/bin:/usr/bin:/bin</string>
     </dict>
 
     <key>RunAtLoad</key>

@@ -14,7 +14,7 @@ WHERE enabled = 1
 
 # 2. 测试消息处理器
 cd ~/Solar/core/message-listener
-bun message-handler.ts "695791816@qq.com" "测试消息"
+bun message-handler.ts "guardian-imessage@example.com" "测试消息"
 
 # 3. 检查最近任务记录
 sqlite3 ~/.solar/solar.db "
@@ -37,7 +37,7 @@ LIMIT 5
 
 ```bash
 sqlite3 ~/.solar/solar.db "
-SELECT * FROM bl_message_triggers WHERE contact_email = '695791816@qq.com'
+SELECT * FROM bl_message_triggers WHERE contact_email = 'guardian-imessage@example.com'
 "
 ```
 
@@ -131,7 +131,7 @@ which bun
 
 ```bash
 cd ~/Solar/core/message-listener
-bun message-handler.ts "695791816@qq.com" "backlog 列表"
+bun message-handler.ts "guardian-imessage@example.com" "backlog 列表"
 ```
 
 ### 方案 B: Shortcut 手动触发
@@ -149,7 +149,7 @@ bun message-handler.ts "695791816@qq.com" "backlog 列表"
    Action 2: Run Shell Script
      - Shell: /bin/bash
      - Script:
-       /opt/homebrew/bin/bun ~/Solar/core/message-listener/message-handler.ts "695791816@qq.com" "$1"
+       /opt/homebrew/bin/bun ~/Solar/core/message-listener/message-handler.ts "guardian-imessage@example.com" "$1"
 
    Action 3: Show Result
      - Input: Shell Script Result
@@ -213,7 +213,7 @@ sqlite3 ~/.solar/solar.db "SELECT * FROM bl_message_triggers WHERE enabled = 1"
 
 # 2. 命令行测试
 cd ~/Solar/core/message-listener
-bun message-handler.ts "695791816@qq.com" "测试消息"
+bun message-handler.ts "guardian-imessage@example.com" "测试消息"
 # 应该有输出 (成功或错误信息)
 
 # 3. 查看日志
@@ -239,7 +239,7 @@ LIMIT 3
 - Bun runtime (已安装)
 - SQLite (系统自带)
 - Apple Shortcuts.app (系统自带)
-- iMessage 已登录账号 (695791816@qq.com)
+- iMessage 已登录账号 (guardian-imessage@example.com)
 
 ---
 

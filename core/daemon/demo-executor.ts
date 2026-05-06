@@ -8,21 +8,21 @@ import Database from 'bun:sqlite';
 import { watch } from 'fs';
 import { readdir, readFile, unlink, mkdir } from 'fs/promises';
 import { join } from 'path';
-import { ReplySender, type ReplyType, type Channel } from '/Users/sihaoli/Solar/core/reply/reply-sender';
-import { SmartScheduler } from '/Users/sihaoli/Solar/core/executor/smart-scheduler';
-import { SecurityMonitor } from '/Users/sihaoli/Solar/core/security/security-monitor';
+import { ReplySender, type ReplyType, type Channel } from '../reply/reply-sender';
+import { SmartScheduler } from '../executor/smart-scheduler';
+import { SecurityMonitor } from '../security/security-monitor';
+import { getGuardianEmails, getGuardianImessageHandle, getNotificationEmail } from '../config/privacy';
 
 const DB_PATH = `${process.env.HOME}/.solar/solar.db`;
 const IMESSAGE_DIR = `${process.env.HOME}/.solar/incoming/imessage`;
 const POLL_INTERVAL = 3000; // 3 秒检查一次
+const GUARDIAN_EMAILS = getGuardianEmails();
+const GUARDIAN_IMESSAGE = getGuardianImessageHandle();
 
 // 🔐 监护人白名单 - 只接受这些发送者的消息
 const GUARDIAN_WHITELIST = [
-  // 邮箱
-  'lisihao@gmail.com',
-  'sihaoli@',  // 部分匹配
-  // 电话号码 (iMessage)
-  '+86',       // 中国号码前缀
+  ...GUARDIAN_EMAILS,
+  ...(GUARDIAN_IMESSAGE ? [GUARDIAN_IMESSAGE] : []),
   // 特殊标记
   'test',      // 测试用
 ];
@@ -113,7 +113,7 @@ class DemoExecutor {
     this.replySender = new ReplySender();
     this.scheduler = new SmartScheduler();
     this.securityMonitor = new SecurityMonitor({
-      guardianEmail: 'lisihao@gmail.com',
+      guardianEmail: getNotificationEmail(),
       minLevel: 'warning',
     });
   }

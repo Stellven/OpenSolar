@@ -4,6 +4,7 @@
 
 DB_PATH="$HOME/.solar/solar.db"
 LOG_FILE="$HOME/.solar/logs/security.log"
+ALERT_EMAIL="${SOLAR_ALERT_EMAIL:-guardian@example.com}"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [QUOTA] $1" >> "$LOG_FILE"
@@ -54,7 +55,7 @@ send_alert() {
     # 2. 如果是 critical/emergency，发 iMessage
     if [[ "$level" == "critical" || "$level" == "emergency" ]]; then
         # 发送邮件 (通过 himalaya)
-        echo "$message" | himalaya message write --to "lisihao@gmail.com" --subject "⚠️ Solar 安全预警: $level" 2>/dev/null || true
+        echo "$message" | himalaya message write --to "$ALERT_EMAIL" --subject "⚠️ Solar 安全预警: $level" 2>/dev/null || true
     fi
 
     log "ALERT: [$level] $message"
