@@ -2491,6 +2491,10 @@ handle_active() {
   local phase
   phase=$(get_field "$sf" "phase")
   case "$phase" in
+    g0_passed)
+      log "${Y}Sprint ${sid} G0 passed; waiting for S1/S2/S6 slice dispatch${N}"
+      return 0
+      ;;
     s0_dispatched|s0_in_progress)
       log "${Y}Sprint ${sid} S0 already dispatched; waiting for builder handoff${N}"
       return 0

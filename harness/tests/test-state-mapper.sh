@@ -88,6 +88,11 @@ make_fixture "fx5c" "active" "s0_dispatched" "builder_main" >/dev/null
 result=$(map_canonical_state "fx5c")
 check "active+s0_dispatched → building/builder_main" "$result" "building" "builder_main"
 
+# ── Fixture 5c2: G0 pass keeps parent sprint open for later slices ───────────
+make_fixture "fx5c2" "active" "g0_passed" "coordinator" >/dev/null
+result=$(map_canonical_state "fx5c2")
+check "active+g0_passed → building/builder_main" "$result" "building" "builder_main"
+
 # ── Fixture 5d: S0 ready for eval routes to evaluator ────────────────────────
 make_fixture "fx5d" "active" "s0_ready_for_eval" "evaluator" >/dev/null
 result=$(map_canonical_state "fx5d")
