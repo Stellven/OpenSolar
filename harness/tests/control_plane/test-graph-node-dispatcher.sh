@@ -22,6 +22,7 @@ cp "$HARNESS_DIR_REAL/lib/graph_scheduler.py" "$TMPDIR_TEST/lib/graph_scheduler.
 cp "$HARNESS_DIR_REAL/lib/graph_node_dispatcher.py" "$TMPDIR_TEST/lib/graph_node_dispatcher.py"
 cp "$HARNESS_DIR_REAL/lib/task_queue.py" "$TMPDIR_TEST/lib/task_queue.py"
 cp "$HARNESS_DIR_REAL/lib/pane_lease.py" "$TMPDIR_TEST/lib/pane_lease.py"
+cp "$HARNESS_DIR_REAL/lib/solar_skills.py" "$TMPDIR_TEST/lib/solar_skills.py"
 
 SID="sprint-test-graph-node-dispatch"
 GRAPH="$TMPDIR_TEST/sprints/${SID}.task_graph.json"
@@ -48,11 +49,11 @@ cat > "$GRAPH" <<JSON
     },
     {
       "id": "S1",
-      "goal": "implement node S1 only",
+      "goal": "implement node S1 only; run browser QA on localhost, debug failures, convert PDF to markdown, and use specialist persona when useful",
       "depends_on": ["S0"],
       "write_scope": ["/a"],
       "read_scope": ["/"],
-      "required_skills": ["python"],
+      "required_skills": ["python", "browser.browse", "document.convert", "persona.agent"],
       "preferred_model": "sonnet",
       "gate": "G1",
       "acceptance": ["S1 passed"],
@@ -111,6 +112,10 @@ S1_TEXT=$(cat "$S1_DISPATCH")
 check "dispatch text has node id" "$S1_TEXT" "Node: \`S1\`"
 check "dispatch text has write scope" "$S1_TEXT" "\`/a\`"
 check "dispatch text forbids parent pass" "$S1_TEXT" "不要把 parent sprint 标成 passed"
+check "dispatch text has capability block" "$S1_TEXT" "<solar-capability-context>"
+check "dispatch text selected gstack" "$S1_TEXT" "gstack"
+check "dispatch text selected MarkItDown" "$S1_TEXT" "MarkItDown"
+check "dispatch text selected agency-agents" "$S1_TEXT" "agency-agents"
 
 echo "T3: queue consumed and graph status updated"
 OUT=$(HARNESS_DIR="$TMPDIR_TEST" python3 "$TMPDIR_TEST/lib/task_queue.py" depth --sprint "$SID" 2>/dev/null)
@@ -158,9 +163,66 @@ check "drain-queue ok" "$OUT" '"ok": true'
 check "drain-queue S1" "$OUT" '"node": "S1"'
 [[ -s "$TMPDIR_TEST/sprints/${SID2}.S1-dispatch.md" ]] && ok "drain dispatch file exists" || fail "drain dispatch file missing"
 
-echo "T5: solar-harness graph-dispatch subcommand routing"
+echo "T5: node-level evaluator dispatch and downstream release"
+python3 - "$GRAPH" <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+for n in d["nodes"]:
+    if n["id"] == "S1":
+        n["status"] = "reviewing"
+json.dump(d, open(p, "w"), indent=2)
+PY
+cat > "$TMPDIR_TEST/sprints/${SID}.S1-handoff.md" <<'EOF'
+# Handoff S1
+EOF
+OUT=$(HARNESS_DIR="$TMPDIR_TEST" SOLAR_HARNESS_SESSION="solar-harness-test" python3 "$TMPDIR_TEST/lib/graph_node_dispatcher.py" dispatch-evals --graph "$GRAPH" --dry-run 2>/dev/null)
+check "dispatch-evals ok" "$OUT" '"ok": true'
+check "S1 eval dispatched" "$OUT" '"node": "S1"'
+S1_EVAL_DISPATCH="$TMPDIR_TEST/sprints/${SID}.S1-eval-dispatch.md"
+[[ -s "$S1_EVAL_DISPATCH" ]] && ok "S1 eval dispatch file exists" || fail "S1 eval dispatch file missing"
+S1_EVAL_TEXT=$(cat "$S1_EVAL_DISPATCH")
+check "eval text node only" "$S1_EVAL_TEXT" "只评审本 DAG node"
+check "eval text forbids parent pass" "$S1_EVAL_TEXT" "不要把 parent sprint 标成 passed"
+check "eval text has capability block" "$S1_EVAL_TEXT" "<solar-capability-context>"
+OUT=$(HARNESS_DIR="$TMPDIR_TEST" SOLAR_HARNESS_SESSION="solar-harness-test" python3 "$TMPDIR_TEST/lib/graph_node_dispatcher.py" node-verdict --graph "$GRAPH" --node S1 --verdict pass --dry-run 2>/dev/null)
+check "S1 verdict ok" "$OUT" '"status": "passed"'
+if [[ "$OUT" != *'"node": "S3"'* ]]; then ok "S3 still blocked until S2 pass"; else fail "S3 released before S2 pass"; fi
+OUT=$(HARNESS_DIR="$TMPDIR_TEST" SOLAR_HARNESS_SESSION="solar-harness-test" python3 "$TMPDIR_TEST/lib/graph_node_dispatcher.py" node-verdict --graph "$GRAPH" --node S2 --verdict pass --dry-run 2>/dev/null)
+check "S2 verdict ok" "$OUT" '"status": "passed"'
+check "S3 downstream released" "$OUT" '"node": "S3"'
+[[ -s "$TMPDIR_TEST/sprints/${SID}.S3-dispatch.md" ]] && ok "S3 dispatch file exists after join" || fail "S3 dispatch missing after join"
+
+echo "T6: failed node blocks downstream"
+SID3="sprint-test-graph-node-fail"
+GRAPH3="$TMPDIR_TEST/sprints/${SID3}.task_graph.json"
+cp "$GRAPH2" "$GRAPH3"
+python3 - "$GRAPH3" "$SID3" <<'PY'
+import json, sys
+p, sid = sys.argv[1], sys.argv[2]
+d = json.load(open(p))
+d["sprint_id"] = sid
+for n in d["nodes"]:
+    n.pop("status", None)
+    n.pop("assigned_to", None)
+    n.pop("dispatch_id", None)
+    n.pop("eval_assigned_to", None)
+    n.pop("eval_dispatch_id", None)
+    n.pop("eval_dispatched_at", None)
+d["nodes"][0]["status"] = "passed"
+d["node_results"] = {"S0": {"status": "passed", "updated_at": "2026-05-09T00:00:00Z"}}
+d["gate_results"] = {"G0": {"status": "passed", "node": "S0", "updated_at": "2026-05-09T00:00:00Z"}}
+json.dump(d, open(p, "w"), indent=2)
+PY
+OUT=$(HARNESS_DIR="$TMPDIR_TEST" SOLAR_HARNESS_SESSION="solar-harness-test" python3 "$TMPDIR_TEST/lib/graph_node_dispatcher.py" node-verdict --graph "$GRAPH3" --node S1 --verdict fail --dry-run 2>/dev/null)
+check "S1 fail verdict ok" "$OUT" '"status": "failed"'
+if [[ "$OUT" != *'"node": "S3"'* ]]; then ok "failed S1 does not release S3"; else fail "failed S1 released S3"; fi
+
+echo "T7: solar-harness graph-dispatch subcommand routing"
 OUT=$(bash "$BIN" graph-dispatch help 2>/dev/null || true)
 check "graph-dispatch help" "$OUT" "Solar Graph Dispatch"
+check "graph-dispatch eval help" "$OUT" "dispatch-evals"
+check "graph-dispatch verdict help" "$OUT" "node-verdict"
 OUT=$(HARNESS_DIR="$TMPDIR_TEST" bash "$BIN" graph-dispatch drain-queue --sprint "$SID2" --dry-run 2>/dev/null || true)
 check "graph-dispatch drain route" "$OUT" '"sprint_id": "sprint-test-graph-node-drain"'
 

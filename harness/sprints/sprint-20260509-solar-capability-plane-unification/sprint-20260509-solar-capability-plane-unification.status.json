@@ -5,10 +5,10 @@
   "status": "passed",
   "priority": "P0",
   "lane": "reliability",
-  "handoff_to": "builder_main",
+  "handoff_to": "",
   "created_at": "2026-05-09T00:30:27Z",
-  "updated_at": "2026-05-09T01:10:00Z",
-  "phase": "planning_complete",
+  "updated_at": "2026-05-09T16:05:00Z",
+  "phase": "finalized",
   "source": "codex-manual-2026-05-09",
   "auto_generated": false,
   "topology": "solo",
@@ -94,6 +94,12 @@
       "event": "post_pass_integration_health_precision_hotfix",
       "by": "codex_pm",
       "note": "Resolved coarse ok labeling: split MinerU from QMD, added capability health dimensions, exposed dispatch backlog/dead-end states, fixed status-server stale pid handling, bounded /integrations latency, and updated tests/schema."
+    },
+    {
+      "ts": "2026-05-09T16:05:00Z",
+      "event": "terminal_state_repaired",
+      "by": "codex_watchdog",
+      "note": "Status was passed but phase/handoff_to still showed planning_complete/builder_main. Cleared stale handoff and set phase=finalized."
     }
   ],
   "round": 2,

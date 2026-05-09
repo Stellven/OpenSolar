@@ -28,6 +28,8 @@ from graph_scheduler import (  # noqa: E402
     save_graph,
     enqueue_ready,
     set_node_status,
+    mark_node_result,
+    parent_ready_check,
 )
 from pane_lease import acquire as acquire_lease, release as release_lease, read_lease  # noqa: E402
 from task_queue import pop, enqueue  # noqa: E402
@@ -59,6 +61,33 @@ def _acceptance_lines(values: Any) -> str:
 def _dispatch_file(sid: str, node_id: str) -> Path:
     safe = re.sub(r"[^A-Za-z0-9_.-]+", "-", node_id).strip("-") or "node"
     return SPRINTS_DIR / f"{sid}.{safe}-dispatch.md"
+
+
+def _safe_node_id(node_id: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]+", "-", node_id).strip("-") or "node"
+
+
+def _handoff_file(sid: str, node_id: str) -> Path:
+    return SPRINTS_DIR / f"{sid}.{_safe_node_id(node_id)}-handoff.md"
+
+
+def _eval_dispatch_file(sid: str, node_id: str) -> Path:
+    return SPRINTS_DIR / f"{sid}.{_safe_node_id(node_id)}-eval-dispatch.md"
+
+
+def _eval_md_file(sid: str, node_id: str) -> Path:
+    return SPRINTS_DIR / f"{sid}.{_safe_node_id(node_id)}-eval.md"
+
+
+def _eval_json_file(sid: str, node_id: str) -> Path:
+    return SPRINTS_DIR / f"{sid}.{_safe_node_id(node_id)}-eval.json"
+
+
+def _node_by_id(graph: dict[str, Any], node_id: str) -> dict[str, Any] | None:
+    for node in graph.get("nodes", []):
+        if node.get("id") == node_id:
+            return node
+    return None
 
 
 def _mark_graph_node(graph_path: str, node_id: str, status: str,
@@ -166,6 +195,101 @@ Graph: `{graph_path}`
 """
 
 
+def build_eval_dispatch_text(graph: dict[str, Any], graph_path: str, node: dict[str, Any], pane: str,
+                             dispatch_id: str) -> str:
+    sid = str(graph.get("sprint_id") or Path(graph_path).stem.replace(".task_graph", ""))
+    node_id = str(node.get("id") or "")
+    handoff = _handoff_file(sid, node_id)
+    eval_md = _eval_md_file(sid, node_id)
+    eval_json = _eval_json_file(sid, node_id)
+    node_dispatch = _dispatch_file(sid, node_id)
+    contract = SPRINTS_DIR / f"{sid}.contract.md"
+
+    return f"""# DAG Node Evaluation Dispatch — {sid} / {node_id}
+
+Sprint: `{sid}`
+Node: `{node_id}`
+Pane: `{pane}`
+Dispatch ID: `{dispatch_id}`
+Graph: `{graph_path}`
+Handoff: `{handoff}`
+
+## Evaluation Scope
+
+- 只评审本 DAG node：`{node_id}`。
+- 不要评审 parent sprint。
+- 不要把 parent sprint 标成 passed。
+- 只根据 node goal / acceptance / write_scope / handoff evidence 给 verdict。
+
+## Node Goal
+
+{node.get("goal", "N/A")}
+
+## Acceptance
+
+{_acceptance_lines(node.get("acceptance"))}
+
+## Write Scope
+
+{_scope_lines(node.get("write_scope"))}
+
+## Required Reads
+
+```bash
+cat "{graph_path}"
+cat "{contract}"
+cat "{node_dispatch}"
+cat "{handoff}"
+```
+
+## Required Outputs
+
+1. 写 Markdown 评审：
+   ```bash
+   cat > "{eval_md}" <<'EOF'
+   # Node Evaluation — {sid} / {node_id}
+
+   ## Verdict
+
+   PASS 或 FAIL
+
+   ## Evidence Checked
+
+   ## Acceptance Result
+
+   ## Scope Compliance
+
+   ## Risks
+
+   ## Required Fixes
+   EOF
+   ```
+
+2. 写机器可读 JSON：
+   ```bash
+   cat > "{eval_json}" <<'EOF'
+   {{
+     "node_id": "{node_id}",
+     "verdict": "PASS",
+     "summary": "",
+     "checked_at": "{_utc_now()}",
+     "eval_md_path": "{eval_md}"
+   }}
+   EOF
+   ```
+
+3. 提交节点 verdict。通过时会自动释放下游 ready node；失败时只阻塞依赖它的下游：
+   ```bash
+   /Users/sihaoli/.solar/harness/solar-harness.sh graph-dispatch node-verdict --graph "{graph_path}" --node "{node_id}" --verdict pass --eval-json "{eval_json}"
+   ```
+
+   如果失败，改用：
+   ```bash
+   /Users/sihaoli/.solar/harness/solar-harness.sh graph-dispatch node-verdict --graph "{graph_path}" --node "{node_id}" --verdict fail --eval-json "{eval_json}" --reason "写清楚失败原因"
+   ```
+"""
+
+
 def _pane_exists(pane: str) -> bool:
     try:
         return subprocess.run(
@@ -190,6 +314,23 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool) -> bool:
         return True
     except Exception:
         return False
+
+
+def _inject_dispatch_context(instruction_file: Path) -> None:
+    """Fail-open Solar skills/KB/capability context injection for DAG dispatch files."""
+    injector = HARNESS_DIR / "lib" / "solar_skills.py"
+    if not injector.exists() or not instruction_file.exists():
+        return
+    try:
+        subprocess.run(
+            [sys.executable, str(injector), "inject", str(instruction_file)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=45,
+            check=False,
+        )
+    except Exception:
+        pass
 
 
 def _lease_active_for(pane: str, sid: str, dispatch_id: str) -> bool:
@@ -253,6 +394,7 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
     text_payload = dict(payload, dispatch_id=dispatch_id, sprint_id=sid)
     instruction_file.parent.mkdir(parents=True, exist_ok=True)
     instruction_file.write_text(build_dispatch_text(text_payload, pane), encoding="utf-8")
+    _inject_dispatch_context(instruction_file)
 
     sent = _send_to_pane(pane, instruction_file, dry_run)
     graph_updated = False
@@ -314,12 +456,17 @@ def drain_queue(sprint_id: str, dry_run: bool = False, max_items: int = 0, ttl: 
 
 
 def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
+    worker_skills = [
+        "bash", "python", "typescript", "docs", "testing",
+        "browser.browse", "browser.qa", "document.convert", "persona.agent",
+        "multi_agent.research", "debug.systematic", "repair.pr-cot",
+    ]
     if dry_run:
         return [
-            {"pane": f"{SESSION}:0.2", "models": ["sonnet", "glm-5.1"], "skills": ["bash", "python", "typescript", "docs", "testing"]},
-            {"pane": "solar-harness-lab:0.0", "models": ["sonnet", "glm-5.1"], "skills": ["bash", "python", "typescript", "docs", "testing"]},
-            {"pane": "solar-harness-lab:0.1", "models": ["sonnet", "glm-5.1"], "skills": ["bash", "python", "typescript", "docs", "testing"]},
-            {"pane": "solar-harness-lab:0.2", "models": ["sonnet", "glm-5.1"], "skills": ["bash", "python", "typescript", "docs", "testing"]},
+            {"pane": f"{SESSION}:0.2", "models": ["sonnet", "glm-5.1"], "skills": worker_skills},
+            {"pane": "solar-harness-lab:0.0", "models": ["sonnet", "glm-5.1"], "skills": worker_skills},
+            {"pane": "solar-harness-lab:0.1", "models": ["sonnet", "glm-5.1"], "skills": worker_skills},
+            {"pane": "solar-harness-lab:0.2", "models": ["sonnet", "glm-5.1"], "skills": worker_skills},
         ]
     try:
         out = subprocess.check_output(
@@ -337,10 +484,123 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         workers.append({
             "pane": pane,
             "models": ["sonnet", "glm-5.1", "deepseek"],
-            "skills": ["bash", "python", "typescript", "docs", "testing"],
+            "skills": worker_skills,
             "busy": bool(read_lease(pane)),
         })
     return workers
+
+
+def _discover_evaluators(dry_run: bool = False) -> list[dict[str, Any]]:
+    if dry_run:
+        return [{"pane": f"{SESSION}:0.3", "models": ["sonnet", "deepseek"], "skills": ["review", "testing", "bash"]}]
+    candidates = [
+        f"{SESSION}:0.3",
+        f"{SESSION}:0.1",
+        "solar-harness-lab:0.3",
+    ]
+    evaluators: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for pane in candidates:
+        if pane in seen:
+            continue
+        seen.add(pane)
+        if _pane_exists(pane):
+            evaluators.append({
+                "pane": pane,
+                "models": ["sonnet", "deepseek", "glm-5.1"],
+                "skills": ["review", "testing", "bash"],
+                "busy": bool(read_lease(pane)),
+            })
+    return evaluators
+
+
+def _node_eval_needed(graph: dict[str, Any], sid: str, node: dict[str, Any], force: bool = False) -> bool:
+    node_id = str(node.get("id") or "")
+    if not node_id:
+        return False
+    results = graph.get("node_results") or {}
+    result = results.get(node_id) if isinstance(results, dict) else None
+    if isinstance(result, dict) and str(result.get("status", "")).lower() in {"passed", "failed", "skipped"}:
+        return False
+    if _eval_json_file(sid, node_id).exists() and not force:
+        return False
+    if node.get("eval_dispatched_at") and not force:
+        return False
+    status = str(node.get("status", "") or "").lower()
+    if status in {"passed", "failed", "skipped"}:
+        return False
+    return _handoff_file(sid, node_id).exists() and status in {"reviewing", "dispatched", "in_progress", "running", ""}
+
+
+def _first_available_evaluator(dry_run: bool = False) -> dict[str, Any] | None:
+    for evaluator in _discover_evaluators(dry_run):
+        pane = str(evaluator.get("pane", ""))
+        if pane and not evaluator.get("busy"):
+            return evaluator
+    return None
+
+
+def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
+                        force: bool = False, max_items: int = 0) -> dict[str, Any]:
+    graph = load_graph(graph_path)
+    sid = str(graph.get("sprint_id") or Path(graph_path).stem.replace(".task_graph", ""))
+    dispatched: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+
+    for node in graph.get("nodes", []):
+        if max_items and len(dispatched) >= max_items:
+            break
+        node_id = str(node.get("id") or "")
+        if not _node_eval_needed(graph, sid, node, force=force):
+            continue
+        evaluator = _first_available_evaluator(dry_run)
+        if not evaluator:
+            skipped.append({"node": node_id, "reason": "no_available_evaluator"})
+            break
+        pane = str(evaluator["pane"])
+        dispatch_id = f"graph-eval-{sid}-{node_id}-{_utc_now().replace(':', '').replace('-', '')}"
+        lease_result = _ensure_lease(pane, sid, dispatch_id, ttl, dry_run)
+        if not lease_result.get("acquired"):
+            skipped.append({
+                "node": node_id,
+                "pane": pane,
+                "reason": lease_result.get("reason", "lease_failed"),
+                "lease": lease_result,
+            })
+            continue
+
+        instruction_file = _eval_dispatch_file(sid, node_id)
+        instruction_file.parent.mkdir(parents=True, exist_ok=True)
+        instruction_file.write_text(
+            build_eval_dispatch_text(graph, graph_path, node, pane, dispatch_id),
+            encoding="utf-8",
+        )
+        _inject_dispatch_context(instruction_file)
+        sent = _send_to_pane(pane, instruction_file, dry_run)
+        if not sent:
+            if not dry_run:
+                release_lease(pane, dispatch_id, "graph_eval_dispatch_send_failed")
+            skipped.append({"node": node_id, "pane": pane, "reason": "send_failed"})
+            continue
+
+        node["status"] = "reviewing"
+        node["eval_assigned_to"] = pane
+        node["eval_dispatch_id"] = dispatch_id
+        node["eval_dispatched_at"] = _utc_now()
+        dispatched.append({
+            "node": node_id,
+            "pane": pane,
+            "dispatch_id": dispatch_id,
+            "instruction_file": str(instruction_file),
+        })
+
+    save_graph(graph_path, graph)
+    return {
+        "ok": not skipped,
+        "sprint_id": sid,
+        "dispatched": dispatched,
+        "skipped": skipped,
+    }
 
 
 def dispatch_ready(graph_path: str, dry_run: bool = False, ttl: int = 900) -> dict[str, Any]:
@@ -350,6 +610,61 @@ def dispatch_ready(graph_path: str, dry_run: bool = False, ttl: int = 900) -> di
     save_graph(graph_path, graph)
     drain_result = drain_queue(str(sid), dry_run=dry_run, max_items=len(enqueue_result.get("enqueued", [])), ttl=ttl)
     return {"ok": enqueue_result.get("ok") and drain_result.get("ok"), "enqueue": enqueue_result, "drain": drain_result}
+
+
+def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
+                 eval_json: str = "", dry_run: bool = False, ttl: int = 900,
+                 dispatch_downstream: bool = True) -> dict[str, Any]:
+    graph = load_graph(graph_path)
+    node = _node_by_id(graph, node_id)
+    if not node:
+        return {"ok": False, "reason": "unknown_node", "node": node_id}
+
+    normalized = verdict.strip().lower()
+    if normalized in {"pass", "passed", "ok"}:
+        status = "passed"
+    elif normalized in {"fail", "failed", "error"}:
+        status = "failed"
+    else:
+        return {"ok": False, "reason": "invalid_verdict", "verdict": verdict}
+
+    note_parts = []
+    if reason:
+        note_parts.append(reason)
+    if eval_json:
+        note_parts.append(f"eval_json={eval_json}")
+    eval_pane = str(node.get("eval_assigned_to") or "")
+    eval_dispatch_id = str(node.get("eval_dispatch_id") or "")
+    parent = mark_node_result(graph, node_id, status, gate_status=status, note="; ".join(note_parts) or None)
+    node["status"] = status
+    node["updated_at"] = _utc_now()
+    if eval_json:
+        node["eval_json"] = eval_json
+    node.pop("assigned_to", None)
+    node.pop("dispatch_id", None)
+    node.pop("eval_assigned_to", None)
+    node.pop("eval_dispatch_id", None)
+    save_graph(graph_path, graph)
+
+    lease_released = False
+    if not dry_run and eval_pane and eval_dispatch_id:
+        lease_released = bool(release_lease(eval_pane, eval_dispatch_id, f"node_{status}").get("released"))
+
+    downstream: dict[str, Any] = {"ok": True, "skipped": "verdict_not_passed"}
+    if status == "passed" and dispatch_downstream and not parent.get("ready"):
+        downstream = dispatch_ready(graph_path, dry_run=dry_run, ttl=ttl)
+    elif status == "passed" and parent.get("ready"):
+        downstream = {"ok": True, "skipped": "parent_ready"}
+
+    return {
+        "ok": bool(downstream.get("ok", True)),
+        "node": node_id,
+        "status": status,
+        "parent": parent,
+        "downstream": downstream,
+        "dry_run": dry_run,
+        "eval_lease_released": lease_released,
+    }
 
 
 def main() -> int:
@@ -367,11 +682,41 @@ def main() -> int:
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--ttl", type=int, default=900)
 
+    p = sub.add_parser("dispatch-evals")
+    p.add_argument("--graph", required=True)
+    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--ttl", type=int, default=900)
+    p.add_argument("--force", action="store_true")
+    p.add_argument("--max-items", type=int, default=0)
+
+    p = sub.add_parser("node-verdict")
+    p.add_argument("--graph", required=True)
+    p.add_argument("--node", required=True)
+    p.add_argument("--verdict", required=True)
+    p.add_argument("--reason", default="")
+    p.add_argument("--eval-json", default="")
+    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--ttl", type=int, default=900)
+    p.add_argument("--no-dispatch-downstream", action="store_true")
+
     args = ap.parse_args()
     if args.cmd == "drain-queue":
         result = drain_queue(args.sprint, args.dry_run, args.max_items, args.ttl)
     elif args.cmd == "dispatch-ready":
         result = dispatch_ready(args.graph, args.dry_run, args.ttl)
+    elif args.cmd == "dispatch-evals":
+        result = dispatch_node_evals(args.graph, args.dry_run, args.ttl, args.force, args.max_items)
+    elif args.cmd == "node-verdict":
+        result = node_verdict(
+            args.graph,
+            args.node,
+            args.verdict,
+            reason=args.reason,
+            eval_json=args.eval_json,
+            dry_run=args.dry_run,
+            ttl=args.ttl,
+            dispatch_downstream=not args.no_dispatch_downstream,
+        )
     else:
         ap.print_help()
         return 1

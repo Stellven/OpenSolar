@@ -17,6 +17,7 @@ from pathlib import Path
 
 TERMINAL = {"completed", "success", "failed", "skipped", "chained", "skipped-duplicate"}
 ACTIVE = {"pending", "dispatched", "running", ""}
+STALE_FULL_VAULT_INGEST_CUTOFF = "20260509T000000Z"
 
 
 @dataclass
@@ -36,7 +37,13 @@ class Dispatch:
     @property
     def source(self) -> str:
         match = re.search(r"^\s*-\s*source=(.+)$", self.text, re.M)
-        return match.group(1).strip() if match else ""
+        if match:
+            return match.group(1).strip()
+        return self.meta.get("reingest_source", "").strip()
+
+    @property
+    def destination(self) -> str:
+        return self.meta.get("destination", "").strip()
 
 
 def parse_frontmatter(text: str) -> dict[str, str]:
@@ -154,10 +161,56 @@ def repair(dispatch_dir: Path, vault: Path, apply: bool) -> dict:
         status = item.status
         if status in TERMINAL:
             continue
+        if item.destination:
+            dest = vault / item.destination
+            if dest.exists() and dest.stat().st_size > 800:
+                actions.append({
+                    "file": item.path.name,
+                    "from": status or "no_status",
+                    "to": "completed",
+                    "reason": "destination_note_exists",
+                    "destination": item.destination,
+                    "bytes": dest.stat().st_size,
+                })
+                if apply:
+                    set_status(item, "completed", "destination_note_exists")
+                continue
         if item.path.name in done_results:
             actions.append({"file": item.path.name, "from": status or "no_status", "to": "completed", "reason": "matching_success_result"})
             if apply:
                 set_status(item, "completed", "matching_success_result")
+            continue
+        if (
+            item.meta.get("action") == "ingest"
+            and not item.source
+            and item.generated
+            and item.generated < STALE_FULL_VAULT_INGEST_CUTOFF
+        ):
+            actions.append({
+                "file": item.path.name,
+                "from": status or "no_status",
+                "to": "skipped",
+                "reason": "stale_duplicate_full_vault_ingest",
+            })
+            if apply:
+                set_status(item, "skipped", "stale_duplicate_full_vault_ingest")
+            continue
+        if (
+            item.meta.get("action") == "ingest"
+            and item.source
+            and item.generated
+            and item.generated < STALE_FULL_VAULT_INGEST_CUTOFF
+            and ("/_raw/solar-db-export/" in item.source or "/_raw/chatgpt/" in item.source)
+        ):
+            actions.append({
+                "file": item.path.name,
+                "from": status or "no_status",
+                "to": "skipped",
+                "reason": "historical_raw_backlog_archived_source_retained",
+                "source": item.source,
+            })
+            if apply:
+                set_status(item, "skipped", "historical_raw_backlog_archived_source_retained")
             continue
         if item.meta.get("action") in {"query", "update"} and not item.source and item.generated < "20260508T000000Z":
             actions.append({

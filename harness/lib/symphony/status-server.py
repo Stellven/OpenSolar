@@ -902,6 +902,25 @@ def _pane_capability_summary() -> dict:
     }
 
 
+def _evolution_status() -> dict:
+    """Return evolution scorecards/experiments from state DB. Fail-open for UI."""
+    engine = HARNESS_DIR / "lib" / "evolution_engine.py"
+    if not engine.exists():
+        return {"ok": False, "reason": "evolution_engine_missing", "scorecards": [], "experiments": []}
+    try:
+        proc = subprocess.run(
+            ["python3", str(engine), "status", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=6,
+        )
+        if proc.returncode != 0:
+            return {"ok": False, "reason": "evolution_status_failed", "stderr": proc.stderr[-500:]}
+        return json.loads(proc.stdout)
+    except Exception as exc:
+        return {"ok": False, "reason": type(exc).__name__, "scorecards": [], "experiments": []}
+
+
 def _obsidian_wiki_readiness() -> dict:
     """Return obsidian_wiki readiness block. Never raises — degrades to ready=false."""
     integration = HARNESS_DIR / "integrations" / "obsidian-wiki.sh"
@@ -1056,6 +1075,7 @@ def _status_payload(limit: int = 50) -> dict:
         "solar_kb": _solar_kb_status(),
         "obsidian_sync": _obsidian_sync_status(),
         "apple_notes_ingest": _apple_notes_ingest_status(),
+        "evolution": _evolution_status(),
     }
 
 
@@ -2175,6 +2195,9 @@ class StatusHandler(BaseHTTPRequestHandler):
         elif path == "/api/capability":
             # Pane capability summary — skills, mcp_mode, kb_context per pane
             self._send_json(_pane_capability_summary())
+
+        elif path == "/api/evolution":
+            self._send_json(_evolution_status())
 
         elif path == "/":
             # _HTML_TEMPLATE is not formatted with str.format(), so collapse the

@@ -77,7 +77,7 @@ log "mounts output: $MOUNTS_OUT"
 
 check "A2.1 mounts --json exits 0" "python3 '$MIRAGE_PY' mounts --json"
 
-for MOUNT in /knowledge /raw /sprints /solar /cortex; do
+for MOUNT in /knowledge /raw /sources /papers /qmd /solar-db /cortex /sprints; do
     if echo "$MOUNTS_OUT" | python3 -c "import json,sys; d=json.load(sys.stdin); paths={m['path'] for m in d['mounts']}; assert '$MOUNT' in paths" 2>/dev/null; then
         pass "A2.2 mount $MOUNT present"
     else
@@ -103,10 +103,10 @@ else
     fail "A3.1 exec find /sprints"
 fi
 
-if python3 "$MIRAGE_PY" exec -- 'ls /solar' >/dev/null 2>&1; then
-    pass "A3.2 exec ls /solar"
+if python3 "$MIRAGE_PY" exec -- 'ls /solar-db' >/dev/null 2>&1; then
+    pass "A3.2 exec ls /solar-db"
 else
-    fail "A3.2 exec ls /solar"
+    fail "A3.2 exec ls /solar-db"
 fi
 
 if python3 "$MIRAGE_PY" exec -- 'find /knowledge -name "*.md" | head -1' >/dev/null 2>&1; then
@@ -190,11 +190,11 @@ else
     fail "A6.1 write /raw allowed"
 fi
 
-# /solar write denied
-if python3 "$MIRAGE_PY" exec -- "echo bad > /solar/mirage-bad.txt" 2>/dev/null; then
-    fail "A6.2 write /solar must be denied"
+# /solar-db write denied
+if python3 "$MIRAGE_PY" exec -- "echo bad > /solar-db/mirage-bad.txt" 2>/dev/null; then
+    fail "A6.2 write /solar-db must be denied"
 else
-    pass "A6.2 write /solar correctly denied"
+    pass "A6.2 write /solar-db correctly denied"
 fi
 
 # /cortex write denied
@@ -283,7 +283,7 @@ else
 fi
 
 # Test write_denied convenience wrapper
-EMIT_DENY=$(python3 "$EVENTS_PY" mirage_write_denied --data '{"logical_path":"/solar/test","reason":"ro mount"}' 2>/dev/null)
+EMIT_DENY=$(python3 "$EVENTS_PY" mirage_write_denied --data '{"logical_path":"/solar-db/test","reason":"ro mount"}' 2>/dev/null)
 if echo "$EMIT_DENY" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["event"]=="mirage_write_denied" and d["severity"]=="warn"' 2>/dev/null; then
     pass "A8.4 mirage_write_denied has severity=warn"
 else

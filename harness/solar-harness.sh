@@ -889,8 +889,15 @@ wake_sprint() {
   local sf="$SPRINTS_DIR/${sid}.status.json"
   [[ -f "$sf" ]] || { err "Sprint 不存在: $sid"; exit 1; }
 
-  local st
+  local st phase handoff_to auto_held contract_bypass contract_handoff contract_target
   st=$(python3 -c "import json; print(json.load(open('$sf')).get('status',''))" 2>/dev/null)
+  phase=$(python3 -c "import json; print(json.load(open('$sf')).get('phase',''))" 2>/dev/null || true)
+  handoff_to=$(python3 -c "import json; print(json.load(open('$sf')).get('handoff_to',''))" 2>/dev/null || true)
+  auto_held=$(python3 -c "import json; print('true' if json.load(open('$sf')).get('auto_held') else 'false')" 2>/dev/null || echo false)
+  contract_bypass=$(grep -Eq '^bypass_pm:[[:space:]]*true[[:space:]]*$' "$SPRINTS_DIR/${sid}.contract.md" 2>/dev/null && echo true || echo false)
+  contract_handoff=$(grep -m1 '^handoff_to:' "$SPRINTS_DIR/${sid}.contract.md" 2>/dev/null | sed 's/^handoff_to:[[:space:]]*//' || true)
+  contract_target=$(grep -m1 '^target_role:' "$SPRINTS_DIR/${sid}.contract.md" 2>/dev/null | sed 's/^target_role:[[:space:]]*//' || true)
+  local original_st="$st"
   case "$st" in
     passed|done|failed|eval_pass)
       ok "Sprint ${sid} 已完成 (${st})，无需恢复"
@@ -982,13 +989,35 @@ else:
     [[ "$pm_actual" == "pm" ]] || LIVE_PM="$LIVE_PLANNER"
   fi
   local target_pane="" target_task=""
-  local phase handoff_to
-  phase=$(python3 -c "import json; print(json.load(open('$sf')).get('phase',''))" 2>/dev/null || true)
-  handoff_to=$(python3 -c "import json; print(json.load(open('$sf')).get('handoff_to',''))" 2>/dev/null || true)
 
   case "$st" in
-    drafting)
-      if [[ "$phase" == "prd_ready" || "$handoff_to" == "planner" ]]; then
+    drafting|drafting_held)
+      if [[ "$contract_bypass" == "true" || "$handoff_to" =~ ^builder(_main)?$ || "$contract_handoff" =~ ^builder(_main)?$ || "$contract_target" =~ ^builder(_main)?$ ]]; then
+        python3 - "$sf" <<'PY' 2>/dev/null || true
+import datetime, json, sys
+sf = sys.argv[1]
+d = json.load(open(sf))
+now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+d["status"] = "active"
+d["phase"] = "planning_complete"
+d["handoff_to"] = "builder"
+d["auto_held"] = False
+d["updated_at"] = now
+d.setdefault("history", []).append({
+    "ts": now,
+    "event": "wake_promoted_bypass_pm_to_builder",
+    "by": "wake",
+    "note": "Strict wake routing: bypass_pm/handoff_to builder must not route to PM or planner."
+})
+json.dump(d, open(sf, "w"), indent=2, ensure_ascii=False)
+PY
+        st="active"
+        target_pane="$LIVE_BUILDER"
+        target_task="Sprint ${sid} 恢复：这是 bypass_pm/Builder 目标合同，禁止转 PM/Planner。请读取 contract/plan 并执行。cat ~/.solar/harness/sprints/${sid}.contract.md"
+      elif [[ "$auto_held" == "true" || "$st" == "drafting_held" ]]; then
+        ok "Sprint ${sid} 当前为 ${st}/auto_held，wake 不强推。请先人工解除 hold 或 activate。"
+        return 0
+      elif [[ "$phase" == "prd_ready" || "$handoff_to" == "planner" ]]; then
         target_pane="$LIVE_PLANNER"
         target_task="Sprint ${sid} 恢复：PRD 已完成，请读取 PRD 和 contract，写 design.md 与 plan.md，完成后将 status=active、phase=planning_complete、handoff_to=builder_main。"
       else
@@ -1055,9 +1084,9 @@ DISPATCH_EOF
   tmux send-keys -t "$target_pane" Enter 2>/dev/null || true
 
   # Step 5: 记录 wake 事件
-  bash "$HARNESS_DIR/session.sh" append "$sid" "{\"event\":\"waked\",\"by\":\"wake\",\"data\":{\"from_status\":\"${st}\",\"target_pane\":\"${target_pane}\"}}" 2>/dev/null || true
+  bash "$HARNESS_DIR/session.sh" append "$sid" "{\"event\":\"waked\",\"by\":\"wake\",\"data\":{\"from_status\":\"${original_st}\",\"target_pane\":\"${target_pane}\"}}" 2>/dev/null || true
 
-  ok "Sprint ${sid} 已恢复 → ${target_pane} (从 ${st})"
+  ok "Sprint ${sid} 已恢复 → ${target_pane} (从 ${original_st})"
 
   # Step 6: 确保 coordinator 在运行
   _ensure_bash4 2>/dev/null || true
@@ -1869,14 +1898,77 @@ print(json.dumps({
     ;;
   integrations)
     _integrations_probe="$HARNESS_DIR/lib/external-integrations-health.py"
-    [[ -f "$_integrations_probe" ]] || { err "external integrations probe not found: $_integrations_probe"; exit 1; }
+    _plugin_loader="$HARNESS_DIR/lib/plugin_loader.py"
+    _capability_reg="$HARNESS_DIR/lib/capability_registry.py"
     case "${2:-status}" in
       status|health)
         shift 2 || true
+        [[ -f "$_integrations_probe" ]] || { err "external integrations probe not found: $_integrations_probe"; exit 1; }
         python3 "$_integrations_probe" "$@"
         ;;
+      plugins|plugin-status)
+        shift 2 || true
+        [[ -f "$_plugin_loader" ]] || { err "plugin_loader not found: $_plugin_loader"; exit 1; }
+        python3 "$_plugin_loader" status "$@"
+        ;;
+      install)
+        shift 2 || true
+        [[ -f "$_plugin_loader" ]] || { err "plugin_loader not found: $_plugin_loader"; exit 1; }
+        python3 "$_plugin_loader" install "$@"
+        ;;
+      disable)
+        shift 2 || true
+        [[ -f "$_plugin_loader" ]] || { err "plugin_loader not found: $_plugin_loader"; exit 1; }
+        python3 "$_plugin_loader" disable "$@"
+        ;;
+      list)
+        shift 2 || true
+        [[ -f "$_plugin_loader" ]] || { err "plugin_loader not found: $_plugin_loader"; exit 1; }
+        python3 "$_plugin_loader" list "$@"
+        ;;
+      validate)
+        shift 2 || true
+        [[ -f "$_plugin_loader" ]] || { err "plugin_loader not found: $_plugin_loader"; exit 1; }
+        python3 "$_plugin_loader" validate "$@"
+        ;;
+      capabilities|caps)
+        shift 2 || true
+        [[ -f "$_capability_reg" ]] || { err "capability_registry not found: $_capability_reg"; exit 1; }
+        python3 "$_capability_reg" "${1:-list}" "${@:2}"
+        ;;
+      sync-caps)
+        shift 2 || true
+        [[ -f "$_capability_reg" ]] || { err "capability_registry not found: $_capability_reg"; exit 1; }
+        python3 "$_capability_reg" sync "$@"
+        ;;
       *)
-        err "用法: $0 integrations [status|health] [--json]"
+        err "用法: $0 integrations [status|plugins|install|disable|list|validate|capabilities|sync-caps] [--json]"
+        exit 1
+        ;;
+    esac
+    ;;
+  evolution)
+    shift
+    _evolution_py="$HARNESS_DIR/lib/evolution_engine.py"
+    _failure_py="$HARNESS_DIR/lib/failure_miner.py"
+    _eval_py="$HARNESS_DIR/lib/eval_runner.py"
+    case "${1:-status}" in
+      status|scorecard|run-loop|promote|demote-degraded)
+        [[ -f "$_evolution_py" ]] || { err "evolution_engine not found: $_evolution_py"; exit 1; }
+        python3 "$_evolution_py" "$@"
+        ;;
+      mine-failures)
+        shift || true
+        [[ -f "$_failure_py" ]] || { err "failure_miner not found: $_failure_py"; exit 1; }
+        python3 "$_failure_py" mine "$@"
+        ;;
+      eval-run)
+        shift || true
+        [[ -f "$_eval_py" ]] || { err "eval_runner not found: $_eval_py"; exit 1; }
+        python3 "$_eval_py" run "$@"
+        ;;
+      *)
+        err "用法: $0 evolution [status|scorecard|run-loop|promote|demote-degraded|mine-failures|eval-run] [--json]"
         exit 1
         ;;
     esac
@@ -3150,7 +3242,7 @@ EOF
     fi
     _graph_dispatch_subcmd="${1:-help}"; shift || true
     case "$_graph_dispatch_subcmd" in
-      dispatch-ready|drain-queue)
+      dispatch-ready|drain-queue|dispatch-evals|node-verdict)
         python3 "$_graph_dispatch_py" "$_graph_dispatch_subcmd" "$@"
         ;;
       help|--help|-h|"")
@@ -3158,6 +3250,8 @@ EOF
         echo ""
         echo "Usage:"
         echo "  $0 graph-dispatch dispatch-ready --graph sprint.task_graph.json [--dry-run]"
+        echo "  $0 graph-dispatch dispatch-evals --graph sprint.task_graph.json [--dry-run]"
+        echo "  $0 graph-dispatch node-verdict --graph sprint.task_graph.json --node S1 --verdict pass|fail"
         echo "  $0 graph-dispatch drain-queue    --sprint SID [--dry-run] [--max-items N]"
         ;;
       *)

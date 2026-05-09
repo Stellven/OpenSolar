@@ -57,7 +57,7 @@ fi
 
 # ── P2: Denied writes to read-only mounts ────────────────────────────────────
 
-for mp in /knowledge /sprints /solar /cortex; do
+for mp in /knowledge /sources /papers /solar-db /cortex /sprints; do
   OUT=$(solar-harness mirage exec --json -- "echo x > ${mp}/_write_test.txt" 2>/dev/null)
   if echo "$OUT" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert "error" in d or d.get("exit_code",0)!=0' 2>/dev/null; then
     pass_probe "P2-deny-write-${mp#/}"

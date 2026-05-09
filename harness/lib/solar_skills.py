@@ -27,7 +27,11 @@ from typing import Any
 # ── paths ──────────────────────────────────────────────────────────────────
 HARNESS_DIR = Path(__file__).resolve().parent.parent
 SKILLS_ROOT = Path.home() / ".agents" / "skills"
+CLAUDE_SKILLS_ROOT = Path.home() / ".claude" / "skills"
+CODEX_SUPERPOWERS_ROOT = Path.home() / ".codex" / "plugins" / "cache" / "openai-curated" / "superpowers"
 SOLAR_NATIVE_ROOT = Path.home() / "Solar" / "skills"
+SOLAR_RULES_ROOT = Path.home() / "Solar" / "rules"
+CLAUDE_RULES_ROOT = Path.home() / ".claude" / "rules"
 STATE_DIR = HARNESS_DIR / "state"
 NATIVE_CACHE = STATE_DIR / "solar-native-skills.json"
 INVENTORY_CACHE = STATE_DIR / "skills-inventory.json"
@@ -169,12 +173,17 @@ def cmd_inventory(args: list[str]) -> int:
 
     # Count main skills root
     agents_count = _count_skills(SKILLS_ROOT)
+    claude_count = _count_skills(CLAUDE_SKILLS_ROOT)
+    codex_superpowers_count = 1 if CODEX_SUPERPOWERS_ROOT.exists() else 0
 
     # Solar native skills
     native_names = _list_skill_names(SOLAR_NATIVE_ROOT)
     native_count = len(native_names)
+    solar_rule_names = _list_skill_names(SOLAR_RULES_ROOT)
+    claude_rule_names = _list_skill_names(CLAUDE_RULES_ROOT)
+    rules_count = len(set(solar_rule_names + claude_rule_names))
 
-    total = agents_count + native_count
+    total = agents_count + claude_count + native_count + codex_superpowers_count + rules_count
 
     sources: dict[str, Any] = {
         "agents-skills": {
@@ -182,11 +191,35 @@ def cmd_inventory(args: list[str]) -> int:
             "count": agents_count,
             "exists": SKILLS_ROOT.exists(),
         },
+        "claude-skills": {
+            "path": str(CLAUDE_SKILLS_ROOT),
+            "count": claude_count,
+            "exists": CLAUDE_SKILLS_ROOT.exists(),
+            "skills": _list_skill_names(CLAUDE_SKILLS_ROOT),
+        },
+        "codex-superpowers": {
+            "path": str(CODEX_SUPERPOWERS_ROOT),
+            "count": codex_superpowers_count,
+            "exists": CODEX_SUPERPOWERS_ROOT.exists(),
+            "skills": ["superpowers"] if CODEX_SUPERPOWERS_ROOT.exists() else [],
+        },
         "solar-native": {
             "path": str(SOLAR_NATIVE_ROOT),
             "count": native_count,
             "exists": SOLAR_NATIVE_ROOT.exists(),
             "skills": native_names,
+        },
+        "solar-rules": {
+            "path": str(SOLAR_RULES_ROOT),
+            "count": len(solar_rule_names),
+            "exists": SOLAR_RULES_ROOT.exists(),
+            "rules": solar_rule_names,
+        },
+        "claude-rules": {
+            "path": str(CLAUDE_RULES_ROOT),
+            "count": len(claude_rule_names),
+            "exists": CLAUDE_RULES_ROOT.exists(),
+            "rules": claude_rule_names,
         },
     }
 
@@ -194,7 +227,10 @@ def cmd_inventory(args: list[str]) -> int:
         "totals": {
             "skills": total,
             "agents_skills": agents_count,
+            "claude_skills": claude_count,
+            "codex_superpowers": codex_superpowers_count,
             "solar_native": native_count,
+            "rules": rules_count,
         },
         "sources": sources,
         "generated_at": _now_iso(),
@@ -264,8 +300,84 @@ def cmd_doctor(args: list[str]) -> int:
 
 _SKILLS_OPEN = "<solar-skills-context>"
 _SKILLS_CLOSE = "</solar-skills-context>"
+_CAP_OPEN = "<solar-capability-context>"
+_CAP_CLOSE = "</solar-capability-context>"
 _KB_OPEN = "<solar-knowledge-context>"
 _KB_CLOSE = "</solar-knowledge-context>"
+
+
+CAPABILITY_RULES: list[dict[str, Any]] = [
+    {
+        "provider": "gstack",
+        "capabilities": ["browser.browse", "browser.qa", "code.review"],
+        "why": "任务涉及网页、本地浏览器、视觉回归或前端 QA。",
+        "use": "需要打开/检查页面时优先使用 gstack/browser QA 流程；保留截图、URL、失败选择器和复现步骤。",
+        "patterns": [
+            r"\b(browser|browse|webpage|website|localhost|127\.0\.0\.1|screenshot|visual|e2e|ui|frontend)\b",
+            r"网页|浏览器|页面|截图|前端|可视化|视觉|打开.*页面|访问.*页面",
+        ],
+    },
+    {
+        "provider": "Superpowers",
+        "capabilities": ["skill.methodology", "workflow.planning", "debug.systematic", "test.tdd"],
+        "why": "任务需要系统化规划、TDD、根因分析或调试纪律。",
+        "use": "先拆解目标和验收，再做最小实现；调试时记录假设、证据、验证命令和回归测试。",
+        "patterns": [
+            r"\b(superpowers|tdd|debug|root cause|systematic|test[- ]driven|plan|planning|breakdown)\b",
+            r"系统化|调试|根因|测试驱动|规划|拆解|路线图|回归",
+        ],
+    },
+    {
+        "provider": "ATLAS",
+        "capabilities": ["repair.pr-cot", "failure.structured_repair", "routing.complexity_budget"],
+        "why": "任务涉及失败修复、hook/tool 异常、阻塞恢复或复杂度预算。",
+        "use": "进入 repair 模式：定位失败点，写明证据链，优先做局部修复；不要静默停住或等待人工拍板。",
+        "patterns": [
+            r"\b(atlas|repair|failure|failed|hook_failed|timeout|blocked|stuck|retry|regression|broken)\b",
+            r"失败|修复|阻塞|卡住|超时|断头|重试|坏了|不动了",
+        ],
+    },
+    {
+        "provider": "OWL",
+        "capabilities": ["multi_agent.research", "browser.agent_experiment", "document.toolkit"],
+        "why": "任务需要多智能体研究、外部框架实验或复杂资料探索。",
+        "use": "把 OWL 当作外部研究/实验 provider；只在需要多代理探索时使用，不替换 Solar coordinator。",
+        "patterns": [
+            r"\b(owl|camel[- ]ai|multi[- ]agent|agent experiment|research swarm)\b",
+            r"多智能体|多代理|研究框架|并行研究|外部代理",
+        ],
+    },
+    {
+        "provider": "MarkItDown",
+        "capabilities": ["document.convert", "document.markdown_extract", "mcp.markitdown"],
+        "why": "任务涉及 PDF/Office/HTML/图片等文档转 Markdown。",
+        "use": "优先把原件转成 Markdown，再交给 Obsidian/QMD/Mirage 入库；保留源文件路径和转换日志。",
+        "patterns": [
+            r"\b(markitdown|pdf|docx|pptx|xlsx|html|convert.*markdown|markdown.*extract)\b",
+            r"转.*md|转.*markdown|文档提取|格式转换|论文|表格|幻灯片",
+        ],
+    },
+    {
+        "provider": "agency-agents",
+        "capabilities": ["persona.agent", "agent.catalog", "specialist.routing"],
+        "why": "任务需要专门角色、行业 persona 或 agent catalog 辅助分工。",
+        "use": "选择匹配 agent/persona 作为参考能力；必须服从 Solar 当前 sprint 合约和 write_scope。",
+        "patterns": [
+            r"\b(agency|persona|specialist|agent catalog|role routing|subagent)\b",
+            r"人格|角色|专家|专门代理|专业代理|子代理",
+        ],
+    },
+    {
+        "provider": "Everything Claude Code",
+        "capabilities": ["agent.inventory", "command.catalog", "rules.catalog", "mcp.catalog"],
+        "why": "任务涉及 Claude Code 生态能力盘点、命令/规则/MCP/agent inventory。",
+        "use": "只读使用 vendor inventory；不要盲装 hooks 或覆盖现有 Solar 规则。",
+        "patterns": [
+            r"\b(everything[- ]claude[- ]code|mcp|commands?|hooks?|rules?|agents? inventory)\b",
+            r"命令目录|规则目录|MCP|hook|能力盘点|代理清单",
+        ],
+    },
+]
 
 
 def _build_skills_block(native_names: list[str], agents_count: int) -> str:
@@ -307,6 +419,48 @@ def _build_kb_block() -> str:
     )
 
 
+def _select_capabilities(dispatch_text: str) -> list[dict[str, Any]]:
+    """Select provider hints from task text. Static and fail-open by design."""
+    selected: list[dict[str, Any]] = []
+    for rule in CAPABILITY_RULES:
+        for pattern in rule["patterns"]:
+            if re.search(pattern, dispatch_text, re.IGNORECASE | re.MULTILINE):
+                selected.append(rule)
+                break
+    return selected
+
+
+def _build_capability_block(dispatch_text: str) -> str:
+    selected = _select_capabilities(dispatch_text)
+    lines = [
+        _CAP_OPEN,
+        f"<!-- auto-generated by solar_skills.py at {_now_iso()} -->",
+        "## Auto-selected Solar Capabilities",
+        "",
+    ]
+    if not selected:
+        lines.extend([
+            "- N/A: 当前 dispatch 没有命中特定外部 capability；按普通 Solar-Harness 流程执行。",
+            "",
+        ])
+    else:
+        for item in selected:
+            caps = ", ".join(item["capabilities"])
+            lines.append(f"- {item['provider']} ({caps})")
+            lines.append(f"  Why: {item['why']}")
+            lines.append(f"  Use: {item['use']}")
+        lines.append("")
+    lines.extend([
+        "## Dispatch Rules",
+        "",
+        "- 这些 capability 是自动选择的执行辅助，不替换 Solar coordinator / planner / evaluator。",
+        "- 若 capability 缺失或不可用，必须 fail-open：继续完成主任务，并在 handoff 写明降级证据。",
+        "- 遇到失败、超时、hook/tool 异常时，优先触发 ATLAS structured repair，不要停在等待人工决策。",
+        _CAP_CLOSE,
+    ])
+    return "\n".join(lines)
+
+
 def _warn(msg: str) -> None:
     print(f"[solar_skills] WARN: {msg}", file=sys.stderr)
 
@@ -336,13 +490,14 @@ def cmd_inject(args: list[str]) -> int:
     native_names = _list_skill_names(SOLAR_NATIVE_ROOT)
     agents_count = _count_skills(SKILLS_ROOT)
 
+    text = dispatch_file.read_text(encoding="utf-8", errors="replace")
     skills_block = _build_skills_block(native_names, agents_count)
+    capability_block = _build_capability_block(text)
     kb_block = _build_kb_block()
 
-    text = dispatch_file.read_text(encoding="utf-8", errors="replace")
-
-    # Replace or append both blocks (idempotent)
+    # Replace or append blocks (idempotent)
     text = _replace_block(text, _SKILLS_OPEN, _SKILLS_CLOSE, skills_block)
+    text = _replace_block(text, _CAP_OPEN, _CAP_CLOSE, capability_block)
     text = _replace_block(text, _KB_OPEN, _KB_CLOSE, kb_block)
 
     dispatch_file.write_text(text, encoding="utf-8")

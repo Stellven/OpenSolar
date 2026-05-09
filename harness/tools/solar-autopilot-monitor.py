@@ -47,6 +47,11 @@ try:
     from graph_scheduler import load_graph, enqueue_ready, parent_ready_check, validate_graph
 except Exception:  # pragma: no cover - fallback for partially installed harnesses
     load_graph = enqueue_ready = parent_ready_check = validate_graph = None
+try:
+    from graph_node_dispatcher import dispatch_ready as graph_dispatch_ready
+    from graph_node_dispatcher import dispatch_node_evals as graph_dispatch_node_evals
+except Exception:  # pragma: no cover - graph dispatcher may be absent in scheduler-only tests
+    graph_dispatch_ready = graph_dispatch_node_evals = None
 
 
 def utc_now() -> str:
@@ -432,16 +437,26 @@ def dispatch_ready_graph_nodes(sid: str, lease: bool = True) -> dict:
     path = graph_path_for(sid)
     if not path.exists():
         return {"ok": False, "reason": "task_graph_missing", "path": str(path)}
-    if load_graph is None or enqueue_ready is None:
+    if load_graph is None or validate_graph is None:
         return {"ok": False, "reason": "graph_scheduler_unavailable"}
     graph = load_graph(path)
     validation = validate_graph(graph) if validate_graph else {"ok": False, "errors": ["graph_scheduler_unavailable"]}
     if not validation.get("ok"):
         return {"ok": False, "reason": "task_graph_invalid", "validation": validation}
+    if graph_dispatch_ready is not None and graph_dispatch_node_evals is not None:
+        evals = graph_dispatch_node_evals(str(path), dry_run=not lease, ttl=900)
+        ready = graph_dispatch_ready(str(path), dry_run=not lease, ttl=900)
+        return {
+            "ok": bool(evals.get("ok")) and bool(ready.get("ok")),
+            "evals": evals,
+            "ready": ready,
+        }
+    if enqueue_ready is None:
+        return {"ok": False, "reason": "graph_dispatcher_unavailable"}
     result = enqueue_ready(graph, str(path), graph_workers(), max_parallel=8, lease=lease, ttl=900)
     from graph_scheduler import save_graph  # imported late so older installs can still inspect
     save_graph(path, graph)
-    return result
+    return {"ok": result.get("ok"), "ready": result}
 
 
 def instruction_for(status: dict, files: dict[str, bool]) -> str:
