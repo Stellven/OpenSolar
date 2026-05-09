@@ -32,6 +32,8 @@ run_test "$DIR/test_audit_uploads.sh"
 run_test "$DIR/test_upload_ingest_coverage.sh"
 run_test "$DIR/test_endpoint_view.sh"
 run_test "$DIR/../integrations/test-capability-plane-e2e.sh"
+run_test "$DIR/../integrations/test-expanded-capability-plane-e2e.sh"
+run_test "$DIR/../integrations/test-capability-fusion-benchmark.sh"
 
 echo ""
 echo "========================================"

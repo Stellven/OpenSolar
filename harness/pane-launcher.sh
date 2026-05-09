@@ -32,6 +32,12 @@ source "$HARNESS_DIR/lib/persona-config.sh"
 CONFIG=$(get_persona_config "$PERSONA")
 eval "$CONFIG"  # 设置 CN, MODEL_FLAG, TOOL_FLAG, DISPLAY_MODEL, STARTUP_TOKEN, PROXY_CHECK, EXTRA_FLAGS
 
+if [[ -n "${LAUNCH_ERROR:-}" ]]; then
+  echo "FATAL: $LAUNCH_ERROR" >&2
+  echo "Refusing to start an Anthropic Claude fallback for persona=$PERSONA." >&2
+  exit 78
+fi
+
 # 设置环境变量
 apply_persona_env "$PERSONA"
 
@@ -100,11 +106,32 @@ if [[ -n "$TMUX_PANE" ]]; then
   AUTO_PID=$!
 fi
 
-# 构建启动命令
-CLAUDE_BIN="${SOLAR_CLAUDE_BIN:-/Users/sihaoli/.npm-global/bin/claude}"
-if [[ ! -x "$CLAUDE_BIN" ]]; then
-  CLAUDE_BIN="$(command -v claude)"
-fi
+# 构建启动命令。部分机器同时安装多个 Claude CLI；旧版不支持
+# --bare，会让第三方网关兼容模式直接失败。需要按能力选择。
+find_claude_bin() {
+  local need_bare=0 c
+  [[ " ${EXTRA_FLAGS:-} " == *" --bare "* ]] && need_bare=1
+  local candidates=()
+  [[ -n "${SOLAR_CLAUDE_BIN:-}" ]] && candidates+=("$SOLAR_CLAUDE_BIN")
+  candidates+=("$HOME/n/bin/claude" "$HOME/.npm-global/bin/claude")
+  c="$(command -v claude 2>/dev/null || true)"
+  [[ -n "$c" ]] && candidates+=("$c")
+
+  for c in "${candidates[@]}"; do
+    [[ -x "$c" ]] || continue
+    if (( need_bare == 1 )) && ! "$c" --help 2>&1 | grep -q -- '--bare'; then
+      continue
+    fi
+    printf '%s\n' "$c"
+    return 0
+  done
+  return 1
+}
+
+CLAUDE_BIN="$(find_claude_bin)" || {
+  echo "FATAL: no Claude CLI found with required capabilities for EXTRA_FLAGS='${EXTRA_FLAGS:-}'" >&2
+  exit 78
+}
 
 CLAUDE_CMD="$CLAUDE_BIN"
 SOLAR_CLAUDE_BYPASS="${SOLAR_CLAUDE_BYPASS:-1}"

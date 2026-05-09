@@ -407,8 +407,19 @@ for child in sorted(harness.iterdir()):
             if path.is_file() and not denied(path.relative_to(harness)):
                 print(path.relative_to(repo).as_posix())
 PY
-  git -C "$SOLAR_REPO" add -A --pathspec-from-file="$stage_file"
-  rm -f "$stage_file"
+  stage_file_filtered="$(mktemp)"
+  ignored_paths_file="$(mktemp)"
+  # `git check-ignore` exits with 1 when there are no matches; treat that as success.
+  git -C "$SOLAR_REPO" check-ignore --stdin < "$stage_file" > "$ignored_paths_file" || true
+  if [[ -s "$ignored_paths_file" ]]; then
+    grep -Fvx -f "$ignored_paths_file" "$stage_file" > "$stage_file_filtered" || true
+  else
+    cp "$stage_file" "$stage_file_filtered"
+  fi
+  rm -f "$ignored_paths_file" "$stage_file"
+
+  git -C "$SOLAR_REPO" add -A --pathspec-from-file="$stage_file_filtered"
+  rm -f "$stage_file_filtered"
   if git -C "$SOLAR_REPO" diff --cached --quiet; then
     echo "pending: no staged repo changes after export"
     exit 0

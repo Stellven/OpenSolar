@@ -323,8 +323,27 @@ def probe(deep: bool = False) -> dict:
     markitdown_owl_toolkit = HOME / ".solar" / "owl" / "venv" / "lib" / "python3.11" / "site-packages" / "camel" / "toolkits" / "markitdown_toolkit.py"
     claude_agents_dir = HOME / ".claude" / "agents"
     addy_agents_dir = HOME / ".claude" / "plugins" / "marketplaces" / "addy-agent-skills" / "agents"
+    addy_root = HOME / ".claude" / "plugins" / "marketplaces" / "addy-agent-skills"
+    addy_skills_dir = addy_root / "skills"
+    addy_refs_dir = addy_root / "references"
     claude_agents_count = len(list(claude_agents_dir.glob("*.md"))) if claude_agents_dir.exists() else 0
     addy_agents_count = len(list(addy_agents_dir.glob("*.md"))) if addy_agents_dir.exists() else 0
+    addy_skills_count = len(list(addy_skills_dir.glob("*/SKILL.md"))) if addy_skills_dir.exists() else 0
+    addy_refs_count = len(list(addy_refs_dir.glob("*.md"))) if addy_refs_dir.exists() else 0
+    empirical_skill = HOME / ".claude" / "skills" / "empirical-pipeline" / "SKILL.md"
+    empirical_gap = HOME / ".solar" / "reports" / "gap-analysis-empirical-research.md"
+    browser_use_mcp = HOME / ".claude" / "mcp-servers" / "browser-use"
+    browser_use_server = browser_use_mcp / "server.py"
+    browser_use_python = browser_use_mcp / ".venv" / "bin" / "python"
+    browser_use_codex = HOME / ".codex" / "plugins" / "cache" / "openai-bundled" / "browser-use"
+    codex_config = HOME / ".codex" / "config.toml"
+    codex_config_text = codex_config.read_text(errors="ignore") if codex_config.exists() else ""
+    openai_agents_report = HOME / ".solar" / "reports" / "2026-04-20-openai-agents-integration-codex.md"
+    codex_bridge_root = HOME / ".solar" / "codex-bridge"
+    codex_bridge_inbox = codex_bridge_root / "from-codex"
+    codex_bridge_protocol = codex_bridge_root / "CODEX-PROTOCOL.md"
+    chain_watcher = HARNESS / "chain-watcher.sh"
+    bridge_ledger = codex_bridge_root / "bridge-ledger.jsonl"
 
     integrations = [
         result(
@@ -493,6 +512,44 @@ def probe(deep: bool = False) -> dict:
             },
         ),
         result(
+            "Empirical Research skills",
+            "https://github.com/brycewang-stanford/Awesome-Agent-Skills-for-Empirical-Research",
+            "Empirical research pipeline registered as Solar dispatch capability for literature review, causal/statistical analysis, reproducibility and academic paper workflows.",
+            lifecycle="active",
+            installed=empirical_skill.exists(),
+            configured=empirical_gap.exists(),
+            running=True,
+            indexed=True,
+            used_by_default=True,
+            complete=empirical_skill.exists(),
+            degraded_reason="" if empirical_skill.exists() else "empirical-pipeline skill missing",
+            evidence={
+                "skill": str(empirical_skill),
+                "gap_analysis": str(empirical_gap),
+                "dispatch_capability": "research.empirical_pipeline",
+            },
+        ),
+        result(
+            "addyosmani/agent-skills",
+            "https://github.com/addyosmani/agent-skills",
+            "Agent skills marketplace installed locally. Solar consumes it as a read-only workflow and specialist-routing catalog through capability injection.",
+            lifecycle="active",
+            installed=addy_root.exists(),
+            configured=addy_agents_count > 0 and addy_refs_count > 0,
+            running=True,
+            indexed=True,
+            used_by_default=True,
+            complete=addy_root.exists() and addy_agents_count > 0 and addy_refs_count > 0,
+            degraded_reason="" if (addy_root.exists() and addy_agents_count > 0 and addy_refs_count > 0) else "agent-skills marketplace incomplete",
+            evidence={
+                "root": str(addy_root),
+                "agents_count": addy_agents_count,
+                "skills_count": addy_skills_count,
+                "references_count": addy_refs_count,
+                "dispatch_capability": "agent_skills.catalog",
+            },
+        ),
+        result(
             "ATLAS repair protocol",
             "Solar local rules",
             "ATLAS-derived repair protocol and PR-CoT failure-repair rules absorbed into Solar rules. Provides structured repair behavior for hook/tool failures.",
@@ -507,6 +564,26 @@ def probe(deep: bool = False) -> dict:
                 "solar_rule": str(HOME / "Solar" / "rules" / "atlas-repair-protocol.md"),
                 "claude_rule": str(HOME / ".claude" / "rules" / "atlas-repair-protocol.md"),
                 "plan": str(HOME / ".solar" / "plans" / "atlas-solar-integration.md"),
+            },
+        ),
+        result(
+            "Browser-use MCP",
+            "https://github.com/browser-use/browser-use",
+            "Local browser-use MCP server and Codex Browser Use plugin. Registered for browser.mcp/browser.automation dispatches; gstack remains the broader browser QA fallback.",
+            lifecycle="active",
+            installed=browser_use_server.exists() or browser_use_codex.exists(),
+            configured=browser_use_python.exists() and browser_use_server.exists(),
+            running=True,
+            indexed=True,
+            used_by_default="browser-use@openai-bundled" in codex_config_text,
+            complete=browser_use_python.exists() and browser_use_server.exists() and browser_use_codex.exists(),
+            degraded_reason="" if (browser_use_python.exists() and browser_use_server.exists() and browser_use_codex.exists()) else "browser-use local MCP/plugin incomplete",
+            evidence={
+                "mcp_server": str(browser_use_server),
+                "venv_python": str(browser_use_python),
+                "codex_plugin": str(browser_use_codex),
+                "codex_config": str(codex_config),
+                "dispatch_capability": "browser.mcp",
             },
         ),
         result(
@@ -529,6 +606,26 @@ def probe(deep: bool = False) -> dict:
             },
         ),
         result(
+            "openai-agents-python PoC",
+            "https://github.com/openai/openai-agents-python",
+            "Design-level PoC for future typed runtime/guardrails/tracing/handoff migration. Explicitly not the current Solar production executor.",
+            lifecycle="candidate",
+            candidate=True,
+            installed=openai_agents_report.exists(),
+            configured=openai_agents_report.exists(),
+            running=False,
+            indexed=True,
+            used_by_default=False,
+            basic_available=openai_agents_report.exists(),
+            complete=False,
+            degraded_reason="",
+            evidence={
+                "report": str(openai_agents_report),
+                "mode": "design_poc_not_production_runtime",
+                "dispatch_capability": "agents_sdk.design",
+            },
+        ),
+        result(
             "Microsoft MarkItDown MCP",
             "https://github.com/microsoft/markitdown",
             "Document conversion provider for PDF/Office/HTML/image-to-Markdown. Solar dispatch injects MarkItDown for document extraction; MCP runtime is optional and detected separately.",
@@ -547,6 +644,28 @@ def probe(deep: bool = False) -> dict:
                 "owl_toolkit": str(markitdown_owl_toolkit),
                 "dispatch_capability": "document.convert",
                 "mcp_runtime": "optional_not_required_for_solar_dispatch",
+            },
+        ),
+        result(
+            "Codex Bridge / pane3 bridge",
+            "Solar local bridge",
+            "Active bridge path is ~/.solar/codex-bridge/from-codex plus chain-watcher ingestion. Legacy ~/.solar/harness/codex-bridge is deprecated and not counted as the active runtime.",
+            lifecycle="active",
+            installed=codex_bridge_root.exists() and chain_watcher.exists(),
+            configured=codex_bridge_inbox.exists() and codex_bridge_protocol.exists(),
+            running=True,
+            indexed=bridge_ledger.exists(),
+            used_by_default=True,
+            complete=codex_bridge_inbox.exists() and codex_bridge_protocol.exists() and chain_watcher.exists(),
+            degraded_reason="" if (codex_bridge_inbox.exists() and codex_bridge_protocol.exists() and chain_watcher.exists()) else "active codex bridge chain missing",
+            evidence={
+                "active_root": str(codex_bridge_root),
+                "from_codex": str(codex_bridge_inbox),
+                "protocol": str(codex_bridge_protocol),
+                "chain_watcher": str(chain_watcher),
+                "ledger": str(bridge_ledger),
+                "legacy_harness_bridge": str(HARNESS / "codex-bridge"),
+                "dispatch_capability": "codex.bridge",
             },
         ),
         result(

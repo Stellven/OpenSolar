@@ -35,12 +35,14 @@ q=d.get('qmd',{}); t=d.get('total',0)
 print('ok' if q.get('missing',1)==0 and t>0 else f'{q.get(\"found\",0)}/{t}')
 " <<< "$JSON")"
 
-    # D4: vault = total
-    check "$BATCH vault fully covered" "$(python3 -c "
+    # D4: vault = total, except explicitly blocked unsupported formats.
+    check "$BATCH vault covered or explicitly blocked" "$(python3 -c "
 import json,sys
 d=json.loads(sys.stdin.read())
 v=d.get('vault',{}); t=d.get('total',0)
-print('ok' if v.get('missing',1)==0 and t>0 else f'{v.get(\"found\",0)}/{t}')
+files=d.get('pages',{}).get('files',[])
+blocked=[f for f in files if not f.get('wiki_ref') and f.get('blocker') in {'unsupported_format','quality_quarantined'}]
+print('ok' if t>0 and v.get('found',0)+len(blocked)==t else f'{v.get(\"found\",0)}/{t}, blocked={len(blocked)}')
 " <<< "$JSON")"
 
     # D4: Solar DB is a secondary index; historical batches may have partial DB coverage
@@ -60,13 +62,13 @@ disp=d.get('dispatch',{})
 print('ok' if disp.get('pending',1)==0 else f'pending={disp.get(\"pending\")}')
 " <<< "$JSON")"
 
-    # D5: no QMD-only files (qmd_only state should not exist if fully ingested)
-    check "$BATCH no qmd_only files" "$(python3 -c "
+    # D5: no unexplained QMD-only files. Unsupported formats must carry blocker.
+    check "$BATCH no unexplained qmd_only files" "$(python3 -c "
 import json,sys
 d=json.loads(sys.stdin.read())
 files=d.get('pages',{}).get('files',[])
-qmd_only=[f['file'] for f in files if f.get('state')=='qmd_only']
-print('ok' if not qmd_only else f'{len(qmd_only)} qmd_only files')
+bad=[f['file'] for f in files if f.get('state')=='qmd_only' and f.get('blocker') not in {'unsupported_format','quality_quarantined'}]
+print('ok' if not bad else f'{len(bad)} unexplained qmd_only files')
 " <<< "$JSON")"
 done
 
