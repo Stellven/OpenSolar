@@ -242,12 +242,12 @@ builder_candidate_panes() {
     printf '%s\n' "$pane"
     seen=" $pane "
   fi
-  while IFS= read -r pane; do
+  while IFS= read -r -u 9 pane; do
     [[ -z "$pane" ]] && continue
     case "$seen" in *" $pane "*) continue ;; esac
     printf '%s\n' "$pane"
     seen+="$pane "
-  done < <(list_lab_builder_panes 2>/dev/null || true)
+  done 9< <(list_lab_builder_panes 2>/dev/null || true)
 }
 
 pane_lease_held_by_other() {
@@ -296,7 +296,7 @@ pane_assignment_held_by_other() {
 
 choose_available_builder_pane() {
   local sid="$1" pane
-  while IFS= read -r pane; do
+  while IFS= read -r -u 8 pane; do
     [[ -n "$pane" ]] || continue
     pane_target_exists "$pane" || continue
     if pane_assignment_held_by_other "$pane" "$sid"; then
@@ -309,7 +309,7 @@ choose_available_builder_pane() {
     fi
     echo "$pane"
     return 0
-  done < <(builder_candidate_panes)
+  done 8< <(builder_candidate_panes)
   return 1
 }
 
@@ -491,7 +491,7 @@ choose_available_role_pane() {
     fi
     echo "$pane"
     return 0
-  done < <(role_candidate_panes "$role" 2>/dev/null || true)
+  done 9< <(role_candidate_panes "$role" 2>/dev/null || true)
   return 1
 }
 
@@ -499,7 +499,7 @@ dispatch_to_role() {
   local role="$1" sid="$2" intent="${3:-${role}_dispatch}" instruction_file="${4:-$SPRINTS_DIR/${sid}.dispatch.md}"
   local message="${5:-}"
   local pane tried=0 last_rc=0
-  while IFS= read -r pane; do
+  while IFS= read -r -u 9 pane; do
     [[ -n "$pane" ]] || continue
     pane_target_exists "$pane" || continue
     if pane_assignment_held_by_other "$pane" "$sid"; then
@@ -518,7 +518,7 @@ dispatch_to_role() {
       return 0
     fi
     log "${Y}[worker-select] ${role} target=${pane} dispatch rc=${last_rc}; trying next candidate${N}"
-  done < <(role_candidate_panes "$role" 2>/dev/null || true)
+  done 9< <(role_candidate_panes "$role" 2>/dev/null || true)
 
   local q_result="unavailable"
   if type queue_enqueue &>/dev/null; then
@@ -2253,6 +2253,19 @@ mark_drafting_flow() {
   grep -qx "${sid}:${stage}" "$marker" 2>/dev/null || echo "${sid}:${stage}" >> "$marker"
 }
 
+builder_flow_marked() {
+  local sid="$1" intent="${2:-builder_dispatch}"
+  local marker="$HARNESS_DIR/.builder-flow-dispatched"
+  [[ -f "$marker" ]] && grep -qx "${sid}:${intent}" "$marker" 2>/dev/null
+}
+
+mark_builder_flow() {
+  local sid="$1" intent="${2:-builder_dispatch}"
+  local marker="$HARNESS_DIR/.builder-flow-dispatched"
+  touch "$marker"
+  grep -qx "${sid}:${intent}" "$marker" 2>/dev/null || echo "${sid}:${intent}" >> "$marker"
+}
+
 handle_queued() {
   local sid="$1" sf="$2"
   local blocked_by
@@ -2477,7 +2490,21 @@ handle_active() {
 
   local phase
   phase=$(get_field "$sf" "phase")
+  case "$phase" in
+    s0_dispatched|s0_in_progress)
+      log "${Y}Sprint ${sid} S0 already dispatched; waiting for builder handoff${N}"
+      return 0
+      ;;
+    s0_ready_for_eval)
+      log "${Y}Sprint ${sid} S0 ready for eval; waiting for evaluator dispatch/state change${N}"
+      return 0
+      ;;
+  esac
   if [[ "$phase" == "planning_complete" && -f "$SPRINTS_DIR/${sid}.plan.md" ]]; then
+    if builder_flow_marked "$sid" "builder_dispatch"; then
+      log "${Y}Sprint ${sid} builder dispatch already recorded, skip duplicate planning_complete dispatch${N}"
+      return 0
+    fi
     log "${G}Sprint 进入 active 且 planner plan 已完成 → 建设者按计划实现${N}"
     log "  需求: ${title}"
     release_pane_assignment_if_matches "$(choose_planner_pane)" "$sid" "planner_plan_completed"
@@ -2516,6 +2543,7 @@ handle_active() {
       return 0
     fi
     emit_event "$sid" "dispatched" "coordinator" "{\"to\":\"builder\",\"task\":\"implement_from_planner_plan\"}"
+    mark_builder_flow "$sid" "builder_dispatch"
     return 0
   fi
 
@@ -3846,6 +3874,31 @@ with open('$patches_file','w') as f:
     log "startup recovery: found ${recovery_count} passed sprints without finalized, replaying handle_passed"
   fi
 
+  # ── Startup actionable-state recovery ─────────────────────────────────────
+  # If coordinator restarts after a planner has already written
+  # status=planning_complete, the persisted last_state can equal the current
+  # state and the normal "state changed" branch will not fire. Replay only this
+  # narrow builder handoff state, guarded by .builder-flow-dispatched.
+  local planning_recovery_count=0
+  for rsf in "$SPRINTS_DIR"/sprint-*.status.json; do
+    [[ -f "$rsf" ]] || continue
+    local rsid rst rphase
+    rsid=$(get_field "$rsf" "id")
+    rst=$(get_field "$rsf" "status")
+    rphase=$(get_field "$rsf" "phase")
+    [[ -n "$rsid" ]] || continue
+    if [[ "$rst" == "planning_complete" && "$rphase" == "planning_complete" && -f "$SPRINTS_DIR/${rsid}.plan.md" ]]; then
+      if ! builder_flow_marked "$rsid" "builder_dispatch"; then
+        ((planning_recovery_count+=1))
+        log "startup recovery: replaying planning_complete builder handoff for $rsid"
+        handle_active "$rsid" "$rsf"
+      fi
+    fi
+  done
+  if [[ "$planning_recovery_count" -gt 0 ]]; then
+    log "startup recovery: replayed ${planning_recovery_count} planning_complete builder handoff(s)"
+  fi
+
   local last_file_mtime=0
   local loop_count=0
   # Sprint 20260423-062851 D1: 启动时记录自身 md5 用于热加载自检
@@ -3952,6 +4005,9 @@ with open('$patches_file','w') as f:
 
           case "$st" in
             active)
+              handle_active "$sid" "$sf"
+              ;;
+            planning_complete)
               handle_active "$sid" "$sf"
               ;;
             planning)

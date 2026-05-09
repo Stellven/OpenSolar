@@ -131,16 +131,26 @@ if st == 'drafting':
 elif st == 'active':
     if phase in ('planning_complete', 'planner_plan', 'plan_reviewed'):
         lc = 'planning_complete'
+    elif phase in ('s0_dispatched', 's0_in_progress'):
+        lc = 'building'
+    elif phase in ('s0_ready_for_eval',):
+        lc = 'build_complete'
+        role = 'evaluator'
     elif phase in ('building', 'build_complete'):
         lc = 'building'
     else:
         # default: active with plan expected
         lc = 'planning_complete'
-    role = 'builder_main'
+    if role == 'none':
+        role = 'builder_main'
 
 elif st == 'planning':
     lc = 'planning'
     role = 'evaluator'
+
+elif st == 'planning_complete':
+    lc = 'planning_complete'
+    role = 'builder_main'
 
 elif st == 'approved':
     lc = 'planning_complete'
