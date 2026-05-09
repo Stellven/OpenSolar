@@ -226,7 +226,12 @@ def find_wiki_ref(source_name: str, vault_path: Path | None = None) -> Path | No
 # ── create stub wiki ref ────────────────────────────────────────────────────
 
 def create_stub_ref(source_path: Path, batch_id: str, vault_path: Path | None = None) -> Path | None:
-    """Create a stub wiki reference file for a source that lacks one."""
+    """Create a minimal tracking ref for a source that lacks one.
+
+    This must not masquerade as knowledge extraction. In particular, PDF stubs
+    are marked as `quality: stub` and `needs_deep_ingest: true` so downstream
+    search/UI can distinguish provenance tracking from actual paper analysis.
+    """
     root = vault_path or VAULT_ROOT
     refs_dir = root / "references"
     refs_dir.mkdir(parents=True, exist_ok=True)
@@ -284,9 +289,13 @@ ingested_at: {time.strftime("%Y-%m-%d")}
 tags: {json.dumps(tags, ensure_ascii=False)}
 visibility: internal
 backfill: true
+quality: stub
+needs_deep_ingest: {str(ext == ".pdf").lower()}
 ---
 
 # {title}
+
+> Tracking stub only. This page is not a completed knowledge extraction.
 
 ## Summary
 

@@ -1,9 +1,9 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Solar External Integrations Health Schema",
-  "version": "1.0.0",
-  "frozen_since": "2026-05-08",
-  "description": "Schema for the output of external-integrations-health.py (six-state per-integration model)",
+  "version": "1.1.0",
+  "frozen_since": "2026-05-09",
+  "description": "Schema for the output of external-integrations-health.py (six-state plus capability health dimensions)",
   "type": "object",
   "required": ["generated_at", "summary", "integrations"],
   "properties": {
@@ -13,18 +13,20 @@
     },
     "summary": {
       "type": "object",
-      "required": ["ok", "warn", "missing", "total"],
+      "required": ["ok", "warn", "error", "missing", "total"],
       "properties": {
         "ok": { "type": "integer", "minimum": 0 },
         "warn": { "type": "integer", "minimum": 0 },
+        "error": { "type": "integer", "minimum": 0 },
         "missing": { "type": "integer", "minimum": 0 },
-        "total": { "type": "integer", "minimum": 1 }
+        "total": { "type": "integer", "minimum": 1 },
+        "dead_ends": { "type": "integer", "minimum": 0 }
       }
     },
     "integrations": {
       "type": "array",
-      "minItems": 7,
-      "maxItems": 7,
+      "minItems": 9,
+      "maxItems": 9,
       "items": {
         "$ref": "#/definitions/integration"
       }
@@ -40,7 +42,7 @@
   "definitions": {
     "integration": {
       "type": "object",
-      "required": ["name", "source", "purpose", "installed", "configured", "running", "indexed", "used_by_default", "status", "degraded_reason", "evidence"],
+      "required": ["name", "source", "purpose", "installed", "configured", "running", "indexed", "used_by_default", "status", "health", "degraded_reason", "dead_ends", "evidence"],
       "properties": {
         "name": { "type": "string" },
         "source": { "type": "string" },
@@ -52,9 +54,23 @@
         "used_by_default": { "type": "boolean" },
         "status": {
           "type": "string",
-          "enum": ["ok", "warn", "missing"]
+          "enum": ["ok", "warn", "error", "missing"]
+        },
+        "health": {
+          "type": "object",
+          "required": ["basic_available", "default_available", "complete_closed_loop", "dead_ends"],
+          "properties": {
+            "basic_available": { "type": "string", "enum": ["ok", "warn", "error"] },
+            "default_available": { "type": "string", "enum": ["ok", "warn", "error"] },
+            "complete_closed_loop": { "type": "string", "enum": ["ok", "warn", "error"] },
+            "dead_ends": { "type": "string", "enum": ["ok", "warn", "error"] }
+          }
         },
         "degraded_reason": { "type": "string" },
+        "dead_ends": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "evidence": { "type": "object" }
       }
     },

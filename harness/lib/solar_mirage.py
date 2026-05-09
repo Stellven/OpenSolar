@@ -408,7 +408,7 @@ def cmd_doctor(args) -> dict:
     drive = _detect_drive(config)
     qmd = _detect_qmd()
     solar_db = _detect_solar_db()
-    mounts = _build_mounts_status(config)
+    raw_mounts = _build_mounts_status(config)
 
     fuse = {"available": False, "reason": "macOS requires kernel extension; use logical mount mode"}
     try:
@@ -417,14 +417,61 @@ def cmd_doctor(args) -> dict:
     except Exception:
         pass
 
+    # Transform raw mounts to design §2.2 schema: {path, status, type, reason}
+    mounts_v2 = []
+    for m in raw_mounts:
+        mpath = m.get("path", "")
+        ready = m.get("ready", False)
+        src_status = m.get("status", "")  # for gdrive mounts
+        # status: ok | degraded | down
+        if ready:
+            status = "ok"
+        elif src_status in ("warn", "degraded"):
+            status = "degraded"
+        elif m.get("optional", False):
+            status = "degraded"
+        else:
+            status = "down"
+        # type: logical (all current mounts are logical wrapper, not FUSE)
+        mtype = "logical"
+        mounts_v2.append({
+            "path": mpath,
+            "status": status,
+            "type": mtype,
+            "reason": m.get("reason", ""),
+        })
+
+    # drive_status / drive_unblock for design §2.2
+    drive_raw_status = drive.get("status", "missing")
+    if drive_raw_status == "ok":
+        drive_status = "connected"
+        drive_unblock = None
+    elif drive_raw_status in ("degraded", "warn", "missing"):
+        drive_status = "dead_end"
+        drive_unblock = {
+            "env_var": "GOOGLE_DRIVE_REFRESH_TOKEN",
+            "ui_path": "/integrations#drive",
+        }
+    else:
+        drive_status = "disabled"
+        drive_unblock = None
+
+    # sdk_decision: always wrapper_only (macFUSE requires reboot+GUI under SIP)
+    sdk_decision_doc = "reports/mirage-sdk-fuse-decision-2026-05-09.md"
+    sdk_decision_doc_full = str(HOME / ".solar" / sdk_decision_doc)
+
     result = {
         "enabled": True,
         "version": sdk.get("version") or None,
         "sdk": sdk,
         "config": str(CONFIG_PATH) if CONFIG_PATH.exists() else None,
         "fuse": fuse,
-        "mounts": mounts,
+        "mounts": mounts_v2,
         "drive": drive,
+        "drive_status": drive_status,
+        "drive_unblock": drive_unblock,
+        "sdk_decision": "wrapper_only",
+        "sdk_decision_doc": sdk_decision_doc_full,
         "qmd": qmd,
         "solar_db": solar_db,
         "last_probe_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),

@@ -27,8 +27,8 @@ check "generated_at present" "$(python3 -c "import json,sys; d=json.loads(sys.st
 check "summary present" "$(python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print('ok' if 'summary' in d else 'missing')" <<< "$JSON")"
 check "integrations array present" "$(python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print('ok' if isinstance(d.get('integrations'), list) else 'missing')" <<< "$JSON")"
 
-# T3: exactly 7 integrations
-check "exactly 7 integrations" "$(python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print('ok' if len(d['integrations'])==7 else f'got {len(d[\"integrations\"])}')" <<< "$JSON")"
+# T3: exactly 9 integrations (MinerU and QMD are intentionally split)
+check "exactly 9 integrations" "$(python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print('ok' if len(d['integrations'])==9 else f'got {len(d[\"integrations\"])}')" <<< "$JSON")"
 
 # T4: every integration has all 6-state fields
 check "all integrations have 6-state fields" "$(python3 -c "
@@ -43,12 +43,25 @@ print('ok')
 " <<< "$JSON")"
 
 # T5: status enum values
-check "status values are ok/warn/missing" "$(python3 -c "
+check "status values are ok/warn/error/missing" "$(python3 -c "
 import json,sys
 d=json.loads(sys.stdin.read())
-valid={'ok','warn','missing'}
+valid={'ok','warn','error','missing'}
 bad=[it['name'] for it in d['integrations'] if it.get('status') not in valid]
 print('ok' if not bad else f'bad status: {bad}')
+" <<< "$JSON")"
+
+# T5b: every integration has detailed health dimensions
+check "all integrations have detailed health dimensions" "$(python3 -c "
+import json,sys
+d=json.loads(sys.stdin.read())
+required={'basic_available','default_available','complete_closed_loop','dead_ends'}
+for it in d['integrations']:
+    h=it.get('health') or {}
+    missing=required-set(h)
+    if missing:
+        print(f'missing {missing} in {it[\"name\"]}'); sys.exit()
+print('ok')
 " <<< "$JSON")"
 
 # T6: summary counts match integration statuses
@@ -59,11 +72,12 @@ ints=d['integrations']
 sm=d['summary']
 ok_n=sum(1 for i in ints if i['status']=='ok')
 warn_n=sum(1 for i in ints if i['status']=='warn')
+err_n=sum(1 for i in ints if i['status']=='error')
 miss_n=sum(1 for i in ints if i['status']=='missing')
-if sm['ok']==ok_n and sm['warn']==warn_n and sm['missing']==miss_n:
+if sm['ok']==ok_n and sm['warn']==warn_n and sm.get('error',0)==err_n and sm['missing']==miss_n:
     print('ok')
 else:
-    print(f'mismatch: summary={sm} vs computed ok={ok_n} warn={warn_n} miss={miss_n}')
+    print(f'mismatch: summary={sm} vs computed ok={ok_n} warn={warn_n} error={err_n} miss={miss_n}')
 " <<< "$JSON")"
 
 # T7: schema file exists and is valid JSON

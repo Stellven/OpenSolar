@@ -477,7 +477,10 @@ pre.code{{background:#211b12;color:#f8efe0;border-radius:14px;padding:.8rem;font
 def _external_integrations_payload(refresh: bool = False) -> dict:
     if not INTEGRATIONS_HEALTH.exists():
         return {"error": "external integrations probe missing", "path": str(INTEGRATIONS_HEALTH)}
-    cmd = ["python3", str(INTEGRATIONS_HEALTH), "--json"]
+    # The probe can run deep historical upload audits, but the dashboard must
+    # remain responsive. Use cached/fast health by default; explicit refresh is
+    # still local-only and bounded.
+    cmd = ["python3", str(INTEGRATIONS_HEALTH), "--json", "--max-age", "3600"]
     if refresh:
         cmd.append("--refresh")
     try:
@@ -485,7 +488,7 @@ def _external_integrations_payload(refresh: bool = False) -> dict:
             cmd,
             text=True,
             capture_output=True,
-            timeout=130,
+            timeout=12,
         )
     except subprocess.TimeoutExpired:
         return {"error": "external integrations probe timeout", "path": str(INTEGRATIONS_HEALTH)}
@@ -1869,9 +1872,19 @@ function evidenceSummary(item) {
       ' · Vault ' + (v.hits || 0) + '/' + (d.total || 0) +
       ' · Solar DB ' + (s.hits || 0) + '/' + (d.total || 0);
   }
+  if (upload.batch && upload.mode === 'fast_metadata') {
+    return 'latest upload ' + upload.batch + ' · files ' + (upload.total_files || 0) + ' · deep audit skipped for dashboard speed';
+  }
   if (ev.qmd_stats) {
     const qmd = ev.qmd_stats || {};
     return 'QMD indexed ' + (qmd.total || 0) + ' · pending ' + (qmd.pending || 0) + ' · vectors ' + (qmd.vectors || 0);
+  }
+  if (ev.total || ev.vectors || ev.pending !== undefined) {
+    return 'QMD indexed ' + (ev.total || 0) + ' · vectors ' + (ev.vectors || 0) + ' · pending ' + (ev.pending || 0);
+  }
+  if (ev.dispatch_backlog) {
+    const b = ev.dispatch_backlog || {};
+    return 'dispatch backlog unresolved ' + (b.unresolved || 0) + '/' + (b.total || 0);
   }
   if (ev.command) return 'command: ' + ev.command;
   if (ev.version) return 'version: ' + ev.version;
@@ -1894,7 +1907,9 @@ function renderIntegrations(data) {
       '<div class="status-tile"><div class="kv-label">Total</div><strong>' + esc(summary.total || items.length || 0) + '</strong></div>' +
       '<div class="status-tile"><div class="kv-label">OK</div><strong>' + esc(summary.ok || 0) + '</strong></div>' +
       '<div class="status-tile"><div class="kv-label">Warn</div><strong>' + esc(summary.warn || 0) + '</strong></div>' +
+      '<div class="status-tile"><div class="kv-label">Error</div><strong>' + esc(summary.error || 0) + '</strong></div>' +
       '<div class="status-tile"><div class="kv-label">Missing</div><strong>' + esc(summary.missing || 0) + '</strong></div>' +
+      '<div class="status-tile"><div class="kv-label">断头</div><strong>' + esc(summary.dead_ends || 0) + '</strong></div>' +
     '</div>' +
     '<div class="muted">缓存：' + (data.cache && data.cache.hit ? '命中' : '刷新') +
     ' · 探测时间：' + esc(data.generated_at || 'N/A') + '</div>';
@@ -1914,7 +1929,14 @@ function renderIntegrations(data) {
         statePill('索引', !!item.indexed) +
         statePill('默认', !!item.used_by_default) +
       '</div>' +
+      '<div class="state-row">' +
+        statePill('基础可用', item.health && item.health.basic_available !== 'error') +
+        statePill('默认可用', item.health && item.health.default_available === 'ok') +
+        statePill('完整闭环', item.health && item.health.complete_closed_loop === 'ok') +
+        statePill('无断头', item.health && item.health.dead_ends === 'ok') +
+      '</div>' +
       '<div class="integration-reason">' + esc(item.degraded_reason || '可用') + '</div>' +
+      (item.dead_ends && item.dead_ends.length ? '<div class="integration-reason warn">断头：' + esc(item.dead_ends.join(', ')) + '</div>' : '') +
       '<div class="muted" style="margin-top:.7rem">' + esc(evidenceSummary(item)) + '</div>' +
       '<details style="margin-top:.8rem"><summary class="muted">证据</summary><pre class="codebox">' +
       esc(JSON.stringify(item.evidence || {}, null, 2)) + '</pre></details>' +

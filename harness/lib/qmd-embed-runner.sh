@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# qmd-embed-runner.sh — idle-only background embedding runner for solar-wiki.
+# qmd-embed-runner.sh — background embedding runner for solar-wiki.
 
 set -euo pipefail
 
@@ -12,10 +12,38 @@ STATE_DIR="$HARNESS_DIR/state"
 LOCK_DIR="$RUN_DIR/qmd-embed.lockdir"
 STATUS_FILE="$STATE_DIR/qmd-embed-status.json"
 LOG_FILE="$RUN_DIR/qmd-embed.log"
-MIN_IDLE_SEC="${SOLAR_QMD_EMBED_MIN_IDLE_SEC:-900}"
-MAX_LOAD_1M="${SOLAR_QMD_EMBED_MAX_LOAD_1M:-4.0}"
-CHECK_INTERVAL="${SOLAR_QMD_EMBED_CHECK_INTERVAL:-20}"
 FORCE="${SOLAR_QMD_EMBED_FORCE:-0}"
+MODE="${SOLAR_QMD_EMBED_MODE:-gentle}"
+[[ "$FORCE" == "1" ]] && MODE="force"
+
+case "$MODE" in
+  idle)
+    MIN_IDLE_SEC="${SOLAR_QMD_EMBED_MIN_IDLE_SEC:-900}"
+    MAX_LOAD_1M="${SOLAR_QMD_EMBED_MAX_LOAD_1M:-4.0}"
+    CHECK_INTERVAL="${SOLAR_QMD_EMBED_CHECK_INTERVAL:-20}"
+    MAX_RUNTIME_SEC="${SOLAR_QMD_EMBED_MAX_RUNTIME_SEC:-0}"
+    ;;
+  gentle)
+    MIN_IDLE_SEC="${SOLAR_QMD_EMBED_MIN_IDLE_SEC:-0}"
+    MAX_LOAD_1M="${SOLAR_QMD_EMBED_MAX_LOAD_1M:-8.0}"
+    CHECK_INTERVAL="${SOLAR_QMD_EMBED_CHECK_INTERVAL:-15}"
+    MAX_RUNTIME_SEC="${SOLAR_QMD_EMBED_MAX_RUNTIME_SEC:-300}"
+    ;;
+  force)
+    MIN_IDLE_SEC="${SOLAR_QMD_EMBED_MIN_IDLE_SEC:-0}"
+    MAX_LOAD_1M="${SOLAR_QMD_EMBED_MAX_LOAD_1M:-999.0}"
+    CHECK_INTERVAL="${SOLAR_QMD_EMBED_CHECK_INTERVAL:-20}"
+    MAX_RUNTIME_SEC="${SOLAR_QMD_EMBED_MAX_RUNTIME_SEC:-0}"
+    ;;
+  *)
+    MODE="gentle"
+    MIN_IDLE_SEC="${SOLAR_QMD_EMBED_MIN_IDLE_SEC:-0}"
+    MAX_LOAD_1M="${SOLAR_QMD_EMBED_MAX_LOAD_1M:-8.0}"
+    CHECK_INTERVAL="${SOLAR_QMD_EMBED_CHECK_INTERVAL:-15}"
+    MAX_RUNTIME_SEC="${SOLAR_QMD_EMBED_MAX_RUNTIME_SEC:-300}"
+    ;;
+esac
+NICE_LEVEL="${SOLAR_QMD_EMBED_NICE:-15}"
 
 mkdir -p "$RUN_DIR" "$STATE_DIR"
 
@@ -36,7 +64,7 @@ status_json() {
 {
   "state": "$state",
   "collection": "$COLLECTION",
-  "mode": "idle_only",
+  "mode": "$MODE",
   "updated_at": "$ts",
   "pending_before": "${pending_before}",
   "pending_after": "${pending_after}",
@@ -44,6 +72,8 @@ status_json() {
   "min_idle_seconds": "${MIN_IDLE_SEC}",
   "load_1m": "${load_1m}",
   "max_load_1m": "${MAX_LOAD_1M}",
+  "max_runtime_seconds": "${MAX_RUNTIME_SEC}",
+  "nice": "${NICE_LEVEL}",
   "detail": "$(printf '%s' "$detail" | json_escape)",
   "log": "$LOG_FILE"
 }
@@ -67,22 +97,35 @@ float_le() {
   awk -v a="${1:-999}" -v b="${2:-0}" 'BEGIN { exit (a <= b ? 0 : 1) }'
 }
 
-is_idle_enough() {
-  [[ "$FORCE" == "1" ]] && return 0
+can_start() {
+  [[ "$MODE" == "force" ]] && return 0
   local idle load
   idle="$(idle_seconds || true)"
   load="$(load_1m || true)"
   [[ -n "$idle" ]] || idle=0
   [[ -n "$load" ]] || load=999
-  if (( idle < MIN_IDLE_SEC )); then
+  if [[ "$MODE" == "idle" && "$idle" -lt "$MIN_IDLE_SEC" ]]; then
     status_json "idle_wait" "user active; waiting for idle window" "$(pending_count || true)" "" "$idle" "$load"
     return 1
   fi
   if ! float_le "$load" "$MAX_LOAD_1M"; then
-    status_json "idle_wait" "system load too high; waiting for idle window" "$(pending_count || true)" "" "$idle" "$load"
+    status_json "${MODE}_wait" "system load too high; waiting for ${MODE} slot" "$(pending_count || true)" "" "$idle" "$load"
     return 1
   fi
   return 0
+}
+
+can_continue() {
+  [[ "$MODE" == "force" ]] && return 0
+  local idle load
+  idle="$(idle_seconds || true)"
+  load="$(load_1m || true)"
+  [[ -n "$idle" ]] || idle=0
+  [[ -n "$load" ]] || load=999
+  if [[ "$MODE" == "idle" && "$idle" -lt "$MIN_IDLE_SEC" ]]; then
+    return 1
+  fi
+  float_le "$load" "$MAX_LOAD_1M"
 }
 
 if [[ -z "$QMD_BIN" || ! -x "$QMD_BIN" ]]; then
@@ -90,7 +133,7 @@ if [[ -z "$QMD_BIN" || ! -x "$QMD_BIN" ]]; then
   exit 0
 fi
 
-if ! is_idle_enough; then
+if ! can_start; then
   exit 0
 fi
 
@@ -103,22 +146,35 @@ trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT
 before="$(pending_count || true)"
 idle="$(idle_seconds || true)"
 load="$(load_1m || true)"
-status_json "running" "qmd embed started" "$before" "" "$idle" "$load"
+status_json "running" "qmd embed started (${MODE})" "$before" "" "$idle" "$load"
 
 {
-  echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] qmd embed -c $COLLECTION started; pending_before=${before:-N/A}"
-  /usr/bin/nice -n 15 "$QMD_BIN" embed -c "$COLLECTION" &
+  start_epoch="$(date +%s)"
+  echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] qmd embed -c $COLLECTION started; mode=$MODE pending_before=${before:-N/A}"
+  /usr/bin/nice -n "$NICE_LEVEL" "$QMD_BIN" embed -c "$COLLECTION" &
   embed_pid=$!
   while kill -0 "$embed_pid" 2>/dev/null; do
     sleep "$CHECK_INTERVAL"
-    if ! is_idle_enough; then
-      echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] user/system active; stopping qmd embed pid=$embed_pid"
+    now_epoch="$(date +%s)"
+    elapsed=$((now_epoch - start_epoch))
+    if [[ "$MAX_RUNTIME_SEC" != "0" && "$elapsed" -ge "$MAX_RUNTIME_SEC" ]]; then
+      echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] ${MODE} time slice ended; stopping qmd embed pid=$embed_pid elapsed=${elapsed}s"
       kill -TERM "$embed_pid" 2>/dev/null || true
       sleep 3
       kill -KILL "$embed_pid" 2>/dev/null || true
       wait "$embed_pid" 2>/dev/null || true
       after="$(pending_count || true)"
-      status_json "paused" "stopped because machine is no longer idle" "$before" "$after" "$(idle_seconds || true)" "$(load_1m || true)"
+      status_json "paused" "${MODE} time slice ended; will continue next launchd tick" "$before" "$after" "$(idle_seconds || true)" "$(load_1m || true)"
+      exit 0
+    fi
+    if ! can_continue; then
+      echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] ${MODE} guard tripped; stopping qmd embed pid=$embed_pid"
+      kill -TERM "$embed_pid" 2>/dev/null || true
+      sleep 3
+      kill -KILL "$embed_pid" 2>/dev/null || true
+      wait "$embed_pid" 2>/dev/null || true
+      after="$(pending_count || true)"
+      status_json "paused" "stopped because ${MODE} guard tripped" "$before" "$after" "$(idle_seconds || true)" "$(load_1m || true)"
       exit 0
     fi
   done
