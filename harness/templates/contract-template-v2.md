@@ -1,14 +1,19 @@
 ---
 name: {{name}}
 description: {{description}}
+summary: {{summary}}
 triggers: [{{triggers}}]
 ---
 
-# Sprint Contract — {{sprint_id}}
+# Sprint Contract — {{name}} ({{sprint_id}})
 Created: {{created_at}}
 Status: drafting
 Phase: spec
 Project: {{project_dir}}
+
+## Summary
+
+{{summary}}
 
 ## When to Use
 

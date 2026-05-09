@@ -165,6 +165,11 @@ QUEUE_NEXT() {
   done
 }
 
+drafting_has_plan() {
+  local sid="$1"
+  [ -f "$SPRINTS_DIR/$sid.plan.md" ]
+}
+
 # D10: 启动恢复 — flock 后先扫一轮清积压
 ingest_codex_all_files
 
@@ -177,14 +182,22 @@ while true; do
   if [ -z "$ACTIVE" ]; then
     NEXT=$(QUEUE_NEXT)
     if [ -n "$NEXT" ]; then
-      echo "[$(date '+%H:%M:%S')] auto-chain: 起 $NEXT"
+      if ! drafting_has_plan "$NEXT"; then
+        echo "[$(date '+%H:%M:%S')] auto-chain: skip $NEXT (drafting without plan.md; coordinator PM→planner flow owns it)"
+        sleep 60
+        continue
+      fi
+
+      echo "[$(date '+%H:%M:%S')] auto-chain: 起 $NEXT (plan.md ready)"
       python3 -c "
 import json, datetime
 sf='$HOME/.solar/harness/sprints/$NEXT.status.json'
 d=json.load(open(sf))
 d['status']='active'
+d['phase']='planning_complete'
+d['handoff_to']='builder_main'
 d['updated_at']=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-d.setdefault('history',[]).append({'ts':d['updated_at'],'event':'auto_chain','by':'chain-watcher'})
+d.setdefault('history',[]).append({'ts':d['updated_at'],'event':'auto_chain','by':'chain-watcher','note':'plan.md exists; promoted drafting sprint to active'})
 json.dump(d,open(sf,'w'),indent=2)
 "
       sleep 60

@@ -30,7 +30,7 @@ d = json.load(open(sf))
 history = d.get('history', [])
 start_entry = next((h for h in history if h.get('event') in ('auto_chain', 'new_sprint')), None)
 start_ts = start_entry.get('ts', '') if start_entry else d.get('updated_at', '')
-end_ts = datetime.datetime.now(datetime.UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
+end_ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 try:
     dur = (datetime.datetime.fromisoformat(end_ts.replace('Z', '+00:00'))
          - datetime.datetime.fromisoformat(start_ts.replace('Z', '+00:00'))).total_seconds()
@@ -80,7 +80,7 @@ _topology_degrade_check() {
 import json, sys, datetime
 topo, tf, days, min_n = sys.argv[1:]
 days, min_n = int(days), int(min_n)
-cutoff = (datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=days)).isoformat()
+cutoff = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)).isoformat()
 runs = []
 with open(tf) as f:
     for line in f:

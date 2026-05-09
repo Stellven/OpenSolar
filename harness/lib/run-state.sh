@@ -43,7 +43,7 @@ import json, sys, os, tempfile, datetime
 sf, new_status, event, by, extra_json = sys.argv[1:]
 d = json.load(open(sf))
 old_status = d.get('status', '')
-now = datetime.datetime.now(datetime.UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
+now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 d['status'] = new_status
 d['updated_at'] = now
 hist = {'ts': now, 'event': event, 'by': by}
@@ -75,7 +75,7 @@ sf, new_status, event, by, extra_json = sys.argv[1:]
 d = json.load(open(sf))
 old_status = d.get('status', '')
 old_round = d.get('round', 0)
-now = datetime.datetime.now(datetime.UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
+now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 d['status'] = new_status
 d['round'] = old_round + 1
 d['updated_at'] = now
@@ -144,7 +144,7 @@ sf, topology = sys.argv[1:]
 d = json.load(open(sf))
 old = d.get('topology', 'standard')
 d['topology'] = topology
-now = datetime.datetime.now(datetime.UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
+now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 d['updated_at'] = now
 d.setdefault('history', []).append({'ts': now, 'event': 'topology_changed', 'by': 'coordinator', 'old': old, 'new': topology})
 fd, tmp = tempfile.mkstemp(dir=os.path.dirname(sf))
@@ -164,7 +164,7 @@ sf, mode = sys.argv[1:]
 d = json.load(open(sf))
 old = d.get('mode', 'balanced')
 d['mode'] = mode
-now = datetime.datetime.now(datetime.UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
+now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 d['updated_at'] = now
 d.setdefault('history', []).append({'ts': now, 'event': 'mode_changed', 'by': 'coordinator', 'old': old, 'new': mode})
 fd, tmp = tempfile.mkstemp(dir=os.path.dirname(sf))

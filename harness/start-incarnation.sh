@@ -44,7 +44,7 @@ apply_persona_env "$PERSONA"
 # Git worktree 隔离: builder
 WORKTREE_DIR=""
 ORIGINAL_WORK_DIR="$WORK_DIR"
-if [[ "$PERSONA" == "builder" ]]; then
+if [[ "$PERSONA" == "builder" || "$PERSONA" == "lab-builder" || "$PERSONA" == "second-builder" ]]; then
   source "$HARNESS_DIR/lib/worktree.sh"
   WORKTREE_DIR=$(setup_builder_worktree "$WORK_DIR")
   if [[ -n "$WORKTREE_DIR" ]]; then
@@ -63,14 +63,28 @@ echo "════════════════════════�
 echo ""
 
 # Poll 就绪提示符后发送启动 token
-TMUX_PANE="${TMUX_PANE:-}"
+TMUX_PANE="${TMUX_PANE:-$(tmux display-message -p '#{pane_id}' 2>/dev/null || true)}"
 send_ready_token() {
   local pane="$1" token="$2"
   [[ -z "$pane" ]] && return
   local max_attempts=60 attempt=0
+  local bypass_accepted=0
   while (( attempt < max_attempts )); do
     local content
     content=$(tmux capture-pane -t "$pane" -p 2>/dev/null | tail -8)
+    if (( bypass_accepted == 0 )) && echo "$content" | grep -qiE 'Bypass Permissions mode|1\. No, exit|2\. Yes, I accept'; then
+      tmux send-keys -t "$pane" "2" Enter
+      bypass_accepted=1
+      sleep 1
+      ((attempt++))
+      continue
+    fi
+    if echo "$content" | grep -qi 'Detected a custom API key in your environment'; then
+      tmux send-keys -t "$pane" "1" Enter
+      sleep 1
+      ((attempt++))
+      continue
+    fi
     if echo "$content" | grep -qE '(╭──|trust.*folder|Allow.*permission)'; then
       sleep 1
       if [[ -n "$token" ]]; then
@@ -90,9 +104,19 @@ if [[ -n "$TMUX_PANE" ]]; then
 fi
 
 # 构建启动命令
-CLAUDE_CMD="claude --dangerously-skip-permissions"
+CLAUDE_BIN="${SOLAR_CLAUDE_BIN:-/Users/sihaoli/.npm-global/bin/claude}"
+if [[ ! -x "$CLAUDE_BIN" ]]; then
+  CLAUDE_BIN="$(command -v claude)"
+fi
+
+CLAUDE_CMD="$CLAUDE_BIN"
+SOLAR_CLAUDE_BYPASS="${SOLAR_CLAUDE_BYPASS:-1}"
+if [[ "$SOLAR_CLAUDE_BYPASS" == "1" ]]; then
+  CLAUDE_CMD="$CLAUDE_BIN --dangerously-skip-permissions"
+fi
 [[ -n "$MODEL_FLAG" ]] && CLAUDE_CMD="$CLAUDE_CMD $MODEL_FLAG"
 [[ -n "$TOOL_FLAG" ]] && CLAUDE_CMD="$CLAUDE_CMD $TOOL_FLAG"
+[[ -n "${EXTRA_FLAGS:-}" ]] && CLAUDE_CMD="$CLAUDE_CMD $EXTRA_FLAGS"
 
 # 退出信号捕获 → pane-exit.jsonl
 EXIT_LOG="$HARNESS_DIR/logs/pane-exit.jsonl"
@@ -113,7 +137,7 @@ set -e
   python3 -c "
 import json, datetime
 record = {
-    'ts': datetime.datetime.now(datetime.UTC).strftime('%Y-%m-%dT%H:%M:%SZ'),
+    'ts': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
     'pane': '${TMUX_PANE:-}',
     'persona': '${PERSONA}',
     'exit_code': ${CLAUDE_EXIT},

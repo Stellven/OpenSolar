@@ -19,7 +19,10 @@ setup_builder_worktree() {
     return 0
   fi
 
-  local worktree_dir="$work_dir/.worktrees/builder"
+  local slot="${SOLAR_BUILDER_SLOT:-builder}"
+  slot=$(printf '%s' "$slot" | sed 's/[^A-Za-z0-9._-]/-/g')
+  [[ -z "$slot" ]] && slot="builder"
+  local worktree_dir="$work_dir/.worktrees/$slot"
 
   # 复用已有 worktree (watchdog 重启场景)
   if [[ -d "$worktree_dir" ]] && git -C "$work_dir" worktree list 2>/dev/null | grep -q "$worktree_dir"; then
@@ -33,10 +36,10 @@ setup_builder_worktree() {
   fi
 
   # 创建新 worktree
-  local branch="harness-builder-$(date +%Y%m%d-%H%M%S)"
+  local branch="harness-${slot}-$(date +%Y%m%d-%H%M%S)"
   mkdir -p "$(dirname "$worktree_dir")"
 
-  if git -C "$work_dir" worktree add "$worktree_dir" -b "$branch" 2>/dev/null; then
+  if git -C "$work_dir" worktree add "$worktree_dir" -b "$branch" >/dev/null 2>&1; then
     echo "$worktree_dir"
   else
     echo ""

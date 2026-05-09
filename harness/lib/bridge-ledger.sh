@@ -25,7 +25,7 @@ ledger_emit() {
 import json, sys, os, datetime
 
 event, artifact, extra_str, ledger_file = sys.argv[1:]
-ts = datetime.datetime.now(datetime.UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
+ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 entry = {"ts": ts, "event": event, "artifact": artifact}
 try:

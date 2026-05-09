@@ -1,0 +1,672 @@
+#!/usr/bin/env python3
+"""
+solar-autopilot-monitor.py
+
+Detects Solar Harness coordination dead-ends and applies safe default repairs.
+It is intentionally conservative: it does not delete data, call external APIs,
+or spend model tokens. It updates local sprint status/events and can dispatch
+clear instructions to tmux panes when requested.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import subprocess
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+HOME = Path.home()
+HARNESS = HOME / ".solar" / "harness"
+SPRINTS = HARNESS / "sprints"
+EVENTS = HARNESS / "events" / "all.jsonl"
+SESSION = "solar-harness"
+STATE = HARNESS / "state" / "autopilot-state.json"
+LOCK = HARNESS / "run" / "autopilot.lock"
+QUEUE = HARNESS / "run" / "autopilot-queue.jsonl"
+PANE_ASSIGNMENTS = HARNESS / ".pane-assignments"
+PANE_LEASE_DIR = HARNESS / "run" / "pane-leases"
+QUEUE_TTL_SEC = 3600
+
+
+ASK_BOSS_RE = re.compile(r"拍板|要走哪条|你决定|老板.*决定|昊哥拍板|等.*确认|是否.*继续")
+COMPACTING_RE = re.compile(r"Compacting conversation|压缩上下文|Compacting", re.I)
+PROMPT_IDLE_RE = re.compile(r"Press up to edit queued messages|❯\s*$|Try \"", re.M)
+PANE_BUSY_RE = re.compile(r"✳|✶|⏺ Bash|Running|Effecting|Swooping|thinking|Cogitating|Brewed|Working", re.I)
+ACTIVE_STATUSES = {"drafting", "queued", "active", "planning", "approved", "reviewing", "ready_for_review", "needs_human_review", "failed_review"}
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def load_json(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return {}
+
+
+def save_json(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+    tmp.replace(path)
+
+
+def load_state() -> dict:
+    state = load_json(STATE)
+    state.setdefault("pane", {})
+    state.setdefault("actions", {})
+    state.setdefault("target_actions", {})
+    state.setdefault("started_at", utc_now())
+    return state
+
+
+def save_state(state: dict) -> None:
+    state["updated_at"] = utc_now()
+    save_json(STATE, state)
+
+
+def append_event(sid: str, event: str, severity: str = "info", data: dict | None = None) -> None:
+    obj = {
+        "ts": utc_now(),
+        "sprint_id": sid,
+        "actor": "solar-autopilot",
+        "event": event,
+        "severity": severity,
+        "data": data or {},
+    }
+    EVENTS.parent.mkdir(parents=True, exist_ok=True)
+    with EVENTS.open("a") as f:
+        f.write(json.dumps(obj, ensure_ascii=False) + "\n")
+    if sid:
+        with (SPRINTS / f"{sid}.events.jsonl").open("a") as f:
+            f.write(json.dumps(obj, ensure_ascii=False) + "\n")
+
+
+def tmux_capture(target: str) -> str:
+    try:
+        r = subprocess.run(
+            ["tmux", "capture-pane", "-t", target, "-p", "-S", "-80"],
+            capture_output=True,
+            text=True,
+            timeout=1.5,
+        )
+        return r.stdout if r.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
+def tmux_send(target: str, text: str) -> bool:
+    try:
+        r = subprocess.run(["tmux", "send-keys", "-t", target, text, "Enter"], timeout=2)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def pane_safe(target: str) -> str:
+    return target.replace(":", "_").replace(".", "_")
+
+
+def parse_utc(ts: str) -> float:
+    try:
+        return datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
+    except Exception:
+        return 0.0
+
+
+def pane_lease(target: str) -> dict:
+    path = PANE_LEASE_DIR / f"{pane_safe(target)}.json"
+    d = load_json(path)
+    if not d:
+        return {}
+    now = time.time()
+    exp = parse_utc(d.get("expires_at", ""))
+    if exp and exp > now:
+        d["active"] = True
+        d["seconds_left"] = int(exp - now)
+        return d
+    return {}
+
+
+def pane_assignments() -> dict[str, dict]:
+    out: dict[str, dict] = {}
+    if not PANE_ASSIGNMENTS.exists():
+        return out
+    now = time.time()
+    for raw in PANE_ASSIGNMENTS.read_text(errors="ignore").splitlines():
+        line = raw.strip()
+        if not line or "=" not in line:
+            continue
+        pane, rest = line.split("=", 1)
+        parts = rest.rsplit(":", 1)
+        sid = parts[0]
+        ts = float(parts[1]) if len(parts) == 2 and parts[1].isdigit() else 0.0
+        out[pane] = {"sid": sid, "assigned_at": ts, "age_sec": int(now - ts) if ts else None}
+    return out
+
+
+def pane_assignment(target: str) -> dict:
+    return pane_assignments().get(target, {})
+
+
+def enqueue_action(finding: dict, reason: str, detail: dict | None = None) -> None:
+    existing_key = f"{finding.get('sid','')}:{finding.get('type','')}:{finding.get('target','')}"
+    for old in load_queue():
+        old_key = f"{old.get('sid','')}:{old.get('type','')}:{old.get('target','')}"
+        if old_key == existing_key:
+            return
+    QUEUE.parent.mkdir(parents=True, exist_ok=True)
+    item = {
+        "ts": utc_now(),
+        "created_at_epoch": time.time(),
+        "sid": finding.get("sid", ""),
+        "type": finding.get("type", ""),
+        "target": finding.get("target", ""),
+        "message": finding.get("message", ""),
+        "reason": reason,
+        "detail": detail or {},
+        "attempts": int(finding.get("attempts", 0)),
+    }
+    with QUEUE.open("a") as q:
+        q.write(json.dumps(item, ensure_ascii=False) + "\n")
+
+
+def load_queue() -> list[dict]:
+    if not QUEUE.exists():
+        return []
+    items: list[dict] = []
+    for raw in QUEUE.read_text(errors="ignore").splitlines():
+        try:
+            item = json.loads(raw)
+        except Exception:
+            continue
+        if item.get("done") or item.get("expired"):
+            continue
+        items.append(item)
+    return items
+
+
+def save_queue(items: list[dict]) -> None:
+    QUEUE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = QUEUE.with_suffix(".jsonl.tmp")
+    with tmp.open("w") as f:
+        for item in items:
+            f.write(json.dumps(item, ensure_ascii=False) + "\n")
+    tmp.replace(QUEUE)
+
+
+def retry_queue(state: dict, dispatch: bool, cooldown: int) -> list[dict]:
+    now_epoch = time.time()
+    retained: list[dict] = []
+    actions: list[dict] = []
+    for item in load_queue():
+        sid = item.get("sid", "")
+        target = item.get("target", "")
+        age = now_epoch - float(item.get("created_at_epoch", now_epoch))
+        if age > QUEUE_TTL_SEC:
+            append_event(sid, "autopilot_queue_expired", "warn", {"target": target, "type": item.get("type"), "age_sec": int(age)})
+            actions.append({"sid": sid, "action": item.get("type"), "expired": True, "target": target})
+            continue
+        if target_recently_dispatched(state, target, cooldown):
+            retained.append(item)
+            actions.append({"sid": sid, "action": item.get("type"), "queued": True, "reason": "target_cooldown", "target": target})
+            continue
+        allowed, gate_reason, gate_detail = pane_gate(target, sid)
+        if not allowed:
+            item["reason"] = gate_reason
+            item["detail"] = gate_detail
+            retained.append(item)
+            actions.append({"sid": sid, "action": item.get("type"), "queued": True, "reason": gate_reason, "target": target})
+            continue
+        if pane_is_busy(target):
+            item["reason"] = "pane_busy"
+            retained.append(item)
+            actions.append({"sid": sid, "action": item.get("type"), "queued": True, "reason": "pane_busy", "target": target})
+            continue
+        sent = False
+        if dispatch and sid:
+            sent = wake_sid(sid)
+        elif dispatch and target and item.get("message"):
+            sent = tmux_send(target, item["message"])
+        item["attempts"] = int(item.get("attempts", 0)) + 1
+        if sent:
+            append_event(sid, "autopilot_queue_dispatched", "info", {"target": target, "type": item.get("type"), "attempts": item["attempts"]})
+            result = {"sid": sid, "action": item.get("type"), "dispatched_from_queue": True, "target": target}
+            mark_action(state, {"sid": sid, "type": item.get("type", ""), "target": target}, result)
+            actions.append(result)
+        else:
+            item["reason"] = "dispatch_failed"
+            retained.append(item)
+            append_event(sid, "autopilot_queue_dispatch_failed", "warn", {"target": target, "type": item.get("type"), "attempts": item["attempts"]})
+            actions.append({"sid": sid, "action": item.get("type"), "queued": True, "reason": "dispatch_failed", "target": target})
+    save_queue(retained)
+    return actions
+
+
+def pane_gate(target: str, sid: str) -> tuple[bool, str, dict]:
+    lease = pane_lease(target)
+    if lease and lease.get("sid") != sid:
+        return False, "pane_leased", lease
+    assignment = pane_assignment(target)
+    if assignment and assignment.get("sid") != sid:
+        age = assignment.get("age_sec")
+        if age is None or age < 1800:
+            return False, "pane_assigned", assignment
+    return True, "ok", {"lease": lease, "assignment": assignment}
+
+
+def wake_sid(sid: str) -> bool:
+    try:
+        r = subprocess.run(
+            [str(HOME / ".solar" / "bin" / "solar-harness"), "wake", sid],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def pane_is_busy(target: str) -> bool:
+    tail = tmux_capture(target)
+    return bool(PANE_BUSY_RE.search(tail)) and not bool(PROMPT_IDLE_RE.search(tail))
+
+
+def sprint_files(sid: str) -> dict[str, bool]:
+    return {
+        "status": (SPRINTS / f"{sid}.status.json").exists(),
+        "prd": (SPRINTS / f"{sid}.prd.md").exists(),
+        "contract": (SPRINTS / f"{sid}.contract.md").exists(),
+        "plan": (SPRINTS / f"{sid}.plan.md").exists(),
+        "handoff": (SPRINTS / f"{sid}.handoff.md").exists(),
+        "eval": (SPRINTS / f"{sid}.eval.md").exists() or (SPRINTS / f"{sid}.eval.json").exists(),
+    }
+
+
+def artifact_signature(sid: str) -> dict:
+    names = ["status.json", "prd.md", "contract.md", "design.md", "plan.md", "handoff.md", "eval.md", "eval.json", "events.jsonl"]
+    items = {}
+    max_mtime = 0.0
+    for suffix in names:
+        path = SPRINTS / f"{sid}.{suffix}"
+        if not path.exists():
+            continue
+        st = path.stat()
+        max_mtime = max(max_mtime, st.st_mtime)
+        items[suffix] = {"mtime": int(st.st_mtime), "size": st.st_size}
+    return {"items": items, "max_mtime": int(max_mtime)}
+
+
+def tail_hash(text: str) -> str:
+    return hashlib.sha1(text.encode("utf-8", errors="ignore")).hexdigest()[:16]
+
+
+def active_statuses() -> list[dict]:
+    rows = []
+    for path in sorted(SPRINTS.glob("sprint-*.status.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        d = load_json(path)
+        sid = d.get("sprint_id") or d.get("id") or path.name.removesuffix(".status.json")
+        if d.get("status") in ACTIVE_STATUSES:
+            d["_sid"] = sid
+            d["_mtime"] = path.stat().st_mtime
+            rows.append(d)
+    return rows
+
+
+def candidate_sid_for_role(role: str) -> str:
+    for st in active_statuses():
+        handoff = st.get("handoff_to", "")
+        phase = st.get("phase", "")
+        sid = st.get("_sid", "")
+        if role == "planner" and (handoff == "planner" or phase == "prd_ready"):
+            return sid
+        if role == "builder" and handoff in ("builder", "builder_main", "builder_parallel", "builder-lab"):
+            return sid
+        if role == "evaluator" and handoff in ("evaluator", "reviewer"):
+            return sid
+        if role == "pm" and handoff in ("pm", "") and st.get("status") in ("drafting", "queued"):
+            return sid
+    return ""
+
+
+def pane_target_for_handoff(handoff: str) -> str:
+    if handoff in ("planner", "architect"):
+        return f"{SESSION}:0.1"
+    if handoff in ("builder", "builder_main", "builder_parallel", "builder-lab"):
+        return f"{SESSION}:0.2"
+    if handoff in ("evaluator", "reviewer"):
+        return f"{SESSION}:0.3"
+    return f"{SESSION}:0.0"
+
+
+def instruction_for(status: dict, files: dict[str, bool]) -> str:
+    sid = status.get("sprint_id") or status.get("id") or ""
+    handoff = status.get("handoff_to", "")
+    if handoff == "planner" and files["prd"] and not files["plan"]:
+        return (
+            f"请接手 {sid}：读取 .prd.md 和 .contract.md，产出 {sid}.plan.md。"
+            "不要问用户拍板；这是 P0 reliability 默认推进。"
+        )
+    if handoff in ("builder", "builder_main", "builder_parallel", "builder-lab") and files["plan"] and not files["handoff"]:
+        return (
+            f"请接手 {sid}：按 plan/contract 实现并写 {sid}.handoff.md。"
+            "先跑验收命令，缺口写清楚。"
+        )
+    if handoff in ("evaluator", "reviewer") and files["handoff"] and not files["eval"]:
+        return f"请评审 {sid}：读取 handoff/contract，产出 eval.md/eval.json。"
+    return ""
+
+
+def inspect_sprints() -> list[dict]:
+    raw_findings = []
+    for path in sorted(SPRINTS.glob("sprint-*.status.json")):
+        status = load_json(path)
+        sid = status.get("sprint_id") or status.get("id") or path.name.removesuffix(".status.json")
+        files = sprint_files(sid)
+        st = status.get("status", "")
+        phase = status.get("phase", "")
+        handoff = status.get("handoff_to", "")
+        priority = status.get("priority", "")
+
+        if priority == "P0" and files["contract"] and not files["prd"]:
+            raw_findings.append(
+                {
+                    "sid": sid,
+                    "type": "missing_prd",
+                    "severity": "warn",
+                    "safe_default": "write_prd_or_escalate_to_codex_pm",
+                    "message": "P0 has contract/evidence but no PRD.",
+                }
+            )
+        if files["prd"] and handoff == "planner" and not files["plan"]:
+            raw_findings.append(
+                {
+                    "sid": sid,
+                    "type": "ready_for_planner",
+                    "severity": "info",
+                    "target": pane_target_for_handoff(handoff),
+                    "message": instruction_for(status, files),
+                }
+            )
+        if files["plan"] and handoff in ("builder", "builder_main", "builder_parallel", "builder-lab") and not files["handoff"]:
+            raw_findings.append(
+                {
+                    "sid": sid,
+                    "type": "ready_for_builder",
+                    "severity": "info",
+                    "target": pane_target_for_handoff(handoff),
+                    "message": instruction_for(status, files),
+                }
+            )
+        if st in ("active", "approved", "reviewing") and phase and not files["plan"] and not files["handoff"] and handoff in ("builder", "builder_main", "builder_parallel", "builder-lab"):
+            raw_findings.append(
+                {
+                    "sid": sid,
+                    "type": "active_without_handoff",
+                    "severity": "warn",
+                    "target": pane_target_for_handoff(handoff),
+                    "message": instruction_for(status, files),
+                }
+            )
+        if files["handoff"] and handoff in ("evaluator", "reviewer") and not files["eval"]:
+            raw_findings.append(
+                {
+                    "sid": sid,
+                    "type": "ready_for_evaluator",
+                    "severity": "info",
+                    "target": pane_target_for_handoff(handoff),
+                    "message": instruction_for(status, files),
+                }
+            )
+    p0 = [f for f in raw_findings if load_json(SPRINTS / f"{f.get('sid')}.status.json").get("priority") == "P0"]
+    return p0 or raw_findings
+
+
+def inspect_panes(state: dict, stall_seconds: int) -> list[dict]:
+    findings = []
+    now_epoch = time.time()
+    for idx, role in enumerate(("pm", "planner", "builder", "evaluator")):
+        target = f"{SESSION}:0.{idx}"
+        tail = tmux_capture(target)
+        h = tail_hash(tail)
+        prev = state["pane"].get(target, {})
+        changed = h != prev.get("hash")
+        unchanged_for = 0 if changed else int(now_epoch - float(prev.get("seen_at", now_epoch)))
+        if changed:
+            state["pane"][target] = {"hash": h, "seen_at": now_epoch, "role": role}
+        if ASK_BOSS_RE.search(tail):
+            sid = candidate_sid_for_role(role)
+            if sid:
+                findings.append(
+                    {
+                        "sid": sid,
+                        "type": "pane_asks_boss",
+                        "severity": "warn",
+                        "target": target,
+                        "role": role,
+                        "message": "不要等待用户拍板；按当前 sprint 合约和 safe default 继续推进。若需要交接，请写明 artifact 并更新 status.json。",
+                    }
+                )
+        if COMPACTING_RE.search(tail) and unchanged_for >= stall_seconds:
+            sid = candidate_sid_for_role(role)
+            if sid:
+                findings.append(
+                    {
+                        "sid": sid,
+                        "type": "pane_compacting_stall",
+                        "severity": "warn",
+                        "target": target,
+                        "role": role,
+                        "unchanged_for_sec": unchanged_for,
+                        "message": f"{role} pane compacting/stalled; re-wake sprint {sid} to continue missing artifact work.",
+                    }
+                )
+        if PROMPT_IDLE_RE.search(tail):
+            sid = candidate_sid_for_role(role)
+            if sid:
+                status = load_json(SPRINTS / f"{sid}.status.json")
+                files = sprint_files(sid)
+                msg = instruction_for(status, files)
+                if msg:
+                    findings.append(
+                        {
+                            "sid": sid,
+                            "type": "pane_idle_with_pending_artifact",
+                            "severity": "info",
+                            "target": target,
+                            "role": role,
+                            "message": msg,
+                        }
+                    )
+    return findings
+
+
+def should_act(state: dict, finding: dict, cooldown: int) -> bool:
+    key = f"{finding.get('sid','')}:{finding.get('type','')}:{finding.get('target','')}"
+    last = float(state["actions"].get(key, {}).get("at", 0))
+    return (time.time() - last) >= cooldown
+
+
+def mark_action(state: dict, finding: dict, result: dict) -> None:
+    key = f"{finding.get('sid','')}:{finding.get('type','')}:{finding.get('target','')}"
+    state["actions"][key] = {"at": time.time(), "ts": utc_now(), "result": result}
+    target = finding.get("target", "")
+    if target and result.get("dispatched"):
+        state["target_actions"][target] = {"at": time.time(), "ts": utc_now(), "result": result}
+
+
+def target_recently_dispatched(state: dict, target: str, cooldown: int) -> bool:
+    if not target:
+        return False
+    last = float(state.get("target_actions", {}).get(target, {}).get("at", 0))
+    return (time.time() - last) < cooldown
+
+
+def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: int) -> list[dict]:
+    actions = []
+    used_targets = set()
+    for f in findings:
+        sid = f.get("sid", "")
+        ftype = f.get("type", "")
+        target = f.get("target", "")
+        if target and target in used_targets:
+            actions.append({"sid": sid, "action": ftype, "skipped": "target_already_used_this_scan", "target": target})
+            continue
+        if not should_act(state, f, cooldown):
+            actions.append({"sid": sid, "action": ftype, "skipped": "cooldown", "target": target})
+            continue
+        if target_recently_dispatched(state, target, cooldown):
+            actions.append({"sid": sid, "action": ftype, "skipped": "target_cooldown", "target": target})
+            continue
+        if dispatch and target:
+            allowed, gate_reason, gate_detail = pane_gate(target, sid)
+            if not allowed:
+                enqueue_action(f, gate_reason, gate_detail)
+                append_event(sid, "autopilot_dispatch_queued_pane_occupied", "warn", {"target": target, "type": ftype, "reason": gate_reason, "detail": gate_detail})
+                result = {"sid": sid, "action": ftype, "queued": True, "reason": gate_reason, "target": target}
+                mark_action(state, f, result)
+                actions.append(result)
+                continue
+        if dispatch and target and pane_is_busy(target):
+            append_event(sid, "autopilot_dispatch_deferred_pane_busy", "warn", {"target": target, "type": ftype})
+            enqueue_action(f, "pane_busy", {})
+            result = {"sid": sid, "action": ftype, "skipped": "pane_busy", "target": target}
+            mark_action(state, f, result)
+            actions.append(result)
+            continue
+        if ftype in ("ready_for_planner", "ready_for_builder", "ready_for_evaluator", "active_without_handoff", "pane_compacting_stall", "pane_idle_with_pending_artifact"):
+            status_path = SPRINTS / f"{sid}.status.json"
+            status = load_json(status_path)
+            hist = status.setdefault("history", [])
+            hist.append(
+                {
+                    "ts": utc_now(),
+                    "event": f"autopilot_{ftype}",
+                    "by": "solar-autopilot",
+                    "note": f.get("message", ""),
+                }
+            )
+            status["updated_at"] = utc_now()
+            if ftype == "ready_for_planner":
+                status["phase"] = "spec"
+            save_json(status_path, status)
+            append_event(sid, f"autopilot_{ftype}", f.get("severity", "info"), {"target": f.get("target", "")})
+            sent = False
+            if dispatch and sid:
+                sent = wake_sid(sid)
+            elif dispatch and f.get("message") and f.get("target"):
+                sent = tmux_send(f["target"], f["message"])
+            result = {"sid": sid, "action": ftype, "dispatched": sent, "target": f.get("target", "")}
+            if sent and target:
+                used_targets.add(target)
+            mark_action(state, f, result)
+            actions.append(result)
+        elif ftype == "pane_asks_boss":
+            append_event("", "autopilot_detected_boss_question", "warn", f)
+            sent = False
+            if dispatch and sid:
+                sent = wake_sid(sid)
+            elif dispatch and f.get("target"):
+                sent = tmux_send(f["target"], f.get("message", "不要等待用户拍板；按 safe default 继续。"))
+            result = {"sid": sid, "action": ftype, "target": f.get("target", ""), "dispatched": sent}
+            if sent and target:
+                used_targets.add(target)
+            mark_action(state, f, result)
+            actions.append(result)
+        elif ftype == "missing_prd":
+            append_event(sid, "autopilot_missing_prd", "warn", f)
+            result = {"sid": sid, "action": ftype, "requires_codex_pm": True}
+            mark_action(state, f, result)
+            actions.append(result)
+    return actions
+
+
+def acquire_lock() -> bool:
+    LOCK.parent.mkdir(parents=True, exist_ok=True)
+    if LOCK.exists():
+        try:
+            old = int(LOCK.read_text().strip() or "0")
+            subprocess.run(["kill", "-0", str(old)], capture_output=True, timeout=1, check=True)
+            return False
+        except Exception:
+            pass
+    LOCK.write_text(str(os.getpid()))
+    return True
+
+
+def release_lock() -> None:
+    try:
+        if LOCK.exists() and LOCK.read_text().strip() == str(os.getpid()):
+            LOCK.unlink()
+    except Exception:
+        pass
+
+
+def scan_once(args: argparse.Namespace, state: dict) -> dict:
+    queue_actions = retry_queue(state, args.dispatch, args.cooldown) if args.apply else []
+    findings = inspect_sprints() + inspect_panes(state, args.stall_seconds)
+    actions = apply_findings(findings, args.dispatch, state, args.cooldown) if args.apply else []
+    payload = {
+        "ok": True,
+        "apply": args.apply,
+        "dispatch": args.dispatch,
+        "loop": args.loop,
+        "findings": findings,
+        "actions": queue_actions + actions,
+        "queue_actions": queue_actions,
+        "queue_depth": len(load_queue()),
+        "state_path": str(STATE),
+    }
+    save_state(state)
+    return payload
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--dispatch", action="store_true")
+    parser.add_argument("--loop", action="store_true", help="run continuously")
+    parser.add_argument("--interval", type=int, default=60)
+    parser.add_argument("--max-iterations", type=int, default=0, help="0 means forever")
+    parser.add_argument("--cooldown", type=int, default=300, help="seconds between repeated actions for same finding")
+    parser.add_argument("--stall-seconds", type=int, default=180, help="pane unchanged seconds before compact/stall recovery")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args()
+
+    if args.loop and not acquire_lock():
+        payload = {"ok": False, "error": "autopilot already running", "lock": str(LOCK)}
+        print(json.dumps(payload, ensure_ascii=False, indent=2) if args.json else payload["error"])
+        return 1
+
+    state = load_state()
+    iterations = 0
+    try:
+        while True:
+            payload = scan_once(args, state)
+            if args.json:
+                print(json.dumps(payload, ensure_ascii=False, indent=2), flush=True)
+            else:
+                print(f"findings={len(payload['findings'])} actions={len(payload['actions'])}", flush=True)
+                for f in payload["findings"]:
+                    print(f"- {f.get('severity')} {f.get('type')} {f.get('sid')} {f.get('target','')}", flush=True)
+            iterations += 1
+            if not args.loop or (args.max_iterations and iterations >= args.max_iterations):
+                break
+            time.sleep(max(5, args.interval))
+    finally:
+        if args.loop:
+            release_lock()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

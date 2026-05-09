@@ -23,6 +23,35 @@
 - [x] 结构化 Agent 输出 (validate.sh schema 校验)
 - [x] 自动检查点 (git tag checkpoint/{sid}/{status}/{time})
 
+### P3 — Symphony 集成 (Sprint 3, 2026-05-07)
+- [x] 结构化事件流 `events/all.jsonl` (schema v1, `lib/events.sh` `emit_event()` API)
+- [x] HTTP 状态面板 port 8765 (`lib/symphony/status-server.py`, 5s 自刷新)
+- [x] coordinator 路由 bug 修复 (regex 锚定 + env override + 诊断日志)
+- [x] workspace-manager / runner / hooks 统一接入 emit_event
+
+### HTTP 状态面板快速上手
+
+```bash
+# 启动
+solar-harness status-server start
+# → Dashboard: http://127.0.0.1:8765/
+
+# 健康检查
+curl http://127.0.0.1:8765/healthz   # → ok
+
+# 当前 Sprint 状态 (JSON)
+curl http://127.0.0.1:8765/status | python3 -m json.tool
+
+# 最近 20 条事件
+curl "http://127.0.0.1:8765/events?limit=20" | python3 -m json.tool
+
+# 按 Sprint 过滤事件
+curl "http://127.0.0.1:8765/events?sprint_id=sprint-20260507-symphony3&limit=50"
+
+# 停止
+solar-harness status-server stop
+```
+
 ## 待评估
 - [ ] Agent 间消息协议 — 协调器已覆盖 80%，等真实使用暴露需求
 - [ ] Task 依赖 DAG — 等需要并行多任务时实现

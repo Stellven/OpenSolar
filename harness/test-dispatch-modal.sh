@@ -101,7 +101,7 @@ else
 fi
 
 # ── 测试 4: coordinator.sh 中包含 D3 代码 ──
-D3_COUNT=$(grep -c "pane 模态预解锁" ~/.solar/harness/coordinator.sh 2>/dev/null || true)
+D3_COUNT=$(grep -c "pane 预解锁序列" ~/.solar/harness/coordinator.sh 2>/dev/null || true)
 if [[ "$D3_COUNT" -ge 1 ]]; then
   echo "PASS: coordinator.sh 包含 D3 预解锁代码"
 else
@@ -109,7 +109,7 @@ else
   FAILS=$((FAILS + 1))
 fi
 
-D3_VERIFY=$(grep -c "派发后验证" ~/.solar/harness/coordinator.sh 2>/dev/null || true)
+D3_VERIFY=$(grep -c "keyword+processing" ~/.solar/harness/coordinator.sh 2>/dev/null || true)
 if [[ "$D3_VERIFY" -ge 1 ]]; then
   echo "PASS: coordinator.sh 包含派发后验证代码"
 else
