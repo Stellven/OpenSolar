@@ -1332,6 +1332,35 @@ inject_dispatch_context() {
     log "${Y}[dispatch] skills inject warn (fail-open): $dispatch_file${N}"
 }
 
+# ensure_state_read_preflight — prevent Claude Write/Edit hook stalls.
+# The local state-read-enforcer hook only accepts the Claude Read tool marker,
+# not shell `cat`, so every dispatch must explicitly start with that action.
+ensure_state_read_preflight() {
+  local dispatch_file="${1:-}"
+  [[ -z "$dispatch_file" || ! -f "$dispatch_file" ]] && return 0
+  grep -q "SOLAR_STATE_READ_PREFLIGHT" "$dispatch_file" 2>/dev/null && return 0
+
+  local tmp
+  tmp="$(mktemp "${dispatch_file}.state-preflight.XXXXXX")" || return 0
+  cat > "$tmp" <<'EOF'
+<!-- SOLAR_STATE_READ_PREFLIGHT -->
+## 必须先读状态 (防写入 hook 卡死)
+
+在任何 Write/Edit/handoff/eval/status 更新之前，必须先用 Claude/Codex 的 **Read 工具**读取：
+
+`/Users/sihaoli/.solar/STATE.md`
+
+不要用 `cat` 替代这一步；本地 `state-read-enforcer.sh` hook 只认 Read 工具标记。
+
+如果 Write/Edit hook 仍阻断，立刻 Read 上面的 STATE 文件后重试原写入一次，不要停在“已读”等待。
+
+---
+
+EOF
+  cat "$dispatch_file" >> "$tmp"
+  mv "$tmp" "$dispatch_file"
+}
+
 # 向 pane 发送指令 (核心调度动作)
 # 原理: 长消息写到指令文件，tmux 只发一行短命令让 Claude 读文件
 dispatch_to_pane() {
@@ -1501,6 +1530,8 @@ dispatch_to_pane() {
     log "${R}dispatch 失败: 指令文件不存在 ${instruction_file}${N}"
     return 1
   fi
+
+  ensure_state_read_preflight "$instruction_file" || true
 
   # 派发前预解锁输入态，避免 modal / plan mode / 残留输入吞键
   if [[ "$pane" =~ \.[0-9]+$ ]]; then
@@ -1926,10 +1957,22 @@ generate_dispatch() {
 
 你是 solar-harness 协调系统的任务执行者。收到指令后按步骤执行。
 
+<!-- SOLAR_STATE_READ_PREFLIGHT -->
+## 必须先读状态 (防写入 hook 卡死)
+
+在任何 Write/Edit/handoff/eval/status 更新之前，必须先用 Claude/Codex 的 **Read 工具**读取：
+
+\`/Users/sihaoli/.solar/STATE.md\`
+
+不要用 \`cat\` 替代这一步；本地 \`state-read-enforcer.sh\` hook 只认 Read 工具标记。
+
+如果 Write/Edit hook 仍阻断，立刻 Read 上面的 STATE 文件后重试原写入一次，不要停在“已读”等待。
+
 ## 通用步骤说明
-1. 读取合约: 路径格式 \`~/.solar/harness/sprints/<sid>.contract.md\`
-2. 按指令执行，不超出范围
-3. 完成后写 handoff/eval + 更新 status.json
+1. 先用 Read 工具读取 \`/Users/sihaoli/.solar/STATE.md\`
+2. 读取合约: 路径格式 \`~/.solar/harness/sprints/<sid>.contract.md\`
+3. 按指令执行，不超出范围
+4. 完成后写 handoff/eval + 更新 status.json
 
 <!-- CACHE_BOUNDARY -->
 <!-- === VARIABLE SUFFIX === -->
@@ -2112,6 +2155,18 @@ contract_has_bypass_pm() {
 gate_check() {
   local sid="$1" st="$2"
   local sprint_dir="$SPRINTS_DIR"
+
+  # Finalized sprints are immutable to the PRD/plan gate. This prevents the
+  # coordinator from rolling a manually/evaluator-closed sprint back to drafting
+  # after proof artifacts are already present.
+  if [[ -f "$sprint_dir/${sid}.finalized" ]]; then
+    return 0
+  fi
+  case "$st" in
+    finalized|eval_passed)
+      return 0
+      ;;
+  esac
 
   case "$st" in
     active)

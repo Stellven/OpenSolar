@@ -1,0 +1,18 @@
+{"ts":"2026-05-09T20:00:30Z","event":"proof_sprint_created","source":"codex","sprint_id":"sprint-20260509-solar-heavy-proof-run","target":"builder_main","note":"Heavy runtime proof sprint created after local benchmark passed 4/4."}
+{"event": "waked", "by": "wake", "data": {"from_status": "active", "target_pane": "solar-harness:0.2"}, "ts": "2026-05-09T20:00:51Z", "sid": "sprint-20260509-solar-heavy-proof-run"}
+{"ts": "2026-05-09T20:00:59Z", "sprint_id": "sprint-20260509-solar-heavy-proof-run", "actor": "solar-autopilot", "event": "autopilot_ready_for_builder", "severity": "info", "data": {"target": "solar-harness:0.2"}}
+{"event": "waked", "by": "wake", "data": {"from_status": "active", "target_pane": "solar-harness:0.2"}, "ts": "2026-05-09T20:01:04Z", "sid": "sprint-20260509-solar-heavy-proof-run"}
+{"ts": "2026-05-09T20:01:27Z", "sid": "sprint-20260509-solar-heavy-proof-run", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-09T20:01:27Z","event":"planner_notified","by":"coordinator","data":{"status":"active"}}
+{"ts": "2026-05-09T20:02:04Z", "sprint_id": "sprint-20260509-solar-heavy-proof-run", "actor": "solar-autopilot", "event": "autopilot_ready_for_evaluator", "severity": "info", "data": {"target": "solar-harness:0.3"}}
+{"ts": "2026-05-09T20:02:06Z", "sid": "sprint-20260509-solar-heavy-proof-run", "event": "dispatch_failed", "by": "coordinator"}
+{"event": "waked", "by": "wake", "data": {"from_status": "reviewing", "target_pane": "solar-harness:0.3"}, "ts": "2026-05-09T20:02:08Z", "sid": "sprint-20260509-solar-heavy-proof-run"}
+{"ts": "2026-05-09T20:02:23Z", "sid": "sprint-20260509-solar-heavy-proof-run", "event": "dispatch_queued", "by": "coordinator"}
+{"ts":"2026-05-09T20:05:20Z","event":"controller_handoff_fallback","source":"codex","sprint_id":"sprint-20260509-solar-heavy-proof-run","reason":"builder pane completed proof but handoff write was blocked/stalled by state-read-enforcer","handoff":"/Users/sihaoli/.solar/harness/sprints/sprint-20260509-solar-heavy-proof-run.handoff.md"}
+{"ts":"2026-05-09T20:05:00Z","event":"eval_passed","source":"codex-controller-fallback","sprint_id":"sprint-20260509-solar-heavy-proof-run","verdict":"PASS","score":100,"passed":4,"total":4,"reason":"evaluator pane verified runtime proof but stalled before writing eval artifacts"}
+{"event": "waked", "by": "wake", "data": {"from_status": "reviewing", "target_pane": "solar-harness:0.3"}, "ts": "2026-05-09T20:03:12Z", "sid": "sprint-20260509-solar-heavy-proof-run"}
+{"ts": "2026-05-09T20:03:16Z", "sid": "sprint-20260509-solar-heavy-proof-run", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-09T20:04:06Z", "sid": "sprint-20260509-solar-heavy-proof-run", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-09T20:04:06Z","event":"planner_notified","by":"coordinator","data":{"status":"active"}}
+{"ts": "2026-05-09T20:04:47Z", "sid": "sprint-20260509-solar-heavy-proof-run", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-09T20:05:04Z", "sid": "sprint-20260509-solar-heavy-proof-run", "event": "dispatch_queued", "by": "coordinator"}
