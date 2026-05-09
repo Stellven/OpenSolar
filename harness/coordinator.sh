@@ -478,8 +478,6 @@ role_candidate_panes() {
 
 choose_available_role_pane() {
   local role="$1" sid="$2" pane
-  local candidates
-  candidates="$(role_candidate_panes "$role" 2>/dev/null || true)"
   while IFS= read -r pane; do
     [[ -n "$pane" ]] || continue
     pane_target_exists "$pane" || continue
@@ -493,7 +491,7 @@ choose_available_role_pane() {
     fi
     echo "$pane"
     return 0
-  done <<< "$candidates"
+  done < <(role_candidate_panes "$role" 2>/dev/null || true)
   return 1
 }
 
@@ -501,8 +499,6 @@ dispatch_to_role() {
   local role="$1" sid="$2" intent="${3:-${role}_dispatch}" instruction_file="${4:-$SPRINTS_DIR/${sid}.dispatch.md}"
   local message="${5:-}"
   local pane tried=0 last_rc=0
-  local candidates
-  candidates="$(role_candidate_panes "$role" 2>/dev/null || true)"
   while IFS= read -r pane; do
     [[ -n "$pane" ]] || continue
     pane_target_exists "$pane" || continue
@@ -522,7 +518,7 @@ dispatch_to_role() {
       return 0
     fi
     log "${Y}[worker-select] ${role} target=${pane} dispatch rc=${last_rc}; trying next candidate${N}"
-  done <<< "$candidates"
+  done < <(role_candidate_panes "$role" 2>/dev/null || true)
 
   local q_result="unavailable"
   if type queue_enqueue &>/dev/null; then
@@ -3553,6 +3549,16 @@ else:
   # D3: history — finalized
   append_history "$sf" "finalized" "coordinator"
   log "finalized: $sid"
+
+  # sprint-20260508-accepted-artifact-knowledge D4: async accepted artifact export (fail-open)
+  (
+    _aae="$HARNESS_DIR/lib/accepted-artifact-export.py"
+    if [[ -f "$_aae" ]]; then
+      mkdir -p "$HARNESS_DIR/logs"
+      python3 "$_aae" export --sid "$sid" 2>&1 | \
+        head -40 >> "$HARNESS_DIR/logs/accepted-artifact-export.log" || true
+    fi
+  ) &
 }
 
 # D5: needs_human_review 处理
