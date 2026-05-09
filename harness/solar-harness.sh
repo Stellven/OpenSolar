@@ -1559,8 +1559,8 @@ do_main_status() {
 
     if tmux display-message -p -t "$pane" '#{pane_id}' >/dev/null 2>&1; then
       title=$(tmux display-message -p -t "$pane" '#{pane_title}' 2>/dev/null || echo "N/A")
-      tail=$(tmux capture-pane -t "$pane" -p -S -8 2>/dev/null | tail -8 || true)
-      if printf '%s\n' "$tail" | grep -qiE 'Generating|thinking|Reading|Bash|Write|Edit|Inferring|Hatching|Whirlpooling|Enchanting|Meandering|Philosophising'; then
+      tail=$(tmux capture-pane -t "$pane" -p -S -40 2>/dev/null | tail -40 || true)
+      if printf '%s\n' "$tail" | grep -qiE 'Generating|thinking|Thinking|Hmm|Reading|Bash|Write|Edit|Update|Inferring|Hatching|Whirlpooling|Enchanting|Meandering|Philosophising|Brewing|Baking|Calculating|Percolating|Marinating|Befuddling|Compacting conversation|Press up to edit queued messages'; then
         runtime="active"
       else
         runtime="idle"
@@ -1623,8 +1623,8 @@ do_lab_status() {
     latest_ts="N/A"
     if tmux display-message -p -t "$pane" '#{pane_id}' >/dev/null 2>&1; then
       title=$(tmux display-message -p -t "$pane" '#{pane_title}' 2>/dev/null || echo "N/A")
-      tail=$(tmux capture-pane -t "$pane" -p -S -8 2>/dev/null | tail -8 || true)
-      if printf '%s\n' "$tail" | grep -qiE 'Generating|thinking|Reading|Bash|Write|Edit|Inferring|Hatching|Whirlpooling|Enchanting|Meandering|Philosophising'; then
+      tail=$(tmux capture-pane -t "$pane" -p -S -40 2>/dev/null | tail -40 || true)
+      if printf '%s\n' "$tail" | grep -qiE 'Generating|thinking|Thinking|Hmm|Reading|Bash|Write|Edit|Update|Inferring|Hatching|Whirlpooling|Enchanting|Meandering|Philosophising|Brewing|Baking|Calculating|Percolating|Marinating|Befuddling|Compacting conversation|Press up to edit queued messages'; then
         runtime="active"
       else
         runtime="idle"
@@ -1756,6 +1756,8 @@ print(json.dumps({
           ok "Status server 已在运行 (tmux: $_SS_TMUX_SESSION, port: $(cat "$_SS_PORT_FILE" 2>/dev/null || echo '?'))"
         elif [[ -f "$_SS_PID" ]] && kill -0 "$(cat "$_SS_PID")" 2>/dev/null; then
           ok "Status server 已在运行 (PID: $(cat "$_SS_PID"), port: $(cat "$_SS_PORT_FILE" 2>/dev/null || echo '?'))"
+        elif curl -fsS "http://127.0.0.1:$(cat "$_SS_PORT_FILE" 2>/dev/null || echo 8765)/healthz" >/dev/null 2>&1; then
+          ok "Status server 已在运行 (port: $(cat "$_SS_PORT_FILE" 2>/dev/null || echo 8765), pidfile stale)"
         else
           rm -f "$_SS_PID" "$_SS_PORT_FILE"
           if command -v tmux >/dev/null 2>&1; then
@@ -1774,10 +1776,12 @@ print(json.dumps({
         fi
         ;;
       stop)
+        _stopped=0
         if tmux has-session -t "$_SS_TMUX_SESSION" 2>/dev/null; then
           tmux kill-session -t "$_SS_TMUX_SESSION" 2>/dev/null || true
           rm -f "$_SS_PID" "$_SS_PORT_FILE"
           ok "Status server 已停止"
+          _stopped=1
         elif [[ -f "$_SS_PID" ]]; then
           _pid_val=$(cat "$_SS_PID" 2>/dev/null || true)
           if [[ "$_pid_val" =~ ^[0-9]+$ ]]; then
@@ -1785,7 +1789,16 @@ print(json.dumps({
           fi
           rm -f "$_SS_PID" "$_SS_PORT_FILE"
           ok "Status server 已停止"
-        else
+          _stopped=1
+        fi
+        _listen_pids=$(lsof -tiTCP:$(cat "$_SS_PORT_FILE" 2>/dev/null || echo 8765) -sTCP:LISTEN 2>/dev/null || true)
+        if [[ -n "$_listen_pids" ]]; then
+          kill $_listen_pids 2>/dev/null || true
+          rm -f "$_SS_PID" "$_SS_PORT_FILE"
+          ok "Status server 端口残留进程已停止 (PID: ${_listen_pids//$'\n'/,})"
+          _stopped=1
+        fi
+        if [[ "$_stopped" == "0" ]]; then
           warn "Status server 未运行"
         fi
         ;;
@@ -1802,6 +1815,10 @@ print(json.dumps({
         elif [[ -f "$_SS_PID" ]] && [[ "$(cat "$_SS_PID" 2>/dev/null)" =~ ^[0-9]+$ ]] && kill -0 "$(cat "$_SS_PID")" 2>/dev/null; then
           _port=$(cat "$_SS_PORT_FILE" 2>/dev/null || echo "8765")
           ok "运行中 (PID: $(cat "$_SS_PID"), port: $_port)"
+          curl -s "http://127.0.0.1:$_port/healthz" 2>/dev/null && echo || true
+        elif curl -fsS "http://127.0.0.1:$(cat "$_SS_PORT_FILE" 2>/dev/null || echo 8765)/healthz" >/dev/null 2>&1; then
+          _port=$(cat "$_SS_PORT_FILE" 2>/dev/null || echo "8765")
+          ok "运行中 (port: $_port, pidfile stale)"
           curl -s "http://127.0.0.1:$_port/healthz" 2>/dev/null && echo || true
         else
           warn "Status server 未运行"
@@ -1945,6 +1962,33 @@ print(json.dumps({
     _graph_py="$HARNESS_DIR/lib/harness_graph.py"
     [[ -f "$_graph_py" ]] || { err "harness_graph.py not found: $_graph_py"; exit 1; }
     python3 "$_graph_py" "$@"
+    ;;
+  mineru)
+    # sprint-20260509-mineru-mirage-closeout S2: PDF extraction
+    shift
+    _mineru_subcmd="${1:-help}"; shift || true
+    case "$_mineru_subcmd" in
+      extract)
+        _ex_py="$HARNESS_DIR/lib/mineru_extract.py"
+        [[ -f "$_ex_py" ]] || { err "mineru_extract.py not found"; exit 1; }
+        python3 "$_ex_py" "$@"
+        ;;
+      doctor)
+        _md_py="$HARNESS_DIR/lib/mineru_doctor.py"
+        [[ -f "$_md_py" ]] || { err "mineru_doctor.py not found"; exit 1; }
+        python3 "$_md_py" "$@"
+        ;;
+      bootstrap)
+        bash "$HARNESS_DIR/vendor/mineru/bootstrap.sh" "$@"
+        ;;
+      help|"")
+        echo "Usage: $0 mineru <extract|doctor|bootstrap> [args]"
+        echo "  extract <pdf>  Extract PDF to Obsidian references/ (--background --vault PATH)"
+        echo "  doctor         Check venv and model status (--json)"
+        echo "  bootstrap      Create/repair vendor venv (--force)"
+        ;;
+      *) err "unknown mineru subcommand: $_mineru_subcmd"; exit 1 ;;
+    esac
     ;;
   autopilot)
     shift
@@ -2349,7 +2393,7 @@ PY
     echo "  $0 autopilot [status|apply|dispatch|loop|start|stop|service-status|queue]  自动监控断头 sprint/pane 并安全推进"
     echo "  $0 symphony [status|dry-run|workspace <sid>]  Symphony 调度"
     echo "  $0 mirage [search|doctor|workspace|mounts|exec|provision]  Mirage 统一虚拟文件系统"
-    echo "  $0 wiki [install|status|export-sprint|update|query|ingest|chatgpt-import|vault-status|lint|rebuild|export-graph|colorize|history|run-dispatch|dispatch-watch|import-solar-db|capture-server|audit-uploads|backfill-uploads|qmd-status|qmd-search|qmd-update|qmd-mcp|qmd-embed|help]  Obsidian Wiki 集成"
+    echo "  $0 wiki [install|status|export-sprint|update|query|ingest|chatgpt-import|vault-status|lint|rebuild|export-graph|colorize|history|run-dispatch|dispatch-watch|dispatch-maintenance|import-solar-db|capture-server|audit-uploads|backfill-uploads|quality-gate|reingest-quarantine|reingest-scheduler|qmd-status|qmd-search|qmd-update|qmd-mcp|qmd-embed|help]  Obsidian Wiki 集成"
     ;;
   mirage)
     # Mirage unified virtual filesystem — sprint-20260508-mirage-unified-vfs
@@ -2522,6 +2566,14 @@ PY
           exit 1
         fi
         ;;
+      dispatch-maintenance|dispatch-doctor)
+        _dispatch_maint="${HARNESS_DIR}/lib/wiki-dispatch-maintenance.py"
+        if [[ ! -f "$_dispatch_maint" ]]; then
+          err "wiki dispatch maintenance not found: $_dispatch_maint"
+          exit 1
+        fi
+        python3 "$_dispatch_maint" "$@"
+        ;;
       import-solar-db)
         if [[ -f "$_wiki_bridge" ]]; then
           # shellcheck disable=SC1090
@@ -2578,7 +2630,73 @@ PY
           err "wiki-upload-backfill not found: $_backfill"
           exit 1
         fi
-        python3 "$_backfill" "$@"
+        if python3 "$_backfill" "$@"; then
+          if printf ' %s ' "$*" | grep -q ' --repair '; then
+            _quality_gate="${HARNESS_DIR}/lib/wiki-quality-gate.py"
+            if [[ -f "$_quality_gate" ]]; then
+              warn "running post-backfill quality gate; low-quality stubs will be quarantined"
+              python3 "$_quality_gate" --apply --json
+            fi
+          fi
+        else
+          exit $?
+        fi
+        ;;
+      quality-gate)
+        # Quarantine low-quality PDF/stub pages before they pollute default KB retrieval.
+        _quality_gate="${HARNESS_DIR}/lib/wiki-quality-gate.py"
+        if [[ ! -f "$_quality_gate" ]]; then
+          err "wiki-quality-gate not found: $_quality_gate"
+          exit 1
+        fi
+        python3 "$_quality_gate" "$@"
+        ;;
+      reingest-quarantine)
+        # Create deep paper reingest dispatches for quarantined PDF/stub pages.
+        _reingest_quarantine="${HARNESS_DIR}/lib/wiki-reingest-quarantine.py"
+        if [[ ! -f "$_reingest_quarantine" ]]; then
+          err "wiki-reingest-quarantine not found: $_reingest_quarantine"
+          exit 1
+        fi
+        python3 "$_reingest_quarantine" "$@"
+        ;;
+      reingest-scheduler)
+        _reingest_scheduler="${HARNESS_DIR}/lib/wiki-reingest-scheduler.sh"
+        _reingest_session="${SOLAR_REINGEST_SESSION_NAME:-solar-wiki-reingest-scheduler}"
+        if [[ ! -x "$_reingest_scheduler" ]]; then
+          err "wiki-reingest-scheduler not executable: $_reingest_scheduler"
+          exit 1
+        fi
+        case "${1:-status}" in
+          start)
+            _interval="${2:-60}"
+            if tmux has-session -t "$_reingest_session" 2>/dev/null; then
+              ok "wiki reingest scheduler already running ($_reingest_session)"
+            else
+              tmux new-session -d -s "$_reingest_session" "$_reingest_scheduler loop '$_interval'"
+              ok "wiki reingest scheduler started ($_reingest_session, interval=${_interval}s)"
+            fi
+            ;;
+          stop)
+            tmux kill-session -t "$_reingest_session" 2>/dev/null || true
+            ok "wiki reingest scheduler stopped ($_reingest_session)"
+            ;;
+          run-once)
+            "$_reingest_scheduler" run-once
+            ;;
+          status)
+            if tmux has-session -t "$_reingest_session" 2>/dev/null; then
+              ok "wiki reingest scheduler running ($_reingest_session)"
+            else
+              warn "wiki reingest scheduler not running ($_reingest_session)"
+            fi
+            "$_reingest_scheduler" status
+            ;;
+          *)
+            err "Usage: $0 wiki reingest-scheduler [start [interval]|stop|status|run-once]"
+            exit 1
+            ;;
+        esac
         ;;
       qmd-status|mineru-status)
         _QMD_BIN="$(command -v qmd 2>/dev/null || true)"
@@ -2606,21 +2724,95 @@ PY
         _QMD_BIN="$(command -v qmd 2>/dev/null || true)"
         [[ -z "$_QMD_BIN" && -x "$HOME/.npm-global/bin/qmd" ]] && _QMD_BIN="$HOME/.npm-global/bin/qmd"
         [[ -n "$_QMD_BIN" ]] || { err "qmd not found; install mineru-document-explorer"; exit 1; }
+        _QMD_PROXY="${HARNESS_DIR}/lib/qmd-ipv4-proxy.py"
+        _QMD_PROXY_PID="${HARNESS_DIR}/run/qmd-mcp-ipv4-proxy.pid"
+        _QMD_PROXY_SESSION="solar-qmd-mcp-proxy"
+        _qmd_mcp_hosts() {
+          python3 - <<'PY'
+import socket
+hosts=["127.0.0.1","::1","localhost"]
+open_hosts=[]
+for h in hosts:
+    try:
+        s=socket.create_connection((h,8181),timeout=0.4)
+        s.close()
+        open_hosts.append(h)
+    except OSError:
+        pass
+print(",".join(open_hosts))
+PY
+        }
+        _qmd_proxy_start() {
+          [[ -f "$_QMD_PROXY" ]] || { err "qmd IPv4 proxy missing: $_QMD_PROXY"; return 1; }
+          mkdir -p "$HARNESS_DIR/run"
+          if tmux has-session -t "$_QMD_PROXY_SESSION" 2>/dev/null; then
+            return 0
+          fi
+          if [[ -f "$_QMD_PROXY_PID" ]]; then
+            _proxy_pid="$(cat "$_QMD_PROXY_PID" 2>/dev/null || true)"
+            if [[ -n "$_proxy_pid" ]] && kill -0 "$_proxy_pid" 2>/dev/null; then
+              return 0
+            fi
+            rm -f "$_QMD_PROXY_PID"
+          fi
+          tmux new-session -d -s "$_QMD_PROXY_SESSION" "python3 '$_QMD_PROXY' \
+            --listen-host 127.0.0.1 --listen-port 8181 \
+            --target-host ::1 --target-port 8181 \
+            --pid-file "$_QMD_PROXY_PID" \
+            >> '$HARNESS_DIR/run/qmd-mcp-ipv4-proxy.log' 2>&1"
+          sleep 0.4
+        }
+        _qmd_proxy_stop() {
+          tmux kill-session -t "$_QMD_PROXY_SESSION" 2>/dev/null || true
+          if [[ -f "$_QMD_PROXY_PID" ]]; then
+            _proxy_pid="$(cat "$_QMD_PROXY_PID" 2>/dev/null || true)"
+            [[ -n "$_proxy_pid" ]] && kill "$_proxy_pid" 2>/dev/null || true
+            rm -f "$_QMD_PROXY_PID"
+          fi
+        }
         case "${1:-status}" in
           status)
-            if lsof -nP -iTCP:8181 -sTCP:LISTEN >/dev/null 2>&1; then
-              ok "qmd MCP running → http://localhost:8181/mcp"
-              lsof -nP -iTCP:8181 -sTCP:LISTEN | tail -1
+            _qmd_mcp_probe="$(_qmd_mcp_hosts)"
+            if [[ -n "$_qmd_mcp_probe" ]]; then
+              if [[ "$_qmd_mcp_probe" == *"127.0.0.1"* ]]; then
+                ok "qmd MCP running → http://127.0.0.1:8181/mcp (hosts: $_qmd_mcp_probe)"
+              else
+                warn "qmd MCP running, but not on 127.0.0.1 (hosts: $_qmd_mcp_probe). Use localhost/[::1] or restart if a strict IPv4 client requires it."
+              fi
+              lsof -nP -iTCP:8181 -sTCP:LISTEN | tail -1 || true
             else
               err "qmd MCP not listening on 8181"
               exit 1
             fi
             ;;
           start)
-            "$_QMD_BIN" mcp --http --daemon
+            _qmd_mcp_probe="$(_qmd_mcp_hosts)"
+            if [[ -z "$_qmd_mcp_probe" ]]; then
+              "$_QMD_BIN" mcp --http --daemon
+              sleep 1
+              _qmd_mcp_probe="$(_qmd_mcp_hosts)"
+            fi
+            if [[ "$_qmd_mcp_probe" == *"127.0.0.1"* ]]; then
+              ok "qmd MCP already reachable on 127.0.0.1:8181"
+              exit 0
+            fi
+            if [[ "$_qmd_mcp_probe" == *"::1"* || "$_qmd_mcp_probe" == *"localhost"* ]]; then
+              _qmd_proxy_start
+              _qmd_mcp_probe="$(_qmd_mcp_hosts)"
+              if [[ "$_qmd_mcp_probe" == *"127.0.0.1"* ]]; then
+                ok "qmd MCP IPv4 proxy running → 127.0.0.1:8181 -> ::1:8181"
+                exit 0
+              fi
+            fi
+            err "qmd MCP failed to become reachable on 127.0.0.1:8181"
+            exit 1
+            ;;
+          stop-proxy)
+            _qmd_proxy_stop
+            ok "qmd MCP IPv4 proxy stopped"
             ;;
           *)
-            err "Usage: $0 wiki qmd-mcp [status|start]"
+            err "Usage: $0 wiki qmd-mcp [status|start|stop-proxy]"
             exit 1
             ;;
         esac
@@ -2640,21 +2832,29 @@ PY
 {
   "state": "scheduled",
   "collection": "solar-wiki",
-  "mode": "idle_only",
+  "mode": "gentle",
   "updated_at": "$(date -u '+%Y-%m-%dT%H:%M:%SZ')",
-  "detail": "launchd loaded; will run only when machine is idle",
+  "detail": "launchd loaded; gentle background mode uses low priority, load guard, and time slices",
   "log": "${HARNESS_DIR}/run/qmd-embed.log"
 }
 EOF
-            ok "qmd embedding idle scheduler loaded ($_embed_label); will run only when machine is idle"
+            ok "qmd embedding gentle scheduler loaded ($_embed_label); low priority, load guarded"
             ;;
           run-once)
             [[ -x "$_embed_runner" ]] || { err "qmd embed runner not executable: $_embed_runner"; exit 1; }
             "$_embed_runner"
             ;;
+          run-idle)
+            [[ -x "$_embed_runner" ]] || { err "qmd embed runner not executable: $_embed_runner"; exit 1; }
+            SOLAR_QMD_EMBED_MODE=idle "$_embed_runner"
+            ;;
+          run-gentle)
+            [[ -x "$_embed_runner" ]] || { err "qmd embed runner not executable: $_embed_runner"; exit 1; }
+            SOLAR_QMD_EMBED_MODE=gentle "$_embed_runner"
+            ;;
           run-now)
             [[ -x "$_embed_runner" ]] || { err "qmd embed runner not executable: $_embed_runner"; exit 1; }
-            SOLAR_QMD_EMBED_FORCE=1 "$_embed_runner"
+            SOLAR_QMD_EMBED_MODE=force SOLAR_QMD_EMBED_FORCE=1 "$_embed_runner"
             ;;
           stop)
             launchctl bootout "gui/$(id -u)" "$_embed_plist" >/dev/null 2>&1 || true
@@ -2664,7 +2864,7 @@ EOF
 {
   "state": "stopped",
   "collection": "solar-wiki",
-  "mode": "idle_only",
+  "mode": "stopped",
   "updated_at": "$(date -u '+%Y-%m-%dT%H:%M:%SZ')",
   "detail": "launchd unloaded and active qmd embed process stopped",
   "log": "${HARNESS_DIR}/run/qmd-embed.log"
@@ -2685,10 +2885,34 @@ EOF
             fi
             ;;
           *)
-            err "Usage: $0 wiki qmd-embed [start|status|stop|run-once|run-now]"
+            err "Usage: $0 wiki qmd-embed [start|status|stop|run-once|run-idle|run-gentle|run-now]"
             exit 1
             ;;
         esac
+        ;;
+      mineru-doctor)
+        # sprint-20260509-mineru-mirage-closeout S1: doctor per design §2.1
+        _md_py="$HARNESS_DIR/lib/mineru_doctor.py"
+        if [[ ! -f "$_md_py" ]]; then err "mineru_doctor.py not found: $_md_py"; exit 1; fi
+        python3 "$_md_py" "$@"
+        ;;
+      export-accepted)
+        # sprint-20260508-accepted-artifact-knowledge: export PASS-only sprint artifact
+        _aae="$HARNESS_DIR/lib/accepted-artifact-export.py"
+        if [[ ! -f "$_aae" ]]; then
+          err "accepted-artifact-export.py not found: $_aae"
+          exit 1
+        fi
+        python3 "$_aae" export "$@"
+        ;;
+      backfill-accepted)
+        # sprint-20260508-accepted-artifact-knowledge: backfill passed sprints (default dry-run)
+        _aae="$HARNESS_DIR/lib/accepted-artifact-export.py"
+        if [[ ! -f "$_aae" ]]; then
+          err "accepted-artifact-export.py not found: $_aae"
+          exit 1
+        fi
+        python3 "$_aae" backfill "$@"
         ;;
       help|--help|-h|"")
         echo "Solar Harness Wiki — Obsidian LLM Wiki integration"
@@ -2709,16 +2933,20 @@ EOF
         echo "  $0 wiki history [--target claude|codex|copilot|hermes|openclaw|auto] [--query <topic>]"
         echo "  $0 wiki run-dispatch <dispatch.md> [--lab-builder 1|2|3|4|--main-builder|--pane <target>] [--dry-run]"
         echo "  $0 wiki dispatch-watch [--once|--loop] [--limit N] [--interval seconds] [--dry-run]"
+        echo "  $0 wiki dispatch-maintenance [status|repair --apply] [--json]"
         echo "  $0 wiki import-solar-db [--scope solar|all] [--per-table-limit N] [--no-dispatch]"
         echo "  $0 wiki capture-server [start|stop|restart|status] [--port N] [--open]"
         echo "  $0 wiki sync-vault [--vault PATH] [--once] [--dry-run] [--json]"
         echo "  $0 wiki audit-uploads --batch <batch_id> [--json]"
         echo "  $0 wiki backfill-uploads --batch <batch_id> [--repair] [--json]"
+        echo "  $0 wiki quality-gate [--apply] [--json] [--vault PATH]"
+        echo "  $0 wiki reingest-quarantine [--manifest PATH] [--limit N] [--json] [--dry-run]"
+        echo "  $0 wiki reingest-scheduler [start [interval]|stop|status|run-once]"
         echo "  $0 wiki qmd-status"
         echo "  $0 wiki qmd-search \"<query>\" [-n N|--json|--files]"
         echo "  $0 wiki qmd-update"
-        echo "  $0 wiki qmd-mcp [status|start]"
-        echo "  $0 wiki qmd-embed [start|status|stop|run-once|run-now]"
+        echo "  $0 wiki qmd-mcp [status|start|stop-proxy]"
+        echo "  $0 wiki qmd-embed [start|status|stop|run-once|run-idle|run-gentle|run-now]"
         echo ""
         echo "Examples:"
         echo "  $0 wiki install --vault ~/Documents/SolarWiki"
@@ -2740,6 +2968,9 @@ EOF
         echo "  $0 wiki qmd-search \"Solar Harness Obsidian\" -n 5 --json"
         echo "  $0 wiki audit-uploads --batch 20260508T122047Z --json"
         echo "  $0 wiki backfill-uploads --batch 20260508T122047Z --repair --json"
+        echo "  $0 wiki quality-gate --apply --json"
+        echo "  $0 wiki reingest-quarantine --limit 8 --json"
+        echo "  $0 wiki reingest-scheduler start 60"
         ;;
       *)
         err "Unknown wiki subcommand: $_wiki_subcmd"

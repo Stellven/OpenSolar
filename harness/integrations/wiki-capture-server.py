@@ -126,6 +126,18 @@ def run_cmd(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess[s
     return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
 
 
+def timeout_result(args: list[str], timeout: int, exc: subprocess.TimeoutExpired) -> subprocess.CompletedProcess[str]:
+    stdout = exc.stdout.decode() if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+    stderr = exc.stderr.decode() if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+    cmd = " ".join(args)
+    return subprocess.CompletedProcess(
+        args=args,
+        returncode=124,
+        stdout=stdout,
+        stderr=(stderr or f"timeout after {timeout}s: {cmd}"),
+    )
+
+
 def dispatch_file_from_output(output: str) -> str:
     for raw in reversed((output or "").splitlines()):
         line = raw.strip()
@@ -152,10 +164,11 @@ def run_wiki_dispatch(dispatch_file: str, lab_builder: int = 1) -> dict:
     selected = lab_builder
     for candidate in order:
         selected = candidate
-        result = run_cmd(
-            [str(SOLAR), "wiki", "run-dispatch", dispatch_file, "--lab-builder", str(candidate)],
-            timeout=30,
-        )
+        args = [str(SOLAR), "wiki", "run-dispatch", dispatch_file, "--lab-builder", str(candidate)]
+        try:
+            result = run_cmd(args, timeout=8)
+        except subprocess.TimeoutExpired as e:
+            result = timeout_result(args, 8, e)
         attempts.append(
             {
                 "lab_builder": candidate,
@@ -167,7 +180,9 @@ def run_wiki_dispatch(dispatch_file: str, lab_builder: int = 1) -> dict:
         if result.returncode == 0:
             break
         # returncode 2 means the pane exists but is busy; try the next lab pane.
-        if result.returncode != 2:
+        # returncode 124 means one pane/dispatch path timed out; try another pane
+        # before giving up so a stale dispatch cannot stall the whole scheduler.
+        if result.returncode not in {2, 124}:
             break
     assert result is not None
     return {
@@ -197,7 +212,7 @@ def dispatch_pending_chatgpt(state: dict, limit: int = 4) -> list[dict]:
     DISPATCH_DIR.mkdir(parents=True, exist_ok=True)
     lab_builder = int(state.get("next_lab_builder", 1) or 1)
     results = []
-    for path in sorted(DISPATCH_DIR.glob("wiki-ingest-*.md"), key=lambda p: p.stat().st_mtime):
+    for path in sorted(DISPATCH_DIR.glob("wiki-ingest-*.md"), key=lambda p: p.stat().st_mtime, reverse=True):
         if len(results) >= limit:
             break
         if not dispatch_is_pending_chatgpt(path):
@@ -437,7 +452,7 @@ def scan_once(limit: int = 4) -> dict:
         *(p for p in UPLOAD_DIR.iterdir() if p.is_file() and not p.name.startswith(".")),
         *(p for p in DB_EXPORT_DIR.rglob("*.md") if p.is_file() and not p.name.startswith(".")),
     ]
-    for path in sorted(source_paths, key=lambda p: p.stat().st_mtime):
+    for path in sorted(source_paths, key=lambda p: p.stat().st_mtime, reverse=True):
         if len(dispatched) >= limit:
             break
         digest = sha256(path)
@@ -503,6 +518,11 @@ def scan_once(limit: int = 4) -> dict:
     state["next_lab_builder"] = lab_builder
     backfills = auto_backfill_uploads(state)
     chatgpt_dispatches = dispatch_pending_chatgpt(state, limit=limit)
+    state.pop("last_error", None)
+    if errors:
+        state["last_dispatch_errors_at"] = utc_now()
+        state["last_dispatch_error_count"] = len(errors)
+        state["last_dispatch_error_sample"] = errors[0].get("error", "")
     save_state(state)
     return {"dispatched": dispatched, "errors": errors, "backfills": backfills, "chatgpt_dispatches": chatgpt_dispatches, "state": state}
 
@@ -709,6 +729,57 @@ def _obsidian_sync_status() -> dict:
     return result
 
 
+def _accepted_artifact_status() -> dict:
+    """Return accepted artifact export stats from manifest — fail-open."""
+    result: dict = {
+        "exported_count": 0,
+        "pending_ingest_count": 0,
+        "failed_count": 0,
+        "last_sid": "",
+        "last_path": "",
+        "last_exported_at": "",
+        "last_error": "",
+        "manifest_exists": False,
+    }
+    manifest_path = VAULT / "_raw" / "solar-harness" / ".manifest" / "accepted-artifacts.json"
+    if not manifest_path.exists():
+        # Also check if vault doesn't exist yet — not an error
+        result["manifest_exists"] = False
+        return result
+    try:
+        manifest = json.loads(manifest_path.read_text())
+        result["manifest_exists"] = True
+        entries = manifest.get("entries", {})
+        result["exported_count"] = len(entries)
+        pending = 0
+        failed = 0
+        last_sid = ""
+        last_path = ""
+        last_at = ""
+        last_err = ""
+        for sid, entry in entries.items():
+            ks = entry.get("knowledge_export_status", "")
+            if ks == "pending" or ks == "exported":
+                pending += 1
+            elif ks == "failed":
+                failed += 1
+                last_err = entry.get("knowledge_export_error", "")
+            at = entry.get("knowledge_exported_at", "")
+            if at > last_at:
+                last_at = at
+                last_sid = sid
+                last_path = entry.get("knowledge_export_path", "")
+        result["pending_ingest_count"] = pending
+        result["failed_count"] = failed
+        result["last_sid"] = last_sid
+        result["last_path"] = last_path
+        result["last_exported_at"] = last_at
+        result["last_error"] = last_err
+    except Exception as e:
+        result["error"] = str(e)
+    return result
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code: int, body: str, content_type: str = "text/plain; charset=utf-8") -> None:
         data = body.encode("utf-8")
@@ -753,6 +824,12 @@ class Handler(BaseHTTPRequestHandler):
                 "upload_backfills": state.get("upload_backfills", {}),
                 "solar_kb": _solar_kb_status(),
                 "obsidian_sync": _obsidian_sync_status(),
+            })
+        elif parsed.path == "/api/accepted-artifacts":
+            # sprint-20260508-accepted-artifact-knowledge: accepted artifact export status
+            self._json(200, {
+                "ok": True,
+                "accepted_artifacts": _accepted_artifact_status(),
             })
         elif parsed.path == "/healthz":
             self._send(200, "ok")
