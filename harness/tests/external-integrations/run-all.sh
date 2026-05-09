@@ -34,6 +34,7 @@ run_test "$DIR/test_endpoint_view.sh"
 run_test "$DIR/../integrations/test-capability-plane-e2e.sh"
 run_test "$DIR/../integrations/test-expanded-capability-plane-e2e.sh"
 run_test "$DIR/../integrations/test-capability-fusion-benchmark.sh"
+run_test "$DIR/../integrations/test-platform-workflow-benchmark.sh"
 
 echo ""
 echo "========================================"

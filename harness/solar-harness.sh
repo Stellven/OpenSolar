@@ -1704,7 +1704,8 @@ case "${1:-start}" in
     for _cap_e2e in \
       "$HARNESS_DIR/tests/integrations/test-capability-plane-e2e.sh" \
       "$HARNESS_DIR/tests/integrations/test-expanded-capability-plane-e2e.sh" \
-      "$HARNESS_DIR/tests/integrations/test-capability-fusion-benchmark.sh"
+      "$HARNESS_DIR/tests/integrations/test-capability-fusion-benchmark.sh" \
+      "$HARNESS_DIR/tests/integrations/test-platform-workflow-benchmark.sh"
     do
       [[ -f "$_cap_e2e" ]] || { err "capability E2E test not found: $_cap_e2e"; exit 1; }
       [[ -x "$_cap_e2e" ]] || chmod +x "$_cap_e2e" 2>/dev/null || true
@@ -1914,6 +1915,7 @@ print(json.dumps({
     _plugin_loader="$HARNESS_DIR/lib/plugin_loader.py"
     _capability_reg="$HARNESS_DIR/lib/capability_registry.py"
     _capability_bench="$HARNESS_DIR/lib/capability_fusion_benchmark.py"
+    _platform_bench="$HARNESS_DIR/lib/platform_workflow_benchmark.py"
     case "${2:-status}" in
       status|health)
         shift 2 || true
@@ -1960,8 +1962,13 @@ print(json.dumps({
         [[ -f "$_capability_bench" ]] || { err "capability_fusion_benchmark not found: $_capability_bench"; exit 1; }
         python3 "$_capability_bench" "$@"
         ;;
+      platform-benchmark|workflow-benchmark)
+        shift 2 || true
+        [[ -f "$_platform_bench" ]] || { err "platform_workflow_benchmark not found: $_platform_bench"; exit 1; }
+        python3 "$_platform_bench" "$@"
+        ;;
       *)
-        err "用法: $0 integrations [status|plugins|install|disable|list|validate|capabilities|sync-caps|benchmark] [--json]"
+        err "用法: $0 integrations [status|plugins|install|disable|list|validate|capabilities|sync-caps|benchmark|platform-benchmark] [--json]"
         exit 1
         ;;
     esac

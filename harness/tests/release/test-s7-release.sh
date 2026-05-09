@@ -160,9 +160,18 @@ else
   fail "capability fusion benchmark script missing or not executable"
 fi
 
+echo "T18: platform workflow benchmark passes"
+if [[ -x tests/integrations/test-platform-workflow-benchmark.sh ]]; then
+  bash tests/integrations/test-platform-workflow-benchmark.sh >/tmp/solar-platform-workflow-benchmark-release.log 2>&1 \
+    && ok "platform workflow benchmark passes" \
+    || fail "platform workflow benchmark failed: $(tail -20 /tmp/solar-platform-workflow-benchmark-release.log | tr '\n' ' ')"
+else
+  fail "platform workflow benchmark script missing or not executable"
+fi
+
 # cleanup
 rm -rf /tmp/solar-release-test
-rm -f /tmp/solar-capability-e2e-release.log /tmp/solar-expanded-capability-e2e-release.log /tmp/solar-capability-fusion-benchmark-release.log
+rm -f /tmp/solar-capability-e2e-release.log /tmp/solar-expanded-capability-e2e-release.log /tmp/solar-capability-fusion-benchmark-release.log /tmp/solar-platform-workflow-benchmark-release.log
 
 echo ""
 echo "=== S7 Release Tooling: PASS=$PASS FAIL=$FAIL ==="
