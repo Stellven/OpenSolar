@@ -850,15 +850,43 @@ select_topology_with_degrade() {
 }
 
 # 读取上次已处理的状态 (防止重复派发)
-# Sprint 20260420-113026: per-sprint dict, 格式 "sid:st|sid:st|..."
+# Sprint 20260420-113026: per-sprint dict.
+# v2 fingerprint: "sid:status:phase:handoff_to:slice_digest|..."
+# Root cause fixed: status-only fingerprints missed active-phase changes such as
+# s2_ready_for_eval -> s1_ready_for_eval, leaving work stuck until watchdog repair.
 load_last_state() {
   [[ -f "$COORD_STATE" ]] && cat "$COORD_STATE" 2>/dev/null | head -1 | tr -d '\n' || echo ""
+}
+
+state_fingerprint() {
+  local sf="$1" sid st phase handoff digest
+  sid=$(get_field "$sf" "id")
+  st=$(get_field "$sf" "status")
+  phase=$(get_field "$sf" "phase")
+  handoff=$(get_field "$sf" "handoff_to")
+  digest=$(python3 - "$sf" <<'PYF' 2>/dev/null
+import hashlib, json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    relevant = {
+        "phase": d.get("phase"),
+        "handoff_to": d.get("handoff_to"),
+        "slice_plan": d.get("slice_plan", {}),
+        "artifacts": {k: v for k, v in d.get("artifacts", {}).items()
+                      if str(k).startswith(("s1", "s2", "s6"))},
+    }
+    print(hashlib.sha1(json.dumps(relevant, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:12])
+except Exception:
+    print("nodigest")
+PYF
+)
+  printf '%s:%s:%s:%s:%s' "$sid" "$st" "${phase:-_}" "${handoff:-_}" "${digest:-nodigest}"
 }
 
 # Sprint 20260420-113026: per-sprint save_state
 # 更新对应 sid 的状态, 保留其他 sprint 状态不变
 save_state() {
-  local new_entry="$1"  # "sid:status"
+  local new_entry="$1"  # "sid:status:phase:handoff_to:digest"
   local sid="${new_entry%%:*}"
 
   if [[ -z "$new_entry" ]] || [[ ! "$new_entry" =~ [a-zA-Z] ]]; then
@@ -911,12 +939,26 @@ os.rename(tmp, path)
 
 # Sprint 20260420-113026: 从 per-sprint dict 中检查状态变化
 check_state_changed() {
-  local sid="$1" new_st="$2"
+  local sid="$1" new_state="$2"
   local current
   current=$(load_last_state)
-  local old_st
-  old_st=$(printf '%s\n' "$current" | tr '|' '\n' | awk -F: -v sid="$sid" '$1 == sid { st=$2 } END { print st }')
-  [[ "$old_st" != "$new_st" ]]
+  local old_state
+  old_state=$(printf '%s\n' "$current" | tr '|' '\n' | awk -F: -v sid="$sid" '$1 == sid { st=$0 } END { print st }')
+  # Migration guard: old coordinator-state entries were "sid:status".
+  # Do not replay terminal history just because the fingerprint format changed.
+  if [[ "$old_state" != "$new_state" ]]; then
+    local old_status new_status
+    old_status=$(printf '%s' "$old_state" | awk -F: '{print $2}')
+    new_status=$(printf '%s' "$new_state" | awk -F: '{print $2}')
+    if [[ "$old_state" == "$sid:$old_status" && "$old_status" == "$new_status" ]]; then
+      case "$new_status" in
+        passed|done|eval_pass|failed|cancelled|superseded|interrupted)
+          return 1
+          ;;
+      esac
+    fi
+  fi
+  [[ "$old_state" != "$new_state" ]]
 }
 
 # 检查 pane 中 Claude 是否在运行且空闲 (等待输入)
@@ -1359,6 +1401,14 @@ dispatch_to_pane() {
         log "${Y}[lease] pane ${pane} held by terminal sprint ${_held_sid}; releasing stale lease${N}"
         release_pane_lease "$pane" "$_held_did" "terminal_sprint_reaped" 2>/dev/null || true
         _lease_result=$(acquire_pane_lease "$pane" "$sid" "$_dispatch_id" 600 2>/dev/null || true)
+      elif [[ -n "$_held_sid" && -n "$_held_did" && "$_held_sid" == "$sid" ]]; then
+        local _same_sid_snapshot=""
+        _same_sid_snapshot="$(capture_pane_tail "$pane" 30 2>/dev/null || true)"
+        if pane_is_idle_snapshot "$_same_sid_snapshot"; then
+          log "${Y}[lease] pane ${pane} held by same sprint ${sid} but idle; releasing stale same-sid lease${N}"
+          release_pane_lease "$pane" "$_held_did" "same_sprint_idle_reaped" 2>/dev/null || true
+          _lease_result=$(acquire_pane_lease "$pane" "$sid" "$_dispatch_id" 600 2>/dev/null || true)
+        fi
       fi
     fi
     if [[ "$_lease_result" == *'"acquired": true'* || "$_lease_result" == *'"acquired":true'* ]]; then
@@ -2052,12 +2102,23 @@ print('1' if d.get('manual_override') is True or d.get('source') == 'manual_over
 " 2>/dev/null | grep -q 1
 }
 
+contract_has_bypass_pm() {
+  local sid="$1"
+  local cf="$SPRINTS_DIR/${sid}.contract.md"
+  [[ -f "$cf" ]] || return 1
+  grep -Eq '^bypass_pm:[[:space:]]*true[[:space:]]*$' "$cf"
+}
+
 gate_check() {
   local sid="$1" st="$2"
   local sprint_dir="$SPRINTS_DIR"
 
   case "$st" in
     active)
+      if contract_has_bypass_pm "$sid"; then
+        log "${G}PRD 门禁豁免: ${sid} bypass_pm:true${N}"
+        return 0
+      fi
       local req_file=""
       req_file=$(pm_requirements_file "$sid" 2>/dev/null || true)
       if [[ -z "$req_file" ]]; then
@@ -2450,6 +2511,174 @@ auto_drive_drafting_sprints() {
   done
 }
 
+next_product_platform_slice() {
+  local sf="$1"
+  python3 - "$sf" "$SPRINTS_DIR" <<'PY' 2>/dev/null
+import json, pathlib, sys
+
+sf = pathlib.Path(sys.argv[1])
+base = pathlib.Path(sys.argv[2])
+d = json.loads(sf.read_text())
+sid = d.get("id") or sf.name.removesuffix(".status.json")
+sp = d.get("slice_plan") or {}
+
+def verdict_passed(slice_id: str) -> bool:
+    item = sp.get(slice_id) or {}
+    if item.get("status") == "passed":
+        return True
+    eval_json = item.get("eval_json") or item.get("eval")
+    if eval_json and str(eval_json).endswith(".json"):
+        candidates = [base / str(eval_json)]
+    else:
+        candidates = [base / f"{sid}.{slice_id}-eval.json"]
+    for p in candidates:
+        try:
+            ej = json.loads(p.read_text())
+            if str(ej.get("verdict", "")).upper() == "PASS":
+                return True
+        except Exception:
+            pass
+    return False
+
+def slice_state(slice_id: str) -> str:
+    item = sp.get(slice_id) or {}
+    return str(item.get("status") or "").strip()
+
+def blocked_or_running(slice_id: str) -> bool:
+    st = slice_state(slice_id)
+    return st in {"queued", "dispatched", "in_progress", "ready_for_eval", "reviewing"}
+
+sequence = [
+    ("s3", ("s1", "s2", "s6")),
+    ("s4", ("s2", "s3")),
+    ("s5", ("s2", "s4", "s6")),
+    ("s7", ("s1", "s2", "s3", "s4", "s5", "s6")),
+]
+
+for slice_id, deps in sequence:
+    if verdict_passed(slice_id):
+        continue
+    if blocked_or_running(slice_id):
+        print("wait:" + slice_id)
+        sys.exit(0)
+    if all(verdict_passed(dep) for dep in deps):
+        print(slice_id)
+        sys.exit(0)
+
+if all(verdict_passed(s) for s in ("s1", "s2", "s3", "s4", "s5", "s6", "s7")):
+    print("all_passed")
+PY
+}
+
+slice_owner() {
+  case "$1" in
+    s4) echo "builder_glm" ;;
+    s5) echo "builder_codex" ;;
+    *) echo "builder_main" ;;
+  esac
+}
+
+slice_title() {
+  case "$1" in
+    s3) echo "Storage & Data Access" ;;
+    s4) echo "Extension Framework" ;;
+    s5) echo "Evolution Engine" ;;
+    s7) echo "Release Tooling + Final Audit" ;;
+    *) echo "$1" ;;
+  esac
+}
+
+dispatch_next_product_slice() {
+  local sid="$1" sf="$2" slice_id="$3"
+  local owner title dispatch_file
+  owner="$(slice_owner "$slice_id")"
+  title="$(slice_title "$slice_id")"
+  dispatch_file="$SPRINTS_DIR/${sid}.${slice_id}-builder-dispatch.md"
+
+  cat > "$dispatch_file" << EOF
+# ${slice_id} Builder Dispatch
+
+Sprint: \`${sid}\`
+Slice: \`${slice_id}\` (${title})
+Owner target: \`${owner}\`
+
+## Read First
+1. \`$SPRINTS_DIR/${sid}.plan.md\`
+2. \`$SPRINTS_DIR/${sid}.contract.md\`
+3. Existing passed slice handoffs/evals for dependency context only.
+
+## Scope
+Implement ${slice_id} only. Do not reopen passed slices. Follow the write scope, Done conditions, stop conditions, and gate listed under ${slice_id} in plan.md.
+
+## Completion
+Write:
+- \`$SPRINTS_DIR/${sid}.${slice_id}-handoff.md\`
+
+Then update \`$SPRINTS_DIR/${sid}.status.json\`:
+- \`phase=${slice_id}_ready_for_eval\`
+- \`handoff_to=evaluator\`
+- \`slice_plan.${slice_id}.status=ready_for_eval\`
+- \`slice_plan.${slice_id}.handoff=${sid}.${slice_id}-handoff.md\`
+- append history event \`${slice_id}_ready_for_eval\`
+
+Do not mark the parent sprint passed.
+EOF
+
+  log "${G}Sprint ${sid} ${slice_id} dependencies passed → dispatch builder (${owner})${N}"
+  dispatch_to_builder "$sid" "${slice_id}_builder_dispatch" "$dispatch_file"
+  local rc=$?
+  if (( rc == 2 )); then
+    log "${Y}[slice-next] builder busy for ${slice_id}, queued/下轮再派${N}"
+    rollback_state_cache "$sid"
+    return 0
+  fi
+  if (( rc != 0 )); then
+    log "${Y}[slice-next] builder dispatch failed for ${slice_id} (rc=${rc}), 下轮重试${N}"
+    rollback_state_cache "$sid"
+    return 0
+  fi
+
+  python3 - "$sf" "$slice_id" "$owner" "$dispatch_file" <<'PY' 2>/dev/null || true
+import datetime, json, pathlib, sys
+sf = pathlib.Path(sys.argv[1])
+slice_id, owner, dispatch_file = sys.argv[2], sys.argv[3], pathlib.Path(sys.argv[4]).name
+d = json.loads(sf.read_text())
+now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+d["status"] = "active"
+d["phase"] = f"{slice_id}_in_progress"
+d["handoff_to"] = owner
+d["updated_at"] = now
+sp = d.setdefault("slice_plan", {})
+item = sp.setdefault(slice_id, {})
+item["status"] = "in_progress"
+item["owner"] = owner
+item["dispatch"] = dispatch_file
+d.setdefault("history", []).append({
+    "ts": now,
+    "event": f"{slice_id}_builder_dispatched",
+    "by": "coordinator",
+    "dispatch": dispatch_file,
+    "note": "Auto-dispatched next slice after dependency eval passes."
+})
+sf.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n")
+PY
+  emit_event "$sid" "slice_dispatched" "coordinator" "{\"slice\":\"${slice_id}\",\"owner\":\"${owner}\"}"
+}
+
+eval_passed_needs_progress() {
+  local sf="$1" phase next_slice
+  phase=$(get_field "$sf" "phase")
+  case "$phase" in
+    s1_eval_passed|s2_eval_passed|s3_eval_passed|s4_eval_passed|s5_eval_passed|s6_eval_passed|s7_eval_passed) ;;
+    *) return 1 ;;
+  esac
+  next_slice="$(next_product_platform_slice "$sf" || true)"
+  case "$next_slice" in
+    s3|s4|s5|s7) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 # 规划者完成合约 → 建设者先写实现计划（Plan-before-build）
 handle_active() {
   local sid="$1" sf="$2"
@@ -2503,12 +2732,94 @@ handle_active() {
       log "${Y}Sprint ${sid} S0 already dispatched; waiting for builder handoff${N}"
       return 0
       ;;
-    s0_ready_for_eval)
-      log "${Y}Sprint ${sid} S0 ready for eval; waiting for evaluator dispatch/state change${N}"
+    s1_eval_passed|s2_eval_passed|s3_eval_passed|s4_eval_passed|s5_eval_passed|s6_eval_passed|s7_eval_passed)
+      local next_slice
+      next_slice="$(next_product_platform_slice "$sf" || true)"
+      case "$next_slice" in
+        s3|s4|s5|s7)
+          dispatch_next_product_slice "$sid" "$sf" "$next_slice"
+          return 0
+          ;;
+        wait:*)
+          log "${Y}Sprint ${sid} ${phase}; ${next_slice#wait:} already in flight, waiting${N}"
+          return 0
+          ;;
+        all_passed)
+          log "${G}Sprint ${sid} all product-platform slices passed; waiting final parent closeout${N}"
+          return 0
+          ;;
+        *)
+          log "${Y}Sprint ${sid} ${phase}; no dependency-ready next slice yet${N}"
+          return 0
+          ;;
+      esac
+      ;;
+    s0_ready_for_eval|s1_ready_for_eval|s2_ready_for_eval|s3_ready_for_eval|s4_ready_for_eval|s5_ready_for_eval|s6_ready_for_eval|s7_ready_for_eval)
+      local slice_id="${phase%%_ready_for_eval}"
+      local eval_file="$SPRINTS_DIR/${sid}.${slice_id}-eval.md"
+      local handoff_file="$SPRINTS_DIR/${sid}.${slice_id}-handoff.md"
+      local eval_dispatch="$SPRINTS_DIR/${sid}.${slice_id}-eval-dispatch.md"
+      if [[ -f "$eval_file" ]]; then
+        log "${Y}Sprint ${sid} ${slice_id} eval already exists; waiting for eval verdict/state change${N}"
+        return 0
+      fi
+      if [[ ! -f "$eval_dispatch" ]]; then
+        cat > "$eval_dispatch" << EOF
+# ${slice_id} Eval Dispatch
+
+Sprint: \`${sid}\`
+Role: evaluator
+
+## Scope
+Evaluate ${slice_id} only. Do not mark the parent sprint passed unless all required slices are complete.
+
+## Read First
+1. \`${handoff_file}\`
+2. \`$SPRINTS_DIR/${sid}.plan.md\`
+3. \`$SPRINTS_DIR/${sid}.contract.md\`
+
+## Completion
+Write \`${eval_file}\` and \`$SPRINTS_DIR/${sid}.${slice_id}-eval.json\`.
+If ${slice_id} passes, update status history with \`${slice_id}_eval_passed\`; keep parent status active until parent-check says all required slices passed.
+EOF
+      fi
+      log "${G}Sprint ${sid} ${slice_id} ready for eval → dispatch evaluator${N}"
+      dispatch_to_evaluator "$sid" "${slice_id}_eval_dispatch" "$eval_dispatch"
+      local eval_rc=$?
+      if (( eval_rc != 0 )); then
+        log "${Y}[handle_active] evaluator dispatch failed for ${slice_id} (rc=${eval_rc}), 下轮重试${N}"
+        rollback_state_cache "$sid"
+      fi
       return 0
       ;;
   esac
   if [[ "$phase" == "planning_complete" && -f "$SPRINTS_DIR/${sid}.plan.md" ]]; then
+    if [[ -f "$SPRINTS_DIR/${sid}.task_graph.json" ]]; then
+      log "${G}Sprint ${sid} planning_complete + task_graph → DAG graph_node 派发${N}"
+      local graph_dispatcher="$HARNESS_DIR/lib/graph_node_dispatcher.py"
+      if [[ ! -f "$graph_dispatcher" ]]; then
+        log "${R}[graph-dispatch] missing dispatcher: ${graph_dispatcher}${N}"
+        rollback_state_cache "$sid"
+        emit_event "$sid" "graph_dispatch_failed" "coordinator" "{\"reason\":\"dispatcher_missing\"}"
+        return 0
+      fi
+      local graph_rc=0 graph_out=""
+      if [[ -n "${SOLAR_COORD_DRY_RUN:-}" ]]; then
+        graph_out="$(python3 "$graph_dispatcher" dispatch-ready --graph "$SPRINTS_DIR/${sid}.task_graph.json" --dry-run 2>&1)" || graph_rc=$?
+      else
+        graph_out="$(python3 "$graph_dispatcher" dispatch-ready --graph "$SPRINTS_DIR/${sid}.task_graph.json" 2>&1)" || graph_rc=$?
+      fi
+      if (( graph_rc != 0 )); then
+        log "${Y}[graph-dispatch] dispatch-ready failed rc=${graph_rc}: ${graph_out}${N}"
+        rollback_state_cache "$sid"
+        emit_event "$sid" "graph_dispatch_failed" "coordinator" "$(python3 -c 'import json,sys; print(json.dumps({"rc": int(sys.argv[1]), "output": sys.argv[2][-1000:]}))' "$graph_rc" "$graph_out" 2>/dev/null || echo '{}')"
+        return 0
+      fi
+      log "${G}[graph-dispatch] ready nodes dispatched: ${graph_out}${N}"
+      emit_event "$sid" "graph_nodes_dispatched" "coordinator" "$(python3 -c 'import json,sys; print(json.dumps({"output": sys.argv[1][-2000:]}))' "$graph_out" 2>/dev/null || echo '{}')"
+      mark_builder_flow "$sid" "graph_node_dispatch"
+      return 0
+    fi
     if builder_flow_marked "$sid" "builder_dispatch"; then
       log "${Y}Sprint ${sid} builder dispatch already recorded, skip duplicate planning_complete dispatch${N}"
       return 0
@@ -3854,10 +4165,10 @@ with open('$patches_file','w') as f:
     if [[ -f "$COORD_STATE" ]]; then
       local saved_state
       saved_state=$(load_last_state)
-      log "初始 last_state = ${saved_state} (从磁盘恢复) | 当前 sprint = ${init_sid}:${init_st}"
+      log "初始 last_state = ${saved_state} (从磁盘恢复) | 当前 sprint = $(state_fingerprint "$init_sf")"
     else
-      printf '%s:%s' "$init_sid" "$init_st" > "$COORD_STATE"
-      log "初始 last_state = ${init_sid}:${init_st} (首次启动,初始化) | 当前 sprint = ${init_sid}:${init_st}"
+      state_fingerprint "$init_sf" > "$COORD_STATE"
+      log "初始 last_state = $(state_fingerprint "$init_sf") (首次启动,初始化)"
     fi
   else
     log "当前 sprint = NONE"
@@ -3985,11 +4296,29 @@ with open('$patches_file','w') as f:
           continue
         fi
 
-        # Sprint 20260420-113026: per-sprint 状态变化检测
-        local current_state="${sid}:${st}"
+        # Sprint 20260420-113026 + 20260509: per-sprint full fingerprint.
+        # Include phase/handoff/slice digest so active-internal transitions trigger.
+        local current_state
+        current_state=$(state_fingerprint "$sf")
 
-        # 只在该 sprint 的状态变化时触发 (不再只看最后一条)
-        if check_state_changed "$sid" "$st"; then
+        # Fingerprint migration guard: old COORD_STATE stored status-only entries.
+        # Terminal finalized sprints must not be replayed just because the stored
+        # fingerprint format changed; migrate their entry quietly and skip work.
+        case "$st" in
+          passed|done|eval_pass)
+            if [[ -f "$SPRINTS_DIR/${sid}.finalized" ]]; then
+              save_state "$current_state" || true
+              continue
+            fi
+            ;;
+          failed|cancelled|superseded|interrupted)
+            save_state "$current_state" || true
+            continue
+            ;;
+        esac
+
+        # 只在该 sprint 的状态指纹变化时触发 (不再只看 status)
+        if check_state_changed "$sid" "$current_state"; then
           local cur_round
           cur_round=$(get_field "$sf" "round")
           log "状态变化检测: ${sid} ${st} (round ${cur_round:-?})"
@@ -4056,6 +4385,15 @@ with open('$patches_file','w') as f:
               handle_drafting "$sid" "$sf"
               ;;
           esac
+        else
+          # Recovery path: a previous coordinator version may have saved the
+          # eval_passed fingerprint before it knew how to dispatch the next
+          # dependency-ready slice. Keep this idempotent and only fire when the
+          # next slice is not already queued/in progress.
+          if [[ "$st" == "active" ]] && eval_passed_needs_progress "$sf"; then
+            log "${Y}[state-recovery] ${sid} eval_passed has dependency-ready next slice; driving handle_active despite unchanged fingerprint${N}"
+            handle_active "$sid" "$sf"
+          fi
         fi
       done
     fi

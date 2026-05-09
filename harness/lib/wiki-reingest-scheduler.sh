@@ -8,7 +8,7 @@ BRIDGE="${HARNESS_DIR}/integrations/obsidian-wiki-bridge.sh"
 LAB_SESSION="${SOLAR_LAB_SESSION_NAME:-solar-harness-lab}"
 VAULT="${OBSIDIAN_VAULT_PATH:-$HOME/Knowledge}"
 DISPATCH_DIR="${OBSIDIAN_WIKI_BRIDGE_RUN_DIR:-${VAULT}/_raw/solar-harness/.dispatch}"
-REINGEST_PANES="${SOLAR_REINGEST_PANES:-0 1 2}"
+REINGEST_PANES="${SOLAR_REINGEST_PANES:-0 1 2 3}"
 
 if [[ ! -f "$BRIDGE" ]]; then
   echo "bridge not found: $BRIDGE" >&2

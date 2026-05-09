@@ -15,7 +15,7 @@
     "planner": "opus",
     "builder": "sonnet",
     "evaluator": "opus",
-    "lab_builder_matrix": "glm,glm,glm,deepseek"
+    "lab_builder_matrix": "glm,glm,glm,anthropic-sonnet"
   },
   "providers": {
     "zhipu_base_url": "https://api.z.ai/api/anthropic",

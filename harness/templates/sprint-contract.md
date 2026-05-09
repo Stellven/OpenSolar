@@ -12,6 +12,16 @@ Project: {{project_dir}}
 ## Done 定义 (Definition of Done)
 {{done_criteria}}
 
+## 规划产物 (Required Planning Artifacts)
+- `sprints/{{sprint_id}}.plan.md`: 给人看的执行计划
+- `sprints/{{sprint_id}}.task_graph.json`: 给控制面执行的 DAG，必须通过：
+
+```bash
+~/.solar/bin/solar-harness graph-scheduler validate --graph ~/.solar/harness/sprints/{{sprint_id}}.task_graph.json
+```
+
+每个 DAG 节点必须声明 `id / goal / depends_on / write_scope / read_scope / required_skills / preferred_model / gate / acceptance / estimated_cost`。未声明 `write_scope` 的节点禁止并行，只能串行。
+
 ## 范围 (Scope)
 - 包含: {{scope_in}}
 - 不包含: {{scope_out}}

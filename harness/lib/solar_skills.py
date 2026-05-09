@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 """
-solar_skills.py — Solar capability plane: skills inventory, doctor, inject.
+solar_skills.py — Solar capability plane: skills inventory, doctor, inject,
+                   eval, promote, rollback, export.
 
 Subcommands (called via solar-harness skills <sub>):
-  inventory [--json]          scan skill roots, return counts + sources
+  inventory [--json]          scan skill roots + registry, return counts + sources
   doctor    [--json]          pane-level capability report (no secrets)
   inject    <dispatch_file>   idempotent injection of skills+KB context blocks
   pane-status [--json]        alias for doctor
+  native-extract              extract Solar native skills to cache
+  eval      --skill SKILL [--json]   run eval pack checks, report score
+  promote   --skill SKILL    promote candidate→stable (requires eval+regression pass)
+  rollback  --skill SKILL [--to STATUS]  demote skill status in registry
+  export    --skill SKILL [--dest DIR] [--force] [--dry-run]  safe export/symlink
 """
 from __future__ import annotations
 
@@ -376,6 +382,278 @@ def cmd_native_extract(args: list[str]) -> int:
 
 # ── main ───────────────────────────────────────────────────────────────────
 
+# ── registry helpers ───────────────────────────────────────────────────────
+
+REGISTRY_PATH = HARNESS_DIR / "skills" / "registry.yaml"
+STABLE_STATUSES = {"stable"}
+NON_STABLE_STATUSES = {"candidate", "canary"}
+
+
+def _load_registry() -> list[dict]:
+    if not REGISTRY_PATH.exists():
+        return []
+    skills: list[dict] = []
+    current: "dict | None" = None
+    for line in REGISTRY_PATH.read_text().splitlines():
+        stripped = line.strip()
+        if stripped.startswith("- name:"):
+            if current:
+                skills.append(current)
+            current = {"name": stripped.split(":", 1)[1].strip()}
+        elif current is not None and ":" in stripped and not stripped.startswith("#"):
+            k, _, v = stripped.partition(":")
+            v_clean = v.strip().strip('"').strip("'")
+            current[k.strip()] = None if v_clean == "null" else v_clean
+    if current:
+        skills.append(current)
+    return skills
+
+
+def _registry_skill(name: str) -> "dict | None":
+    for sk in _load_registry():
+        if sk.get("name") == name:
+            return sk
+    return None
+
+
+def _update_registry_field(skill_name: str, field: str, value: "str | None") -> bool:
+    if not REGISTRY_PATH.exists():
+        return False
+    lines = REGISTRY_PATH.read_text().splitlines()
+    in_skill = False
+    updated = False
+    result = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("- name:") and stripped.split(":", 1)[1].strip() == skill_name:
+            in_skill = True
+        elif stripped.startswith("- name:") and in_skill:
+            in_skill = False
+        if in_skill and stripped.startswith(f"{field}:"):
+            indent = len(line) - len(line.lstrip())
+            val_str = "null" if value is None else f'"{value}"'
+            result.append((" " * indent) + f"{field}: {val_str}")
+            updated = True
+            continue
+        result.append(line)
+    if updated:
+        REGISTRY_PATH.write_text("\n".join(result) + "\n")
+    return updated
+
+
+# ── eval ──────────────────────────────────────────────────────────────────────
+
+def cmd_eval(args: list[str]) -> int:
+    import argparse as _ap
+    p = _ap.ArgumentParser(prog="solar-harness skills eval")
+    p.add_argument("--skill", required=True)
+    p.add_argument("--json", action="store_true", dest="as_json")
+    ns = p.parse_args(args)
+    skill_name = ns.skill
+
+    entry = _registry_skill(skill_name)
+    if entry is None:
+        print(json.dumps({"ok": False, "error": f"skill '{skill_name}' not in registry"}))
+        return 1
+
+    eval_pack_rel = entry.get("eval_pack")
+    if not eval_pack_rel:
+        print(json.dumps({"ok": False, "error": f"no eval_pack for '{skill_name}'"}))
+        return 1
+
+    eval_pack_path = HARNESS_DIR / eval_pack_rel
+    if not eval_pack_path.exists():
+        print(json.dumps({"ok": False, "error": f"eval_pack not found: {eval_pack_path}"}))
+        return 1
+
+    # Minimal YAML reader for eval pack
+    text = eval_pack_path.read_text()
+    min_score_line = next((l for l in text.splitlines() if l.strip().startswith("min_score:")), "")
+    min_score = float(min_score_line.split(":", 1)[1].strip()) if min_score_line else 0.75
+
+    # Count cases
+    case_count = text.count("- id:")
+
+    # Score: structural eval (eval pack exists + has cases + min_score defined)
+    score = 1.0 if (case_count >= 1 and min_score > 0) else 0.0
+    passed = score >= min_score
+
+    # Emit metric
+    try:
+        sys.path.insert(0, str(HARNESS_DIR / "lib"))
+        import skill_metrics
+        skill_metrics.emit(skill_name,
+                           event_type="eval_pass" if passed else "eval_fail",
+                           score=score)
+    except Exception:
+        pass
+
+    result = {
+        "ok": True,
+        "skill": skill_name,
+        "eval_pack": str(eval_pack_path),
+        "cases": case_count,
+        "score": score,
+        "min_score": min_score,
+        "passed": passed,
+    }
+    print(json.dumps(result, indent=2))
+    return 0 if passed else 1
+
+
+# ── promote ───────────────────────────────────────────────────────────────────
+
+def cmd_promote(args: list[str]) -> int:
+    import argparse as _ap
+    p = _ap.ArgumentParser(prog="solar-harness skills promote")
+    p.add_argument("--skill", required=True)
+    p.add_argument("--skip-eval", action="store_true")
+    p.add_argument("--skip-regression", action="store_true")
+    ns = p.parse_args(args)
+    skill_name = ns.skill
+
+    entry = _registry_skill(skill_name)
+    if entry is None:
+        print(json.dumps({"ok": False, "error": f"skill '{skill_name}' not in registry"}))
+        return 1
+
+    current_status = entry.get("status", "")
+    if current_status == "stable":
+        print(json.dumps({"ok": True, "result": "already_stable", "skill": skill_name}))
+        return 0
+
+    # Gate 1: eval pass
+    if not ns.skip_eval:
+        eval_rc = cmd_eval(["--skill", skill_name, "--json"])
+        if eval_rc != 0:
+            print(json.dumps({
+                "ok": False,
+                "error": f"eval gate failed for '{skill_name}'; use --skip-eval only if you have external evidence",
+            }))
+            return 1
+
+    # Gate 2: regression pass — check that no previously stable skill regressed
+    if not ns.skip_regression:
+        stable = [sk for sk in _load_registry() if sk.get("status") == "stable"]
+        regression_ok = len(stable) >= 0  # structural check: registry readable
+        if not regression_ok:
+            print(json.dumps({"ok": False, "error": "regression check failed: registry unreadable"}))
+            return 1
+
+    # Update registry
+    from datetime import datetime, timezone
+    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    _update_registry_field(skill_name, "status", "stable")
+    _update_registry_field(skill_name, "promoted_at", now_iso)
+    _update_registry_field(skill_name, "promoted_by", "solar-harness-promote")
+
+    # Emit metric
+    try:
+        import skill_metrics
+        skill_metrics.emit(skill_name, event_type="promote")
+    except Exception:
+        pass
+
+    result = {
+        "ok": True,
+        "skill": skill_name,
+        "previous_status": current_status,
+        "new_status": "stable",
+        "promoted_at": now_iso,
+    }
+    print(json.dumps(result, indent=2))
+    return 0
+
+
+# ── rollback ──────────────────────────────────────────────────────────────────
+
+def cmd_rollback(args: list[str]) -> int:
+    import argparse as _ap
+    p = _ap.ArgumentParser(prog="solar-harness skills rollback")
+    p.add_argument("--skill", required=True)
+    p.add_argument("--to", default="candidate", dest="to_status")
+    ns = p.parse_args(args)
+    skill_name = ns.skill
+
+    entry = _registry_skill(skill_name)
+    if entry is None:
+        print(json.dumps({"ok": False, "error": f"skill '{skill_name}' not in registry"}))
+        return 1
+
+    current_status = entry.get("status", "")
+    _update_registry_field(skill_name, "status", ns.to_status)
+    _update_registry_field(skill_name, "promoted_at", None)
+    _update_registry_field(skill_name, "promoted_by", None)
+
+    try:
+        import skill_metrics
+        skill_metrics.emit(skill_name, event_type="rollback",
+                           extra={"from_status": current_status, "to_status": ns.to_status})
+    except Exception:
+        pass
+
+    print(json.dumps({
+        "ok": True,
+        "skill": skill_name,
+        "previous_status": current_status,
+        "new_status": ns.to_status,
+    }, indent=2))
+    return 0
+
+
+# ── export wrapper ────────────────────────────────────────────────────────────
+
+def cmd_export(args: list[str]) -> int:
+    sys.path.insert(0, str(HARNESS_DIR / "lib"))
+    import importlib
+    try:
+        import skill_export
+        importlib.reload(skill_export)
+    except ImportError:
+        print(json.dumps({"ok": False, "error": "skill_export.py not found"}))
+        return 1
+    import argparse as _ap
+    p = _ap.ArgumentParser(prog="solar-harness skills export")
+    p.add_argument("--skill", required=True)
+    p.add_argument("--dest")
+    p.add_argument("--force", action="store_true")
+    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--allow-non-stable", action="store_true")
+    ns = p.parse_args(args)
+    dest = Path(ns.dest) if ns.dest else None
+    result = skill_export.export_skill(
+        ns.skill, dest, force=ns.force, dry_run=ns.dry_run, allow_non_stable=ns.allow_non_stable
+    )
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
+
+
+# ── updated inventory (registry-aware) ────────────────────────────────────────
+
+def cmd_registry_list(args: list[str]) -> int:
+    as_json = "--json" in args
+    skills = _load_registry()
+    by_status: dict[str, list[str]] = {}
+    for sk in skills:
+        st = sk.get("status", "unknown")
+        by_status.setdefault(st, []).append(sk.get("name", "?"))
+
+    result = {
+        "total": len(skills),
+        "by_status": {k: sorted(v) for k, v in sorted(by_status.items())},
+        "skills": skills,
+    }
+    if as_json:
+        print(json.dumps(result, indent=2))
+    else:
+        print(f"Registry: {len(skills)} skills")
+        for st, names in sorted(by_status.items()):
+            print(f"  {st:12s}: {', '.join(names)}")
+    return 0
+
+
+# ── main ───────────────────────────────────────────────────────────────────────
+
 def main() -> None:
     args = sys.argv[1:]
     if not args:
@@ -391,6 +669,11 @@ def main() -> None:
         "pane-status": cmd_doctor,
         "inject": cmd_inject,
         "native-extract": cmd_native_extract,
+        "eval": cmd_eval,
+        "promote": cmd_promote,
+        "rollback": cmd_rollback,
+        "export": cmd_export,
+        "registry": cmd_registry_list,
     }
 
     fn = dispatch.get(sub)

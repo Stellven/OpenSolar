@@ -103,6 +103,11 @@ make_fixture "fx5d" "active" "s0_ready_for_eval" "evaluator" >/dev/null
 result=$(map_canonical_state "fx5d")
 check "active+s0_ready_for_eval → build_complete/evaluator" "$result" "build_complete" "evaluator"
 
+# ── Fixture 5e: slice ready-for-eval routes to evaluator ─────────────────────
+make_fixture "fx5e" "active" "s6_ready_for_eval" "evaluator" >/dev/null
+result=$(map_canonical_state "fx5e")
+check "active+s6_ready_for_eval → build_complete/evaluator" "$result" "build_complete" "evaluator"
+
 # ── Fixture 6: passed → done/none ────────────────────────────────────────────
 make_fixture "fx6" "passed" "" "" >/dev/null
 result=$(map_canonical_state "fx6")

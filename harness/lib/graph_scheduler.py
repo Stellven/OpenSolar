@@ -1,0 +1,623 @@
+#!/usr/bin/env python3
+"""graph_scheduler.py — machine-executable DAG scheduler for Solar Harness.
+
+This module turns planner output (`sprint-<sid>.task_graph.json`) into concrete
+dispatch decisions. It intentionally stays in Python so it can plug into the
+existing S6 control plane without adding a TypeScript runtime dependency.
+
+Core guarantees:
+  - invalid DAGs fail fast (missing deps, cycles, duplicate nodes)
+  - ready nodes require all dependencies to be passed
+  - nodes with overlapping write_scope never share a batch
+  - nodes without declared write_scope are treated as exclusive writers
+  - parent sprint cannot pass until every node and required gate has passed
+"""
+from __future__ import annotations
+
+import argparse
+import datetime
+import json
+import os
+import sys
+from copy import deepcopy
+from pathlib import Path
+from typing import Any
+
+HOME = Path.home()
+HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
+
+TERMINAL_STATUSES = {"passed", "failed", "skipped"}
+ACTIVE_STATUSES = {"assigned", "dispatched", "in_progress", "running", "reviewing"}
+READY_STATUSES = {"pending", "queued", "blocked", ""}
+PASS_STATUSES = {"passed"}
+
+
+def _now() -> str:
+    return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def load_graph(path: str | Path) -> dict[str, Any]:
+    return json.loads(Path(path).read_text())
+
+
+def save_graph(path: str | Path, graph: dict[str, Any]) -> None:
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(p.suffix + ".tmp")
+    tmp.write_text(json.dumps(graph, indent=2, ensure_ascii=False) + "\n")
+    os.replace(tmp, p)
+
+
+def _nodes(graph: dict[str, Any]) -> list[dict[str, Any]]:
+    nodes = graph.get("nodes")
+    if not isinstance(nodes, list):
+        raise ValueError("task_graph.nodes must be a list")
+    return nodes
+
+
+def _node_map(graph: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    result: dict[str, dict[str, Any]] = {}
+    for node in _nodes(graph):
+        node_id = node.get("id")
+        if not isinstance(node_id, str) or not node_id:
+            raise ValueError("every task graph node requires non-empty id")
+        if node_id in result:
+            raise ValueError(f"duplicate node id: {node_id}")
+        result[node_id] = node
+    return result
+
+
+def _node_results(graph: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    results = graph.get("node_results") or graph.get("results") or {}
+    return results if isinstance(results, dict) else {}
+
+
+def node_status(graph: dict[str, Any], node_id: str) -> str:
+    results = _node_results(graph)
+    if node_id in results and isinstance(results[node_id], dict):
+        return str(results[node_id].get("status", "") or "").lower()
+    node = _node_map(graph)[node_id]
+    return str(node.get("status", "pending") or "pending").lower()
+
+
+def _depends_on(node: dict[str, Any]) -> list[str]:
+    deps = node.get("depends_on", [])
+    if deps is None:
+        return []
+    if not isinstance(deps, list):
+        raise ValueError(f"{node.get('id')}.depends_on must be a list")
+    return [str(d) for d in deps]
+
+
+def _estimated_cost(node: dict[str, Any]) -> float:
+    try:
+        return float(node.get("estimated_cost", 1) or 1)
+    except Exception:
+        return 1.0
+
+
+def validate_graph(graph: dict[str, Any]) -> dict[str, Any]:
+    ids = _node_map(graph)
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    for node_id, node in ids.items():
+        for dep in _depends_on(node):
+            if dep not in ids:
+                errors.append(f"{node_id} depends on missing node {dep}")
+        if "write_scope" not in node or not node.get("write_scope"):
+            warnings.append(f"{node_id} missing write_scope; scheduler will serialize it")
+        if "acceptance" not in node:
+            warnings.append(f"{node_id} missing acceptance")
+
+    try:
+        topo_order(graph)
+    except ValueError as exc:
+        errors.append(str(exc))
+
+    return {
+        "ok": not errors,
+        "sprint_id": graph.get("sprint_id"),
+        "node_count": len(ids),
+        "errors": errors,
+        "warnings": warnings,
+    }
+
+
+def topo_order(graph: dict[str, Any]) -> list[str]:
+    ids = _node_map(graph)
+    indegree = {node_id: 0 for node_id in ids}
+    outgoing = {node_id: [] for node_id in ids}
+
+    for node_id, node in ids.items():
+        for dep in _depends_on(node):
+            if dep not in ids:
+                raise ValueError(f"{node_id} depends on missing node {dep}")
+            indegree[node_id] += 1
+            outgoing[dep].append(node_id)
+
+    queue = sorted([node_id for node_id, deg in indegree.items() if deg == 0])
+    order: list[str] = []
+    while queue:
+        node_id = queue.pop(0)
+        order.append(node_id)
+        for child in sorted(outgoing[node_id]):
+            indegree[child] -= 1
+            if indegree[child] == 0:
+                queue.append(child)
+                queue.sort()
+
+    if len(order) != len(ids):
+        cycle_nodes = sorted([node_id for node_id, deg in indegree.items() if deg > 0])
+        raise ValueError("cycle detected: " + ", ".join(cycle_nodes))
+    return order
+
+
+def topo_layers(graph: dict[str, Any]) -> list[list[str]]:
+    ids = _node_map(graph)
+    remaining = set(ids)
+    passed: set[str] = set()
+    layers: list[list[str]] = []
+
+    while remaining:
+        layer = sorted([
+            node_id for node_id in remaining
+            if all(dep in passed for dep in _depends_on(ids[node_id]))
+        ])
+        if not layer:
+            raise ValueError("cycle detected while building layers")
+        layers.append(layer)
+        remaining -= set(layer)
+        passed.update(layer)
+    return layers
+
+
+def critical_path(graph: dict[str, Any]) -> dict[str, Any]:
+    ids = _node_map(graph)
+    order = topo_order(graph)
+    best_cost: dict[str, float] = {}
+    best_path: dict[str, list[str]] = {}
+
+    for node_id in order:
+        node = ids[node_id]
+        deps = _depends_on(node)
+        if not deps:
+            best_cost[node_id] = _estimated_cost(node)
+            best_path[node_id] = [node_id]
+            continue
+        parent = max(deps, key=lambda dep: best_cost.get(dep, 0))
+        best_cost[node_id] = best_cost.get(parent, 0) + _estimated_cost(node)
+        best_path[node_id] = best_path.get(parent, [parent]) + [node_id]
+
+    if not order:
+        return {"cost": 0, "path": []}
+    end = max(order, key=lambda node_id: best_cost.get(node_id, 0))
+    return {"cost": best_cost[end], "path": best_path[end]}
+
+
+def _is_passed(graph: dict[str, Any], node_id: str) -> bool:
+    return node_status(graph, node_id) in PASS_STATUSES
+
+
+def ready_nodes(graph: dict[str, Any]) -> list[dict[str, Any]]:
+    validation = validate_graph(graph)
+    if not validation["ok"]:
+        raise ValueError("; ".join(validation["errors"]))
+
+    ids = _node_map(graph)
+    ready: list[dict[str, Any]] = []
+    for node_id in topo_order(graph):
+        status = node_status(graph, node_id)
+        if status in TERMINAL_STATUSES or status in ACTIVE_STATUSES:
+            continue
+        if status not in READY_STATUSES:
+            continue
+        deps = _depends_on(ids[node_id])
+        if all(_is_passed(graph, dep) for dep in deps):
+            ready.append(deepcopy(ids[node_id]))
+    return ready
+
+
+def _scope_list(node: dict[str, Any]) -> list[str]:
+    scopes = node.get("write_scope")
+    if not scopes:
+        return []
+    if isinstance(scopes, str):
+        return [scopes]
+    if not isinstance(scopes, list):
+        raise ValueError(f"{node.get('id')}.write_scope must be a string or list")
+    return [str(scope) for scope in scopes if str(scope)]
+
+
+def _scope_overlap(a: str, b: str) -> bool:
+    if a == b:
+        return True
+    a_norm = a.rstrip("/") + "/"
+    b_norm = b.rstrip("/") + "/"
+    return a_norm.startswith(b_norm) or b_norm.startswith(a_norm)
+
+
+def write_scope_conflict(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    a_scopes = _scope_list(a)
+    b_scopes = _scope_list(b)
+
+    # Missing write_scope means exclusive writer. It cannot safely share a batch.
+    if not a_scopes or not b_scopes:
+        return True
+    return any(_scope_overlap(sa, sb) for sa in a_scopes for sb in b_scopes)
+
+
+def _batch_ready_nodes(nodes: list[dict[str, Any]], max_parallel: int | None = None) -> list[list[dict[str, Any]]]:
+    batches: list[list[dict[str, Any]]] = []
+    for node in nodes:
+        placed = False
+        for batch in batches:
+            if max_parallel and len(batch) >= max_parallel:
+                continue
+            if any(write_scope_conflict(node, other) for other in batch):
+                continue
+            batch.append(node)
+            placed = True
+            break
+        if not placed:
+            batches.append([node])
+    return batches
+
+
+def make_batches(graph: dict[str, Any], max_parallel: int | None = None) -> dict[str, Any]:
+    nodes = ready_nodes(graph)
+    batches = _batch_ready_nodes(nodes, max_parallel=max_parallel)
+    return {
+        "ok": True,
+        "sprint_id": graph.get("sprint_id"),
+        "batch_count": len(batches),
+        "batches": [
+            {
+                "id": f"batch-{idx + 1}",
+                "join_gate": [node.get("gate") for node in batch if node.get("gate")],
+                "nodes": [node["id"] for node in batch],
+            }
+            for idx, batch in enumerate(batches)
+        ],
+    }
+
+
+def _worker_busy(worker: dict[str, Any]) -> bool:
+    return bool(worker.get("busy")) or str(worker.get("status", "")).lower() in {"busy", "leased", "running"}
+
+
+def _worker_quota_exhausted(worker: dict[str, Any], preferred_model: str | None = None) -> bool:
+    exhausted = worker.get("quota_exhausted", False)
+    if isinstance(exhausted, bool):
+        return exhausted
+    if isinstance(exhausted, list) and preferred_model:
+        return preferred_model in exhausted
+    return False
+
+
+def _model_match(worker: dict[str, Any], preferred_model: str | None) -> bool:
+    if not preferred_model:
+        return True
+    models = [str(m).lower() for m in worker.get("models", [])]
+    if not models:
+        return True
+    return preferred_model.lower() in models
+
+
+def _skills_match(worker: dict[str, Any], required_skills: list[str]) -> bool:
+    if not required_skills:
+        return True
+    skills = set(str(s) for s in worker.get("skills", []))
+    return set(required_skills).issubset(skills)
+
+
+def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, Any]]) -> dict[str, Any]:
+    """Assign one batch to available workers.
+
+    Matching order:
+      1. exact preferred_model + required skills
+      2. same skills with alternate model (Sonnet/DeepSeek fallback, etc.)
+      3. queue when no safe worker exists
+    """
+    assigned: list[dict[str, Any]] = []
+    queued: list[dict[str, Any]] = []
+    used_panes: set[str] = set()
+
+    for node in batch_nodes:
+        preferred_model = node.get("preferred_model")
+        required_skills = [str(s) for s in node.get("required_skills", [])]
+        candidates: list[tuple[int, dict[str, Any]]] = []
+
+        for worker in workers:
+            pane = str(worker.get("pane", ""))
+            if not pane or pane in used_panes or _worker_busy(worker):
+                continue
+            if not _skills_match(worker, required_skills):
+                continue
+            if _worker_quota_exhausted(worker, preferred_model):
+                continue
+            score = 0 if _model_match(worker, preferred_model) else 10
+            score += int(worker.get("load", 0) or 0)
+            candidates.append((score, worker))
+
+        if not candidates:
+            queued.append({"node": node["id"], "reason": "no_matching_worker"})
+            continue
+
+        candidates.sort(key=lambda item: (item[0], str(item[1].get("pane", ""))))
+        worker = candidates[0][1]
+        used_panes.add(str(worker.get("pane")))
+        assigned.append({
+            "node": node["id"],
+            "pane": worker.get("pane"),
+            "preferred_model": preferred_model,
+            "selected_models": worker.get("models", []),
+            "fallback_model": not _model_match(worker, preferred_model),
+        })
+
+    return {"ok": True, "assigned": assigned, "queued": queued}
+
+
+def assign_ready(graph: dict[str, Any], workers: list[dict[str, Any]],
+                 max_parallel: int | None = None) -> dict[str, Any]:
+    batches = _batch_ready_nodes(ready_nodes(graph), max_parallel=max_parallel)
+    if not batches:
+        return {"ok": True, "assigned": [], "queued": [], "batch": []}
+    first_batch = batches[0]
+    result = assign_workers(first_batch, workers)
+    result["batch"] = [node["id"] for node in first_batch]
+    return result
+
+
+def mark_node_result(graph: dict[str, Any], node_id: str, status: str,
+                     gate_status: str | None = None, note: str | None = None) -> dict[str, Any]:
+    ids = _node_map(graph)
+    if node_id not in ids:
+        raise ValueError(f"unknown node: {node_id}")
+
+    graph.setdefault("node_results", {})
+    graph["node_results"][node_id] = {
+        "status": status,
+        "updated_at": _now(),
+    }
+    if note:
+        graph["node_results"][node_id]["note"] = note
+
+    gate = ids[node_id].get("gate")
+    if gate and (gate_status or status) == "passed":
+        graph.setdefault("gate_results", {})
+        graph["gate_results"][gate] = {"status": "passed", "node": node_id, "updated_at": _now()}
+
+    return parent_ready_check(graph)
+
+
+def set_node_status(graph: dict[str, Any], node_id: str, status: str,
+                    pane: str | None = None, dispatch_id: str | None = None) -> None:
+    ids = _node_map(graph)
+    if node_id not in ids:
+        raise ValueError(f"unknown node: {node_id}")
+    ids[node_id]["status"] = status
+    ids[node_id]["updated_at"] = _now()
+    if pane:
+        ids[node_id]["assigned_to"] = pane
+    if dispatch_id:
+        ids[node_id]["dispatch_id"] = dispatch_id
+
+
+def enqueue_ready(graph: dict[str, Any], graph_path: str, workers: list[dict[str, Any]],
+                  max_parallel: int | None = None, lease: bool = False,
+                  ttl: int = 600) -> dict[str, Any]:
+    """Assign ready graph nodes and enqueue them as old-control-plane payloads.
+
+    This is the compatibility bridge: graph scheduler decides what is safe to
+    run, while the existing queue/coordinator still performs the actual wake.
+    """
+    sys.path.insert(0, str(HARNESS_DIR / "lib"))
+    from task_queue import enqueue  # noqa: WPS433
+
+    if lease:
+        from pane_lease import acquire  # noqa: WPS433
+    else:
+        acquire = None
+
+    sid = str(graph.get("sprint_id") or Path(graph_path).stem.replace(".task_graph", ""))
+    assignment = assign_ready(graph, workers, max_parallel=max_parallel)
+    queued: list[dict[str, Any]] = list(assignment.get("queued", []))
+    enqueued: list[dict[str, Any]] = []
+
+    nodes_by_id = _node_map(graph)
+    for item in assignment.get("assigned", []):
+        node_id = item["node"]
+        pane = item["pane"]
+        dispatch_id = f"graph-{sid}-{node_id}-{datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}"
+
+        lease_result = {"acquired": True, "reason": "lease_disabled"}
+        if acquire is not None:
+            lease_result = acquire(pane, sid, dispatch_id, ttl)
+            if not lease_result.get("acquired"):
+                queued.append({
+                    "node": node_id,
+                    "pane": pane,
+                    "reason": lease_result.get("reason", "lease_failed"),
+                })
+                continue
+
+        payload = {
+            "type": "graph_node",
+            "graph": graph_path,
+            "sprint_id": sid,
+            "node": nodes_by_id[node_id],
+            "assignment": item,
+            "dispatch_id": dispatch_id,
+            "lease": lease_result,
+        }
+        q = enqueue(sid, f"graph_node|node_id={node_id}|pane={pane}", 80, payload)
+        set_node_status(graph, node_id, "dispatched", pane=pane, dispatch_id=dispatch_id)
+        enqueued.append({"node": node_id, "pane": pane, "queue": q, "dispatch_id": dispatch_id})
+
+    return {
+        "ok": True,
+        "sprint_id": sid,
+        "batch": assignment.get("batch", []),
+        "enqueued": enqueued,
+        "queued": queued,
+    }
+
+
+def parent_ready_check(graph: dict[str, Any]) -> dict[str, Any]:
+    ids = _node_map(graph)
+    open_nodes = [node_id for node_id in ids if node_status(graph, node_id) != "passed"]
+    failed_nodes = [node_id for node_id in ids if node_status(graph, node_id) == "failed"]
+
+    required_gates = graph.get("required_gates")
+    if required_gates is None:
+        required_gates = [node.get("gate") for node in ids.values() if node.get("gate")]
+    required_gates = [str(g) for g in required_gates if g]
+
+    gate_results = graph.get("gate_results") or {}
+    missing_gates = [
+        gate for gate in required_gates
+        if not isinstance(gate_results.get(gate), dict) or gate_results[gate].get("status") != "passed"
+    ]
+
+    ready = not open_nodes and not failed_nodes and not missing_gates and bool(ids)
+    return {
+        "ok": True,
+        "sprint_id": graph.get("sprint_id"),
+        "ready": ready,
+        "node_count": len(ids),
+        "open_nodes": open_nodes,
+        "failed_nodes": failed_nodes,
+        "required_gates": required_gates,
+        "missing_gates": missing_gates,
+    }
+
+
+def _workers_from_file(path: str | None) -> list[dict[str, Any]]:
+    if not path:
+        return []
+    data = json.loads(Path(path).read_text())
+    if isinstance(data, dict):
+        return data.get("workers", [])
+    if isinstance(data, list):
+        return data
+    raise ValueError("workers file must be a list or {workers: [...]}")
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(prog="graph_scheduler.py")
+    sub = ap.add_subparsers(dest="cmd")
+
+    def add_graph(p: argparse.ArgumentParser) -> None:
+        p.add_argument("--graph", required=True)
+
+    p = sub.add_parser("validate")
+    add_graph(p)
+
+    p = sub.add_parser("topo")
+    add_graph(p)
+
+    p = sub.add_parser("layers")
+    add_graph(p)
+
+    p = sub.add_parser("critical-path")
+    add_graph(p)
+
+    p = sub.add_parser("ready")
+    add_graph(p)
+
+    p = sub.add_parser("batches")
+    add_graph(p)
+    p.add_argument("--max-parallel", type=int)
+    p.add_argument("--out")
+
+    p = sub.add_parser("assign")
+    add_graph(p)
+    p.add_argument("--workers", required=True)
+    p.add_argument("--max-parallel", type=int)
+
+    p = sub.add_parser("mark")
+    add_graph(p)
+    p.add_argument("--node", required=True)
+    p.add_argument("--status", required=True)
+    p.add_argument("--note")
+    p.add_argument("--in-place", action="store_true")
+
+    p = sub.add_parser("parent-check")
+    add_graph(p)
+
+    p = sub.add_parser("enqueue-ready")
+    add_graph(p)
+    p.add_argument("--workers", required=True)
+    p.add_argument("--max-parallel", type=int)
+    p.add_argument("--lease", action="store_true")
+    p.add_argument("--ttl", type=int, default=600)
+    p.add_argument("--in-place", action="store_true")
+
+    args = ap.parse_args()
+
+    try:
+        if args.cmd == "validate":
+            print(json.dumps(validate_graph(load_graph(args.graph)), ensure_ascii=False))
+
+        elif args.cmd == "topo":
+            graph = load_graph(args.graph)
+            print(json.dumps({"ok": True, "order": topo_order(graph)}, ensure_ascii=False))
+
+        elif args.cmd == "layers":
+            graph = load_graph(args.graph)
+            print(json.dumps({"ok": True, "layers": topo_layers(graph)}, ensure_ascii=False))
+
+        elif args.cmd == "critical-path":
+            graph = load_graph(args.graph)
+            result = critical_path(graph)
+            result["ok"] = True
+            print(json.dumps(result, ensure_ascii=False))
+
+        elif args.cmd == "ready":
+            graph = load_graph(args.graph)
+            print(json.dumps({"ok": True, "nodes": [n["id"] for n in ready_nodes(graph)]}, ensure_ascii=False))
+
+        elif args.cmd == "batches":
+            graph = load_graph(args.graph)
+            result = make_batches(graph, args.max_parallel)
+            if args.out:
+                Path(args.out).write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n")
+            print(json.dumps(result, ensure_ascii=False))
+
+        elif args.cmd == "assign":
+            graph = load_graph(args.graph)
+            workers = _workers_from_file(args.workers)
+            print(json.dumps(assign_ready(graph, workers, args.max_parallel), ensure_ascii=False))
+
+        elif args.cmd == "mark":
+            graph = load_graph(args.graph)
+            result = mark_node_result(graph, args.node, args.status, note=args.note)
+            if args.in_place:
+                save_graph(args.graph, graph)
+            print(json.dumps(result, ensure_ascii=False))
+
+        elif args.cmd == "parent-check":
+            print(json.dumps(parent_ready_check(load_graph(args.graph)), ensure_ascii=False))
+
+        elif args.cmd == "enqueue-ready":
+            graph = load_graph(args.graph)
+            workers = _workers_from_file(args.workers)
+            result = enqueue_ready(graph, args.graph, workers, args.max_parallel, args.lease, args.ttl)
+            if args.in_place:
+                save_graph(args.graph, graph)
+            print(json.dumps(result, ensure_ascii=False))
+
+        else:
+            ap.print_help()
+            return 1
+
+    except Exception as exc:
+        print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
+        return 2
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

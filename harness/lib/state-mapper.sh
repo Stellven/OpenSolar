@@ -137,7 +137,9 @@ elif st == 'active':
         lc = 'building'
     elif phase in ('s0_dispatched', 's0_in_progress'):
         lc = 'building'
-    elif phase in ('s0_ready_for_eval',):
+    elif phase in ('s0_ready_for_eval', 's1_ready_for_eval', 's2_ready_for_eval',
+                   's3_ready_for_eval', 's4_ready_for_eval', 's5_ready_for_eval',
+                   's6_ready_for_eval', 's7_ready_for_eval'):
         lc = 'build_complete'
         role = 'evaluator'
     elif phase in ('building', 'build_complete'):

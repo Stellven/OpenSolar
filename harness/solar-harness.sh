@@ -191,7 +191,20 @@ do_doctor() {
   # 旧版曾用全文件双引号奇偶数做阻塞检查；它不理解 heredoc、Python
   # 三引号和跨行 dispatch 文本，会把合法脚本误判为坏脚本。
 
-  # (g) 所有 sprint 状态机合法
+  # (g) qmd launcher Node ABI 风险可检测可修复
+  if [[ -x "$HARNESS_DIR/lib/qmd-launcher-repair.sh" ]]; then
+    local qmd_repair_out qmd_repair_rc
+    qmd_repair_out="$("$HARNESS_DIR/lib/qmd-launcher-repair.sh" --check 2>&1)" || qmd_repair_rc=$?
+    qmd_repair_rc="${qmd_repair_rc:-0}"
+    if [[ "$qmd_repair_rc" == "2" ]]; then
+      echo "⚠ qmd launcher 存在 Node ABI 风险"
+      echo "   修复: $0 wiki qmd-repair --apply"
+    elif [[ "$qmd_repair_rc" != "0" ]]; then
+      echo "⚠ qmd launcher 检查异常: $qmd_repair_out"
+    fi
+  fi
+
+  # (h) 所有 sprint 状态机合法
   for f in "$SPRINTS_DIR"/*.status.json; do
     [[ -f "$f" ]] || continue
     local st
@@ -588,7 +601,7 @@ detect_pane_by_persona_simple() {
 
 write_parallel_lab_state() {
   local work_dir="$1"
-  local model_matrix="${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,deepseek}"
+  local model_matrix="${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,anthropic-sonnet}"
   mkdir -p "$HARNESS_DIR/state"
   {
     printf "WORK_DIR='%s'\n" "$work_dir"
@@ -602,7 +615,7 @@ ensure_parallel_builder_lab() {
   local work_dir="${1:-$(pwd)}"
   tmux has-session -t "$LAB_SESSION_NAME" 2>/dev/null || return 0
   local state_file="$HARNESS_DIR/state/parallel-builder-lab.env"
-  local desired_matrix="${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,deepseek}"
+  local desired_matrix="${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,anthropic-sonnet}"
   local current_matrix=""
   if [[ -f "$state_file" ]]; then
     current_matrix=$(grep '^LAB_MODEL_MATRIX=' "$state_file" 2>/dev/null | sed "s/^LAB_MODEL_MATRIX='//;s/'$//" || true)
@@ -615,7 +628,7 @@ ensure_parallel_builder_lab() {
   write_parallel_lab_state "$work_dir"
 
   tmux rename-window -t "$LAB_SESSION_NAME:0" "Builder Lab" 2>/dev/null || true
-  tmux set-option -t "$LAB_SESSION_NAME" status-right "#[fg=#f9e2af]Solar Builder Lab #[fg=#a6e3a1]3 GLM-5.1 + 1 DeepSeek V4 Pro #[default]%H:%M" 2>/dev/null || true
+  tmux set-option -t "$LAB_SESSION_NAME" status-right "#[fg=#f9e2af]Solar Builder Lab #[fg=#a6e3a1]3 GLM-5.1 + 1 Claude Sonnet #[default]%H:%M" 2>/dev/null || true
   tmux set-environment -t "$LAB_SESSION_NAME" SOLAR_CLAUDE_BYPASS 1 2>/dev/null || true
   configure_builder_lab_labels
 
@@ -699,7 +712,7 @@ start_extension() {
   tmux set-option -t "$LAB_SESSION_NAME" pane-border-style "fg=#45475a"
   tmux set-option -t "$LAB_SESSION_NAME" pane-active-border-style "fg=#f9e2af"
   tmux set-option -t "$LAB_SESSION_NAME" status-right-length 60
-  tmux set-option -t "$LAB_SESSION_NAME" status-right "#[fg=#f9e2af]Solar Builder Lab #[fg=#a6e3a1]3 GLM-5.1 + 1 DeepSeek V4 Pro #[default]%H:%M"
+  tmux set-option -t "$LAB_SESSION_NAME" status-right "#[fg=#f9e2af]Solar Builder Lab #[fg=#a6e3a1]3 GLM-5.1 + 1 Claude Sonnet #[default]%H:%M"
   configure_builder_lab_labels
 
   ok "Parallel Builder Lab 四分屏已启动"
@@ -709,7 +722,7 @@ start_extension() {
   echo "  │ GLM-5.1      │ GLM-5.1      │"
   echo "  ├──────────────┼──────────────┤"
   echo "  │  Builder 3   │  Builder 4   │"
-  echo "  │ GLM-5.1      │ DeepSeek V4  │"
+  echo "  │ GLM-5.1      │ Claude Sonnet│"
   echo "  └──────────────┴──────────────┘"
   echo ""
   echo "  重新接入:  tmux attach -t $LAB_SESSION_NAME"
@@ -722,8 +735,12 @@ start_extension() {
 new_sprint() {
   local req="$1"
   local sid
-  sid=$(date +"sprint-%Y%m%d-%H%M%S")
   ensure_dirs
+  sid=$(date +"sprint-%Y%m%d-%H%M%S")
+  while [[ -e "$SPRINTS_DIR/$sid.status.json" || -e "$SPRINTS_DIR/$sid.contract.md" || -e "$SPRINTS_DIR/$sid.events.jsonl" ]]; do
+    sleep 1
+    sid=$(date +"sprint-%Y%m%d-%H%M%S")
+  done
 
   local template="$HARNESS_DIR/templates/contract-template-v2.md"
   local title summary
@@ -1954,7 +1971,12 @@ print(json.dumps({
       pane-status)   shift; python3 "$_skills_py" pane-status "$@" ;;
       inject)        shift; python3 "$_skills_py" inject "$@" ;;
       native-extract) shift; python3 "$_skills_py" native-extract "$@" ;;
-      *) err "用法: solar-harness skills <inventory|doctor|pane-status|inject|native-extract> [--json]"; exit 1 ;;
+      registry)      shift; python3 "$_skills_py" registry "$@" ;;
+      eval)          shift; python3 "$_skills_py" eval "$@" ;;
+      promote)       shift; python3 "$_skills_py" promote "$@" ;;
+      rollback)      shift; python3 "$_skills_py" rollback "$@" ;;
+      export)        shift; python3 "$_skills_py" export "$@" ;;
+      *) err "用法: solar-harness skills <inventory|doctor|export|eval|promote|rollback|registry> [opts]"; exit 1 ;;
     esac
     ;;
   graph)
@@ -2392,8 +2414,10 @@ PY
     echo "  $0 context inject --query \"问题\" [--format hook|markdown|--json]  默认知识上下文注入"
     echo "  $0 autopilot [status|apply|dispatch|loop|start|stop|service-status|queue]  自动监控断头 sprint/pane 并安全推进"
     echo "  $0 symphony [status|dry-run|workspace <sid>]  Symphony 调度"
+    echo "  $0 graph-scheduler [validate|ready|batches|assign|enqueue-ready|mark|parent-check]  DAG 并行调度"
+    echo "  $0 graph-dispatch [dispatch-ready|drain-queue]  DAG 节点级 pane 派发"
     echo "  $0 mirage [search|doctor|workspace|mounts|exec|provision]  Mirage 统一虚拟文件系统"
-    echo "  $0 wiki [install|status|export-sprint|update|query|ingest|chatgpt-import|vault-status|lint|rebuild|export-graph|colorize|history|run-dispatch|dispatch-watch|dispatch-maintenance|import-solar-db|capture-server|audit-uploads|backfill-uploads|quality-gate|reingest-quarantine|reingest-scheduler|qmd-status|qmd-search|qmd-update|qmd-mcp|qmd-embed|help]  Obsidian Wiki 集成"
+    echo "  $0 wiki [install|status|export-sprint|update|query|ingest|chatgpt-import|vault-status|lint|rebuild|export-graph|colorize|history|run-dispatch|dispatch-watch|dispatch-maintenance|import-solar-db|capture-server|audit-uploads|backfill-uploads|quality-gate|reingest-quarantine|reingest-scheduler|qmd-status|qmd-repair|qmd-search|qmd-update|qmd-mcp|qmd-embed|help]  Obsidian Wiki 集成"
     ;;
   mirage)
     # Mirage unified virtual filesystem — sprint-20260508-mirage-unified-vfs
@@ -2698,11 +2722,32 @@ PY
             ;;
         esac
         ;;
+      qmd-repair|mineru-repair)
+        _qmd_repair="${HARNESS_DIR}/lib/qmd-launcher-repair.sh"
+        [[ -x "$_qmd_repair" ]] || { err "qmd launcher repair not found: $_qmd_repair"; exit 1; }
+        "$_qmd_repair" "$@"
+        ;;
       qmd-status|mineru-status)
         _QMD_BIN="$(command -v qmd 2>/dev/null || true)"
         [[ -z "$_QMD_BIN" && -x "$HOME/.npm-global/bin/qmd" ]] && _QMD_BIN="$HOME/.npm-global/bin/qmd"
         [[ -n "$_QMD_BIN" ]] || { err "qmd not found; install mineru-document-explorer"; exit 1; }
-        "$_QMD_BIN" status "$@"
+        _qmd_status_out=""
+        _qmd_status_rc=0
+        _qmd_repair="${HARNESS_DIR}/lib/qmd-launcher-repair.sh"
+        set +e
+        _qmd_status_out="$("$_QMD_BIN" status "$@" 2>&1)"
+        _qmd_status_rc=$?
+        set -e
+        if [[ "$_qmd_status_rc" != "0" ]] && printf '%s\n' "$_qmd_status_out" | grep -Eiq 'NODE_MODULE_VERSION|ERR_DLOPEN_FAILED|better-sqlite3' && [[ -x "$_qmd_repair" ]]; then
+          warn "qmd native-module ABI error detected; attempting launcher repair"
+          "$_qmd_repair" --apply >&2 || true
+          set +e
+          _qmd_status_out="$("$_QMD_BIN" status "$@" 2>&1)"
+          _qmd_status_rc=$?
+          set -e
+        fi
+        printf '%s\n' "$_qmd_status_out"
+        exit "$_qmd_status_rc"
         ;;
       qmd-search|mineru-search)
         _QMD_BIN="$(command -v qmd 2>/dev/null || true)"
@@ -2858,7 +2903,7 @@ EOF
             ;;
           stop)
             launchctl bootout "gui/$(id -u)" "$_embed_plist" >/dev/null 2>&1 || true
-            pkill -f '/Users/sihaoli/.npm-global/bin/qmd embed -c solar-wiki' >/dev/null 2>&1 || true
+            pkill -f 'qmd embed -c solar-wiki' >/dev/null 2>&1 || true
             mkdir -p "$(dirname "$_embed_status")"
             cat > "$_embed_status" <<EOF
 {
@@ -2943,6 +2988,7 @@ EOF
         echo "  $0 wiki reingest-quarantine [--manifest PATH] [--limit N] [--json] [--dry-run]"
         echo "  $0 wiki reingest-scheduler [start [interval]|stop|status|run-once]"
         echo "  $0 wiki qmd-status"
+        echo "  $0 wiki qmd-repair [--check|--apply] [--json]"
         echo "  $0 wiki qmd-search \"<query>\" [-n N|--json|--files]"
         echo "  $0 wiki qmd-update"
         echo "  $0 wiki qmd-mcp [status|start|stop-proxy]"
@@ -3058,6 +3104,64 @@ EOF
         ;;
       *)
         err "Unknown s6-autopilot subcommand: $_ap_subcmd"; exit 1
+        ;;
+    esac
+    ;;
+
+  graph-scheduler)
+    # Machine-executable sprint DAG scheduler
+    shift
+    _graph_py="$HARNESS_DIR/lib/graph_scheduler.py"
+    if [[ ! -f "$_graph_py" ]]; then
+      err "graph_scheduler.py not found: $_graph_py"; exit 1
+    fi
+    _graph_subcmd="${1:-help}"; shift || true
+    case "$_graph_subcmd" in
+      validate|topo|layers|critical-path|ready|batches|assign|mark|parent-check|enqueue-ready)
+        python3 "$_graph_py" "$_graph_subcmd" "$@"
+        ;;
+      help|--help|-h|"")
+        echo "Solar Graph Scheduler — DAG planning and parallel dispatch"
+        echo ""
+        echo "Usage:"
+        echo "  $0 graph-scheduler validate       --graph sprint.task_graph.json"
+        echo "  $0 graph-scheduler topo           --graph sprint.task_graph.json"
+        echo "  $0 graph-scheduler layers         --graph sprint.task_graph.json"
+        echo "  $0 graph-scheduler critical-path  --graph sprint.task_graph.json"
+        echo "  $0 graph-scheduler ready          --graph sprint.task_graph.json"
+        echo "  $0 graph-scheduler batches        --graph sprint.task_graph.json [--max-parallel N] [--out dispatch_batches.json]"
+        echo "  $0 graph-scheduler assign         --graph sprint.task_graph.json --workers workers.json [--max-parallel N]"
+        echo "  $0 graph-scheduler enqueue-ready  --graph sprint.task_graph.json --workers workers.json [--lease] [--in-place]"
+        echo "  $0 graph-scheduler mark           --graph sprint.task_graph.json --node S1 --status passed [--in-place]"
+        echo "  $0 graph-scheduler parent-check   --graph sprint.task_graph.json"
+        ;;
+      *)
+        err "Unknown graph-scheduler subcommand: $_graph_subcmd"; exit 1
+        ;;
+    esac
+    ;;
+
+  graph-dispatch)
+    # DAG graph_node payload dispatcher
+    shift
+    _graph_dispatch_py="$HARNESS_DIR/lib/graph_node_dispatcher.py"
+    if [[ ! -f "$_graph_dispatch_py" ]]; then
+      err "graph_node_dispatcher.py not found: $_graph_dispatch_py"; exit 1
+    fi
+    _graph_dispatch_subcmd="${1:-help}"; shift || true
+    case "$_graph_dispatch_subcmd" in
+      dispatch-ready|drain-queue)
+        python3 "$_graph_dispatch_py" "$_graph_dispatch_subcmd" "$@"
+        ;;
+      help|--help|-h|"")
+        echo "Solar Graph Dispatch — DAG node payload to pane dispatch"
+        echo ""
+        echo "Usage:"
+        echo "  $0 graph-dispatch dispatch-ready --graph sprint.task_graph.json [--dry-run]"
+        echo "  $0 graph-dispatch drain-queue    --sprint SID [--dry-run] [--max-items N]"
+        ;;
+      *)
+        err "Unknown graph-dispatch subcommand: $_graph_dispatch_subcmd"; exit 1
         ;;
     esac
     ;;

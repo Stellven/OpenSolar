@@ -104,7 +104,68 @@ ingest_single_contract() {
   fi
 
   cp "$cf" "$HOME/.solar/harness/sprints/$SID.contract.md"
-  echo "  ✅ → $SID (drafting,等 chain 起)"
+
+  # Codex remote execution path: contracts with bypass_pm:true are already fully
+  # specified. Route them directly to builder by materializing a minimal plan and
+  # promoting status, instead of downgrading them into PM intake.
+  if grep -Eq '^bypass_pm:[[:space:]]*true[[:space:]]*$' "$cf"; then
+    python3 - "$SID" "$cf" "$HOME/.solar/harness/sprints/$SID.status.json" "$HOME/.solar/harness/sprints/$SID.plan.md" <<'PY_CHAIN_WATCHER_BYPASS'
+import json, sys, datetime
+from pathlib import Path
+
+sid, contract, status, plan = sys.argv[1:]
+now = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+contract_p = Path(contract)
+status_p = Path(status)
+plan_p = Path(plan)
+
+try:
+    d = json.loads(status_p.read_text())
+except Exception:
+    d = {"id": sid, "history": []}
+
+d["status"] = "active"
+d["phase"] = "planning_complete"
+d["handoff_to"] = "builder"
+d["updated_at"] = now
+d.setdefault("history", []).append({
+    "ts": now,
+    "event": "bypass_pm_contract_promoted_to_builder",
+    "by": "chain-watcher",
+    "contract": str(contract_p),
+})
+status_p.write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n")
+plan_p.write_text(f"""# Plan — {sid}
+
+## Intent
+
+Execute the already bounded bypass_pm contract exactly as written.
+
+## Write Scope
+
+- Only files explicitly allowed by the contract.
+- For this sprint, write handoff/evidence under `~/.solar/harness/sprints/`.
+
+## Steps
+
+1. Read `{contract_p}`.
+2. Execute only the Required Work and Acceptance Criteria in the contract.
+3. Write `~/.solar/harness/sprints/{sid}.handoff.md` unless the contract explicitly requires a different handoff path.
+4. Run the contract verification commands.
+5. Submit with `bash ~/.solar/harness/solar-harness.sh handoff-submit {sid}`.
+
+## Stop Rules
+
+- Stop on any action outside the contract boundary.
+- Do not repair unrelated Solar/Codex/harness state.
+""")
+PY_CHAIN_WATCHER_BYPASS
+    printf '{"ts":"%s","event":"bypass_pm_promoted","by":"chain-watcher","sid":"%s","data":{"to":"builder","plan":"%s"}}\n' \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SID" "$HOME/.solar/harness/sprints/$SID.plan.md" >> "$HOME/.solar/harness/sprints/$SID.events.jsonl" 2>/dev/null || true
+    echo "  ✅ → $SID (bypass_pm:true → active/planning_complete, builder route)"
+  else
+    echo "  ✅ → $SID (drafting,等 chain 起)"
+  fi
   type ledger_emit &>/dev/null && ledger_emit "produced" "$SID.contract.md" "{\"source\":\"codex\"}" 2>/dev/null || true
   type ledger_emit &>/dev/null && ledger_emit "consumed" "$SID.contract.md" "{\"source\":\"chain-watcher\"}" 2>/dev/null || true
 }
