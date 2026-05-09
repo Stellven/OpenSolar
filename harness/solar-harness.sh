@@ -1068,6 +1068,19 @@ json.dump(d, open('$sf', 'w'), indent = 2)
   cat > "$SPRINTS_DIR/${sid}.dispatch.md" << DISPATCH_EOF
 # 协调器恢复指令 (Wake)
 
+<!-- SOLAR_STATE_READ_PREFLIGHT -->
+## 必须先读状态 (防写入 hook 卡死)
+
+在任何 Write/Edit/handoff/eval/status 更新之前，必须先用 Claude/Codex 的 **Read 工具**读取：
+
+\`/Users/sihaoli/.solar/STATE.md\`
+
+不要用 \`cat\` 替代这一步；本地 \`state-read-enforcer.sh\` hook 只认 Read 工具标记。
+
+如果 Write/Edit hook 仍阻断，立刻 Read 上面的 STATE 文件后重试原写入一次，不要停在“已读”等待。
+
+---
+
 ${target_task}
 DISPATCH_EOF
 
@@ -1916,6 +1929,7 @@ print(json.dumps({
     _capability_reg="$HARNESS_DIR/lib/capability_registry.py"
     _capability_bench="$HARNESS_DIR/lib/capability_fusion_benchmark.py"
     _platform_bench="$HARNESS_DIR/lib/platform_workflow_benchmark.py"
+    _heavy_proof_bench="$HARNESS_DIR/lib/heavy_proof_benchmark.py"
     case "${2:-status}" in
       status|health)
         shift 2 || true
@@ -1967,8 +1981,13 @@ print(json.dumps({
         [[ -f "$_platform_bench" ]] || { err "platform_workflow_benchmark not found: $_platform_bench"; exit 1; }
         python3 "$_platform_bench" "$@"
         ;;
+      heavy-proof|heavy-benchmark)
+        shift 2 || true
+        [[ -f "$_heavy_proof_bench" ]] || { err "heavy_proof_benchmark not found: $_heavy_proof_bench"; exit 1; }
+        python3 "$_heavy_proof_bench" "$@"
+        ;;
       *)
-        err "用法: $0 integrations [status|plugins|install|disable|list|validate|capabilities|sync-caps|benchmark|platform-benchmark] [--json]"
+        err "用法: $0 integrations [status|plugins|install|disable|list|validate|capabilities|sync-caps|benchmark|platform-benchmark|heavy-proof] [--json]"
         exit 1
         ;;
     esac

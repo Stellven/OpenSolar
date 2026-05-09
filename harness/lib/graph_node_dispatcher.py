@@ -21,6 +21,19 @@ HOME = Path.home()
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
 SPRINTS_DIR = HARNESS_DIR / "sprints"
 SESSION = os.environ.get("SOLAR_HARNESS_SESSION", "solar-harness")
+STATE_READ_PREFLIGHT = """<!-- SOLAR_STATE_READ_PREFLIGHT -->
+## 必须先读状态 (防写入 hook 卡死)
+
+在任何 Write/Edit/handoff/eval/status 更新之前，必须先用 Claude/Codex 的 **Read 工具**读取：
+
+`/Users/sihaoli/.solar/STATE.md`
+
+不要用 `cat` 替代这一步；本地 `state-read-enforcer.sh` hook 只认 Read 工具标记。
+
+如果 Write/Edit hook 仍阻断，立刻 Read 上面的 STATE 文件后重试原写入一次，不要停在“已读”等待。
+
+---
+"""
 
 sys.path.insert(0, str(HARNESS_DIR / "lib"))
 from graph_scheduler import (  # noqa: E402
@@ -122,7 +135,9 @@ def build_dispatch_text(payload: dict[str, Any], pane: str) -> str:
     graph_path = payload.get("graph") or str(SPRINTS_DIR / f"{sid}.task_graph.json")
     dispatch_id = payload.get("dispatch_id", "")
 
-    return f"""# DAG Node Dispatch — {sid} / {node_id}
+    return f"""{STATE_READ_PREFLIGHT}
+
+# DAG Node Dispatch — {sid} / {node_id}
 
 Sprint: `{sid}`
 Node: `{node_id}`
@@ -205,7 +220,9 @@ def build_eval_dispatch_text(graph: dict[str, Any], graph_path: str, node: dict[
     node_dispatch = _dispatch_file(sid, node_id)
     contract = SPRINTS_DIR / f"{sid}.contract.md"
 
-    return f"""# DAG Node Evaluation Dispatch — {sid} / {node_id}
+    return f"""{STATE_READ_PREFLIGHT}
+
+# DAG Node Evaluation Dispatch — {sid} / {node_id}
 
 Sprint: `{sid}`
 Node: `{node_id}`
