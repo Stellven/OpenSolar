@@ -45,6 +45,7 @@ git -C "$SOLAR_REPO" rev-parse --show-toplevel >/dev/null
 mkdir -p "$REPO_HARNESS" "$REPO_HARNESS/sprints" "$KNOWLEDGE_DIR"
 
 rsync_excludes=(
+  --exclude '.*'
   --exclude '.DS_Store'
   --exclude '.*.pid'
   --exclude '.*.port'
@@ -52,6 +53,8 @@ rsync_excludes=(
   --exclude '*.port'
   --exclude '*.log'
   --exclude '*.bak'
+  --exclude '*.bak-*'
+  --exclude '*.bak.*'
   --exclude '*.backup'
   --exclude '*.tmp'
   --exclude '*~'
