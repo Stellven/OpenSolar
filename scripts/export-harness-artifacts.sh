@@ -339,21 +339,30 @@ repo = Path(os.environ["SOLAR_REPO"])
 harness = Path(os.environ["REPO_HARNESS"])
 
 allowed_dirs = {
+    "ADR",
     "brain",
     "config",
+    "docker",
     "docs",
+    "evals",
     "extensions",
+    "hooks",
+    "installer",
     "integrations",
     "lib",
     "personas",
+    "plugins",
+    "release",
     "runbooks",
     "schemas",
+    "skills",
     "sprints",
     "templates",
     "tests",
     "tools",
 }
-top_suffixes = {".sh", ".ts", ".json", ".md"}
+top_suffixes = {".sh", ".ts", ".json", ".md", ".toml", ".plist"}
+top_names = {"VERSION"}
 deny_names = {
     ".DS_Store",
     "STATE.md",
@@ -391,7 +400,7 @@ print("scripts/export-harness-artifacts.sh")
 for child in sorted(harness.iterdir()):
     rel = child.relative_to(repo)
     if child.is_file():
-        if child.suffix in top_suffixes and not denied(child.relative_to(harness)):
+        if (child.suffix in top_suffixes or child.name in top_names) and not denied(child.relative_to(harness)):
             print(rel.as_posix())
     elif child.is_dir() and child.name in allowed_dirs:
         for path in sorted(child.rglob("*")):

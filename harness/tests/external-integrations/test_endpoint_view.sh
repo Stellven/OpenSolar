@@ -24,11 +24,14 @@ python3 "$HARNESS/lib/external-integrations-health.py" --json > /dev/null 2>&1 |
 JSON=$(curl -fsS --max-time 15 "$HOST/integrations" 2>/dev/null) && \
     check "/integrations returns 200" "ok" || check "/integrations returns 200" "timeout or error"
 
-# T2: /integrations JSON has 9 integrations
-check "/integrations has 9 integrations" "$(python3 -c "
+# T2: /integrations JSON includes the current expanded integration catalog.
+check "/integrations has expanded integration catalog" "$(python3 -c "
 import json,sys
 d=json.loads(sys.stdin.read())
-print('ok' if len(d.get('integrations',[])) == 9 else f'got {len(d.get(\"integrations\",[]))}')
+names={i.get('name') for i in d.get('integrations',[])}
+required={'Google Drive mount','camel-ai/owl','Microsoft MarkItDown MCP','agency-agents persona'}
+missing=required-names
+print('ok' if len(d.get('integrations',[])) >= 14 and not missing else f'got {len(d.get(\"integrations\",[]))}, missing={sorted(missing)}')
 " <<< "$JSON" 2>/dev/null || echo parse-error)"
 
 # T3: /integrations-view returns 200
@@ -39,7 +42,7 @@ VIEW=$(curl -fsS --max-time 15 "$HOST/integrations-view" 2>/dev/null) && \
 check "view is HTML (doctype present)" "$(python3 -c "import sys; s=sys.stdin.read(); print('ok' if '<!doctype html' in s.lower()[:200] else 'missing')" <<< "$VIEW")"
 
 # T5: all major integration names in HTML source (server-side rendered)
-check "all major integration names in HTML" "$(echo "$VIEW" | grep -ic -E 'obsidian-wiki|MinerU|QMD|mermaid|symphony|mirage|owl|[Gg]oogle|everything-claude-code' | awk '{print ($1>=9?"ok":"got " $1)}')"
+check "all major integration names in HTML" "$(echo "$VIEW" | grep -ic -E 'obsidian-wiki|MinerU|QMD|mermaid|symphony|mirage|owl|[Gg]oogle|everything-claude-code|MarkItDown|agency-agents' | awk '{print ($1>=11?"ok":"got " $1)}')"
 
 # T6: /status still works (no regression)
 curl -fsS --max-time 5 "$HOST/status" > /dev/null 2>&1 && \

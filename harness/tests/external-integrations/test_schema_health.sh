@@ -27,8 +27,15 @@ check "generated_at present" "$(python3 -c "import json,sys; d=json.loads(sys.st
 check "summary present" "$(python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print('ok' if 'summary' in d else 'missing')" <<< "$JSON")"
 check "integrations array present" "$(python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print('ok' if isinstance(d.get('integrations'), list) else 'missing')" <<< "$JSON")"
 
-# T3: exactly 9 integrations (MinerU and QMD are intentionally split)
-check "exactly 9 integrations" "$(python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print('ok' if len(d['integrations'])==9 else f'got {len(d[\"integrations\"])}')" <<< "$JSON")"
+# T3: integration catalog includes the current required set.
+check "required integrations present" "$(python3 -c "
+import json,sys
+d=json.loads(sys.stdin.read())
+names={i.get('name') for i in d['integrations']}
+required={'Ar9av/obsidian-wiki','opendatalab/MinerU-Document-Explorer','QMD semantic search/embed','mermaid-js/mermaid','openai/symphony','strukto-ai/mirage','camel-ai/owl','Microsoft MarkItDown MCP','agency-agents persona','Google Drive mount'}
+missing=required-names
+print('ok' if not missing and len(d['integrations'])>=len(required) else f'missing={sorted(missing)} total={len(d[\"integrations\"])}')
+" <<< "$JSON")"
 
 # T4: every integration has all 6-state fields
 check "all integrations have 6-state fields" "$(python3 -c "

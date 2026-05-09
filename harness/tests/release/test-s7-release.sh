@@ -133,8 +133,18 @@ if [[ -f "/tmp/solar-release-test/solar-harness-${V}.tar.gz" ]]; then
   [[ -z "$HAS_BACKUPS" ]] && ok "tarball excludes backups/" || fail "tarball includes backups/"
 fi
 
+echo "T15: capability plane E2E suite passes"
+if [[ -x tests/integrations/test-capability-plane-e2e.sh ]]; then
+  bash tests/integrations/test-capability-plane-e2e.sh >/tmp/solar-capability-e2e-release.log 2>&1 \
+    && ok "capability plane E2E passes" \
+    || fail "capability plane E2E failed: $(tail -20 /tmp/solar-capability-e2e-release.log | tr '\n' ' ')"
+else
+  fail "capability plane E2E script missing or not executable"
+fi
+
 # cleanup
 rm -rf /tmp/solar-release-test
+rm -f /tmp/solar-capability-e2e-release.log
 
 echo ""
 echo "=== S7 Release Tooling: PASS=$PASS FAIL=$FAIL ==="

@@ -1,0 +1,18 @@
+# Runtime and local export leftovers. Release artifacts are committed explicitly.
+STATE.md
+_extracted_knowledge_fallback/
+_sources/
+backups/
+codex-bridge/
+events.jsonl
+events/
+experiments/
+inbox/
+reports/
+telemetry/
+brain/pending-improvements.jsonl
+capability-graph.jsonl
+codex-budget.json
+kpi.json
+low-quality-capabilities.json
+pending-improvements.jsonl
