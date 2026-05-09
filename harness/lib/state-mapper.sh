@@ -131,6 +131,8 @@ if st == 'drafting':
 elif st == 'active':
     if phase in ('planning_complete', 'planner_plan', 'plan_reviewed'):
         lc = 'planning_complete'
+    elif phase in ('g0_passed',):
+        lc = 'building'
     elif phase in ('s0_dispatched', 's0_in_progress'):
         lc = 'building'
     elif phase in ('s0_ready_for_eval',):

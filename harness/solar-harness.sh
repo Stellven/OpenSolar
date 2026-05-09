@@ -2999,6 +2999,41 @@ EOF
         ;;
     esac
     ;;
+  product)
+    # S0 snapshot/restore/verify — sprint-20260509-solar-product-platform
+    shift
+    _prod_py="$HARNESS_DIR/lib/product_snapshot.py"
+    if [[ ! -f "$_prod_py" ]]; then
+      err "product_snapshot.py not found: $_prod_py"; exit 1
+    fi
+    _prod_subcmd="${1:-help}"; shift || true
+    case "$_prod_subcmd" in
+      snapshot)
+        python3 "$_prod_py" snapshot "$@"
+        ;;
+      verify)
+        python3 "$_prod_py" verify "$@"
+        ;;
+      restore)
+        python3 "$_prod_py" restore "$@"
+        ;;
+      list)
+        python3 "$_prod_py" list "$@"
+        ;;
+      help|--help|-h|"")
+        echo "Solar Product Snapshot — S0 foundation"
+        echo ""
+        echo "Usage:"
+        echo "  $0 product snapshot [--dry-run] [--scope minimal|full] [--out-dir DIR]"
+        echo "  $0 product verify   (--latest | --id SNAP_ID) [--out-dir DIR]"
+        echo "  $0 product restore  (--latest | --id SNAP_ID) [--dry-run] [--target-dir DIR]"
+        echo "  $0 product list     [--out-dir DIR]"
+        ;;
+      *)
+        err "Unknown product subcommand: $_prod_subcmd"; exit 1
+        ;;
+    esac
+    ;;
   *)
     # If arg looks like a directory, use it as work dir
     if [[ -d "$1" ]]; then
