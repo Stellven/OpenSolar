@@ -41,17 +41,52 @@ _quarantine_capture() {
 }
 
 # ── _quarantine_has_residue ───────────────────────────────────────────────────
-# Residue = Claude Code prompt (❯) present with non-whitespace text after it.
-# Clean  = no ❯ found, or ❯ followed only by whitespace to EOL.
+_quarantine_prompt_input() {
+    python3 -c '
+import re
+import sys
+
+lines = sys.stdin.read().splitlines()
+prompt_indexes = [i for i, line in enumerate(lines) if "❯" in line]
+if not prompt_indexes:
+    sys.exit(0)
+
+footer_re = re.compile(r"⏵.*(auto|accept edits|edit|bypass permissions).*mode on|shift\\+tab|esc to interrupt", re.I)
+footer_indexes = [i for i, line in enumerate(lines) if footer_re.search(line)]
+footer_at = footer_indexes[-1] if footer_indexes else len(lines)
+
+# Claude Code keeps historical submitted prompts above the divider. The current
+# editable prompt is the last prompt close to the mode/footer region.
+eligible = []
+for i in prompt_indexes:
+    if i > footer_at or footer_at - i > 6:
+        continue
+    next_nonempty = ""
+    for line in lines[i + 1:footer_at + 1]:
+        if line.strip():
+            next_nonempty = line.strip()
+            break
+    if next_nonempty.startswith("─"):
+        continue
+    eligible.append(i)
+if not eligible:
+    sys.exit(0)
+
+line = lines[eligible[-1]]
+text = line.split("❯", 1)[1].replace("\u00a0", " ").strip()
+if text in {"Try \"fix lint errors\"", "Try \"summarize this codebase\""}:
+    text = ""
+print(text)
+'
+}
+
+# Residue = current Claude Code prompt has non-whitespace text after it.
+# Clean  = no current prompt found, current prompt blank, or only historical prompts.
 _quarantine_has_residue() {
     local snapshot="$1"
-    if ! printf '%s\n' "$snapshot" | grep -q '❯' 2>/dev/null; then
-        return 1  # no prompt present
-    fi
-    if printf '%s\n' "$snapshot" | grep -qE '❯[[:space:]]*$' 2>/dev/null; then
-        return 1  # idle prompt, no residue
-    fi
-    return 0  # prompt with text = residue
+    local input
+    input="$(printf '%s\n' "$snapshot" | _quarantine_prompt_input 2>/dev/null || true)"
+    [[ -n "$input" ]]
 }
 
 # ── _quarantine_inbox_append ──────────────────────────────────────────────────

@@ -956,17 +956,39 @@ pane_has_prompt_snapshot() {
 pane_prompt_input_snapshot() {
   local snapshot="$1"
   printf '%s\n' "$snapshot" | python3 -c '
+import re
 import sys
 
-prompt_input = ""
-for line in sys.stdin.read().splitlines():
-    if "❯" not in line:
+lines = sys.stdin.read().splitlines()
+prompt_indexes = [i for i, line in enumerate(lines) if "❯" in line]
+if not prompt_indexes:
+    sys.exit(0)
+
+footer_re = re.compile(r"⏵.*(auto|accept edits|edit|bypass permissions).*mode on|shift\\+tab|esc to interrupt", re.I)
+footer_indexes = [i for i, line in enumerate(lines) if footer_re.search(line)]
+footer_at = footer_indexes[-1] if footer_indexes else len(lines)
+
+# Only the prompt close to the mode/footer region is editable input. Older
+# prompt lines above the divider are chat history and must not block dispatch.
+eligible = []
+for i in prompt_indexes:
+    if i > footer_at or footer_at - i > 6:
         continue
-    text = line.split("❯", 1)[1].replace("\u00a0", " ").strip()
-    if text in {"Try \"fix lint errors\"", "Try \"summarize this codebase\""}:
+    next_nonempty = ""
+    for line in lines[i + 1:footer_at + 1]:
+        if line.strip():
+            next_nonempty = line.strip()
+            break
+    if next_nonempty.startswith("─"):
         continue
-    if text:
-        prompt_input = text
+    eligible.append(i)
+if not eligible:
+    sys.exit(0)
+
+line = lines[eligible[-1]]
+prompt_input = line.split("❯", 1)[1].replace("\u00a0", " ").strip()
+if prompt_input in {"Try \"fix lint errors\"", "Try \"summarize this codebase\""}:
+    prompt_input = ""
 
 print(prompt_input)
 '

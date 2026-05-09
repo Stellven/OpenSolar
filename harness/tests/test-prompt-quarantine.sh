@@ -67,6 +67,17 @@ prompt_quarantine_check "$PANE" "$SID" "$DID1" || rc=$?
 check "no prompt → exit 0" "$rc" "0"
 unset _QUARANTINE_CAPTURE_OVERRIDE
 
+# T2b: historical prompt text above footer is not editable residue
+export _QUARANTINE_CAPTURE_OVERRIDE="old output
+────────────────────────────────────────
+❯ 把 4 项 low-severity 注脚开个新 sprint 修了
+────────────────────────────────────────
+  ⏵⏵ bypass permissions on (shift+tab to cycle)"
+rc=0
+prompt_quarantine_check "$PANE" "$SID" "$DID1" || rc=$?
+check "historical prompt line near footer → exit 0" "$rc" "0"
+unset _QUARANTINE_CAPTURE_OVERRIDE
+
 echo ""
 echo "--- residue detection + fix keys (≤3 attempts) ---"
 
@@ -74,7 +85,8 @@ SID2="sprint-pq-test-02"
 DID2="d-20260508T200001Z-bb0001"
 
 # T3: first residue → exit 1 (fix keys sent), counter = 1
-export _QUARANTINE_CAPTURE_OVERRIDE="  ❯ some residual text here"
+export _QUARANTINE_CAPTURE_OVERRIDE="  ❯ some residual text here
+  ⏵⏵ bypass permissions on (shift+tab to cycle)"
 rc=0
 prompt_quarantine_check "$PANE" "$SID2" "$DID2" || rc=$?
 check "1st residue → exit 1" "$rc" "1"
@@ -84,7 +96,8 @@ check "1st residue → counter=1" "$cnt" "1"
 unset _QUARANTINE_CAPTURE_OVERRIDE
 
 # T4: second residue (same pane+did) → exit 1, counter = 2
-export _QUARANTINE_CAPTURE_OVERRIDE="  ❯ still some text"
+export _QUARANTINE_CAPTURE_OVERRIDE="  ❯ still some text
+  ⏵⏵ bypass permissions on (shift+tab to cycle)"
 rc=0
 prompt_quarantine_check "$PANE" "$SID2" "$DID2" || rc=$?
 check "2nd residue → exit 1" "$rc" "1"
@@ -93,7 +106,8 @@ check "2nd residue → counter=2" "$cnt" "2"
 unset _QUARANTINE_CAPTURE_OVERRIDE
 
 # T5: third residue → exit 1, counter = 3
-export _QUARANTINE_CAPTURE_OVERRIDE="  ❯ more text"
+export _QUARANTINE_CAPTURE_OVERRIDE="  ❯ more text
+  ⏵⏵ bypass permissions on (shift+tab to cycle)"
 rc=0
 prompt_quarantine_check "$PANE" "$SID2" "$DID2" || rc=$?
 check "3rd residue → exit 1" "$rc" "1"
@@ -110,7 +124,8 @@ echo ""
 echo "--- quarantine on 4th attempt ---"
 
 # T7: fourth residue → exit 2 (quarantined), cooldown file created
-export _QUARANTINE_CAPTURE_OVERRIDE="  ❯ still stuck"
+export _QUARANTINE_CAPTURE_OVERRIDE="  ❯ still stuck
+  ⏵⏵ bypass permissions on (shift+tab to cycle)"
 rc=0
 prompt_quarantine_check "$PANE" "$SID2" "$DID2" || rc=$?
 check "4th attempt → exit 2 (quarantined)" "$rc" "2"
@@ -172,7 +187,8 @@ echo ""
 echo "--- coordinator.sh has no direct send-keys Escape/C-u ---"
 
 # T13: verify coordinator.sh no longer has raw Escape/C-u send-keys
-direct_cu=$(grep -cE "tmux send-keys.*C-u|tmux send-keys.*Escape" "$HARNESS_DIR/coordinator.sh" 2>/dev/null || echo 0)
+direct_cu=$(grep -cE "tmux send-keys.*C-u|tmux send-keys.*Escape" "$HARNESS_DIR/coordinator.sh" 2>/dev/null || true)
+direct_cu="$(printf '%s\n' "$direct_cu" | tail -1)"
 check "coordinator.sh: 0 direct C-u/Escape send-keys" "$direct_cu" "0"
 
 echo ""
