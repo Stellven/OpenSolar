@@ -707,9 +707,17 @@ get_latest_sprint_file() {
   for f in "$SPRINTS_DIR"/sprint-*.status.json; do
     [[ -f "$f" ]] || continue
 
-    # 跳过 id 为空的僵尸文件 (降频 log)
+    # JSON 可读但缺 id/sprint_id 时按文件名自愈；真正不可读才降频告警。
     local fid
     fid=$(python3 -c "import json; print(json.load(open('$f')).get('id',''))" 2>/dev/null)
+    if [[ -z "$fid" ]]; then
+      local repair_result
+      repair_result="$(repair_status_identity "$f" 2>/dev/null || true)"
+      if [[ "$repair_result" == "repaired" || "$repair_result" == "ok" ]]; then
+        fid=$(python3 -c "import json; print(json.load(open('$f')).get('id',''))" 2>/dev/null)
+        [[ -n "$fid" ]] && [[ "$repair_result" == "repaired" ]] && log "${Y}[status-repair] recovered missing id: $f -> $fid${N}"
+      fi
+    fi
     if [[ -z "$fid" ]]; then
       if [[ -z "${_corrupted_logged[$f]:-}" ]]; then
         log "corrupted status.json skipped: $f"
@@ -732,6 +740,57 @@ get_latest_sprint_file() {
 
 get_field() {
   python3 -c "import json; print(json.load(open('$1')).get('$2',''))" 2>/dev/null
+}
+
+repair_status_identity() {
+  local sf="$1"
+  [[ -f "$sf" ]] || return 1
+  python3 - "$sf" <<'PY' 2>/dev/null
+import datetime, json, os, sys, tempfile
+
+sf = sys.argv[1]
+name = os.path.basename(sf)
+suffix = ".status.json"
+if not name.endswith(suffix):
+    sys.exit(1)
+sid = name[:-len(suffix)]
+try:
+    with open(sf, encoding="utf-8") as f:
+        data = json.load(f)
+except Exception:
+    sys.exit(1)
+if not isinstance(data, dict):
+    sys.exit(1)
+
+status = data.get("status")
+if not status:
+    sys.exit(1)
+
+changed = False
+for key in ("id", "sprint_id"):
+    if not data.get(key):
+        data[key] = sid
+        changed = True
+
+if not changed:
+    print("ok")
+    sys.exit(0)
+
+ts = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+data["updated_at"] = data.get("updated_at") or ts
+data.setdefault("history", []).append({
+    "ts": ts,
+    "event": "status_identity_repaired",
+    "by": "coordinator",
+    "note": "Recovered missing id/sprint_id from status filename so scanner can route the sprint."
+})
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(sf), suffix=".tmp")
+with os.fdopen(fd, "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+os.replace(tmp, sf)
+print("repaired")
+PY
 }
 
 # sprint-20260503-090450 D1/D5: 读合约 topology 字段, 默认 standard
@@ -3777,6 +3836,13 @@ with open('$patches_file','w') as f:
     echo "═══════════════════════════════════════════════════" >> "$COORD_LOG"
     echo "[会话] 轮询开始: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$COORD_LOG"
 
+    if type reap_expired_leases &>/dev/null; then
+      local reaped_leases
+      reaped_leases="$(reap_expired_leases 2>/dev/null || echo 0)"
+      [[ "$reaped_leases" =~ ^[0-9]+$ ]] || reaped_leases=0
+      (( reaped_leases > 0 )) && log "${Y}[lease-reaper] removed ${reaped_leases} expired pane leases${N}"
+    fi
+
     # ── D2: 文件级 mtime 检测 (Sprint sprint-20260417-213037, 2026-04-17) ──
     # 根因: macOS APFS 改文件内容不更新目录 mtime → coordinator 漏检
     # 修复: 扫描 sprint-*.status.json 取 max(mtime), 单文件修改即触发
@@ -3818,7 +3884,16 @@ with open('$patches_file','w') as f:
         sid=$(get_field "$sf" "id")
         st=$(get_field "$sf" "status")
 
-        # D2: 跳过损坏 status.json (缺 id 或 status), 复用 get_latest_sprint_file 的去重表
+        # D2: JSON 可读但缺 id/sprint_id 时自愈；仍缺 id/status 才按损坏跳过。
+        if [[ -z "$sid" ]] || [[ -z "$st" ]]; then
+          local repair_result
+          repair_result="$(repair_status_identity "$sf" 2>/dev/null || true)"
+          if [[ "$repair_result" == "repaired" || "$repair_result" == "ok" ]]; then
+            sid=$(get_field "$sf" "id")
+            st=$(get_field "$sf" "status")
+            [[ "$repair_result" == "repaired" ]] && log "${Y}[status-repair] recovered missing identity: $sf (sid=[$sid] st=[$st])${N}"
+          fi
+        fi
         if [[ -z "$sid" ]] || [[ -z "$st" ]]; then
           if [[ -z "${_corrupted_logged[$sf]:-}" ]]; then
             log "${Y}⚠ scanner: corrupted status.json skipped: $sf (sid=[$sid] st=[$st])${N}"
