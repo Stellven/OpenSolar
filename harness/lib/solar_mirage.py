@@ -290,6 +290,28 @@ def _detect_drive(config: dict) -> dict:
     drive_mount = next((m for m in (config.get("mounts") or []) if m.get("path") == "/drive"), {})
     cred_env = drive_mount.get("credential_env", "GOOGLE_APPLICATION_CREDENTIALS")
     cred_path = os.environ.get(cred_env, "")
+    local_root = drive_mount.get("root") or ""
+
+    if local_root and Path(local_root).exists():
+        return {
+            "status": "ok",
+            "reason": "local Google Drive File Provider mount found",
+            "credential_env": cred_env,
+            "local_root": local_root,
+            "provider": drive_mount.get("local_provider", "macos-file-provider"),
+        }
+
+    cloud_storage = HOME / "Library" / "CloudStorage"
+    if cloud_storage.exists():
+        for candidate in sorted(cloud_storage.glob("GoogleDrive-*")):
+            if candidate.is_dir():
+                return {
+                    "status": "ok",
+                    "reason": "local Google Drive File Provider mount found",
+                    "credential_env": cred_env,
+                    "local_root": str(candidate),
+                    "provider": "macos-google-drive-file-provider",
+                }
 
     if cred_path and Path(cred_path).exists():
         return {"status": "ok", "reason": "credentials found", "credential_env": cred_env}
@@ -387,7 +409,9 @@ def _build_mounts_status(config: dict) -> list:
             config_for_drive = config
             drive = _detect_drive(config_for_drive)
             ready = drive["status"] == "ok"
+            physical_root = m.get("root") or drive.get("local_root", "")
             result.append({"path": mpath, "ready": ready, "mode": mode,
+                            "physical_root": physical_root,
                             "optional": optional, "status": drive["status"],
                             "reason": drive["reason"]})
         elif source_type == "virtual_command":
@@ -447,7 +471,7 @@ def cmd_doctor(args) -> dict:
         drive_status = "connected"
         drive_unblock = None
     elif drive_raw_status in ("degraded", "warn", "missing"):
-        drive_status = "dead_end"
+        drive_status = "optional_missing"
         drive_unblock = {
             "env_var": "GOOGLE_DRIVE_REFRESH_TOKEN",
             "ui_path": "/integrations#drive",
@@ -589,7 +613,7 @@ def cmd_exec(args, extra_flags: list) -> dict:
                 "reason": "host absolute path not in any logical mount",
             })
             return {
-                "error": f"host path not allowed: {token!r}. Use logical mount paths (/knowledge, /raw, /sprints, /solar, /cortex)",
+                "error": f"host path not allowed: {token!r}. Use logical mount paths (/knowledge, /raw, /sources, /papers, /qmd, /solar-db, /cortex, /sprints)",
                 "cmd": cmd_str,
                 "exit_code": 126,
             }

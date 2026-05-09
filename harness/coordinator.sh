@@ -2364,6 +2364,41 @@ handle_drafting() {
   local plan="$SPRINTS_DIR/${sid}.plan.md"
   local req_file=""
 
+  if python3 - "$sf" <<'PY' 2>/dev/null
+import json, sys
+d=json.load(open(sys.argv[1]))
+if d.get("auto_held") or d.get("status") == "drafting_held":
+    sys.exit(0)
+sys.exit(1)
+PY
+  then
+    log "${Y}Sprint ${sid} drafting held; skip PM/Planner auto dispatch${N}"
+    return 0
+  fi
+
+  if contract_has_bypass_pm "$sid" || [[ "$(get_field "$sf" "handoff_to")" =~ ^builder(_main)?$ ]]; then
+    log "${G}Drafting bypass_pm/builder target → promote active builder without PM/Planner${N}"
+    python3 - "$sf" <<'PY' 2>/dev/null || true
+import datetime, json, sys
+sf=sys.argv[1]
+d=json.load(open(sf))
+now=datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+d["status"]="active"
+d["phase"]="planning_complete"
+d["handoff_to"]="builder"
+d["updated_at"]=now
+d.setdefault("history", []).append({
+    "ts": now,
+    "event": "drafting_bypass_pm_promoted_to_builder",
+    "by": "coordinator",
+    "note": "Strict drafting routing: bypass_pm/handoff_to builder must not route to PM or planner."
+})
+json.dump(d, open(sf, "w"), indent=2, ensure_ascii=False)
+PY
+    rollback_state_cache "$sid"
+    return 0
+  fi
+
   req_file=$(pm_requirements_file "$sid" 2>/dev/null || true)
 
   if [[ -z "$req_file" ]]; then
@@ -2546,7 +2581,7 @@ def slice_state(slice_id: str) -> str:
 
 def blocked_or_running(slice_id: str) -> bool:
     st = slice_state(slice_id)
-    return st in {"queued", "dispatched", "in_progress", "ready_for_eval", "reviewing"}
+    return st in {"queued", "dispatched", "in_progress", "ready_for_eval", "reviewing", "blocked"} or st.startswith("blocked")
 
 sequence = [
     ("s3", ("s1", "s2", "s6")),
@@ -2732,6 +2767,11 @@ handle_active() {
       log "${Y}Sprint ${sid} S0 already dispatched; waiting for builder handoff${N}"
       return 0
       ;;
+    s1_dispatched|s1_in_progress|s1_blocked*|s2_dispatched|s2_in_progress|s2_blocked*|s3_dispatched|s3_in_progress|s3_blocked*|s4_dispatched|s4_in_progress|s4_blocked*|s5_dispatched|s5_in_progress|s5_blocked*|s6_dispatched|s6_in_progress|s6_blocked*|s7_dispatched|s7_in_progress|s7_blocked*)
+      local slice_id="${phase%%_*}"
+      log "${Y}Sprint ${sid} ${slice_id} already dispatched/in progress/blocked (${phase}); waiting for builder handoff or manual unblock${N}"
+      return 0
+      ;;
     s1_eval_passed|s2_eval_passed|s3_eval_passed|s4_eval_passed|s5_eval_passed|s6_eval_passed|s7_eval_passed)
       local next_slice
       next_slice="$(next_product_platform_slice "$sf" || true)"
@@ -2803,11 +2843,19 @@ EOF
         emit_event "$sid" "graph_dispatch_failed" "coordinator" "{\"reason\":\"dispatcher_missing\"}"
         return 0
       fi
-      local graph_rc=0 graph_out=""
+      local graph_rc=0 graph_out="" graph_eval_out="" graph_eval_rc=0
       if [[ -n "${SOLAR_COORD_DRY_RUN:-}" ]]; then
+        graph_eval_out="$(python3 "$graph_dispatcher" dispatch-evals --graph "$SPRINTS_DIR/${sid}.task_graph.json" --dry-run 2>&1)" || graph_eval_rc=$?
         graph_out="$(python3 "$graph_dispatcher" dispatch-ready --graph "$SPRINTS_DIR/${sid}.task_graph.json" --dry-run 2>&1)" || graph_rc=$?
       else
+        graph_eval_out="$(python3 "$graph_dispatcher" dispatch-evals --graph "$SPRINTS_DIR/${sid}.task_graph.json" 2>&1)" || graph_eval_rc=$?
         graph_out="$(python3 "$graph_dispatcher" dispatch-ready --graph "$SPRINTS_DIR/${sid}.task_graph.json" 2>&1)" || graph_rc=$?
+      fi
+      if (( graph_eval_rc != 0 )); then
+        log "${Y}[graph-dispatch] dispatch-evals failed rc=${graph_eval_rc}: ${graph_eval_out}${N}"
+        rollback_state_cache "$sid"
+        emit_event "$sid" "graph_eval_dispatch_failed" "coordinator" "$(python3 -c 'import json,sys; print(json.dumps({"rc": int(sys.argv[1]), "output": sys.argv[2][-1000:]}))' "$graph_eval_rc" "$graph_eval_out" 2>/dev/null || echo '{}')"
+        return 0
       fi
       if (( graph_rc != 0 )); then
         log "${Y}[graph-dispatch] dispatch-ready failed rc=${graph_rc}: ${graph_out}${N}"
@@ -2815,8 +2863,9 @@ EOF
         emit_event "$sid" "graph_dispatch_failed" "coordinator" "$(python3 -c 'import json,sys; print(json.dumps({"rc": int(sys.argv[1]), "output": sys.argv[2][-1000:]}))' "$graph_rc" "$graph_out" 2>/dev/null || echo '{}')"
         return 0
       fi
+      log "${G}[graph-dispatch] node evals: ${graph_eval_out}${N}"
       log "${G}[graph-dispatch] ready nodes dispatched: ${graph_out}${N}"
-      emit_event "$sid" "graph_nodes_dispatched" "coordinator" "$(python3 -c 'import json,sys; print(json.dumps({"output": sys.argv[1][-2000:]}))' "$graph_out" 2>/dev/null || echo '{}')"
+      emit_event "$sid" "graph_nodes_dispatched" "coordinator" "$(python3 -c 'import json,sys; print(json.dumps({"eval_output": sys.argv[1][-2000:], "ready_output": sys.argv[2][-2000:]}))' "$graph_eval_out" "$graph_out" 2>/dev/null || echo '{}')"
       mark_builder_flow "$sid" "graph_node_dispatch"
       return 0
     fi
@@ -4383,6 +4432,9 @@ with open('$patches_file','w') as f:
               ;;
             drafting)
               handle_drafting "$sid" "$sf"
+              ;;
+            drafting_held)
+              log "${Y}Sprint ${sid} drafting_held; coordinator will not auto-dispatch PM/Planner${N}"
               ;;
           esac
         else

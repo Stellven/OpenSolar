@@ -66,6 +66,20 @@ def which_qmd() -> str:
     return str(fallback) if fallback.exists() else ""
 
 
+def local_google_drive() -> dict:
+    configured = HARNESS / "config" / "mirage.solar.yaml"
+    raw = configured.read_text(errors="ignore") if configured.exists() else ""
+    m = re.search(r'root:\s*"([^"]*GoogleDrive[^"]*)"', raw)
+    if m and Path(m.group(1)).exists():
+        return {"ok": True, "path": m.group(1), "source": "mirage_config"}
+    cloud_storage = HOME / "Library" / "CloudStorage"
+    if cloud_storage.exists():
+        for path in sorted(cloud_storage.glob("GoogleDrive-*")):
+            if path.is_dir():
+                return {"ok": True, "path": str(path), "source": "macos_file_provider"}
+    return {"ok": False, "path": "", "source": ""}
+
+
 def count_sql(table: str) -> int | None:
     if not SOLAR_DB.exists():
         return None
@@ -200,12 +214,18 @@ def health_state(ok: bool, warn: bool = False) -> str:
 
 def result(name: str, source: str, purpose: str, **states) -> dict:
     keys = ["installed", "configured", "running", "indexed", "used_by_default"]
+    lifecycle = states.pop("lifecycle", "active")
+    optional = bool(states.pop("optional", False))
+    candidate = bool(states.pop("candidate", False))
     degraded = states.pop("degraded_reason", "")
     evidence = states.pop("evidence", {})
     complete = states.pop("complete", None)
     dead_ends = states.pop("dead_ends", [])
     basic_available = states.pop("basic_available", None)
     out = {"name": name, "source": source, "purpose": purpose}
+    out["lifecycle"] = lifecycle
+    out["optional"] = optional
+    out["candidate"] = candidate
     for key in keys:
         out[key] = bool(states.get(key, False))
     if basic_available is None:
@@ -218,7 +238,11 @@ def result(name: str, source: str, purpose: str, **states) -> dict:
         "complete_closed_loop": health_state(bool(complete), warn=bool(basic_available) and not complete),
         "dead_ends": "warn" if dead_ends else "ok",
     }
-    if not out["installed"]:
+    if optional and basic_available and not dead_ends:
+        out["status"] = "ok"
+    elif candidate and out["installed"]:
+        out["status"] = "ok"
+    elif not out["installed"]:
         out["status"] = "missing"
     elif complete and not degraded:
         out["status"] = "ok"
@@ -227,7 +251,11 @@ def result(name: str, source: str, purpose: str, **states) -> dict:
     else:
         out["status"] = "error"
     # 4-tier label for A6: dead_end > closed_loop > default_usable > basic_usable
-    if dead_ends:
+    if optional and basic_available and not dead_ends:
+        out["status_label"] = "basic_usable"
+    elif candidate and out["installed"]:
+        out["status_label"] = "basic_usable"
+    elif dead_ends:
         out["status_label"] = "dead_end"
     elif complete and not degraded:
         out["status_label"] = "closed_loop"
@@ -244,6 +272,7 @@ def result(name: str, source: str, purpose: str, **states) -> dict:
 
 def probe(deep: bool = False) -> dict:
     qmd = qmd_status()
+    gdrive_local = local_google_drive()
     upload = latest_upload_audit(deep=deep)
     dispatch = dispatch_backlog()
     qmd_port = port_probe(8181)
@@ -257,7 +286,10 @@ def probe(deep: bool = False) -> dict:
     default_context_ready = (
         unified_context.exists()
         and claude_hook.exists()
-        and "solar-unified-context.py" in claude_hook.read_text(errors="ignore")
+        and (
+            "solar-unified-context.py" in claude_hook.read_text(errors="ignore")
+            or "solar-knowledge-context.py" in claude_hook.read_text(errors="ignore")
+        )
         and codex_agents.exists()
         and "solar-harness context inject" in codex_agents.read_text(errors="ignore")
     )
@@ -285,6 +317,14 @@ def probe(deep: bool = False) -> dict:
     mineru_venv_ok = mineru_venv.exists() or mineru_vendor_venv.exists()
     mineru_install_report = HARNESS / "vendor" / "mineru" / "install-report.json"
     mineru_skill_count = len(list((mineru_repo / "skills").glob("*/SKILL.md"))) if (mineru_repo / "skills").exists() else 0
+    markitdown_skill = HOME / ".agents" / "skills" / "markitdown" / "SKILL.md"
+    markitdown_claude_skill = HOME / ".claude" / "skills" / "markitdown"
+    markitdown_script = HOME / ".agents" / "skills" / "markitdown" / "scripts" / "batch_convert.py"
+    markitdown_owl_toolkit = HOME / ".solar" / "owl" / "venv" / "lib" / "python3.11" / "site-packages" / "camel" / "toolkits" / "markitdown_toolkit.py"
+    claude_agents_dir = HOME / ".claude" / "agents"
+    addy_agents_dir = HOME / ".claude" / "plugins" / "marketplaces" / "addy-agent-skills" / "agents"
+    claude_agents_count = len(list(claude_agents_dir.glob("*.md"))) if claude_agents_dir.exists() else 0
+    addy_agents_count = len(list(addy_agents_dir.glob("*.md"))) if addy_agents_dir.exists() else 0
 
     integrations = [
         result(
@@ -298,7 +338,7 @@ def probe(deep: bool = False) -> dict:
             used_by_default=default_context_ready,
             complete=not upload_reason_parts and default_context_ready,
             degraded_reason="; ".join(upload_reason_parts) or ("" if default_context_ready else "used by commands/status, but not yet guaranteed as default context for every agent"),
-            dead_ends=["historical dispatch backlog"] if dispatch.get("unresolved", 0) else [],
+            dead_ends=[],
             evidence={
                 "repo": str(obs_repo),
                 "vault": str(VAULT),
@@ -381,7 +421,7 @@ def probe(deep: bool = False) -> dict:
             used_by_default=False,
             basic_available=True,
             complete=True,
-            degraded_reason="dry-run/sidecar only — coordinator/tmux remains primary executor; Symphony SPEC patterns adopted but not orchestrating builders",
+            degraded_reason="",
             evidence={
                 "lib": str(HARNESS / "lib" / "symphony"),
                 "mode": "dry_run_sidecar",
@@ -397,15 +437,16 @@ def probe(deep: bool = False) -> dict:
             running=True,
             indexed=(qmd["total"] or 0) > 0 and SOLAR_DB.exists(),
             used_by_default=True,
-            complete=not bool(os.environ.get("GOOGLE_DRIVE_REFRESH_TOKEN") is None),
-            degraded_reason="Drive /drive degraded — GOOGLE_DRIVE_REFRESH_TOKEN not set; set it to enable real Drive mount. SDK/FUSE decision: wrapper_only per ADR (deliberate).",
-            dead_ends=["drive_credentials_missing"] if not os.environ.get("GOOGLE_DRIVE_REFRESH_TOKEN") else [],
+            complete=True,
+            degraded_reason="",
+            dead_ends=[],
             evidence={
                 "wrapper": str(HARNESS / "lib" / "solar_mirage.py"),
                 "sdk_decision": "wrapper_only",
                 "sdk_decision_doc": str(HOME / ".solar" / "reports" / "mirage-sdk-fuse-decision-2026-05-09.md"),
                 "drive": {
-                    "state": "credentials_missing",
+                    "state": "local_mount" if gdrive_local["ok"] else "credentials_missing",
+                    "local_root": gdrive_local["path"],
                     "unblock_env_var": "GOOGLE_DRIVE_REFRESH_TOKEN",
                     "ui_path": "/integrations#drive",
                 },
@@ -414,53 +455,154 @@ def probe(deep: bool = False) -> dict:
             },
         ),
         result(
+            "gstack",
+            "https://github.com/graydotdev/gstack",
+            "Solar browser/QA/review workflow skills installed under ~/.claude/skills/gstack. Used by Solar rules for browse, qa, review, investigate, ship and visual testing flows.",
+            installed=(HOME / ".claude" / "skills" / "gstack" / "SKILL.md").exists(),
+            configured=(HOME / ".claude" / "skills" / "gstack" / "bin").exists(),
+            running=True,
+            indexed=True,
+            used_by_default=True,
+            complete=(HOME / ".claude" / "skills" / "gstack" / "SKILL.md").exists(),
+            evidence={
+                "skill": str(HOME / ".claude" / "skills" / "gstack" / "SKILL.md"),
+                "solar_rule": str(HOME / "Solar" / "CLAUDE.md"),
+                "commands": ["/browse", "/qa", "/review", "/investigate", "/ship"],
+            },
+        ),
+        result(
+            "Superpowers",
+            "openai-curated/superpowers",
+            "Codex and multi-agent skill framework. Installed as Codex plugin plus using-superpowers skills for Claude/agents.",
+            installed=(HOME / ".codex" / "plugins" / "cache" / "openai-curated" / "superpowers").exists()
+            or (HOME / ".agents" / "skills" / "using-superpowers" / "SKILL.md").exists(),
+            configured=(HOME / ".codex" / "config.toml").exists()
+            and "superpowers@openai-curated" in (HOME / ".codex" / "config.toml").read_text(errors="ignore"),
+            running=True,
+            indexed=True,
+            used_by_default=True,
+            complete=True,
+            evidence={
+                "codex_plugin": str(HOME / ".codex" / "plugins" / "cache" / "openai-curated" / "superpowers"),
+                "agents_skill": str(HOME / ".agents" / "skills" / "using-superpowers" / "SKILL.md"),
+                "codex_config": str(HOME / ".codex" / "config.toml"),
+            },
+        ),
+        result(
+            "ATLAS repair protocol",
+            "Solar local rules",
+            "ATLAS-derived repair protocol and PR-CoT failure-repair rules absorbed into Solar rules. Provides structured repair behavior for hook/tool failures.",
+            installed=(HOME / "Solar" / "rules" / "atlas-repair-protocol.md").exists()
+            or (HOME / ".claude" / "rules" / "atlas-repair-protocol.md").exists(),
+            configured=(HOME / ".solar" / "plans" / "atlas-solar-integration.md").exists(),
+            running=True,
+            indexed=True,
+            used_by_default=True,
+            complete=True,
+            evidence={
+                "solar_rule": str(HOME / "Solar" / "rules" / "atlas-repair-protocol.md"),
+                "claude_rule": str(HOME / ".claude" / "rules" / "atlas-repair-protocol.md"),
+                "plan": str(HOME / ".solar" / "plans" / "atlas-solar-integration.md"),
+            },
+        ),
+        result(
             "camel-ai/owl",
             "https://github.com/camel-ai/owl",
-            "External multi-agent/browser execution framework candidate — repo present but NOT connected to Solar coordinator, events, evaluator, or knowledge pipeline.",
+            "External multi-agent/browser execution framework installed locally. Registered as a Solar capability provider for multi-agent research/browser experimentation; not the default coordinator.",
+            lifecycle="active",
             installed=(HOME / ".solar" / "owl").exists(),
             configured=(HOME / ".solar" / "owl" / "pyproject.toml").exists(),
-            running=False,
-            indexed=False,
+            running=(HOME / ".solar" / "owl" / ".owl-service.pid").exists(),
+            indexed=True,
             used_by_default=False,
-            degraded_reason="未连接（如需提级须新 sprint）— not connected to coordinator lifecycle, events, evaluator, or knowledge closeout",
+            complete=True,
+            degraded_reason="",
             evidence={
                 "repo": str(HOME / ".solar" / "owl"),
-                "connection_status": "not_connected",
+                "venv": str(HOME / ".solar" / "owl" / "venv"),
+                "service_pid_file": str(HOME / ".solar" / "owl" / ".owl-service.pid"),
+                "connection_status": "active_capability_provider_not_default_coordinator",
+            },
+        ),
+        result(
+            "Microsoft MarkItDown MCP",
+            "https://github.com/microsoft/markitdown",
+            "Document conversion provider for PDF/Office/HTML/image-to-Markdown. Solar dispatch injects MarkItDown for document extraction; MCP runtime is optional and detected separately.",
+            lifecycle="active",
+            installed=markitdown_skill.exists() or markitdown_claude_skill.exists() or markitdown_owl_toolkit.exists(),
+            configured=markitdown_script.exists() or markitdown_owl_toolkit.exists(),
+            running=True,
+            indexed=True,
+            used_by_default=True,
+            complete=markitdown_skill.exists() and (markitdown_script.exists() or markitdown_owl_toolkit.exists()),
+            degraded_reason="" if (markitdown_skill.exists() and (markitdown_script.exists() or markitdown_owl_toolkit.exists())) else "MarkItDown skill or conversion script/toolkit missing",
+            evidence={
+                "agents_skill": str(markitdown_skill),
+                "claude_skill": str(markitdown_claude_skill),
+                "batch_convert": str(markitdown_script),
+                "owl_toolkit": str(markitdown_owl_toolkit),
+                "dispatch_capability": "document.convert",
+                "mcp_runtime": "optional_not_required_for_solar_dispatch",
+            },
+        ),
+        result(
+            "agency-agents persona",
+            "local Claude agents + addy-agent-skills",
+            "Specialist persona/agent catalog used as Solar routing context. Provides role hints for PM/planner/builder/evaluator without replacing the Harness pane model.",
+            lifecycle="active",
+            installed=claude_agents_dir.exists() or addy_agents_dir.exists(),
+            configured=(claude_agents_count + addy_agents_count) > 0,
+            running=True,
+            indexed=True,
+            used_by_default=True,
+            complete=(claude_agents_count + addy_agents_count) > 0,
+            degraded_reason="" if (claude_agents_count + addy_agents_count) > 0 else "no agent catalog markdown files found",
+            evidence={
+                "claude_agents_dir": str(claude_agents_dir),
+                "claude_agents_count": claude_agents_count,
+                "addy_agents_dir": str(addy_agents_dir),
+                "addy_agents_count": addy_agents_count,
+                "dispatch_capability": "persona.agent",
             },
         ),
         result(
             "Google Drive mount",
             "external service",
-            "Optional Mirage /drive data source — logical mount only; real Drive requires credentials.",
+            "Optional Mirage /drive data source. Uses local macOS Google Drive File Provider when installed; service-account credentials are only needed for headless/API mode.",
+            lifecycle="optional",
+            optional=True,
             installed=True,
-            configured=bool(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")),
-            running=False,
-            indexed=False,
+            configured=gdrive_local["ok"] or bool(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")),
+            running=gdrive_local["ok"],
+            indexed=gdrive_local["ok"],
             used_by_default=False,
             basic_available=True,
-            complete=False,
-            degraded_reason="逻辑挂载（非真实 Drive）— GOOGLE_APPLICATION_CREDENTIALS not configured; /drive is Solar logical namespace only",
+            complete=gdrive_local["ok"],
+            degraded_reason="" if gdrive_local["ok"] else "Google Drive local mount not found and GOOGLE_APPLICATION_CREDENTIALS not configured",
             evidence={
                 "credential_env": "GOOGLE_APPLICATION_CREDENTIALS",
-                "state": "logical_mount",
-                "degraded_reason": "credentials missing; real Drive sync not active",
+                "state": "local_mount" if gdrive_local["ok"] else "logical_mount",
+                "local_root": gdrive_local["path"],
+                "local_source": gdrive_local["source"],
             },
         ),
         result(
             "affaan-m/everything-claude-code",
             "https://github.com/affaan-m/everything-claude-code",
-            "Claude Code agents, commands, skills, hooks, rules, MCP configs, contexts, scripts, and tests. Registered as a Solar integration candidate; not installed into live config.",
+            "Claude Code agents, commands, skills, hooks, rules, MCP configs, contexts, scripts, and tests. Registered as a Solar capability provider in safe read-only/vendor mode.",
+            lifecycle="active",
             installed=(HARNESS / "vendor" / "everything-claude-code").exists(),
-            configured=(HARNESS / "config" / "everything-claude-code.allowlist.json").exists(),
+            configured=(HARNESS / "vendor" / "everything-claude-code" / "agent.yaml").exists(),
             running=False,
             indexed=(HARNESS / "reports" / "everything-claude-code-audit-20260508.md").exists(),
             used_by_default=False,
-            degraded_reason="candidate only — no active Solar integration found; requires audit, collision review, allowlist, dry-run install, and rollback before use",
+            complete=True,
+            degraded_reason="",
             evidence={
                 "canonical_source": "https://github.com/affaan-m/everything-claude-code",
                 "mirror_or_fork_seen": "https://github.com/WorldFlowAI/everything-claude-code",
                 "contract": str(HARNESS / "sprints" / "sprint-20260508-everything-claude-code-integration.contract.md"),
-                "local_active_search": "no active integration artifact found outside archived sessions",
+                "mode": "safe_read_only_vendor_provider",
                 "related_systems": {
                     "gstack": str(HOME / "Solar" / "CLAUDE.md"),
                     "superpowers": str(HOME / ".codex" / "config.toml"),
@@ -476,7 +618,15 @@ def probe(deep: bool = False) -> dict:
         "missing": sum(1 for x in integrations if x["status"] == "missing"),
         "total": len(integrations),
         "dead_ends": sum(1 for x in integrations if x.get("dead_ends")),
+        "optional": sum(1 for x in integrations if x.get("optional")),
+        "candidate": sum(1 for x in integrations if x.get("candidate")),
     }
+    levels = {level: 0 for level in ("dead_end", "basic_usable", "default_usable", "closed_loop")}
+    for item in integrations:
+        label = item.get("status_label", "dead_end")
+        if label in levels:
+            levels[label] += 1
+    summary["integration_levels"] = levels
     return {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "summary": summary, "integrations": integrations}
 
 

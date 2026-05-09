@@ -19,23 +19,34 @@ mounts:
     redact_on_write: true
     description: "Staging area for new content"
 
-  - path: /sprints
+  - path: /sources
     source_type: disk
-    root: "/Users/sihaoli/.solar/harness/sprints"
+    root: "/Users/sihaoli/.solar/harness/_sources"
     mode: ro
-    description: "Sprint artifacts (read-only)"
+    description: "Canonical source library (read-only)"
 
-  - path: /solar
+  - path: /papers
     source_type: disk
-    root: "/Users/sihaoli/.solar"
+    root: "/Users/sihaoli/.solar/harness/_sources/papers"
     mode: ro
-    redact_on_read: true
+    description: "Canonical papers and PDFs (read-only)"
+
+  - path: /qmd
+    source_type: virtual_command
+    adapter: "solar-harness wiki qmd-search"
+    mode: ro
+    description: "QMD/MinerU semantic search (read-only)"
+
+  - path: /solar-db
+    source_type: disk
+    root: "/Users/sihaoli/.solar/harness/_sources/solar-db"
+    mode: ro
     deny_subpaths:
       - "secrets/"
       - ".env"
       - ".token"
       - "credentials"
-    description: "Solar state (read-only, redacted)"
+    description: "Solar DB exported views and metadata (read-only)"
 
   - path: /cortex
     source_type: disk
@@ -43,25 +54,20 @@ mounts:
     mode: ro
     description: "Cortex knowledge base (read-only)"
 
-  - path: /projects
+  - path: /sprints
     source_type: disk
-    root: ""
-    allowlist_roots: []
+    root: "/Users/sihaoli/.solar/harness/sprints"
     mode: ro
-    description: "Allowlisted project roots (empty by default)"
+    description: "Sprint artifacts (read-only)"
 
   - path: /drive
     source_type: gdrive
+    root: "/Users/sihaoli/Library/CloudStorage/GoogleDrive-haogege1977@gmail.com"
+    local_provider: "macos-google-drive-file-provider"
     credential_env: "GOOGLE_APPLICATION_CREDENTIALS"
     mode: ro
     optional: true
-    description: "Google Drive (optional, read-only by default)"
-
-  - path: /qmd
-    source_type: virtual_command
-    adapter: "solar-harness wiki qmd-search"
-    mode: ro
-    description: "QMD/MinerU search (read-only)"
+    description: "Google Drive local File Provider mount (optional, read-only by default)"
 
 policy:
   default_timeout_s: 30

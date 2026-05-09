@@ -109,7 +109,7 @@ def retrieve(query: str, max_hits: int, max_chars: int, timeout_ms: int) -> dict
             },
             {
                 "source": "default",
-                "mount": "/solar_db",
+                "mount": "/solar-db",
                 "path": str(HOME / ".solar" / "solar.db"),
                 "title": "Solar DB",
                 "snippet": "Solar DB 保存 sprint、cortex、accepted artifacts、obsidian_vault_index 和 FTS 索引。设计/开发前先查已有资产，避免重复造轮子。",
