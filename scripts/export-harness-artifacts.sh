@@ -319,6 +319,8 @@ PY
   knowledge_paths="$(python3 -c 'import json,sys; print("\n".join(item["knowledge"] for item in json.load(sys.stdin)["exported"]))' <<<"$summary_json")"
   commit_body="$(mktemp)"
   {
+    echo "feat(solar): archive usable harness feature artifacts"
+    echo
     echo "Export usable Solar Harness artifacts into Solar/harness."
     echo
     echo "Validation:"
@@ -328,7 +330,7 @@ PY
     echo "Knowledge extraction files:"
     echo "$knowledge_paths" | sed 's/^/- /'
   } > "$commit_body"
-  git -C "$SOLAR_REPO" commit -F "$commit_body" -m "feat(solar): archive usable harness feature artifacts"
+  git -C "$SOLAR_REPO" commit -F "$commit_body"
   rm -f "$commit_body"
   git -C "$SOLAR_REPO" rev-parse --short HEAD
 fi
