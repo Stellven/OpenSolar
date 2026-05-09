@@ -1930,6 +1930,7 @@ print(json.dumps({
     _capability_bench="$HARNESS_DIR/lib/capability_fusion_benchmark.py"
     _platform_bench="$HARNESS_DIR/lib/platform_workflow_benchmark.py"
     _heavy_proof_bench="$HARNESS_DIR/lib/heavy_proof_benchmark.py"
+    _agent_arena_bench="$HARNESS_DIR/lib/agent_arena_benchmark.py"
     case "${2:-status}" in
       status|health)
         shift 2 || true
@@ -1986,11 +1987,22 @@ print(json.dumps({
         [[ -f "$_heavy_proof_bench" ]] || { err "heavy_proof_benchmark not found: $_heavy_proof_bench"; exit 1; }
         python3 "$_heavy_proof_bench" "$@"
         ;;
+      agent-arena|arena)
+        shift 2 || true
+        [[ -f "$_agent_arena_bench" ]] || { err "agent_arena_benchmark not found: $_agent_arena_bench"; exit 1; }
+        python3 "$_agent_arena_bench" "$@"
+        ;;
       *)
-        err "用法: $0 integrations [status|plugins|install|disable|list|validate|capabilities|sync-caps|benchmark|platform-benchmark|heavy-proof] [--json]"
+        err "用法: $0 integrations [status|plugins|install|disable|list|validate|capabilities|sync-caps|benchmark|platform-benchmark|heavy-proof|agent-arena] [--json]"
         exit 1
         ;;
     esac
+    ;;
+  agent-arena|arena)
+    shift
+    _agent_arena_bench="$HARNESS_DIR/lib/agent_arena_benchmark.py"
+    [[ -f "$_agent_arena_bench" ]] || { err "agent_arena_benchmark not found: $_agent_arena_bench"; exit 1; }
+    python3 "$_agent_arena_bench" "$@"
     ;;
   evolution)
     shift
