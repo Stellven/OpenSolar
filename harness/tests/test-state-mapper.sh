@@ -78,6 +78,21 @@ make_fixture "fx5" "reviewing" "" "" >/dev/null
 result=$(map_canonical_state "fx5")
 check "reviewing → build_complete/evaluator" "$result" "build_complete" "evaluator"
 
+# ── Fixture 5b: planning_complete status → planning_complete/builder_main ───
+make_fixture "fx5b" "planning_complete" "planning_complete" "builder_main" >/dev/null
+result=$(map_canonical_state "fx5b")
+check "status=planning_complete → planning_complete/builder_main" "$result" "planning_complete" "builder_main"
+
+# ── Fixture 5c: S0 dispatched should not map back to planning dispatch ───────
+make_fixture "fx5c" "active" "s0_dispatched" "builder_main" >/dev/null
+result=$(map_canonical_state "fx5c")
+check "active+s0_dispatched → building/builder_main" "$result" "building" "builder_main"
+
+# ── Fixture 5d: S0 ready for eval routes to evaluator ────────────────────────
+make_fixture "fx5d" "active" "s0_ready_for_eval" "evaluator" >/dev/null
+result=$(map_canonical_state "fx5d")
+check "active+s0_ready_for_eval → build_complete/evaluator" "$result" "build_complete" "evaluator"
+
 # ── Fixture 6: passed → done/none ────────────────────────────────────────────
 make_fixture "fx6" "passed" "" "" >/dev/null
 result=$(map_canonical_state "fx6")
