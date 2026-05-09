@@ -601,7 +601,7 @@ detect_pane_by_persona_simple() {
 
 write_parallel_lab_state() {
   local work_dir="$1"
-  local model_matrix="${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,anthropic-sonnet}"
+  local model_matrix="${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,deepseek}"
   mkdir -p "$HARNESS_DIR/state"
   {
     printf "WORK_DIR='%s'\n" "$work_dir"
@@ -615,7 +615,7 @@ ensure_parallel_builder_lab() {
   local work_dir="${1:-$(pwd)}"
   tmux has-session -t "$LAB_SESSION_NAME" 2>/dev/null || return 0
   local state_file="$HARNESS_DIR/state/parallel-builder-lab.env"
-  local desired_matrix="${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,anthropic-sonnet}"
+  local desired_matrix="${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,deepseek}"
   local current_matrix=""
   if [[ -f "$state_file" ]]; then
     current_matrix=$(grep '^LAB_MODEL_MATRIX=' "$state_file" 2>/dev/null | sed "s/^LAB_MODEL_MATRIX='//;s/'$//" || true)
@@ -628,7 +628,7 @@ ensure_parallel_builder_lab() {
   write_parallel_lab_state "$work_dir"
 
   tmux rename-window -t "$LAB_SESSION_NAME:0" "Builder Lab" 2>/dev/null || true
-  tmux set-option -t "$LAB_SESSION_NAME" status-right "#[fg=#f9e2af]Solar Builder Lab #[fg=#a6e3a1]3 GLM-5.1 + 1 Claude Sonnet #[default]%H:%M" 2>/dev/null || true
+  tmux set-option -t "$LAB_SESSION_NAME" status-right "#[fg=#f9e2af]Solar Builder Lab #[fg=#a6e3a1]3 GLM-5.1 + 1 DeepSeek V4 #[default]%H:%M" 2>/dev/null || true
   tmux set-environment -t "$LAB_SESSION_NAME" SOLAR_CLAUDE_BYPASS 1 2>/dev/null || true
   configure_builder_lab_labels
 
@@ -650,7 +650,7 @@ ensure_parallel_builder_lab() {
       continue
     fi
     pane_id=$(tmux display-message -p -t "$target" '#{pane_id}')
-    tmux respawn-pane -k -t "$target" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH TMUX_PANE=${pane_id} SOLAR_BUILDER_SLOT=${slot} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh lab-builder ${_esc_work}"
+    tmux respawn-pane -k -t "$target" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH TMUX_PANE=${pane_id} SOLAR_BUILDER_SLOT=${slot} SOLAR_LAB_BUILDER_MODEL_MATRIX=${desired_matrix} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh lab-builder ${_esc_work}"
   done
   configure_builder_lab_labels
 }
@@ -695,7 +695,7 @@ start_extension() {
     local target="$1" persona="$2" slot="$3"
     local pane_id
     pane_id=$(tmux display-message -p -t "$target" '#{pane_id}')
-    tmux send-keys -t "$target" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH TMUX_PANE=${pane_id} SOLAR_BUILDER_SLOT=${slot} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" Enter
+    tmux send-keys -t "$target" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH TMUX_PANE=${pane_id} SOLAR_BUILDER_SLOT=${slot} SOLAR_LAB_BUILDER_MODEL_MATRIX=${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,deepseek} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" Enter
   }
   sleep 1
   launch_persona_pane "$LAB_SESSION_NAME:Builder Lab.0" "lab-builder" "lab-builder-1"
@@ -712,7 +712,7 @@ start_extension() {
   tmux set-option -t "$LAB_SESSION_NAME" pane-border-style "fg=#45475a"
   tmux set-option -t "$LAB_SESSION_NAME" pane-active-border-style "fg=#f9e2af"
   tmux set-option -t "$LAB_SESSION_NAME" status-right-length 60
-  tmux set-option -t "$LAB_SESSION_NAME" status-right "#[fg=#f9e2af]Solar Builder Lab #[fg=#a6e3a1]3 GLM-5.1 + 1 Claude Sonnet #[default]%H:%M"
+  tmux set-option -t "$LAB_SESSION_NAME" status-right "#[fg=#f9e2af]Solar Builder Lab #[fg=#a6e3a1]3 GLM-5.1 + 1 DeepSeek V4 #[default]%H:%M"
   configure_builder_lab_labels
 
   ok "Parallel Builder Lab 四分屏已启动"
@@ -722,7 +722,7 @@ start_extension() {
   echo "  │ GLM-5.1      │ GLM-5.1      │"
   echo "  ├──────────────┼──────────────┤"
   echo "  │  Builder 3   │  Builder 4   │"
-  echo "  │ GLM-5.1      │ Claude Sonnet│"
+  echo "  │ GLM-5.1      │ DeepSeek V4  │"
   echo "  └──────────────┴──────────────┘"
   echo ""
   echo "  重新接入:  tmux attach -t $LAB_SESSION_NAME"
@@ -1700,10 +1700,17 @@ case "${1:-start}" in
   lab-status) do_lab_status "${2:-}" ;;
   doctor)    bash "$HARNESS_DIR/doctor.sh" "${2:-}" ;;
   verify-integrations|capability-e2e)
-    _cap_e2e="$HARNESS_DIR/tests/integrations/test-capability-plane-e2e.sh"
-    [[ -x "$_cap_e2e" ]] || chmod +x "$_cap_e2e" 2>/dev/null || true
-    [[ -f "$_cap_e2e" ]] || { err "capability E2E test not found: $_cap_e2e"; exit 1; }
-    bash "$_cap_e2e"
+    _cap_fail=0
+    for _cap_e2e in \
+      "$HARNESS_DIR/tests/integrations/test-capability-plane-e2e.sh" \
+      "$HARNESS_DIR/tests/integrations/test-expanded-capability-plane-e2e.sh" \
+      "$HARNESS_DIR/tests/integrations/test-capability-fusion-benchmark.sh"
+    do
+      [[ -f "$_cap_e2e" ]] || { err "capability E2E test not found: $_cap_e2e"; exit 1; }
+      [[ -x "$_cap_e2e" ]] || chmod +x "$_cap_e2e" 2>/dev/null || true
+      bash "$_cap_e2e" || _cap_fail=1
+    done
+    exit "$_cap_fail"
     ;;
   --skip-doctor) start_harness 3 "${2:-$(pwd)}" "--skip-doctor" ;;
   coord-status)
@@ -1906,6 +1913,7 @@ print(json.dumps({
     _integrations_probe="$HARNESS_DIR/lib/external-integrations-health.py"
     _plugin_loader="$HARNESS_DIR/lib/plugin_loader.py"
     _capability_reg="$HARNESS_DIR/lib/capability_registry.py"
+    _capability_bench="$HARNESS_DIR/lib/capability_fusion_benchmark.py"
     case "${2:-status}" in
       status|health)
         shift 2 || true
@@ -1947,8 +1955,13 @@ print(json.dumps({
         [[ -f "$_capability_reg" ]] || { err "capability_registry not found: $_capability_reg"; exit 1; }
         python3 "$_capability_reg" sync "$@"
         ;;
+      benchmark|bench)
+        shift 2 || true
+        [[ -f "$_capability_bench" ]] || { err "capability_fusion_benchmark not found: $_capability_bench"; exit 1; }
+        python3 "$_capability_bench" "$@"
+        ;;
       *)
-        err "用法: $0 integrations [status|plugins|install|disable|list|validate|capabilities|sync-caps] [--json]"
+        err "用法: $0 integrations [status|plugins|install|disable|list|validate|capabilities|sync-caps|benchmark] [--json]"
         exit 1
         ;;
     esac
@@ -2796,7 +2809,12 @@ PY
             if tmux has-session -t "$_reingest_session" 2>/dev/null; then
               ok "wiki reingest scheduler already running ($_reingest_session)"
             else
-              tmux new-session -d -s "$_reingest_session" "$_reingest_scheduler loop '$_interval'"
+              _reingest_panes="${SOLAR_REINGEST_PANES:-}"
+              if [[ -n "$_reingest_panes" ]]; then
+                tmux new-session -d -s "$_reingest_session" "SOLAR_REINGEST_PANES=$(printf '%q' "$_reingest_panes") $_reingest_scheduler loop '$_interval'"
+              else
+                tmux new-session -d -s "$_reingest_session" "$_reingest_scheduler loop '$_interval'"
+              fi
               ok "wiki reingest scheduler started ($_reingest_session, interval=${_interval}s)"
             fi
             ;;

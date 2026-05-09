@@ -19,6 +19,10 @@ HARNESS_DIR="${HARNESS_DIR:-$HOME/.solar/harness}"
 # 从 model-config.sh 读 ZHIPU_* 变量
 _source_model_config() {
   source "$HARNESS_DIR/model-config.sh" 2>/dev/null || true
+  # Shared router env can hold non-Anthropic provider keys (for example
+  # DEEPSEEK_API_KEY). Source it here so tmux-launched panes do not silently
+  # fall back to Claude when the interactive shell env is sparse.
+  source "$HOME/.solar/brain-router/.env" 2>/dev/null || true
 }
 
 _zhipu_available() {
@@ -32,6 +36,7 @@ _zhipu_credentials_available() {
 }
 
 _deepseek_auth_token() {
+  source "$HOME/.solar/brain-router/.env" 2>/dev/null || true
   if [[ -n "${DEEPSEEK_API_KEY:-}" ]]; then
     printf '%s' "${DEEPSEEK_API_KEY}"
     return 0
@@ -65,9 +70,9 @@ _lab_builder_model_for_slot() {
   local slot_num="${slot##*-}"
   [[ "$slot_num" =~ ^[0-9]+$ ]] || slot_num=1
 
-  # Default keeps GLM concurrency at 3 for the lab builders. Override example:
-  # SOLAR_LAB_BUILDER_MODEL_MATRIX=glm,glm,glm,anthropic-sonnet
-  local matrix="${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,anthropic-sonnet}"
+  # Default keeps GLM concurrency at 3 for the lab builders and uses DeepSeek
+  # for the fourth pane. Anthropic must be explicitly requested.
+  local matrix="${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,deepseek}"
   local IFS=','
   local models=($matrix)
   local selected="${models[$((slot_num - 1))]:-}"
@@ -107,7 +112,7 @@ get_persona_config() {
   local persona="$1"
   _source_model_config
 
-  local model_flag="" base_url="" auth_token="" tool_flag="" display_model="" startup_token="" proxy_check="0" auth_source="" extra_flags=""
+  local model_flag="" base_url="" auth_token="" tool_flag="" display_model="" startup_token="" proxy_check="0" auth_source="" extra_flags="" launch_error=""
   local cn=""
 
   case "$persona" in
@@ -189,10 +194,11 @@ get_persona_config() {
         extra_flags="$(_gateway_compat_flags)"
         display_model="GLM-5.1 (智谱, ${SOLAR_BUILDER_SLOT:-lab-builder})"
       elif [[ "$lab_model" == "glm" ]]; then
-        model_flag="--model sonnet"
+        model_flag=""
         base_url=""
         auth_token=""
-        display_model="Claude Sonnet (GLM unavailable, ${SOLAR_BUILDER_SLOT:-lab-builder})"
+        display_model="UNAVAILABLE: GLM credentials missing (${SOLAR_BUILDER_SLOT:-lab-builder})"
+        launch_error="GLM requested for ${SOLAR_BUILDER_SLOT:-lab-builder}, but ZHIPU credentials are unavailable; refusing Claude fallback"
       elif [[ "$lab_model" == "sonnet" ]] && _zhipu_credentials_available; then
         model_flag="--model sonnet"
         base_url="${ZHIPU_BASE_URL:-}"
@@ -206,6 +212,13 @@ get_persona_config() {
         auth_source="deepseek"
         extra_flags="$(_gateway_compat_flags)"
         display_model="DeepSeek V4 Pro (${SOLAR_BUILDER_SLOT:-lab-builder})"
+        auth_token="$(_deepseek_auth_token 2>/dev/null || true)"
+      elif [[ "$lab_model" == "deepseek" ]]; then
+        model_flag=""
+        base_url=""
+        auth_token=""
+        display_model="UNAVAILABLE: DeepSeek credentials missing (${SOLAR_BUILDER_SLOT:-lab-builder})"
+        launch_error="DeepSeek requested for ${SOLAR_BUILDER_SLOT:-lab-builder}, but DEEPSEEK_API_KEY is unavailable; refusing Claude fallback"
       elif [[ "$lab_model" == "opus" ]]; then
         model_flag="--model opus"
         base_url=""
@@ -217,10 +230,11 @@ get_persona_config() {
         auth_token=""
         display_model="Claude Sonnet (Anthropic, ${SOLAR_BUILDER_SLOT:-lab-builder})"
       else
-        model_flag="--model sonnet"
+        model_flag=""
         base_url=""
         auth_token=""
-        display_model="Claude Sonnet (fallback, ${SOLAR_BUILDER_SLOT:-lab-builder})"
+        display_model="UNAVAILABLE: unknown lab model '${lab_model}' (${SOLAR_BUILDER_SLOT:-lab-builder})"
+        launch_error="unknown lab model '${lab_model}' for ${SOLAR_BUILDER_SLOT:-lab-builder}; refusing Claude fallback"
       fi
       tool_flag=""
       startup_token=""
@@ -310,6 +324,7 @@ get_persona_config() {
   echo "PROXY_CHECK='$proxy_check'"
   echo "AUTH_SOURCE='$auth_source'"
   echo "EXTRA_FLAGS='$extra_flags'"
+  echo "LAUNCH_ERROR='$launch_error'"
 }
 
 apply_persona_env() {

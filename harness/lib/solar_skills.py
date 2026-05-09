@@ -377,6 +377,56 @@ CAPABILITY_RULES: list[dict[str, Any]] = [
             r"命令目录|规则目录|MCP|hook|能力盘点|代理清单",
         ],
     },
+    {
+        "provider": "Empirical Research",
+        "capabilities": ["research.empirical_pipeline", "research.literature_review", "analysis.causal_inference"],
+        "why": "任务涉及实证研究、文献综述、因果推断、可复现分析或学术论文。",
+        "use": "按研究问题、数据、识别策略、统计验证、复现包和论文写作链路执行；把证据和限制写入 handoff。",
+        "patterns": [
+            r"\b(empirical|causal|literature review|reproducib|academic paper|research design|stata|rct|did|iv)\b",
+            r"实证|因果|文献综述|可复现|论文|研究设计|统计分析|固定效应|工具变量",
+        ],
+    },
+    {
+        "provider": "addyosmani/agent-skills",
+        "capabilities": ["agent_skills.catalog", "workflow.spec_driven", "workflow.code_review", "workflow.test_driven"],
+        "why": "任务需要 agent-skills 的规范驱动、测试驱动、评审、发布或上下文工程方法。",
+        "use": "把 addyosmani/agent-skills 当作只读工作流模式库；不能覆盖 Solar 当前合约和角色派发。",
+        "patterns": [
+            r"\b(addyosmani|agent-skills|spec[- ]driven|source[- ]driven|context engineering)\b",
+            r"规范驱动|源驱动|上下文工程|agent skills|代理技能",
+        ],
+    },
+    {
+        "provider": "Browser-use MCP",
+        "capabilities": ["browser.mcp", "browser.automation", "browser.screenshot", "browser.localhost_test"],
+        "why": "任务明确需要 browser-use、MCP 浏览器自动化、截图或 localhost 交互测试。",
+        "use": "优先使用本地 browser-use MCP / Codex Browser Use 能力；若不可用，降级到 gstack/browser QA 并记录证据。",
+        "patterns": [
+            r"\b(browser-use|browser use|browser mcp|mcp browser|localhost.*screenshot|click|type)\b",
+            r"浏览器.*MCP|browser-use|点击|输入|本地页面测试|截图",
+        ],
+    },
+    {
+        "provider": "openai-agents-python",
+        "capabilities": ["agents_sdk.design", "agents_sdk.guardrails", "agents_sdk.tracing", "agents_sdk.handoff_model"],
+        "why": "任务涉及 OpenAI Agents SDK、typed agents、guardrails、tracing、sessions 或 handoff runtime 设计。",
+        "use": "按 PoC/设计能力使用，不把它当成当前生产执行器；输出迁移边界、回滚和不替换清单。",
+        "patterns": [
+            r"\b(openai[- ]agents|agents sdk|guardrails|typed agents|handoffs|tracing|sessions)\b",
+            r"OpenAI Agents|智能体 SDK|护栏|追踪|会话|原生 handoff",
+        ],
+    },
+    {
+        "provider": "Codex Bridge",
+        "capabilities": ["codex.bridge", "codex.contract_ingest", "codex.review_handoff", "pane3.bridge"],
+        "why": "任务涉及 Codex 到 Solar 的合约、review、pane3 bridge 或 from-codex 文件链路。",
+        "use": "使用新链路 ~/.solar/codex-bridge/from-codex + chain-watcher；旧 ~/.solar/harness/codex-bridge 只作兼容证据。",
+        "patterns": [
+            r"\b(codex bridge|pane3|from-codex|to-codex|chain-watcher|execution-contract)\b",
+            r"Codex Bridge|pane3|三号 pane|合约导入|chain watcher",
+        ],
+    },
 ]
 
 

@@ -142,9 +142,27 @@ else
   fail "capability plane E2E script missing or not executable"
 fi
 
+echo "T16: expanded capability plane E2E suite passes"
+if [[ -x tests/integrations/test-expanded-capability-plane-e2e.sh ]]; then
+  bash tests/integrations/test-expanded-capability-plane-e2e.sh >/tmp/solar-expanded-capability-e2e-release.log 2>&1 \
+    && ok "expanded capability plane E2E passes" \
+    || fail "expanded capability plane E2E failed: $(tail -20 /tmp/solar-expanded-capability-e2e-release.log | tr '\n' ' ')"
+else
+  fail "expanded capability plane E2E script missing or not executable"
+fi
+
+echo "T17: capability fusion benchmark passes"
+if [[ -x tests/integrations/test-capability-fusion-benchmark.sh ]]; then
+  bash tests/integrations/test-capability-fusion-benchmark.sh >/tmp/solar-capability-fusion-benchmark-release.log 2>&1 \
+    && ok "capability fusion benchmark passes" \
+    || fail "capability fusion benchmark failed: $(tail -20 /tmp/solar-capability-fusion-benchmark-release.log | tr '\n' ' ')"
+else
+  fail "capability fusion benchmark script missing or not executable"
+fi
+
 # cleanup
 rm -rf /tmp/solar-release-test
-rm -f /tmp/solar-capability-e2e-release.log
+rm -f /tmp/solar-capability-e2e-release.log /tmp/solar-expanded-capability-e2e-release.log /tmp/solar-capability-fusion-benchmark-release.log
 
 echo ""
 echo "=== S7 Release Tooling: PASS=$PASS FAIL=$FAIL ==="
