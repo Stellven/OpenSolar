@@ -42,7 +42,11 @@ require_dir "$LIVE_HARNESS"
 require_dir "$SOLAR_REPO"
 git -C "$SOLAR_REPO" rev-parse --show-toplevel >/dev/null
 
-mkdir -p "$REPO_HARNESS" "$REPO_HARNESS/sprints" "$KNOWLEDGE_DIR"
+mkdir -p "$REPO_HARNESS" "$REPO_HARNESS/sprints"
+knowledge_dir_ready=1
+if ! mkdir -p "$KNOWLEDGE_DIR" 2>/dev/null; then
+  knowledge_dir_ready=0
+fi
 
 rsync_excludes=(
   --exclude '.*'
@@ -97,6 +101,10 @@ repo_harness = Path(os.environ["REPO_HARNESS"])
 knowledge_dir = Path(os.environ["KNOWLEDGE_DIR"])
 eligible = {s.strip() for s in os.environ["ELIGIBLE_STATUSES"].split(",") if s.strip()}
 sprints = live / "sprints"
+
+fallback_knowledge_dir = repo_harness / "_extracted_knowledge_fallback"
+fallback_used = False
+errors = []
 
 artifact_suffixes = [
     ".status.json",
@@ -157,7 +165,9 @@ if sprints.exists():
         eval_excerpt = eval_path.read_text(encoding="utf-8", errors="replace")[:4000] if eval_path else "N/A"
         handoff_excerpt = handoff_path.read_text(encoding="utf-8", errors="replace")[:3000] if handoff_path else "N/A"
         plan_excerpt = plan_path.read_text(encoding="utf-8", errors="replace")[:2500] if plan_path else "N/A"
-        knowledge_path.write_text(f"""# Solar Harness 可用功能归档：{title}
+        try:
+            knowledge_path.parent.mkdir(parents=True, exist_ok=True)
+            knowledge_path.write_text(f"""# Solar Harness 可用功能归档：{title}
 
 生成时间：{now}
 Sprint：`{sid}`
@@ -222,6 +232,82 @@ sprint archive: {dest}
 {eval_excerpt}
 ```
 """, encoding="utf-8")
+        except Exception as exc:
+            fallback_used = True
+            try:
+                fallback_knowledge_dir.mkdir(parents=True, exist_ok=True)
+                fallback_path = fallback_knowledge_dir / knowledge_name
+                fallback_path.write_text(f"""# Solar Harness 可用功能归档：{title}
+
+生成时间：{now}
+Sprint：`{sid}`
+状态：`{state}`
+归档目录：`{dest}`
+
+> WARN: 无法写入目标知识目录：`{knowledge_dir}`。已写入仓库 fallback：`{fallback_path}`。
+
+## 功能模块
+
+{title}
+
+## 用户价值
+
+该 sprint 已达到 `{state}` 状态，视为可用功能候选；其代码和交付材料已从 live harness 导出到 Solar 仓库的 `harness/` 目录，便于版本化、审查和回滚。
+
+## 设计结构
+
+```text
+live: {live}
+repo: {repo_harness}
+sprint archive: {dest}
+```
+
+## 关键文件
+
+{chr(10).join(f"- `{name}`" for name in copied) if copied else "- N/A"}
+
+## 核心 API / 命令
+
+- `scripts/export-harness-artifacts.sh --commit`
+- `solar-harness` sprint lifecycle commands
+
+## 验证方法
+
+- 以 sprint `.eval.md` 为准。
+- 本归档任务只提交状态为 `{state}` 的 sprint 产物。
+
+## 风险边界
+
+- 不归档 runtime 日志、pid/port、cache、venv、vendor、quarantine、planner inbox。
+- 不提交 Solar 仓库中与 `harness/` 和本导出脚本无关的既有脏改。
+
+## 后续改进
+
+- 为每个功能模块补充更细粒度的 code-owner 和测试命令映射。
+- 将 eval 中的真实命令结构化为机器可读字段。
+
+## Plan 摘要
+
+```text
+{plan_excerpt}
+```
+
+## Handoff 摘要
+
+```text
+{handoff_excerpt}
+```
+
+## Eval 摘要
+
+```text
+{eval_excerpt}
+```
+""", encoding="utf-8")
+                knowledge_path = fallback_path
+            except Exception as exc2:
+                errors.append({"sprint": sid, "error": f"knowledge write failed: {exc!r}; fallback failed: {exc2!r}"})
+                knowledge_path = Path("N/A")
         exported.append({
             "sprint": sid,
             "status": state,
@@ -230,7 +316,7 @@ sprint archive: {dest}
             "files": copied,
         })
 
-print(json.dumps({"exported": exported, "skipped": skipped}, ensure_ascii=False))
+print(json.dumps({"exported": exported, "skipped": skipped, "knowledge_fallback_used": fallback_used, "errors": errors}, ensure_ascii=False))
 PY
 )"
 
@@ -318,7 +404,6 @@ PY
     echo "pending: no staged repo changes after export"
     exit 0
   fi
-  first_sprint="$(python3 -c 'import json,sys; data=json.load(sys.stdin)["exported"]; print(data[0]["sprint"])' <<<"$summary_json")"
   knowledge_paths="$(python3 -c 'import json,sys; print("\n".join(item["knowledge"] for item in json.load(sys.stdin)["exported"]))' <<<"$summary_json")"
   commit_body="$(mktemp)"
   {

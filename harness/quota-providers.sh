@@ -37,7 +37,7 @@ emit_text() {
   case "$status" in
     ok)
       if [[ -n "$unit" ]]; then
-        printf "%s:%s%s" "$metric" "$value" "$unit"
+        printf "%s:%s %s" "$metric" "$value" "$unit"
       else
         printf "%s:%s" "$metric" "$value"
       fi
@@ -72,7 +72,7 @@ else:
         metric = data.get("metric", "quota")
         value = data.get("value", "N/A")
         unit = data.get("unit", "")
-        print(f"{metric}:{value}{unit}")
+        print(f"{metric}:{value} {unit}".rstrip())
     else:
         print(f"quota:N/A({data.get('note', 'warn')})")
 PY
