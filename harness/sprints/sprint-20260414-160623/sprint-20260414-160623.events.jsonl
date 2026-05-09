@@ -1,2 +1,3 @@
 {"ts": "2026-04-20T02:41:20Z", "sid": "sprint-20260414-160623", "event": "dispatched", "by": "coordinator", "data": {"to": "planner", "task": "passed"}}
 {"ts": "2026-04-20T02:41:21Z", "sid": "sprint-20260414-160623", "event": "handle_passed_completed", "by": "coordinator", "data": {"finalized_at": "2026-04-20T02:41:20Z"}}
+{"ts": "2026-05-09T14:20:41Z", "sid": "sprint-20260414-160623", "event": "state_changed", "by": "coordinator"}

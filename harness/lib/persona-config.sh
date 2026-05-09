@@ -66,8 +66,8 @@ _lab_builder_model_for_slot() {
   [[ "$slot_num" =~ ^[0-9]+$ ]] || slot_num=1
 
   # Default keeps GLM concurrency at 3 for the lab builders. Override example:
-  # SOLAR_LAB_BUILDER_MODEL_MATRIX=glm,glm,glm,deepseek
-  local matrix="${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,deepseek}"
+  # SOLAR_LAB_BUILDER_MODEL_MATRIX=glm,glm,glm,anthropic-sonnet
+  local matrix="${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,anthropic-sonnet}"
   local IFS=','
   local models=($matrix)
   local selected="${models[$((slot_num - 1))]:-}"

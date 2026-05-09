@@ -41,6 +41,7 @@ HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
 sys.path.insert(0, str(HARNESS_DIR / "lib"))
 from pane_lease import pane_state, release, reap, list_leases  # noqa: E402
 from task_queue import next_free_worker, enqueue, pop, depth   # noqa: E402
+from graph_node_dispatcher import dispatch_queue_item          # noqa: E402
 from solar_state_db import (                                    # noqa: E402
     open_state_db, init_db, emit_event as db_emit_event,
     get_pending_tasks, get_free_workers, release_task,
@@ -265,6 +266,15 @@ def drain_queue(sprint_id: str) -> dict:
         item = pop(sprint_id)
         if item is None:
             break
+        if "graph_node|" in item.get("intent", "") or (item.get("payload") or {}).get("node"):
+            result = dispatch_queue_item(item, dry_run=bool(os.environ.get("SOLAR_COORD_DRY_RUN")), ttl=900)
+            conn = open_state_db()
+            init_db(conn)
+            db_emit_event(conn, sprint_id, "graph_queue_drain_dispatch", payload=result)
+            dispatched.append({"item": item, "status": "graph_dispatched" if result.get("ok") else "graph_requeued", "result": result})
+            if not result.get("ok"):
+                break
+            continue
         pane = next_free_worker(sprint_id)
         conn = open_state_db()
         init_db(conn)

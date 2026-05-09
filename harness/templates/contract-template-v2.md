@@ -34,11 +34,26 @@ Project: {{project_dir}}
 ## Process
 
 1. **Spec**: Define requirements and acceptance criteria
-2. **Plan**: Design implementation approach
-3. **Build**: Implement the code
+2. **Plan**: Design implementation approach and write `sprints/{{sprint_id}}.task_graph.json`
+3. **Build**: Control plane dispatches ready DAG nodes in parallel
 4. **Test**: Verify functionality
-5. **Review**: Evaluator checks against Done criteria
+5. **Review**: Node evaluator checks each gate; parent evaluator checks all gates
 6. **Ship**: Finalize and deliver
+
+## Required Planning Artifacts
+
+Planner must produce both files before handoff to builders:
+
+- `sprints/{{sprint_id}}.plan.md` — human-readable execution plan
+- `sprints/{{sprint_id}}.task_graph.json` — machine-readable DAG validated by:
+
+```bash
+~/.solar/bin/solar-harness graph-scheduler validate --graph ~/.solar/harness/sprints/{{sprint_id}}.task_graph.json
+```
+
+Each task graph node must declare `id`, `goal`, `depends_on`, `write_scope`, `read_scope`, `required_skills`, `preferred_model`, `gate`, `acceptance`, and `estimated_cost`.
+
+Parallel dispatch rule: nodes can run together only when dependencies are passed and `write_scope` does not overlap. Missing `write_scope` is treated as exclusive and must not be parallelized.
 
 ## Definition of Done
 

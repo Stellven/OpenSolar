@@ -27,7 +27,9 @@ case "$MODE" in
     MIN_IDLE_SEC="${SOLAR_QMD_EMBED_MIN_IDLE_SEC:-0}"
     MAX_LOAD_1M="${SOLAR_QMD_EMBED_MAX_LOAD_1M:-8.0}"
     CHECK_INTERVAL="${SOLAR_QMD_EMBED_CHECK_INTERVAL:-15}"
-    MAX_RUNTIME_SEC="${SOLAR_QMD_EMBED_MAX_RUNTIME_SEC:-300}"
+    # Large vaults can spend several minutes just chunking; too-short slices
+    # repeatedly kill qmd before any vectors are written.
+    MAX_RUNTIME_SEC="${SOLAR_QMD_EMBED_MAX_RUNTIME_SEC:-1800}"
     ;;
   force)
     MIN_IDLE_SEC="${SOLAR_QMD_EMBED_MIN_IDLE_SEC:-0}"
@@ -40,7 +42,7 @@ case "$MODE" in
     MIN_IDLE_SEC="${SOLAR_QMD_EMBED_MIN_IDLE_SEC:-0}"
     MAX_LOAD_1M="${SOLAR_QMD_EMBED_MAX_LOAD_1M:-8.0}"
     CHECK_INTERVAL="${SOLAR_QMD_EMBED_CHECK_INTERVAL:-15}"
-    MAX_RUNTIME_SEC="${SOLAR_QMD_EMBED_MAX_RUNTIME_SEC:-300}"
+    MAX_RUNTIME_SEC="${SOLAR_QMD_EMBED_MAX_RUNTIME_SEC:-1800}"
     ;;
 esac
 NICE_LEVEL="${SOLAR_QMD_EMBED_NICE:-15}"
@@ -82,7 +84,10 @@ EOF
 
 pending_count() {
   [[ -n "$QMD_BIN" ]] || { echo ""; return; }
-  "$QMD_BIN" status 2>/dev/null | awk '/Pending:/ {print $2; exit}'
+  "$QMD_BIN" status 2>/dev/null | awk '
+    /Pending:/ {print $2; found=1; exit}
+    END {if (!found) print "0"}
+  '
 }
 
 idle_seconds() {
@@ -132,6 +137,9 @@ if [[ -z "$QMD_BIN" || ! -x "$QMD_BIN" ]]; then
   status_json "missing" "qmd binary not found"
   exit 0
 fi
+
+QMD_BIN_DIR="$(cd "$(dirname "$QMD_BIN")" && pwd)"
+export PATH="$QMD_BIN_DIR:$PATH"
 
 if ! can_start; then
   exit 0

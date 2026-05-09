@@ -538,23 +538,25 @@ _bridge_pane_idle() {
   # lines below the prompt after a resize, which otherwise hides the actual
   # prompt from the tail window.
   tail_view="$(printf '%s\n' "$view" | sed '/^[[:space:]]*$/d' | tail -40)"
+  local recent_view
+  recent_view="$(printf '%s\n' "$tail_view" | tail -12)"
 
   # Active Claude/Codex UIs can still render the prompt footer while a tool or
   # thinking phase is running. Check these current activity markers before the
   # prompt-footer idle shortcut, otherwise dispatch-watch can overfill panes.
-  if printf '%s\n' "$tail_view" | grep -qE 'Brewing|Baking|Calculating|Percolating|Marinating|Befuddling|Compacting conversation|Thinking|thinking|Hmm|Press up to edit queued messages|Reading [0-9]+ files|Read [0-9]+ files|Bash\(|Edit\(|Write\(|Update\('; then
+  if printf '%s\n' "$recent_view" | grep -qE 'Brewing|Baking|Calculating|Percolating|Marinating|Befuddling|Compacting conversation|Thinking|thinking|Hmm|Press up to edit queued messages|Reading [0-9]+ files|Read [0-9]+ files|Bash\(|Edit\(|Write\(|Update\('; then
     return 1
   fi
 
-  # Claude/Codex often leaves old "Baked for 4m 17s" lines in scrollback after
-  # returning to the prompt. Treat the current prompt footer as idle before
-  # scanning older scrollback for activity markers.
+  # Claude/Codex often leaves old tool lines in scrollback after returning to
+  # the prompt. Treat the current prompt footer as idle unless there is a real
+  # queued-input/interrupt marker in the recent footer.
   if printf '%s\n' "$tail_view" | grep -q '❯' && \
      printf '%s\n' "$tail_view" | grep -qE 'new task\? /clear|bypass permissions|shift\+tab to cycle'; then
     return 0
   fi
 
-  if printf '%s\n' "$tail_view" | grep -qE 'esc to interrupt|Press up to edit queued messages|[✻✳✶·] .*[[:alpha:]].*[0-9]+s|Reading [0-9]|Bash\(|Edit\(|Write\(|Update\(|Searched for|Read [0-9]|Listing|Puzzling|Dilly-dallying|Levitating|Newspapering|Cogitating|Crafting'; then
+  if printf '%s\n' "$recent_view" | grep -qE 'esc to interrupt|Press up to edit queued messages|[✻✳✶·] .*[[:alpha:]].*[0-9]+s|Reading [0-9]|Bash\(|Edit\(|Write\(|Update\(|Searched for|Read [0-9]|Listing|Puzzling|Dilly-dallying|Levitating|Newspapering|Cogitating|Crafting'; then
     return 1
   fi
   printf '%s\n' "$tail_view" | grep -q '❯' || return 1

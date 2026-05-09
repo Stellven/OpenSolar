@@ -22,10 +22,10 @@ from pathlib import Path
 
 
 HOME = Path.home()
-HARNESS = HOME / ".solar" / "harness"
+HARNESS = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
 SPRINTS = HARNESS / "sprints"
 EVENTS = HARNESS / "events" / "all.jsonl"
-SESSION = "solar-harness"
+SESSION = os.environ.get("SOLAR_HARNESS_SESSION", "solar-harness")
 STATE = HARNESS / "state" / "autopilot-state.json"
 LOCK = HARNESS / "run" / "autopilot.lock"
 QUEUE = HARNESS / "run" / "autopilot-queue.jsonl"
@@ -39,6 +39,14 @@ COMPACTING_RE = re.compile(r"Compacting conversation|压缩上下文|Compacting"
 PROMPT_IDLE_RE = re.compile(r"Press up to edit queued messages|❯\s*$|Try \"", re.M)
 PANE_BUSY_RE = re.compile(r"✳|✶|⏺ Bash|Running|Effecting|Swooping|thinking|Cogitating|Brewed|Working", re.I)
 ACTIVE_STATUSES = {"drafting", "queued", "active", "planning", "approved", "reviewing", "ready_for_review", "needs_human_review", "failed_review"}
+GRAPH_READY_HANDOFFS = {"builder", "builder_main", "builder_parallel", "builder-lab"}
+
+import sys
+sys.path.insert(0, str(HARNESS / "lib"))
+try:
+    from graph_scheduler import load_graph, enqueue_ready, parent_ready_check, validate_graph
+except Exception:  # pragma: no cover - fallback for partially installed harnesses
+    load_graph = enqueue_ready = parent_ready_check = validate_graph = None
 
 
 def utc_now() -> str:
@@ -286,7 +294,9 @@ def sprint_files(sid: str) -> dict[str, bool]:
         "status": (SPRINTS / f"{sid}.status.json").exists(),
         "prd": (SPRINTS / f"{sid}.prd.md").exists(),
         "contract": (SPRINTS / f"{sid}.contract.md").exists(),
+        "design": (SPRINTS / f"{sid}.design.md").exists(),
         "plan": (SPRINTS / f"{sid}.plan.md").exists(),
+        "task_graph": (SPRINTS / f"{sid}.task_graph.json").exists(),
         "handoff": (SPRINTS / f"{sid}.handoff.md").exists(),
         "eval": (SPRINTS / f"{sid}.eval.md").exists() or (SPRINTS / f"{sid}.eval.json").exists(),
     }
@@ -348,13 +358,99 @@ def pane_target_for_handoff(handoff: str) -> str:
     return f"{SESSION}:0.0"
 
 
+def discover_worker_panes() -> list[str]:
+    try:
+        r = subprocess.run(
+            ["tmux", "list-panes", "-a", "-F", "#{session_name}:#{window_index}.#{pane_index}"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if r.returncode == 0:
+            panes = [p.strip() for p in r.stdout.splitlines() if p.strip()]
+            builders = [p for p in panes if p.startswith(f"{SESSION}:") or p.startswith("solar-harness-lab:")]
+            return builders or panes
+    except Exception:
+        pass
+    return [f"{SESSION}:0.2"]
+
+
+def infer_worker_models(pane: str) -> list[str]:
+    if pane.endswith(".0"):
+        return ["sonnet", "glm-5.1"]
+    if pane.endswith(".1"):
+        return ["sonnet"]
+    if pane.endswith(".2"):
+        return ["sonnet", "glm-5.1"]
+    if pane.endswith(".3"):
+        return ["deepseek", "sonnet"]
+    return ["sonnet"]
+
+
+def graph_workers() -> list[dict]:
+    workers = []
+    for pane in discover_worker_panes():
+        lease = pane_lease(pane)
+        busy = bool(lease) or pane_is_busy(pane)
+        workers.append(
+            {
+                "pane": pane,
+                "models": infer_worker_models(pane),
+                "skills": ["bash", "python", "typescript", "docs", "testing"],
+                "busy": busy,
+                "lease": lease,
+            }
+        )
+    return workers
+
+
+def graph_path_for(sid: str) -> Path:
+    return SPRINTS / f"{sid}.task_graph.json"
+
+
+def graph_status(sid: str) -> dict:
+    path = graph_path_for(sid)
+    if not path.exists() or load_graph is None:
+        return {"exists": path.exists(), "ready": False, "path": str(path)}
+    try:
+        graph = load_graph(path)
+        validation = validate_graph(graph) if validate_graph else {"ok": False, "errors": ["graph_scheduler_unavailable"]}
+        parent = parent_ready_check(graph) if parent_ready_check else {"ready": False}
+        return {
+            "exists": True,
+            "path": str(path),
+            "valid": bool(validation.get("ok")),
+            "validation": validation,
+            "parent_ready": bool(parent.get("ready")),
+            "parent": parent,
+        }
+    except Exception as exc:
+        return {"exists": True, "ready": False, "path": str(path), "valid": False, "error": str(exc)}
+
+
+def dispatch_ready_graph_nodes(sid: str, lease: bool = True) -> dict:
+    path = graph_path_for(sid)
+    if not path.exists():
+        return {"ok": False, "reason": "task_graph_missing", "path": str(path)}
+    if load_graph is None or enqueue_ready is None:
+        return {"ok": False, "reason": "graph_scheduler_unavailable"}
+    graph = load_graph(path)
+    validation = validate_graph(graph) if validate_graph else {"ok": False, "errors": ["graph_scheduler_unavailable"]}
+    if not validation.get("ok"):
+        return {"ok": False, "reason": "task_graph_invalid", "validation": validation}
+    result = enqueue_ready(graph, str(path), graph_workers(), max_parallel=8, lease=lease, ttl=900)
+    from graph_scheduler import save_graph  # imported late so older installs can still inspect
+    save_graph(path, graph)
+    return result
+
+
 def instruction_for(status: dict, files: dict[str, bool]) -> str:
     sid = status.get("sprint_id") or status.get("id") or ""
     handoff = status.get("handoff_to", "")
     if handoff == "planner" and files["prd"] and not files["plan"]:
         return (
-            f"请接手 {sid}：读取 .prd.md 和 .contract.md，产出 {sid}.plan.md。"
-            "不要问用户拍板；这是 P0 reliability 默认推进。"
+            f"请接手 {sid}：读取 .prd.md 和 .contract.md，产出 {sid}.plan.md 和 {sid}.task_graph.json。"
+            "task_graph 必须通过 solar-harness graph-scheduler validate。不要问用户拍板；这是 P0 reliability 默认推进。"
         )
     if handoff in ("builder", "builder_main", "builder_parallel", "builder-lab") and files["plan"] and not files["handoff"]:
         return (
@@ -397,7 +493,55 @@ def inspect_sprints() -> list[dict]:
                     "message": instruction_for(status, files),
                 }
             )
-        if files["plan"] and handoff in ("builder", "builder_main", "builder_parallel", "builder-lab") and not files["handoff"]:
+        if files["plan"] and not files["task_graph"] and handoff in GRAPH_READY_HANDOFFS:
+            raw_findings.append(
+                {
+                    "sid": sid,
+                    "type": "missing_task_graph",
+                    "severity": "warn",
+                    "target": pane_target_for_handoff("planner"),
+                    "message": (
+                        f"{sid} 已有 plan.md 但缺 task_graph.json。请补机器可执行 DAG，"
+                        "并运行 graph-scheduler validate；未补前禁止粗派发给 builder。"
+                    ),
+                }
+            )
+        if files["plan"] and files["task_graph"] and handoff in GRAPH_READY_HANDOFFS:
+            gs = graph_status(sid)
+            if gs.get("parent_ready"):
+                raw_findings.append(
+                    {
+                        "sid": sid,
+                        "type": "graph_parent_ready",
+                        "severity": "info",
+                        "target": pane_target_for_handoff("evaluator"),
+                        "message": f"{sid} DAG 全部 gate 已通过，请做 parent eval/closeout。",
+                        "graph": gs,
+                    }
+                )
+            elif gs.get("valid"):
+                raw_findings.append(
+                    {
+                        "sid": sid,
+                        "type": "graph_ready_nodes",
+                        "severity": "info",
+                        "target": "",
+                        "message": f"{sid} task_graph valid；autopilot 将只派发 ready DAG nodes。",
+                        "graph": gs,
+                    }
+                )
+            else:
+                raw_findings.append(
+                    {
+                        "sid": sid,
+                        "type": "invalid_task_graph",
+                        "severity": "warn",
+                        "target": pane_target_for_handoff("planner"),
+                        "message": f"{sid} task_graph.json 无效，请修复后再派发 builder。",
+                        "graph": gs,
+                    }
+                )
+        if files["plan"] and not files["task_graph"] and handoff in ("builder", "builder_main", "builder_parallel", "builder-lab") and not files["handoff"]:
             raw_findings.append(
                 {
                     "sid": sid,
@@ -543,7 +687,34 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
             mark_action(state, f, result)
             actions.append(result)
             continue
-        if ftype in ("ready_for_planner", "ready_for_builder", "ready_for_evaluator", "active_without_handoff", "pane_compacting_stall", "pane_idle_with_pending_artifact"):
+        if ftype in ("graph_ready_nodes",):
+            result = dispatch_ready_graph_nodes(sid, lease=dispatch)
+            append_event(sid, "autopilot_graph_enqueue_ready", "info" if result.get("ok") else "warn", result)
+            mark_action(state, f, {"sid": sid, "action": ftype, **result})
+            actions.append({"sid": sid, "action": ftype, **result})
+        elif ftype in ("graph_parent_ready",):
+            append_event(sid, "autopilot_graph_parent_ready", "info", f.get("graph", {}))
+            sent = False
+            if dispatch and sid:
+                sent = wake_sid(sid)
+            result = {"sid": sid, "action": ftype, "target": f.get("target", ""), "dispatched": sent}
+            if sent and target:
+                used_targets.add(target)
+            mark_action(state, f, result)
+            actions.append(result)
+        elif ftype in ("missing_task_graph", "invalid_task_graph"):
+            append_event(sid, f"autopilot_{ftype}", "warn", f.get("graph", {}))
+            sent = False
+            if dispatch and sid:
+                sent = wake_sid(sid)
+            elif dispatch and f.get("message") and f.get("target"):
+                sent = tmux_send(f["target"], f["message"])
+            result = {"sid": sid, "action": ftype, "target": f.get("target", ""), "dispatched": sent}
+            if sent and target:
+                used_targets.add(target)
+            mark_action(state, f, result)
+            actions.append(result)
+        elif ftype in ("ready_for_planner", "ready_for_builder", "ready_for_evaluator", "active_without_handoff", "pane_compacting_stall", "pane_idle_with_pending_artifact"):
             status_path = SPRINTS / f"{sid}.status.json"
             status = load_json(status_path)
             hist = status.setdefault("history", [])
