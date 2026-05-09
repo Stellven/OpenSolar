@@ -93,6 +93,11 @@ make_fixture "fx5c2" "active" "g0_passed" "coordinator" >/dev/null
 result=$(map_canonical_state "fx5c2")
 check "active+g0_passed → building/builder_main" "$result" "building" "builder_main"
 
+# ── Fixture 5c3: slice dispatch phases must not fall back to planning ───────
+make_fixture "fx5c3" "active" "s6_dispatched" "builder" >/dev/null
+result=$(map_canonical_state "fx5c3")
+check "active+s6_dispatched → building/builder_main" "$result" "building" "builder_main"
+
 # ── Fixture 5d: S0 ready for eval routes to evaluator ────────────────────────
 make_fixture "fx5d" "active" "s0_ready_for_eval" "evaluator" >/dev/null
 result=$(map_canonical_state "fx5d")

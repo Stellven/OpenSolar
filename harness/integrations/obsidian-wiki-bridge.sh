@@ -533,13 +533,16 @@ _bridge_pane_exists() {
 _bridge_pane_idle() {
   local target="$1" view tail_view
   _bridge_pane_exists "$target" || return 1
-  view="$(tmux capture-pane -p -t "$target" -S -40 2>/dev/null | tail -40)"
-  tail_view="$(printf '%s\n' "$view" | tail -10)"
+  view="$(tmux capture-pane -p -t "$target" -S -160 2>/dev/null | tail -160)"
+  # Ignore trailing blank space in TUI panes; Claude often leaves many blank
+  # lines below the prompt after a resize, which otherwise hides the actual
+  # prompt from the tail window.
+  tail_view="$(printf '%s\n' "$view" | sed '/^[[:space:]]*$/d' | tail -40)"
 
   # Active Claude/Codex UIs can still render the prompt footer while a tool or
   # thinking phase is running. Check these current activity markers before the
   # prompt-footer idle shortcut, otherwise dispatch-watch can overfill panes.
-  if printf '%s\n' "$view" | grep -qE 'Brewing|Baking|Calculating|Percolating|Marinating|Befuddling|Compacting conversation|Thinking|thinking|Hmm|Press up to edit queued messages|Reading [0-9]+ files|Read [0-9]+ files|Bash\(|Edit\(|Write\(|Update\('; then
+  if printf '%s\n' "$tail_view" | grep -qE 'Brewing|Baking|Calculating|Percolating|Marinating|Befuddling|Compacting conversation|Thinking|thinking|Hmm|Press up to edit queued messages|Reading [0-9]+ files|Read [0-9]+ files|Bash\(|Edit\(|Write\(|Update\('; then
     return 1
   fi
 

@@ -3034,6 +3034,63 @@ EOF
         ;;
     esac
     ;;
+  s6-autopilot)
+    # S6 Control Plane — autopilot.py (three-state deadlock detection)
+    shift
+    _ap_py="$HARNESS_DIR/lib/autopilot.py"
+    if [[ ! -f "$_ap_py" ]]; then
+      err "autopilot.py not found: $_ap_py"; exit 1
+    fi
+    _ap_subcmd="${1:-status}"; shift || true
+    case "$_ap_subcmd" in
+      scan|status|fault-report|resolve-deadlock|drain-queue)
+        python3 "$_ap_py" "$_ap_subcmd" "$@"
+        ;;
+      help|--help|-h|"")
+        echo "Solar S6 Autopilot — three-state deadlock detection"
+        echo ""
+        echo "Usage:"
+        echo "  $0 s6-autopilot scan            [--sprint SID]"
+        echo "  $0 s6-autopilot status          [--sprint SID]"
+        echo "  $0 s6-autopilot fault-report    [--sprint SID]"
+        echo "  $0 s6-autopilot drain-queue     --sprint SID"
+        echo "  $0 s6-autopilot resolve-deadlock --pane P --sprint SID --dispatch-id DID"
+        ;;
+      *)
+        err "Unknown s6-autopilot subcommand: $_ap_subcmd"; exit 1
+        ;;
+    esac
+    ;;
+
+  leases)
+    # S6 Control Plane — pane_lease.py
+    shift
+    _lease_py="$HARNESS_DIR/lib/pane_lease.py"
+    if [[ ! -f "$_lease_py" ]]; then
+      err "pane_lease.py not found: $_lease_py"; exit 1
+    fi
+    _lease_subcmd="${1:-list}"; shift || true
+    case "$_lease_subcmd" in
+      check|state|acquire|release|reap|list)
+        python3 "$_lease_py" "$_lease_subcmd" "$@"
+        ;;
+      help|--help|-h|"")
+        echo "Solar Pane Leases — S6 Control Plane"
+        echo ""
+        echo "Usage:"
+        echo "  $0 leases list"
+        echo "  $0 leases state  --pane PANE"
+        echo "  $0 leases check  --pane PANE"
+        echo "  $0 leases acquire --pane P --sprint SID --dispatch-id DID [--ttl N]"
+        echo "  $0 leases release --pane P --dispatch-id DID [--reason R]"
+        echo "  $0 leases reap"
+        ;;
+      *)
+        err "Unknown leases subcommand: $_lease_subcmd"; exit 1
+        ;;
+    esac
+    ;;
+
   *)
     # If arg looks like a directory, use it as work dir
     if [[ -d "$1" ]]; then

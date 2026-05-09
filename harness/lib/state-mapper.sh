@@ -133,6 +133,8 @@ elif st == 'active':
         lc = 'planning_complete'
     elif phase in ('g0_passed',):
         lc = 'building'
+    elif phase in ('slices_dispatched', 's1_dispatched', 's2_dispatched', 's6_dispatched'):
+        lc = 'building'
     elif phase in ('s0_dispatched', 's0_in_progress'):
         lc = 'building'
     elif phase in ('s0_ready_for_eval',):
