@@ -1,0 +1,89 @@
+{
+  "sprint_id": "sprint-20260507-symphony2",
+  "status": "passed",
+  "priority": "P1",
+  "lane": "delivery",
+  "handoff_to": "planner",
+  "predecessor": "sprint-20260506-symphony1",
+  "created_at": "2026-05-07T14:42:08Z",
+  "updated_at": "2026-05-07T19:18:31Z",
+  "product_brief": "/Users/sihaoli/.solar/harness/sprints/sprint-20260507-symphony2.product-brief.md",
+  "auto_generated": false,
+  "source": "pm-manual-2026-05-07",
+  "phase": "spec",
+  "title": "Symphony Sprint 2 \u2014 workspace 4 hook \u751f\u547d\u5468\u671f + \u5f3a\u9694\u79bb + Sprint 1 D6",
+  "contract": "/Users/sihaoli/.solar/harness/sprints/sprint-20260507-symphony2.contract.md",
+  "crew": {
+    "builder_main": "glm-5.1",
+    "builder_fallback": "deepseek-v3",
+    "evaluator": "deepseek-r1",
+    "gate_judge": "planner"
+  },
+  "history": [
+    {
+      "ts": "2026-05-07T14:59:37Z",
+      "event": "contract_written",
+      "by": "planner",
+      "note": "Contract derived from PM brief (D1-D8 + Gate A/B)"
+    },
+    {
+      "ts": "2026-05-07T14:59:37Z",
+      "event": "status_active",
+      "by": "planner"
+    },
+    {
+      "ts": "2026-05-07T15:02:54Z",
+      "event": "fixed_id_field",
+      "by": "planner",
+      "note": "add id field for coordinator scanner"
+    },
+    {
+      "ts": "2026-05-07T17:36:57Z",
+      "event": "plan_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-07T18:58:58Z",
+      "event": "implementation_completed",
+      "by": "builder"
+    },
+    {
+      "ts": "2026-05-07T19:05:02Z",
+      "event": "schema_unblocked",
+      "by": "master_brain",
+      "note": "\u7e41\u4f53\u8282\u6807\u9898\u6539\u7b80\u4f53\uff0cschema PASS\uff0c\u91cd\u65b0\u89e6\u53d1 review dispatch"
+    },
+    {
+      "ts": "2026-05-07T19:05:31Z",
+      "event": "handoff_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-07T19:14:58Z",
+      "event": "handoff_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-07T19:18:31Z",
+      "event": "eval_completed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-05-07T19:18:39Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-05-07T19:18:53Z",
+      "event": "finalized",
+      "by": "coordinator"
+    }
+  ],
+  "id": "sprint-20260507-symphony2",
+  "round": 2,
+  "last_handoff_mtime": 1778180332.0,
+  "last_exported_sprint": "sprint-20260507-symphony2",
+  "last_exported_at": "2026-05-07T23:25:54Z"
+}

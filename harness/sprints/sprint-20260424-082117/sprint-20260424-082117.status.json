@@ -1,0 +1,62 @@
+{
+  "id": "sprint-20260424-082117",
+  "title": "新增'迁移'触发指令: 监护人一句话'迁移到 mini-m4' / '打包迁移' / '从 bundle 恢复' / '",
+  "status": "passed",
+  "created_at": "2026-04-24T00:21:17Z",
+  "round": 1,
+  "history": [
+    {
+      "ts": "2026-04-24T00:21:17Z",
+      "event": "contract_created",
+      "by": "user"
+    },
+    {
+      "ts": "2026-04-24T00:22:11Z",
+      "event": "done_criteria_filled",
+      "by": "planner",
+      "note": "迁移触发词+意图识别+skill 备用+冒烟"
+    },
+    {
+      "ts": "2026-04-24T00:22:11Z",
+      "event": "activated",
+      "by": "planner"
+    },
+    {
+      "ts": "2026-04-24T00:24:53Z",
+      "event": "plan_reviewed",
+      "by": "evaluator",
+      "verdict": "APPROVE",
+      "reason": "[heal-auto]"
+    },
+    {
+      "ts": "2026-04-24T01:12:01Z",
+      "event": "implementation_completed",
+      "by": "builder",
+      "round": 1
+    },
+    {
+      "ts": "2026-04-24T01:12:14Z",
+      "event": "handoff_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-04-24T01:14:51Z",
+      "event": "eval_completed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-04-24T01:14:59Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-04-24T01:15:00Z",
+      "event": "finalized",
+      "by": "coordinator"
+    }
+  ],
+  "updated_at": "2026-04-24T01:14:51Z",
+  "last_handoff_mtime": 1776993108.0
+}

@@ -1,0 +1,379 @@
+#!/usr/bin/env python3
+"""Solar external integration health.
+
+Six-state model per integration:
+installed, configured, running, indexed, used_by_default, degraded_reason.
+The probe is local-only and fail-open: one broken integration should not break
+the whole status payload.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import socket
+import sqlite3
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+HOME = Path.home()
+HARNESS = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
+VAULT = Path(os.environ.get("OBSIDIAN_VAULT_PATH", HOME / "Knowledge"))
+SOLAR_DB = HOME / ".solar" / "solar.db"
+CACHE_PATH = HARNESS / "state" / "external-integrations-last-probe.json"
+
+
+def run(cmd: list[str], timeout: float = 3.0) -> tuple[int, str]:
+    try:
+        p = subprocess.run(cmd, text=True, capture_output=True, timeout=timeout)
+        return p.returncode, (p.stdout + p.stderr).strip()
+    except Exception as exc:
+        return 99, f"{type(exc).__name__}: {exc}"
+
+
+def port_open(host: str, port: int, timeout: float = 0.25) -> bool:
+    hosts = [host]
+    if host in ("127.0.0.1", "localhost"):
+        hosts.append("::1")
+    for item in hosts:
+        try:
+            with socket.create_connection((item, port), timeout=timeout):
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def which_qmd() -> str:
+    for item in os.environ.get("PATH", "").split(os.pathsep):
+        p = Path(item) / "qmd"
+        if p.exists() and os.access(p, os.X_OK):
+            return str(p)
+    fallback = HOME / ".npm-global" / "bin" / "qmd"
+    return str(fallback) if fallback.exists() else ""
+
+
+def count_sql(table: str) -> int | None:
+    if not SOLAR_DB.exists():
+        return None
+    try:
+        with sqlite3.connect(SOLAR_DB) as conn:
+            return int(conn.execute(f"select count(*) from {table}").fetchone()[0])
+    except Exception:
+        return None
+
+
+def qmd_status() -> dict:
+    qmd = which_qmd()
+    if not qmd:
+        return {"ok": False, "binary": "", "raw": "", "total": 0, "pending": None, "vectors": None}
+    code, out = run([qmd, "status"], timeout=6)
+    total = pending = vectors = None
+    for raw in out.splitlines():
+        line = raw.strip()
+        if line.startswith("Total:"):
+            total = int(line.split()[1]) if len(line.split()) > 1 and line.split()[1].isdigit() else None
+        elif line.startswith("Vectors:"):
+            vectors = int(line.split()[1]) if len(line.split()) > 1 and line.split()[1].isdigit() else None
+        elif line.startswith("Pending:"):
+            pending = int(line.split()[1]) if len(line.split()) > 1 and line.split()[1].isdigit() else None
+    return {"ok": code == 0, "binary": qmd, "raw": out[:2000], "total": total or 0, "pending": pending, "vectors": vectors}
+
+
+def latest_upload_audit() -> dict:
+    upload_dir = VAULT / "_raw" / "file-uploads"
+    if not upload_dir.exists():
+        return {"available": False, "reason": "file upload dir missing"}
+    batches: dict[str, int] = {}
+    for path in upload_dir.iterdir():
+        if not path.is_file():
+            continue
+        name = path.name
+        if len(name) >= 16 and name[0:8].isdigit() and name[8] == "T" and name[15] == "Z":
+            batches[name[:16]] = batches.get(name[:16], 0) + 1
+    if not batches:
+        return {"available": False, "reason": "no upload batches"}
+    auditor = HARNESS / "lib" / "wiki-upload-audit.py"
+    if not auditor.exists():
+        return {"available": False, "reason": "wiki-upload-audit.py missing"}
+    checked = []
+    latest = None
+    backlog_gaps = []
+    for batch, _count in sorted(batches.items(), key=lambda kv: (kv[0], kv[1]), reverse=True)[:10]:
+        code, out = run(["python3", str(auditor), "--batch", batch, "--json"], timeout=90)
+        try:
+            data = json.loads(out)
+        except Exception:
+            checked.append({"batch": batch, "error": out[:160], "exit_code": code})
+            continue
+        checked.append({"batch": batch, "total": data.get("total", 0)})
+        if data.get("total", 0) > 0:
+            has_gap = bool(
+                data.get("solar_db", {}).get("missing", 0)
+                or data.get("vault", {}).get("missing", 0)
+                or data.get("qmd", {}).get("missing", 0)
+                or data.get("dispatch", {}).get("pending", 0)
+            )
+            if latest is None:
+                latest = {"available": True, "batch": batch, "data": data, "checked": checked}
+            elif has_gap:
+                backlog_gaps.append(
+                    {
+                        "batch": batch,
+                        "total": data.get("total", 0),
+                        "qmd_missing": data.get("qmd", {}).get("missing", 0),
+                        "vault_missing": data.get("vault", {}).get("missing", 0),
+                        "solar_db_missing": data.get("solar_db", {}).get("missing", 0),
+                        "dispatch_pending": data.get("dispatch", {}).get("pending", 0),
+                    }
+                )
+    if latest:
+        latest["checked"] = checked
+        latest["historical_backlog"] = backlog_gaps[:5]
+        return latest
+    if checked:
+        return {"available": False, "reason": "no auditable upload batch with nonzero total found", "checked": checked}
+    return {"available": False, "reason": "no upload batches"}
+
+
+def result(name: str, source: str, purpose: str, **states) -> dict:
+    keys = ["installed", "configured", "running", "indexed", "used_by_default"]
+    degraded = states.pop("degraded_reason", "")
+    evidence = states.pop("evidence", {})
+    out = {"name": name, "source": source, "purpose": purpose}
+    for key in keys:
+        out[key] = bool(states.get(key, False))
+    out["status"] = "ok" if all(out[k] for k in keys) and not degraded else ("warn" if out["installed"] else "missing")
+    out["degraded_reason"] = degraded
+    out["evidence"] = evidence
+    return out
+
+
+def probe() -> dict:
+    qmd = qmd_status()
+    upload = latest_upload_audit()
+
+    obs_repo = HARNESS / "vendor" / "obsidian-wiki"
+    wiki_cfg = HOME / ".obsidian-wiki" / "config"
+    unified_context = HARNESS / "lib" / "solar-unified-context.py"
+    claude_hook = HOME / ".claude" / "hooks" / "solar-knowledge-context.sh"
+    codex_agents = HOME / ".codex" / "AGENTS.md"
+    default_context_ready = (
+        unified_context.exists()
+        and claude_hook.exists()
+        and "solar-unified-context.py" in claude_hook.read_text(errors="ignore")
+        and codex_agents.exists()
+        and "solar-harness context inject" in codex_agents.read_text(errors="ignore")
+    )
+    vault_ready = VAULT.exists()
+    capture_running = port_open("127.0.0.1", 8788)
+    vault_md_count = len(list(VAULT.glob("**/*.md"))) if vault_ready else 0
+    upload_reason = ""
+    if upload.get("available"):
+        d = upload["data"]
+        if d.get("solar_db", {}).get("missing", 0) or d.get("vault", {}).get("missing", 0) or d.get("qmd", {}).get("missing", 0):
+            upload_reason = (
+                f"latest batch {upload['batch']}: qmd {d['qmd']['found']}/{d['total']}, "
+                f"vault {d['vault']['found']}/{d['total']}, solar_db {d['solar_db']['found']}/{d['total']}"
+            )
+
+    integrations = [
+        result(
+            "Ar9av/obsidian-wiki",
+            "https://github.com/Ar9av/obsidian-wiki",
+            "Obsidian-native knowledge vault, wiki ingest/query/lint/graph skills, Solar artifact export.",
+            installed=obs_repo.exists(),
+            configured=wiki_cfg.exists() and vault_ready,
+            running=capture_running,
+            indexed=vault_md_count > 0,
+            used_by_default=default_context_ready,
+            degraded_reason=upload_reason or ("" if default_context_ready else "used by commands/status, but not yet guaranteed as default context for every agent"),
+            evidence={
+                "repo": str(obs_repo),
+                "vault": str(VAULT),
+                "capture_port_8788": capture_running,
+                "vault_md_count": vault_md_count,
+                "unified_context": str(unified_context),
+                "claude_hook": str(claude_hook),
+                "codex_agents": str(codex_agents),
+                "latest_upload_audit": upload,
+            },
+        ),
+        result(
+            "opendatalab/MinerU-Document-Explorer + QMD",
+            "https://github.com/opendatalab/MinerU-Document-Explorer",
+            "Document indexing/search for PDF, markdown, docx, pptx; semantic retrieval backing Solar wiki.",
+            installed=bool(qmd["binary"]),
+            configured=qmd["ok"] and "solar-wiki" in qmd["raw"],
+            running=port_open("127.0.0.1", 8181),
+            indexed=(qmd["total"] or 0) > 0,
+            used_by_default=True,
+            degraded_reason=f"{qmd['pending']} files need embedding" if qmd.get("pending") else "",
+            evidence={
+                "qmd_binary": qmd["binary"],
+                "total": qmd["total"],
+                "vectors": qmd["vectors"],
+                "pending": qmd["pending"],
+                "mcp_port_8181": port_open("127.0.0.1", 8181),
+                "embed_launchd": (HOME / "Library" / "LaunchAgents" / "com.solar.qmd-mineru-embed.plist").exists(),
+                "embed_status": str(HARNESS / "state" / "qmd-embed-status.json"),
+            },
+        ),
+        result(
+            "mermaid-js/mermaid",
+            "https://github.com/mermaid-js/mermaid",
+            "Local .mmd architecture diagram browser and renderer in Solar Status.",
+            installed=(HARNESS / "vendor" / "mermaid-viewer" / "node_modules" / "mermaid").exists(),
+            configured=True,
+            running=port_open("127.0.0.1", 8765),
+            indexed=len(list((HARNESS / "reports").glob("*.mmd"))) > 0,
+            used_by_default=True,
+            evidence={"viewer": "http://127.0.0.1:8765/mermaid", "mmd_count": len(list((HARNESS / "reports").glob("*.mmd")))},
+        ),
+        result(
+            "openai/symphony",
+            "https://github.com/openai/symphony",
+            "Adopted SPEC patterns (WORKFLOW, isolated workspace, hooks, scheduler events) as local dry-run sidecar — coordinator/tmux is the real executor; Symphony does not run builders.",
+            installed=(HARNESS / "lib" / "symphony").exists(),
+            configured=(HARNESS / "lib" / "symphony" / "workflow-loader.py").exists(),
+            running=False,
+            indexed=(HARNESS / "state" / "symphony").exists(),
+            used_by_default=False,
+            degraded_reason="dry-run/sidecar only — coordinator/tmux remains primary executor; Symphony SPEC patterns adopted but not orchestrating builders",
+            evidence={
+                "lib": str(HARNESS / "lib" / "symphony"),
+                "mode": "dry_run_sidecar",
+                "executes_builders": False,
+            },
+        ),
+        result(
+            "strukto-ai/mirage",
+            "https://github.com/strukto-ai/mirage",
+            "Solar logical VFS wrapper over Knowledge, Raw, Sprints, Solar DB, QMD — NOT official Mirage SDK/FUSE; Drive is a logical mount that requires credentials to become real.",
+            installed=(HARNESS / "lib" / "solar_mirage.py").exists(),
+            configured=(HARNESS / "config" / "mirage.solar.yaml").exists(),
+            running=True,
+            indexed=(qmd["total"] or 0) > 0 and SOLAR_DB.exists(),
+            used_by_default=True,
+            degraded_reason="Solar logical wrapper only — official Mirage SDK/FUSE not installed; Drive is logical mount (not real Drive), credentials required",
+            evidence={
+                "wrapper": str(HARNESS / "lib" / "solar_mirage.py"),
+                "sdk": {"kind": "solar-logical"},
+                "drive": {
+                    "state": "credentials_missing",
+                    "degraded_reason": "GOOGLE_APPLICATION_CREDENTIALS not set; /drive is logical mount only",
+                },
+            },
+        ),
+        result(
+            "camel-ai/owl",
+            "https://github.com/camel-ai/owl",
+            "External multi-agent/browser execution framework candidate — repo present but NOT connected to Solar coordinator, events, evaluator, or knowledge pipeline.",
+            installed=(HOME / ".solar" / "owl").exists(),
+            configured=(HOME / ".solar" / "owl" / "pyproject.toml").exists(),
+            running=False,
+            indexed=False,
+            used_by_default=False,
+            degraded_reason="未连接（如需提级须新 sprint）— not connected to coordinator lifecycle, events, evaluator, or knowledge closeout",
+            evidence={
+                "repo": str(HOME / ".solar" / "owl"),
+                "connection_status": "not_connected",
+            },
+        ),
+        result(
+            "Google Drive mount",
+            "external service",
+            "Optional Mirage /drive data source — logical mount only; real Drive requires credentials.",
+            installed=True,
+            configured=bool(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")),
+            running=False,
+            indexed=False,
+            used_by_default=False,
+            degraded_reason="逻辑挂载（非真实 Drive）— GOOGLE_APPLICATION_CREDENTIALS not configured; /drive is Solar logical namespace only",
+            evidence={
+                "credential_env": "GOOGLE_APPLICATION_CREDENTIALS",
+                "state": "logical_mount",
+                "degraded_reason": "credentials missing; real Drive sync not active",
+            },
+        ),
+        result(
+            "affaan-m/everything-claude-code",
+            "https://github.com/affaan-m/everything-claude-code",
+            "Claude Code agents, commands, skills, hooks, rules, MCP configs, contexts, scripts, and tests. Registered as a Solar integration candidate; not installed into live config.",
+            installed=(HARNESS / "vendor" / "everything-claude-code").exists(),
+            configured=(HARNESS / "config" / "everything-claude-code.allowlist.json").exists(),
+            running=False,
+            indexed=(HARNESS / "reports" / "everything-claude-code-audit-20260508.md").exists(),
+            used_by_default=False,
+            degraded_reason="candidate only — no active Solar integration found; requires audit, collision review, allowlist, dry-run install, and rollback before use",
+            evidence={
+                "canonical_source": "https://github.com/affaan-m/everything-claude-code",
+                "mirror_or_fork_seen": "https://github.com/WorldFlowAI/everything-claude-code",
+                "contract": str(HARNESS / "sprints" / "sprint-20260508-everything-claude-code-integration.contract.md"),
+                "local_active_search": "no active integration artifact found outside archived sessions",
+                "related_systems": {
+                    "gstack": str(HOME / "Solar" / "CLAUDE.md"),
+                    "superpowers": str(HOME / ".codex" / "config.toml"),
+                },
+            },
+        ),
+    ]
+
+    summary = {
+        "ok": sum(1 for x in integrations if x["status"] == "ok"),
+        "warn": sum(1 for x in integrations if x["status"] == "warn"),
+        "missing": sum(1 for x in integrations if x["status"] == "missing"),
+        "total": len(integrations),
+    }
+    return {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "summary": summary, "integrations": integrations}
+
+
+def text_report(data: dict) -> str:
+    rows = []
+    for x in data["integrations"]:
+        rows.append(
+            f"{x['status']:7} {x['name']:<38} installed={int(x['installed'])} configured={int(x['configured'])} "
+            f"running={int(x['running'])} indexed={int(x['indexed'])} default={int(x['used_by_default'])} "
+            f"{x['degraded_reason']}"
+        )
+    return "\n".join(rows)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--refresh", action="store_true", help="ignore cache and run all probes")
+    ap.add_argument("--max-age", type=int, default=120, help="cache max age in seconds")
+    args = ap.parse_args()
+    data = None
+    if not args.refresh and CACHE_PATH.exists():
+        try:
+            cached = json.loads(CACHE_PATH.read_text())
+            age = time.time() - float(cached.get("_cached_at", 0))
+            if age <= args.max_age:
+                data = cached
+                data["_cache"] = {"hit": True, "age_sec": round(age, 1), "path": str(CACHE_PATH)}
+        except Exception:
+            data = None
+    if data is None:
+        data = probe()
+        data["_cached_at"] = time.time()
+        data["_cache"] = {"hit": False, "path": str(CACHE_PATH)}
+        try:
+            CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            CACHE_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+        except OSError:
+            pass
+    if args.json:
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+    else:
+        print(text_report(data))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

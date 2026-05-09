@@ -13,7 +13,7 @@
 #
 # @module solar-farm/harness/watchdog
 # ================================================================
-set -eu
+set -Eeu
 
 # Bash 4+ 版本守卫
 if [[ "${BASH_VERSINFO[0]:-0}" -lt 4 ]]; then
@@ -25,6 +25,7 @@ fi
 HARNESS_DIR="$HOME/.solar/harness"
 SPRINTS_DIR="$HARNESS_DIR/sprints"
 SESSION_NAME="solar-harness"
+LAB_SESSION_NAME="solar-harness-lab"
 WATCHDOG_PID_FILE="$HARNESS_DIR/.watchdog.pid"
 WATCHDOG_STATE="$HARNESS_DIR/.watchdog-state"
 COORD_PID_FILE="$HARNESS_DIR/.coordinator.pid"
@@ -40,6 +41,8 @@ PANE_DEAD_THRESHOLD=30
 PANE_RESTART_COOLDOWN=300
 PANE_MAX_RESTARTS=3
 PANE_RESTART_STATE="$HARNESS_DIR/.pane-restart-state"
+SESSION_RECOVERY_MARKER="$HARNESS_DIR/.watchdog-session-recovered-at"
+SESSION_START_GRACE_SECS="${SESSION_START_GRACE_SECS:-90}"
 # sprint-20260503-100705 D5: 熔断自动恢复秒数 (默认 600, 可环境变量覆盖)
 AUTO_RECOVER_SECS="${AUTO_RECOVER_SECS:-600}"
 # sprint-20260503-100705 D4: 熔断通知限频 (同一 pane 5 分钟窗口最多 1 条)
@@ -50,6 +53,29 @@ log()  { echo -e "${C}[Watchdog]${N} $(date '+%H:%M:%S') $*"; }
 ok()   { echo -e "${G}[Watchdog]${N} $*"; }
 warn() { echo -e "${Y}[Watchdog]${N} $*"; }
 err()  { echo -e "${R}[Watchdog]${N} $*"; }
+
+live_coordinator_pids() {
+  ps ax -o pid= -o args= | awk -v script="$HARNESS_DIR/coordinator.sh" '
+    $0 ~ "^[[:space:]]*[0-9]+[[:space:]]+([^[:space:]]*/)?bash[[:space:]]+" script "([[:space:]]|$)" { print $1 }
+  '
+}
+
+heal_coord_pidfile_from_process_table() {
+  local real_pids real_pid
+  real_pids=$(live_coordinator_pids || true)
+  [[ -n "$real_pids" ]] || return 1
+
+  real_pid=$(echo "$real_pids" | head -1)
+  echo "$real_pid" > "$COORD_PID_FILE"
+  warn "Coordinator pidfile stale/missing; healed from process table (PID=${real_pid})"
+  return 0
+}
+
+log_unexpected_error() {
+  local status="$1"
+  local line="$2"
+  err "unexpected exit status=${status} line=${line} cmd=${BASH_COMMAND}"
+}
 
 # --- D4: 终态 sprint 过滤 (Sprint 20260422-211820) ---
 is_actionable_state() {
@@ -88,6 +114,10 @@ do_check() {
     fi
   fi
 
+  if ! $coord_alive && heal_coord_pidfile_from_process_table; then
+    coord_alive=true
+  fi
+
   local failures
   failures=$(get_failure_count)
 
@@ -124,7 +154,19 @@ do_check() {
 
   # 找活跃 sprint 并 wake (D3: 只 wake 非终态 sprint)
   local active_sid=""
-  for f in "$SPRINTS_DIR"/*.status.json; do
+  if [[ -f "$HARNESS_DIR/.pane-assignments" ]]; then
+    active_sid=$(sed -n 's/^solar-harness:0\.2=\([^:]*\):.*/\1/p' "$HARNESS_DIR/.pane-assignments" | head -1)
+    if [[ -n "$active_sid" && -f "$SPRINTS_DIR/${active_sid}.status.json" ]]; then
+      local assigned_st
+      assigned_st=$(python3 -c "import json; print(json.load(open('$SPRINTS_DIR/${active_sid}.status.json')).get('status',''))" 2>/dev/null)
+      is_actionable_state "$assigned_st" || active_sid=""
+    else
+      active_sid=""
+    fi
+  fi
+
+  for f in $(ls -t "$SPRINTS_DIR"/*.status.json 2>/dev/null); do
+    [[ -z "$active_sid" ]] || break
     [[ -f "$f" ]] || continue
     local st
     st=$(python3 -c "import json; print(json.load(open('$f')).get('status',''))" 2>/dev/null)
@@ -140,8 +182,7 @@ do_check() {
   else
     log "无非终态 sprint, 跳过 wake"
     bash "$HARNESS_DIR/coordinator.sh" >> "$HARNESS_DIR/.coordinator.log" 2>&1 &
-    echo $! > "$COORD_PID_FILE"
-    log "Coordinator 重启完成 (PID: $!)"
+    log "Coordinator 重启已触发 (spawn PID: $!, pidfile 由 coordinator 接管)"
   fi
 
   # 记录 watchdog 事件
@@ -154,7 +195,7 @@ do_check() {
 
 # --- D1: claude 活性检测 (递归 BFS 进程子树) ---
 # sprint-20260503-100705: 重写为完整递归，不再限于两级
-# 用 pgrep -P BFS 遍历 pane_pid 的整个子进程树，匹配 ^claude
+# 用 pgrep -P BFS 遍历 pane_pid 的整个子进程树，匹配 claude 可执行文件
 is_claude_alive_in_pane() {
   local pane_pid="$1"
   local queue="$pane_pid" visited=""
@@ -164,17 +205,17 @@ is_claude_alive_in_pane() {
     for pid in $queue; do
       case " $visited " in *" $pid "*) continue ;; esac
       visited="$visited $pid"
-      # 用 comm= 精确匹配 (comm 是进程名，不含路径和参数)
+      # macOS comm 可能返回完整路径 (/Users/.../.local/bin/claude)。
       local ccmd
       ccmd=$(ps -p "$pid" -o comm= 2>/dev/null) || continue
       case "$ccmd" in
-        claude) return 0 ;;
+        claude|*/claude) return 0 ;;
       esac
       # 也检查 args= 前缀 (处理 claude CLI 入口 node .../claude)
       local cargs
       cargs=$(ps -p "$pid" -o args= 2>/dev/null) || continue
       case "$cargs" in
-        claude[[:space:]]*|claude) return 0 ;;
+        claude[[:space:]]*|claude|*/claude[[:space:]]*|*/claude) return 0 ;;
       esac
       # BFS: 收集子进程
       local children
@@ -187,34 +228,114 @@ is_claude_alive_in_pane() {
   return 1
 }
 
+is_harness_launcher_alive_in_pane() {
+  local pane_pid="$1"
+  local queue="$pane_pid" visited=""
+
+  while [[ -n "$queue" ]]; do
+    local next_queue=""
+    for pid in $queue; do
+      case " $visited " in *" $pid "*) continue ;; esac
+      visited="$visited $pid"
+
+      local cargs
+      cargs=$(ps -p "$pid" -o args= 2>/dev/null) || continue
+      case "$cargs" in
+        *"/pane-launcher.sh "*|*" pane-launcher.sh "*|*"/start-incarnation.sh "*|*" start-incarnation.sh "*) return 0 ;;
+      esac
+
+      local children
+      children=$(pgrep -P "$pid" 2>/dev/null) || true
+      [[ -n "$children" ]] && next_queue="$next_queue $children"
+    done
+    queue="$next_queue"
+  done
+
+  return 1
+}
+
+pane_key() {
+  local pane="$1"
+  printf '%s' "$pane" | sed 's/[^A-Za-z0-9_.-]/_/g'
+}
+
 # --- D5: 死 pane 检测 + 自动重启 ---
-# pane 索引 → persona 映射 (只对这些 pane 做自愈)
-# Window 0 "Product Delivery"
-declare -A PERSONA_PANES=( [0]="pm" [1]="planner" [2]="builder" [3]="evaluator" )
-# Window 1 "Strategy Lab" — loaded from farm-layout.json if available
-_load_strategy_lab_panes() {
+# Full tmux target → persona. Product Delivery and Strategy Lab live in
+# separate sessions, so numeric pane indexes would collide.
+declare -A PERSONA_PANES=(
+  ["$SESSION_NAME:0.0"]="pm"
+  ["$SESSION_NAME:0.1"]="planner"
+  ["$SESSION_NAME:0.2"]="builder"
+  ["$SESSION_NAME:0.3"]="evaluator"
+  ["$LAB_SESSION_NAME:0.0"]="architect"
+  ["$LAB_SESSION_NAME:0.1"]="lab-builder"
+  ["$LAB_SESSION_NAME:0.2"]="lab-evaluator"
+  ["$LAB_SESSION_NAME:0.3"]="observer"
+)
+
+_load_layout_panes() {
   local layout="$HOME/.solar/harness/farm-layout.json"
   [[ -f "$layout" ]] || return 0
-  local n_panes
-  n_panes=$(python3 -c "import json; d=json.load(open('$layout')); w1=[w for w in d.get('windows',[]) if w.get('name')=='Strategy Lab']; print(len(w1[0]['panes']) if w1 else 0)" 2>/dev/null) || return 0
-  local idx=0
-  while [[ "$idx" -lt "$n_panes" ]]; do
-    local role
-    role=$(python3 -c "import json; d=json.load(open('$layout')); w1=[w for w in d.get('windows',[]) if w.get('name')=='Strategy Lab']; p=w1[0]['panes'][$idx] if w1 else {}; print(p.get('persona',''))" 2>/dev/null) || break
-    [[ -n "$role" ]] && PERSONA_PANES["$((idx + 4))"]="$role"
-    idx=$((idx + 1))
-  done
+  local target role
+  while IFS=$'\t' read -r target role; do
+    [[ -z "$target" || -z "$role" ]] && continue
+    PERSONA_PANES["$target"]="$role"
+  done < <(python3 -c "
+import json
+d=json.load(open('$layout'))
+default_session=d.get('session_name','solar-harness')
+for w in d.get('windows',[]):
+    session=w.get('session') or default_session
+    win=w.get('index',0)
+    for p in w.get('panes',[]):
+        print(f\"{session}:{win}.{p.get('pane_index')}\\t{p.get('persona') or p.get('role') or ''}\")
+" 2>/dev/null || true)
 }
-_load_strategy_lab_panes
+_load_layout_panes
+
+ensure_tmux_sessions() {
+  local missing=0
+
+  if ! tmux has-session -t "$SESSION_NAME" &>/dev/null; then
+    warn "tmux session missing: ${SESSION_NAME}; rebuilding Product Delivery"
+    TERM=dumb "$HARNESS_DIR/solar-harness.sh" --skip-doctor "$HOME" >> "$HARNESS_DIR/.watchdog-launchd.log" 2>&1 || true
+    missing=1
+  fi
+
+  if ! tmux has-session -t "$LAB_SESSION_NAME" &>/dev/null; then
+    warn "tmux session missing: ${LAB_SESSION_NAME}; rebuilding Strategy Lab"
+    TERM=dumb "$HARNESS_DIR/solar-harness.sh" 扩展 "$HOME" >> "$HARNESS_DIR/.watchdog-launchd.log" 2>&1 || true
+    missing=1
+  fi
+
+  if (( missing )); then
+    local ts
+    ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    date +%s > "$SESSION_RECOVERY_MARKER"
+    printf '%s\n' "- [ ] [${ts}] [WATCHDOG-SESSION-RECOVERED] tmux session missing; watchdog attempted harness rebuild" \
+      >> "$HARNESS_DIR/PLANNER-INBOX.md"
+    printf '%s\tsession_recovered\t\twatchdog rebuilt missing tmux session(s)\n' "$ts" \
+      > "$HARNESS_DIR/.planner-last-notice"
+  fi
+}
 
 check_panes() {
-  # 检查 tmux session 存在
-  tmux has-session -t "$SESSION_NAME" &>/dev/null || return 0
-
   local now
   now=$(date +%s)
 
-  # 读取 rate-limit 状态: pane_index:last_ts:count (取最后匹配行)
+  ensure_tmux_sessions
+
+  if [[ -f "$SESSION_RECOVERY_MARKER" ]]; then
+    local recovered_at grace_elapsed
+    recovered_at=$(cat "$SESSION_RECOVERY_MARKER" 2>/dev/null || echo 0)
+    grace_elapsed=$(( now - recovered_at ))
+    if (( grace_elapsed >= 0 && grace_elapsed < SESSION_START_GRACE_SECS )); then
+      log "Session recovery grace active (${grace_elapsed}/${SESSION_START_GRACE_SECS}s); skip pane restart checks"
+      return 0
+    fi
+  fi
+
+  # 读取 rate-limit 状态: pane_key:last_ts:count (取最后匹配行)
   declare -A pane_state
   if [[ -f "$PANE_RESTART_STATE" ]]; then
     while IFS=':' read -r pidx pts pcount; do
@@ -222,13 +343,14 @@ check_panes() {
     done < <(tail -r "$PANE_RESTART_STATE" 2>/dev/null | awk -F: '!seen[$1]++')
   fi
 
-  local pane_output
-  pane_output=$(tmux list-panes -t "$SESSION_NAME" -F '#{pane_index} #{pane_current_command} #{pane_dead}' 2>/dev/null) || return 0
+  local target
+  for target in "${!PERSONA_PANES[@]}"; do
+    local session="${target%%:*}"
+    tmux has-session -t "$session" &>/dev/null || continue
 
-  while read -r line; do
-    [[ -z "$line" ]] && continue
-    local pidx pcmd pdead
-    read -r pidx pcmd pdead <<< "$line"
+    local pane_info pcmd pdead pane_pid
+    pane_info=$(tmux display-message -p -t "$target" '#{pane_current_command} #{pane_dead} #{pane_pid}' 2>/dev/null) || continue
+    read -r pcmd pdead pane_pid <<< "$pane_info"
 
     # remain-on-exit 死 pane 不重启 (用户可手动处理)
     [[ "$pdead" == "1" ]] && continue
@@ -236,17 +358,18 @@ check_panes() {
     case "$pcmd" in
       claude|node) continue ;;
     esac
-    # 未知 pane 索引跳过 (只扫 persona pane 0/1/2)
-    [[ -z "${PERSONA_PANES[$pidx]:-}" ]] && continue
-
     # D1: cmd 不是 claude/node → 递归 BFS 检查 claude 是否在子进程树中
-    local pane_pid
-    pane_pid=$(tmux list-panes -t "$SESSION_NAME" -F '#{pane_index} #{pane_pid}' 2>/dev/null | awk -v pi="$pidx" '$1==pi{print $2}') || true
     if [[ -n "$pane_pid" ]] && is_claude_alive_in_pane "$pane_pid"; then
       continue
     fi
+    # 启动中/信任确认中的 pane 可能还是 bash/zsh，但 launcher 正常存活；不能误杀。
+    if [[ -n "$pane_pid" ]] && is_harness_launcher_alive_in_pane "$pane_pid"; then
+      continue
+    fi
 
-    local persona="${PERSONA_PANES[$pidx]}"
+    local persona="${PERSONA_PANES[$target]}"
+    local pidx
+    pidx="$(pane_key "$target")"
 
     # rate-limit 检查
     local last_ts=0 count=0
@@ -274,19 +397,19 @@ check_panes() {
       done
       if [[ -n "$active_sid" ]]; then
         bash "$HARNESS_DIR/session.sh" append "$active_sid" \
-          "{\"event\":\"pane_restart_rate_limited\",\"by\":\"watchdog\",\"data\":{\"pane\":\"$pidx\",\"persona\":\"$persona\",\"count\":$count}}" 2>/dev/null || true
+          "{\"event\":\"pane_restart_rate_limited\",\"by\":\"watchdog\",\"data\":{\"pane\":\"$target\",\"persona\":\"$persona\",\"count\":$count}}" 2>/dev/null || true
       fi
-      warn "Pane $pidx ($persona) rate-limited (${count}/${PANE_MAX_RESTARTS} in ${PANE_RESTART_COOLDOWN}s)"
+      warn "Pane $target ($persona) rate-limited (${count}/${PANE_MAX_RESTARTS} in ${PANE_RESTART_COOLDOWN}s)"
       # sprint-20260503-100705 D4: 熔断通知限频 — 同一 pane 5 分钟窗口最多 1 条
       local cb_ts
       cb_ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
       local cb_now
       cb_now=$(date +%s)
       if (( cb_now - _last_cb_notify_ts >= 300 )); then
-        printf '%s\n' "- [ ] [${cb_ts}] [WATCHDOG-CIRCUIT-BREAKER] Pane ${pidx} (${persona}) ${PANE_RESTART_COOLDOWN}s 内 restart ${count}/${PANE_MAX_RESTARTS} 次,已熔断,停止重启,需人工介入" \
+        printf '%s\n' "- [ ] [${cb_ts}] [WATCHDOG-CIRCUIT-BREAKER] Pane ${target} (${persona}) ${PANE_RESTART_COOLDOWN}s 内 restart ${count}/${PANE_MAX_RESTARTS} 次,已熔断,停止重启,需人工介入" \
           >> "$HARNESS_DIR/PLANNER-INBOX.md"
         printf '%s\tcircuit_breaker\t\twatchdog 熔断 pane=%s persona=%s count=%s window=%ss\n' \
-          "$cb_ts" "$pidx" "$persona" "$count" "$PANE_RESTART_COOLDOWN" \
+          "$cb_ts" "$target" "$persona" "$count" "$PANE_RESTART_COOLDOWN" \
           > "$HARNESS_DIR/.planner-last-notice"
         _last_cb_notify_ts=$cb_now
       fi
@@ -294,14 +417,13 @@ check_panes() {
     fi
 
     # 重启 pane
-    log "Pane $pidx ($persona) 异常 (cmd=$pcmd)，重启..."
-    tmux send-keys -t "$SESSION_NAME:0.$pidx" C-c 2>/dev/null || true
+    log "Pane $target ($persona) 异常 (cmd=$pcmd)，重启..."
+    tmux send-keys -t "$target" C-c 2>/dev/null || true
     sleep 0.5
     # D3/D5 sprint-20260502-191700: 传 work_dir + 路径转义
-    local _respawn_workdir="$HOME"
-    if [[ "$persona" == "builder" ]] && [[ -d "$HOME/.solar/harness" ]]; then
-      _respawn_workdir="$HOME"
-    fi
+    local _respawn_workdir
+    _respawn_workdir=$(tmux display-message -p -t "$target" '#{pane_current_path}' 2>/dev/null || echo "$HOME")
+    [[ -d "$_respawn_workdir" ]] || _respawn_workdir="$HOME"
     local _esc_h _esc_w
     _esc_h=$(printf '%q' "$HARNESS_DIR")
     _esc_w=$(printf '%q' "$_respawn_workdir")
@@ -313,19 +435,21 @@ check_panes() {
     for _p in /opt/homebrew/bin /usr/local/bin "$HOME/n/bin" "$HOME/.local/bin" "$HOME/.npm-global/bin" "$HOME/.bun/bin"; do
       [[ -d "$_p" ]] && case ":${_user_path}:" in *":$_p:"*) ;; *) _user_path="$_p:${_user_path}" ;; esac
     done
-    tmux respawn-pane -k -t "$SESSION_NAME:0.$pidx" \
-      "env HOME='${HOME}' PATH='${_user_path}' ${_restart_bash} ${_esc_h}/start-incarnation.sh $persona ${_esc_w}" 2>/dev/null || {
+    local _pane_id
+    _pane_id=$(tmux display-message -p -t "$target" '#{pane_id}' 2>/dev/null || true)
+    tmux respawn-pane -k -t "$target" \
+      "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH HOME='${HOME}' PATH='${_user_path}' TMUX_PANE='${_pane_id}' ${_restart_bash} ${_esc_h}/start-incarnation.sh $persona ${_esc_w}" 2>/dev/null || {
       warn "respawn-pane 失败, 尝试 send-keys..."
-      tmux send-keys -t "$SESSION_NAME:0.$pidx" \
-        "env PATH='${_user_path}' ${_restart_bash} ${_esc_h}/start-incarnation.sh $persona ${_esc_w}" Enter
+      tmux send-keys -t "$target" \
+        "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH PATH='${_user_path}' TMUX_PANE='${_pane_id}' ${_restart_bash} ${_esc_h}/start-incarnation.sh $persona ${_esc_w}" Enter
     }
     # sprint-20260502-200424 D2: respawn 后 5 秒验证 pane 活性 (诊断, 不是重试)
     sleep 5
     local _post_respawn_dead
-    _post_respawn_dead=$(tmux list-panes -t "$SESSION_NAME" -F '#{pane_index} #{pane_dead}' 2>/dev/null | awk -v pi="$pidx" '$1==pi{print $2}')
+    _post_respawn_dead=$(tmux display-message -p -t "$target" '#{pane_dead}' 2>/dev/null || echo 1)
     if [[ "${_post_respawn_dead:-0}" == "1" ]]; then
-      err "Pane $pidx ($persona) respawn 后立即死亡! (status 127 或其他)"
-      echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event\":\"respawn_immediate_death\",\"pane\":\"$pidx\",\"persona\":\"$persona\",\"path\":\"${_user_path}\"}" \
+      err "Pane $target ($persona) respawn 后立即死亡! (status 127 或其他)"
+      echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event\":\"respawn_immediate_death\",\"pane\":\"$target\",\"persona\":\"$persona\",\"path\":\"${_user_path}\"}" \
         >> "$HARNESS_DIR/logs/pane-exit.jsonl"
     fi
 
@@ -348,11 +472,11 @@ check_panes() {
     done
     if [[ -n "$active_sid" ]]; then
       bash "$HARNESS_DIR/session.sh" append "$active_sid" \
-        "{\"event\":\"pane_auto_restarted\",\"by\":\"watchdog\",\"data\":{\"pane\":\"$pidx\",\"persona\":\"$persona\",\"restart_count\":$new_count}}" 2>/dev/null || true
+        "{\"event\":\"pane_auto_restarted\",\"by\":\"watchdog\",\"data\":{\"pane\":\"$target\",\"persona\":\"$persona\",\"restart_count\":$new_count}}" 2>/dev/null || true
     fi
 
-    log "Pane $pidx ($persona) 已重启 (restart #${new_count})"
-  done <<< "$pane_output"
+    log "Pane $target ($persona) 已重启 (restart #${new_count})"
+  done
 }
 
 # 清理 pane restart state (启动时)
@@ -369,6 +493,76 @@ clean_pane_restart_state() {
     done < "$PANE_RESTART_STATE"
     mv "$tmpf" "$PANE_RESTART_STATE"
   fi
+}
+
+launchd_label() {
+  printf '%s\n' "com.solar.watchdog"
+}
+
+launchd_domain() {
+  printf 'gui/%s\n' "$(id -u)"
+}
+
+write_launchd_plist() {
+  local plist_path="$1"
+  local script_path="$HARNESS_DIR/coordinator-watchdog.sh"
+  local bash_path="/opt/homebrew/bin/bash"
+  [[ -x "$bash_path" ]] || bash_path="/bin/bash"
+  mkdir -p "$(dirname "$plist_path")"
+  cat > "$plist_path" << PLIST_EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>$(launchd_label)</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>${bash_path}</string>
+        <string>${script_path}</string>
+        <string>run-daemon</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>${HARNESS_DIR}/.watchdog-launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>${HARNESS_DIR}/.watchdog-launchd.log</string>
+    <key>WorkingDirectory</key>
+    <string>${HARNESS_DIR}</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:${HOME}/n/bin:${HOME}/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+</dict>
+</plist>
+PLIST_EOF
+}
+
+start_launchd_watchdog() {
+  local plist_label
+  plist_label="$(launchd_label)"
+  local plist_path="$HOME/Library/LaunchAgents/${plist_label}.plist"
+  local domain
+  domain="$(launchd_domain)"
+
+  write_launchd_plist "$plist_path"
+  launchctl bootout "$domain" "$plist_path" 2>/dev/null || launchctl unload "$plist_path" 2>/dev/null || true
+  launchctl bootstrap "$domain" "$plist_path" 2>/dev/null || launchctl load "$plist_path" 2>/dev/null
+  launchctl kickstart -k "${domain}/${plist_label}" 2>/dev/null || true
+
+  sleep 2
+  local daemon_pid
+  daemon_pid=$(pgrep -f "coordinator-watchdog.sh run-daemon" 2>/dev/null | head -1 || true)
+  if [[ -z "$daemon_pid" ]]; then
+    return 1
+  fi
+  echo "$daemon_pid" > "$WATCHDOG_PID_FILE"
+  log "launchd plist: ${plist_path}"
+  ok "Watchdog 已通过 launchd 常驻 (PID: ${daemon_pid})"
 }
 
 # --- 后台守护循环 ---
@@ -416,11 +610,23 @@ case "${1:-help}" in
       rm -f "$WATCHDOG_PID_FILE"
     fi
     log "启动 Watchdog..."
-    run_watchdog >> "$HARNESS_DIR/.watchdog.log" 2>&1 &
+    if [[ "$(uname -s)" == "Darwin" && "${SOLAR_WATCHDOG_NO_LAUNCHD:-0}" != "1" ]] && command -v launchctl >/dev/null 2>&1; then
+      if start_launchd_watchdog; then
+        exit 0
+      fi
+      warn "launchd 启动失败，回退到后台进程模式"
+    fi
+    nohup /opt/homebrew/bin/bash "$HARNESS_DIR/coordinator-watchdog.sh" run-daemon >> "$HARNESS_DIR/.watchdog.log" 2>&1 </dev/null &
     echo $! > "$WATCHDOG_PID_FILE"
     ok "Watchdog 启动完成 (PID: $!)"
     ;;
   stop)
+    if [[ "$(uname -s)" == "Darwin" ]] && command -v launchctl >/dev/null 2>&1; then
+      plist_label="$(launchd_label)"
+      plist_path="$HOME/Library/LaunchAgents/${plist_label}.plist"
+      domain="$(launchd_domain)"
+      launchctl bootout "$domain" "$plist_path" 2>/dev/null || launchctl unload "$plist_path" 2>/dev/null || true
+    fi
     if [[ -f "$WATCHDOG_PID_FILE" ]]; then
       kill "$(cat "$WATCHDOG_PID_FILE")" 2>/dev/null || true
       rm -f "$WATCHDOG_PID_FILE"
@@ -451,11 +657,17 @@ case "${1:-help}" in
       pid=$(cat "$COORD_PID_FILE")
       if kill -0 "$pid" 2>/dev/null; then
         ok "Coordinator 存活 (PID: ${pid})"
+      elif heal_coord_pidfile_from_process_table; then
+        ok "Coordinator 存活 (PID: $(cat "$COORD_PID_FILE"))"
       else
         err "Coordinator 已死 (PID: ${pid} 不存在)"
       fi
     else
-      warn "无 Coordinator PID 文件"
+      if heal_coord_pidfile_from_process_table; then
+        ok "Coordinator 存活 (PID: $(cat "$COORD_PID_FILE"))"
+      else
+        warn "无 Coordinator PID 文件"
+      fi
     fi
     failures=$(get_failure_count)
     echo "  连续失败: ${failures}/${MAX_CONSECUTIVE_FAILURES}"
@@ -477,50 +689,18 @@ case "${1:-help}" in
       rm -f "$WATCHDOG_PID_FILE"
     fi
 
-    local plist_label="com.solar.watchdog"
-    local plist_path="$HOME/Library/LaunchAgents/${plist_label}.plist"
-    local script_path="$HARNESS_DIR/coordinator-watchdog.sh"
+    plist_label="$(launchd_label)"
+    plist_path="$HOME/Library/LaunchAgents/${plist_label}.plist"
+    domain="$(launchd_domain)"
 
-    if [[ -f "$plist_path" ]]; then
-      launchctl unload "$plist_path" 2>/dev/null || true
-    fi
-
-    mkdir -p "$(dirname "$plist_path")"
-
-    cat > "$plist_path" << PLIST_EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>${plist_label}</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/bin/bash</string>
-        <string>${script_path}</string>
-        <string>run-daemon</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>StartInterval</key>
-    <integer>${CHECK_INTERVAL}</integer>
-    <key>StandardOutPath</key>
-    <string>${HARNESS_DIR}/.watchdog-launchd.log</string>
-    <key>StandardErrorPath</key>
-    <string>${HARNESS_DIR}/.watchdog-launchd.log</string>
-    <key>WorkingDirectory</key>
-    <string>${HARNESS_DIR}</string>
-</dict>
-</plist>
-PLIST_EOF
-
-    launchctl load "$plist_path" 2>/dev/null
+    write_launchd_plist "$plist_path"
+    launchctl bootout "$domain" "$plist_path" 2>/dev/null || launchctl unload "$plist_path" 2>/dev/null || true
+    launchctl bootstrap "$domain" "$plist_path" 2>/dev/null || launchctl load "$plist_path" 2>/dev/null
+    launchctl kickstart -k "${domain}/${plist_label}" 2>/dev/null || true
     # 写 PID 文件（launchd 管理的进程 PID 需要等一下）
     sleep 1
     # 尝试获取 launchd 管理的 watchdog PID
-    local daemon_pid
+    daemon_pid=""
     daemon_pid=$(pgrep -f "coordinator-watchdog.sh run-daemon" 2>/dev/null | head -1 || true)
     if [[ -n "$daemon_pid" ]]; then
       echo "$daemon_pid" > "$WATCHDOG_PID_FILE"
@@ -533,11 +713,12 @@ PLIST_EOF
     log "卸载: $0 uninstall-launchd"
     ;;
   uninstall-launchd)
-    local plist_label="com.solar.watchdog"
-    local plist_path="$HOME/Library/LaunchAgents/${plist_label}.plist"
+    plist_label="$(launchd_label)"
+    plist_path="$HOME/Library/LaunchAgents/${plist_label}.plist"
+    domain="$(launchd_domain)"
 
     if [[ -f "$plist_path" ]]; then
-      launchctl unload "$plist_path" 2>/dev/null || true
+      launchctl bootout "$domain" "$plist_path" 2>/dev/null || launchctl unload "$plist_path" 2>/dev/null || true
       rm -f "$plist_path"
       rm -f "$WATCHDOG_PID_FILE"
       ok "Watchdog launchd 已卸载，plist 已删除"
@@ -548,24 +729,30 @@ PLIST_EOF
   run-daemon)
     # D3: pidfile 自治 + trap 清理 (Sprint 20260422-222017)
     cleanup_watchdog_pid() {
+      local exit_status=$?
+      log "Watchdog daemon 退出 (PID: $$, status=${exit_status})"
       if [[ "$(cat "$WATCHDOG_PID_FILE" 2>/dev/null)" == "$$" ]]; then
         rm -f "$WATCHDOG_PID_FILE"
       fi
     }
-    trap 'cleanup_watchdog_pid' EXIT TERM
+    trap 'log_unexpected_error "$?" "$LINENO"' ERR
+    trap 'cleanup_watchdog_pid' EXIT
+    trap 'log "Watchdog daemon 收到 TERM"; exit 143' TERM
+    trap 'log "Watchdog daemon 收到 HUP"; exit 129' HUP
+    trap 'log "Watchdog daemon 收到 INT"; exit 130' INT
     echo "$$" > "$WATCHDOG_PID_FILE"
     log "Watchdog daemon 启动 (PID: $$, coord 每 ${CHECK_INTERVAL}s, panes 每 ${PANE_CHECK_INTERVAL}s)"
     save_state 0
     clean_pane_restart_state
 
     # Sprint 20260423-062851 D2: 启动时记录自身 md5 用于热加载自检
-    local INIT_MD5
+    INIT_MD5=""
     INIT_MD5=$(md5 -q "$0" 2>/dev/null || md5sum "$0" 2>/dev/null | cut -d' ' -f1 || echo 'unknown')
     log "watchdog md5=${INIT_MD5}"
 
-    local coord_ticks=0
-    local pane_ticks=0
-    local daemon_loop_count=0
+    coord_ticks=0
+    pane_ticks=0
+    daemon_loop_count=0
 
     while true; do
       if (( coord_ticks >= CHECK_INTERVAL )); then
@@ -586,14 +773,14 @@ PLIST_EOF
       daemon_loop_count=$((daemon_loop_count + 1))
 
       # Sprint 20260423-062851 D2: md5 自检热加载 (每 60 轮 ≈ 60 秒)
-      local hot_reload_tick=${HOT_RELOAD_TICK_OVERRIDE:-60}
+      hot_reload_tick=${HOT_RELOAD_TICK_OVERRIDE:-60}
       if (( daemon_loop_count % hot_reload_tick == 0 )); then
-        local current_md5
+        current_md5=""
         current_md5=$(md5 -q "$0" 2>/dev/null || md5sum "$0" 2>/dev/null | cut -d' ' -f1 || echo 'unknown')
         if [[ "$current_md5" != "$INIT_MD5" ]]; then
           log "[hot-reload] watchdog md5 changed: ${INIT_MD5} → ${current_md5}, exec restart"
           cleanup_watchdog_pid
-          exec /opt/homebrew/bin/bash "$0" run-daemon
+          exec /opt/homebrew/bin/bash "$HARNESS_DIR/coordinator-watchdog.sh" run-daemon
         fi
       fi
     done

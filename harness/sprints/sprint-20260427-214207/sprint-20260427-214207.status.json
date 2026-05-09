@@ -1,0 +1,91 @@
+{
+  "id": "sprint-20260427-214207",
+  "title": "Solar \u8fdc\u7a0b\u6a21\u5f0f + Codex Pro \u53cc\u573a\u666f (\u89c4\u5212+\u7814\u7a76): (1) \u8fdc\u7a0b\u6a21\u5f0f\u89e6\u53d1\u8bcd+\u7f51\u7edc\u611f\u77e5+ssh \u6d3e\u53d1+",
+  "status": "passed",
+  "phase": "spec",
+  "created_at": "2026-04-27T13:42:07Z",
+  "round": 2,
+  "history": [
+    {
+      "ts": "2026-04-27T13:42:07Z",
+      "event": "contract_created",
+      "by": "user"
+    },
+    {
+      "ts": "2026-04-27T13:43:22Z",
+      "event": "done_criteria_filled",
+      "by": "planner",
+      "note": "v3 7 Done: \u7f51\u7edc/\u53cd\u5411\u901a\u9053/Codex MCP/codex-plan/codex-research/\u4e09\u89d2\u5206\u5de5/E2E"
+    },
+    {
+      "ts": "2026-04-27T13:43:22Z",
+      "event": "activated",
+      "by": "planner"
+    },
+    {
+      "ts": "2026-04-27T13:45:13Z",
+      "event": "plan_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-04-27T13:45:40Z",
+      "event": "plan_reviewed",
+      "by": "evaluator",
+      "verdict": "APPROVE"
+    },
+    {
+      "ts": "2026-04-27T13:46:54Z",
+      "event": "plan_reviewed",
+      "by": "evaluator",
+      "verdict": "APPROVE",
+      "reason": "\u5df2 APPROVE,\u63a8\u534f\u8c03\u5668\u6d3e build"
+    },
+    {
+      "ts": "2026-04-27T13:57:27Z",
+      "event": "implementation_completed",
+      "by": "builder",
+      "round": 1
+    },
+    {
+      "ts": "2026-04-27T13:57:37Z",
+      "event": "handoff_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-04-27T13:59:42Z",
+      "event": "eval_completed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-04-27T13:59:52Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-04-27T13:59:53Z",
+      "event": "finalized",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-04-27T14:16:10Z",
+      "event": "implementation_completed",
+      "by": "builder",
+      "round": 2
+    },
+    {
+      "ts": "2026-04-27T14:16:19Z",
+      "event": "handoff_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-04-27T14:17:50Z",
+      "event": "eval_completed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    }
+  ],
+  "updated_at": "2026-04-27T14:17:50Z",
+  "last_handoff_mtime": 1777299361.0
+}

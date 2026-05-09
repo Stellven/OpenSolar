@@ -1,0 +1,68 @@
+{
+  "id": "sprint-20260422-162434",
+  "title": "Solar 一键跨机迁移 (当前 MacBook → Mac Mini): 开发 solar-harness migra",
+  "status": "passed",
+  "created_at": "2026-04-22T08:24:34Z",
+  "round": 3,
+  "history": [
+    {
+      "ts": "2026-04-22T08:24:34Z",
+      "event": "contract_created",
+      "by": "user"
+    },
+    {
+      "ts": "2026-04-23T05:38:55Z",
+      "event": "done_criteria_filled",
+      "by": "planner",
+      "note": "昨天已填 12 条 Done, 今天补完范围+6组约束"
+    },
+    {
+      "ts": "2026-04-23T05:38:55Z",
+      "event": "activated",
+      "by": "planner",
+      "note": "监护人批准, codex 审核跳过 (代理 ws 路由故障)"
+    },
+    {
+      "ts": "2026-04-23T05:44:19Z",
+      "event": "plan_reviewed",
+      "by": "evaluator",
+      "verdict": "APPROVE",
+      "reason": "[heal-auto]"
+    },
+    {
+      "ts": "2026-04-23T06:00:49Z",
+      "event": "handoff_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-04-23T06:10:22Z",
+      "event": "eval_completed",
+      "by": "evaluator",
+      "verdict": "FAIL",
+      "reason": "export.sh Python heredoc 双 bug: (1) L327-328 shell 展开产生裸 false → NameError (2) L287 引号 heredoc 阻止 BUNDLE_DIR 展开 → files_hash 空. 冒烟测试全失败"
+    },
+    {
+      "ts": "2026-04-23T06:36:56Z",
+      "event": "handoff_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-04-23T06:41:58Z",
+      "event": "eval_completed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-04-23T06:42:03Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-04-23T06:42:04Z",
+      "event": "finalized",
+      "by": "coordinator"
+    }
+  ],
+  "updated_at": "2026-04-23T06:41:58Z"
+}

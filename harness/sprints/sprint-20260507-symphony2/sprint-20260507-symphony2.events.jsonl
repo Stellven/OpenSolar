@@ -1,0 +1,12 @@
+{"ts":"2026-05-07T14:42:08Z","event":"sprint_drafting","sprint_id":"sprint-20260507-symphony2","source":"pm","note":"Symphony Sprint 2 product brief authored, awaiting planner contract"}
+{"ts":"2026-05-07T14:59:37Z","event":"contract_written","sprint_id":"sprint-20260507-symphony2","by":"planner"}
+{"ts":"2026-05-07T14:59:37Z","event":"status_active","sprint_id":"sprint-20260507-symphony2","by":"planner"}
+{"ts": "2026-05-07T18:58:58Z", "event": "handoff_submitted", "by": "builder", "sid": "sprint-20260507-symphony2"}
+{"ts": "2026-05-07T19:18:31Z", "event": "eval_passed", "by": "evaluator", "verdict": "pass", "sid": "sprint-20260507-symphony2"}
+{"ts":"2026-05-07T19:18:39Z","event":"planner_notified","by":"coordinator","data":{"status":"passed"}}
+{"event": "watchdog_circuit_break", "by": "watchdog", "data": {"failures": 3}, "ts": "2026-05-07T19:21:56Z", "sid": "sprint-20260507-symphony2"}
+{"event": "watchdog_circuit_break", "by": "watchdog", "data": {"failures": 3}, "ts": "2026-05-07T19:24:55Z", "sid": "sprint-20260507-symphony2"}
+{"ts":"2026-05-07T20:33:38Z","sprint_id":"sprint-20260507-symphony2","actor":"runner","event":"runner_started","severity":"info","payload":{"mode":"dry-run","ws_dir":"/Users/sihaoli/.solar/workspaces/sprint-20260507-symphony2"}}
+{"ts":"2026-05-07T20:33:38Z","sprint_id":"sprint-20260507-symphony2","actor":"runner","event":"runner_exited","severity":"info","payload":{"mode":"dry-run","exit_code":0}}
+{"ts":"2026-05-09T00:40:20Z","sprint_id":"sprint-20260507-symphony2","actor":"runner","event":"runner_started","severity":"info","payload":{"mode":"dry-run","ws_dir":"/Users/sihaoli/.solar/workspaces/sprint-20260507-symphony2"}}
+{"ts":"2026-05-09T00:40:20Z","sprint_id":"sprint-20260507-symphony2","actor":"runner","event":"runner_exited","severity":"info","payload":{"mode":"dry-run","exit_code":0}}

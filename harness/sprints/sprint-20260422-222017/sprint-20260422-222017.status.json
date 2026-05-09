@@ -1,0 +1,74 @@
+{
+  "id": "sprint-20260422-222017",
+  "title": "第四轮修复：loud notify pane 空闲检测正则错 + 审判官漏审语义偏离 (只 grep 不 smoke t",
+  "status": "passed",
+  "created_at": "2026-04-22T14:20:17Z",
+  "round": 1,
+  "history": [
+    {
+      "ts": "2026-04-22T14:20:17Z",
+      "event": "contract_created",
+      "by": "user"
+    },
+    {
+      "ts": "2026-04-22T14:21:06Z",
+      "event": "done_criteria_filled",
+      "by": "planner"
+    },
+    {
+      "ts": "2026-04-22T14:21:06Z",
+      "event": "activated",
+      "by": "planner",
+      "note": "第四轮: loud notify 正则 + 审判官 smoke test 铁律 + watchdog 去重"
+    },
+    {
+      "ts": "2026-04-22T14:22:29Z",
+      "event": "reverted_to_drafting",
+      "by": "planner",
+      "note": "合约 Done 写入失败 (HEREDOC 转义问题), 撤回重填"
+    },
+    {
+      "ts": "2026-04-22T14:22:29Z",
+      "event": "done_criteria_filled",
+      "by": "planner",
+      "note": "Done 直接 Python 写入, 绕过 update-contract HEREDOC bug"
+    },
+    {
+      "ts": "2026-04-22T14:22:29Z",
+      "event": "activated",
+      "by": "planner",
+      "note": "重新激活, 建设者请重读合约"
+    },
+    {
+      "ts": "2026-04-22T14:27:44Z",
+      "event": "plan_reviewed",
+      "by": "evaluator",
+      "verdict": "APPROVE",
+      "reason": "[heal-auto]"
+    },
+    {
+      "ts": "2026-04-22T14:36:22Z",
+      "event": "implementation_completed",
+      "by": "builder",
+      "round": 1
+    },
+    {
+      "ts": "2026-04-22T14:36:33Z",
+      "event": "handoff_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-04-22T14:39:39Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-04-22T14:39:39Z",
+      "event": "finalized",
+      "by": "coordinator"
+    }
+  ],
+  "updated_at": "2026-04-22T14:39:35Z",
+  "last_handoff_mtime": 1776868567.0
+}

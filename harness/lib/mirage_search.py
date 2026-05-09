@@ -1,0 +1,520 @@
+#!/usr/bin/env python3
+"""
+mirage_search.py — Unified search across Mirage paths, QMD, and Solar DB.
+
+Sources:
+  1. mirage_path — bounded grep/rg over allowed mount directories
+  2. qmd — call `solar-harness wiki qmd-search "<query>" --json`
+  3. solar_db — call `solar-knowledge-context.py --query ... --json`
+
+Output:
+  Normalized hits with mount, path, source_type, snippet, provenance, score_or_rank.
+  Defaults: max 10 hits, max 4000 chars.
+  Degraded sources are tracked in `degraded_sources`.
+
+Used by:
+  solar_mirage.py (S1 wrapper) → its search subcommand → this module
+  solar-harness mirage search <query> --json
+
+Sprint: sprint-20260508-mirage-unified-vfs
+Slice:  S2
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from pathlib import Path
+from typing import Any
+
+# ─── Default allowed mounts for path search ───────────────────────────
+# These are the safe, read-only mounts defined in the design.
+# If mirage.solar.yaml exists (S1 deliverable), it overrides these.
+DEFAULT_MOUNTS: list[dict[str, str]] = [
+    {"path": "/knowledge", "root": os.path.expanduser("~/Knowledge")},
+    {"path": "/sprints",  "root": os.path.expanduser("~/.solar/harness/sprints")},
+    {"path": "/cortex",   "root": os.path.expanduser("~/.claude/core/cortex")},
+]
+
+HARNESS_DIR = os.path.expanduser("~/.solar/harness")
+QMD_BIN = "qmd"
+QMD_COLLECTION = os.environ.get("QMD_WIKI_COLLECTION", "solar-wiki")
+SOLAR_KB_SCRIPT = os.path.join(HARNESS_DIR, "lib", "solar-knowledge-context.py")
+MIRAGE_CONFIG_YAML = os.path.join(HARNESS_DIR, "config", "mirage.solar.yaml")
+
+# Budgets (contract A4)
+DEFAULT_MAX_HITS = 10
+DEFAULT_MAX_CHARS = 4000
+ADAPTER_TIMEOUT_S = 3  # per source adapter
+
+
+# ─── Mount resolution ─────────────────────────────────────────────────
+
+def _load_mounts_from_yaml() -> list[dict[str, str]] | None:
+    """Try to load mount definitions from mirage.solar.yaml (S1 deliverable)."""
+    if not os.path.exists(MIRAGE_CONFIG_YAML):
+        return None
+    try:
+        with open(MIRAGE_CONFIG_YAML) as f:
+            content = f.read()
+    except Exception:
+        return None
+    mounts: list[dict[str, str]] = []
+    in_mounts = False
+    in_policy = False  # stop parsing mounts at policy:
+    current: dict[str, str] = {}
+    for line in content.splitlines():
+        stripped = line.strip()
+        # Stop at policy section
+        if stripped.startswith("policy:"):
+            in_policy = True
+            in_mounts = False
+            continue
+        if in_policy:
+            continue
+        if stripped.startswith("mounts:"):
+            in_mounts = True
+            continue
+        if not in_mounts:
+            continue
+        # New mount entry
+        if stripped.startswith("- path:"):
+            if current:
+                mounts.append(current)
+                current = {}
+            current["path"] = stripped.split(":", 1)[1].strip().strip('"')
+        elif stripped.startswith("root:") and "path" in current:
+            root_val = stripped.split(":", 1)[1].strip().strip('"')
+            if root_val:
+                current["root"] = os.path.expanduser(root_val)
+        elif stripped.startswith("mode:"):
+            current["mode"] = stripped.split(":", 1)[1].strip()
+        elif stripped.startswith("source_type:"):
+            current["source_type"] = stripped.split(":", 1)[1].strip()
+        elif stripped.startswith("optional:") and "root" not in current:
+            # End of current mount (gdrive/virtual, no root)
+            if current and "path" in current:
+                # Only keep disk mounts with roots for path search
+                pass
+            current = {}
+        elif stripped.startswith("adapter:") or stripped.startswith("credential_env:"):
+            # Skip these — not disk mounts
+            pass
+        elif stripped == "" and current:
+            # End of current mount block
+            if "root" in current and current["root"]:
+                pass  # keep it
+            elif "root" not in current:
+                # virtual or gdrive mount, skip for path search
+                current = {}
+    if current and "path" in current and "root" in current and current["root"]:
+        mounts.append(current)
+    # Filter: only keep disk mounts with valid roots
+    disk_mounts = [m for m in mounts
+                   if m.get("source_type") in (None, "disk")
+                   and m.get("root") and os.path.isdir(m.get("root", ""))]
+    if disk_mounts:
+        return disk_mounts
+    return None
+
+
+def get_mounts() -> list[dict[str, str]]:
+    """Return mount definitions: config if available, else defaults."""
+    loaded = _load_mounts_from_yaml()
+    if loaded:
+        return loaded
+    return DEFAULT_MOUNTS
+
+
+# ─── Source adapter: mirage_path ──────────────────────────────────────
+
+def _rg_available() -> bool:
+    """Check if ripgrep is on PATH."""
+    try:
+        subprocess.run(["rg", "--version"], capture_output=True, timeout=1)
+        return True
+    except Exception:
+        return False
+
+
+def search_mirage_path(query: str, mounts: list[dict[str, str]],
+                       max_hits: int = 6) -> list[dict[str, Any]]:
+    """Grep allowed mount directories for query matches.
+
+    Uses rg (ripgrep) if available; falls back to grep -r.
+    Returns up to max_hits normalized hits.
+    """
+    hits: list[dict[str, Any]] = []
+    use_rg = _rg_available()
+
+    for mount in mounts:
+        root = mount.get("root", "")
+        if not os.path.isdir(root):
+            continue
+        mount_path = mount.get("path", root)
+        root = os.path.realpath(root)
+
+        try:
+            if use_rg:
+                cmd = [
+                    "rg", "--json", "--no-heading", "--ignore-case",
+                    "--max-count", str(max_hits),
+                    "--max-filesize", "1M",
+                    "--follow",
+                    "-g", "!*.png", "-g", "!*.jpg", "-g", "!*.gif",
+                    "-g", "!*.pdf", "-g", "!*.zip", "-g", "!*.tar",
+                    "-g", "!*.gz", "-g", "!*.db", "-g", "!*.sqlite",
+                    "-g", "!.git/*", "-g", "!.obsidian/*",
+                    "--", query, root,
+                ]
+                result = subprocess.run(
+                    cmd, capture_output=True, text=True,
+                    timeout=ADAPTER_TIMEOUT_S,
+                )
+                if result.returncode not in (0, 1):
+                    continue
+                for line in result.stdout.strip().split("\n"):
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if entry.get("type") != "match":
+                        continue
+                    data = entry.get("data", {})
+                    file_path = data.get("path", {}).get("text", "")
+                    line_text = data.get("lines", {}).get("text", "").strip()
+                    line_no = data.get("line_number", 0)
+                    snippet = line_text[:300]
+                    if file_path:
+                        hits.append({
+                            "mount": mount_path,
+                            "path": "/" + os.path.relpath(file_path, root),
+                            "source_type": "mirage_path",
+                            "snippet": snippet,
+                            "provenance": f"rg:{mount_path}:{line_no}",
+                            "score_or_rank": 1.0,
+                        })
+            else:
+                cmd = ["grep", "-rin", "--max-count=1", "-I"]
+                cmd += ["--", query, root]
+                result = subprocess.run(
+                    cmd, capture_output=True, text=True,
+                    timeout=ADAPTER_TIMEOUT_S,
+                )
+                if result.returncode not in (0, 1):
+                    continue
+                for line in result.stdout.strip().split("\n"):
+                    if not line:
+                        continue
+                    parts = line.split(":", 2)
+                    if len(parts) < 3:
+                        continue
+                    fpath, lineno_str, text = parts
+                    try:
+                        lineno = int(lineno_str)
+                    except ValueError:
+                        continue
+                    rel = "/" + os.path.relpath(fpath, root)
+                    hits.append({
+                        "mount": mount_path,
+                        "path": rel,
+                        "source_type": "mirage_path",
+                        "snippet": text.strip()[:300],
+                        "provenance": f"grep:{mount_path}:{lineno}",
+                        "score_or_rank": 1.0,
+                    })
+        except subprocess.TimeoutExpired:
+            continue
+        except Exception:
+            continue
+
+        if len(hits) >= max_hits:
+            break
+
+    return hits[:max_hits]
+
+
+# ─── Source adapter: qmd ──────────────────────────────────────────────
+
+def search_qmd(query: str, max_hits: int = 5) -> tuple[list[dict[str, Any]], bool]:
+    """Call qmd search and normalize results.
+
+    Returns (hits, available).  available=False means qmd is not installed
+    or search failed; hits will be empty.
+    """
+    hits: list[dict[str, Any]] = []
+    try:
+        subprocess.run([QMD_BIN, "--version"], capture_output=True, timeout=2)
+    except Exception:
+        return hits, False
+
+    try:
+        result = subprocess.run(
+            [QMD_BIN, "search", query, "-c", QMD_COLLECTION, "--json", "-n", str(max_hits)],
+            capture_output=True, text=True,
+            timeout=ADAPTER_TIMEOUT_S,
+        )
+        if result.returncode != 0:
+            return hits, True
+        data = json.loads(result.stdout)
+    except subprocess.TimeoutExpired:
+        return hits, True
+    except (json.JSONDecodeError, Exception):
+        return hits, True
+
+    if not isinstance(data, list):
+        return hits, True
+
+    for i, item in enumerate(data):
+        if not isinstance(item, dict):
+            continue
+        file_ref = item.get("file", "") or item.get("path", "") or ""
+        title = item.get("title", "")
+        snippet = item.get("snippet", "") or item.get("context", "") or ""
+        score = float(item.get("score", 0.5))
+
+        hits.append({
+            "mount": "/qmd",
+            "path": file_ref,
+            "source_type": "qmd",
+            "snippet": (snippet or title or "")[:300],
+            "provenance": f"qmd:{QMD_COLLECTION}:{item.get('docid', i)}",
+            "score_or_rank": score,
+        })
+
+    return hits[:max_hits], True
+
+
+# ─── Source adapter: solar_db ─────────────────────────────────────────
+
+def search_solar_db(query: str, max_hits: int = 5) -> tuple[list[dict[str, Any]], bool]:
+    """Call solar-knowledge-context.py and normalize results.
+
+    Returns (hits, available).  available=False means the script is missing;
+    hits will be empty.
+    """
+    hits: list[dict[str, Any]] = []
+    if not os.path.exists(SOLAR_KB_SCRIPT):
+        return hits, False
+
+    try:
+        result = subprocess.run(
+            ["python3", SOLAR_KB_SCRIPT,
+             "--query", query,
+             "--json",
+             "--max-hits", str(max_hits),
+             "--fail-open"],
+            capture_output=True, text=True,
+            timeout=ADAPTER_TIMEOUT_S + 1,
+        )
+        if result.returncode != 0:
+            return hits, True
+        data = json.loads(result.stdout)
+    except subprocess.TimeoutExpired:
+        return hits, True
+    except (json.JSONDecodeError, Exception):
+        return hits, True
+
+    raw_hits = data.get("hits", [])
+    if not isinstance(raw_hits, list):
+        return hits, True
+
+    for item in raw_hits:
+        if not isinstance(item, dict):
+            continue
+        source = item.get("source", "") or item.get("table", "")
+        hit_id = item.get("id", "")
+        title = item.get("title", "")
+        snippet = item.get("snippet", "")[:300]
+        score = float(item.get("score", 0.5))
+        item_path = item.get("path", "") or hit_id or title or ""
+
+        hits.append({
+            "mount": "/solar_db",
+            "path": item_path,
+            "source_type": "solar_db",
+            "snippet": snippet,
+            "provenance": f"solar_db:{source}:{hit_id}" if hit_id else f"solar_db:{source}",
+            "score_or_rank": score,
+        })
+
+    return hits[:max_hits], True
+
+
+# ─── Aggregation ──────────────────────────────────────────────────────
+
+def _dedup_key(hit: dict[str, Any]) -> str:
+    """Create a dedup key from path + snippet prefix."""
+    p = hit.get("path", "")
+    s = hit.get("snippet", "")[:40]
+    return f"{p}||{s}"
+
+
+def unified_search(query: str,
+                   max_hits: int = DEFAULT_MAX_HITS,
+                   max_chars: int = DEFAULT_MAX_CHARS,
+                   sources: list[str] | None = None,
+                   mounts: list[dict[str, str]] | None = None) -> dict[str, Any]:
+    """Run unified search across all available sources.
+
+    Args:
+        query: Search query string.
+        max_hits: Maximum number of hits to return (default 10).
+        max_chars: Maximum total characters in hit snippets (default 4000).
+        sources: Which source types to query. None = all.
+        mounts: Mount definitions for path search. None = auto-detect.
+
+    Returns:
+        Dict with keys: hits, degraded_sources, total_chars, truncated, query, elapsed_ms.
+    """
+    t0 = time.monotonic()
+    if sources is None:
+        sources = ["mirage_path", "qmd", "solar_db"]
+    if mounts is None:
+        mounts = get_mounts()
+
+    all_hits: list[dict[str, Any]] = []
+    degraded: list[str] = []
+
+    # Distribute hit budget across active sources
+    active_count = len(sources)
+    per_source = max(3, max_hits // max(1, active_count))
+
+    # --- mirage_path ---
+    if "mirage_path" in sources:
+        path_hits = search_mirage_path(query, mounts, per_source)
+        all_hits.extend(path_hits)
+        if not path_hits:
+            degraded.append("mirage_path:no_results")
+
+    # --- qmd ---
+    if "qmd" in sources:
+        qmd_hits, qmd_ok = search_qmd(query, per_source)
+        all_hits.extend(qmd_hits)
+        if not qmd_ok:
+            degraded.append("qmd:unavailable")
+
+    # --- solar_db ---
+    if "solar_db" in sources:
+        db_hits, db_ok = search_solar_db(query, per_source)
+        all_hits.extend(db_hits)
+        if not db_ok:
+            degraded.append("solar_db:unavailable")
+
+    # Deduplicate by path+snippet key
+    seen: set[str] = set()
+    unique: list[dict[str, Any]] = []
+    for h in all_hits:
+        key = _dedup_key(h)
+        if key not in seen:
+            seen.add(key)
+            unique.append(h)
+
+    # Sort by score descending
+    unique.sort(key=lambda h: h.get("score_or_rank", 0.0), reverse=True)
+
+    # Enforce hit budget
+    hits = unique[:max_hits]
+
+    # Enforce character budget
+    total_chars = 0
+    kept: list[dict[str, Any]] = []
+    truncated = False
+    for h in hits:
+        snippet = h.get("snippet", "")
+        snip_len = len(snippet)
+        if total_chars + snip_len > max_chars:
+            remaining = max(0, max_chars - total_chars)
+            if remaining > 40:
+                h["snippet"] = snippet[:remaining]
+                kept.append(h)
+                total_chars += remaining
+            truncated = True
+            break
+        kept.append(h)
+        total_chars += snip_len
+
+    return {
+        "hits": kept,
+        "degraded_sources": degraded,
+        "total_chars": total_chars,
+        "truncated": truncated,
+        "query": query,
+        "elapsed_ms": (time.monotonic() - t0) * 1000,
+    }
+
+
+# ─── CLI ──────────────────────────────────────────────────────────────
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Mirage unified search — query across Mirage paths, QMD, and Solar DB",
+    )
+    parser.add_argument("query", help="Search query string")
+    parser.add_argument("--json", dest="json_out", action="store_true",
+                        default=True, help="Output as JSON (default)")
+    parser.add_argument("--max-hits", type=int, default=DEFAULT_MAX_HITS,
+                        help=f"Max hits to return (default: {DEFAULT_MAX_HITS})")
+    parser.add_argument("--max-chars", type=int, default=DEFAULT_MAX_CHARS,
+                        help=f"Max total snippet chars (default: {DEFAULT_MAX_CHARS})")
+    parser.add_argument("--sources", type=str, default="mirage_path,qmd,solar_db",
+                        help="Comma-separated source types (default: mirage_path,qmd,solar_db)")
+    parser.add_argument("--config", type=str, default=None,
+                        help="Path to mirage.solar.yaml (optional)")
+    args = parser.parse_args()
+
+    sources_list = [s.strip() for s in args.sources.split(",") if s.strip()]
+
+    mounts: list[dict[str, str]] | None = None
+    if args.config and os.path.exists(args.config):
+        global MIRAGE_CONFIG_YAML
+        MIRAGE_CONFIG_YAML = args.config
+        mounts = _load_mounts_from_yaml()
+    if mounts is None:
+        mounts = get_mounts()
+
+    result = unified_search(
+        query=args.query,
+        max_hits=args.max_hits,
+        max_chars=args.max_chars,
+        sources=sources_list,
+        mounts=mounts,
+    )
+
+    if args.json_out:
+        json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
+        sys.stdout.write("\n")
+    else:
+        hits = result.get("hits", [])
+        if not hits:
+            print(f"No results found for: {args.query}")
+            if result.get("degraded_sources"):
+                print(f"Degraded sources: {', '.join(result['degraded_sources'])}")
+            return
+        print(f"Search results for: {args.query}")
+        print(f"Sources: {args.sources}  |  Hits: {len(hits)}  |  "
+              f"Chars: {result.get('total_chars', 0)}")
+        print("-" * 60)
+        for i, h in enumerate(hits, 1):
+            st = h.get("source_type", "?")
+            mount = h.get("mount", "?")
+            path = h.get("path", "?")
+            score = h.get("score_or_rank", 0)
+            snippet = h.get("snippet", "")
+            print(f"[{i}] [{st}] {mount}{path} (score={score:.2f})")
+            print(f"    {snippet[:200]}")
+        if result.get("truncated"):
+            print("... (results truncated due to char budget)")
+        if result.get("degraded_sources"):
+            print(f"\n⚠ Degraded sources: {', '.join(result['degraded_sources'])}")
+
+
+if __name__ == "__main__":
+    main()

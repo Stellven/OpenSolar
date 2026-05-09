@@ -1,0 +1,35 @@
+{
+  "id": "sprint-20260414-130713",
+  "title": "\u9009\u62e9\u6027\u96c6\u6210 agency-agents \u2014 \u5b89\u88c5 Solar \u7f3a\u5931\u9886\u57df\u7684 agent \u4eba\u683c\u6587\u4ef6\u5230 ~/.claude/a",
+  "status": "passed",
+  "created_at": "2026-04-14T05:07:13Z",
+  "round": 3,
+  "history": [
+    {
+      "ts": "2026-04-14T05:07:13Z",
+      "event": "contract_created",
+      "by": "user"
+    },
+    {
+      "ts": "2026-04-14T05:07:36Z",
+      "event": "done_criteria_filled",
+      "by": "planner"
+    },
+    {
+      "ts": "2026-04-14T05:36:47Z",
+      "event": "handoff_submitted",
+      "by": "builder"
+    },
+    {
+      "ts": "2026-04-14T07:07:30Z",
+      "event": "handoff_submitted",
+      "by": "builder"
+    },
+    {
+      "ts": "2026-04-14T07:29:52Z",
+      "event": "handoff_submitted",
+      "by": "builder"
+    }
+  ],
+  "updated_at": "2026-04-14T07:32:41Z"
+}

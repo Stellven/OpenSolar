@@ -1,0 +1,20 @@
+{
+  "id": "sprint-20260417-160453",
+  "title": "Solar Subconscious (\u81ea\u7814\u7248): \u7528\u81ea\u6709\u7ec4\u4ef6 (hooks + brain-router + MemP",
+  "status": "passed",
+  "created_at": "2026-04-17T08:04:53Z",
+  "round": 1,
+  "history": [
+    {
+      "ts": "2026-04-17T08:04:53Z",
+      "event": "contract_created",
+      "by": "user"
+    },
+    {
+      "ts": "2026-04-17T08:06:12Z",
+      "event": "done_criteria_filled",
+      "by": "planner"
+    }
+  ],
+  "updated_at": "2026-04-17T09:08:10Z"
+}

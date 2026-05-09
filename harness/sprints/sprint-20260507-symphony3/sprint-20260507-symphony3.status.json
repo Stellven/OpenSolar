@@ -1,0 +1,76 @@
+{
+  "id": "sprint-20260507-symphony3",
+  "sprint_id": "sprint-20260507-symphony3",
+  "title": "Symphony \u96c6\u6210 Sprint 3 \u2014 \u7ed3\u6784\u5316\u65e5\u5fd7\u7edf\u4e00 + HTTP \u72b6\u6001\u9762\u677f 8765 + Sprint 2 backlog",
+  "status": "passed",
+  "priority": "P2",
+  "lane": "delivery",
+  "handoff_to": "builder_main",
+  "predecessor": "sprint-20260507-symphony2",
+  "created_at": "2026-05-07T19:30:00Z",
+  "updated_at": "2026-05-07T20:39:11Z",
+  "product_brief": "/Users/sihaoli/.solar/harness/sprints/sprint-20260507-symphony3.product-brief.md",
+  "contract": "/Users/sihaoli/.solar/harness/sprints/sprint-20260507-symphony3.contract.md",
+  "auto_generated": false,
+  "source": "pm-manual-2026-05-07",
+  "phase": "planning_complete",
+  "round": 2,
+  "crew": {
+    "planner": "claude-opus",
+    "builder_main": "glm-5.1",
+    "builder_fallback": "claude-sonnet",
+    "evaluator": "claude-opus",
+    "gate_judge": "planner"
+  },
+  "history": [
+    {
+      "ts": "2026-05-07T19:30:00Z",
+      "event": "product_brief_received",
+      "by": "pm",
+      "note": "Sprint 3 product brief landed; status opened for planner handoff."
+    },
+    {
+      "ts": "2026-05-07T19:30:00Z",
+      "event": "contract_seed_created",
+      "by": "codex",
+      "note": "Seed contract points planner to product brief as source of truth."
+    },
+    {
+      "ts": "2026-05-07T20:05:15Z",
+      "event": "planner_plan_completed",
+      "by": "planner",
+      "note": "plan.md written (17KB / 318 lines, 9 slices S1-S9, dual gates Day 3/5, 16 files affected); status drafting\u2192active, phase spec\u2192planning_complete; coordinator auto-dispatch to builder."
+    },
+    {
+      "ts": "2026-05-07T20:29:46Z",
+      "event": "implementation_completed",
+      "by": "builder"
+    },
+    {
+      "ts": "2026-05-07T20:32:55Z",
+      "event": "handoff_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-07T20:39:11Z",
+      "event": "eval_completed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-05-07T20:40:05Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-05-07T20:40:48Z",
+      "event": "finalized",
+      "by": "coordinator"
+    }
+  ],
+  "plan": "/Users/sihaoli/.solar/harness/sprints/sprint-20260507-symphony3.plan.md",
+  "last_handoff_mtime": 1778185779.0,
+  "last_exported_sprint": "sprint-20260507-symphony3",
+  "last_exported_at": "2026-05-07T23:25:53Z"
+}

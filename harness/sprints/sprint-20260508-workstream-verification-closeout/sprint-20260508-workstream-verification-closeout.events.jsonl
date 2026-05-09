@@ -1,0 +1,32 @@
+{"ts":"2026-05-08T16:40:00Z","sid":"sprint-20260508-workstream-verification-closeout","event":"contract_created","by":"codex_pm","severity":"info","data":{"priority":"P0","lane":"reliability","handoff_to":"planner","scope":["obsidian-wiki","qmd-mineru","capture-server","solar-kb-autouse","accepted-artifact-knowledge","data-plane-closeout","mirage-vfs","status-events-pane-hooks"]}}
+{"ts":"2026-05-08T16:43:00Z","sid":"sprint-20260508-workstream-verification-closeout","event":"planner_dispatch_sent","by":"codex_pm","severity":"info","data":{"target":"solar-harness:0.1","dispatch":"/Users/sihaoli/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.dispatch.md"}}
+{"ts":"2026-05-08T16:47:00Z","sid":"sprint-20260508-workstream-verification-closeout","event":"planner_unblocked_reports_dir","by":"codex_pm","severity":"warn","data":{"created":"/Users/sihaoli/.solar/harness/reports","reason":"planner recon parallel command cancelled when reports dir was missing"}}
+{"ts":"2026-05-08T16:55:00Z","sid":"sprint-20260508-workstream-verification-closeout","event":"verification_matrix_ready","by":"codex_pm","severity":"warn","data":{"report_md":"/Users/sihaoli/.solar/harness/reports/solar-workstream-verification-20260508.md","report_json":"/Users/sihaoli/.solar/harness/reports/solar-workstream-verification-20260508.json","fix_dispatch":"/Users/sihaoli/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.fix-dispatch.md","note":"planner compact stalled after plan.md; matrix and fix dispatch completed by Codex from collected evidence"}}
+{"ts": "2026-05-08T12:23:17Z", "sid": "sprint-20260508-workstream-verification-closeout", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-08T12:23:17Z","event":"planner_notified","by":"coordinator","data":{"status":"drafting"}}
+{"ts": "2026-05-08T12:23:35Z", "sid": "sprint-20260508-workstream-verification-closeout", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T12:23:56Z", "sid": "sprint-20260508-workstream-verification-closeout", "event": "gate_blocked", "by": "coordinator"}
+{"ts":"2026-05-08T12:25:26Z","event":"planner_notified","by":"coordinator","data":{"status":"drafting"}}
+{"ts": "2026-05-08T12:25:43Z", "sid": "sprint-20260508-workstream-verification-closeout", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T12:26:00Z", "sid": "sprint-20260508-workstream-verification-closeout", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T12:31:20Z", "sid": "sprint-20260508-workstream-verification-closeout", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-08T12:31:21Z","event":"planner_notified","by":"coordinator","data":{"status":"active"}}
+{"ts": "2026-05-08T12:31:46Z", "sid": "sprint-20260508-workstream-verification-closeout", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T12:43:29Z", "sid": "sprint-20260508-workstream-verification-closeout", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-08T12:43:29Z","event":"planner_notified","by":"coordinator","data":{"status":"active"}}
+{"ts": "2026-05-08T12:53:21Z", "sid": "sprint-20260508-workstream-verification-closeout", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T12:53:53Z", "sid": "sprint-20260508-workstream-verification-closeout", "event": "dispatched", "by": "coordinator"}
+{"ts": "2026-05-08T13:02:28Z", "event": "handoff_submitted", "by": "builder", "sid": "sprint-20260508-workstream-verification-closeout"}
+{"ts": "2026-05-08T13:05:15Z", "sid": "sprint-20260508-workstream-verification-closeout", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T13:06:03Z", "sid": "sprint-20260508-workstream-verification-closeout", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-08T13:08:23Z", "sid": "sprint-20260508-workstream-verification-closeout", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T13:09:10Z", "sid": "sprint-20260508-workstream-verification-closeout", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-08T13:17:26Z", "sid": "sprint-20260508-workstream-verification-closeout", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T13:18:14Z", "sid": "sprint-20260508-workstream-verification-closeout", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-08T13:21:43Z", "sid": "sprint-20260508-workstream-verification-closeout", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T13:28:34Z", "sid": "sprint-20260508-workstream-verification-closeout", "event": "dispatch_failed", "by": "coordinator"}
+{"event": "waked", "by": "wake", "data": {"from_status": "approved", "target_pane": "solar-harness:0.2"}, "ts": "2026-05-08T14:19:09Z", "sid": "sprint-20260508-workstream-verification-closeout"}
+{"event": "watchdog_restart", "by": "watchdog", "data": {"failure_count": 1}, "ts": "2026-05-08T14:19:09Z", "sid": "sprint-20260508-workstream-verification-closeout"}
+{"ts": "2026-05-08T14:21:46Z", "sid": "sprint-20260508-workstream-verification-closeout", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T14:22:16Z", "sid": "sprint-20260508-workstream-verification-closeout", "event": "dispatched", "by": "coordinator"}
+{"ts": "2026-05-08T15:11:44Z", "sid": "sprint-20260508-workstream-verification-closeout", "event": "state_changed", "by": "coordinator"}

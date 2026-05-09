@@ -1,0 +1,23 @@
+{"ts":"2026-05-07T20:31:16Z","actor":"codex","event":"sprint_created","severity":"info","sprint_id":"sprint-20260507-obsidian-wiki","payload":{"source_repo":"https://github.com/Ar9av/obsidian-wiki","handoff_to":"planner","status":"drafting","phase":"spec"}}
+{"ts": "2026-05-07T20:36:29Z", "sid": "sprint-20260507-obsidian-wiki", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-07T20:39:35Z", "sid": "sprint-20260507-obsidian-wiki", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-07T20:39:50Z", "sid": "sprint-20260507-obsidian-wiki", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-07T20:41:22Z", "sid": "sprint-20260507-obsidian-wiki", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-07T20:42:02Z", "sid": "sprint-20260507-obsidian-wiki", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-07T20:42:33Z", "sid": "sprint-20260507-obsidian-wiki", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-07T20:43:12Z", "sid": "sprint-20260507-obsidian-wiki", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-07T20:43:40Z", "sid": "sprint-20260507-obsidian-wiki", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-07T20:44:01Z", "sid": "sprint-20260507-obsidian-wiki", "event": "dispatched", "by": "coordinator"}
+{"event": "waked", "by": "wake", "data": {"from_status": "active", "target_pane": "solar-harness:0.0"}, "ts": "2026-05-07T20:54:13Z", "sid": "sprint-20260507-obsidian-wiki"}
+{"event": "watchdog_restart", "by": "watchdog", "data": {"failure_count": 2}, "ts": "2026-05-07T20:54:13Z", "sid": "sprint-20260507-obsidian-wiki"}
+{"event": "waked", "by": "wake", "data": {"from_status": "active", "target_pane": "solar-harness:0.0"}, "ts": "2026-05-07T20:55:21Z", "sid": "sprint-20260507-obsidian-wiki"}
+{"event": "watchdog_restart", "by": "watchdog", "data": {"failure_count": 1}, "ts": "2026-05-07T20:55:21Z", "sid": "sprint-20260507-obsidian-wiki"}
+{"event": "waked", "by": "wake", "data": {"from_status": "active", "target_pane": "solar-harness:0.2"}, "ts": "2026-05-07T21:03:49Z", "sid": "sprint-20260507-obsidian-wiki"}
+{"event": "watchdog_restart", "by": "watchdog", "data": {"failure_count": 1}, "ts": "2026-05-07T21:03:49Z", "sid": "sprint-20260507-obsidian-wiki"}
+{"ts":"2026-05-07T21:08:05Z","event":"builder_dispatch_reissued","by":"codex_pm","sid":"sprint-20260507-obsidian-wiki","data":{"pane":"solar-harness:0.2","test_result":"42 PASS / 0 FAIL","dispatch":"/Users/sihaoli/.solar/harness/sprints/sprint-20260507-obsidian-wiki.dispatch.md"}}
+{"ts": "2026-05-07T21:12:24Z", "sid": "sprint-20260507-obsidian-wiki", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-07T21:13:00Z", "sid": "sprint-20260507-obsidian-wiki", "event": "dispatched", "by": "coordinator"}
+{"ts": "2026-05-07T21:16:42Z", "event": "eval_passed", "by": "evaluator", "verdict": "pass", "sid": "sprint-20260507-obsidian-wiki"}
+{"ts": "2026-05-07T21:17:09Z", "sid": "sprint-20260507-obsidian-wiki", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-07T21:17:10Z","event":"planner_notified","by":"coordinator","data":{"status":"passed"}}
+{"ts": "2026-05-07T21:17:39Z", "sid": "sprint-20260507-obsidian-wiki", "event": "dispatched", "by": "coordinator"}

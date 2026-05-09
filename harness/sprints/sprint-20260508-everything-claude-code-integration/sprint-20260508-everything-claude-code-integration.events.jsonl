@@ -1,0 +1,28 @@
+{"ts": "2026-05-08T16:57:00Z", "sid": "sprint-20260508-everything-claude-code-integration", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-08T17:05:00Z","sprint_id":"sprint-20260508-everything-claude-code-integration","actor":"codex_pm","event":"prd_completed","severity":"info","data":{"handoff_to":"planner","vendor":"/Users/sihaoli/.solar/harness/vendor/everything-claude-code","report":"/Users/sihaoli/.solar/harness/reports/everything-claude-code-audit-20260508.md","live_hook_changes":0}}
+{"event": "waked", "by": "wake", "data": {"from_status": "drafting", "target_pane": "solar-harness:0.1"}, "ts": "2026-05-08T17:27:37Z", "sid": "sprint-20260508-everything-claude-code-integration"}
+{"event": "watchdog_restart", "by": "watchdog", "data": {"failure_count": 2}, "ts": "2026-05-08T17:27:58Z", "sid": "sprint-20260508-everything-claude-code-integration"}
+{"event": "waked", "by": "wake", "data": {"from_status": "drafting", "target_pane": "solar-harness:0.1"}, "ts": "2026-05-08T17:29:09Z", "sid": "sprint-20260508-everything-claude-code-integration"}
+{"event": "watchdog_restart", "by": "watchdog", "data": {"failure_count": 1}, "ts": "2026-05-08T17:29:09Z", "sid": "sprint-20260508-everything-claude-code-integration"}
+{"event": "waked", "by": "wake", "data": {"from_status": "drafting", "target_pane": "solar-harness:0.1"}, "ts": "2026-05-08T17:29:49Z", "sid": "sprint-20260508-everything-claude-code-integration"}
+{"event": "watchdog_restart", "by": "watchdog", "data": {"failure_count": 2}, "ts": "2026-05-08T17:29:49Z", "sid": "sprint-20260508-everything-claude-code-integration"}
+{"ts": "2026-05-08T17:32:30Z", "sid": "sprint-20260508-everything-claude-code-integration", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-08T17:37:00Z","sprint_id":"sprint-20260508-everything-claude-code-integration","actor":"codex_pm_acting_planner","event":"planner_plan_completed","severity":"warn","data":{"reason":"planner_compact_stall_after_design","handoff_to":"builder_main","plan":"/Users/sihaoli/.solar/harness/sprints/sprint-20260508-everything-claude-code-integration.plan.md"}}
+{"event": "waked", "by": "wake", "data": {"from_status": "active", "target_pane": "solar-harness:0.2"}, "ts": "2026-05-08T17:32:38Z", "sid": "sprint-20260508-everything-claude-code-integration"}
+{"ts": "2026-05-08T17:33:56Z", "sid": "sprint-20260508-everything-claude-code-integration", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-08T17:33:56Z","event":"planner_notified","by":"coordinator","data":{"status":"active"}}
+{"ts": "2026-05-08T17:40:49Z", "sid": "sprint-20260508-everything-claude-code-integration", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-08T17:40:49Z","event":"planner_notified","by":"coordinator","data":{"status":"active"}}
+{"ts": "2026-05-08T17:45:22Z", "sprint_id": "sprint-20260508-everything-claude-code-integration", "actor": "solar-autopilot", "event": "autopilot_ready_for_builder", "severity": "info", "data": {"target": "solar-harness:0.2"}}
+{"event": "waked", "by": "wake", "data": {"from_status": "active", "target_pane": "solar-harness:0.2"}, "ts": "2026-05-08T17:45:28Z", "sid": "sprint-20260508-everything-claude-code-integration"}
+{"ts": "2026-05-08T17:45:28Z", "sprint_id": "sprint-20260508-everything-claude-code-integration", "actor": "solar-autopilot", "event": "autopilot_pane_idle_with_pending_artifact", "severity": "info", "data": {"target": "solar-harness:0.2"}}
+{"event": "waked", "by": "wake", "data": {"from_status": "active", "target_pane": "solar-harness:0.2"}, "ts": "2026-05-08T17:45:33Z", "sid": "sprint-20260508-everything-claude-code-integration"}
+{"ts": "2026-05-08T17:45:46Z", "sid": "sprint-20260508-everything-claude-code-integration", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-08T17:45:46Z","event":"planner_notified","by":"coordinator","data":{"status":"active"}}
+{"ts": "2026-05-08T17:47:43Z", "sid": "sprint-20260508-everything-claude-code-integration", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T17:48:06Z", "sid": "sprint-20260508-everything-claude-code-integration", "event": "dispatched", "by": "coordinator"}
+{"ts": "2026-05-08T17:51:51Z", "event": "eval_passed", "by": "evaluator", "verdict": "pass", "sid": "sprint-20260508-everything-claude-code-integration"}
+{"ts": "2026-05-08T17:52:26Z", "sid": "sprint-20260508-everything-claude-code-integration", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-08T17:52:28Z","event":"planner_notified","by":"coordinator","data":{"status":"passed"}}
+{"ts": "2026-05-08T17:52:50Z", "sid": "sprint-20260508-everything-claude-code-integration", "event": "dispatched", "by": "coordinator"}
+{"ts": "2026-05-08T17:53:06Z", "sid": "sprint-20260508-everything-claude-code-integration", "event": "handle_passed_completed", "by": "coordinator"}

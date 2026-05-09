@@ -1,0 +1,13 @@
+{"ts":"2026-05-07T19:30:00Z","event":"phase_transition","by":"codex","sid":"sprint-20260507-symphony3","data":{"from":"none","to":"spec","handoff_to":"planner"}}
+{"event": "waked", "by": "wake", "data": {"from_status": "active", "target_pane": "solar-harness:0.2"}, "ts": "2026-05-07T20:09:42Z", "sid": "sprint-20260507-symphony3"}
+{"event": "watchdog_restart", "by": "watchdog", "data": {"failure_count": 1}, "ts": "2026-05-07T20:09:42Z", "sid": "sprint-20260507-symphony3"}
+{"event": "waked", "by": "wake", "data": {"from_status": "active", "target_pane": "solar-harness:0.2"}, "ts": "2026-05-07T20:13:40Z", "sid": "sprint-20260507-symphony3"}
+{"event": "watchdog_restart", "by": "watchdog", "data": {"failure_count": 1}, "ts": "2026-05-07T20:13:40Z", "sid": "sprint-20260507-symphony3"}
+{"ts": "2026-05-07T20:29:46Z", "event": "handoff_submitted", "by": "builder", "sid": "sprint-20260507-symphony3"}
+{"event": "waked", "by": "wake", "data": {"from_status": "reviewing", "target_pane": "solar-harness:0.3"}, "ts": "2026-05-07T20:36:04Z", "sid": "sprint-20260507-symphony3"}
+{"event": "watchdog_restart", "by": "watchdog", "data": {"failure_count": 1}, "ts": "2026-05-07T20:36:04Z", "sid": "sprint-20260507-symphony3"}
+{"ts": "2026-05-07T20:39:11Z", "event": "eval_passed", "by": "evaluator", "verdict": "pass", "sid": "sprint-20260507-symphony3"}
+{"ts": "2026-05-07T20:40:05Z", "sid": "sprint-20260507-symphony3", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-07T20:40:05Z","event":"planner_notified","by":"coordinator","data":{"status":"passed"}}
+{"ts": "2026-05-07T20:40:33Z", "sid": "sprint-20260507-symphony3", "event": "dispatched", "by": "coordinator"}
+{"ts": "2026-05-07T20:40:48Z", "sid": "sprint-20260507-symphony3", "event": "handle_passed_completed", "by": "coordinator"}

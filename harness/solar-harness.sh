@@ -15,6 +15,8 @@ set -eu
 
 HARNESS_DIR="$HOME/.solar/harness"
 SESSION_NAME="solar-harness"
+LAB_SESSION_NAME="solar-harness-lab"
+LEGACY_LAB_SESSION_NAME="solar-harness-strategy"
 SPRINTS_DIR="$HARNESS_DIR/sprints"
 
 # sprint-20260503-094659 D2: 统一 state helper
@@ -31,6 +33,74 @@ warn() { echo -e "${Y}[Harness]${N} $*"; }
 err()  { echo -e "${R}[Harness]${N} $*"; }
 
 ensure_dirs() { mkdir -p "$SPRINTS_DIR" "$HARNESS_DIR/personas" "$HARNESS_DIR/templates"; }
+
+cleanup_legacy_sessions() {
+  if ! tmux has-session -t "$LEGACY_LAB_SESSION_NAME" 2>/dev/null; then
+    return 0
+  fi
+
+  local attached="0"
+  attached=$(tmux display-message -p -t "$LEGACY_LAB_SESSION_NAME" '#{session_attached}' 2>/dev/null || echo "0")
+  if [[ "$attached" != "0" ]]; then
+    warn "检测到旧 Strategy Lab session 仍被附着: $LEGACY_LAB_SESSION_NAME"
+    warn "请先退出旧会话，再运行: tmux kill-session -t $LEGACY_LAB_SESSION_NAME"
+    return 0
+  fi
+
+  tmux kill-session -t "$LEGACY_LAB_SESSION_NAME" 2>/dev/null || true
+  ok "已清理旧残留 session: $LEGACY_LAB_SESSION_NAME"
+}
+
+sanitize_tmux_claude_env() {
+  local session="$1"
+  tmux set-environment -t "$session" -gu CLAUDECODE 2>/dev/null || true
+  tmux set-environment -t "$session" -gu CLAUDE_CODE_ENTRYPOINT 2>/dev/null || true
+  tmux set-environment -t "$session" -gu CLAUDE_CODE_EXECPATH 2>/dev/null || true
+}
+
+attach_or_print() {
+  local session="${1:-$SESSION_NAME}"
+  if [[ -t 1 && -n "${TERM:-}" && "${TERM:-}" != "dumb" ]]; then
+    tmux attach -t "$session" || {
+      warn "tmux attach 失败，session 已在后台运行: $session"
+      log "重新接入: tmux attach -t $session"
+      return 0
+    }
+  else
+    ok "tmux session 已在后台运行: $session"
+    log "重新接入: tmux attach -t $session"
+  fi
+}
+
+configure_role_footer_style() {
+  local session="$1" active_color="${2:-#89b4fa}"
+  tmux set-window-option -t "$session:0" pane-border-status bottom 2>/dev/null || true
+  tmux set-window-option -t "$session:0" pane-border-format "#[fg=${active_color},bold] #P #{pane_title} #[default]" 2>/dev/null || true
+  tmux set-option -t "$session" allow-set-title off 2>/dev/null || true
+}
+
+pane_footer_label() {
+  local persona="$1" label="$2" slot="${3:-}"
+  bash "$HARNESS_DIR/quota-footer.sh" "$persona" "$label" "$slot" 2>/dev/null || printf "%s | 模型:N/A | 剩余:N/A | 已用:N/A tok" "$label"
+}
+
+configure_product_delivery_labels() {
+  tmux has-session -t "$SESSION_NAME" 2>/dev/null || return 0
+  configure_role_footer_style "$SESSION_NAME" "#89b4fa"
+  tmux select-pane -t "$SESSION_NAME:Product Delivery.0" -T "$(pane_footer_label pm "PM 产品经理")" 2>/dev/null || true
+  tmux select-pane -t "$SESSION_NAME:Product Delivery.1" -T "$(pane_footer_label planner "Planner 规划者")" 2>/dev/null || true
+  tmux select-pane -t "$SESSION_NAME:Product Delivery.2" -T "$(pane_footer_label builder "Builder 主建设者")" 2>/dev/null || true
+  tmux select-pane -t "$SESSION_NAME:Product Delivery.3" -T "$(pane_footer_label evaluator "Evaluator 审判官")" 2>/dev/null || true
+}
+
+configure_builder_lab_labels() {
+  tmux has-session -t "$LAB_SESSION_NAME" 2>/dev/null || return 0
+  configure_role_footer_style "$LAB_SESSION_NAME" "#f9e2af"
+  tmux select-pane -t "$LAB_SESSION_NAME:Builder Lab.0" -T "$(pane_footer_label lab-builder "Builder 1" "lab-builder-1")" 2>/dev/null || true
+  tmux select-pane -t "$LAB_SESSION_NAME:Builder Lab.1" -T "$(pane_footer_label lab-builder "Builder 2" "lab-builder-2")" 2>/dev/null || true
+  tmux select-pane -t "$LAB_SESSION_NAME:Builder Lab.2" -T "$(pane_footer_label lab-builder "Builder 3" "lab-builder-3")" 2>/dev/null || true
+  tmux select-pane -t "$LAB_SESSION_NAME:Builder Lab.3" -T "$(pane_footer_label lab-builder "Builder 4" "lab-builder-4")" 2>/dev/null || true
+}
 
 # ---- Bash 4+ 检测 ----
 
@@ -88,6 +158,18 @@ do_doctor() {
       echo "   修复: $bash4 -n $HARNESS_DIR/coordinator.sh 查看详情"
       ((failed++))
     }
+    "$bash4" -n "$HARNESS_DIR/lib/persona-config.sh" 2>/dev/null || {
+      echo "❌ persona-config.sh 语法错误 (bash -n 失败)"
+      echo "   修复: $bash4 -n $HARNESS_DIR/lib/persona-config.sh 查看详情"
+      ((failed++))
+    }
+    if [[ -x "$HARNESS_DIR/test-gateway-compat.sh" ]]; then
+      "$bash4" "$HARNESS_DIR/test-gateway-compat.sh" >/dev/null 2>&1 || {
+        echo "❌ 第三方网关兼容配置检查失败"
+        echo "   修复: $bash4 $HARNESS_DIR/test-gateway-compat.sh 查看详情"
+        ((failed++))
+      }
+    fi
   fi
 
   # (d) 关键目录可写
@@ -105,18 +187,9 @@ do_doctor() {
     fi
   fi
 
-  # (f) coordinator.sh 未转义双引号平衡
-  if [[ -f "$HARNESS_DIR/coordinator.sh" ]]; then
-    local qcount
-    qcount=$(awk '
-      { for(i=1;i<=length;i++) if(substr($0,i,1)=="\"" && (i==1 || substr($0,i-1,1)!="\\")) n++ }
-      END { print n+0 }' "$HARNESS_DIR/coordinator.sh")
-    if (( qcount % 2 != 0 )); then
-      echo "❌ coordinator.sh 未转义引号不平衡 (count=$qcount)"
-      echo "   修复: 检查多行字符串中的双引号闭合"
-      ((failed++))
-    fi
-  fi
+  # (f) coordinator.sh 语法已由 bash -n 覆盖。
+  # 旧版曾用全文件双引号奇偶数做阻塞检查；它不理解 heredoc、Python
+  # 三引号和跨行 dispatch 文本，会把合法脚本误判为坏脚本。
 
   # (g) 所有 sprint 状态机合法
   for f in "$SPRINTS_DIR"/*.status.json; do
@@ -124,7 +197,7 @@ do_doctor() {
     local st
     st=$(python3 -c "import json; print(json.load(open('$f')).get('status',''))" 2>/dev/null)
     case "$st" in
-      drafting|active|planning|approved|reviewing|ready_for_review|failed_review|passed|done|failed|eval_pass|cancelled|interrupted|superseded|needs_human_review) ;;
+      drafting|queued|active|planning|approved|reviewing|ready_for_review|failed_review|passed|done|failed|eval_pass|cancelled|interrupted|superseded|needs_human_review|blocked) ;;
       *)
         echo "⚠ $(basename "$f") 非法状态: $st"
         ;;
@@ -141,6 +214,12 @@ do_doctor() {
 }
 
 # ---- 同步启动 Coordinator ----
+
+find_live_coordinator_pids() {
+  ps ax -o pid= -o args= | awk -v script="$HARNESS_DIR/coordinator.sh" '
+    $0 ~ "^[[:space:]]*[0-9]+[[:space:]]+([^[:space:]]*/)?bash[[:space:]]+" script "([[:space:]]|$)" { print $1 }
+  '
+}
 
 start_coordinator_sync() {
   _ensure_bash4 || { err "bash 4+ 不可用，无法启动 coordinator"; return 1; }
@@ -159,6 +238,17 @@ start_coordinator_sync() {
     fi
     # 死进程 → 清锁
     rm -f "$pidfile"
+  fi
+
+  # pidfile 缺失/过期时，先查真实进程，避免 launcher/watchdog 并发启动多个 coordinator。
+  local real_pids real_pid
+  real_pids=$(find_live_coordinator_pids || true)
+  if [[ -n "$real_pids" ]]; then
+    real_pid=$(echo "$real_pids" | head -1)
+    echo "$real_pid" > "$pidfile"
+    ok "Coordinator 已在运行，pidfile 已自愈 (PID: $real_pid)"
+    bash "$HARNESS_DIR/doctor.sh" --summary 2>/dev/null || true
+    return 0
   fi
 
   # 启动 (nohup 隔离 SIGHUP)
@@ -223,6 +313,8 @@ start_harness() {
   local work_dir="${2:-$(pwd)}"
   local skip_doctor="${3:-}"
 
+  cleanup_legacy_sessions
+
   # 启动前自检 (除非 --skip-doctor)
   if [[ "$skip_doctor" != "--skip-doctor" ]]; then
     log "运行启动自检..."
@@ -233,17 +325,18 @@ start_harness() {
   command -v claude &>/dev/null || { err "claude 未安装"; exit 1; }
 
   if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
-    # 检查是否还有 claude 在运行
-    local claude_count
-    claude_count=$(tmux list-panes -t "$SESSION_NAME" -F '#{pane_current_command}' 2>/dev/null | grep -c '^claude$' || true)
-    if [[ "$claude_count" -gt 0 ]]; then
-      ok "Solar Harness 运行中 (${claude_count} 个 Claude 活跃)"
-      tmux attach -t "$SESSION_NAME"
-      return
+    # 安全优先: pane_current_command 经常是 bash/zsh，因为 Claude TUI 是子进程。
+    # 旧逻辑只数 current_command=claude，容易把真实运行中的 session 误判为死
+    # session 并 kill 掉用户现场。已有 session 一律复用/attach，不自动销毁。
+    local panes_count
+    panes_count=$(tmux list-panes -t "$SESSION_NAME" 2>/dev/null | wc -l | tr -d ' ')
+    ok "Solar Harness 已在运行 (${panes_count} panes)，直接接入"
+    if tmux list-windows -t "$SESSION_NAME" -F '#{window_name}' 2>/dev/null | grep -qx "Product Delivery"; then
+      tmux select-window -t "$SESSION_NAME:Product Delivery" 2>/dev/null || true
     fi
-    # 没有 claude 了 → 死 session，自动重建
-    warn "旧 session 存在但 Claude 已退出，自动重建..."
-    tmux kill-session -t "$SESSION_NAME"
+    configure_product_delivery_labels
+    attach_or_print
+    return
   fi
 
   ensure_dirs
@@ -264,6 +357,8 @@ start_harness() {
   # ================================================================
 
   tmux new-session -d -s "$SESSION_NAME" -c "$work_dir"
+  sanitize_tmux_claude_env "$SESSION_NAME"
+  tmux set-environment -t "$SESSION_NAME" SOLAR_CLAUDE_BYPASS 1 2>/dev/null || true
 
   # D3: pane 保留现场 — 进程退出后 pane 不消失 (remain-on-exit)
   tmux set-option -t "$SESSION_NAME" remain-on-exit on
@@ -285,18 +380,24 @@ start_harness() {
   local _esc_harness _esc_work
   _esc_harness=$(printf '%q' "$HARNESS_DIR")
   _esc_work=$(printf '%q' "$work_dir")
+  launch_persona_pane() {
+    local target="$1" persona="$2"
+    local pane_id
+    pane_id=$(tmux display-message -p -t "$target" '#{pane_id}')
+    tmux send-keys -t "$target" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH TMUX_PANE=${pane_id} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" Enter
+  }
   sleep 1
-  tmux send-keys -t "$SESSION_NAME:Product Delivery.0" "bash ${_esc_harness}/pane-launcher.sh pm ${_esc_work}" Enter
+  launch_persona_pane "$SESSION_NAME:Product Delivery.0" "pm"
   sleep 1
-  tmux send-keys -t "$SESSION_NAME:Product Delivery.1" "bash ${_esc_harness}/pane-launcher.sh planner ${_esc_work}" Enter
+  launch_persona_pane "$SESSION_NAME:Product Delivery.1" "planner"
   if [[ "$mode" == "3" ]]; then
     sleep 1
-    tmux send-keys -t "$SESSION_NAME:Product Delivery.2" "bash ${_esc_harness}/pane-launcher.sh builder ${_esc_work}" Enter
+    launch_persona_pane "$SESSION_NAME:Product Delivery.2" "builder"
     sleep 1
-    tmux send-keys -t "$SESSION_NAME:Product Delivery.3" "bash ${_esc_harness}/pane-launcher.sh evaluator ${_esc_work}" Enter
+    launch_persona_pane "$SESSION_NAME:Product Delivery.3" "evaluator"
   else
     sleep 1
-    tmux send-keys -t "$SESSION_NAME:Product Delivery.2" "bash ${_esc_harness}/pane-launcher.sh builder ${_esc_work}" Enter
+    launch_persona_pane "$SESSION_NAME:Product Delivery.2" "builder"
   fi
 
   # 设置活跃 pane 为 PM (非监控)
@@ -311,6 +412,7 @@ start_harness() {
   tmux set-option -t "$SESSION_NAME" pane-active-border-style "fg=#89b4fa"
   tmux set-option -t "$SESSION_NAME" status-right-length 60
   tmux set-option -t "$SESSION_NAME" status-right "#[fg=#89b4fa]Solar Harness #[fg=#a6e3a1]${mode}化身+并行 #[default]%H:%M"
+  configure_product_delivery_labels
 
   # 打印帮助 (attach 前输出到 stdout)
   echo ""
@@ -354,18 +456,25 @@ start_harness() {
   start_coordinator_sync || { err "Coordinator 启动失败，中止"; exit 1; }
   start_watchdog_sync
 
-  tmux attach -t "$SESSION_NAME"
+  attach_or_print
 }
 
 # ---- Status ----
 
 show_status() {
+  cleanup_legacy_sessions
   echo ""
   if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
-    ok "Solar Harness 运行中"
+    ok "Solar Harness Product Delivery 运行中 ($SESSION_NAME)"
     echo ""
     tmux list-windows -t "$SESSION_NAME" 2>/dev/null | sed 's/^/  /'
     echo ""
+    if tmux has-session -t "$LAB_SESSION_NAME" 2>/dev/null; then
+      ok "Solar Harness Parallel Builder Lab 运行中 ($LAB_SESSION_NAME)"
+      echo ""
+      tmux list-windows -t "$LAB_SESSION_NAME" 2>/dev/null | sed 's/^/  /'
+      echo ""
+    fi
     local cnt
     cnt=$(ls "$SPRINTS_DIR"/*.status.json 2>/dev/null | wc -l | tr -d ' ')
     log "Sprints: ${cnt}"
@@ -382,8 +491,14 @@ show_status() {
       fi
     done
   else
-    warn "Solar Harness 未运行"
-    log "启动: $0 [工作目录]"
+    if tmux has-session -t "$LAB_SESSION_NAME" 2>/dev/null; then
+      ok "Solar Harness Parallel Builder Lab 运行中 ($LAB_SESSION_NAME)"
+      echo ""
+      tmux list-windows -t "$LAB_SESSION_NAME" 2>/dev/null | sed 's/^/  /'
+    else
+      warn "Solar Harness 未运行"
+      log "启动: $0 [工作目录]"
+    fi
   fi
   echo ""
 }
@@ -391,6 +506,8 @@ show_status() {
 # ---- Kill ----
 
 kill_harness() {
+  cleanup_legacy_sessions
+  local killed=0
   if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
     log "关闭..."
     # Mark active sprints as interrupted
@@ -405,62 +522,199 @@ if d.get('status') in ('active','reviewing'):
 " 2>/dev/null
     done
     tmux kill-session -t "$SESSION_NAME"
+    killed=1
+  fi
+  if tmux has-session -t "$LAB_SESSION_NAME" 2>/dev/null; then
+    tmux kill-session -t "$LAB_SESSION_NAME"
+    killed=1
+  fi
+  if (( killed == 1 )); then
     ok "已关闭"
   else
     warn "未运行"
   fi
 }
 
-# ---- Extend: 启动第二个四分屏 (Strategy Lab) ----
+pane_process_persona_simple() {
+  local target="$1"
+  local pane_pid
+  pane_pid=$(tmux display-message -p -t "$target" '#{pane_pid}' 2>/dev/null || true)
+  [[ -n "$pane_pid" ]] || return 1
 
-start_extension() {
-  if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
-    err "Harness 未运行，先启动: solar-harness"
-    exit 1
+  local queue="$pane_pid" visited=""
+  while [[ -n "$queue" ]]; do
+    local next_queue=""
+    local pid
+    for pid in $queue; do
+      case " $visited " in *" $pid "*) continue ;; esac
+      visited="$visited $pid"
+
+      local args
+      args=$(ps -p "$pid" -o args= 2>/dev/null || true)
+      if [[ "$args" =~ start-(incarnation|launcher)\.sh[[:space:]]+([A-Za-z0-9_-]+) ]]; then
+        echo "${BASH_REMATCH[2]}"
+        return 0
+      fi
+
+      local children
+      children=$(pgrep -P "$pid" 2>/dev/null || true)
+      [[ -n "$children" ]] && next_queue="$next_queue $children"
+    done
+    queue="$next_queue"
+  done
+  return 1
+}
+
+detect_pane_by_persona_simple() {
+  local session="$1" window="$2" persona="$3" fallback="$4"
+  tmux has-session -t "$session" 2>/dev/null || { echo "$fallback"; return 0; }
+  local idx target proc_persona content
+  while IFS= read -r idx; do
+    [[ -z "$idx" ]] && continue
+    target="${session}:${window}.${idx}"
+    proc_persona=$(pane_process_persona_simple "$target" 2>/dev/null || true)
+    if [[ "$proc_persona" == "$persona" ]]; then
+      echo "$target"
+      return 0
+    fi
+    content=$(tmux capture-pane -t "$target" -p -S -80 2>/dev/null | tail -80 || true)
+    if printf '%s\n' "$content" | grep -qE "Persona:[[:space:]]*${persona}([[:space:]]|$)"; then
+      echo "$target"
+      return 0
+    fi
+  done < <(tmux list-panes -t "${session}:${window}" -F '#{pane_index}' 2>/dev/null || true)
+  echo "$fallback"
+}
+
+write_parallel_lab_state() {
+  local work_dir="$1"
+  local model_matrix="${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,deepseek}"
+  mkdir -p "$HARNESS_DIR/state"
+  {
+    printf "WORK_DIR='%s'\n" "$work_dir"
+    printf "LAB_SESSION='%s'\n" "$LAB_SESSION_NAME"
+    printf "LAB_MODEL_MATRIX='%s'\n" "$model_matrix"
+    printf "UPDATED_AT='%s'\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  } > "$HARNESS_DIR/state/parallel-builder-lab.env"
+}
+
+ensure_parallel_builder_lab() {
+  local work_dir="${1:-$(pwd)}"
+  tmux has-session -t "$LAB_SESSION_NAME" 2>/dev/null || return 0
+  local state_file="$HARNESS_DIR/state/parallel-builder-lab.env"
+  local desired_matrix="${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,deepseek}"
+  local current_matrix=""
+  if [[ -f "$state_file" ]]; then
+    current_matrix=$(grep '^LAB_MODEL_MATRIX=' "$state_file" 2>/dev/null | sed "s/^LAB_MODEL_MATRIX='//;s/'$//" || true)
+  fi
+  local rebuild_for_model_matrix=0
+  if [[ "$current_matrix" != "$desired_matrix" ]]; then
+    rebuild_for_model_matrix=1
+    warn "Parallel Builder Lab 模型矩阵变化: ${current_matrix:-N/A} -> ${desired_matrix}; 将 respawn 四个 builder"
+  fi
+  write_parallel_lab_state "$work_dir"
+
+  tmux rename-window -t "$LAB_SESSION_NAME:0" "Builder Lab" 2>/dev/null || true
+  tmux set-option -t "$LAB_SESSION_NAME" status-right "#[fg=#f9e2af]Solar Builder Lab #[fg=#a6e3a1]3 GLM-5.1 + 1 DeepSeek V4 Pro #[default]%H:%M" 2>/dev/null || true
+  tmux set-environment -t "$LAB_SESSION_NAME" SOLAR_CLAUDE_BYPASS 1 2>/dev/null || true
+  configure_builder_lab_labels
+
+  local pane_count
+  pane_count=$(tmux list-panes -t "$LAB_SESSION_NAME:0" 2>/dev/null | wc -l | tr -d ' ')
+  if [[ "$pane_count" != "4" ]]; then
+    warn "Parallel Builder Lab 需要 4 个 pane，当前为 ${pane_count}；请重建 lab session"
+    return 0
   fi
 
-  # Check if Strategy Lab window already exists
-  if tmux list-windows -t "$SESSION_NAME" -F '#{window_name}' 2>/dev/null | grep -q "Strategy Lab"; then
-    ok "Window 1 (Strategy Lab) 已存在"
-    tmux select-window -t "$SESSION_NAME:Strategy Lab"
-    tmux attach -t "$SESSION_NAME"
+  local _esc_harness _esc_work i target pane_id slot content
+  _esc_harness=$(printf '%q' "$HARNESS_DIR")
+  _esc_work=$(printf '%q' "$work_dir")
+  for i in 0 1 2 3; do
+    target="$LAB_SESSION_NAME:0.$i"
+    slot="lab-builder-$((i + 1))"
+    content=$(tmux capture-pane -t "$target" -p -S -80 2>/dev/null | tail -80 || true)
+    if (( rebuild_for_model_matrix == 0 )) && printf '%s\n' "$content" | grep -qE "Persona:[[:space:]]*lab-builder([[:space:]]|$)"; then
+      continue
+    fi
+    pane_id=$(tmux display-message -p -t "$target" '#{pane_id}')
+    tmux respawn-pane -k -t "$target" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH TMUX_PANE=${pane_id} SOLAR_BUILDER_SLOT=${slot} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh lab-builder ${_esc_work}"
+  done
+  configure_builder_lab_labels
+}
+
+# ---- Extend: 启动独立第二四分屏 (Parallel Builder Lab) ----
+
+start_extension() {
+  local work_dir="${1:-$(pwd)}"
+
+  cleanup_legacy_sessions
+  write_parallel_lab_state "$work_dir"
+
+  # 第二屏必须是独立 session。不要做成同一 session 的 window，否则两个终端
+  # attach 同一 session 时会互相切 window，看起来像镜像。
+  if tmux has-session -t "$LAB_SESSION_NAME" 2>/dev/null; then
+    ensure_parallel_builder_lab "$work_dir"
+    ok "Parallel Builder Lab 已在独立 session 运行 ($LAB_SESSION_NAME)"
+    attach_or_print "$LAB_SESSION_NAME"
     return
   fi
 
-  local work_dir="${1:-$(pwd)}"
+  log "启动独立 Parallel Builder Lab 四分屏..."
+  log "session: $LAB_SESSION_NAME"
+  log "工作目录: ${work_dir}"
 
-  # Create window 1
-  tmux new-window -t "$SESSION_NAME" -n "Strategy Lab" -c "$work_dir"
+  tmux new-session -d -s "$LAB_SESSION_NAME" -n "Builder Lab" -c "$work_dir"
+  sanitize_tmux_claude_env "$LAB_SESSION_NAME"
+  tmux set-environment -t "$LAB_SESSION_NAME" SOLAR_CLAUDE_BYPASS 1 2>/dev/null || true
+  tmux set-option -t "$LAB_SESSION_NAME" remain-on-exit on
 
   # Split into 4 panes (same layout as window 0)
-  tmux split-window -v -t "$SESSION_NAME:Strategy Lab" -c "$work_dir"
-  tmux split-window -h -t "$SESSION_NAME:Strategy Lab.0" -c "$work_dir"
-  tmux split-window -h -t "$SESSION_NAME:Strategy Lab.2" -c "$work_dir"
+  tmux split-window -v -t "$LAB_SESSION_NAME:Builder Lab" -c "$work_dir"
+  tmux split-window -h -t "$LAB_SESSION_NAME:Builder Lab.0" -c "$work_dir"
+  tmux split-window -h -t "$LAB_SESSION_NAME:Builder Lab.2" -c "$work_dir"
 
-  # Launch personas
+  # Launch four isolated builders. SOLAR_BUILDER_SLOT gives each pane its own
+  # git worktree under .worktrees/, so parallel work does not collide.
   local _esc_harness _esc_work
   _esc_harness=$(printf '%q' "$HARNESS_DIR")
   _esc_work=$(printf '%q' "$work_dir")
+  launch_persona_pane() {
+    local target="$1" persona="$2" slot="$3"
+    local pane_id
+    pane_id=$(tmux display-message -p -t "$target" '#{pane_id}')
+    tmux send-keys -t "$target" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH TMUX_PANE=${pane_id} SOLAR_BUILDER_SLOT=${slot} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" Enter
+  }
   sleep 1
-  tmux send-keys -t "$SESSION_NAME:Strategy Lab.0" "bash ${_esc_harness}/pane-launcher.sh architect ${_esc_work}" Enter
+  launch_persona_pane "$LAB_SESSION_NAME:Builder Lab.0" "lab-builder" "lab-builder-1"
   sleep 1
-  tmux send-keys -t "$SESSION_NAME:Strategy Lab.1" "bash ${_esc_harness}/pane-launcher.sh lab-builder ${_esc_work}" Enter
+  launch_persona_pane "$LAB_SESSION_NAME:Builder Lab.1" "lab-builder" "lab-builder-2"
   sleep 1
-  tmux send-keys -t "$SESSION_NAME:Strategy Lab.2" "bash ${_esc_harness}/pane-launcher.sh lab-evaluator ${_esc_work}" Enter
+  launch_persona_pane "$LAB_SESSION_NAME:Builder Lab.2" "lab-builder" "lab-builder-3"
   sleep 1
-  tmux send-keys -t "$SESSION_NAME:Strategy Lab.3" "bash ${_esc_harness}/pane-launcher.sh observer ${_esc_work}" Enter
+  launch_persona_pane "$LAB_SESSION_NAME:Builder Lab.3" "lab-builder" "lab-builder-4"
 
-  ok "Strategy Lab 四分屏已启动"
+  tmux select-pane -t "$LAB_SESSION_NAME:Builder Lab.0"
+  tmux set-option -t "$LAB_SESSION_NAME" mouse on
+  tmux set-option -t "$LAB_SESSION_NAME" status-style "bg=#1a1a2e,fg=#cdd6f4"
+  tmux set-option -t "$LAB_SESSION_NAME" pane-border-style "fg=#45475a"
+  tmux set-option -t "$LAB_SESSION_NAME" pane-active-border-style "fg=#f9e2af"
+  tmux set-option -t "$LAB_SESSION_NAME" status-right-length 60
+  tmux set-option -t "$LAB_SESSION_NAME" status-right "#[fg=#f9e2af]Solar Builder Lab #[fg=#a6e3a1]3 GLM-5.1 + 1 DeepSeek V4 Pro #[default]%H:%M"
+  configure_builder_lab_labels
+
+  ok "Parallel Builder Lab 四分屏已启动"
   echo ""
   echo "  ┌──────────────┬──────────────┐"
-  echo "  │   架构师      │  实验建设者   │"
-  echo "  │   architect   │  lab-builder │"
+  echo "  │  Builder 1   │  Builder 2   │"
+  echo "  │ GLM-5.1      │ GLM-5.1      │"
   echo "  ├──────────────┼──────────────┤"
-  echo "  │  实验审判官   │   观察者      │"
-  echo "  │ lab-evaluator │   observer   │"
+  echo "  │  Builder 3   │  Builder 4   │"
+  echo "  │ GLM-5.1      │ DeepSeek V4  │"
   echo "  └──────────────┴──────────────┘"
   echo ""
-  tmux attach -t "$SESSION_NAME"
+  echo "  重新接入:  tmux attach -t $LAB_SESSION_NAME"
+  echo ""
+  attach_or_print "$LAB_SESSION_NAME"
 }
 
 # ---- New Sprint ----
@@ -472,8 +726,11 @@ new_sprint() {
   ensure_dirs
 
   local template="$HARNESS_DIR/templates/contract-template-v2.md"
-  local title
+  local title summary
   title=$(echo "$req" | head -1 | cut -c1-60)
+  summary=$(echo "$req" | tr '\n' ' ' | sed 's/[[:space:]]\\{1,\\}/ /g' | cut -c1-180)
+  [[ -z "$title" ]] && title="Untitled Sprint"
+  [[ -z "$summary" ]] && summary="$title"
   local created_at
   created_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -485,16 +742,21 @@ new_sprint() {
       -e "s|{{project_dir}}|$(pwd)|g" \
       -e "s|{{name}}|${title}|g" \
       -e "s|{{description}}|${req}|g" \
+      -e "s|{{summary}}|${summary}|g" \
       -e "s|{{triggers}}|auto|g" \
       -e "s|{{requirements}}|${req}|g" \
       "$template" > "${SPRINTS_DIR}/${sid}.contract.md"
   else
     # Fallback: inline template (backward compat)
     cat > "${SPRINTS_DIR}/${sid}.contract.md" << EOF
-# Sprint Contract — ${sid}
+# Sprint Contract — ${title} (${sid})
 Created: ${created_at}
 Status: drafting
 Project: $(pwd)
+
+## Summary
+
+${summary}
 
 ## Requirements
 
@@ -534,11 +796,13 @@ EOF
 {
   "id": "${sid}",
   "title": "${title}",
+  "summary": "${summary}",
   "status": "drafting",
   "phase": "spec",
+  "handoff_to": "pm",
   "created_at": "${created_at}",
   "round": 0,
-  "history": [{"ts": "${created_at}", "event": "contract_created", "by": "user"}]
+  "history": [{"ts": "${created_at}", "event": "pm_intake_created", "by": "user"}]
 }
 EOF2
 
@@ -549,7 +813,7 @@ EOF2
   ok "Sprint created: ${sid}"
   log "Contract: ${SPRINTS_DIR}/${sid}.contract.md"
   log "Phase: spec"
-  log "Next: Planner expands Done criteria"
+  log "Next: PM researches request and writes PRD, then Planner/architect designs plan"
 }
 
 # ---- Wake: 从崩溃恢复 Sprint ----
@@ -629,6 +893,8 @@ wake_sprint() {
 
     # 重建 4-pane 布局 (后台)
     tmux new-session -d -s "$SESSION_NAME" -c "$work_dir"
+    sanitize_tmux_claude_env "$SESSION_NAME"
+    tmux set-environment -t "$SESSION_NAME" SOLAR_CLAUDE_BYPASS 1 2>/dev/null || true
     tmux split-window -v -t "$SESSION_NAME" -c "$work_dir"
     tmux split-window -h -t "$SESSION_NAME:0.0" -c "$work_dir"
     tmux split-window -h -t "$SESSION_NAME:0.2" -c "$work_dir"
@@ -639,14 +905,15 @@ wake_sprint() {
     local _esc_h _esc_w
     _esc_h=$(printf '%q' "$HARNESS_DIR")
     _esc_w=$(printf '%q' "$work_dir")
-    tmux send-keys -t "$SESSION_NAME:0.0" "bash ${_esc_h}/pane-launcher.sh planner ${_esc_w}" Enter
+    tmux send-keys -t "$SESSION_NAME:0.0" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH SOLAR_CLAUDE_BYPASS=1 bash ${_esc_h}/pane-launcher.sh pm ${_esc_w}" Enter
     sleep 1
-    tmux send-keys -t "$SESSION_NAME:0.1" "bash ${_esc_h}/pane-launcher.sh builder ${_esc_w}" Enter
+    tmux send-keys -t "$SESSION_NAME:0.1" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH SOLAR_CLAUDE_BYPASS=1 bash ${_esc_h}/pane-launcher.sh planner ${_esc_w}" Enter
     sleep 1
-    tmux send-keys -t "$SESSION_NAME:0.2" "bash ${_esc_h}/pane-launcher.sh evaluator ${_esc_w}" Enter
+    tmux send-keys -t "$SESSION_NAME:0.2" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH SOLAR_CLAUDE_BYPASS=1 bash ${_esc_h}/pane-launcher.sh builder ${_esc_w}" Enter
     sleep 1
-    tmux send-keys -t "$SESSION_NAME:0.3" "bash ${_esc_h}/pane-launcher.sh second-builder ${_esc_w}" Enter
+    tmux send-keys -t "$SESSION_NAME:0.3" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH SOLAR_CLAUDE_BYPASS=1 bash ${_esc_h}/pane-launcher.sh evaluator ${_esc_w}" Enter
     sleep 1
+    configure_product_delivery_labels
 
     ok "tmux session 已重建"
   fi
@@ -683,34 +950,53 @@ else:
   fi
 
   # Step 3: 从最后状态推导派发目标
-  local PANE_PLANNER="$SESSION_NAME:0.0"
-  local PANE_BUILDER="$SESSION_NAME:0.1"
-  local PANE_EVALUATOR="$SESSION_NAME:0.2"
+  local PANE_PM="$SESSION_NAME:0.0"
+  local PANE_PLANNER="$SESSION_NAME:0.1"
+  local PANE_BUILDER="$SESSION_NAME:0.2"
+  local PANE_EVALUATOR="$SESSION_NAME:0.3"
+  local LIVE_PM LIVE_PLANNER LIVE_BUILDER LIVE_EVALUATOR
+  LIVE_PM=$(detect_pane_by_persona_simple "$SESSION_NAME" 0 "pm" "$PANE_PM")
+  LIVE_PLANNER=$(detect_pane_by_persona_simple "$SESSION_NAME" 0 "planner" "$PANE_PLANNER")
+  LIVE_BUILDER=$(detect_pane_by_persona_simple "$SESSION_NAME" 0 "builder" "$PANE_BUILDER")
+  LIVE_EVALUATOR=$(detect_pane_by_persona_simple "$SESSION_NAME" 0 "evaluator" "$PANE_EVALUATOR")
+  if [[ "$LIVE_PM" == "$PANE_PM" ]]; then
+    local pm_actual
+    pm_actual=$(pane_process_persona_simple "$LIVE_PM" 2>/dev/null || true)
+    [[ "$pm_actual" == "pm" ]] || LIVE_PM="$LIVE_PLANNER"
+  fi
   local target_pane="" target_task=""
+  local phase handoff_to
+  phase=$(python3 -c "import json; print(json.load(open('$sf')).get('phase',''))" 2>/dev/null || true)
+  handoff_to=$(python3 -c "import json; print(json.load(open('$sf')).get('handoff_to',''))" 2>/dev/null || true)
 
   case "$st" in
     drafting)
-      target_pane="$PANE_PLANNER"
-      target_task="Sprint ${sid} 恢复：请在规划者窗口继续完成 Done 定义。"
+      if [[ "$phase" == "prd_ready" || "$handoff_to" == "planner" ]]; then
+        target_pane="$LIVE_PLANNER"
+        target_task="Sprint ${sid} 恢复：PRD 已完成，请读取 PRD 和 contract，写 design.md 与 plan.md，完成后将 status=active、phase=planning_complete、handoff_to=builder_main。"
+      else
+        target_pane="$LIVE_PM"
+        target_task="Sprint ${sid} 恢复：请在产品经理窗口研究用户需求并产出 PRD。"
+      fi
       ;;
     active)
-      target_pane="$PANE_BUILDER"
+      target_pane="$LIVE_BUILDER"
       target_task="Sprint ${sid} 恢复：请读取合约并继续实现。cat ~/.solar/harness/sprints/${sid}.contract.md"
       ;;
     planning)
-      target_pane="$PANE_EVALUATOR"
+      target_pane="$LIVE_EVALUATOR"
       target_task="Sprint ${sid} 恢复：建设者已提交计划，请审批。cat ~/.solar/harness/sprints/${sid}.plan.md"
       ;;
     approved)
-      target_pane="$PANE_BUILDER"
+      target_pane="$LIVE_BUILDER"
       target_task="Sprint ${sid} 恢复：计划已批准，请继续实现。cat ~/.solar/harness/sprints/${sid}.plan.md"
       ;;
     reviewing|ready_for_review)
-      target_pane="$PANE_EVALUATOR"
+      target_pane="$LIVE_EVALUATOR"
       target_task="Sprint ${sid} 恢复：建设者已提交，请评审。cat ~/.solar/harness/sprints/${sid}.handoff.md"
       ;;
     failed_review)
-      target_pane="$PANE_BUILDER"
+      target_pane="$LIVE_BUILDER"
       target_task="Sprint ${sid} 恢复：评审未通过，请修复。cat ~/.solar/harness/sprints/${sid}.eval.md"
       ;;
     interrupted)
@@ -722,12 +1008,12 @@ d['status'] = 'reviewing'
 d['updated_at'] = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
 json.dump(d, open('$sf', 'w'), indent = 2)
 " 2>/dev/null
-      target_pane="$PANE_EVALUATOR"
+      target_pane="$LIVE_EVALUATOR"
       target_task="Sprint ${sid} 恢复 (从 interrupted)：请评审。cat ~/.solar/harness/sprints/${sid}.handoff.md"
       ;;
     *)
       warn "未知状态: ${st}，派发给建设者"
-      target_pane="$PANE_BUILDER"
+      target_pane="$LIVE_BUILDER"
       target_task="Sprint ${sid} 恢复：当前状态 ${st}，请检查并继续。"
       ;;
   esac
@@ -740,7 +1026,16 @@ ${target_task}
 DISPATCH_EOF
 
   local short_cmd="读取并执行指令文件 $SPRINTS_DIR/${sid}.dispatch.md 中的所有步骤"
-  tmux send-keys -t "$target_pane" "$short_cmd" Enter 2>/dev/null
+  # Claude TUI can leave stale input in the prompt after interrupts; clear the
+  # current input line and send Enter twice so wake does not stop at a queued
+  # prompt requiring a manual second Enter.
+  tmux send-keys -t "$target_pane" C-u 2>/dev/null || true
+  sleep 0.2
+  tmux send-keys -t "$target_pane" "$short_cmd" 2>/dev/null || true
+  sleep 0.5
+  tmux send-keys -t "$target_pane" Enter 2>/dev/null || true
+  sleep 0.3
+  tmux send-keys -t "$target_pane" Enter 2>/dev/null || true
 
   # Step 5: 记录 wake 事件
   bash "$HARNESS_DIR/session.sh" append "$sid" "{\"event\":\"waked\",\"by\":\"wake\",\"data\":{\"from_status\":\"${st}\",\"target_pane\":\"${target_pane}\"}}" 2>/dev/null || true
@@ -806,6 +1101,25 @@ os.rename(tmp,sf)
 
   bash "$HARNESS_DIR/session.sh" append "$sid" "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event\":\"handoff_submitted\",\"by\":\"builder\",\"sid\":\"$sid\"}" 2>/dev/null || true
   type ledger_emit &>/dev/null && ledger_emit "produced" "$sid.handoff.md" "{\"by\":\"builder\"}" 2>/dev/null || true
+
+  # sprint-20260508-coordinator-control-plane-v2 S3: write ack file so ack-watcher can confirm
+  local _did_file="$SPRINTS_DIR/${sid}.current-dispatch-id"
+  if [[ -f "$_did_file" ]]; then
+    local _did
+    _did=$(cat "$_did_file" 2>/dev/null || true)
+    if [[ -n "$_did" ]]; then
+      local _ack_file="$SPRINTS_DIR/${sid}.ack-${_did}.json"
+      python3 -c "
+import json, datetime, os, sys
+sid=sys.argv[1]; did=sys.argv[2]; path=sys.argv[3]
+now=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+ack={'dispatch_id':did,'sid':sid,'role':'builder','status':'success',
+     'exit_code':0,'message':'handoff submitted','artifacts':['handoff.md'],'wrote_at':now}
+with open(path,'w') as f: json.dump(ack,f,indent=2)
+" "$sid" "$_did" "$_ack_file" 2>/dev/null || true
+    fi
+  fi
+
   ok "handoff-submit: $sid → reviewing"
 }
 
@@ -1224,6 +1538,111 @@ print(f"未找到 sid={sid} 的 telemetry 记录")
 PY
 }
 
+do_main_status() {
+  printf '%s\n' "Solar Harness Main Status"
+  printf '%s\n' "runtime != assignment != artifact: pane output alone is not proof of progress."
+  printf '%s\n' ""
+  printf '┌────────────┬────────────┬──────────────┬────────────────────────────┬─────────────────────┬────────────────────────────┐\n'
+  printf '│ Pane       │ Role       │ Runtime      │ Assignment                 │ Artifact            │ Title                      │\n'
+  printf '├────────────┼────────────┼──────────────┼────────────────────────────┼─────────────────────┼────────────────────────────┤\n'
+
+  local i pane role title tail runtime assignment sid artifact file
+  for i in 0 1 2 3; do
+    pane="$SESSION_NAME:0.$i"
+    case "$i" in
+      0) role="PM" ;;
+      1) role="Planner" ;;
+      2) role="Builder" ;;
+      3) role="Evaluator" ;;
+    esac
+    title="N/A"; runtime="missing"; assignment="N/A"; artifact="N/A"
+
+    if tmux display-message -p -t "$pane" '#{pane_id}' >/dev/null 2>&1; then
+      title=$(tmux display-message -p -t "$pane" '#{pane_title}' 2>/dev/null || echo "N/A")
+      tail=$(tmux capture-pane -t "$pane" -p -S -8 2>/dev/null | tail -8 || true)
+      if printf '%s\n' "$tail" | grep -qiE 'Generating|thinking|Reading|Bash|Write|Edit|Inferring|Hatching|Whirlpooling|Enchanting|Meandering|Philosophising'; then
+        runtime="active"
+      else
+        runtime="idle"
+      fi
+    fi
+
+    if [[ -f "$HARNESS_DIR/.pane-assignments" ]]; then
+      assignment=$(awk -F'[=:]' -v p="$pane" '$1":"$2 == p {print $3}' "$HARNESS_DIR/.pane-assignments" 2>/dev/null | tail -1)
+      [[ -z "$assignment" ]] && assignment="N/A"
+    fi
+
+    sid="$assignment"
+    if [[ "$sid" != "N/A" ]]; then
+      case "$role" in
+        PM)
+          file="$SPRINTS_DIR/${sid}.prd.md"
+          [[ -f "$file" ]] || file="$SPRINTS_DIR/${sid}.product-brief.md"
+          ;;
+        Planner) file="$SPRINTS_DIR/${sid}.plan.md" ;;
+        Builder) file="$SPRINTS_DIR/${sid}.handoff.md" ;;
+        Evaluator) file="$SPRINTS_DIR/${sid}.eval.md" ;;
+      esac
+      if [[ -f "$file" ]]; then
+        artifact=$(stat -f '%Sm' -t '%Y-%m-%d %H:%M:%S' "$file" 2>/dev/null || echo "present")
+      else
+        artifact="missing"
+      fi
+    fi
+
+    printf '│ %-10s │ %-10s │ %-12s │ %-26s │ %-19s │ %-26s │\n' \
+      "pane$i" "$role" "$runtime" "$(printf '%.26s' "$assignment")" "$(printf '%.19s' "$artifact")" "$(printf '%.26s' "$title")"
+  done
+
+  printf '└────────────┴────────────┴──────────────┴────────────────────────────┴─────────────────────┴────────────────────────────┘\n'
+}
+
+do_lab_status() {
+  local sid="${1:-}"
+  local lab_dir="$SPRINTS_DIR"
+  [[ -n "$sid" ]] && lab_dir="$SPRINTS_DIR/${sid#sprint-20260507-obsidian-wiki}"
+  # Current Obsidian Wiki lab uses a fixed sidecar directory. Keep this generic
+  # enough for operators while making artifact-vs-runtime status explicit.
+  if [[ -d "$SPRINTS_DIR/obsidian-wiki-lab" ]]; then
+    lab_dir="$SPRINTS_DIR/obsidian-wiki-lab"
+  fi
+
+  printf '%s\n' "Solar Harness Lab Status"
+  printf '%s\n' "artifact != runtime: handoff files prove delivery; pane state proves current activity."
+  printf '%s\n' ""
+  printf '┌───────────────┬──────────────┬──────────────┬─────────────────────┬────────────────────────────┐\n'
+  printf '│ Pane          │ Runtime      │ Artifact     │ Latest Handoff      │ Title                      │\n'
+  printf '├───────────────┼──────────────┼──────────────┼─────────────────────┼────────────────────────────┤\n'
+
+  local i pane title tail runtime artifact latest latest_ts
+  for i in 0 1 2 3; do
+    pane="$LAB_SESSION_NAME:0.$i"
+    title="N/A"
+    runtime="missing"
+    artifact="missing"
+    latest_ts="N/A"
+    if tmux display-message -p -t "$pane" '#{pane_id}' >/dev/null 2>&1; then
+      title=$(tmux display-message -p -t "$pane" '#{pane_title}' 2>/dev/null || echo "N/A")
+      tail=$(tmux capture-pane -t "$pane" -p -S -8 2>/dev/null | tail -8 || true)
+      if printf '%s\n' "$tail" | grep -qiE 'Generating|thinking|Reading|Bash|Write|Edit|Inferring|Hatching|Whirlpooling|Enchanting|Meandering|Philosophising'; then
+        runtime="active"
+      else
+        runtime="idle"
+      fi
+    fi
+
+    latest=$(ls -t "$lab_dir"/lab-builder-$((i+1))*handoff.md 2>/dev/null | head -1 || true)
+    if [[ -n "$latest" && -f "$latest" ]]; then
+      artifact="present"
+      latest_ts=$(stat -f '%Sm' -t '%Y-%m-%d %H:%M:%S' "$latest" 2>/dev/null || echo "N/A")
+    fi
+    printf '│ %-13s │ %-12s │ %-12s │ %-19s │ %-26s │\n' \
+      "lab-builder-$((i+1))" "$runtime" "$artifact" "$latest_ts" "$(printf '%.26s' "$title")"
+  done
+
+  printf '└───────────────┴──────────────┴──────────────┴─────────────────────┴────────────────────────────┘\n'
+}
+
 # ---- Main ----
 
 case "${1:-start}" in
@@ -1231,18 +1650,19 @@ case "${1:-start}" in
   2)         start_harness 2 "${2:-$(pwd)}" "${3:-}" ;;
   3)         start_harness 3 "${2:-$(pwd)}" "${3:-}" ;;
   status)    show_status ;;
+  main-status) do_main_status ;;
+  lab-status) do_lab_status "${2:-}" ;;
   doctor)    bash "$HARNESS_DIR/doctor.sh" "${2:-}" ;;
   --skip-doctor) start_harness 3 "${2:-$(pwd)}" "--skip-doctor" ;;
   coord-status)
     # Sprint 20260420-082442 D2: 协调器状态诊断
-    local pidfile="$HARNESS_DIR/.coordinator.pid"
-    local running=false stale_lock=false pid=0 uptime_s=0
+    pidfile="$HARNESS_DIR/.coordinator.pid"
+    running=false; stale_lock=false; pid=0; uptime_s=0
     if [[ -f "$pidfile" ]]; then
       pid=$(cat "$pidfile" 2>/dev/null)
       if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
         running=true
         # 计算运行时间
-        local start_ts
         start_ts=$(ps -p "$pid" -o lstart= 2>/dev/null)
         if [[ -n "$start_ts" ]]; then
           uptime_s=$(( $(date +%s) - $(date -j -f "%a %b %d %H:%M:%S %Y" "$start_ts" +%s 2>/dev/null || echo $(date +%s)) ))
@@ -1272,7 +1692,11 @@ print(json.dumps({
     new_sprint "$2"
     ;;
   attach)
-    tmux attach -t "$SESSION_NAME" 2>/dev/null || err "未运行"
+    if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+      attach_or_print
+    else
+      err "未运行"
+    fi
     ;;
   monitor)
     if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
@@ -1320,6 +1744,327 @@ print(json.dumps({
       *) err "用法: $0 webhook [start|stop|status]" ;;
     esac
     ;;
+  status-server)
+    _SS_PID="$HARNESS_DIR/run/status-server.pid"
+    _SS_LOG="$HARNESS_DIR/run/status-server.log"
+    _SS_PORT_FILE="$HARNESS_DIR/run/status-server.port"
+    _SS_TMUX_SESSION="solar-harness-status-server"
+    mkdir -p "$HARNESS_DIR/run"
+    case "${2:-start}" in
+      start)
+        if tmux has-session -t "$_SS_TMUX_SESSION" 2>/dev/null; then
+          ok "Status server 已在运行 (tmux: $_SS_TMUX_SESSION, port: $(cat "$_SS_PORT_FILE" 2>/dev/null || echo '?'))"
+        elif [[ -f "$_SS_PID" ]] && kill -0 "$(cat "$_SS_PID")" 2>/dev/null; then
+          ok "Status server 已在运行 (PID: $(cat "$_SS_PID"), port: $(cat "$_SS_PORT_FILE" 2>/dev/null || echo '?'))"
+        else
+          rm -f "$_SS_PID" "$_SS_PORT_FILE"
+          if command -v tmux >/dev/null 2>&1; then
+            tmux new-session -d -s "$_SS_TMUX_SESSION" \
+              "cd '$HARNESS_DIR' && exec python3 '$HARNESS_DIR/lib/symphony/status-server.py' >> '$_SS_LOG' 2>&1"
+            echo "tmux:${_SS_TMUX_SESSION}" > "$_SS_PID"
+          else
+            nohup python3 "$HARNESS_DIR/lib/symphony/status-server.py" >> "$_SS_LOG" 2>&1 &
+            echo $! > "$_SS_PID"
+          fi
+          sleep 0.5
+          _port=$(cat "$_SS_PORT_FILE" 2>/dev/null || echo "8765")
+          ok "Status server 启动 (port: $_port)"
+          log "Dashboard: http://127.0.0.1:$_port/"
+          log "日志: $_SS_LOG"
+        fi
+        ;;
+      stop)
+        if tmux has-session -t "$_SS_TMUX_SESSION" 2>/dev/null; then
+          tmux kill-session -t "$_SS_TMUX_SESSION" 2>/dev/null || true
+          rm -f "$_SS_PID" "$_SS_PORT_FILE"
+          ok "Status server 已停止"
+        elif [[ -f "$_SS_PID" ]]; then
+          _pid_val=$(cat "$_SS_PID" 2>/dev/null || true)
+          if [[ "$_pid_val" =~ ^[0-9]+$ ]]; then
+            kill "$_pid_val" 2>/dev/null || true
+          fi
+          rm -f "$_SS_PID" "$_SS_PORT_FILE"
+          ok "Status server 已停止"
+        else
+          warn "Status server 未运行"
+        fi
+        ;;
+      restart)
+        "$0" status-server stop 2>/dev/null || true
+        sleep 0.3
+        "$0" status-server start
+        ;;
+      status)
+        if tmux has-session -t "$_SS_TMUX_SESSION" 2>/dev/null; then
+          _port=$(cat "$_SS_PORT_FILE" 2>/dev/null || echo "8765")
+          ok "运行中 (tmux: $_SS_TMUX_SESSION, port: $_port)"
+          curl -s "http://127.0.0.1:$_port/healthz" 2>/dev/null && echo || true
+        elif [[ -f "$_SS_PID" ]] && [[ "$(cat "$_SS_PID" 2>/dev/null)" =~ ^[0-9]+$ ]] && kill -0 "$(cat "$_SS_PID")" 2>/dev/null; then
+          _port=$(cat "$_SS_PORT_FILE" 2>/dev/null || echo "8765")
+          ok "运行中 (PID: $(cat "$_SS_PID"), port: $_port)"
+          curl -s "http://127.0.0.1:$_port/healthz" 2>/dev/null && echo || true
+        else
+          warn "Status server 未运行"
+        fi
+        ;;
+      *) err "用法: $0 status-server [start|stop|restart|status]" ;;
+    esac
+    ;;
+  mermaid)
+    _MMD_OPEN=0
+    _MMD_FILE="${2:-}"
+    if [[ "${_MMD_FILE:-}" == "--open" ]]; then
+      _MMD_OPEN=1
+      _MMD_FILE="${3:-}"
+    fi
+    if [[ "${3:-}" == "--open" ]]; then
+      _MMD_OPEN=1
+    fi
+    "$0" status-server start >/dev/null 2>&1 || true
+    _MMD_PORT=$(cat "$HARNESS_DIR/run/status-server.port" 2>/dev/null || echo "8765")
+    if [[ -n "${_MMD_FILE:-}" ]]; then
+      _MMD_URL_PATH=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$_MMD_FILE")
+      _MMD_URL="http://127.0.0.1:${_MMD_PORT}/mermaid/view?file=${_MMD_URL_PATH}"
+    else
+      _MMD_URL="http://127.0.0.1:${_MMD_PORT}/mermaid"
+    fi
+    ok "Mermaid Viewer: $_MMD_URL"
+    if [[ "$_MMD_OPEN" == "1" ]]; then
+      open "$_MMD_URL" >/dev/null 2>&1 || true
+    fi
+    ;;
+  integrations)
+    _integrations_probe="$HARNESS_DIR/lib/external-integrations-health.py"
+    [[ -f "$_integrations_probe" ]] || { err "external integrations probe not found: $_integrations_probe"; exit 1; }
+    case "${2:-status}" in
+      status|health)
+        shift 2 || true
+        python3 "$_integrations_probe" "$@"
+        ;;
+      *)
+        err "用法: $0 integrations [status|health] [--json]"
+        exit 1
+        ;;
+    esac
+    ;;
+  everything-claude-code|ecc)
+    shift
+    _ecc_adapter="$HARNESS_DIR/lib/everything_claude_code_adapter.py"
+    [[ -f "$_ecc_adapter" ]] || { err "everything claude code adapter not found: $_ecc_adapter"; exit 1; }
+    case "${1:-doctor}" in
+      doctor|inventory|report)
+        python3 "$_ecc_adapter" "$@"
+        ;;
+      install)
+        shift
+        case "${1:-}" in
+          --dry-run|dry-run)
+            shift || true
+            python3 "$_ecc_adapter" install-dry-run "$@"
+            ;;
+          *)
+            err "用法: $0 everything-claude-code install --dry-run [--json]"
+            exit 1
+            ;;
+        esac
+        ;;
+      sync)
+        shift
+        _al=""
+        _dr=""
+        while [[ $# -gt 0 ]]; do
+          case "$1" in
+            --allowlist) _al="$2"; shift 2 ;;
+            --allowlist=*) _al="${1#--allowlist=}"; shift ;;
+            --dry-run) _dr="--dry-run"; shift ;;
+            --json) set -- "--json" "$@"; break ;;
+            *) shift ;;
+          esac
+        done
+        [[ -n "$_al" ]] || { err "用法: $0 everything-claude-code sync --allowlist <path> [--dry-run] [--json]"; exit 1; }
+        python3 "$_ecc_adapter" sync-allowlisted --allowlist "$_al" $_dr "$@"
+        ;;
+      rollback)
+        shift
+        python3 "$_ecc_adapter" rollback "$@"
+        ;;
+      help|--help|-h)
+        echo "用法: $0 everything-claude-code [doctor|inventory|report|install --dry-run|sync --allowlist <path>|rollback] [--json]"
+        ;;
+      *)
+        err "用法: $0 everything-claude-code [doctor|inventory|report|install --dry-run|sync --allowlist <path>|rollback] [--json]"
+        exit 1
+        ;;
+    esac
+    ;;
+  notes)
+    shift
+    _notes_adapter="$HARNESS_DIR/lib/apple_notes_ingest.py"
+    [[ -f "$_notes_adapter" ]] || { err "apple notes adapter not found: $_notes_adapter"; exit 1; }
+    case "${1:-doctor}" in
+      doctor)
+        shift; python3 "$_notes_adapter" doctor --json "$@" ;;
+      scan)
+        shift; python3 "$_notes_adapter" scan --json "$@" ;;
+      status)
+        shift; python3 "$_notes_adapter" status --json "$@" ;;
+      install-scheduler)
+        shift; python3 "$_notes_adapter" install-scheduler --json "$@" ;;
+      uninstall-scheduler)
+        shift; python3 "$_notes_adapter" uninstall-scheduler --json "$@" ;;
+      *)
+        err "用法: $0 notes [doctor|scan|status|install-scheduler|uninstall-scheduler] [--dry-run] [--force-dispatch] [--interval N] [--json]"
+        exit 1 ;;
+    esac
+    ;;
+  data-plane)
+    shift
+    _dp_audit="$HARNESS_DIR/lib/data_plane_audit.py"
+    [[ -f "$_dp_audit" ]] || { err "data plane audit script not found: $_dp_audit"; exit 1; }
+    case "${1:-audit}" in
+      audit)        shift; python3 "$_dp_audit" audit "$@" ;;
+      repair-state) shift; python3 "$_dp_audit" repair-state "$@" ;;
+      *) err "用法: solar-harness data-plane <audit|repair-state> [--json] [--dry-run] [--verbose]"; exit 1 ;;
+    esac
+    ;;
+  skills)
+    shift
+    _skills_py="$HARNESS_DIR/lib/solar_skills.py"
+    [[ -f "$_skills_py" ]] || { err "solar_skills.py not found: $_skills_py"; exit 1; }
+    case "${1:-inventory}" in
+      inventory)     shift; python3 "$_skills_py" inventory "$@" ;;
+      doctor)        shift; python3 "$_skills_py" doctor "$@" ;;
+      pane-status)   shift; python3 "$_skills_py" pane-status "$@" ;;
+      inject)        shift; python3 "$_skills_py" inject "$@" ;;
+      native-extract) shift; python3 "$_skills_py" native-extract "$@" ;;
+      *) err "用法: solar-harness skills <inventory|doctor|pane-status|inject|native-extract> [--json]"; exit 1 ;;
+    esac
+    ;;
+  graph)
+    shift
+    _graph_py="$HARNESS_DIR/lib/harness_graph.py"
+    [[ -f "$_graph_py" ]] || { err "harness_graph.py not found: $_graph_py"; exit 1; }
+    python3 "$_graph_py" "$@"
+    ;;
+  autopilot)
+    shift
+    _autopilot="$HARNESS_DIR/tools/solar-autopilot-monitor.py"
+    [[ -f "$_autopilot" ]] || { err "autopilot monitor not found: $_autopilot"; exit 1; }
+    _autopilot_label="com.solar.autopilot"
+    _autopilot_plist="$HOME/Library/LaunchAgents/${_autopilot_label}.plist"
+    case "${1:-status}" in
+      status|scan)
+        python3 "$_autopilot" --json
+        ;;
+      apply)
+        shift
+        python3 "$_autopilot" --apply --json "$@"
+        ;;
+      dispatch)
+        shift
+        python3 "$_autopilot" --apply --dispatch --json "$@"
+        ;;
+      loop)
+        shift
+        python3 "$_autopilot" --apply --dispatch --loop --json "$@"
+        ;;
+      start)
+        mkdir -p "$HOME/Library/LaunchAgents" "$HARNESS_DIR/state" "$HARNESS_DIR/run"
+        cat > "$_autopilot_plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>${_autopilot_label}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>${_autopilot}</string>
+    <string>--apply</string>
+    <string>--dispatch</string>
+    <string>--loop</string>
+    <string>--interval</string>
+    <string>60</string>
+    <string>--cooldown</string>
+    <string>300</string>
+    <string>--stall-seconds</string>
+    <string>180</string>
+    <string>--json</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>WorkingDirectory</key>
+  <string>${HARNESS_DIR}</string>
+  <key>StandardOutPath</key>
+  <string>${HARNESS_DIR}/.autopilot-launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>${HARNESS_DIR}/.autopilot-launchd.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:${HOME}/.solar/bin:${HOME}/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+</dict>
+</plist>
+EOF
+        launchctl bootout "gui/$(id -u)" "$_autopilot_plist" >/dev/null 2>&1 || true
+        launchctl bootstrap "gui/$(id -u)" "$_autopilot_plist"
+        launchctl kickstart -k "gui/$(id -u)/${_autopilot_label}" >/dev/null 2>&1 || true
+        ok "autopilot started: ${_autopilot_label}"
+        ;;
+      stop)
+        launchctl bootout "gui/$(id -u)" "$_autopilot_plist" >/dev/null 2>&1 || true
+        rm -f "$HARNESS_DIR/run/autopilot.lock"
+        ok "autopilot stopped"
+        ;;
+      service-status)
+        launchctl print "gui/$(id -u)/${_autopilot_label}" 2>/dev/null | sed -n '1,80p' || true
+        [[ -f "$HARNESS_DIR/state/autopilot-state.json" ]] && python3 -m json.tool "$HARNESS_DIR/state/autopilot-state.json" | sed -n '1,120p'
+        ;;
+      queue)
+        _q="$HARNESS_DIR/run/autopilot-queue.jsonl"
+        if [[ -f "$_q" ]]; then
+          python3 - <<PY
+import json, pathlib, time
+q = pathlib.Path("$_q")
+items = []
+for raw in q.read_text(errors="ignore").splitlines():
+    try:
+        d = json.loads(raw)
+    except Exception:
+        continue
+    if not d.get("done") and not d.get("expired"):
+        items.append(d)
+print(f"autopilot queue depth: {len(items)}")
+print("┌──────────────────────────────────────────────┬──────────────────────┬────────────────────┬──────────┐")
+print("│ Sprint                                       │ Target               │ Reason             │ Attempts │")
+print("├──────────────────────────────────────────────┼──────────────────────┼────────────────────┼──────────┤")
+for d in items[-20:]:
+    print(f"│ {d.get('sid','')[:44]:<44} │ {d.get('target','')[:20]:<20} │ {d.get('reason','')[:18]:<18} │ {int(d.get('attempts',0)):>8} │")
+if not items:
+    print("│ N/A                                          │ N/A                  │ N/A                │        0 │")
+print("└──────────────────────────────────────────────┴──────────────────────┴────────────────────┴──────────┘")
+PY
+        else
+          echo "autopilot queue empty"
+        fi
+        ;;
+      help|--help|-h)
+        echo "用法: $0 autopilot [status|apply|dispatch|loop|start|stop|service-status|queue]"
+        echo "  status   扫描断头 sprint/pane，不修改"
+        echo "  apply    写入本地状态/events，安全默认推进"
+        echo "  dispatch apply 后向对应 tmux pane 发送接手指令"
+        echo "  loop     常驻巡逻：自动发现阻塞并 wake/dispatch"
+        echo "  start    用 launchd 启动常驻巡逻器"
+        echo "  stop     停止 launchd 巡逻器"
+        echo "  queue    查看因 pane lease/assignment/busy 被排队的动作"
+        ;;
+      *) err "用法: $0 autopilot [status|apply|dispatch|loop|start|stop|service-status|queue]" ; exit 1 ;;
+    esac
+    ;;
   plan-verdict)
     [[ -z "${2:-}" ]] && { err "用法: solar-harness plan-verdict <sid> approve|reject [reason]"; exit 1; }
     do_plan_verdict "$2" "${3:-}" "${4:-}"
@@ -1327,6 +2072,10 @@ print(json.dumps({
   handoff-submit)
     [[ -z "${2:-}" ]] && { err "用法: solar-harness handoff-submit <sid>"; exit 1; }
     do_handoff_submit "$2"
+    ;;
+  parallel-integrate)
+    [[ -z "${2:-}" ]] && { err "用法: solar-harness parallel-integrate <sid> [repo-root]"; exit 1; }
+    bash "$HARNESS_DIR/lib/parallel-integrate.sh" "$2" "${3:-}"
     ;;
   eval-verdict)
     [[ -z "${2:-}" ]] && { err "用法: solar-harness eval-verdict <sid> pass|fail [reason]"; exit 1; }
@@ -1441,8 +2190,11 @@ print(json.dumps({
 
     # Step 3: Remote import
     ok "Step 3/4: Remote import..."
+    IMPORT_EXIT=0
+    set +e
     ssh $SSH_OPTS "$DEPLOY_TARGET" "bash -lc 'solar-harness migrate import ~/solar-bundles/latest.tar'" 2>&1
     IMPORT_EXIT=$?
+    set -e
 
     if [[ $IMPORT_EXIT -ne 0 ]]; then
       err "远程 import 失败 (exit=$IMPORT_EXIT)"
@@ -1451,8 +2203,11 @@ print(json.dumps({
 
     # Step 4: Remote doctor
     ok "Step 4/4: Remote doctor..."
+    DOCTOR_EXIT=0
+    set +e
     ssh $SSH_OPTS "$DEPLOY_TARGET" "bash -lc 'solar-harness doctor'" 2>&1
     DOCTOR_EXIT=$?
+    set -e
 
     if [[ $DOCTOR_EXIT -ne 0 ]]; then
       warn "远程 doctor 检查失败, 自动 rollback --diff..."
@@ -1473,19 +2228,20 @@ print(json.dumps({
       err "tmux session solar-harness 不存在, 无法 reload"
       exit 1
     fi
-    local coord_pidfile="$HARNESS_DIR/.coordinator.pid"
-    local old_pid=""
+    coord_pidfile="$HARNESS_DIR/.coordinator.pid"
+    old_pid=""
     [[ -f "$coord_pidfile" ]] && old_pid=$(cat "$coord_pidfile" 2>/dev/null)
     if [[ -z "$old_pid" ]] || ! kill -0 "$old_pid" 2>/dev/null; then
       err "Coordinator 未运行 (PID=${old_pid:-empty})"
       exit 1
     fi
-    local old_md5
+    old_md5=""
     old_md5=$(md5 -q "$HARNESS_DIR/coordinator.sh" 2>/dev/null || echo 'unknown')
     ok "旧 Coordinator: PID=${old_pid}, md5=${old_md5}"
     kill -TERM "$old_pid" 2>/dev/null || true
     ok "已发送 SIGTERM, 等待 watchdog 拉起新实例..."
-    local waited=0 new_pid=""
+    waited=0
+    new_pid=""
     while (( waited < 40 )); do
       sleep 1
       waited=$((waited + 1))
@@ -1504,12 +2260,58 @@ print(json.dumps({
       err "Watchdog 未能拉起新 coordinator (${waited}s), 请手动: bash $HARNESS_DIR/coordinator-watchdog.sh start"
       exit 1
     fi
-    local new_md5
+    new_md5=""
     new_md5=$(md5 -q "$HARNESS_DIR/coordinator.sh" 2>/dev/null || echo 'unknown')
     ok "新 Coordinator: PID=${new_pid}, md5=${new_md5}"
     ;;
   update-contract)
     do_update_contract "$@"
+    ;;
+  context)
+    shift
+    _context_subcmd="${1:-inject}"; shift || true
+    _context_py="$HARNESS_DIR/lib/solar-unified-context.py"
+    if [[ ! -f "$_context_py" ]]; then
+      err "solar-unified-context.py not found: $_context_py"
+      exit 1
+    fi
+    case "$_context_subcmd" in
+      inject)
+        _query=""
+        _format="hook"
+        _args=()
+        while [[ $# -gt 0 ]]; do
+          case "$1" in
+            --query|-q)
+              [[ -z "${2:-}" ]] && { err "--query requires text"; exit 1; }
+              _query="$2"; shift 2 ;;
+            --format)
+              [[ -z "${2:-}" ]] && { err "--format requires hook|markdown"; exit 1; }
+              _format="$2"; shift 2 ;;
+            --json|--max-hits|--max-chars|--timeout-ms|--fail-open)
+              _args+=("$1")
+              if [[ "$1" != "--json" && "$1" != "--fail-open" ]]; then
+                [[ -z "${2:-}" ]] && { err "$1 requires value"; exit 1; }
+                _args+=("$2"); shift 2
+              else
+                shift
+              fi ;;
+            *)
+              if [[ -z "$_query" ]]; then _query="$1"; else _args+=("$1"); fi
+              shift ;;
+          esac
+        done
+        [[ -n "$_query" ]] || { err "Usage: $0 context inject --query \"<text>\" [--format hook|markdown|--json]"; exit 1; }
+        python3 "$_context_py" --query "$_query" --format "$_format" --fail-open ${_args[@]+"${_args[@]}"}
+        ;;
+      status)
+        python3 "$_context_py" --query "Solar Harness Obsidian QMD Mirage" --json --max-hits 3 --fail-open
+        ;;
+      *)
+        err "Usage: $0 context [inject|status] --query \"<text>\""
+        exit 1
+        ;;
+    esac
     ;;
   help|--help|-h)
     echo "Solar Harness — 多化身协同环境"
@@ -1518,9 +2320,11 @@ print(json.dumps({
     echo "  $0 [start] [工作目录] [--skip-doctor]  启动3化身"
     echo "  $0 2 [工作目录]        启动2化身"
     echo "  $0 status              查看状态"
+    echo "  $0 main-status         查看主屏 runtime + assignment + artifact 状态"
+    echo "  $0 lab-status          查看 lab pane runtime + handoff artifact 状态"
     echo "  $0 doctor              环境自检"
     echo "  $0 kill                关闭"
-    echo "  $0 扩展 | extend       启动第二个四分屏 (Strategy Lab)"
+    echo "  $0 扩展 | extend       启动独立第二四分屏 (solar-harness-lab)"
     echo "  $0 sprint \"需求\"       创建 Sprint"
     echo "  $0 wake [sprint-id]  列出未完成 Sprint 或恢复指定 Sprint"
     echo "  $0 wake --help       显示 wake 帮助"
@@ -1529,6 +2333,7 @@ print(json.dumps({
     echo "  $0 migrate <export|import|verify|rollback|deploy|bootstrap>  跨机迁移"
     echo "  $0 deploy <user@host> [--force]  一键部署"
     echo "  $0 plan-verdict <sid> approve|reject [reason]  原子审批计划"
+    echo "  $0 parallel-integrate <sid> [repo-root]  集成并行 builder worktree"
     echo "  $0 eval-verdict <sid> pass|fail [reason]  原子评审判定"
     echo "  $0 verify-events <sid>  事件一致性校验"
     echo "  $0 capsule show <sid>   查看 State Capsule 摘要"
@@ -1536,6 +2341,432 @@ print(json.dumps({
     echo "  $0 attach              重新接入 tmux"
     echo "  $0 monitor             在独立窗口打开 monitor (回退)"
     echo "  $0 webhook [start|stop|status]  管理 Webhook server"
+    echo "  $0 status-server [start|stop|restart|status]  管理 HTTP 状态面板 (port 8765)"
+    echo "  $0 mermaid [--open] [file.mmd]  打开 Mermaid .mmd 架构图浏览器"
+    echo "  $0 integrations status [--json]  外部开源集成六态健康检查"
+    echo "  $0 everything-claude-code [doctor|inventory|report|install --dry-run]  Everything Claude Code 候选集成审计"
+    echo "  $0 context inject --query \"问题\" [--format hook|markdown|--json]  默认知识上下文注入"
+    echo "  $0 autopilot [status|apply|dispatch|loop|start|stop|service-status|queue]  自动监控断头 sprint/pane 并安全推进"
+    echo "  $0 symphony [status|dry-run|workspace <sid>]  Symphony 调度"
+    echo "  $0 mirage [search|doctor|workspace|mounts|exec|provision]  Mirage 统一虚拟文件系统"
+    echo "  $0 wiki [install|status|export-sprint|update|query|ingest|chatgpt-import|vault-status|lint|rebuild|export-graph|colorize|history|run-dispatch|dispatch-watch|import-solar-db|capture-server|audit-uploads|backfill-uploads|qmd-status|qmd-search|qmd-update|qmd-mcp|qmd-embed|help]  Obsidian Wiki 集成"
+    ;;
+  mirage)
+    # Mirage unified virtual filesystem — sprint-20260508-mirage-unified-vfs
+    shift
+    _mirage_wrapper="$HARNESS_DIR/lib/solar_mirage.py"
+    if [[ ! -f "$_mirage_wrapper" ]]; then
+      err "Mirage wrapper not found: $_mirage_wrapper"
+      exit 1
+    fi
+    python3 "$_mirage_wrapper" "$@"
+    ;;
+  wiki)
+    # Obsidian Wiki integration — sprint-20260507-obsidian-wiki
+    shift
+    _wiki_subcmd="${1:-help}"; shift || true
+    _wiki_installer="$HARNESS_DIR/integrations/obsidian-wiki.sh"
+    _wiki_exporter="$HARNESS_DIR/integrations/obsidian-wiki-export.sh"
+    _wiki_bridge="$HARNESS_DIR/integrations/obsidian-wiki-bridge.sh"
+    case "$_wiki_subcmd" in
+      install)
+        if [[ -f "$_wiki_installer" ]]; then
+          # shellcheck disable=SC1090
+          source "$_wiki_installer"
+          cmd_wiki_install "$@"
+        else
+          err "Wiki installer not found: $_wiki_installer"
+          err "Integration may not be fully deployed yet."
+          exit 1
+        fi
+        ;;
+      status)
+        if [[ -f "$_wiki_installer" ]]; then
+          # shellcheck disable=SC1090
+          source "$_wiki_installer"
+          cmd_wiki_status "$@"
+        else
+          err "Wiki installer not found: $_wiki_installer"
+          exit 1
+        fi
+        ;;
+      export-sprint)
+        if [[ -f "$_wiki_exporter" ]]; then
+          # shellcheck disable=SC1090
+          source "$_wiki_exporter"
+          cmd_wiki_export_sprint "$@"
+        elif [[ -f "$_wiki_installer" ]]; then
+          # fallback: export may be embedded in installer
+          source "$_wiki_installer"
+          cmd_wiki_export_sprint "$@"
+        else
+          err "Wiki export module not found: $_wiki_exporter"
+          exit 1
+        fi
+        ;;
+      update)
+        if [[ -f "$_wiki_bridge" ]]; then
+          # shellcheck disable=SC1090
+          source "$_wiki_bridge"
+          cmd_wiki_update "$@"
+        else
+          err "Wiki bridge not found: $_wiki_bridge"
+          exit 1
+        fi
+        ;;
+      query)
+        if [[ -f "$_wiki_bridge" ]]; then
+          # shellcheck disable=SC1090
+          source "$_wiki_bridge"
+          cmd_wiki_query "$@"
+        else
+          err "Wiki bridge not found: $_wiki_bridge"
+          exit 1
+        fi
+        ;;
+      ingest)
+        if [[ -f "$_wiki_bridge" ]]; then
+          # shellcheck disable=SC1090
+          source "$_wiki_bridge"
+          cmd_wiki_ingest "$@"
+        else
+          err "Wiki bridge not found: $_wiki_bridge"
+          exit 1
+        fi
+        ;;
+      chatgpt-import|import-chatgpt)
+        _chatgpt_importer="${HARNESS_DIR}/lib/chatgpt-conversation-ingest.py"
+        if [[ ! -f "$_chatgpt_importer" ]]; then
+          err "ChatGPT importer not found: $_chatgpt_importer"
+          exit 1
+        fi
+        python3 "$_chatgpt_importer" "$@"
+        ;;
+      vault-status)
+        if [[ -f "$_wiki_bridge" ]]; then
+          # shellcheck disable=SC1090
+          source "$_wiki_bridge"
+          cmd_wiki_vault_status "$@"
+        else
+          err "Wiki bridge not found: $_wiki_bridge"
+          exit 1
+        fi
+        ;;
+      lint)
+        if [[ -f "$_wiki_bridge" ]]; then
+          # shellcheck disable=SC1090
+          source "$_wiki_bridge"
+          cmd_wiki_lint "$@"
+        else
+          err "Wiki bridge not found: $_wiki_bridge"
+          exit 1
+        fi
+        ;;
+      rebuild)
+        if [[ -f "$_wiki_bridge" ]]; then
+          # shellcheck disable=SC1090
+          source "$_wiki_bridge"
+          cmd_wiki_rebuild "$@"
+        else
+          err "Wiki bridge not found: $_wiki_bridge"
+          exit 1
+        fi
+        ;;
+      export-graph)
+        if [[ -f "$_wiki_bridge" ]]; then
+          # shellcheck disable=SC1090
+          source "$_wiki_bridge"
+          cmd_wiki_export_graph "$@"
+        else
+          err "Wiki bridge not found: $_wiki_bridge"
+          exit 1
+        fi
+        ;;
+      colorize)
+        if [[ -f "$_wiki_bridge" ]]; then
+          # shellcheck disable=SC1090
+          source "$_wiki_bridge"
+          cmd_wiki_colorize "$@"
+        else
+          err "Wiki bridge not found: $_wiki_bridge"
+          exit 1
+        fi
+        ;;
+      history)
+        if [[ -f "$_wiki_bridge" ]]; then
+          # shellcheck disable=SC1090
+          source "$_wiki_bridge"
+          cmd_wiki_history "$@"
+        else
+          err "Wiki bridge not found: $_wiki_bridge"
+          exit 1
+        fi
+        ;;
+      run-dispatch)
+        if [[ -f "$_wiki_bridge" ]]; then
+          # shellcheck disable=SC1090
+          source "$_wiki_bridge"
+          cmd_wiki_run_dispatch "$@"
+        else
+          err "Wiki bridge not found: $_wiki_bridge"
+          exit 1
+        fi
+        ;;
+      dispatch-watch)
+        if [[ -f "$_wiki_bridge" ]]; then
+          # shellcheck disable=SC1090
+          source "$_wiki_bridge"
+          cmd_wiki_dispatch_watch "$@"
+        else
+          err "Wiki bridge not found: $_wiki_bridge"
+          exit 1
+        fi
+        ;;
+      import-solar-db)
+        if [[ -f "$_wiki_bridge" ]]; then
+          # shellcheck disable=SC1090
+          source "$_wiki_bridge"
+          cmd_wiki_import_solar_db "$@"
+        else
+          err "Wiki bridge not found: $_wiki_bridge"
+          exit 1
+        fi
+        ;;
+      capture-server)
+        if [[ -f "$_wiki_bridge" ]]; then
+          # shellcheck disable=SC1090
+          source "$_wiki_bridge"
+          cmd_wiki_capture_server "$@"
+        else
+          err "Wiki bridge not found: $_wiki_bridge"
+          exit 1
+        fi
+        ;;
+      sync-vault)
+        # S2.5: Index /Users/sihaoli/Knowledge (or --vault PATH) into Solar DB
+        local _indexer="${HARNESS_DIR}/lib/obsidian-vault-indexer.py"
+        local _sv_vault="${OBSIDIAN_VAULT_PATH:-$HOME/Knowledge}"
+        local _sv_args=()
+        while [[ $# -gt 0 ]]; do
+          case "$1" in
+            --vault) [[ -z "${2:-}" ]] && { err "--vault requires a path"; exit 1; }
+                     _sv_vault="$2"; shift 2 ;;
+            --once|--dry-run|--json) _sv_args+=("$1"); shift ;;
+            --max-files) _sv_args+=("$1" "${2:?}"); shift 2 ;;
+            *) err "unknown sync-vault arg: $1"; exit 1 ;;
+          esac
+        done
+        if [[ ! -f "$_indexer" ]]; then
+          err "obsidian-vault-indexer not found: $_indexer"
+          exit 1
+        fi
+        python3 "$_indexer" --vault "$_sv_vault" --once "${_sv_args[@]}"
+        ;;
+      audit-uploads)
+        # B3: Audit a file-upload batch for vault/qmd/DB coverage
+        _auditor="${HARNESS_DIR}/lib/wiki-upload-audit.py"
+        if [[ ! -f "$_auditor" ]]; then
+          err "wiki-upload-audit not found: $_auditor"
+          exit 1
+        fi
+        python3 "$_auditor" "$@"
+        ;;
+      backfill-uploads)
+        # B3: Backfill qmd/vault/DB for a file-upload batch
+        _backfill="${HARNESS_DIR}/lib/wiki-upload-backfill.py"
+        if [[ ! -f "$_backfill" ]]; then
+          err "wiki-upload-backfill not found: $_backfill"
+          exit 1
+        fi
+        python3 "$_backfill" "$@"
+        ;;
+      qmd-status|mineru-status)
+        _QMD_BIN="$(command -v qmd 2>/dev/null || true)"
+        [[ -z "$_QMD_BIN" && -x "$HOME/.npm-global/bin/qmd" ]] && _QMD_BIN="$HOME/.npm-global/bin/qmd"
+        [[ -n "$_QMD_BIN" ]] || { err "qmd not found; install mineru-document-explorer"; exit 1; }
+        "$_QMD_BIN" status "$@"
+        ;;
+      qmd-search|mineru-search)
+        _QMD_BIN="$(command -v qmd 2>/dev/null || true)"
+        [[ -z "$_QMD_BIN" && -x "$HOME/.npm-global/bin/qmd" ]] && _QMD_BIN="$HOME/.npm-global/bin/qmd"
+        [[ -n "$_QMD_BIN" ]] || { err "qmd not found; install mineru-document-explorer"; exit 1; }
+        if [[ $# -lt 1 ]]; then
+          err "Usage: $0 wiki qmd-search \"<query>\" [qmd search args]"
+          exit 1
+        fi
+        "$_QMD_BIN" search "$1" -c "${QMD_WIKI_COLLECTION:-solar-wiki}" "${@:2}"
+        ;;
+      qmd-update|mineru-update)
+        _QMD_BIN="$(command -v qmd 2>/dev/null || true)"
+        [[ -z "$_QMD_BIN" && -x "$HOME/.npm-global/bin/qmd" ]] && _QMD_BIN="$HOME/.npm-global/bin/qmd"
+        [[ -n "$_QMD_BIN" ]] || { err "qmd not found; install mineru-document-explorer"; exit 1; }
+        "$_QMD_BIN" update "$@"
+        ;;
+      qmd-mcp|mineru-mcp)
+        _QMD_BIN="$(command -v qmd 2>/dev/null || true)"
+        [[ -z "$_QMD_BIN" && -x "$HOME/.npm-global/bin/qmd" ]] && _QMD_BIN="$HOME/.npm-global/bin/qmd"
+        [[ -n "$_QMD_BIN" ]] || { err "qmd not found; install mineru-document-explorer"; exit 1; }
+        case "${1:-status}" in
+          status)
+            if lsof -nP -iTCP:8181 -sTCP:LISTEN >/dev/null 2>&1; then
+              ok "qmd MCP running → http://localhost:8181/mcp"
+              lsof -nP -iTCP:8181 -sTCP:LISTEN | tail -1
+            else
+              err "qmd MCP not listening on 8181"
+              exit 1
+            fi
+            ;;
+          start)
+            "$_QMD_BIN" mcp --http --daemon
+            ;;
+          *)
+            err "Usage: $0 wiki qmd-mcp [status|start]"
+            exit 1
+            ;;
+        esac
+        ;;
+      qmd-embed|mineru-embed)
+        _embed_runner="${HARNESS_DIR}/lib/qmd-embed-runner.sh"
+        _embed_plist="$HOME/Library/LaunchAgents/com.solar.qmd-mineru-embed.plist"
+        _embed_status="${HARNESS_DIR}/state/qmd-embed-status.json"
+        _embed_label="com.solar.qmd-mineru-embed"
+        case "${1:-status}" in
+          start)
+            [[ -x "$_embed_runner" ]] || { err "qmd embed runner not executable: $_embed_runner"; exit 1; }
+            launchctl bootout "gui/$(id -u)" "$_embed_plist" >/dev/null 2>&1 || true
+            launchctl bootstrap "gui/$(id -u)" "$_embed_plist"
+            mkdir -p "$(dirname "$_embed_status")"
+            cat > "$_embed_status" <<EOF
+{
+  "state": "scheduled",
+  "collection": "solar-wiki",
+  "mode": "idle_only",
+  "updated_at": "$(date -u '+%Y-%m-%dT%H:%M:%SZ')",
+  "detail": "launchd loaded; will run only when machine is idle",
+  "log": "${HARNESS_DIR}/run/qmd-embed.log"
+}
+EOF
+            ok "qmd embedding idle scheduler loaded ($_embed_label); will run only when machine is idle"
+            ;;
+          run-once)
+            [[ -x "$_embed_runner" ]] || { err "qmd embed runner not executable: $_embed_runner"; exit 1; }
+            "$_embed_runner"
+            ;;
+          run-now)
+            [[ -x "$_embed_runner" ]] || { err "qmd embed runner not executable: $_embed_runner"; exit 1; }
+            SOLAR_QMD_EMBED_FORCE=1 "$_embed_runner"
+            ;;
+          stop)
+            launchctl bootout "gui/$(id -u)" "$_embed_plist" >/dev/null 2>&1 || true
+            pkill -f '/Users/sihaoli/.npm-global/bin/qmd embed -c solar-wiki' >/dev/null 2>&1 || true
+            mkdir -p "$(dirname "$_embed_status")"
+            cat > "$_embed_status" <<EOF
+{
+  "state": "stopped",
+  "collection": "solar-wiki",
+  "mode": "idle_only",
+  "updated_at": "$(date -u '+%Y-%m-%dT%H:%M:%SZ')",
+  "detail": "launchd unloaded and active qmd embed process stopped",
+  "log": "${HARNESS_DIR}/run/qmd-embed.log"
+}
+EOF
+            ok "qmd embedding background job stopped ($_embed_label)"
+            ;;
+          status)
+            if launchctl print "gui/$(id -u)/$_embed_label" >/dev/null 2>&1; then
+              ok "qmd embedding launchd loaded ($_embed_label)"
+            else
+              warn "qmd embedding launchd not loaded"
+            fi
+            if [[ -f "$_embed_status" ]]; then
+              cat "$_embed_status"
+            else
+              warn "no qmd embed status yet: $_embed_status"
+            fi
+            ;;
+          *)
+            err "Usage: $0 wiki qmd-embed [start|status|stop|run-once|run-now]"
+            exit 1
+            ;;
+        esac
+        ;;
+      help|--help|-h|"")
+        echo "Solar Harness Wiki — Obsidian LLM Wiki integration"
+        echo ""
+        echo "Usage:"
+        echo "  $0 wiki install --vault <path> [--repo <path>] [--refresh]"
+        echo "  $0 wiki status [--json]"
+        echo "  $0 wiki export-sprint <sid> [--redact|--full]"
+        echo "  $0 wiki update [--project <path>] [--mode append|full]"
+        echo "  $0 wiki query \"<question>\" [--quick]"
+        echo "  $0 wiki ingest [--source <path>] [--mode append|full|raw] [--project <name>]"
+        echo "  $0 wiki chatgpt-import [--browser-all [auto|chrome|arc|edge|brave|safari]|--browser [auto|chrome|arc|edge|brave|safari]|--source <conversations.json|transcript.md|dir|->|--clipboard] [--no-dispatch] [--limit N]"
+        echo "  $0 wiki vault-status [--insights]"
+        echo "  $0 wiki lint [--fix]"
+        echo "  $0 wiki rebuild [--mode archive-only|archive-rebuild|restore] [--archive <name>]"
+        echo "  $0 wiki export-graph [--all|--public]"
+        echo "  $0 wiki colorize [--mode by-tag|by-category|by-visibility|combined|custom]"
+        echo "  $0 wiki history [--target claude|codex|copilot|hermes|openclaw|auto] [--query <topic>]"
+        echo "  $0 wiki run-dispatch <dispatch.md> [--lab-builder 1|2|3|4|--main-builder|--pane <target>] [--dry-run]"
+        echo "  $0 wiki dispatch-watch [--once|--loop] [--limit N] [--interval seconds] [--dry-run]"
+        echo "  $0 wiki import-solar-db [--scope solar|all] [--per-table-limit N] [--no-dispatch]"
+        echo "  $0 wiki capture-server [start|stop|restart|status] [--port N] [--open]"
+        echo "  $0 wiki sync-vault [--vault PATH] [--once] [--dry-run] [--json]"
+        echo "  $0 wiki audit-uploads --batch <batch_id> [--json]"
+        echo "  $0 wiki backfill-uploads --batch <batch_id> [--repair] [--json]"
+        echo "  $0 wiki qmd-status"
+        echo "  $0 wiki qmd-search \"<query>\" [-n N|--json|--files]"
+        echo "  $0 wiki qmd-update"
+        echo "  $0 wiki qmd-mcp [status|start]"
+        echo "  $0 wiki qmd-embed [start|status|stop|run-once|run-now]"
+        echo ""
+        echo "Examples:"
+        echo "  $0 wiki install --vault ~/Documents/SolarWiki"
+        echo "  $0 wiki status --json"
+        echo "  $0 wiki export-sprint sprint-20260507-symphony3 --redact"
+        echo "  $0 wiki update --mode append"
+        echo "  $0 wiki query \"What did sprint symphony1 achieve?\""
+        echo "  $0 wiki ingest --source ~/Downloads/paper.pdf --mode append"
+        echo "  $0 wiki chatgpt-import --browser-all      # preferred: capture all open ChatGPT conversation tabs"
+        echo "  $0 wiki chatgpt-import --browser          # preferred: capture active ChatGPT tab"
+        echo "  $0 wiki chatgpt-import --source ~/Downloads/conversations.json --limit 50"
+        echo "  pbpaste | $0 wiki chatgpt-import --source -"
+        echo "  $0 wiki history --target codex --query \"rust ownership\""
+        echo "  $0 wiki colorize --mode by-category"
+        echo "  $0 wiki run-dispatch \"\$OBSIDIAN_VAULT_PATH/_raw/solar-harness/.dispatch/wiki-ingest-<ts>.md\" --lab-builder 1"
+        echo "  $0 wiki dispatch-watch --once --limit 4"
+        echo "  $0 wiki import-solar-db --scope solar --per-table-limit 25"
+        echo "  $0 wiki capture-server start --open"
+        echo "  $0 wiki qmd-search \"Solar Harness Obsidian\" -n 5 --json"
+        echo "  $0 wiki audit-uploads --batch 20260508T122047Z --json"
+        echo "  $0 wiki backfill-uploads --batch 20260508T122047Z --repair --json"
+        ;;
+      *)
+        err "Unknown wiki subcommand: $_wiki_subcmd"
+        echo "Run '$0 wiki help' for usage." >&2
+        exit 1
+        ;;
+    esac
+    ;;
+  symphony)
+    shift
+    case "${1:-status}" in
+      status)
+        python3 "$HARNESS_DIR/lib/symphony/scheduler.py" --status
+        ;;
+      dry-run)
+        python3 "$HARNESS_DIR/lib/symphony/scheduler.py" --dry-run
+        ;;
+      workspace)
+        shift
+        [[ -z "${1:-}" ]] && { err "Usage: $0 symphony workspace <sprint-id>"; exit 1; }
+        bash "$HARNESS_DIR/lib/symphony/workspace-manager.sh" show "$1"
+        ;;
+      *)
+        echo "Usage: $0 symphony [status|dry-run|workspace <sid>]" >&2
+        exit 1
+        ;;
+    esac
     ;;
   *)
     # If arg looks like a directory, use it as work dir

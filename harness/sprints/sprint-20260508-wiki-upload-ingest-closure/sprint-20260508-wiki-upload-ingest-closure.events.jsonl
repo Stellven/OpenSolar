@@ -1,0 +1,97 @@
+{"ts":"2026-05-08T12:50:16Z","sid":"sprint-20260508-wiki-upload-ingest-closure","event":"contract_created","by":"codex_pm","priority":"P0","lane":"reliability","handoff_to":"planner","contract":"/Users/sihaoli/.solar/harness/sprints/sprint-20260508-wiki-upload-ingest-closure.contract.md"}
+{"ts":"2026-05-08T12:50:16Z","sid":"sprint-20260508-wiki-upload-ingest-closure","event":"planner_handoff_opened","by":"codex_pm","blocks":["sprint-20260508-solar-kb-obsidian-autouse","sprint-20260508-data-plane-closeout"],"note":"Fix upload-to-searchable-knowledge closure before claiming Solar KB/data-plane done."}
+{"ts": "2026-05-08T12:56:23Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-08T12:56:23Z","event":"planner_notified","by":"coordinator","data":{"status":"drafting"}}
+{"ts": "2026-05-08T12:56:40Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T13:04:58Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-08T13:12:20Z","event":"planner_notified","by":"coordinator","data":{"status":"drafting"}}
+{"ts": "2026-05-08T13:12:36Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts":"2026-05-08T13:13:47Z","sid":"sprint-20260508-wiki-upload-ingest-closure","event":"planner_plan_completed","by":"codex_pm","plan":"/Users/sihaoli/.solar/harness/sprints/sprint-20260508-wiki-upload-ingest-closure.plan.md","topology":"mixture"}
+{"ts":"2026-05-08T13:13:47Z","sid":"sprint-20260508-wiki-upload-ingest-closure","event":"plan_approved","by":"codex_pm","handoff_to":"builder_parallel","note":"User requested immediate execution; coordinator should trigger dispatch_mixture on next scan."}
+{"event": "waked", "by": "wake", "data": {"from_status": "approved", "target_pane": "solar-harness:0.2"}, "ts": "2026-05-08T13:15:49Z", "sid": "sprint-20260508-wiki-upload-ingest-closure"}
+{"ts": "2026-05-08T13:15:55Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T13:16:13Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T13:16:18Z", "sprint_id": "sprint-20260508-wiki-upload-ingest-closure", "actor": "solar-autopilot", "event": "autopilot_ready_for_builder", "severity": "info", "data": {"target": "solar-harness:0.2"}}
+{"ts": "2026-05-08T13:17:10Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "mixture_dispatched", "by": "coordinator"}
+{"ts": "2026-05-08T13:20:26Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-08T15:50:47Z","sid":"sprint-20260508-wiki-upload-ingest-closure","event":"manual_parallel_handoffs_merged","by":"codex_pm","handoff":"/Users/sihaoli/.solar/harness/sprints/sprint-20260508-wiki-upload-ingest-closure.handoff.md","note":"5/5 builder handoffs existed; coordinator same-state building_parallel did not re-run merge. Advanced to reviewing/evaluator."}
+{"event": "waked", "by": "wake", "data": {"from_status": "reviewing", "target_pane": "solar-harness:0.3"}, "ts": "2026-05-08T15:53:20Z", "sid": "sprint-20260508-wiki-upload-ingest-closure"}
+{"ts": "2026-05-08T15:56:29Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T15:56:52Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T15:59:32Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T15:59:50Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T16:00:33Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "mixture_dispatched", "by": "coordinator"}
+{"ts": "2026-05-08T16:03:10Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T16:03:27Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "parallel_integrate_failed", "by": "coordinator"}
+{"ts": "2026-05-08T16:05:42Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-08T16:05:42Z","event":"planner_notified","by":"coordinator","data":{"status":"needs_human_review"}}
+{"ts": "2026-05-08T16:06:11Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatched", "by": "coordinator"}
+{"ts": "2026-05-08T16:06:16Z", "event": "eval_failed", "by": "evaluator", "verdict": "fail", "sid": "sprint-20260508-wiki-upload-ingest-closure"}
+{"ts": "2026-05-08T16:08:17Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T16:08:32Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T16:10:31Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-08T16:10:31Z","event":"planner_notified","by":"coordinator","data":{"status":"active"}}
+{"ts": "2026-05-08T16:12:47Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T16:14:52Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T16:15:13Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T16:17:13Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T16:17:28Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T16:38:33Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T16:38:49Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T16:40:35Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T16:40:51Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T16:45:25Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T16:45:45Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T16:49:30Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T16:49:47Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T16:51:39Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T16:51:58Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T16:55:36Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T16:55:52Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T16:57:18Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T16:57:37Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T17:07:00Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T17:07:14Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T17:08:13Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T17:08:27Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T17:18:21Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T17:18:36Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "prompt_quarantined", "by": "coordinator"}
+{"ts": "2026-05-08T17:18:51Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-08T17:19:06Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-08T17:33:04Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T17:34:29Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T17:35:29Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T17:36:51Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T17:37:07Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T17:41:11Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T17:41:28Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T17:42:05Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T17:42:24Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T17:46:03Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T17:46:23Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T17:46:56Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T17:47:13Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T17:48:22Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T17:48:45Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T17:49:18Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T17:49:35Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T17:50:52Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T17:51:14Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "round_dispatched", "by": "coordinator"}
+{"ts": "2026-05-08T17:56:30Z", "event": "handoff_submitted", "by": "builder", "sid": "sprint-20260508-wiki-upload-ingest-closure"}
+{"ts": "2026-05-08T17:57:38Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T17:57:55Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T17:58:25Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T17:58:40Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T18:00:39Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T18:00:55Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T18:02:31Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T18:02:47Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T18:06:53Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T18:07:14Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatched", "by": "coordinator"}
+{"ts": "2026-05-08T18:13:29Z", "event": "eval_passed", "by": "evaluator", "verdict": "pass", "sid": "sprint-20260508-wiki-upload-ingest-closure"}
+{"ts": "2026-05-08T18:14:32Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-08T18:14:33Z","event":"planner_notified","by":"coordinator","data":{"status":"passed"}}
+{"ts": "2026-05-08T18:14:48Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "prompt_quarantined", "by": "coordinator"}
+{"ts": "2026-05-08T18:15:03Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-08T18:15:18Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-08T18:15:36Z", "sid": "sprint-20260508-wiki-upload-ingest-closure", "event": "handle_passed_completed", "by": "coordinator"}

@@ -1,0 +1,61 @@
+{
+  "id": "sprint-20260427-111903",
+  "title": "知识库自动化补救: (1) 安装/确认 MemPalace 真实位置 (~/.solar/mempalace 不存在,需",
+  "status": "passed",
+  "phase": "spec",
+  "created_at": "2026-04-27T03:19:03Z",
+  "round": 1,
+  "history": [
+    {
+      "ts": "2026-04-27T03:19:03Z",
+      "event": "contract_created",
+      "by": "user"
+    },
+    {
+      "ts": "2026-04-27T06:14:15Z",
+      "event": "done_criteria_filled",
+      "by": "planner",
+      "note": "5 条 Done 写入 (MemPalace/auto-favorites/补录/MEMORY/cron)"
+    },
+    {
+      "ts": "2026-04-27T06:14:15Z",
+      "event": "activated",
+      "by": "planner"
+    },
+    {
+      "ts": "2026-04-27T06:17:45Z",
+      "event": "plan_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-04-27T06:18:23Z",
+      "event": "plan_reviewed",
+      "by": "evaluator",
+      "verdict": "APPROVE"
+    },
+    {
+      "ts": "2026-04-27T12:57:44Z",
+      "event": "implementation_completed",
+      "by": "builder",
+      "round": 1
+    },
+    {
+      "ts": "2026-04-27T12:57:52Z",
+      "event": "handoff_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-04-27T13:01:29Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-04-27T13:01:30Z",
+      "event": "finalized",
+      "by": "coordinator"
+    }
+  ],
+  "updated_at": "2026-04-27T13:01:21Z",
+  "last_handoff_mtime": 1777294659.0
+}

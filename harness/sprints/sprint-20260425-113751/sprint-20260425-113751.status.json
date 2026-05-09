@@ -1,0 +1,77 @@
+{
+  "id": "sprint-20260425-113751",
+  "title": "集成 addyosmani/agent-skills 工业级模式到 solar-harness: (P0-1) 统一 S",
+  "status": "passed",
+  "created_at": "2026-04-25T03:37:51Z",
+  "round": 1,
+  "history": [
+    {
+      "ts": "2026-04-25T03:37:51Z",
+      "event": "contract_created",
+      "by": "user"
+    },
+    {
+      "ts": "2026-04-25T03:38:45Z",
+      "event": "done_criteria_filled",
+      "by": "planner",
+      "note": "agent-skills 集成 7 项 D1-D7"
+    },
+    {
+      "ts": "2026-04-25T03:38:45Z",
+      "event": "activated",
+      "by": "planner"
+    },
+    {
+      "ts": "2026-04-25T04:53:47Z",
+      "event": "plan_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-04-25T04:54:40Z",
+      "event": "plan_submitted",
+      "by": "builder",
+      "note": "实现计划已写入 plan.md, 含 9 个变更文件 + 6 风险点 + 6 phase 实现顺序"
+    },
+    {
+      "ts": "2026-04-25T05:46:14Z",
+      "event": "plan_approved",
+      "by": "planner",
+      "note": "计划覆盖 D1-D7, 批准。建议: cache 集成点留后续; verify 格式可用 HTML 注释替代 YAML"
+    },
+    {
+      "ts": "2026-04-25T13:13:25Z",
+      "event": "handoff_submitted",
+      "by": "builder",
+      "note": "D1-D7 all implemented, handoff.md written"
+    },
+    {
+      "ts": "2026-04-25T13:13:39Z",
+      "event": "handoff_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-04-27T00:46:27Z",
+      "event": "superseded",
+      "by": "planner",
+      "note": "被新需求覆盖: mac mini 重定位为推理后端"
+    },
+    {
+      "ts": "2026-04-28T07:12:02Z",
+      "event": "status_corrected",
+      "by": "planner",
+      "note": "修正 04-27 错误的 superseded → passed (实际 04-25 21:19 已 PASS verdict 7/7)"
+    },
+    {
+      "ts": "2026-04-28T07:12:12Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-04-28T07:12:12Z",
+      "event": "finalized",
+      "by": "coordinator"
+    }
+  ],
+  "updated_at": "2026-04-28T07:12:02Z"
+}

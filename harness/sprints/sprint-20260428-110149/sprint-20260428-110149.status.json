@@ -1,0 +1,60 @@
+{
+  "id": "sprint-20260428-110149",
+  "title": "执行 D3 git filter-repo 清理 GitHub 上的 P0 敏感信息(本机文件保留): (1) brew",
+  "status": "passed",
+  "phase": "spec",
+  "created_at": "2026-04-28T03:01:49Z",
+  "round": 1,
+  "history": [
+    {
+      "ts": "2026-04-28T03:01:49Z",
+      "event": "contract_created",
+      "by": "user"
+    },
+    {
+      "ts": "2026-04-28T03:02:33Z",
+      "event": "done_criteria_filled",
+      "by": "planner",
+      "note": "5 Done D1-D5: filter-repo 实施, 本机文件不动"
+    },
+    {
+      "ts": "2026-04-28T03:02:33Z",
+      "event": "activated",
+      "by": "planner"
+    },
+    {
+      "ts": "2026-04-28T03:04:30Z",
+      "event": "plan_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-04-28T03:05:12Z",
+      "event": "plan_reviewed",
+      "by": "evaluator",
+      "verdict": "APPROVE"
+    },
+    {
+      "ts": "2026-04-28T03:13:24Z",
+      "event": "handoff_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-04-28T03:17:08Z",
+      "event": "eval_completed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-04-28T03:17:13Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-04-28T03:17:13Z",
+      "event": "finalized",
+      "by": "coordinator"
+    }
+  ],
+  "updated_at": "2026-04-28T03:17:08Z"
+}

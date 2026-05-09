@@ -1,0 +1,38 @@
+{
+  "id": "sprint-20260415-131819",
+  "title": "Trace2Skill \u8fed\u4ee3\u95ed\u73af\u5347\u7ea7: \u8865\u5168\u8bba\u6587\u6838\u5fc3\u5dee\u8ddd \u2014 G5 \u8fed\u4ee3\u7cbe\u5316\u95ed\u73af + G4 \u8f68\u8ff9\u591a\u6837\u6027 + G2 ReA",
+  "status": "passed",
+  "created_at": "2026-04-15T05:18:19Z",
+  "round": 2,
+  "history": [
+    {
+      "ts": "2026-04-15T05:18:19Z",
+      "event": "contract_created",
+      "by": "user"
+    },
+    {
+      "ts": "2026-04-15T05:20:15Z",
+      "event": "done_criteria_filled",
+      "by": "planner"
+    },
+    {
+      "ts": "2026-04-15T21:38:24Z",
+      "event": "failed_review",
+      "by": "judge",
+      "round": 1
+    },
+    {
+      "ts": "2026-04-15T21:50:09Z",
+      "event": "fix_submitted",
+      "by": "builder",
+      "round": 2
+    },
+    {
+      "ts": "2026-04-15T21:51:59Z",
+      "event": "passed",
+      "by": "judge",
+      "round": 2
+    }
+  ],
+  "updated_at": "2026-04-15T21:51:59Z"
+}

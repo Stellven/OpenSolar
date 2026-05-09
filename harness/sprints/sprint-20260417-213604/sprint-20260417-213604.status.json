@@ -1,0 +1,38 @@
+{
+  "id": "sprint-20260417-213604",
+  "title": "Solar 自进化框架 v1: capability-graph + auto-postmortem + pending",
+  "status": "passed",
+  "created_at": "2026-04-17T13:36:04Z",
+  "round": 1,
+  "history": [
+    {
+      "ts": "2026-04-17T13:36:04Z",
+      "event": "contract_created",
+      "by": "user"
+    },
+    {
+      "ts": "2026-04-17T14:35:35Z",
+      "event": "done_criteria_filled",
+      "by": "planner"
+    },
+    {
+      "ts": "2026-04-17T17:39:59Z",
+      "event": "plan_approved",
+      "by": "evaluator",
+      "details": "APPROVE: 7/7 covered, D4 circular-dependency dodge noted"
+    },
+    {
+      "ts": "2026-04-17T22:40:51Z",
+      "event": "plan_approved_by_planner",
+      "by": "planner",
+      "reason": "evaluator_stuck_50min_no_output"
+    },
+    {
+      "ts": "2026-04-17T22:49:05Z",
+      "event": "eval_completed",
+      "by": "evaluator",
+      "details": "PASS: D1-D7 all passed. Minor: D1 missing J_Governance category (41/41+ seeds OK)."
+    }
+  ],
+  "updated_at": "2026-04-17T22:49:05Z"
+}

@@ -1,7 +1,10 @@
-# Sprint Contract — {{sprint_id}}
+# Sprint Contract — {{title}} ({{sprint_id}})
 Created: {{created_at}}
 Status: drafting
 Project: {{project_dir}}
+
+## 简述 (Summary)
+{{summary}}
 
 ## 需求 (Requirements)
 {{requirements}}

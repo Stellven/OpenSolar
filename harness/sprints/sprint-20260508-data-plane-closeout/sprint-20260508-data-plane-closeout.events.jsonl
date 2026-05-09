@@ -1,0 +1,27 @@
+{"ts": "2026-05-08T12:03:34Z", "sid": "sprint-20260508-data-plane-closeout", "event": "state_changed", "by": "coordinator"}
+{"event": "waked", "by": "wake", "data": {"from_status": "queued", "target_pane": "solar-harness:0.2"}, "ts": "2026-05-08T17:57:39Z", "sid": "sprint-20260508-data-plane-closeout"}
+{"ts": "2026-05-08T18:00:10Z", "sid": "sprint-20260508-data-plane-closeout", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-08T18:00:10Z","event":"planner_notified","by":"coordinator","data":{"status":"active"}}
+{"ts": "2026-05-08T18:00:24Z", "sid": "sprint-20260508-data-plane-closeout", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T18:01:59Z", "sid": "sprint-20260508-data-plane-closeout", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-08T18:02:00Z","event":"planner_notified","by":"coordinator","data":{"status":"drafting"}}
+{"ts": "2026-05-08T18:02:15Z", "sid": "sprint-20260508-data-plane-closeout", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T18:05:23Z", "sid": "sprint-20260508-data-plane-closeout", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T18:07:49Z", "sprint_id": "sprint-20260508-data-plane-closeout", "actor": "solar-autopilot", "event": "autopilot_dispatch_deferred_pane_busy", "severity": "warn", "data": {"target": "solar-harness:0.1", "type": "pane_asks_boss"}}
+{"ts": "2026-05-08T18:09:47Z", "sid": "sprint-20260508-data-plane-closeout", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T18:10:09Z", "sid": "sprint-20260508-data-plane-closeout", "event": "dispatched", "by": "coordinator"}
+{"ts": "2026-05-08T18:10:50Z", "sprint_id": "sprint-20260508-data-plane-closeout", "actor": "solar-autopilot", "event": "autopilot_ready_for_builder", "severity": "info", "data": {"target": "solar-harness:0.2"}}
+{"event": "waked", "by": "wake", "data": {"from_status": "active", "target_pane": "solar-harness:0.2"}, "ts": "2026-05-08T18:10:54Z", "sid": "sprint-20260508-data-plane-closeout"}
+{"ts": "2026-05-08T18:15:55Z", "sprint_id": "sprint-20260508-data-plane-closeout", "actor": "solar-autopilot", "event": "autopilot_ready_for_builder", "severity": "info", "data": {"target": "solar-harness:0.2"}}
+{"event": "waked", "by": "wake", "data": {"from_status": "active", "target_pane": "solar-harness:0.2"}, "ts": "2026-05-08T18:15:59Z", "sid": "sprint-20260508-data-plane-closeout"}
+{"ts": "2026-05-08T18:18:23Z", "sid": "sprint-20260508-data-plane-closeout", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T18:18:39Z", "sid": "sprint-20260508-data-plane-closeout", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T18:23:48Z", "sid": "sprint-20260508-data-plane-closeout", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T18:24:09Z", "sid": "sprint-20260508-data-plane-closeout", "event": "dispatched", "by": "coordinator"}
+{"ts": "2026-05-08T18:28:01Z", "event": "eval_passed", "by": "evaluator", "verdict": "pass", "sid": "sprint-20260508-data-plane-closeout"}
+{"ts": "2026-05-08T18:28:33Z", "sid": "sprint-20260508-data-plane-closeout", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-08T18:28:34Z","event":"planner_notified","by":"coordinator","data":{"status":"passed"}}
+{"ts": "2026-05-08T18:28:48Z", "sid": "sprint-20260508-data-plane-closeout", "event": "prompt_quarantined", "by": "coordinator"}
+{"ts": "2026-05-08T18:29:02Z", "sid": "sprint-20260508-data-plane-closeout", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-08T18:29:16Z", "sid": "sprint-20260508-data-plane-closeout", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-08T18:29:30Z", "sid": "sprint-20260508-data-plane-closeout", "event": "handle_passed_completed", "by": "coordinator"}

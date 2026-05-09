@@ -1,0 +1,96 @@
+{
+  "id": "sprint-20260428-154612",
+  "title": "让 solar-verify + red-flags 真集成进 coordinator: handle_handoff_",
+  "status": "passed",
+  "phase": "spec",
+  "created_at": "2026-04-28T07:46:12Z",
+  "round": 3,
+  "history": [
+    {
+      "ts": "2026-04-28T07:46:12Z",
+      "event": "contract_created",
+      "by": "user"
+    },
+    {
+      "ts": "2026-04-28T07:46:47Z",
+      "event": "done_criteria_filled",
+      "by": "planner",
+      "note": "4 Done: coordinator 集成 solar-verify + red-flags + 审判官读取 + smoke"
+    },
+    {
+      "ts": "2026-04-28T07:46:47Z",
+      "event": "activated",
+      "by": "planner"
+    },
+    {
+      "ts": "2026-04-28T07:57:49Z",
+      "event": "plan_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-04-28T08:00:10Z",
+      "event": "plan_reviewed",
+      "by": "evaluator",
+      "verdict": "APPROVE"
+    },
+    {
+      "ts": "2026-04-28T08:10:24Z",
+      "event": "implementation_completed",
+      "by": "builder",
+      "round": 1
+    },
+    {
+      "ts": "2026-04-28T08:10:40Z",
+      "event": "handoff_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-04-28T08:16:18Z",
+      "event": "eval_completed",
+      "by": "evaluator",
+      "verdict": "FAIL",
+      "reason": "D2 verify-result format incomplete grep count 2 need 3 add echo solar-verify header at line 1031"
+    },
+    {
+      "ts": "2026-04-28T08:21:26Z",
+      "event": "implementation_completed",
+      "by": "builder",
+      "round": 3
+    },
+    {
+      "ts": "2026-04-28T08:21:33Z",
+      "event": "handoff_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-04-28T08:24:07Z",
+      "event": "eval_completed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-04-28T08:24:15Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-04-28T08:24:15Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-04-28T08:24:16Z",
+      "event": "finalized",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-04-28T08:24:16Z",
+      "event": "finalized",
+      "by": "coordinator"
+    }
+  ],
+  "updated_at": "2026-04-28T08:24:07Z",
+  "last_handoff_mtime": 1777364483.0
+}

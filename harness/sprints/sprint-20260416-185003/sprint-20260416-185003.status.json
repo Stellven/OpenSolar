@@ -1,0 +1,26 @@
+{
+  "id": "sprint-20260416-185003",
+  "title": "Agent Loop \u4e0a\u4e0b\u6587\u5de5\u7a0b\u5347\u7ea7 (\u53c2\u8003\u300aHarness Engineering \u4e8c\u300b): \u89e3\u51b3\u6587\u7ae0\u70b9\u540d\u7684 3 \u4e2a\u81f4",
+  "status": "passed",
+  "created_at": "2026-04-16T10:50:03Z",
+  "round": 2,
+  "history": [
+    {
+      "ts": "2026-04-16T10:50:03Z",
+      "event": "contract_created",
+      "by": "user"
+    },
+    {
+      "ts": "2026-04-16T10:51:09Z",
+      "event": "done_criteria_filled",
+      "by": "planner"
+    },
+    {
+      "ts": "2026-04-16T10:53:11Z",
+      "event": "plan_approved",
+      "by": "evaluator",
+      "round": 0
+    }
+  ],
+  "updated_at": "2026-04-16T11:25:41Z"
+}

@@ -1,0 +1,47 @@
+{"ts":"2026-05-08T15:24:00Z","sid":"sprint-20260508-kb-qmd-default-fallback","event":"contract_created","by":"codex_pm","priority":"P0","lane":"reliability","handoff_to":"planner","contract":"/Users/sihaoli/.solar/harness/sprints/sprint-20260508-kb-qmd-default-fallback.contract.md"}
+{"ts":"2026-05-08T15:24:00Z","sid":"sprint-20260508-kb-qmd-default-fallback","event":"planner_handoff_opened","by":"codex_pm","note":"Default KB retrieval must fall back to qmd solar-wiki and pass 大模型热力学 hook verification."}
+{"ts": "2026-05-08T15:26:00Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-08T15:26:00Z","event":"planner_notified","by":"coordinator","data":{"status":"drafting"}}
+{"ts": "2026-05-08T15:26:33Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "dispatched", "by": "coordinator"}
+{"ts":"2026-05-08T15:35:12Z","event":"planner_notified","by":"coordinator","data":{"status":"drafting"}}
+{"ts": "2026-05-08T15:35:55Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "dispatch_failed", "by": "coordinator"}
+{"ts":"2026-05-08T15:50:47Z","sid":"sprint-20260508-kb-qmd-default-fallback","event":"planner_fast_path_unblocked","by":"codex_pm","design":"/Users/sihaoli/.solar/harness/sprints/sprint-20260508-kb-qmd-default-fallback.design.md","plan":"/Users/sihaoli/.solar/harness/sprints/sprint-20260508-kb-qmd-default-fallback.plan.md","note":"Planner pane dispatch failed; design/plan were created manually so coordinator can dispatch builder_main without waiting."}
+{"event": "waked", "by": "wake", "data": {"from_status": "active", "target_pane": "solar-harness:0.2"}, "ts": "2026-05-08T15:52:19Z", "sid": "sprint-20260508-kb-qmd-default-fallback"}
+{"event": "watchdog_restart", "by": "watchdog", "data": {"failure_count": 1}, "ts": "2026-05-08T15:52:20Z", "sid": "sprint-20260508-kb-qmd-default-fallback"}
+{"ts": "2026-05-08T15:53:37Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T15:54:01Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "dispatch_blocked", "by": "coordinator"}
+{"event": "waked", "by": "wake", "data": {"from_status": "active", "target_pane": "solar-harness:0.2"}, "ts": "2026-05-08T15:54:51Z", "sid": "sprint-20260508-kb-qmd-default-fallback"}
+{"ts": "2026-05-08T15:57:42Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T15:57:59Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T16:01:50Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T16:02:07Z", "event": "handoff_submitted", "by": "builder", "sid": "sprint-20260508-kb-qmd-default-fallback"}
+{"ts": "2026-05-08T16:02:13Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T16:04:41Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T16:04:57Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T16:07:11Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T16:07:26Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T16:08:08Z", "event": "handoff_submitted", "by": "builder", "sid": "sprint-20260508-kb-qmd-default-fallback"}
+{"ts": "2026-05-08T16:09:32Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T16:09:47Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T16:11:48Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T16:12:03Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T16:13:48Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T16:14:03Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T16:16:13Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T16:16:28Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T16:37:30Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T16:37:46Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T16:39:25Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T16:39:41Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T16:44:14Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T16:44:33Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "dispatch_blocked", "by": "coordinator"}
+{"ts": "2026-05-08T16:48:05Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-08T16:48:34Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "dispatched", "by": "coordinator"}
+{"ts": "2026-05-08T16:51:59Z", "event": "eval_passed", "by": "evaluator", "verdict": "pass", "sid": "sprint-20260508-kb-qmd-default-fallback"}
+{"ts":"2026-05-08T16:52:01Z","sid":"sprint-20260508-kb-qmd-default-fallback","event":"post_eval_ranking_refinement_verified","by":"codex_pm","note":"Semantic prompt now injects synthesis/大模型热力学 only; raw sprint artifact docs remain searchable for explicit artifact queries. Regression 8/8 PASS."}
+{"ts": "2026-05-08T16:53:24Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-08T16:53:25Z","event":"planner_notified","by":"coordinator","data":{"status":"passed"}}
+{"ts": "2026-05-08T16:53:40Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "prompt_quarantined", "by": "coordinator"}
+{"ts": "2026-05-08T16:53:56Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-08T16:54:12Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-08T16:54:28Z", "sid": "sprint-20260508-kb-qmd-default-fallback", "event": "handle_passed_completed", "by": "coordinator"}

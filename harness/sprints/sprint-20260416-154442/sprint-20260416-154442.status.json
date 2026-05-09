@@ -1,0 +1,38 @@
+{
+  "id": "sprint-20260416-154442",
+  "title": "solar-harness \u67b6\u6784\u5347\u7ea7 (\u53c2\u8003 Anthropic Decoupled Agents): \u628a Sessio",
+  "status": "passed",
+  "created_at": "2026-04-16T07:44:42Z",
+  "round": 1,
+  "history": [
+    {
+      "ts": "2026-04-16T07:44:42Z",
+      "event": "contract_created",
+      "by": "user"
+    },
+    {
+      "ts": "2026-04-16T07:46:52Z",
+      "event": "done_criteria_filled",
+      "by": "planner"
+    },
+    {
+      "ts": "2026-04-16T09:41:11Z",
+      "event": "handoff_submitted",
+      "by": "builder",
+      "round": 1
+    },
+    {
+      "ts": "2026-04-16T09:43:49Z",
+      "event": "passed",
+      "by": "judge",
+      "round": 1
+    },
+    {
+      "ts": "2026-04-16T09:50:46Z",
+      "event": "passed",
+      "by": "judge",
+      "round": 1
+    }
+  ],
+  "updated_at": "2026-04-16T09:50:46Z"
+}

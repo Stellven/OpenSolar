@@ -346,6 +346,28 @@ else
   fail "T8a: 3 Dones → builder1=$b1_odd, builder2=$b2_odd, half=$half_odd (exp 2,1)"
 fi
 
+# ─── T9: mixture dispatches per-builder files, not shared dispatch.md ───
+echo ""
+echo "--- T9: mixture dispatch file isolation ---"
+
+if grep -q 'local instruction_file="${4:-$SPRINTS_DIR/${sid}.dispatch.md}"' "$HARNESS_DIR/coordinator.sh"; then
+  pass "T9a: dispatch_to_pane supports explicit instruction file argument"
+else
+  fail "T9a: dispatch_to_pane missing explicit instruction file argument"
+fi
+
+if grep -q 'dispatch_to_pane "$pane" "" "$sid" "$builder_dispatch"' "$HARNESS_DIR/coordinator.sh"; then
+  pass "T9b: dispatch_mixture sends dispatch-builderN.md to each pane"
+else
+  fail "T9b: dispatch_mixture still sends shared dispatch.md"
+fi
+
+if grep -q 'cp "$SPRINTS_DIR/${sid}.dispatch.md" "$builder_dispatch"' "$HARNESS_DIR/coordinator.sh"; then
+  pass "T9c: dispatch_mixture preserves per-builder dispatch files"
+else
+  fail "T9c: dispatch_mixture missing per-builder dispatch file preservation"
+fi
+
 # ─── Summary ───
 echo ""
 echo "=== Results: $PASS PASS / $FAIL FAIL ==="
