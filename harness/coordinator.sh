@@ -2495,6 +2495,10 @@ handle_active() {
       log "${Y}Sprint ${sid} G0 passed; waiting for S1/S2/S6 slice dispatch${N}"
       return 0
       ;;
+    slices_dispatched|s1_dispatched|s2_dispatched|s6_dispatched)
+      log "${Y}Sprint ${sid} slices dispatched (${phase}); waiting for slice handoff/eval${N}"
+      return 0
+      ;;
     s0_dispatched|s0_in_progress)
       log "${Y}Sprint ${sid} S0 already dispatched; waiting for builder handoff${N}"
       return 0

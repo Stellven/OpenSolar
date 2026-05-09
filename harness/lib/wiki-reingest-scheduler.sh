@@ -8,6 +8,7 @@ BRIDGE="${HARNESS_DIR}/integrations/obsidian-wiki-bridge.sh"
 LAB_SESSION="${SOLAR_LAB_SESSION_NAME:-solar-harness-lab}"
 VAULT="${OBSIDIAN_VAULT_PATH:-$HOME/Knowledge}"
 DISPATCH_DIR="${OBSIDIAN_WIKI_BRIDGE_RUN_DIR:-${VAULT}/_raw/solar-harness/.dispatch}"
+REINGEST_PANES="${SOLAR_REINGEST_PANES:-0 1 2}"
 
 if [[ ! -f "$BRIDGE" ]]; then
   echo "bridge not found: $BRIDGE" >&2
@@ -58,12 +59,38 @@ for path in sorted(items, key=order_key):
 PY
 }
 
+pane_has_running_dispatch() {
+  local target="$1"
+  python3 - "$DISPATCH_DIR" "$target" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+target = sys.argv[2]
+
+def field(text: str, name: str) -> str:
+    m = re.search(rf"^{re.escape(name)}:\s*(.*)$", text, re.M)
+    return m.group(1).strip() if m else ""
+
+for path in root.glob("wiki-paper-reingest-*.md"):
+    try:
+        text = path.read_text(errors="ignore")
+    except OSError:
+        continue
+    if field(text, "action") == "paper-reingest" and field(text, "status") == "running" and field(text, "target_pane") == target:
+        sys.exit(0)
+sys.exit(1)
+PY
+}
+
 run_once() {
   local pane target file sent=0
-  for pane in 0 1 2 3; do
+  for pane in $REINGEST_PANES; do
     target="${LAB_SESSION}:0.${pane}"
     _bridge_pane_exists "$target" || continue
     _bridge_pane_idle "$target" || continue
+    pane_has_running_dispatch "$target" && continue
     file="$(next_pending_reingest)"
     [[ -n "$file" ]] || break
     if cmd_wiki_run_dispatch "$file" --pane "$target"; then
