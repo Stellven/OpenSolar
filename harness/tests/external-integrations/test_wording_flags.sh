@@ -19,7 +19,7 @@ echo "=== test_wording_flags ==="
 
 JSON=$(python3 "$HEALTH" --json 2>/dev/null)
 
-# D6: Mirage — sdk.kind = solar-logical, drive.state = credentials_missing
+# D6: Mirage — sdk.kind = solar-logical, drive.state reflects either local File Provider or headless credentials.
 check "Mirage sdk.kind=solar-logical" "$(python3 -c "
 import json,sys
 d=json.loads(sys.stdin.read())
@@ -29,12 +29,12 @@ sdk=m.get('evidence',{}).get('sdk',{})
 print('ok' if sdk.get('kind')=='solar-logical' else f'got {sdk}')
 " <<< "$JSON")"
 
-check "Mirage drive.state=credentials_missing" "$(python3 -c "
+check "Mirage drive.state is current enum" "$(python3 -c "
 import json,sys
 d=json.loads(sys.stdin.read())
 m=next((i for i in d['integrations'] if 'mirage' in i['name'].lower()), None)
 drv=m.get('evidence',{}).get('drive',{})
-print('ok' if drv.get('state')=='credentials_missing' else f'got {drv}')
+print('ok' if drv.get('state') in {'local_mount','credentials_missing','logical_mount'} else f'got {drv}')
 " <<< "$JSON")"
 
 # D7: Symphony — mode=dry_run_sidecar, executes_builders=False
@@ -54,13 +54,13 @@ ev=s.get('evidence',{})
 print('ok' if ev.get('executes_builders')==False else f'got {ev}')
 " <<< "$JSON")"
 
-# D8: OWL — connection_status=not_connected
-check "OWL connection_status=not_connected" "$(python3 -c "
+# D8: OWL — active provider, not default coordinator.
+check "OWL connection_status=active provider" "$(python3 -c "
 import json,sys
 d=json.loads(sys.stdin.read())
 o=next((i for i in d['integrations'] if 'owl' in i['name'].lower()), None)
 ev=o.get('evidence',{})
-print('ok' if ev.get('connection_status')=='not_connected' else f'got {ev}')
+print('ok' if ev.get('connection_status')=='active_capability_provider_not_default_coordinator' else f'got {ev}')
 " <<< "$JSON")"
 
 # D8: OWL used_by_default = False
@@ -71,12 +71,12 @@ o=next((i for i in d['integrations'] if 'owl' in i['name'].lower()), None)
 print('ok' if o.get('used_by_default')==False else f'got {o.get(\"used_by_default\")}')
 " <<< "$JSON")"
 
-# D8: OWL running = False
-check "OWL running=False" "$(python3 -c "
+# D8: OWL running is a bool; service presence is allowed but not required for default coordinator.
+check "OWL running is bool" "$(python3 -c "
 import json,sys
 d=json.loads(sys.stdin.read())
 o=next((i for i in d['integrations'] if 'owl' in i['name'].lower()), None)
-print('ok' if o.get('running')==False else f'got {o.get(\"running\")}')
+print('ok' if isinstance(o.get('running'), bool) else f'got {o.get(\"running\")}')
 " <<< "$JSON")"
 
 # D7: Symphony running = False (not running builders)

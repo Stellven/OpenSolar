@@ -442,6 +442,10 @@ def probe(deep: bool = False) -> dict:
             dead_ends=[],
             evidence={
                 "wrapper": str(HARNESS / "lib" / "solar_mirage.py"),
+                "sdk": {
+                    "kind": "solar-logical",
+                    "mode": "wrapper_only",
+                },
                 "sdk_decision": "wrapper_only",
                 "sdk_decision_doc": str(HOME / ".solar" / "reports" / "mirage-sdk-fuse-decision-2026-05-09.md"),
                 "drive": {

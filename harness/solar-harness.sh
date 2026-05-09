@@ -1699,6 +1699,12 @@ case "${1:-start}" in
   main-status) do_main_status ;;
   lab-status) do_lab_status "${2:-}" ;;
   doctor)    bash "$HARNESS_DIR/doctor.sh" "${2:-}" ;;
+  verify-integrations|capability-e2e)
+    _cap_e2e="$HARNESS_DIR/tests/integrations/test-capability-plane-e2e.sh"
+    [[ -x "$_cap_e2e" ]] || chmod +x "$_cap_e2e" 2>/dev/null || true
+    [[ -f "$_cap_e2e" ]] || { err "capability E2E test not found: $_cap_e2e"; exit 1; }
+    bash "$_cap_e2e"
+    ;;
   --skip-doctor) start_harness 3 "${2:-$(pwd)}" "--skip-doctor" ;;
   coord-status)
     # Sprint 20260420-082442 D2: 协调器状态诊断
@@ -2502,6 +2508,7 @@ PY
     echo "  $0 status-server [start|stop|restart|status]  管理 HTTP 状态面板 (port 8765)"
     echo "  $0 mermaid [--open] [file.mmd]  打开 Mermaid .mmd 架构图浏览器"
     echo "  $0 integrations status [--json]  外部开源集成六态健康检查"
+    echo "  $0 verify-integrations  端到端验证 Drive/OWL/MarkItDown/agency + 两个四分屏 dispatch 能力"
     echo "  $0 everything-claude-code [doctor|inventory|report|install --dry-run]  Everything Claude Code 候选集成审计"
     echo "  $0 context inject --query \"问题\" [--format hook|markdown|--json]  默认知识上下文注入"
     echo "  $0 autopilot [status|apply|dispatch|loop|start|stop|service-status|queue]  自动监控断头 sprint/pane 并安全推进"

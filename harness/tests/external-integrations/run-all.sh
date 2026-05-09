@@ -31,6 +31,7 @@ run_test "$DIR/test_wording_flags.sh"
 run_test "$DIR/test_audit_uploads.sh"
 run_test "$DIR/test_upload_ingest_coverage.sh"
 run_test "$DIR/test_endpoint_view.sh"
+run_test "$DIR/../integrations/test-capability-plane-e2e.sh"
 
 echo ""
 echo "========================================"

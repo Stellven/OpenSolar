@@ -26,8 +26,10 @@ fi
 echo "  Testing batch: $BATCH"
 
 # T1: audit exits 0 or 1 (not 2 = error)
+set +e
 JSON=$(python3 "$AUDITOR" --batch "$BATCH" --json 2>&1)
 EXIT=$?
+set -e
 check "audit exits 0 or 1 (not usage error)" "$([ $EXIT -le 1 ] && echo ok || echo "exit $EXIT")"
 
 # T2: output is valid JSON
