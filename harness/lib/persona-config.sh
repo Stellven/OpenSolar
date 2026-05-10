@@ -70,9 +70,10 @@ _lab_builder_model_for_slot() {
   local slot_num="${slot##*-}"
   [[ "$slot_num" =~ ^[0-9]+$ ]] || slot_num=1
 
-  # Default keeps GLM concurrency at 3 for the lab builders and uses DeepSeek
-  # for the fourth pane. Anthropic must be explicitly requested.
-  local matrix="${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,deepseek}"
+  # Default keeps GLM concurrency at 3 for the lab builders and uses native
+  # Anthropic Sonnet for the fourth pane. Bare "sonnet" is reserved for the
+  # Zhipu compatibility route, so use the explicit anthropic-sonnet alias here.
+  local matrix="${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,anthropic-sonnet}"
   local IFS=','
   local models=($matrix)
   local selected="${models[$((slot_num - 1))]:-}"

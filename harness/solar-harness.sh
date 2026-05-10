@@ -601,7 +601,7 @@ detect_pane_by_persona_simple() {
 
 write_parallel_lab_state() {
   local work_dir="$1"
-  local model_matrix="${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,deepseek}"
+  local model_matrix="${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,anthropic-sonnet}"
   mkdir -p "$HARNESS_DIR/state"
   {
     printf "WORK_DIR='%s'\n" "$work_dir"
@@ -615,7 +615,7 @@ ensure_parallel_builder_lab() {
   local work_dir="${1:-$(pwd)}"
   tmux has-session -t "$LAB_SESSION_NAME" 2>/dev/null || return 0
   local state_file="$HARNESS_DIR/state/parallel-builder-lab.env"
-  local desired_matrix="${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,deepseek}"
+  local desired_matrix="${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,anthropic-sonnet}"
   local current_matrix=""
   if [[ -f "$state_file" ]]; then
     current_matrix=$(grep '^LAB_MODEL_MATRIX=' "$state_file" 2>/dev/null | sed "s/^LAB_MODEL_MATRIX='//;s/'$//" || true)
@@ -628,7 +628,7 @@ ensure_parallel_builder_lab() {
   write_parallel_lab_state "$work_dir"
 
   tmux rename-window -t "$LAB_SESSION_NAME:0" "Builder Lab" 2>/dev/null || true
-  tmux set-option -t "$LAB_SESSION_NAME" status-right "#[fg=#f9e2af]Solar Builder Lab #[fg=#a6e3a1]3 GLM-5.1 + 1 DeepSeek V4 #[default]%H:%M" 2>/dev/null || true
+  tmux set-option -t "$LAB_SESSION_NAME" status-right "#[fg=#f9e2af]Solar Builder Lab #[fg=#a6e3a1]3 GLM-5.1 + 1 Claude Sonnet #[default]%H:%M" 2>/dev/null || true
   tmux set-environment -t "$LAB_SESSION_NAME" SOLAR_CLAUDE_BYPASS 1 2>/dev/null || true
   configure_builder_lab_labels
 
@@ -695,7 +695,7 @@ start_extension() {
     local target="$1" persona="$2" slot="$3"
     local pane_id
     pane_id=$(tmux display-message -p -t "$target" '#{pane_id}')
-    tmux send-keys -t "$target" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH TMUX_PANE=${pane_id} SOLAR_BUILDER_SLOT=${slot} SOLAR_LAB_BUILDER_MODEL_MATRIX=${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,deepseek} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" Enter
+    tmux send-keys -t "$target" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH TMUX_PANE=${pane_id} SOLAR_BUILDER_SLOT=${slot} SOLAR_LAB_BUILDER_MODEL_MATRIX=${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,anthropic-sonnet} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" Enter
   }
   sleep 1
   launch_persona_pane "$LAB_SESSION_NAME:Builder Lab.0" "lab-builder" "lab-builder-1"
@@ -712,7 +712,7 @@ start_extension() {
   tmux set-option -t "$LAB_SESSION_NAME" pane-border-style "fg=#45475a"
   tmux set-option -t "$LAB_SESSION_NAME" pane-active-border-style "fg=#f9e2af"
   tmux set-option -t "$LAB_SESSION_NAME" status-right-length 60
-  tmux set-option -t "$LAB_SESSION_NAME" status-right "#[fg=#f9e2af]Solar Builder Lab #[fg=#a6e3a1]3 GLM-5.1 + 1 DeepSeek V4 #[default]%H:%M"
+  tmux set-option -t "$LAB_SESSION_NAME" status-right "#[fg=#f9e2af]Solar Builder Lab #[fg=#a6e3a1]3 GLM-5.1 + 1 Claude Sonnet #[default]%H:%M"
   configure_builder_lab_labels
 
   ok "Parallel Builder Lab 四分屏已启动"
@@ -722,7 +722,7 @@ start_extension() {
   echo "  │ GLM-5.1      │ GLM-5.1      │"
   echo "  ├──────────────┼──────────────┤"
   echo "  │  Builder 3   │  Builder 4   │"
-  echo "  │ GLM-5.1      │ DeepSeek V4  │"
+  echo "  │ GLM-5.1      │ Claude Sonnet│"
   echo "  └──────────────┴──────────────┘"
   echo ""
   echo "  重新接入:  tmux attach -t $LAB_SESSION_NAME"
