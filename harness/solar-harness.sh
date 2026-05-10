@@ -2561,6 +2561,12 @@ PY
         ;;
     esac
     ;;
+  experience)
+    # Solar Experience Memory Layer (sprint-20260509-205414)
+    shift
+    _exp_runner="$(dirname "$0")/lib/experience_runner.py"
+    python3 "$_exp_runner" "$@"
+    ;;
   help|--help|-h)
     echo "Solar Harness — 多化身协同环境"
     echo ""
