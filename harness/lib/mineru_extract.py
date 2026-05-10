@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """
 solar-harness mineru extract <pdf-path> [--background] [--vault PATH] [--json]
+solar-harness mineru scan-papers [--json]
+solar-harness mineru queue-papers [--limit N] [--json]
 
 Extracts PDF to Obsidian references/<slug>/ with provenance frontmatter.
 Produces ~/.solar/reports/mineru-audit-<ts>.json with source -> generated_pages.
+scan-papers discovers canonical papers from source-manifest.jsonl.
+queue-papers enqueues discovered papers for idle background extraction.
 """
 from __future__ import annotations
 import hashlib
@@ -22,6 +26,11 @@ QUEUE_FILE = Path.home() / ".solar" / "queues" / "mineru.jsonl"
 REPORTS_DIR = Path.home() / ".solar" / "reports"
 OBSIDIAN_VAULT = Path(os.environ.get("OBSIDIAN_VAULT_PATH",
                                       str(Path.home() / "Knowledge")))
+# S5: Canonical source paths
+K_SOURCES_DIR = OBSIDIAN_VAULT / "_sources"
+K_META_DIR = OBSIDIAN_VAULT / "_meta"
+MANIFEST_JSONL = K_META_DIR / "source-manifest.jsonl"
+REFERENCES_DIR = OBSIDIAN_VAULT / "references"
 
 
 def _slug(pdf_path: Path) -> str:
