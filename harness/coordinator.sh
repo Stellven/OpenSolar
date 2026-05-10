@@ -1361,6 +1361,32 @@ EOF
   mv "$tmp" "$dispatch_file"
 }
 
+# experience_pre_dispatch — advisory hook (fail-open, 50ms timeout)
+# EXPERIENCE_HOOK=0 to bypass; calls lib/coordinator_hooks.py pre_dispatch_json
+experience_pre_dispatch() {
+  local _sid="${1:-}" _action="${2:-dispatch}"
+  [[ "${EXPERIENCE_HOOK:-1}" == "0" ]] && return 0
+  [[ -z "$_sid" ]] && return 0
+  local _py; _py=$(python3 -c "
+import sys, os
+sys.path.insert(0,'$(dirname "$0")/lib')
+try:
+    from coordinator_hooks import pre_dispatch_json
+    print(pre_dispatch_json('${_sid}', '${_action}'))
+except Exception as e:
+    import json; print(json.dumps({'action':'allow','reason':'error_fail_open'}))
+" 2>/dev/null || echo '{"action":"allow","reason":"py_fail_open"}')
+  local _act; _act=$(echo "$_py" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('action','allow'))" 2>/dev/null || echo "allow")
+  if [[ "$_act" == "abort" ]]; then
+    log "${Y}[experience_hook] abort: sid=${_sid} reason=$(echo "$_py" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('reason',''))" 2>/dev/null)${N}"
+    return 1
+  fi
+  if [[ "$_act" == "advisory" ]]; then
+    log "${Y}[experience_hook] advisory: sid=${_sid} $(echo "$_py" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('advisory','')[:120])" 2>/dev/null)${N}"
+  fi
+  return 0
+}
+
 # 向 pane 发送指令 (核心调度动作)
 # 原理: 长消息写到指令文件，tmux 只发一行短命令让 Claude 读文件
 dispatch_to_pane() {
@@ -1409,6 +1435,12 @@ dispatch_to_pane() {
     return 2
   fi
   echo $$ > "$lock_dir/pid"
+
+  # experience_pre_dispatch hook (fail-open, sprint-20260509-205414)
+  if ! experience_pre_dispatch "$sid" "dispatch_to_pane"; then
+    rm -rf "$lock_dir" 2>/dev/null || true
+    return 3
+  fi
 
   # sprint-20260508-coordinator-control-plane-v2 S2+S3: assign dispatch_id
   local _dispatch_id=""
