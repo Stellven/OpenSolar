@@ -2,7 +2,7 @@
   "id": "sprint-20260430-163948",
   "title": "L3 MemPalace 完整化: 真 MCP 协议 server (用 mcp SDK stdio_server) +",
   "status": "passed",
-  "phase": "build",
+  "phase": "eval_passed",
   "created_at": "2026-04-30T08:39:48Z",
   "round": 2,
   "history": [
@@ -128,8 +128,21 @@
       "ts": "2026-05-01T19:42:44Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": "build",
+        "handoff_to": null,
+        "target_role": null
+      }
     }
   ],
-  "updated_at": "2026-05-01T19:42:35Z",
-  "last_handoff_mtime": 1777539737.0
+  "updated_at": "2026-05-10T14:52:54Z",
+  "last_handoff_mtime": 1777539737.0,
+  "handoff_to": "done",
+  "target_role": "done"
 }

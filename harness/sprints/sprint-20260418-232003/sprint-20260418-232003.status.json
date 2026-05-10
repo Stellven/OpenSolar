@@ -1,6 +1,6 @@
 {
   "id": "sprint-20260418-232003",
-  "title": "dispatch \u4e0e LLM \u7a33\u5b9a\u6027\u6700\u540e\u4e00\u516c\u91cc: bug #6/#7/#8 \u4fee\u590d + brain-router \u7a33\u5b9a\u6027 ",
+  "title": "dispatch 与 LLM 稳定性最后一公里: bug #6/#7/#8 修复 + brain-router 稳定性 ",
   "status": "passed",
   "created_at": "2026-04-18T15:20:03Z",
   "round": 1,
@@ -14,7 +14,21 @@
       "ts": "2026-04-18T15:20:56Z",
       "event": "done_criteria_filled",
       "by": "planner"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": null,
+        "handoff_to": null,
+        "target_role": null
+      }
     }
   ],
-  "updated_at": "2026-04-18T16:02:56Z"
+  "updated_at": "2026-05-10T14:52:54Z",
+  "phase": "eval_passed",
+  "handoff_to": "done",
+  "target_role": "done"
 }

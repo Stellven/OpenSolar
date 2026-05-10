@@ -5,11 +5,11 @@
   "status": "passed",
   "priority": "P1",
   "lane": "data-plane",
-  "handoff_to": "builder_main",
+  "handoff_to": "done",
   "created_at": "2026-05-08T17:45:00Z",
-  "updated_at": "2026-05-09T00:37:06Z",
+  "updated_at": "2026-05-10T14:52:54Z",
   "contract": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-mirage-codex-solar-substrate.contract.md",
-  "phase": "planning_complete",
+  "phase": "eval_passed",
   "blocked_by": null,
   "source": "codex-manual-2026-05-08",
   "auto_generated": false,
@@ -108,9 +108,21 @@
       "ts": "2026-05-09T00:38:42Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": "planning_complete",
+        "handoff_to": "builder_main",
+        "target_role": null
+      }
     }
   ],
   "prd": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-mirage-codex-solar-substrate.prd.md",
   "round": 3,
-  "last_handoff_mtime": 1778286604.0
+  "last_handoff_mtime": 1778286604.0,
+  "target_role": "done"
 }

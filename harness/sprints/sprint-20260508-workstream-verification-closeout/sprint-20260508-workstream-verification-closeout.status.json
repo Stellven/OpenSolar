@@ -5,12 +5,12 @@
   "status": "passed",
   "priority": "P0",
   "lane": "reliability",
-  "handoff_to": "builder_main",
+  "handoff_to": "done",
   "created_at": "2026-05-08T16:40:00Z",
-  "updated_at": "2026-05-08T13:06:03Z",
+  "updated_at": "2026-05-10T14:52:54Z",
   "prd": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.prd.md",
   "contract": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.contract.md",
-  "phase": "planning_complete",
+  "phase": "eval_passed",
   "plan": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.plan.md",
   "report_md": "/Users/sihaoli/.solar/harness/reports/solar-workstream-verification-20260508.md",
   "report_json": "/Users/sihaoli/.solar/harness/reports/solar-workstream-verification-20260508.json",
@@ -94,10 +94,22 @@
       "ts": "2026-05-08T13:02:28Z",
       "event": "implementation_completed",
       "by": "builder"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": "planning_complete",
+        "handoff_to": "builder_main",
+        "target_role": null
+      }
     }
   ],
   "round": 1,
   "last_handoff_mtime": 1778245333.0,
   "verdict": "PASS",
-  "passed_at": "2026-05-08T15:08:20Z"
+  "passed_at": "2026-05-08T15:08:20Z",
+  "target_role": "done"
 }

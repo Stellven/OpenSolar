@@ -1,0 +1,82 @@
+{
+  "id": "sprint-20260510-solar-mia-full-integration",
+  "title": "Solar MIA Full Integration — Upstream First",
+  "summary": "Vendor ECNU-SII/MIA, inventory upstream Manager/Planner/Executor/Memory-Serve/TTRL, compare with Solar experience layer, and produce fusion design without overwriting local code.",
+  "status": "passed",
+  "phase": "eval_passed",
+  "handoff_to": "evaluator",
+  "target_role": "evaluator",
+  "priority": "P1",
+  "lane": "capability",
+  "round": 2,
+  "bypass_pm": true,
+  "created_at": "2026-05-10T14:33:52Z",
+  "updated_at": "2026-05-10T14:54:20Z",
+  "history": [
+    {
+      "ts": "2026-05-10T14:33:52Z",
+      "event": "contract_created_by_codex",
+      "by": "codex",
+      "note": "User approved upstream-first full MIA integration; local Solar experience layer must be treated as adapter/fallback, not the source of truth."
+    },
+    {
+      "ts": "2026-05-10T14:35:33Z",
+      "event": "graph_node_dispatched",
+      "by": "codex_controller",
+      "note": "M1 vendor upstream ECNU-SII/MIA dispatched to solar-harness-lab:0.3 Sonnet. P1 runs without stealing P0 data-plane reviewer/builders."
+    },
+    {
+      "ts": "2026-05-10T14:38:29Z",
+      "event": "plan_written",
+      "by": "builder",
+      "note": "Implementation plan written covering M1-M5 DAG nodes with collision analysis, fusion architecture preview, risk assessment, and stop rules."
+    },
+    {
+      "ts": "2026-05-10T14:40:19Z",
+      "event": "plan_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-10T14:40:56Z",
+      "event": "plan_reviewed",
+      "by": "evaluator",
+      "verdict": "APPROVE"
+    },
+    {
+      "ts": "2026-05-10T14:46:58Z",
+      "event": "implementation_completed",
+      "by": "builder",
+      "round": 2
+    },
+    {
+      "ts": "2026-05-10T14:47:42Z",
+      "event": "autopilot_pane_idle_with_pending_artifact",
+      "by": "solar-autopilot",
+      "note": "请评审 sprint-20260510-solar-mia-full-integration：读取 handoff/contract，产出 eval.md/eval.json。"
+    },
+    {
+      "ts": "2026-05-10T14:48:46Z",
+      "event": "handoff_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-10T14:53:18Z",
+      "event": "autopilot_pane_idle_with_pending_artifact",
+      "by": "solar-autopilot",
+      "note": "请评审 sprint-20260510-solar-mia-full-integration：读取 handoff/contract，产出 eval.md/eval.json。"
+    },
+    {
+      "ts": "2026-05-10T14:54:20Z",
+      "event": "eval_pass",
+      "by": "审判官",
+      "note": "D1-D6 all PASS; round=2; vendor unmodified; smoke honest pendings; P2 F1-F5 contract ready."
+    }
+  ],
+  "artifacts": [
+    "contract",
+    "prd",
+    "plan",
+    "task_graph"
+  ],
+  "last_handoff_mtime": 1778424397.0
+}

@@ -2,7 +2,7 @@
   "id": "sprint-20260428-212348",
   "title": "扫描 Solar 系统已开发的全部能力, 输出用户使用说明书 USER-GUIDE.md 到 ~/Solar 根目录: ",
   "status": "passed",
-  "phase": "ship",
+  "phase": "eval_passed",
   "created_at": "2026-04-28T13:23:48Z",
   "round": 2,
   "history": [
@@ -48,8 +48,21 @@
       "ts": "2026-04-29T06:22:20Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": "ship",
+        "handoff_to": null,
+        "target_role": null
+      }
     }
   ],
-  "updated_at": "2026-04-29T06:22:17Z",
-  "last_handoff_mtime": 1777442948.0
+  "updated_at": "2026-05-10T14:52:54Z",
+  "last_handoff_mtime": 1777442948.0,
+  "handoff_to": "done",
+  "target_role": "done"
 }

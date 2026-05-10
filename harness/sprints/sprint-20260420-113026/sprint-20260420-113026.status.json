@@ -1,6 +1,6 @@
 {
   "id": "sprint-20260420-113026",
-  "title": "\u534f\u8c03\u5668 plan-review \u72b6\u6001\u5361\u6b7b\u4fee\u590d + \u901a\u7528\u4e2d\u95f4\u72b6\u6001\u81ea\u6108\u673a\u5236: \u6839\u56e0\u662f\u5ba1\u5224\u5b98 REJECT \u540e dispatc",
+  "title": "协调器 plan-review 状态卡死修复 + 通用中间状态自愈机制: 根因是审判官 REJECT 后 dispatc",
   "status": "passed",
   "created_at": "2026-04-20T03:30:26Z",
   "round": 2,
@@ -14,7 +14,7 @@
       "ts": "2026-04-20T05:38:20Z",
       "event": "done_criteria_filled_and_activated",
       "by": "planner",
-      "note": "\u4fee\u590d 3 \u65ad\u5934: plan-review\u5361\u6b7b + handle_passed\u6f0f\u89e6\u53d1 + \u534f\u8c03\u5668\u6f0f\u62cd\u4e2d\u95f4\u6001"
+      "note": "修复 3 断头: plan-review卡死 + handle_passed漏触发 + 协调器漏拍中间态"
     },
     {
       "ts": "2026-04-20T05:44:46Z",
@@ -54,7 +54,21 @@
       "event": "implementation_completed",
       "by": "builder",
       "round": 2
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": null,
+        "handoff_to": null,
+        "target_role": null
+      }
     }
   ],
-  "updated_at": "2026-04-20T10:42:17Z"
+  "updated_at": "2026-05-10T14:52:54Z",
+  "phase": "eval_passed",
+  "handoff_to": "done",
+  "target_role": "done"
 }

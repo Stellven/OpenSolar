@@ -32,7 +32,21 @@
       "event": "eval_completed",
       "by": "evaluator",
       "details": "PASS: D1-D7 all passed. Minor: D1 missing J_Governance category (41/41+ seeds OK)."
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": null,
+        "handoff_to": null,
+        "target_role": null
+      }
     }
   ],
-  "updated_at": "2026-04-17T22:49:05Z"
+  "updated_at": "2026-05-10T14:52:54Z",
+  "phase": "eval_passed",
+  "handoff_to": "done",
+  "target_role": "done"
 }

@@ -5,12 +5,12 @@
   "status": "passed",
   "priority": "P0",
   "lane": "reliability",
-  "handoff_to": "builder_main",
+  "handoff_to": "done",
   "created_at": "2026-05-08T06:40:20Z",
-  "updated_at": "2026-05-08T18:05:00Z",
+  "updated_at": "2026-05-10T14:52:54Z",
   "prd": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-solar-kb-obsidian-autouse.prd.md",
   "contract": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-solar-kb-obsidian-autouse.contract.md",
-  "phase": "building_parallel",
+  "phase": "eval_passed",
   "parallel_expected_handoffs": 2,
   "parallel_requested_builders": 2,
   "parallel_integrate_enabled": true,
@@ -108,9 +108,21 @@
       "ts": "2026-05-08T18:06:38Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": "building_parallel",
+        "handoff_to": "builder_main",
+        "target_role": null
+      }
     }
   ],
   "plan": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-solar-kb-obsidian-autouse.plan.md",
   "design": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-solar-kb-obsidian-autouse.design.md",
-  "round": 3
+  "round": 3,
+  "target_role": "done"
 }

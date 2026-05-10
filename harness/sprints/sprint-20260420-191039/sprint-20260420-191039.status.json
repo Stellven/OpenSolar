@@ -1,6 +1,6 @@
 {
   "id": "sprint-20260420-191039",
-  "title": "\u4fee\u590d\u7b2c 4 \u4e2a\u65ad\u5934 - \u5efa\u8bbe\u8005\u4ea4 handoff \u65f6 history/events \u4e0d\u540c\u6b65: \u6839\u56e0\u540c plan-verd",
+  "title": "修复第 4 个断头 - 建设者交 handoff 时 history/events 不同步: 根因同 plan-verd",
   "status": "passed",
   "created_at": "2026-04-20T11:10:39Z",
   "round": 2,
@@ -14,7 +14,7 @@
       "ts": "2026-04-20T11:11:16Z",
       "event": "done_criteria_filled_and_activated",
       "by": "planner",
-      "note": "\u4fee\u590d\u7b2c 4 \u4e2a\u65ad\u5934 - handoff-submit \u539f\u5b50\u547d\u4ee4\u8865\u9f50 history/events \u540c\u6b65"
+      "note": "修复第 4 个断头 - handoff-submit 原子命令补齐 history/events 同步"
     },
     {
       "ts": "2026-04-20T11:16:01Z",
@@ -22,7 +22,21 @@
       "by": "evaluator",
       "verdict": "APPROVE",
       "note": "8/8 Done covered. round++ semantics verified: matches existing dispatch subshell behavior. Three-command symmetry (plan-verdict/eval-verdict/handoff-submit) confirmed."
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": null,
+        "handoff_to": null,
+        "target_role": null
+      }
     }
   ],
-  "updated_at": "2026-04-20T11:42:40Z"
+  "updated_at": "2026-05-10T14:52:54Z",
+  "phase": "eval_passed",
+  "handoff_to": "done",
+  "target_role": "done"
 }

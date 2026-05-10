@@ -2,9 +2,9 @@
   "id": "sprint-20260507-010946",
   "title": "Solar-Harness x OpenAI Symphony Integration P0",
   "status": "passed",
-  "phase": "planning_complete",
+  "phase": "eval_passed",
   "created_at": "2026-05-07T01:09:46Z",
-  "updated_at": "2026-05-07T02:28:53Z",
+  "updated_at": "2026-05-10T14:52:54Z",
   "round": 1,
   "history": [
     {
@@ -67,8 +67,21 @@
       "ts": "2026-05-07T02:29:07Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": "planning_complete",
+        "handoff_to": null,
+        "target_role": null
+      }
     }
   ],
   "passed_at": "2026-05-07T02:29:06Z",
-  "finalized_at": "2026-05-07T02:29:07Z"
+  "finalized_at": "2026-05-07T02:29:07Z",
+  "handoff_to": "done",
+  "target_role": "done"
 }

@@ -1,6 +1,6 @@
 {
   "id": "sprint-20260416-195738",
-  "title": "Harness \u65ad\u5934\u4fee\u590d: \u628a sprint-185003 \u91cc 3 \u4e2a\u65ad\u5934\u529f\u80fd\u771f\u6b63\u63a5\u7535 \u2014 (D2) archive.s",
+  "title": "Harness 断头修复: 把 sprint-185003 里 3 个断头功能真正接电 — (D2) archive.s",
   "status": "passed",
   "created_at": "2026-04-16T11:57:38Z",
   "round": 1,
@@ -29,10 +29,24 @@
       "event": "reactivated",
       "by": "planner",
       "data": {
-        "reason": "\u5408\u5e76\u65b9\u6848\u5931\u8d25: 191955 \u4e2d\u9014\u52a0 Done \u672a\u88ab\u5ba1\u5224\u5b98\u68c0\u6d4b"
+        "reason": "合并方案失败: 191955 中途加 Done 未被审判官检测"
+      }
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": null,
+        "handoff_to": null,
+        "target_role": null
       }
     }
   ],
-  "updated_at": "2026-04-16T12:27:19Z",
-  "reverted_from_merge": "sprint-20260416-191955"
+  "updated_at": "2026-05-10T14:52:54Z",
+  "reverted_from_merge": "sprint-20260416-191955",
+  "phase": "eval_passed",
+  "handoff_to": "done",
+  "target_role": "done"
 }

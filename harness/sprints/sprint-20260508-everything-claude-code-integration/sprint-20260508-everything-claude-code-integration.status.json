@@ -3,12 +3,12 @@
   "sprint_id": "sprint-20260508-everything-claude-code-integration",
   "title": "Everything Claude Code Integration Backlog",
   "status": "passed",
-  "phase": "spec",
+  "phase": "eval_passed",
   "priority": "P1",
   "lane": "agent-ecosystem",
-  "handoff_to": "builder_main",
+  "handoff_to": "done",
   "created_at": "2026-05-08T16:52:52Z",
-  "updated_at": "2026-05-08T17:51:51Z",
+  "updated_at": "2026-05-10T14:52:54Z",
   "contract": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-everything-claude-code-integration.contract.md",
   "source": "codex-manual-2026-05-08",
   "auto_generated": false,
@@ -110,11 +110,23 @@
       "ts": "2026-05-08T17:53:06Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": "spec",
+        "handoff_to": "builder_main",
+        "target_role": null
+      }
     }
   ],
   "round": 1,
   "design": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-everything-claude-code-integration.design.md",
   "plan": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-everything-claude-code-integration.plan.md",
   "topology": "solo",
-  "builder_model": "sonnet-4.6"
+  "builder_model": "sonnet-4.6",
+  "target_role": "done"
 }

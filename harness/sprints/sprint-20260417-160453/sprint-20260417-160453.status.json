@@ -1,6 +1,6 @@
 {
   "id": "sprint-20260417-160453",
-  "title": "Solar Subconscious (\u81ea\u7814\u7248): \u7528\u81ea\u6709\u7ec4\u4ef6 (hooks + brain-router + MemP",
+  "title": "Solar Subconscious (自研版): 用自有组件 (hooks + brain-router + MemP",
   "status": "passed",
   "created_at": "2026-04-17T08:04:53Z",
   "round": 1,
@@ -14,7 +14,21 @@
       "ts": "2026-04-17T08:06:12Z",
       "event": "done_criteria_filled",
       "by": "planner"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": null,
+        "handoff_to": null,
+        "target_role": null
+      }
     }
   ],
-  "updated_at": "2026-04-17T09:08:10Z"
+  "updated_at": "2026-05-10T14:52:54Z",
+  "phase": "eval_passed",
+  "handoff_to": "done",
+  "target_role": "done"
 }

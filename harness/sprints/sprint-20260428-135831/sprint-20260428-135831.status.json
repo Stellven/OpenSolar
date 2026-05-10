@@ -2,7 +2,7 @@
   "id": "sprint-20260428-135831",
   "title": "在 ~/Solar/README.md 标题后第一个 section 插入'⚡ 一键安装'段(用户复制粘贴给 AI ag",
   "status": "passed",
-  "phase": "spec",
+  "phase": "eval_passed",
   "created_at": "2026-04-28T05:58:31Z",
   "round": 1,
   "history": [
@@ -60,8 +60,21 @@
       "ts": "2026-04-28T06:27:39Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": "spec",
+        "handoff_to": null,
+        "target_role": null
+      }
     }
   ],
-  "updated_at": "2026-04-28T06:27:27Z",
-  "last_handoff_mtime": 1777357487.0
+  "updated_at": "2026-05-10T14:52:54Z",
+  "last_handoff_mtime": 1777357487.0,
+  "handoff_to": "done",
+  "target_role": "done"
 }

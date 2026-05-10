@@ -5,12 +5,12 @@
   "status": "passed",
   "priority": "P0",
   "lane": "reliability",
-  "handoff_to": "evaluator",
+  "handoff_to": "done",
   "created_at": "2026-05-08T12:50:16Z",
-  "updated_at": "2026-05-08T18:13:29Z",
+  "updated_at": "2026-05-10T14:52:54Z",
   "prd": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-wiki-upload-ingest-closure.prd.md",
   "contract": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-wiki-upload-ingest-closure.contract.md",
-  "phase": "round2_complete",
+  "phase": "eval_passed",
   "topology": "solo",
   "plan": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-wiki-upload-ingest-closure.plan.md",
   "handoff": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-wiki-upload-ingest-closure.handoff.md",
@@ -154,6 +154,17 @@
       "ts": "2026-05-08T18:15:36Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": "round2_complete",
+        "handoff_to": "evaluator",
+        "target_role": null
+      }
     }
   ],
   "parallel_expected_handoffs": 1,
@@ -161,5 +172,6 @@
   "parallel_integrate_enabled": false,
   "parallel_integrate_report": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-wiki-upload-ingest-closure.parallel-integrate.md",
   "round": 3,
-  "last_handoff_mtime": 1778262969.0
+  "last_handoff_mtime": 1778262969.0,
+  "target_role": "done"
 }

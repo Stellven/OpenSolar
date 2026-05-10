@@ -2,7 +2,7 @@
   "id": "sprint-20260428-094726",
   "title": "Solar 用户友好化双任务: A. **紧急安全清理** — 扫描三仓库(~/.claude, ~/Solar, ~/",
   "status": "passed",
-  "phase": "spec",
+  "phase": "eval_passed",
   "created_at": "2026-04-28T01:47:26Z",
   "round": 0,
   "history": [
@@ -54,7 +54,20 @@
       "ts": "2026-04-28T02:53:07Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": "spec",
+        "handoff_to": null,
+        "target_role": null
+      }
     }
   ],
-  "updated_at": "2026-04-28T02:53:04Z"
+  "updated_at": "2026-05-10T14:52:54Z",
+  "handoff_to": "done",
+  "target_role": "done"
 }

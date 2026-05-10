@@ -1,6 +1,6 @@
 {
   "id": "sprint-20260414-211603",
-  "title": "\u628a\u5b9e\u8bc1\u6d41\u6c34\u7ebf\u7684\u89e6\u53d1\u8bcd\u7f29\u77ed: \u7528\u6237\u53ea\u8bf4'\u5b9e\u8bc1'\u5373\u53ef\u89e6\u53d1 empirical-pipeline\uff0c\u4fee\u6539 intent-engi",
+  "title": "把实证流水线的触发词缩短: 用户只说'实证'即可触发 empirical-pipeline，修改 intent-engi",
   "status": "passed",
   "created_at": "2026-04-14T13:16:03Z",
   "round": 1,
@@ -14,7 +14,21 @@
       "ts": "2026-04-14T13:16:20Z",
       "event": "done_criteria_filled",
       "by": "planner"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": null,
+        "handoff_to": null,
+        "target_role": null
+      }
     }
   ],
-  "updated_at": "2026-04-14T21:36:21Z"
+  "updated_at": "2026-05-10T14:52:54Z",
+  "phase": "eval_passed",
+  "handoff_to": "done",
+  "target_role": "done"
 }

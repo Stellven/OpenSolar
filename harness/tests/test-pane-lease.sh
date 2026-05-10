@@ -98,9 +98,36 @@ check "acquire after reap → acquired=True" "$acquired4" "True"
 release_pane_lease "solar-harness:0.3" "d-20260508T100004Z-000000" >/dev/null 2>&1 || true
 
 echo ""
+echo "--- python lease compatibility ---"
+
+# T9: bash lease reader treats Python-native sprint_id leases as busy.
+PANE_PY="solar-harness:0.5"
+DID_PY="graph-eval-test-python-lease"
+python3 - "$_PANE_LEASE_DIR" "$PANE_PY" "$DID_PY" <<'PY'
+import datetime, json, pathlib, sys
+lease_dir = pathlib.Path(sys.argv[1])
+pane = sys.argv[2]
+did = sys.argv[3]
+safe = pane.replace(":", "_").replace(".", "_")
+expires = (datetime.datetime.utcnow() + datetime.timedelta(seconds=600)).strftime("%Y-%m-%dT%H:%M:%SZ")
+(lease_dir / f"{safe}.json").write_text(json.dumps({
+    "pane": pane,
+    "sprint_id": "sprint-python-lease",
+    "dispatch_id": did,
+    "acquired_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "expires_at": expires,
+    "ttl_sec": 600,
+}), encoding="utf-8")
+PY
+result_py=$(acquire_pane_lease "$PANE_PY" "sprint-other" "d-20260508T100005Z-abcdef" 600 2>/dev/null || true)
+held_py=$(python3 -c "import json,sys; d=json.loads(sys.argv[1]); print(d.get('held_sid',''))" "$result_py" 2>/dev/null || true)
+check "bash acquire sees Python sprint_id lease" "$held_py" "sprint-python-lease"
+release_pane_lease "$PANE_PY" "$DID_PY" "python_compat_done" >/dev/null 2>&1 || true
+
+echo ""
 echo "--- concurrent acquire (10 processes) ---"
 
-# T9: 10 concurrent acquires on same pane → exactly 1 succeeds
+# T10: 10 concurrent acquires on same pane → exactly 1 succeeds
 PANE_C="solar-harness:0.4"
 success_count=0
 for i in $(seq 1 10); do

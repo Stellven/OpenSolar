@@ -1,6 +1,6 @@
 {
   "id": "sprint-20260422-192238",
-  "title": "\u4fee sprint-20260422-172812 D5 \u5b9e\u65bd\u504f\u79bb\uff1acoordinator-watchdog.sh \u767d\u540d\u5355",
+  "title": "修 sprint-20260422-172812 D5 实施偏离：coordinator-watchdog.sh 白名单",
   "status": "passed",
   "created_at": "2026-04-22T11:22:38Z",
   "round": 1,
@@ -26,7 +26,21 @@
       "event": "activated",
       "by": "planner",
       "note": "plan APPROVEd, dispatching to builder"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": null,
+        "handoff_to": null,
+        "target_role": null
+      }
     }
   ],
-  "updated_at": "2026-04-22T12:34:15Z"
+  "updated_at": "2026-05-10T14:52:54Z",
+  "phase": "eval_passed",
+  "handoff_to": "done",
+  "target_role": "done"
 }

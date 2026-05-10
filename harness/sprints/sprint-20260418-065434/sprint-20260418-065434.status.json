@@ -1,6 +1,6 @@
 {
   "id": "sprint-20260418-065434",
-  "title": "\u610f\u56fe\u8def\u7531\u5668 v1: \u7528\u6237\u4e00\u53e5\u8bdd\u9700\u6c42 \u2192 \u81ea\u52a8\u62c6 Sprint \u5408\u7ea6 + Done + \u6fc0\u6d3b (\u7ec8\u6781\u613f\u666f\u6838\u5fc3)",
+  "title": "意图路由器 v1: 用户一句话需求 → 自动拆 Sprint 合约 + Done + 激活 (终极愿景核心)",
   "status": "passed",
   "created_at": "2026-04-17T22:54:34Z",
   "round": 1,
@@ -14,7 +14,21 @@
       "ts": "2026-04-17T23:12:28Z",
       "event": "done_criteria_filled",
       "by": "planner"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": null,
+        "handoff_to": null,
+        "target_role": null
+      }
     }
   ],
-  "updated_at": "2026-04-18T00:52:41Z"
+  "updated_at": "2026-05-10T14:52:54Z",
+  "phase": "eval_passed",
+  "handoff_to": "done",
+  "target_role": "done"
 }

@@ -5,12 +5,12 @@
   "status": "passed",
   "priority": "P1",
   "lane": "knowledge",
-  "handoff_to": "builder_main",
+  "handoff_to": "done",
   "created_at": "2026-05-08T17:10:00Z",
-  "updated_at": "2026-05-08T18:22:08Z",
+  "updated_at": "2026-05-10T14:52:54Z",
   "prd": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-apple-notes-wechat-ingest.prd.md",
   "contract": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-apple-notes-wechat-ingest.contract.md",
-  "phase": "planning_complete",
+  "phase": "eval_passed",
   "source": "codex-manual-2026-05-08",
   "auto_generated": false,
   "evidence": [
@@ -131,11 +131,23 @@
       "ts": "2026-05-08T18:23:33Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": "planning_complete",
+        "handoff_to": "builder_main",
+        "target_role": null
+      }
     }
   ],
   "plan": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-apple-notes-wechat-ingest.plan.md",
   "design": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-apple-notes-wechat-ingest.design.md",
   "topology": "solo",
   "builder_model": "sonnet-4.6",
-  "round": 1
+  "round": 1,
+  "target_role": "done"
 }

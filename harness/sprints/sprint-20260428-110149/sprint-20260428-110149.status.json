@@ -2,7 +2,7 @@
   "id": "sprint-20260428-110149",
   "title": "执行 D3 git filter-repo 清理 GitHub 上的 P0 敏感信息(本机文件保留): (1) brew",
   "status": "passed",
-  "phase": "spec",
+  "phase": "eval_passed",
   "created_at": "2026-04-28T03:01:49Z",
   "round": 1,
   "history": [
@@ -54,7 +54,20 @@
       "ts": "2026-04-28T03:17:13Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": "spec",
+        "handoff_to": null,
+        "target_role": null
+      }
     }
   ],
-  "updated_at": "2026-04-28T03:17:08Z"
+  "updated_at": "2026-05-10T14:52:54Z",
+  "handoff_to": "done",
+  "target_role": "done"
 }

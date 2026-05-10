@@ -1,11 +1,11 @@
 {
   "sid": "sprint-20260509-mineru-mirage-closeout",
   "status": "passed",
-  "phase": "planning_complete",
+  "phase": "eval_passed",
   "priority": "P1",
   "lane": "delivery",
-  "handoff_to": "builder_main",
-  "updated_at": "2026-05-09T02:02:05Z",
+  "handoff_to": "done",
+  "updated_at": "2026-05-10T14:52:54Z",
   "summary": "Close partial MinerU Document Explorer and Mirage SDK/FUSE integrations; keep QMD IPv4 compatibility and heavy jobs background-only.",
   "id": "sprint-20260509-mineru-mirage-closeout",
   "sprint_id": "sprint-20260509-mineru-mirage-closeout",
@@ -164,6 +164,17 @@
       "ts": "2026-05-09T02:02:05Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": "planning_complete",
+        "handoff_to": "builder_main",
+        "target_role": null
+      }
     }
   ],
   "blocked_by": null,
@@ -174,5 +185,6 @@
   "knowledge_ingest_dispatch": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260509-mineru-mirage-closeout.dispatch.md",
   "knowledge_exported_at": "2026-05-09T02:02:05Z",
   "knowledge_ingested_at": null,
-  "knowledge_export_error": null
+  "knowledge_export_error": null,
+  "target_role": "done"
 }

@@ -45,6 +45,12 @@ d = json.load(open(sf))
 old_status = d.get('status', '')
 now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 d['status'] = new_status
+d.update({
+    'approved': {'phase': 'plan_reviewed', 'handoff_to': 'builder', 'target_role': 'builder'},
+    'reviewing': {'phase': 'implementation_complete', 'handoff_to': 'evaluator', 'target_role': 'evaluator'},
+    'passed': {'phase': 'eval_passed', 'handoff_to': '', 'target_role': ''},
+    'failed_review': {'phase': 'eval_failed', 'handoff_to': 'builder', 'target_role': 'builder'},
+}.get(new_status, {}))
 d['updated_at'] = now
 hist = {'ts': now, 'event': event, 'by': by}
 try:
@@ -77,9 +83,15 @@ old_status = d.get('status', '')
 old_round = d.get('round', 0)
 now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 d['status'] = new_status
+d.update({
+    'approved': {'phase': 'plan_reviewed', 'handoff_to': 'builder', 'target_role': 'builder'},
+    'reviewing': {'phase': 'implementation_complete', 'handoff_to': 'evaluator', 'target_role': 'evaluator'},
+    'passed': {'phase': 'eval_passed', 'handoff_to': '', 'target_role': ''},
+    'failed_review': {'phase': 'eval_failed', 'handoff_to': 'builder', 'target_role': 'builder'},
+}.get(new_status, {}))
 d['round'] = old_round + 1
 d['updated_at'] = now
-hist = {'ts': now, 'event': event, 'by': by}
+hist = {'ts': now, 'event': event, 'by': by, 'round': d['round']}
 try:
     extra = json.loads(extra_json) if extra_json else {}
     hist.update(extra)

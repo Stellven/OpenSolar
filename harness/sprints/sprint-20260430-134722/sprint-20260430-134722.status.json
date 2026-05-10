@@ -2,7 +2,7 @@
   "id": "sprint-20260430-134722",
   "title": "解决仓库 Solar-MAX 安全审计发现的 5 项问题：OAuth secret JSON、git 追踪的 SQLit",
   "status": "passed",
-  "phase": "review",
+  "phase": "eval_passed",
   "created_at": "2026-04-30T05:47:22Z",
   "round": 1,
   "history": [
@@ -152,9 +152,20 @@
       "ts": "2026-04-30T06:24:05Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": "review",
+        "handoff_to": null,
+        "target_role": null
+      }
     }
   ],
-  "updated_at": "2026-04-30T06:24:01Z",
+  "updated_at": "2026-05-10T14:52:54Z",
   "approvals": {
     "force_push_to_origin": {
       "approved": true,
@@ -169,5 +180,7 @@
       "note": "监护人将自行去 Google Cloud Console 撤销重签 OAuth credential，建设者只需在 handoff 中给清晰步骤"
     }
   },
-  "last_handoff_mtime": 1777530194.0
+  "last_handoff_mtime": 1777530194.0,
+  "handoff_to": "done",
+  "target_role": "done"
 }

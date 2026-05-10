@@ -3,12 +3,12 @@
   "sprint_id": "sprint-20260508-external-integrations-closeout",
   "title": "External Integrations Closeout",
   "status": "passed",
-  "phase": "planning_complete_deferred",
+  "phase": "eval_passed",
   "priority": "P0",
   "lane": "reliability",
-  "handoff_to": "backlog",
+  "handoff_to": "done",
   "created_at": "2026-05-08T14:45:00Z",
-  "updated_at": "2026-05-08T16:44:27Z",
+  "updated_at": "2026-05-10T14:52:54Z",
   "contract": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-external-integrations-closeout.contract.md",
   "source": "codex-manual-2026-05-08",
   "auto_generated": false,
@@ -71,10 +71,22 @@
       "ts": "2026-05-08T16:47:51Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": "planning_complete_deferred",
+        "handoff_to": "backlog",
+        "target_role": null
+      }
     }
   ],
   "prd": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-external-integrations-closeout.prd.md",
   "design": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-external-integrations-closeout.design.md",
   "plan": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-external-integrations-closeout.plan.md",
-  "round": 1
+  "round": 1,
+  "target_role": "done"
 }

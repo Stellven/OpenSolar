@@ -1,6 +1,6 @@
 {
   "id": "sprint-20260420-090726",
-  "title": "\u6536\u5b98\u65ad\u5934\u4fee\u590d (\u7b2c\u56db\u6839\u56e0): coordinator get_latest_sprint_file \u6f0f\u8df3 cancell",
+  "title": "收官断头修复 (第四根因): coordinator get_latest_sprint_file 漏跳 cancell",
   "status": "passed",
   "created_at": "2026-04-20T01:07:26Z",
   "round": 1,
@@ -14,7 +14,21 @@
       "ts": "2026-04-20T01:08:24Z",
       "event": "done_criteria_filled",
       "by": "planner"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": null,
+        "handoff_to": null,
+        "target_role": null
+      }
     }
   ],
-  "updated_at": "2026-04-20T01:21:32Z"
+  "updated_at": "2026-05-10T14:52:54Z",
+  "phase": "eval_passed",
+  "handoff_to": "done",
+  "target_role": "done"
 }

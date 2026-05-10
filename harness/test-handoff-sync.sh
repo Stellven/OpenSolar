@@ -54,10 +54,16 @@ echo "--- Scenario A: normal handoff-submit ---"
 setup_mock
 bash "$HARNESS_DIR/solar-harness.sh" handoff-submit "$TEST_SID" 2>&1
 STATUS=$(python3 -c "import json; print(json.load(open('$SPRINTS_DIR/${TEST_SID}.status.json'))['status'])")
+PHASE=$(python3 -c "import json; print(json.load(open('$SPRINTS_DIR/${TEST_SID}.status.json')).get('phase',''))")
+HANDOFF_TO=$(python3 -c "import json; print(json.load(open('$SPRINTS_DIR/${TEST_SID}.status.json')).get('handoff_to',''))")
+TARGET_ROLE=$(python3 -c "import json; print(json.load(open('$SPRINTS_DIR/${TEST_SID}.status.json')).get('target_role',''))")
 ROUND=$(python3 -c "import json; print(json.load(open('$SPRINTS_DIR/${TEST_SID}.status.json'))['round'])")
 HAS_IMPL=$(python3 -c "import json; d=json.load(open('$SPRINTS_DIR/${TEST_SID}.status.json')); print(any(h.get('event')=='implementation_completed' and h.get('round')==1 for h in d.get('history',[])))")
 HAS_EVENT=$(grep -c 'handoff_submitted' "$SPRINTS_DIR/${TEST_SID}.events.jsonl" 2>/dev/null || echo 0)
 assert_eq "status=reviewing" "reviewing" "$STATUS"
+assert_eq "phase=implementation_complete" "implementation_complete" "$PHASE"
+assert_eq "handoff_to=evaluator" "evaluator" "$HANDOFF_TO"
+assert_eq "target_role=evaluator" "evaluator" "$TARGET_ROLE"
 assert_eq "round=1" "1" "$ROUND"
 assert_eq "history has implementation_completed" "True" "$HAS_IMPL"
 assert_eq "events.jsonl has handoff_submitted" "1" "$HAS_EVENT"

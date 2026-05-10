@@ -1,6 +1,6 @@
 {
   "id": "sprint-20260417-145543",
-  "title": "\u534f\u8c03\u5668\u4f53\u9a8c\u5347\u7ea7: (1) \u8f6e\u8be2\u6539\u4e8b\u4ef6\u9a71\u52a8 \u2014 sleep 3 + python3 json.load \u6539\u4e3a stat m",
+  "title": "协调器体验升级: (1) 轮询改事件驱动 — sleep 3 + python3 json.load 改为 stat m",
   "status": "passed",
   "created_at": "2026-04-17T06:55:43Z",
   "round": 1,
@@ -14,7 +14,21 @@
       "ts": "2026-04-17T06:56:50Z",
       "event": "done_criteria_filled",
       "by": "planner"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": null,
+        "handoff_to": null,
+        "target_role": null
+      }
     }
   ],
-  "updated_at": "2026-04-17T07:06:26Z"
+  "updated_at": "2026-05-10T14:52:54Z",
+  "phase": "eval_passed",
+  "handoff_to": "done",
+  "target_role": "done"
 }

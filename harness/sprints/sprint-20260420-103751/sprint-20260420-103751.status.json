@@ -1,6 +1,6 @@
 {
   "id": "sprint-20260420-103751",
-  "title": "openai-agents-python PoC: \u7528 openai-agents SDK \u5b9e\u73b0\u6700\u5c0f\u4e09\u4e13\u5bb6\u4f1a\u5ba1(\u5ba1\u5224\u5b98+",
+  "title": "openai-agents-python PoC: 用 openai-agents SDK 实现最小三专家会审(审判官+",
   "status": "passed",
   "created_at": "2026-04-20T02:37:51Z",
   "round": 2,
@@ -20,13 +20,13 @@
       "event": "plan_reviewed",
       "by": "evaluator",
       "verdict": "REJECT",
-      "reason": "MH1: brain-router\u8c03\u7528\u8def\u5f84\u4e0d\u53ef\u884c MH2: Agent\u964d\u7ea7\u4e3afunction_tool\u504f\u79bb\u5408\u7ea6"
+      "reason": "MH1: brain-router调用路径不可行 MH2: Agent降级为function_tool偏离合约"
     },
     {
       "ts": "2026-04-20T03:26:23Z",
       "event": "contract_revised_after_plan_reject",
       "by": "planner",
-      "note": "Done#3\u653e\u5bbdbrain-router\u786c\u8981\u6c42\u4e3aprovider-agnostic; \u7ea6\u675f\u8ffd\u52a0Agent\u5bf9\u8c61\u8981\u6c42; \u91cd\u65b0\u6d3ebuilder"
+      "note": "Done#3放宽brain-router硬要求为provider-agnostic; 约束追加Agent对象要求; 重新派builder"
     },
     {
       "ts": "2026-04-20T03:31:38Z",
@@ -57,7 +57,7 @@
         "D4",
         "D5"
       ],
-      "note": "D4: guardrail\u672a\u6ce8\u518c\u5230agent D5: \u4ea7\u51fa\u4e0e\u4ee3\u7801\u4e0d\u4e00\u81f4(\u65e7gemini\u4ea7\u51fa vs \u65b0zhipu\u4ee3\u7801)"
+      "note": "D4: guardrail未注册到agent D5: 产出与代码不一致(旧gemini产出 vs 新zhipu代码)"
     },
     {
       "ts": "2026-04-20T05:26:45Z",
@@ -86,7 +86,21 @@
       "by": "evaluator",
       "verdict": "PASS",
       "reason": "verified"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": null,
+        "handoff_to": null,
+        "target_role": null
+      }
     }
   ],
-  "updated_at": "2026-04-20T10:31:23Z"
+  "updated_at": "2026-05-10T14:52:54Z",
+  "phase": "eval_passed",
+  "handoff_to": "done",
+  "target_role": "done"
 }

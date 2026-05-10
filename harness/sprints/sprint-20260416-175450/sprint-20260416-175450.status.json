@@ -1,6 +1,6 @@
 {
   "id": "sprint-20260416-175450",
-  "title": "\u4fee\u590d sprint-20260416-154442 \u7684 4 \u4e2a\u9057\u7559\u95ee\u9898: (1) watchdog \u6ca1\u5728\u540e\u53f0\u8fd0\u884c (2)",
+  "title": "修复 sprint-20260416-154442 的 4 个遗留问题: (1) watchdog 没在后台运行 (2)",
   "status": "passed",
   "created_at": "2026-04-16T09:54:50Z",
   "round": 3,
@@ -38,7 +38,21 @@
       "event": "passed",
       "by": "judge",
       "round": 3
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": null,
+        "handoff_to": null,
+        "target_role": null
+      }
     }
   ],
-  "updated_at": "2026-04-16T10:25:57Z"
+  "updated_at": "2026-05-10T14:52:54Z",
+  "phase": "eval_passed",
+  "handoff_to": "done",
+  "target_role": "done"
 }

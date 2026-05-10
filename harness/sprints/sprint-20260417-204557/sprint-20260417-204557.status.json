@@ -32,7 +32,21 @@
       "event": "eval_completed",
       "by": "evaluator",
       "details": "PASS: D1-D7 all passed. Round 1 failures (D1/D6/D7) fixed. Report 46→168 lines."
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": null,
+        "handoff_to": null,
+        "target_role": null
+      }
     }
   ],
-  "updated_at": "2026-04-17T13:50:35Z"
+  "updated_at": "2026-05-10T14:52:54Z",
+  "phase": "eval_passed",
+  "handoff_to": "done",
+  "target_role": "done"
 }

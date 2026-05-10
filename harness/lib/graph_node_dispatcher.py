@@ -9,11 +9,13 @@ the assigned pane.
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -319,15 +321,38 @@ def _pane_exists(pane: str) -> bool:
         return False
 
 
+def _write_submit_ack(sid: str, node_id: str, pane: str, dispatch_id: str) -> None:
+    """Write observable submit evidence so evaluators can verify pane received the dispatch."""
+    try:
+        ack_dir = HARNESS_DIR / "sprints" / "graph-acks"
+        ack_dir.mkdir(parents=True, exist_ok=True)
+        ack_file = ack_dir / f"{sid}.{node_id}-submit-ack.json"
+        ack = {
+            "sid": sid,
+            "node_id": node_id,
+            "pane": pane,
+            "dispatch_id": dispatch_id,
+            "submitted_at": _utc_now(),
+        }
+        ack_file.write_text(json.dumps(ack, indent=2), encoding="utf-8")
+    except Exception:
+        pass  # fail-open: ack write failure must not block dispatch
+
+
 def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool) -> bool:
     if dry_run:
         return True
     short_cmd = f"读取并执行 {instruction_file}"
     try:
         subprocess.run(["tmux", "send-keys", "-t", pane, "C-u"], timeout=2)
-        subprocess.run(["tmux", "send-keys", "-t", pane, short_cmd], timeout=2)
+        time.sleep(0.2)
+        # Send as literal text; otherwise tmux may parse punctuation in a
+        # path-like instruction as key names and discard the input.
+        subprocess.run(["tmux", "send-keys", "-t", pane, "-l", short_cmd], timeout=2)
+        time.sleep(0.5)
+        # Single explicit Enter — do NOT also send C-m (would double-submit).
         subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=2)
-        subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=2)
+        time.sleep(0.3)
         return True
     except Exception:
         return False
@@ -362,9 +387,59 @@ def _lease_active_for(pane: str, sid: str, dispatch_id: str) -> bool:
 
 
 def _utc_now() -> str:
-    import datetime
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+def _append_event(sid: str, event: dict[str, Any]) -> None:
+    event_file = SPRINTS_DIR / f"{sid}.events.jsonl"
+    event = dict(event)
+    event.setdefault("ts", _utc_now())
+    event.setdefault("sid", sid)
+    try:
+        with event_file.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(event, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def _mark_parent_sprint_passed_if_ready(sid: str, parent: dict[str, Any], dry_run: bool) -> bool:
+    if dry_run or not parent.get("ready"):
+        return False
+    status_file = SPRINTS_DIR / f"{sid}.status.json"
+    if not status_file.exists():
+        return False
+    try:
+        data = json.loads(status_file.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+
+    now = _utc_now()
+    history = data.get("history")
+    if not isinstance(history, list):
+        history = []
+    history.append({
+        "ts": now,
+        "event": "graph_parent_ready_passed",
+        "by": "graph-dispatch",
+        "note": "All DAG nodes and required gates passed via parent_ready_check.",
+    })
+    data.update({
+        "status": "passed",
+        "phase": "completed",
+        "handoff_to": "done",
+        "target_role": "done",
+        "updated_at": now,
+        "completed_at": now,
+        "graph_parent_ready": parent,
+        "history": history,
+    })
+    status_file.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _append_event(sid, {
+        "event": "graph_parent_ready_passed",
+        "by": "graph-dispatch",
+        "data": {"node_count": parent.get("node_count"), "required_gates": parent.get("required_gates", [])},
+    })
+    return True
 
 
 def _ensure_lease(pane: str, sid: str, dispatch_id: str, ttl: int, dry_run: bool) -> dict[str, Any]:
@@ -416,6 +491,8 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
     sent = _send_to_pane(pane, instruction_file, dry_run)
     graph_updated = False
     if sent:
+        if not dry_run:
+            _write_submit_ack(sid, node_id, pane, dispatch_id)
         try:
             graph = load_graph(graph_path)
             set_node_status(graph, node_id, "dispatched", pane=pane, dispatch_id=dispatch_id)
@@ -510,10 +587,11 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
 def _discover_evaluators(dry_run: bool = False) -> list[dict[str, Any]]:
     if dry_run:
         return [{"pane": f"{SESSION}:0.3", "models": ["sonnet", "deepseek"], "skills": ["review", "testing", "bash"]}]
+    # Graph node evaluation mutates graph verdict state. Keep it on the
+    # evaluator persona; falling back to planner/builder panes causes wrong-role
+    # dispatch and leaves the real review queue blocked.
     candidates = [
         f"{SESSION}:0.3",
-        f"{SESSION}:0.1",
-        "solar-harness-lab:0.3",
     ]
     evaluators: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -597,9 +675,15 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
         if not sent:
             if not dry_run:
                 release_lease(pane, dispatch_id, "graph_eval_dispatch_send_failed")
+            # Clear eval assignment so the node can be retried on next cycle.
+            node.pop("eval_assigned_to", None)
+            node.pop("eval_dispatch_id", None)
+            node.pop("eval_dispatched_at", None)
             skipped.append({"node": node_id, "pane": pane, "reason": "send_failed"})
             continue
 
+        if not dry_run:
+            _write_submit_ack(sid, node_id, pane, dispatch_id)
         node["status"] = "reviewing"
         node["eval_assigned_to"] = pane
         node["eval_dispatch_id"] = dispatch_id
@@ -633,6 +717,7 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
                  eval_json: str = "", dry_run: bool = False, ttl: int = 900,
                  dispatch_downstream: bool = True) -> dict[str, Any]:
     graph = load_graph(graph_path)
+    sid = str(graph.get("sprint_id") or Path(graph_path).stem.replace(".task_graph", ""))
     node = _node_by_id(graph, node_id)
     if not node:
         return {"ok": False, "reason": "unknown_node", "node": node_id}
@@ -672,6 +757,7 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
         downstream = dispatch_ready(graph_path, dry_run=dry_run, ttl=ttl)
     elif status == "passed" and parent.get("ready"):
         downstream = {"ok": True, "skipped": "parent_ready"}
+    parent_status_updated = _mark_parent_sprint_passed_if_ready(sid, parent, dry_run)
 
     return {
         "ok": bool(downstream.get("ok", True)),
@@ -681,6 +767,7 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
         "downstream": downstream,
         "dry_run": dry_run,
         "eval_lease_released": lease_released,
+        "parent_status_updated": parent_status_updated,
     }
 
 

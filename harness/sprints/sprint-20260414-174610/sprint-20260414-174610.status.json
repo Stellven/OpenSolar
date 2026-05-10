@@ -1,6 +1,6 @@
 {
   "id": "sprint-20260414-174610",
-  "title": "\u5f00\u53d1\u5b66\u672f\u7814\u7a76\u6d41\u6c34\u7ebf\u53e3\u4ee4: \u7528\u6237\u8bf4\u4e00\u4e2a\u89e6\u53d1\u8bcd(\u5982 '\u7814\u7a76\u6d41\u6c34\u7ebf' \u6216 '/research')\uff0c\u81ea\u52a8\u542f\u52a8 10 \u9636\u6bb5\u7aef\u5230\u7aef",
+  "title": "开发学术研究流水线口令: 用户说一个触发词(如 '研究流水线' 或 '/research')，自动启动 10 阶段端到端",
   "status": "passed",
   "created_at": "2026-04-14T09:46:10Z",
   "round": 1,
@@ -14,7 +14,21 @@
       "ts": "2026-04-14T09:47:33Z",
       "event": "done_criteria_filled",
       "by": "planner"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": null,
+        "handoff_to": null,
+        "target_role": null
+      }
     }
   ],
-  "updated_at": "2026-04-14T13:16:30Z"
+  "updated_at": "2026-05-10T14:52:54Z",
+  "phase": "eval_passed",
+  "handoff_to": "done",
+  "target_role": "done"
 }

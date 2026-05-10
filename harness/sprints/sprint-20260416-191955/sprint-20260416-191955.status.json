@@ -1,6 +1,6 @@
 {
   "id": "sprint-20260416-191955",
-  "title": "\u5ba1\u5224\u5b98\u81ea\u52a8\u8c03\u7528 /verify-all \u6280\u80fd: \u628a\u5ba1\u5224\u5b98\u4ece'\u81ea\u5df1\u5199 bash \u9a8c\u8bc1'\u5347\u7ea7\u4e3a'\u8c03\u7528\u73b0\u6210\u7684 /verify-",
+  "title": "审判官自动调用 /verify-all 技能: 把审判官从'自己写 bash 验证'升级为'调用现成的 /verify-",
   "status": "passed",
   "created_at": "2026-04-16T11:19:55Z",
   "round": 1,
@@ -14,7 +14,21 @@
       "ts": "2026-04-16T11:54:34Z",
       "event": "done_criteria_filled",
       "by": "planner"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": null,
+        "handoff_to": null,
+        "target_role": null
+      }
     }
   ],
-  "updated_at": "2026-04-16T12:04:58Z"
+  "updated_at": "2026-05-10T14:52:54Z",
+  "phase": "eval_passed",
+  "handoff_to": "done",
+  "target_role": "done"
 }

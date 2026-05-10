@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import shutil
 import statistics
 import subprocess
@@ -33,12 +34,22 @@ UV_BIN = os.environ.get("UV_BIN") or shutil.which("uv") or "/opt/homebrew/bin/uv
 
 PUBLIC_BENCHMARKS: list[dict[str, Any]] = [
     {
+        "id": "swe-bench-pro",
+        "name": "SWE-bench Pro",
+        "domain": "real GitHub issue repair",
+        "adapter_env": "SWE_BENCH_PRO_CMD",
+        "default_binary": "swebench",
+        "source": "https://scale.com/blog/swe-bench-pro",
+        "score_contract": "runner must write JSON score to SOLAR_ARENA_SCORE_FILE or --score-file path",
+    },
+    {
         "id": "swe-bench",
         "name": "SWE-bench Verified",
         "domain": "real GitHub issue repair",
         "adapter_env": "SWE_BENCH_CMD",
         "default_binary": "swebench",
         "source": "https://www.swebench.com/",
+        "score_contract": "runner must write JSON score to SOLAR_ARENA_SCORE_FILE or --score-file path",
     },
     {
         "id": "terminal-bench",
@@ -47,6 +58,18 @@ PUBLIC_BENCHMARKS: list[dict[str, Any]] = [
         "adapter_env": "TERMINAL_BENCH_CMD",
         "default_binary": "tb",
         "source": "https://terminalbench.lol/",
+        "alternate_binaries": ["harbor"],
+        "score_contract": "runner must write JSON score to SOLAR_ARENA_SCORE_FILE or --score-file path",
+    },
+    {
+        "id": "browsecomp",
+        "name": "BrowseComp",
+        "domain": "hard web browsing and answer grounding",
+        "adapter_env": "BROWSECOMP_CMD",
+        "default_binary": "simple-evals",
+        "source": "https://openai.com/index/browsecomp/",
+        "alternate_binaries": ["browsecomp"],
+        "score_contract": "runner must write JSON score to SOLAR_ARENA_SCORE_FILE and answer/grader artifacts under SOLAR_ARENA_EVIDENCE_DIR",
     },
     {
         "id": "osworld",
@@ -264,16 +287,214 @@ def public_adapter_status() -> list[dict[str, Any]]:
     out = []
     for bench in PUBLIC_BENCHMARKS:
         env_cmd = os.environ.get(bench["adapter_env"], "")
-        binary = shutil.which(bench["default_binary"])
+        candidates = [bench["default_binary"], *bench.get("alternate_binaries", [])]
+        binary = next((found for item in candidates if (found := shutil.which(item))), None)
         configured = bool(env_cmd or binary)
         out.append({
             **bench,
             "configured": configured,
             "runner": env_cmd or binary or "",
             "status": "ok" if configured else "pending",
-            "reason": "" if configured else f"{bench['adapter_env']} not set and {bench['default_binary']} not found",
+            "reason": "" if configured else f"{bench['adapter_env']} not set and none of {','.join(candidates)} found",
         })
     return out
+
+
+def public_benchmark_by_id(benchmark_id: str) -> dict[str, Any] | None:
+    for bench in PUBLIC_BENCHMARKS:
+        if bench["id"] == benchmark_id:
+            return bench
+    return None
+
+
+def public_benchmark_status(benchmark_id: str) -> dict[str, Any] | None:
+    for status in public_adapter_status():
+        if status["id"] == benchmark_id:
+            return status
+    return None
+
+
+def parse_runner_command(value: str) -> list[str]:
+    if not value.strip():
+        return []
+    return shlex.split(value)
+
+
+def coerce_score_value(data: dict[str, Any]) -> float | None:
+    for key in ("score", "pass_rate", "accuracy", "success_rate"):
+        value = data.get(key)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, dict):
+            for nested_key in ("score", "value", "mean", "average", "pass_rate", "accuracy"):
+                nested = value.get(nested_key)
+                if isinstance(nested, (int, float)) and not isinstance(nested, bool):
+                    return float(nested)
+    passed = data.get("passed")
+    total = data.get("total")
+    if isinstance(passed, (int, float)) and isinstance(total, (int, float)) and total:
+        return round(100.0 * float(passed) / float(total), 4)
+    return None
+
+
+def parse_score_file(score_file: Path) -> dict[str, Any]:
+    if not score_file.exists():
+        return {"ok": False, "reason": "missing_score_file", "path": str(score_file)}
+    try:
+        data = json.loads(score_file.read_text(encoding="utf-8", errors="replace"))
+    except Exception as exc:
+        return {"ok": False, "reason": "invalid_score_json", "path": str(score_file), "error": str(exc)}
+    score = coerce_score_value(data if isinstance(data, dict) else {})
+    ok_value = data.get("ok") if isinstance(data, dict) else None
+    ok = bool(ok_value) if isinstance(ok_value, bool) else score is not None
+    return {"ok": ok, "path": str(score_file), "score": score, "data": data}
+
+
+def benchmark_artifacts_ok(benchmark_id: str, evidence_dir: Path) -> dict[str, Any]:
+    if benchmark_id != "browsecomp":
+        return {"ok": True, "required": []}
+    required = ["answers.jsonl", "grader.json"]
+    missing = [name for name in required if not (evidence_dir / name).exists()]
+    return {"ok": not missing, "required": required, "missing": missing}
+
+
+def benchmark_doctor(args: argparse.Namespace) -> dict[str, Any]:
+    statuses = public_adapter_status()
+    if getattr(args, "benchmark", ""):
+        statuses = [item for item in statuses if item["id"] == args.benchmark]
+    return {
+        "ok": True,
+        "generated_at": now(),
+        "schema": {
+            "id": "benchmark adapter id",
+            "runner": "external command from *_CMD env or discovered binary",
+            "dataset": "optional dataset selector passed via SOLAR_ARENA_DATASET",
+            "task_limit": "optional task limit passed via SOLAR_ARENA_TASK_LIMIT",
+            "timeout": "subprocess timeout seconds",
+            "agent_cmd": "agent command passed via SOLAR_ARENA_AGENT_CMD",
+            "out_dir": "benchmark output directory",
+            "score_file": "required JSON score file path",
+            "evidence_dir": "stdout/stderr/score/artifacts directory",
+            "status": "ok|pending|error",
+        },
+        "adapters": statuses,
+    }
+
+
+def benchmark_run(args: argparse.Namespace) -> dict[str, Any]:
+    status = public_benchmark_status(args.benchmark)
+    if not status:
+        return {
+            "ok": False,
+            "generated_at": now(),
+            "benchmark": args.benchmark,
+            "status": "error",
+            "reason": "unknown_benchmark",
+            "known": [bench["id"] for bench in PUBLIC_BENCHMARKS],
+        }
+
+    ts = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    evidence_dir = Path(args.evidence_dir or REPORTS / "agent-arena-evidence" / ts / "benchmarks" / safe_name(args.benchmark))
+    out_dir = Path(args.out_dir or evidence_dir / "out")
+    score_file = Path(args.score_file or evidence_dir / "score.json")
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    base = {
+        "id": status["id"],
+        "runner": status["runner"],
+        "dataset": args.dataset or "",
+        "task_limit": args.task_limit,
+        "timeout": args.timeout,
+        "agent_cmd": args.agent_cmd or "",
+        "out_dir": str(out_dir),
+        "score_file": str(score_file),
+        "evidence_dir": str(evidence_dir),
+        "status": status["status"],
+    }
+
+    if not status["configured"]:
+        data = {
+            "ok": False,
+            "generated_at": now(),
+            "benchmark": base,
+            "status": "pending",
+            "reason": status["reason"],
+            "adapter": status,
+        }
+        write_json(evidence_dir / "benchmark.json", data)
+        return data
+
+    cmd = parse_runner_command(status["runner"])
+    if not cmd:
+        data = {
+            "ok": False,
+            "generated_at": now(),
+            "benchmark": base,
+            "status": "error",
+            "reason": "empty_runner_command",
+            "adapter": status,
+        }
+        write_json(evidence_dir / "benchmark.json", data)
+        return data
+
+    env = {
+        "SOLAR_ARENA_BENCHMARK_ID": args.benchmark,
+        "SOLAR_ARENA_AGENT_CMD": args.agent_cmd or "",
+        "SOLAR_ARENA_DATASET": args.dataset or "",
+        "SOLAR_ARENA_TASK_LIMIT": str(args.task_limit or ""),
+        "SOLAR_ARENA_OUT_DIR": str(out_dir),
+        "SOLAR_ARENA_SCORE_FILE": str(score_file),
+        "SOLAR_ARENA_EVIDENCE_DIR": str(evidence_dir),
+    }
+    if args.dataset:
+        env["DATASET"] = args.dataset
+    if args.task_limit is not None:
+        env["TASK_LIMIT"] = str(args.task_limit)
+
+    result = run_command(f"benchmark-{args.benchmark}", cmd, evidence_dir, timeout=int(args.timeout), env=env)
+    score = parse_score_file(score_file)
+    artifacts = benchmark_artifacts_ok(args.benchmark, evidence_dir)
+    ok = bool(result.get("ok")) and bool(score.get("ok")) and bool(artifacts.get("ok"))
+    data = {
+        "ok": ok,
+        "generated_at": now(),
+        "benchmark": {**base, "status": "ok" if ok else "error"},
+        "status": "ok" if ok else "error",
+        "adapter": status,
+        "runner_result": {k: v for k, v in result.items() if k not in {"stdout", "stderr"}},
+        "score": score,
+        "artifacts": artifacts,
+        "claim_boundary": "This is an adapter execution record, not a public leaderboard submission. Score is accepted only from the configured benchmark runner output.",
+    }
+    write_json(evidence_dir / "benchmark.json", data)
+    return data
+
+
+def render_benchmark_markdown(data: dict[str, Any]) -> str:
+    bench = data.get("benchmark", {})
+    adapter = data.get("adapter", {})
+    score = data.get("score", {})
+    return "\n".join([
+        f"# Agent Arena Public Benchmark Adapter — {bench.get('id', 'unknown')}",
+        "",
+        f"- Status: `{data.get('status')}`",
+        f"- Runner: `{bench.get('runner') or 'N/A'}`",
+        f"- Dataset: `{bench.get('dataset') or 'N/A'}`",
+        f"- Task limit: `{bench.get('task_limit') if bench.get('task_limit') is not None else 'N/A'}`",
+        f"- Evidence: `{bench.get('evidence_dir')}`",
+        f"- Score file: `{bench.get('score_file')}`",
+        f"- Parsed score: `{score.get('score', 'N/A') if isinstance(score, dict) else 'N/A'}`",
+        "",
+        "## Boundary",
+        "",
+        f"- Source: {adapter.get('source', 'N/A')}",
+        "- Pending means the official/approved runner is missing; it is not a failed benchmark.",
+        "- OK requires runner exit 0, score JSON, and required artifacts for that adapter.",
+        "",
+    ])
 
 
 def solar_quick_tasks() -> list[dict[str, Any]]:
@@ -803,6 +1024,29 @@ def main() -> int:
     p.add_argument("--auto-repair", action="store_true")
     p.add_argument("--out-dir", default=str(REPORTS / "agent-arena-soak" / "latest"))
 
+    p = sub.add_parser("benchmarks")
+    bench_sub = p.add_subparsers(dest="benchmark_cmd")
+
+    p_list = bench_sub.add_parser("list")
+    p_list.add_argument("--json", action="store_true", dest="as_json")
+
+    p_doc = bench_sub.add_parser("doctor")
+    p_doc.add_argument("--json", action="store_true", dest="as_json")
+    p_doc.add_argument("--benchmark", default="")
+
+    p_run = bench_sub.add_parser("run")
+    p_run.add_argument("benchmark")
+    p_run.add_argument("--json", action="store_true", dest="as_json")
+    p_run.add_argument("--dataset", default="")
+    p_run.add_argument("--task-limit", type=int, default=None)
+    p_run.add_argument("--timeout", type=int, default=1800)
+    p_run.add_argument("--agent-cmd", default="")
+    p_run.add_argument("--out-dir", default="")
+    p_run.add_argument("--score-file", default="")
+    p_run.add_argument("--evidence-dir", default="")
+    p_run.add_argument("--out-json", default=str(REPORTS / "agent-arena-benchmark-latest.json"))
+    p_run.add_argument("--out-md", default=str(REPORTS / "agent-arena-benchmark-latest.md"))
+
     args = ap.parse_args()
     if args.cmd == "doctor":
         data = doctor()
@@ -847,6 +1091,41 @@ def main() -> int:
             print(f"  iterations: {data['iterations']} failures={data['failures']}")
             print(f"  out_dir: {data['out_dir']}")
         return 0 if data["ok"] else 1
+
+    if args.cmd == "benchmarks":
+        if args.benchmark_cmd == "list":
+            data = {"ok": True, "generated_at": now(), "adapters": public_adapter_status()}
+            if args.as_json:
+                print(json.dumps(data, ensure_ascii=False, indent=2))
+            else:
+                print("Agent Arena Public Benchmark Adapters")
+                for item in data["adapters"]:
+                    print(f"  {item['id']}: {item['status']} runner={item['runner'] or 'N/A'}")
+            return 0
+
+        if args.benchmark_cmd == "doctor":
+            data = benchmark_doctor(args)
+            if args.as_json:
+                print(json.dumps(data, ensure_ascii=False, indent=2))
+            else:
+                print("Agent Arena Benchmark Doctor")
+                for item in data["adapters"]:
+                    print(f"  {item['id']}: {item['status']} {item.get('reason', '')}")
+            return 0
+
+        if args.benchmark_cmd == "run":
+            data = benchmark_run(args)
+            write_json(Path(args.out_json), data)
+            write_text(Path(args.out_md), render_benchmark_markdown(data))
+            if args.as_json:
+                print(json.dumps(data, ensure_ascii=False, indent=2))
+            else:
+                bench = data.get("benchmark", {})
+                print(f"Agent Arena Benchmark Adapter: {data.get('status', 'error').upper()}")
+                print(f"  benchmark: {bench.get('id')}")
+                print(f"  runner: {bench.get('runner') or 'N/A'}")
+                print(f"  evidence: {bench.get('evidence_dir')}")
+            return 0 if data.get("ok") or data.get("status") == "pending" else 1
 
     ap.print_help()
     return 1

@@ -55,8 +55,22 @@
       "ts": "2026-04-24T01:15:00Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": null,
+        "handoff_to": null,
+        "target_role": null
+      }
     }
   ],
-  "updated_at": "2026-04-24T01:14:51Z",
-  "last_handoff_mtime": 1776993108.0
+  "updated_at": "2026-05-10T14:52:54Z",
+  "last_handoff_mtime": 1776993108.0,
+  "phase": "eval_passed",
+  "handoff_to": "done",
+  "target_role": "done"
 }

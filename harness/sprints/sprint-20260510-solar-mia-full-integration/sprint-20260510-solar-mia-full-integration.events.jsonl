@@ -1,0 +1,19 @@
+{"ts": "2026-05-10T14:35:56Z", "sid": "sprint-20260510-solar-mia-full-integration", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-10T14:36:37Z", "sid": "sprint-20260510-solar-mia-full-integration", "event": "dispatched", "by": "coordinator"}
+{"ts": "2026-05-10T14:39:43Z", "sid": "sprint-20260510-solar-mia-full-integration", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-10T14:40:19Z", "sid": "sprint-20260510-solar-mia-full-integration", "event": "dispatched", "by": "coordinator"}
+{"ts": "2026-05-10T14:40:56Z", "event": "plan_verdict", "by": "evaluator", "verdict": "approve", "sid": "sprint-20260510-solar-mia-full-integration"}
+{"ts": "2026-05-10T14:41:40Z", "sprint_id": "sprint-20260510-solar-mia-full-integration", "actor": "solar-autopilot", "event": "autopilot_dispatch_queued_pane_occupied", "severity": "warn", "data": {"target": "solar-harness:0.2", "type": "pane_idle_with_pending_artifact", "reason": "pane_leased", "detail": {"pane": "solar-harness:0.2", "sid": "sprint-20260510-contract-housekeeping", "dispatch_id": "d-20260510T144134Z-c3ba5e", "acquired_at": "2026-05-10T14:41:34Z", "expires_at": "2026-05-10T14:51:34Z", "ttl_sec": 600, "active": true, "seconds_left": 593}}}
+{"ts": "2026-05-10T14:42:11Z", "sid": "sprint-20260510-solar-mia-full-integration", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-10T14:42:36Z", "sid": "sprint-20260510-solar-mia-full-integration", "event": "dispatched", "by": "coordinator"}
+{"ts": "2026-05-10T14:46:58Z", "event": "handoff_submitted", "by": "builder", "sid": "sprint-20260510-solar-mia-full-integration"}
+{"ts": "2026-05-10T14:47:42Z", "sprint_id": "sprint-20260510-solar-mia-full-integration", "actor": "solar-autopilot", "event": "autopilot_pane_idle_with_pending_artifact", "severity": "info", "data": {"target": "solar-harness:0.3"}}
+{"event": "waked", "by": "wake", "data": {"from_status": "reviewing", "target_pane": "solar-harness:0.3"}, "ts": "2026-05-10T14:48:02Z", "sid": "sprint-20260510-solar-mia-full-integration"}
+{"ts": "2026-05-10T14:48:16Z", "sid": "sprint-20260510-solar-mia-full-integration", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-10T14:48:46Z", "sid": "sprint-20260510-solar-mia-full-integration", "event": "dispatched", "by": "coordinator"}
+{"event": "waked", "by": "wake", "data": {"from_status": "reviewing", "target_pane": "solar-harness:0.3"}, "ts": "2026-05-10T14:51:02Z", "sid": "sprint-20260510-solar-mia-full-integration"}
+{"event": "watchdog_restart", "by": "watchdog", "data": {"failure_count": 1}, "ts": "2026-05-10T14:51:02Z", "sid": "sprint-20260510-solar-mia-full-integration"}
+{"event": "waked", "by": "wake", "data": {"from_status": "reviewing", "target_pane": "solar-harness:0.3"}, "ts": "2026-05-10T14:52:13Z", "sid": "sprint-20260510-solar-mia-full-integration"}
+{"ts": "2026-05-10T14:52:13Z", "sprint_id": "sprint-20260510-solar-mia-full-integration", "actor": "solar-autopilot", "event": "autopilot_queue_dispatched", "severity": "info", "data": {"target": "solar-harness:0.2", "type": "pane_idle_with_pending_artifact", "attempts": 1}}
+{"ts": "2026-05-10T14:53:18Z", "sprint_id": "sprint-20260510-solar-mia-full-integration", "actor": "solar-autopilot", "event": "autopilot_pane_idle_with_pending_artifact", "severity": "info", "data": {"target": "solar-harness:0.3"}}
+{"event": "waked", "by": "wake", "data": {"from_status": "reviewing", "target_pane": "solar-harness:0.3"}, "ts": "2026-05-10T14:53:23Z", "sid": "sprint-20260510-solar-mia-full-integration"}

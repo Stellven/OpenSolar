@@ -1,19 +1,19 @@
 {
   "id": "sprint-20260507-symphony3",
   "sprint_id": "sprint-20260507-symphony3",
-  "title": "Symphony \u96c6\u6210 Sprint 3 \u2014 \u7ed3\u6784\u5316\u65e5\u5fd7\u7edf\u4e00 + HTTP \u72b6\u6001\u9762\u677f 8765 + Sprint 2 backlog",
+  "title": "Symphony 集成 Sprint 3 — 结构化日志统一 + HTTP 状态面板 8765 + Sprint 2 backlog",
   "status": "passed",
   "priority": "P2",
   "lane": "delivery",
-  "handoff_to": "builder_main",
+  "handoff_to": "done",
   "predecessor": "sprint-20260507-symphony2",
   "created_at": "2026-05-07T19:30:00Z",
-  "updated_at": "2026-05-07T20:39:11Z",
+  "updated_at": "2026-05-10T14:52:54Z",
   "product_brief": "/Users/sihaoli/.solar/harness/sprints/sprint-20260507-symphony3.product-brief.md",
   "contract": "/Users/sihaoli/.solar/harness/sprints/sprint-20260507-symphony3.contract.md",
   "auto_generated": false,
   "source": "pm-manual-2026-05-07",
-  "phase": "planning_complete",
+  "phase": "eval_passed",
   "round": 2,
   "crew": {
     "planner": "claude-opus",
@@ -39,7 +39,7 @@
       "ts": "2026-05-07T20:05:15Z",
       "event": "planner_plan_completed",
       "by": "planner",
-      "note": "plan.md written (17KB / 318 lines, 9 slices S1-S9, dual gates Day 3/5, 16 files affected); status drafting\u2192active, phase spec\u2192planning_complete; coordinator auto-dispatch to builder."
+      "note": "plan.md written (17KB / 318 lines, 9 slices S1-S9, dual gates Day 3/5, 16 files affected); status drafting→active, phase spec→planning_complete; coordinator auto-dispatch to builder."
     },
     {
       "ts": "2026-05-07T20:29:46Z",
@@ -67,10 +67,22 @@
       "ts": "2026-05-07T20:40:48Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-10T14:52:54Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": "planning_complete",
+        "handoff_to": "builder_main",
+        "target_role": null
+      }
     }
   ],
   "plan": "/Users/sihaoli/.solar/harness/sprints/sprint-20260507-symphony3.plan.md",
   "last_handoff_mtime": 1778185779.0,
   "last_exported_sprint": "sprint-20260507-symphony3",
-  "last_exported_at": "2026-05-07T23:25:53Z"
+  "last_exported_at": "2026-05-07T23:25:53Z",
+  "target_role": "done"
 }
