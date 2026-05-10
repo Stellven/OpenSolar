@@ -331,6 +331,12 @@ def _update_status(sid: str, sprints_dir: Path, fields: dict[str, Any]) -> None:
     try:
         d = json.loads(sf.read_text())
         d.update(fields)
+        finalized = (sprints_dir / f"{sid}.finalized").exists()
+        if d.get("status") in ("passed", "eval_pass", "finalized") or finalized:
+            if d.get("phase") not in ("finalized", "release_passed", "eval_passed"):
+                d["phase"] = "finalized"
+            if d.get("handoff_to") in ("pm", "planner", "builder", "builder_main", "evaluator", "coordinator", "completed"):
+                d["handoff_to"] = ""
         d["updated_at"] = _now_iso()
         tmp = sf.with_suffix(".tmp")
         tmp.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n")

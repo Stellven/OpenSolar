@@ -29,9 +29,12 @@ HARNESS_DIR = Path(__file__).resolve().parent.parent
 SKILLS_ROOT = Path.home() / ".agents" / "skills"
 CLAUDE_SKILLS_ROOT = Path.home() / ".claude" / "skills"
 CODEX_SUPERPOWERS_ROOT = Path.home() / ".codex" / "plugins" / "cache" / "openai-curated" / "superpowers"
+CODEX_SKILLS_ROOT = Path.home() / ".codex" / "skills"
+CODEX_PLUGIN_CACHE_ROOT = Path.home() / ".codex" / "plugins" / "cache"
 SOLAR_NATIVE_ROOT = Path.home() / "Solar" / "skills"
 SOLAR_RULES_ROOT = Path.home() / "Solar" / "rules"
 CLAUDE_RULES_ROOT = Path.home() / ".claude" / "rules"
+HARNESS_VENDOR_ROOT = HARNESS_DIR / "vendor"
 STATE_DIR = HARNESS_DIR / "state"
 NATIVE_CACHE = STATE_DIR / "solar-native-skills.json"
 INVENTORY_CACHE = STATE_DIR / "skills-inventory.json"
@@ -63,6 +66,25 @@ def _count_skills(root: Path) -> int:
                 continue
             total += 1
     return total
+
+
+def _count_skill_files(root: Path) -> int:
+    """Count recursive SKILL.md / skill.md files under a root."""
+    if not root.exists():
+        return 0
+    paths = {str(p).lower() for p in root.rglob("SKILL.md")}
+    paths.update(str(p).lower() for p in root.rglob("skill.md"))
+    return len(paths)
+
+
+def _sample_skill_files(root: Path, limit: int = 20) -> list[str]:
+    if not root.exists():
+        return []
+    by_lower = {str(p).lower(): p for p in root.rglob("SKILL.md")}
+    by_lower.update({str(p).lower(): p for p in root.rglob("skill.md")})
+    paths = sorted(str(p) for p in by_lower.values())
+    paths = [Path(p) for p in paths]
+    return [str(p.relative_to(root)) for p in paths[:limit]]
 
 
 def _list_skill_names(root: Path) -> list[str]:
@@ -182,8 +204,36 @@ def cmd_inventory(args: list[str]) -> int:
     solar_rule_names = _list_skill_names(SOLAR_RULES_ROOT)
     claude_rule_names = _list_skill_names(CLAUDE_RULES_ROOT)
     rules_count = len(set(solar_rule_names + claude_rule_names))
+    codex_skills_count = _count_skill_files(CODEX_SKILLS_ROOT)
+    codex_plugin_skill_files = _count_skill_files(CODEX_PLUGIN_CACHE_ROOT)
+
+    vendor_sources = {
+        "ruflo": HARNESS_VENDOR_ROOT / "ruflo",
+        "hermes-agent": HARNESS_VENDOR_ROOT / "hermes-agent",
+        "obsidian-wiki": HARNESS_VENDOR_ROOT / "obsidian-wiki",
+        "everything-claude-code": HARNESS_VENDOR_ROOT / "everything-claude-code",
+        "mineru-document-explorer": HARNESS_VENDOR_ROOT / "MinerU-Document-Explorer",
+    }
+    vendor_skill_files = {
+        name: {
+            "path": str(root),
+            "exists": root.exists(),
+            "skill_files": _count_skill_files(root),
+            "sample": _sample_skill_files(root, 12),
+        }
+        for name, root in vendor_sources.items()
+    }
+    vendor_skill_files_total = sum(v["skill_files"] for v in vendor_skill_files.values())
 
     total = agents_count + claude_count + native_count + codex_superpowers_count + rules_count
+    recursive_skill_files_total = (
+        _count_skill_files(SKILLS_ROOT)
+        + _count_skill_files(CLAUDE_SKILLS_ROOT)
+        + codex_skills_count
+        + codex_plugin_skill_files
+        + _count_skill_files(SOLAR_NATIVE_ROOT)
+        + vendor_skill_files_total
+    )
 
     sources: dict[str, Any] = {
         "agents-skills": {
@@ -203,6 +253,19 @@ def cmd_inventory(args: list[str]) -> int:
             "exists": CODEX_SUPERPOWERS_ROOT.exists(),
             "skills": ["superpowers"] if CODEX_SUPERPOWERS_ROOT.exists() else [],
         },
+        "codex-skills": {
+            "path": str(CODEX_SKILLS_ROOT),
+            "count": codex_skills_count,
+            "exists": CODEX_SKILLS_ROOT.exists(),
+            "sample": _sample_skill_files(CODEX_SKILLS_ROOT, 12),
+        },
+        "codex-plugin-cache": {
+            "path": str(CODEX_PLUGIN_CACHE_ROOT),
+            "count": codex_plugin_skill_files,
+            "exists": CODEX_PLUGIN_CACHE_ROOT.exists(),
+            "sample": _sample_skill_files(CODEX_PLUGIN_CACHE_ROOT, 12),
+        },
+        "vendor-skill-files": vendor_skill_files,
         "solar-native": {
             "path": str(SOLAR_NATIVE_ROOT),
             "count": native_count,
@@ -226,11 +289,21 @@ def cmd_inventory(args: list[str]) -> int:
     result = {
         "totals": {
             "skills": total,
+            "skill_files_recursive": recursive_skill_files_total,
             "agents_skills": agents_count,
             "claude_skills": claude_count,
             "codex_superpowers": codex_superpowers_count,
+            "codex_skills": codex_skills_count,
+            "codex_plugin_skill_files": codex_plugin_skill_files,
             "solar_native": native_count,
+            "vendor_skill_files": vendor_skill_files_total,
             "rules": rules_count,
+        },
+        "usability": {
+            "directly_advertised_to_panes": "summary_only",
+            "dispatch_injection": "keyword-selected provider hints plus inventory counts",
+            "all_1000_plus_loaded_into_prompt": False,
+            "note": "Solar-Harness can discover thousands of skill files, but it does not inject every skill into every pane. It injects compact inventory/context and routes to providers by task keywords.",
         },
         "sources": sources,
         "generated_at": _now_iso(),
@@ -300,6 +373,8 @@ def cmd_doctor(args: list[str]) -> int:
 
 _SKILLS_OPEN = "<solar-skills-context>"
 _SKILLS_CLOSE = "</solar-skills-context>"
+_INTENT_OPEN = "<solar-intent-context>"
+_INTENT_CLOSE = "</solar-intent-context>"
 _CAP_OPEN = "<solar-capability-context>"
 _CAP_CLOSE = "</solar-capability-context>"
 _KB_OPEN = "<solar-knowledge-context>"
@@ -427,6 +502,16 @@ CAPABILITY_RULES: list[dict[str, Any]] = [
             r"Codex Bridge|pane3|三号 pane|合约导入|chain watcher",
         ],
     },
+    {
+        "provider": "Ruflo",
+        "capabilities": ["ruflo.swarm", "ruflo.plugins", "ruflo.agent_catalog", "ruflo.memory", "ruflo.mcp", "ruflo.workflow_templates"],
+        "why": "任务涉及 Claude Code swarm、Ruflo/Claude Flow、插件市场、多代理编排、MCP 或 self-learning memory。",
+        "use": "默认只读使用 vendor/ruflo 的 agent/plugin/skill inventory；不要自动运行 ruflo init 或注册 MCP，除非合约明确允许写 .claude/hooks/settings。",
+        "patterns": [
+            r"\b(ruflo|ruvflo|claude[- ]flow|swarm|hive[- ]mind|agentdb|ruvector|sparc)\b",
+            r"Ruflo|Claude Flow|蜂群|多代理编排|插件市场|自学习|AgentDB|RuVector",
+        ],
+    },
 ]
 
 
@@ -478,6 +563,62 @@ def _select_capabilities(dispatch_text: str) -> list[dict[str, Any]]:
                 selected.append(rule)
                 break
     return selected
+
+
+def _match_intents(dispatch_text: str) -> dict[str, Any]:
+    """Run the Solar intent adapter. Fail-open if unavailable."""
+    try:
+        sys.path.insert(0, str(HARNESS_DIR / "lib"))
+        import intent_engine_adapter  # type: ignore
+
+        return intent_engine_adapter.match(dispatch_text, record=False)
+    except Exception as e:
+        return {
+            "ok": False,
+            "matched": False,
+            "matches": [],
+            "error": str(e),
+        }
+
+
+def _build_intent_block(dispatch_text: str) -> str:
+    result = _match_intents(dispatch_text)
+    matches = result.get("matches") or []
+    lines = [
+        _INTENT_OPEN,
+        f"<!-- auto-generated by solar_skills.py at {_now_iso()} -->",
+        "## Solar Intent Adapter",
+        "",
+    ]
+    if not result.get("ok", False):
+        lines.extend([
+            f"- warn: intent adapter unavailable: {result.get('error', 'unknown')}",
+            "- fail-open: continue normal Solar-Harness dispatch.",
+            "",
+        ])
+    elif not matches:
+        lines.extend([
+            "- N/A: no direct Solar intent or legacy skill hint matched.",
+            "",
+        ])
+    else:
+        for item in matches:
+            label = item.get("skill") or item.get("target") or item.get("type", "unknown")
+            lines.append(
+                f"- {item.get('kind', 'intent')} {item.get('source', 'solar')} "
+                f"{label} confidence={item.get('confidence', 'N/A')}"
+            )
+            lines.append(f"  Action: {item.get('instruction', 'N/A')}")
+        lines.append("")
+    lines.extend([
+        "## Intent Rules",
+        "",
+        "- 这是旧 Solar intent-engine-hook.sh 的 Harness 适配层；用于 dispatch 前决策提示。",
+        "- direct intent 可以改变执行纪律；skill hint 只作为能力注入建议，不覆盖 sprint 合约。",
+        "- 命中 learned-db 规则时，优先按学习规则解释用户意图，但必须保留证据。",
+        _INTENT_CLOSE,
+    ])
+    return "\n".join(lines)
 
 
 def _build_capability_block(dispatch_text: str) -> str:
@@ -542,11 +683,13 @@ def cmd_inject(args: list[str]) -> int:
 
     text = dispatch_file.read_text(encoding="utf-8", errors="replace")
     skills_block = _build_skills_block(native_names, agents_count)
+    intent_block = _build_intent_block(text)
     capability_block = _build_capability_block(text)
     kb_block = _build_kb_block()
 
     # Replace or append blocks (idempotent)
     text = _replace_block(text, _SKILLS_OPEN, _SKILLS_CLOSE, skills_block)
+    text = _replace_block(text, _INTENT_OPEN, _INTENT_CLOSE, intent_block)
     text = _replace_block(text, _CAP_OPEN, _CAP_CLOSE, capability_block)
     text = _replace_block(text, _KB_OPEN, _KB_CLOSE, kb_block)
 

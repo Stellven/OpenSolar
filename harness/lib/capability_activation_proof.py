@@ -1,0 +1,244 @@
+#!/usr/bin/env python3
+"""Prove Solar-Harness capabilities are activated, not just installed.
+
+This runner focuses on "can it actually be used?" rather than green status:
+
+1. Default dispatch text contains intent/capability context.
+2. DAG graph-node dispatch receives the same context.
+3. Real runtimes produce observable artifacts.
+4. Negative controls do not falsely select unrelated capabilities.
+
+Boundary: no benchmark can prove an LLM's private reasoning.  We prove the
+worker-visible prompt/context, runtime calls, and produced artifacts.
+"""
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+from typing import Any
+
+
+HOME = Path.home()
+HARNESS = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
+REPORTS = HARNESS / "reports"
+SOLAR_BIN = HARNESS / "solar-harness.sh"
+
+
+def now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8", errors="replace")
+
+
+def write_json(path: Path, data: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def run(cmd: list[str], evidence_dir: Path, name: str, timeout: int = 180) -> dict[str, Any]:
+    started = time.time()
+    try:
+        proc = subprocess.run(cmd, text=True, capture_output=True, timeout=timeout)
+        result = {
+            "ok": proc.returncode == 0,
+            "exit_code": proc.returncode,
+            "duration_s": round(time.time() - started, 3),
+            "stdout": proc.stdout,
+            "stderr": proc.stderr,
+            "cmd": cmd,
+        }
+    except Exception as exc:
+        result = {
+            "ok": False,
+            "exit_code": 99,
+            "duration_s": round(time.time() - started, 3),
+            "stdout": "",
+            "stderr": f"{type(exc).__name__}: {exc}",
+            "cmd": cmd,
+        }
+    stem = "".join(c if c.isalnum() or c in "-_." else "_" for c in name)
+    write_json(evidence_dir / "commands" / f"{stem}.json", {k: v for k, v in result.items() if k not in {"stdout", "stderr"}})
+    write_text(evidence_dir / "commands" / f"{stem}.stdout.txt", result["stdout"][-80000:])
+    write_text(evidence_dir / "commands" / f"{stem}.stderr.txt", result["stderr"][-80000:])
+    return result
+
+
+def proof_dispatch_activation(evidence_dir: Path) -> dict[str, Any]:
+    tmp = Path(tempfile.mkdtemp(prefix="solar-activation-dispatch-"))
+    try:
+        dispatch = tmp / "dispatch.md"
+        dispatch.write_text(
+            "\n".join([
+                "# Activation Proof Dispatch",
+                "",
+                "赶紧继续修复：用系统化调试排查 browser-use localhost screenshot 问题，",
+                "用 MarkItDown 处理 PDF，用 Ruflo swarm 做多代理拆解，并把证据写入 handoff。",
+            ]),
+            encoding="utf-8",
+        )
+        result = run([sys.executable, str(HARNESS / "lib" / "solar_skills.py"), "inject", str(dispatch)], evidence_dir, "dispatch_inject", timeout=60)
+        text = dispatch.read_text(encoding="utf-8", errors="replace")
+        write_text(evidence_dir / "dispatch" / "activation-dispatch.injected.md", text)
+        required = [
+            "<solar-intent-context>",
+            "<solar-capability-context>",
+            "execute confidence",
+            "Superpowers",
+            "Browser-use MCP",
+            "MarkItDown",
+            "Ruflo",
+        ]
+        missing = [item for item in required if item not in text]
+        return {
+            "name": "default dispatch activates intent/capability context",
+            "status": "ok" if result["ok"] and not missing else "error",
+            "passed": result["ok"] and not missing,
+            "evidence": {
+                "injected_file": str(evidence_dir / "dispatch" / "activation-dispatch.injected.md"),
+                "missing": missing,
+            },
+        }
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def proof_graph_dispatch_activation(evidence_dir: Path) -> dict[str, Any]:
+    result = run(["bash", str(HARNESS / "tests" / "control_plane" / "test-graph-node-dispatcher.sh")], evidence_dir, "graph_node_dispatcher", timeout=180)
+    stdout = result["stdout"]
+    required = [
+        "dispatch text has capability block",
+        "dispatch text selected gstack",
+        "dispatch text selected MarkItDown",
+        "eval text has capability block",
+        "S3 downstream released",
+    ]
+    missing = [item for item in required if item not in stdout]
+    return {
+        "name": "DAG graph-node dispatch activates context and gates downstream",
+        "status": "ok" if result["ok"] and not missing else "error",
+        "passed": result["ok"] and not missing,
+        "evidence": {
+            "stdout": str(evidence_dir / "commands" / "graph_node_dispatcher.stdout.txt"),
+            "missing": missing,
+        },
+    }
+
+
+def proof_runtime_effect(evidence_dir: Path) -> dict[str, Any]:
+    result = run(["bash", str(SOLAR_BIN), "integrations", "heavy-proof", "--json"], evidence_dir, "heavy_proof_runtime", timeout=900)
+    parsed: dict[str, Any] = {}
+    try:
+        parsed = json.loads(result["stdout"])
+    except Exception:
+        parsed = {"parse_error": result["stdout"][-1000:]}
+    write_json(evidence_dir / "runtime" / "heavy-proof.json", parsed)
+    expected = {
+        "MemPalace real semantic search": "hits=3",
+        "Apple Notes mock source to wiki dispatch": "exported=1",
+        "Accepted sprint artifact to wiki dispatch": "dispatch_exists=True",
+        "Browser-use real browser navigation": "marker_found=True",
+    }
+    seen = {item.get("name"): str(item.get("evidence", {}).get("reason", "")) for item in parsed.get("results", [])}
+    missing = [name for name, marker in expected.items() if marker not in seen.get(name, "")]
+    return {
+        "name": "real runtimes produce observable artifacts",
+        "status": "ok" if result["ok"] and parsed.get("ok") and not missing else "error",
+        "passed": bool(result["ok"] and parsed.get("ok") and not missing),
+        "evidence": {
+            "heavy_proof_json": str(evidence_dir / "runtime" / "heavy-proof.json"),
+            "heavy_proof_evidence_dir": parsed.get("evidence_dir", ""),
+            "missing": missing,
+            "seen": seen,
+        },
+    }
+
+
+def proof_negative_control(evidence_dir: Path) -> dict[str, Any]:
+    tmp = Path(tempfile.mkdtemp(prefix="solar-activation-negative-"))
+    try:
+        dispatch = tmp / "negative.md"
+        dispatch.write_text("# Negative\n\nCompute 2 + 2 only.\n", encoding="utf-8")
+        result = run([sys.executable, str(HARNESS / "lib" / "solar_skills.py"), "inject", str(dispatch)], evidence_dir, "negative_inject", timeout=60)
+        text = dispatch.read_text(encoding="utf-8", errors="replace")
+        write_text(evidence_dir / "negative" / "negative.injected.md", text)
+        false_hits = [name for name in ["Browser-use MCP", "MarkItDown", "Ruflo", "Empirical Research", "gstack"] if name in text]
+        return {
+            "name": "negative control does not activate unrelated capabilities",
+            "status": "ok" if result["ok"] and not false_hits else "error",
+            "passed": result["ok"] and not false_hits,
+            "evidence": {
+                "injected_file": str(evidence_dir / "negative" / "negative.injected.md"),
+                "false_hits": false_hits,
+            },
+        }
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def render_markdown(payload: dict[str, Any]) -> str:
+    rows = []
+    for idx, item in enumerate(payload["proofs"], 1):
+        rows.append(f"│ {idx:<2} │ {item['name'][:42]:<42} │ {item['status']:<6} │ {str(item['evidence'])[:52]:<52} │")
+    return "\n".join([
+        f"# Solar Capability Activation Proof — {payload['generated_at']}",
+        "",
+        f"- Result: `{'PASS' if payload['ok'] else 'FAIL'}`",
+        f"- Passed: `{payload['passed']}/{payload['total']}`",
+        f"- Evidence: `{payload['evidence_dir']}`",
+        "",
+        "```text",
+        "┌────┬────────────────────────────────────────────┬────────┬──────────────────────────────────────────────────────┐",
+        "│ #  │ Proof                                      │ 状态   │ 证据                                                 │",
+        "├────┼────────────────────────────────────────────┼────────┼──────────────────────────────────────────────────────┤",
+        *rows,
+        "└────┴────────────────────────────────────────────┴────────┴──────────────────────────────────────────────────────┘",
+        "```",
+        "",
+        "## Boundary",
+        "",
+        "- 能证明：默认 prompt/dispatch 已带能力、真实 runtime 已执行、产物已生成、负例不误触发。",
+        "- 不能证明：LLM 私有思考过程一定按某个 skill 思考；只能证明 worker 可见输入和可观察输出。",
+        "",
+    ])
+
+
+def main() -> int:
+    evidence_dir = REPORTS / "capability-activation-evidence" / "latest"
+    if evidence_dir.exists():
+        shutil.rmtree(evidence_dir)
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+
+    proofs = [
+        proof_dispatch_activation(evidence_dir),
+        proof_graph_dispatch_activation(evidence_dir),
+        proof_runtime_effect(evidence_dir),
+        proof_negative_control(evidence_dir),
+    ]
+    passed = sum(1 for item in proofs if item["passed"])
+    payload = {
+        "ok": passed == len(proofs),
+        "generated_at": now(),
+        "passed": passed,
+        "total": len(proofs),
+        "evidence_dir": str(evidence_dir),
+        "proofs": proofs,
+    }
+    write_json(REPORTS / "capability-activation-proof-latest.json", payload)
+    write_text(REPORTS / "capability-activation-proof-latest.md", render_markdown(payload))
+    write_json(evidence_dir / "activation-proof.json", payload)
+    write_text(evidence_dir / "activation-proof.md", render_markdown(payload))
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload["ok"] else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
