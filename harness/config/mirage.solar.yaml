@@ -21,13 +21,13 @@ mounts:
 
   - path: /sources
     source_type: disk
-    root: "/Users/sihaoli/.solar/harness/_sources"
+    root: "/Users/sihaoli/Knowledge/_sources"
     mode: ro
     description: "Canonical source library (read-only)"
 
   - path: /papers
     source_type: disk
-    root: "/Users/sihaoli/.solar/harness/_sources/papers"
+    root: "/Users/sihaoli/Knowledge/_sources/papers"
     mode: ro
     description: "Canonical papers and PDFs (read-only)"
 

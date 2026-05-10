@@ -462,6 +462,7 @@ def cmd_doctor(args) -> dict:
             "path": mpath,
             "status": status,
             "type": mtype,
+            "physical_root": m.get("physical_root", ""),
             "reason": m.get("reason", ""),
         })
 

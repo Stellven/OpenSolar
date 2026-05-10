@@ -56,6 +56,13 @@ sanitize_tmux_claude_env() {
   tmux set-environment -t "$session" -gu CLAUDECODE 2>/dev/null || true
   tmux set-environment -t "$session" -gu CLAUDE_CODE_ENTRYPOINT 2>/dev/null || true
   tmux set-environment -t "$session" -gu CLAUDE_CODE_EXECPATH 2>/dev/null || true
+  tmux set-environment -t "$session" -gu ANTHROPIC_BASE_URL 2>/dev/null || true
+  tmux set-environment -t "$session" -gu ANTHROPIC_AUTH_TOKEN 2>/dev/null || true
+  tmux set-environment -t "$session" -gu ANTHROPIC_API_KEY 2>/dev/null || true
+  tmux set-environment -t "$session" -gu ANTHROPIC_DEFAULT_OPUS_MODEL 2>/dev/null || true
+  tmux set-environment -t "$session" -gu ANTHROPIC_DEFAULT_SONNET_MODEL 2>/dev/null || true
+  tmux set-environment -t "$session" -gu ANTHROPIC_DEFAULT_HAIKU_MODEL 2>/dev/null || true
+  tmux set-environment -t "$session" -gu SOLAR_LAB_BUILDER_MODEL_MATRIX 2>/dev/null || true
 }
 
 attach_or_print() {
@@ -650,7 +657,7 @@ ensure_parallel_builder_lab() {
       continue
     fi
     pane_id=$(tmux display-message -p -t "$target" '#{pane_id}')
-    tmux respawn-pane -k -t "$target" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH TMUX_PANE=${pane_id} SOLAR_BUILDER_SLOT=${slot} SOLAR_LAB_BUILDER_MODEL_MATRIX=${desired_matrix} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh lab-builder ${_esc_work}"
+    tmux respawn-pane -k -t "$target" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH -u ANTHROPIC_BASE_URL -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_API_KEY -u ANTHROPIC_DEFAULT_OPUS_MODEL -u ANTHROPIC_DEFAULT_SONNET_MODEL -u ANTHROPIC_DEFAULT_HAIKU_MODEL TMUX_PANE=${pane_id} SOLAR_BUILDER_SLOT=${slot} SOLAR_LAB_BUILDER_MODEL_MATRIX=${desired_matrix} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh lab-builder ${_esc_work}"
   done
   configure_builder_lab_labels
 }
@@ -695,7 +702,7 @@ start_extension() {
     local target="$1" persona="$2" slot="$3"
     local pane_id
     pane_id=$(tmux display-message -p -t "$target" '#{pane_id}')
-    tmux send-keys -t "$target" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH TMUX_PANE=${pane_id} SOLAR_BUILDER_SLOT=${slot} SOLAR_LAB_BUILDER_MODEL_MATRIX=${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,anthropic-sonnet} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" Enter
+    tmux send-keys -t "$target" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH -u ANTHROPIC_BASE_URL -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_API_KEY -u ANTHROPIC_DEFAULT_OPUS_MODEL -u ANTHROPIC_DEFAULT_SONNET_MODEL -u ANTHROPIC_DEFAULT_HAIKU_MODEL TMUX_PANE=${pane_id} SOLAR_BUILDER_SLOT=${slot} SOLAR_LAB_BUILDER_MODEL_MATRIX=${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,anthropic-sonnet} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" Enter
   }
   sleep 1
   launch_persona_pane "$LAB_SESSION_NAME:Builder Lab.0" "lab-builder" "lab-builder-1"
@@ -904,6 +911,10 @@ wake_sprint() {
       return 0
       ;;
   esac
+  if [[ "$phase" =~ ^(completed|finalized|eval_passed|release_passed)$ ]] && [[ -z "$handoff_to" || "$handoff_to" =~ ^(done|completed)$ ]]; then
+    ok "Sprint ${sid} 已完成 (${st}/${phase}/${handoff_to:-none})，无需恢复"
+    return 0
+  fi
 
   log "恢复 Sprint: ${sid} (当前状态: ${st})"
 

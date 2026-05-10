@@ -261,7 +261,7 @@ import datetime, json, sys
 sid = sys.argv[1]
 d = json.loads(sys.argv[2])
 expires = d.get("expires_at", "")
-held_sid = d.get("sid", "")
+held_sid = d.get("sid") or d.get("sprint_id") or ""
 now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 sys.exit(0 if expires > now and held_sid and held_sid != sid else 1)
 PY
@@ -569,6 +569,18 @@ status_is_terminal_for_assignment() {
       return 0
       ;;
   esac
+  python3 - "$sf" <<'PY' 2>/dev/null && return 0 || true
+import json, sys
+d = json.load(open(sys.argv[1]))
+phase = d.get("phase", "")
+handoff_to = d.get("handoff_to", "")
+target_role = d.get("target_role", "")
+if phase in {"completed", "finalized", "eval_passed", "release_passed"} and (
+    handoff_to in {"", "done", "completed"} and target_role in {"", "done", "completed"}
+):
+    raise SystemExit(0)
+raise SystemExit(1)
+PY
   return 1
 }
 

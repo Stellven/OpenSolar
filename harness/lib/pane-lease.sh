@@ -55,7 +55,7 @@ with open(lock_path, 'a') as lockf:
                     print(json.dumps({'acquired': False,
                                       'reason': 'pane_leased',
                                       'held_by': existing.get('dispatch_id'),
-                                      'held_sid': existing.get('sid'),
+                                      'held_sid': existing.get('sid') or existing.get('sprint_id'),
                                       'expires_at': expires_at}))
                     sys.exit(1)
             except Exception:

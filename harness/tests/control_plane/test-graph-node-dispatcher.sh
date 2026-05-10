@@ -185,6 +185,21 @@ S1_EVAL_TEXT=$(cat "$S1_EVAL_DISPATCH")
 check "eval text node only" "$S1_EVAL_TEXT" "只评审本 DAG node"
 check "eval text forbids parent pass" "$S1_EVAL_TEXT" "不要把 parent sprint 标成 passed"
 check "eval text has capability block" "$S1_EVAL_TEXT" "<solar-capability-context>"
+OUT=$(HARNESS_DIR="$TMPDIR_TEST" PYTHONPATH="$TMPDIR_TEST/lib" SOLAR_HARNESS_SESSION="solar-harness-test" python3 - <<'PY'
+import graph_node_dispatcher as g
+
+g._pane_exists = lambda pane: pane in {
+    "solar-harness-test:0.1",
+    "solar-harness-test:0.3",
+    "solar-harness-lab:0.3",
+}
+g.read_lease = lambda pane: {}
+panes = [item["pane"] for item in g._discover_evaluators(False)]
+print(",".join(panes))
+PY
+)
+if [[ "$OUT" != *"solar-harness-test:0.1"* ]]; then ok "planner pane excluded from evaluator candidates"; else fail "planner pane included as evaluator ($OUT)"; fi
+check "primary evaluator candidate retained" "$OUT" "solar-harness-test:0.3"
 OUT=$(HARNESS_DIR="$TMPDIR_TEST" SOLAR_HARNESS_SESSION="solar-harness-test" python3 "$TMPDIR_TEST/lib/graph_node_dispatcher.py" node-verdict --graph "$GRAPH" --node S1 --verdict pass --dry-run 2>/dev/null)
 check "S1 verdict ok" "$OUT" '"status": "passed"'
 if [[ "$OUT" != *'"node": "S3"'* ]]; then ok "S3 still blocked until S2 pass"; else fail "S3 released before S2 pass"; fi

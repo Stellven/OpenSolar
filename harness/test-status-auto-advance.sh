@@ -38,9 +38,15 @@ bash "$HARNESS_DIR/solar-harness.sh" handoff-submit "$FIXTURE_SID" >/dev/null 2>
 new_st=$(rs_read_status "$FIXTURE_SID")
 [[ "$new_st" == "reviewing" ]] && pass || fail "T1b: expected reviewing, got $new_st"
 
+new_phase=$(rs_read_field "$FIXTURE_SID" "phase")
+[[ "$new_phase" == "implementation_complete" ]] && pass || fail "T1c: expected phase=implementation_complete, got $new_phase"
+
+new_handoff=$(rs_read_field "$FIXTURE_SID" "handoff_to")
+[[ "$new_handoff" == "evaluator" ]] && pass || fail "T1d: expected handoff_to=evaluator, got $new_handoff"
+
 # Verify round bumped
 new_round=$(rs_read_field "$FIXTURE_SID" "round")
-[[ "$new_round" -eq 2 ]] && pass || fail "T1c: expected round=2, got $new_round"
+[[ "$new_round" -eq 2 ]] && pass || fail "T1e: expected round=2, got $new_round"
 
 # ── T2: eval_verdict pass → passed ──
 bash "$HARNESS_DIR/solar-harness.sh" eval-verdict "$FIXTURE_SID" pass "all good" >/dev/null 2>&1 && pass || fail "T2a: eval-verdict pass failed"

@@ -33,6 +33,30 @@ PAPERS_DIR = SOURCES_DIR / "papers"
 RAW_DIR = HOME / "Knowledge" / "_raw"
 SHA_PREFIX_LEN = 2
 
+# S1: canonical _sources and _meta directories under ~/Knowledge
+KNOWLEDGE_DIR = HOME / "Knowledge"
+K_SOURCES_DIR = KNOWLEDGE_DIR / "_sources"
+K_META_DIR = KNOWLEDGE_DIR / "_meta"
+RAW_UPLOADS_DIR = KNOWLEDGE_DIR / "_raw" / "file-uploads"
+MANIFEST_JSONL = K_META_DIR / "source-manifest.jsonl"
+MANIFEST_STATS = K_META_DIR / "source-manifest-stats.json"
+
+SOURCE_CATEGORIES = ("papers", "webpages", "apple-notes", "chatgpt", "other")
+EXT_TO_CATEGORY: dict[str, str] = {
+    ".pdf": "papers",
+    ".pages": "apple-notes",
+    ".html": "webpages",
+    ".htm": "webpages",
+    ".md": "other",
+    ".jsonl": "other",
+    ".json": "other",
+    ".txt": "other",
+    ".docx": "other",
+    ".doc": "other",
+    ".epub": "papers",
+    ".ipynb": "other",
+}
+
 
 def _now() -> str:
     return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -67,6 +91,118 @@ def _read_manifest(dest_dir: Path) -> "dict | None":
 
 
 # ── scan ──────────────────────────────────────────────────────────────────────
+
+def _ext_to_media_type(path: Path) -> str:
+    ext = path.suffix.lower()
+    mapping = {
+        ".pdf": "application/pdf",
+        ".epub": "application/epub+zip",
+        ".pages": "application/vnd.apple.pages",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".doc": "application/msword",
+        ".html": "text/html",
+        ".htm": "text/html",
+        ".md": "text/markdown",
+        ".txt": "text/plain",
+        ".json": "application/json",
+        ".jsonl": "application/x-ndjson",
+        ".ipynb": "application/x-ipynb+json",
+    }
+    return mapping.get(ext, "application/octet-stream")
+
+
+def cmd_generate(raw_dir: Path, meta_dir: Path, sources_dir: Path, apply: bool, as_json: bool) -> int:
+    if not raw_dir.exists():
+        out = {"ok": False, "error": f"raw_dir not found: {raw_dir}"}
+        if as_json:
+            print(json.dumps(out, indent=2))
+        else:
+            print(f"ERROR: {out['error']}")
+        return 1
+
+    files = sorted(f for f in raw_dir.rglob("*") if f.is_file())
+    entries: list[dict] = []
+    errors: list[dict] = []
+    by_category: dict[str, int] = {c: 0 for c in SOURCE_CATEGORIES}
+    total_bytes = 0
+
+    for src in files:
+        ext = src.suffix.lower()
+        category = EXT_TO_CATEGORY.get(ext, "other")
+        media_type = _ext_to_media_type(src)
+        try:
+            sha = _sha256(src)
+            size = src.stat().st_size
+        except Exception as exc:
+            errors.append({"path": str(src), "error": str(exc)})
+            continue
+
+        prefix = sha[:SHA_PREFIX_LEN]
+        canonical_path = str(sources_dir / category / prefix / sha / src.name)
+        entry = {
+            "sha256": sha,
+            "size": size,
+            "original_path": str(src),
+            "canonical_path": canonical_path,
+            "media_type": media_type,
+            "category": category,
+            "status": "indexed",
+            "indexed_at": _now(),
+        }
+        entries.append(entry)
+        by_category[category] = by_category.get(category, 0) + 1
+        total_bytes += size
+
+    stats = {
+        "ok": len(errors) == 0,
+        "total_files": len(entries),
+        "total_bytes": total_bytes,
+        "error_count": len(errors),
+        "by_category": by_category,
+        "generated_at": _now(),
+        "raw_dir": str(raw_dir),
+        "manifest_path": str(meta_dir / "source-manifest.jsonl"),
+    }
+
+    out = {
+        "ok": len(errors) == 0,
+        "apply": apply,
+        "dry_run": not apply,
+        "total": len(entries),
+        "errors": len(errors),
+        "stats": stats,
+        "entries": entries if as_json else None,
+    }
+
+    if apply:
+        meta_dir.mkdir(parents=True, exist_ok=True)
+        manifest_tmp = meta_dir / "source-manifest.jsonl.tmp"
+        with open(manifest_tmp, "w", encoding="utf-8") as f:
+            for entry in entries:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        manifest_tmp.rename(meta_dir / "source-manifest.jsonl")
+
+        stats_tmp = meta_dir / "source-manifest-stats.json.tmp"
+        stats_tmp.write_text(json.dumps(stats, indent=2, ensure_ascii=False) + "\n")
+        stats_tmp.rename(meta_dir / "source-manifest-stats.json")
+
+    if as_json:
+        printable = {k: v for k, v in out.items() if v is not None}
+        print(json.dumps(printable, indent=2))
+    else:
+        mode = "DRY-RUN" if not apply else "APPLY"
+        print(f"Generate [{mode}]: {len(entries)} files, {total_bytes:,} bytes, {len(errors)} errors")
+        for cat, cnt in by_category.items():
+            if cnt:
+                print(f"  {cat}: {cnt}")
+        if errors:
+            for e in errors:
+                print(f"  ERROR: {e['path']}: {e['error']}")
+        if apply:
+            print(f"  → {meta_dir / 'source-manifest.jsonl'}")
+            print(f"  → {meta_dir / 'source-manifest-stats.json'}")
+    return 0 if len(errors) == 0 else 1
+
 
 def cmd_scan(raw_dir: Path, as_json: bool) -> int:
     pdfs = sorted(raw_dir.glob("**/*.pdf")) if raw_dir.exists() else []
@@ -291,6 +427,13 @@ def main() -> int:
     ap = argparse.ArgumentParser(prog="source_manifest.py")
     sub = ap.add_subparsers(dest="cmd")
 
+    gn = sub.add_parser("generate")
+    gn.add_argument("--raw-dir", default=str(RAW_UPLOADS_DIR))
+    gn.add_argument("--meta-dir", default=str(K_META_DIR))
+    gn.add_argument("--sources-dir", default=str(K_SOURCES_DIR))
+    gn.add_argument("--apply", action="store_true")
+    gn.add_argument("--json", action="store_true", dest="as_json")
+
     sc = sub.add_parser("scan")
     sc.add_argument("--raw-dir", default=str(RAW_DIR))
     sc.add_argument("--json", action="store_true", dest="as_json")
@@ -310,7 +453,9 @@ def main() -> int:
     ls.add_argument("--json", action="store_true", dest="as_json")
 
     args = ap.parse_args()
-    if args.cmd == "scan":
+    if args.cmd == "generate":
+        return cmd_generate(Path(args.raw_dir), Path(args.meta_dir), Path(args.sources_dir), args.apply, args.as_json)
+    elif args.cmd == "scan":
         return cmd_scan(Path(args.raw_dir), args.as_json)
     elif args.cmd == "migrate":
         return cmd_migrate(Path(args.raw_dir), Path(args.dest), args.apply, args.as_json)

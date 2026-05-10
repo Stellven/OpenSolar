@@ -136,7 +136,7 @@ def acquire(pane: str, sprint_id: str, dispatch_id: str, ttl: int = DEFAULT_TTL)
                     "acquired": False,
                     "reason": "pane_busy",
                     "held_by": existing.get("dispatch_id"),
-                    "held_sid": existing.get("sprint_id"),
+                    "held_sid": existing.get("sid") or existing.get("sprint_id"),
                     "expires_at": existing.get("expires_at"),
                 }
 
@@ -145,6 +145,7 @@ def acquire(pane: str, sprint_id: str, dispatch_id: str, ttl: int = DEFAULT_TTL)
             ).strftime("%Y-%m-%dT%H:%M:%SZ")
             lease = {
                 "pane": pane,
+                "sid": sprint_id,
                 "sprint_id": sprint_id,
                 "dispatch_id": dispatch_id,
                 "acquired_at": now,
