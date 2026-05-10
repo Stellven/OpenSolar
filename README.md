@@ -6,6 +6,103 @@
 [![Agents](https://img.shields.io/badge/Agents-13-green.svg)](docs/agents.md)
 [![Skills](https://img.shields.io/badge/Skills-38-blue.svg)](docs/skills.md)
 
+## 当前范围：Solar = Core + Harness + Codex 协同
+
+从现在起，除非特别说明，**Solar** 指这个仓库里的完整系统面，而不是只指前台 agent 配置：
+
+- `core/`, `agents/`, `skills/`, `rules/`, `hooks/`: Claude/Codex 可加载的 AI-native 工作流内核。
+- `harness/`: sprint 合约库、coordinator、派单链路、pane lease、task graph、eval、知识/经验层、远端同步工具。
+- `.solar/`: STATE/DECISIONS/ARCH/RFC/实验模板等隐藏控制面文件；这些也属于 Solar 的部署契约。
+- `codex-bridge/`, `scripts/`, `deploy/`, `docs/`: Codex 与 Solar Harness 协同、导出、部署、巡检和文档化入口。
+
+运行态数据库、个人日志、密钥、WAL/SHM、pane 截图和本机私有轨迹不作为公开源码提交；它们由安装器或 harness 在本地生成。
+
+## 当前架构
+
+```mermaid
+flowchart TB
+  User["User / Operator"] --> IDE["Claude Code / Codex / Cursor"]
+  IDE --> Core["Solar Core\nCLAUDE.md / rules / skills / agents / hooks"]
+  Core --> State[".solar Control Plane\nSTATE / DECISIONS / ARCH / RFC"]
+  Core --> Harness["solar-harness\ncoordinator / sprint contracts / task graph"]
+
+  Harness --> Queue["Dispatch Queue\nrun/queue + pane leases + assignments"]
+  Queue --> PM["PM Pane\nPRD / contract"]
+  Queue --> Planner["Planner Pane\nplan.md / task_graph.json"]
+  Queue --> Builder["Builder Panes\nlocal + lab workers"]
+  Queue --> Evaluator["Evaluator Pane\neval.md / verdict"]
+
+  Builder --> Artifacts["Sprint Artifacts\nhandoff / eval / release notes"]
+  Evaluator --> Artifacts
+  Artifacts --> Experience["Experience Memory\nschema + compressed lessons"]
+  Experience --> Harness
+
+  Harness --> Mini["Mac mini Remote Harness\nlisihao@100.122.223.55"]
+  Mini --> RemoteWorkers["Remote workers / heavier jobs / parity tests"]
+  RemoteWorkers --> Harness
+
+  Harness --> KB["Knowledge Extraction\n.solar/extracted_knowledge + Solar/harness"]
+  KB --> Core
+```
+
+### 怎么玩
+
+```bash
+git clone https://github.com/lisihao/Solar.git ~/Solar
+cd ~/Solar
+./install.sh
+```
+
+常用入口：
+
+| 入口 | 命令/位置 | 用途 |
+|------|-----------|------|
+| L1 安装 | `./install.sh` | 安装 Solar Core 到 `~/.claude` / `~/.solar` |
+| Agent 使用 | `@Coder`, `/commit`, `/review` | 通过 Claude/Codex 调用 agents 和 skills |
+| Harness 控制面 | `harness/solar-harness.sh` | sprint 合约、派单、eval、coordinator |
+| Harness 自检 | `cd harness && ./doctor.sh --summary` | 检查本地运行环境和控制面 |
+| Coordinator | `cd harness && ./solar-harness.sh start` | 启动 tmux panes + coordinator |
+| 远端同步 | `harness/tools/sync-code-to-mac-mini.sh` | 同步 MacBook/Mac mini harness 代码 |
+| 经验层 | `harness/lib/experience/` | 成功/失败轨迹压缩、检索、复用 |
+
+### 怎么部署
+
+1. 本机安装：
+
+   ```bash
+   git clone https://github.com/lisihao/Solar.git ~/Solar
+   cd ~/Solar
+   ./install.sh
+   ./scripts/smoke-install.sh
+   ```
+
+2. Harness 启动：
+
+   ```bash
+   cd ~/Solar/harness
+   ./doctor.sh --summary
+   ./solar-harness.sh start
+   ./solar-harness.sh coord-status
+   ```
+
+3. Mac mini 镜像部署（可选）：
+
+   ```bash
+   cd ~/Solar/harness
+   ./tools/sync-code-to-mac-mini.sh
+   ssh lisihao@100.122.223.55 'cd ~/.solar/harness && ./solar-harness.sh coord-status'
+   ```
+
+4. 提交/发布前检查：
+
+   ```bash
+   cd ~/Solar
+   ./scripts/smoke-install.sh
+   cd harness
+   bash -n coordinator.sh lib/pane-lease.sh
+   python3 -m py_compile lib/graph_node_dispatcher.py lib/pane_lease.py
+   ```
+
 ## ⚡ 一键安装（3 分钟）
 
 > **真实可执行最小路径** — 只承诺 L1 基础安装，不假装存在的功能。
