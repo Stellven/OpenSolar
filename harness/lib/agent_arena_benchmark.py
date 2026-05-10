@@ -254,7 +254,7 @@ def agent_status(agent: str) -> dict[str, Any]:
     if agent == "codex-local":
         cmd = os.environ.get("CODEX_ARENA_CMD", "")
         return {"available": bool(cmd), "runner": cmd, "reason": "" if cmd else "CODEX_ARENA_CMD not configured"}
-    if agent == "claude-code":
+    if agent in {"claude-code", "claude-code-bare"}:
         binary = shutil.which("claude")
         return {"available": bool(binary), "runner": binary or "", "reason": "" if binary else "claude binary not found"}
     return {"available": False, "runner": "", "reason": "unknown agent"}
@@ -365,6 +365,8 @@ def head_to_head_tasks(agent: str, runner: str | None, evidence_dir: Path) -> li
     root.mkdir(parents=True, exist_ok=True)
     artifact = root / "artifact.json"
     marker = root / "MARKER.txt"
+    empty_settings = root / "claude-empty-settings.json"
+    empty_settings.write_text("{}", encoding="utf-8")
     hermes_home = evidence_dir / "hermes-home"
     hermes_home.mkdir(parents=True, exist_ok=True)
 
@@ -380,6 +382,21 @@ def head_to_head_tasks(agent: str, runner: str | None, evidence_dir: Path) -> li
         ]
     elif agent == "hermes" and runner:
         cmd = [runner, "--ignore-user-config", "--help"]
+    elif agent == "claude-code-bare" and runner:
+        cmd = [runner, "--bare", "-p", "Return exactly: CLAUDE_CODE_READY", "--permission-mode", "bypassPermissions", "--tools", "", "--model", "sonnet", "--max-budget-usd", "0.25"]
+    elif agent == "claude-code" and runner:
+        cmd = [
+            runner, "-p", "Return exactly: CLAUDE_CODE_READY",
+            "--permission-mode", "bypassPermissions",
+            "--model", "sonnet",
+            "--max-budget-usd", "0.25",
+            "--strict-mcp-config",
+            "--mcp-config", '{"mcpServers":{}}',
+            "--settings", str(empty_settings),
+            "--setting-sources", "local",
+            "--disable-slash-commands",
+            "--output-format", "text",
+        ]
     else:
         cmd = [sys.executable, "-c", "raise SystemExit(2)"]
 
@@ -391,8 +408,8 @@ def head_to_head_tasks(agent: str, runner: str | None, evidence_dir: Path) -> li
             "command": cmd,
             "timeout": 60,
             "env": {"HERMES_HOME": str(hermes_home)} if agent == "hermes" else {},
-            "verifier": "stdout_contains" if agent == "hermes" else "json_artifact",
-            "stdout_contains": "Hermes Agent",
+            "verifier": "stdout_contains" if agent in {"hermes", "claude-code", "claude-code-bare"} else "json_artifact",
+            "stdout_contains": "CLAUDE_CODE_READY" if agent in {"claude-code", "claude-code-bare"} else "Hermes Agent",
             "artifact": str(artifact),
             "expected_json": {"ok": True, "task": "same-task-artifact"},
         },
@@ -492,6 +509,22 @@ def run_agent(agent: str, suite: str, evidence_dir: Path, deep: bool) -> dict[st
             "pass_rate": round(100.0 * passed / total, 2) if total else 0,
             "reason": "same-task verifier suite" if suite == "head-to-head" else "runtime smoke only; not a same-task Solar-vs-Hermes capability comparison yet",
             "source": status.get("source"),
+            "tasks": results,
+        }
+
+    if agent in {"claude-code", "claude-code-bare"}:
+        tasks = head_to_head_tasks(agent, status["runner"], agent_dir)
+        results = [run_command_task(task, agent_dir) for task in tasks]
+        passed = sum(1 for item in results if item["passed"])
+        total = len(results)
+        return {
+            "agent": agent,
+            "available": True,
+            "status": "ok" if passed == total else "error",
+            "score": passed,
+            "max_score": total,
+            "pass_rate": round(100.0 * passed / total, 2) if total else 0,
+            "reason": "Claude Code bare mode same-task verifier" if suite == "head-to-head" else "Claude Code bare adapter",
             "tasks": results,
         }
 
@@ -707,7 +740,7 @@ def soak(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def doctor() -> dict[str, Any]:
-    agents = ["solar-harness", "hermes", "codex-local", "claude-code"]
+    agents = ["solar-harness", "hermes", "codex-local", "claude-code", "claude-code-bare"]
     return {
         "ok": True,
         "generated_at": now(),

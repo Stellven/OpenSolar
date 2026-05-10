@@ -1931,6 +1931,9 @@ print(json.dumps({
     _platform_bench="$HARNESS_DIR/lib/platform_workflow_benchmark.py"
     _heavy_proof_bench="$HARNESS_DIR/lib/heavy_proof_benchmark.py"
     _agent_arena_bench="$HARNESS_DIR/lib/agent_arena_benchmark.py"
+    _cert_suite="$HARNESS_DIR/lib/capability_certification_suite.py"
+    _activation_proof="$HARNESS_DIR/lib/capability_activation_proof.py"
+    _ruflo_adapter="$HARNESS_DIR/lib/ruflo_adapter.py"
     case "${2:-status}" in
       status|health)
         shift 2 || true
@@ -1992,8 +1995,28 @@ print(json.dumps({
         [[ -f "$_agent_arena_bench" ]] || { err "agent_arena_benchmark not found: $_agent_arena_bench"; exit 1; }
         python3 "$_agent_arena_bench" "$@"
         ;;
+      certify|certification|cert)
+        shift 2 || true
+        [[ -f "$_cert_suite" ]] || { err "capability_certification_suite not found: $_cert_suite"; exit 1; }
+        python3 "$_cert_suite" "$@"
+        ;;
+      activation-proof|prove-activation|prove-use)
+        shift 2 || true
+        [[ -f "$_activation_proof" ]] || { err "capability_activation_proof not found: $_activation_proof"; exit 1; }
+        python3 "$_activation_proof" "$@"
+        ;;
+      ruflo-status|ruflo)
+        shift 2 || true
+        [[ -f "$_ruflo_adapter" ]] || { err "ruflo_adapter not found: $_ruflo_adapter"; exit 1; }
+        python3 "$_ruflo_adapter" status "$@"
+        ;;
+      ruflo-vendor)
+        shift 2 || true
+        [[ -f "$_ruflo_adapter" ]] || { err "ruflo_adapter not found: $_ruflo_adapter"; exit 1; }
+        python3 "$_ruflo_adapter" vendor "$@"
+        ;;
       *)
-        err "用法: $0 integrations [status|plugins|install|disable|list|validate|capabilities|sync-caps|benchmark|platform-benchmark|heavy-proof|agent-arena] [--json]"
+        err "用法: $0 integrations [status|plugins|install|disable|list|validate|capabilities|sync-caps|benchmark|platform-benchmark|heavy-proof|agent-arena|certify|activation-proof|ruflo-status] [--json]"
         exit 1
         ;;
     esac
@@ -2126,6 +2149,16 @@ print(json.dumps({
       rollback)      shift; python3 "$_skills_py" rollback "$@" ;;
       export)        shift; python3 "$_skills_py" export "$@" ;;
       *) err "用法: solar-harness skills <inventory|doctor|export|eval|promote|rollback|registry> [opts]"; exit 1 ;;
+    esac
+    ;;
+  intent)
+    shift
+    _intent_py="$HARNESS_DIR/lib/intent_engine_adapter.py"
+    [[ -f "$_intent_py" ]] || { err "intent_engine_adapter.py not found: $_intent_py"; exit 1; }
+    case "${1:-match}" in
+      match) shift; python3 "$_intent_py" match "$@" ;;
+      learn) shift; python3 "$_intent_py" learn "$@" ;;
+      *) err "用法: solar-harness intent <match|learn> [opts]"; exit 1 ;;
     esac
     ;;
   graph)

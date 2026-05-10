@@ -1,0 +1,60 @@
+---
+id: ruflo
+name: "Ruflo Multi-Agent Orchestration"
+version: "3.7.0-alpha.19"
+description: "Read-only Solar-Harness integration for ruvnet/ruflo: Claude Code swarm orchestration, plugins, agents, memory and MCP architecture. Full init/MCP is gated because it writes .claude, hooks and workspace config."
+status: enabled
+
+write_scope:
+  - "state/ruflo"
+  - "reports/ruflo"
+
+read_scope:
+  - "vendor/ruflo"
+  - "vendor/ruflo/plugins"
+  - "vendor/ruflo/.agents"
+  - "vendor/ruflo/.claude"
+
+capabilities:
+  - "ruflo.swarm"
+  - "ruflo.plugins"
+  - "ruflo.agent_catalog"
+  - "ruflo.memory"
+  - "ruflo.mcp"
+  - "ruflo.workflow_templates"
+
+commands:
+  - "solar-harness integrations ruflo-status --json"
+  - "npx ruflo@latest --help"
+  - "npx ruflo@latest mcp start"
+
+background_safety:
+  mode: none
+  idle_only: false
+  rate_limit: "manual-only"
+  max_runtime_s: 30
+  max_memory_mb: 256
+
+eval_packs:
+  - "tests/plugins/test-s4-extension-framework.sh"
+
+rollback:
+  strategy: disable
+  commands:
+    - "solar-harness integrations disable ruflo"
+
+integration_level: basic_usable
+
+entry: "vendor/ruflo/README.md"
+
+events:
+  - "ruflo.vendor_verified"
+  - "ruflo.capability_registered"
+
+depends_on: []
+
+tags:
+  - "swarm"
+  - "multi-agent"
+  - "mcp"
+  - "claude-code"
