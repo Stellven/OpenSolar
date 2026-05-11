@@ -4,6 +4,8 @@ set -euo pipefail
 APPLY=0
 JSON=0
 QMD_BIN="${QMD_BIN:-}"
+HARNESS_DIR="${HARNESS_DIR:-$HOME/.solar/harness}"
+[[ -f "$HARNESS_DIR/lib/qmd-resolver.sh" ]] && . "$HARNESS_DIR/lib/qmd-resolver.sh"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -31,20 +33,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$QMD_BIN" ]]; then
-  QMD_BIN="$(command -v qmd 2>/dev/null || true)"
+  QMD_BIN="$(solar_qmd_bin_or_empty 2>/dev/null || true)"
 fi
-if [[ -z "$QMD_BIN" && -x "$HOME/.npm-global/bin/qmd" ]]; then
-  QMD_BIN="$HOME/.npm-global/bin/qmd"
-fi
-if [[ -z "$QMD_BIN" && -x "$HOME/n/bin/qmd" ]]; then
-  QMD_BIN="$HOME/n/bin/qmd"
-fi
-if [[ -z "$QMD_BIN" && -x "/opt/homebrew/bin/qmd" ]]; then
-  QMD_BIN="/opt/homebrew/bin/qmd"
-fi
-if [[ -z "$QMD_BIN" && -x "/usr/local/bin/qmd" ]]; then
-  QMD_BIN="/usr/local/bin/qmd"
-fi
+solar_export_qmd_runtime_path "$QMD_BIN"
 
 json_escape() {
   local s="${1:-}"
