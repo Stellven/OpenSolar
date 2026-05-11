@@ -123,6 +123,16 @@ def check_qmd(source_name: str) -> bool:
     if not qmd_bin:
         qmd_bin = subprocess.getoutput("command -v qmd 2>/dev/null || echo ''").strip()
     if not qmd_bin:
+        for candidate in (
+            Path.home() / ".npm-global/bin/qmd",
+            Path.home() / "n/bin/qmd",
+            Path("/opt/homebrew/bin/qmd"),
+            Path("/usr/local/bin/qmd"),
+        ):
+            if candidate.exists() and os.access(candidate, os.X_OK):
+                qmd_bin = str(candidate)
+                break
+    if not qmd_bin:
         return False
 
     stem = Path(source_name).stem

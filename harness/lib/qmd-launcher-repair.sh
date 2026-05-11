@@ -36,6 +36,15 @@ fi
 if [[ -z "$QMD_BIN" && -x "$HOME/.npm-global/bin/qmd" ]]; then
   QMD_BIN="$HOME/.npm-global/bin/qmd"
 fi
+if [[ -z "$QMD_BIN" && -x "$HOME/n/bin/qmd" ]]; then
+  QMD_BIN="$HOME/n/bin/qmd"
+fi
+if [[ -z "$QMD_BIN" && -x "/opt/homebrew/bin/qmd" ]]; then
+  QMD_BIN="/opt/homebrew/bin/qmd"
+fi
+if [[ -z "$QMD_BIN" && -x "/usr/local/bin/qmd" ]]; then
+  QMD_BIN="/usr/local/bin/qmd"
+fi
 
 json_escape() {
   local s="${1:-}"

@@ -231,7 +231,26 @@ def _mirage_detail(doctor_result: dict) -> dict:
 
 def system_status() -> dict[str, object]:
     cfg = load_config()
-    qmd = run_cmd(["/Users/sihaoli/.npm-global/bin/qmd", "status"], timeout=8) if Path("/Users/sihaoli/.npm-global/bin/qmd").exists() else {"ok": False, "stderr": "qmd not found"}
+    qmd_candidates = []
+    if os.environ.get("QMD_BIN"):
+        qmd_candidates.append(Path(os.environ["QMD_BIN"]))
+    qmd_candidates.extend(
+        [
+            Path.home() / ".npm-global/bin/qmd",
+            Path.home() / "n/bin/qmd",
+            Path("/opt/homebrew/bin/qmd"),
+            Path("/usr/local/bin/qmd"),
+        ]
+    )
+    qmd_bin = next(
+        (
+            str(p)
+            for p in qmd_candidates
+            if p.exists() and os.access(p, os.X_OK)
+        ),
+        "",
+    )
+    qmd = run_cmd([qmd_bin, "status"], timeout=8) if qmd_bin else {"ok": False, "stderr": "qmd not found"}
     wiki = run_cmd([str(HARNESS_DIR / "solar-harness.sh"), "wiki", "status", "--json"], timeout=8)
     mirage = run_cmd([str(HARNESS_DIR / "solar-harness.sh"), "mirage", "doctor", "--json"], timeout=8)
     status_server = run_cmd(["/usr/bin/curl", "-fsS", "--max-time", "3", "http://127.0.0.1:8765/healthz"], timeout=5)
