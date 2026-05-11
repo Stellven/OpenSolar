@@ -2959,7 +2959,11 @@ PY
         ;;
       qmd-status|mineru-status)
         _QMD_BIN="$(command -v qmd 2>/dev/null || true)"
+        [[ -z "$_QMD_BIN" && -n "${QMD_BIN:-}" && -x "${QMD_BIN:-}" ]] && _QMD_BIN="$QMD_BIN"
         [[ -z "$_QMD_BIN" && -x "$HOME/.npm-global/bin/qmd" ]] && _QMD_BIN="$HOME/.npm-global/bin/qmd"
+        [[ -z "$_QMD_BIN" && -x "$HOME/n/bin/qmd" ]] && _QMD_BIN="$HOME/n/bin/qmd"
+        [[ -z "$_QMD_BIN" && -x "/opt/homebrew/bin/qmd" ]] && _QMD_BIN="/opt/homebrew/bin/qmd"
+        [[ -z "$_QMD_BIN" && -x "/usr/local/bin/qmd" ]] && _QMD_BIN="/usr/local/bin/qmd"
         [[ -n "$_QMD_BIN" ]] || { err "qmd not found; install mineru-document-explorer"; exit 1; }
         _qmd_status_out=""
         _qmd_status_rc=0
@@ -2981,7 +2985,11 @@ PY
         ;;
       qmd-search|mineru-search)
         _QMD_BIN="$(command -v qmd 2>/dev/null || true)"
+        [[ -z "$_QMD_BIN" && -n "${QMD_BIN:-}" && -x "${QMD_BIN:-}" ]] && _QMD_BIN="$QMD_BIN"
         [[ -z "$_QMD_BIN" && -x "$HOME/.npm-global/bin/qmd" ]] && _QMD_BIN="$HOME/.npm-global/bin/qmd"
+        [[ -z "$_QMD_BIN" && -x "$HOME/n/bin/qmd" ]] && _QMD_BIN="$HOME/n/bin/qmd"
+        [[ -z "$_QMD_BIN" && -x "/opt/homebrew/bin/qmd" ]] && _QMD_BIN="/opt/homebrew/bin/qmd"
+        [[ -z "$_QMD_BIN" && -x "/usr/local/bin/qmd" ]] && _QMD_BIN="/usr/local/bin/qmd"
         [[ -n "$_QMD_BIN" ]] || { err "qmd not found; install mineru-document-explorer"; exit 1; }
         if [[ $# -lt 1 ]]; then
           err "Usage: $0 wiki qmd-search \"<query>\" [qmd search args]"
@@ -2991,13 +2999,21 @@ PY
         ;;
       qmd-update|mineru-update)
         _QMD_BIN="$(command -v qmd 2>/dev/null || true)"
+        [[ -z "$_QMD_BIN" && -n "${QMD_BIN:-}" && -x "${QMD_BIN:-}" ]] && _QMD_BIN="$QMD_BIN"
         [[ -z "$_QMD_BIN" && -x "$HOME/.npm-global/bin/qmd" ]] && _QMD_BIN="$HOME/.npm-global/bin/qmd"
+        [[ -z "$_QMD_BIN" && -x "$HOME/n/bin/qmd" ]] && _QMD_BIN="$HOME/n/bin/qmd"
+        [[ -z "$_QMD_BIN" && -x "/opt/homebrew/bin/qmd" ]] && _QMD_BIN="/opt/homebrew/bin/qmd"
+        [[ -z "$_QMD_BIN" && -x "/usr/local/bin/qmd" ]] && _QMD_BIN="/usr/local/bin/qmd"
         [[ -n "$_QMD_BIN" ]] || { err "qmd not found; install mineru-document-explorer"; exit 1; }
         "$_QMD_BIN" update "$@"
         ;;
       qmd-mcp|mineru-mcp)
         _QMD_BIN="$(command -v qmd 2>/dev/null || true)"
+        [[ -z "$_QMD_BIN" && -n "${QMD_BIN:-}" && -x "${QMD_BIN:-}" ]] && _QMD_BIN="$QMD_BIN"
         [[ -z "$_QMD_BIN" && -x "$HOME/.npm-global/bin/qmd" ]] && _QMD_BIN="$HOME/.npm-global/bin/qmd"
+        [[ -z "$_QMD_BIN" && -x "$HOME/n/bin/qmd" ]] && _QMD_BIN="$HOME/n/bin/qmd"
+        [[ -z "$_QMD_BIN" && -x "/opt/homebrew/bin/qmd" ]] && _QMD_BIN="/opt/homebrew/bin/qmd"
+        [[ -z "$_QMD_BIN" && -x "/usr/local/bin/qmd" ]] && _QMD_BIN="/usr/local/bin/qmd"
         [[ -n "$_QMD_BIN" ]] || { err "qmd not found; install mineru-document-explorer"; exit 1; }
         _QMD_PROXY="${HARNESS_DIR}/lib/qmd-ipv4-proxy.py"
         _QMD_PROXY_PID="${HARNESS_DIR}/run/qmd-mcp-ipv4-proxy.pid"
