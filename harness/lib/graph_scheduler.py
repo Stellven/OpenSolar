@@ -18,6 +18,7 @@ import argparse
 import datetime
 import json
 import os
+import shutil
 import sqlite3
 import sys
 from copy import deepcopy
@@ -48,6 +49,48 @@ def save_graph(path: str | Path, graph: dict[str, Any]) -> None:
     tmp = p.with_suffix(p.suffix + ".tmp")
     tmp.write_text(json.dumps(graph, indent=2, ensure_ascii=False) + "\n")
     os.replace(tmp, p)
+
+
+def _source_text_for_graph(graph_path: str | Path | None, explicit_source: str | Path | None = None) -> str:
+    paths: list[Path] = []
+    if explicit_source:
+        paths.append(Path(explicit_source))
+    if graph_path:
+        graph_p = Path(graph_path)
+        if graph_p.name.endswith(".task_graph.json"):
+            stem = graph_p.name[:-len(".task_graph.json")]
+            paths.extend([
+                graph_p.with_name(f"{stem}.contract.md"),
+                graph_p.with_name(f"{stem}.plan.md"),
+            ])
+    chunks: list[str] = []
+    seen: set[Path] = set()
+    for path in paths:
+        path = path.expanduser()
+        if path in seen or not path.exists() or not path.is_file():
+            continue
+        seen.add(path)
+        chunks.append(path.read_text(encoding="utf-8", errors="replace"))
+    return "\n\n".join(chunks)
+
+
+def auto_enrich_graph(graph: dict[str, Any], graph_path: str | Path | None = None,
+                      source: str | Path | None = None) -> dict[str, Any]:
+    """Best-effort capability enrichment for default dispatch paths."""
+    try:
+        from capability_inference import enrich_graph  # noqa: WPS433
+
+        return enrich_graph(graph, source_text=_source_text_for_graph(graph_path, source))
+    except Exception:
+        return graph
+
+
+def _changed_nodes(graph: dict[str, Any]) -> list[str]:
+    info = graph.get("capability_inference") or {}
+    changed = info.get("changed_nodes") or []
+    if isinstance(changed, list):
+        return [str(item) for item in changed if str(item)]
+    return []
 
 
 def _nodes(graph: dict[str, Any]) -> list[dict[str, Any]]:
@@ -443,13 +486,20 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
 
 
 def assign_ready(graph: dict[str, Any], workers: list[dict[str, Any]],
-                 max_parallel: int | None = None) -> dict[str, Any]:
+                 max_parallel: int | None = None,
+                 graph_path: str | Path | None = None,
+                 source: str | Path | None = None) -> dict[str, Any]:
+    graph = auto_enrich_graph(graph, graph_path=graph_path, source=source)
     batches = _batch_ready_nodes(ready_nodes(graph), max_parallel=max_parallel)
     if not batches:
         return {"ok": True, "assigned": [], "queued": [], "batch": []}
     first_batch = batches[0]
     result = assign_workers(first_batch, workers)
     result["batch"] = [node["id"] for node in first_batch]
+    result["capability_enrichment"] = {
+        "changed_nodes": _changed_nodes(graph),
+        "auto": True,
+    }
     return result
 
 
@@ -504,8 +554,9 @@ def enqueue_ready(graph: dict[str, Any], graph_path: str, workers: list[dict[str
     else:
         acquire = None
 
+    graph = auto_enrich_graph(graph, graph_path=graph_path)
     sid = str(graph.get("sprint_id") or Path(graph_path).stem.replace(".task_graph", ""))
-    assignment = assign_ready(graph, workers, max_parallel=max_parallel)
+    assignment = assign_ready(graph, workers, max_parallel=max_parallel, graph_path=graph_path)
     queued: list[dict[str, Any]] = list(assignment.get("queued", []))
     enqueued: list[dict[str, Any]] = []
 
@@ -543,8 +594,57 @@ def enqueue_ready(graph: dict[str, Any], graph_path: str, workers: list[dict[str
         "ok": True,
         "sprint_id": sid,
         "batch": assignment.get("batch", []),
+        "capability_enrichment": assignment.get("capability_enrichment", {}),
         "enqueued": enqueued,
         "queued": queued,
+    }
+
+
+def enrich_backlog(sprints_dir: str | Path, dry_run: bool = False,
+                   backup_dir: str | Path | None = None) -> dict[str, Any]:
+    root = Path(sprints_dir).expanduser()
+    if not root.exists():
+        raise ValueError(f"sprints dir not found: {root}")
+    graphs = sorted(root.glob("*.task_graph.json"))
+    backup_root = Path(backup_dir).expanduser() if backup_dir else (
+        HARNESS_DIR / "state" / "task-graph-enrich-backups" / datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    )
+    changed: list[dict[str, Any]] = []
+    unchanged: list[str] = []
+    errors: list[dict[str, str]] = []
+
+    for graph_path in graphs:
+        try:
+            before_text = graph_path.read_text(encoding="utf-8")
+            graph = json.loads(before_text)
+            enriched = auto_enrich_graph(graph, graph_path=graph_path)
+            after_text = json.dumps(enriched, indent=2, ensure_ascii=False) + "\n"
+            nodes = _changed_nodes(enriched)
+            if after_text == before_text:
+                unchanged.append(graph_path.name)
+                continue
+            if not dry_run:
+                backup_root.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(graph_path, backup_root / graph_path.name)
+                save_graph(graph_path, enriched)
+            changed.append({
+                "graph": str(graph_path),
+                "changed_nodes": nodes,
+                "node_count": len(_nodes(enriched)),
+            })
+        except Exception as exc:
+            errors.append({"graph": str(graph_path), "error": str(exc)})
+
+    return {
+        "ok": not errors,
+        "sprints_dir": str(root),
+        "graph_count": len(graphs),
+        "changed_count": len(changed),
+        "unchanged_count": len(unchanged),
+        "backup_dir": str(backup_root) if changed and not dry_run else "",
+        "dry_run": dry_run,
+        "changed": changed,
+        "errors": errors,
     }
 
 
@@ -626,6 +726,7 @@ def main() -> int:
     add_graph(p)
     p.add_argument("--workers", required=True)
     p.add_argument("--max-parallel", type=int)
+    p.add_argument("--source")
 
     p = sub.add_parser("mark")
     add_graph(p)
@@ -644,6 +745,11 @@ def main() -> int:
     p.add_argument("--lease", action="store_true")
     p.add_argument("--ttl", type=int, default=600)
     p.add_argument("--in-place", action="store_true")
+
+    p = sub.add_parser("enrich-backlog")
+    p.add_argument("--sprints-dir", default=str(HARNESS_DIR / "sprints"))
+    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--backup-dir")
 
     args = ap.parse_args()
 
@@ -693,7 +799,7 @@ def main() -> int:
         elif args.cmd == "assign":
             graph = load_graph(args.graph)
             workers = _workers_from_file(args.workers)
-            print(json.dumps(assign_ready(graph, workers, args.max_parallel), ensure_ascii=False))
+            print(json.dumps(assign_ready(graph, workers, args.max_parallel, args.graph, args.source), ensure_ascii=False))
 
         elif args.cmd == "mark":
             graph = load_graph(args.graph)
@@ -712,6 +818,9 @@ def main() -> int:
             if args.in_place:
                 save_graph(args.graph, graph)
             print(json.dumps(result, ensure_ascii=False))
+
+        elif args.cmd == "enrich-backlog":
+            print(json.dumps(enrich_backlog(args.sprints_dir, args.dry_run, args.backup_dir), ensure_ascii=False))
 
         else:
             ap.print_help()
