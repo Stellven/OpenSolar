@@ -18,6 +18,12 @@ _bridge_ok()   { echo "[wiki-bridge] ✓ $*" >&2; }
 _bridge_warn() { echo "[wiki-bridge] ⚠ $*" >&2; }
 _bridge_err()  { echo "[wiki-bridge] ✗ $*" >&2; }
 
+_bridge_dispatch_paused() {
+  [[ "${SOLAR_NO_DISPATCH:-0}" == "1" ]] && return 0
+  [[ -f "${HARNESS_DIR:-$HOME/.solar/harness}/run/no-dispatch.flag" ]] && return 0
+  return 1
+}
+
 # Load vault path from config file if OBSIDIAN_VAULT_PATH not already set.
 _bridge_load_config() {
   local config="${OBSIDIAN_WIKI_CONFIG:-$HOME/.obsidian-wiki/config}"
@@ -649,6 +655,11 @@ cmd_wiki_run_dispatch() {
     printf 'action=%s\n' "${action:-N/A}"
     printf 'skill=%s\n' "${skill:-N/A}"
     return 0
+  fi
+
+  if _bridge_dispatch_paused; then
+    _bridge_err "dispatch paused by no-dispatch flag; not sending to ${target_pane}"
+    return 4
   fi
 
   tmux send-keys -t "$target_pane" C-u 2>/dev/null || true

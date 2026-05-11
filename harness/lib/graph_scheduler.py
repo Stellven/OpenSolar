@@ -376,6 +376,13 @@ def _model_match(worker: dict[str, Any], preferred_model: str | None) -> bool:
     return preferred_model.lower() in models
 
 
+def _model_requires_strict_match(preferred_model: str | None, strict_model: bool = False) -> bool:
+    if not preferred_model or not strict_model:
+        return False
+    normalized = preferred_model.lower()
+    return normalized in {"glm", "glm-5", "glm-5.1", "zhipu"}
+
+
 def _skills_match(worker: dict[str, Any], required_skills: list[str]) -> bool:
     if not required_skills:
         return True
@@ -463,6 +470,7 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
 
     for node in batch_nodes:
         preferred_model = node.get("preferred_model")
+        strict_model = bool(node.get("strict_model") or node.get("model_strict"))
         required_skills = [str(s) for s in node.get("required_skills", [])]
         required_capabilities = _capability_list(node)
         candidates: list[tuple[float, int, int, str, dict[str, Any]]] = []
@@ -476,6 +484,8 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
             if not _capabilities_match(worker, required_capabilities):
                 continue
             if _worker_quota_exhausted(worker, preferred_model):
+                continue
+            if _model_requires_strict_match(preferred_model, strict_model) and not _model_match(worker, preferred_model):
                 continue
             cap_score = _capability_score(worker, required_capabilities, capability_scores)
             model_penalty = 0 if _model_match(worker, preferred_model) else 10

@@ -79,13 +79,13 @@ send_ready_token() {
       tmux send-keys -t "$pane" "2" Enter
       bypass_accepted=1
       sleep 1
-      ((attempt++))
+      attempt=$((attempt + 1))
       continue
     fi
-    if echo "$content" | grep -qi 'Detected a custom API key in your environment'; then
+    if echo "$content" | grep -qiE 'Detected a custom API key in your environment|Do you want to use this API key'; then
       tmux send-keys -t "$pane" "1" Enter
       sleep 1
-      ((attempt++))
+      attempt=$((attempt + 1))
       continue
     fi
     if echo "$content" | grep -qE '(╭──|trust.*folder|Allow.*permission|bypass permissions)'; then
@@ -98,7 +98,7 @@ send_ready_token() {
       return 0
     fi
     sleep 1
-    ((attempt++))
+    attempt=$((attempt + 1))
   done
 }
 if [[ -n "$TMUX_PANE" ]]; then
@@ -113,7 +113,7 @@ find_claude_bin() {
   [[ " ${EXTRA_FLAGS:-} " == *" --bare "* ]] && need_bare=1
   local candidates=()
   [[ -n "${SOLAR_CLAUDE_BIN:-}" ]] && candidates+=("$SOLAR_CLAUDE_BIN")
-  candidates+=("$HOME/n/bin/claude" "$HOME/.npm-global/bin/claude")
+  candidates+=("$HOME/.npm-global/bin/claude" "$HOME/bin/claude" "$HOME/n/bin/claude")
   c="$(command -v claude 2>/dev/null || true)"
   [[ -n "$c" ]] && candidates+=("$c")
 
@@ -132,6 +132,51 @@ CLAUDE_BIN="$(find_claude_bin)" || {
   echo "FATAL: no Claude CLI found with required capabilities for EXTRA_FLAGS='${EXTRA_FLAGS:-}'" >&2
   exit 78
 }
+
+write_runtime_marker() {
+  local marker_dir="$HARNESS_DIR/run/pane-env"
+  local pane_safe="${TMUX_PANE:-unknown}"
+  pane_safe="${pane_safe//[^A-Za-z0-9_.-]/_}"
+  mkdir -p "$marker_dir" 2>/dev/null || return 0
+  python3 - "$marker_dir/$pane_safe.json" <<'PY' 2>/dev/null || true
+import json, os, sys, time
+
+def present(name):
+    return bool(os.environ.get(name))
+
+def host(value):
+    if not value:
+        return ""
+    return value.split("//", 1)[-1].split("/", 1)[0]
+
+record = {
+    "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    "pane": os.environ.get("TMUX_PANE", ""),
+    "persona": os.environ.get("SOLAR_PERSONA", ""),
+    "builder_slot": os.environ.get("SOLAR_BUILDER_SLOT", ""),
+    "claude_bin": os.environ.get("SOLAR_SELECTED_CLAUDE_BIN", ""),
+    "auth_source": os.environ.get("SOLAR_AUTH_SOURCE", ""),
+    "base_url_host": host(os.environ.get("ANTHROPIC_BASE_URL", "")),
+    "has_anthropic_auth_token": present("ANTHROPIC_AUTH_TOKEN"),
+    "has_anthropic_api_key": present("ANTHROPIC_API_KEY"),
+    "zhipu_token_source": os.environ.get("ZHIPU_TOKEN_SOURCE", ""),
+    "default_opus_model": os.environ.get("ANTHROPIC_DEFAULT_OPUS_MODEL", ""),
+    "default_sonnet_model": os.environ.get("ANTHROPIC_DEFAULT_SONNET_MODEL", ""),
+    "model_flag": os.environ.get("SOLAR_MODEL_FLAG", ""),
+    "extra_flags": os.environ.get("SOLAR_EXTRA_FLAGS", ""),
+}
+with open(sys.argv[1], "w", encoding="utf-8") as f:
+    json.dump(record, f, ensure_ascii=False, indent=2)
+    f.write("\n")
+PY
+}
+
+export SOLAR_PERSONA="$PERSONA"
+export SOLAR_SELECTED_CLAUDE_BIN="$CLAUDE_BIN"
+export SOLAR_AUTH_SOURCE="${AUTH_SOURCE:-}"
+export SOLAR_MODEL_FLAG="${MODEL_FLAG:-}"
+export SOLAR_EXTRA_FLAGS="${EXTRA_FLAGS:-}"
+write_runtime_marker
 
 CLAUDE_CMD="$CLAUDE_BIN"
 SOLAR_CLAUDE_BYPASS="${SOLAR_CLAUDE_BYPASS:-1}"

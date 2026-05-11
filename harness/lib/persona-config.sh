@@ -56,6 +56,14 @@ _gateway_compat_flags() {
   printf '%s' "--bare --tools default --strict-mcp-config --mcp-config $HARNESS_DIR/config/empty-mcp.json"
 }
 
+_zhipu_coding_plan_flags() {
+  # Z.AI's official Claude Code Coding Plan setup uses ANTHROPIC_AUTH_TOKEN and
+  # the Anthropic-compatible endpoint. Do not use --bare here: Claude Code's
+  # bare mode authenticates with ANTHROPIC_API_KEY and presents "API Usage
+  # Billing", which can bypass the Coding Plan subscription route.
+  printf '%s' "--tools default --strict-mcp-config --mcp-config $HARNESS_DIR/config/empty-mcp.json"
+}
+
 _infer_auth_source_for_base_url() {
   local base_url="$1"
   case "$base_url" in
@@ -192,7 +200,7 @@ get_persona_config() {
         base_url="${ZHIPU_BASE_URL:-}"
         auth_token="${ZHIPU_AUTH_TOKEN:-}"
         auth_source="zhipu"
-        extra_flags="$(_gateway_compat_flags)"
+        extra_flags="$(_zhipu_coding_plan_flags)"
         display_model="GLM-5.1 (智谱, ${SOLAR_BUILDER_SLOT:-lab-builder})"
       elif [[ "$lab_model" == "glm" ]]; then
         model_flag=""
@@ -205,7 +213,7 @@ get_persona_config() {
         base_url="${ZHIPU_BASE_URL:-}"
         auth_token="${ZHIPU_AUTH_TOKEN:-}"
         auth_source="zhipu"
-        extra_flags="$(_gateway_compat_flags)"
+        extra_flags="$(_zhipu_coding_plan_flags)"
         display_model="GLM-4.7 (智谱, ${SOLAR_BUILDER_SLOT:-lab-builder})"
       elif [[ "$lab_model" == "deepseek" ]] && _deepseek_available; then
         model_flag="--model sonnet"
@@ -248,7 +256,7 @@ get_persona_config() {
         base_url="${ZHIPU_BASE_URL:-}"
         auth_token="${ZHIPU_AUTH_TOKEN:-}"
         auth_source="zhipu"
-        extra_flags="$(_gateway_compat_flags)"
+        extra_flags="$(_zhipu_coding_plan_flags)"
         display_model="GLM-5.1 (智谱)"
       else
         model_flag="--model opus"
@@ -267,7 +275,7 @@ get_persona_config() {
         base_url="${ZHIPU_BASE_URL:-}"
         auth_token="${ZHIPU_AUTH_TOKEN:-}"
         auth_source="zhipu"
-        extra_flags="$(_gateway_compat_flags)"
+        extra_flags="$(_zhipu_coding_plan_flags)"
         display_model="GLM-5.1 (智谱)"
       else
         model_flag="--model opus"
@@ -286,7 +294,7 @@ get_persona_config() {
         base_url="${ZHIPU_BASE_URL:-}"
         auth_token="${ZHIPU_AUTH_TOKEN:-}"
         auth_source="zhipu"
-        extra_flags="$(_gateway_compat_flags)"
+        extra_flags="$(_zhipu_coding_plan_flags)"
         display_model="GLM-5.1 (智谱)"
       else
         model_flag="--model opus"
@@ -300,11 +308,11 @@ get_persona_config() {
       ;;
   esac
 
-  # Any non-Anthropic gateway must use Claude Code's minimal request shape.
-  # z.ai and DeepSeek both reject parts of the normal interactive/MCP payload.
+  # DeepSeek still needs Claude Code's minimal request shape. Z.AI Coding Plan
+  # must stay on the official Claude Code route above.
   if [[ -n "$base_url" ]]; then
     [[ -n "$auth_source" ]] || auth_source="$(_infer_auth_source_for_base_url "$base_url")"
-    if [[ "${SOLAR_GATEWAY_COMPAT:-1}" != "0" && -z "$extra_flags" ]]; then
+    if [[ "$auth_source" != "zhipu" && "${SOLAR_GATEWAY_COMPAT:-1}" != "0" && -z "$extra_flags" ]]; then
       extra_flags="$(_gateway_compat_flags)"
     fi
   fi
@@ -355,7 +363,9 @@ apply_persona_env() {
           return 1
         fi
         export ANTHROPIC_AUTH_TOKEN="$deepseek_token"
-        unset ANTHROPIC_API_KEY
+        # Claude Code --bare authenticates Anthropic-compatible endpoints via
+        # ANTHROPIC_API_KEY; keep AUTH_TOKEN too for older CLI compatibility.
+        export ANTHROPIC_API_KEY="$deepseek_token"
         export ANTHROPIC_DEFAULT_OPUS_MODEL="${DEEPSEEK_OPUS_MODEL:-deepseek-v4-flash}"
         export ANTHROPIC_DEFAULT_SONNET_MODEL="${DEEPSEEK_SONNET_MODEL:-deepseek-v4-pro}"
         export ANTHROPIC_DEFAULT_HAIKU_MODEL="${DEEPSEEK_HAIKU_MODEL:-deepseek-v4-flash}"
