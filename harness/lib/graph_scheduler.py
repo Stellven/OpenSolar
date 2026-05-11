@@ -93,6 +93,23 @@ def _changed_nodes(graph: dict[str, Any]) -> list[str]:
     return []
 
 
+def _required_capability_snapshot(graph: dict[str, Any]) -> dict[str, list[str]]:
+    snapshot: dict[str, list[str]] = {}
+    try:
+        nodes = _nodes(graph)
+    except Exception:
+        return snapshot
+    for node in nodes:
+        node_id = str(node.get("id", ""))
+        if not node_id:
+            continue
+        if "required_capabilities" not in node:
+            snapshot[node_id] = ["__MISSING_REQUIRED_CAPABILITIES__"]
+            continue
+        snapshot[node_id] = _capability_list(node)
+    return snapshot
+
+
 def _nodes(graph: dict[str, Any]) -> list[dict[str, Any]]:
     nodes = graph.get("nodes")
     if not isinstance(nodes, list):
@@ -617,10 +634,12 @@ def enrich_backlog(sprints_dir: str | Path, dry_run: bool = False,
         try:
             before_text = graph_path.read_text(encoding="utf-8")
             graph = json.loads(before_text)
+            before_caps = _required_capability_snapshot(graph)
             enriched = auto_enrich_graph(graph, graph_path=graph_path)
+            after_caps = _required_capability_snapshot(enriched)
             after_text = json.dumps(enriched, indent=2, ensure_ascii=False) + "\n"
-            nodes = _changed_nodes(enriched)
-            if after_text == before_text:
+            nodes = [node_id for node_id, caps in after_caps.items() if caps != before_caps.get(node_id, [])]
+            if not nodes:
                 unchanged.append(graph_path.name)
                 continue
             if not dry_run:

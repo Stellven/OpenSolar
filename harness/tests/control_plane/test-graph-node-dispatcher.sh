@@ -54,6 +54,7 @@ cat > "$GRAPH" <<JSON
       "write_scope": ["/a"],
       "read_scope": ["/"],
       "required_skills": ["python", "browser.browse", "document.convert", "persona.agent"],
+      "required_capabilities": ["browser.browse", "document.convert", "persona.agent"],
       "preferred_model": "sonnet",
       "gate": "G1",
       "acceptance": ["S1 passed"],
@@ -111,6 +112,8 @@ S2_DISPATCH="$TMPDIR_TEST/sprints/${SID}.S2-dispatch.md"
 S1_TEXT=$(cat "$S1_DISPATCH")
 check "dispatch text has node id" "$S1_TEXT" "Node: \`S1\`"
 check "dispatch text has write scope" "$S1_TEXT" "\`/a\`"
+check "dispatch text has required capabilities section" "$S1_TEXT" "## Required Capabilities"
+check "dispatch text lists browser capability" "$S1_TEXT" "\`browser.browse\`"
 check "dispatch text forbids parent pass" "$S1_TEXT" "不要把 parent sprint 标成 passed"
 check "dispatch text has capability block" "$S1_TEXT" "<solar-capability-context>"
 check "dispatch text selected gstack" "$S1_TEXT" "gstack"
@@ -184,6 +187,8 @@ S1_EVAL_DISPATCH="$TMPDIR_TEST/sprints/${SID}.S1-eval-dispatch.md"
 S1_EVAL_TEXT=$(cat "$S1_EVAL_DISPATCH")
 check "eval text node only" "$S1_EVAL_TEXT" "只评审本 DAG node"
 check "eval text forbids parent pass" "$S1_EVAL_TEXT" "不要把 parent sprint 标成 passed"
+check "eval text has required capabilities section" "$S1_EVAL_TEXT" "## Required Capabilities"
+check "eval text lists browser capability" "$S1_EVAL_TEXT" "\`browser.browse\`"
 check "eval text has capability block" "$S1_EVAL_TEXT" "<solar-capability-context>"
 OUT=$(HARNESS_DIR="$TMPDIR_TEST" PYTHONPATH="$TMPDIR_TEST/lib" SOLAR_HARNESS_SESSION="solar-harness-test" python3 - <<'PY'
 import graph_node_dispatcher as g

@@ -28,6 +28,7 @@ CAP_GRAPH="$TMPDIR_TEST/capability.task_graph.json"
 CAP_WORKERS="$TMPDIR_TEST/capability-workers.json"
 INFER_GRAPH="$TMPDIR_TEST/infer-capability.task_graph.json"
 INFER_SOURCE="$TMPDIR_TEST/infer-capability.contract.md"
+BACKLOG_DIR="$TMPDIR_TEST/backlog-sprints"
 
 cat > "$GRAPH" <<'JSON'
 {
@@ -195,6 +196,10 @@ cat > "$INFER_SOURCE" <<'MD'
 需要使用 Ruflo / Claude Flow 的 swarm、MCP 和 workflow templates 能力，不能只按普通 Python 任务派发。
 MD
 
+mkdir -p "$BACKLOG_DIR"
+cp "$INFER_GRAPH" "$BACKLOG_DIR/sprint-backlog.task_graph.json"
+cp "$INFER_SOURCE" "$BACKLOG_DIR/sprint-backlog.contract.md"
+
 cat > "$CONFLICT" <<'JSON'
 {
   "sprint_id": "sprint-conflict",
@@ -283,7 +288,16 @@ check "Ruflo MCP inferred" "$OUT" '"ruflo.mcp"'
 OUT=$(python3 "$LIB/graph_scheduler.py" assign --graph "$INFER_GRAPH" --workers "$CAP_WORKERS" --max-parallel 2 2>/dev/null)
 check "inferred capability selects Ruflo worker" "$OUT" '"pane": "solar-harness:0.2"'
 
-echo "T11: enqueue-ready writes graph node payloads only for ready batch"
+echo "T11: backlog enrichment migrates existing graphs"
+OUT=$(python3 "$LIB/graph_scheduler.py" enrich-backlog --sprints-dir "$BACKLOG_DIR" 2>/dev/null)
+check "enrich-backlog ok" "$OUT" '"ok": true'
+check "enrich-backlog changed one graph" "$OUT" '"changed_count": 1'
+OUT=$(python3 -c "import json; g=json.load(open('$BACKLOG_DIR/sprint-backlog.task_graph.json')); print(json.dumps(g['nodes'][0], ensure_ascii=False))")
+check "backlog graph has Ruflo capability" "$OUT" '"ruflo.swarm"'
+OUT=$(python3 "$LIB/graph_scheduler.py" enrich-backlog --sprints-dir "$BACKLOG_DIR" --dry-run 2>/dev/null)
+check "enrich-backlog idempotent" "$OUT" '"changed_count": 0'
+
+echo "T12: enqueue-ready writes graph node payloads only for ready batch"
 cp "$GRAPH" "$ENQ_GRAPH"
 OUT=$(HARNESS_DIR="$TMPDIR_TEST" python3 "$LIB/graph_scheduler.py" enqueue-ready --graph "$ENQ_GRAPH" --workers "$WORKERS" --max-parallel 8 --in-place 2>/dev/null)
 check "enqueue-ready ok" "$OUT" '"ok": true'
@@ -296,7 +310,7 @@ check "queue depth 3" "$OUT" '"depth": 3'
 OUT=$(python3 "$LIB/graph_scheduler.py" ready --graph "$ENQ_GRAPH" 2>/dev/null)
 if [[ "$OUT" != *'"S1"'* && "$OUT" != *'"S2"'* && "$OUT" != *'"S6"'* ]]; then ok "in-place dispatched nodes no longer ready"; else fail "dispatched nodes still ready"; fi
 
-echo "T12: mark results and release next layer"
+echo "T13: mark results and release next layer"
 for n in S1 S2 S6; do
   python3 "$LIB/graph_scheduler.py" mark --graph "$GRAPH" --node "$n" --status passed --in-place >/dev/null
 done
@@ -304,19 +318,19 @@ OUT=$(python3 "$LIB/graph_scheduler.py" ready --graph "$GRAPH" 2>/dev/null)
 check "S3 ready after join" "$OUT" '"S3"'
 if [[ "$OUT" != *'"S4"'* ]]; then ok "S4 still blocked"; else fail "S4 dispatched too early"; fi
 
-echo "T13: failure blocks descendants only"
+echo "T14: failure blocks descendants only"
 python3 "$LIB/graph_scheduler.py" mark --graph "$GRAPH" --node S3 --status failed --in-place >/dev/null
 OUT=$(python3 "$LIB/graph_scheduler.py" ready --graph "$GRAPH" 2>/dev/null)
 if [[ "$OUT" != *'"S4"'* && "$OUT" != *'"S5"'* && "$OUT" != *'"S7"'* ]]; then ok "S3 failure blocks S4/S5/S7"; else fail "failure did not block descendants"; fi
 
-echo "T14: queue can store graph node payload"
+echo "T15: queue can store graph node payload"
 OUT=$(HARNESS_DIR="$TMPDIR_TEST" python3 "$LIB/task_queue.py" enqueue-node --sprint sprint-test-dag --node-id S1 --payload '{"node_id":"S1","goal":"installer"}' 2>/dev/null)
 check "enqueue-node ok" "$OUT" '"ok": true'
 OUT=$(HARNESS_DIR="$TMPDIR_TEST" python3 "$LIB/task_queue.py" pop --sprint sprint-test-dag 2>/dev/null)
 check "pop graph node intent" "$OUT" 'graph_node|node_id=S1'
 check "pop graph node payload" "$OUT" '"payload"'
 
-echo "T15: solar-harness subcommand routing"
+echo "T16: solar-harness subcommand routing"
 OUT=$(bash "$BIN" graph-scheduler help 2>/dev/null || true)
 check "graph-scheduler help" "$OUT" "Solar Graph Scheduler"
 check "graph-scheduler help has enrichment" "$OUT" "enrich-capabilities"
@@ -324,6 +338,8 @@ OUT=$(bash "$BIN" graph-scheduler validate --graph "$CONFLICT" 2>/dev/null || tr
 check "graph-scheduler validate route" "$OUT" '"ok": true'
 OUT=$(bash "$BIN" graph-scheduler enrich-capabilities --graph "$INFER_GRAPH" --source "$INFER_SOURCE" 2>/dev/null || true)
 check "graph-scheduler enrich route" "$OUT" '"ok": true'
+OUT=$(bash "$BIN" graph-scheduler enrich-backlog --sprints-dir "$BACKLOG_DIR" --dry-run 2>/dev/null || true)
+check "graph-scheduler enrich-backlog route" "$OUT" '"ok": true'
 
 echo ""
 echo "=== Graph Scheduler: PASS=$PASS FAIL=$FAIL ==="
