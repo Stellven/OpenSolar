@@ -910,7 +910,7 @@ wake_sprint() {
   phase=$(python3 -c "import json; print(json.load(open('$sf')).get('phase',''))" 2>/dev/null || true)
   handoff_to=$(python3 -c "import json; print(json.load(open('$sf')).get('handoff_to',''))" 2>/dev/null || true)
   auto_held=$(python3 -c "import json; print('true' if json.load(open('$sf')).get('auto_held') else 'false')" 2>/dev/null || echo false)
-  contract_bypass=$(grep -Eq '^bypass_pm:[[:space:]]*true[[:space:]]*$' "$SPRINTS_DIR/${sid}.contract.md" 2>/dev/null && echo true || echo false)
+  contract_bypass=$(grep -Eiq '^(bypass_pm|bypass pm):[[:space:]]*true[[:space:]]*$' "$SPRINTS_DIR/${sid}.contract.md" 2>/dev/null && echo true || echo false)
   contract_handoff=$(grep -m1 '^handoff_to:' "$SPRINTS_DIR/${sid}.contract.md" 2>/dev/null | sed 's/^handoff_to:[[:space:]]*//' || true)
   contract_target=$(grep -m1 '^target_role:' "$SPRINTS_DIR/${sid}.contract.md" 2>/dev/null | sed 's/^target_role:[[:space:]]*//' || true)
   local original_st="$st"
@@ -1177,6 +1177,11 @@ json.dump(d, open('$sf', 'w'), indent = 2)
 
 ${target_task}
 DISPATCH_EOF
+
+  if [[ "${SOLAR_NO_DISPATCH:-0}" == "1" || -f "$HARNESS_DIR/run/no-dispatch.flag" ]]; then
+    warn "no-dispatch flag active; wake wrote dispatch file but did not send to pane: ${target_pane}"
+    return 4
+  fi
 
   local short_cmd="读取并执行指令文件 $SPRINTS_DIR/${sid}.dispatch.md 中的所有步骤"
   # Claude TUI can leave stale input in the prompt after interrupts; clear the
@@ -3506,6 +3511,31 @@ EOF
         ;;
       *)
         err "Unknown graph-dispatch subcommand: $_graph_dispatch_subcmd"; exit 1
+        ;;
+    esac
+    ;;
+
+  runtime)
+    # Managed Agent Runtime — session log, projection, activity, doctor
+    shift
+    _runtime_subcmd="${1:-doctor}"; shift || true
+    _runtime_py_dir="$HARNESS_DIR/lib"
+    case "$_runtime_subcmd" in
+      doctor)
+        python3 "$_runtime_py_dir/runtime_doctor.py" "$@"
+        ;;
+      project)
+        python3 "$_runtime_py_dir/projection_engine.py" "$@"
+        ;;
+      help|--help|-h|"")
+        echo "Solar Managed Agent Runtime"
+        echo ""
+        echo "Usage:"
+        echo "  $0 runtime doctor [sprint_id] [--json] [--all]"
+        echo "  $0 runtime project <sprint_id> [--write-cache] [--json]"
+        ;;
+      *)
+        err "Unknown runtime subcommand: $_runtime_subcmd"; exit 1
         ;;
     esac
     ;;

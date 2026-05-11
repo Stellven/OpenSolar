@@ -76,13 +76,13 @@ send_ready_token() {
       tmux send-keys -t "$pane" "2" Enter
       bypass_accepted=1
       sleep 1
-      ((attempt++))
+      attempt=$((attempt + 1))
       continue
     fi
-    if echo "$content" | grep -qi 'Detected a custom API key in your environment'; then
+    if echo "$content" | grep -qiE 'Detected a custom API key in your environment|Do you want to use this API key'; then
       tmux send-keys -t "$pane" "1" Enter
       sleep 1
-      ((attempt++))
+      attempt=$((attempt + 1))
       continue
     fi
     if echo "$content" | grep -qE '(╭──|trust.*folder|Allow.*permission)'; then
@@ -95,7 +95,7 @@ send_ready_token() {
       return 0
     fi
     sleep 1
-    ((attempt++))
+    attempt=$((attempt + 1))
   done
 }
 if [[ -n "$TMUX_PANE" ]]; then

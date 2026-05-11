@@ -29,6 +29,7 @@ SESSION = os.environ.get("SOLAR_HARNESS_SESSION", "solar-harness")
 STATE = HARNESS / "state" / "autopilot-state.json"
 LOCK = HARNESS / "run" / "autopilot.lock"
 QUEUE = HARNESS / "run" / "autopilot-queue.jsonl"
+NO_DISPATCH_FLAG = HARNESS / "run" / "no-dispatch.flag"
 PANE_ASSIGNMENTS = HARNESS / ".pane-assignments"
 PANE_LEASE_DIR = HARNESS / "run" / "pane-leases"
 QUEUE_TTL_SEC = 3600
@@ -117,11 +118,17 @@ def tmux_capture(target: str) -> str:
 
 
 def tmux_send(target: str, text: str) -> bool:
+    if no_dispatch_enabled():
+        return False
     try:
         r = subprocess.run(["tmux", "send-keys", "-t", target, text, "Enter"], timeout=2)
         return r.returncode == 0
     except Exception:
         return False
+
+
+def no_dispatch_enabled() -> bool:
+    return os.environ.get("SOLAR_NO_DISPATCH") == "1" or NO_DISPATCH_FLAG.exists()
 
 
 def pane_safe(target: str) -> str:
@@ -434,6 +441,8 @@ def graph_status(sid: str) -> dict:
 
 
 def dispatch_ready_graph_nodes(sid: str, lease: bool = True) -> dict:
+    if no_dispatch_enabled():
+        return {"ok": False, "reason": "no_dispatch_flag", "sprint_id": sid, "dispatched": [], "skipped": []}
     path = graph_path_for(sid)
     if not path.exists():
         return {"ok": False, "reason": "task_graph_missing", "path": str(path)}

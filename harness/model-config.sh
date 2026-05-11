@@ -6,21 +6,33 @@
 
 export ZHIPU_BASE_URL="https://api.z.ai/api/anthropic"
 export ZHIPU_MODEL="GLM-5.1"
+export ZHIPU_TOKEN_SOURCE="${ZHIPU_TOKEN_SOURCE:-unset}"
 
-# Token 从 secrets 文件读取,不硬编码
+# Token 从 secrets 文件读取，不硬编码。
+# 优先级：
+#   1. ~/.solar/secrets/zhipu.env             # 专用 Coding Plan token
+#   2. ~/.solar/secrets/solar-user-secrets.env # UI/用户配置
+#   3. 进程环境变量                            # 手动临时覆盖
 SECRETS_FILE="$HOME/.solar/secrets/zhipu.env"
 if [[ -f "$SECRETS_FILE" ]]; then
   source "$SECRETS_FILE"
+  export ZHIPU_TOKEN_SOURCE="zhipu.env"
 fi
 
-# Coding Plan 包月 token (与 cc-switch DB 同源, 2026-05-06 修复 1210)
-# shell env 里的旧 Pay-as-you-go token (1a8b9adc...) 不能用,必须强覆盖
-CODING_PLAN_TOKEN="cee4edb0bb554b709623d2c2d63c4065.q0unUsiCytMqBo07"
-if [[ -z "${ZHIPU_AUTH_TOKEN:-}" || "${ZHIPU_AUTH_TOKEN:0:12}" == "1a8b9adce224" ]]; then
-  export ZHIPU_AUTH_TOKEN="$CODING_PLAN_TOKEN"
+USER_SECRETS_FILE="$HOME/.solar/secrets/solar-user-secrets.env"
+if [[ -z "${ZHIPU_AUTH_TOKEN:-}" && -f "$USER_SECRETS_FILE" ]]; then
+  source "$USER_SECRETS_FILE"
+  export ZHIPU_TOKEN_SOURCE="solar-user-secrets.env"
 fi
+
+if [[ -n "${ZHIPU_AUTH_TOKEN:-}" && "${ZHIPU_TOKEN_SOURCE:-unset}" == "unset" ]]; then
+  export ZHIPU_TOKEN_SOURCE="environment"
+fi
+
 # 兼容旧命名 ZHIPU_API_KEY
-export ZHIPU_API_KEY="$ZHIPU_AUTH_TOKEN"
+if [[ -n "${ZHIPU_AUTH_TOKEN:-}" ]]; then
+  export ZHIPU_API_KEY="$ZHIPU_AUTH_TOKEN"
+fi
 
 # 缺失凭据时不要直接 exit。
 # 启动链会在 persona-config.sh 内决定是否回退到 Claude 默认模型。

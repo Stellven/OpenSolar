@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Regression guard: third-party Anthropic-compatible gateways must never launch
-# with the full Claude Code interactive/MCP payload.
+# Regression guard: provider-specific Claude Code gateway behavior.
+# Z.AI Coding Plan uses the official Claude Code route (AUTH_TOKEN + /api/anthropic)
+# and must not use --bare/API_KEY because that can route as API usage billing.
+# Other Anthropic-compatible gateways, such as DeepSeek, still need --bare.
 set -euo pipefail
 
 HARNESS_DIR="${HARNESS_DIR:-$HOME/.solar/harness}"
@@ -34,7 +36,11 @@ check_gateway_config() {
   fi
 
   [[ -n "$auth_source" ]] && pass "$label: auth source set ($auth_source)" || fail "$label: missing AUTH_SOURCE"
-  [[ "$extra_flags" == *"--bare"* ]] && pass "$label: --bare enabled" || fail "$label: missing --bare"
+  if [[ "$auth_source" == "zhipu" ]]; then
+    [[ "$extra_flags" != *"--bare"* ]] && pass "$label: zhipu coding plan does not use --bare" || fail "$label: zhipu must not use --bare"
+  else
+    [[ "$extra_flags" == *"--bare"* ]] && pass "$label: --bare enabled" || fail "$label: missing --bare"
+  fi
   [[ "$extra_flags" == *"--tools default"* ]] && pass "$label: tools constrained" || fail "$label: missing --tools default"
   [[ "$extra_flags" == *"--strict-mcp-config"* ]] && pass "$label: strict MCP config" || fail "$label: missing --strict-mcp-config"
   [[ "$extra_flags" == *"config/empty-mcp.json"* ]] && pass "$label: empty MCP config used" || fail "$label: missing empty MCP config"

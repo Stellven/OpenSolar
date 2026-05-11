@@ -1,0 +1,75 @@
+{"ts": "2026-05-11T19:18:50Z", "sprint_id": "sprint-20260511-managed-agent-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_missing_prd", "severity": "warn", "data": {"sid": "sprint-20260511-managed-agent-runtime-foundation", "type": "missing_prd", "severity": "warn", "safe_default": "write_prd_or_escalate_to_codex_pm", "message": "P0 has contract/evidence but no PRD."}}
+{"ts": "2026-05-11T19:18:50Z", "sprint_id": "sprint-20260511-managed-agent-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_active_without_handoff", "severity": "warn", "data": {"target": "solar-harness:0.2"}}
+{"event": "waked", "by": "wake", "data": {"from_status": "active", "target_pane": "solar-harness:0.2"}, "ts": "2026-05-11T19:18:52Z", "sid": "sprint-20260511-managed-agent-runtime-foundation"}
+{"ts": "2026-05-11T19:19:34Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-11T19:19:34Z","event":"planner_notified","by":"coordinator","data":{"status":"active"}}
+{"ts": "2026-05-11T19:20:18Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-11T19:20:35Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-11T19:21:31Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-11T19:22:21Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-11T19:22:22Z","event":"planner_notified","by":"coordinator","data":{"status":"active"}}
+{"ts": "2026-05-11T19:23:09Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-11T19:23:27Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-11T19:23:55Z", "sprint_id": "sprint-20260511-managed-agent-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_missing_prd", "severity": "warn", "data": {"sid": "sprint-20260511-managed-agent-runtime-foundation", "type": "missing_prd", "severity": "warn", "safe_default": "write_prd_or_escalate_to_codex_pm", "message": "P0 has contract/evidence but no PRD."}}
+{"ts": "2026-05-11T19:24:20Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-11T19:24:56Z", "sprint_id": "sprint-20260511-managed-agent-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_active_without_handoff", "severity": "warn", "data": {"target": "solar-harness:0.2"}}
+{"event": "waked", "by": "wake", "data": {"from_status": "active", "target_pane": "solar-harness:0.2"}, "ts": "2026-05-11T19:24:59Z", "sid": "sprint-20260511-managed-agent-runtime-foundation"}
+{"ts": "2026-05-11T19:25:21Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-11T19:25:21Z","event":"planner_notified","by":"coordinator","data":{"status":"active"}}
+{"ts": "2026-05-11T19:26:01Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-11T19:26:17Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-11T19:27:04Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-11T19:27:56Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-11T19:27:56Z","event":"planner_notified","by":"coordinator","data":{"status":"active"}}
+{"ts": "2026-05-11T19:28:35Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-11T19:28:52Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-11T19:29:00Z", "sprint_id": "sprint-20260511-managed-agent-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_missing_prd", "severity": "warn", "data": {"sid": "sprint-20260511-managed-agent-runtime-foundation", "type": "missing_prd", "severity": "warn", "safe_default": "write_prd_or_escalate_to_codex_pm", "message": "P0 has contract/evidence but no PRD."}}
+{"ts": "2026-05-11T19:29:41Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-11T19:30:00Z", "sprint_id": "sprint-20260511-managed-agent-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_active_without_handoff", "severity": "warn", "data": {"target": "solar-harness:0.2"}}
+{"event": "waked", "by": "wake", "data": {"from_status": "active", "target_pane": "solar-harness:0.2"}, "ts": "2026-05-11T19:30:03Z", "sid": "sprint-20260511-managed-agent-runtime-foundation"}
+{"ts": "2026-05-11T19:30:31Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-11T19:30:31Z","event":"planner_notified","by":"coordinator","data":{"status":"active"}}
+{"ts": "2026-05-11T19:31:12Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-11T19:31:30Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-11T19:31:52Z", "event": "handoff_submitted", "by": "builder", "sid": "sprint-20260511-managed-agent-runtime-foundation"}
+{"ts": "2026-05-11T19:32:04Z", "sprint_id": "sprint-20260511-managed-agent-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_ready_for_evaluator", "severity": "info", "data": {"target": "solar-harness:0.3"}}
+{"ts": "2026-05-11T19:32:24Z", "sprint_id": "sprint-20260511-managed-agent-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_pane_idle_with_pending_artifact", "severity": "info", "data": {"target": "solar-harness:0.3"}}
+{"ts": "2026-05-11T19:32:24Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "state_changed", "by": "coordinator"}
+{"event": "waked", "by": "wake", "data": {"from_status": "reviewing", "target_pane": "solar-harness:0.3"}, "ts": "2026-05-11T19:32:27Z", "sid": "sprint-20260511-managed-agent-runtime-foundation"}
+{"ts": "2026-05-11T19:33:06Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-11T19:33:23Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "dispatch_queued", "by": "coordinator"}
+{"event": "waked", "by": "wake", "data": {"from_status": "active", "target_pane": "solar-harness:0.2"}, "ts": "2026-05-11T19:34:10Z", "sid": "sprint-20260511-managed-agent-runtime-foundation"}
+{"event": "watchdog_restart", "by": "watchdog", "data": {"failure_count": 1}, "ts": "2026-05-11T19:34:10Z", "sid": "sprint-20260511-managed-agent-runtime-foundation"}
+{"ts": "2026-05-11T19:34:27Z", "sprint_id": "sprint-20260511-managed-agent-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_missing_prd", "severity": "warn", "data": {"sid": "sprint-20260511-managed-agent-runtime-foundation", "type": "missing_prd", "severity": "warn", "safe_default": "write_prd_or_escalate_to_codex_pm", "message": "P0 has contract/evidence but no PRD."}}
+{"ts": "2026-05-11T19:35:13Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-11T19:35:54Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-11T19:36:12Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-11T19:37:07Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-11T19:37:45Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-11T19:38:00Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-11T19:39:28Z", "sprint_id": "sprint-20260511-managed-agent-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_missing_prd", "severity": "warn", "data": {"sid": "sprint-20260511-managed-agent-runtime-foundation", "type": "missing_prd", "severity": "warn", "safe_default": "write_prd_or_escalate_to_codex_pm", "message": "P0 has contract/evidence but no PRD."}}
+{"ts": "2026-05-11T19:43:29Z", "sprint_id": "sprint-20260511-managed-agent-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_ready_for_evaluator", "severity": "info", "data": {"target": "solar-harness:0.3"}}
+{"event": "waked", "by": "wake", "data": {"from_status": "reviewing", "target_pane": "solar-harness:0.3"}, "ts": "2026-05-11T19:43:33Z", "sid": "sprint-20260511-managed-agent-runtime-foundation"}
+{"ts": "2026-05-11T19:44:03Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-11T19:44:33Z", "sprint_id": "sprint-20260511-managed-agent-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_missing_prd", "severity": "warn", "data": {"sid": "sprint-20260511-managed-agent-runtime-foundation", "type": "missing_prd", "severity": "warn", "safe_default": "write_prd_or_escalate_to_codex_pm", "message": "P0 has contract/evidence but no PRD."}}
+{"ts": "2026-05-11T19:44:46Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-11T19:45:02Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-11T19:45:55Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-11T19:46:18Z", "event": "eval_passed", "by": "evaluator", "verdict": "pass", "sid": "sprint-20260511-managed-agent-runtime-foundation"}
+{"ts": "2026-05-11T19:46:35Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-11T19:46:47Z", "event": "eval_passed", "by": "evaluator", "verdict": "pass", "sid": "sprint-20260511-managed-agent-runtime-foundation"}
+{"ts": "2026-05-11T19:46:53Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-11T19:47:45Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "state_changed", "by": "coordinator"}
+{"ts":"2026-05-11T19:47:46Z","event":"planner_notified","by":"coordinator","data":{"status":"passed"}}
+{"ts": "2026-05-11T19:48:03Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-11T19:48:23Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-11T19:48:45Z", "sid": "sprint-20260511-managed-agent-runtime-foundation", "event": "handle_passed_completed", "by": "coordinator"}
+{"ts": "2026-05-11T19:48:45Z", "event": "accepted_artifact_exported", "source": "accepted-artifact-export", "path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260511-managed-agent-runtime-foundation.accepted.md", "bytes": 24102, "source_hash": "3e90ccb306f7c626c51770d6556cbb5700ad1023524a0ed9039060521a9f7b4f"}
+{"ts": "2026-05-11T19:48:45Z", "event": "accepted_artifact_ingest_dispatched", "source": "accepted-artifact-export", "dispatch_file": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260511-managed-agent-runtime-foundation.dispatch.md"}
+{"ts": "2026-05-11T19:49:34Z", "sprint_id": "sprint-20260511-managed-agent-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_missing_prd", "severity": "warn", "data": {"sid": "sprint-20260511-managed-agent-runtime-foundation", "type": "missing_prd", "severity": "warn", "safe_default": "write_prd_or_escalate_to_codex_pm", "message": "P0 has contract/evidence but no PRD."}}
+{"ts": "2026-05-11T19:54:35Z", "sprint_id": "sprint-20260511-managed-agent-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_missing_prd", "severity": "warn", "data": {"sid": "sprint-20260511-managed-agent-runtime-foundation", "type": "missing_prd", "severity": "warn", "safe_default": "write_prd_or_escalate_to_codex_pm", "message": "P0 has contract/evidence but no PRD."}}
+{"ts": "2026-05-11T19:59:35Z", "sprint_id": "sprint-20260511-managed-agent-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_missing_prd", "severity": "warn", "data": {"sid": "sprint-20260511-managed-agent-runtime-foundation", "type": "missing_prd", "severity": "warn", "safe_default": "write_prd_or_escalate_to_codex_pm", "message": "P0 has contract/evidence but no PRD."}}
+{"ts": "2026-05-11T20:04:36Z", "sprint_id": "sprint-20260511-managed-agent-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_missing_prd", "severity": "warn", "data": {"sid": "sprint-20260511-managed-agent-runtime-foundation", "type": "missing_prd", "severity": "warn", "safe_default": "write_prd_or_escalate_to_codex_pm", "message": "P0 has contract/evidence but no PRD."}}
+{"ts": "2026-05-11T20:09:38Z", "sprint_id": "sprint-20260511-managed-agent-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_missing_prd", "severity": "warn", "data": {"sid": "sprint-20260511-managed-agent-runtime-foundation", "type": "missing_prd", "severity": "warn", "safe_default": "write_prd_or_escalate_to_codex_pm", "message": "P0 has contract/evidence but no PRD."}}
+{"ts": "2026-05-11T20:14:43Z", "sprint_id": "sprint-20260511-managed-agent-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_missing_prd", "severity": "warn", "data": {"sid": "sprint-20260511-managed-agent-runtime-foundation", "type": "missing_prd", "severity": "warn", "safe_default": "write_prd_or_escalate_to_codex_pm", "message": "P0 has contract/evidence but no PRD."}}
+{"ts": "2026-05-11T20:20:21Z", "sprint_id": "sprint-20260511-managed-agent-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_missing_prd", "severity": "warn", "data": {"sid": "sprint-20260511-managed-agent-runtime-foundation", "type": "missing_prd", "severity": "warn", "safe_default": "write_prd_or_escalate_to_codex_pm", "message": "P0 has contract/evidence but no PRD."}}

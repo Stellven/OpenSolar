@@ -1401,11 +1401,24 @@ except Exception as e:
 
 # 向 pane 发送指令 (核心调度动作)
 # 原理: 长消息写到指令文件，tmux 只发一行短命令让 Claude 读文件
+dispatch_paused() {
+  [[ "${SOLAR_NO_DISPATCH:-0}" == "1" ]] && return 0
+  [[ -f "${HARNESS_DIR}/run/no-dispatch.flag" ]] && return 0
+  return 1
+}
+
 dispatch_to_pane() {
   local pane="$1"
   local message="$2"
   local sid="${3:-dispatch}"
   local instruction_file="${4:-$SPRINTS_DIR/${sid}.dispatch.md}"
+
+  if dispatch_paused; then
+    log "${Y}[dispatch] paused by no-dispatch flag; refusing pane dispatch sid=${sid} pane=${pane}${N}"
+    emit_event "$sid" "dispatch_blocked" "coordinator" \
+      "{\"pane\":\"${pane}\",\"reason\":\"no_dispatch_flag\"}"
+    return 4
+  fi
 
   # Planner/PM panes must receive real dispatches. Older code returned after
   # notify_planner(), which made "dispatch to planner" silently become
@@ -2193,7 +2206,7 @@ contract_has_bypass_pm() {
   local sid="$1"
   local cf="$SPRINTS_DIR/${sid}.contract.md"
   [[ -f "$cf" ]] || return 1
-  grep -Eq '^bypass_pm:[[:space:]]*true[[:space:]]*$' "$cf"
+  grep -Eiq '^(bypass_pm|bypass pm):[[:space:]]*true[[:space:]]*$' "$cf"
 }
 
 status_has_bypass_pm() {
@@ -2209,7 +2222,7 @@ handoff = str(d.get("handoff_to", ""))
 phase = str(d.get("phase", ""))
 if d.get("bypass_pm") is True or d.get("contract_bypass_pm") is True:
     print("1")
-elif phase == "planning_complete" and handoff in {"builder", "builder_main"}:
+elif (phase == "planning_complete" or phase == "graph_dispatch_active") and handoff in {"builder", "builder_main"}:
     print("1")
 else:
     print("0")
@@ -2957,7 +2970,7 @@ EOF
       return 0
       ;;
   esac
-  if [[ ( "$phase" == "planning_complete" || "$phase" == "graph_dispatch_active" ) && -f "$SPRINTS_DIR/${sid}.plan.md" ]]; then
+  if [[ "$phase" == "graph_dispatch_active" || ( "$phase" == "planning_complete" && -f "$SPRINTS_DIR/${sid}.plan.md" ) ]]; then
     if [[ -f "$SPRINTS_DIR/${sid}.task_graph.json" ]]; then
       log "${G}Sprint ${sid} ${phase} + task_graph → DAG graph_node 派发${N}"
       local graph_dispatcher="$HARNESS_DIR/lib/graph_node_dispatcher.py"

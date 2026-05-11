@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import fcntl
 import json
 import os
 import re
@@ -23,6 +24,7 @@ HOME = Path.home()
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
 SPRINTS_DIR = HARNESS_DIR / "sprints"
 SESSION = os.environ.get("SOLAR_HARNESS_SESSION", "solar-harness")
+NO_DISPATCH_FLAG = HARNESS_DIR / "run" / "no-dispatch.flag"
 STATE_READ_PREFLIGHT = """<!-- SOLAR_STATE_READ_PREFLIGHT -->
 ## 必须先读状态 (防写入 hook 卡死)
 
@@ -47,11 +49,15 @@ from graph_scheduler import (  # noqa: E402
     parent_ready_check,
 )
 from pane_lease import acquire as acquire_lease, release as release_lease, read_lease  # noqa: E402
-from task_queue import pop, enqueue  # noqa: E402
+from task_queue import enqueue  # noqa: E402
 
 
 def _json(obj: Any) -> str:
     return json.dumps(obj, ensure_ascii=False)
+
+
+def _no_dispatch_enabled() -> bool:
+    return os.environ.get("SOLAR_NO_DISPATCH") == "1" or NO_DISPATCH_FLAG.exists()
 
 
 def _node_id_from_intent(intent: str) -> str:
@@ -82,6 +88,24 @@ def _safe_node_id(node_id: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "-", node_id).strip("-") or "node"
 
 
+def _pane_safe(pane: str) -> str:
+    return pane.replace(":", "_").replace(".", "_")
+
+
+def _pane_health(pane: str) -> dict[str, Any]:
+    path = HARNESS_DIR / "run" / "provider-health" / f"{_pane_safe(pane)}.json"
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    until = str(data.get("quarantine_until") or "")
+    if until and until <= _utc_now():
+        return {}
+    return data
+
+
 def _handoff_file(sid: str, node_id: str) -> Path:
     return SPRINTS_DIR / f"{sid}.{_safe_node_id(node_id)}-handoff.md"
 
@@ -98,11 +122,76 @@ def _eval_json_file(sid: str, node_id: str) -> Path:
     return SPRINTS_DIR / f"{sid}.{_safe_node_id(node_id)}-eval.json"
 
 
+def _queue_file(sprint_id: str) -> Path:
+    qdir = HARNESS_DIR / "run" / "queue"
+    qdir.mkdir(parents=True, exist_ok=True)
+    return qdir / f"{sprint_id}.jsonl"
+
+
+def _is_graph_queue_item(item: dict[str, Any]) -> bool:
+    intent = item.get("intent", "")
+    return "graph_node|" in intent or bool((item.get("payload") or {}).get("node"))
+
+
+def _pop_graph_queue_item(sprint_id: str) -> dict[str, Any] | None:
+    """Pop only graph-node items so legacy PM/planner queue entries do not block DAG dispatch."""
+    qf = _queue_file(sprint_id)
+    if not qf.exists():
+        return None
+    lock_path = str(qf) + ".lock"
+    with open(lock_path, "a") as lf:
+        fcntl.flock(lf, fcntl.LOCK_EX)
+        try:
+            items: list[dict[str, Any]] = []
+            for line in qf.read_text().splitlines():
+                try:
+                    items.append(json.loads(line))
+                except Exception:
+                    pass
+            pending = sorted(
+                [item for item in items if not item.get("consumed") and _is_graph_queue_item(item)],
+                key=lambda x: (-x.get("priority", 0), x.get("enqueued_at", "")),
+            )
+            if not pending:
+                return None
+            target = pending[0]
+            target["consumed"] = True
+            target["consumed_at"] = _utc_now()
+            for idx, item in enumerate(items):
+                if item.get("id") == target.get("id"):
+                    items[idx] = target
+                    break
+            tmp = str(qf) + ".tmp"
+            with open(tmp, "w") as f:
+                for item in items:
+                    f.write(json.dumps(item) + "\n")
+            os.replace(tmp, str(qf))
+            return target
+        finally:
+            fcntl.flock(lf, fcntl.LOCK_UN)
+
+
 def _node_by_id(graph: dict[str, Any], node_id: str) -> dict[str, Any] | None:
     for node in graph.get("nodes", []):
         if node.get("id") == node_id:
             return node
     return None
+
+
+def _graph_node_runtime_state(graph_path: str, node_id: str) -> dict[str, Any]:
+    try:
+        graph = load_graph(graph_path)
+        node = _node_by_id(graph, node_id) or {}
+        result = (graph.get("node_results") or {}).get(node_id) or {}
+        status = str(result.get("status") or node.get("status") or "pending").lower()
+        return {
+            "ok": True,
+            "status": status,
+            "dispatch_id": node.get("dispatch_id") or result.get("dispatch_id") or "",
+            "assigned_to": node.get("assigned_to") or result.get("assigned_to") or "",
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "status": ""}
 
 
 def _mark_graph_node(graph_path: str, node_id: str, status: str,
@@ -472,6 +561,26 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
         return {"ok": False, "reason": "invalid_graph_queue_item", "item": item}
     if not pane:
         return {"ok": False, "reason": "missing_assigned_pane", "node": node_id}
+    runtime_state = _graph_node_runtime_state(graph_path, node_id)
+    current_status = str(runtime_state.get("status") or "")
+    current_dispatch_id = str(runtime_state.get("dispatch_id") or "")
+    if current_status in {"passed", "failed", "skipped", "reviewing"}:
+        return {
+            "ok": True,
+            "reason": "stale_graph_item_node_not_dispatchable",
+            "node": node_id,
+            "status": current_status,
+            "dispatch_id": dispatch_id,
+        }
+    if current_status in {"assigned", "dispatched", "in_progress", "running"} and current_dispatch_id and current_dispatch_id != dispatch_id:
+        return {
+            "ok": True,
+            "reason": "stale_graph_item_superseded",
+            "node": node_id,
+            "status": current_status,
+            "current_dispatch_id": current_dispatch_id,
+            "stale_dispatch_id": dispatch_id,
+        }
     if not dry_run and not _pane_exists(pane):
         enqueue(sid, item.get("intent", f"graph_node|node_id={node_id}"), item.get("priority", 80), payload)
         _mark_graph_node(graph_path, node_id, "pending", clear_assignment=True)
@@ -538,14 +647,8 @@ def drain_queue(sprint_id: str, dry_run: bool = False, max_items: int = 0, ttl: 
     while True:
         if max_items and processed >= max_items:
             break
-        item = pop(sprint_id)
+        item = _pop_graph_queue_item(sprint_id)
         if item is None:
-            break
-        intent = item.get("intent", "")
-        if "graph_node|" not in intent and not (item.get("payload") or {}).get("node"):
-            # Preserve non-graph queue semantics by putting old items back.
-            enqueue(sprint_id, intent, item.get("priority", 50), item.get("payload"))
-            results.append({"ok": False, "reason": "non_graph_item_requeued", "intent": intent})
             break
         results.append(dispatch_queue_item(item, dry_run=dry_run, ttl=ttl))
         processed += 1
@@ -560,34 +663,69 @@ def drain_queue(sprint_id: str, dry_run: bool = False, max_items: int = 0, ttl: 
 def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
     worker_skills = [
         "bash", "python", "typescript", "docs", "testing",
-        "browser.browse", "browser.qa", "document.convert", "persona.agent",
-        "multi_agent.research", "debug.systematic", "repair.pr-cot",
+        "architecture", "schema", "state-machine", "distributed-systems",
+        "routing", "diagnostics", "evaluation",
+        "browser.browse", "browser.qa", "code.review", "document.convert",
+        "persona.agent", "multi_agent.research", "debug.systematic",
+        "repair.pr-cot",
+    ]
+    worker_capabilities = [
+        "browser.browse", "browser.qa", "code.review",
+        "browser.mcp", "browser.automation", "browser.screenshot",
+        "browser.localhost_test",
+        "document.convert", "document.markdown_extract", "mcp.markitdown",
+        "persona.agent", "agent.catalog", "specialist.routing",
+        "multi_agent.research", "browser.agent_experiment", "document.toolkit",
+        "agent.inventory", "command.catalog", "rules.catalog", "mcp.catalog",
+        "repair.pr-cot", "failure.structured_repair", "routing.complexity_budget",
+        "skill.methodology", "workflow.planning", "debug.systematic", "test.tdd",
+        "agents_sdk.design", "agents_sdk.guardrails", "agents_sdk.tracing",
+        "agents_sdk.handoff_model",
     ]
     if dry_run:
         return [
-            {"pane": f"{SESSION}:0.2", "models": ["sonnet", "glm-5.1"], "skills": worker_skills},
-            {"pane": "solar-harness-lab:0.0", "models": ["sonnet", "glm-5.1"], "skills": worker_skills},
-            {"pane": "solar-harness-lab:0.1", "models": ["sonnet", "glm-5.1"], "skills": worker_skills},
-            {"pane": "solar-harness-lab:0.2", "models": ["sonnet", "glm-5.1"], "skills": worker_skills},
+            {"pane": f"{SESSION}:0.2", "models": ["sonnet", "glm-5.1"], "skills": worker_skills, "capabilities": worker_capabilities},
+            {"pane": "solar-harness-lab:0.0", "models": ["sonnet", "glm-5.1"], "skills": worker_skills, "capabilities": worker_capabilities},
+            {"pane": "solar-harness-lab:0.1", "models": ["sonnet", "glm-5.1"], "skills": worker_skills, "capabilities": worker_capabilities},
+            {"pane": "solar-harness-lab:0.2", "models": ["sonnet", "glm-5.1"], "skills": worker_skills, "capabilities": worker_capabilities},
         ]
     try:
         out = subprocess.check_output(
-            ["tmux", "list-panes", "-a", "-F", "#{session_name}:#{window_index}.#{pane_index}"],
+            ["tmux", "list-panes", "-a", "-F", "#{session_name}:#{window_index}.#{pane_index}\t#{pane_title}"],
             stderr=subprocess.DEVNULL,
             timeout=3,
         ).decode()
-        panes = [p.strip() for p in out.splitlines() if p.strip()]
+        pane_rows = [p.rstrip("\n").split("\t", 1) for p in out.splitlines() if p.strip()]
     except Exception:
-        panes = []
+        pane_rows = []
     workers = []
-    for pane in panes:
-        if not (pane.startswith(f"{SESSION}:") or pane.startswith("solar-harness-lab:")):
+    for row in pane_rows:
+        pane = row[0].strip()
+        title = row[1].strip() if len(row) > 1 else ""
+        # Only builder panes can receive DAG build nodes. Main PM/planner/evaluator
+        # panes share the session prefix but must not be treated as builders.
+        if pane != f"{SESSION}:0.2" and not pane.startswith("solar-harness-lab:"):
             continue
+        models = ["sonnet", "glm-5.1", "deepseek"]
+        quota_exhausted: list[str] = []
+        title_lower = title.lower()
+        if "glm" in title_lower:
+            models = ["glm", "glm-5.1"]
+            if "quota:exhausted" in title_lower or "quota exhausted" in title_lower:
+                quota_exhausted.extend(["glm", "glm-5.1"])
+        elif "sonnet" in title_lower:
+            models = ["sonnet", "anthropic-sonnet"]
+        elif "deepseek" in title_lower:
+            models = ["deepseek", "deepseek-v4-pro"]
         workers.append({
             "pane": pane,
-            "models": ["sonnet", "glm-5.1", "deepseek"],
+            "models": models,
             "skills": worker_skills,
-            "busy": bool(read_lease(pane)),
+            "capabilities": worker_capabilities,
+            "busy": bool(read_lease(pane)) or bool(_pane_health(pane).get("unavailable")),
+            "title": title,
+            "quota_exhausted": quota_exhausted,
+            "health": _pane_health(pane),
         })
     return workers
 
@@ -713,6 +851,8 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
 
 
 def dispatch_ready(graph_path: str, dry_run: bool = False, ttl: int = 900) -> dict[str, Any]:
+    if _no_dispatch_enabled() and not dry_run:
+        return {"ok": False, "reason": "no_dispatch_flag", "graph": graph_path, "enqueue": {}, "drain": {}}
     graph = load_graph(graph_path)
     sid = graph.get("sprint_id") or Path(graph_path).stem.replace(".task_graph", "")
     enqueue_result = enqueue_ready(graph, graph_path, _discover_workers(dry_run), max_parallel=8, lease=not dry_run, ttl=ttl)
