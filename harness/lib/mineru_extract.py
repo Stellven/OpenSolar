@@ -264,8 +264,227 @@ Extraction failed — PDF may be scanned image-only or require GPU-based OCR.
     }
 
 
+def scan_canonical_papers(as_json: bool = False) -> dict:
+    """Scan source-manifest.jsonl for papers with category=papers, media_type=application/pdf.
+    Resolve actual file path: canonical_path first, then original_path fallback.
+    Returns summary with discovered papers and their resolvable paths.
+    """
+    papers: list[dict] = []
+    unresolved: list[dict] = []
+    if not MANIFEST_JSONL.exists():
+        result = {
+            "ok": False,
+            "error": f"manifest not found: {MANIFEST_JSONL}",
+            "papers": [],
+            "total": 0,
+            "resolvable": 0,
+            "unresolved": 0,
+        }
+        if as_json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f"ERROR: manifest not found at {MANIFEST_JSONL}")
+        return result
+
+    with open(MANIFEST_JSONL, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if entry.get("category") != "papers" or entry.get("media_type") != "application/pdf":
+                continue
+
+            canonical = Path(entry["canonical_path"])
+            original = Path(entry["original_path"])
+            resolved = None
+            source_type = None
+
+            if canonical.exists():
+                resolved = canonical
+                source_type = "canonical"
+            elif original.exists():
+                resolved = original
+                source_type = "original_fallback"
+
+            # Check if already extracted: look for references/<slug>/index.md
+            slug = _slug(resolved) if resolved else _slug(canonical)
+            ref_dir = REFERENCES_DIR / slug
+            already_extracted = (ref_dir / "index.md").exists() if ref_dir else False
+
+            paper_info = {
+                "sha256": entry["sha256"],
+                "original_path": str(original),
+                "canonical_path": str(canonical),
+                "resolved_path": str(resolved) if resolved else None,
+                "source_type": source_type,
+                "size": entry.get("size", 0),
+                "name": canonical.name,
+                "slug": slug,
+                "already_extracted": already_extracted,
+                "ref_dir": str(ref_dir),
+            }
+
+            if resolved:
+                papers.append(paper_info)
+            else:
+                unresolved.append(paper_info)
+
+    result = {
+        "ok": True,
+        "manifest": str(MANIFEST_JSONL),
+        "total": len(papers) + len(unresolved),
+        "resolvable": len(papers),
+        "unresolved": len(unresolved),
+        "already_extracted": sum(1 for p in papers if p["already_extracted"]),
+        "pending_extraction": sum(1 for p in papers if not p["already_extracted"]),
+        "papers": papers,
+        "unresolved": unresolved,
+    }
+    if as_json:
+        print(json.dumps(result, indent=2))
+    else:
+        print(f"Canonical papers scan: {result['total']} total, {result['resolvable']} resolvable, "
+              f"{result['unresolved']} unresolved")
+        print(f"  already extracted: {result['already_extracted']}, pending: {result['pending_extraction']}")
+    return result
+
+
+def queue_canonical_papers(limit: int = 0, as_json: bool = False) -> dict:
+    """Enqueue canonical papers for idle background extraction.
+    Only queues papers that are not already extracted.
+    Never runs extraction in foreground — always queues to mineru.jsonl.
+    """
+    scan = scan_canonical_papers(as_json=False)
+    if not scan.get("ok"):
+        if as_json:
+            print(json.dumps(scan, indent=2))
+        return scan
+
+    pending = [p for p in scan.get("papers", []) if not p["already_extracted"]]
+    if limit > 0:
+        pending = pending[:limit]
+
+    if not pending:
+        result = {
+            "ok": True,
+            "queued": 0,
+            "message": "no pending papers to extract",
+            "total_papers": scan["total"],
+            "already_extracted": scan["already_extracted"],
+        }
+        if as_json:
+            print(json.dumps(result, indent=2))
+        else:
+            print("No pending papers to extract.")
+        return result
+
+    QUEUE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    jobs = []
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    for paper in pending:
+        job = {
+            "ts": ts,
+            "pdf": paper["resolved_path"],
+            "vault": str(OBSIDIAN_VAULT),
+            "status": "queued",
+            "source_type": paper["source_type"],
+            "canonical_path": paper["canonical_path"],
+            "sha256": paper["sha256"],
+            "slug": paper["slug"],
+        }
+        with open(QUEUE_FILE, "a", encoding="utf-8") as qf:
+            qf.write(json.dumps(job) + "\n")
+        jobs.append(job)
+
+    result = {
+        "ok": True,
+        "queued": len(jobs),
+        "queue_file": str(QUEUE_FILE),
+        "total_papers": scan["total"],
+        "already_extracted": scan["already_extracted"],
+        "remaining_unresolved": scan["unresolved"],
+        "jobs_sample": jobs[:3],
+        "mode": "idle_background",
+        "note": "extraction will run only when system is idle (HIDIdleTime >= 60s, no active claude processes)",
+    }
+    if as_json:
+        print(json.dumps(result, indent=2))
+    else:
+        print(f"Queued {len(jobs)} papers for idle background extraction.")
+        print(f"  queue: {QUEUE_FILE}")
+        print(f"  mode: idle/background (worker runs only when system is idle)")
+    return result
+
+
+def doctor(as_json: bool = False) -> dict:
+    """Quick health check: venv + canonical papers input + extraction output path."""
+    venv_ok = VENV_PYTHON.exists()
+    scan = scan_canonical_papers(as_json=False)
+    references_dir = REFERENCES_DIR
+    output_under_knowledge = str(references_dir).startswith(str(OBSIDIAN_VAULT))
+
+    result = {
+        "ok": venv_ok and scan.get("ok", False),
+        "venv": str(VENV_PYTHON),
+        "venv_ok": venv_ok,
+        "canonical_papers_input": str(K_SOURCES_DIR / "papers"),
+        "papers_in_manifest": scan.get("total", 0),
+        "resolvable_pdfs": scan.get("resolvable", 0),
+        "extraction_output": str(references_dir),
+        "output_under_knowledge": output_under_knowledge,
+        "worker_mode": "idle_background_queued",
+        "foreground_blocking": False,
+    }
+
+    if as_json:
+        print(json.dumps(result, indent=2))
+    else:
+        tag = "✅" if result["ok"] else "⚠️"
+        print(f"{tag} MinerU doctor")
+        print(f"  venv:             {'ok' if venv_ok else 'missing'} — {VENV_PYTHON}")
+        print(f"  canonical papers: {scan.get('total',0)} in manifest, "
+              f"{scan.get('resolvable',0)} resolvable")
+        print(f"  extraction output: {references_dir}")
+        print(f"  worker:           idle/background (no foreground blocking)")
+    return result
+
+
 def main() -> None:
     args = sys.argv[1:]
+
+    # doctor subcommand
+    if args and args[0] == "doctor":
+        as_json = "--json" in args
+        doctor(as_json=as_json)
+        return
+
+    # S5 subcommands: scan-papers, queue-papers
+    if args and args[0] == "scan-papers":
+        as_json = "--json" in args
+        scan_canonical_papers(as_json=as_json)
+        return
+
+    if args and args[0] == "queue-papers":
+        as_json = "--json" in args
+        limit = 0
+        i = 1
+        while i < len(args):
+            if args[i] == "--limit" and i + 1 < len(args):
+                limit = int(args[i + 1])
+                i += 2
+            else:
+                i += 1
+        queue_canonical_papers(limit=limit, as_json=as_json)
+        return
+
+    # Original extract subcommand
+    if args and args[0] == "extract":
+        args = args[1:]  # consume 'extract' subcommand
+
     background = "--background" in args
     as_json = "--json" in args
     vault_arg = None
@@ -285,6 +504,8 @@ def main() -> None:
 
     if not pdf_paths:
         print("Usage: solar-harness mineru extract <pdf-path> [--background] [--vault PATH] [--json]", file=sys.stderr)
+        print("       solar-harness mineru scan-papers [--json]", file=sys.stderr)
+        print("       solar-harness mineru queue-papers [--limit N] [--json]", file=sys.stderr)
         sys.exit(1)
 
     vault = Path(vault_arg) if vault_arg else OBSIDIAN_VAULT
