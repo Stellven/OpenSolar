@@ -49,20 +49,109 @@ flowchart TB
 ## 部署架构
 
 ```mermaid
-flowchart LR
-  Repo["GitHub Repo\nlisihao/Solar"] --> Local["Local Workstation\n~/Solar + ~/.solar + ~/.claude"]
-  Local --> CoreInstall["L1 Core Install\n./install.sh"]
-  Local --> HarnessRun["L2 Harness Runtime\nharness/solar-harness.sh start"]
-  HarnessRun --> Tmux["tmux Panes\nPM / Planner / Builders / Evaluator"]
-  HarnessRun --> Status["Status UI\nlocalhost dashboard + reports"]
+flowchart TB
+  Repo["GitHub Repo\nlisihao/Solar"] --> LocalInstall["Local install\n~/Solar + ~/.solar + ~/.claude"]
+  LocalInstall --> LocalHarness["Local Solar Harness\n~/.solar/harness"]
 
-  Local --> RemoteSync["Optional Remote Sync\nharness/tools/sync-code-to-mac-mini.sh"]
-  RemoteSync --> Remote["Remote Mac mini\n~/.solar/harness"]
-  Remote --> RemoteHarness["Remote Coordinator\nremote builders / smoke / parity tests"]
+  subgraph LocalMachine["Local workstation"]
+    LocalHarness --> MainSession["tmux: solar-harness\nmain control screen"]
+    MainSession --> P0["pane 0\nPM / Codex handoff / owner intent"]
+    MainSession --> P1["pane 1\nPlanner / Architect\nplan.md + task_graph.json"]
+    MainSession --> P2["pane 2\nBuilder main\nimplementation"]
+    MainSession --> P3["pane 3\nEvaluator / bridge\nnode verdict + parent gate"]
 
-  Local --> Vault["Knowledge Vault\nObsidian + _raw + _sources"]
+    LocalHarness --> LabSession["tmux: solar-harness-lab\nparallel builder lab"]
+    LabSession --> L0["lab pane 0\nBuilder worker"]
+    LabSession --> L1["lab pane 1\nBuilder worker"]
+    LabSession --> L2["lab pane 2\nBuilder worker"]
+    LabSession --> L3["lab pane 3\nBuilder worker"]
+
+    LocalHarness --> StatusUI["Status UI\nlocalhost dashboard / integrations / config"]
+  end
+
+  LocalHarness --> RemoteDispatch["solar-remote-dispatch\nsync / dispatch / pull / doctor"]
+
+  subgraph RemoteMachine["Remote Mac mini or worker host"]
+    RemoteDispatch --> RemoteHarness["Remote Solar Harness\n~/.solar/harness"]
+    RemoteHarness --> RemoteMain["remote tmux main screen\nPM / Planner / Builder / Evaluator"]
+    RemoteHarness --> RemoteLab["remote builder lab\nparallel verification / heavy jobs"]
+    RemoteHarness --> RemoteStatus["remote coord-status\nhealth / stale lock / panes"]
+  end
+
+  LocalHarness --> Vault["Knowledge Vault\nObsidian + _raw + _sources"]
   Vault --> QMD["QMD Index\nsemantic + lexical retrieval"]
-  Vault --> Backup["Optional Drive Mirror\nbackup/cold storage, not primary runtime"]
+  Vault --> Backup["Optional Drive mirror\nbackup only, not primary runtime"]
+```
+
+## 合约库与调度架构
+
+Solar Harness 的核心不是“人盯 pane”，而是文件化合约库 + coordinator + DAG scheduler。用户或 Codex 先把需求落成 sprint contract，Planner 再输出人看的 `plan.md` 和机器执行的 `task_graph.json`。Coordinator 只派发 ready node，pane lease 防止抢占，Evaluator 只对 node/batch/parent gate 给 verdict。
+
+```mermaid
+flowchart LR
+  UserIntent["User intent\n一句话需求 / bug / integration request"] --> Contract["Contract Library\nharness/sprints/*.contract.md"]
+  Contract --> Status["Sprint Status\n*.status.json\nphase / handoff_to / round"]
+  Contract --> Planner["Planner output\n*.plan.md\n*.task_graph.json"]
+
+  Planner --> Graph["TaskGraph DAG\nnodes / depends_on / write_scope\nrequired_skills / required_capabilities"]
+  Graph --> Enrich["Capability Enrich\ninfer required_capabilities\nfrom contract + node text"]
+  Enrich --> Scheduler["Graph Scheduler\nready_nodes / batches / assign_workers"]
+
+  Scheduler --> Queue["Task Queue\nrun/queue/*.jsonl\ngraph_node payloads"]
+  Scheduler --> Lease["Pane Lease\nrun/pane-leases\nexclusive ownership + TTL"]
+  Queue --> Coordinator["Coordinator / Autopilot\nwake target pane\nno manual Enter expected"]
+
+  Coordinator --> BuilderDispatch["Builder dispatch\n*.Sx-dispatch.md"]
+  BuilderDispatch --> Builder["Builder pane\nimplements one node only"]
+  Builder --> Handoff["Node handoff\n*.Sx-handoff.md"]
+
+  Handoff --> EvalDispatch["Evaluator dispatch\n*.Sx-eval-dispatch.md"]
+  EvalDispatch --> Evaluator["Evaluator pane\nchecks acceptance + write scope"]
+  Evaluator --> NodeVerdict["Node verdict\n*.Sx-eval.md/json"]
+
+  NodeVerdict --> Gate{"All deps passed?"}
+  Gate -- "yes" --> Scheduler
+  Gate -- "no" --> Blocked["Downstream remains blocked"]
+  Scheduler --> ParentGate["Parent ready check\nall nodes + required gates passed"]
+  ParentGate --> Final["Sprint passed / failed / superseded\naccepted artifacts exported"]
+```
+
+### 调度规则
+
+| 规则 | 作用 |
+|------|------|
+| `depends_on` | 上游 node 未 passed，下游不派发 |
+| `write_scope` | 同批并行前检查写范围，重叠则拆批 |
+| `required_capabilities` | 调度器按能力选择 worker，例如 browser、Ruflo、MarkItDown、ATLAS |
+| `pane lease` | pane 被占用时排队，不直接抢 pane |
+| `node verdict` | 每个 node 单独评审，不能直接把 parent sprint 标 passed |
+| `parent_ready_check` | 只有所有 node 和 required gate passed，parent sprint 才能关闭 |
+
+### 本地和远端怎么协同
+
+```mermaid
+sequenceDiagram
+  participant U as User / Codex
+  participant L as Local Contract Library
+  participant LC as Local Coordinator
+  participant LB as Local Builders
+  participant RD as Remote Dispatch
+  participant RH as Remote Harness
+  participant RB as Remote Builders
+  participant E as Evaluator
+
+  U->>L: write contract.md / status.json
+  L->>LC: coordinator detects handoff_to
+  LC->>L: planner writes plan.md + task_graph.json
+  LC->>LB: dispatch ready local DAG nodes
+  LC->>RD: optional dispatch remote-heavy or parity sprint
+  RD->>RH: rsync contract + artifacts, wake remote coordinator
+  RH->>RB: remote panes execute assigned work
+  RB->>RH: write handoff/eval/status artifacts
+  RD->>L: pull remote artifacts back
+  LB->>E: local node handoff for review
+  RH->>E: remote eval evidence pulled into local library
+  E->>L: node verdict / parent gate / final status
 ```
 
 ## 模块集成架构
