@@ -106,6 +106,18 @@ def validate_config(config: dict[str, Any]) -> list[str]:
     return errors
 
 
+def remote_harness_path(config: dict[str, Any]) -> str:
+    """Return a remote-shell-safe harness path for ssh/rsync commands."""
+    remote_base = config.get("remote_path", "~")
+    if remote_base == "~":
+        return "$HOME/.solar/harness"
+    return f"{str(remote_base).rstrip('/')}/.solar/harness"
+
+
+def remote_sprints_path(config: dict[str, Any]) -> str:
+    return f"{remote_harness_path(config)}/sprints"
+
+
 # ---------------------------------------------------------------------------
 # Manifest & Checksum
 # ---------------------------------------------------------------------------
@@ -166,11 +178,7 @@ def verify_remote_checksum(config: dict[str, Any], sid: str,
     Returns {"ok": True} if all checksums match, or {"ok": False, "mismatches": [...]}.
     """
     target = f"{config['remote_user']}@{config['remote_host']}"
-    remote_base = config.get("remote_path", "~")
-    if remote_base == "~":
-        remote_sprints = "~/.solar/harness/sprints"
-    else:
-        remote_sprints = f"{remote_base}/.solar/harness/sprints"
+    remote_sprints = remote_sprints_path(config)
 
     mismatches: list[dict[str, str]] = []
     checked: list[str] = []
@@ -222,6 +230,7 @@ def doctor(config: dict[str, Any]) -> dict[str, Any]:
 
     target = f"{config['remote_user']}@{config['remote_host']}"
     checks: dict[str, Any] = {}
+    remote_harness = remote_harness_path(config)
 
     # 1. SSH connectivity
     try:
@@ -251,7 +260,7 @@ def doctor(config: dict[str, Any]) -> dict[str, Any]:
     try:
         result = subprocess.run(
             ["ssh", "-o", "BatchMode=yes", target,
-             "test -d ~/.solar/harness && echo ok || echo missing"],
+             f"test -d \"{remote_harness}\" && echo ok || echo missing"],
             capture_output=True, text=True, timeout=10,
         )
         checks["remote_harness"] = {"ok": "ok" in result.stdout}
@@ -262,7 +271,7 @@ def doctor(config: dict[str, Any]) -> dict[str, Any]:
     try:
         result = subprocess.run(
             ["ssh", "-o", "BatchMode=yes", target,
-             "cat ~/.solar/harness/VERSION 2>/dev/null || echo unknown"],
+             f"cat \"{remote_harness}/VERSION\" 2>/dev/null || echo unknown"],
             capture_output=True, text=True, timeout=10,
         )
         checks["remote_version"] = {"version": result.stdout.strip()}
@@ -374,11 +383,7 @@ def pull_remote_status(sid: str, config: dict[str, Any],
                        local_dir: Path | None = None) -> dict[str, Any]:
     """Pull remote sprint status, events, graph, handoff, eval files to local."""
     target = f"{config['remote_user']}@{config['remote_host']}"
-    remote_base = config.get("remote_path", "~")
-    if remote_base == "~":
-        remote_sprints = "~/.solar/harness/sprints"
-    else:
-        remote_sprints = f"{remote_base}/.solar/harness/sprints"
+    remote_sprints = remote_sprints_path(config)
     dest = local_dir or SPRINTS_DIR
     dest.mkdir(parents=True, exist_ok=True)
 
@@ -453,11 +458,13 @@ def main() -> int:
     p.add_argument("--sprint", required=True)
     p.add_argument("--host", default="")
     p.add_argument("--user", default="")
+    p.add_argument("--path", default="")
 
     p = sub.add_parser("pull")
     p.add_argument("--sprint", required=True)
     p.add_argument("--host", default="")
     p.add_argument("--user", default="")
+    p.add_argument("--path", default="")
     p.add_argument("--dest", default="")
 
     args = ap.parse_args()
@@ -484,7 +491,7 @@ def main() -> int:
         return 0
 
     elif args.cmd == "verify":
-        config = load_config(args.host, args.user)
+        config = load_config(args.host, args.user, args.path)
         manifest_path = SPRINTS_DIR / f"{args.sprint}.manifest.json"
         if not manifest_path.exists():
             print(_json({"ok": False, "error": f"manifest not found: {manifest_path}"}))
@@ -495,7 +502,7 @@ def main() -> int:
         return 0 if result.get("ok") else 1
 
     elif args.cmd == "pull":
-        config = load_config(args.host, args.user)
+        config = load_config(args.host, args.user, args.path)
         local_dir = Path(args.dest) if args.dest else None
         result = pull_remote_status(args.sprint, config, local_dir)
         print(_json(result))
