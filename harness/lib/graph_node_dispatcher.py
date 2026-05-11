@@ -155,6 +155,10 @@ Graph: `{graph_path}`
 
 {_scope_lines(node.get("required_skills"))}
 
+## Required Capabilities
+
+{_scope_lines(node.get("required_capabilities"))}
+
 ## Read Scope
 
 {_scope_lines(node.get("read_scope"))}
@@ -247,6 +251,10 @@ Handoff: `{handoff}`
 ## Acceptance
 
 {_acceptance_lines(node.get("acceptance"))}
+
+## Required Capabilities
+
+{_scope_lines(node.get("required_capabilities"))}
 
 ## Write Scope
 

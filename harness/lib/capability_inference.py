@@ -151,6 +151,7 @@ def enrich_graph(graph: dict[str, Any], source_text: str = "",
         inferred = infer_node_capabilities(node, source_text=source_text)
         inferred_caps = inferred["capabilities"]
         existing = node.get("required_capabilities", [])
+        had_required_capabilities = "required_capabilities" in node
         if isinstance(existing, str):
             existing_caps = [existing]
         elif isinstance(existing, list):
@@ -159,7 +160,7 @@ def enrich_graph(graph: dict[str, Any], source_text: str = "",
             existing_caps = []
 
         final_caps = inferred_caps if overwrite else _dedupe(existing_caps + inferred_caps)
-        if final_caps != existing_caps:
+        if final_caps != existing_caps or not had_required_capabilities:
             node["required_capabilities"] = final_caps
             changed_nodes.append(str(node.get("id", "")))
         if inferred_caps:

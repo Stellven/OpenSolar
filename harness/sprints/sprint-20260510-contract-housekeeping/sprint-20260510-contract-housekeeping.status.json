@@ -1,0 +1,81 @@
+{
+  "id": "sprint-20260510-contract-housekeeping",
+  "title": "Solar Contract Library Housekeeping",
+  "summary": "只读审计 no_status 合约和旧 queue remnants，安全清理 stale terminal 队列，避免误派发。",
+  "status": "passed",
+  "phase": "eval_passed",
+  "handoff_to": "done",
+  "target_role": "builder",
+  "priority": "P2",
+  "lane": "reliability",
+  "round": 5,
+  "bypass_pm": true,
+  "created_at": "2026-05-10T14:39:30Z",
+  "updated_at": "2026-05-11T14:45:17Z",
+  "history": [
+    {
+      "ts": "2026-05-10T14:39:30Z",
+      "event": "contract_created_by_codex",
+      "by": "codex",
+      "note": "User approved housekeeping after contract library count showed 11 no_status contracts and 2 pending queue remnants."
+    },
+    {
+      "ts": "2026-05-10T14:46:20Z",
+      "event": "implementation_completed",
+      "by": "builder",
+      "round": 3
+    },
+    {
+      "ts": "2026-05-10T14:59:34Z",
+      "event": "handoff_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-10T15:02:11Z",
+      "event": "eval_fail",
+      "by": "审判官",
+      "note": "Round 1 FAIL (low). D1 missing .md companion + per-entry has_handoff/eval/events/task_graph fields. D2-D5 PASS. ~10 min to fix."
+    },
+    {
+      "ts": "2026-05-10T15:02:12Z",
+      "event": "eval_completed",
+      "by": "evaluator",
+      "round": 4,
+      "verdict": "FAIL",
+      "reason": "D1 deviates from contract: missing .md companion + missing per-entry has_handoff/eval/events/task_graph fields. D2-D5 PASS. ~10 min round-2 fix."
+    },
+    {
+      "ts": "2026-05-11T14:43:23Z",
+      "event": "targeted_reeval_pass",
+      "by": "codex-targeted-recheck",
+      "round": 5,
+      "verdict": "PASS",
+      "note": "D1 fixed: no-status-audit.md exists and no-status-audit.json entries include has_handoff/has_eval/has_events/has_task_graph. D2-D5 were already PASS in round 1."
+    },
+    {
+      "ts": "2026-05-11T14:44:29Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-05-11T14:45:17Z",
+      "event": "finalized",
+      "by": "coordinator"
+    }
+  ],
+  "artifacts": [
+    "contract",
+    "eval",
+    "no-status-audit-json",
+    "no-status-audit-md",
+    "task_graph"
+  ],
+  "last_handoff_mtime": 1778424373.0,
+  "knowledge_export_status": "exported",
+  "knowledge_export_path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260510-contract-housekeeping.accepted.md",
+  "knowledge_ingest_dispatch": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260510-contract-housekeeping.dispatch.md",
+  "knowledge_exported_at": "2026-05-11T14:45:17Z",
+  "knowledge_ingested_at": null,
+  "knowledge_export_error": null
+}

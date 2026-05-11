@@ -2639,7 +2639,7 @@ PY
     echo "  $0 ragflow [doctor|config|search|evidence-pack|export-manifest]  RAGFlow raw evidence / retrieval adapter"
     echo "  $0 autopilot [status|apply|dispatch|loop|start|stop|service-status|queue]  自动监控断头 sprint/pane 并安全推进"
     echo "  $0 symphony [status|dry-run|workspace <sid>]  Symphony 调度"
-    echo "  $0 graph-scheduler [validate|ready|batches|enrich-capabilities|assign|enqueue-ready|mark|parent-check]  DAG 并行调度"
+    echo "  $0 graph-scheduler [validate|ready|batches|enrich-capabilities|enrich-backlog|assign|enqueue-ready|mark|parent-check]  DAG 并行调度"
     echo "  $0 graph-dispatch [dispatch-ready|drain-queue]  DAG 节点级 pane 派发"
     echo "  $0 mirage [search|doctor|workspace|mounts|exec|provision]  Mirage 统一虚拟文件系统"
     echo "  $0 wiki [install|status|export-sprint|update|query|ingest|chatgpt-import|vault-status|lint|rebuild|export-graph|colorize|history|run-dispatch|dispatch-watch|dispatch-maintenance|import-solar-db|capture-server|audit-uploads|backfill-uploads|quality-gate|reingest-quarantine|reingest-scheduler|qmd-status|qmd-repair|qmd-search|qmd-update|qmd-mcp|qmd-embed|help]  Obsidian Wiki 集成"
@@ -3347,7 +3347,7 @@ EOF
     fi
     _graph_subcmd="${1:-help}"; shift || true
     case "$_graph_subcmd" in
-      validate|topo|layers|critical-path|ready|batches|enrich-capabilities|assign|mark|parent-check|enqueue-ready)
+      validate|topo|layers|critical-path|ready|batches|enrich-capabilities|enrich-backlog|assign|mark|parent-check|enqueue-ready)
         python3 "$_graph_py" "$_graph_subcmd" "$@"
         ;;
       help|--help|-h|"")
@@ -3361,6 +3361,7 @@ EOF
         echo "  $0 graph-scheduler ready          --graph sprint.task_graph.json"
         echo "  $0 graph-scheduler batches        --graph sprint.task_graph.json [--max-parallel N] [--out dispatch_batches.json]"
         echo "  $0 graph-scheduler enrich-capabilities --graph sprint.task_graph.json [--source contract.md] [--in-place]"
+        echo "  $0 graph-scheduler enrich-backlog [--sprints-dir DIR] [--dry-run]"
         echo "  $0 graph-scheduler assign         --graph sprint.task_graph.json --workers workers.json [--max-parallel N]"
         echo "  $0 graph-scheduler enqueue-ready  --graph sprint.task_graph.json --workers workers.json [--lease] [--in-place]"
         echo "  $0 graph-scheduler mark           --graph sprint.task_graph.json --node S1 --status passed [--in-place]"
