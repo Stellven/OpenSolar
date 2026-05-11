@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -36,6 +37,7 @@ SOLAR_RULES_ROOT = Path.home() / "Solar" / "rules"
 CLAUDE_RULES_ROOT = Path.home() / ".claude" / "rules"
 HARNESS_VENDOR_ROOT = HARNESS_DIR / "vendor"
 STATE_DIR = HARNESS_DIR / "state"
+STATE_DB = Path(os.environ.get("HARNESS_STATE_DB", str(HARNESS_DIR / "run" / "state.db")))
 NATIVE_CACHE = STATE_DIR / "solar-native-skills.json"
 INVENTORY_CACHE = STATE_DIR / "skills-inventory.json"
 SOLAR_CONTEXT_PY = HARNESS_DIR / "lib" / "solar-unified-context.py"
@@ -506,7 +508,7 @@ CAPABILITY_RULES: list[dict[str, Any]] = [
         "provider": "Ruflo",
         "capabilities": ["ruflo.swarm", "ruflo.plugins", "ruflo.agent_catalog", "ruflo.memory", "ruflo.mcp", "ruflo.workflow_templates"],
         "why": "任务涉及 Claude Code swarm、Ruflo/Claude Flow、插件市场、多代理编排、MCP 或 self-learning memory。",
-        "use": "默认只读使用 vendor/ruflo 的 agent/plugin/skill inventory；不要自动运行 ruflo init 或注册 MCP，除非合约明确允许写 .claude/hooks/settings。",
+        "use": "优先使用 Solar 管理的 sandbox runtime：solar-harness integrations ruflo-runtime-status / ruflo-runtime-smoke；不要在宿主项目直接运行 ruflo init 或写 .claude/hooks/settings，除非合约明确授权。",
         "patterns": [
             r"\b(ruflo|ruvflo|claude[- ]flow|swarm|hive[- ]mind|agentdb|ruvector|sparc)\b",
             r"Ruflo|Claude Flow|蜂群|多代理编排|插件市场|自学习|AgentDB|RuVector",
@@ -554,14 +556,83 @@ def _build_kb_block() -> str:
     )
 
 
+def _load_capability_scorecards() -> dict[str, dict[str, Any]]:
+    """Load runtime-aware capability scorecards from state DB if available."""
+    if not STATE_DB.exists():
+        return {}
+    try:
+        conn = sqlite3.connect(str(STATE_DB), timeout=2.0)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT capability, provider, score, level, status, payload FROM capability_scorecards"
+        ).fetchall()
+        conn.close()
+    except Exception:
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        item = dict(row)
+        try:
+            payload = item.get("payload")
+            if payload:
+                extra = json.loads(payload)
+                if isinstance(extra, dict):
+                    item.update(extra)
+        except Exception:
+            pass
+        out[f"{item.get('provider')}::{item.get('capability')}"] = item
+        out[f"cap::{item.get('capability')}"] = item
+    return out
+
+
+def _rank_rule(rule: dict[str, Any], scores: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    provider = str(rule.get("provider", ""))
+    provider_key = provider.lower().replace(" ", "-")
+    aliases = {
+        "ruflo": "ruflo",
+        "gstack": "gstack",
+        "superpowers": "superpowers",
+        "browser-use-mcp": "browser-use",
+        "codex-bridge": "codex-bridge",
+        "openai-agents-python": "openai-agents-python",
+        "empirical-research": "empirical-research",
+        "addyosmani/agent-skills": "addy-agent-skills",
+        "markitdown": "markitdown",
+        "owl": "owl",
+        "agency-agents": "agency-agents",
+        "atlas": "atlas",
+        "everything-claude-code": "everything-claude-code",
+    }
+    provider_id = aliases.get(provider_key, provider_key)
+    matches = []
+    for cap in rule.get("capabilities", []):
+        item = scores.get(f"{provider_id}::{cap}") or scores.get(f"cap::{cap}")
+        if item:
+            matches.append(item)
+    if not matches:
+        return {"score": 0.0, "level": "", "runtime_level": "", "runtime_backend": "", "provider_id": provider_id}
+    best = sorted(matches, key=lambda x: float(x.get("score", 0)), reverse=True)[0]
+    return {
+        "score": float(best.get("score", 0)),
+        "level": best.get("level", ""),
+        "runtime_level": best.get("runtime_level", ""),
+        "runtime_backend": best.get("runtime_backend", ""),
+        "provider_id": provider_id,
+    }
+
+
 def _select_capabilities(dispatch_text: str) -> list[dict[str, Any]]:
-    """Select provider hints from task text. Static and fail-open by design."""
+    """Select provider hints from task text, ranked by runtime-aware scorecards."""
+    scores = _load_capability_scorecards()
     selected: list[dict[str, Any]] = []
     for rule in CAPABILITY_RULES:
         for pattern in rule["patterns"]:
             if re.search(pattern, dispatch_text, re.IGNORECASE | re.MULTILINE):
-                selected.append(rule)
+                item = dict(rule)
+                item["scorecard"] = _rank_rule(rule, scores)
+                selected.append(item)
                 break
+    selected.sort(key=lambda item: (-float(item.get("scorecard", {}).get("score", 0)), item.get("provider", "")))
     return selected
 
 
@@ -638,6 +709,12 @@ def _build_capability_block(dispatch_text: str) -> str:
         for item in selected:
             caps = ", ".join(item["capabilities"])
             lines.append(f"- {item['provider']} ({caps})")
+            scorecard = item.get("scorecard", {}) if isinstance(item.get("scorecard"), dict) else {}
+            if scorecard.get("score"):
+                lines.append(
+                    f"  Score: {scorecard.get('score')} level={scorecard.get('level') or 'N/A'} "
+                    f"runtime={scorecard.get('runtime_level') or 'N/A'} backend={scorecard.get('runtime_backend') or 'N/A'}"
+                )
             lines.append(f"  Why: {item['why']}")
             lines.append(f"  Use: {item['use']}")
         lines.append("")

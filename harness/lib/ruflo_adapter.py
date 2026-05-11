@@ -8,6 +8,9 @@ without running `ruflo init`, registering MCP, or writing Claude Code hooks.
 from __future__ import annotations
 
 import argparse
+import datetime
+import hashlib
+import shutil
 import json
 import os
 import subprocess
@@ -20,14 +23,34 @@ HOME = Path.home()
 HARNESS = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
 RUFLO_DIR = Path(os.environ.get("RUFLO_SOURCE_DIR", HARNESS / "vendor" / "ruflo"))
 RUFLO_REPO = "https://github.com/ruvnet/ruflo.git"
+RUFLO_STATE = HARNESS / "state" / "ruflo"
+RUFLO_RUNTIME = Path(os.environ.get("RUFLO_RUNTIME_DIR", RUFLO_STATE / "claude-flow-runtime"))
+RUFLO_REPORTS = HARNESS / "reports" / "ruflo"
+RUFLO_RUNTIME_PACKAGE = os.environ.get("RUFLO_RUNTIME_PACKAGE", "@claude-flow/cli@latest")
 
 
-def _run(cmd: list[str], cwd: Path | None = None, timeout: int = 10) -> tuple[int, str]:
+def _run(
+    cmd: list[str],
+    cwd: Path | None = None,
+    timeout: int = 10,
+    env: dict[str, str] | None = None,
+) -> tuple[int, str]:
     try:
-        proc = subprocess.run(cmd, cwd=str(cwd) if cwd else None, text=True, capture_output=True, timeout=timeout)
+        proc = subprocess.run(
+            cmd,
+            cwd=str(cwd) if cwd else None,
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+            env=env,
+        )
         return proc.returncode, (proc.stdout + proc.stderr).strip()
     except Exception as exc:
         return 99, f"{type(exc).__name__}: {exc}"
+
+
+def _utc_now() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _git(args: list[str]) -> str:
@@ -82,7 +105,15 @@ def _case_collision_warnings() -> list[str]:
             by_lower.setdefault(line.lower(), []).append(line)
         collisions = [paths for paths in by_lower.values() if len(paths) > 1]
         for paths in collisions[:20]:
-            warnings.append("case-collision: " + " | ".join(paths))
+            hashes: set[str] = set()
+            for item in paths:
+                try:
+                    payload = (RUFLO_DIR / item).read_bytes()
+                    hashes.add(hashlib.sha256(payload).hexdigest())
+                except Exception:
+                    hashes.add("unreadable")
+            if len(hashes) > 1:
+                warnings.append("case-collision-content-differs: " + " | ".join(paths))
     return warnings
 
 
@@ -91,9 +122,10 @@ def status() -> dict[str, Any]:
     pkg = _read_package() if exists else {"ok": False, "reason": "source missing"}
     counts = _count_paths() if exists else {"skill_files": 0, "plugins": 0, "agent_markdown_files": 0}
     warnings = _case_collision_warnings() if exists else []
+    runtime = runtime_status()
     return {
         "ok": exists and bool(pkg.get("ok")),
-        "integration_level": "basic_usable",
+        "integration_level": "full_runtime_usable" if runtime.get("ok") else "basic_usable",
         "mode": "read_only_safe_vendor",
         "source": {
             "path": str(RUFLO_DIR),
@@ -104,11 +136,204 @@ def status() -> dict[str, Any]:
         "package": pkg,
         "inventory": counts,
         "warnings": warnings,
+        "runtime": runtime,
         "blocked_actions": [
-            "ruflo init is not run automatically because it writes .claude, hooks, MCP config and workspace files.",
-            "MCP server registration is not enabled until a sandboxed command contract is added.",
+            "Host-level ruflo init is still blocked because it writes .claude, hooks, MCP config and workspace files.",
+            "Full runtime is allowed only inside the Solar-managed sandbox runtime directory.",
         ],
     }
+
+
+def _runtime_env(runtime_dir: Path) -> dict[str, str]:
+    env = os.environ.copy()
+    env["HOME"] = str(runtime_dir / "home")
+    env["npm_config_cache"] = str(runtime_dir / "npm-cache")
+    env["CLAUDE_CONFIG_DIR"] = str(runtime_dir / "home" / ".claude")
+    env["RUFLO_SANDBOX"] = "1"
+    return env
+
+
+def runtime_paths(runtime_dir: Path = RUFLO_RUNTIME) -> dict[str, str]:
+    source = runtime_dir / "source"
+    work = runtime_dir / "work"
+    return {
+        "runtime_dir": str(runtime_dir),
+        "source": str(source),
+        "home": str(runtime_dir / "home"),
+        "npm_cache": str(runtime_dir / "npm-cache"),
+        "work": str(work),
+        "published_cli": str(work / "node_modules" / ".bin" / "claude-flow"),
+        "published_mcp_cli": str(work / "node_modules" / ".bin" / "claude-flow-mcp"),
+        "published_package": str(work / "node_modules" / "@claude-flow" / "cli" / "package.json"),
+        "source_cli": str(source / "bin" / "cli.js"),
+        "source_cli_dist": str(source / "v3" / "@claude-flow" / "cli" / "dist" / "src" / "index.js"),
+    }
+
+
+def runtime_status(runtime_dir: Path = RUFLO_RUNTIME) -> dict[str, Any]:
+    paths = runtime_paths(runtime_dir)
+    source = Path(paths["source"])
+    work = Path(paths["work"])
+    published_cli = Path(paths["published_cli"])
+    published_package = Path(paths["published_package"])
+    source_cli = Path(paths["source_cli"])
+    source_dist = Path(paths["source_cli_dist"])
+    evidence = runtime_dir / "runtime-smoke.json"
+    package_data: dict[str, Any] = {}
+    if published_package.exists():
+        try:
+            package_data = json.loads(published_package.read_text(encoding="utf-8"))
+        except Exception as exc:
+            package_data = {"error": str(exc)}
+    backend = "none"
+    if published_cli.exists():
+        backend = "official_claude_flow_cli"
+    elif source_cli.exists():
+        backend = "vendored_ruflo_source"
+    data: dict[str, Any] = {
+        "ok": False,
+        "integration_level": "pending",
+        "mode": "sandboxed_full_runtime",
+        "backend": backend,
+        "runtime_package": RUFLO_RUNTIME_PACKAGE,
+        "paths": paths,
+        "work_exists": work.exists(),
+        "source_exists": source.exists(),
+        "node_modules_exists": (work / "node_modules").exists() or (source / "node_modules").exists(),
+        "cli_exists": published_cli.exists() or source_cli.exists(),
+        "published_cli_exists": published_cli.exists(),
+        "published_package": package_data,
+        "source_cli_exists": source_cli.exists(),
+        "source_cli_dist_exists": source_dist.exists(),
+        "evidence": str(evidence),
+    }
+    if evidence.exists():
+        try:
+            smoke = json.loads(evidence.read_text(encoding="utf-8"))
+            data["last_smoke"] = smoke
+            if smoke.get("ok"):
+                data["ok"] = True
+                data["integration_level"] = "full_runtime_usable"
+        except Exception as exc:
+            data["last_smoke_error"] = str(exc)
+    return data
+
+
+def bootstrap_runtime(runtime_dir: Path = RUFLO_RUNTIME, force: bool = False, build: bool = False) -> dict[str, Any]:
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    work = runtime_dir / "work"
+    if force and work.exists():
+        shutil.rmtree(work)
+    for key in ("home", "npm-cache", "work"):
+        (runtime_dir / key).mkdir(parents=True, exist_ok=True)
+
+    steps: list[dict[str, Any]] = []
+    env = _runtime_env(runtime_dir)
+    if not (work / "package.json").exists():
+        code, out = _run(["npm", "init", "-y"], cwd=work, timeout=30, env=env)
+        steps.append({"step": "npm_init", "ok": code == 0, "exit_code": code, "output_tail": out[-2000:]})
+        if code != 0:
+            return {"ok": False, "stage": "npm_init", "runtime": runtime_status(runtime_dir), "steps": steps}
+
+    timeout = int(os.environ.get("RUFLO_RUNTIME_BOOTSTRAP_TIMEOUT", "900"))
+    code, out = _run(
+        [
+            "npm",
+            "install",
+            "--ignore-scripts",
+            "--omit=optional",
+            "--no-audit",
+            "--no-fund",
+            RUFLO_RUNTIME_PACKAGE,
+        ],
+        cwd=work,
+        timeout=timeout,
+        env=env,
+    )
+    steps.append({"step": "npm_install_official_cli", "ok": code == 0, "exit_code": code, "output_tail": out[-4000:]})
+    if code != 0:
+        return {"ok": False, "stage": "npm_install_official_cli", "runtime": runtime_status(runtime_dir), "steps": steps}
+
+    if build:
+        source = runtime_dir / "source"
+        if not source.exists():
+            ignore = shutil.ignore_patterns(".git", "node_modules", ".turbo", "dist")
+            shutil.copytree(RUFLO_DIR, source, ignore=ignore)
+        code, out = _run(["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"], cwd=source, timeout=300, env=env)
+        steps.append({"step": "source_npm_ci", "ok": code == 0, "exit_code": code, "output_tail": out[-4000:]})
+        if code == 0:
+            code, out = _run(["npm", "run", "build"], cwd=source, timeout=180, env=env)
+            steps.append({"step": "source_npm_run_build", "ok": code == 0, "exit_code": code, "output_tail": out[-4000:]})
+        if code != 0:
+            return {"ok": False, "stage": "source_build", "runtime": runtime_status(runtime_dir), "steps": steps}
+
+    return {"ok": True, "stage": "bootstrap", "runtime": runtime_status(runtime_dir), "steps": steps}
+
+
+def runtime_smoke(runtime_dir: Path = RUFLO_RUNTIME, bootstrap: bool = False) -> dict[str, Any]:
+    if bootstrap:
+        boot = bootstrap_runtime(runtime_dir=runtime_dir)
+        if not boot.get("ok"):
+            return boot
+    paths = runtime_paths(runtime_dir)
+    work = Path(paths["work"])
+    source = Path(paths["source"])
+    published_cli = Path(paths["published_cli"])
+    source_cli = Path(paths["source_cli"])
+    env = _runtime_env(runtime_dir)
+    if published_cli.exists():
+        cwd = work
+        backend = "official_claude_flow_cli"
+        commands = [
+            {"name": "help", "cmd": [str(published_cli), "--help"], "timeout": 30},
+            {"name": "version", "cmd": [str(published_cli), "--version"], "timeout": 30},
+            {"name": "mcp_help", "cmd": [str(published_cli), "mcp", "--help"], "timeout": 30},
+        ]
+    elif source_cli.exists():
+        cwd = source
+        backend = "vendored_ruflo_source"
+        commands = [
+            {"name": "help", "cmd": ["node", "bin/cli.js", "--help"], "timeout": 30},
+            {"name": "version", "cmd": ["node", "bin/cli.js", "--version"], "timeout": 30},
+        ]
+    else:
+        payload = {
+            "ok": False,
+            "checked_at": _utc_now(),
+            "runtime_dir": str(runtime_dir),
+            "backend": "none",
+            "error": "no executable Ruflo/Claude-Flow CLI found in sandbox; run ruflo-runtime-bootstrap first",
+            "commands": [],
+        }
+        runtime_dir.mkdir(parents=True, exist_ok=True)
+        (runtime_dir / "runtime-smoke.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        RUFLO_REPORTS.mkdir(parents=True, exist_ok=True)
+        (RUFLO_REPORTS / "runtime-smoke-latest.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return payload
+    results = []
+    ok = True
+    for item in commands:
+        code, out = _run(item["cmd"], cwd=cwd, timeout=item["timeout"], env=env)
+        passed = code == 0 and bool(out.strip())
+        ok = ok and passed
+        results.append({"name": item["name"], "ok": passed, "exit_code": code, "output_tail": out[-4000:]})
+    payload = {
+        "ok": ok,
+        "checked_at": _utc_now(),
+        "runtime_dir": str(runtime_dir),
+        "backend": backend,
+        "runtime_package": RUFLO_RUNTIME_PACKAGE,
+        "commands": results,
+        "host_pollution_check": {
+            "sandbox_home": str(runtime_dir / "home"),
+            "host_claude_dir_unchanged_by_policy": True,
+        },
+    }
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    (runtime_dir / "runtime-smoke.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    RUFLO_REPORTS.mkdir(parents=True, exist_ok=True)
+    (RUFLO_REPORTS / "runtime-smoke-latest.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return payload
 
 
 def vendor(update: bool = False) -> dict[str, Any]:
@@ -130,10 +355,35 @@ def main() -> int:
     p = sub.add_parser("vendor")
     p.add_argument("--json", action="store_true")
     p.add_argument("--update", action="store_true")
+    p = sub.add_parser("runtime-status")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--runtime-dir", default="")
+    p = sub.add_parser("runtime-bootstrap")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--runtime-dir", default="")
+    p.add_argument("--force", action="store_true")
+    p.add_argument("--no-build", action="store_true")
+    p = sub.add_parser("runtime-smoke")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--runtime-dir", default="")
+    p.add_argument("--bootstrap", action="store_true")
     args = ap.parse_args()
 
     if args.cmd == "vendor":
         data = vendor(update=args.update)
+    elif args.cmd == "runtime-status":
+        data = runtime_status(Path(args.runtime_dir) if args.runtime_dir else RUFLO_RUNTIME)
+    elif args.cmd == "runtime-bootstrap":
+        data = bootstrap_runtime(
+            runtime_dir=Path(args.runtime_dir) if args.runtime_dir else RUFLO_RUNTIME,
+            force=args.force,
+            build=not args.no_build,
+        )
+    elif args.cmd == "runtime-smoke":
+        data = runtime_smoke(
+            runtime_dir=Path(args.runtime_dir) if args.runtime_dir else RUFLO_RUNTIME,
+            bootstrap=args.bootstrap,
+        )
     else:
         data = status()
     print(json.dumps(data, ensure_ascii=False, indent=2))

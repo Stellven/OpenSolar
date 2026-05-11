@@ -2026,8 +2026,23 @@ print(json.dumps({
         [[ -f "$_ruflo_adapter" ]] || { err "ruflo_adapter not found: $_ruflo_adapter"; exit 1; }
         python3 "$_ruflo_adapter" vendor "$@"
         ;;
+      ruflo-runtime-status)
+        shift 2 || true
+        [[ -f "$_ruflo_adapter" ]] || { err "ruflo_adapter not found: $_ruflo_adapter"; exit 1; }
+        python3 "$_ruflo_adapter" runtime-status "$@"
+        ;;
+      ruflo-runtime-bootstrap)
+        shift 2 || true
+        [[ -f "$_ruflo_adapter" ]] || { err "ruflo_adapter not found: $_ruflo_adapter"; exit 1; }
+        python3 "$_ruflo_adapter" runtime-bootstrap "$@"
+        ;;
+      ruflo-runtime-smoke)
+        shift 2 || true
+        [[ -f "$_ruflo_adapter" ]] || { err "ruflo_adapter not found: $_ruflo_adapter"; exit 1; }
+        python3 "$_ruflo_adapter" runtime-smoke "$@"
+        ;;
       *)
-        err "用法: $0 integrations [status|plugins|install|disable|list|validate|capabilities|sync-caps|benchmark|platform-benchmark|heavy-proof|agent-arena|certify|activation-proof|ruflo-status] [--json]"
+        err "用法: $0 integrations [status|plugins|install|disable|list|validate|capabilities|sync-caps|benchmark|platform-benchmark|heavy-proof|agent-arena|certify|activation-proof|ruflo-status|ruflo-runtime-status|ruflo-runtime-bootstrap|ruflo-runtime-smoke] [--json]"
         exit 1
         ;;
     esac
@@ -2044,7 +2059,7 @@ print(json.dumps({
     _failure_py="$HARNESS_DIR/lib/failure_miner.py"
     _eval_py="$HARNESS_DIR/lib/eval_runner.py"
     case "${1:-status}" in
-      status|scorecard|run-loop|promote|demote-degraded)
+      status|scorecard|recommend|run-loop|promote|demote-degraded)
         [[ -f "$_evolution_py" ]] || { err "evolution_engine not found: $_evolution_py"; exit 1; }
         python3 "$_evolution_py" "$@"
         ;;
@@ -2059,7 +2074,7 @@ print(json.dumps({
         python3 "$_eval_py" run "$@"
         ;;
       *)
-        err "用法: $0 evolution [status|scorecard|run-loop|promote|demote-degraded|mine-failures|eval-run] [--json]"
+        err "用法: $0 evolution [status|scorecard|recommend|run-loop|promote|demote-degraded|mine-failures|eval-run] [--json]"
         exit 1
         ;;
     esac
@@ -2572,6 +2587,15 @@ PY
         ;;
     esac
     ;;
+  ragflow)
+    shift
+    _ragflow_adapter="$HARNESS_DIR/lib/ragflow_adapter.py"
+    if [[ ! -f "$_ragflow_adapter" ]]; then
+      err "RAGFlow adapter not found: $_ragflow_adapter"
+      exit 1
+    fi
+    python3 "$_ragflow_adapter" "$@"
+    ;;
   experience)
     # Solar Experience Memory Layer (sprint-20260509-205414)
     shift
@@ -2612,9 +2636,10 @@ PY
     echo "  $0 verify-integrations  端到端验证 Drive/OWL/MarkItDown/agency + 两个四分屏 dispatch 能力"
     echo "  $0 everything-claude-code [doctor|inventory|report|install --dry-run]  Everything Claude Code 候选集成审计"
     echo "  $0 context inject --query \"问题\" [--format hook|markdown|--json]  默认知识上下文注入"
+    echo "  $0 ragflow [doctor|config|search|evidence-pack|export-manifest]  RAGFlow raw evidence / retrieval adapter"
     echo "  $0 autopilot [status|apply|dispatch|loop|start|stop|service-status|queue]  自动监控断头 sprint/pane 并安全推进"
     echo "  $0 symphony [status|dry-run|workspace <sid>]  Symphony 调度"
-    echo "  $0 graph-scheduler [validate|ready|batches|assign|enqueue-ready|mark|parent-check]  DAG 并行调度"
+    echo "  $0 graph-scheduler [validate|ready|batches|enrich-capabilities|assign|enqueue-ready|mark|parent-check]  DAG 并行调度"
     echo "  $0 graph-dispatch [dispatch-ready|drain-queue]  DAG 节点级 pane 派发"
     echo "  $0 mirage [search|doctor|workspace|mounts|exec|provision]  Mirage 统一虚拟文件系统"
     echo "  $0 wiki [install|status|export-sprint|update|query|ingest|chatgpt-import|vault-status|lint|rebuild|export-graph|colorize|history|run-dispatch|dispatch-watch|dispatch-maintenance|import-solar-db|capture-server|audit-uploads|backfill-uploads|quality-gate|reingest-quarantine|reingest-scheduler|qmd-status|qmd-repair|qmd-search|qmd-update|qmd-mcp|qmd-embed|help]  Obsidian Wiki 集成"
@@ -3322,7 +3347,7 @@ EOF
     fi
     _graph_subcmd="${1:-help}"; shift || true
     case "$_graph_subcmd" in
-      validate|topo|layers|critical-path|ready|batches|assign|mark|parent-check|enqueue-ready)
+      validate|topo|layers|critical-path|ready|batches|enrich-capabilities|assign|mark|parent-check|enqueue-ready)
         python3 "$_graph_py" "$_graph_subcmd" "$@"
         ;;
       help|--help|-h|"")
@@ -3335,6 +3360,7 @@ EOF
         echo "  $0 graph-scheduler critical-path  --graph sprint.task_graph.json"
         echo "  $0 graph-scheduler ready          --graph sprint.task_graph.json"
         echo "  $0 graph-scheduler batches        --graph sprint.task_graph.json [--max-parallel N] [--out dispatch_batches.json]"
+        echo "  $0 graph-scheduler enrich-capabilities --graph sprint.task_graph.json [--source contract.md] [--in-place]"
         echo "  $0 graph-scheduler assign         --graph sprint.task_graph.json --workers workers.json [--max-parallel N]"
         echo "  $0 graph-scheduler enqueue-ready  --graph sprint.task_graph.json --workers workers.json [--lease] [--in-place]"
         echo "  $0 graph-scheduler mark           --graph sprint.task_graph.json --node S1 --status passed [--in-place]"

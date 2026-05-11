@@ -367,7 +367,7 @@ document.getElementById('zoom-out').addEventListener('click', () => {{
 
 def _integrations_view_html() -> str:
     """Standalone human-readable HTML page for external integrations health (server-side rendered)."""
-    data = _external_integrations_payload(refresh=False)
+    data = _external_integrations_payload(refresh=True)
     items = data.get("integrations", []) if isinstance(data, dict) else []
     summary = data.get("summary", {}) if isinstance(data, dict) else {}
     generated_at = data.get("generated_at", "N/A") if isinstance(data, dict) else "N/A"
@@ -376,23 +376,42 @@ def _integrations_view_html() -> str:
         cls = {"ok": "ok", "warn": "warn", "missing": "missing"}.get(st, "missing")
         return f'<span class="badge {html.escape(cls)}">{html.escape(st)}</span>'
 
+    def _level_badge(level: str) -> str:
+        cls = {
+            "closed_loop": "ok",
+            "default_usable": "default",
+            "basic_usable": "warn",
+            "dead_end": "missing",
+        }.get(level, "missing")
+        return f'<span class="level {html.escape(cls)}">{html.escape(level or "unknown")}</span>'
+
     def _pill(label: str, on: bool) -> str:
         cls = "on" if on else "off"
         return f'<div class="pill {cls}">{html.escape(label)}</div>'
+
+    def _runtime_line(it: dict) -> str:
+        ev = it.get("evidence", {}) if isinstance(it.get("evidence", {}), dict) else {}
+        parts = []
+        for key in ("runtime_level", "runtime_backend", "runtime_version", "dispatch_capability"):
+            if ev.get(key):
+                parts.append(f"{key}: {ev.get(key)}")
+        return " · ".join(parts)
 
     cards_html = ""
     for it in items:
         name = it.get("name", "N/A")
         purpose = it.get("purpose", it.get("source", ""))
         status = it.get("status", "unknown")
+        level = it.get("status_label", "unknown")
         reason = it.get("degraded_reason", "")
         ev = json.dumps(it.get("evidence", {}), ensure_ascii=False, indent=2)
         reason_html = ('<div class="reason">' + html.escape(reason) + '</div>') if reason else ''
+        runtime_html = ('<div class="runtime-line">' + html.escape(_runtime_line(it)) + '</div>') if _runtime_line(it) else ''
         cards_html += (
             '<article class="card">'
             '<div class="card-head"><div><div class="card-name">' + html.escape(name) + '</div>'
             '<div class="purpose">' + html.escape(purpose) + '</div></div>'
-            + _badge(status) + '</div>'
+            '<div class="badge-stack">' + _badge(status) + _level_badge(level) + '</div></div>'
             '<div class="state-row">'
             + _pill("安装", bool(it.get("installed")))
             + _pill("配置", bool(it.get("configured")))
@@ -401,6 +420,7 @@ def _integrations_view_html() -> str:
             + _pill("默认", bool(it.get("used_by_default")))
             + '</div>'
             + reason_html
+            + runtime_html
             + '<details><summary>证据详情</summary>'
             '<pre class="code">' + html.escape(ev) + '</pre></details>'
             '</article>'
@@ -434,11 +454,18 @@ h1{{font-size:clamp(2rem,5vw,4rem);line-height:.9;margin:.2rem 0 .8rem;}}
 .badge.ok{{background:var(--ok);}}
 .badge.warn{{background:var(--warn);}}
 .badge.missing{{background:var(--miss);}}
+.badge-stack{{display:flex;flex-direction:column;gap:.35rem;align-items:flex-end;}}
+.level{{display:inline-block;padding:3px 9px;border-radius:999px;font:800 .68rem ui-monospace,SFMono-Regular,Menlo,monospace;border:1px solid var(--line);background:rgba(255,255,255,.54);color:var(--ink);}}
+.level.ok{{background:#d1f5e0;color:var(--ok);border-color:#a3e8c0;}}
+.level.default{{background:#dbeafe;color:#1f4f8f;border-color:#b9d4ff;}}
+.level.warn{{background:#f7e6c8;color:var(--warn);border-color:#eed09d;}}
+.level.missing{{background:#eee;color:var(--miss);}}
 .state-row{{display:grid;grid-template-columns:repeat(5,1fr);gap:.4rem;margin:.7rem 0;}}
 .pill{{border-radius:10px;padding:.35rem .4rem;text-align:center;font:800 .7rem ui-monospace,SFMono-Regular,Menlo,monospace;border:1px solid var(--line);}}
 .pill.on{{background:#d1f5e0;color:#1a7a4a;border-color:#a3e8c0;}}
 .pill.off{{background:#f5e8d0;color:#888;border-color:#e8d8b8;}}
 .reason{{font-size:.86rem;margin:.5rem 0;padding:.5rem .7rem;border-radius:12px;background:rgba(255,255,255,.38);border:1px solid var(--line);}}
+.runtime-line{{font:800 .78rem ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--accent);background:rgba(31,111,91,.08);border:1px solid rgba(31,111,91,.18);border-radius:12px;padding:.55rem .7rem;margin:.55rem 0;overflow-wrap:anywhere;}}
 .purpose{{color:var(--muted);font-size:.84rem;margin:.3rem 0 .6rem;}}
 details summary{{cursor:pointer;color:var(--muted);font-size:.82rem;margin-top:.7rem;}}
 pre.code{{background:#211b12;color:#f8efe0;border-radius:14px;padding:.8rem;font-size:.78rem;overflow:auto;white-space:pre-wrap;word-break:break-all;max-height:200px;}}
@@ -480,7 +507,7 @@ def _external_integrations_payload(refresh: bool = False) -> dict:
     # The probe can run deep historical upload audits, but the dashboard must
     # remain responsive. Use cached/fast health by default; explicit refresh is
     # still local-only and bounded.
-    cmd = ["python3", str(INTEGRATIONS_HEALTH), "--json", "--max-age", "3600"]
+    cmd = ["python3", str(INTEGRATIONS_HEALTH), "--json", "--max-age", "120"]
     if refresh:
         cmd.append("--refresh")
     try:
@@ -1484,6 +1511,40 @@ td {
   justify-content: space-between;
   align-items: flex-start;
 }
+.badge-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: flex-end;
+}
+.level-badge {
+  display: inline-block;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.22rem 0.55rem;
+  background: rgba(255, 255, 255, 0.50);
+  color: var(--ink);
+  font: 900 0.68rem ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.level-badge.ok {
+  background: rgba(56, 128, 93, 0.14);
+  border-color: rgba(56, 128, 93, 0.28);
+  color: #1f6f5b;
+}
+.level-badge.default {
+  background: rgba(62, 107, 179, 0.14);
+  border-color: rgba(62, 107, 179, 0.26);
+  color: #254f91;
+}
+.level-badge.warn {
+  background: rgba(190, 112, 55, 0.16);
+  border-color: rgba(190, 112, 55, 0.30);
+  color: #8b4a1d;
+}
+.level-badge.missing {
+  background: rgba(117, 104, 88, 0.12);
+  color: var(--muted);
+}
 .integration-name {
   font-size: 1.08rem;
   font-weight: 900;
@@ -1510,6 +1571,16 @@ td {
   min-height: 2.2rem;
   color: var(--muted);
   overflow-wrap: anywhere;
+}
+.runtime-line {
+  margin-top: 0.65rem;
+  border: 1px solid rgba(31, 111, 91, 0.18);
+  border-radius: 14px;
+  padding: 0.58rem 0.72rem;
+  background: rgba(31, 111, 91, 0.08);
+  color: var(--accent);
+  overflow-wrap: anywhere;
+  font: 900 0.78rem ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .integration-summary {
   display: flex;
@@ -1708,6 +1779,7 @@ Config http://127.0.0.1:8789/setup</div>
       </div>
     </div>
     <div class="card"><div id="integrations-summary">Loading...</div></div>
+    <div class="card"><h3>自演化能力排序</h3><div id="evolution-card">Loading...</div></div>
     <div id="integrations-card">Loading...</div>
   </section>
 
@@ -1740,6 +1812,11 @@ function statusBadge(st) {
   const s = st || 'unknown';
   const cls = s === 'failed' || s === 'error' ? 'error-badge' : s === 'warn' ? 'warn-badge' : s;
   return '<span class="badge ' + esc(cls) + '">' + esc(s) + '</span>';
+}
+function levelBadge(level) {
+  const s = level || 'unknown';
+  const cls = s === 'closed_loop' ? 'ok' : s === 'default_usable' ? 'default' : s === 'basic_usable' ? 'warn' : 'missing';
+  return '<span class="level-badge ' + esc(cls) + '">' + esc(s) + '</span>';
 }
 function sevClass(s) { return s === 'error' ? 'error' : s === 'warn' ? 'warn' : 'info'; }
 function runtimeClass(s) { return s === 'active' ? 'info' : s === 'missing' ? 'error' : s === 'unknown' ? 'warn' : ''; }
@@ -1902,6 +1979,14 @@ function evidenceSummary(item) {
   if (ev.total || ev.vectors || ev.pending !== undefined) {
     return 'QMD indexed ' + (ev.total || 0) + ' · vectors ' + (ev.vectors || 0) + ' · pending ' + (ev.pending || 0);
   }
+  if (ev.runtime_level || ev.runtime_backend || ev.runtime_version) {
+    return [
+      ev.runtime_level ? 'runtime ' + ev.runtime_level : '',
+      ev.runtime_backend || '',
+      ev.runtime_version ? 'v' + ev.runtime_version : '',
+      ev.dispatch_capability ? 'capability ' + ev.dispatch_capability : ''
+    ].filter(Boolean).join(' · ');
+  }
   if (ev.dispatch_backlog) {
     const b = ev.dispatch_backlog || {};
     return 'dispatch backlog unresolved ' + (b.unresolved || 0) + '/' + (b.total || 0);
@@ -1930,18 +2015,23 @@ function renderIntegrations(data) {
       '<div class="status-tile"><div class="kv-label">Error</div><strong>' + esc(summary.error || 0) + '</strong></div>' +
       '<div class="status-tile"><div class="kv-label">Missing</div><strong>' + esc(summary.missing || 0) + '</strong></div>' +
       '<div class="status-tile"><div class="kv-label">断头</div><strong>' + esc(summary.dead_ends || 0) + '</strong></div>' +
+      '<div class="status-tile"><div class="kv-label">Closed Loop</div><strong>' + esc((summary.integration_levels || {}).closed_loop || 0) + '</strong></div>' +
+      '<div class="status-tile"><div class="kv-label">Default</div><strong>' + esc((summary.integration_levels || {}).default_usable || 0) + '</strong></div>' +
     '</div>' +
-    '<div class="muted">缓存：' + (data.cache && data.cache.hit ? '命中' : '刷新') +
+    '<div class="muted">缓存：' + (data._cache && data._cache.hit ? '命中' : '刷新') +
     ' · 探测时间：' + esc(data.generated_at || 'N/A') + '</div>';
   if (!items.length) {
     cardEl.innerHTML = '<div class="card muted">没有集成探测结果。</div>';
     return;
   }
   cardEl.innerHTML = '<div class="integration-grid">' + items.map(item => {
+    const ev = item.evidence || {};
+    const runtimeLine = [ev.runtime_level, ev.runtime_backend, ev.runtime_version ? 'v' + ev.runtime_version : '', ev.dispatch_capability]
+      .filter(Boolean).join(' · ');
     return '<article class="integration-card">' +
       '<div class="integration-head"><div><div class="integration-name">' + esc(item.name || item.id || 'N/A') +
       '</div><div class="muted">' + esc(item.purpose || item.source || '') + '</div></div>' +
-      '<div>' + statusBadge(item.status || 'unknown') + '</div></div>' +
+      '<div class="badge-stack">' + statusBadge(item.status || 'unknown') + levelBadge(item.status_label || 'unknown') + '</div></div>' +
       '<div class="state-row">' +
         statePill('安装', !!item.installed) +
         statePill('配置', !!item.configured) +
@@ -1957,11 +2047,33 @@ function renderIntegrations(data) {
       '</div>' +
       '<div class="integration-reason">' + esc(item.degraded_reason || '可用') + '</div>' +
       (item.dead_ends && item.dead_ends.length ? '<div class="integration-reason warn">断头：' + esc(item.dead_ends.join(', ')) + '</div>' : '') +
+      (runtimeLine ? '<div class="runtime-line">' + esc(runtimeLine) + '</div>' : '') +
       '<div class="muted" style="margin-top:.7rem">' + esc(evidenceSummary(item)) + '</div>' +
       '<details style="margin-top:.8rem"><summary class="muted">证据</summary><pre class="codebox">' +
       esc(JSON.stringify(item.evidence || {}, null, 2)) + '</pre></details>' +
     '</article>';
   }).join('') + '</div>';
+}
+function renderEvolution(evolution) {
+  const el = document.getElementById('evolution-card');
+  if (!el) return;
+  if (!evolution || !evolution.ok) {
+    el.innerHTML = '<div class="muted">Evolution scorecard unavailable.</div>';
+    return;
+  }
+  const rows = (evolution.scorecards || []).slice(0, 10);
+  if (!rows.length) {
+    el.innerHTML = '<div class="muted">No scorecards yet. Run solar-harness evolution scorecard --json.</div>';
+    return;
+  }
+  el.innerHTML = '<table><tr><th>Capability</th><th>Provider</th><th>Score</th><th>Level</th><th>Runtime</th></tr>' +
+    rows.map(r => '<tr>' +
+      '<td>' + esc(r.capability || '-') + '</td>' +
+      '<td>' + esc(r.provider || '-') + '</td>' +
+      '<td><strong>' + esc(r.score || '-') + '</strong></td>' +
+      '<td>' + levelBadge(r.level || '-') + '</td>' +
+      '<td>' + esc([r.runtime_level, r.runtime_backend, r.runtime_version ? 'v' + r.runtime_version : ''].filter(Boolean).join(' · ') || 'N/A') + '</td>' +
+    '</tr>').join('') + '</table>';
 }
 function refreshIntegrations(force) {
   const summaryEl = document.getElementById('integrations-summary');
@@ -2070,6 +2182,7 @@ function render(data) {
 
   const wiki = data.obsidian_wiki || {};
   const mirage = data.mirage || {};
+  renderEvolution(data.evolution || {});
   document.getElementById('knowledge-summary').innerHTML = renderKnowledgeSummary(wiki, mirage);
   document.getElementById('wiki-card').innerHTML = renderList(wiki);
   document.getElementById('mirage-card').innerHTML = renderMirageHealth(mirage);

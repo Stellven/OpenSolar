@@ -72,6 +72,24 @@ echo "T9: experiment template has rollback"
 grep -q "## Rollback" experiments/s5-vfs-search-promotion/hypothesis.md \
   && ok "experiment rollback documented" || fail "experiment rollback missing"
 
+echo "T10: runtime-aware scorecard promotes Ruflo full runtime"
+OUT=$("$BIN" evolution recommend --capability ruflo.swarm --json)
+check_contains "recommend ok" "$OUT" '"ok": true'
+check_contains "ruflo closed_loop" "$OUT" '"level": "closed_loop"'
+check_contains "ruflo full runtime" "$OUT" '"runtime_level": "full_runtime_usable"'
+check_contains "ruflo backend" "$OUT" '"runtime_backend": "official_claude_flow_cli"'
+
+DISPATCH="$(mktemp /tmp/solar-evolution-ranked-dispatch.XXXXXX.md)"
+cat >"$DISPATCH" <<'EOF'
+# Runtime Ranked Dispatch
+
+Need Ruflo swarm and Claude Flow MCP for multi-agent orchestration.
+EOF
+"$BIN" skills inject "$DISPATCH" >/dev/null
+grep -q "Score: " "$DISPATCH" && ok "dispatch includes score" || fail "dispatch missing score"
+grep -q "runtime=full_runtime_usable" "$DISPATCH" && ok "dispatch includes runtime level" || fail "dispatch missing runtime level"
+rm -f "$DISPATCH"
+
 echo ""
 echo "=== S5 Evolution Engine: PASS=$PASS FAIL=$FAIL ==="
 [[ $FAIL -eq 0 ]]
