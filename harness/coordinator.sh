@@ -3388,6 +3388,15 @@ json.dump(d,open('$sf','w'),indent=2)
 # 建设者完成实现 → 通知审判官
 handle_reviewing() {
   local sid="$1" sf="$2"
+  if [[ -f "$HARNESS_DIR/lib/reviewing_route_normalizer.py" ]]; then
+    local norm_result
+    norm_result=$(python3 "$HARNESS_DIR/lib/reviewing_route_normalizer.py" "$sf" 2>/dev/null || true)
+    if [[ "$norm_result" == "normalized" ]]; then
+      log "${Y}[handle_reviewing] normalized stale builder routing → evaluator for ${sid}${N}"
+      emit_event "$sid" "review_route_normalized" "coordinator" \
+        "{\"reason\":\"reviewing_with_builder_route\",\"to\":\"evaluator\"}"
+    fi
+  fi
   local round
   round=$(get_field "$sf" "round")
 

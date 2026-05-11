@@ -48,10 +48,11 @@ Planner must produce both files before handoff to builders:
 - `sprints/{{sprint_id}}.task_graph.json` — machine-readable DAG validated by:
 
 ```bash
+~/.solar/bin/solar-harness graph-scheduler enrich-capabilities --graph ~/.solar/harness/sprints/{{sprint_id}}.task_graph.json --source ~/.solar/harness/sprints/{{sprint_id}}.contract.md --in-place
 ~/.solar/bin/solar-harness graph-scheduler validate --graph ~/.solar/harness/sprints/{{sprint_id}}.task_graph.json
 ```
 
-Each task graph node must declare `id`, `goal`, `depends_on`, `write_scope`, `read_scope`, `required_skills`, `preferred_model`, `gate`, `acceptance`, and `estimated_cost`.
+Each task graph node must declare `id`, `goal`, `depends_on`, `write_scope`, `read_scope`, `required_skills`, `required_capabilities`, `preferred_model`, `gate`, `acceptance`, and `estimated_cost`. If planner cannot determine external capabilities manually, it must run `graph-scheduler enrich-capabilities` and keep the inferred `required_capabilities` in the graph.
 
 Parallel dispatch rule: nodes can run together only when dependencies are passed and `write_scope` does not overlap. Missing `write_scope` is treated as exclusive and must not be parallelized.
 

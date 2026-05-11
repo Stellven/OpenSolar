@@ -1300,6 +1300,13 @@ PYEOF
       if ! _capture_pid_alive "$pid" && _capture_health "$running_port"; then
         _capture_recover_running "$running_port" || true
         pid="$(_capture_current_pid || true)"
+      elif ! _capture_pid_alive "$pid" && [[ "$running_port" != "$port" ]] && _capture_health "$port"; then
+        # Recover from stale pid/port files left by an old capture-server
+        # instance. The extension posts to the configured port, so status must
+        # not report stopped while that port is actually healthy.
+        _capture_recover_running "$port" || true
+        running_port="$port"
+        pid="$(_capture_current_pid || true)"
       fi
       if _capture_pid_alive "$pid" && _capture_health "$running_port"; then
         _bridge_ok "capture server running → http://127.0.0.1:${running_port}"

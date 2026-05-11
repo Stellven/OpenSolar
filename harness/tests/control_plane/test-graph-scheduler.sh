@@ -24,6 +24,10 @@ CONFLICT="$TMPDIR_TEST/conflict.task_graph.json"
 CYCLE="$TMPDIR_TEST/cycle.task_graph.json"
 BATCHES="$TMPDIR_TEST/dispatch_batches.json"
 ENQ_GRAPH="$TMPDIR_TEST/enqueue.task_graph.json"
+CAP_GRAPH="$TMPDIR_TEST/capability.task_graph.json"
+CAP_WORKERS="$TMPDIR_TEST/capability-workers.json"
+INFER_GRAPH="$TMPDIR_TEST/infer-capability.task_graph.json"
+INFER_SOURCE="$TMPDIR_TEST/infer-capability.contract.md"
 
 cat > "$GRAPH" <<'JSON'
 {
@@ -140,6 +144,57 @@ cat > "$WORKERS" <<'JSON'
 }
 JSON
 
+cat > "$CAP_GRAPH" <<'JSON'
+{
+  "sprint_id": "sprint-capability",
+  "nodes": [
+    {
+      "id": "R1",
+      "goal": "Ruflo swarm orchestration",
+      "depends_on": [],
+      "write_scope": ["/reports/ruflo"],
+      "required_skills": ["python"],
+      "required_capabilities": ["ruflo.swarm"],
+      "preferred_model": "sonnet",
+      "acceptance": ["runtime-aware worker chosen"]
+    }
+  ]
+}
+JSON
+
+cat > "$CAP_WORKERS" <<'JSON'
+{
+  "workers": [
+    {"pane": "solar-harness:0.1", "models": ["sonnet"], "skills": ["python"], "provider": "generic", "capabilities": ["ruflo.swarm"], "capability_score": 1},
+    {"pane": "solar-harness:0.2", "models": ["sonnet"], "skills": ["python"], "provider": "ruflo", "capabilities": ["ruflo.swarm", "ruflo.plugins", "ruflo.agent_catalog", "ruflo.memory", "ruflo.mcp", "ruflo.workflow_templates"], "capability_score": 9}
+  ]
+}
+JSON
+
+cat > "$INFER_GRAPH" <<'JSON'
+{
+  "sprint_id": "sprint-infer-capability",
+  "nodes": [
+    {
+      "id": "R1",
+      "goal": "Use Ruflo Claude Flow swarm orchestration to verify MCP workflow templates",
+      "depends_on": [],
+      "write_scope": ["/reports/ruflo-infer"],
+      "read_scope": ["/Users/sihaoli/.solar/harness/vendor/ruflo"],
+      "required_skills": ["python"],
+      "preferred_model": "sonnet",
+      "acceptance": ["required_capabilities inferred before assignment"],
+      "estimated_cost": 1
+    }
+  ]
+}
+JSON
+
+cat > "$INFER_SOURCE" <<'MD'
+# Contract
+需要使用 Ruflo / Claude Flow 的 swarm、MCP 和 workflow templates 能力，不能只按普通 Python 任务派发。
+MD
+
 cat > "$CONFLICT" <<'JSON'
 {
   "sprint_id": "sprint-conflict",
@@ -163,6 +218,7 @@ JSON
 
 echo "T1: py_compile"
 python3 -m py_compile "$LIB/graph_scheduler.py" 2>&1 && ok "graph_scheduler.py compiles" || fail "compile error"
+python3 -m py_compile "$LIB/capability_inference.py" 2>&1 && ok "capability_inference.py compiles" || fail "capability_inference.py compile error"
 python3 -c "import json; s=json.load(open('$HARNESS_DIR/schemas/task-graph.schema.json')); assert s.get('title') == 'Solar Harness TaskGraph'; print('ok')" >/dev/null \
   && ok "task-graph.schema.json valid" || fail "task-graph.schema.json invalid"
 
@@ -211,7 +267,23 @@ OUT=$(python3 "$LIB/graph_scheduler.py" parent-check --graph "$GRAPH" 2>/dev/nul
 check "parent not ready" "$OUT" '"ready": false'
 check "open nodes present" "$OUT" '"open_nodes"'
 
-echo "T9: enqueue-ready writes graph node payloads only for ready batch"
+echo "T9: runtime-aware capability worker ranking"
+OUT=$(python3 "$LIB/graph_scheduler.py" assign --graph "$CAP_GRAPH" --workers "$CAP_WORKERS" --max-parallel 2 2>/dev/null)
+check "capability assign ok" "$OUT" '"ok": true'
+check "Ruflo worker selected" "$OUT" '"pane": "solar-harness:0.2"'
+check "capability score emitted" "$OUT" '"capability_score"'
+
+echo "T10: capability enrichment from contract/node text"
+OUT=$(python3 "$LIB/graph_scheduler.py" enrich-capabilities --graph "$INFER_GRAPH" --source "$INFER_SOURCE" --in-place 2>/dev/null)
+check "enrich-capabilities ok" "$OUT" '"ok": true'
+check "enrich changed R1" "$OUT" '"R1"'
+OUT=$(python3 -c "import json; g=json.load(open('$INFER_GRAPH')); print(json.dumps(g['nodes'][0], ensure_ascii=False))")
+check "Ruflo swarm inferred" "$OUT" '"ruflo.swarm"'
+check "Ruflo MCP inferred" "$OUT" '"ruflo.mcp"'
+OUT=$(python3 "$LIB/graph_scheduler.py" assign --graph "$INFER_GRAPH" --workers "$CAP_WORKERS" --max-parallel 2 2>/dev/null)
+check "inferred capability selects Ruflo worker" "$OUT" '"pane": "solar-harness:0.2"'
+
+echo "T11: enqueue-ready writes graph node payloads only for ready batch"
 cp "$GRAPH" "$ENQ_GRAPH"
 OUT=$(HARNESS_DIR="$TMPDIR_TEST" python3 "$LIB/graph_scheduler.py" enqueue-ready --graph "$ENQ_GRAPH" --workers "$WORKERS" --max-parallel 8 --in-place 2>/dev/null)
 check "enqueue-ready ok" "$OUT" '"ok": true'
@@ -224,7 +296,7 @@ check "queue depth 3" "$OUT" '"depth": 3'
 OUT=$(python3 "$LIB/graph_scheduler.py" ready --graph "$ENQ_GRAPH" 2>/dev/null)
 if [[ "$OUT" != *'"S1"'* && "$OUT" != *'"S2"'* && "$OUT" != *'"S6"'* ]]; then ok "in-place dispatched nodes no longer ready"; else fail "dispatched nodes still ready"; fi
 
-echo "T10: mark results and release next layer"
+echo "T12: mark results and release next layer"
 for n in S1 S2 S6; do
   python3 "$LIB/graph_scheduler.py" mark --graph "$GRAPH" --node "$n" --status passed --in-place >/dev/null
 done
@@ -232,23 +304,26 @@ OUT=$(python3 "$LIB/graph_scheduler.py" ready --graph "$GRAPH" 2>/dev/null)
 check "S3 ready after join" "$OUT" '"S3"'
 if [[ "$OUT" != *'"S4"'* ]]; then ok "S4 still blocked"; else fail "S4 dispatched too early"; fi
 
-echo "T11: failure blocks descendants only"
+echo "T13: failure blocks descendants only"
 python3 "$LIB/graph_scheduler.py" mark --graph "$GRAPH" --node S3 --status failed --in-place >/dev/null
 OUT=$(python3 "$LIB/graph_scheduler.py" ready --graph "$GRAPH" 2>/dev/null)
 if [[ "$OUT" != *'"S4"'* && "$OUT" != *'"S5"'* && "$OUT" != *'"S7"'* ]]; then ok "S3 failure blocks S4/S5/S7"; else fail "failure did not block descendants"; fi
 
-echo "T12: queue can store graph node payload"
+echo "T14: queue can store graph node payload"
 OUT=$(HARNESS_DIR="$TMPDIR_TEST" python3 "$LIB/task_queue.py" enqueue-node --sprint sprint-test-dag --node-id S1 --payload '{"node_id":"S1","goal":"installer"}' 2>/dev/null)
 check "enqueue-node ok" "$OUT" '"ok": true'
 OUT=$(HARNESS_DIR="$TMPDIR_TEST" python3 "$LIB/task_queue.py" pop --sprint sprint-test-dag 2>/dev/null)
 check "pop graph node intent" "$OUT" 'graph_node|node_id=S1'
 check "pop graph node payload" "$OUT" '"payload"'
 
-echo "T13: solar-harness subcommand routing"
+echo "T15: solar-harness subcommand routing"
 OUT=$(bash "$BIN" graph-scheduler help 2>/dev/null || true)
 check "graph-scheduler help" "$OUT" "Solar Graph Scheduler"
+check "graph-scheduler help has enrichment" "$OUT" "enrich-capabilities"
 OUT=$(bash "$BIN" graph-scheduler validate --graph "$CONFLICT" 2>/dev/null || true)
 check "graph-scheduler validate route" "$OUT" '"ok": true'
+OUT=$(bash "$BIN" graph-scheduler enrich-capabilities --graph "$INFER_GRAPH" --source "$INFER_SOURCE" 2>/dev/null || true)
+check "graph-scheduler enrich route" "$OUT" '"ok": true'
 
 echo ""
 echo "=== Graph Scheduler: PASS=$PASS FAIL=$FAIL ==="

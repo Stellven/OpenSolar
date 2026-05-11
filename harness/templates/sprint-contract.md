@@ -17,10 +17,11 @@ Project: {{project_dir}}
 - `sprints/{{sprint_id}}.task_graph.json`: 给控制面执行的 DAG，必须通过：
 
 ```bash
+~/.solar/bin/solar-harness graph-scheduler enrich-capabilities --graph ~/.solar/harness/sprints/{{sprint_id}}.task_graph.json --source ~/.solar/harness/sprints/{{sprint_id}}.contract.md --in-place
 ~/.solar/bin/solar-harness graph-scheduler validate --graph ~/.solar/harness/sprints/{{sprint_id}}.task_graph.json
 ```
 
-每个 DAG 节点必须声明 `id / goal / depends_on / write_scope / read_scope / required_skills / preferred_model / gate / acceptance / estimated_cost`。未声明 `write_scope` 的节点禁止并行，只能串行。
+每个 DAG 节点必须声明 `id / goal / depends_on / write_scope / read_scope / required_skills / required_capabilities / preferred_model / gate / acceptance / estimated_cost`。如果 planner 无法人工判断外部能力，必须先运行 `graph-scheduler enrich-capabilities`，把自动推导出的 `required_capabilities` 保留在图里。未声明 `write_scope` 的节点禁止并行，只能串行。
 
 ## 范围 (Scope)
 - 包含: {{scope_in}}

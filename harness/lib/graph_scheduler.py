@@ -18,6 +18,7 @@ import argparse
 import datetime
 import json
 import os
+import sqlite3
 import sys
 from copy import deepcopy
 from pathlib import Path
@@ -25,6 +26,7 @@ from typing import Any
 
 HOME = Path.home()
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
+STATE_DB = Path(os.environ.get("HARNESS_STATE_DB", HARNESS_DIR / "run" / "state.db"))
 
 TERMINAL_STATUSES = {"passed", "failed", "skipped"}
 ACTIVE_STATUSES = {"assigned", "dispatched", "in_progress", "running", "reviewing"}
@@ -109,6 +111,16 @@ def validate_graph(graph: dict[str, Any]) -> dict[str, Any]:
             warnings.append(f"{node_id} missing write_scope; scheduler will serialize it")
         if "acceptance" not in node:
             warnings.append(f"{node_id} missing acceptance")
+        if "required_capabilities" not in node:
+            try:
+                from capability_inference import infer_node_capabilities  # noqa: WPS433
+
+                inferred = infer_node_capabilities(node)
+                if inferred.get("capabilities"):
+                    caps = ",".join(inferred["capabilities"])
+                    warnings.append(f"{node_id} inferred capabilities available but missing required_capabilities: {caps}")
+            except Exception:
+                pass
 
     try:
         topo_order(graph)
@@ -311,6 +323,71 @@ def _skills_match(worker: dict[str, Any], required_skills: list[str]) -> bool:
     return set(required_skills).issubset(skills)
 
 
+def _capability_list(obj: dict[str, Any]) -> list[str]:
+    values: list[str] = []
+    for key in ("required_capabilities", "capabilities"):
+        raw = obj.get(key, [])
+        if isinstance(raw, str):
+            values.append(raw)
+        elif isinstance(raw, list):
+            values.extend(str(item) for item in raw if str(item))
+    return values
+
+
+def _load_capability_scores() -> dict[str, float]:
+    if not STATE_DB.exists():
+        return {}
+    try:
+        conn = sqlite3.connect(str(STATE_DB), timeout=2.0)
+        rows = conn.execute("SELECT capability, provider, score FROM capability_scorecards").fetchall()
+        conn.close()
+    except Exception:
+        return {}
+    scores: dict[str, float] = {}
+    for capability, provider, score in rows:
+        try:
+            value = float(score)
+        except Exception:
+            value = 0.0
+        scores[f"{provider}::{capability}"] = max(value, scores.get(f"{provider}::{capability}", 0.0))
+        scores[f"cap::{capability}"] = max(value, scores.get(f"cap::{capability}", 0.0))
+    return scores
+
+
+def _worker_capabilities(worker: dict[str, Any]) -> list[str]:
+    caps = _capability_list(worker)
+    if caps:
+        return caps
+    # Backward compatibility: older worker JSON used only "skills".
+    return [str(item) for item in worker.get("skills", []) if "." in str(item)]
+
+
+def _capabilities_match(worker: dict[str, Any], required_capabilities: list[str]) -> bool:
+    if not required_capabilities:
+        return True
+    caps = set(_worker_capabilities(worker))
+    return set(required_capabilities).issubset(caps)
+
+
+def _capability_score(worker: dict[str, Any], required_capabilities: list[str],
+                      scores: dict[str, float]) -> float:
+    if not required_capabilities:
+        return 0.0
+    provider = str(worker.get("provider") or worker.get("capability_provider") or "").strip()
+    total = 0.0
+    for cap in required_capabilities:
+        if provider:
+            total += scores.get(f"{provider}::{cap}", 0.0)
+        total += scores.get(f"cap::{cap}", 0.0)
+    if total:
+        return total
+    # Manual worker score escape hatch for tests/local topology files.
+    try:
+        return float(worker.get("capability_score", 0) or 0)
+    except Exception:
+        return 0.0
+
+
 def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, Any]]) -> dict[str, Any]:
     """Assign one batch to available workers.
 
@@ -322,11 +399,13 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
     assigned: list[dict[str, Any]] = []
     queued: list[dict[str, Any]] = []
     used_panes: set[str] = set()
+    capability_scores = _load_capability_scores()
 
     for node in batch_nodes:
         preferred_model = node.get("preferred_model")
         required_skills = [str(s) for s in node.get("required_skills", [])]
-        candidates: list[tuple[int, dict[str, Any]]] = []
+        required_capabilities = _capability_list(node)
+        candidates: list[tuple[float, int, int, str, dict[str, Any]]] = []
 
         for worker in workers:
             pane = str(worker.get("pane", ""))
@@ -334,18 +413,21 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
                 continue
             if not _skills_match(worker, required_skills):
                 continue
+            if not _capabilities_match(worker, required_capabilities):
+                continue
             if _worker_quota_exhausted(worker, preferred_model):
                 continue
-            score = 0 if _model_match(worker, preferred_model) else 10
-            score += int(worker.get("load", 0) or 0)
-            candidates.append((score, worker))
+            cap_score = _capability_score(worker, required_capabilities, capability_scores)
+            model_penalty = 0 if _model_match(worker, preferred_model) else 10
+            load = int(worker.get("load", 0) or 0)
+            candidates.append((-cap_score, model_penalty, load, pane, worker))
 
         if not candidates:
             queued.append({"node": node["id"], "reason": "no_matching_worker"})
             continue
 
-        candidates.sort(key=lambda item: (item[0], str(item[1].get("pane", ""))))
-        worker = candidates[0][1]
+        candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3]))
+        cap_rank, _model_penalty, _load, _pane, worker = candidates[0]
         used_panes.add(str(worker.get("pane")))
         assigned.append({
             "node": node["id"],
@@ -353,6 +435,8 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
             "preferred_model": preferred_model,
             "selected_models": worker.get("models", []),
             "fallback_model": not _model_match(worker, preferred_model),
+            "required_capabilities": required_capabilities,
+            "capability_score": round(-cap_rank, 3),
         })
 
     return {"ok": True, "assigned": assigned, "queued": queued}
@@ -531,6 +615,13 @@ def main() -> int:
     p.add_argument("--max-parallel", type=int)
     p.add_argument("--out")
 
+    p = sub.add_parser("enrich-capabilities")
+    add_graph(p)
+    p.add_argument("--source")
+    p.add_argument("--out")
+    p.add_argument("--in-place", action="store_true")
+    p.add_argument("--overwrite", action="store_true")
+
     p = sub.add_parser("assign")
     add_graph(p)
     p.add_argument("--workers", required=True)
@@ -584,6 +675,20 @@ def main() -> int:
             if args.out:
                 Path(args.out).write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n")
             print(json.dumps(result, ensure_ascii=False))
+
+        elif args.cmd == "enrich-capabilities":
+            from capability_inference import enrich_graph  # noqa: WPS433
+
+            graph = load_graph(args.graph)
+            source_text = ""
+            if args.source:
+                source_text = Path(args.source).read_text(encoding="utf-8", errors="replace")
+            result_graph = enrich_graph(graph, source_text=source_text, overwrite=args.overwrite)
+            if args.in_place:
+                save_graph(args.graph, result_graph)
+            elif args.out:
+                save_graph(args.out, result_graph)
+            print(json.dumps(result_graph.get("capability_inference", {"ok": True}), ensure_ascii=False))
 
         elif args.cmd == "assign":
             graph = load_graph(args.graph)

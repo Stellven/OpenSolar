@@ -344,6 +344,17 @@ def probe(deep: bool = False) -> dict:
     codex_bridge_protocol = codex_bridge_root / "CODEX-PROTOCOL.md"
     chain_watcher = HARNESS / "chain-watcher.sh"
     bridge_ledger = codex_bridge_root / "bridge-ledger.jsonl"
+    ruflo_vendor = HARNESS / "vendor" / "ruflo"
+    ruflo_status: dict = {}
+    ruflo_code, ruflo_out = run(["bash", str(HARNESS / "solar-harness.sh"), "integrations", "ruflo-status", "--json"], timeout=10)
+    if ruflo_code == 0:
+        try:
+            ruflo_status = json.loads(ruflo_out)
+        except Exception:
+            ruflo_status = {"parse_error": ruflo_out[:500]}
+    ruflo_runtime = ruflo_status.get("runtime", {}) if isinstance(ruflo_status, dict) else {}
+    ruflo_runtime_ok = bool(ruflo_runtime.get("ok"))
+    ruflo_cli = Path(str((ruflo_runtime.get("paths") or {}).get("published_cli", "")))
 
     integrations = [
         result(
@@ -730,6 +741,31 @@ def probe(deep: bool = False) -> dict:
                     "gstack": str(HOME / "Solar" / "CLAUDE.md"),
                     "superpowers": str(HOME / ".codex" / "config.toml"),
                 },
+            },
+        ),
+        result(
+            "ruflo / Claude Flow",
+            "https://github.com/ruvnet/ruflo",
+            "Sandboxed Ruflo / Claude Flow runtime provider for swarm orchestration, agent catalog, memory, workflow templates and MCP command surface. Host-level ruflo init remains gated; Solar uses the managed sandbox runtime.",
+            lifecycle="active",
+            installed=ruflo_vendor.exists(),
+            configured=bool(ruflo_runtime.get("cli_exists")),
+            running=ruflo_runtime_ok,
+            indexed=(ruflo_status.get("inventory", {}) or {}).get("skill_files", 0) > 0,
+            used_by_default=True,
+            complete=ruflo_runtime_ok,
+            degraded_reason="" if ruflo_runtime_ok else "Ruflo sandbox runtime not smoked; run solar-harness integrations ruflo-runtime-smoke --json",
+            dead_ends=[] if ruflo_runtime_ok else ["ruflo_runtime_not_smoked"],
+            evidence={
+                "vendor": str(ruflo_vendor),
+                "source_commit": (ruflo_status.get("source", {}) or {}).get("commit", ""),
+                "runtime_backend": ruflo_runtime.get("backend", ""),
+                "runtime_level": ruflo_runtime.get("integration_level", ""),
+                "runtime_package": ruflo_runtime.get("runtime_package", ""),
+                "runtime_version": (ruflo_runtime.get("published_package", {}) or {}).get("version", ""),
+                "published_cli": str(ruflo_cli),
+                "evidence": ruflo_runtime.get("evidence", ""),
+                "dispatch_capability": "ruflo.swarm",
             },
         ),
     ]

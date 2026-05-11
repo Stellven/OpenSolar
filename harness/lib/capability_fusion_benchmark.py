@@ -131,6 +131,27 @@ SCENARIOS: list[dict[str, Any]] = [
         ],
         "runtime_commands": [["bash", "-n", str(HARNESS / "chain-watcher.sh")]],
     },
+    {
+        "id": "ruflo",
+        "name": "Ruflo / Claude Flow",
+        "plugin": "ruflo",
+        "health_name": "ruflo / Claude Flow",
+        "capabilities": ["ruflo.swarm", "ruflo.plugins", "ruflo.agent_catalog", "ruflo.memory", "ruflo.mcp", "ruflo.workflow_templates"],
+        "dispatch_text": "ruflo claude-flow swarm hive-mind agentdb ruvector sparc MCP 多代理编排 自学习",
+        "expected_provider": "Ruflo",
+        "runtime_paths": [
+            HARNESS / "vendor" / "ruflo",
+            HARNESS / "state" / "ruflo" / "claude-flow-runtime" / "work" / "node_modules" / ".bin" / "claude-flow",
+            HARNESS / "state" / "ruflo" / "claude-flow-runtime" / "runtime-smoke.json",
+        ],
+        "runtime_commands": [[
+            "bash",
+            str(SOLAR_BIN),
+            "integrations",
+            "ruflo-runtime-smoke",
+            "--json",
+        ]],
+    },
 ]
 
 

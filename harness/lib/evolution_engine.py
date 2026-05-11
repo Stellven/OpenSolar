@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import sqlite3
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,15 @@ sys.path.insert(0, str(HARNESS_DIR / "lib"))
 from capability_registry import LEVEL_REVERSE, _open_db as open_capability_db  # type: ignore  # noqa: E402
 from eval_runner import run_pack  # type: ignore  # noqa: E402
 from failure_miner import mine as mine_failures  # type: ignore  # noqa: E402
+
+LEVEL_RANK = {"dead_end": 1, "basic_usable": 2, "default_usable": 3, "closed_loop": 4}
+RANK_LEVEL = {v: k for k, v in LEVEL_RANK.items()}
+RUNTIME_BONUS = {
+    "full_runtime_usable": 0.75,
+    "runtime_usable": 0.50,
+    "basic_usable": 0.0,
+    "pending": -0.25,
+}
 
 
 def _now() -> str:
@@ -57,6 +67,85 @@ def _conn() -> sqlite3.Connection:
     return conn
 
 
+def _load_external_health() -> dict[str, dict[str, Any]]:
+    """Map provider/capability names to health probe evidence.
+
+    This is intentionally fail-open: evolution scoring should still work if the
+    UI health probe is slow or temporarily unavailable.
+    """
+    probe = HARNESS_DIR / "lib" / "external-integrations-health.py"
+    if not probe.exists():
+        return {}
+    try:
+        proc = subprocess.run(
+            ["python3", str(probe), "--json", "--max-age", "120"],
+            text=True,
+            capture_output=True,
+            timeout=15,
+        )
+        if proc.returncode != 0:
+            return {}
+        data = json.loads(proc.stdout)
+    except Exception:
+        return {}
+
+    out: dict[str, dict[str, Any]] = {}
+    aliases = {
+        "ruflo": ["ruflo"],
+        "gstack": ["gstack"],
+        "superpowers": ["superpowers"],
+        "browser-use": ["browser-use"],
+        "codex-bridge": ["codex bridge", "pane3 bridge"],
+        "openai-agents-python": ["openai-agents-python"],
+        "empirical-research": ["empirical research"],
+        "addy-agent-skills": ["addyosmani/agent-skills", "agent-skills"],
+        "markitdown": ["markitdown"],
+        "owl": ["camel-ai/owl", "owl"],
+        "agency-agents": ["agency-agents persona"],
+        "mirage": ["mirage"],
+        "qmd": ["qmd"],
+        "mineru": ["mineru"],
+        "obsidian": ["obsidian-wiki"],
+    }
+    for item in data.get("integrations", []):
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name", "")).lower()
+        evidence = item.get("evidence", {}) if isinstance(item.get("evidence"), dict) else {}
+        cap = str(evidence.get("dispatch_capability", "")).strip()
+        if cap:
+            out[f"cap:{cap}"] = item
+        for provider, needles in aliases.items():
+            if any(needle in name for needle in needles):
+                out[f"provider:{provider}"] = item
+    return out
+
+
+def _health_for(provider: str, capability: str, health: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    return health.get(f"cap:{capability}") or health.get(f"provider:{provider}") or {}
+
+
+def _effective_level(registry_level: str, health_item: dict[str, Any]) -> str:
+    health_level = str(health_item.get("status_label") or "")
+    if LEVEL_RANK.get(health_level, 0) > LEVEL_RANK.get(registry_level, 0):
+        return health_level
+    return registry_level
+
+
+def _runtime_bonus(health_item: dict[str, Any]) -> float:
+    evidence = health_item.get("evidence", {}) if isinstance(health_item.get("evidence"), dict) else {}
+    runtime_level = str(evidence.get("runtime_level") or "")
+    bonus = RUNTIME_BONUS.get(runtime_level, 0.0)
+    if health_item.get("status") == "ok":
+        bonus += 0.10
+    health = health_item.get("health", {}) if isinstance(health_item.get("health"), dict) else {}
+    if health.get("complete_closed_loop") == "ok":
+        bonus += 0.15
+    if health.get("dead_ends") == "warn" or health_item.get("dead_ends"):
+        bonus -= 0.50
+    return bonus
+
+
 def scorecard(write: bool = True) -> dict[str, Any]:
     conn = _conn()
     rows = conn.execute(
@@ -64,18 +153,30 @@ def scorecard(write: bool = True) -> dict[str, Any]:
     ).fetchall()
     failures = mine_failures(limit=20)
     failure_count = int(failures.get("failures", 0))
+    health = _load_external_health()
     entries = []
     for row in rows:
         level_int = int(row["level"])
-        level = LEVEL_REVERSE.get(level_int, "dead_end")
+        registry_level = LEVEL_REVERSE.get(level_int, "dead_end")
+        health_item = _health_for(str(row["provider"]), str(row["capability"]), health)
+        level = _effective_level(registry_level, health_item)
+        level_int = LEVEL_RANK.get(level, level_int)
         penalty = min(1.0, failure_count / 200.0)
-        score = max(1.0, round(float(level_int) - penalty, 2))
+        runtime_bonus = _runtime_bonus(health_item)
+        score = max(1.0, min(5.0, round(float(level_int) + runtime_bonus - penalty, 2)))
         status = "active" if score >= 2 else "degraded"
+        evidence = health_item.get("evidence", {}) if isinstance(health_item.get("evidence"), dict) else {}
         item = {
             "capability": row["capability"],
             "provider": row["provider"],
             "score": score,
             "level": level,
+            "registry_level": registry_level,
+            "runtime_level": evidence.get("runtime_level", ""),
+            "runtime_backend": evidence.get("runtime_backend", ""),
+            "runtime_version": evidence.get("runtime_version", ""),
+            "health_status": health_item.get("status", ""),
+            "health_label": health_item.get("status_label", ""),
             "status": status,
             "failures": failure_count,
         }
@@ -135,6 +236,22 @@ def demote_degraded(threshold: float = 2.0) -> dict[str, Any]:
     return {"ok": True, "demoted": demoted, "count": len(demoted)}
 
 
+def recommend(capability: str | None = None, limit: int = 20) -> dict[str, Any]:
+    """Return runtime-aware capability recommendations for dispatch/autopilot."""
+    latest = scorecard(write=True)
+    cards = latest.get("scorecards", [])
+    if capability:
+        cards = [item for item in cards if item.get("capability") == capability]
+    cards = sorted(cards, key=lambda item: (-float(item.get("score", 0)), str(item.get("provider", ""))))[:limit]
+    return {
+        "ok": True,
+        "capability": capability or "",
+        "count": len(cards),
+        "recommendations": cards,
+        "generated_at": _now(),
+    }
+
+
 def run_loop(pack: str) -> dict[str, Any]:
     before = scorecard(write=True)
     clusters = mine_failures(limit=1)
@@ -180,15 +297,26 @@ def run_loop(pack: str) -> dict[str, Any]:
 def status() -> dict[str, Any]:
     conn = _conn()
     rows = conn.execute(
-        "SELECT capability, provider, score, level, status, failures, updated_at FROM capability_scorecards ORDER BY score DESC, capability LIMIT 50"
+        "SELECT capability, provider, score, level, status, failures, updated_at, payload FROM capability_scorecards ORDER BY score DESC, capability LIMIT 80"
     ).fetchall()
     experiments = conn.execute(
         "SELECT id, capability, verdict, updated_at FROM evolution_experiments ORDER BY updated_at DESC LIMIT 10"
     ).fetchall()
     conn.close()
+    scorecards = []
+    for row in rows:
+        item = dict(row)
+        payload = item.pop("payload", "")
+        try:
+            if payload:
+                extra = json.loads(payload)
+                item.update({k: v for k, v in extra.items() if k not in item or item[k] in ("", None)})
+        except Exception:
+            item["payload_error"] = "invalid_json"
+        scorecards.append(item)
     return {
         "ok": True,
-        "scorecards": [dict(r) for r in rows],
+        "scorecards": scorecards,
         "experiments": [dict(r) for r in experiments],
         "total_scorecards": len(rows),
     }
@@ -198,6 +326,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(prog="evolution_engine.py")
     sub = ap.add_subparsers(dest="cmd")
     sub.add_parser("scorecard").add_argument("--json", action="store_true")
+    p = sub.add_parser("recommend")
+    p.add_argument("--capability", default="")
+    p.add_argument("--limit", type=int, default=20)
+    p.add_argument("--json", action="store_true")
     p = sub.add_parser("run-loop")
     p.add_argument("--pack", default=str(HARNESS_DIR / "evals" / "packs" / "s5-basic" / "eval.json"))
     p.add_argument("--json", action="store_true")
@@ -213,6 +345,8 @@ def main() -> int:
     args = ap.parse_args()
     if args.cmd == "scorecard":
         data = scorecard(write=True)
+    elif args.cmd == "recommend":
+        data = recommend(args.capability or None, args.limit)
     elif args.cmd == "run-loop":
         data = run_loop(args.pack)
     elif args.cmd == "promote":

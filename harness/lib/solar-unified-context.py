@@ -20,9 +20,12 @@ from pathlib import Path
 HOME = Path.home()
 HARNESS = Path(os.environ.get("HARNESS_DIR", str(HOME / ".solar" / "harness")))
 MIRAGE = HARNESS / "lib" / "solar_mirage.py"
+RAGFLOW_ADAPTER = HARNESS / "lib" / "ragflow_adapter.py"
+RAGFLOW_CONFIG = HARNESS / "config" / "ragflow.solar.json"
 DEFAULT_MAX_CHARS = int(os.environ.get("SOLAR_CONTEXT_MAX_CHARS", "2600"))
 DEFAULT_MAX_HITS = int(os.environ.get("SOLAR_CONTEXT_MAX_HITS", "8"))
 DEFAULT_TIMEOUT_MS = int(os.environ.get("SOLAR_CONTEXT_TIMEOUT_MS", "2500"))
+DEFAULT_RAGFLOW_TIMEOUT_MS = int(os.environ.get("SOLAR_CONTEXT_RAGFLOW_TIMEOUT_MS", "1200"))
 
 
 def _run_mirage(query: str, max_hits: int, max_chars: int, timeout_ms: int) -> dict:
@@ -79,6 +82,70 @@ def _compact_hit(hit: dict) -> dict:
     }
 
 
+def _ragflow_enabled() -> bool:
+    if os.environ.get("SOLAR_CONTEXT_RAGFLOW", "").strip() in {"1", "true", "TRUE", "yes"}:
+        return True
+    if not RAGFLOW_CONFIG.exists():
+        return False
+    try:
+        data = json.loads(RAGFLOW_CONFIG.read_text(encoding="utf-8"))
+        return bool(data.get("enabled"))
+    except Exception:
+        return False
+
+
+def _run_ragflow(query: str, max_hits: int, timeout_ms: int) -> dict:
+    if not _ragflow_enabled():
+        return {"hits": [], "degraded": []}
+    if not RAGFLOW_ADAPTER.exists():
+        return {"hits": [], "degraded": ["ragflow:adapter_missing"]}
+    try:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(RAGFLOW_ADAPTER),
+                "search",
+                "--query",
+                query,
+                "--source",
+                "both",
+                "--page-size",
+                str(max_hits),
+                "--timeout-sec",
+                str(max(0.5, timeout_ms / 1000.0)),
+                "--json",
+                "--fail-open",
+            ],
+            text=True,
+            capture_output=True,
+            timeout=max(1.0, timeout_ms / 1000.0 + 0.5),
+        )
+    except subprocess.TimeoutExpired:
+        return {"hits": [], "degraded": ["ragflow:timeout"]}
+    except Exception as exc:
+        return {"hits": [], "degraded": [f"ragflow:error:{type(exc).__name__}"]}
+    try:
+        data = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return {"hits": [], "degraded": ["ragflow:bad_json"]}
+    if proc.returncode not in (0, 2):
+        data.setdefault("degraded", []).append(f"ragflow:rc={proc.returncode}")
+    return data
+
+
+def _compact_ragflow_hit(hit: dict) -> dict:
+    title = hit.get("title") or hit.get("document_id") or hit.get("id") or "RAGFlow chunk"
+    return {
+        "source": "ragflow",
+        "mount": "ragflow://",
+        "path": str(hit.get("document_id") or hit.get("id") or ""),
+        "title": title,
+        "snippet": (hit.get("snippet") or "")[:450],
+        "provenance": "ragflow:retrieval",
+        "score": hit.get("score", 0),
+    }
+
+
 def retrieve(query: str, max_hits: int, max_chars: int, timeout_ms: int) -> dict:
     started = time.monotonic()
     data = _run_mirage(query, max_hits=max_hits, max_chars=max_chars, timeout_ms=timeout_ms)
@@ -87,6 +154,12 @@ def retrieve(query: str, max_hits: int, max_chars: int, timeout_ms: int) -> dict
         data = _run_mirage(fallback_query, max_hits=max_hits, max_chars=max_chars, timeout_ms=timeout_ms)
         data["fallback_query"] = fallback_query
     hits = [_compact_hit(h) for h in data.get("hits", []) if isinstance(h, dict)]
+    ragflow_data = _run_ragflow(
+        query,
+        max_hits=max(1, min(3, max_hits)),
+        timeout_ms=DEFAULT_RAGFLOW_TIMEOUT_MS,
+    )
+    hits += [_compact_ragflow_hit(h) for h in ragflow_data.get("hits", []) if isinstance(h, dict)]
     if not hits:
         hits = [
             {
@@ -117,7 +190,7 @@ def retrieve(query: str, max_hits: int, max_chars: int, timeout_ms: int) -> dict
                 "score": 0.1,
             },
         ][:max_hits]
-    priority = {"qmd": 0, "solar_db": 1, "mirage_path": 2}
+    priority = {"qmd": 0, "solar_db": 1, "ragflow": 2, "mirage_path": 3}
     hits.sort(key=lambda h: (priority.get(h.get("source", ""), 9), -float(h.get("score") or 0)))
     total = 0
     kept = []
@@ -130,10 +203,10 @@ def retrieve(query: str, max_hits: int, max_chars: int, timeout_ms: int) -> dict
     return {
         "query": query,
         "hits": kept,
-        "degraded_sources": data.get("degraded_sources", []),
+        "degraded_sources": list(data.get("degraded_sources", [])) + list(ragflow_data.get("degraded", [])),
         "elapsed_ms": round((time.monotonic() - started) * 1000, 1),
         "total_chars": total,
-        "backend": "mirage+qmd+solar_db+obsidian",
+        "backend": "mirage+qmd+solar_db+obsidian+ragflow_optional",
     }
 
 
@@ -143,7 +216,7 @@ def format_hook(data: dict, max_chars: int) -> str:
         return ""
     lines = [
         "<solar-unified-context>",
-        "来源: Mirage + QMD solar-wiki + Obsidian Vault + Solar DB",
+        "来源: Mirage + QMD solar-wiki + Obsidian Vault + Solar DB + RAGFlow(optional)",
         "规则: 开始开发/设计/分析前，优先参考这些命中；如不足，再主动搜索 vault/qmd。",
     ]
     total = sum(len(x) for x in lines)

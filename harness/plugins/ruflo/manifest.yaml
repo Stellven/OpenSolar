@@ -2,7 +2,7 @@
 id: ruflo
 name: "Ruflo Multi-Agent Orchestration"
 version: "3.7.0-alpha.19"
-description: "Read-only Solar-Harness integration for ruvnet/ruflo: Claude Code swarm orchestration, plugins, agents, memory and MCP architecture. Full init/MCP is gated because it writes .claude, hooks and workspace config."
+description: "Sandboxed Solar-Harness integration for ruvnet/ruflo / Claude Flow: Claude Code swarm orchestration, plugins, agents, memory and MCP architecture. Host-level init remains gated, but the official @claude-flow/cli runtime is installed and smoked inside state/ruflo."
 status: enabled
 
 write_scope:
@@ -25,15 +25,16 @@ capabilities:
 
 commands:
   - "solar-harness integrations ruflo-status --json"
-  - "npx ruflo@latest --help"
-  - "npx ruflo@latest mcp start"
+  - "solar-harness integrations ruflo-runtime-status --json"
+  - "solar-harness integrations ruflo-runtime-bootstrap --json"
+  - "solar-harness integrations ruflo-runtime-smoke --json"
 
 background_safety:
-  mode: none
+  mode: bounded
   idle_only: false
-  rate_limit: "manual-only"
-  max_runtime_s: 30
-  max_memory_mb: 256
+  rate_limit: "sandbox-only"
+  max_runtime_s: 900
+  max_memory_mb: 1024
 
 eval_packs:
   - "tests/plugins/test-s4-extension-framework.sh"
@@ -43,13 +44,14 @@ rollback:
   commands:
     - "solar-harness integrations disable ruflo"
 
-integration_level: basic_usable
+integration_level: default_usable
 
 entry: "vendor/ruflo/README.md"
 
 events:
   - "ruflo.vendor_verified"
   - "ruflo.capability_registered"
+  - "ruflo.runtime_smoked"
 
 depends_on: []
 

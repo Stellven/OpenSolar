@@ -144,6 +144,25 @@ else
   fail "T8" "$browser_all_out"
 fi
 
+cat > "$TMP/partial-browser.json" <<'JSON'
+{
+  "source": "browser",
+  "url": "https://chatgpt.com/c/partial",
+  "title": "ChatGPT - Partial",
+  "messages": [
+    {"role": "assistant", "text": "企业软件会从人填表的 SaaS 迁移到 agent 执行的工作流系统，核心价值从表单系统转向上下文、权限、审计和自动化控制面。"}
+  ]
+}
+JSON
+partial_out="$(python3 "$SCRIPT" --source "$TMP/partial-browser.json" --out-root "$TMP/out" --batch-id test-partial --no-dispatch --json)"
+if echo "$partial_out" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["ok"] and d["conversations_written"] == 1 and d["qa_pairs_written"] == 0' 2>/dev/null && \
+   grep -R "partial_transcript: true" "$TMP/out/test-partial" >/dev/null && \
+   grep -R "企业软件会从人填表" "$TMP/out/test-partial" >/dev/null; then
+  pass "T9 partial one-sided capture preserved"
+else
+  fail "T9" "$partial_out"
+fi
+
 hint_ok="$(python3 - <<'PY'
 import importlib.util
 from pathlib import Path
@@ -156,15 +175,15 @@ print("ok" if "Allow JavaScript from Apple Events" in hint and "conversations.js
 PY
 )"
 if [[ "$hint_ok" == "ok" ]]; then
-  pass "T9 browser permission error has actionable hint"
+  pass "T10 browser permission error has actionable hint"
 else
-  fail "T9" "missing actionable browser hint"
+  fail "T10" "missing actionable browser hint"
 fi
 
 if bash -n "$HOME/.solar/harness/solar-harness.sh"; then
-  pass "T10 solar-harness shell syntax ok"
+  pass "T11 solar-harness shell syntax ok"
 else
-  fail "T10" "bash -n failed"
+  fail "T11" "bash -n failed"
 fi
 
 echo ""

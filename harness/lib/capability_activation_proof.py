@@ -162,6 +162,29 @@ def proof_runtime_effect(evidence_dir: Path) -> dict[str, Any]:
     }
 
 
+def proof_ruflo_runtime_effect(evidence_dir: Path) -> dict[str, Any]:
+    result = run(["bash", str(SOLAR_BIN), "integrations", "ruflo-runtime-smoke", "--json"], evidence_dir, "ruflo_runtime_smoke", timeout=120)
+    parsed: dict[str, Any] = {}
+    try:
+        parsed = json.loads(result["stdout"])
+    except Exception:
+        parsed = {"parse_error": result["stdout"][-1000:]}
+    write_json(evidence_dir / "runtime" / "ruflo-runtime-smoke.json", parsed)
+    commands = {item.get("name"): item for item in parsed.get("commands", []) if isinstance(item, dict)}
+    missing = [name for name in ("help", "version", "mcp_help") if not commands.get(name, {}).get("ok")]
+    return {
+        "name": "Ruflo sandbox runtime exposes CLI and MCP command surface",
+        "status": "ok" if result["ok"] and parsed.get("ok") and not missing else "error",
+        "passed": bool(result["ok"] and parsed.get("ok") and not missing),
+        "evidence": {
+            "runtime_smoke_json": str(evidence_dir / "runtime" / "ruflo-runtime-smoke.json"),
+            "backend": parsed.get("backend", ""),
+            "runtime_package": parsed.get("runtime_package", ""),
+            "missing": missing,
+        },
+    }
+
+
 def proof_negative_control(evidence_dir: Path) -> dict[str, Any]:
     tmp = Path(tempfile.mkdtemp(prefix="solar-activation-negative-"))
     try:
@@ -221,6 +244,7 @@ def main() -> int:
         proof_dispatch_activation(evidence_dir),
         proof_graph_dispatch_activation(evidence_dir),
         proof_runtime_effect(evidence_dir),
+        proof_ruflo_runtime_effect(evidence_dir),
         proof_negative_control(evidence_dir),
     ]
     passed = sum(1 for item in proofs if item["passed"])

@@ -83,6 +83,17 @@
             "type": "string"
           }
         },
+        "required_capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "capability_inference": {
+          "type": "object",
+          "additionalProperties": true
+        },
         "preferred_model": {
           "type": "string"
         },
