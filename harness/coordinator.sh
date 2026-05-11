@@ -2932,9 +2932,9 @@ EOF
       return 0
       ;;
   esac
-  if [[ "$phase" == "planning_complete" && -f "$SPRINTS_DIR/${sid}.plan.md" ]]; then
+  if [[ ( "$phase" == "planning_complete" || "$phase" == "graph_dispatch_active" ) && -f "$SPRINTS_DIR/${sid}.plan.md" ]]; then
     if [[ -f "$SPRINTS_DIR/${sid}.task_graph.json" ]]; then
-      log "${G}Sprint ${sid} planning_complete + task_graph → DAG graph_node 派发${N}"
+      log "${G}Sprint ${sid} ${phase} + task_graph → DAG graph_node 派发${N}"
       local graph_dispatcher="$HARNESS_DIR/lib/graph_node_dispatcher.py"
       if [[ ! -f "$graph_dispatcher" ]]; then
         log "${R}[graph-dispatch] missing dispatcher: ${graph_dispatcher}${N}"
@@ -2966,6 +2966,12 @@ EOF
       log "${G}[graph-dispatch] ready nodes dispatched: ${graph_out}${N}"
       emit_event "$sid" "graph_nodes_dispatched" "coordinator" "$(python3 -c 'import json,sys; print(json.dumps({"eval_output": sys.argv[1][-2000:], "ready_output": sys.argv[2][-2000:]}))' "$graph_eval_out" "$graph_out" 2>/dev/null || echo '{}')"
       mark_builder_flow "$sid" "graph_node_dispatch"
+      return 0
+    fi
+    if [[ "$phase" == "graph_dispatch_active" ]]; then
+      log "${R}[graph-dispatch] ${sid} phase=graph_dispatch_active but task_graph missing; refuse parent builder dispatch${N}"
+      rollback_state_cache "$sid"
+      emit_event "$sid" "graph_dispatch_failed" "coordinator" "{\"reason\":\"task_graph_missing\",\"phase\":\"graph_dispatch_active\"}"
       return 0
     fi
     if builder_flow_marked "$sid" "builder_dispatch"; then
