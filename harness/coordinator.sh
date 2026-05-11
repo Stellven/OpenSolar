@@ -2196,6 +2196,31 @@ contract_has_bypass_pm() {
   grep -Eq '^bypass_pm:[[:space:]]*true[[:space:]]*$' "$cf"
 }
 
+status_has_bypass_pm() {
+  local sid="$1"
+  local sf="$SPRINTS_DIR/${sid}.status.json"
+  [[ -f "$sf" ]] || return 1
+  python3 - "$sf" <<'PY' 2>/dev/null | grep -q 1
+import json
+import sys
+
+d = json.load(open(sys.argv[1]))
+handoff = str(d.get("handoff_to", ""))
+phase = str(d.get("phase", ""))
+if d.get("bypass_pm") is True or d.get("contract_bypass_pm") is True:
+    print("1")
+elif phase == "planning_complete" and handoff in {"builder", "builder_main"}:
+    print("1")
+else:
+    print("0")
+PY
+}
+
+sprint_bypasses_pm_gate() {
+  local sid="$1"
+  contract_has_bypass_pm "$sid" || status_has_bypass_pm "$sid"
+}
+
 gate_check() {
   local sid="$1" st="$2"
   local sprint_dir="$SPRINTS_DIR"
@@ -2214,8 +2239,8 @@ gate_check() {
 
   case "$st" in
     active)
-      if contract_has_bypass_pm "$sid"; then
-        log "${G}PRD 门禁豁免: ${sid} bypass_pm:true${N}"
+      if sprint_bypasses_pm_gate "$sid"; then
+        log "${G}PRD 门禁豁免: ${sid} bypass_pm/status planning_complete builder target${N}"
         return 0
       fi
       local req_file=""

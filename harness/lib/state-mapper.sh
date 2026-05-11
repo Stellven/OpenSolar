@@ -187,8 +187,18 @@ elif st == 'failed':
     role = 'none'
 
 elif st == 'queued':
-    lc = 'intake'
-    role = 'pm'
+    if phase in ('planning_complete',) or handoff_to in ('builder', 'builder_main'):
+        lc = 'building'
+        role = 'builder_main'
+    elif phase in ('prd_ready', 'contract_ready') or handoff_to == 'planner':
+        lc = 'planning'
+        role = 'planner'
+    elif handoff_to == 'evaluator':
+        lc = 'build_complete'
+        role = 'evaluator'
+    else:
+        lc = 'intake'
+        role = 'pm'
 
 else:
     lc = 'unknown'

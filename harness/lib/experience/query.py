@@ -40,7 +40,34 @@ def _make_trigger_sig_from_sid(sid: str) -> Optional[str]:
         return None
 
 
-def query_for_sprint(sid: str, limit: int = 5) -> Dict[str, Any]:
+def _load_status_for_question(sid: str) -> Dict[str, Any]:
+    path = os.path.join(SPRINTS_DIR, f"{sid}.status.json")
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _should_include_mia(include_mia: Optional[bool]) -> bool:
+    if include_mia is not None:
+        return include_mia
+    raw = os.environ.get("SOLAR_EXPERIENCE_MIA", "1").strip().lower()
+    return raw not in {"0", "false", "no", "off", "disabled"}
+
+
+def _mia_for_question(question: str, limit: int) -> Dict[str, Any]:
+    try:
+        from . import mia_adapter
+
+        return mia_adapter.memory_context(question, limit=limit)
+    except Exception as exc:
+        return {"ok": False, "status": "adapter_error", "reason": str(exc)[:300]}
+
+
+def query_for_sprint(sid: str, limit: int = 5, include_mia: Optional[bool] = None) -> Dict[str, Any]:
     """Main query API. Returns top success and failure memories for a sprint.
 
     Result format: {"sid": ..., "memories": [...], "ok": true}
@@ -81,14 +108,27 @@ def query_for_sprint(sid: str, limit: int = 5) -> Dict[str, Any]:
                 except Exception:
                     r[field] = []
 
-    return {
+    result = {
         "sid": sid,
         "memories": results[:limit * 2],
+        "backend": "sqlite_fts",
         "ok": True,
     }
+    if _should_include_mia(include_mia):
+        status_data = _load_status_for_question(sid)
+        question_parts = [
+            f"Sprint {sid}",
+            f"status={status_data.get('status', '')}",
+            f"phase={status_data.get('phase', '')}",
+            f"handoff_to={status_data.get('handoff_to', '')}",
+            str(status_data.get("title") or status_data.get("summary") or ""),
+        ]
+        result["mia"] = _mia_for_question(" | ".join(p for p in question_parts if p), limit)
+        result["backend"] = "mia+sqlite_fts" if result["mia"].get("ok") else "sqlite_fts"
+    return result
 
 
-def query_fts_memories(query_text: str, limit: int = 10) -> Dict[str, Any]:
+def query_fts_memories(query_text: str, limit: int = 10, include_mia: Optional[bool] = None) -> Dict[str, Any]:
     """FTS query returning matching memories."""
     init_db()
     rows = query_fts(query_text, limit=limit)
@@ -99,7 +139,11 @@ def query_fts_memories(query_text: str, limit: int = 10) -> Dict[str, Any]:
                     r[field] = json.loads(r[field])
                 except Exception:
                     r[field] = []
-    return {"query": query_text, "memories": rows, "ok": True}
+    result = {"query": query_text, "memories": rows, "backend": "sqlite_fts", "ok": True}
+    if _should_include_mia(include_mia):
+        result["mia"] = _mia_for_question(query_text, limit)
+        result["backend"] = "mia+sqlite_fts" if result["mia"].get("ok") else "sqlite_fts"
+    return result
 
 
 def get_stats() -> Dict[str, Any]:
