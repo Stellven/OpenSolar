@@ -1,6 +1,6 @@
 """CLI for Solar Experience Memory.
 
-Provides: extract | compress | index | query | backfill | stats
+Provides: extract | compress | index | query | backfill | stats | mia-status | mia-query | mia-start
 Called via solar-harness.sh experience <subcommand>
 """
 import json
@@ -86,6 +86,7 @@ def cmd_query(args: List[str]) -> int:
     from .query import query_for_sprint, query_fts_memories
 
     as_json = "--json" in args
+    include_mia = "--no-mia" not in args
     sid = None
     text = None
     limit = 10
@@ -105,9 +106,9 @@ def cmd_query(args: List[str]) -> int:
             i += 1
 
     if sid:
-        result = query_for_sprint(sid, limit=limit)
+        result = query_for_sprint(sid, limit=limit, include_mia=include_mia)
     elif text:
-        result = query_fts_memories(text, limit=limit)
+        result = query_fts_memories(text, limit=limit, include_mia=include_mia)
     else:
         print("error: --sid <sid> or --text <query> required", file=sys.stderr)
         return 1
@@ -117,6 +118,10 @@ def cmd_query(args: List[str]) -> int:
     else:
         memories = result.get("memories", [])
         print(f"Found {len(memories)} memories for sid={sid or text}")
+        print(f"Backend: {result.get('backend', 'unknown')}")
+        if result.get("mia"):
+            mia = result["mia"]
+            print(f"MIA: {mia.get('status')} {mia.get('base_url', '')} {mia.get('latency_ms', '')}ms")
         for m in memories:
             print(f"  [{m['pattern_class']}] {m.get('advisory','')[:100]} "
                   f"(hits={m.get('hit_count',0)} reason={m.get('match_reason','')})")
@@ -156,6 +161,67 @@ def cmd_stats(args: List[str]) -> int:
     return 0
 
 
+def cmd_mia_status(args: List[str]) -> int:
+    """Show MIA adapter/runtime health."""
+    from .memory_serve_daemon import status
+
+    result = status()
+    if "--json" in args:
+        print(json.dumps(result, ensure_ascii=False))
+    else:
+        print(f"MIA status: {result.get('status')}")
+        print(f"Adapter: {result.get('adapter', {}).get('status')} {result.get('adapter', {}).get('base_url')}")
+        deps = result.get("dependencies", {})
+        print(f"Dependencies ok: {deps.get('ok')}")
+        if deps.get("missing_python_modules"):
+            print(f"Missing modules: {', '.join(deps.get('missing_python_modules', []))}")
+        if deps.get("missing_files"):
+            print(f"Missing files: {', '.join(deps.get('missing_files', []))}")
+    return 0
+
+
+def cmd_mia_query(args: List[str]) -> int:
+    """Query MIA Memory-Serve directly."""
+    from .mia_adapter import memory_context
+
+    as_json = "--json" in args
+    limit = 5
+    text_parts = []
+    i = 0
+    while i < len(args):
+        if args[i] == "--limit" and i + 1 < len(args):
+            limit = int(args[i + 1])
+            i += 2
+        elif args[i].startswith("--"):
+            i += 1
+        else:
+            text_parts.append(args[i])
+            i += 1
+    question = " ".join(text_parts).strip()
+    if not question:
+        print("error: mia-query <text> required", file=sys.stderr)
+        return 1
+    result = memory_context(question, limit=limit)
+    if as_json:
+        print(json.dumps(result, ensure_ascii=False))
+    else:
+        print(f"MIA: {result.get('status')} {result.get('base_url', '')} {result.get('latency_ms', '')}ms")
+        if result.get("context"):
+            print(result["context"][:2000])
+        elif result.get("reason"):
+            print(result["reason"])
+    return 0 if result.get("ok") else 2
+
+
+def cmd_mia_start(args: List[str]) -> int:
+    """Start MIA Memory-Serve when local dependencies are available."""
+    from .memory_serve_daemon import start
+
+    result = start(dry_run="--dry-run" in args)
+    print(json.dumps(result, ensure_ascii=False))
+    return 0 if result.get("ok") else 2
+
+
 COMMANDS = {
     "extract": cmd_extract,
     "compress": cmd_compress,
@@ -163,12 +229,15 @@ COMMANDS = {
     "query": cmd_query,
     "backfill": cmd_backfill,
     "stats": cmd_stats,
+    "mia-status": cmd_mia_status,
+    "mia-query": cmd_mia_query,
+    "mia-start": cmd_mia_start,
 }
 
 
 def main(args: List[str]) -> int:
     if not args:
-        print("Usage: solar-harness experience <extract|compress|index|query|backfill|stats> [options]",
+        print("Usage: solar-harness experience <extract|compress|index|query|backfill|stats|mia-status|mia-query|mia-start> [options]",
               file=sys.stderr)
         return 1
     subcmd = args[0]

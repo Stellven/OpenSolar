@@ -1011,6 +1011,80 @@ else:
   local target_pane="" target_task=""
 
   case "$st" in
+    queued)
+      if [[ "$auto_held" == "true" ]]; then
+        ok "Sprint ${sid} 当前为 queued/auto_held，wake 不强推。请先人工解除 hold 或 activate。"
+        return 0
+      elif [[ "$contract_bypass" == "true" || "$handoff_to" =~ ^builder(_main)?$ || "$contract_handoff" =~ ^builder(_main)?$ || "$contract_target" =~ ^builder(_main)?$ || "$phase" == "planning_complete" ]]; then
+        python3 - "$sf" <<'PY' 2>/dev/null || true
+import datetime, json, sys
+sf = sys.argv[1]
+d = json.load(open(sf))
+now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+d["status"] = "active"
+d["phase"] = "planning_complete"
+d["handoff_to"] = "builder_main"
+d["bypass_pm"] = True
+d["auto_held"] = False
+d["updated_at"] = now
+d.setdefault("history", []).append({
+    "ts": now,
+    "event": "wake_promoted_queued_to_builder",
+    "by": "wake",
+    "note": "Queued sprint is implementation-ready; route to builder_main instead of unknown-status fallback."
+})
+json.dump(d, open(sf, "w"), indent=2, ensure_ascii=False)
+PY
+        st="active"
+        target_pane="$LIVE_BUILDER"
+        target_task="Sprint ${sid} 恢复：queued 合约已具备建设条件，禁止转 PM/Planner。请读取 contract/plan 并执行。cat ~/.solar/harness/sprints/${sid}.contract.md"
+      elif [[ "$phase" == "prd_ready" || "$phase" == "contract_ready" || "$handoff_to" == "planner" || "$contract_handoff" == "planner" || "$contract_target" == "planner" ]]; then
+        python3 - "$sf" <<'PY' 2>/dev/null || true
+import datetime, json, sys
+sf = sys.argv[1]
+d = json.load(open(sf))
+now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+d["status"] = "drafting"
+d["handoff_to"] = "planner"
+d["auto_held"] = False
+d["updated_at"] = now
+d.setdefault("history", []).append({
+    "ts": now,
+    "event": "wake_promoted_queued_to_planner",
+    "by": "wake",
+    "note": "Queued sprint has PRD/contract-ready planner handoff; route to planner explicitly."
+})
+json.dump(d, open(sf, "w"), indent=2, ensure_ascii=False)
+PY
+        st="drafting"
+        target_pane="$LIVE_PLANNER"
+        target_task="Sprint ${sid} 恢复：queued 合约处于 ${phase:-contract_ready}，请读取 PRD/contract，写 design.md 与 plan.md，完成后将 status=active、phase=planning_complete、handoff_to=builder_main。"
+      elif [[ "$handoff_to" == "evaluator" || "$contract_handoff" == "evaluator" || "$contract_target" == "evaluator" ]]; then
+        target_pane="$LIVE_EVALUATOR"
+        target_task="Sprint ${sid} 恢复：queued 合约指定 evaluator，请检查 contract/status 并给出是否放行。cat ~/.solar/harness/sprints/${sid}.contract.md"
+      else
+        python3 - "$sf" <<'PY' 2>/dev/null || true
+import datetime, json, sys
+sf = sys.argv[1]
+d = json.load(open(sf))
+now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+d["status"] = "drafting"
+d["handoff_to"] = "pm"
+d["auto_held"] = False
+d["updated_at"] = now
+d.setdefault("history", []).append({
+    "ts": now,
+    "event": "wake_promoted_queued_to_pm",
+    "by": "wake",
+    "note": "Queued sprint lacks explicit planner/builder/evaluator handoff; route to PM intake."
+})
+json.dump(d, open(sf, "w"), indent=2, ensure_ascii=False)
+PY
+        st="drafting"
+        target_pane="$LIVE_PM"
+        target_task="Sprint ${sid} 恢复：queued 合约缺少明确 handoff，请先补齐产品需求/PRD，再交给 Planner。cat ~/.solar/harness/sprints/${sid}.contract.md"
+      fi
+      ;;
     drafting|drafting_held)
       if [[ "$contract_bypass" == "true" || "$handoff_to" =~ ^builder(_main)?$ || "$contract_handoff" =~ ^builder(_main)?$ || "$contract_target" =~ ^builder(_main)?$ ]]; then
         python3 - "$sf" <<'PY' 2>/dev/null || true
@@ -1078,9 +1152,9 @@ json.dump(d, open('$sf', 'w'), indent = 2)
       target_task="Sprint ${sid} 恢复 (从 interrupted)：请评审。cat ~/.solar/harness/sprints/${sid}.handoff.md"
       ;;
     *)
-      warn "未知状态: ${st}，派发给建设者"
-      target_pane="$LIVE_BUILDER"
-      target_task="Sprint ${sid} 恢复：当前状态 ${st}，请检查并继续。"
+      warn "未知状态: ${st}，派发给 PM 做状态诊断，不直接给建设者执行"
+      target_pane="$LIVE_PM"
+      target_task="Sprint ${sid} 恢复：当前状态 ${st} 未被 wake 状态机识别。请先诊断 status/phase/handoff_to，修正状态后再派发，不要直接实现。"
       ;;
   esac
 

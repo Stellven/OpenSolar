@@ -96,7 +96,10 @@ def _check_patterns(sid: str) -> Decision:
         sys.path.insert(0, os.path.join(HARNESS_DIR, "lib"))
         from experience.query import query_for_sprint
 
-        result = query_for_sprint(sid, limit=5)
+        # Keep the dispatch hook under 50ms. The MIA HTTP runtime is used by
+        # normal experience queries, but the coordinator hook must remain local
+        # and fail-open.
+        result = query_for_sprint(sid, limit=5, include_mia=False)
         memories = result.get("memories", [])
 
         high_conf_aborts = [

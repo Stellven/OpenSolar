@@ -437,6 +437,7 @@ check_panes() {
     done
     local _pane_id
     _pane_id=$(tmux display-message -p -t "$target" '#{pane_id}' 2>/dev/null || true)
+    # respawn start-incarnation: keep watchdog pane recovery on the non-interactive launcher.
     tmux respawn-pane -k -t "$target" \
       "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH HOME='${HOME}' PATH='${_user_path}' TMUX_PANE='${_pane_id}' ${_restart_bash} ${_esc_h}/start-incarnation.sh $persona ${_esc_w}" 2>/dev/null || {
       warn "respawn-pane 失败, 尝试 send-keys..."
