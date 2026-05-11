@@ -115,6 +115,79 @@ def _last_extract() -> dict | None:
         return None
 
 
+def _canonical_papers_status() -> dict:
+    """Check canonical papers input directory and manifest.
+    Reports how many papers are available for extraction and their resolution status.
+    """
+    vault = Path.home() / "Knowledge"
+    manifest_path = vault / "_meta" / "source-manifest.jsonl"
+    sources_papers = vault / "_sources" / "papers"
+
+    status: dict = {
+        "manifest_exists": manifest_path.exists(),
+        "sources_papers_dir_exists": sources_papers.exists(),
+        "total_in_manifest": 0,
+        "resolvable_canonical": 0,
+        "resolvable_original_fallback": 0,
+        "unresolved": 0,
+        "already_extracted": 0,
+    }
+
+    if not manifest_path.exists():
+        status["status"] = "blocked"
+        status["blocked_reason"] = "manifest not found — run source_manifest.py generate --apply first"
+        return status
+
+    try:
+        from pathlib import Path as P
+        references_dir = vault / "references"
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                entry = json.loads(line)
+                if entry.get("category") != "papers" or entry.get("media_type") != "application/pdf":
+                    continue
+                status["total_in_manifest"] += 1
+
+                canonical = P(entry["canonical_path"])
+                original = P(entry["original_path"])
+
+                if canonical.exists():
+                    status["resolvable_canonical"] += 1
+                    resolved = canonical
+                elif original.exists():
+                    status["resolvable_original_fallback"] += 1
+                    resolved = original
+                else:
+                    status["unresolved"] += 1
+                    continue
+
+                # Check extraction status
+                import re
+                stem = re.sub(r"[^\w\-]", "-", resolved.stem).strip("-").lower()[:60]
+                if (references_dir / stem / "index.md").exists():
+                    status["already_extracted"] += 1
+    except Exception as e:
+        status["status"] = "error"
+        status["error"] = str(e)
+        return status
+
+    resolvable = status["resolvable_canonical"] + status["resolvable_original_fallback"]
+    if status["total_in_manifest"] == 0:
+        status["status"] = "empty"
+        status["blocked_reason"] = "no papers in manifest"
+    elif resolvable == 0:
+        status["status"] = "blocked"
+        status["blocked_reason"] = "papers in manifest but none resolvable on disk — run migration first"
+    else:
+        status["status"] = "ok"
+        status["pending_extraction"] = resolvable - status["already_extracted"]
+
+    return status
+
+
 def main() -> None:
     verbose = "--verbose" in sys.argv
     as_json = "--json" in sys.argv or True  # always JSON
@@ -141,6 +214,7 @@ def main() -> None:
         "lock_file": str(LOCK_FILE) if LOCK_FILE.exists() else None,
         "models": models,
         "last_extract": last_extract,
+        "canonical_papers": _canonical_papers_status(),
         "errors": errors,
         **report_info,
     }
@@ -152,6 +226,14 @@ def main() -> None:
         print(f"  venv: {venv_status}")
         print(f"  venv_path: {VENV_DIR}")
         print(f"  layout: {models['layout']}  ocr: {models['ocr']}")
+        cp = result.get("canonical_papers", {})
+        cp_status = cp.get("status", "unknown")
+        print(f"  canonical_papers: {cp_status} ({cp.get('total_in_manifest', 0)} in manifest, "
+              f"{cp.get('resolvable_canonical', 0)} canonical, "
+              f"{cp.get('resolvable_original_fallback', 0)} original-fallback, "
+              f"{cp.get('already_extracted', 0)} extracted)")
+        if cp.get("blocked_reason"):
+            print(f"    ⚠ {cp['blocked_reason']}")
         if last_extract:
             print(f"  last_extract: {last_extract['ts']} ({last_extract['pages']} pages from {last_extract['source'][:40]})")
         if errors:

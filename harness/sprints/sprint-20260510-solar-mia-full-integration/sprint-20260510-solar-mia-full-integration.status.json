@@ -1,6 +1,6 @@
 {
   "id": "sprint-20260510-solar-mia-full-integration",
-  "title": "Solar MIA Full Integration \u2014 Upstream First",
+  "title": "Solar MIA Full Integration — Upstream First",
   "summary": "Vendor ECNU-SII/MIA, inventory upstream Manager/Planner/Executor/Memory-Serve/TTRL, compare with Solar experience layer, and produce fusion design without overwriting local code.",
   "status": "passed",
   "phase": "eval_passed",
@@ -11,7 +11,7 @@
   "round": 2,
   "bypass_pm": true,
   "created_at": "2026-05-10T14:33:52Z",
-  "updated_at": "2026-05-10T14:54:20Z",
+  "updated_at": "2026-05-10T14:57:07Z",
   "history": [
     {
       "ts": "2026-05-10T14:33:52Z",
@@ -52,7 +52,7 @@
       "ts": "2026-05-10T14:47:42Z",
       "event": "autopilot_pane_idle_with_pending_artifact",
       "by": "solar-autopilot",
-      "note": "\u8bf7\u8bc4\u5ba1 sprint-20260510-solar-mia-full-integration\uff1a\u8bfb\u53d6 handoff/contract\uff0c\u4ea7\u51fa eval.md/eval.json\u3002"
+      "note": "请评审 sprint-20260510-solar-mia-full-integration：读取 handoff/contract，产出 eval.md/eval.json。"
     },
     {
       "ts": "2026-05-10T14:48:46Z",
@@ -63,12 +63,12 @@
       "ts": "2026-05-10T14:53:18Z",
       "event": "autopilot_pane_idle_with_pending_artifact",
       "by": "solar-autopilot",
-      "note": "\u8bf7\u8bc4\u5ba1 sprint-20260510-solar-mia-full-integration\uff1a\u8bfb\u53d6 handoff/contract\uff0c\u4ea7\u51fa eval.md/eval.json\u3002"
+      "note": "请评审 sprint-20260510-solar-mia-full-integration：读取 handoff/contract，产出 eval.md/eval.json。"
     },
     {
       "ts": "2026-05-10T14:54:20Z",
       "event": "eval_pass",
-      "by": "\u5ba1\u5224\u5b98",
+      "by": "审判官",
       "note": "D1-D6 all PASS; round=2; vendor unmodified; smoke honest pendings; P2 F1-F5 contract ready."
     },
     {
@@ -77,6 +77,17 @@
       "by": "evaluator",
       "verdict": "PASS",
       "reason": "D1-D6 all PASS; vendor unmodified at d428f489; honest smoke pendings (flask + memory_functions); P2 F1-F5 contract ready (no GPU/secrets/upstream-mod)"
+    },
+    {
+      "ts": "2026-05-10T14:55:59Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-05-10T14:57:07Z",
+      "event": "finalized",
+      "by": "coordinator"
     }
   ],
   "artifacts": [
@@ -85,5 +96,11 @@
     "plan",
     "task_graph"
   ],
-  "last_handoff_mtime": 1778424397.0
+  "last_handoff_mtime": 1778424397.0,
+  "knowledge_export_status": "exported",
+  "knowledge_export_path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260510-solar-mia-full-integration.accepted.md",
+  "knowledge_ingest_dispatch": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260510-solar-mia-full-integration.dispatch.md",
+  "knowledge_exported_at": "2026-05-10T14:57:07Z",
+  "knowledge_ingested_at": null,
+  "knowledge_export_error": null
 }
