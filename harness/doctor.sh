@@ -23,6 +23,12 @@ import json, subprocess, os, re, sys
 SESSION_NAME = "solar-harness"
 LAB_SESSION_NAME = "solar-harness-lab"
 HARNESS_DIR = os.path.expanduser("~/.solar/harness")
+sys.path.insert(0, os.path.join(HARNESS_DIR, "lib"))
+try:
+    from qmd_resolver import resolve_qmd_bin
+except Exception:
+    def resolve_qmd_bin():
+        return ""
 
 result = {
     "tmux_session_alive": False,
@@ -36,6 +42,16 @@ result = {
     "panes": [],
     "warnings": [],
     "repairs_available": [],
+    "qmd": {
+        "resolver": "",
+        "stripped_path_ok": False,
+        "stripped_status_ok": False,
+        "status_ok": False,
+        "vectors": "",
+        "pending": "",
+        "repair_status": "",
+        "repair_action": ""
+    },
     "gateway_compat": {
         "checked": False,
         "ok": False,
@@ -205,6 +221,80 @@ if os.path.isfile(pidfile) and not result["coordinator_alive"]:
 if os.path.isfile(wpidfile) and not result["watchdog_alive"]:
     result["repairs_available"].append("watchdog-down: run watchdog start")
 
+# qmd resolver / launcher health. This is deliberately stripped-PATH tested so
+# launchd and ssh non-interactive environments do not regress silently.
+qmd_resolver_script = os.path.join(HARNESS_DIR, "lib", "qmd-resolver.sh")
+if os.path.isfile(qmd_resolver_script):
+    try:
+        env = {
+            "HOME": os.path.expanduser("~"),
+            "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+            "HARNESS_DIR": HARNESS_DIR,
+        }
+        if os.environ.get("QMD_BIN"):
+            env["QMD_BIN"] = os.environ["QMD_BIN"]
+        r = subprocess.run(
+            ["bash", qmd_resolver_script, "--print"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            env=env,
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            result["qmd"]["resolver"] = r.stdout.strip().splitlines()[0]
+            result["qmd"]["stripped_path_ok"] = True
+        h = subprocess.run(
+            ["bash", os.path.join(HARNESS_DIR, "solar-harness.sh"), "wiki", "qmd-status"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            env=env,
+        )
+        result["qmd"]["stripped_status_ok"] = (h.returncode == 0)
+        if h.returncode != 0:
+            result["warnings"].append("qmd stripped-PATH status check failed")
+    except Exception as e:
+        result["warnings"].append(f"qmd stripped-PATH resolver check failed: {e}")
+
+if not result["qmd"]["resolver"]:
+    qmd_bin = resolve_qmd_bin()
+    result["qmd"]["resolver"] = qmd_bin
+else:
+    qmd_bin = result["qmd"]["resolver"]
+
+if qmd_bin:
+    try:
+        r = subprocess.run([qmd_bin, "status"], capture_output=True, text=True, timeout=12)
+        result["qmd"]["status_ok"] = (r.returncode == 0)
+        if r.returncode == 0:
+            for line in r.stdout.splitlines():
+                s = line.strip()
+                if s.startswith("Vectors:"):
+                    result["qmd"]["vectors"] = s.split(":", 1)[1].strip()
+                elif s.startswith("Pending:"):
+                    result["qmd"]["pending"] = s.split(":", 1)[1].strip()
+        else:
+            result["warnings"].append("qmd status failed")
+    except Exception as e:
+        result["warnings"].append(f"qmd status failed: {e}")
+else:
+    result["warnings"].append("qmd resolver found no executable")
+
+qmd_repair = os.path.join(HARNESS_DIR, "lib", "qmd-launcher-repair.sh")
+if os.path.isfile(qmd_repair) and os.access(qmd_repair, os.X_OK):
+    try:
+        r = subprocess.run([qmd_repair, "--check", "--json"], capture_output=True, text=True, timeout=15)
+        if r.stdout.strip():
+            d = json.loads(r.stdout.strip().splitlines()[-1])
+            result["qmd"]["repair_status"] = d.get("status", "")
+            result["qmd"]["repair_action"] = d.get("action", "")
+        if r.returncode == 2:
+            result["repairs_available"].append("qmd-launcher-abi: run solar-harness wiki qmd-repair --apply")
+        elif r.returncode not in (0,):
+            result["warnings"].append("qmd launcher repair check failed")
+    except Exception as e:
+        result["warnings"].append(f"qmd launcher repair check failed: {e}")
+
 # symphony section
 symphony_dir = os.path.join(HARNESS_DIR, "lib", "symphony")
 scheduler_path = os.path.join(symphony_dir, "scheduler.py")
@@ -281,12 +371,14 @@ doctor_summary() {
   local json_output
   json_output=$(doctor_json)
 
-  local tmux_alive lab_alive coord_alive watchdog_alive gateway_ok bash_ver panes_count warnings_count
+  local tmux_alive lab_alive coord_alive watchdog_alive gateway_ok qmd_ok qmd_pending bash_ver panes_count warnings_count
   tmux_alive=$(echo "$json_output" | python3 -c "import json,sys; print(json.load(sys.stdin)['tmux_session_alive'])" 2>/dev/null)
   lab_alive=$(echo "$json_output" | python3 -c "import json,sys; print(json.load(sys.stdin).get('lab_session_alive', False))" 2>/dev/null)
   coord_alive=$(echo "$json_output" | python3 -c "import json,sys; print(json.load(sys.stdin)['coordinator_alive'])" 2>/dev/null)
   watchdog_alive=$(echo "$json_output" | python3 -c "import json,sys; print(json.load(sys.stdin)['watchdog_alive'])" 2>/dev/null)
   gateway_ok=$(echo "$json_output" | python3 -c "import json,sys; print(json.load(sys.stdin).get('gateway_compat',{}).get('ok', False))" 2>/dev/null)
+  qmd_ok=$(echo "$json_output" | python3 -c "import json,sys; d=json.load(sys.stdin).get('qmd',{}); print(d.get('stripped_path_ok', False) and d.get('stripped_status_ok', False) and d.get('status_ok', False))" 2>/dev/null)
+  qmd_pending=$(echo "$json_output" | python3 -c "import json,sys; print(json.load(sys.stdin).get('qmd',{}).get('pending',''))" 2>/dev/null)
   bash_ver=$(echo "$json_output" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('bash_version','?'))" 2>/dev/null)
   panes_count=$(echo "$json_output" | python3 -c "import json,sys; print(len(json.load(sys.stdin)['panes']))" 2>/dev/null)
   warnings_count=$(echo "$json_output" | python3 -c "import json,sys; print(len(json.load(sys.stdin)['warnings']))" 2>/dev/null)
@@ -299,6 +391,7 @@ doctor_summary() {
   echo "  │ coord:  $([ "$coord_alive" == "True" ] && echo "✅ alive" || echo "❌ down")"
   echo "  │ watch:  $([ "$watchdog_alive" == "True" ] && echo "✅ alive" || echo "❌ down")"
   echo "  │ gateway:$([ "$gateway_ok" == "True" ] && echo " ✅ compat" || echo " ❌ check")"
+  echo "  │ qmd:    $([ "$qmd_ok" == "True" ] && echo "✅ resolver" || echo "❌ check") ${qmd_pending:0:22}"
   echo "  │ panes:  ${panes_count}"
   echo "  │ warns:  ${warnings_count}"
   echo "  └────────────────────────────────────────────┘"

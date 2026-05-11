@@ -28,6 +28,9 @@ from pathlib import Path
 
 HOME = Path.home()
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", str(HOME / ".solar" / "harness")))
+sys.path.insert(0, str(HARNESS_DIR / "lib"))
+from qmd_resolver import resolve_qmd_bin  # noqa: E402
+
 CONFIG_PATH = HARNESS_DIR / "config" / "solar-user-config.json"
 SECRETS_PATH = HOME / ".solar" / "secrets" / "solar-user-secrets.env"
 PID_FILE = HARNESS_DIR / ".solar-config-server.pid"
@@ -231,25 +234,7 @@ def _mirage_detail(doctor_result: dict) -> dict:
 
 def system_status() -> dict[str, object]:
     cfg = load_config()
-    qmd_candidates = []
-    if os.environ.get("QMD_BIN"):
-        qmd_candidates.append(Path(os.environ["QMD_BIN"]))
-    qmd_candidates.extend(
-        [
-            Path.home() / ".npm-global/bin/qmd",
-            Path.home() / "n/bin/qmd",
-            Path("/opt/homebrew/bin/qmd"),
-            Path("/usr/local/bin/qmd"),
-        ]
-    )
-    qmd_bin = next(
-        (
-            str(p)
-            for p in qmd_candidates
-            if p.exists() and os.access(p, os.X_OK)
-        ),
-        "",
-    )
+    qmd_bin = resolve_qmd_bin()
     qmd = run_cmd([qmd_bin, "status"], timeout=8) if qmd_bin else {"ok": False, "stderr": "qmd not found"}
     wiki = run_cmd([str(HARNESS_DIR / "solar-harness.sh"), "wiki", "status", "--json"], timeout=8)
     mirage = run_cmd([str(HARNESS_DIR / "solar-harness.sh"), "mirage", "doctor", "--json"], timeout=8)

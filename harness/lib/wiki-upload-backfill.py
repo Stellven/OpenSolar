@@ -30,6 +30,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from qmd_resolver import resolve_qmd_bin
+
 VAULT_ROOT = Path(os.environ.get("OBSIDIAN_VAULT_PATH", "/Users/sihaoli/Knowledge"))
 DB_PATH = Path(os.environ.get("SOLAR_DB", str(Path.home() / ".solar" / "solar.db")))
 UPLOAD_DIR: Path | None = None
@@ -320,17 +322,7 @@ def register_qmd(md_path: Path) -> bool:
     """Ensure a markdown file is visible in qmd solar-wiki collection."""
     qmd_bin = os.environ.get("QMD_BIN", "")
     if not qmd_bin:
-        qmd_bin = subprocess.getoutput("command -v qmd 2>/dev/null || echo ''").strip()
-    if not qmd_bin:
-        for candidate in (
-            Path.home() / ".npm-global/bin/qmd",
-            Path.home() / "n/bin/qmd",
-            Path("/opt/homebrew/bin/qmd"),
-            Path("/usr/local/bin/qmd"),
-        ):
-            if candidate.exists() and os.access(candidate, os.X_OK):
-                qmd_bin = str(candidate)
-                break
+        qmd_bin = resolve_qmd_bin()
     if not qmd_bin:
         return False
 

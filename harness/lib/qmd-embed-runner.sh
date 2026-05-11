@@ -4,15 +4,14 @@
 set -euo pipefail
 
 HARNESS_DIR="${HARNESS_DIR:-$HOME/.solar/harness}"
-QMD_BIN="${QMD_BIN:-$(command -v qmd 2>/dev/null || true)}"
-[[ -z "$QMD_BIN" && -x "$HOME/.npm-global/bin/qmd" ]] && QMD_BIN="$HOME/.npm-global/bin/qmd"
-[[ -z "$QMD_BIN" && -x "$HOME/n/bin/qmd" ]] && QMD_BIN="$HOME/n/bin/qmd"
-[[ -z "$QMD_BIN" && -x "/opt/homebrew/bin/qmd" ]] && QMD_BIN="/opt/homebrew/bin/qmd"
-[[ -z "$QMD_BIN" && -x "/usr/local/bin/qmd" ]] && QMD_BIN="/usr/local/bin/qmd"
+[[ -f "$HARNESS_DIR/lib/qmd-resolver.sh" ]] && . "$HARNESS_DIR/lib/qmd-resolver.sh"
+QMD_BIN="${QMD_BIN:-$(solar_qmd_bin_or_empty 2>/dev/null || true)}"
+solar_export_qmd_runtime_path "$QMD_BIN"
 COLLECTION="${QMD_WIKI_COLLECTION:-solar-wiki}"
 RUN_DIR="$HARNESS_DIR/run"
 STATE_DIR="$HARNESS_DIR/state"
 LOCK_DIR="$RUN_DIR/qmd-embed.lockdir"
+LOCK_PID_FILE="$LOCK_DIR/pid"
 STATUS_FILE="$STATE_DIR/qmd-embed-status.json"
 LOG_FILE="$RUN_DIR/qmd-embed.log"
 FORCE="${SOLAR_QMD_EMBED_FORCE:-0}"
@@ -49,6 +48,12 @@ case "$MODE" in
     ;;
 esac
 NICE_LEVEL="${SOLAR_QMD_EMBED_NICE:-15}"
+# QMD embedding is a background maintenance task, not an interactive query path.
+# Prefer CPU by default so native Metal crashes do not wedge the knowledge index;
+# set SOLAR_QMD_EMBED_ALLOW_GPU=1 or NODE_LLAMA_CPP_GPU=auto to opt back in.
+if [[ -z "${NODE_LLAMA_CPP_GPU:-}" && "${SOLAR_QMD_EMBED_ALLOW_GPU:-0}" != "1" ]]; then
+  export NODE_LLAMA_CPP_GPU=false
+fi
 
 mkdir -p "$RUN_DIR" "$STATE_DIR"
 
@@ -149,10 +154,23 @@ if ! can_start; then
 fi
 
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-  status_json "locked" "another qmd embed run is active"
-  exit 0
+  lock_pid="$(cat "$LOCK_PID_FILE" 2>/dev/null || true)"
+  if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
+    status_json "locked" "another qmd embed run is active (pid=$lock_pid)"
+    exit 0
+  fi
+  # Legacy/stale lockdirs did not always have a pid file, and native qmd
+  # crashes can leave a dead pid file behind. This lockdir is private to the
+  # embed runner, so a dead pid makes it safe to reap.
+  rm -f "$LOCK_PID_FILE" 2>/dev/null || true
+  rmdir "$LOCK_DIR" 2>/dev/null || true
+  if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    status_json "locked" "another qmd embed run is active"
+    exit 0
+  fi
 fi
-trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT
+printf '%s\n' "$$" > "$LOCK_PID_FILE"
+trap 'rm -f "$LOCK_PID_FILE"; rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT
 
 before="$(pending_count || true)"
 idle="$(idle_seconds || true)"
@@ -189,8 +207,10 @@ status_json "running" "qmd embed started (${MODE})" "$before" "" "$idle" "$load"
       exit 0
     fi
   done
+  set +e
   wait "$embed_pid"
   rc=$?
+  set -e
   after="$(pending_count || true)"
   echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] qmd embed finished rc=$rc pending_after=${after:-N/A}"
   if [[ "$rc" -eq 0 ]]; then

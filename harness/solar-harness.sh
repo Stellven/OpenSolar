@@ -22,6 +22,9 @@ SPRINTS_DIR="$HARNESS_DIR/sprints"
 # sprint-20260503-094659 D2: 统一 state helper
 . "$HARNESS_DIR/lib/run-state.sh"
 
+# Shared qmd resolver. Optional source keeps older installs doctor-capable.
+[[ -f "$HARNESS_DIR/lib/qmd-resolver.sh" ]] && . "$HARNESS_DIR/lib/qmd-resolver.sh"
+
 # sprint-20260503-163542 D3: bridge ledger
 [[ -f "$HARNESS_DIR/lib/bridge-ledger.sh" ]] && . "$HARNESS_DIR/lib/bridge-ledger.sh"
 
@@ -200,6 +203,12 @@ do_doctor() {
 
   # (g) qmd launcher Node ABI 风险可检测可修复
   if [[ -x "$HARNESS_DIR/lib/qmd-launcher-repair.sh" ]]; then
+    local qmd_bin_check=""
+    qmd_bin_check="$(env -i HOME="$HOME" PATH="/usr/bin:/bin:/usr/sbin:/sbin" QMD_BIN="${QMD_BIN:-}" bash "$HARNESS_DIR/lib/qmd-resolver.sh" --print 2>/dev/null || true)"
+    if [[ -z "$qmd_bin_check" ]]; then
+      echo "⚠ qmd resolver stripped-PATH 检查未找到 qmd"
+      echo "   修复: 安装 qmd/mineru-document-explorer 或设置 QMD_BIN"
+    fi
     local qmd_repair_out qmd_repair_rc
     qmd_repair_out="$("$HARNESS_DIR/lib/qmd-launcher-repair.sh" --check 2>&1)" || qmd_repair_rc=$?
     qmd_repair_rc="${qmd_repair_rc:-0}"
@@ -2958,13 +2967,9 @@ PY
         "$_qmd_repair" "$@"
         ;;
       qmd-status|mineru-status)
-        _QMD_BIN="$(command -v qmd 2>/dev/null || true)"
-        [[ -z "$_QMD_BIN" && -n "${QMD_BIN:-}" && -x "${QMD_BIN:-}" ]] && _QMD_BIN="$QMD_BIN"
-        [[ -z "$_QMD_BIN" && -x "$HOME/.npm-global/bin/qmd" ]] && _QMD_BIN="$HOME/.npm-global/bin/qmd"
-        [[ -z "$_QMD_BIN" && -x "$HOME/n/bin/qmd" ]] && _QMD_BIN="$HOME/n/bin/qmd"
-        [[ -z "$_QMD_BIN" && -x "/opt/homebrew/bin/qmd" ]] && _QMD_BIN="/opt/homebrew/bin/qmd"
-        [[ -z "$_QMD_BIN" && -x "/usr/local/bin/qmd" ]] && _QMD_BIN="/usr/local/bin/qmd"
+        _QMD_BIN="$(solar_qmd_bin_or_empty)"
         [[ -n "$_QMD_BIN" ]] || { err "qmd not found; install mineru-document-explorer"; exit 1; }
+        solar_export_qmd_runtime_path "$_QMD_BIN"
         _qmd_status_out=""
         _qmd_status_rc=0
         _qmd_repair="${HARNESS_DIR}/lib/qmd-launcher-repair.sh"
@@ -2984,13 +2989,9 @@ PY
         exit "$_qmd_status_rc"
         ;;
       qmd-search|mineru-search)
-        _QMD_BIN="$(command -v qmd 2>/dev/null || true)"
-        [[ -z "$_QMD_BIN" && -n "${QMD_BIN:-}" && -x "${QMD_BIN:-}" ]] && _QMD_BIN="$QMD_BIN"
-        [[ -z "$_QMD_BIN" && -x "$HOME/.npm-global/bin/qmd" ]] && _QMD_BIN="$HOME/.npm-global/bin/qmd"
-        [[ -z "$_QMD_BIN" && -x "$HOME/n/bin/qmd" ]] && _QMD_BIN="$HOME/n/bin/qmd"
-        [[ -z "$_QMD_BIN" && -x "/opt/homebrew/bin/qmd" ]] && _QMD_BIN="/opt/homebrew/bin/qmd"
-        [[ -z "$_QMD_BIN" && -x "/usr/local/bin/qmd" ]] && _QMD_BIN="/usr/local/bin/qmd"
+        _QMD_BIN="$(solar_qmd_bin_or_empty)"
         [[ -n "$_QMD_BIN" ]] || { err "qmd not found; install mineru-document-explorer"; exit 1; }
+        solar_export_qmd_runtime_path "$_QMD_BIN"
         if [[ $# -lt 1 ]]; then
           err "Usage: $0 wiki qmd-search \"<query>\" [qmd search args]"
           exit 1
@@ -2998,23 +2999,15 @@ PY
         "$_QMD_BIN" search "$1" -c "${QMD_WIKI_COLLECTION:-solar-wiki}" "${@:2}"
         ;;
       qmd-update|mineru-update)
-        _QMD_BIN="$(command -v qmd 2>/dev/null || true)"
-        [[ -z "$_QMD_BIN" && -n "${QMD_BIN:-}" && -x "${QMD_BIN:-}" ]] && _QMD_BIN="$QMD_BIN"
-        [[ -z "$_QMD_BIN" && -x "$HOME/.npm-global/bin/qmd" ]] && _QMD_BIN="$HOME/.npm-global/bin/qmd"
-        [[ -z "$_QMD_BIN" && -x "$HOME/n/bin/qmd" ]] && _QMD_BIN="$HOME/n/bin/qmd"
-        [[ -z "$_QMD_BIN" && -x "/opt/homebrew/bin/qmd" ]] && _QMD_BIN="/opt/homebrew/bin/qmd"
-        [[ -z "$_QMD_BIN" && -x "/usr/local/bin/qmd" ]] && _QMD_BIN="/usr/local/bin/qmd"
+        _QMD_BIN="$(solar_qmd_bin_or_empty)"
         [[ -n "$_QMD_BIN" ]] || { err "qmd not found; install mineru-document-explorer"; exit 1; }
+        solar_export_qmd_runtime_path "$_QMD_BIN"
         "$_QMD_BIN" update "$@"
         ;;
       qmd-mcp|mineru-mcp)
-        _QMD_BIN="$(command -v qmd 2>/dev/null || true)"
-        [[ -z "$_QMD_BIN" && -n "${QMD_BIN:-}" && -x "${QMD_BIN:-}" ]] && _QMD_BIN="$QMD_BIN"
-        [[ -z "$_QMD_BIN" && -x "$HOME/.npm-global/bin/qmd" ]] && _QMD_BIN="$HOME/.npm-global/bin/qmd"
-        [[ -z "$_QMD_BIN" && -x "$HOME/n/bin/qmd" ]] && _QMD_BIN="$HOME/n/bin/qmd"
-        [[ -z "$_QMD_BIN" && -x "/opt/homebrew/bin/qmd" ]] && _QMD_BIN="/opt/homebrew/bin/qmd"
-        [[ -z "$_QMD_BIN" && -x "/usr/local/bin/qmd" ]] && _QMD_BIN="/usr/local/bin/qmd"
+        _QMD_BIN="$(solar_qmd_bin_or_empty)"
         [[ -n "$_QMD_BIN" ]] || { err "qmd not found; install mineru-document-explorer"; exit 1; }
+        solar_export_qmd_runtime_path "$_QMD_BIN"
         _QMD_PROXY="${HARNESS_DIR}/lib/qmd-ipv4-proxy.py"
         _QMD_PROXY_PID="${HARNESS_DIR}/run/qmd-mcp-ipv4-proxy.pid"
         _QMD_PROXY_SESSION="solar-qmd-mcp-proxy"
@@ -3112,6 +3105,8 @@ PY
         _embed_runner="${HARNESS_DIR}/lib/qmd-embed-runner.sh"
         _embed_plist="$HOME/Library/LaunchAgents/com.solar.qmd-mineru-embed.plist"
         _embed_status="${HARNESS_DIR}/state/qmd-embed-status.json"
+        _embed_lock="${HARNESS_DIR}/run/qmd-embed.lockdir"
+        _embed_lock_pid="${_embed_lock}/pid"
         _embed_label="com.solar.qmd-mineru-embed"
         case "${1:-status}" in
           start)
@@ -3168,6 +3163,31 @@ EOF
               ok "qmd embedding launchd loaded ($_embed_label)"
             else
               warn "qmd embedding launchd not loaded"
+            fi
+            if [[ -f "$_embed_status" ]] && grep -Eq '"state"[[:space:]]*:[[:space:]]*"(running|locked)"' "$_embed_status"; then
+              _lock_pid="$(cat "$_embed_lock_pid" 2>/dev/null || true)"
+              if [[ -z "$_lock_pid" || ! "$_lock_pid" =~ ^[0-9]+$ || ! -d "/proc/$_lock_pid" ]]; then
+                # macOS has no /proc; kill -0 is the portable live-pid check.
+                if [[ -z "$_lock_pid" || ! "$_lock_pid" =~ ^[0-9]+$ ]] || ! kill -0 "$_lock_pid" 2>/dev/null; then
+                  _pending_after="$("$0" wiki qmd-status 2>/dev/null | awk '/Pending:/ {print $2; found=1; exit} END {if (!found) print "0"}')"
+                  mkdir -p "$(dirname "$_embed_status")"
+                  cat > "$_embed_status" <<EOF
+{
+  "state": "error",
+  "collection": "solar-wiki",
+  "mode": "stale",
+  "updated_at": "$(date -u '+%Y-%m-%dT%H:%M:%SZ')",
+  "pending_before": "",
+  "pending_after": "${_pending_after}",
+  "detail": "stale qmd embed status/lock detected; no live runner pid (${_lock_pid:-N/A})",
+  "log": "${HARNESS_DIR}/run/qmd-embed.log"
+}
+EOF
+                  rm -f "$_embed_lock_pid" 2>/dev/null || true
+                  rmdir "$_embed_lock" 2>/dev/null || true
+                  warn "stale qmd embed lock/status repaired"
+                fi
+              fi
             fi
             if [[ -f "$_embed_status" ]]; then
               cat "$_embed_status"

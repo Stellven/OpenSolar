@@ -18,12 +18,13 @@ import argparse
 import json
 import os
 import re
-import shutil
 import sqlite3
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+from qmd_resolver import resolve_qmd_bin
 
 DB_PATH = Path(os.environ.get("SOLAR_DB", str(Path.home() / ".solar" / "solar.db")))
 VAULT_PATH = Path(os.environ.get("OBSIDIAN_VAULT_PATH", "/Users/sihaoli/Knowledge"))
@@ -235,17 +236,9 @@ def _qmd_fallback(query: str, max_hits: int, timeout_remaining_ms: float) -> lis
     """Fallback: qmd search solar-wiki. Returns [] on any failure (fail-open)."""
     if timeout_remaining_ms < 200:
         return []
-    # Locate qmd binary: env override → known path → PATH
-    qmd_bin = os.environ.get("QMD_BIN", "")
-    if not qmd_bin or not Path(qmd_bin).is_file():
-        candidate = "/Users/sihaoli/.npm-global/bin/qmd"
-        if Path(candidate).is_file():
-            qmd_bin = candidate
-        else:
-            found = shutil.which("qmd")
-            if not found:
-                return []
-            qmd_bin = found
+    qmd_bin = resolve_qmd_bin()
+    if not qmd_bin:
+        return []
     try:
         per_call = max(0.5, (timeout_remaining_ms / 2) / 1000.0)
         queries = [query]
