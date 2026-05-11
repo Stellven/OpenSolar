@@ -6,46 +6,122 @@
 [![Agents](https://img.shields.io/badge/Agents-13-green.svg)](docs/agents.md)
 [![Skills](https://img.shields.io/badge/Skills-38-blue.svg)](docs/skills.md)
 
-## 当前范围：Solar = Core + Harness + Codex 协同
+## 当前范围：Solar = AI Native Core + Solar Harness + Unified Knowledge
 
-从现在起，除非特别说明，**Solar** 指这个仓库里的完整系统面，而不是只指前台 agent 配置：
+**Solar** 现在是一个 AI-native operating system 原型，不只是 Claude/Codex 的提示词集合。它由三层组成：
 
-- `core/`, `agents/`, `skills/`, `rules/`, `hooks/`: Claude/Codex 可加载的 AI-native 工作流内核。
-- `harness/`: sprint 合约库、coordinator、派单链路、pane lease、task graph、eval、知识/经验层、远端同步工具。
-- `.solar/`: STATE/DECISIONS/ARCH/RFC/实验模板等隐藏控制面文件；这些也属于 Solar 的部署契约。
-- `codex-bridge/`, `scripts/`, `deploy/`, `docs/`: Codex 与 Solar Harness 协同、导出、部署、巡检和文档化入口。
+- `core/`, `agents/`, `skills/`, `rules/`, `hooks/`: AI-native 工作流内核，提供 agent/persona、skill、规则、hook 和长期状态入口。
+- `harness/`: Solar Harness 控制面，负责 sprint 合约、DAG 调度、pane lease、builder/evaluator 派发、远端执行、benchmark 和经验沉淀。
+- `.solar/`, `codex-bridge/`, `scripts/`, `deploy/`, `docs/`: 部署契约、Codex 协同、导出、巡检、知识沉淀和产品化辅助工具。
 
-运行态数据库、个人日志、密钥、WAL/SHM、pane 截图和本机私有轨迹不作为公开源码提交；它们由安装器或 harness 在本地生成。
+运行态数据库、个人日志、密钥、WAL/SHM、pane 截图、本机私有轨迹和本地模型缓存不作为公开源码提交；安装器和 Harness 会在本机生成这些运行态资产。
 
-## 当前架构
+## 技术架构
 
 ```mermaid
 flowchart TB
-  User["User / Operator"] --> IDE["Claude Code / Codex / Cursor"]
-  IDE --> Core["Solar Core\nCLAUDE.md / rules / skills / agents / hooks"]
-  Core --> State[".solar Control Plane\nSTATE / DECISIONS / ARCH / RFC"]
-  Core --> Harness["solar-harness\ncoordinator / sprint contracts / task graph"]
+  User["Operator / Codex / Claude Code"] --> Intent["Intent & Contract Layer\nnatural language / PRD / sprint contract"]
 
-  Harness --> Queue["Dispatch Queue\nrun/queue + pane leases + assignments"]
-  Queue --> PM["PM Pane\nPRD / contract"]
-  Queue --> Planner["Planner Pane\nplan.md / task_graph.json"]
-  Queue --> Builder["Builder Panes\nlocal + lab workers"]
-  Queue --> Evaluator["Evaluator Pane\neval.md / verdict"]
+  Intent --> Core["Solar Core\nagents / skills / rules / hooks / CLAUDE.md"]
+  Intent --> Harness["Solar Harness Control Plane\ncoordinator / autopilot / task queue / pane lease"]
 
-  Builder --> Artifacts["Sprint Artifacts\nhandoff / eval / release notes"]
+  Harness --> Planner["Planner\nplan.md + task_graph.json"]
+  Planner --> Scheduler["DAG Scheduler\nready nodes / write-scope guard / capability matching"]
+  Scheduler --> Builders["Builder Workers\nmain panes + builder lab + remote workers"]
+  Scheduler --> Evaluator["Evaluator\nnode verdict / batch gate / parent gate"]
+
+  Builders --> Artifacts["Sprint Artifacts\nhandoff / eval / reports / accepted outputs"]
   Evaluator --> Artifacts
-  Artifacts --> Experience["Experience Memory\nschema + compressed lessons"]
-  Experience --> Harness
+  Artifacts --> Experience["Experience Memory\nsuccess/failure compression / reusable lessons"]
+  Experience --> Scheduler
 
-  Harness --> Mini["Mac mini Remote Harness\nlisihao@100.122.223.55"]
-  Mini --> RemoteWorkers["Remote workers / heavier jobs / parity tests"]
-  RemoteWorkers --> Harness
+  Harness --> Capability["Capability Plane\nskills inventory / intent match / runtime scorecards"]
+  Capability --> Scheduler
+  Capability --> Core
 
-  Harness --> KB["Knowledge Extraction\n.solar/extracted_knowledge + Solar/harness"]
-  KB --> Core
+  Harness --> DataAccess["Data Access Layer\nMirage VFS / QMD search / Solar DB / Obsidian vault"]
+  DataAccess --> DataProcessing["Data Processing\nMinerU / wiki-ingest / embeddings / provenance"]
+  DataProcessing --> Knowledge["Unified Knowledge\n_sources / Obsidian / QMD index / accepted artifacts"]
+  Knowledge --> Core
+  Knowledge --> Harness
 ```
 
-### 怎么玩
+## 部署架构
+
+```mermaid
+flowchart LR
+  Repo["GitHub Repo\nlisihao/Solar"] --> Local["Local Workstation\n~/Solar + ~/.solar + ~/.claude"]
+  Local --> CoreInstall["L1 Core Install\n./install.sh"]
+  Local --> HarnessRun["L2 Harness Runtime\nharness/solar-harness.sh start"]
+  HarnessRun --> Tmux["tmux Panes\nPM / Planner / Builders / Evaluator"]
+  HarnessRun --> Status["Status UI\nlocalhost dashboard + reports"]
+
+  Local --> RemoteSync["Optional Remote Sync\nharness/tools/sync-code-to-mac-mini.sh"]
+  RemoteSync --> Remote["Remote Mac mini\n~/.solar/harness"]
+  Remote --> RemoteHarness["Remote Coordinator\nremote builders / smoke / parity tests"]
+
+  Local --> Vault["Knowledge Vault\nObsidian + _raw + _sources"]
+  Vault --> QMD["QMD Index\nsemantic + lexical retrieval"]
+  Vault --> Backup["Optional Drive Mirror\nbackup/cold storage, not primary runtime"]
+```
+
+## 模块集成架构
+
+```mermaid
+flowchart TB
+  subgraph "Execution Plane"
+    Symphony["OpenAI Symphony Patterns\nWORKFLOW contract / hooks / events"]
+    DAG["TaskGraph DAG\nrequired_capabilities / write_scope / join gates"]
+    Remote["Remote Dispatch\nMac mini doctor / dispatch / pull"]
+  end
+
+  subgraph "Knowledge Plane"
+    Obsidian["Obsidian Wiki\nhuman-readable vault"]
+    QMD["QMD\nsemantic index + retrieval"]
+    MinerU["MinerU\nPDF deep extraction"]
+    Mirage["Mirage\nunified virtual data access"]
+  end
+
+  subgraph "Capability Plane"
+    Ruflo["Ruflo / Claude Flow\nsandbox runtime + MCP surface"]
+    Gstack["Gstack / Browser QA"]
+    Superpowers["Superpowers\nplanning / TDD / debugging"]
+    ATLAS["ATLAS\nstructured repair"]
+    Skills["Solar Skills\ninventory / doctor / inject"]
+  end
+
+  Symphony --> DAG
+  DAG --> Remote
+  DAG --> Skills
+  Skills --> Ruflo
+  Skills --> Gstack
+  Skills --> Superpowers
+  Skills --> ATLAS
+  Mirage --> Obsidian
+  Mirage --> QMD
+  MinerU --> Obsidian
+  Obsidian --> QMD
+  QMD --> Skills
+```
+
+## 功能特性
+
+| 能力 | 状态 | 说明 |
+|------|------|------|
+| AI-native Core | ok | `agents/skills/rules/hooks/core` 可安装到 `~/.claude`，作为 Claude/Codex 工作流内核 |
+| Solar Harness | ok | sprint contract、coordinator、task queue、pane lease、builder/evaluator 派发 |
+| DAG 并行调度 | ok | `task_graph.json` 支持依赖、write_scope 冲突保护、join gate、parent gate |
+| 能力自动选择 | ok | 根据任务文本推导 `required_capabilities`，调度前自动 enrich，派发文本显式展示 |
+| 多 pane 协同 | ok | 主屏 + builder lab，支持不同模型/worker 能力和 lease 保护 |
+| 远端执行 | ok | `solar-remote-dispatch` 支持 doctor、dispatch、pull 和 Mac mini 复核链路 |
+| 知识库闭环 | ok | Obsidian Wiki、QMD、Solar DB、accepted artifacts、wiki dispatch |
+| 文档/PDF 处理 | ok | MinerU / MarkItDown / wiki-ingest / QMD index 分层处理 |
+| 统一数据访问 | warn | Mirage VFS 设计和基础 mount 存在，深层 SDK/FUSE 闭环继续演进 |
+| Ruflo / Claude Flow | ok | sandbox runtime 可用，CLI/MCP smoke 通过，不污染宿主项目 hooks |
+| Benchmark / Proof | ok | capability certification、activation proof、fusion benchmark、heavy proof |
+| 自演化能力 | ok | capability scorecard、runtime-aware ranking、experience memory 和 regression gates |
+
+## 快速开始
 
 ```bash
 git clone https://github.com/lisihao/Solar.git ~/Solar
@@ -62,10 +138,12 @@ cd ~/Solar
 | Harness 控制面 | `harness/solar-harness.sh` | sprint 合约、派单、eval、coordinator |
 | Harness 自检 | `cd harness && ./doctor.sh --summary` | 检查本地运行环境和控制面 |
 | Coordinator | `cd harness && ./solar-harness.sh start` | 启动 tmux panes + coordinator |
-| 远端同步 | `harness/tools/sync-code-to-mac-mini.sh` | 同步 MacBook/Mac mini harness 代码 |
-| 经验层 | `harness/lib/experience/` | 成功/失败轨迹压缩、检索、复用 |
+| Status UI | `cd harness && ./solar-harness.sh status-server` | 打开本地状态面板、配置页和集成健康 |
+| 远端同步 | `harness/tools/sync-code-to-mac-mini.sh` | 同步 MacBook/Mac mini Harness 代码 |
+| 远端复核 | `solar-remote-dispatch doctor --json` | 检查 SSH、rsync、remote harness、tmux、pane 状态 |
+| 能力证明 | `harness/solar-harness.sh integrations activation-proof --json` | 证明默认 dispatch/DAG/runtime/负例控制 |
 
-### 怎么部署
+## 部署方式
 
 1. 本机安装：
 
@@ -85,12 +163,12 @@ cd ~/Solar
    ./solar-harness.sh coord-status
    ```
 
-3. Mac mini 镜像部署（可选）：
+3. 远端 Mac mini 镜像部署（可选）：
 
    ```bash
    cd ~/Solar/harness
    ./tools/sync-code-to-mac-mini.sh
-   ssh lisihao@100.122.223.55 'cd ~/.solar/harness && ./solar-harness.sh coord-status'
+   solar-remote-dispatch doctor --host <user@mac-mini-host> --json
    ```
 
 4. 提交/发布前检查：
@@ -100,7 +178,8 @@ cd ~/Solar
    ./scripts/smoke-install.sh
    cd harness
    bash -n coordinator.sh lib/pane-lease.sh
-   python3 -m py_compile lib/graph_node_dispatcher.py lib/pane_lease.py
+   python3 -m py_compile lib/graph_scheduler.py lib/graph_node_dispatcher.py lib/pane_lease.py
+   ./solar-harness.sh integrations activation-proof --json
    ```
 
 ## ⚡ 一键安装（3 分钟）
@@ -124,7 +203,7 @@ cd ~/Solar && ./install.sh
 > 2. 每步必须先报告"目的+命令+预期输出",我点头才执行
 > 3. 任一步失败立刻停下,告诉我失败的具体输出,不要静默跳过
 > 4. 装完后必须跑 `cd ~/Solar && ./install.sh` 末尾的 6 项自检,全 ✅ 才算成功
-> 5. 不要跑 `~/.solar/bin/solar-harness doctor` (该工具属于 L2 高级模式,当前未打包)
+> 5. 基础安装只要求 L1 自检通过；如果需要 L2 Harness，再进入 `~/Solar/harness` 运行 `./doctor.sh --summary`
 >
 > 现在开始 Step 1:系统检测。
 
@@ -150,7 +229,7 @@ echo "✅ Solar L1 安装就位"
 ### 必需 vs 可选
 
 - **必需** (L1 基础): `~/Solar` 仓库 + `./install.sh` → `~/.claude/` 配置就位 → 启动 Claude Code 输入 `solar` 看启动宣告
-- **可选** (L2 高级): Solar Harness 协调器 / Sprint / 牛马链路 — **当前未打包到本仓库**, 详见 [USER-GUIDE 第 9 节](USER-GUIDE.md)
+- **可选** (L2 高级): Solar Harness 协调器 / Sprint / DAG 调度 / 远端执行 — 位于 `~/Solar/harness`，先跑 `cd ~/Solar/harness && ./doctor.sh --summary`
 - **可选** (L3 项目): `~/Solar-MAX` 项目模式 — 独立大仓库, 详见 USER-GUIDE
 
 完整 8 步剧本: [INSTALL-AGENT.md](INSTALL-AGENT.md)
