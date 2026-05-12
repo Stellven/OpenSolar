@@ -25,6 +25,10 @@ SPRINTS_DIR="$HARNESS_DIR/sprints"
 # Shared qmd resolver. Optional source keeps older installs doctor-capable.
 [[ -f "$HARNESS_DIR/lib/qmd-resolver.sh" ]] && . "$HARNESS_DIR/lib/qmd-resolver.sh"
 
+# Operator-owned config. Runtime launchers consume this instead of hardcoding
+# model policy in multiple places.
+[[ -f "$HARNESS_DIR/lib/harness-config.sh" ]] && . "$HARNESS_DIR/lib/harness-config.sh"
+
 # sprint-20260503-163542 D3: bridge ledger
 [[ -f "$HARNESS_DIR/lib/bridge-ledger.sh" ]] && . "$HARNESS_DIR/lib/bridge-ledger.sh"
 
@@ -96,11 +100,12 @@ pane_footer_label() {
 
 configure_product_delivery_labels() {
   tmux has-session -t "$SESSION_NAME" 2>/dev/null || return 0
+  tmux rename-window -t "$SESSION_NAME:0" "Product Delivery" 2>/dev/null || true
   configure_role_footer_style "$SESSION_NAME" "#89b4fa"
-  tmux select-pane -t "$SESSION_NAME:Product Delivery.0" -T "$(pane_footer_label pm "PM 产品经理")" 2>/dev/null || true
-  tmux select-pane -t "$SESSION_NAME:Product Delivery.1" -T "$(pane_footer_label planner "Planner 规划者")" 2>/dev/null || true
-  tmux select-pane -t "$SESSION_NAME:Product Delivery.2" -T "$(pane_footer_label builder "Builder 主建设者")" 2>/dev/null || true
-  tmux select-pane -t "$SESSION_NAME:Product Delivery.3" -T "$(pane_footer_label evaluator "Evaluator 审判官")" 2>/dev/null || true
+  tmux select-pane -t "$SESSION_NAME:0.0" -T "$(pane_footer_label pm "PM 产品经理")" 2>/dev/null || true
+  tmux select-pane -t "$SESSION_NAME:0.1" -T "$(pane_footer_label planner "Planner 规划者")" 2>/dev/null || true
+  tmux select-pane -t "$SESSION_NAME:0.2" -T "$(pane_footer_label builder "Builder 主建设者")" 2>/dev/null || true
+  tmux select-pane -t "$SESSION_NAME:0.3" -T "$(pane_footer_label evaluator "Evaluator 审判官")" 2>/dev/null || true
 }
 
 configure_builder_lab_labels() {
@@ -621,7 +626,8 @@ detect_pane_by_persona_simple() {
 
 write_parallel_lab_state() {
   local work_dir="$1"
-  local model_matrix="${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,anthropic-sonnet}"
+  local model_matrix
+  model_matrix="$(solar_lab_builder_matrix)"
   mkdir -p "$HARNESS_DIR/state"
   {
     printf "WORK_DIR='%s'\n" "$work_dir"
@@ -635,7 +641,9 @@ ensure_parallel_builder_lab() {
   local work_dir="${1:-$(pwd)}"
   tmux has-session -t "$LAB_SESSION_NAME" 2>/dev/null || return 0
   local state_file="$HARNESS_DIR/state/parallel-builder-lab.env"
-  local desired_matrix="${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,anthropic-sonnet}"
+  local desired_matrix matrix_label
+  desired_matrix="$(solar_lab_builder_matrix)"
+  matrix_label="$(solar_lab_builder_matrix_label "$desired_matrix")"
   local current_matrix=""
   if [[ -f "$state_file" ]]; then
     current_matrix=$(grep '^LAB_MODEL_MATRIX=' "$state_file" 2>/dev/null | sed "s/^LAB_MODEL_MATRIX='//;s/'$//" || true)
@@ -648,7 +656,7 @@ ensure_parallel_builder_lab() {
   write_parallel_lab_state "$work_dir"
 
   tmux rename-window -t "$LAB_SESSION_NAME:0" "Builder Lab" 2>/dev/null || true
-  tmux set-option -t "$LAB_SESSION_NAME" status-right "#[fg=#f9e2af]Solar Builder Lab #[fg=#a6e3a1]3 GLM-5.1 + 1 Claude Sonnet #[default]%H:%M" 2>/dev/null || true
+  tmux set-option -t "$LAB_SESSION_NAME" status-right "#[fg=#f9e2af]Solar Builder Lab #[fg=#a6e3a1]${matrix_label} #[default]%H:%M" 2>/dev/null || true
   tmux set-environment -t "$LAB_SESSION_NAME" SOLAR_CLAUDE_BYPASS 1 2>/dev/null || true
   configure_builder_lab_labels
 
@@ -679,6 +687,9 @@ ensure_parallel_builder_lab() {
 
 start_extension() {
   local work_dir="${1:-$(pwd)}"
+  local model_matrix matrix_label
+  model_matrix="$(solar_lab_builder_matrix)"
+  matrix_label="$(solar_lab_builder_matrix_label "$model_matrix")"
 
   cleanup_legacy_sessions
   write_parallel_lab_state "$work_dir"
@@ -715,7 +726,7 @@ start_extension() {
     local target="$1" persona="$2" slot="$3"
     local pane_id
     pane_id=$(tmux display-message -p -t "$target" '#{pane_id}')
-    tmux send-keys -t "$target" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH -u ANTHROPIC_BASE_URL -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_API_KEY -u ANTHROPIC_DEFAULT_OPUS_MODEL -u ANTHROPIC_DEFAULT_SONNET_MODEL -u ANTHROPIC_DEFAULT_HAIKU_MODEL TMUX_PANE=${pane_id} SOLAR_BUILDER_SLOT=${slot} SOLAR_LAB_BUILDER_MODEL_MATRIX=${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,anthropic-sonnet} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" Enter
+    tmux send-keys -t "$target" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH -u ANTHROPIC_BASE_URL -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_API_KEY -u ANTHROPIC_DEFAULT_OPUS_MODEL -u ANTHROPIC_DEFAULT_SONNET_MODEL -u ANTHROPIC_DEFAULT_HAIKU_MODEL TMUX_PANE=${pane_id} SOLAR_BUILDER_SLOT=${slot} SOLAR_LAB_BUILDER_MODEL_MATRIX=${model_matrix} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" Enter
   }
   sleep 1
   launch_persona_pane "$LAB_SESSION_NAME:Builder Lab.0" "lab-builder" "lab-builder-1"
@@ -732,17 +743,21 @@ start_extension() {
   tmux set-option -t "$LAB_SESSION_NAME" pane-border-style "fg=#45475a"
   tmux set-option -t "$LAB_SESSION_NAME" pane-active-border-style "fg=#f9e2af"
   tmux set-option -t "$LAB_SESSION_NAME" status-right-length 60
-  tmux set-option -t "$LAB_SESSION_NAME" status-right "#[fg=#f9e2af]Solar Builder Lab #[fg=#a6e3a1]3 GLM-5.1 + 1 Claude Sonnet #[default]%H:%M"
+  tmux set-option -t "$LAB_SESSION_NAME" status-right "#[fg=#f9e2af]Solar Builder Lab #[fg=#a6e3a1]${matrix_label} #[default]%H:%M"
   configure_builder_lab_labels
 
   ok "Parallel Builder Lab 四分屏已启动"
   echo ""
   echo "  ┌──────────────┬──────────────┐"
   echo "  │  Builder 1   │  Builder 2   │"
-  echo "  │ GLM-5.1      │ GLM-5.1      │"
+  printf "  │ %-12s │ %-12s │\n" \
+    "$(solar_lab_builder_matrix_item_label "$model_matrix" 0)" \
+    "$(solar_lab_builder_matrix_item_label "$model_matrix" 1)"
   echo "  ├──────────────┼──────────────┤"
   echo "  │  Builder 3   │  Builder 4   │"
-  echo "  │ GLM-5.1      │ Claude Sonnet│"
+  printf "  │ %-12s │ %-12s │\n" \
+    "$(solar_lab_builder_matrix_item_label "$model_matrix" 2)" \
+    "$(solar_lab_builder_matrix_item_label "$model_matrix" 3)"
   echo "  └──────────────┴──────────────┘"
   echo ""
   echo "  重新接入:  tmux attach -t $LAB_SESSION_NAME"
@@ -1739,6 +1754,61 @@ do_lab_status() {
   printf '└───────────────┴──────────────┴──────────────┴─────────────────────┴────────────────────────────┘\n'
 }
 
+do_models_command() {
+  local subcmd="${1:-show}"
+  shift || true
+  case "$subcmd" in
+    show|status)
+      local matrix label source
+      matrix="$(solar_lab_builder_matrix)"
+      label="$(solar_lab_builder_matrix_label "$matrix")"
+      if [[ -n "${SOLAR_LAB_BUILDER_MODEL_MATRIX:-}" ]]; then
+        source="env:SOLAR_LAB_BUILDER_MODEL_MATRIX"
+      else
+        source="$SOLAR_USER_CONFIG"
+      fi
+      printf '┌────────────────────┬──────────────────────────────────────────────┐\n'
+      printf '│ %-18s │ %-44s │\n' "配置项" "当前值"
+      printf '├────────────────────┼──────────────────────────────────────────────┤\n'
+      printf '│ %-18s │ %-44s │\n' "lab matrix" "$(printf '%.44s' "$matrix")"
+      printf '│ %-18s │ %-44s │\n' "显示" "$(printf '%.44s' "$label")"
+      printf '│ %-18s │ %-44s │\n' "来源" "$(printf '%.44s' "$source")"
+      printf '└────────────────────┴──────────────────────────────────────────────┘\n'
+      ;;
+    set-lab-matrix)
+      local matrix="${1:-}"
+      [[ -n "$matrix" ]] || { err "用法: $0 models set-lab-matrix <matrix> [--apply]"; exit 1; }
+      solar_set_lab_builder_matrix "$matrix"
+      ok "已写入 lab builder 模型矩阵: $matrix"
+      if [[ "${2:-}" == "--apply" ]]; then
+        ensure_parallel_builder_lab "$(pwd)"
+        ok "已按配置刷新 Builder Lab"
+      else
+        log "生效方式: solar-harness models apply-lab 或重新运行 solar-harness extend"
+      fi
+      ;;
+    apply-lab)
+      ensure_parallel_builder_lab "$(pwd)"
+      ;;
+    refresh-labels)
+      configure_product_delivery_labels
+      configure_builder_lab_labels
+      ;;
+    help|--help|-h)
+      echo "Solar Harness Models"
+      echo ""
+      echo "Usage:"
+      echo "  $0 models show"
+      echo "  $0 models set-lab-matrix glm,glm,glm,anthropic-sonnet [--apply]"
+      echo "  $0 models apply-lab"
+      echo "  $0 models refresh-labels"
+      ;;
+    *)
+      err "Unknown models subcommand: $subcmd"; exit 1
+      ;;
+  esac
+}
+
 # ---- Main ----
 
 case "${1:-start}" in
@@ -1797,6 +1867,7 @@ print(json.dumps({
     ;;
   kill|stop) kill_harness ;;
   扩展|extend) start_extension "${2:-$(pwd)}" ;;
+  models) shift; do_models_command "$@" ;;
   sprint)
     [[ -z "${2:-}" ]] && { err "用法: $0 sprint \"需求描述\""; exit 1; }
     new_sprint "$2"
@@ -2210,7 +2281,9 @@ print(json.dumps({
     case "${1:-match}" in
       match) shift; python3 "$_intent_py" match "$@" ;;
       learn) shift; python3 "$_intent_py" learn "$@" ;;
-      *) err "用法: solar-harness intent <match|learn> [opts]"; exit 1 ;;
+      audit) shift; python3 "$_intent_py" audit "$@" ;;
+      summarize) shift; python3 "$_intent_py" summarize "$@" ;;
+      *) err "用法: solar-harness intent <match|learn|audit|summarize> [opts]"; exit 1 ;;
     esac
     ;;
   graph)
