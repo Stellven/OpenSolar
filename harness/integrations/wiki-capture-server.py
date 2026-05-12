@@ -94,6 +94,24 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def root_raw_ingest_candidate(path: Path) -> bool:
+    """Only auto-ingest real root-level raw notes; skip smoke/test sentinels."""
+    name = path.name.lower()
+    if name.startswith("."):
+        return False
+    if name.startswith("mirage-smoke") or "smoke" in name or "test" in name:
+        return False
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return False
+    if len(text.strip()) < 1000 and not text.startswith("---"):
+        return False
+    if text.startswith("---"):
+        return any(marker in text[:1200] for marker in ("topic:", "artifact_type:", "source: codex", "source: web-capture"))
+    return len(text.strip()) >= 1000
+
+
 def clean_content(text: str) -> str:
     text = html.unescape(text)
     text = text.replace("\r\n", "\n").replace("\r", "\n")
@@ -153,6 +171,28 @@ def dispatch_status(path: str | Path) -> str:
         return ""
     match = re.search(r"^status:\s*(\S+)\s*$", text, flags=re.MULTILINE)
     return match.group(1) if match else ""
+
+
+def existing_dispatch_for_source(source_path: Path) -> dict:
+    """Return the newest dispatch that already references source_path."""
+    source = str(source_path)
+    if not DISPATCH_DIR.exists():
+        return {}
+    matches = []
+    for path in DISPATCH_DIR.glob("wiki-ingest-*.md"):
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+        if f"source={source}" not in text and f"source: {source}" not in text:
+            continue
+        status = dispatch_status(path)
+        matches.append({"path": str(path), "status": status, "mtime": path.stat().st_mtime})
+    if not matches:
+        return {}
+    terminal_rank = {"completed": 5, "skipped": 4, "running": 3, "dispatched": 2, "pending": 2, "failed": 1}
+    matches.sort(key=lambda item: (terminal_rank.get(item["status"], 0), item["mtime"]), reverse=True)
+    return matches[0]
 
 
 def run_wiki_dispatch(dispatch_file: str, lab_builder: int = 1) -> dict:
@@ -448,6 +488,7 @@ def scan_once(limit: int = 4) -> dict:
     lab_builder = int(state.get("next_lab_builder", 1) or 1)
 
     source_paths = [
+        *(p for p in RAW_ROOT.glob("*.md") if p.is_file() and root_raw_ingest_candidate(p)),
         *WEB_CAPTURE_DIR.glob("*.md"),
         *(p for p in UPLOAD_DIR.iterdir() if p.is_file() and not p.name.startswith(".")),
         *(p for p in DB_EXPORT_DIR.rglob("*.md") if p.is_file() and not p.name.startswith(".")),
@@ -457,6 +498,16 @@ def scan_once(limit: int = 4) -> dict:
             break
         digest = sha256(path)
         rec = captures.get(str(path), {})
+        existing = existing_dispatch_for_source(path)
+        if not rec and existing and existing.get("status") in {"completed", "skipped", "running", "pending", "dispatched"}:
+            captures[str(path)] = {
+                "status": existing.get("status"),
+                "content_hash": digest,
+                "source_path": str(path),
+                "dispatch_file": existing.get("path", ""),
+                "deduped_at": utc_now(),
+            }
+            continue
         if rec.get("content_hash") == digest:
             rec_status = rec.get("status")
             dispatch_file = rec.get("dispatch_file") or ""

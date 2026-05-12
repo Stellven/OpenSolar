@@ -47,5 +47,28 @@ footer="$(
 )"
 assert_contains "$footer" "模型:Sonnet" "footer shows actual model, not host title/local label"
 
+pm_cfg="$(bash "$HARNESS_DIR/lib/persona-config.sh" --print-config pm)"
+planner_cfg="$(bash "$HARNESS_DIR/lib/persona-config.sh" --print-config planner)"
+evaluator_cfg="$(bash "$HARNESS_DIR/lib/persona-config.sh" --print-config evaluator)"
+assert_contains "$pm_cfg" "MODEL_FLAG='--model sonnet'" "PM avoids broken Opus alias"
+assert_contains "$planner_cfg" "MODEL_FLAG='--model sonnet'" "planner avoids broken Opus alias"
+assert_contains "$evaluator_cfg" "MODEL_FLAG='--model sonnet'" "evaluator avoids broken Opus alias"
+assert_contains "$pm_cfg" "DISPLAY_MODEL='Claude Sonnet (Anthropic)'" "PM display shows configured Sonnet route"
+
+tmp_cfg="$(mktemp)"
+python3 - "$HARNESS_DIR/config/solar-user-config.json" "$tmp_cfg" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+data.setdefault("models", {})["pm"] = "opus"
+Path(sys.argv[2]).write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+pm_opus_guard="$(SOLAR_USER_CONFIG="$tmp_cfg" bash "$HARNESS_DIR/lib/persona-config.sh" --print-config pm)"
+rm -f "$tmp_cfg"
+assert_contains "$pm_opus_guard" "MODEL_FLAG='--model sonnet'" "Opus-configured PM is guarded to Sonnet"
+assert_contains "$pm_opus_guard" "Opus 1210 guard" "Opus health guard is visible when config requests Opus"
+
 printf '=== RESULT: PASS=%d FAIL=%d ===\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]]

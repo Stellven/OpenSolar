@@ -74,6 +74,44 @@ _infer_auth_source_for_base_url() {
   esac
 }
 
+_normalize_main_model_alias() {
+  printf '%s' "${1:-sonnet}" | tr '[:upper:]' '[:lower:]' | xargs
+}
+
+_persona_model_alias() {
+  local persona="$1"
+  local default_value="${2:-sonnet}"
+  if command -v solar_persona_model >/dev/null 2>&1; then
+    _normalize_main_model_alias "$(solar_persona_model "$persona" "$default_value")"
+  else
+    _normalize_main_model_alias "$default_value"
+  fi
+}
+
+_configure_anthropic_persona_model() {
+  local alias="$(_normalize_main_model_alias "${1:-sonnet}")"
+  case "$alias" in
+    opus|claude-opus|anthropic-opus|claude-opus-*)
+      # 2026-05-12 live smoke: Claude Code 2.1.112 returns API 400 code=1210
+      # for Opus aliases on this machine while Sonnet succeeds. Treat Opus as
+      # unhealthy until an explicit model smoke promotes it again.
+      model_flag="--model sonnet"
+      display_model="Claude Sonnet (Anthropic, Opus 1210 guard)"
+      ;;
+    sonnet|anthropic-sonnet|claude|claude-sonnet|anthropic)
+      model_flag="--model sonnet"
+      display_model="Claude Sonnet (Anthropic)"
+      ;;
+    *)
+      # Unknown main-screen model aliases are unsafe for production panes.
+      # Fail closed to the verified native Claude route instead of launching a
+      # pane that later dies with an opaque API 400.
+      model_flag="--model sonnet"
+      display_model="Claude Sonnet (Anthropic, unknown alias '${alias}' guarded)"
+      ;;
+  esac
+}
+
 _lab_builder_model_for_slot() {
   local slot="${SOLAR_BUILDER_SLOT:-lab-builder-1}"
   local slot_num="${slot##*-}"
@@ -132,12 +170,11 @@ get_persona_config() {
   case "$persona" in
     planner)
       cn="规划者"
-      model_flag="--model opus"
+      _configure_anthropic_persona_model "$(_persona_model_alias planner sonnet)"
       # planner 直连 Anthropic, 清掉 Zhipu env
       base_url=""
       auth_token=""
       tool_flag="--allowedTools Read Bash Grep Glob"
-      display_model="Claude Opus (Anthropic)"
       startup_token="solar"
       proxy_check="1"
       ;;
@@ -157,42 +194,37 @@ get_persona_config() {
     evaluator)
       cn="审判官"
       # Product Delivery 的 pane3 是主评审通道，优先稳定性。
-      # Zhipu Anthropic 兼容层近期在 evaluator 路径上出现 1210，先固定回 Opus。
-      model_flag="--model opus"
+      _configure_anthropic_persona_model "$(_persona_model_alias evaluator sonnet)"
       base_url=""
       auth_token=""
-      display_model="Claude Opus (Anthropic)"
       tool_flag="--allowedTools Read Bash Grep Glob Write"
       startup_token=""
       proxy_check="0"
       ;;
     pm)
       cn="产品经理"
-      model_flag="--model opus"
+      _configure_anthropic_persona_model "$(_persona_model_alias pm sonnet)"
       base_url=""
       auth_token=""
       tool_flag="--allowedTools Read Bash Grep Glob Write"
-      display_model="Claude Opus (Anthropic)"
       startup_token=""
       proxy_check="1"
       ;;
     architect)
       cn="架构师"
-      model_flag="--model opus"
+      _configure_anthropic_persona_model "$(_persona_model_alias architect sonnet)"
       base_url=""
       auth_token=""
       tool_flag="--allowedTools Read Bash Grep Glob Write Edit"
-      display_model="Claude Opus (Anthropic)"
       startup_token=""
       proxy_check="1"
       ;;
     second-builder)
-      cn="架构师(opus)"
-      model_flag="--model opus"
+      cn="架构师(sonnet)"
+      _configure_anthropic_persona_model "$(_persona_model_alias second-builder sonnet)"
       base_url=""
       auth_token=""
       tool_flag="--allowedTools Read Bash Grep Glob Write Edit"
-      display_model="Claude Opus (Anthropic)"
       startup_token=""
       proxy_check="1"
       ;;
@@ -264,10 +296,9 @@ get_persona_config() {
         extra_flags="$(_zhipu_coding_plan_flags)"
         display_model="GLM-5.1 (智谱)"
       else
-        model_flag="--model opus"
+        _configure_anthropic_persona_model "$(_persona_model_alias lab-evaluator sonnet)"
         base_url=""
         auth_token=""
-        display_model="Claude Opus (fallback)"
       fi
       tool_flag="--allowedTools Read Bash Grep Glob Write"
       startup_token=""
@@ -283,10 +314,9 @@ get_persona_config() {
         extra_flags="$(_zhipu_coding_plan_flags)"
         display_model="GLM-5.1 (智谱)"
       else
-        model_flag="--model opus"
+        _configure_anthropic_persona_model "$(_persona_model_alias observer sonnet)"
         base_url=""
         auth_token=""
-        display_model="Claude Opus (fallback)"
       fi
       tool_flag="--allowedTools Read Bash Grep Glob"
       startup_token=""
@@ -302,10 +332,9 @@ get_persona_config() {
         extra_flags="$(_zhipu_coding_plan_flags)"
         display_model="GLM-5.1 (智谱)"
       else
-        model_flag="--model opus"
+        _configure_anthropic_persona_model "$(_persona_model_alias "$persona" sonnet)"
         base_url=""
         auth_token=""
-        display_model="Claude Opus (fallback)"
       fi
       tool_flag=""
       startup_token=""
@@ -484,6 +513,35 @@ for item in reversed(deduped[:3]):
     tags_str = ','.join(item.get('tags', []))
     print(f'- [{conf:.1f}] {item.get(\"lesson\", \"\")} ({tags_str})')
 " "$persona" "$lessons_file" 2>/dev/null
+}
+
+# ── Runtime Policy: 强制交互式 pane 走统一知识上下文 ─────────────────────
+inject_runtime_policy() {
+  local persona="$1"
+  cat <<'EOF'
+
+## Solar Runtime Context Policy (Mandatory)
+
+你运行在 Solar-Harness pane 内。无论当前 persona 是 PM、Planner、Builder、Evaluator 还是 Lab Builder，只要收到用户直接输入、需求分析、技术研究、架构设计、调试诊断、知识库问题或 Solar/Harness 运维问题，第一步必须先调用统一知识入口：
+
+```bash
+solar-harness context inject --query "<把用户原始问题简洁转写到这里>" --format markdown
+```
+
+这个命令是默认知识库入口，背后包含 Mirage VFS + QMD solar-wiki + Obsidian Vault + Solar DB。你必须把它作为主检索路径。
+
+硬性规则：
+- 不得把 `sqlite3 ~/.solar/solar.db ...` 当作第一步或唯一知识库查询。
+- 不得直接跳到 Web Search；必须先跑 `solar-harness context inject`，再按需要补充 web 或 sqlite。
+- 如果 context inject 有命中，回答/brief/plan/handoff/eval 中必须体现“已使用 Solar Unified Context”，并引用关键命中来源。
+- 如果 context inject 返回无命中或 degraded sources，必须说明降级，然后才能用 sqlite、grep、qmd-search、web search 作为补充。
+- 直接 sqlite 查询只允许作为二级验证或精确表查询；它不能替代 Mirage/QMD/Obsidian 默认路径。
+- 处理 dispatch 文件时，如果文件中已经有 `<solar-unified-context>`，可复用；如果没有，先运行上面的 context inject。
+
+可见性要求：
+- 在最终输出或 handoff/eval 中写一行：`Knowledge Context: solar-harness context inject used`。
+- 如果未使用，必须写明失败原因；否则视为违反 Solar-Harness 默认能力使用规则。
+EOF
 }
 
 # --print-config CLI 接口

@@ -2253,7 +2253,8 @@ print(json.dumps({
     case "${1:-audit}" in
       audit)        shift; python3 "$_dp_audit" audit "$@" ;;
       repair-state) shift; python3 "$_dp_audit" repair-state "$@" ;;
-      *) err "用法: solar-harness data-plane <audit|repair-state> [--json] [--dry-run] [--verbose]"; exit 1 ;;
+      refresh-ledger) shift; python3 "$_dp_audit" refresh-ledger "$@" ;;
+      *) err "用法: solar-harness data-plane <audit|repair-state|refresh-ledger> [--json] [--dry-run] [--verbose]"; exit 1 ;;
     esac
     ;;
   skills)
@@ -2264,14 +2265,17 @@ print(json.dumps({
       inventory)     shift; python3 "$_skills_py" inventory "$@" ;;
       doctor)        shift; python3 "$_skills_py" doctor "$@" ;;
       pane-status)   shift; python3 "$_skills_py" pane-status "$@" ;;
+      readiness)     shift; python3 "$_skills_py" readiness "$@" ;;
+      certify|certification|cert) shift; python3 "$_skills_py" certify "$@" ;;
       inject)        shift; python3 "$_skills_py" inject "$@" ;;
+      effect-scan)   shift; python3 "$_skills_py" effect-scan "$@" ;;
       native-extract) shift; python3 "$_skills_py" native-extract "$@" ;;
       registry)      shift; python3 "$_skills_py" registry "$@" ;;
       eval)          shift; python3 "$_skills_py" eval "$@" ;;
       promote)       shift; python3 "$_skills_py" promote "$@" ;;
       rollback)      shift; python3 "$_skills_py" rollback "$@" ;;
       export)        shift; python3 "$_skills_py" export "$@" ;;
-      *) err "用法: solar-harness skills <inventory|doctor|export|eval|promote|rollback|registry> [opts]"; exit 1 ;;
+      *) err "用法: solar-harness skills <inventory|doctor|readiness|certify|inject|effect-scan|export|eval|promote|rollback|registry> [opts]"; exit 1 ;;
     esac
     ;;
   intent)
@@ -2944,9 +2948,9 @@ PY
         ;;
       sync-vault)
         # S2.5: Index /Users/sihaoli/Knowledge (or --vault PATH) into Solar DB
-        local _indexer="${HARNESS_DIR}/lib/obsidian-vault-indexer.py"
-        local _sv_vault="${OBSIDIAN_VAULT_PATH:-$HOME/Knowledge}"
-        local _sv_args=()
+        _indexer="${HARNESS_DIR}/lib/obsidian-vault-indexer.py"
+        _sv_vault="${OBSIDIAN_VAULT_PATH:-$HOME/Knowledge}"
+        _sv_args=()
         while [[ $# -gt 0 ]]; do
           case "$1" in
             --vault) [[ -z "${2:-}" ]] && { err "--vault requires a path"; exit 1; }

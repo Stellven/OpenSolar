@@ -96,6 +96,35 @@ solar_lab_builder_matrix() {
   solar_config_json_get "models.lab_builder_matrix" "$SOLAR_DEFAULT_LAB_BUILDER_MATRIX"
 }
 
+solar_persona_model() {
+  local persona="$1"
+  local default_value="${2:-sonnet}"
+  local key=""
+  case "$persona" in
+    pm) key="models.pm" ;;
+    planner) key="models.planner" ;;
+    builder) key="models.builder" ;;
+    evaluator) key="models.evaluator" ;;
+    architect) key="models.architect" ;;
+    second-builder) key="models.second_builder" ;;
+    lab-evaluator) key="models.lab_evaluator" ;;
+    observer) key="models.observer" ;;
+    *) key="models.${persona}" ;;
+  esac
+
+  local value=""
+  value="$(solar_config_json_get "$key" "")"
+  if [[ -z "$value" && "$persona" == "pm" ]]; then
+    value="$(solar_config_json_get "models.planner" "")"
+  elif [[ -z "$value" && "$persona" == "architect" ]]; then
+    value="$(solar_config_json_get "models.planner" "")"
+  elif [[ -z "$value" && "$persona" == "second-builder" ]]; then
+    value="$(solar_config_json_get "models.builder" "")"
+  fi
+
+  printf '%s\n' "${value:-$default_value}"
+}
+
 solar_set_lab_builder_matrix() {
   local matrix="$1"
   if ! solar_validate_lab_builder_matrix "$matrix"; then

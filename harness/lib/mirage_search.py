@@ -357,6 +357,33 @@ def _dedup_key(hit: dict[str, Any]) -> str:
     return f"{p}||{s}"
 
 
+def _hit_text(hit: dict[str, Any]) -> str:
+    return " ".join(
+        str(hit.get(k, "") or "").lower()
+        for k in ("path", "mount", "source_type", "provenance", "snippet")
+    )
+
+
+def _layer_priority(hit: dict[str, Any]) -> int:
+    text = _hit_text(hit)
+    if "qmd://solar-wiki/synthesis/" in text or "/knowledge/synthesis/" in text or "/synthesis/" in text:
+        return 0
+    if "qmd://solar-wiki/concepts/" in text or "/knowledge/concepts/" in text or "/concepts/" in text:
+        return 1
+    if "qmd://solar-wiki/references/" in text or "/knowledge/references/" in text or "/references/" in text:
+        return 2
+    if any(f"qmd://solar-wiki/{bucket}/" in text or f"/knowledge/{bucket}/" in text or f"/{bucket}/" in text
+           for bucket in ("entities", "projects", "skills", "theses", "timelines", "contradictions", "indexes")):
+        return 3
+    if "qmd://solar-wiki/raw/" in text or "/knowledge/_raw/" in text or "/_raw/" in text or "/raw/" in text:
+        return 80
+    return 40
+
+
+def _source_priority(hit: dict[str, Any]) -> int:
+    return {"qmd": 0, "solar_db": 1, "mirage_path": 2}.get(str(hit.get("source_type", "")), 9)
+
+
 def unified_search(query: str,
                    max_hits: int = DEFAULT_MAX_HITS,
                    max_chars: int = DEFAULT_MAX_CHARS,
@@ -417,8 +444,9 @@ def unified_search(query: str,
             seen.add(key)
             unique.append(h)
 
-    # Sort by score descending
-    unique.sort(key=lambda h: h.get("score_or_rank", 0.0), reverse=True)
+    # Prefer compiled knowledge layers; keep raw material as evidence, not the
+    # default synthesis context when both are available.
+    unique.sort(key=lambda h: (_layer_priority(h), _source_priority(h), -float(h.get("score_or_rank", 0.0) or 0.0)))
 
     # Enforce hit budget
     hits = unique[:max_hits]
