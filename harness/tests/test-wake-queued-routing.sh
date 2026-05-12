@@ -22,7 +22,9 @@ assert queued < drafting < wildcard
 assert "wake_promoted_queued_to_planner" in s
 assert "wake_promoted_queued_to_builder" in s
 assert "wake_promoted_queued_to_pm" in s
-assert 'd["bypass_pm"] = True' in s[queued:drafting]
+assert "runtime_status.py" in s[queued:drafting]
+assert '"bypass_pm":true' in s[queued:drafting]
+assert '"auto_held":false' in s[queued:drafting]
 assert 'target_pane="$LIVE_PLANNER"' in s[queued:drafting]
 assert 'target_pane="$LIVE_BUILDER"' in s[queued:drafting]
 assert 'target_pane="$LIVE_PM"' in s[queued:drafting]

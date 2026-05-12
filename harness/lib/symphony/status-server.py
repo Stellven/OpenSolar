@@ -35,6 +35,7 @@ from pathlib import Path
 # ── Paths ──
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", str(Path.home() / ".solar" / "harness")))
 SPRINTS_DIR = HARNESS_DIR / "sprints"
+SESSIONS_DIR = HARNESS_DIR / "sessions"
 EVENTS_DIR = HARNESS_DIR / "events"
 ALL_EVENTS = EVENTS_DIR / "all.jsonl"
 COORD_STATE = HARNESS_DIR / ".coordinator-state"
@@ -82,6 +83,14 @@ def _read_jsonl(path: Path, limit: int = 50, sprint_id: str = "", filter_synthet
     except OSError:
         return []
     return lines[-limit:]
+
+
+def _runtime_events_path(sprint_id: str) -> Path:
+    """Prefer session-log v2 events, fall back to legacy sprint events."""
+    session_path = SESSIONS_DIR / sprint_id / "events.jsonl"
+    if session_path.exists():
+        return session_path
+    return SPRINTS_DIR / f"{sprint_id}.events.jsonl"
 
 
 def _safe_rel(path: Path, root: Path) -> str:
@@ -2260,7 +2269,7 @@ class StatusHandler(BaseHTTPRequestHandler):
             except ValueError:
                 limit = 50
             if sprint_id:
-                src = SPRINTS_DIR / f"{sprint_id}.events.jsonl"
+                src = _runtime_events_path(sprint_id)
             else:
                 src = ALL_EVENTS
             events = _read_jsonl(src, limit=limit, sprint_id="")

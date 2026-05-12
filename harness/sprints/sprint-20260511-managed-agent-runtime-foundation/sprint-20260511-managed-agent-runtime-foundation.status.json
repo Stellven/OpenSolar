@@ -179,5 +179,8 @@
   "knowledge_ingest_dispatch": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260511-managed-agent-runtime-foundation.dispatch.md",
   "knowledge_exported_at": "2026-05-11T19:48:45Z",
   "knowledge_ingested_at": null,
-  "knowledge_export_error": null
+  "knowledge_export_error": null,
+  "event_count": 80,
+  "last_event_ts": "2026-05-11T20:54:06Z",
+  "projected_at": "2026-05-11T20:54:06Z"
 }

@@ -15,6 +15,7 @@ import json
 import os
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 HARNESS_DIR = os.path.expanduser("~/.solar/harness")
@@ -91,7 +92,7 @@ def _check_projection_drift(sprint_id: str) -> Dict[str, Any]:
     sys.path.insert(0, os.path.dirname(__file__))
     try:
         from projection_engine import ProjectionEngine
-        engine = ProjectionEngine(sprint_id)
+        engine = ProjectionEngine(sprint_id, harness_dir=HARNESS_DIR)
         state = engine.project()
         return {
             "ok": not state.drift_detected,
@@ -108,7 +109,7 @@ def _check_duplicate_commands(sprint_id: str) -> Dict[str, Any]:
     sys.path.insert(0, os.path.dirname(__file__))
     try:
         from projection_engine import ProjectionEngine
-        engine = ProjectionEngine(sprint_id)
+        engine = ProjectionEngine(sprint_id, harness_dir=HARNESS_DIR)
         state = engine.project()
         dups = state.duplicate_commands
         return {
@@ -125,7 +126,7 @@ def _check_stale_activities(sprint_id: str) -> Dict[str, Any]:
     sys.path.insert(0, os.path.dirname(__file__))
     try:
         from projection_engine import ProjectionEngine
-        engine = ProjectionEngine(sprint_id)
+        engine = ProjectionEngine(sprint_id, harness_dir=HARNESS_DIR)
         state = engine.project()
         stale = state.stale_activities
         return {
@@ -170,6 +171,18 @@ def doctor_sprint(
     stale_threshold_minutes: int = 60,
 ) -> Dict[str, Any]:
     """Run all checks for one sprint and return a report dict."""
+    # Default adoption path: every doctor pass first mirrors legacy sprint
+    # artifacts into session-log v2. This makes doctor a runtime gate, not a
+    # passive linter that can silently ignore old-only state.
+    try:
+        sys.path.insert(0, os.path.dirname(__file__))
+        from runtime_bridge import adopt_sprint
+        adopt_sprint(sprint_id, harness_dir=Path(HARNESS_DIR))
+    except Exception:
+        # Individual checks below will surface event/projection issues. Doctor
+        # must remain fail-open enough to report corrupt legacy state.
+        pass
+
     checks = {
         "event_log_health": _check_event_log_health(sprint_id),
         "projection_drift":  _check_projection_drift(sprint_id),

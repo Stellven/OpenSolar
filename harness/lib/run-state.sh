@@ -37,34 +37,7 @@ rs_transition() {
   [[ -z "$extra_json" ]] && extra_json="{}"
   local sf="$SPRINTS_DIR/${sid}.status.json"
   [[ -f "$sf" ]] || { echo "rs_transition: sprint not found: $sid" >&2; return 1; }
-
-  python3 - "$sf" "$new_status" "$event" "$by" "$extra_json" <<'PY'
-import json, sys, os, tempfile, datetime
-sf, new_status, event, by, extra_json = sys.argv[1:]
-d = json.load(open(sf))
-old_status = d.get('status', '')
-now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-d['status'] = new_status
-d.update({
-    'approved': {'phase': 'plan_reviewed', 'handoff_to': 'builder', 'target_role': 'builder'},
-    'reviewing': {'phase': 'implementation_complete', 'handoff_to': 'evaluator', 'target_role': 'evaluator'},
-    'passed': {'phase': 'eval_passed', 'handoff_to': '', 'target_role': ''},
-    'failed_review': {'phase': 'eval_failed', 'handoff_to': 'builder', 'target_role': 'builder'},
-}.get(new_status, {}))
-d['updated_at'] = now
-hist = {'ts': now, 'event': event, 'by': by}
-try:
-    extra = json.loads(extra_json) if extra_json else {}
-    hist.update(extra)
-except json.JSONDecodeError:
-    pass
-d.setdefault('history', []).append(hist)
-fd, tmp = tempfile.mkstemp(dir=os.path.dirname(sf))
-with os.fdopen(fd, 'w') as f:
-    json.dump(d, f, indent=2)
-os.rename(tmp, sf)
-print(f'OK: {os.path.basename(sf).replace(".status.json","")} {old_status} -> {new_status} (round={d.get("round",0)})')
-PY
+  python3 "${HOME}/.solar/harness/lib/runtime_status.py" "$sf" "$new_status" "$event" "$by" "$extra_json"
 }
 
 # 状态推进 + round 递增 (handoff/eval-fail 专用)
@@ -74,36 +47,7 @@ rs_transition_with_round_bump() {
   [[ -z "$extra_json" ]] && extra_json="{}"
   local sf="$SPRINTS_DIR/${sid}.status.json"
   [[ -f "$sf" ]] || { echo "rs_transition_with_round_bump: sprint not found: $sid" >&2; return 1; }
-
-  python3 - "$sf" "$new_status" "$event" "$by" "$extra_json" <<'PY'
-import json, sys, os, tempfile, datetime
-sf, new_status, event, by, extra_json = sys.argv[1:]
-d = json.load(open(sf))
-old_status = d.get('status', '')
-old_round = d.get('round', 0)
-now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-d['status'] = new_status
-d.update({
-    'approved': {'phase': 'plan_reviewed', 'handoff_to': 'builder', 'target_role': 'builder'},
-    'reviewing': {'phase': 'implementation_complete', 'handoff_to': 'evaluator', 'target_role': 'evaluator'},
-    'passed': {'phase': 'eval_passed', 'handoff_to': '', 'target_role': ''},
-    'failed_review': {'phase': 'eval_failed', 'handoff_to': 'builder', 'target_role': 'builder'},
-}.get(new_status, {}))
-d['round'] = old_round + 1
-d['updated_at'] = now
-hist = {'ts': now, 'event': event, 'by': by, 'round': d['round']}
-try:
-    extra = json.loads(extra_json) if extra_json else {}
-    hist.update(extra)
-except json.JSONDecodeError:
-    pass
-d.setdefault('history', []).append(hist)
-fd, tmp = tempfile.mkstemp(dir=os.path.dirname(sf))
-with os.fdopen(fd, 'w') as f:
-    json.dump(d, f, indent=2)
-os.rename(tmp, sf)
-print(f'OK: {os.path.basename(sf).replace(".status.json","")} {old_status} -> {new_status} (round={old_round}->{old_round+1})')
-PY
+  python3 "${HOME}/.solar/harness/lib/runtime_status.py" "$sf" "$new_status" "$event" "$by" "$extra_json" --bump-round
 }
 
 # ─── 工具 ───
