@@ -76,7 +76,7 @@ send_ready_token() {
     local content
     content=$(tmux capture-pane -t "$pane" -p 2>/dev/null | tail -8)
     if (( bypass_accepted == 0 )) && echo "$content" | grep -qiE 'Bypass Permissions mode|1\. No, exit|2\. Yes, I accept'; then
-      tmux send-keys -t "$pane" "2" Enter
+      tmux send-keys -t "$pane" Down Enter
       bypass_accepted=1
       sleep 1
       attempt=$((attempt + 1))
@@ -181,7 +181,7 @@ write_runtime_marker
 CLAUDE_CMD="$CLAUDE_BIN"
 SOLAR_CLAUDE_BYPASS="${SOLAR_CLAUDE_BYPASS:-1}"
 if [[ "$SOLAR_CLAUDE_BYPASS" == "1" ]]; then
-  CLAUDE_CMD="$CLAUDE_BIN --dangerously-skip-permissions"
+  CLAUDE_CMD="$CLAUDE_BIN --permission-mode bypassPermissions"
 fi
 [[ -n "$MODEL_FLAG" ]] && CLAUDE_CMD="$CLAUDE_CMD $MODEL_FLAG"
 [[ -n "$TOOL_FLAG" ]] && CLAUDE_CMD="$CLAUDE_CMD $TOOL_FLAG"
