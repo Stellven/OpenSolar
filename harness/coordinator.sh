@@ -1751,6 +1751,12 @@ emit_event() {
   [[ -z "$payload" ]] && payload="{}"
   # Write to structured events (lib/events.sh events_emit)
   events_emit "$actor" "$event" "$sev" "$sid" "$payload" 2>/dev/null || true
+  # Managed Agent Runtime adoption: dual-write legacy coordinator events into
+  # session-log v2 so projection/replay can recover the sprint without relying
+  # on tmux pane scrollback or status.json as the only truth source.
+  if [[ -n "$sid" && -f "$HARNESS_DIR/lib/runtime_bridge.py" ]]; then
+    python3 "$HARNESS_DIR/lib/runtime_bridge.py" event "$sid" "$event" "$actor" "$payload" --quiet 2>/dev/null || true
+  fi
   # Also write to legacy session.sh event stream for backward compat
   bash "$SESSION_SH" append "$sid" "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"sid\":\"${sid}\",\"event\":\"${event}\",\"by\":\"${actor}\"}" &>/dev/null || true
 }
@@ -1776,6 +1782,17 @@ with os.fdopen(fd, 'w') as f:
     json.dump(d, f, indent=2, ensure_ascii=False)
 os.rename(tmp, sf)
 " 2>/dev/null || true
+}
+
+runtime_status_transition() {
+  local sid="$1" new_status="$2" event="$3" by="$4" extra_json="${5:-{}}" bump="${6:-0}"
+  local sf="$SPRINTS_DIR/${sid}.status.json"
+  [[ -f "$sf" ]] || return 1
+  if [[ "$bump" == "1" || "$bump" == "true" || "$bump" == "--bump-round" ]]; then
+    python3 "$HARNESS_DIR/lib/runtime_status.py" "$sf" "$new_status" "$event" "$by" "$extra_json" --bump-round >/dev/null 2>&1
+  else
+    python3 "$HARNESS_DIR/lib/runtime_status.py" "$sf" "$new_status" "$event" "$by" "$extra_json" >/dev/null 2>&1
+  fi
 }
 
 # ================================================================
@@ -2261,16 +2278,7 @@ gate_check() {
       if [[ -z "$req_file" ]]; then
         log "${R}门禁拦截: active 状态但 PRD 不存在${N}"
         dispatch_to_pm "$sid" "gate_missing_prd" "$SPRINTS_DIR/${sid}.dispatch.md" "门禁拦截：Sprint ${sid} 缺少 PM PRD。请先研究用户需求，写 ~/.solar/harness/sprints/${sid}.prd.md，再交给 Planner/架构师。"
-        python3 -c "
-import json, datetime
-sf='$sprint_dir/${sid}.status.json'
-d=json.load(open(sf))
-d['status']='drafting'
-d['phase']='spec'
-d['updated_at']=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-d.setdefault('history', []).append({'ts': d['updated_at'], 'event': 'active_blocked_missing_prd', 'by': 'coordinator'})
-json.dump(d,open(sf,'w'),indent=2,ensure_ascii=False)
-" 2>/dev/null
+        runtime_status_transition "$sid" "drafting" "active_blocked_missing_prd" "coordinator" '{"status_fields":{"phase":"spec","handoff_to":"pm","target_role":"pm"}}' || true
         return 1
       fi
       if [[ "$req_file" == "$sprint_dir/${sid}.prd.md" ]]; then
@@ -2278,32 +2286,14 @@ json.dump(d,open(sf,'w'),indent=2,ensure_ascii=False)
         if prd_err=$(validate_doc "prd" "$req_file"); then :; else
           log "${R}门禁拦截: PRD 结构不完整${N}"
           dispatch_to_pm "$sid" "gate_prd_schema" "$SPRINTS_DIR/${sid}.dispatch.md" "门禁拦截 (PRD Schema): ${prd_err}。请补全 ~/.solar/harness/sprints/${sid}.prd.md 后再交给 Planner。"
-          python3 -c "
-import json, datetime
-sf='$sprint_dir/${sid}.status.json'
-d=json.load(open(sf))
-d['status']='drafting'
-d['phase']='spec'
-d['updated_at']=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-d.setdefault('history', []).append({'ts': d['updated_at'], 'event': 'active_blocked_invalid_prd', 'by': 'coordinator'})
-json.dump(d,open(sf,'w'),indent=2,ensure_ascii=False)
-" 2>/dev/null
+          runtime_status_transition "$sid" "drafting" "active_blocked_invalid_prd" "coordinator" '{"status_fields":{"phase":"spec","handoff_to":"pm","target_role":"pm"}}' || true
           return 1
         fi
       fi
       if [[ ! -f "$sprint_dir/${sid}.plan.md" ]] && ! status_has_manual_override "$sprint_dir/${sid}.status.json"; then
         log "${R}门禁拦截: active 状态但 planner plan.md 不存在${N}"
         dispatch_to_planner "$sid" "gate_missing_plan" "$SPRINTS_DIR/${sid}.dispatch.md" "门禁拦截：Sprint ${sid} 已有 PM 需求，但缺少架构/Planner 计划。请读取 ${req_file} 和 contract.md，产出 plan.md 后再进入 active。"
-        python3 -c "
-import json, datetime
-sf='$sprint_dir/${sid}.status.json'
-d=json.load(open(sf))
-d['status']='drafting'
-d['phase']='prd_ready'
-d['updated_at']=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-d.setdefault('history', []).append({'ts': d['updated_at'], 'event': 'active_blocked_missing_plan', 'by': 'coordinator'})
-json.dump(d,open(sf,'w'),indent=2,ensure_ascii=False)
-" 2>/dev/null
+        runtime_status_transition "$sid" "drafting" "active_blocked_missing_plan" "coordinator" '{"status_fields":{"phase":"prd_ready","handoff_to":"planner","target_role":"planner"}}' || true
         return 1
       fi
       ;;
@@ -2313,26 +2303,14 @@ json.dump(d,open(sf,'w'),indent=2,ensure_ascii=False)
       if [[ ! -f "$sprint_dir/${sid}.plan.md" ]]; then
         log "${R}门禁拦截: planning 状态但 plan.md 不存在${N}"
         dispatch_to_builder "$sid" "gate_missing_plan" "$SPRINTS_DIR/${sid}.dispatch.md" "门禁拦截：你需要先写实现计划到 ~/.solar/harness/sprints/${sid}.plan.md 再更新状态为 planning。"
-        python3 -c "
-import json, datetime
-d=json.load(open('$sprint_dir/${sid}.status.json'))
-d['status']='active'
-d['updated_at']=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-json.dump(d,open('$sprint_dir/${sid}.status.json','w'),indent=2)
-" 2>/dev/null
+        runtime_status_transition "$sid" "active" "planning_blocked_missing_plan" "coordinator" '{}' || true
         return 1
       fi
       # Schema 校验
       local plan_err
       if plan_err=$(validate_doc "plan" "$sprint_dir/${sid}.plan.md"); then :; else
         dispatch_to_builder "$sid" "gate_plan_schema" "$SPRINTS_DIR/${sid}.dispatch.md" "门禁拦截 (Schema): plan.md 结构不完整。${plan_err} 请补全后重新提交。"
-        python3 -c "
-import json, datetime
-d=json.load(open('$sprint_dir/${sid}.status.json'))
-d['status']='active'
-d['updated_at']=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-json.dump(d,open('$sprint_dir/${sid}.status.json','w'),indent=2)
-" 2>/dev/null
+        runtime_status_transition "$sid" "active" "planning_blocked_invalid_plan" "coordinator" '{}' || true
         return 1
       fi
       ;;
@@ -2342,25 +2320,13 @@ json.dump(d,open('$sprint_dir/${sid}.status.json','w'),indent=2)
       if [[ ! -f "$sprint_dir/${sid}.handoff.md" ]]; then
         log "${R}门禁拦截: reviewing 状态但 handoff.md 不存在${N}"
         dispatch_to_builder "$sid" "gate_missing_handoff" "$SPRINTS_DIR/${sid}.dispatch.md" "门禁拦截：你需要先写 handoff 文档到 ~/.solar/harness/sprints/${sid}.handoff.md 再更新状态为 reviewing。"
-        python3 -c "
-import json, datetime
-d=json.load(open('$sprint_dir/${sid}.status.json'))
-d['status']='approved'
-d['updated_at']=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-json.dump(d,open('$sprint_dir/${sid}.status.json','w'),indent=2)
-" 2>/dev/null
+        runtime_status_transition "$sid" "approved" "reviewing_blocked_missing_handoff" "coordinator" '{}' || true
         return 1
       fi
       local handoff_err
       if handoff_err=$(validate_doc "handoff" "$sprint_dir/${sid}.handoff.md"); then :; else
         dispatch_to_builder "$sid" "gate_handoff_schema" "$SPRINTS_DIR/${sid}.dispatch.md" "门禁拦截 (Schema): handoff.md 结构不完整。${handoff_err} 请补全后重新提交。"
-        python3 -c "
-import json, datetime
-d=json.load(open('$sprint_dir/${sid}.status.json'))
-d['status']='approved'
-d['updated_at']=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-json.dump(d,open('$sprint_dir/${sid}.status.json','w'),indent=2)
-" 2>/dev/null
+        runtime_status_transition "$sid" "approved" "reviewing_blocked_invalid_handoff" "coordinator" '{}' || true
         return 1
       fi
       ;;
@@ -2370,38 +2336,20 @@ json.dump(d,open('$sprint_dir/${sid}.status.json','w'),indent=2)
       if [[ ! -f "$sprint_dir/${sid}.eval.md" ]]; then
         log "${R}门禁拦截: passed 但 eval.md 不存在${N}"
         dispatch_to_evaluator "$sid" "gate_missing_eval" "$SPRINTS_DIR/${sid}.dispatch.md" "门禁拦截：你需要先写评估报告到 ~/.solar/harness/sprints/${sid}.eval.md 再标记为 passed。"
-        python3 -c "
-import json, datetime
-d=json.load(open('$sprint_dir/${sid}.status.json'))
-d['status']='reviewing'
-d['updated_at']=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-json.dump(d,open('$sprint_dir/${sid}.status.json','w'),indent=2)
-" 2>/dev/null
+        runtime_status_transition "$sid" "reviewing" "passed_blocked_missing_eval" "coordinator" '{}' || true
         return 1
       fi
       local eval_err
       if eval_err=$(validate_doc "eval" "$sprint_dir/${sid}.eval.md"); then :; else
         dispatch_to_evaluator "$sid" "gate_eval_schema" "$SPRINTS_DIR/${sid}.dispatch.md" "门禁拦截 (Schema): eval.md 结构不完整。${eval_err} 请补全后重新提交。"
-        python3 -c "
-import json, datetime
-d=json.load(open('$sprint_dir/${sid}.status.json'))
-d['status']='reviewing'
-d['updated_at']=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-json.dump(d,open('$sprint_dir/${sid}.status.json','w'),indent=2)
-" 2>/dev/null
+        runtime_status_transition "$sid" "reviewing" "passed_blocked_invalid_eval" "coordinator" '{}' || true
         return 1
       fi
       # 检查 eval.md 中是否还有 FAIL 项
       if grep -qi 'FAIL' "$sprint_dir/${sid}.eval.md" 2>/dev/null && grep -qi '总判定.*FAIL' "$sprint_dir/${sid}.eval.md" 2>/dev/null; then
         log "${R}门禁拦截: eval.md 总判定为 FAIL 但状态标为 passed${N}"
         dispatch_to_evaluator "$sid" "gate_eval_fail" "$SPRINTS_DIR/${sid}.dispatch.md" "门禁拦截：eval.md 总判定为 FAIL，不能标记为 passed。请修正判定或让建设者修复 FAIL 项。"
-        python3 -c "
-import json, datetime
-d=json.load(open('$sprint_dir/${sid}.status.json'))
-d['status']='reviewing'
-d['updated_at']=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-json.dump(d,open('$sprint_dir/${sid}.status.json','w'),indent=2)
-" 2>/dev/null
+        runtime_status_transition "$sid" "reviewing" "passed_blocked_eval_fail" "coordinator" '{}' || true
         return 1
       fi
       ;;
@@ -2475,23 +2423,7 @@ handle_queued() {
   fi
 
   log "${G}Queued sprint ${sid} 阻塞已解除 → 推进 drafting/PM intake${N}"
-  python3 - "$sf" <<'PY' 2>/dev/null || true
-import datetime, json, sys
-sf = sys.argv[1]
-d = json.load(open(sf))
-now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-d["status"] = "drafting"
-d["phase"] = "spec"
-d["handoff_to"] = "pm"
-d["updated_at"] = now
-d.setdefault("history", []).append({
-    "ts": now,
-    "event": "queued_unblocked",
-    "by": "coordinator",
-    "note": "Auto-promoted queued sprint after blocker reached terminal state."
-})
-json.dump(d, open(sf, "w"), indent=2, ensure_ascii=False)
-PY
+  runtime_status_transition "$sid" "drafting" "queued_unblocked" "coordinator" '{"status_fields":{"phase":"spec","handoff_to":"pm","target_role":"pm"},"note":"Auto-promoted queued sprint after blocker reached terminal state."}' || true
   rollback_state_cache "$sid"
 }
 
@@ -2515,23 +2447,7 @@ PY
 
   if contract_has_bypass_pm "$sid" || [[ "$(get_field "$sf" "handoff_to")" =~ ^builder(_main)?$ ]]; then
     log "${G}Drafting bypass_pm/builder target → promote active builder without PM/Planner${N}"
-    python3 - "$sf" <<'PY' 2>/dev/null || true
-import datetime, json, sys
-sf=sys.argv[1]
-d=json.load(open(sf))
-now=datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-d["status"]="active"
-d["phase"]="planning_complete"
-d["handoff_to"]="builder"
-d["updated_at"]=now
-d.setdefault("history", []).append({
-    "ts": now,
-    "event": "drafting_bypass_pm_promoted_to_builder",
-    "by": "coordinator",
-    "note": "Strict drafting routing: bypass_pm/handoff_to builder must not route to PM or planner."
-})
-json.dump(d, open(sf, "w"), indent=2, ensure_ascii=False)
-PY
+    runtime_status_transition "$sid" "active" "drafting_bypass_pm_promoted_to_builder" "coordinator" '{"status_fields":{"phase":"planning_complete","handoff_to":"builder","target_role":"builder"},"note":"Strict drafting routing: bypass_pm/handoff_to builder must not route to PM or planner."}' || true
     rollback_state_cache "$sid"
     return 0
   fi
@@ -2660,16 +2576,7 @@ PY
   fi
 
   log "${G}Drafting sprint 已有 plan → 自动推进 active/planning_complete${N}"
-  python3 -c "
-import json, datetime
-sf='$sf'
-d=json.load(open(sf))
-d['status']='active'
-d['phase']='planning_complete'
-d['updated_at']=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-d.setdefault('history', []).append({'ts': d['updated_at'], 'event': 'planner_plan_completed', 'by': 'coordinator', 'note': 'Auto-promoted drafting sprint because plan.md exists.'})
-json.dump(d, open(sf, 'w'), indent=2, ensure_ascii=False)
-" 2>/dev/null || true
+  runtime_status_transition "$sid" "active" "planner_plan_completed" "coordinator" '{"status_fields":{"phase":"planning_complete","handoff_to":"builder","target_role":"builder"},"note":"Auto-promoted drafting sprint because plan.md exists."}' || true
 }
 
 auto_drive_drafting_sprints() {
@@ -2815,25 +2722,14 @@ import datetime, json, pathlib, sys
 sf = pathlib.Path(sys.argv[1])
 slice_id, owner, dispatch_file = sys.argv[2], sys.argv[3], pathlib.Path(sys.argv[4]).name
 d = json.loads(sf.read_text())
-now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-d["status"] = "active"
-d["phase"] = f"{slice_id}_in_progress"
-d["handoff_to"] = owner
-d["updated_at"] = now
 sp = d.setdefault("slice_plan", {})
 item = sp.setdefault(slice_id, {})
 item["status"] = "in_progress"
 item["owner"] = owner
 item["dispatch"] = dispatch_file
-d.setdefault("history", []).append({
-    "ts": now,
-    "event": f"{slice_id}_builder_dispatched",
-    "by": "coordinator",
-    "dispatch": dispatch_file,
-    "note": "Auto-dispatched next slice after dependency eval passes."
-})
 sf.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n")
 PY
+  runtime_status_transition "$sid" "active" "${slice_id}_builder_dispatched" "coordinator" "{\"status_fields\":{\"phase\":\"${slice_id}_in_progress\",\"handoff_to\":\"${owner}\",\"target_role\":\"${owner}\"},\"dispatch\":\"$(basename "$dispatch_file")\",\"note\":\"Auto-dispatched next slice after dependency eval passes.\"}" || true
   emit_event "$sid" "slice_dispatched" "coordinator" "{\"slice\":\"${slice_id}\",\"owner\":\"${owner}\"}"
 }
 
@@ -3126,14 +3022,7 @@ ${contract_summary:-（请直接打开 contract.md 查看最新修订）}
 
 3. 写好后更新状态:
    \`\`\`bash
-   python3 -c \"
-   import json, datetime
-   sf='\$HOME/.solar/harness/sprints/${sid}.status.json'
-   d=json.load(open(sf))
-   d['status']='planning'
-   d['updated_at']=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-   json.dump(d,open(sf,'w'),indent=2)
-   \"
+   solar-harness runtime status ${sid} planning plan_submitted builder '{}'
    \`\`\`
 
 **先写计划，不要直接写代码。**"
@@ -3324,17 +3213,7 @@ ${chunk}
     return 0
   fi
 
-  python3 -c "
-import json, datetime
-d=json.load(open('$sf'))
-d['status']='building_parallel'
-d['parallel_expected_handoffs']=$success_count
-d['parallel_requested_builders']=$builder_count
-d['parallel_integrate_enabled']=True
-d['updated_at']=datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-d.setdefault('history',[]).append({'ts':d['updated_at'],'event':'mixture_dispatched','by':'coordinator','success_count':$success_count,'requested_builders':$builder_count})
-json.dump(d,open('$sf','w'),indent=2)
-" 2>/dev/null
+  runtime_status_transition "$sid" "building_parallel" "mixture_dispatched" "coordinator" "{\"status_fields\":{\"parallel_expected_handoffs\":${success_count},\"parallel_requested_builders\":${builder_count},\"parallel_integrate_enabled\":true},\"success_count\":${success_count},\"requested_builders\":${builder_count}}" || true
   emit_event "$sid" "mixture_dispatched" "coordinator" "{\"success_count\":${success_count},\"requested_builders\":${builder_count},\"dispatch_rcs\":\"${dispatch_rcs# }\"}"
 }
 
@@ -3398,15 +3277,7 @@ handle_building_parallel() {
     if ! bash "$HARNESS_DIR/lib/parallel-integrate.sh" "$sid" >> "$COORD_LOG" 2>&1; then
       log "${R}[parallel-integrate] ${sid}: 集成失败，已保留报告 ${SPRINTS_DIR}/${sid}.parallel-integrate.md${N}"
       emit_event "$sid" "parallel_integrate_failed" "coordinator" "{\"report\":\"${SPRINTS_DIR}/${sid}.parallel-integrate.md\"}"
-      python3 -c "
-import json, datetime
-d=json.load(open('$sf'))
-d['status']='needs_human_review'
-d['updated_at']=datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-d['parallel_integrate_report']='${SPRINTS_DIR}/${sid}.parallel-integrate.md'
-d.setdefault('history',[]).append({'ts':d['updated_at'],'event':'parallel_integrate_failed','by':'coordinator'})
-json.dump(d,open('$sf','w'),indent=2)
-" 2>/dev/null || true
+      runtime_status_transition "$sid" "needs_human_review" "parallel_integrate_failed" "coordinator" "{\"status_fields\":{\"parallel_integrate_report\":\"${SPRINTS_DIR}/${sid}.parallel-integrate.md\"}}" || true
       return 0
     fi
     emit_event "$sid" "parallel_integrated" "coordinator" "{\"report\":\"${SPRINTS_DIR}/${sid}.parallel-integrate.md\"}"
@@ -3634,25 +3505,15 @@ handle_failed_review() {
   local human_reason
   if human_reason=$(check_needs_human "$sid"); then
     log "${Y}检测到 @NEEDS_HUMAN: ${human_reason}${N}"
-    python3 -c "
-import json, datetime
-d=json.load(open('$sf'))
-d['status']='needs_human_review'
-d['updated_at']=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-json.dump(d,open('$sf','w'),indent=2)
-" 2>/dev/null
+    local human_json
+    human_json=$(python3 -c 'import json,sys; print(json.dumps({"reason": sys.argv[1]}, ensure_ascii=False))' "$human_reason" 2>/dev/null || echo '{}')
+    runtime_status_transition "$sid" "needs_human_review" "needs_human_marker_detected" "coordinator" "$human_json" || true
     return
   fi
 
 	  if [[ "$round" -ge 3 ]]; then
 	    log "${R}Sprint 已达最大轮次 (${round})，标记为 failed${N}"
-    python3 -c "
-import json, datetime
-d=json.load(open('$sf'))
-d['status']='failed'
-d['updated_at']=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-json.dump(d,open('$sf','w'),indent=2)
-" 2>/dev/null
+    runtime_status_transition "$sid" "failed" "failed_max_rounds" "coordinator" "{\"reason\":\"max_rounds\",\"round\":${round}}" || true
 
 	    # ── Remote notification (Sprint 20260427-214207) ──
 	    remote_notify "$sid" "failed" "{\"reason\":\"max_rounds\"}"
@@ -3719,13 +3580,7 @@ cat ~/.solar/harness/sprints/${sid}.eval.md
   _learn_from_eval "$sid"
 
   # 把状态改回 approved (跳过 plan 阶段，直接修)
-  python3 -c "
-import json, datetime
-d=json.load(open('$sf'))
-d['status']='approved'
-d['updated_at']=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-json.dump(d,open('$sf','w'),indent=2)
-" 2>/dev/null
+  runtime_status_transition "$sid" "approved" "failed_review_returned_to_builder" "coordinator" "{\"round\":${round}}" || true
 
   # D4: 尝试从 eval.json 提取失败项 (短路)
   local fail_info
@@ -4076,14 +3931,7 @@ handle_passed() {
     arch_done=$(get_field "$sf" "architect_verdict")
     if [[ -z "$arch_done" ]]; then
       log "${Y}deliberation 拓扑: evaluator PASS → architect 二审${N}"
-      python3 -c "
-import json, datetime
-sf='${sf}'
-d=json.load(open(sf))
-d['status']='architect_reviewing'
-d['updated_at']=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-json.dump(d,open(sf,'w'),indent=2)
-" 2>/dev/null || true
+      runtime_status_transition "$sid" "architect_reviewing" "deliberation_architect_second_review" "coordinator" '{}' || true
       return 0
     fi
   fi
@@ -4207,25 +4055,11 @@ handle_needs_human() {
 1. 修复合约: 编辑 ~/.solar/harness/sprints/${sid}.contract.md
 2. 继续 Sprint: 更新 status 为 active
    \`\`\`bash
-   python3 -c \"
-   import json, datetime
-   sf='\$HOME/.solar/harness/sprints/${sid}.status.json'
-   d=json.load(open(sf))
-   d['status']='active'
-   d['updated_at']=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-   json.dump(d,open(sf,'w'),indent=2)
-   \"
+   solar-harness runtime status ${sid} active human_continue planner '{}'
    \`\`\`
 3. 终止 Sprint:
    \`\`\`bash
-   python3 -c \"
-   import json, datetime
-   sf='\$HOME/.solar/harness/sprints/${sid}.status.json'
-   d=json.load(open(sf))
-   d['status']='failed'
-   d['updated_at']=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-   json.dump(d,open(sf,'w'),indent=2)
-   \"
+   solar-harness runtime status ${sid} failed human_stop planner '{}'
    \`\`\`
 
 注意: needs_human_review **不计入** 3 轮失败上限。"

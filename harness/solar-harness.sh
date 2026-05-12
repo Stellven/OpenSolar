@@ -542,13 +542,17 @@ kill_harness() {
     # Mark active sprints as interrupted
     for f in "$SPRINTS_DIR"/*.status.json; do
       [[ -f "$f" ]] || continue
-      python3 -c "
-import json
-with open('$f') as fh: d = json.load(fh)
-if d.get('status') in ('active','reviewing'):
-    d['status'] = 'interrupted'
-    with open('$f','w') as fh: json.dump(d, fh, indent=2)
-" 2>/dev/null
+      python3 - "$f" "$HARNESS_DIR/lib/runtime_status.py" <<'PY' 2>/dev/null || true
+import json, subprocess, sys
+status_path, runtime_status = sys.argv[1:]
+with open(status_path, encoding="utf-8") as fh:
+    data = json.load(fh)
+if data.get("status") in ("active", "reviewing"):
+    subprocess.run(
+        ["python3", runtime_status, status_path, "interrupted", "harness_killed", "solar-harness", "{}"],
+        check=False,
+    )
+PY
     done
     tmux kill-session -t "$SESSION_NAME"
     killed=1
@@ -905,6 +909,13 @@ wake_sprint() {
   local sf="$SPRINTS_DIR/${sid}.status.json"
   [[ -f "$sf" ]] || { err "Sprint 不存在: $sid"; exit 1; }
 
+  # Managed Agent Runtime adoption: before routing, mirror legacy artifacts into
+  # session-log v2 and refresh status.json from ProjectionEngine. This keeps
+  # wake recoverable from durable events while preserving legacy compatibility.
+  if [[ -f "$HARNESS_DIR/lib/runtime_bridge.py" ]]; then
+    python3 "$HARNESS_DIR/lib/runtime_bridge.py" adopt "$sid" --write-cache --quiet 2>/dev/null || true
+  fi
+
   local st phase handoff_to auto_held contract_bypass contract_handoff contract_target
   st=$(python3 -c "import json; print(json.load(open('$sf')).get('status',''))" 2>/dev/null)
   phase=$(python3 -c "import json; print(json.load(open('$sf')).get('phase',''))" 2>/dev/null || true)
@@ -1016,46 +1027,12 @@ else:
         ok "Sprint ${sid} 当前为 queued/auto_held，wake 不强推。请先人工解除 hold 或 activate。"
         return 0
       elif [[ "$contract_bypass" == "true" || "$handoff_to" =~ ^builder(_main)?$ || "$contract_handoff" =~ ^builder(_main)?$ || "$contract_target" =~ ^builder(_main)?$ || "$phase" == "planning_complete" ]]; then
-        python3 - "$sf" <<'PY' 2>/dev/null || true
-import datetime, json, sys
-sf = sys.argv[1]
-d = json.load(open(sf))
-now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-d["status"] = "active"
-d["phase"] = "planning_complete"
-d["handoff_to"] = "builder_main"
-d["bypass_pm"] = True
-d["auto_held"] = False
-d["updated_at"] = now
-d.setdefault("history", []).append({
-    "ts": now,
-    "event": "wake_promoted_queued_to_builder",
-    "by": "wake",
-    "note": "Queued sprint is implementation-ready; route to builder_main instead of unknown-status fallback."
-})
-json.dump(d, open(sf, "w"), indent=2, ensure_ascii=False)
-PY
+        python3 "$HARNESS_DIR/lib/runtime_status.py" "$sf" "active" "wake_promoted_queued_to_builder" "wake" '{"status_fields":{"phase":"planning_complete","handoff_to":"builder_main","target_role":"builder_main","bypass_pm":true,"auto_held":false},"note":"Queued sprint is implementation-ready; route to builder_main instead of unknown-status fallback."}' >/dev/null 2>&1 || true
         st="active"
         target_pane="$LIVE_BUILDER"
         target_task="Sprint ${sid} 恢复：queued 合约已具备建设条件，禁止转 PM/Planner。请读取 contract/plan 并执行。cat ~/.solar/harness/sprints/${sid}.contract.md"
       elif [[ "$phase" == "prd_ready" || "$phase" == "contract_ready" || "$handoff_to" == "planner" || "$contract_handoff" == "planner" || "$contract_target" == "planner" ]]; then
-        python3 - "$sf" <<'PY' 2>/dev/null || true
-import datetime, json, sys
-sf = sys.argv[1]
-d = json.load(open(sf))
-now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-d["status"] = "drafting"
-d["handoff_to"] = "planner"
-d["auto_held"] = False
-d["updated_at"] = now
-d.setdefault("history", []).append({
-    "ts": now,
-    "event": "wake_promoted_queued_to_planner",
-    "by": "wake",
-    "note": "Queued sprint has PRD/contract-ready planner handoff; route to planner explicitly."
-})
-json.dump(d, open(sf, "w"), indent=2, ensure_ascii=False)
-PY
+        python3 "$HARNESS_DIR/lib/runtime_status.py" "$sf" "drafting" "wake_promoted_queued_to_planner" "wake" '{"status_fields":{"handoff_to":"planner","target_role":"planner","auto_held":false},"note":"Queued sprint has PRD/contract-ready planner handoff; route to planner explicitly."}' >/dev/null 2>&1 || true
         st="drafting"
         target_pane="$LIVE_PLANNER"
         target_task="Sprint ${sid} 恢复：queued 合约处于 ${phase:-contract_ready}，请读取 PRD/contract，写 design.md 与 plan.md，完成后将 status=active、phase=planning_complete、handoff_to=builder_main。"
@@ -1063,23 +1040,7 @@ PY
         target_pane="$LIVE_EVALUATOR"
         target_task="Sprint ${sid} 恢复：queued 合约指定 evaluator，请检查 contract/status 并给出是否放行。cat ~/.solar/harness/sprints/${sid}.contract.md"
       else
-        python3 - "$sf" <<'PY' 2>/dev/null || true
-import datetime, json, sys
-sf = sys.argv[1]
-d = json.load(open(sf))
-now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-d["status"] = "drafting"
-d["handoff_to"] = "pm"
-d["auto_held"] = False
-d["updated_at"] = now
-d.setdefault("history", []).append({
-    "ts": now,
-    "event": "wake_promoted_queued_to_pm",
-    "by": "wake",
-    "note": "Queued sprint lacks explicit planner/builder/evaluator handoff; route to PM intake."
-})
-json.dump(d, open(sf, "w"), indent=2, ensure_ascii=False)
-PY
+        python3 "$HARNESS_DIR/lib/runtime_status.py" "$sf" "drafting" "wake_promoted_queued_to_pm" "wake" '{"status_fields":{"handoff_to":"pm","target_role":"pm","auto_held":false},"note":"Queued sprint lacks explicit planner/builder/evaluator handoff; route to PM intake."}' >/dev/null 2>&1 || true
         st="drafting"
         target_pane="$LIVE_PM"
         target_task="Sprint ${sid} 恢复：queued 合约缺少明确 handoff，请先补齐产品需求/PRD，再交给 Planner。cat ~/.solar/harness/sprints/${sid}.contract.md"
@@ -1087,24 +1048,7 @@ PY
       ;;
     drafting|drafting_held)
       if [[ "$contract_bypass" == "true" || "$handoff_to" =~ ^builder(_main)?$ || "$contract_handoff" =~ ^builder(_main)?$ || "$contract_target" =~ ^builder(_main)?$ ]]; then
-        python3 - "$sf" <<'PY' 2>/dev/null || true
-import datetime, json, sys
-sf = sys.argv[1]
-d = json.load(open(sf))
-now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-d["status"] = "active"
-d["phase"] = "planning_complete"
-d["handoff_to"] = "builder"
-d["auto_held"] = False
-d["updated_at"] = now
-d.setdefault("history", []).append({
-    "ts": now,
-    "event": "wake_promoted_bypass_pm_to_builder",
-    "by": "wake",
-    "note": "Strict wake routing: bypass_pm/handoff_to builder must not route to PM or planner."
-})
-json.dump(d, open(sf, "w"), indent=2, ensure_ascii=False)
-PY
+        python3 "$HARNESS_DIR/lib/runtime_status.py" "$sf" "active" "wake_promoted_bypass_pm_to_builder" "wake" '{"status_fields":{"phase":"planning_complete","handoff_to":"builder","target_role":"builder","auto_held":false},"note":"Strict wake routing: bypass_pm/handoff_to builder must not route to PM or planner."}' >/dev/null 2>&1 || true
         st="active"
         target_pane="$LIVE_BUILDER"
         target_task="Sprint ${sid} 恢复：这是 bypass_pm/Builder 目标合同，禁止转 PM/Planner。请读取 contract/plan 并执行。cat ~/.solar/harness/sprints/${sid}.contract.md"
@@ -1141,13 +1085,7 @@ PY
       ;;
     interrupted)
       # 被 kill_harness 打断，改回 reviewing 让 coordinator 重新派发
-      python3 -c "
-import json, datetime
-d = json.load(open('$sf'))
-d['status'] = 'reviewing'
-d['updated_at'] = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-json.dump(d, open('$sf', 'w'), indent = 2)
-" 2>/dev/null
+      python3 "$HARNESS_DIR/lib/runtime_status.py" "$sf" "reviewing" "wake_resumed_interrupted" "wake" '{}' >/dev/null 2>&1 || true
       target_pane="$LIVE_EVALUATOR"
       target_task="Sprint ${sid} 恢复 (从 interrupted)：请评审。cat ~/.solar/harness/sprints/${sid}.handoff.md"
       ;;
@@ -3527,12 +3465,29 @@ EOF
       project)
         python3 "$_runtime_py_dir/projection_engine.py" "$@"
         ;;
+      adopt|bridge)
+        python3 "$_runtime_py_dir/runtime_bridge.py" adopt "$@"
+        ;;
+      status)
+        _runtime_sid="${1:-}"; shift || true
+        _runtime_status="${1:-}"; shift || true
+        _runtime_event="${1:-state_transition}"; shift || true
+        _runtime_actor="${1:-coordinator}"; shift || true
+        _runtime_extra="${1:-{}}"; shift || true
+        if [[ -z "$_runtime_sid" || -z "$_runtime_status" ]]; then
+          err "用法: $0 runtime status <sid> <new_status> [event] [actor] [extra_json] [--bump-round]"
+          exit 1
+        fi
+        python3 "$_runtime_py_dir/runtime_status.py" "$SPRINTS_DIR/${_runtime_sid}.status.json" "$_runtime_status" "$_runtime_event" "$_runtime_actor" "$_runtime_extra" "$@"
+        ;;
       help|--help|-h|"")
         echo "Solar Managed Agent Runtime"
         echo ""
         echo "Usage:"
         echo "  $0 runtime doctor [sprint_id] [--json] [--all]"
         echo "  $0 runtime project <sprint_id> [--write-cache] [--json]"
+        echo "  $0 runtime adopt  <sprint_id>|--all [--write-cache] [--json]"
+        echo "  $0 runtime status <sid> <new_status> [event] [actor] [extra_json] [--bump-round]"
         ;;
       *)
         err "Unknown runtime subcommand: $_runtime_subcmd"; exit 1

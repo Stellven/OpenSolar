@@ -34,12 +34,22 @@ _ACTIVITY_STATUS_MAP: Dict[str, str] = {
 
 # Ordered status progression for drift detection
 _STATUS_RANK: Dict[str, int] = {
-    "queued":    1,
-    "active":    2,
-    "reviewing": 3,
-    "passed":    4,
-    "error":     5,
-    "cancelled": 6,
+    "queued":             1,
+    "drafting":           2,
+    "planning":           3,
+    "approved":           4,
+    "active":             5,
+    "building_parallel":  6,
+    "architect_reviewing": 7,
+    "reviewing":          8,
+    "needs_human_review": 9,
+    "passed":             10,
+    "error":              11,
+    "failed":             11,
+    "failed_review":      11,
+    "cancelled":          12,
+    "superseded":         13,
+    "interrupted":        14,
 }
 
 
@@ -97,6 +107,7 @@ class ProjectionEngine:
         overall_round = 0
         event_count = 0
         last_ts: Optional[str] = None
+        last_state_status: Optional[str] = None
 
         for ev in self._log.replay(sprint_id=self.sprint_id):
             event_count += 1
@@ -146,12 +157,15 @@ class ProjectionEngine:
                 r = payload.get("round", 0)
                 if isinstance(r, int) and r > overall_round:
                     overall_round = r
+                to_status = payload.get("to")
+                if isinstance(to_status, str) and to_status:
+                    last_state_status = to_status
 
         activity_list = list(activities.values())
-        stale = self._find_stale(activity_list, last_ts)
+        stale = self._find_stale(activity_list, last_ts, last_state_status)
 
         # Derive overall sprint status from activities
-        sprint_status = self._derive_sprint_status(activity_list)
+        sprint_status = self._derive_sprint_status(activity_list, last_state_status)
 
         # Drift check against on-disk status.json
         drift, drift_reason = self._check_drift(sprint_status)
@@ -199,7 +213,14 @@ class ProjectionEngine:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _derive_sprint_status(self, activities: List[ActivityState]) -> str:
+    def _derive_sprint_status(
+        self,
+        activities: List[ActivityState],
+        state_status: Optional[str] = None,
+    ) -> str:
+        normalized_state = _normalize_status(state_status or "")
+        if normalized_state:
+            return normalized_state
         if not activities:
             return "queued"
         statuses = {a.status for a in activities}
@@ -219,9 +240,18 @@ class ProjectionEngine:
         return "queued"
 
     def _find_stale(
-        self, activities: List[ActivityState], now_ts: Optional[str]
+        self,
+        activities: List[ActivityState],
+        now_ts: Optional[str],
+        state_status: Optional[str] = None,
     ) -> List[str]:
         if not now_ts:
+            return []
+        normalized_state = _normalize_status(state_status or "")
+        if normalized_state in {
+            "passed", "error", "failed", "failed_review", "cancelled",
+            "superseded", "interrupted",
+        }:
             return []
         stale = []
         try:
@@ -271,6 +301,32 @@ class ProjectionEngine:
 
 def _now_ts() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _normalize_status(status: str) -> str:
+    s = (status or "").strip().lower()
+    aliases = {
+        "done": "passed",
+        "eval_pass": "passed",
+        "eval_passed": "passed",
+        "completed": "passed",
+        "finalized": "passed",
+        "failed": "error",
+        "failed_review": "error",
+        "running": "active",
+        "implementation": "active",
+        "awaiting_review": "reviewing",
+        "canceled": "cancelled",
+    }
+    s = aliases.get(s, s)
+    if s in {
+        "queued", "drafting", "planning", "approved", "active",
+        "building_parallel", "architect_reviewing", "reviewing",
+        "needs_human_review", "passed", "error", "failed",
+        "failed_review", "cancelled", "superseded", "interrupted",
+    }:
+        return s
+    return ""
 
 
 def main() -> None:
