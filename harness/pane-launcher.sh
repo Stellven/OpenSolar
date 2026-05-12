@@ -82,8 +82,21 @@ send_ready_token() {
       attempt=$((attempt + 1))
       continue
     fi
+    if (( bypass_accepted == 0 )) && echo "$content" | grep -qiE 'Yes, and make it my default mode|Yes, enable auto mode|enable auto mode'; then
+      tmux send-keys -t "$pane" Enter
+      bypass_accepted=1
+      sleep 1
+      attempt=$((attempt + 1))
+      continue
+    fi
     if echo "$content" | grep -qiE 'Detected a custom API key in your environment|Do you want to use this API key'; then
       tmux send-keys -t "$pane" "1" Enter
+      sleep 1
+      attempt=$((attempt + 1))
+      continue
+    fi
+    if echo "$content" | grep -qiE 'Files with errors are skipped|Continue without these settings|Exit and fix manually'; then
+      tmux send-keys -t "$pane" Down Enter
       sleep 1
       attempt=$((attempt + 1))
       continue
@@ -181,7 +194,7 @@ write_runtime_marker
 CLAUDE_CMD="$CLAUDE_BIN"
 SOLAR_CLAUDE_BYPASS="${SOLAR_CLAUDE_BYPASS:-1}"
 if [[ "$SOLAR_CLAUDE_BYPASS" == "1" ]]; then
-  CLAUDE_CMD="$CLAUDE_BIN --permission-mode bypassPermissions"
+  CLAUDE_CMD="$CLAUDE_BIN --permission-mode ${SOLAR_CLAUDE_PERMISSION_MODE:-auto}"
 fi
 [[ -n "$MODEL_FLAG" ]] && CLAUDE_CMD="$CLAUDE_CMD $MODEL_FLAG"
 [[ -n "$TOOL_FLAG" ]] && CLAUDE_CMD="$CLAUDE_CMD $TOOL_FLAG"
@@ -197,25 +210,30 @@ $CLAUDE_CMD --append-system-prompt "$(cat "$PERSONA_FILE")$_whisper"
 CLAUDE_EXIT=$?
 set -e
 
-# 写退出记录
-{
-  LAST_LINES=""
-  if [[ -n "$TMUX_PANE" ]]; then
-    LAST_LINES=$(tmux capture-pane -t "$TMUX_PANE" -p -S -30 2>/dev/null | tail -30 | python3 -c "import sys; print(sys.stdin.read().replace('\n','\\n')[:2000])" 2>/dev/null || true)
-  fi
-  python3 -c "
-import json, datetime
+# 写退出记录。Pane 内容可能含引号、反引号、控制字符；通过 stdin/env
+# 传给 Python，避免把捕获文本插进 shell 字符串导致启动器语法崩溃。
+LAST_LINES=""
+if [[ -n "$TMUX_PANE" ]]; then
+  LAST_LINES=$(tmux capture-pane -t "$TMUX_PANE" -p -S -30 2>/dev/null | tail -30 | head -c 2000 || true)
+fi
+printf '%s' "$LAST_LINES" | PANE_EXIT_LOG="$EXIT_LOG" PANE_EXIT_CODE="$CLAUDE_EXIT" PANE_EXIT_TMUX="${TMUX_PANE:-}" PANE_EXIT_PERSONA="$PERSONA" python3 - <<'PY' 2>/dev/null || true
+import datetime
+import json
+import os
+import sys
+
+exit_code = int(os.environ.get("PANE_EXIT_CODE", "0") or 0)
 record = {
-    'ts': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
-    'pane': '${TMUX_PANE:-}',
-    'persona': '${PERSONA}',
-    'exit_code': ${CLAUDE_EXIT},
-    'signal': 'normal' if ${CLAUDE_EXIT} < 128 else 'signal_' + str(${CLAUDE_EXIT} - 128),
-    'last_30_lines': '''${LAST_LINES}'''
+    "ts": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "pane": os.environ.get("PANE_EXIT_TMUX", ""),
+    "persona": os.environ.get("PANE_EXIT_PERSONA", ""),
+    "exit_code": exit_code,
+    "signal": "normal" if exit_code < 128 else f"signal_{exit_code - 128}",
+    "last_30_lines": sys.stdin.read()[:2000],
 }
-print(json.dumps(record, ensure_ascii=False))
-" 2>/dev/null
-} >> "$EXIT_LOG" 2>/dev/null || true
+with open(os.environ["PANE_EXIT_LOG"], "a", encoding="utf-8") as fh:
+    fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+PY
 
 [[ -n "${AUTO_PID:-}" ]] && kill "$AUTO_PID" 2>/dev/null || true
 
