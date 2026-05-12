@@ -65,6 +65,58 @@ def _ts_from_str(s: str | None) -> str | None:
     return s
 
 
+def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type IN ('table','view') AND name=?",
+        (table,),
+    ).fetchone()
+    return row is not None
+
+
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    if not _table_exists(conn, table):
+        return set()
+    try:
+        return {str(row[1]) for row in conn.execute(f"PRAGMA table_info([{table}])").fetchall()}
+    except sqlite3.OperationalError:
+        return set()
+
+
+def _table_count(conn: sqlite3.Connection, table: str) -> int:
+    if not _table_exists(conn, table):
+        return 0
+    try:
+        return int(conn.execute(f"SELECT count(*) FROM [{table}]").fetchone()[0])
+    except sqlite3.OperationalError:
+        return 0
+
+
+def _current_index_fresh(conn: sqlite3.Connection) -> dict:
+    """Return current active knowledge index status used as replacement for legacy KB tables."""
+    vault_count = 0
+    vault_latest = None
+    fts_count = 0
+    try:
+        vault_count, vault_latest = conn.execute(
+            "SELECT count(*), MAX(indexed_at) FROM obsidian_vault_index WHERE deleted_at IS NULL"
+        ).fetchone()
+    except sqlite3.OperationalError:
+        pass
+    try:
+        fts_count = conn.execute("SELECT count(*) FROM fts_unified_search").fetchone()[0]
+    except sqlite3.OperationalError:
+        pass
+    latest_age = _days_ago(vault_latest)
+    current = bool(vault_count and latest_age is not None and latest_age <= 7)
+    return {
+        "obsidian_vault_index": int(vault_count or 0),
+        "fts_unified_search": int(fts_count or 0),
+        "latest_indexed_at": vault_latest,
+        "latest_age_days": latest_age,
+        "current": current,
+    }
+
+
 # ── Audit Checks ─────────────────────────────────────────────
 
 def check_state_integrity(conn: sqlite3.Connection) -> dict:
@@ -105,6 +157,22 @@ def check_table_freshness(conn: sqlite3.Connection, table: str, ts_col: str = "u
     return {"name": table, "row_count": count, "freshest": freshest, "age_days": age, "status": status}
 
 
+def check_legacy_table_freshness(conn: sqlite3.Connection, table: str, ts_col: str = "updated_at") -> dict:
+    """Report legacy table freshness without pretending dormant legacy tables are active writers."""
+    result = check_table_freshness(conn, table, ts_col)
+    if result.get("status") in ("warn", "stale"):
+        replacement = _current_index_fresh(conn)
+        if replacement.get("current"):
+            result["status"] = "dormant"
+            result["replacement"] = "obsidian_vault_index+fts_unified_search"
+            result["replacement_evidence"] = replacement
+            result["note"] = (
+                f"{table} is a legacy/dormant table in the current data plane; "
+                "active searchable knowledge is in obsidian_vault_index + fts_unified_search."
+            )
+    return result
+
+
 def check_sys_data_ledger(conn: sqlite3.Connection) -> dict:
     try:
         row = conn.execute("SELECT count(*), MAX(last_checked) FROM sys_data_ledger").fetchone()
@@ -125,14 +193,27 @@ def check_sys_data_ledger(conn: sqlite3.Connection) -> dict:
 def check_sys_resources(conn: sqlite3.Connection) -> dict:
     try:
         total = conn.execute("SELECT count(*) FROM sys_resources").fetchone()[0]
-        accessed = conn.execute(
-            "SELECT count(*) FROM sys_resources WHERE access_count > 0 OR last_accessed_at IS NOT NULL"
-        ).fetchone()[0]
     except sqlite3.OperationalError:
         return {"name": "sys_resources", "total": 0, "accessed_count": 0, "status": "missing"}
 
-    status = "dormant" if accessed == 0 else ("ok" if accessed > total * 0.1 else "warn")
-    return {"name": "sys_resources", "total": total, "accessed_count": accessed, "status": status}
+    usage_count = 0
+    latest_usage = None
+    try:
+        usage_count, latest_usage = conn.execute(
+            "SELECT count(*), MAX(called_at) FROM sys_resource_usage"
+        ).fetchone()
+    except sqlite3.OperationalError:
+        pass
+    status = "dormant" if usage_count == 0 else "ok"
+    return {
+        "name": "sys_resources",
+        "total": total,
+        "active": conn.execute("SELECT count(*) FROM sys_resources WHERE status='active'").fetchone()[0],
+        "usage_count": int(usage_count or 0),
+        "latest_usage": latest_usage,
+        "status": status,
+        "note": "registry exists but runtime usage telemetry has no calls yet" if usage_count == 0 else "",
+    }
 
 
 def check_bridge_ledger() -> dict:
@@ -193,11 +274,14 @@ def check_resource_usage(conn: sqlite3.Connection) -> dict:
     """A4: Resource usage telemetry honesty check."""
     try:
         total = conn.execute("SELECT count(*) FROM sys_resources").fetchone()[0]
-        accessed = conn.execute(
-            "SELECT count(*) FROM sys_resources WHERE access_count > 0"
-        ).fetchone()[0]
     except sqlite3.OperationalError:
         return {"name": "resource_usage", "note": "sys_resources table missing", "status": "missing"}
+    try:
+        usage_count, latest_usage = conn.execute(
+            "SELECT count(*), MAX(called_at) FROM sys_resource_usage"
+        ).fetchone()
+    except sqlite3.OperationalError:
+        usage_count, latest_usage = 0, None
 
     # Check if solar-knowledge-context.py actually reads from sys_resources
     ctx_script = HARNESS_DIR / "lib" / "solar-knowledge-context.py"
@@ -209,21 +293,22 @@ def check_resource_usage(conn: sqlite3.Connection) -> dict:
         except Exception:
             pass
 
-    if accessed == 0:
+    if usage_count == 0:
         return {
             "name": "resource_usage",
             "total_resources": total,
-            "accessed_count": 0,
+            "usage_count": 0,
             "consumer_exists": reads_resources,
             "status": "dormant",
-            "note": "sys_resources exists but access_count=0 for all rows; layer is dormant"
+            "note": "sys_resources exists but sys_resource_usage has no calls; layer is dormant"
             if reads_resources else
             "sys_resources exists but no consumer reads from it; layer is dormant",
         }
     return {
         "name": "resource_usage",
         "total_resources": total,
-        "accessed_count": accessed,
+        "usage_count": int(usage_count or 0),
+        "latest_usage": latest_usage,
         "status": "ok",
     }
 
@@ -235,7 +320,9 @@ def check_accepted_artifact_path(conn: sqlite3.Connection) -> dict:
     indexed = 0
     try:
         indexed = conn.execute(
-            "SELECT count(*) FROM obsidian_vault_index WHERE path LIKE '%harness%' AND deleted_at IS NULL"
+            "SELECT count(*) FROM obsidian_vault_index "
+            "WHERE file_path LIKE '%/_raw/solar-harness/accepted/%.accepted.md' "
+            "AND deleted_at IS NULL"
         ).fetchone()[0]
     except sqlite3.OperationalError:
         pass
@@ -290,9 +377,9 @@ def run_audit(json_output: bool = False, verbose: bool = False) -> int:
             check_sys_data_ledger(conn),
             check_sys_resources(conn),
             check_table_freshness(conn, "cortex_sources", "created_at"),
-            check_table_freshness(conn, "cortex_passages", "created_at"),
-            check_table_freshness(conn, "solar_kb_entries", "created_at"),
-            check_table_freshness(conn, "knowledge_records", "created_at"),
+            check_legacy_table_freshness(conn, "cortex_passages", "created_at"),
+            check_legacy_table_freshness(conn, "solar_kb_entries", "created_at"),
+            check_legacy_table_freshness(conn, "knowledge_records", "created_at"),
             check_bridge_ledger(),
             check_sprint_artifacts(),
             check_resource_usage(conn),
@@ -431,6 +518,93 @@ def run_repair_state(dry_run: bool = False, json_output: bool = False) -> int:
         conn.close()
 
 
+def run_refresh_ledger(dry_run: bool = False, json_output: bool = False) -> int:
+    """Refresh sys_data_ledger counts and last_checked from the live DB.
+
+    This updates ledger metadata only. It does not mutate source tables or
+    fabricate activity timestamps.
+    """
+    conn = open_solar_db()
+    try:
+        if not _table_exists(conn, "sys_data_ledger"):
+            result = {"action": "refresh-ledger", "status": "missing", "updated": 0}
+            if json_output:
+                print(json.dumps(result, indent=2, ensure_ascii=False))
+            else:
+                print("❌ sys_data_ledger table missing")
+            return 1
+
+        rows = conn.execute(
+            "SELECT ledger_id, source_type, source_name FROM sys_data_ledger"
+        ).fetchall()
+        now = _now_iso()
+        updates = []
+        for ledger_id, source_type, source_name in rows:
+            record_count = None
+            status = "active"
+            notes = ""
+            if source_type == "table":
+                if _table_exists(conn, source_name):
+                    record_count = _table_count(conn, source_name)
+                    if source_name in {"cortex_passages", "solar_kb_entries", "knowledge_records"}:
+                        replacement = _current_index_fresh(conn)
+                        if replacement.get("current"):
+                            status = "dormant"
+                            notes = "legacy table; current searchable data plane is obsidian_vault_index+fts_unified_search"
+                else:
+                    record_count = 0
+                    status = "missing"
+                    notes = "source table missing"
+            elif source_type in {"index", "file"}:
+                # We can safely mark the ledger checked without claiming filesystem/index internals changed.
+                record_count = None
+                status = "checked"
+            else:
+                record_count = None
+            updates.append({
+                "ledger_id": ledger_id,
+                "source_type": source_type,
+                "source_name": source_name,
+                "record_count": record_count,
+                "status": status,
+                "notes": notes,
+            })
+
+        if not dry_run:
+            for item in updates:
+                if item["record_count"] is None:
+                    conn.execute(
+                        "UPDATE sys_data_ledger SET status=?, last_checked=?, updated_at=?, notes=COALESCE(NULLIF(?, ''), notes) WHERE ledger_id=?",
+                        (item["status"], now, now, item["notes"], item["ledger_id"]),
+                    )
+                else:
+                    conn.execute(
+                        "UPDATE sys_data_ledger SET record_count=?, status=?, last_checked=?, updated_at=?, notes=COALESCE(NULLIF(?, ''), notes) WHERE ledger_id=?",
+                        (item["record_count"], item["status"], now, now, item["notes"], item["ledger_id"]),
+                    )
+            conn.commit()
+
+        result = {
+            "action": "refresh-ledger",
+            "mode": "dry-run" if dry_run else "live",
+            "updated": len(updates),
+            "status": "ok",
+            "checked_at": now,
+            "updates": updates,
+        }
+        if json_output:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print(f"✅ sys_data_ledger refreshed: {len(updates)} rows")
+        return 0
+    except Exception as e:
+        conn.rollback()
+        print(f"❌ refresh-ledger failed: {e}", file=sys.stderr)
+        return 2
+    finally:
+        conn.close()
+
+
 # ── CLI ───────────────────────────────────────────────────────
 
 def main():
@@ -445,11 +619,17 @@ def main():
     repair_p.add_argument("--dry-run", action="store_true", help="Show what would be repaired without modifying")
     repair_p.add_argument("--json", action="store_true", help="Output as JSON")
 
+    refresh_p = sub.add_parser("refresh-ledger", help="Refresh sys_data_ledger counts and last_checked")
+    refresh_p.add_argument("--dry-run", action="store_true", help="Show what would be refreshed without modifying")
+    refresh_p.add_argument("--json", action="store_true", help="Output as JSON")
+
     args = parser.parse_args()
     if args.command == "audit":
         sys.exit(run_audit(json_output=args.json, verbose=args.verbose))
     elif args.command == "repair-state":
         sys.exit(run_repair_state(dry_run=args.dry_run, json_output=args.json))
+    elif args.command == "refresh-ledger":
+        sys.exit(run_refresh_ledger(dry_run=args.dry_run, json_output=args.json))
     else:
         parser.print_help()
         sys.exit(1)

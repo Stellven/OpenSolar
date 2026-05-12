@@ -27,6 +27,9 @@ from pathlib import Path
 DB_PATH = Path(os.environ.get("SOLAR_DB", str(Path.home() / ".solar" / "solar.db")))
 VAULT_PATH = Path(os.environ.get("OBSIDIAN_VAULT_PATH", "/Users/sihaoli/Knowledge"))
 EXCLUDE_DIRS = {".obsidian", ".trash", ".git", ".dispatch", "_raw"}
+RAW_INDEX_ALLOW_PREFIXES = {
+    Path("_raw") / "solar-harness" / "accepted",
+}
 EXTENSIONS = {".md", ".markdown"}
 MAX_CONTENT_CHARS = 2000
 MAX_SUMMARY_CHARS = 400
@@ -198,7 +201,12 @@ def index_vault(vault: Path, db: Path, max_files: int = 0, dry_run: bool = False
     # Collect all .md files in vault
     md_files: list[Path] = []
     for path in vault.rglob("*"):
-        if any(part in EXCLUDE_DIRS for part in path.parts):
+        try:
+            rel = path.relative_to(vault)
+        except ValueError:
+            rel = path
+        allowed_raw = any(rel == prefix or prefix in rel.parents for prefix in RAW_INDEX_ALLOW_PREFIXES)
+        if any(part in EXCLUDE_DIRS for part in rel.parts) and not allowed_raw:
             continue
         if path.is_file() and path.suffix.lower() in EXTENSIONS:
             md_files.append(path)

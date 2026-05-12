@@ -26,3 +26,5 @@
 {"ts":"2026-05-08T17:52:28Z","event":"planner_notified","by":"coordinator","data":{"status":"passed"}}
 {"ts": "2026-05-08T17:52:50Z", "sid": "sprint-20260508-everything-claude-code-integration", "event": "dispatched", "by": "coordinator"}
 {"ts": "2026-05-08T17:53:06Z", "sid": "sprint-20260508-everything-claude-code-integration", "event": "handle_passed_completed", "by": "coordinator"}
+{"ts": "2026-05-12T19:43:23Z", "event": "accepted_artifact_exported", "source": "accepted-artifact-export", "path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260508-everything-claude-code-integration.accepted.md", "bytes": 40835, "source_hash": "8ea4d1b708da2aefddfdf835eb6bdef2e0b693c62ceca054b82a5faaa10c82cb"}
+{"ts": "2026-05-12T19:43:23Z", "event": "accepted_artifact_ingest_dispatched", "source": "accepted-artifact-export", "dispatch_file": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260508-everything-claude-code-integration.dispatch.md"}

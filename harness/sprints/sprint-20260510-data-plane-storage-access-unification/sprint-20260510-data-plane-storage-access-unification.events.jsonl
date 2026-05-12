@@ -44,3 +44,5 @@
 {"ts": "2026-05-11T00:25:16Z", "sid": "sprint-20260510-data-plane-storage-access-unification", "event": "state_changed", "by": "coordinator"}
 {"ts": "2026-05-11T00:25:36Z", "sid": "sprint-20260510-data-plane-storage-access-unification", "event": "dispatch_queued", "by": "coordinator"}
 {"ts": "2026-05-11T00:26:13Z", "sid": "sprint-20260510-data-plane-storage-access-unification", "event": "parent_eval_passed_finalized", "by": "codex-controller", "data": {"eval_md": "sprint-20260510-data-plane-storage-access-unification.eval.md", "finalized": true}}
+{"ts": "2026-05-12T19:43:23Z", "event": "accepted_artifact_exported", "source": "accepted-artifact-export", "path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260510-data-plane-storage-access-unification.accepted.md", "bytes": 17489, "source_hash": "807d4ea43bdf169c8db8b493be0e76bf83f198c837e4d676c6625c59f5131e7e"}
+{"ts": "2026-05-12T19:43:23Z", "event": "accepted_artifact_ingest_dispatched", "source": "accepted-artifact-export", "dispatch_file": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260510-data-plane-storage-access-unification.dispatch.md"}

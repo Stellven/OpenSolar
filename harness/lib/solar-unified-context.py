@@ -16,7 +16,6 @@ import sys
 import time
 from pathlib import Path
 
-
 HOME = Path.home()
 HARNESS = Path(os.environ.get("HARNESS_DIR", str(HOME / ".solar" / "harness")))
 MIRAGE = HARNESS / "lib" / "solar_mirage.py"
@@ -26,6 +25,12 @@ DEFAULT_MAX_CHARS = int(os.environ.get("SOLAR_CONTEXT_MAX_CHARS", "2600"))
 DEFAULT_MAX_HITS = int(os.environ.get("SOLAR_CONTEXT_MAX_HITS", "8"))
 DEFAULT_TIMEOUT_MS = int(os.environ.get("SOLAR_CONTEXT_TIMEOUT_MS", "2500"))
 DEFAULT_RAGFLOW_TIMEOUT_MS = int(os.environ.get("SOLAR_CONTEXT_RAGFLOW_TIMEOUT_MS", "1200"))
+
+sys.path.insert(0, str(HARNESS / "lib"))
+try:
+    from resource_telemetry import record_usage
+except Exception:  # pragma: no cover - fail-open for hook paths
+    record_usage = None  # type: ignore
 
 
 def _run_mirage(query: str, max_hits: int, max_chars: int, timeout_ms: int) -> dict:
@@ -71,7 +76,7 @@ def _compact_hit(hit: dict) -> dict:
     path = hit.get("path") or ""
     mount = hit.get("mount") or ""
     source_type = hit.get("source_type") or ""
-    return {
+    compact = {
         "source": source_type,
         "mount": mount,
         "path": path,
@@ -80,6 +85,60 @@ def _compact_hit(hit: dict) -> dict:
         "provenance": hit.get("provenance") or "",
         "score": hit.get("score_or_rank", 0),
     }
+    compact["layer"] = _context_layer(compact)
+    return compact
+
+
+def _context_path_text(hit: dict) -> str:
+    return " ".join(
+        str(hit.get(k) or "").lower()
+        for k in ("path", "mount", "title", "provenance", "source")
+    )
+
+
+def _context_layer(hit: dict) -> str:
+    text = _context_path_text(hit)
+    if "qmd://solar-wiki/synthesis/" in text or "/knowledge/synthesis/" in text or "/synthesis/" in text:
+        return "synthesis"
+    if "qmd://solar-wiki/concepts/" in text or "/knowledge/concepts/" in text or "/concepts/" in text:
+        return "concepts"
+    if "qmd://solar-wiki/references/" in text or "/knowledge/references/" in text or "/references/" in text:
+        return "references"
+    if any(f"qmd://solar-wiki/{bucket}/" in text or f"/knowledge/{bucket}/" in text or f"/{bucket}/" in text
+           for bucket in ("entities", "projects", "skills", "theses", "timelines", "contradictions", "indexes")):
+        return "curated"
+    if "qmd://solar-wiki/raw/" in text or "/knowledge/_raw/" in text or "/_raw/" in text or "/raw/" in text:
+        return "raw-evidence"
+    if str(hit.get("source") or "").lower() == "ragflow":
+        return "retrieval-evidence"
+    return "other"
+
+
+def _layer_priority(layer: str) -> int:
+    return {
+        "synthesis": 0,
+        "concepts": 1,
+        "references": 2,
+        "curated": 3,
+        "other": 40,
+        "retrieval-evidence": 70,
+        "raw-evidence": 80,
+    }.get(layer, 50)
+
+
+def _sort_context_hits(hits: list[dict]) -> list[dict]:
+    source_priority = {"qmd": 0, "solar_db": 1, "mirage_path": 2, "ragflow": 3}
+    for hit in hits:
+        hit["layer"] = _context_layer(hit)
+    return sorted(
+        hits,
+        key=lambda h: (
+            _layer_priority(str(h.get("layer") or "other")),
+            source_priority.get(str(h.get("source") or ""), 9),
+            -float(h.get("score") or 0),
+            str(h.get("title") or ""),
+        ),
+    )
 
 
 def _ragflow_enabled() -> bool:
@@ -135,7 +194,7 @@ def _run_ragflow(query: str, max_hits: int, timeout_ms: int) -> dict:
 
 def _compact_ragflow_hit(hit: dict) -> dict:
     title = hit.get("title") or hit.get("document_id") or hit.get("id") or "RAGFlow chunk"
-    return {
+    compact = {
         "source": "ragflow",
         "mount": "ragflow://",
         "path": str(hit.get("document_id") or hit.get("id") or ""),
@@ -144,6 +203,8 @@ def _compact_ragflow_hit(hit: dict) -> dict:
         "provenance": "ragflow:retrieval",
         "score": hit.get("score", 0),
     }
+    compact["layer"] = _context_layer(compact)
+    return compact
 
 
 def retrieve(query: str, max_hits: int, max_chars: int, timeout_ms: int) -> dict:
@@ -170,6 +231,7 @@ def retrieve(query: str, max_hits: int, max_chars: int, timeout_ms: int) -> dict
                 "snippet": "本机默认知识库。优先用 `solar-harness wiki qmd-search \"<query>\" --json` 或 `solar-harness mirage search \"<query>\" --json` 检索。",
                 "provenance": "static:solar-unified-context",
                 "score": 0.1,
+                "layer": "other",
             },
             {
                 "source": "default",
@@ -179,6 +241,7 @@ def retrieve(query: str, max_hits: int, max_chars: int, timeout_ms: int) -> dict
                 "snippet": "MinerU Document Explorer 负责 PDF/Markdown/文档索引和语义检索；后台 `solar-harness wiki qmd-embed status` 处理 embedding backlog。",
                 "provenance": "static:solar-unified-context",
                 "score": 0.1,
+                "layer": "other",
             },
             {
                 "source": "default",
@@ -188,10 +251,10 @@ def retrieve(query: str, max_hits: int, max_chars: int, timeout_ms: int) -> dict
                 "snippet": "Solar DB 保存 sprint、cortex、accepted artifacts、obsidian_vault_index 和 FTS 索引。设计/开发前先查已有资产，避免重复造轮子。",
                 "provenance": "static:solar-unified-context",
                 "score": 0.1,
+                "layer": "other",
             },
         ][:max_hits]
-    priority = {"qmd": 0, "solar_db": 1, "ragflow": 2, "mirage_path": 3}
-    hits.sort(key=lambda h: (priority.get(h.get("source", ""), 9), -float(h.get("score") or 0)))
+    hits = _sort_context_hits(hits)
     total = 0
     kept = []
     for hit in hits:
@@ -218,11 +281,12 @@ def format_hook(data: dict, max_chars: int) -> str:
         "<solar-unified-context>",
         "来源: Mirage + QMD solar-wiki + Obsidian Vault + Solar DB + RAGFlow(optional)",
         "规则: 开始开发/设计/分析前，优先参考这些命中；如不足，再主动搜索 vault/qmd。",
+        "排序: synthesis/concepts/references 优先；raw 只作为证据层靠后。",
     ]
     total = sum(len(x) for x in lines)
     for hit in hits:
         path = str(hit.get("path") or "")
-        mount = "" if "://" in path or path.startswith(str(HOME)) else str(hit.get("mount") or "")
+        mount = "" if "://" in path or path.startswith(str(HOME)) or path.startswith("obsidian:") else str(hit.get("mount") or "")
         entry = f"- [{hit.get('source')}] {hit.get('title') or 'N/A'} ({mount}{path}): {hit.get('snippet')}"
         if total + len(entry) > max_chars:
             break
@@ -253,13 +317,39 @@ def main() -> int:
     parser.add_argument("--fail-open", action="store_true")
     args = parser.parse_args()
 
+    started = time.monotonic()
+    success = True
+    error = ""
     try:
         data = retrieve(args.query, args.max_hits, args.max_chars, args.timeout_ms)
     except Exception as exc:
+        success = False
+        error = str(exc)
         if args.fail_open:
             data = {"query": args.query, "hits": [], "degraded_sources": [str(exc)], "backend": "error"}
         else:
             raise
+    finally:
+        if record_usage is not None:
+            try:
+                record_usage(
+                    "tool",
+                    "solar-unified-context",
+                    intent="context.inject",
+                    input_summary=args.query,
+                    success=success,
+                    output_summary=(
+                        f"hits={len(data.get('hits', [])) if 'data' in locals() else 0}; "
+                        f"degraded={','.join(str(x) for x in (data.get('degraded_sources', []) if 'data' in locals() else []))}"
+                    ),
+                    error=error,
+                    started_at=started,
+                    description="Solar-Harness unified context injector over Mirage, QMD, Obsidian, Solar DB and optional RAGFlow.",
+                    keywords=["context", "mirage", "qmd", "obsidian", "solar-db", "knowledge"],
+                    config={"backend": "mirage+qmd+solar_db+obsidian+ragflow_optional"},
+                )
+            except Exception:
+                pass
 
     if args.json:
         print(json.dumps(data, ensure_ascii=False, indent=2))

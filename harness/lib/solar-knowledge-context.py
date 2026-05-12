@@ -297,6 +297,33 @@ def _curated_path_boost(hit: dict) -> float:
     return 0.0
 
 
+def _knowledge_layer(hit: dict) -> str:
+    text = _lower_hit_text(hit)
+    if "qmd://solar-wiki/synthesis/" in text or "/knowledge/synthesis/" in text or "/synthesis/" in text:
+        return "synthesis"
+    if "qmd://solar-wiki/concepts/" in text or "/knowledge/concepts/" in text or "/concepts/" in text:
+        return "concepts"
+    if "qmd://solar-wiki/references/" in text or "/knowledge/references/" in text or "/references/" in text:
+        return "references"
+    if any(f"qmd://solar-wiki/{bucket}/" in text or f"/knowledge/{bucket}/" in text or f"/{bucket}/" in text
+           for bucket in ("entities", "projects", "skills", "theses", "timelines", "contradictions", "indexes")):
+        return "curated"
+    if "qmd://solar-wiki/raw/" in text or "/knowledge/_raw/" in text or "/_raw/" in text or "/raw/" in text:
+        return "raw-evidence"
+    return "other"
+
+
+def _knowledge_layer_priority(hit: dict) -> int:
+    return {
+        "synthesis": 0,
+        "concepts": 1,
+        "references": 2,
+        "curated": 3,
+        "other": 40,
+        "raw-evidence": 80,
+    }.get(str(hit.get("layer") or _knowledge_layer(hit)), 50)
+
+
 def _query_relevance_boost(hit: dict, query: str) -> float:
     kw = _extract_cjk_keywords(query)
     title = str(hit.get("title", ""))
@@ -332,15 +359,16 @@ def _rank_hits(hits: list[dict], query: str) -> list[dict]:
         return base + _curated_path_boost(hit) + _query_relevance_boost(hit, query) - _artifact_penalty(hit, query)
 
     for hit in hits:
+        hit["layer"] = _knowledge_layer(hit)
         hit["rank_score"] = round(adjusted(hit), 4)
     return sorted(
         hits,
         key=lambda h: (
-            float(h.get("rank_score", 0.0) or 0.0),
-            float(h.get("score", 0.0) or 0.0),
+            _knowledge_layer_priority(h),
+            -float(h.get("rank_score", 0.0) or 0.0),
+            -float(h.get("score", 0.0) or 0.0),
             str(h.get("title", "")),
         ),
-        reverse=True,
     )
 
 

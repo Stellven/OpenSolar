@@ -1,0 +1,2 @@
+{"ts": "2026-05-12T19:43:23Z", "event": "accepted_artifact_exported", "source": "accepted-artifact-export", "path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260418-065438.accepted.md", "bytes": 7193, "source_hash": "51055faae7b98a38a9fab87ea122211136d3dfa46f9798bdee01cb2be7a0c818"}
+{"ts": "2026-05-12T19:43:23Z", "event": "accepted_artifact_ingest_dispatched", "source": "accepted-artifact-export", "dispatch_file": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260418-065438.dispatch.md"}

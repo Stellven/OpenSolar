@@ -6,6 +6,8 @@ solar_skills.py — Solar capability plane: skills inventory, doctor, inject,
 Subcommands (called via solar-harness skills <sub>):
   inventory [--json]          scan skill roots + registry, return counts + sources
   doctor    [--json]          pane-level capability report (no secrets)
+  readiness [--json] [--all]  classify skills as discoverable/injectable/executable/effective/broken
+  certify   [--json]          run core skill probes and write readiness scorecards
   inject    <dispatch_file>   idempotent injection of skills+KB context blocks
   pane-status [--json]        alias for doctor
   native-extract              extract Solar native skills to cache
@@ -25,6 +27,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    from resource_telemetry import record_usage
+except Exception:  # pragma: no cover - telemetry must fail-open
+    record_usage = None  # type: ignore
+
 # ── paths ──────────────────────────────────────────────────────────────────
 HARNESS_DIR = Path(__file__).resolve().parent.parent
 SKILLS_ROOT = Path.home() / ".agents" / "skills"
@@ -40,6 +48,8 @@ STATE_DIR = HARNESS_DIR / "state"
 STATE_DB = Path(os.environ.get("HARNESS_STATE_DB", str(HARNESS_DIR / "run" / "state.db")))
 NATIVE_CACHE = STATE_DIR / "solar-native-skills.json"
 INVENTORY_CACHE = STATE_DIR / "skills-inventory.json"
+READINESS_CACHE = STATE_DIR / "skills-readiness.json"
+CERTIFICATION_CACHE = STATE_DIR / "skills-certification.json"
 SOLAR_CONTEXT_PY = HARNESS_DIR / "lib" / "solar-unified-context.py"
 
 # Keys redacted from doctor output
@@ -188,6 +198,319 @@ def _extract_mcp_config_path(extra_flags: str) -> str | None:
 
 def _redact(text: str) -> str:
     return SECRET_PATTERNS.sub("[REDACTED]", text)
+
+
+READINESS_ORDER = ["broken", "discoverable", "injectable", "executable", "effective"]
+CORE_SOLAR_SKILLS: list[dict[str, Any]] = [
+    {
+        "name": "solar-harness-runtime",
+        "capabilities": ["harness.context_preflight", "harness.intent", "harness.dispatch_visibility"],
+        "probe": "dispatch_inject",
+        "provider": "solar-harness-runtime",
+    },
+    {
+        "name": "solar-intent-engine",
+        "capabilities": ["intent.match", "intent.audit", "dispatch.intent_telemetry"],
+        "probe": "intent_match",
+        "provider": "solar-intent-engine",
+    },
+    {
+        "name": "solar-activation-proof",
+        "capabilities": ["activation.proof", "negative_control", "runtime_artifacts"],
+        "probe": "activation_proof",
+        "provider": "solar-activation-proof",
+    },
+    {
+        "name": "solar-graph-scheduler",
+        "capabilities": ["dag.validate", "dag.ready_nodes", "dag.join_gate"],
+        "probe": "graph_validate",
+        "provider": "solar-graph-scheduler",
+    },
+    {
+        "name": "solar-model-routing",
+        "capabilities": ["models.show", "models.lab_matrix", "models.footer_labels"],
+        "probe": "models_show",
+        "provider": "solar-model-routing",
+    },
+    {
+        "name": "solar-knowledge-ingest",
+        "capabilities": ["context.inject", "wiki.status", "data_plane.audit"],
+        "probe": "data_plane_audit",
+        "provider": "solar-knowledge-ingest",
+    },
+    {
+        "name": "solar-autopilot-monitor",
+        "capabilities": ["autopilot.monitor", "autopilot.safe_apply", "pane.deadlock_detection"],
+        "probe": "autopilot_monitor",
+        "provider": "solar-autopilot-monitor",
+    },
+]
+
+
+def _skill_file(root: Path, name: str) -> Path:
+    return root / name / "SKILL.md"
+
+
+def _level(discoverable: bool, injectable: bool, executable: bool, effective: bool, broken: bool = False) -> str:
+    if broken:
+        return "broken"
+    if effective:
+        return "effective"
+    if executable:
+        return "executable"
+    if injectable:
+        return "injectable"
+    if discoverable:
+        return "discoverable"
+    return "broken"
+
+
+def _score_for_level(level: str) -> float:
+    return {
+        "effective": 4.0,
+        "executable": 3.0,
+        "injectable": 2.0,
+        "discoverable": 1.0,
+        "broken": 0.0,
+    }.get(level, 0.0)
+
+
+def _status_for_level(level: str) -> str:
+    if level == "effective":
+        return "active"
+    if level in ("executable", "injectable", "discoverable"):
+        return "pending"
+    return "broken"
+
+
+def _scorecard_payload(level: str, evidence: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "readiness_level": level,
+        "runtime_level": "full_runtime_usable" if level == "effective" else (
+            "runtime_usable" if level == "executable" else level
+        ),
+        "runtime_backend": "solar-harness",
+        "evidence": evidence,
+    }
+
+
+def _write_scorecard(capability: str, provider: str, level: str, evidence: dict[str, Any]) -> None:
+    STATE_DB.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(STATE_DB), timeout=5.0)
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS capability_scorecards (
+            capability TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            score REAL NOT NULL,
+            level TEXT NOT NULL,
+            status TEXT NOT NULL,
+            eval_passed INTEGER NOT NULL DEFAULT 0,
+            regression_passed INTEGER NOT NULL DEFAULT 0,
+            failures INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL,
+            payload TEXT,
+            PRIMARY KEY (capability, provider)
+        )
+        """
+    )
+    score = _score_for_level(level)
+    status = _status_for_level(level)
+    payload = _scorecard_payload(level, evidence)
+    conn.execute(
+        """INSERT INTO capability_scorecards
+           (capability, provider, score, level, status, eval_passed, regression_passed, updated_at, payload)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(capability, provider) DO UPDATE SET
+             score=excluded.score, level=excluded.level, status=excluded.status,
+             eval_passed=excluded.eval_passed, regression_passed=excluded.regression_passed,
+             updated_at=excluded.updated_at, payload=excluded.payload""",
+        (
+            capability,
+            provider,
+            score,
+            "closed_loop" if level == "effective" else ("default_usable" if level == "executable" else level),
+            status,
+            1 if level in ("effective", "executable") else 0,
+            1 if level == "effective" else 0,
+            _now_iso(),
+            json.dumps(payload, ensure_ascii=False),
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+
+def _scorecard_level(provider: str, capability: str, scores: dict[str, dict[str, Any]]) -> str:
+    item = scores.get(f"{provider}::{capability}") or scores.get(f"cap::{capability}") or {}
+    payload = item.get("payload")
+    if isinstance(payload, str):
+        try:
+            decoded = json.loads(payload)
+            if isinstance(decoded, dict) and decoded.get("readiness_level"):
+                return str(decoded["readiness_level"])
+        except Exception:
+            pass
+    runtime = str(item.get("runtime_level") or "")
+    level = str(item.get("level") or "")
+    if runtime == "full_runtime_usable" or level == "closed_loop":
+        return "effective"
+    if runtime == "runtime_usable" or level == "default_usable":
+        return "executable"
+    if item:
+        return "injectable"
+    return ""
+
+
+def _run(cmd: list[str], timeout: int = 30, max_output_chars: int | None = 4000) -> dict[str, Any]:
+    def _trim(text: str) -> str:
+        if max_output_chars is None:
+            return text
+        return text[-max_output_chars:]
+
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return {
+            "ok": proc.returncode == 0,
+            "returncode": proc.returncode,
+            "stdout": _trim(proc.stdout),
+            "stderr": _trim(proc.stderr),
+            "cmd": cmd,
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "cmd": cmd}
+
+
+def _load_data_plane_audit() -> dict[str, Any]:
+    proc = _run(
+        [str(HARNESS_DIR / "solar-harness.sh"), "data-plane", "audit", "--json"],
+        timeout=30,
+        max_output_chars=None,
+    )
+    try:
+        stdout = str(proc.get("stdout", "") or "").strip()
+        if stdout:
+            return json.loads(stdout)
+    except Exception:
+        pass
+    return {"overall_status": "error", "checks": [], "error": proc.get("error") or proc.get("stderr", "")}
+
+
+def _accepted_artifact_readiness(audit: dict[str, Any] | None = None) -> dict[str, Any]:
+    audit = audit or _load_data_plane_audit()
+    checks = audit.get("checks", []) if isinstance(audit.get("checks"), list) else []
+    check = next((item for item in checks if item.get("name") == "accepted_artifact_path"), {})
+    status = str(check.get("status") or "missing")
+    indexed = int(check.get("indexed_in_vault") or 0)
+    finalized = int(check.get("finalized_sprints") or 0)
+    if status == "ok" and indexed > 0:
+        level = "effective"
+    elif finalized > 0:
+        level = "injectable"
+    elif status == "missing":
+        level = "broken"
+    else:
+        level = "injectable"
+    return {
+        "name": "accepted-artifacts-knowledge-index",
+        "provider": "solar-data-plane",
+        "capability": "accepted_artifacts.indexed_in_vault",
+        "level": level,
+        "status": status,
+        "evidence": check,
+    }
+
+
+def _core_skill_readiness(scores: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for spec in CORE_SOLAR_SKILLS:
+        name = spec["name"]
+        codex_file = _skill_file(CODEX_SKILLS_ROOT, name)
+        agents_file = _skill_file(SKILLS_ROOT, name)
+        discoverable = codex_file.exists() or agents_file.exists()
+        injectable = agents_file.exists()
+        best_score_level = ""
+        for cap in spec.get("capabilities", []):
+            best_score_level = max(
+                [best_score_level, _scorecard_level(spec["provider"], cap, scores)],
+                key=lambda item: READINESS_ORDER.index(item) if item in READINESS_ORDER else -1,
+            )
+        executable = best_score_level in ("executable", "effective")
+        effective = best_score_level == "effective"
+        broken = not discoverable or not codex_file.exists() or not agents_file.exists()
+        level = _level(discoverable, injectable, executable, effective, broken)
+        out.append({
+            "name": name,
+            "source": "solar-harness-core",
+            "level": level,
+            "layers": {
+                "discoverable": discoverable,
+                "injectable": injectable,
+                "executable": executable,
+                "effective": effective,
+            },
+            "paths": {
+                "codex": str(codex_file),
+                "agents": str(agents_file),
+            },
+            "capabilities": spec.get("capabilities", []),
+            "probe": spec.get("probe", ""),
+            "broken_reason": "missing dual registration" if broken else "",
+        })
+    return out
+
+
+def _all_discovered_skill_records() -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    roots: list[tuple[str, Path, bool]] = [
+        ("agents-skills", SKILLS_ROOT, True),
+        ("codex-skills", CODEX_SKILLS_ROOT, False),
+        ("claude-skills", CLAUDE_SKILLS_ROOT, False),
+        ("solar-native", SOLAR_NATIVE_ROOT, True),
+    ]
+    for source, root, injectable in roots:
+        if not root.exists():
+            continue
+        for skill_file in sorted({p for p in root.rglob("SKILL.md")} | {p for p in root.rglob("skill.md")}):
+            meta = _read_skill_meta(skill_file.parent)
+            name = str(meta.get("name") or skill_file.parent.name)
+            records.append({
+                "name": name,
+                "source": source,
+                "path": str(skill_file),
+                "level": "injectable" if injectable else "discoverable",
+                "layers": {
+                    "discoverable": True,
+                    "injectable": injectable,
+                    "executable": False,
+                    "effective": False,
+                },
+            })
+    vendor_roots = {
+        "vendor:ruflo": HARNESS_VENDOR_ROOT / "ruflo",
+        "vendor:hermes-agent": HARNESS_VENDOR_ROOT / "hermes-agent",
+        "vendor:obsidian-wiki": HARNESS_VENDOR_ROOT / "obsidian-wiki",
+        "vendor:everything-claude-code": HARNESS_VENDOR_ROOT / "everything-claude-code",
+        "vendor:mineru-document-explorer": HARNESS_VENDOR_ROOT / "MinerU-Document-Explorer",
+    }
+    for source, root in vendor_roots.items():
+        if not root.exists():
+            continue
+        for skill_file in sorted({p for p in root.rglob("SKILL.md")} | {p for p in root.rglob("skill.md")}):
+            meta = _read_skill_meta(skill_file.parent)
+            records.append({
+                "name": str(meta.get("name") or skill_file.parent.name),
+                "source": source,
+                "path": str(skill_file),
+                "level": "discoverable",
+                "layers": {
+                    "discoverable": True,
+                    "injectable": False,
+                    "executable": False,
+                    "effective": False,
+                },
+            })
+    return records
 
 
 # ── inventory ──────────────────────────────────────────────────────────────
@@ -403,6 +726,66 @@ CAPABILITY_RULES: list[dict[str, Any]] = [
         ],
     },
     {
+        "provider": "solar-intent-engine",
+        "capabilities": ["intent.match", "intent.audit", "dispatch.intent_telemetry"],
+        "why": "任务涉及意图识别、learned intent、dispatch 前能力命中或 intent telemetry。",
+        "use": "先运行 solar-harness intent match，再用 skills inject 生成 .intent.json；只把 audit 证据写成 worker_used。",
+        "patterns": [
+            r"\b(intent engine|intent[- ]match|intent telemetry|learned intent|dispatch intent)\b",
+            r"意图识别|意图引擎|能力命中|intent|telemetry",
+        ],
+    },
+    {
+        "provider": "solar-activation-proof",
+        "capabilities": ["activation.proof", "negative_control", "runtime_artifacts"],
+        "why": "任务要求证明能力默认、自动、可用、有效，不能只看安装状态。",
+        "use": "运行 solar-harness integrations activation-proof --json；必须包含 negative control 和 runtime artifacts。",
+        "patterns": [
+            r"\b(activation[- ]proof|negative control|runtime artifacts|default automatic usable effective)\b",
+            r"证明.*可用|默认.*自动|有效果|负对照|激活证明",
+        ],
+    },
+    {
+        "provider": "solar-graph-scheduler",
+        "capabilities": ["dag.validate", "dag.ready_nodes", "dag.join_gate"],
+        "why": "任务涉及 task_graph、DAG、ready node、join gate、write_scope 或父 sprint readiness。",
+        "use": "必须验证 task_graph.json；无 write_scope 节点不得并行；父 sprint 通过前必须 parent-ready-check。",
+        "patterns": [
+            r"\b(task_graph|graph scheduler|graph[- ]scheduler|dag|ready nodes?|join gate|write_scope|parent[- ]ready)\b",
+            r"任务图|DAG|就绪节点|并行批次|写范围|父级验收|join gate",
+        ],
+    },
+    {
+        "provider": "solar-model-routing",
+        "capabilities": ["models.show", "models.lab_matrix", "models.footer_labels"],
+        "why": "任务涉及 pane 模型、GLM/Sonnet 路由、lab matrix、footer 角标或配额 fallback。",
+        "use": "只用 solar-harness models show/set-lab-matrix/refresh-labels；不要直接改 pane launcher 文案。",
+        "patterns": [
+            r"\b(model routing|lab matrix|glm|sonnet|opus|footer labels?|quota|persona-config)\b",
+            r"模型路由|模型配置|角标|GLM|Sonnet|配额|lab matrix",
+        ],
+    },
+    {
+        "provider": "solar-knowledge-ingest",
+        "capabilities": ["context.inject", "wiki.status", "data_plane.audit"],
+        "why": "任务涉及知识库、Obsidian/QMD/Mirage/MinerU、_raw/_sources、accepted artifacts 入库或 data-plane。",
+        "use": "先 context inject 和 data-plane audit；_raw 只作 staging，accepted artifacts 必须有入库/索引证据。",
+        "patterns": [
+            r"\b(knowledge ingest|wiki|obsidian|qmd|mirage|mineru|data[- ]plane|accepted artifacts?|_raw|_sources)\b",
+            r"知识库|入库|索引|原件|数据平面|accepted artifact|验收产物",
+        ],
+    },
+    {
+        "provider": "solar-autopilot-monitor",
+        "capabilities": ["autopilot.monitor", "autopilot.safe_apply", "pane.deadlock_detection"],
+        "why": "任务涉及自动盯梢、pane 死等、queue/lease 阻塞、自动推进或协调器断头。",
+        "use": "先运行 solar-autopilot-monitor.py --json；只对安全项 --apply，派发前检查 pane lease。",
+        "patterns": [
+            r"\b(autopilot|monitor|pane lease|deadlock|stale handoff|queue blockage|auto[- ]dispatch)\b",
+            r"自动盯梢|自动推进|死等|队列阻塞|pane lease|断头|卡住",
+        ],
+    },
+    {
         "provider": "gstack",
         "capabilities": ["browser.browse", "browser.qa", "code.review"],
         "why": "任务涉及网页、本地浏览器、视觉回归或前端 QA。",
@@ -547,12 +930,13 @@ def _build_skills_block(native_names: list[str], agents_count: int) -> str:
     return "\n".join(lines)
 
 
-def _build_kb_block() -> str:
+def _build_kb_block(query: str = "") -> str:
     """Generate KB context block, degraded if solar-unified-context.py fails."""
     if SOLAR_CONTEXT_PY.exists():
         try:
+            q = " ".join((query or "Solar-Harness dispatch context").split())[:600]
             result = subprocess.run(
-                [sys.executable, str(SOLAR_CONTEXT_PY), "--format", "block"],
+                [sys.executable, str(SOLAR_CONTEXT_PY), "--query", q, "--format", "hook", "--fail-open"],
                 capture_output=True, text=True, timeout=30
             )
             if result.returncode == 0 and result.stdout.strip():
@@ -620,6 +1004,8 @@ def _rank_rule(rule: dict[str, Any], scores: dict[str, dict[str, Any]]) -> dict[
         "agency-agents": "agency-agents",
         "atlas": "atlas",
         "everything-claude-code": "everything-claude-code",
+        "solar-harness-runtime": "solar-harness-runtime",
+        "solar-data-plane": "solar-data-plane",
     }
     provider_id = aliases.get(provider_key, provider_key)
     matches = []
@@ -733,6 +1119,14 @@ def _build_capability_block(dispatch_text: str, selected: list[dict[str, Any]] |
                     f"  Score: {scorecard.get('score')} level={scorecard.get('level') or 'N/A'} "
                     f"runtime={scorecard.get('runtime_level') or 'N/A'} backend={scorecard.get('runtime_backend') or 'N/A'}"
                 )
+                readiness_level = _scorecard_level(
+                    str(scorecard.get("provider_id") or item["provider"]),
+                    str(item["capabilities"][0]) if item.get("capabilities") else "",
+                    _load_capability_scorecards(),
+                )
+                lines.append(f"  Readiness: {readiness_level or 'scorecard_present'}")
+            else:
+                lines.append("  Readiness: injectable_only (no executable/effective scorecard yet)")
             lines.append(f"  Why: {item['why']}")
             lines.append(f"  Use: {item['use']}")
         lines.append("")
@@ -845,7 +1239,7 @@ def cmd_inject(args: list[str]) -> int:
     skills_block = _build_skills_block(native_names, agents_count)
     intent_block = _build_intent_block(text, intent_result)
     capability_block = _build_capability_block(text, capabilities)
-    kb_block = _build_kb_block()
+    kb_block = _build_kb_block(original_text)
 
     # Replace or append blocks (idempotent)
     text = _replace_block(text, _SKILLS_OPEN, _SKILLS_CLOSE, skills_block)
@@ -864,8 +1258,36 @@ def cmd_inject(args: list[str]) -> int:
             native_count=len(native_names),
             general_count=agents_count,
         )
+        if record_usage is not None:
+            record_usage(
+                "tool",
+                "solar-skills-inject",
+                intent="skills.inject",
+                input_summary=str(dispatch_file),
+                success=True,
+                output_summary=(
+                    f"intent_matched={bool(intent_result.get('matched'))}; "
+                    f"capabilities={len(capabilities)}; sidecar={sidecar.name}"
+                ),
+                description="Solar-Harness default dispatch injector for skills, intent, capability and KB context blocks.",
+                keywords=["skills", "intent", "capability", "dispatch", "knowledge"],
+                config={"dispatch_file": str(dispatch_file)},
+            )
         print(f"[solar_skills] injected context blocks into {dispatch_file.name}; telemetry={sidecar.name}")
     except Exception as exc:
+        if record_usage is not None:
+            record_usage(
+                "tool",
+                "solar-skills-inject",
+                intent="skills.inject",
+                input_summary=str(dispatch_file),
+                success=False,
+                output_summary="injection completed but telemetry sidecar failed",
+                error=str(exc),
+                description="Solar-Harness default dispatch injector for skills, intent, capability and KB context blocks.",
+                keywords=["skills", "intent", "capability", "dispatch", "knowledge"],
+                config={"dispatch_file": str(dispatch_file)},
+            )
         _warn(f"intent telemetry sidecar failed for {dispatch_file}: {exc}")
         print(f"[solar_skills] injected context blocks into {dispatch_file.name}; telemetry=warn")
     return 0
@@ -899,6 +1321,256 @@ def cmd_native_extract(args: list[str]) -> int:
     NATIVE_CACHE.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n")
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
+
+
+# ── readiness / certification ──────────────────────────────────────────────
+
+def _summarize_readiness(records: list[dict[str, Any]]) -> dict[str, int]:
+    summary = {level: 0 for level in READINESS_ORDER}
+    for item in records:
+        level = str(item.get("level") or "broken")
+        summary[level if level in summary else "broken"] += 1
+    return summary
+
+
+def _readiness_payload(include_all: bool = False, write_scorecards: bool = False) -> dict[str, Any]:
+    scores = _load_capability_scorecards()
+    core = _core_skill_readiness(scores)
+    all_records = _all_discovered_skill_records()
+    accepted = _accepted_artifact_readiness()
+    records = core + [accepted]
+    if include_all:
+        # Core records are authoritative; append non-core inventory records for complete coverage.
+        core_names = {item["name"] for item in core}
+        records.extend(item for item in all_records if item.get("name") not in core_names)
+    summary = _summarize_readiness(records)
+    if write_scorecards:
+        for item in core:
+            provider = item["name"]
+            level = item["level"]
+            evidence = {"paths": item.get("paths", {}), "layers": item.get("layers", {})}
+            for cap in item.get("capabilities", []):
+                _write_scorecard(str(cap), provider, level, evidence)
+        _write_scorecard(
+            accepted["capability"],
+            accepted["provider"],
+            accepted["level"],
+            accepted.get("evidence", {}),
+        )
+    return {
+        "ok": summary.get("broken", 0) == 0,
+        "overall_status": "ok" if summary.get("broken", 0) == 0 and summary.get("injectable", 0) == 0 else "warn",
+        "summary": summary,
+        "core": core,
+        "accepted_artifacts": accepted,
+        "skills": records,
+        "total": len(records),
+        "all_discovered_total": len(all_records),
+        "generated_at": _now_iso(),
+        "contract": {
+            "levels": READINESS_ORDER,
+            "rule": "Do not claim a skill is usable above its certified readiness level.",
+        },
+    }
+
+
+def cmd_readiness(args: list[str]) -> int:
+    include_all = "--all" in args
+    as_json = "--json" in args
+    write_scorecards = "--write-scorecards" in args
+    result = _readiness_payload(include_all=include_all, write_scorecards=write_scorecards)
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    READINESS_CACHE.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    if record_usage is not None:
+        record_usage(
+            "tool",
+            "solar-skills-readiness",
+            intent="skills.readiness",
+            input_summary=" ".join(args),
+            success=True,
+            output_summary=f"overall={result.get('overall_status')}; total={result.get('total')}; broken={result.get('summary', {}).get('broken')}",
+            description="Solar-Harness skills readiness classifier.",
+            keywords=["skills", "readiness", "certification", "capability"],
+        )
+    if as_json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print("Solar skills readiness")
+        for level in READINESS_ORDER:
+            print(f"  {level:12s}: {result['summary'].get(level, 0)}")
+        print(f"  total       : {result['total']}")
+        print(f"  all_discovered_total: {result['all_discovered_total']}")
+    return 0
+
+
+def _probe_core_skill(spec: dict[str, Any]) -> dict[str, Any]:
+    import tempfile
+
+    name = str(spec["name"])
+    probe = str(spec.get("probe") or "")
+    base = {
+        "name": name,
+        "probe": probe,
+        "ok": False,
+        "level": "broken",
+        "evidence": {},
+    }
+    codex_file = _skill_file(CODEX_SKILLS_ROOT, name)
+    agents_file = _skill_file(SKILLS_ROOT, name)
+    if not codex_file.exists() or not agents_file.exists():
+        base["evidence"] = {"missing": [str(p) for p in (codex_file, agents_file) if not p.exists()]}
+        return base
+
+    if probe == "dispatch_inject":
+        with tempfile.TemporaryDirectory() as td:
+            dispatch = Path(td) / "dispatch.md"
+            dispatch.write_text("# Test\n\nsolar-harness intent engine pane dispatch 能力可视化\n", encoding="utf-8")
+            proc = _run([sys.executable, str(Path(__file__).resolve()), "inject", str(dispatch)], timeout=60)
+            text = dispatch.read_text(encoding="utf-8", errors="replace") if dispatch.exists() else ""
+            sidecar = Path(str(dispatch) + ".intent.json")
+            ok = bool(proc.get("ok")) and "Solar-Harness Runtime" in text and sidecar.exists()
+            base.update({
+                "ok": ok,
+                "level": "effective" if ok else "broken",
+                "evidence": {"sidecar": sidecar.exists(), "provider_visible": "Solar-Harness Runtime" in text},
+            })
+            return base
+
+    if probe == "intent_match":
+        proc = _run([sys.executable, str(HARNESS_DIR / "lib" / "intent_engine_adapter.py"), "match", "修复 solar-harness intent engine", "--json"], timeout=30)
+        parsed_ok = False
+        if proc.get("ok"):
+            try:
+                parsed_ok = bool(json.loads(str(proc.get("stdout") or "{}")).get("ok"))
+            except Exception:
+                parsed_ok = False
+        base.update({"ok": parsed_ok, "level": "executable" if parsed_ok else "broken", "evidence": proc})
+        return base
+
+    if probe == "activation_proof":
+        proc = _run([str(HARNESS_DIR / "solar-harness.sh"), "integrations", "activation-proof", "--json"], timeout=180)
+        passed_all = False
+        if proc.get("ok"):
+            try:
+                payload = json.loads(str(proc.get("stdout") or "{}"))
+                passed_all = bool(payload.get("ok")) and int(payload.get("passed", 0)) == int(payload.get("total", -1))
+                proc["parsed"] = {"passed": payload.get("passed"), "total": payload.get("total")}
+            except Exception:
+                passed_all = False
+        base.update({"ok": passed_all, "level": "effective" if passed_all else "broken", "evidence": proc})
+        return base
+
+    if probe == "graph_validate":
+        with tempfile.TemporaryDirectory() as td:
+            graph = Path(td) / "task_graph.json"
+            graph.write_text(json.dumps({
+                "sprint_id": "test-skill-readiness",
+                "nodes": [{
+                    "id": "S1",
+                    "goal": "test node",
+                    "depends_on": [],
+                    "write_scope": [str(Path(td) / "out.txt")],
+                    "required_skills": ["bash"],
+                    "preferred_model": "glm",
+                    "gate": "G1",
+                    "acceptance": ["ok"],
+                }],
+            }), encoding="utf-8")
+            proc = _run([sys.executable, str(HARNESS_DIR / "lib" / "graph_scheduler.py"), "validate", "--graph", str(graph)], timeout=30)
+            ok = bool(proc.get("ok")) and '"ok": true' in str(proc.get("stdout", "")).lower()
+            base.update({"ok": ok, "level": "executable" if ok else "broken", "evidence": proc})
+            return base
+
+    if probe == "models_show":
+        proc = _run([str(HARNESS_DIR / "solar-harness.sh"), "models", "show"], timeout=30)
+        ok = bool(proc.get("ok")) and "lab matrix" in str(proc.get("stdout", ""))
+        base.update({"ok": ok, "level": "executable" if ok else "broken", "evidence": proc})
+        return base
+
+    if probe == "data_plane_audit":
+        audit = _load_data_plane_audit()
+        ok = "checks" in audit
+        effective = audit.get("overall_status") == "ok"
+        base.update({
+            "ok": ok,
+            "level": "effective" if effective else ("executable" if ok else "broken"),
+            "evidence": {
+                "overall_status": audit.get("overall_status"),
+                "accepted_artifact_path": audit.get("accepted_artifact_path", {}),
+            },
+        })
+        return base
+
+    if probe == "autopilot_monitor":
+        proc = _run([sys.executable, str(HARNESS_DIR / "tools" / "solar-autopilot-monitor.py"), "--json"], timeout=30)
+        ok = bool(proc.get("ok"))
+        base.update({"ok": ok, "level": "executable" if ok else "broken", "evidence": proc})
+        return base
+
+    return base
+
+
+def cmd_certify(args: list[str]) -> int:
+    as_json = "--json" in args
+    probes = [_probe_core_skill(spec) for spec in CORE_SOLAR_SKILLS]
+    accepted = _accepted_artifact_readiness()
+
+    for spec, probe in zip(CORE_SOLAR_SKILLS, probes):
+        for cap in spec.get("capabilities", []):
+            _write_scorecard(str(cap), str(spec["provider"]), str(probe["level"]), probe.get("evidence", {}))
+    _write_scorecard(
+        accepted["capability"],
+        accepted["provider"],
+        accepted["level"],
+        accepted.get("evidence", {}),
+    )
+
+    readiness = _readiness_payload(include_all=False, write_scorecards=False)
+    failed = [p for p in probes if not p.get("ok")]
+    warns = []
+    if accepted.get("level") != "effective":
+        warns.append({
+            "name": accepted["name"],
+            "level": accepted["level"],
+            "evidence": accepted.get("evidence", {}),
+        })
+    result = {
+        "ok": not failed,
+        "overall_status": "error" if failed else ("warn" if warns else "ok"),
+        "probes_passed": len(probes) - len(failed),
+        "probes_total": len(probes),
+        "failed": failed,
+        "warns": warns,
+        "readiness_summary": readiness["summary"],
+        "accepted_artifacts": accepted,
+        "generated_at": _now_iso(),
+        "scorecards_written": True,
+    }
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    CERTIFICATION_CACHE.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    if record_usage is not None:
+        record_usage(
+            "tool",
+            "solar-skills-certify",
+            intent="skills.certify",
+            input_summary=" ".join(args),
+            success=not failed,
+            output_summary=(
+                f"overall={result.get('overall_status')}; "
+                f"probes={result.get('probes_passed')}/{result.get('probes_total')}; "
+                f"accepted={accepted.get('level')}"
+            ),
+            error=json.dumps(failed[:2], ensure_ascii=False) if failed else "",
+            description="Solar-Harness skills certification runner and scorecard writer.",
+            keywords=["skills", "certify", "scorecard", "capability"],
+        )
+    if as_json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(f"Solar skills certify: {result['overall_status']}")
+        print(f"  probes: {result['probes_passed']}/{result['probes_total']}")
+        print(f"  accepted_artifacts: {accepted['level']} ({accepted['status']})")
+    return 0 if not failed else 1
 
 
 # ── main ───────────────────────────────────────────────────────────────────
@@ -1149,6 +1821,38 @@ def cmd_export(args: list[str]) -> int:
     return 0 if result.get("ok") else 1
 
 
+def cmd_effect_scan(args: list[str]) -> int:
+    import argparse as _ap
+    try:
+        from capability_effects import scan_effect
+    except Exception as exc:
+        print(json.dumps({"ok": False, "error": f"capability_effects unavailable: {exc}"}))
+        return 1
+
+    p = _ap.ArgumentParser(prog="solar-harness skills effect-scan")
+    p.add_argument("dispatch_file")
+    p.add_argument("--handoff", default="")
+    p.add_argument("--eval", dest="eval_file", default="")
+    p.add_argument("--eval-json", default="")
+    p.add_argument("--verdict", default="")
+    p.add_argument("--no-db", action="store_true")
+    p.add_argument("--json", action="store_true")
+    ns = p.parse_args(args)
+    result = scan_effect(
+        ns.dispatch_file,
+        handoff_file=ns.handoff,
+        eval_file=ns.eval_file,
+        eval_json_file=ns.eval_json,
+        verdict=ns.verdict,
+        record_db=not ns.no_db,
+    )
+    if ns.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(f"capability effect: {result.get('effect', {}).get('status', result.get('reason', 'unknown'))}")
+    return 0 if result.get("ok") else 1
+
+
 # ── updated inventory (registry-aware) ────────────────────────────────────────
 
 def cmd_registry_list(args: list[str]) -> int:
@@ -1188,12 +1892,15 @@ def main() -> None:
         "inventory": cmd_inventory,
         "doctor": cmd_doctor,
         "pane-status": cmd_doctor,
+        "readiness": cmd_readiness,
+        "certify": cmd_certify,
         "inject": cmd_inject,
         "native-extract": cmd_native_extract,
         "eval": cmd_eval,
         "promote": cmd_promote,
         "rollback": cmd_rollback,
         "export": cmd_export,
+        "effect-scan": cmd_effect_scan,
         "registry": cmd_registry_list,
     }
 

@@ -132,3 +132,5 @@
 {"ts":"2026-05-09T00:37:46Z","event":"planner_notified","by":"coordinator","data":{"status":"passed"}}
 {"ts": "2026-05-09T00:38:22Z", "sid": "sprint-20260508-mirage-codex-solar-substrate", "event": "dispatched", "by": "coordinator"}
 {"ts": "2026-05-09T00:38:42Z", "sid": "sprint-20260508-mirage-codex-solar-substrate", "event": "handle_passed_completed", "by": "coordinator"}
+{"ts": "2026-05-12T19:43:23Z", "event": "accepted_artifact_exported", "source": "accepted-artifact-export", "path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260508-mirage-codex-solar-substrate.accepted.md", "bytes": 40835, "source_hash": "156104c2fdeb5fdee077b442cb0b6f72732695940b62050ce0d216eead5b63b5"}
+{"ts": "2026-05-12T19:43:23Z", "event": "accepted_artifact_ingest_dispatched", "source": "accepted-artifact-export", "dispatch_file": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260508-mirage-codex-solar-substrate.dispatch.md"}

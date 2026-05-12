@@ -3,7 +3,7 @@
   "title": "Solar Data Plane Storage And Access Unification",
   "summary": "统一数据存储层和统一数据访问层：Knowledge/_sources canonical source library，Mirage 访问层，QMD 索引层，MinerU 后台处理层，Drive 冷备镜像。",
   "status": "passed",
-  "phase": "completed",
+  "phase": "finalized",
   "handoff_to": "done",
   "target_role": "done",
   "priority": "P0",
@@ -11,7 +11,7 @@
   "round": 1,
   "bypass_pm": true,
   "created_at": "2026-05-10T14:06:15Z",
-  "updated_at": "2026-05-11T00:26:13Z",
+  "updated_at": "2026-05-12T19:43:23Z",
   "history": [
     {
       "ts": "2026-05-10T14:06:15Z",
@@ -157,5 +157,11 @@
       "drive-pass"
     ],
     "missing_gates": []
-  }
+  },
+  "knowledge_export_status": "exported",
+  "knowledge_export_path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260510-data-plane-storage-access-unification.accepted.md",
+  "knowledge_ingest_dispatch": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260510-data-plane-storage-access-unification.dispatch.md",
+  "knowledge_exported_at": "2026-05-12T19:43:23Z",
+  "knowledge_ingested_at": null,
+  "knowledge_export_error": null
 }

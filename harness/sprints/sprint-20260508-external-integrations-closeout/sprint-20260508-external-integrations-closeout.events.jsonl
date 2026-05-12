@@ -32,3 +32,5 @@
 {"ts": "2026-05-08T16:47:22Z", "sid": "sprint-20260508-external-integrations-closeout", "event": "dispatch_failed", "by": "coordinator"}
 {"ts": "2026-05-08T16:47:36Z", "sid": "sprint-20260508-external-integrations-closeout", "event": "dispatch_failed", "by": "coordinator"}
 {"ts": "2026-05-08T16:47:51Z", "sid": "sprint-20260508-external-integrations-closeout", "event": "handle_passed_completed", "by": "coordinator"}
+{"ts": "2026-05-12T19:43:23Z", "event": "accepted_artifact_exported", "source": "accepted-artifact-export", "path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260508-external-integrations-closeout.accepted.md", "bytes": 40835, "source_hash": "6329d5bed2823826cb28869e7c3dd289d273264cce42b6a5208df089be26161a"}
+{"ts": "2026-05-12T19:43:23Z", "event": "accepted_artifact_ingest_dispatched", "source": "accepted-artifact-export", "dispatch_file": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260508-external-integrations-closeout.dispatch.md"}

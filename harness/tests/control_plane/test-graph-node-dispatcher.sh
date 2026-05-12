@@ -23,6 +23,9 @@ cp "$HARNESS_DIR_REAL/lib/graph_node_dispatcher.py" "$TMPDIR_TEST/lib/graph_node
 cp "$HARNESS_DIR_REAL/lib/task_queue.py" "$TMPDIR_TEST/lib/task_queue.py"
 cp "$HARNESS_DIR_REAL/lib/pane_lease.py" "$TMPDIR_TEST/lib/pane_lease.py"
 cp "$HARNESS_DIR_REAL/lib/solar_skills.py" "$TMPDIR_TEST/lib/solar_skills.py"
+cp "$HARNESS_DIR_REAL/lib/capability_effects.py" "$TMPDIR_TEST/lib/capability_effects.py"
+cp "$HARNESS_DIR_REAL/lib/resource_telemetry.py" "$TMPDIR_TEST/lib/resource_telemetry.py"
+cp "$HARNESS_DIR_REAL/lib/solar_db.py" "$TMPDIR_TEST/lib/solar_db.py"
 
 SID="sprint-test-graph-node-dispatch"
 GRAPH="$TMPDIR_TEST/sprints/${SID}.task_graph.json"
@@ -178,6 +181,11 @@ json.dump(d, open(p, "w"), indent=2)
 PY
 cat > "$TMPDIR_TEST/sprints/${SID}.S1-handoff.md" <<'EOF'
 # Handoff S1
+
+## Capability / KB Usage Evidence
+
+- Used Browser-use MCP for localhost browser QA.
+- Used MarkItDown document.convert evidence for PDF conversion.
 EOF
 OUT=$(HARNESS_DIR="$TMPDIR_TEST" SOLAR_HARNESS_SESSION="solar-harness-test" python3 "$TMPDIR_TEST/lib/graph_node_dispatcher.py" dispatch-evals --graph "$GRAPH" --dry-run 2>/dev/null)
 check "dispatch-evals ok" "$OUT" '"ok": true'
@@ -207,6 +215,15 @@ if [[ "$OUT" != *"solar-harness-test:0.1"* ]]; then ok "planner pane excluded fr
 check "primary evaluator candidate retained" "$OUT" "solar-harness-test:0.3"
 OUT=$(HARNESS_DIR="$TMPDIR_TEST" SOLAR_HARNESS_SESSION="solar-harness-test" python3 "$TMPDIR_TEST/lib/graph_node_dispatcher.py" node-verdict --graph "$GRAPH" --node S1 --verdict pass --dry-run 2>/dev/null)
 check "S1 verdict ok" "$OUT" '"status": "passed"'
+check "S1 capability effect recorded" "$OUT" '"status": "eval_passed_with_worker_evidence"'
+python3 - "$S1_DISPATCH.intent.json" <<'PY' && ok "S1 intent sidecar effect updated" || fail "S1 intent sidecar effect missing"
+import json, sys
+d = json.load(open(sys.argv[1]))
+effect = d.get("effect") or {}
+assert effect.get("worker_used") is True, effect
+assert effect.get("eval_passed") is True, effect
+assert "MarkItDown" in effect.get("used_providers", []), effect
+PY
 if [[ "$OUT" != *'"node": "S3"'* ]]; then ok "S3 still blocked until S2 pass"; else fail "S3 released before S2 pass"; fi
 OUT=$(HARNESS_DIR="$TMPDIR_TEST" SOLAR_HARNESS_SESSION="solar-harness-test" python3 "$TMPDIR_TEST/lib/graph_node_dispatcher.py" node-verdict --graph "$GRAPH" --node S2 --verdict pass --dry-run 2>/dev/null)
 check "S2 verdict ok" "$OUT" '"status": "passed"'

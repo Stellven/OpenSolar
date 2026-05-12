@@ -12,9 +12,9 @@
     "harness_dir": "/Users/sihaoli/.solar/harness"
   },
   "models": {
-    "planner": "opus",
+    "planner": "sonnet",
     "builder": "sonnet",
-    "evaluator": "opus",
+    "evaluator": "sonnet",
     "lab_builder_matrix": "glm,glm,glm,anthropic-sonnet"
   },
   "providers": {

@@ -139,6 +139,63 @@ def proof_graph_dispatch_activation(evidence_dir: Path) -> dict[str, Any]:
     }
 
 
+def proof_use_effect_telemetry(evidence_dir: Path) -> dict[str, Any]:
+    tmp = Path(tempfile.mkdtemp(prefix="solar-activation-effect-"))
+    try:
+        dispatch = tmp / "dispatch.md"
+        dispatch.write_text(
+            "# Effect Proof\n\nUse MarkItDown to convert PDF evidence and write handoff/eval proof.\n",
+            encoding="utf-8",
+        )
+        inject = run([sys.executable, str(HARNESS / "lib" / "solar_skills.py"), "inject", str(dispatch)], evidence_dir, "effect_inject", timeout=60)
+        handoff = tmp / "handoff.md"
+        handoff.write_text(
+            "# Handoff\n\n## Capability / KB Usage Evidence\n\n- Used MarkItDown document.convert evidence for PDF markdown extraction.\n",
+            encoding="utf-8",
+        )
+        eval_json = tmp / "eval.json"
+        eval_json.write_text('{"verdict":"PASS","summary":"MarkItDown evidence checked"}\n', encoding="utf-8")
+        effect = run(
+            [
+                sys.executable,
+                str(HARNESS / "lib" / "solar_skills.py"),
+                "effect-scan",
+                str(dispatch),
+                "--handoff",
+                str(handoff),
+                "--eval-json",
+                str(eval_json),
+                "--json",
+            ],
+            evidence_dir,
+            "effect_scan",
+            timeout=60,
+        )
+        parsed: dict[str, Any] = {}
+        try:
+            parsed = json.loads(effect["stdout"])
+        except Exception:
+            parsed = {"parse_error": effect["stdout"][-1000:]}
+        sidecar = dispatch.with_name(dispatch.name + ".intent.json")
+        sidecar_out = evidence_dir / "dispatch" / "effect-dispatch.intent.json"
+        if sidecar.exists():
+            sidecar_out.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(sidecar, sidecar_out)
+        status = ((parsed.get("effect") or {}).get("status") or "")
+        return {
+            "name": "use-to-effect telemetry updates intent sidecar from handoff/eval",
+            "status": "ok" if inject["ok"] and effect["ok"] and status == "eval_passed_with_worker_evidence" else "error",
+            "passed": bool(inject["ok"] and effect["ok"] and status == "eval_passed_with_worker_evidence"),
+            "evidence": {
+                "intent_telemetry_file": str(sidecar_out) if sidecar.exists() else "",
+                "effect_status": status,
+                "used_providers": (parsed.get("effect") or {}).get("used_providers", []),
+            },
+        }
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def proof_runtime_effect(evidence_dir: Path) -> dict[str, Any]:
     result = run(["bash", str(SOLAR_BIN), "integrations", "heavy-proof", "--json"], evidence_dir, "heavy_proof_runtime", timeout=900)
     parsed: dict[str, Any] = {}
@@ -255,6 +312,7 @@ def main() -> int:
     proofs = [
         proof_dispatch_activation(evidence_dir),
         proof_graph_dispatch_activation(evidence_dir),
+        proof_use_effect_telemetry(evidence_dir),
         proof_runtime_effect(evidence_dir),
         proof_ruflo_runtime_effect(evidence_dir),
         proof_negative_control(evidence_dir),

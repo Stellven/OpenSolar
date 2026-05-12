@@ -51,6 +51,10 @@ from graph_scheduler import (  # noqa: E402
 )
 from pane_lease import acquire as acquire_lease, release as release_lease, read_lease  # noqa: E402
 from task_queue import enqueue  # noqa: E402
+try:
+    from capability_effects import scan_effect  # noqa: E402
+except Exception:  # pragma: no cover - fail-open in partial test fixtures
+    scan_effect = None  # type: ignore
 
 
 def _json(obj: Any) -> str:
@@ -291,6 +295,11 @@ Graph: `{graph_path}`
 
    ## Verification Evidence
 
+   ## Capability / KB Usage Evidence
+
+   - 写明实际使用了 dispatch 中哪些 Solar capability / skill / KB context。
+   - 如果未使用，写明原因；不要把“被注入”当成“已使用”。
+
    ## Scope Compliance
 
    ## Known Risks
@@ -371,6 +380,11 @@ cat "{handoff}"
    PASS 或 FAIL
 
    ## Evidence Checked
+
+   ## Capability / KB Usage Evidence Checked
+
+   - 检查 handoff 是否说明实际使用了哪些 capability / KB context。
+   - 如果 eval PASS，必须说明这些能力证据是否支撑验收。
 
    ## Acceptance Result
 
@@ -507,6 +521,7 @@ def _intent_telemetry_summary(instruction_file: Path) -> dict[str, Any]:
         "capability_providers": [c.get("provider") for c in caps],
         "worker_visible": data.get("worker_visible") or {},
         "effect_status": (data.get("effect") or {}).get("status", "pending_worker_evidence"),
+        "effect": data.get("effect") or {},
     }
 
 
@@ -1000,6 +1015,20 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
     node["updated_at"] = _utc_now()
     if eval_json:
         node["eval_json"] = eval_json
+    effect_result: dict[str, Any] = {}
+    if scan_effect is not None:
+        try:
+            effect_result = scan_effect(
+                _dispatch_file(sid, node_id),
+                handoff_file=_handoff_file(sid, node_id),
+                eval_file=_eval_md_file(sid, node_id),
+                eval_json_file=eval_json or _eval_json_file(sid, node_id),
+                verdict=status,
+                record_db=not dry_run,
+            )
+            node["capability_effect"] = effect_result.get("effect", {})
+        except Exception as exc:
+            effect_result = {"ok": False, "reason": f"effect_scan_failed:{type(exc).__name__}", "error": str(exc)}
     node.pop("assigned_to", None)
     node.pop("dispatch_id", None)
     node.pop("eval_assigned_to", None)
@@ -1026,6 +1055,7 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
         "dry_run": dry_run,
         "eval_lease_released": lease_released,
         "parent_status_updated": parent_status_updated,
+        "capability_effect": effect_result,
     }
 
 
