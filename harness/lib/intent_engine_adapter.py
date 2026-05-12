@@ -20,8 +20,11 @@ from pathlib import Path
 from typing import Any
 
 SOLAR_DB = Path(os.environ.get("SOLAR_INTENT_DB", str(Path.home() / ".solar" / "solar.db")))
-STATE_DIR = Path.home() / ".solar" / "harness" / "state"
+HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", str(Path.home() / ".solar" / "harness")))
+SPRINTS_DIR = HARNESS_DIR / "sprints"
+STATE_DIR = HARNESS_DIR / "state"
 EVENTS_JSONL = STATE_DIR / "events.jsonl"
+DISPATCH_LEDGER = HARNESS_DIR / "run" / "dispatch-ledger.jsonl"
 
 
 @dataclass(frozen=True)
@@ -328,6 +331,241 @@ def cmd_learn(args: argparse.Namespace) -> int:
     return 0 if result.get("ok") else 1
 
 
+def _load_json(path: Path) -> dict[str, Any]:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _iter_intent_sidecars(sid: str | None = None) -> list[Path]:
+    roots = [SPRINTS_DIR, HARNESS_DIR / "reports" / "capability-activation-evidence"]
+    out: list[Path] = []
+    for root in roots:
+        if not root.exists():
+            continue
+        for path in root.rglob("*.intent.json"):
+            if sid and sid not in str(path):
+                data = _load_json(path)
+                if sid not in str(data.get("dispatch_file", "")):
+                    continue
+            out.append(path)
+    return sorted(set(out), key=lambda p: str(p))
+
+
+def _infer_sid(sidecar: Path, data: dict[str, Any]) -> str:
+    text = f"{sidecar} {data.get('dispatch_file', '')}"
+    m = re.search(r"sprint-\d{8}[-A-Za-z0-9_.]+", text)
+    if not m:
+        return ""
+    raw = m.group(0)
+    for suffix in (
+        ".dispatch", ".handoff", ".eval", ".status", ".task_graph",
+        ".contract", ".plan", ".prd", ".design",
+    ):
+        if suffix in raw:
+            raw = raw.split(suffix, 1)[0]
+    return raw.rstrip(".")
+
+
+def _status_for_sid(sid: str) -> dict[str, Any]:
+    if not sid:
+        return {}
+    return _load_json(SPRINTS_DIR / f"{sid}.status.json")
+
+
+def _artifact_paths_for_sid(sid: str) -> list[Path]:
+    if not sid:
+        return []
+    pats = [
+        f"{sid}.handoff.md",
+        f"{sid}.eval.md",
+        f"{sid}.eval.json",
+        f"{sid}.status.json",
+        f"{sid}.*handoff.md",
+        f"{sid}.*eval.md",
+        f"{sid}.*report.md",
+        f"{sid}.*report.json",
+    ]
+    paths: list[Path] = []
+    for pat in pats:
+        paths.extend(SPRINTS_DIR.glob(pat))
+    return sorted(set(p for p in paths if p.exists()))
+
+
+def _terms_from_telemetry(data: dict[str, Any]) -> list[str]:
+    terms: list[str] = []
+    intent = data.get("intent") or {}
+    for m in intent.get("matches") or []:
+        for key in ("type", "source", "skill", "target"):
+            val = m.get(key)
+            if val:
+                terms.append(str(val))
+    for cap in data.get("capabilities") or []:
+        if cap.get("provider"):
+            terms.append(str(cap["provider"]))
+        for c in cap.get("capabilities") or []:
+            terms.append(str(c))
+    return sorted({t.lower() for t in terms if len(t) >= 3})
+
+
+def _audit_one_sidecar(sidecar: Path, write: bool = False) -> dict[str, Any]:
+    data = _load_json(sidecar)
+    sid = _infer_sid(sidecar, data)
+    status = _status_for_sid(sid)
+    artifact_paths = _artifact_paths_for_sid(sid)
+    terms = _terms_from_telemetry(data)
+    evidence: list[dict[str, Any]] = []
+    for path in artifact_paths:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace").lower()
+        except Exception:
+            continue
+        hits = [term for term in terms if term in text]
+        if hits:
+            evidence.append({
+                "file": str(path),
+                "hits": hits[:12],
+            })
+
+    has_signal = bool((data.get("intent") or {}).get("matches") or data.get("capabilities"))
+    worker_used = bool(evidence)
+    status_value = str(status.get("status", "unknown"))
+    phase_value = str(status.get("phase", "unknown"))
+    terminal_pass = status_value in {"passed", "completed"} or phase_value in {"eval_passed", "completed"}
+    terminal_fail = status_value in {"failed", "failed_review"} or phase_value in {"eval_failed", "failed"}
+    if not has_signal:
+        effect_status = "no_intent_or_capability"
+    elif worker_used and terminal_pass:
+        effect_status = "used_and_passed"
+    elif worker_used and terminal_fail:
+        effect_status = "used_but_failed"
+    elif worker_used:
+        effect_status = "used_unverified"
+    elif artifact_paths:
+        effect_status = "visible_not_used"
+    else:
+        effect_status = "pending_worker_evidence"
+
+    effect = {
+        "status": effect_status,
+        "worker_used": worker_used,
+        "evidence": evidence,
+        "audited_at": now_iso(),
+        "artifact_count": len(artifact_paths),
+        "terminal_status": status_value,
+        "terminal_phase": phase_value,
+        "note": "Audit checks observable handoff/eval/status artifacts; private model reasoning is not observable.",
+    }
+    if write:
+        data["effect"] = effect
+        sidecar.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return {
+        "sidecar": str(sidecar),
+        "sid": sid,
+        "dispatch_file": data.get("dispatch_file", ""),
+        "intent_matched": bool((data.get("intent") or {}).get("matched")),
+        "intent_matches": (data.get("intent") or {}).get("matches", []),
+        "capability_providers": [c.get("provider") for c in data.get("capabilities") or []],
+        "worker_visible": data.get("worker_visible") or {},
+        "effect": effect,
+    }
+
+
+def _sidecar_from_arg(path_arg: str) -> Path:
+    path = Path(path_arg)
+    if path.name.endswith(".intent.json"):
+        return path
+    return path.with_name(path.name + ".intent.json")
+
+
+def _short_label(value: Any, limit: int = 24) -> str:
+    text = str(value or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)] + "…"
+
+
+def summarize_sidecar(path_arg: str) -> dict[str, Any]:
+    sidecar = _sidecar_from_arg(path_arg)
+    data = _load_json(sidecar)
+    intent = data.get("intent") or {}
+    matches = intent.get("matches") or []
+    caps = data.get("capabilities") or []
+    intent_labels: list[str] = []
+    for m in matches:
+        label = m.get("skill") or m.get("target") or m.get("type") or m.get("source")
+        if label:
+            intent_labels.append(str(label))
+    cap_labels = [str(c.get("provider")) for c in caps if c.get("provider")]
+    effect = data.get("effect") or {}
+    intent_text = ",".join(_short_label(x, 22) for x in intent_labels[:3]) if intent_labels else "N/A"
+    cap_text = ",".join(_short_label(x, 22) for x in cap_labels[:4]) if cap_labels else "N/A"
+    effect_status = str(effect.get("status") or "pending_worker_evidence")
+    title_parts = []
+    if intent_labels:
+        title_parts.append("I:" + ",".join(_short_label(x, 10) for x in intent_labels[:2]))
+    if cap_labels:
+        title_parts.append("C:" + ",".join(_short_label(x, 10) for x in cap_labels[:3]))
+    title = " | ".join(title_parts) if title_parts else "能力:N/A"
+    text = f"Solar能力: intent={intent_text} | caps={cap_text} | effect={_short_label(effect_status, 20)}"
+    return {
+        "ok": bool(data),
+        "sidecar": str(sidecar),
+        "intent_labels": intent_labels,
+        "capability_providers": cap_labels,
+        "effect_status": effect_status,
+        "text": text,
+        "title": title,
+    }
+
+
+def cmd_audit(args: argparse.Namespace) -> int:
+    sidecars = _iter_intent_sidecars(args.sid)
+    rows = [_audit_one_sidecar(p, write=args.write) for p in sidecars]
+    payload = {
+        "ok": True,
+        "generated_at": now_iso(),
+        "sid": args.sid or "",
+        "total": len(rows),
+        "matched": sum(1 for r in rows if r.get("intent_matched") or r.get("capability_providers")),
+        "worker_used": sum(1 for r in rows if (r.get("effect") or {}).get("worker_used")),
+        "effect_status_counts": {},
+        "rows": rows,
+    }
+    counts: dict[str, int] = {}
+    for row in rows:
+        st = (row.get("effect") or {}).get("status", "unknown")
+        counts[st] = counts.get(st, 0) + 1
+    payload["effect_status_counts"] = counts
+    if args.as_json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(f"Intent audit: total={payload['total']} matched={payload['matched']} worker_used={payload['worker_used']}")
+        print("┌──────────────────────────────────────────────┬──────────────┬──────────────┬──────────────────────┐")
+        print("│ sidecar                                      │ matched      │ worker_used  │ effect               │")
+        print("├──────────────────────────────────────────────┼──────────────┼──────────────┼──────────────────────┤")
+        for row in rows[-20:]:
+            name = Path(str(row.get("sidecar", ""))).name[:44]
+            effect = row.get("effect") or {}
+            print(f"│ {name:<44} │ {str(row.get('intent_matched')):<12} │ {str(effect.get('worker_used')):<12} │ {str(effect.get('status'))[:20]:<20} │")
+        print("└──────────────────────────────────────────────┴──────────────┴──────────────┴──────────────────────┘")
+        if args.write:
+            print("updated sidecars with latest effect audit")
+    return 0
+
+
+def cmd_summarize(args: argparse.Namespace) -> int:
+    payload = summarize_sidecar(args.path)
+    if args.as_json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    elif args.title:
+        print(payload.get("title", "能力:N/A"))
+    else:
+        print(payload.get("text", "Solar能力: N/A"))
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(prog="intent_engine_adapter.py")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -340,6 +578,16 @@ def main() -> int:
     l.add_argument("pattern")
     l.add_argument("intent")
     l.set_defaults(func=cmd_learn)
+    a = sub.add_parser("audit")
+    a.add_argument("--sid")
+    a.add_argument("--json", action="store_true", dest="as_json")
+    a.add_argument("--write", action="store_true")
+    a.set_defaults(func=cmd_audit)
+    s = sub.add_parser("summarize")
+    s.add_argument("path")
+    s.add_argument("--json", action="store_true", dest="as_json")
+    s.add_argument("--title", action="store_true")
+    s.set_defaults(func=cmd_summarize)
     args = ap.parse_args()
     return args.func(args)
 

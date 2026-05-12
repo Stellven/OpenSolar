@@ -15,6 +15,7 @@
 # ================================================================
 
 HARNESS_DIR="${HARNESS_DIR:-$HOME/.solar/harness}"
+[[ -f "$HARNESS_DIR/lib/harness-config.sh" ]] && source "$HARNESS_DIR/lib/harness-config.sh"
 
 # 从 model-config.sh 读 ZHIPU_* 变量
 _source_model_config() {
@@ -78,10 +79,14 @@ _lab_builder_model_for_slot() {
   local slot_num="${slot##*-}"
   [[ "$slot_num" =~ ^[0-9]+$ ]] || slot_num=1
 
-  # Default keeps GLM concurrency at 3 for the lab builders and uses native
-  # Anthropic Sonnet for the fourth pane. Bare "sonnet" is reserved for the
-  # Zhipu compatibility route, so use the explicit anthropic-sonnet alias here.
-  local matrix="${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,anthropic-sonnet}"
+  # Model policy is config-owned. Launchers should not hardcode lab routing.
+  local matrix
+  if command -v solar_lab_builder_matrix >/dev/null 2>&1; then
+    matrix="$(solar_lab_builder_matrix)"
+  else
+    echo "FATAL: missing harness config helper: $HARNESS_DIR/lib/harness-config.sh" >&2
+    return 1
+  fi
   local IFS=','
   local models=($matrix)
   local selected="${models[$((slot_num - 1))]:-}"

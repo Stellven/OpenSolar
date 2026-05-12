@@ -1334,6 +1334,9 @@ check_planner_notice() {
 # Fail-open: any error is logged but does not abort the dispatch.
 inject_dispatch_context() {
   local dispatch_file="${1:-}"
+  local sid="${2:-dispatch}"
+  local pane="${3:-unknown}"
+  local dispatch_id="${4:-}"
   [[ -z "$dispatch_file" || ! -f "$dispatch_file" ]] && return 0
   local skills_py="$HARNESS_DIR/lib/solar_skills.py"
   if [[ ! -f "$skills_py" ]]; then
@@ -1342,6 +1345,71 @@ inject_dispatch_context() {
   fi
   python3 "$skills_py" inject "$dispatch_file" 2>/dev/null || \
     log "${Y}[dispatch] skills inject warn (fail-open): $dispatch_file${N}"
+  local sidecar="${dispatch_file}.intent.json"
+  if [[ -f "$sidecar" ]] && type dispatch_ledger_append &>/dev/null; then
+    local summary
+    summary=$(python3 - "$sidecar" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+try:
+    data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+except Exception as exc:
+    print(json.dumps({"intent_telemetry_error": str(exc)}, ensure_ascii=False))
+    raise SystemExit(0)
+
+intent = data.get("intent") or {}
+caps = data.get("capabilities") or []
+matches = intent.get("matches") or []
+print(json.dumps({
+    "instruction_file": data.get("dispatch_file", ""),
+    "intent_telemetry_file": str(Path(sys.argv[1])),
+    "intent_matched": bool(intent.get("matched")),
+    "intent_matches": [
+        {
+            "kind": m.get("kind"),
+            "type": m.get("type"),
+            "source": m.get("source"),
+            "skill": m.get("skill"),
+            "target": m.get("target"),
+            "confidence": m.get("confidence"),
+        }
+        for m in matches
+    ],
+    "capability_providers": [c.get("provider") for c in caps],
+    "worker_visible": data.get("worker_visible") or {},
+    "effect_status": (data.get("effect") or {}).get("status", "pending_worker_evidence"),
+}, ensure_ascii=False))
+PY
+)
+    dispatch_ledger_append "intent_injected" "$sid" "$pane" "${dispatch_id:-intent}" "$summary" || true
+  fi
+}
+
+dispatch_visibility_text() {
+  local dispatch_file="${1:-}"
+  [[ -n "$dispatch_file" && -f "$dispatch_file.intent.json" ]] || { printf '%s' "Solar能力: intent=N/A | caps=N/A | effect=N/A"; return 0; }
+  python3 "$HARNESS_DIR/lib/intent_engine_adapter.py" summarize "$dispatch_file" 2>/dev/null || \
+    printf '%s' "Solar能力: intent=N/A | caps=N/A | effect=N/A"
+}
+
+dispatch_visibility_title() {
+  local dispatch_file="${1:-}"
+  [[ -n "$dispatch_file" && -f "$dispatch_file.intent.json" ]] || { printf '%s' "能力:N/A"; return 0; }
+  python3 "$HARNESS_DIR/lib/intent_engine_adapter.py" summarize "$dispatch_file" --title 2>/dev/null || \
+    printf '%s' "能力:N/A"
+}
+
+set_pane_capability_title() {
+  local pane="${1:-}" dispatch_file="${2:-}"
+  [[ -n "$pane" && -n "$dispatch_file" ]] || return 0
+  local current cap_title base
+  current=$(tmux display-message -p -t "$pane" '#{pane_title}' 2>/dev/null || true)
+  cap_title=$(dispatch_visibility_title "$dispatch_file")
+  base=$(printf '%s' "$current" | sed 's/[[:space:]]|[[:space:]]能力:.*$//')
+  [[ -n "$base" ]] || base="$pane"
+  tmux select-pane -t "$pane" -T "${base} | 能力:${cap_title}" 2>/dev/null || true
 }
 
 # ensure_state_read_preflight — prevent Claude Write/Edit hook stalls.
@@ -1638,9 +1706,12 @@ dispatch_to_pane() {
   fi
 
   # sprint-20260509-solar-capability-plane-unification D4: inject skills+KB context before dispatch
-  inject_dispatch_context "$instruction_file" || true
+  inject_dispatch_context "$instruction_file" "$sid" "$pane" "${_dispatch_id:-}" || true
+  set_pane_capability_title "$pane" "$instruction_file"
 
-  local short_cmd="读取并执行 ${instruction_file}"
+  local visibility_text
+  visibility_text="$(dispatch_visibility_text "$instruction_file")"
+  local short_cmd="${visibility_text}; 读取并执行 ${instruction_file}"
   local dispatch_keyword
   dispatch_keyword=$(basename "$instruction_file")
   local tries=0

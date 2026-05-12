@@ -13,6 +13,19 @@ usage() {
 
 [[ -n "$PERSONA" ]] || { usage; exit 2; }
 
+fmt_num() {
+  local n="${1:-0}"
+  if [[ "$n" == "N/A" ]]; then
+    printf "N/A"
+  elif [[ "$n" =~ ^[0-9]+$ ]] && (( n >= 1000000 )); then
+    awk -v n="$n" 'BEGIN { printf "%.1fM", n / 1000000 }'
+  elif [[ "$n" =~ ^[0-9]+$ ]] && (( n >= 1000 )); then
+    awk -v n="$n" 'BEGIN { printf "%.1fK", n / 1000 }'
+  else
+    printf "%s" "$n"
+  fi
+}
+
 if [[ -n "$SLOT" ]]; then
   export SOLAR_BUILDER_SLOT="$SLOT"
 fi
@@ -163,22 +176,11 @@ PY
 PROVIDER_QUOTA=$(bash "$HARNESS_DIR/quota-providers.sh" "$MODEL_KEY" text 2>/dev/null || printf "quota:N/A(provider-fail)")
 if [[ "$PROVIDER_QUOTA" == quota:N/A* && "$LOCAL_QUOTA_REMAINING" != "N/A" ]]; then
   QUOTA_DISPLAY="剩余:$(fmt_num "$LOCAL_QUOTA_REMAINING")"
+elif [[ "$PROVIDER_QUOTA" == quota:N/A* ]]; then
+  QUOTA_DISPLAY="余:N/A"
 else
   QUOTA_DISPLAY="$PROVIDER_QUOTA"
 fi
-
-fmt_num() {
-  local n="${1:-0}"
-  if [[ "$n" == "N/A" ]]; then
-    printf "N/A"
-  elif [[ "$n" =~ ^[0-9]+$ ]] && (( n >= 1000000 )); then
-    awk -v n="$n" 'BEGIN { printf "%.1fM", n / 1000000 }'
-  elif [[ "$n" =~ ^[0-9]+$ ]] && (( n >= 1000 )); then
-    awk -v n="$n" 'BEGIN { printf "%.1fK", n / 1000 }'
-  else
-    printf "%s" "$n"
-  fi
-}
 
 MODEL_SHORT=$(DISPLAY_MODEL="$DISPLAY_MODEL" python3 - <<'PY'
 import os

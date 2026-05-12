@@ -147,11 +147,10 @@ LAST_LINES=""
 if [[ -n "$TMUX_PANE" ]]; then
   LAST_LINES=$(tmux capture-pane -t "$TMUX_PANE" -p -S -30 2>/dev/null | tail -30 | head -c 2000 || true)
 fi
-printf '%s' "$LAST_LINES" | PANE_EXIT_LOG="$EXIT_LOG" PANE_EXIT_CODE="$CLAUDE_EXIT" PANE_EXIT_TMUX="${TMUX_PANE:-}" PANE_EXIT_PERSONA="$PERSONA" python3 - <<'PY' 2>/dev/null || true
+PANE_EXIT_LOG="$EXIT_LOG" PANE_EXIT_CODE="$CLAUDE_EXIT" PANE_EXIT_TMUX="${TMUX_PANE:-}" PANE_EXIT_PERSONA="$PERSONA" PANE_EXIT_LAST_LINES="$LAST_LINES" python3 - <<'PY' 2>/dev/null || true
 import datetime
 import json
 import os
-import sys
 
 exit_code = int(os.environ.get("PANE_EXIT_CODE", "0") or 0)
 record = {
@@ -160,7 +159,7 @@ record = {
     "persona": os.environ.get("PANE_EXIT_PERSONA", ""),
     "exit_code": exit_code,
     "signal": "normal" if exit_code < 128 else f"signal_{exit_code - 128}",
-    "last_30_lines": sys.stdin.read()[:2000],
+    "last_30_lines": os.environ.get("PANE_EXIT_LAST_LINES", "")[:2000],
 }
 with open(os.environ["PANE_EXIT_LOG"], "a", encoding="utf-8") as fh:
     fh.write(json.dumps(record, ensure_ascii=False) + "\n")

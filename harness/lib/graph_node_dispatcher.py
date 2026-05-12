@@ -25,6 +25,7 @@ HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
 SPRINTS_DIR = HARNESS_DIR / "sprints"
 SESSION = os.environ.get("SOLAR_HARNESS_SESSION", "solar-harness")
 NO_DISPATCH_FLAG = HARNESS_DIR / "run" / "no-dispatch.flag"
+DISPATCH_LEDGER = HARNESS_DIR / "run" / "dispatch-ledger.jsonl"
 STATE_READ_PREFLIGHT = """<!-- SOLAR_STATE_READ_PREFLIGHT -->
 ## 必须先读状态 (防写入 hook 卡死)
 
@@ -439,7 +440,8 @@ def _write_submit_ack(sid: str, node_id: str, pane: str, dispatch_id: str) -> No
 def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool) -> bool:
     if dry_run:
         return True
-    short_cmd = f"读取并执行 {instruction_file}"
+    _set_pane_capability_title(pane, instruction_file)
+    short_cmd = f"{_visibility_summary(instruction_file)['text']}; 读取并执行 {instruction_file}"
     try:
         subprocess.run(["tmux", "send-keys", "-t", pane, "C-u"], timeout=2)
         time.sleep(0.2)
@@ -455,7 +457,107 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool) -> bool:
         return False
 
 
-def _inject_dispatch_context(instruction_file: Path) -> None:
+def _append_dispatch_ledger(kind: str, sid: str, pane: str, dispatch_id: str, extra: dict[str, Any]) -> None:
+    record = {
+        "ts": _utc_now(),
+        "kind": kind,
+        "sid": sid,
+        "pane": pane,
+        "dispatch_id": dispatch_id,
+    }
+    record.update(extra)
+    DISPATCH_LEDGER.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with DISPATCH_LEDGER.open("a", encoding="utf-8") as f:
+            try:
+                fcntl.flock(f, fcntl.LOCK_EX)
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+            finally:
+                fcntl.flock(f, fcntl.LOCK_UN)
+    except Exception:
+        pass
+
+
+def _intent_telemetry_summary(instruction_file: Path) -> dict[str, Any]:
+    sidecar = instruction_file.with_name(instruction_file.name + ".intent.json")
+    if not sidecar.exists():
+        return {"intent_telemetry_file": "", "intent_telemetry_missing": True}
+    try:
+        data = json.loads(sidecar.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {"intent_telemetry_file": str(sidecar), "intent_telemetry_error": str(exc)}
+    intent = data.get("intent") or {}
+    matches = intent.get("matches") or []
+    caps = data.get("capabilities") or []
+    return {
+        "instruction_file": data.get("dispatch_file", str(instruction_file)),
+        "intent_telemetry_file": str(sidecar),
+        "intent_matched": bool(intent.get("matched")),
+        "intent_matches": [
+            {
+                "kind": m.get("kind"),
+                "type": m.get("type"),
+                "source": m.get("source"),
+                "skill": m.get("skill"),
+                "target": m.get("target"),
+                "confidence": m.get("confidence"),
+            }
+            for m in matches
+        ],
+        "capability_providers": [c.get("provider") for c in caps],
+        "worker_visible": data.get("worker_visible") or {},
+        "effect_status": (data.get("effect") or {}).get("status", "pending_worker_evidence"),
+    }
+
+
+def _visibility_summary(instruction_file: Path) -> dict[str, str]:
+    sidecar = instruction_file.with_name(instruction_file.name + ".intent.json")
+    if not sidecar.exists():
+        return {
+            "text": "Solar能力: intent=N/A | caps=N/A | effect=N/A",
+            "title": "能力:N/A",
+        }
+    summary = _intent_telemetry_summary(instruction_file)
+    intent_labels: list[str] = []
+    for m in summary.get("intent_matches", []):
+        label = m.get("skill") or m.get("target") or m.get("type") or m.get("source")
+        if label:
+            intent_labels.append(str(label))
+    cap_labels = [str(x) for x in summary.get("capability_providers", []) if x]
+
+    def short(value: str, limit: int) -> str:
+        return value if len(value) <= limit else value[: max(0, limit - 1)] + "…"
+
+    intent_text = ",".join(short(x, 22) for x in intent_labels[:3]) if intent_labels else "N/A"
+    cap_text = ",".join(short(x, 22) for x in cap_labels[:4]) if cap_labels else "N/A"
+    effect = short(str(summary.get("effect_status") or "pending_worker_evidence"), 20)
+    title_parts: list[str] = []
+    if intent_labels:
+        title_parts.append("I:" + ",".join(short(x, 10) for x in intent_labels[:2]))
+    if cap_labels:
+        title_parts.append("C:" + ",".join(short(x, 10) for x in cap_labels[:3]))
+    return {
+        "text": f"Solar能力: intent={intent_text} | caps={cap_text} | effect={effect}",
+        "title": " | ".join(title_parts) if title_parts else "能力:N/A",
+    }
+
+
+def _set_pane_capability_title(pane: str, instruction_file: Path) -> None:
+    try:
+        current = subprocess.run(
+            ["tmux", "display-message", "-p", "-t", pane, "#{pane_title}"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        ).stdout.strip()
+        base = re.sub(r"\s+\|\s+能力:.*$", "", current) or pane
+        title = _visibility_summary(instruction_file)["title"]
+        subprocess.run(["tmux", "select-pane", "-t", pane, "-T", f"{base} | 能力:{title}"], timeout=2)
+    except Exception:
+        pass
+
+
+def _inject_dispatch_context(instruction_file: Path, sid: str = "", pane: str = "", dispatch_id: str = "") -> None:
     """Fail-open Solar skills/KB/capability context injection for DAG dispatch files."""
     injector = HARNESS_DIR / "lib" / "solar_skills.py"
     if not injector.exists() or not instruction_file.exists():
@@ -470,6 +572,14 @@ def _inject_dispatch_context(instruction_file: Path) -> None:
         )
     except Exception:
         pass
+    if sid and dispatch_id:
+        _append_dispatch_ledger(
+            "intent_injected",
+            sid,
+            pane or "unknown",
+            dispatch_id,
+            _intent_telemetry_summary(instruction_file),
+        )
 
 
 def _lease_active_for(pane: str, sid: str, dispatch_id: str) -> bool:
@@ -603,7 +713,7 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
     text_payload = dict(payload, dispatch_id=dispatch_id, sprint_id=sid)
     instruction_file.parent.mkdir(parents=True, exist_ok=True)
     instruction_file.write_text(build_dispatch_text(text_payload, pane), encoding="utf-8")
-    _inject_dispatch_context(instruction_file)
+    _inject_dispatch_context(instruction_file, sid=sid, pane=pane, dispatch_id=dispatch_id)
 
     sent = _send_to_pane(pane, instruction_file, dry_run)
     graph_updated = False
@@ -816,7 +926,7 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
             build_eval_dispatch_text(graph, graph_path, node, pane, dispatch_id),
             encoding="utf-8",
         )
-        _inject_dispatch_context(instruction_file)
+        _inject_dispatch_context(instruction_file, sid=sid, pane=pane, dispatch_id=dispatch_id)
         sent = _send_to_pane(pane, instruction_file, dry_run)
         if not sent:
             if not dry_run:

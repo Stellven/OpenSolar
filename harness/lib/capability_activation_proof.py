@@ -88,6 +88,11 @@ def proof_dispatch_activation(evidence_dir: Path) -> dict[str, Any]:
         result = run([sys.executable, str(HARNESS / "lib" / "solar_skills.py"), "inject", str(dispatch)], evidence_dir, "dispatch_inject", timeout=60)
         text = dispatch.read_text(encoding="utf-8", errors="replace")
         write_text(evidence_dir / "dispatch" / "activation-dispatch.injected.md", text)
+        sidecar = dispatch.with_name(dispatch.name + ".intent.json")
+        sidecar_out = evidence_dir / "dispatch" / "activation-dispatch.injected.md.intent.json"
+        if sidecar.exists():
+            sidecar_out.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(sidecar, sidecar_out)
         required = [
             "<solar-intent-context>",
             "<solar-capability-context>",
@@ -104,6 +109,7 @@ def proof_dispatch_activation(evidence_dir: Path) -> dict[str, Any]:
             "passed": result["ok"] and not missing,
             "evidence": {
                 "injected_file": str(evidence_dir / "dispatch" / "activation-dispatch.injected.md"),
+                "intent_telemetry_file": str(sidecar_out) if sidecar.exists() else "",
                 "missing": missing,
             },
         }
@@ -193,6 +199,11 @@ def proof_negative_control(evidence_dir: Path) -> dict[str, Any]:
         result = run([sys.executable, str(HARNESS / "lib" / "solar_skills.py"), "inject", str(dispatch)], evidence_dir, "negative_inject", timeout=60)
         text = dispatch.read_text(encoding="utf-8", errors="replace")
         write_text(evidence_dir / "negative" / "negative.injected.md", text)
+        sidecar = dispatch.with_name(dispatch.name + ".intent.json")
+        sidecar_out = evidence_dir / "negative" / "negative.injected.md.intent.json"
+        if sidecar.exists():
+            sidecar_out.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(sidecar, sidecar_out)
         false_hits = [name for name in ["Browser-use MCP", "MarkItDown", "Ruflo", "Empirical Research", "gstack"] if name in text]
         return {
             "name": "negative control does not activate unrelated capabilities",
@@ -200,6 +211,7 @@ def proof_negative_control(evidence_dir: Path) -> dict[str, Any]:
             "passed": result["ok"] and not false_hits,
             "evidence": {
                 "injected_file": str(evidence_dir / "negative" / "negative.injected.md"),
+                "intent_telemetry_file": str(sidecar_out) if sidecar.exists() else "",
                 "false_hits": false_hits,
             },
         }
