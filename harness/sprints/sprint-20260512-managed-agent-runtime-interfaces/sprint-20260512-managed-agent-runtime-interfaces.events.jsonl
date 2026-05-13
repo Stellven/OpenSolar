@@ -54,3 +54,4 @@
 {"ts": "2026-05-13T11:16:28Z", "event": "eval_passed", "by": "evaluator", "verdict": "pass", "sid": "sprint-20260512-managed-agent-runtime-interfaces"}
 {"ts": "2026-05-13T11:17:29Z", "sid": "sprint-20260512-managed-agent-runtime-interfaces", "event": "state_changed", "by": "coordinator"}
 {"ts":"2026-05-13T11:17:30Z","event":"planner_notified","by":"coordinator","data":{"status":"passed"}}
+{"ts": "2026-05-13T11:18:02Z", "sid": "sprint-20260512-managed-agent-runtime-interfaces", "event": "dispatch_queued", "by": "coordinator"}
