@@ -319,13 +319,23 @@ def _normalize_status(status: str) -> str:
         "canceled": "cancelled",
     }
     s = aliases.get(s, s)
-    if s in {
+    valid = {
         "queued", "drafting", "planning", "approved", "active",
         "building_parallel", "architect_reviewing", "reviewing",
         "needs_human_review", "passed", "error", "failed",
         "failed_review", "cancelled", "superseded", "interrupted",
-    }:
+    }
+    if s in valid:
         return s
+    # Legacy runtime_status/state-mapper events sometimes encode a compact
+    # state identity like:
+    #   sprint-id:passed:eval_passed:_:hash
+    # The projection source of truth is the status token inside that identity,
+    # not the entire composite string.
+    for part in s.split(":"):
+        token = aliases.get(part.strip(), part.strip())
+        if token in valid:
+            return token
     return ""
 
 
