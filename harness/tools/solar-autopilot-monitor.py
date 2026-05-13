@@ -16,6 +16,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -38,7 +39,18 @@ KB_PROBE_HEALTH = HARNESS / "state" / "knowledge-probe-health.json"
 KB_PROBE_INTERVAL_SEC = int(os.environ.get("SOLAR_KB_PROBE_INTERVAL_SEC", "1800"))
 KB_PROBE_TRIGGER_COOLDOWN_SEC = int(os.environ.get("SOLAR_KB_PROBE_TRIGGER_COOLDOWN_SEC", "300"))
 KB_PROBE_TIMEOUT_SEC = int(os.environ.get("SOLAR_KB_PROBE_TIMEOUT_SEC", "120"))
+
+sys.path.insert(0, str(HARNESS / "lib"))
+try:
+    from runtime_bridge import record_legacy_event
+except Exception:  # pragma: no cover - monitor must fail open
+    record_legacy_event = None  # type: ignore
 QMD_PROXY_HEALTH = HARNESS / "state" / "qmd-mcp-ipv4-health.json"
+TELEMETRY_ONLY_FINDINGS = {
+    "knowledge_context_sqlite_only",
+    "knowledge_context_timeout",
+    "knowledge_probe_failed",
+}
 
 
 ASK_BOSS_RE = re.compile(r"拍板|要走哪条|你决定|老板.*决定|昊哥拍板|等.*确认|是否.*继续")
@@ -111,6 +123,11 @@ def append_event(sid: str, event: str, severity: str = "info", data: dict | None
     if sid:
         with (SPRINTS / f"{sid}.events.jsonl").open("a") as f:
             f.write(json.dumps(obj, ensure_ascii=False) + "\n")
+        if record_legacy_event is not None:
+            try:
+                record_legacy_event(sid, event, "solar-autopilot", data or {}, harness_dir=HARNESS)
+            except Exception:
+                pass
 
 
 def ensure_qmd_mcp_ipv4(reason: str) -> dict:
@@ -363,6 +380,14 @@ def pane_assignment(target: str) -> dict:
 
 
 def enqueue_action(finding: dict, reason: str, detail: dict | None = None) -> None:
+    if finding.get("type") in TELEMETRY_ONLY_FINDINGS:
+        append_event(
+            finding.get("sid", ""),
+            "autopilot_queue_skip_telemetry_only",
+            "info",
+            {"target": finding.get("target", ""), "type": finding.get("type"), "reason": reason},
+        )
+        return
     existing_key = f"{finding.get('sid','')}:{finding.get('type','')}:{finding.get('target','')}"
     for old in load_queue():
         old_key = f"{old.get('sid','')}:{old.get('type','')}:{old.get('target','')}"
@@ -415,6 +440,10 @@ def retry_queue(state: dict, dispatch: bool, cooldown: int) -> list[dict]:
     for item in load_queue():
         sid = item.get("sid", "")
         target = item.get("target", "")
+        if item.get("type") in TELEMETRY_ONLY_FINDINGS:
+            append_event(sid, "autopilot_queue_drop_telemetry_only", "info", {"target": target, "type": item.get("type")})
+            actions.append({"sid": sid, "action": item.get("type"), "dropped": "telemetry_only", "target": target})
+            continue
         age = now_epoch - float(item.get("created_at_epoch", now_epoch))
         if age > QUEUE_TTL_SEC:
             append_event(sid, "autopilot_queue_expired", "warn", {"target": target, "type": item.get("type"), "age_sec": int(age)})

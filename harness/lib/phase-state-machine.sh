@@ -17,7 +17,7 @@
 # ================================================================
 set -eu
 
-HARNESS_DIR="$HOME/.solar/harness"
+HARNESS_DIR="${HARNESS_DIR:-$HOME/.solar/harness}"
 SPRINTS_DIR="$HARNESS_DIR/sprints"
 
 # ---- Helpers ----
@@ -54,7 +54,7 @@ d = json.load(open(sf))
 old = d.get('phase', 'legacy')
 d['phase'] = '${phase}'
 d['updated_at'] = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-d['history'].append({
+d.setdefault('history', []).append({
     'ts': d['updated_at'],
     'event': 'phase_transition',
     'by': 'phase-state-machine',
@@ -169,11 +169,21 @@ exit_gate() {
 
 append_event() {
   local sid="$1" from="$2" to="$3"
+  if [[ -f "$HARNESS_DIR/lib/events.sh" ]]; then
+    # Use the unified events library so phase transitions also reach
+    # session-log v2 through runtime_bridge.py.
+    # shellcheck source=/dev/null
+    source "$HARNESS_DIR/lib/events.sh"
+    events_emit "phase-state-machine" "phase_transition" "info" "$sid" "{\"from\":\"${from}\",\"to\":\"${to}\"}" 2>/dev/null && return 0
+  fi
   local events_file="${SPRINTS_DIR}/${sid}.events.jsonl"
   local ts
   ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   printf '{"ts":"%s","event":"phase_transition","by":"phase-state-machine","sid":"%s","data":{"from":"%s","to":"%s"}}\n' \
     "$ts" "$sid" "$from" "$to" >> "$events_file"
+  if [[ -f "$HARNESS_DIR/lib/runtime_bridge.py" ]]; then
+    python3 "$HARNESS_DIR/lib/runtime_bridge.py" event "$sid" "phase_transition" "phase-state-machine" "{\"from\":\"${from}\",\"to\":\"${to}\"}" --quiet 2>/dev/null || true
+  fi
 }
 
 # ---- Commands ----

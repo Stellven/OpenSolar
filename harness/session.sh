@@ -15,7 +15,7 @@
 # ================================================================
 set -eu
 
-HARNESS_DIR="$HOME/.solar/harness"
+HARNESS_DIR="${HARNESS_DIR:-$HOME/.solar/harness}"
 SPRINTS_DIR="$HARNESS_DIR/sprints"
 ARCHIVE_DIR="$SPRINTS_DIR/archive"
 
@@ -89,6 +89,33 @@ json.dump(d, sys.stdout, ensure_ascii=False)
   echo "$event_json" >> "$events_file"
   rm -rf "$lock_dir"
   trap - EXIT
+
+  if [[ "${SOLAR_SESSION_SH_NO_BRIDGE:-0}" != "1" && -f "$HARNESS_DIR/lib/runtime_bridge.py" ]]; then
+    python3 - "$HARNESS_DIR/lib/runtime_bridge.py" "$sid" "$event_json" <<'PY' 2>/dev/null || true
+import json
+import subprocess
+import sys
+
+bridge, sid, raw = sys.argv[1], sys.argv[2], sys.argv[3]
+d = json.loads(raw)
+payload = d.get("data") if isinstance(d.get("data"), dict) else d.get("payload")
+if not isinstance(payload, dict):
+    payload = dict(d)
+subprocess.run(
+    [
+        "python3",
+        bridge,
+        "event",
+        sid,
+        str(d.get("event") or "session_event"),
+        str(d.get("by") or d.get("actor") or "session.sh"),
+        json.dumps(payload, ensure_ascii=False),
+        "--quiet",
+    ],
+    check=False,
+)
+PY
+  fi
 
   echo "ok: appended to ${sid}.events.jsonl"
 }

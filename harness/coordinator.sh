@@ -520,6 +520,13 @@ dispatch_to_role() {
     log "${Y}[worker-select] ${role} target=${pane} dispatch rc=${last_rc}; trying next candidate${N}"
   done 9< <(role_candidate_panes "$role" 2>/dev/null || true)
 
+  if [[ "$intent" == "passed_notify" && "$last_rc" == "3" ]]; then
+    log "${Y}[worker-select] suppress terminal ${role} notify queue sid=${sid} intent=${intent} reason=terminal_phase_wake_detected${N}"
+    emit_event "$sid" "dispatch_suppressed" "coordinator" \
+      "{\"role\":\"${role}\",\"intent\":\"${intent}\",\"reason\":\"terminal_phase_wake_detected\"}"
+    return 0
+  fi
+
   local q_result="unavailable"
   if type queue_enqueue &>/dev/null; then
     q_result="$(queue_enqueue "$sid" "${intent}|role=${role}|file=${instruction_file}" "$(sprint_queue_priority "$sid")" 2>/dev/null || echo "error")"
@@ -675,6 +682,10 @@ else:
         f.write(value + '\n')
     os.rename(tmp, path)
 " 2>/dev/null || true
+  local sid
+  sid=$(basename "$sf" .status.json)
+  [[ -n "$sid" && -f "$HARNESS_DIR/lib/runtime_bridge.py" ]] && \
+    python3 "$HARNESS_DIR/lib/runtime_bridge.py" event "$sid" "$event" "$by" "${extra:-{}}" --quiet 2>/dev/null || true
 }
 
 G='\033[0;32m'; Y='\033[1;33m'; R='\033[0;31m'; C='\033[0;36m'; N='\033[0m'
@@ -1281,10 +1292,8 @@ notify_planner() {
   echo "$(date -u +%Y-%m-%dT%H:%M:%SZ)	${status:-unknown}	${sid}	${trunc_title}" \
     > "$HARNESS_DIR/.planner-last-notice"
 
-  # 写事件流
-  if [[ -f "$SPRINTS_DIR/${sid}.events.jsonl" ]]; then
-    echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event\":\"planner_notified\",\"by\":\"coordinator\",\"data\":{\"status\":\"${status:-unknown}\"}}" >> "$SPRINTS_DIR/${sid}.events.jsonl"
-  fi
+  # 写事件流：统一走 emit_event，避免只写 legacy events.jsonl 而绕过 session-log v2。
+  emit_event "$sid" "planner_notified" "coordinator" "{\"status\":\"${status:-unknown}\"}"
   log "${C}规划者通知: $icon ${status:-unknown} ${sid}${N}"
 }
 
@@ -1829,7 +1838,7 @@ emit_event() {
     python3 "$HARNESS_DIR/lib/runtime_bridge.py" event "$sid" "$event" "$actor" "$payload" --quiet 2>/dev/null || true
   fi
   # Also write to legacy session.sh event stream for backward compat
-  bash "$SESSION_SH" append "$sid" "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"sid\":\"${sid}\",\"event\":\"${event}\",\"by\":\"${actor}\"}" &>/dev/null || true
+  SOLAR_SESSION_SH_NO_BRIDGE=1 bash "$SESSION_SH" append "$sid" "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"sid\":\"${sid}\",\"event\":\"${event}\",\"by\":\"${actor}\"}" &>/dev/null || true
 }
 
 # D3: 原子追加 history 到 status.json
@@ -3757,9 +3766,11 @@ check_auto_suggest() {
   [[ -f "$imp_file" ]] && [[ -s "$imp_file" ]] || return 0
 
   HARNESS_DIR="$HARNESS_DIR" SPRINTS_DIR="$SPRINTS_DIR" TS="$ts" python3 << 'PYEOF' 2>> "$COORD_LOG" || true
-import datetime, hashlib, json, os
+import datetime, hashlib, json, os, sys
+from pathlib import Path
 
-imp_file = os.path.join(os.environ["HARNESS_DIR"], "pending-improvements.jsonl")
+harness_dir = os.environ["HARNESS_DIR"]
+imp_file = os.path.join(harness_dir, "pending-improvements.jsonl")
 sprints_dir = os.environ["SPRINTS_DIR"]
 ts = os.environ["TS"]
 
@@ -3822,6 +3833,20 @@ status = {
 }
 with open(sf, "w") as f:
     json.dump(status, f, indent=2)
+
+try:
+    sys.path.insert(0, os.path.join(harness_dir, "lib"))
+    from runtime_bridge import adopt_sprint, record_legacy_event
+    record_legacy_event(
+        sid,
+        "auto_suggest_sprint_created",
+        "coordinator",
+        {"source_sprint": top.get("sprint_id", ""), "priority": top.get("priority", "low")},
+        harness_dir=Path(harness_dir),
+    )
+    adopt_sprint(sid, harness_dir=Path(harness_dir))
+except Exception:
+    pass
 
 # 写 contract.md (简化版, 规划者可编辑)
 priority = top.get("priority", "low")

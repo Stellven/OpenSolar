@@ -89,6 +89,9 @@ emit_event() {
   if [[ -n "$sprint_id" && "$sprint_id" != "null" ]]; then
     local sprint_log="${_SPRINTS_DIR}/${sprint_id}.events.jsonl"
     _atomic_append "$sprint_log" "$json_line"
+    if [[ -f "${HARNESS_DIR}/lib/runtime_bridge.py" ]]; then
+      python3 "${HARNESS_DIR}/lib/runtime_bridge.py" event "$sprint_id" "$event_name" "$actor" "$payload" --quiet 2>/dev/null || true
+    fi
   fi
 }
 

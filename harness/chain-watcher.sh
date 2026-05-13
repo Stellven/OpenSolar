@@ -12,10 +12,11 @@ mkdir "$PID_LOCK_DIR" 2>/dev/null || { echo "[chain-watcher] already running, ex
 echo $$ > "$PID_LOCK_DIR/pid"
 trap 'rm -rf "$PID_LOCK_DIR"' EXIT
 
+HARNESS_DIR="${HARNESS_DIR:-$HOME/.solar/harness}"
 CODEX_INBOX="$HOME/.solar/codex-bridge/from-codex"
 CODEX_PROCESSED="$HOME/.solar/codex-bridge/from-codex/.processed"
-PLANNER_INBOX="$HOME/.solar/harness/PLANNER-INBOX.md"
-SPRINTS_DIR="$HOME/.solar/harness/sprints"
+PLANNER_INBOX="$HARNESS_DIR/PLANNER-INBOX.md"
+SPRINTS_DIR="$HARNESS_DIR/sprints"
 mkdir -p "$CODEX_PROCESSED"
 
 # D3: bridge ledger
@@ -160,8 +161,11 @@ Execute the already bounded bypass_pm contract exactly as written.
 - Do not repair unrelated Solar/Codex/harness state.
 """)
 PY_CHAIN_WATCHER_BYPASS
-    printf '{"ts":"%s","event":"bypass_pm_promoted","by":"chain-watcher","sid":"%s","data":{"to":"builder","plan":"%s"}}\n' \
-      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SID" "$HOME/.solar/harness/sprints/$SID.plan.md" >> "$HOME/.solar/harness/sprints/$SID.events.jsonl" 2>/dev/null || true
+    if [[ -f "$HARNESS_DIR/lib/events.sh" ]]; then
+      # shellcheck source=/dev/null
+      source "$HARNESS_DIR/lib/events.sh"
+      events_emit "chain-watcher" "bypass_pm_promoted" "info" "$SID" "{\"to\":\"builder\",\"plan\":\"$HARNESS_DIR/sprints/$SID.plan.md\"}" 2>/dev/null || true
+    fi
     echo "  ✅ → $SID (bypass_pm:true → active/planning_complete, builder route)"
   else
     echo "  ✅ → $SID (drafting,等 chain 起)"
@@ -250,17 +254,7 @@ while true; do
       fi
 
       echo "[$(date '+%H:%M:%S')] auto-chain: 起 $NEXT (plan.md ready)"
-      python3 -c "
-import json, datetime
-sf='$HOME/.solar/harness/sprints/$NEXT.status.json'
-d=json.load(open(sf))
-d['status']='active'
-d['phase']='planning_complete'
-d['handoff_to']='builder_main'
-d['updated_at']=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-d.setdefault('history',[]).append({'ts':d['updated_at'],'event':'auto_chain','by':'chain-watcher','note':'plan.md exists; promoted drafting sprint to active'})
-json.dump(d,open(sf,'w'),indent=2)
-"
+      python3 "$HARNESS_DIR/lib/runtime_status.py" "$SPRINTS_DIR/$NEXT.status.json" "active" "auto_chain" "chain-watcher" '{"status_fields":{"phase":"planning_complete","handoff_to":"builder_main","target_role":"builder_main"},"note":"plan.md exists; promoted drafting sprint to active"}' >/dev/null 2>&1 || true
       sleep 60
     fi
   fi

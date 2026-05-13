@@ -227,6 +227,22 @@ def _check_interface_health(sprint_id: str) -> Dict[str, Any]:
     except Exception as exc:
         dimensions["chaos_suite"] = {"ok": False, "message": str(exc)}
 
+    # Write-path audit: active legacy cache writes must be bridged or explicitly
+    # classified as non-lifecycle telemetry.
+    try:
+        from runtime_write_path_audit import audit as audit_write_paths
+        report = audit_write_paths(Path(HARNESS_DIR))
+        counts = report.get("counts", {})
+        ok = bool(report.get("ok")) and counts.get("warn", 0) == 0
+        dimensions["write_path_audit"] = {
+            "ok": ok,
+            "message": f"ok={counts.get('ok', 0)} warn={counts.get('warn', 0)} error={counts.get('error', 0)}",
+            "scanned_files": report.get("scanned_files", 0),
+            "counts": counts,
+        }
+    except Exception as exc:
+        dimensions["write_path_audit"] = {"ok": False, "message": str(exc)}
+
     all_ok = all(d.get("ok", False) for d in dimensions.values())
     any_warn = not all_ok and any(d.get("ok") for d in dimensions.values())
     return {

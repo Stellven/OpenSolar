@@ -21,6 +21,12 @@ from typing import Any
 HARNESS_DIR = Path(__file__).resolve().parent.parent
 SPRINTS_DIR = HARNESS_DIR / "sprints"
 
+sys.path.insert(0, str(HARNESS_DIR / "lib"))
+try:
+    from runtime_bridge import record_legacy_event
+except Exception:  # pragma: no cover - export must fail open
+    record_legacy_event = None  # type: ignore
+
 # ── secret redaction ────────────────────────────────────────────────────────
 _SECRET_PATTERNS = [
     (re.compile(r"sk-[A-Za-z0-9]{8,}"), "[REDACTED_API_KEY]"),
@@ -351,6 +357,8 @@ def _emit_event(sid: str, sprints_dir: Path, event_type: str, data: dict[str, An
     try:
         with ef.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        if record_legacy_event is not None:
+            record_legacy_event(sid, event_type, "accepted-artifact-export", data, harness_dir=HARNESS_DIR)
     except Exception as e:
         print(f"[accepted-export] warn: event emit failed: {e}", file=sys.stderr)
 
