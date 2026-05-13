@@ -2328,6 +2328,21 @@ contract_has_bypass_pm() {
   grep -Eiq '^(bypass_pm|bypass pm):[[:space:]]*true[[:space:]]*$' "$cf"
 }
 
+planner_artifacts_ready() {
+  local sid="$1"
+  python3 "$HARNESS_DIR/lib/workflow_guard.py" route "$sid" --field route_role 2>/dev/null | grep -Eq '^(builder|builder_main)$'
+}
+
+workflow_guard_route_role() {
+  local sid="$1"
+  python3 "$HARNESS_DIR/lib/workflow_guard.py" route "$sid" --field route_role 2>/dev/null || echo pm
+}
+
+workflow_guard_violations() {
+  local sid="$1"
+  python3 "$HARNESS_DIR/lib/workflow_guard.py" route "$sid" --field violations 2>/dev/null || echo '[]'
+}
+
 status_has_bypass_pm() {
   local sid="$1"
   local sf="$SPRINTS_DIR/${sid}.status.json"
@@ -2350,7 +2365,10 @@ PY
 
 sprint_bypasses_pm_gate() {
   local sid="$1"
-  contract_has_bypass_pm "$sid" || status_has_bypass_pm "$sid"
+  # Legacy bypass_pm caused PM/Planner skips.  Only the workflow guard can allow
+  # builder dispatch, and only after PRD + design + plan + task_graph exist (or a
+  # deliberate operator_bypass_pm is present).
+  planner_artifacts_ready "$sid"
 }
 
 gate_check() {
@@ -2371,10 +2389,9 @@ gate_check() {
 
   case "$st" in
     active)
-      if sprint_bypasses_pm_gate "$sid"; then
-        log "${G}PRD 门禁豁免: ${sid} bypass_pm/status planning_complete builder target${N}"
-        return 0
-      fi
+      local guard_role guard_violations
+      guard_role="$(workflow_guard_route_role "$sid")"
+      guard_violations="$(workflow_guard_violations "$sid")"
       local req_file=""
       req_file=$(pm_requirements_file "$sid" 2>/dev/null || true)
       if [[ -z "$req_file" ]]; then
@@ -2392,9 +2409,9 @@ gate_check() {
           return 1
         fi
       fi
-      if [[ ! -f "$sprint_dir/${sid}.plan.md" ]] && ! status_has_manual_override "$sprint_dir/${sid}.status.json"; then
-        log "${R}门禁拦截: active 状态但 planner plan.md 不存在${N}"
-        dispatch_to_planner "$sid" "gate_missing_plan" "$SPRINTS_DIR/${sid}.dispatch.md" "门禁拦截：Sprint ${sid} 已有 PM 需求，但缺少架构/Planner 计划。请读取 ${req_file} 和 contract.md，产出 plan.md 后再进入 active。"
+      if [[ "$guard_role" != "builder_main" && "$guard_role" != "builder" ]] && ! status_has_manual_override "$sprint_dir/${sid}.status.json"; then
+        log "${R}门禁拦截: active 状态但 Planner 产物未齐 (${guard_violations})${N}"
+        dispatch_to_planner "$sid" "gate_missing_planner_artifacts" "$SPRINTS_DIR/${sid}.dispatch.md" "门禁拦截：Sprint ${sid} 已有 PM 需求，但缺少 Planner 产物。请读取 ${req_file} 和 contract.md，补齐 design.md、plan.md、task_graph.json 后再进入 builder。violations=${guard_violations}"
         runtime_status_transition "$sid" "drafting" "active_blocked_missing_plan" "coordinator" '{"status_fields":{"phase":"prd_ready","handoff_to":"planner","target_role":"planner"}}' || true
         return 1
       fi
@@ -2547,13 +2564,6 @@ PY
     return 0
   fi
 
-  if contract_has_bypass_pm "$sid" || [[ "$(get_field "$sf" "handoff_to")" =~ ^builder(_main)?$ ]]; then
-    log "${G}Drafting bypass_pm/builder target → promote active builder without PM/Planner${N}"
-    runtime_status_transition "$sid" "active" "drafting_bypass_pm_promoted_to_builder" "coordinator" '{"status_fields":{"phase":"planning_complete","handoff_to":"builder","target_role":"builder"},"note":"Strict drafting routing: bypass_pm/handoff_to builder must not route to PM or planner."}' || true
-    rollback_state_cache "$sid"
-    return 0
-  fi
-
   req_file=$(pm_requirements_file "$sid" 2>/dev/null || true)
 
   if [[ -z "$req_file" ]]; then
@@ -2610,7 +2620,12 @@ PY
     return 0
   fi
 
-  if [[ ! -f "$plan" ]]; then
+  local design="$SPRINTS_DIR/${sid}.design.md"
+  local graph="$SPRINTS_DIR/${sid}.task_graph.json"
+  local guard_role
+  guard_role="$(workflow_guard_route_role "$sid")"
+
+  if [[ "$guard_role" != "builder_main" && "$guard_role" != "builder" ]]; then
     if [[ "$req_file" == "$prd" ]]; then
       local prd_err
       if prd_err=$(validate_doc "prd" "$req_file"); then :; else
@@ -2630,8 +2645,8 @@ PY
       return 0
     fi
 
-    log "${G}PRD ready → 自动派 planner/架构师产出设计和 plan${N}"
-    generate_dispatch "$sid" "规划者" "基于 PRD 和合约产出架构设计与实施计划"
+    log "${G}PRD ready → 自动派 planner/架构师产出设计、plan 和 task_graph${N}"
+    generate_dispatch "$sid" "规划者" "基于 PRD 和合约产出架构设计、实施计划与 DAG 任务图"
     append_dispatch "$sid" "### 步骤
 
 1. 读取合约:
@@ -2646,15 +2661,20 @@ PY
 4. 写实施计划到:
    ~/.solar/harness/sprints/${sid}.plan.md
 
-5. 如 PRD 中验收标准需要转成更细 Done 条件，可更新 contract.md；但不要改变 PM 目标。
+5. 写机器可执行 DAG 任务图到:
+   ~/.solar/harness/sprints/${sid}.task_graph.json
 
-6. plan 必须包含: 交付切片顺序、文件级写入范围、并发边界、验证命令、no-live-pane-mutation 保护、rollback/stop rule。
+6. task_graph.json 每个节点必须包含: id、goal、depends_on、write_scope、read_scope、required_skills、preferred_model、gate、acceptance、estimated_cost。没有 write_scope 的节点不得并行。
 
-7. 完成后更新 status.json:
+7. plan 必须包含: 交付切片顺序、文件级写入范围、并发边界、验证命令、no-live-pane-mutation 保护、rollback/stop rule。
+
+8. 完成后更新 status.json:
    - status: active
    - phase: planning_complete
    - handoff_to: builder_main
    - history 追加 planner_plan_completed
+
+9. 不要直接给 Builder 写自然语言任务；Builder 派发必须由 graph scheduler / graph-dispatch 根据 task_graph.json 生成。
 
 **不要写业务代码，不要重启 harness，不要触碰 live tmux pane。**"
 
@@ -2677,8 +2697,8 @@ PY
     return 0
   fi
 
-  log "${G}Drafting sprint 已有 plan → 自动推进 active/planning_complete${N}"
-  runtime_status_transition "$sid" "active" "planner_plan_completed" "coordinator" '{"status_fields":{"phase":"planning_complete","handoff_to":"builder","target_role":"builder"},"note":"Auto-promoted drafting sprint because plan.md exists."}' || true
+  log "${G}Drafting sprint 已有 PRD + design + plan + task_graph → 自动推进 active/planning_complete${N}"
+  runtime_status_transition "$sid" "active" "planner_graph_completed" "coordinator" '{"status_fields":{"phase":"planning_complete","handoff_to":"builder_main","target_role":"builder_main"},"note":"Auto-promoted drafting sprint because planner artifacts and task_graph are complete."}' || true
 }
 
 auto_drive_drafting_sprints() {
@@ -2968,7 +2988,7 @@ EOF
       return 0
       ;;
   esac
-  if [[ "$phase" == "graph_dispatch_active" || ( "$phase" == "planning_complete" && -f "$SPRINTS_DIR/${sid}.plan.md" ) ]]; then
+  if [[ "$phase" == "graph_dispatch_active" || "$phase" == "planning_complete" ]]; then
     if [[ -f "$SPRINTS_DIR/${sid}.task_graph.json" ]]; then
       log "${G}Sprint ${sid} ${phase} + task_graph → DAG graph_node 派发${N}"
       local graph_dispatcher="$HARNESS_DIR/lib/graph_node_dispatcher.py"
@@ -3004,55 +3024,19 @@ EOF
       mark_builder_flow "$sid" "graph_node_dispatch"
       return 0
     fi
-    if [[ "$phase" == "graph_dispatch_active" ]]; then
-      log "${R}[graph-dispatch] ${sid} phase=graph_dispatch_active but task_graph missing; refuse parent builder dispatch${N}"
-      rollback_state_cache "$sid"
-      emit_event "$sid" "graph_dispatch_failed" "coordinator" "{\"reason\":\"task_graph_missing\",\"phase\":\"graph_dispatch_active\"}"
-      return 0
-    fi
-    if builder_flow_marked "$sid" "builder_dispatch"; then
-      log "${Y}Sprint ${sid} builder dispatch already recorded, skip duplicate planning_complete dispatch${N}"
-      return 0
-    fi
-    log "${G}Sprint 进入 active 且 planner plan 已完成 → 建设者按计划实现${N}"
-    log "  需求: ${title}"
-    release_pane_assignment_if_matches "$(choose_planner_pane)" "$sid" "planner_plan_completed"
+    log "${R}[graph-dispatch] ${sid} phase=${phase} but task_graph missing; refuse parent builder dispatch${N}"
+    dispatch_to_planner "$sid" "gate_missing_task_graph" "$SPRINTS_DIR/${sid}.dispatch.md" "门禁拦截：Planner 必须补齐 ~/.solar/harness/sprints/${sid}.task_graph.json，包含 id/goal/depends_on/write_scope/read_scope/required_skills/preferred_model/gate/acceptance/estimated_cost。未生成 DAG 前禁止直接派 Builder。"
+    runtime_status_transition "$sid" "drafting" "active_blocked_missing_task_graph" "coordinator" '{"status_fields":{"phase":"prd_ready","handoff_to":"planner","target_role":"planner"},"note":"Workflow guard refused single-builder fallback; task_graph is required."}' || true
+    rollback_state_cache "$sid"
+    emit_event "$sid" "graph_dispatch_failed" "coordinator" "{\"reason\":\"task_graph_missing\",\"phase\":\"${phase}\"}"
+    return 0
+  fi
 
-    generate_dispatch "$sid" "建设者" "按 planner plan 实现代码"
-    append_dispatch "$sid" "### 步骤
-
-1. 读取实施计划:
-   cat ~/.solar/harness/sprints/${sid}.plan.md
-
-2. 读取合约确认边界:
-   cat ~/.solar/harness/sprints/${sid}.contract.md
-
-3. 严格按 plan 的文件级写入范围实现代码，不要扩大 scope。
-
-4. 实现完成后写 handoff 文档到 ~/.solar/harness/sprints/${sid}.handoff.md
-   必须包含: \`## Summary\`, \`## Changed Files\`, \`## Architecture\`, \`## Verification Evidence\`, \`## Known Risks\`, \`## Not Done\`
-
-5. 更新状态:
-   \`\`\`bash
-   bash ~/.solar/harness/solar-harness.sh handoff-submit ${sid}
-   \`\`\`
-
-**不要重写 plan，不要触碰 live tmux pane，直接按 planner plan 实现。**"
-
-    dispatch_to_builder "$sid" "builder_dispatch"
-    local rc=$?
-    if (( rc == 2 )); then
-      log "${Y}[handle_active] pane busy, 下轮再派 (planner plan implementation)${N}"
-      rollback_state_cache "$sid"
-      return 0
-    fi
-    if (( rc != 0 )); then
-      log "${Y}[handle_active] builder dispatch failed (rc=${rc}), 下轮重试${N}"
-      rollback_state_cache "$sid"
-      return 0
-    fi
-    emit_event "$sid" "dispatched" "coordinator" "{\"to\":\"builder\",\"task\":\"implement_from_planner_plan\"}"
-    mark_builder_flow "$sid" "builder_dispatch"
+  if [[ -f "$SPRINTS_DIR/${sid}.plan.md" ]]; then
+    log "${R}Sprint ${sid} active 有 plan 但 phase 非 planning_complete/graph_dispatch_active；禁止单 builder fallback${N}"
+    dispatch_to_planner "$sid" "gate_missing_task_graph_or_phase" "$SPRINTS_DIR/${sid}.dispatch.md" "门禁拦截：当前 active sprint 不能靠 plan.md 直接派 Builder。请补齐 task_graph.json 并把 phase 设为 planning_complete，再由 graph scheduler 派发。"
+    runtime_status_transition "$sid" "drafting" "active_blocked_missing_graph_phase" "coordinator" '{"status_fields":{"phase":"prd_ready","handoff_to":"planner","target_role":"planner"},"note":"Single-builder fallback disabled; planner DAG is required."}' || true
+    rollback_state_cache "$sid"
     return 0
   fi
 
@@ -3193,6 +3177,19 @@ handle_planning() {
 # 审判官批准计划 → 建设者开始实现
 handle_approved() {
   local sid="$1" sf="$2"
+
+  if [[ -f "$SPRINTS_DIR/${sid}.task_graph.json" ]]; then
+    log "${G}计划已批准且 task_graph 存在 → 切回 graph scheduler 派发${N}"
+    runtime_status_transition "$sid" "active" "approved_graph_ready" "coordinator" '{"status_fields":{"phase":"planning_complete","handoff_to":"builder_main","target_role":"builder_main"},"note":"Approved legacy state normalized to DAG dispatch."}' || true
+    rollback_state_cache "$sid"
+    return 0
+  fi
+
+  log "${R}approved 状态缺 task_graph，禁止直接派 Builder${N}"
+  dispatch_to_planner "$sid" "gate_approved_missing_task_graph" "$SPRINTS_DIR/${sid}.dispatch.md" "门禁拦截：approved/plan-only 是旧流程。请补齐 task_graph.json，让 graph scheduler 并行派发 builder；不要直接单路实现。"
+  runtime_status_transition "$sid" "drafting" "approved_blocked_missing_task_graph" "coordinator" '{"status_fields":{"phase":"prd_ready","handoff_to":"planner","target_role":"planner"},"note":"Approved legacy single-builder flow disabled; task_graph is required."}' || true
+  rollback_state_cache "$sid"
+  return 0
 
   # mixture 拓扑 — 主屏 builder + 扩展屏 builders 并行
   local topology
@@ -3410,6 +3407,19 @@ handle_reviewing() {
   fi
   local round
   round=$(get_field "$sf" "round")
+
+  local graph_path="$SPRINTS_DIR/${sid}.task_graph.json"
+  if [[ -f "$graph_path" ]]; then
+    local parent_check parent_ready
+    parent_check=$(bash "$HARNESS_DIR/solar-harness.sh" graph-scheduler parent-check --graph "$graph_path" 2>/dev/null || true)
+    parent_ready=$(python3 -c "import json,sys; raw=sys.argv[1]; d=json.loads(raw) if raw.strip() else {}; print('1' if d.get('ready') else '0')" "$parent_check" 2>/dev/null || echo 0)
+    if [[ "$parent_ready" != "1" ]]; then
+      log "${Y}[handle_reviewing] ${sid} has task_graph but parent-check not ready; block parent evaluator dispatch${N}"
+      emit_event "$sid" "parent_review_blocked" "coordinator" "{\"reason\":\"dag_parent_not_ready\",\"parent_check\":$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$parent_check")}"
+      append_history "$sf" "parent_review_blocked_dag_not_ready" "coordinator"
+      return 0
+    fi
+  fi
 
   release_pane_assignment_if_matches "$(choose_planner_pane)" "$sid" "entered_reviewing"
   release_pane_assignment_if_matches "$(choose_builder_pane)" "$sid" "builder_handoff_completed"

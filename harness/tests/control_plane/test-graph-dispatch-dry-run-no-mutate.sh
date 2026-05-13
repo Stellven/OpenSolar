@@ -75,7 +75,9 @@ import sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
 assert d["ok"], d
 assert d["enqueue"]["dry_run"] is True, d
-assert d["drain"]["processed"] == 0, d
+assert d["drain"]["processed"] == 1, d
+assert d["drain"]["results"][0]["dry_run"] is True, d
+assert d["drain"]["results"][0]["graph_updated"] is False, d
 print("dispatcher_dry_run_ok")
 PY
 

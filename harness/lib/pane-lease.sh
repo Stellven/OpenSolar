@@ -130,7 +130,7 @@ check_pane_lease() {
 reap_expired_leases() {
     [[ -d "$_PANE_LEASE_DIR" ]] || return 0
     python3 -c "
-import json, datetime, os, sys
+import json, datetime, fcntl, os, sys
 
 lease_dir = sys.argv[1]
 now_str   = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -145,6 +145,32 @@ for fname in os.listdir(lease_dir):
         if d.get('expires_at', 'z') <= now_str:
             os.remove(path)
             reaped += 1
+    except Exception:
+        pass
+
+for fname in os.listdir(lease_dir):
+    if not fname.endswith('.json.lock'):
+        continue
+    lock_path = os.path.join(lease_dir, fname)
+    lease_path = lock_path[:-5]
+    if os.path.exists(lease_path):
+        continue
+    try:
+        with open(lock_path, 'a') as lockf:
+            try:
+                fcntl.flock(lockf, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                continue
+            try:
+                os.remove(lock_path)
+                reaped += 1
+            except FileNotFoundError:
+                pass
+            finally:
+                try:
+                    fcntl.flock(lockf, fcntl.LOCK_UN)
+                except Exception:
+                    pass
     except Exception:
         pass
 

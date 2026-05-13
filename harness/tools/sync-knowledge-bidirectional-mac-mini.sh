@@ -28,7 +28,7 @@ Env:
 
 Scope:
   Syncs compiled Knowledge layers and ~/.solar/extracted_knowledge markdown.
-  Excludes Knowledge/_raw, nested PDF page dumps, .obsidian, .env, SQLite/QMD indexes, logs, and raw docs.
+  Excludes Knowledge/_raw, nested PDF page dumps, sync conflict copies, .obsidian, .env, SQLite/QMD indexes, logs, and raw docs.
 EOF
 }
 
@@ -100,6 +100,7 @@ VAULT_FILTER=(
   --exclude='/**/_raw/***'
   --exclude='/references/*/page-*.md'
   --exclude='/references/*/index.md'
+  --exclude='*.conflict-*.md'
   --exclude='/.obsidian/***'
   --exclude='/.env'
   --exclude='/.manifest.json'
@@ -225,7 +226,7 @@ local_vault=$LOCAL_VAULT
 remote_vault=$REMOTE_VAULT
 local_extracted=$LOCAL_EXTRACTED
 remote_extracted=$REMOTE_EXTRACTED
-excluded=Knowledge/_raw,nested_pdf_page_dumps,.obsidian,.env,sqlite/qmd-db,raw-doc-extensions
+excluded=Knowledge/_raw,nested_pdf_page_dumps,sync_conflict_copies,.obsidian,.env,sqlite/qmd-db,raw-doc-extensions
 pull_left=$PULL_LEFT
 push_left=$PUSH_LEFT
 extracted_pull_left=$EX_PULL_LEFT

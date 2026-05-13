@@ -19,26 +19,24 @@ queued = s.index("    queued)")
 drafting = s.index("    drafting|drafting_held)")
 wildcard = s.index("    *)", drafting)
 assert queued < drafting < wildcard
-assert "wake_promoted_queued_to_planner" in s
-assert "wake_promoted_queued_to_builder" in s
-assert "wake_promoted_queued_to_pm" in s
-assert "runtime_status.py" in s[queued:drafting]
-assert '"bypass_pm":true' in s[queued:drafting]
-assert '"auto_held":false' in s[queued:drafting]
-assert 'target_pane="$LIVE_PLANNER"' in s[queued:drafting]
-assert 'target_pane="$LIVE_BUILDER"' in s[queued:drafting]
-assert 'target_pane="$LIVE_PM"' in s[queued:drafting]
+assert "wake_workflow_guard_to_planner" in s
+assert "wake_workflow_guard_to_builder" in s
+assert "wake_workflow_guard_to_pm" in s
+assert "route_by_workflow_guard" in s[queued:drafting]
+guard = s.index("route_by_workflow_guard()")
+assert "runtime_status.py" in s[guard:queued]
+assert '"auto_held":false' in s[guard:queued]
 assert "未知状态: ${st}，派发给 PM 做状态诊断" in s
 PY
-[[ $? -eq 0 ]] && ok "wake has explicit queued routing before wildcard" || fail "queued routing missing or ordered incorrectly"
+[[ $? -eq 0 ]] && ok "wake routes queued through workflow guard before wildcard" || fail "queued workflow guard missing or ordered incorrectly"
 
-grep -q "phase in ('prd_ready', 'contract_ready') or handoff_to == 'planner'" "$STATE_MAPPER" \
-  && ok "state mapper routes queued contract_ready to planner" \
-  || fail "state mapper does not route queued contract_ready to planner"
+grep -q "contract_ready and legacy handoff_to=builder must still enter PM" "$STATE_MAPPER" \
+  && ok "state mapper keeps queued contract_ready/builder legacy at PM intake" \
+  || fail "state mapper still exposes legacy queued shortcut"
 
-grep -q "handoff_to in ('builder', 'builder_main')" "$STATE_MAPPER" \
-  && ok "state mapper routes queued builder handoff to builder_main" \
-  || fail "state mapper does not route queued builder handoff"
+grep -q "phase in ('prd_ready',) or handoff_to == 'planner'" "$STATE_MAPPER" \
+  && ok "state mapper routes queued prd_ready to planner" \
+  || fail "state mapper does not route queued prd_ready to planner"
 
 bash -n "$SCRIPT" \
   && ok "solar-harness.sh syntax ok" \
@@ -53,10 +51,10 @@ from pathlib import Path
 s = Path("coordinator.sh").read_text()
 assert "status_has_bypass_pm()" in s
 assert "sprint_bypasses_pm_gate()" in s
-assert "sprint_bypasses_pm_gate \"$sid\"" in s
-assert "phase == \"planning_complete\"" in s
+assert "planner_artifacts_ready" in s
+assert "task_graph.json" in s
 PY
-[[ $? -eq 0 ]] && ok "coordinator gate honors status bypass" || fail "coordinator gate bypass missing"
+[[ $? -eq 0 ]] && ok "coordinator gate requires workflow guard/task_graph" || fail "coordinator workflow guard missing"
 
 echo ""
 echo "========================"

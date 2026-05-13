@@ -95,6 +95,92 @@ else
   fail "T8" "$t8_dedup"
 fi
 
+# T9 — qmd_adapter status routes through SandboxHand (R1 of
+# sprint-20260513-tool-plane-sandbox-default-routing)
+echo "T9: qmd_adapter status sandbox routing"
+t9_out=$(python3 "$HOME/.solar/harness/lib/qmd_adapter.py" status --json 2>/dev/null)
+t9_eval=$(printf '%s' "$t9_out" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception as e:
+    print("parse-error:" + str(e))
+    sys.exit(0)
+executor = d.get("executor", "")
+mode = d.get("execution_mode", "")
+ev = d.get("evidence_file", "")
+if executor != "sandbox":
+    print("not-sandbox:" + executor)
+elif mode != "argv":
+    print("not-argv:" + mode)
+elif not ev:
+    print("no-evidence")
+else:
+    print("ok:" + ev)
+' 2>/dev/null)
+case "$t9_eval" in
+  ok:*) pass "T9 qmd status routed through SandboxHand (${t9_eval})" ;;
+  *)    fail "T9" "$t9_eval" ;;
+esac
+
+# T10 — evidence file actually exists and records argv mode
+if [ "${t9_eval#ok:}" != "$t9_eval" ]; then
+  ev_path="${t9_eval#ok:}"
+  if [ -f "$ev_path" ] && python3 -c "
+import json, sys
+d = json.load(open('$ev_path'))
+assert d.get('execution_mode') == 'argv', d.get('execution_mode')
+assert d.get('command_name') == 'qmd-status', d.get('command_name')
+print('ok')
+" 2>/dev/null | grep -q '^ok$'; then
+    pass "T10 sandbox evidence file written with argv mode"
+  else
+    fail "T10" "evidence missing or wrong schema at $ev_path"
+  fi
+fi
+
+# T11 — mirage_search.search_qmd routes through SandboxHand (R1 extension of
+# sprint-20260513-tool-plane-sandbox-default-routing)
+echo "T11: mirage_search.search_qmd sandbox routing"
+t11_eval=$(python3 - <<'PY' 2>/dev/null
+import os, json, importlib.util, sys
+spec = importlib.util.spec_from_file_location("mirage_search", os.path.expanduser("~/.solar/harness/lib/mirage_search.py"))
+m = importlib.util.module_from_spec(spec)
+sys.modules["mirage_search"] = m
+spec.loader.exec_module(m)
+m.search_qmd("sandbox routing smoke", max_hits=1)
+r = m.LAST_QMD_ROUTE or {}
+if r.get("executor") != "sandbox":
+    print("not-sandbox:" + str(r.get("executor")))
+elif r.get("execution_mode") != "argv":
+    print("not-argv:" + str(r.get("execution_mode")))
+elif not r.get("evidence_file") or not os.path.exists(r.get("evidence_file","")):
+    print("no-evidence:" + str(r.get("evidence_file")))
+else:
+    print("ok:" + r.get("evidence_file"))
+PY
+)
+case "$t11_eval" in
+  ok:*) pass "T11 mirage_search.search_qmd routed through SandboxHand (${t11_eval})" ;;
+  *)    fail "T11" "$t11_eval" ;;
+esac
+
+# T12 — evidence file from T11 records argv mode and qmd-search command name
+if [ "${t11_eval#ok:}" != "$t11_eval" ]; then
+  ev_path="${t11_eval#ok:}"
+  if [ -f "$ev_path" ] && python3 -c "
+import json
+d = json.load(open('$ev_path'))
+assert d.get('execution_mode') == 'argv', d.get('execution_mode')
+assert d.get('command_name') == 'qmd-search', d.get('command_name')
+print('ok')
+" 2>/dev/null | grep -q '^ok$'; then
+    pass "T12 qmd-search evidence file written with argv mode"
+  else
+    fail "T12" "evidence missing or wrong schema at $ev_path"
+  fi
+fi
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

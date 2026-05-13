@@ -36,6 +36,10 @@ import time
 from pathlib import Path
 from typing import Optional
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from hands_runtime import SandboxHand  # noqa: E402
+from runtime_interfaces import ResultStatus  # noqa: E402
+
 # ── Paths ──
 HOME = Path.home()
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", str(HOME / ".solar" / "harness")))
@@ -460,9 +464,12 @@ def cmd_doctor(args) -> dict:
         mtype = "logical"
         mounts_v2.append({
             "path": mpath,
+            "ready": bool(ready),
+            "mode": m.get("mode", "ro"),
             "status": status,
             "type": mtype,
             "physical_root": m.get("physical_root", ""),
+            "optional": bool(m.get("optional", False)),
             "reason": m.get("reason", ""),
         })
 
@@ -580,6 +587,7 @@ def cmd_exec(args, extra_flags: list) -> dict:
     mounts = config.get("mounts") or []
 
     cmd_str = " ".join(cmd_parts)
+    original_cmd = cmd_str
 
     try:
         argv = shlex.split(cmd_str)
@@ -681,13 +689,31 @@ def cmd_exec(args, extra_flags: list) -> dict:
         final_cmd = re.sub(re.escape(mp) + r'(?=/|$|\s|\'|"|\|)', root, final_cmd)
 
     t0 = time.monotonic()
+    hand = SandboxHand()
+    hand_ref = None
     try:
-        r = subprocess.run(
-            final_cmd, shell=True, capture_output=True, text=True, timeout=float(timeout_s),
+        hand_ref = hand.provision(capabilities=["mirage-exec", verb])
+        writable_roots = _mirage_writable_roots(mounts, extra_flags)
+        result = hand.execute(
+            hand_ref,
+            f"mirage-exec-{verb}",
+            {
+                "argv": ["/bin/sh", "-c", final_cmd],
+                "write_guard_roots": _mirage_guard_roots(mounts, original_cmd),
+                "write_allowed_roots": writable_roots,
+                "session_id": f"mirage-exec-{ws_id}",
+                "sprint_id": f"mirage-exec-{ws_id}",
+                "activity_id": f"mirage-exec-{verb}",
+            },
+            idempotency_key=f"mirage-exec:{ws_id}:{time.time_ns()}",
+            timeout_seconds=int(float(timeout_s)),
         )
         elapsed_ms = int((time.monotonic() - t0) * 1000)
-        stdout = _redact(r.stdout)
-        stderr = _redact(r.stderr)
+        stdout = _redact(str(result.output or ""))
+        stderr = _redact(str((result.metadata or {}).get("stderr", "") or result.error or ""))
+        exit_code = 0 if result.status == ResultStatus.OK else 1
+        if result.status == ResultStatus.TIMEOUT:
+            exit_code = -1
 
         # Filter stdout/stderr lines that expose physical paths of denied subpaths
         for _m in mounts:
@@ -710,25 +736,34 @@ def cmd_exec(args, extra_flags: list) -> dict:
             "cmd_kind": verb,
             "mount": _primary_mount(final_cmd, mounts),
             "duration_ms": elapsed_ms,
-            "exit_code": r.returncode,
+            "exit_code": exit_code,
+            "executor": "sandbox",
+            "evidence_file": (result.metadata or {}).get("evidence_file", ""),
         })
 
         return {
-            "exit_code": r.returncode,
+            "exit_code": exit_code,
             "stdout": stdout,
             "stderr": stderr[:4096],
             "duration_ms": elapsed_ms,
             "truncated": truncated,
-            "cmd": cmd_str,
+            "cmd": original_cmd,
+            "executor": "sandbox",
+            "execution_mode": (result.metadata or {}).get("execution_mode", ""),
+            "write_guard": (result.metadata or {}).get("write_guard", {}),
+            "evidence_file": (result.metadata or {}).get("evidence_file", ""),
         }
 
     except subprocess.TimeoutExpired:
         _emit("mirage_command_executed", {
             "cmd_kind": verb, "mount": "", "duration_ms": int(timeout_s * 1000), "exit_code": -1
         })
-        return {"error": f"command timed out after {timeout_s}s", "cmd": cmd_str}
+        return {"error": f"command timed out after {timeout_s}s", "cmd": original_cmd}
     except Exception as e:
-        return {"error": str(e), "cmd": cmd_str}
+        return {"error": str(e), "cmd": original_cmd}
+    finally:
+        if hand_ref is not None:
+            hand.dispose(hand_ref)
 
 
 def _primary_mount(cmd_str: str, mounts: list) -> str:
@@ -737,6 +772,40 @@ def _primary_mount(cmd_str: str, mounts: list) -> str:
         if mp and mp in cmd_str:
             return mp
     return ""
+
+
+def _mirage_guard_roots(mounts: list, cmd_str: str) -> list[str]:
+    roots: list[str] = []
+    for m in mounts:
+        mp = str(m.get("path") or "")
+        if not mp or not re.search(re.escape(mp) + r"(?=/|$|\s|\'|\"|\|)", cmd_str):
+            continue
+        root = m.get("root") or m.get("physical_root") or ""
+        if not root:
+            continue
+        try:
+            p = Path(str(root)).expanduser()
+            if p.exists():
+                roots.append(str(p))
+        except OSError:
+            continue
+    return sorted(set(roots))
+
+
+def _mirage_writable_roots(mounts: list, extra_flags: list) -> list[str]:
+    allowed: list[str] = []
+    for m in mounts:
+        root = m.get("root") or m.get("physical_root") or ""
+        if not root:
+            continue
+        mode = str(m.get("mode") or "ro").lower()
+        path = str(m.get("path") or "")
+        if mode == "rw" or (path == "/drive" and "--allow-write-drive" in extra_flags):
+            try:
+                allowed.append(str(Path(str(root)).expanduser()))
+            except OSError:
+                continue
+    return sorted(set(allowed))
 
 
 def cmd_provision(args, extra_flags: list) -> dict:

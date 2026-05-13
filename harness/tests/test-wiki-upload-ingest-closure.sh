@@ -25,7 +25,7 @@ if [[ $# -gt 0 ]]; then
   fi
 fi
 
-VALID_CASES="dispatch-unique terminal-state pages audit-backfill"
+VALID_CASES="dispatch-unique terminal-state pages audit-backfill sandbox-extract"
 if [[ -n "$CASE" ]]; then
   found=0
   for c in $VALID_CASES; do
@@ -446,6 +446,70 @@ REF
   print_suite_summary "audit-backfill"
 }
 
+# ── Case: sandbox-extract ────────────────────────────────────────────────
+# Verifies that wiki-upload-backfill.py routes pdftotext/qlmanage smoke
+# invocations through SandboxHand (executor=sandbox, execution_mode=argv,
+# evidence_file written). This is the R2 acceptance for
+# sprint-20260513-tool-plane-sandbox-default-routing.
+
+run_sandbox_extract() {
+  reset_counts
+  echo ""
+  echo "── Case: sandbox-extract ──────────────────────────────"
+
+  local fixture="/tmp/wiki-upload-backfill-sandbox-fixture.txt"
+  cat > "$fixture" <<'EOF_FIX'
+sandbox extract regression fixture
+EOF_FIX
+
+  local result
+  result=$(python3 - "$fixture" <<'PY'
+import json, os, sys, importlib.util
+sys.path.insert(0, os.path.expanduser("~/.solar/harness/lib"))
+spec = importlib.util.spec_from_file_location(
+    "wiki_upload_backfill",
+    os.path.expanduser("~/.solar/harness/lib/wiki-upload-backfill.py"),
+)
+m = importlib.util.module_from_spec(spec)
+sys.modules["wiki_upload_backfill"] = m
+spec.loader.exec_module(m)
+
+route = m._run_extract_sandboxed("cat", ["cat", sys.argv[1]], timeout=10)
+out = {
+    "cat_executor": route.get("executor"),
+    "cat_mode": route.get("execution_mode"),
+    "cat_ok": bool(route.get("ok")),
+    "cat_evidence_exists": bool(route.get("evidence_file")) and os.path.exists(route.get("evidence_file","")),
+    "cat_stdout_len": len(route.get("stdout","") or ""),
+}
+
+# pdftotext missing-PDF run — still must route through sandbox even when
+# the underlying CLI fails; this proves we never regress to host execution.
+from pathlib import Path
+m.extract_pdf_text(Path("/tmp/does-not-exist-sandbox-route.pdf"))
+ev = m.LAST_EXTRACT_ROUTE.get("evidence_file","")
+out.update({
+    "pdf_executor": m.LAST_EXTRACT_ROUTE.get("executor"),
+    "pdf_mode": m.LAST_EXTRACT_ROUTE.get("execution_mode"),
+    "pdf_evidence_exists": bool(ev) and os.path.exists(ev),
+})
+print(json.dumps(out))
+PY
+)
+  rm -f "$fixture"
+
+  assert_eq "cat executor=sandbox" "sandbox" "$(echo "$result" | python3 -c 'import json,sys;print(json.load(sys.stdin)["cat_executor"])')"
+  assert_eq "cat execution_mode=argv" "argv"  "$(echo "$result" | python3 -c 'import json,sys;print(json.load(sys.stdin)["cat_mode"])')"
+  assert_eq "cat ok=True"            "True"   "$(echo "$result" | python3 -c 'import json,sys;print(json.load(sys.stdin)["cat_ok"])')"
+  assert_eq "cat evidence exists"    "True"   "$(echo "$result" | python3 -c 'import json,sys;print(json.load(sys.stdin)["cat_evidence_exists"])')"
+  assert_gt "cat stdout non-empty"   "0"      "$(echo "$result" | python3 -c 'import json,sys;print(json.load(sys.stdin)["cat_stdout_len"])')"
+  assert_eq "pdf executor=sandbox"   "sandbox" "$(echo "$result" | python3 -c 'import json,sys;print(json.load(sys.stdin)["pdf_executor"])')"
+  assert_eq "pdf execution_mode=argv" "argv"  "$(echo "$result" | python3 -c 'import json,sys;print(json.load(sys.stdin)["pdf_mode"])')"
+  assert_eq "pdf evidence exists"    "True"   "$(echo "$result" | python3 -c 'import json,sys;print(json.load(sys.stdin)["pdf_evidence_exists"])')"
+
+  print_suite_summary "sandbox-extract"
+}
+
 # ── Run selected cases ───────────────────────────────────────────────────
 
 echo "═══════════════════════════════════════════════════"
@@ -458,12 +522,14 @@ if [[ -n "$CASE" ]]; then
     terminal-state)   run_terminal_state ;;
     pages)            run_pages ;;
     audit-backfill)   run_audit_backfill ;;
+    sandbox-extract)  run_sandbox_extract ;;
   esac
 else
   run_dispatch_unique
   run_terminal_state
   run_pages
   run_audit_backfill
+  run_sandbox_extract
 fi
 
 echo ""

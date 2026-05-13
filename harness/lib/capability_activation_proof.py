@@ -236,15 +236,27 @@ def proof_ruflo_runtime_effect(evidence_dir: Path) -> dict[str, Any]:
     write_json(evidence_dir / "runtime" / "ruflo-runtime-smoke.json", parsed)
     commands = {item.get("name"): item for item in parsed.get("commands", []) if isinstance(item, dict)}
     missing = [name for name in ("help", "version", "mcp_help") if not commands.get(name, {}).get("ok")]
+    not_sandboxed = [
+        name for name in ("help", "version", "mcp_help")
+        if commands.get(name, {}).get("executor") != "sandbox"
+        or commands.get(name, {}).get("execution_mode") != "argv"
+        or not commands.get(name, {}).get("evidence_file")
+    ]
+    passed = bool(result["ok"] and parsed.get("ok") and not missing and not not_sandboxed)
     return {
         "name": "Ruflo sandbox runtime exposes CLI and MCP command surface",
-        "status": "ok" if result["ok"] and parsed.get("ok") and not missing else "error",
-        "passed": bool(result["ok"] and parsed.get("ok") and not missing),
+        "status": "ok" if passed else "error",
+        "passed": passed,
         "evidence": {
             "runtime_smoke_json": str(evidence_dir / "runtime" / "ruflo-runtime-smoke.json"),
             "backend": parsed.get("backend", ""),
             "runtime_package": parsed.get("runtime_package", ""),
             "missing": missing,
+            "not_sandboxed": not_sandboxed,
+            "sandboxed_commands": [
+                name for name in ("help", "version", "mcp_help")
+                if commands.get(name, {}).get("executor") == "sandbox"
+            ],
         },
     }
 
@@ -555,6 +567,213 @@ def proof_sandbox_write_guard_blocks_host_write(evidence_dir: Path) -> dict[str,
     }
 
 
+def proof_mirage_exec_routes_through_sandbox(evidence_dir: Path) -> dict[str, Any]:
+    marker = f"activation_mirage_sandbox_{os.getpid()}"
+    logical_path = f"/raw/_{marker}.txt"
+    physical_path = HOME / "Knowledge" / "_raw" / f"_{marker}.txt"
+    payload: dict[str, Any] = {}
+    try:
+        write_result = run(
+            [str(SOLAR_BIN), "mirage", "exec", "--json", "--", f"echo {marker} > {logical_path}"],
+            evidence_dir,
+            "mirage_exec_sandbox_write",
+            timeout=60,
+        )
+        read_result = run(
+            [str(SOLAR_BIN), "mirage", "exec", "--json", "--", f"cat {logical_path}"],
+            evidence_dir,
+            "mirage_exec_sandbox_read",
+            timeout=60,
+        )
+        write_payload = json.loads(write_result.get("stdout") or "{}")
+        read_payload = json.loads(read_result.get("stdout") or "{}")
+        evidence_file = Path(write_payload.get("evidence_file", ""))
+        evidence = json.loads(evidence_file.read_text(encoding="utf-8")) if evidence_file.exists() else {}
+        payload = {
+            "write": write_payload,
+            "read": read_payload,
+            "evidence_file": str(evidence_file),
+            "evidence_execution_mode": evidence.get("execution_mode", ""),
+            "evidence_write_guard_enabled": bool((evidence.get("write_guard") or {}).get("enabled")),
+            "evidence_write_guard_violations": len((evidence.get("write_guard") or {}).get("violations") or []),
+        }
+        passed = (
+            write_result.get("ok")
+            and read_result.get("ok")
+            and write_payload.get("exit_code") == 0
+            and write_payload.get("executor") == "sandbox"
+            and write_payload.get("execution_mode") == "argv"
+            and bool((write_payload.get("write_guard") or {}).get("enabled"))
+            and not ((write_payload.get("write_guard") or {}).get("violations") or [])
+            and evidence_file.exists()
+            and read_payload.get("stdout") == marker
+        )
+    except Exception as exc:
+        passed = False
+        payload = {"error": f"{type(exc).__name__}: {exc}"}
+    finally:
+        try:
+            physical_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    write_json(evidence_dir / "runtime" / "mirage-exec-sandbox-route.json", payload)
+    return {
+        "name": "Mirage exec routes default data access commands through SandboxHand",
+        "status": "ok" if passed else "error",
+        "passed": bool(passed),
+        "evidence": {
+            "runtime_json": str(evidence_dir / "runtime" / "mirage-exec-sandbox-route.json"),
+            "evidence_file": payload.get("evidence_file", ""),
+            "executor": (payload.get("write") or {}).get("executor", ""),
+            "execution_mode": (payload.get("write") or {}).get("execution_mode", ""),
+            "write_guard_enabled": bool(((payload.get("write") or {}).get("write_guard") or {}).get("enabled")),
+            "read_stdout": (payload.get("read") or {}).get("stdout", ""),
+        },
+    }
+
+
+def _load_module_by_path(name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(name, str(path))
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load {name} from {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def proof_qmd_search_routes_through_sandbox(evidence_dir: Path) -> dict[str, Any]:
+    """Prove `mirage_search.search_qmd` lands inside SandboxHand (argv + evidence)."""
+    payload: dict[str, Any] = {}
+    passed = False
+    try:
+        mirage = _load_module_by_path("mirage_search", HARNESS / "lib" / "mirage_search.py")
+        # Ensure sys.path is set so internal qmd_resolver import works.
+        lib_dir = str(HARNESS / "lib")
+        if lib_dir not in sys.path:
+            sys.path.insert(0, lib_dir)
+        mirage.search_qmd("activation-proof sandbox routing", max_hits=1)
+        route = dict(getattr(mirage, "LAST_QMD_ROUTE", {}) or {})
+        evidence_file = Path(route.get("evidence_file", "") or "")
+        evidence = (
+            json.loads(evidence_file.read_text(encoding="utf-8")) if evidence_file.exists() else {}
+        )
+        payload = {
+            "executor": route.get("executor", ""),
+            "execution_mode": route.get("execution_mode", ""),
+            "evidence_file": str(evidence_file),
+            "evidence_command_name": evidence.get("command_name", ""),
+            "evidence_execution_mode": evidence.get("execution_mode", ""),
+            "exit_code": route.get("exit_code"),
+            "sandbox_status": route.get("sandbox_status", ""),
+            "fallback_reason": route.get("fallback_reason", ""),
+            "argv_first": (route.get("argv") or [""])[0],
+        }
+        # Honest proof: executor must be sandbox; mode argv; evidence file present.
+        # Exit code from qmd may be non-zero (sandbox HOME isolation hides host's
+        # collection config) — that is OK as long as routing is verifiable.
+        passed = (
+            route.get("executor") == "sandbox"
+            and route.get("execution_mode") == "argv"
+            and evidence_file.exists()
+            and evidence.get("execution_mode") == "argv"
+            and evidence.get("command_name") == "qmd-search"
+        )
+    except Exception as exc:
+        payload = {"error": f"{type(exc).__name__}: {exc}"}
+        passed = False
+
+    write_json(evidence_dir / "runtime" / "qmd-search-sandbox-route.json", payload)
+    return {
+        "name": "mirage_search.search_qmd routes through SandboxHand",
+        "status": "ok" if passed else "error",
+        "passed": bool(passed),
+        "evidence": {
+            "runtime_json": str(evidence_dir / "runtime" / "qmd-search-sandbox-route.json"),
+            "evidence_file": payload.get("evidence_file", ""),
+            "executor": payload.get("executor", ""),
+            "execution_mode": payload.get("execution_mode", ""),
+            "evidence_command_name": payload.get("evidence_command_name", ""),
+            "fallback_reason": payload.get("fallback_reason", ""),
+        },
+    }
+
+
+def proof_pdftotext_extract_routes_through_sandbox(evidence_dir: Path) -> dict[str, Any]:
+    """Prove `wiki-upload-backfill._run_extract_sandboxed` lands inside SandboxHand.
+
+    Honest proof: even when the underlying CLI fails (missing PDF, missing
+    binary) the routing must still emit executor=sandbox + argv mode + evidence
+    file. We probe via a `cat` argv that is guaranteed to succeed inside the
+    sandbox so we can also assert stdout pass-through.
+    """
+    payload: dict[str, Any] = {}
+    passed = False
+    fixture: Path | None = None
+    try:
+        backfill = _load_module_by_path(
+            "wiki_upload_backfill_proof",
+            HARNESS / "lib" / "wiki-upload-backfill.py",
+        )
+        fixture = Path(tempfile.mkstemp(prefix="activation-extract-", suffix=".txt")[1])
+        marker = f"sandbox-extract-marker-{os.getpid()}"
+        fixture.write_text(marker, encoding="utf-8")
+
+        route = backfill._run_extract_sandboxed(
+            "cat", ["cat", str(fixture)], timeout=15
+        )
+        evidence_file = Path(route.get("evidence_file", "") or "")
+        evidence = (
+            json.loads(evidence_file.read_text(encoding="utf-8")) if evidence_file.exists() else {}
+        )
+        payload = {
+            "executor": route.get("executor", ""),
+            "execution_mode": route.get("execution_mode", ""),
+            "evidence_file": str(evidence_file),
+            "evidence_command_name": evidence.get("command_name", ""),
+            "evidence_execution_mode": evidence.get("execution_mode", ""),
+            "evidence_secret_names": evidence.get("secret_names", []),
+            "exit_code": route.get("exit_code"),
+            "ok": route.get("ok"),
+            "stdout_marker_match": (route.get("stdout") or "").strip() == marker,
+            "argv_first": (route.get("argv") or [""])[0],
+        }
+        passed = (
+            route.get("executor") == "sandbox"
+            and route.get("execution_mode") == "argv"
+            and bool(route.get("ok"))
+            and evidence_file.exists()
+            and evidence.get("execution_mode") == "argv"
+            and (route.get("stdout") or "").strip() == marker
+            and not evidence.get("secret_names")  # no inline credentials
+        )
+    except Exception as exc:
+        payload = {"error": f"{type(exc).__name__}: {exc}"}
+        passed = False
+    finally:
+        if fixture is not None:
+            try:
+                fixture.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    write_json(evidence_dir / "runtime" / "pdftotext-extract-sandbox-route.json", payload)
+    return {
+        "name": "wiki-upload-backfill extract routes through SandboxHand",
+        "status": "ok" if passed else "error",
+        "passed": bool(passed),
+        "evidence": {
+            "runtime_json": str(evidence_dir / "runtime" / "pdftotext-extract-sandbox-route.json"),
+            "evidence_file": payload.get("evidence_file", ""),
+            "executor": payload.get("executor", ""),
+            "execution_mode": payload.get("execution_mode", ""),
+            "evidence_command_name": payload.get("evidence_command_name", ""),
+            "stdout_marker_match": payload.get("stdout_marker_match", False),
+        },
+    }
+
+
 def proof_negative_control(evidence_dir: Path) -> dict[str, Any]:
     tmp = Path(tempfile.mkdtemp(prefix="solar-activation-negative-"))
     try:
@@ -625,6 +844,9 @@ def main() -> int:
         proof_model_call_runtime_projection(evidence_dir),
         proof_disposable_sandbox_runtime_lifecycle(evidence_dir),
         proof_sandbox_write_guard_blocks_host_write(evidence_dir),
+        proof_mirage_exec_routes_through_sandbox(evidence_dir),
+        proof_qmd_search_routes_through_sandbox(evidence_dir),
+        proof_pdftotext_extract_routes_through_sandbox(evidence_dir),
         proof_status_ui_capability_health_projection(evidence_dir),
         proof_negative_control(evidence_dir),
     ]

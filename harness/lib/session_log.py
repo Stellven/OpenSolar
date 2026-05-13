@@ -36,6 +36,7 @@ VALID_TYPES = frozenset({
     "context_injected", "log_message", "session_started", "session_ended",
     "model_call_requested", "model_call_succeeded", "model_call_failed",
     "model_session_started", "model_session_ended",
+    "tool_call_requested", "tool_call_succeeded", "tool_call_failed",
 })
 
 

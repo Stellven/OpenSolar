@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import hashlib
 import json
 import os
 import subprocess
@@ -42,6 +43,8 @@ sys.path.insert(0, str(HARNESS_DIR / "lib"))
 from pane_lease import pane_state, release, reap, list_leases  # noqa: E402
 from task_queue import next_free_worker, enqueue, pop, depth   # noqa: E402
 from graph_node_dispatcher import dispatch_queue_item          # noqa: E402
+from context_projection import ContextProjection               # noqa: E402
+from runtime_doctor import doctor_all, doctor_sprint            # noqa: E402
 from solar_state_db import (                                    # noqa: E402
     open_state_db, init_db, emit_event as db_emit_event,
     get_pending_tasks, get_free_workers, release_task,
@@ -52,6 +55,7 @@ STALL_SEC = int(os.environ.get("AUTOPILOT_STALL_SEC", "900"))
 BACKLOG_THRESHOLD = int(os.environ.get("AUTOPILOT_BACKLOG_THRESHOLD", "3"))
 QUARANTINE_DIR = HARNESS_DIR / "run" / "quarantine"
 EVENTS_JSONL = HARNESS_DIR / "run" / "dispatch-ledger.jsonl"
+RUNTIME_REPAIR_PRIORITY = int(os.environ.get("AUTOPILOT_RUNTIME_REPAIR_PRIORITY", "92"))
 
 
 def _now() -> str:
@@ -156,7 +160,144 @@ def scan(sprint_id: "str | None" = None) -> list[dict]:
                     "inbox": str(inbox),
                 })
 
+    # Runtime doctor debt: long-running reliability issues are not just UI
+    # warnings; they must become repairable autopilot actions.
+    actions.extend(runtime_debt_actions(sprint_id=sprint_id, repair=False).get("actions", []))
+
     return actions
+
+
+# ── runtime debt detection/repair ─────────────────────────────────────────────
+
+def _repair_intent(kind: str, sid: str, detail: str) -> str:
+    digest = hashlib.sha256(f"{kind}:{sid}:{detail}".encode()).hexdigest()[:12]
+    return f"runtime_repair|kind={kind}|sid={sid}|hash={digest}"
+
+
+def _enqueue_runtime_repair(sid: str, kind: str, detail: dict) -> dict:
+    intent = _repair_intent(kind, sid, json.dumps(detail, sort_keys=True))
+    payload = {
+        "type": "runtime_repair",
+        "kind": kind,
+        "sprint_id": sid,
+        "detail": detail,
+        "created_at": _now(),
+        "source": "autopilot.runtime_debt",
+        "instruction": (
+            "Investigate and repair runtime debt without fabricating success. "
+            "Use session log, runtime doctor, and process audit evidence."
+        ),
+    }
+    return enqueue(sid, intent, RUNTIME_REPAIR_PRIORITY, payload)
+
+
+def _record_context_repair(sid: str) -> dict:
+    cp = ContextProjection(sid, harness_dir=str(HARNESS_DIR))
+    return cp.record_context_injected(
+        query=sid,
+        policy_name="autopilot-repair",
+        budget_tokens=1200,
+        actor="autopilot",
+        source="autopilot_runtime_repair",
+    )
+
+
+def _runtime_debt_from_report(report: dict) -> list[dict]:
+    sprints = report.get("sprints") if isinstance(report.get("sprints"), list) else [report]
+    actions: list[dict] = []
+    for sp in sprints:
+        sid = sp.get("sprint_id") or sp.get("sid")
+        if not sid:
+            continue
+        checks = sp.get("checks") or {}
+
+        event_health = checks.get("event_log_health") or {}
+        if event_health.get("bad_lines") or event_health.get("seq_gaps"):
+            actions.append({
+                "action": "runtime_repair_queue",
+                "kind": "event_log_integrity",
+                "sprint_id": sid,
+                "detail": {
+                    "bad_lines": event_health.get("bad_lines", 0),
+                    "seq_gaps": event_health.get("seq_gaps", []),
+                    "message": event_health.get("message", ""),
+                },
+            })
+
+        context_runtime = checks.get("context_runtime") or {}
+        if context_runtime.get("ok") and context_runtime.get("warn") and not context_runtime.get("context_injected_count"):
+            actions.append({
+                "action": "runtime_context_repair",
+                "kind": "missing_context_event",
+                "sprint_id": sid,
+                "detail": {
+                    "real_recall_hit_count": context_runtime.get("real_recall_hit_count", 0),
+                    "message": context_runtime.get("message", ""),
+                },
+            })
+
+        model_runtime = checks.get("model_call_runtime") or {}
+        pending_model = model_runtime.get("pending_dispatch_ids") or []
+        if pending_model:
+            actions.append({
+                "action": "runtime_repair_queue",
+                "kind": "pending_model_call",
+                "sprint_id": sid,
+                "detail": {
+                    "pending_dispatch_ids": pending_model,
+                    "message": model_runtime.get("message", ""),
+                },
+            })
+
+        process = checks.get("process_audit") or {}
+        audit = process.get("audit") or {}
+        side = audit.get("side_effect_boundaries") or {}
+        hard_risks = process.get("hard_risks") or []
+        if hard_risks:
+            actions.append({
+                "action": "runtime_repair_queue",
+                "kind": "process_audit_risk",
+                "sprint_id": sid,
+                "detail": {
+                    "risks": hard_risks,
+                    "unstarted_commands": side.get("unstarted_commands", []),
+                    "started_without_terminal": side.get("started_without_terminal", []),
+                    "terminal_without_start": side.get("terminal_without_start", []),
+                    "message": process.get("message", ""),
+                },
+            })
+
+    return actions
+
+
+def runtime_debt_actions(sprint_id: "str | None" = None, repair: bool = False) -> dict:
+    """Detect runtime doctor warnings/errors and optionally repair/queue them."""
+    report = doctor_sprint(sprint_id) if sprint_id else doctor_all(active_only=True)
+    actions = _runtime_debt_from_report(report)
+    repaired: list[dict] = []
+    if repair:
+        conn = open_state_db()
+        init_db(conn)
+        for action in actions:
+            sid = action["sprint_id"]
+            kind = action["kind"]
+            if action["action"] == "runtime_context_repair":
+                result = _record_context_repair(sid)
+                db_emit_event(conn, sid, "runtime_context_repaired", payload=result)
+                repaired.append({"action": action, "result": result, "mode": "record_context_event"})
+            else:
+                result = _enqueue_runtime_repair(sid, kind, action.get("detail") or {})
+                db_emit_event(conn, sid, "runtime_repair_queued", payload={"kind": kind, "queue": result})
+                repaired.append({"action": action, "result": result, "mode": "queued"})
+    return {
+        "ok": True,
+        "sprint_id": sprint_id,
+        "count": len(actions),
+        "actions": actions,
+        "repaired": repaired,
+        "repaired_count": len(repaired),
+        "scanned_at": _now(),
+    }
 
 
 # ── fault report ─────────────────────────────────────────────────────────────
@@ -226,6 +367,15 @@ def fault_report(sprint_id: "str | None" = None) -> dict:
     # deadlock (stalled leases)
     stalled = [a for a in scan(sprint_id) if a.get("action") == "resolve_deadlock"]
     faults.extend(stalled)
+
+    runtime_debt = runtime_debt_actions(sprint_id=sprint_id, repair=False)
+    for item in runtime_debt.get("actions", []):
+        faults.append({
+            "fault": "runtime_debt",
+            "sprint_id": item.get("sprint_id"),
+            "kind": item.get("kind"),
+            "detail": item.get("detail"),
+        })
 
     return {
         "ok": True,
@@ -313,6 +463,10 @@ def main() -> int:
     dq = sub.add_parser("drain-queue")
     dq.add_argument("--sprint", required=True)
 
+    rt = sub.add_parser("runtime-debt")
+    rt.add_argument("--sprint")
+    rt.add_argument("--repair", action="store_true")
+
     args = ap.parse_args()
 
     if args.cmd == "scan":
@@ -348,6 +502,10 @@ def main() -> int:
     elif args.cmd == "drain-queue":
         result = drain_queue(args.sprint)
         print(json.dumps(result))
+
+    elif args.cmd == "runtime-debt":
+        result = runtime_debt_actions(getattr(args, "sprint", None), repair=bool(args.repair))
+        print(json.dumps(result, indent=2))
 
     else:
         ap.print_help()

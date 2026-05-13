@@ -124,7 +124,21 @@ GRAPH_TEXT=$(cat "$TMPDIR_TEST/sprints/${SID}.task_graph.json")
 check "S1 status dispatched" "$GRAPH_TEXT" '"status": "dispatched"'
 check "S2 status dispatched" "$GRAPH_TEXT" '"status": "dispatched"'
 
-echo "T4: missing task_graph does not fall back to builder dispatch"
+echo "T4: task_graph sprint does not use legacy parent evaluator route"
+cat > "$TMPDIR_TEST/sprints/${SID}.handoff.md" <<'EOF'
+# Legacy sprint handoff should not trigger parent eval while DAG nodes are open.
+EOF
+python3 - "$TMPDIR_TEST/sprints/${SID}.status.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+d["handoff_to"] = "evaluator"
+json.dump(d, open(p, "w"), indent=2)
+PY
+OUT=$(HARNESS_DIR="$TMPDIR_TEST" SOLAR_HARNESS_SESSION="solar-harness-test" python3 "$TMPDIR_TEST/tools/solar-autopilot-monitor.py" --json --cooldown 0 2>/dev/null)
+if [[ "$OUT" != *'"ready_for_evaluator"'* ]]; then ok "task_graph blocks legacy parent evaluator"; else fail "task_graph leaked legacy parent evaluator route"; fi
+
+echo "T5: missing task_graph does not fall back to builder dispatch"
 SID2="sprint-test-missing-graph"
 cat > "$TMPDIR_TEST/sprints/${SID2}.status.json" <<JSON
 {

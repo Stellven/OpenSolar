@@ -224,7 +224,36 @@ def _pane_health(pane: str) -> dict[str, Any]:
     until = str(data.get("quarantine_until") or "")
     if until and until <= _utc_now():
         return {}
+    if _provider_health_stale(data):
+        return {}
     return data
+
+
+def _parse_health_ts(value: Any) -> datetime.datetime | None:
+    if not value:
+        return None
+    text = str(value).strip()
+    for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.datetime.strptime(text, fmt).replace(tzinfo=datetime.timezone.utc)
+        except ValueError:
+            pass
+    return None
+
+
+def _provider_health_stale(data: dict[str, Any]) -> bool:
+    """Do not let old temporary quota failures permanently remove panes."""
+    if not data.get("unavailable") and str(data.get("status") or "").lower() != "unavailable":
+        return False
+    now = datetime.datetime.now(datetime.timezone.utc)
+    reset_at = _parse_health_ts(data.get("reset_at_provider_time"))
+    if reset_at and reset_at <= now:
+        return True
+    checked_at = _parse_health_ts(data.get("checked_at"))
+    if not checked_at:
+        return False
+    ttl = int(os.environ.get("SOLAR_PROVIDER_HEALTH_UNAVAILABLE_TTL_SEC", "21600"))
+    return (now - checked_at).total_seconds() > ttl
 
 
 def _handoff_file(sid: str, node_id: str) -> Path:
@@ -387,6 +416,8 @@ Graph: `{graph_path}`
 - 只允许修改 `Write Scope` 里的文件/目录；需要扩大范围时写入 handoff 的 `Scope Change Request`，不要直接扩大。
 - 不要把 parent sprint 标成 passed。
 - 不要等待用户确认；遇到阻塞先写清楚证据和最小修复建议。
+- 不要停在“继续/要不要继续/等待 review”提示；只要本节点 acceptance 未完成，就自主继续执行。
+- 完成后必须写 handoff 并把本节点标记为 `reviewing`；这是释放下游和 evaluator 的唯一闭环。
 
 ## Work Steps
 
@@ -729,18 +760,43 @@ def _set_pane_capability_title(pane: str, instruction_file: Path) -> None:
 def _inject_dispatch_context(instruction_file: Path, sid: str = "", pane: str = "", dispatch_id: str = "") -> None:
     """Fail-open Solar skills/KB/capability context injection for DAG dispatch files."""
     injector = HARNESS_DIR / "lib" / "solar_skills.py"
-    if not injector.exists() or not instruction_file.exists():
+    if not instruction_file.exists():
         return
-    try:
-        subprocess.run(
-            [sys.executable, str(injector), "inject", str(instruction_file)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=45,
-            check=False,
-        )
-    except Exception:
-        pass
+    if injector.exists():
+        try:
+            subprocess.run(
+                [sys.executable, str(injector), "inject", str(instruction_file)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=45,
+                check=False,
+            )
+        except Exception:
+            pass
+    runtime_injector = HARNESS_DIR / "lib" / "runtime_context_inject.py"
+    if sid and dispatch_id and runtime_injector.exists():
+        try:
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(runtime_injector),
+                    str(instruction_file),
+                    "--session-id",
+                    sid,
+                    "--pane",
+                    pane or "unknown",
+                    "--dispatch-id",
+                    dispatch_id,
+                    "--budget-tokens",
+                    "1800",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=60,
+                check=False,
+            )
+        except Exception:
+            pass
     if sid and dispatch_id:
         _append_dispatch_ledger(
             "intent_injected",
@@ -919,13 +975,13 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
     if sent:
         if not dry_run:
             _write_submit_ack(sid, node_id, pane, dispatch_id)
-        try:
-            graph = load_graph(graph_path)
-            set_node_status(graph, node_id, "dispatched", pane=pane, dispatch_id=dispatch_id)
-            save_graph(graph_path, graph)
-            graph_updated = True
-        except Exception:
-            graph_updated = False
+            try:
+                graph = load_graph(graph_path)
+                set_node_status(graph, node_id, "dispatched", pane=pane, dispatch_id=dispatch_id)
+                save_graph(graph_path, graph)
+                graph_updated = True
+            except Exception:
+                graph_updated = False
         return {
             "ok": True,
             "node": node_id,
@@ -990,6 +1046,8 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "skill.methodology", "workflow.planning", "debug.systematic", "test.tdd",
         "agents_sdk.design", "agents_sdk.guardrails", "agents_sdk.tracing",
         "agents_sdk.handoff_model",
+        "ruflo.swarm", "ruflo.plugins", "ruflo.agent_catalog",
+        "ruflo.memory", "ruflo.mcp", "ruflo.workflow_templates",
     ]
     if dry_run:
         return [

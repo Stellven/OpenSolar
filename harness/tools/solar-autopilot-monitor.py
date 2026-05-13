@@ -60,7 +60,10 @@ TELEMETRY_ONLY_FINDINGS = {
 ASK_BOSS_RE = re.compile(r"拍板|要走哪条|你决定|老板.*决定|昊哥拍板|等.*确认|是否.*继续")
 COMPACTING_RE = re.compile(r"Compacting conversation|压缩上下文|Compacting", re.I)
 PROMPT_IDLE_RE = re.compile(r"Press up to edit queued messages|❯\s*$|Try \"", re.M)
-PANE_BUSY_RE = re.compile(r"✳|✶|⏺ Bash|Running|Effecting|Swooping|thinking|Cogitating|Brewed|Working", re.I)
+PANE_BUSY_RE = re.compile(
+    r"✳|✶|⏺ Bash|Running|Effecting|Swooping|thinking|Cogitating|Churning|Ruminating|Working",
+    re.I,
+)
 SQLITE_ONLY_RE = re.compile(r"sqlite3\s+~?/?.*\.solar/solar\.db", re.I)
 CONTEXT_INJECT_RE = re.compile(r"solar-harness\s+context\s+inject|Solar Unified Context", re.I)
 CONTEXT_TIMEOUT_RE = re.compile(r"context inject[\s\S]{0,240}timeout\s+\d+s|timeout\s+\d+s[\s\S]{0,240}context inject", re.I)
@@ -710,6 +713,18 @@ def infer_worker_models(pane: str) -> list[str]:
 
 def graph_workers() -> list[dict]:
     workers = []
+    skills = [
+        "bash", "python", "typescript", "docs", "testing",
+        "architecture", "schema", "state-machine", "distributed-systems",
+        "routing", "diagnostics", "evaluation", "debug.systematic",
+    ]
+    capabilities = [
+        "code.review", "debug.systematic", "skill.methodology",
+        "workflow.planning", "test.tdd", "browser.browse", "browser.qa",
+        "document.convert", "document.markdown_extract",
+        "ruflo.swarm", "ruflo.plugins", "ruflo.agent_catalog",
+        "ruflo.memory", "ruflo.mcp", "ruflo.workflow_templates",
+    ]
     for pane in discover_worker_panes():
         lease = pane_lease(pane)
         busy = bool(lease) or pane_is_busy(pane)
@@ -717,7 +732,8 @@ def graph_workers() -> list[dict]:
             {
                 "pane": pane,
                 "models": infer_worker_models(pane),
-                "skills": ["bash", "python", "typescript", "docs", "testing"],
+                "skills": skills,
+                "capabilities": capabilities,
                 "busy": busy,
                 "lease": lease,
             }
@@ -747,6 +763,40 @@ def graph_status(sid: str) -> dict:
         }
     except Exception as exc:
         return {"exists": True, "ready": False, "path": str(path), "valid": False, "error": str(exc)}
+
+
+def assigned_graph_node_for_pane(target: str) -> dict:
+    if load_graph is None:
+        return {}
+    active_node_statuses = {"assigned", "dispatched", "in_progress", "running"}
+    for status in active_statuses():
+        sid = status.get("_sid") or status.get("sprint_id") or status.get("id")
+        if not sid:
+            continue
+        path = graph_path_for(str(sid))
+        if not path.exists():
+            continue
+        try:
+            graph = load_graph(path)
+        except Exception:
+            continue
+        for node in graph.get("nodes", []):
+            node_status = str(node.get("status") or "").lower()
+            if node.get("assigned_to") != target or node_status not in active_node_statuses:
+                continue
+            node_id = str(node.get("id") or "")
+            handoff = SPRINTS / f"{sid}.{node_id}-handoff.md"
+            if handoff.exists():
+                continue
+            return {
+                "sid": str(sid),
+                "node_id": node_id,
+                "status": node_status,
+                "graph": str(path),
+                "dispatch_file": str(SPRINTS / f"{sid}.{node_id}-dispatch.md"),
+                "dispatch_id": node.get("dispatch_id", ""),
+            }
+    return {}
 
 
 def dispatch_ready_graph_nodes(sid: str, lease: bool = True) -> dict:
@@ -896,7 +946,7 @@ def inspect_sprints() -> list[dict]:
                     "message": instruction_for(status, files),
                 }
             )
-        if files["handoff"] and handoff in ("evaluator", "reviewer") and not files["eval"]:
+        if files["handoff"] and not files["task_graph"] and handoff in ("evaluator", "reviewer") and not files["eval"]:
             raw_findings.append(
                 {
                     "sid": sid,
@@ -949,11 +999,30 @@ def inspect_panes(state: dict, stall_seconds: int) -> list[dict]:
                         "message": f"{role} pane compacting/stalled; re-wake sprint {sid} to continue missing artifact work.",
                     }
                 )
-        if PROMPT_IDLE_RE.search(tail):
+        if PROMPT_IDLE_RE.search(tail) and not PANE_BUSY_RE.search(tail):
+            graph_node = assigned_graph_node_for_pane(target)
+            if graph_node:
+                findings.append(
+                    {
+                        "sid": graph_node["sid"],
+                        "type": "graph_node_idle_assigned",
+                        "severity": "warn",
+                        "target": target,
+                        "role": role,
+                        "graph_node": graph_node,
+                        "message": (
+                            f"继续执行 DAG node {graph_node['node_id']}，不要等待用户输入继续。"
+                            f"读取并完成 {graph_node['dispatch_file']}；完成后写 handoff 并标记 reviewing。"
+                        ),
+                    }
+                )
+                continue
             sid = candidate_sid_for_role(role)
             if sid:
                 status = load_json(SPRINTS / f"{sid}.status.json")
                 files = sprint_files(sid)
+                if files.get("task_graph"):
+                    continue
                 msg = instruction_for(status, files)
                 if msg:
                     findings.append(
@@ -966,6 +1035,32 @@ def inspect_panes(state: dict, stall_seconds: int) -> list[dict]:
                             "message": msg,
                         }
                     )
+    # Lab builders also receive DAG nodes. They are not covered by the fixed
+    # main-screen role loop above, so resume assigned lab nodes explicitly when
+    # the pane returns to prompt without a node handoff.
+    for target in discover_worker_panes():
+        if not target.startswith("solar-harness-lab:"):
+            continue
+        tail = tmux_capture(target)
+        if not PROMPT_IDLE_RE.search(tail) or PANE_BUSY_RE.search(tail):
+            continue
+        graph_node = assigned_graph_node_for_pane(target)
+        if not graph_node:
+            continue
+        findings.append(
+            {
+                "sid": graph_node["sid"],
+                "type": "graph_node_idle_assigned",
+                "severity": "warn",
+                "target": target,
+                "role": "lab-builder",
+                "graph_node": graph_node,
+                "message": (
+                    f"继续执行 DAG node {graph_node['node_id']}，不要等待用户输入继续。"
+                    f"读取并完成 {graph_node['dispatch_file']}；完成后写 handoff 并标记 reviewing。"
+                ),
+            }
+        )
     return findings
 
 
@@ -1127,6 +1222,16 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
             append_event(sid, "autopilot_graph_enqueue_ready", "info" if result.get("ok") else "warn", result)
             mark_action(state, f, {"sid": sid, "action": ftype, **result})
             actions.append({"sid": sid, "action": ftype, **result})
+        elif ftype == "graph_node_idle_assigned":
+            append_event(sid, "autopilot_graph_node_idle_resume", "warn", f.get("graph_node", {}))
+            sent = False
+            if dispatch and target and f.get("message"):
+                sent = tmux_send(target, f["message"])
+            result = {"sid": sid, "action": ftype, "target": target, "dispatched": sent, "graph_node": f.get("graph_node", {})}
+            if sent and target:
+                used_targets.add(target)
+            mark_action(state, f, result)
+            actions.append(result)
         elif ftype in ("graph_parent_ready",):
             append_event(sid, "autopilot_graph_parent_ready", "info", f.get("graph", {}))
             sent = False

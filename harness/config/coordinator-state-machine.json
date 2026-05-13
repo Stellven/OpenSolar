@@ -34,13 +34,13 @@
       "id": "prd_ready_to_planning_complete",
       "from": "prd_ready",
       "event": "design_plan_present",
-      "guard": "exists(plan.md)",
+      "guard": "exists(design.md) && exists(plan.md) && exists(task_graph.json)",
       "to": "planning_complete",
       "requested_role": "builder_main",
-      "required_artifacts": ["design", "plan"],
+      "required_artifacts": ["design", "plan", "task_graph"],
       "timeout_policy": {"ack": 300, "artifact": 7200},
       "retry_policy": {"max_attempts": 3, "backoff": "linear:120"},
-      "note": "Planner produced design+plan → hand to Builder"
+      "note": "Planner produced design+plan+task_graph → hand to DAG Builder scheduler"
     },
     {
       "id": "planning_complete_to_build_complete",

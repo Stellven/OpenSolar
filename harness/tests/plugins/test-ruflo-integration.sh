@@ -70,6 +70,18 @@ assert "state/ruflo" in d["paths"]["runtime_dir"]
 assert d["integration_level"] in ("pending", "full_runtime_usable")
 PY
 
+OUT=$("$HARNESS_DIR/solar-harness.sh" integrations ruflo-runtime-smoke --json)
+python3 - "$OUT" <<'PY' && ok "ruflo runtime smoke uses SandboxHand" || fail "ruflo runtime smoke uses SandboxHand"
+import json, sys
+d=json.loads(sys.argv[1])
+assert d["ok"] is True
+for item in d.get("commands", []):
+    assert item.get("executor") == "sandbox", item
+    assert item.get("execution_mode") == "argv", item
+    assert item.get("evidence_file"), item
+    assert item.get("write_guard", {}).get("enabled") is True, item
+PY
+
 echo "R7 — unified health and UI expose full runtime"
 OUT=$("$HARNESS_DIR/solar-harness.sh" integrations status --json --refresh)
 python3 - "$OUT" <<'PY' && ok "ruflo unified health full runtime" || fail "ruflo unified health full runtime"
