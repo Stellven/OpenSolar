@@ -623,10 +623,19 @@ _bridge_pane_idle() {
   local recent_view
   recent_view="$(printf '%s\n' "$tail_view" | tail -12)"
 
+  # Old tool output can remain close to the prompt after a hook interruption.
+  # If the visible footer has returned to the prompt, treat the pane as idle
+  # unless there is an explicit queued-input or interrupt marker.
+  if printf '%s\n' "$tail_view" | grep -q '❯' && \
+     printf '%s\n' "$recent_view" | grep -qE '\? for shortcuts|new task\? /clear|bypass permissions|shift\+tab to cycle' && \
+     ! printf '%s\n' "$recent_view" | grep -qE 'esc to interrupt|Press up to edit queued messages'; then
+    return 0
+  fi
+
   # Active Claude/Codex UIs can still render the prompt footer while a tool or
   # thinking phase is running. Check these current activity markers before the
   # prompt-footer idle shortcut, otherwise dispatch-watch can overfill panes.
-  if printf '%s\n' "$recent_view" | grep -qE 'Brewing|Baking|Calculating|Percolating|Marinating|Befuddling|Compacting conversation|Thinking|thinking|Hmm|Press up to edit queued messages|Reading [0-9]+ files|Read [0-9]+ files|Bash\(|Edit\(|Write\(|Update\('; then
+  if printf '%s\n' "$recent_view" | grep -qE 'Brewing|Baking|Calculating|Percolating|Marinating|Befuddling|Clauding|Computing|Cooking|Billowing|Frosting|Discombobulating|Levitating|Cultivating|Compacting conversation|Thinking|thinking|Hmm|Press up to edit queued messages|Reading [0-9]+ files|Read [0-9]+ files|Bash\(|Edit\(|Write\(|Update\('; then
     return 1
   fi
 
@@ -638,7 +647,7 @@ _bridge_pane_idle() {
     return 0
   fi
 
-  if printf '%s\n' "$recent_view" | grep -qE 'esc to interrupt|Press up to edit queued messages|[✻✳✶·] .*[[:alpha:]].*[0-9]+s|Reading [0-9]|Bash\(|Edit\(|Write\(|Update\(|Searched for|Read [0-9]|Listing|Puzzling|Dilly-dallying|Levitating|Newspapering|Cogitating|Crafting'; then
+  if printf '%s\n' "$recent_view" | grep -qE 'esc to interrupt|Press up to edit queued messages|[✻✳✶·] .*[[:alpha:]].*[0-9]+s|Reading [0-9]|Bash\(|Edit\(|Write\(|Update\(|Searched for|Read [0-9]|Listing|Puzzling|Dilly-dallying|Levitating|Newspapering|Cogitating|Crafting|Clauding|Computing|Cooking|Billowing|Frosting|Discombobulating|Cultivating'; then
     return 1
   fi
   printf '%s\n' "$tail_view" | grep -q '❯' || return 1

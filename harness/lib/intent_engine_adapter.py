@@ -103,6 +103,17 @@ GSTACK_RULES: tuple[IntentRule, ...] = (
     IntentRule("hint", "skill_hint", 0.85, (r"合并部署|^land$|land.and.deploy",), "建议使用 gstack land-and-deploy。", "gstack", "land-and-deploy"),
 )
 
+AGENT_RULES_BOOKS_RULES: tuple[IntentRule, ...] = (
+    IntentRule("hint", "skill_hint", 0.86, (r"clean code|整洁代码|命名|小函数|可读性|code smell",), "建议使用 agent-rules-books: clean-code.mini。", "agent-rules-books", "clean-code"),
+    IntentRule("hint", "skill_hint", 0.88, (r"refactor|refactoring|重构|代码异味|安全重构",), "建议使用 agent-rules-books: refactoring.mini。", "agent-rules-books", "refactoring"),
+    IntentRule("hint", "skill_hint", 0.88, (r"legacy code|遗留代码|characterization test|seam|难测代码",), "建议使用 agent-rules-books: working-effectively-with-legacy-code.mini。", "agent-rules-books", "working-effectively-with-legacy-code"),
+    IntentRule("hint", "skill_hint", 0.86, (r"clean architecture|整洁架构|dependency rule|边界|use case",), "建议使用 agent-rules-books: clean-architecture.mini。", "agent-rules-books", "clean-architecture"),
+    IntentRule("hint", "skill_hint", 0.86, (r"\bddd\b|domain[- ]driven design|领域驱动|bounded context|聚合|领域事件",), "建议使用 agent-rules-books: domain-driven-design.mini。", "agent-rules-books", "domain-driven-design"),
+    IntentRule("hint", "skill_hint", 0.86, (r"\bddia\b|data[- ]intensive|数据密集|一致性|复制|分区|事务|schema evolution|event stream",), "建议使用 agent-rules-books: designing-data-intensive-applications.mini。", "agent-rules-books", "designing-data-intensive-applications"),
+    IntentRule("hint", "skill_hint", 0.86, (r"release it|生产可靠性|熔断|限流|超时|重试|bulkhead|backpressure",), "建议使用 agent-rules-books: release-it.mini。", "agent-rules-books", "release-it"),
+    IntentRule("hint", "skill_hint", 0.82, (r"pragmatic programmer|程序员修炼|正交性|dry|自动化|快速反馈",), "建议使用 agent-rules-books: the-pragmatic-programmer.mini。", "agent-rules-books", "the-pragmatic-programmer"),
+)
+
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -146,6 +157,11 @@ def match_static(text: str) -> list[dict[str, Any]]:
 
     # Preserve legacy precedence: Superpowers before gstack.
     for rule in SUPERPOWER_RULES:
+        if any(re.search(p, lowered, re.IGNORECASE) for p in rule.patterns):
+            matches.append(as_match(rule, normalized))
+            return matches
+
+    for rule in AGENT_RULES_BOOKS_RULES:
         if any(re.search(p, lowered, re.IGNORECASE) for p in rule.patterns):
             matches.append(as_match(rule, normalized))
             return matches

@@ -491,6 +491,7 @@ def _all_discovered_skill_records() -> list[dict[str, Any]]:
         "vendor:hermes-agent": HARNESS_VENDOR_ROOT / "hermes-agent",
         "vendor:obsidian-wiki": HARNESS_VENDOR_ROOT / "obsidian-wiki",
         "vendor:everything-claude-code": HARNESS_VENDOR_ROOT / "everything-claude-code",
+        "vendor:agent-rules-books": HARNESS_VENDOR_ROOT / "agent-rules-books",
         "vendor:mineru-document-explorer": HARNESS_VENDOR_ROOT / "MinerU-Document-Explorer",
     }
     for source, root in vendor_roots.items():
@@ -537,17 +538,31 @@ def cmd_inventory(args: list[str]) -> int:
         "hermes-agent": HARNESS_VENDOR_ROOT / "hermes-agent",
         "obsidian-wiki": HARNESS_VENDOR_ROOT / "obsidian-wiki",
         "everything-claude-code": HARNESS_VENDOR_ROOT / "everything-claude-code",
+        "agent-rules-books": HARNESS_VENDOR_ROOT / "agent-rules-books",
         "mineru-document-explorer": HARNESS_VENDOR_ROOT / "MinerU-Document-Explorer",
     }
-    vendor_skill_files = {
-        name: {
-            "path": str(root),
-            "exists": root.exists(),
-            "skill_files": _count_skill_files(root),
-            "sample": _sample_skill_files(root, 12),
-        }
-        for name, root in vendor_sources.items()
-    }
+    vendor_skill_files = {}
+    for name, root in vendor_sources.items():
+        if name == "agent-rules-books" and root.exists():
+            rule_files = sorted(
+                p for p in root.glob("*/*.md")
+                if p.parent.name not in {"docs", "_rule-workbench"}
+            )
+            vendor_skill_files[name] = {
+                "path": str(root),
+                "exists": True,
+                "skill_files": len(rule_files),
+                "rule_files": len(rule_files),
+                "kind": "rulebook_provider",
+                "sample": [str(p.relative_to(root)) for p in rule_files[:12]],
+            }
+        else:
+            vendor_skill_files[name] = {
+                "path": str(root),
+                "exists": root.exists(),
+                "skill_files": _count_skill_files(root),
+                "sample": _sample_skill_files(root, 12),
+            }
     vendor_skill_files_total = sum(v["skill_files"] for v in vendor_skill_files.values())
 
     total = agents_count + claude_count + native_count + codex_superpowers_count + rules_count
@@ -876,6 +891,16 @@ CAPABILITY_RULES: list[dict[str, Any]] = [
         ],
     },
     {
+        "provider": "agent-rules-books",
+        "capabilities": ["rules.book_catalog", "rules.refactoring", "rules.architecture", "rules.ddd", "rules.reliability", "rules.data_systems"],
+        "why": "任务涉及经典工程书规则：Clean Code、Refactoring、DDD、Clean Architecture、DDIA、Release It、Legacy Code 等。",
+        "use": "先用 solar-harness agent-rules-books inventory/report 查看可用规则；默认只注入一个相关 mini 规则集，full 只作参考，不要全量塞进 prompt。",
+        "patterns": [
+            r"\b(agent[- ]rules[- ]books|clean code|clean architecture|refactoring|domain[- ]driven design|ddd|ddia|release it|legacy code|code complete|pragmatic programmer)\b",
+            r"经典.*工程书|重构|领域驱动|DDD|整洁代码|整洁架构|数据密集型|遗留代码|生产可靠性|代码大全|程序员修炼",
+        ],
+    },
+    {
         "provider": "Browser-use MCP",
         "capabilities": ["browser.mcp", "browser.automation", "browser.screenshot", "browser.localhost_test"],
         "why": "任务明确需要 browser-use、MCP 浏览器自动化、截图或 localhost 交互测试。",
@@ -1004,6 +1029,7 @@ def _rank_rule(rule: dict[str, Any], scores: dict[str, dict[str, Any]]) -> dict[
         "agency-agents": "agency-agents",
         "atlas": "atlas",
         "everything-claude-code": "everything-claude-code",
+        "agent-rules-books": "agent-rules-books",
         "solar-harness-runtime": "solar-harness-runtime",
         "solar-data-plane": "solar-data-plane",
     }

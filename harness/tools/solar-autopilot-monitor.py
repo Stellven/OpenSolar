@@ -33,12 +33,20 @@ NO_DISPATCH_FLAG = HARNESS / "run" / "no-dispatch.flag"
 PANE_ASSIGNMENTS = HARNESS / ".pane-assignments"
 PANE_LEASE_DIR = HARNESS / "run" / "pane-leases"
 QUEUE_TTL_SEC = 3600
+KB_PROBE_SCRIPT = HARNESS / "tests" / "test-knowledge-probe-coverage.sh"
+KB_PROBE_HEALTH = HARNESS / "state" / "knowledge-probe-health.json"
+KB_PROBE_INTERVAL_SEC = int(os.environ.get("SOLAR_KB_PROBE_INTERVAL_SEC", "1800"))
+KB_PROBE_TRIGGER_COOLDOWN_SEC = int(os.environ.get("SOLAR_KB_PROBE_TRIGGER_COOLDOWN_SEC", "300"))
+KB_PROBE_TIMEOUT_SEC = int(os.environ.get("SOLAR_KB_PROBE_TIMEOUT_SEC", "120"))
 
 
 ASK_BOSS_RE = re.compile(r"拍板|要走哪条|你决定|老板.*决定|昊哥拍板|等.*确认|是否.*继续")
 COMPACTING_RE = re.compile(r"Compacting conversation|压缩上下文|Compacting", re.I)
 PROMPT_IDLE_RE = re.compile(r"Press up to edit queued messages|❯\s*$|Try \"", re.M)
 PANE_BUSY_RE = re.compile(r"✳|✶|⏺ Bash|Running|Effecting|Swooping|thinking|Cogitating|Brewed|Working", re.I)
+SQLITE_ONLY_RE = re.compile(r"sqlite3\s+~?/?.*\.solar/solar\.db", re.I)
+CONTEXT_INJECT_RE = re.compile(r"solar-harness\s+context\s+inject|Solar Unified Context", re.I)
+CONTEXT_TIMEOUT_RE = re.compile(r"context inject[\s\S]{0,240}timeout\s+\d+s|timeout\s+\d+s[\s\S]{0,240}context inject", re.I)
 ACTIVE_STATUSES = {"drafting", "queued", "active", "planning", "approved", "reviewing", "ready_for_review", "needs_human_review", "failed_review"}
 GRAPH_READY_HANDOFFS = {"builder", "builder_main", "builder_parallel", "builder-lab"}
 
@@ -102,6 +110,95 @@ def append_event(sid: str, event: str, severity: str = "info", data: dict | None
     if sid:
         with (SPRINTS / f"{sid}.events.jsonl").open("a") as f:
             f.write(json.dumps(obj, ensure_ascii=False) + "\n")
+
+
+def run_kb_probe(reason: str, force: bool = False) -> dict:
+    """Run the default knowledge retrieval regression probe.
+
+    This is intentionally local and token-free. It proves the default
+    Mirage/QMD/Obsidian context path still answers the common probe set instead
+    of silently degrading to sqlite-only lookups.
+    """
+    last = load_json(KB_PROBE_HEALTH)
+    now_epoch = time.time()
+    if force and last and last.get("reason") == reason and now_epoch - float(last.get("checked_at_epoch", 0)) < KB_PROBE_TRIGGER_COOLDOWN_SEC:
+        last["skipped"] = "trigger_cooldown"
+        last["reason"] = reason
+        return last
+    if not force and last and now_epoch - float(last.get("checked_at_epoch", 0)) < KB_PROBE_INTERVAL_SEC:
+        last["skipped"] = "cooldown"
+        last["reason"] = reason
+        return last
+    if not KB_PROBE_SCRIPT.exists():
+        result = {
+            "ok": False,
+            "status": "error",
+            "reason": reason,
+            "error": "kb_probe_script_missing",
+            "script": str(KB_PROBE_SCRIPT),
+            "checked_at": utc_now(),
+            "checked_at_epoch": now_epoch,
+        }
+        save_json(KB_PROBE_HEALTH, result)
+        append_event("", "autopilot_kb_probe_missing", "error", result)
+        return result
+    try:
+        proc = subprocess.run(
+            [str(KB_PROBE_SCRIPT)],
+            cwd=str(HARNESS),
+            text=True,
+            capture_output=True,
+            timeout=KB_PROBE_TIMEOUT_SEC,
+        )
+        output = (proc.stdout or "") + (proc.stderr or "")
+        passed = re.search(r"PROBES_PASSED=(\d+)\s+PROBES_FAILED=(\d+)", output)
+        passed_count = int(passed.group(1)) if passed else None
+        failed_count = int(passed.group(2)) if passed else None
+        ok = proc.returncode == 0 and failed_count == 0
+        result = {
+            "ok": ok,
+            "status": "ok" if ok else "error",
+            "reason": reason,
+            "returncode": proc.returncode,
+            "probes_passed": passed_count,
+            "probes_failed": failed_count,
+            "stdout_tail": (proc.stdout or "")[-4000:],
+            "stderr_tail": (proc.stderr or "")[-4000:],
+            "script": str(KB_PROBE_SCRIPT),
+            "checked_at": utc_now(),
+            "checked_at_epoch": now_epoch,
+        }
+    except subprocess.TimeoutExpired as exc:
+        result = {
+            "ok": False,
+            "status": "error",
+            "reason": reason,
+            "error": "kb_probe_timeout",
+            "timeout_sec": KB_PROBE_TIMEOUT_SEC,
+            "stdout_tail": (exc.stdout or "")[-4000:] if isinstance(exc.stdout, str) else "",
+            "stderr_tail": (exc.stderr or "")[-4000:] if isinstance(exc.stderr, str) else "",
+            "script": str(KB_PROBE_SCRIPT),
+            "checked_at": utc_now(),
+            "checked_at_epoch": now_epoch,
+        }
+    except Exception as exc:
+        result = {
+            "ok": False,
+            "status": "error",
+            "reason": reason,
+            "error": f"{type(exc).__name__}: {exc}",
+            "script": str(KB_PROBE_SCRIPT),
+            "checked_at": utc_now(),
+            "checked_at_epoch": now_epoch,
+        }
+    save_json(KB_PROBE_HEALTH, result)
+    append_event(
+        "",
+        "autopilot_kb_probe_passed" if result.get("ok") else "autopilot_kb_probe_failed",
+        "info" if result.get("ok") else "error",
+        result,
+    )
+    return result
 
 
 def tmux_capture(target: str) -> str:
@@ -658,6 +755,82 @@ def inspect_panes(state: dict, stall_seconds: int) -> list[dict]:
     return findings
 
 
+def inspect_knowledge_context(state: dict) -> list[dict]:
+    """Detect default-context regressions and run the KB probe automatically.
+
+    The user-facing failure mode is a pane answering with sqlite-only lookup or
+    timing out on `solar-harness context inject`. Both mean the default
+    knowledge path may be broken even if the underlying pages exist.
+    """
+    findings: list[dict] = []
+    force_probe = False
+    reasons: list[str] = []
+    for idx, role in enumerate(("pm", "planner", "builder", "evaluator")):
+        target = f"{SESSION}:0.{idx}"
+        tail = tmux_capture(target)
+        has_sqlite = bool(SQLITE_ONLY_RE.search(tail))
+        has_context = bool(CONTEXT_INJECT_RE.search(tail))
+        if has_sqlite and not has_context:
+            force_probe = True
+            reasons.append(f"{target}:sqlite_only")
+            findings.append(
+                {
+                    "sid": "",
+                    "type": "knowledge_context_sqlite_only",
+                    "severity": "warn",
+                    "target": target,
+                    "role": role,
+                    "message": "检测到 pane 使用 sqlite3 ~/.solar/solar.db 且未看到 solar-harness context inject；自动运行 KB probe。",
+                }
+            )
+        if CONTEXT_TIMEOUT_RE.search(tail):
+            force_probe = True
+            reasons.append(f"{target}:context_timeout")
+            findings.append(
+                {
+                    "sid": "",
+                    "type": "knowledge_context_timeout",
+                    "severity": "warn",
+                    "target": target,
+                    "role": role,
+                    "message": "检测到 context inject timeout；自动运行 KB probe 并记录健康状态。",
+                }
+            )
+    reason = ",".join(reasons) if reasons else "periodic"
+    probe = run_kb_probe(reason, force=force_probe)
+    if probe.get("ok"):
+        state["knowledge_probe"] = {
+            "status": "ok",
+            "checked_at": probe.get("checked_at"),
+            "probes_passed": probe.get("probes_passed"),
+            "probes_failed": probe.get("probes_failed"),
+            "reason": probe.get("reason"),
+        }
+    else:
+        findings.append(
+            {
+                "sid": "",
+                "type": "knowledge_probe_failed",
+                "severity": "error",
+                "target": f"{SESSION}:0.0",
+                "role": "pm",
+                "message": (
+                    "KB probe failed；默认知识路径可能不可用。先不要只查 sqlite，"
+                    "请检查 state/knowledge-probe-health.json 和 tests/test-knowledge-probe-coverage.sh 输出。"
+                ),
+                "probe": probe,
+            }
+        )
+        state["knowledge_probe"] = {
+            "status": "error",
+            "checked_at": probe.get("checked_at"),
+            "probes_passed": probe.get("probes_passed"),
+            "probes_failed": probe.get("probes_failed"),
+            "reason": probe.get("reason"),
+        }
+    return findings
+
+
 def should_act(state: dict, finding: dict, cooldown: int) -> bool:
     key = f"{finding.get('sid','')}:{finding.get('type','')}:{finding.get('target','')}"
     last = float(state["actions"].get(key, {}).get("at", 0))
@@ -782,6 +955,16 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
             result = {"sid": sid, "action": ftype, "requires_codex_pm": True}
             mark_action(state, f, result)
             actions.append(result)
+        elif ftype in ("knowledge_context_sqlite_only", "knowledge_context_timeout", "knowledge_probe_failed"):
+            append_event("", f"autopilot_{ftype}", f.get("severity", "warn"), f)
+            sent = False
+            if dispatch and f.get("target") and ftype == "knowledge_probe_failed":
+                sent = tmux_send(f["target"], f.get("message", "KB probe failed；请先恢复 solar-harness context inject 默认路径。"))
+            result = {"sid": sid, "action": ftype, "target": f.get("target", ""), "dispatched": sent}
+            if sent and target:
+                used_targets.add(target)
+            mark_action(state, f, result)
+            actions.append(result)
     return actions
 
 
@@ -808,7 +991,7 @@ def release_lock() -> None:
 
 def scan_once(args: argparse.Namespace, state: dict) -> dict:
     queue_actions = retry_queue(state, args.dispatch, args.cooldown) if args.apply else []
-    findings = inspect_sprints() + inspect_panes(state, args.stall_seconds)
+    findings = inspect_sprints() + inspect_panes(state, args.stall_seconds) + inspect_knowledge_context(state)
     actions = apply_findings(findings, args.dispatch, state, args.cooldown) if args.apply else []
     payload = {
         "ok": True,
