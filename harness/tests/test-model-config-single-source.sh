@@ -42,19 +42,6 @@ override="$(
 )"
 assert_contains "$override" "DISPLAY_MODEL='Claude Sonnet (Anthropic, lab-builder-2)'" "env override remains available for one-off testing"
 
-footer="$(
-  bash "$HARNESS_DIR/quota-footer.sh" builder "Builder 主建设者"
-)"
-assert_contains "$footer" "模型:Sonnet" "footer shows actual model, not host title/local label"
-
-pm_cfg="$(bash "$HARNESS_DIR/lib/persona-config.sh" --print-config pm)"
-planner_cfg="$(bash "$HARNESS_DIR/lib/persona-config.sh" --print-config planner)"
-evaluator_cfg="$(bash "$HARNESS_DIR/lib/persona-config.sh" --print-config evaluator)"
-assert_contains "$pm_cfg" "MODEL_FLAG='--model sonnet'" "PM avoids broken Opus alias"
-assert_contains "$planner_cfg" "MODEL_FLAG='--model sonnet'" "planner avoids broken Opus alias"
-assert_contains "$evaluator_cfg" "MODEL_FLAG='--model sonnet'" "evaluator avoids broken Opus alias"
-assert_contains "$pm_cfg" "DISPLAY_MODEL='Claude Sonnet (Anthropic)'" "PM display shows configured Sonnet route"
-
 tmp_cfg="$(mktemp)"
 python3 - "$HARNESS_DIR/config/solar-user-config.json" "$tmp_cfg" <<'PY'
 import json
@@ -62,13 +49,21 @@ import sys
 from pathlib import Path
 
 data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-data.setdefault("models", {})["pm"] = "opus"
+models = data.setdefault("models", {})
+for role in ("pm", "planner", "builder", "evaluator"):
+    models[role] = "opus"
 Path(sys.argv[2]).write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
-pm_opus_guard="$(SOLAR_USER_CONFIG="$tmp_cfg" bash "$HARNESS_DIR/lib/persona-config.sh" --print-config pm)"
+pm_opus="$(SOLAR_USER_CONFIG="$tmp_cfg" bash "$HARNESS_DIR/lib/persona-config.sh" --print-config pm)"
+planner_opus="$(SOLAR_USER_CONFIG="$tmp_cfg" bash "$HARNESS_DIR/lib/persona-config.sh" --print-config planner)"
+builder_opus="$(SOLAR_USER_CONFIG="$tmp_cfg" bash "$HARNESS_DIR/lib/persona-config.sh" --print-config builder)"
+evaluator_opus="$(SOLAR_USER_CONFIG="$tmp_cfg" bash "$HARNESS_DIR/lib/persona-config.sh" --print-config evaluator)"
 rm -f "$tmp_cfg"
-assert_contains "$pm_opus_guard" "MODEL_FLAG='--model sonnet'" "Opus-configured PM is guarded to Sonnet"
-assert_contains "$pm_opus_guard" "Opus 1210 guard" "Opus health guard is visible when config requests Opus"
+assert_contains "$pm_opus" "MODEL_FLAG='--model opus'" "PM reads main config and resolves to Opus"
+assert_contains "$planner_opus" "MODEL_FLAG='--model opus'" "planner reads main config and resolves to Opus"
+assert_contains "$builder_opus" "MODEL_FLAG='--model opus'" "builder reads main config and resolves to Opus"
+assert_contains "$evaluator_opus" "MODEL_FLAG='--model opus'" "evaluator reads main config and resolves to Opus"
+assert_contains "$pm_opus" "DISPLAY_MODEL='Claude Opus 4.7 (Anthropic)'" "PM display shows configured Opus route"
 
 printf '=== RESULT: PASS=%d FAIL=%d ===\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]]

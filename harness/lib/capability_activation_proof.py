@@ -20,6 +20,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import importlib.util
 from pathlib import Path
 from typing import Any
 
@@ -248,6 +249,106 @@ def proof_ruflo_runtime_effect(evidence_dir: Path) -> dict[str, Any]:
     }
 
 
+def proof_model_call_runtime_projection(evidence_dir: Path) -> dict[str, Any]:
+    tmp = Path(tempfile.mkdtemp(prefix="solar-activation-model-call-"))
+    session_id = f"activation-model-call-{int(time.time())}"
+    dispatch_id = f"activation-model-call-{os.getpid()}"
+    pane = "solar-harness:0.2"
+    try:
+        instruction = tmp / "instruction.md"
+        instruction.write_text(
+            "# Model Call Activation Proof\n\n"
+            "Use Solar knowledge context and write an observable handoff artifact.\n",
+            encoding="utf-8",
+        )
+        request = run(
+            [
+                sys.executable,
+                str(HARNESS / "lib" / "model_call_runtime.py"),
+                "request",
+                "--session-id",
+                session_id,
+                "--pane",
+                pane,
+                "--dispatch-id",
+                dispatch_id,
+                "--instruction-file",
+                str(instruction),
+                "--status",
+                "queued",
+                "--json",
+            ],
+            evidence_dir,
+            "model_call_request",
+            timeout=60,
+        )
+        succeeded = run(
+            [
+                sys.executable,
+                str(HARNESS / "lib" / "model_call_runtime.py"),
+                "succeeded",
+                "--session-id",
+                session_id,
+                "--pane",
+                pane,
+                "--dispatch-id",
+                dispatch_id,
+                "--instruction-file",
+                str(instruction),
+                "--status",
+                "accepted",
+                "--json",
+            ],
+            evidence_dir,
+            "model_call_succeeded",
+            timeout=60,
+        )
+
+        events_path = HARNESS / "sessions" / session_id / "events.jsonl"
+        events = []
+        if events_path.exists():
+            for raw in events_path.read_text(encoding="utf-8", errors="replace").splitlines():
+                try:
+                    events.append(json.loads(raw))
+                except json.JSONDecodeError:
+                    pass
+
+        status_module_path = HARNESS / "lib" / "symphony" / "status-server.py"
+        projection: dict[str, Any] = {}
+        if status_module_path.exists():
+            spec = importlib.util.spec_from_file_location("solar_status_server_activation", status_module_path)
+            if spec and spec.loader:
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)  # type: ignore[union-attr]
+                projection = mod._latest_model_call_for_pane(pane, "")  # type: ignore[attr-defined]
+
+        write_json(evidence_dir / "runtime" / "model-call-runtime.json", {
+            "session_id": session_id,
+            "dispatch_id": dispatch_id,
+            "pane": pane,
+            "events_path": str(events_path),
+            "events": events,
+            "status_projection": projection,
+        })
+        event_types = {ev.get("type") for ev in events}
+        missing = [t for t in ["model_call_requested", "model_call_succeeded"] if t not in event_types]
+        projected = projection.get("dispatch_id") == dispatch_id and projection.get("status") == "ok"
+        return {
+            "name": "model-call events project into status UI evidence",
+            "status": "ok" if request["ok"] and succeeded["ok"] and not missing and projected else "error",
+            "passed": bool(request["ok"] and succeeded["ok"] and not missing and projected),
+            "evidence": {
+                "runtime_json": str(evidence_dir / "runtime" / "model-call-runtime.json"),
+                "events_path": str(events_path),
+                "missing": missing,
+                "projected_status": projection.get("status", ""),
+                "projected_dispatch": projection.get("dispatch_id", ""),
+            },
+        }
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def proof_negative_control(evidence_dir: Path) -> dict[str, Any]:
     tmp = Path(tempfile.mkdtemp(prefix="solar-activation-negative-"))
     try:
@@ -315,6 +416,7 @@ def main() -> int:
         proof_use_effect_telemetry(evidence_dir),
         proof_runtime_effect(evidence_dir),
         proof_ruflo_runtime_effect(evidence_dir),
+        proof_model_call_runtime_projection(evidence_dir),
         proof_negative_control(evidence_dir),
     ]
     passed = sum(1 for item in proofs if item["passed"])

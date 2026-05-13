@@ -194,6 +194,17 @@ export SOLAR_MODEL_FLAG="${MODEL_FLAG:-}"
 export SOLAR_EXTRA_FLAGS="${EXTRA_FLAGS:-}"
 write_runtime_marker
 
+record_pane_model_session() {
+  local event="${1:-}" exit_code="${2:-}"
+  local recorder="$HARNESS_DIR/lib/model_call_runtime.py"
+  [[ -f "$recorder" ]] || return 0
+  local session_id="${SOLAR_RUNTIME_SESSION_ID:-pane-${TMUX_PANE:-unknown}}"
+  session_id="${session_id//[^A-Za-z0-9_.:-]/_}"
+  local args=("$recorder" "$event" "--session-id" "$session_id" "--pane" "${TMUX_PANE:-}" "--dispatch-id" "pane-session-${PERSONA}" "--actor" "pane-launcher" "--status" "$event")
+  [[ -n "$exit_code" ]] && args+=("--exit-code" "$exit_code")
+  python3 "${args[@]}" >/dev/null 2>&1 || true
+}
+
 CLAUDE_CMD="$CLAUDE_BIN"
 SOLAR_CLAUDE_BYPASS="${SOLAR_CLAUDE_BYPASS:-1}"
 if [[ "$SOLAR_CLAUDE_BYPASS" == "1" ]]; then
@@ -211,10 +222,12 @@ set +e
 _runtime_policy=$(inject_runtime_policy "$PERSONA")
 _whisper=$(inject_whisper "$PERSONA")
 _prefix_policy=$(inject_prefix_policy "$PERSONA")
+record_pane_model_session "session-started" ""
 $CLAUDE_CMD --append-system-prompt "$_runtime_policy
 $_prefix_policy
 $(cat "$PERSONA_FILE")$_whisper"
 CLAUDE_EXIT=$?
+record_pane_model_session "session-ended" "$CLAUDE_EXIT"
 set -e
 
 # 写退出记录。Pane 内容可能含引号、反引号、控制字符；通过 stdin/env

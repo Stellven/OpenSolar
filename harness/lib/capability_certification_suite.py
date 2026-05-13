@@ -55,6 +55,8 @@ FAST_CHECKS: list[dict[str, Any]] = [
             str(HARNESS / "lib" / "capability_fusion_benchmark.py"),
             str(HARNESS / "lib" / "platform_workflow_benchmark.py"),
             str(HARNESS / "lib" / "agent_arena_benchmark.py"),
+            str(HARNESS / "lib" / "model_call_runtime.py"),
+            str(HARNESS / "lib" / "runtime_context_inject.py"),
         ],
         "timeout": 30,
     },
@@ -84,6 +86,13 @@ FAST_CHECKS: list[dict[str, Any]] = [
         "name": "DAG graph node dispatcher inject path",
         "dimensions": ["default", "automatic"],
         "cmd": ["bash", str(HARNESS / "tests" / "control_plane" / "test-graph-node-dispatcher.sh")],
+        "timeout": 120,
+    },
+    {
+        "id": "model-call-runtime",
+        "name": "Model-call runtime event bridge",
+        "dimensions": ["default", "usable", "evidence"],
+        "cmd": ["bash", str(HARNESS / "tests" / "runtime" / "test-model-call-runtime.sh")],
         "timeout": 120,
     },
     {

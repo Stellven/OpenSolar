@@ -618,7 +618,13 @@ def enqueue_ready(graph: dict[str, Any], graph_path: str, workers: list[dict[str
         else:
             q = enqueue(sid, f"graph_node|node_id={node_id}|pane={pane}", 80, payload)
             set_node_status(graph, node_id, "dispatched", pane=pane, dispatch_id=dispatch_id)
-        enqueued.append({"node": node_id, "pane": pane, "queue": q, "dispatch_id": dispatch_id})
+        enqueued_item = {"node": node_id, "pane": pane, "queue": q, "dispatch_id": dispatch_id}
+        if dry_run:
+            # Dry-run callers still need the exact payload so they can render
+            # node dispatch files and validate worker-visible context without
+            # mutating the persistent queue.
+            enqueued_item["payload"] = payload
+        enqueued.append(enqueued_item)
 
     return {
         "ok": True,

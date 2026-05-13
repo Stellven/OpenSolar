@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-05-08T12:56:14Z",
+  "updated_at": "2026-05-13T17:18:22Z",
   "setup_complete": true,
   "user": {
     "display_name": "Solar-Harness",
@@ -12,10 +12,11 @@
     "harness_dir": "/Users/sihaoli/.solar/harness"
   },
   "models": {
-    "planner": "sonnet",
-    "builder": "sonnet",
-    "evaluator": "sonnet",
-    "lab_builder_matrix": "glm,glm,glm,anthropic-sonnet"
+    "planner": "opus",
+    "builder": "opus",
+    "evaluator": "opus",
+    "lab_builder_matrix": "glm,glm,glm,anthropic-sonnet",
+    "pm": "opus"
   },
   "providers": {
     "zhipu_base_url": "https://api.z.ai/api/anthropic",

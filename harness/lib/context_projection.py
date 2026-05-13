@@ -13,13 +13,15 @@ import json
 import os
 import re
 import sys
+import hashlib
+import importlib.util
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 sys.path.insert(0, os.path.dirname(__file__))
 
 from runtime_interfaces import ContextView
-from session_log import SessionLog
+from session_log import DuplicateEventError, SessionLog
 
 HARNESS_DIR = os.path.expanduser("~/.solar/harness")
 
@@ -39,7 +41,9 @@ _SECRET_PATTERNS = [
 _HIGH_VALUE_TYPES = frozenset({
     "command_issued", "activity_started", "activity_succeeded",
     "activity_failed", "activity_handoff", "state_transition",
-    "human_feedback", "context_injected",
+    "human_feedback", "context_injected", "model_call_requested",
+    "model_call_succeeded", "model_call_failed", "model_session_started",
+    "model_session_ended",
 })
 
 # Event types that can be summarized/dropped to save tokens
@@ -62,6 +66,81 @@ def _redact_secrets(text: str) -> str:
     for pat in _SECRET_PATTERNS:
         result = pat.sub("[REDACTED]", result)
     return result
+
+
+def _load_unified_context_module() -> Any:
+    path = os.path.join(HARNESS_DIR, "lib", "solar-unified-context.py")
+    if not os.path.exists(path):
+        return None
+    spec = importlib.util.spec_from_file_location("solar_unified_context", path)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)  # type: ignore[union-attr]
+    return module
+
+
+def _retrieve_kb_hits(
+    query: str,
+    *,
+    max_hits: int = 6,
+    max_chars: int = 2200,
+    timeout_ms: int = 2500,
+) -> List[Dict[str, Any]]:
+    """Retrieve KB hits via the unified Mirage/QMD/Obsidian/Solar DB path.
+
+    This is fail-open by design: context projection must remain available even
+    if QMD/Mirage are temporarily down, but it must not pretend a placeholder is
+    real recall evidence.
+    """
+    try:
+        module = _load_unified_context_module()
+        if module is None or not hasattr(module, "retrieve"):
+            return [{
+                "source": "context_projection",
+                "title": "unified context unavailable",
+                "relevance_score": 0.0,
+                "note": "solar-unified-context.py missing or not importable",
+                "degraded": True,
+            }]
+        data = module.retrieve(
+            query,
+            max_hits=max_hits,
+            max_chars=max_chars,
+            timeout_ms=timeout_ms,
+        )
+        hits: List[Dict[str, Any]] = []
+        for hit in data.get("hits", []):
+            if not isinstance(hit, dict):
+                continue
+            hits.append({
+                "source": hit.get("source") or "unknown",
+                "mount": hit.get("mount") or "",
+                "path": hit.get("path") or "",
+                "title": hit.get("title") or hit.get("path") or "untitled",
+                "snippet": _redact_secrets(str(hit.get("snippet") or ""))[:500],
+                "provenance": hit.get("provenance") or "",
+                "layer": hit.get("layer") or "",
+                "score": hit.get("score", 0),
+                "relevance_score": hit.get("score", 0),
+            })
+        for degraded in data.get("degraded_sources", []) or []:
+            hits.append({
+                "source": "degraded",
+                "title": str(degraded),
+                "relevance_score": 0.0,
+                "note": "unified context degraded source",
+                "degraded": True,
+            })
+        return hits
+    except Exception as exc:
+        return [{
+            "source": "context_projection",
+            "title": "unified context error",
+            "relevance_score": 0.0,
+            "note": f"{type(exc).__name__}: {exc}",
+            "degraded": True,
+        }]
 
 
 class ContextProjection:
@@ -90,7 +169,7 @@ class ContextProjection:
         - included_event_ids: events that are included verbatim
         - summarized_ranges: ranges of events that were summarized
         - dropped_ranges: ranges of events that were dropped entirely
-        - kb_hits: (placeholder for future KB integration)
+        - kb_hits: Mirage/QMD/Obsidian/Solar DB recall evidence when query is set
         """
         budget = budget_tokens or 8000  # default ~32K chars
         events = self._log.all_events()
@@ -186,17 +265,10 @@ class ContextProjection:
             }, ensure_ascii=False)
             included_event_data.append(_redact_secrets(event_text))
 
-        # Phase 3: KB hits (placeholder — actual KB integration would
-        # call solar-harness mirage search here)
+        # Phase 3: KB hits via unified Mirage/QMD/Obsidian/Solar DB recall.
         kb_hits: List[Dict[str, Any]] = []
         if query:
-            kb_hits.append({
-                "source": "solar-harness",
-                "query": query,
-                "title": "context projection query",
-                "relevance_score": 0.0,
-                "note": "KB integration placeholder — real hits require mirage",
-            })
+            kb_hits = _retrieve_kb_hits(query)
 
         return ContextView(
             session_id=self.session_id,
@@ -270,3 +342,148 @@ class ContextProjection:
 
         text = "\n".join(parts)
         return _redact_secrets(text)
+
+    def record_context_injected(
+        self,
+        *,
+        query: Optional[str] = None,
+        policy_name: str = "default",
+        budget_tokens: Optional[int] = None,
+        actor: str = "coordinator",
+        activity_id: Optional[str] = None,
+        correlation_id: Optional[str] = None,
+        source: str = "context_projection",
+    ) -> Dict[str, Any]:
+        """Append a durable `context_injected` audit event.
+
+        The event stores the redacted model-visible context and provenance. It
+        is the explicit boundary where a projection becomes part of the durable
+        session history; plain `build_context*` remains read-only.
+        """
+        view = self.build_context(
+            policy_name=policy_name,
+            query=query,
+            budget_tokens=budget_tokens,
+        )
+        text = self.build_context_text(
+            policy_name=policy_name,
+            query=query,
+            budget_tokens=budget_tokens,
+        )
+        existing = self._log.all_events()
+        last_seq = existing[-1].get("seq", 0) if existing else 0
+        digest_src = json.dumps(
+            {
+                "session_id": self.session_id,
+                "query": query or "",
+                "policy_name": policy_name,
+                "budget_tokens": budget_tokens or view.budget_tokens,
+                "last_seq": last_seq,
+                "included_event_ids": view.included_event_ids,
+                "kb_paths": [h.get("path") for h in view.kb_hits[:8]],
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        digest = hashlib.sha256(digest_src.encode("utf-8")).hexdigest()[:16]
+        payload = {
+            "query": query,
+            "policy_name": policy_name,
+            "built_at": view.built_at,
+            "token_estimate": view.token_estimate,
+            "budget_tokens": view.budget_tokens,
+            "included_event_ids": view.included_event_ids,
+            "summarized_ranges": view.summarized_ranges,
+            "dropped_ranges": view.dropped_ranges,
+            "kb_hits": view.kb_hits[:8],
+            "context_text": text,
+            "redaction_policy": "default_secret_patterns",
+            "provenance": "projection over append-only session events plus unified knowledge recall",
+        }
+        idem = f"context_injected:{self.session_id}:{digest}"
+        try:
+            event_id = self._log.append(
+                "context_injected",
+                actor=actor,
+                source=source,
+                sprint_id=self.session_id,
+                activity_id=activity_id,
+                correlation_id=correlation_id,
+                idempotency_key=idem,
+                payload=payload,
+            )
+            duplicate = False
+        except DuplicateEventError:
+            event_id = ""
+            duplicate = True
+        return {
+            "ok": True,
+            "duplicate": duplicate,
+            "event_id": event_id,
+            "idempotency_key": idem,
+            "session_id": self.session_id,
+            "payload": payload,
+        }
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="solar-harness context projection over session log + unified KB"
+    )
+    parser.add_argument("session_id")
+    parser.add_argument("--query", default=None)
+    parser.add_argument("--policy", default="default")
+    parser.add_argument("--budget-tokens", type=int, default=None)
+    parser.add_argument("--format", choices=("markdown", "json"), default="markdown")
+    parser.add_argument("--record", action="store_true",
+                        help="Append a context_injected audit event")
+    parser.add_argument("--actor", default="coordinator")
+    parser.add_argument("--activity-id", default=None)
+    parser.add_argument("--correlation-id", default=None)
+    args = parser.parse_args()
+
+    cp = ContextProjection(args.session_id)
+    if args.record:
+        result = cp.record_context_injected(
+            query=args.query,
+            policy_name=args.policy,
+            budget_tokens=args.budget_tokens,
+            actor=args.actor,
+            activity_id=args.activity_id,
+            correlation_id=args.correlation_id,
+        )
+        if args.format == "json":
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(result["payload"]["context_text"])
+        return
+
+    if args.format == "json":
+        view = cp.build_context(
+            query=args.query,
+            policy_name=args.policy,
+            budget_tokens=args.budget_tokens,
+        )
+        print(json.dumps({
+            "session_id": view.session_id,
+            "policy_name": view.policy_name,
+            "built_at": view.built_at,
+            "included_event_ids": view.included_event_ids,
+            "summarized_ranges": view.summarized_ranges,
+            "dropped_ranges": view.dropped_ranges,
+            "kb_hits": view.kb_hits,
+            "token_estimate": view.token_estimate,
+            "budget_tokens": view.budget_tokens,
+        }, ensure_ascii=False, indent=2))
+    else:
+        print(cp.build_context_text(
+            query=args.query,
+            policy_name=args.policy,
+            budget_tokens=args.budget_tokens,
+        ))
+
+
+if __name__ == "__main__":
+    main()

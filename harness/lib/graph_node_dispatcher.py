@@ -372,7 +372,14 @@ cat "{graph_path}"
 cat "{contract}"
 cat "{node_dispatch}"
 cat "{handoff}"
+solar-harness session evaluate "{sid}" --json
 ```
+
+## Log-Native Evaluation Requirement
+
+- 评审必须消费 append-only session log，不得只看最终 handoff 文件。
+- 在 eval.md 的 `Evidence Checked` 中写入 `Session Log: solar-harness session evaluate used`。
+- 如果 `session evaluate` 返回 errors/warnings，必须逐项解释是否阻塞本 node verdict。
 
 ## Required Outputs
 
@@ -457,11 +464,40 @@ def _write_submit_ack(sid: str, node_id: str, pane: str, dispatch_id: str) -> No
         pass  # fail-open: ack write failure must not block dispatch
 
 
-def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool) -> bool:
+def _record_model_call(event: str, sid: str, pane: str, dispatch_id: str,
+                       instruction_file: Path, *, tries: int = 0,
+                       status: str = "", error: str = "") -> None:
+    if not sid:
+        return
+    recorder = HARNESS_DIR / "lib" / "model_call_runtime.py"
+    if not recorder.exists():
+        return
+    cmd = [
+        sys.executable, str(recorder), event,
+        "--session-id", sid,
+        "--pane", pane,
+        "--dispatch-id", dispatch_id,
+        "--instruction-file", str(instruction_file),
+        "--actor", "graph-dispatcher",
+        "--tries", str(tries),
+    ]
+    if status:
+        cmd += ["--status", status]
+    if error:
+        cmd += ["--error", error]
+    try:
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8)
+    except Exception:
+        pass
+
+
+def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
+                  *, sid: str = "", dispatch_id: str = "") -> bool:
     if dry_run:
         return True
     _set_pane_capability_title(pane, instruction_file)
     short_cmd = f"{_visibility_summary(instruction_file)['text']}; 读取并执行 {instruction_file}"
+    _record_model_call("request", sid, pane, dispatch_id, instruction_file, status="tmux_submit_requested")
     try:
         subprocess.run(["tmux", "send-keys", "-t", pane, "C-u"], timeout=2)
         time.sleep(0.2)
@@ -472,8 +508,10 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool) -> bool:
         # Single explicit Enter — do NOT also send C-m (would double-submit).
         subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=2)
         time.sleep(0.3)
+        _record_model_call("succeeded", sid, pane, dispatch_id, instruction_file, tries=1, status="tmux_submit_accepted")
         return True
-    except Exception:
+    except Exception as exc:
+        _record_model_call("failed", sid, pane, dispatch_id, instruction_file, tries=1, status="tmux_submit_failed", error=str(exc))
         return False
 
 
@@ -766,7 +804,7 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
     instruction_file.write_text(build_dispatch_text(text_payload, pane), encoding="utf-8")
     _inject_dispatch_context(instruction_file, sid=sid, pane=pane, dispatch_id=dispatch_id)
 
-    sent = _send_to_pane(pane, instruction_file, dry_run)
+    sent = _send_to_pane(pane, instruction_file, dry_run, sid=sid, dispatch_id=dispatch_id)
     graph_updated = False
     if sent:
         if not dry_run:
@@ -978,7 +1016,7 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
             encoding="utf-8",
         )
         _inject_dispatch_context(instruction_file, sid=sid, pane=pane, dispatch_id=dispatch_id)
-        sent = _send_to_pane(pane, instruction_file, dry_run)
+        sent = _send_to_pane(pane, instruction_file, dry_run, sid=sid, dispatch_id=dispatch_id)
         if not sent:
             if not dry_run:
                 release_lease(pane, dispatch_id, "graph_eval_dispatch_send_failed")
@@ -1027,7 +1065,21 @@ def dispatch_ready(graph_path: str, dry_run: bool = False, ttl: int = 900) -> di
     )
     if not dry_run:
         save_graph(graph_path, graph)
-    drain_result = drain_queue(str(sid), dry_run=dry_run, max_items=len(enqueue_result.get("enqueued", [])), ttl=ttl)
+    if dry_run:
+        results = []
+        for enqueued in enqueue_result.get("enqueued", []):
+            payload = enqueued.get("payload")
+            if not isinstance(payload, dict):
+                continue
+            results.append(dispatch_queue_item({
+                "sprint_id": sid,
+                "intent": f"graph_node|node_id={enqueued.get('node')}",
+                "priority": 80,
+                "payload": payload,
+            }, dry_run=True, ttl=ttl))
+        drain_result = {"ok": all(r.get("ok", False) for r in results), "processed": len(results), "results": results}
+    else:
+        drain_result = drain_queue(str(sid), dry_run=dry_run, max_items=len(enqueue_result.get("enqueued", [])), ttl=ttl)
     return {"ok": enqueue_result.get("ok") and drain_result.get("ok"), "enqueue": enqueue_result, "drain": drain_result}
 
 

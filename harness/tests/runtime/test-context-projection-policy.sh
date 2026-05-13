@@ -105,10 +105,12 @@ from context_projection import ContextProjection
 cp = ContextProjection('${SESSION_ID}')
 view = cp.build_context(query='managed agent runtime')
 print(len(view.kb_hits) > 0)
-print(view.kb_hits[0]['source'])
+print(view.kb_hits[0]['source'] != 'solar-harness')
+print('placeholder' not in str(view.kb_hits[0].get('note', '')).lower())
 ")
 assert_eq "T4: has kb hits" "$(echo "$T4_OUT" | head -1)" "True"
-assert_eq "T4: kb source" "$(echo "$T4_OUT" | sed -n '2p')" "solar-harness"
+assert_eq "T4: real kb source" "$(echo "$T4_OUT" | sed -n '2p')" "True"
+assert_eq "T4: no placeholder" "$(echo "$T4_OUT" | sed -n '3p')" "True"
 
 # T5: Token estimate
 T5_OUT=$(python3 -c "
@@ -184,6 +186,37 @@ assert_eq "T9: empty events" "$(echo "$T9_OUT" | head -1)" "0"
 assert_eq "T9: empty summaries" "$(echo "$T9_OUT" | sed -n '2p')" "0"
 assert_eq "T9: empty dropped" "$(echo "$T9_OUT" | sed -n '3p')" "0"
 assert_eq "T9: zero tokens" "$(echo "$T9_OUT" | sed -n '4p')" "0"
+
+# T10: explicit record appends context_injected audit event
+T10_OUT=$(python3 -c "
+from session_log import SessionLog
+from context_projection import ContextProjection
+log = SessionLog('${SESSION_ID}')
+before = len([e for e in log.all_events() if e.get('type') == 'context_injected'])
+cp = ContextProjection('${SESSION_ID}')
+result = cp.record_context_injected(query='managed agent runtime', activity_id='test-dispatch')
+after_events = [e for e in log.all_events() if e.get('type') == 'context_injected']
+payload = after_events[-1]['payload'] if after_events else {}
+print(result['ok'])
+print(len(after_events) == before + 1 or result.get('duplicate') is True)
+print(bool(payload.get('context_text')))
+print(len(payload.get('kb_hits') or []) > 0)
+")
+assert_eq "T10: record ok" "$(echo "$T10_OUT" | head -1)" "True"
+assert_eq "T10: event appended" "$(echo "$T10_OUT" | sed -n '2p')" "True"
+assert_eq "T10: context text" "$(echo "$T10_OUT" | sed -n '3p')" "True"
+assert_eq "T10: kb hits" "$(echo "$T10_OUT" | sed -n '4p')" "True"
+
+# T11: dispatch injector writes worker-visible runtime context and sidecar
+DISPATCH_FILE="${HARNESS_DIR}/run/test-runtime-context-dispatch-${SESSION_ID}.md"
+mkdir -p "${HARNESS_DIR}/run"
+printf '请分析 managed agent runtime context projection\n' > "$DISPATCH_FILE"
+T11_OUT=$(python3 "${LIB_DIR}/runtime_context_inject.py" "$DISPATCH_FILE" --session-id "${SESSION_ID}" --pane "test-pane" --dispatch-id "dispatch-1" --json)
+DISPATCH_CONTENT=$(cat "$DISPATCH_FILE")
+assert_contains "T11: visible runtime context" "$DISPATCH_CONTENT" "<solar-runtime-context>"
+assert_contains "T11: visible runtime context end" "$DISPATCH_CONTENT" "</solar-runtime-context>"
+assert_contains "T11: injector ok" "$T11_OUT" '"ok": true'
+rm -f "$DISPATCH_FILE" "$DISPATCH_FILE.runtime-context.json"
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="

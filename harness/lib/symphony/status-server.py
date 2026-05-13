@@ -53,6 +53,13 @@ PORT_RANGE = range(8765, 8776)
 
 
 _SYNTHETIC_SID_PREFIXES = ("test-hooks-", "test-sid-", "sprint-race-test-", "sprint-test-smoke-", "sprint-test-workspace-", "test-verify-")
+_MODEL_EVENT_TYPES = {
+    "model_call_requested",
+    "model_call_succeeded",
+    "model_call_failed",
+    "model_session_started",
+    "model_session_ended",
+}
 
 
 def _is_synthetic_event(obj: dict) -> bool:
@@ -750,6 +757,108 @@ def _artifact_for_assignment(role: str, sid: str) -> dict:
     return {"state": "missing", "path": str(candidates[0]) if candidates else "", "mtime": ""}
 
 
+def _model_call_status(event_type: str, payload: dict) -> str:
+    if event_type == "model_call_succeeded":
+        return "ok"
+    if event_type == "model_call_failed":
+        return "error"
+    if event_type == "model_call_requested":
+        return "running"
+    if event_type == "model_session_started":
+        return "ready"
+    if event_type == "model_session_ended":
+        return "ended" if payload.get("exit_code") == 0 else "warn"
+    return "unknown"
+
+
+def _model_label_from_payload(payload: dict) -> str:
+    model = payload.get("model") if isinstance(payload.get("model"), dict) else {}
+    flag = str(model.get("model_flag") or "").replace("--model", "").strip()
+    auth = str(model.get("auth_source") or "").strip()
+    persona = str(model.get("persona") or "").strip()
+    parts = [part for part in [flag, auth, persona] if part]
+    return " / ".join(parts)
+
+
+def _latest_model_call_for_pane(target: str, pane_id: str = "") -> dict:
+    """Project the newest observable model-call boundary event for one pane.
+
+    This is intentionally based on the append-only session logs, not tmux tail
+    text.  It proves the runtime boundary we can observe: pane/model dispatch
+    submission and pane process lifecycle. It does not claim private model
+    reasoning visibility.
+    """
+    aliases = {target}
+    if pane_id:
+        aliases.add(pane_id)
+    safe_pane_id = pane_id.replace("%", "_") if pane_id else ""
+    candidate_files = []
+    try:
+        candidate_files = sorted(
+            SESSIONS_DIR.glob("*/events.jsonl"),
+            key=lambda p: p.stat().st_mtime if p.exists() else 0,
+            reverse=True,
+        )[:240]
+    except Exception:
+        candidate_files = []
+
+    newest = None
+    newest_key = ("", -1)
+    for path in candidate_files:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                for raw in fh:
+                    raw = raw.strip()
+                    if not raw:
+                        continue
+                    try:
+                        ev = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+                    ev_type = ev.get("type")
+                    if ev_type not in _MODEL_EVENT_TYPES:
+                        continue
+                    payload = ev.get("payload") if isinstance(ev.get("payload"), dict) else {}
+                    ev_pane = str(payload.get("pane") or "")
+                    session_id = str(ev.get("session_id") or "")
+                    if ev_pane not in aliases and session_id != f"pane-{safe_pane_id}":
+                        continue
+                    key = (str(ev.get("ts") or ""), int(ev.get("seq") or 0))
+                    if key >= newest_key:
+                        newest_key = key
+                        newest = ev
+        except OSError:
+            continue
+
+    if not newest:
+        return {
+            "status": "unknown",
+            "event_type": "",
+            "ts": "",
+            "session_id": "",
+            "dispatch_id": "",
+            "model": "",
+            "error": "",
+            "instruction_preview": "",
+            "private_reasoning_visible": False,
+        }
+
+    payload = newest.get("payload") if isinstance(newest.get("payload"), dict) else {}
+    return {
+        "status": _model_call_status(str(newest.get("type") or ""), payload),
+        "event_type": newest.get("type") or "",
+        "ts": newest.get("ts") or "",
+        "session_id": newest.get("session_id") or "",
+        "sprint_id": newest.get("sprint_id") or "",
+        "dispatch_id": payload.get("dispatch_id") or newest.get("activity_id") or "",
+        "model": _model_label_from_payload(payload),
+        "error": payload.get("error") or "",
+        "instruction_preview": payload.get("instruction_preview") or "",
+        "private_reasoning_visible": bool(payload.get("private_reasoning_visible", False)),
+        "observability_boundary": payload.get("observability_boundary") or "",
+    }
+
+
 def _pane_snapshot(target: str, role: str, assignment: str = "") -> dict:
     assignment_meta = _sprint_meta(assignment) if assignment else {}
     pane_id = _run_tmux(["display-message", "-p", "-t", target, "#{pane_id}"])
@@ -762,6 +871,7 @@ def _pane_snapshot(target: str, role: str, assignment: str = "") -> dict:
             "assignment_meta": assignment_meta,
             "artifact": _artifact_for_assignment(role, assignment),
             "title": "",
+            "model_call": _latest_model_call_for_pane(target, pane_id),
         }
     title = _run_tmux(["display-message", "-p", "-t", target, "#{pane_title}"])
     tail = _run_tmux(["capture-pane", "-t", target, "-p", "-S", "-8"], timeout=1.0)
@@ -773,6 +883,7 @@ def _pane_snapshot(target: str, role: str, assignment: str = "") -> dict:
         "assignment_meta": assignment_meta,
         "artifact": _artifact_for_assignment(role, assignment),
         "title": title,
+        "model_call": _latest_model_call_for_pane(target, pane_id),
     }
 
 
@@ -1876,6 +1987,22 @@ function artifactLabel(a) {
   }
   return esc(st);
 }
+function modelCallCell(m) {
+  m = m || {};
+  const status = m.status || 'unknown';
+  const model = m.model || 'N/A';
+  const eventType = m.event_type || 'no_event';
+  const ts = m.ts ? new Date(m.ts).toLocaleTimeString() : '';
+  const dispatch = m.dispatch_id ? '<div class="tech-id">dispatch: ' + esc(clip(m.dispatch_id, 42)) + '</div>' : '';
+  const err = m.error ? '<div class="warn">error: ' + esc(clip(m.error, 96)) + '</div>' : '';
+  const preview = m.instruction_preview ? '<div class="muted">' + esc(clip(m.instruction_preview, 88)) + '</div>' : '';
+  return '<div class="task-block">' +
+    '<div class="task-head"><div>' + statusBadge(status) + '</div><div class="muted">' + esc(ts) + '</div></div>' +
+    '<div class="kv-grid">' + kv('Event', eventType) + kv('Model', model) + '</div>' +
+    dispatch + err + preview +
+    '<div class="tech-id">private reasoning visible: ' + esc(String(!!m.private_reasoning_visible)) + '</div>' +
+    '</div>';
+}
 function clip(v, limit) {
   const s = String(v || '').replace(/\s+/g, ' ').trim();
   return s.length > limit ? s.slice(0, limit - 1).trim() + '…' : s;
@@ -1934,11 +2061,12 @@ function renderPaneMatrix(cardId, screen) {
     return;
   }
   let t = '<div class="refresh">' + esc((screen && screen.note) || '') + '</div>';
-  t += '<table><tr><th>Pane</th><th>Role</th><th>Runtime</th><th>当前任务</th><th>Artifact</th><th>Title</th></tr>';
+  t += '<table><tr><th>Pane</th><th>Role</th><th>Runtime</th><th>模型调用</th><th>当前任务</th><th>Artifact</th><th>Title</th></tr>';
   panes.forEach(p => {
     t += '<tr><td>' + esc(p.target || '-') + '</td>' +
          '<td>' + esc(p.role || '-') + '</td>' +
          '<td class="' + runtimeClass(p.runtime_state) + '">' + esc(p.runtime_state || '-') + '</td>' +
+         '<td>' + modelCallCell(p.model_call) + '</td>' +
          '<td>' + taskCell(p.assignment_meta, p.assignment) + '</td>' +
          '<td>' + artifactLabel(p.artifact) + '</td>' +
          '<td>' + esc(p.title || '-') + '</td></tr>';
