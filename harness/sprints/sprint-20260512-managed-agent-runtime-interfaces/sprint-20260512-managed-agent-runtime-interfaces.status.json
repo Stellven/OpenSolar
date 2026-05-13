@@ -139,6 +139,12 @@
       "by": "evaluator",
       "verdict": "PASS",
       "reason": "PASS_WITH_WARN: runtime interfaces accepted; residual event seq gap non-blocking"
+    },
+    {
+      "ts": "2026-05-13T11:17:30Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
     }
   ],
   "updated_at": "2026-05-13T11:16:28Z",
