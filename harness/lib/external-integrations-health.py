@@ -355,6 +355,15 @@ def probe(deep: bool = False) -> dict:
     ruflo_runtime = ruflo_status.get("runtime", {}) if isinstance(ruflo_status, dict) else {}
     ruflo_runtime_ok = bool(ruflo_runtime.get("ok"))
     ruflo_cli = Path(str((ruflo_runtime.get("paths") or {}).get("published_cli", "")))
+    arb_vendor = HARNESS / "vendor" / "agent-rules-books"
+    arb_report = HARNESS / "reports" / "agent-rules-books-inventory.json"
+    arb_status: dict = {}
+    arb_code, arb_out = run(["python3", str(HARNESS / "lib" / "agent_rules_books_adapter.py"), "doctor", "--json"], timeout=8)
+    if arb_code == 0:
+        try:
+            arb_status = json.loads(arb_out)
+        except Exception:
+            arb_status = {"parse_error": arb_out[:500]}
 
     integrations = [
         result(
@@ -741,6 +750,27 @@ def probe(deep: bool = False) -> dict:
                     "gstack": str(HOME / "Solar" / "CLAUDE.md"),
                     "superpowers": str(HOME / ".codex" / "config.toml"),
                 },
+            },
+        ),
+        result(
+            "ciembor/agent-rules-books",
+            "https://github.com/ciembor/agent-rules-books",
+            "MIT rule/skill catalog distilled from classic software engineering books. Solar uses it as a safe read-only book-rules provider: mini for task-specific pressure, full as retrieval/reference.",
+            lifecycle="active",
+            installed=arb_vendor.exists(),
+            configured=(arb_status.get("counts", {}) or {}).get("mini", 0) >= 10,
+            running=True,
+            indexed=arb_report.exists(),
+            used_by_default=False,
+            complete=bool(arb_status.get("ok")),
+            degraded_reason="" if arb_status.get("ok") else "agent-rules-books vendor/report incomplete; run solar-harness agent-rules-books vendor && report",
+            evidence={
+                "vendor": str(arb_vendor),
+                "report": str(HARNESS / "reports" / "agent-rules-books-inventory.md"),
+                "counts": arb_status.get("counts", {}),
+                "mode": "safe_read_only_vendor_provider",
+                "default_version": "mini",
+                "dispatch_capability": "rules.book_catalog",
             },
         ),
         result(

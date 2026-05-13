@@ -32,6 +32,16 @@ unified_hits = [
 ordered = unified._sort_context_hits(unified_hits)
 assert [h["layer"] for h in ordered] == ["synthesis", "concepts", "references", "raw-evidence"], ordered
 
+unified_topic_hits = [
+    {"source": "qmd", "path": "qmd://solar-wiki/references/solar-harness-pm-1210-context-inject-fix-20260512.md", "title": "fix", "snippet": "太空数据中心 context inject", "score": 0.99},
+    {"source": "qmd", "path": "qmd://solar-wiki/references/太空数据中心散热方案.md", "title": "太空数据中心散热方案", "snippet": "太空数据中心散热", "score": 0.90},
+    {"source": "solar_db", "path": "/Users/sihaoli/Knowledge/references/太空数据中心散热方案.md", "title": "太空数据中心散热方案", "snippet": "太空数据中心散热", "score": 0.80},
+]
+ordered_topic = unified._sort_context_hits(unified_topic_hits, "太空数据中心 space data center orbital data center")
+assert ordered_topic[0]["title"] == "太空数据中心散热方案", ordered_topic
+filtered_topic = unified._filter_runtime_noise(ordered_topic, "太空数据中心 space data center orbital data center")
+assert all("1210" not in h["path"] for h in filtered_topic), filtered_topic
+
 kb_hits = [
     {"path": "qmd://solar-wiki/raw/a.md", "id": "raw", "title": "raw", "snippet": "", "score": 999},
     {"path": "/Users/sihaoli/Knowledge/references/a.md", "id": "ref", "title": "ref", "snippet": "", "score": 0.1},
@@ -46,6 +56,22 @@ mirage_hits = [
     {"source_type": "solar_db", "path": "/Users/sihaoli/Knowledge/references/a.md", "score_or_rank": 0.1},
 ]
 assert mirage._layer_priority(mirage_hits[1]) < mirage._layer_priority(mirage_hits[0])
+
+variants = mirage._query_variants("太空数据中心 space data center orbital data center")
+assert "太空数据中心" in variants, variants
+
+mixed_hits = [
+    {"source_type": "qmd", "path": "qmd://solar-wiki/concepts/solar-harness-symphony-backend.md", "snippet": "data center"},
+    {"source_type": "qmd", "path": "qmd://solar-wiki/concepts/orbital-data-center.md", "snippet": "轨道数据中心和太空数据中心"},
+]
+ordered_mixed = sorted(
+    mixed_hits,
+    key=lambda h: (
+        mirage._layer_priority(h),
+        -mirage._topic_relevance(h, "太空数据中心 space data center orbital data center"),
+    ),
+)
+assert "orbital-data-center" in ordered_mixed[0]["path"], ordered_mixed
 
 print("PASS context router layer ranking")
 PY

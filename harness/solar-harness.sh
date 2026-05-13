@@ -32,12 +32,20 @@ SPRINTS_DIR="$HARNESS_DIR/sprints"
 # sprint-20260503-163542 D3: bridge ledger
 [[ -f "$HARNESS_DIR/lib/bridge-ledger.sh" ]] && . "$HARNESS_DIR/lib/bridge-ledger.sh"
 
+# Human-facing capability visibility prefixes.
+[[ -f "$HARNESS_DIR/lib/capability-prefix.sh" ]] && . "$HARNESS_DIR/lib/capability-prefix.sh"
+
 # ---- Colors ----
 G='\033[0;32m'; Y='\033[1;33m'; R='\033[0;31m'; C='\033[0;36m'; B='\033[0;34m'; N='\033[0m'
 log()  { echo -e "${C}[Harness]${N} $*"; }
 ok()   { echo -e "${G}[Harness]${N} $*"; }
 warn() { echo -e "${Y}[Harness]${N} $*"; }
 err()  { echo -e "${R}[Harness]${N} $*"; }
+human_prefix() {
+  local module="$1"; shift || true
+  case " $* " in *" --json "*) return 0 ;; esac
+  type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "$module" "$*"
+}
 
 ensure_dirs() { mkdir -p "$SPRINTS_DIR" "$HARNESS_DIR/personas" "$HARNESS_DIR/templates"; }
 
@@ -95,7 +103,9 @@ configure_role_footer_style() {
 
 pane_footer_label() {
   local persona="$1" label="$2" slot="${3:-}"
-  bash "$HARNESS_DIR/quota-footer.sh" "$persona" "$label" "$slot" 2>/dev/null || printf "%s | 模型:N/A | 剩余:N/A | 已用:N/A tok" "$label"
+  local base
+  base="$(bash "$HARNESS_DIR/quota-footer.sh" "$persona" "$label" "$slot" 2>/dev/null || printf "%s | 模型:N/A | 剩余:N/A | 已用:N/A tok" "$label")"
+  printf "%s | 能力:K/I/S/G/A" "$base"
 }
 
 configure_product_delivery_labels() {
@@ -1671,7 +1681,13 @@ do_main_status() {
     if tmux display-message -p -t "$pane" '#{pane_id}' >/dev/null 2>&1; then
       title=$(tmux display-message -p -t "$pane" '#{pane_title}' 2>/dev/null || echo "N/A")
       tail=$(tmux capture-pane -t "$pane" -p -S -40 2>/dev/null | tail -40 || true)
-      if printf '%s\n' "$tail" | grep -qiE 'Generating|thinking|Thinking|Hmm|Reading|Bash|Write|Edit|Update|Inferring|Hatching|Whirlpooling|Enchanting|Meandering|Philosophising|Brewing|Baking|Calculating|Percolating|Marinating|Befuddling|Compacting conversation|Press up to edit queued messages'; then
+      local recent_tail
+      recent_tail="$(printf '%s\n' "$tail" | sed '/^[[:space:]]*$/d' | tail -12)"
+      if printf '%s\n' "$tail" | grep -q '❯' && \
+         printf '%s\n' "$recent_tail" | grep -qE '\? for shortcuts|new task\? /clear|bypass permissions|shift\+tab to cycle' && \
+         ! printf '%s\n' "$recent_tail" | grep -qE 'esc to interrupt|Press up to edit queued messages'; then
+        runtime="idle"
+      elif printf '%s\n' "$recent_tail" | grep -qiE 'Generating|thinking|Thinking|Hmm|Reading|Bash|Write|Edit|Update|Inferring|Hatching|Whirlpooling|Enchanting|Meandering|Philosophising|Brewing|Baking|Calculating|Percolating|Marinating|Befuddling|Clauding|Computing|Cooking|Billowing|Frosting|Discombobulating|Levitating|Cultivating|Compacting conversation|Press up to edit queued messages'; then
         runtime="active"
       else
         runtime="idle"
@@ -1735,7 +1751,13 @@ do_lab_status() {
     if tmux display-message -p -t "$pane" '#{pane_id}' >/dev/null 2>&1; then
       title=$(tmux display-message -p -t "$pane" '#{pane_title}' 2>/dev/null || echo "N/A")
       tail=$(tmux capture-pane -t "$pane" -p -S -40 2>/dev/null | tail -40 || true)
-      if printf '%s\n' "$tail" | grep -qiE 'Generating|thinking|Thinking|Hmm|Reading|Bash|Write|Edit|Update|Inferring|Hatching|Whirlpooling|Enchanting|Meandering|Philosophising|Brewing|Baking|Calculating|Percolating|Marinating|Befuddling|Compacting conversation|Press up to edit queued messages'; then
+      local recent_tail
+      recent_tail="$(printf '%s\n' "$tail" | sed '/^[[:space:]]*$/d' | tail -12)"
+      if printf '%s\n' "$tail" | grep -q '❯' && \
+         printf '%s\n' "$recent_tail" | grep -qE '\? for shortcuts|new task\? /clear|bypass permissions|shift\+tab to cycle' && \
+         ! printf '%s\n' "$recent_tail" | grep -qE 'esc to interrupt|Press up to edit queued messages'; then
+        runtime="idle"
+      elif printf '%s\n' "$recent_tail" | grep -qiE 'Generating|thinking|Thinking|Hmm|Reading|Bash|Write|Edit|Update|Inferring|Hatching|Whirlpooling|Enchanting|Meandering|Philosophising|Brewing|Baking|Calculating|Percolating|Marinating|Befuddling|Clauding|Computing|Cooking|Billowing|Frosting|Discombobulating|Levitating|Cultivating|Compacting conversation|Press up to edit queued messages'; then
         runtime="active"
       else
         runtime="idle"
@@ -2046,6 +2068,7 @@ print(json.dumps({
       status|health)
         shift 2 || true
         [[ -f "$_integrations_probe" ]] || { err "external integrations probe not found: $_integrations_probe"; exit 1; }
+        human_prefix "skills" "integrations health $*"
         python3 "$_integrations_probe" "$@"
         ;;
       plugins|plugin-status)
@@ -2106,16 +2129,19 @@ print(json.dumps({
       certify|certification|cert)
         shift 2 || true
         [[ -f "$_cert_suite" ]] || { err "capability_certification_suite not found: $_cert_suite"; exit 1; }
+        human_prefix "skills" "integrations certify $*"
         python3 "$_cert_suite" "$@"
         ;;
       activation-proof|prove-activation|prove-use)
         shift 2 || true
         [[ -f "$_activation_proof" ]] || { err "capability_activation_proof not found: $_activation_proof"; exit 1; }
+        human_prefix "skills" "activation-proof $*"
         python3 "$_activation_proof" "$@"
         ;;
       ruflo-status|ruflo)
         shift 2 || true
         [[ -f "$_ruflo_adapter" ]] || { err "ruflo_adapter not found: $_ruflo_adapter"; exit 1; }
+        human_prefix "ruflo" "status $*"
         python3 "$_ruflo_adapter" status "$@"
         ;;
       ruflo-vendor)
@@ -2126,6 +2152,7 @@ print(json.dumps({
       ruflo-runtime-status)
         shift 2 || true
         [[ -f "$_ruflo_adapter" ]] || { err "ruflo_adapter not found: $_ruflo_adapter"; exit 1; }
+        human_prefix "ruflo" "runtime-status $*"
         python3 "$_ruflo_adapter" runtime-status "$@"
         ;;
       ruflo-runtime-bootstrap)
@@ -2136,6 +2163,7 @@ print(json.dumps({
       ruflo-runtime-smoke)
         shift 2 || true
         [[ -f "$_ruflo_adapter" ]] || { err "ruflo_adapter not found: $_ruflo_adapter"; exit 1; }
+        human_prefix "ruflo" "runtime-smoke $*"
         python3 "$_ruflo_adapter" runtime-smoke "$@"
         ;;
       *)
@@ -2226,6 +2254,26 @@ print(json.dumps({
         ;;
     esac
     ;;
+  agent-rules-books|arb)
+    shift
+    _arb_adapter="$HARNESS_DIR/lib/agent_rules_books_adapter.py"
+    [[ -f "$_arb_adapter" ]] || { err "agent_rules_books_adapter.py not found: $_arb_adapter"; exit 1; }
+    case "${1:-doctor}" in
+      doctor|inventory|report|vendor|prove)
+        _sub="${1:-doctor}"; shift || true
+        human_prefix "skills" "agent-rules-books ${_sub} $*"
+        python3 "$_arb_adapter" "$_sub" "$@" ;;
+      sync|install)
+        _sub="${1:-sync}"; shift || true
+        human_prefix "skills" "agent-rules-books ${_sub} $*"
+        python3 "$_arb_adapter" "$_sub" "$@" ;;
+      help|--help|-h)
+        echo "用法: $0 agent-rules-books [doctor|inventory|report|vendor|prove|sync|install] [--json] [--dry-run] [--version mini|nano|full]" ;;
+      *)
+        err "用法: $0 agent-rules-books [doctor|inventory|report|vendor|prove|sync|install] [--json] [--dry-run] [--version mini|nano|full]"
+        exit 1 ;;
+    esac
+    ;;
   notes)
     shift
     _notes_adapter="$HARNESS_DIR/lib/apple_notes_ingest.py"
@@ -2262,19 +2310,19 @@ print(json.dumps({
     _skills_py="$HARNESS_DIR/lib/solar_skills.py"
     [[ -f "$_skills_py" ]] || { err "solar_skills.py not found: $_skills_py"; exit 1; }
     case "${1:-inventory}" in
-      inventory)     shift; python3 "$_skills_py" inventory "$@" ;;
-      doctor)        shift; python3 "$_skills_py" doctor "$@" ;;
-      pane-status)   shift; python3 "$_skills_py" pane-status "$@" ;;
-      readiness)     shift; python3 "$_skills_py" readiness "$@" ;;
-      certify|certification|cert) shift; python3 "$_skills_py" certify "$@" ;;
-      inject)        shift; python3 "$_skills_py" inject "$@" ;;
-      effect-scan)   shift; python3 "$_skills_py" effect-scan "$@" ;;
-      native-extract) shift; python3 "$_skills_py" native-extract "$@" ;;
-      registry)      shift; python3 "$_skills_py" registry "$@" ;;
-      eval)          shift; python3 "$_skills_py" eval "$@" ;;
-      promote)       shift; python3 "$_skills_py" promote "$@" ;;
-      rollback)      shift; python3 "$_skills_py" rollback "$@" ;;
-      export)        shift; python3 "$_skills_py" export "$@" ;;
+      inventory)     shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "inventory"; python3 "$_skills_py" inventory "$@" ;;
+      doctor)        shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "doctor"; python3 "$_skills_py" doctor "$@" ;;
+      pane-status)   shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "pane-status"; python3 "$_skills_py" pane-status "$@" ;;
+      readiness)     shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "readiness"; python3 "$_skills_py" readiness "$@" ;;
+      certify|certification|cert) shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "certify"; python3 "$_skills_py" certify "$@" ;;
+      inject)        shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "inject"; python3 "$_skills_py" inject "$@" ;;
+      effect-scan)   shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "effect-scan"; python3 "$_skills_py" effect-scan "$@" ;;
+      native-extract) shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "native-extract"; python3 "$_skills_py" native-extract "$@" ;;
+      registry)      shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "registry"; python3 "$_skills_py" registry "$@" ;;
+      eval)          shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "eval"; python3 "$_skills_py" eval "$@" ;;
+      promote)       shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "promote"; python3 "$_skills_py" promote "$@" ;;
+      rollback)      shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "rollback"; python3 "$_skills_py" rollback "$@" ;;
+      export)        shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "export"; python3 "$_skills_py" export "$@" ;;
       *) err "用法: solar-harness skills <inventory|doctor|readiness|certify|inject|effect-scan|export|eval|promote|rollback|registry> [opts]"; exit 1 ;;
     esac
     ;;
@@ -2283,10 +2331,10 @@ print(json.dumps({
     _intent_py="$HARNESS_DIR/lib/intent_engine_adapter.py"
     [[ -f "$_intent_py" ]] || { err "intent_engine_adapter.py not found: $_intent_py"; exit 1; }
     case "${1:-match}" in
-      match) shift; python3 "$_intent_py" match "$@" ;;
-      learn) shift; python3 "$_intent_py" learn "$@" ;;
-      audit) shift; python3 "$_intent_py" audit "$@" ;;
-      summarize) shift; python3 "$_intent_py" summarize "$@" ;;
+      match) shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "intent" "match"; python3 "$_intent_py" match "$@" ;;
+      learn) shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "intent" "learn"; python3 "$_intent_py" learn "$@" ;;
+      audit) shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "intent" "audit"; python3 "$_intent_py" audit "$@" ;;
+      summarize) shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "intent" "summarize"; python3 "$_intent_py" summarize "$@" ;;
       *) err "用法: solar-harness intent <match|learn|audit|summarize> [opts]"; exit 1 ;;
     esac
     ;;
@@ -2294,6 +2342,7 @@ print(json.dumps({
     shift
     _graph_py="$HARNESS_DIR/lib/harness_graph.py"
     [[ -f "$_graph_py" ]] || { err "harness_graph.py not found: $_graph_py"; exit 1; }
+    type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "graph" "${1:-run}"
     python3 "$_graph_py" "$@"
     ;;
   mineru)
@@ -2304,14 +2353,17 @@ print(json.dumps({
       extract)
         _ex_py="$HARNESS_DIR/lib/mineru_extract.py"
         [[ -f "$_ex_py" ]] || { err "mineru_extract.py not found"; exit 1; }
+        human_prefix "mineru" "extract $*"
         python3 "$_ex_py" "$@"
         ;;
       doctor)
         _md_py="$HARNESS_DIR/lib/mineru_doctor.py"
         [[ -f "$_md_py" ]] || { err "mineru_doctor.py not found"; exit 1; }
+        human_prefix "mineru" "doctor $*"
         python3 "$_md_py" "$@"
         ;;
       bootstrap)
+        human_prefix "mineru" "bootstrap $*"
         bash "$HARNESS_DIR/vendor/mineru/bootstrap.sh" "$@"
         ;;
       help|"")
@@ -2331,18 +2383,22 @@ print(json.dumps({
     _autopilot_plist="$HOME/Library/LaunchAgents/${_autopilot_label}.plist"
     case "${1:-status}" in
       status|scan)
+        human_prefix "autopilot" "${1:-status}"
         python3 "$_autopilot" --json
         ;;
       apply)
         shift
+        human_prefix "autopilot" "apply $*"
         python3 "$_autopilot" --apply --json "$@"
         ;;
       dispatch)
         shift
+        human_prefix "autopilot" "dispatch $*"
         python3 "$_autopilot" --apply --dispatch --json "$@"
         ;;
       loop)
         shift
+        human_prefix "autopilot" "loop $*"
         python3 "$_autopilot" --apply --dispatch --loop --json "$@"
         ;;
       start)
@@ -2656,6 +2712,7 @@ PY
       inject)
         _query=""
         _format="hook"
+        _json_requested="0"
         _args=()
         while [[ $# -gt 0 ]]; do
           case "$1" in
@@ -2666,6 +2723,7 @@ PY
               [[ -z "${2:-}" ]] && { err "--format requires hook|markdown"; exit 1; }
               _format="$2"; shift 2 ;;
             --json|--max-hits|--max-chars|--timeout-ms|--fail-open)
+              [[ "$1" == "--json" ]] && _json_requested="1"
               _args+=("$1")
               if [[ "$1" != "--json" && "$1" != "--fail-open" ]]; then
                 [[ -z "${2:-}" ]] && { err "$1 requires value"; exit 1; }
@@ -2679,6 +2737,9 @@ PY
           esac
         done
         [[ -n "$_query" ]] || { err "Usage: $0 context inject --query \"<text>\" [--format hook|markdown|--json]"; exit 1; }
+        if [[ "$_format" != "hook" && "$_json_requested" != "1" ]]; then
+          type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "knowledge" "context inject query=${_query:0:80}"
+        fi
         python3 "$_context_py" --query "$_query" --format "$_format" --fail-open ${_args[@]+"${_args[@]}"}
         ;;
       status)

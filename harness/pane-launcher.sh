@@ -27,6 +27,7 @@ PERSONA_FILE="$HOME/.solar/harness/personas/${PERSONA}.md"
 
 # 加载共享配置
 source "$HARNESS_DIR/lib/persona-config.sh"
+source "$HARNESS_DIR/lib/capability-prefix.sh"
 
 # 解析配置
 CONFIG=$(get_persona_config "$PERSONA")
@@ -50,6 +51,8 @@ echo -e "  Persona: ${PERSONA}"
 echo -e "  模型: ${Y}${DISPLAY_MODEL}${N}"
 echo -e "  工作目录: ${WORK_DIR}"
 echo -e "${C}══════════════════════════════════════${N}"
+echo ""
+solar_capability_legend
 echo ""
 
 # Git worktree 隔离: builder
@@ -194,7 +197,7 @@ write_runtime_marker
 CLAUDE_CMD="$CLAUDE_BIN"
 SOLAR_CLAUDE_BYPASS="${SOLAR_CLAUDE_BYPASS:-1}"
 if [[ "$SOLAR_CLAUDE_BYPASS" == "1" ]]; then
-  CLAUDE_CMD="$CLAUDE_BIN --permission-mode ${SOLAR_CLAUDE_PERMISSION_MODE:-auto}"
+  CLAUDE_CMD="$CLAUDE_BIN --permission-mode ${SOLAR_CLAUDE_PERMISSION_MODE:-bypassPermissions}"
 fi
 [[ -n "$MODEL_FLAG" ]] && CLAUDE_CMD="$CLAUDE_CMD $MODEL_FLAG"
 [[ -n "$TOOL_FLAG" ]] && CLAUDE_CMD="$CLAUDE_CMD $TOOL_FLAG"
@@ -207,7 +210,9 @@ mkdir -p "$(dirname "$EXIT_LOG")" 2>/dev/null || true
 set +e
 _runtime_policy=$(inject_runtime_policy "$PERSONA")
 _whisper=$(inject_whisper "$PERSONA")
+_prefix_policy=$(inject_prefix_policy "$PERSONA")
 $CLAUDE_CMD --append-system-prompt "$_runtime_policy
+$_prefix_policy
 $(cat "$PERSONA_FILE")$_whisper"
 CLAUDE_EXIT=$?
 set -e

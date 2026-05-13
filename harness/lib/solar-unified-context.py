@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -23,7 +24,7 @@ RAGFLOW_ADAPTER = HARNESS / "lib" / "ragflow_adapter.py"
 RAGFLOW_CONFIG = HARNESS / "config" / "ragflow.solar.json"
 DEFAULT_MAX_CHARS = int(os.environ.get("SOLAR_CONTEXT_MAX_CHARS", "2600"))
 DEFAULT_MAX_HITS = int(os.environ.get("SOLAR_CONTEXT_MAX_HITS", "8"))
-DEFAULT_TIMEOUT_MS = int(os.environ.get("SOLAR_CONTEXT_TIMEOUT_MS", "2500"))
+DEFAULT_TIMEOUT_MS = int(os.environ.get("SOLAR_CONTEXT_TIMEOUT_MS", "8000"))
 DEFAULT_RAGFLOW_TIMEOUT_MS = int(os.environ.get("SOLAR_CONTEXT_RAGFLOW_TIMEOUT_MS", "1200"))
 
 sys.path.insert(0, str(HARNESS / "lib"))
@@ -92,8 +93,83 @@ def _compact_hit(hit: dict) -> dict:
 def _context_path_text(hit: dict) -> str:
     return " ".join(
         str(hit.get(k) or "").lower()
-        for k in ("path", "mount", "title", "provenance", "source")
+        for k in ("path", "mount", "title", "snippet", "provenance", "source")
     )
+
+
+def _extract_cjk_keywords(query: str) -> str:
+    cleaned = re.sub(
+        r'帮我|请你|请问|帮忙|告诉我|给我|分析一下|分析下|解释一下|介绍一下|讲解|'
+        r'详细说明|总结|简单|怎么|如何|基于|关于|是什么|有哪些|有什么|什么是|'
+        r'做了什么|负责什么|解决了什么问题|当前是否|当前|现在|是否',
+        ' ',
+        query,
+    )
+    cleaned = re.sub(
+        r'分析|研究|探讨|优化|改进|实现|设计|解决|处理|应用|使用|部署|集成|'
+        r'配置|与.*关系|和.*关系',
+        ' ',
+        cleaned,
+    )
+    cleaned = re.sub(r'[的了在里与和及/？?，,。:：()（）]', ' ', cleaned)
+    segments = re.findall(r'[\u4e00-\u9fff\u3400-\u4dbf]{4,}', cleaned)
+    if segments:
+        return max(segments, key=len)
+    cjk_any = re.findall(r'[\u4e00-\u9fff\u3400-\u4dbf]{2,}', cleaned)
+    return max(cjk_any, key=len) if cjk_any else ""
+
+
+def _context_relevance(hit: dict, query: str) -> float:
+    topic = _extract_cjk_keywords(query) or query.strip()
+    if not topic:
+        return 0.0
+    hay = _context_path_text(hit)
+    topic_l = topic.lower()
+    boost = 0.0
+    if topic_l in hay:
+        boost += 2.0
+    if query.strip().lower() and query.strip().lower() in hay:
+        boost += 0.5
+    if "solar-harness-pm-1210-context-inject-fix" in hay:
+        boost -= 1.5
+    ascii_tokens = [t.lower() for t in re.findall(r'[A-Za-z][A-Za-z0-9_.-]*', query) if len(t) >= 3]
+    if ascii_tokens:
+        matched = sum(1 for t in ascii_tokens if t in hay)
+        if matched == len(ascii_tokens):
+            boost += 2.5
+        else:
+            boost += 0.4 * matched
+    return boost
+
+
+def _is_runtime_noise(hit: dict, query: str) -> bool:
+    q = query.lower()
+    if any(term in q for term in ("solar-harness", "1210", "context inject", "模型", "修复", "debug")):
+        return False
+    hay = _context_path_text(hit)
+    return any(
+        marker in hay
+        for marker in (
+            "solar-harness-pm-1210-context-inject-fix",
+            "solar-interactive-context-policy-fix",
+            "solar-context-inject-recall-ranking-fix",
+            "context-inject-fix",
+            "context inject recall and ranking fix",
+        )
+    )
+
+
+def _filter_runtime_noise(hits: list[dict], query: str) -> list[dict]:
+    topic = _extract_cjk_keywords(query) or query.strip()
+    if not topic:
+        return hits
+    topical_non_noise = [
+        h for h in hits
+        if topic.lower() in _context_path_text(h) and not _is_runtime_noise(h, query)
+    ]
+    if len(topical_non_noise) < 2:
+        return hits
+    return [h for h in hits if not _is_runtime_noise(h, query)]
 
 
 def _context_layer(hit: dict) -> str:
@@ -126,13 +202,14 @@ def _layer_priority(layer: str) -> int:
     }.get(layer, 50)
 
 
-def _sort_context_hits(hits: list[dict]) -> list[dict]:
+def _sort_context_hits(hits: list[dict], query: str = "") -> list[dict]:
     source_priority = {"qmd": 0, "solar_db": 1, "mirage_path": 2, "ragflow": 3}
     for hit in hits:
         hit["layer"] = _context_layer(hit)
     return sorted(
         hits,
         key=lambda h: (
+            -_context_relevance(h, query),
             _layer_priority(str(h.get("layer") or "other")),
             source_priority.get(str(h.get("source") or ""), 9),
             -float(h.get("score") or 0),
@@ -254,7 +331,7 @@ def retrieve(query: str, max_hits: int, max_chars: int, timeout_ms: int) -> dict
                 "layer": "other",
             },
         ][:max_hits]
-    hits = _sort_context_hits(hits)
+    hits = _filter_runtime_noise(_sort_context_hits(hits, query=query), query)
     total = 0
     kept = []
     for hit in hits:
