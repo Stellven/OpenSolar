@@ -55,3 +55,5 @@
 {"ts": "2026-05-13T11:17:29Z", "sid": "sprint-20260512-managed-agent-runtime-interfaces", "event": "state_changed", "by": "coordinator"}
 {"ts":"2026-05-13T11:17:30Z","event":"planner_notified","by":"coordinator","data":{"status":"passed"}}
 {"ts": "2026-05-13T11:18:02Z", "sid": "sprint-20260512-managed-agent-runtime-interfaces", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-13T11:18:40Z", "sprint_id": "sprint-20260512-managed-agent-runtime-interfaces", "actor": "solar-autopilot", "event": "autopilot_missing_prd", "severity": "warn", "data": {"sid": "sprint-20260512-managed-agent-runtime-interfaces", "type": "missing_prd", "severity": "warn", "safe_default": "write_prd_or_escalate_to_codex_pm", "message": "P0 has contract/evidence but no PRD."}}
+{"ts": "2026-05-13T11:18:41Z", "sid": "sprint-20260512-managed-agent-runtime-interfaces", "event": "dispatch_failed", "by": "coordinator"}
