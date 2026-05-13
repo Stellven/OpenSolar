@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 class HandType(str, Enum):
     MOCK = "mock"
     SHELL = "shell"
+    SANDBOX = "sandbox"
     PANE = "pane"
     REMOTE = "remote"
     MCP = "mcp"

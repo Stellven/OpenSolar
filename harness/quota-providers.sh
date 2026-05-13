@@ -149,6 +149,17 @@ probe_zhipu() {
     emit "zhipu" "warn" "quota" "N/A" "" "no-key"
     return 0
   fi
+  # Zhipu Coding Plan tokens used through the Claude Code compatible endpoint
+  # are not reliably represented by the bigmodel monitor quota endpoint.  That
+  # endpoint can return 0 after weekly window changes even when the coding plan
+  # is usable again, which incorrectly makes lab panes look quota-exhausted and
+  # blocks dispatch.  Default to an informational N/A unless explicitly asked
+  # to query the monitor endpoint.
+  if [[ "${SOLAR_ZHIPU_QUOTA_PROBE_MODE:-coding-plan}" != "monitor" ]]; then
+    cache_put "$name" "zhipu" "warn" "quota" "N/A" "" "coding-plan"
+    emit "zhipu" "warn" "quota" "N/A" "" "coding-plan"
+    return 0
+  fi
   local raw
   raw="$(curl -fsS --max-time 8 \
     -H "Authorization: ${key}" \

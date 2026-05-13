@@ -8,6 +8,7 @@ Solar-Harness now exposes append-only session log operations as first-class comm
 solar-harness session replay <session_id> [--json] [--include-events] [--out path]
 solar-harness session diff <session_a> <session_b> [--harness-a dir] [--harness-b dir] [--json] [--out path]
 solar-harness session evaluate <session_id> [--json] [--out path]
+solar-harness session compare-version <session_id> <git-ref-a> <git-ref-b> [--repo dir] [--source-harness dir] [--json] [--out path]
 ```
 
 ## Runtime Boundary
@@ -24,12 +25,14 @@ Latest generated evidence:
 - `reports/session-replay-latest.json`
 - `reports/session-diff-latest.json`
 - `reports/session-log-native-eval-latest.json`
+- `reports/session-compare-version-latest.json`
 
 ## Guarantees
 
 - Replay is derived from append-only events.
 - Diff ignores volatile `event_id` and `ts` metadata to compare semantic event content.
 - Cross-harness comparison is supported with `--harness-a` and `--harness-b`.
+- Cross-version comparison is supported with `compare-version`; it exports both git refs, copies the same session log into each version harness, and runs version-local replay.
 - Log-native evaluation does not require handoff/eval artifacts to produce a verdict.
 
 ## Non-Goals

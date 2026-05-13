@@ -52,6 +52,11 @@ from graph_scheduler import (  # noqa: E402
 from pane_lease import acquire as acquire_lease, release as release_lease, read_lease  # noqa: E402
 from task_queue import enqueue  # noqa: E402
 try:
+    from model_registry import load_registry as _load_model_registry, normalize as _normalize_model  # noqa: E402
+except Exception:  # pragma: no cover - partial fixtures can omit registry helper
+    _load_model_registry = None  # type: ignore
+    _normalize_model = None  # type: ignore
+try:
     from runtime_bridge import record_legacy_event  # noqa: E402
     from runtime_status import transition_status  # noqa: E402
 except Exception:  # pragma: no cover - fail-open in partial test fixtures
@@ -69,6 +74,111 @@ def _json(obj: Any) -> str:
 
 def _no_dispatch_enabled() -> bool:
     return os.environ.get("SOLAR_NO_DISPATCH") == "1" or NO_DISPATCH_FLAG.exists()
+
+
+def _model_registry() -> dict[str, Any]:
+    if _load_model_registry is not None:
+        try:
+            return _load_model_registry()
+        except Exception:
+            pass
+    path = HARNESS_DIR / "config" / "model-registry.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {
+            "defaults": {"main_model": "opus", "lab_builder_matrix": "glm,glm,glm,anthropic-sonnet"},
+            "models": {},
+        }
+
+
+def _normalize_model_alias(alias: str) -> str:
+    reg = _model_registry()
+    if _normalize_model is not None:
+        try:
+            return str(_normalize_model(reg, alias))
+        except Exception:
+            pass
+    value = str(alias or "").strip().lower()
+    fallback = {
+        "opus": "claude-opus",
+        "claude-opus": "claude-opus",
+        "anthropic-sonnet": "claude-sonnet",
+        "claude-sonnet": "claude-sonnet",
+        "claude": "claude-sonnet",
+        "glm": "zhipu-glm-5.1",
+        "glm-5": "zhipu-glm-5.1",
+        "glm-5.1": "zhipu-glm-5.1",
+        "sonnet": "zhipu-glm-4.7",
+        "glm-4.7": "zhipu-glm-4.7",
+        "deepseek": "deepseek-v4-pro",
+        "deepseek-v4-pro": "deepseek-v4-pro",
+    }
+    return fallback.get(value, value)
+
+
+def _model_alias_set(alias: str) -> list[str]:
+    reg = _model_registry()
+    model_id = _normalize_model_alias(alias)
+    spec = (reg.get("models") or {}).get(model_id) or {}
+    values = {model_id, str(alias or "").strip().lower()}
+    values.update(str(x).strip().lower() for x in (spec.get("aliases") or []) if str(x).strip())
+    if spec.get("model_key"):
+        values.add(str(spec["model_key"]).strip().lower())
+    return sorted(v for v in values if v)
+
+
+def _matrix_items(matrix: str) -> list[str]:
+    return [x.strip() for x in str(matrix or "").split(",") if x.strip()]
+
+
+def _load_user_config() -> dict[str, Any]:
+    try:
+        return json.loads((HARNESS_DIR / "config" / "solar-user-config.json").read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _configured_main_model(role: str) -> str:
+    reg = _model_registry()
+    cfg = _load_user_config()
+    models = cfg.get("models") if isinstance(cfg.get("models"), dict) else {}
+    default = (reg.get("defaults") or {}).get("main_model") or "opus"
+    return str(models.get(role) or default)
+
+
+def _configured_lab_model_for_pane(pane: str) -> str:
+    reg = _model_registry()
+    cfg = _load_user_config()
+    models = cfg.get("models") if isinstance(cfg.get("models"), dict) else {}
+    matrix = str(models.get("lab_builder_matrix") or (reg.get("defaults") or {}).get("lab_builder_matrix") or "glm,glm,glm,anthropic-sonnet")
+    items = _matrix_items(matrix)
+    if not items:
+        return "anthropic-sonnet"
+    try:
+        index = int(str(pane).rsplit(".", 1)[1])
+    except Exception:
+        index = 0
+    return items[index] if index < len(items) else items[-1]
+
+
+def _models_for_pane(pane: str, title: str = "") -> list[str]:
+    if pane == f"{SESSION}:0.2":
+        return _model_alias_set(_configured_main_model("builder"))
+    if pane == f"{SESSION}:0.3":
+        return _model_alias_set(_configured_main_model("evaluator"))
+    if pane.startswith("solar-harness-lab:"):
+        return _model_alias_set(_configured_lab_model_for_pane(pane))
+    title_lower = title.lower()
+    if "deepseek" in title_lower:
+        return _model_alias_set("deepseek")
+    if "glm-5.1" in title_lower or "glm" in title_lower:
+        return _model_alias_set("glm")
+    if "opus" in title_lower:
+        return _model_alias_set("opus")
+    if "sonnet" in title_lower:
+        return _model_alias_set("anthropic-sonnet")
+    return _model_alias_set("anthropic-sonnet")
 
 
 def _node_id_from_intent(intent: str) -> str:
@@ -883,10 +993,11 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
     ]
     if dry_run:
         return [
-            {"pane": f"{SESSION}:0.2", "models": ["sonnet", "glm-5.1"], "skills": worker_skills, "capabilities": worker_capabilities},
-            {"pane": "solar-harness-lab:0.0", "models": ["sonnet", "glm-5.1"], "skills": worker_skills, "capabilities": worker_capabilities},
-            {"pane": "solar-harness-lab:0.1", "models": ["sonnet", "glm-5.1"], "skills": worker_skills, "capabilities": worker_capabilities},
-            {"pane": "solar-harness-lab:0.2", "models": ["sonnet", "glm-5.1"], "skills": worker_skills, "capabilities": worker_capabilities},
+            {"pane": f"{SESSION}:0.2", "models": _models_for_pane(f"{SESSION}:0.2"), "skills": worker_skills, "capabilities": worker_capabilities},
+            {"pane": "solar-harness-lab:0.0", "models": _models_for_pane("solar-harness-lab:0.0"), "skills": worker_skills, "capabilities": worker_capabilities},
+            {"pane": "solar-harness-lab:0.1", "models": _models_for_pane("solar-harness-lab:0.1"), "skills": worker_skills, "capabilities": worker_capabilities},
+            {"pane": "solar-harness-lab:0.2", "models": _models_for_pane("solar-harness-lab:0.2"), "skills": worker_skills, "capabilities": worker_capabilities},
+            {"pane": "solar-harness-lab:0.3", "models": _models_for_pane("solar-harness-lab:0.3"), "skills": worker_skills, "capabilities": worker_capabilities},
         ]
     try:
         out = subprocess.check_output(
@@ -905,17 +1016,12 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         # panes share the session prefix but must not be treated as builders.
         if pane != f"{SESSION}:0.2" and not pane.startswith("solar-harness-lab:"):
             continue
-        models = ["sonnet", "glm-5.1", "deepseek"]
+        models = _models_for_pane(pane, title)
         quota_exhausted: list[str] = []
         title_lower = title.lower()
         if "glm" in title_lower:
-            models = ["glm", "glm-5.1"]
             if "quota:exhausted" in title_lower or "quota exhausted" in title_lower:
-                quota_exhausted.extend(["glm", "glm-5.1"])
-        elif "sonnet" in title_lower:
-            models = ["sonnet", "anthropic-sonnet"]
-        elif "deepseek" in title_lower:
-            models = ["deepseek", "deepseek-v4-pro"]
+                quota_exhausted.extend(_model_alias_set("glm"))
         workers.append({
             "pane": pane,
             "models": models,
@@ -931,7 +1037,7 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
 
 def _discover_evaluators(dry_run: bool = False) -> list[dict[str, Any]]:
     if dry_run:
-        return [{"pane": f"{SESSION}:0.3", "models": ["sonnet", "deepseek"], "skills": ["review", "testing", "bash"]}]
+        return [{"pane": f"{SESSION}:0.3", "models": _models_for_pane(f"{SESSION}:0.3"), "skills": ["review", "testing", "bash"]}]
     # Graph node evaluation mutates graph verdict state. Keep it on the
     # evaluator persona; falling back to planner/builder panes causes wrong-role
     # dispatch and leaves the real review queue blocked.
@@ -947,7 +1053,7 @@ def _discover_evaluators(dry_run: bool = False) -> list[dict[str, Any]]:
         if _pane_exists(pane):
             evaluators.append({
                 "pane": pane,
-                "models": ["sonnet", "deepseek", "glm-5.1"],
+                "models": _models_for_pane(pane),
                 "skills": ["review", "testing", "bash"],
                 "busy": bool(read_lease(pane)),
             })

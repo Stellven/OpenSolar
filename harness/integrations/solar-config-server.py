@@ -32,6 +32,9 @@ sys.path.insert(0, str(HARNESS_DIR / "lib"))
 from qmd_resolver import resolve_qmd_bin  # noqa: E402
 
 CONFIG_PATH = HARNESS_DIR / "config" / "solar-user-config.json"
+MODEL_REGISTRY_PATH = HARNESS_DIR / "config" / "model-registry.json"
+KNOWLEDGE_PROBE_HEALTH = HARNESS_DIR / "state" / "knowledge-probe-health.json"
+MODEL_DOCTOR_HEALTH = HARNESS_DIR / "state" / "model-registry-doctor-health.json"
 SECRETS_PATH = HOME / ".solar" / "secrets" / "solar-user-secrets.env"
 PID_FILE = HARNESS_DIR / ".solar-config-server.pid"
 PORT_FILE = HARNESS_DIR / ".solar-config-server.port"
@@ -62,10 +65,11 @@ DEFAULT_CONFIG = {
         "harness_dir": str(HARNESS_DIR),
     },
     "models": {
+        "pm": "opus",
         "planner": "opus",
-        "builder": "sonnet",
+        "builder": "opus",
         "evaluator": "opus",
-        "lab_builder_matrix": "glm,glm,glm,deepseek",
+        "lab_builder_matrix": "glm,glm,glm,anthropic-sonnet",
     },
     "providers": {
         "zhipu_base_url": "https://api.z.ai/api/anthropic",
@@ -95,6 +99,40 @@ DEFAULT_CONFIG = {
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def load_model_registry() -> dict:
+    try:
+        return json.loads(MODEL_REGISTRY_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {
+            "defaults": {"main_model": "opus", "lab_builder_matrix": "glm,glm,glm,anthropic-sonnet"},
+            "models": {},
+            "matrix_options": [],
+        }
+
+
+def model_registry_options() -> dict[str, object]:
+    reg = load_model_registry()
+    model_options = []
+    for model_id, spec in (reg.get("models") or {}).items():
+        if not spec.get("main_allowed"):
+            continue
+        aliases = spec.get("aliases") or []
+        model_options.append({
+            "value": aliases[0] if aliases else model_id,
+            "id": model_id,
+            "label": spec.get("label") or model_id,
+        })
+    return {
+        "model_options": model_options or [
+            {"value": "opus", "id": "claude-opus", "label": "Claude Opus 4.7"},
+            {"value": "anthropic-sonnet", "id": "claude-sonnet", "label": "Claude Sonnet"},
+        ],
+        "matrix_options": reg.get("matrix_options") or [
+            {"value": "glm,glm,glm,anthropic-sonnet", "label": "3× GLM 5.1 + Claude Sonnet"},
+        ],
+    }
 
 
 def deep_merge(base: dict, override: dict) -> dict:
@@ -216,20 +254,60 @@ def _mirage_detail(doctor_result: dict) -> dict:
         drive = d.get("drive") or {}
         qmd = d.get("qmd") or {}
         mounts = d.get("mounts") or []
+        qmd_detail = qmd.get("detail") if isinstance(qmd, dict) and isinstance(qmd.get("detail"), dict) else {}
+
+        def mount_item(m: dict) -> dict:
+            status = m.get("status")
+            ready = m.get("ready")
+            if ready is None:
+                ready = status == "ok"
+            return {
+                "path": m.get("path"),
+                "mode": m.get("mode") or m.get("type"),
+                "ready": bool(ready),
+                "status": status or ("ok" if ready else "error"),
+                "physical_root": m.get("physical_root", ""),
+                "reason": m.get("reason", ""),
+            }
+
+        def count_from(text: object) -> int:
+            m = re.search(r"(\d+)", str(text or ""))
+            return int(m.group(1)) if m else 0
+
         return {
             "ok": True,
             "enabled": d.get("enabled", False),
             "workspace_id": d.get("workspace_id", ""),
-            "mounts": [{"path": m.get("path"), "mode": m.get("mode"), "ready": m.get("ready")} for m in mounts],
+            "mounts": [mount_item(m) for m in mounts if isinstance(m, dict)],
             "drive_status": drive.get("status", "unknown") if isinstance(drive, dict) else "unknown",
             "drive_ro": drive.get("mode", "ro") == "ro" if isinstance(drive, dict) else True,
-            "qmd_indexed": qmd.get("indexed", 0) if isinstance(qmd, dict) else 0,
+            "drive_root": drive.get("local_root", "") if isinstance(drive, dict) else "",
+            "qmd_status": qmd.get("status", "unknown") if isinstance(qmd, dict) else "unknown",
+            "qmd_indexed": qmd.get("indexed", 0) if isinstance(qmd, dict) and qmd.get("indexed") is not None else count_from(qmd_detail.get("total")),
+            "qmd_vectors": count_from(qmd_detail.get("vectors")),
+            "qmd_pending": count_from(qmd_detail.get("pending")),
             "last_probe_at": d.get("probed_at"),
             "stale": False,
-            "credential_configured": bool(drive.get("credentials_path") or drive.get("token_path")) if isinstance(drive, dict) else False,
+            "credential_configured": bool(drive.get("credentials_path") or drive.get("token_path") or drive.get("local_root")) if isinstance(drive, dict) else False,
         }
     except (json.JSONDecodeError, Exception):
         return {"ok": True, "detail": str(doctor_result.get("stdout") or "")[:300]}
+
+
+def health_file_summary(path: Path) -> dict[str, object]:
+    d = {}
+    try:
+        d = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {"ok": False, "status": "missing", "path": str(path)}
+    return {
+        "ok": bool(d.get("ok")),
+        "status": d.get("status", "unknown"),
+        "checked_at": d.get("checked_at", ""),
+        "probes_passed": d.get("probes_passed"),
+        "probes_failed": d.get("probes_failed"),
+        "path": str(path),
+    }
 
 
 def system_status() -> dict[str, object]:
@@ -243,11 +321,14 @@ def system_status() -> dict[str, object]:
         "config_path": str(CONFIG_PATH),
         "secrets_path": str(SECRETS_PATH),
         "config": cfg,
+        "model_registry": model_registry_options(),
         "secrets": load_masked_secrets(),
         "checks": {
             "wiki": summarize_json_cmd(wiki),
             "qmd": summarize_text_cmd(qmd, ["Total:", "Vectors:", "Pending:", "solar-wiki"]),
             "mirage": _mirage_detail(mirage),
+            "knowledge_probe": health_file_summary(KNOWLEDGE_PROBE_HEALTH),
+            "model_doctor": health_file_summary(MODEL_DOCTOR_HEALTH),
             "status_server": {"ok": bool(status_server.get("ok")), "detail": str(status_server.get("stdout") or status_server.get("stderr", ""))[:300]},
         },
     }
@@ -381,22 +462,8 @@ HTML = r"""<!doctype html>
   <script>
     let current = {};
     const secretKeys = ["ANTHROPIC_API_KEY","OPENAI_API_KEY","ZHIPU_AUTH_TOKEN","DEEPSEEK_API_KEY","GOOGLE_APPLICATION_CREDENTIALS"];
-    const modelOptions = [
-      ["opus", "Claude Opus"],
-      ["sonnet", "Claude Sonnet"],
-      ["glm-5.1", "GLM 5.1"],
-      ["glm", "GLM"],
-      ["deepseek", "DeepSeek"],
-      ["deepseek-r1", "DeepSeek R1"],
-      ["codex", "Codex"]
-    ];
-    const matrixOptions = [
-      ["glm-5.1,glm-5.1,sonnet,sonnet", "2× GLM 5.1 + 2× Sonnet（推荐）"],
-      ["glm-5.1,sonnet,glm-5.1,sonnet", "GLM/Sonnet 交错"],
-      ["sonnet,sonnet,sonnet,sonnet", "全 Sonnet"],
-      ["glm,glm,glm,deepseek", "旧配置：3× GLM + DeepSeek"],
-      ["glm-5.1,sonnet,deepseek,sonnet", "混合：GLM + Sonnet + DeepSeek"]
-    ];
+    let modelOptions = [["opus", "Claude Opus 4.7"], ["anthropic-sonnet", "Claude Sonnet"]];
+    let matrixOptions = [["glm,glm,glm,anthropic-sonnet", "3× GLM 5.1 + Claude Sonnet"]];
     function get(obj, path) { return path.split('.').reduce((o,k)=>o&&o[k], obj); }
     function set(obj, path, value) { const parts=path.split('.'); let o=obj; parts.slice(0,-1).forEach(k=>o=o[k]||(o[k]={})); o[parts.at(-1)]=value; }
     function renderSelectOptions(el, options, value) {
@@ -404,6 +471,9 @@ HTML = r"""<!doctype html>
       const all = has || !value ? options : [[value, `当前自定义：${value}`], ...options];
       el.innerHTML = all.map(([v, label]) => `<option value="${v}">${label}</option>`).join('');
       if (value !== undefined) el.value = value;
+    }
+    function normalizeOptions(items) {
+      return (items || []).map(item => Array.isArray(item) ? item : [item.value, item.label || item.value]).filter(([v]) => !!v);
     }
     function fillForm(config) {
       document.querySelectorAll('[name]').forEach(el => {
@@ -444,6 +514,10 @@ HTML = r"""<!doctype html>
       const res = await fetch('/api/status');
       const data = await res.json();
       current = data.config;
+      if (data.model_registry) {
+        modelOptions = normalizeOptions(data.model_registry.model_options);
+        matrixOptions = normalizeOptions(data.model_registry.matrix_options);
+      }
       fillForm(data.config);
       renderSecrets(data.secrets || {});
       renderStatus(data);

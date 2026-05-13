@@ -181,15 +181,81 @@ def _check_interface_health(sprint_id: str) -> Dict[str, Any]:
 
     # Hands runtime: adapters available
     try:
-        from hands_runtime import available_hand_types, get_hand
+        from hands_runtime import available_hand_types
         types = available_hand_types()
-        ok = len(types) >= 3
+        type_names = [t.value for t in types]
+        ok = len(types) >= 3 and "sandbox" in type_names
         dimensions["hands_runtime"] = {
-            "ok": ok, "message": f"{len(types)} adapters available",
-            "adapters": [t.value for t in types],
+            "ok": ok,
+            "message": f"{len(types)} adapters available; sandbox={'yes' if 'sandbox' in type_names else 'no'}",
+            "adapters": type_names,
         }
     except Exception as exc:
         dimensions["hands_runtime"] = {"ok": False, "message": str(exc)}
+
+    # Sandbox hand: lifecycle smoke plus evidence/disposal visibility.
+    try:
+        from hands_runtime import SandboxHand
+        from runtime_interfaces import ResultStatus
+        import tempfile
+        hand = SandboxHand()
+        ref = hand.provision(capabilities=["doctor"])
+        guard_root = tempfile.mkdtemp(prefix="solar-runtime-doctor-guard-")
+        result = hand.execute(
+            ref,
+            "doctor-smoke",
+            {
+                "argv": ["/bin/sh", "-c", "printf doctor-ok > doctor.txt; cat doctor.txt"],
+                "write_guard_roots": [guard_root],
+            },
+            idempotency_key=f"runtime-doctor-sandbox-{os.getpid()}",
+            timeout_seconds=15,
+        )
+        disposed = hand.dispose(ref)
+        write_guard = result.metadata.get("write_guard") or {}
+        write_guard_violations = write_guard.get("violations") or []
+        execution_mode = result.metadata.get("execution_mode", "")
+        ok = (
+            result.status == ResultStatus.OK
+            and result.output == "doctor-ok"
+            and bool(result.metadata.get("evidence_file"))
+            and bool(disposed.output.get("workspace_removed"))
+            and execution_mode == "argv"
+            and bool(write_guard.get("enabled"))
+            and not write_guard_violations
+        )
+        dimensions["sandbox_runtime"] = {
+            "ok": ok,
+            "message": "argv/provision/execute/evidence/write-guard/dispose ok" if ok else "sandbox lifecycle smoke failed",
+            "status": result.status.value if hasattr(result.status, "value") else str(result.status),
+            "evidence_file": result.metadata.get("evidence_file", ""),
+            "workspace_removed": bool(disposed.output.get("workspace_removed")),
+            "execution_mode": execution_mode,
+            "write_guard_enabled": bool(write_guard.get("enabled")),
+            "write_guard_violations": len(write_guard_violations),
+            "boundary": "local process sandbox, not VM/container isolation",
+        }
+        import shutil
+        shutil.rmtree(guard_root, ignore_errors=True)
+    except Exception as exc:
+        dimensions["sandbox_runtime"] = {"ok": False, "message": str(exc)}
+
+    # Compare-version requires a git-managed harness repo.  Installed runtimes
+    # may legitimately be non-git; keep this diagnostic visible without failing
+    # the whole doctor.
+    try:
+        from session_tools import compare_version_doctor_payload
+        report = compare_version_doctor_payload(Path(HARNESS_DIR), Path(HARNESS_DIR))
+        dimensions["compare_version_ready"] = {
+            "ok": True,
+            "warn": not bool(report.get("ok")),
+            "message": "ready" if report.get("ok") else "not ready: harness dir is not a git-managed repo",
+            "available": bool(report.get("ok")),
+            "checks": report.get("checks", {}),
+            "usage": report.get("usage", ""),
+        }
+    except Exception as exc:
+        dimensions["compare_version_ready"] = {"ok": True, "warn": True, "message": str(exc), "available": False}
 
     # Worker runtime: register/lease
     try:
@@ -244,7 +310,7 @@ def _check_interface_health(sprint_id: str) -> Dict[str, Any]:
         dimensions["write_path_audit"] = {"ok": False, "message": str(exc)}
 
     all_ok = all(d.get("ok", False) for d in dimensions.values())
-    any_warn = not all_ok and any(d.get("ok") for d in dimensions.values())
+    any_warn = any(d.get("warn") for d in dimensions.values()) or (not all_ok and any(d.get("ok") for d in dimensions.values()))
     return {
         "ok": all_ok,
         "warn": any_warn,

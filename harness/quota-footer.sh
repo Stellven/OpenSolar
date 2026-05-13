@@ -33,8 +33,16 @@ fi
 CONFIG=$(bash "$HARNESS_DIR/lib/persona-config.sh" --print-config "$PERSONA" 2>/dev/null || true)
 DISPLAY_MODEL=$(printf '%s\n' "$CONFIG" | awk -F= '$1=="DISPLAY_MODEL"{gsub(/^'\''|'\''$/, "", $2); print $2; exit}')
 DISPLAY_MODEL="${DISPLAY_MODEL:-N/A}"
+MODEL_ID=$(printf '%s\n' "$CONFIG" | awk -F= '$1=="MODEL_ID"{gsub(/^'\''|'\''$/, "", $2); print $2; exit}')
+if [[ -f "$HARNESS_DIR/lib/harness-config.sh" ]]; then
+  # shellcheck source=/dev/null
+  source "$HARNESS_DIR/lib/harness-config.sh"
+fi
 
-MODEL_KEY=$(DISPLAY_MODEL="$DISPLAY_MODEL" python3 - <<'PY'
+if [[ -n "$MODEL_ID" ]] && command -v solar_model_key >/dev/null 2>&1; then
+  MODEL_KEY="$(solar_model_key "$MODEL_ID")"
+else
+  MODEL_KEY=$(DISPLAY_MODEL="$DISPLAY_MODEL" python3 - <<'PY'
 import os, re
 name = os.environ.get("DISPLAY_MODEL", "").lower()
 if "glm-5.1" in name:
@@ -54,6 +62,7 @@ else:
     print(s or "unknown")
 PY
 )
+fi
 
 USED_TOKENS=$(MODEL_KEY="$MODEL_KEY" HARNESS_DIR="$HARNESS_DIR" python3 - <<'PY'
 import datetime, glob, json, os, time
@@ -182,7 +191,10 @@ else
   QUOTA_DISPLAY="$PROVIDER_QUOTA"
 fi
 
-MODEL_SHORT=$(DISPLAY_MODEL="$DISPLAY_MODEL" python3 - <<'PY'
+if [[ -n "$MODEL_ID" ]] && command -v solar_model_short_label >/dev/null 2>&1; then
+  MODEL_SHORT="$(solar_model_short_label "$MODEL_ID")"
+else
+  MODEL_SHORT=$(DISPLAY_MODEL="$DISPLAY_MODEL" python3 - <<'PY'
 import os
 name = os.environ.get("DISPLAY_MODEL", "N/A")
 for old, new in [
@@ -199,6 +211,7 @@ for old, new in [
 print(name[:24])
 PY
 )
+fi
 
 printf "%s | 模型:%s | %s | 已用:%s tok" \
   "$LABEL" "$MODEL_SHORT" "$QUOTA_DISPLAY" "$(fmt_num "$USED_TOKENS")"

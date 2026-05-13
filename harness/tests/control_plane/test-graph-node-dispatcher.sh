@@ -16,7 +16,7 @@ check() {
 
 TMPDIR_TEST=$(mktemp -d)
 trap 'rm -rf "$TMPDIR_TEST"' EXIT
-mkdir -p "$TMPDIR_TEST/lib" "$TMPDIR_TEST/sprints" "$TMPDIR_TEST/run/queue" "$TMPDIR_TEST/run/pane-leases"
+mkdir -p "$TMPDIR_TEST/lib" "$TMPDIR_TEST/config" "$TMPDIR_TEST/sprints" "$TMPDIR_TEST/run/queue" "$TMPDIR_TEST/run/pane-leases"
 
 cp "$HARNESS_DIR_REAL/lib/graph_scheduler.py" "$TMPDIR_TEST/lib/graph_scheduler.py"
 cp "$HARNESS_DIR_REAL/lib/graph_node_dispatcher.py" "$TMPDIR_TEST/lib/graph_node_dispatcher.py"
@@ -26,6 +26,9 @@ cp "$HARNESS_DIR_REAL/lib/solar_skills.py" "$TMPDIR_TEST/lib/solar_skills.py"
 cp "$HARNESS_DIR_REAL/lib/capability_effects.py" "$TMPDIR_TEST/lib/capability_effects.py"
 cp "$HARNESS_DIR_REAL/lib/resource_telemetry.py" "$TMPDIR_TEST/lib/resource_telemetry.py"
 cp "$HARNESS_DIR_REAL/lib/solar_db.py" "$TMPDIR_TEST/lib/solar_db.py"
+cp "$HARNESS_DIR_REAL/lib/model_registry.py" "$TMPDIR_TEST/lib/model_registry.py"
+cp "$HARNESS_DIR_REAL/config/model-registry.json" "$TMPDIR_TEST/config/model-registry.json"
+cp "$HARNESS_DIR_REAL/config/solar-user-config.json" "$TMPDIR_TEST/config/solar-user-config.json"
 
 SID="sprint-test-graph-node-dispatch"
 GRAPH="$TMPDIR_TEST/sprints/${SID}.task_graph.json"
@@ -98,8 +101,24 @@ cat > "$GRAPH" <<JSON
 JSON
 
 echo "T1: py_compile"
-python3 -m py_compile "$TMPDIR_TEST/lib/graph_node_dispatcher.py" "$TMPDIR_TEST/lib/graph_scheduler.py" "$TMPDIR_TEST/lib/task_queue.py" \
+python3 -m py_compile "$TMPDIR_TEST/lib/graph_node_dispatcher.py" "$TMPDIR_TEST/lib/graph_scheduler.py" "$TMPDIR_TEST/lib/task_queue.py" "$TMPDIR_TEST/lib/model_registry.py" \
   && ok "modules compile" || fail "compile failed"
+
+echo "T1b: dispatcher reads model registry for worker capability"
+MODELS_JSON=$(HARNESS_DIR="$TMPDIR_TEST" SOLAR_HARNESS_SESSION="solar-harness-test" python3 - <<'PY'
+import json
+import os
+import sys
+sys.path.insert(0, os.path.join(os.environ["HARNESS_DIR"], "lib"))
+import graph_node_dispatcher as g
+print(json.dumps({
+    "main_builder": g._models_for_pane("solar-harness-test:0.2"),
+    "lab4": g._models_for_pane("solar-harness-lab:0.3"),
+}, ensure_ascii=False))
+PY
+)
+check "main builder model aliases include configured Opus" "$MODELS_JSON" "claude-opus"
+check "lab4 model aliases include explicit Anthropic Sonnet" "$MODELS_JSON" "anthropic-sonnet"
 
 echo "T2: dispatch-ready dry-run creates explicit node dispatch files"
 OUT=$(HARNESS_DIR="$TMPDIR_TEST" SOLAR_HARNESS_SESSION="solar-harness-test" python3 "$TMPDIR_TEST/lib/graph_node_dispatcher.py" dispatch-ready --graph "$GRAPH" --dry-run 2>/dev/null)

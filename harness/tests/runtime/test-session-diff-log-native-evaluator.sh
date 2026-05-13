@@ -7,11 +7,12 @@ LIB_DIR="${HARNESS_DIR}/lib"
 SID_A="test-session-tools-pass-$$"
 SID_B="test-session-tools-fail-$$"
 TMP_HARNESS="$(mktemp -d)"
+TMP_REPO="$(mktemp -d)"
 PASS=0
 FAIL=0
 
 cleanup() {
-  rm -rf "${HARNESS_DIR}/sessions/${SID_A}" "${HARNESS_DIR}/sessions/${SID_B}" "$TMP_HARNESS"
+  rm -rf "${HARNESS_DIR}/sessions/${SID_A}" "${HARNESS_DIR}/sessions/${SID_B}" "$TMP_HARNESS" "$TMP_REPO"
 }
 trap cleanup EXIT
 
@@ -77,6 +78,33 @@ assert_contains "cross harness ok" "$OUT" '"ok": true'
 echo "T6: solar-harness CLI wrapper"
 OUT=$("${HARNESS_DIR}/solar-harness.sh" session replay "$SID_A" --json)
 assert_contains "cli wrapper replay" "$OUT" '"session_id": "'"$SID_A"'"'
+
+echo "T7: compare-version same ref returns equal projection"
+mkdir -p "$TMP_REPO/lib"
+cp "${LIB_DIR}/session_tools.py" "${LIB_DIR}/session_log.py" "${LIB_DIR}/projection_engine.py" "$TMP_REPO/lib/"
+git -C "$TMP_REPO" init -q
+git -C "$TMP_REPO" add lib
+git -C "$TMP_REPO" -c user.email=test@example.com -c user.name=test commit -q -m v1
+git -C "$TMP_REPO" tag v1
+OUT=$(python3 "${LIB_DIR}/session_tools.py" compare-version "$SID_A" v1 v1 --repo "$TMP_REPO" --source-harness "$HARNESS_DIR" --json)
+assert_contains "compare same projection equal" "$OUT" '"projection_equal": true'
+assert_contains "compare same ok" "$OUT" '"ok": true'
+
+echo "T8: compare-version detects projection behavior drift"
+python3 - "$TMP_REPO/lib/projection_engine.py" <<'PY'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1])
+text = p.read_text()
+text = text.replace('"activity_succeeded": "passed"', '"activity_succeeded": "reviewing"', 1)
+p.write_text(text)
+PY
+git -C "$TMP_REPO" add lib/projection_engine.py
+git -C "$TMP_REPO" -c user.email=test@example.com -c user.name=test commit -q -m v2
+git -C "$TMP_REPO" tag v2
+OUT=$(python3 "${LIB_DIR}/session_tools.py" compare-version "$SID_A" v1 v2 --repo "$TMP_REPO" --source-harness "$HARNESS_DIR" --json || true)
+assert_contains "compare drift projection not equal" "$OUT" '"projection_equal": false'
+assert_contains "compare drift statuses shown" "$OUT" '"a_status": "passed"'
 
 echo ""
 echo "=== Session Diff / Log-Native Evaluator: PASS=$PASS FAIL=$FAIL ==="

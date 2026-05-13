@@ -75,12 +75,16 @@ _infer_auth_source_for_base_url() {
 }
 
 _normalize_main_model_alias() {
-  printf '%s' "${1:-sonnet}" | tr '[:upper:]' '[:lower:]' | xargs
+  if command -v solar_model_alias_canonical >/dev/null 2>&1; then
+    solar_model_alias_canonical "${1:-anthropic-sonnet}" 2>/dev/null || printf '%s' "claude-sonnet"
+  else
+    printf '%s' "${1:-sonnet}" | tr '[:upper:]' '[:lower:]' | xargs
+  fi
 }
 
 _persona_model_alias() {
   local persona="$1"
-  local default_value="${2:-sonnet}"
+  local default_value="${2:-anthropic-sonnet}"
   if command -v solar_persona_model >/dev/null 2>&1; then
     _normalize_main_model_alias "$(solar_persona_model "$persona" "$default_value")"
   else
@@ -89,14 +93,16 @@ _persona_model_alias() {
 }
 
 _configure_anthropic_persona_model() {
-  local alias="$(_normalize_main_model_alias "${1:-sonnet}")"
+  local alias="$(_normalize_main_model_alias "${1:-anthropic-sonnet}")"
   case "$alias" in
-    opus|claude-opus|anthropic-opus|claude-opus-*|opus-4.7|opus-4-7|claude-opus-4.7|claude-opus-4-7)
-      model_flag="--model opus"
+    claude-opus)
+      model_id="$alias"
+      model_flag="$(solar_model_flag "$alias")"
       display_model="Claude Opus 4.7 (Anthropic)"
       ;;
-    sonnet|anthropic-sonnet|claude|claude-sonnet|anthropic)
-      model_flag="--model sonnet"
+    claude-sonnet)
+      model_id="$alias"
+      model_flag="$(solar_model_flag "$alias")"
       display_model="Claude Sonnet (Anthropic)"
       ;;
     *)
@@ -104,6 +110,7 @@ _configure_anthropic_persona_model() {
       # Fail closed to the verified native Claude route instead of launching a
       # pane that later dies with an opaque API 400.
       model_flag="--model sonnet"
+      model_id="claude-sonnet"
       display_model="Claude Sonnet (Anthropic, unknown alias '${alias}' guarded)"
       ;;
   esac
@@ -130,44 +137,27 @@ _lab_builder_model_for_slot() {
     if (( last_index >= 0 )); then
       selected="${models[$last_index]}"
     else
-      selected="sonnet"
+      selected="anthropic-sonnet"
     fi
   fi
-  selected=$(printf '%s' "$selected" | tr '[:upper:]' '[:lower:]' | xargs)
-
-  case "$selected" in
-    glm|glm-5|glm-5.1|zhipu)
-      echo "glm"
-      ;;
-    sonnet|glm-4.7|glm47|zhipu-sonnet)
-      echo "sonnet"
-      ;;
-    deepseek|deepseek-v4|deepseek-v4-pro|deepseek-v4-flash|ds|ds-v4)
-      echo "deepseek"
-      ;;
-    anthropic-sonnet|claude|claude-sonnet|anthropic)
-      echo "anthropic-sonnet"
-      ;;
-    opus|claude-opus)
-      echo "opus"
-      ;;
-    *)
-      echo "$selected"
-      ;;
-  esac
+  if command -v solar_model_alias_canonical >/dev/null 2>&1; then
+    solar_model_alias_canonical "$selected"
+  else
+    printf '%s' "$selected" | tr '[:upper:]' '[:lower:]' | xargs
+  fi
 }
 
 get_persona_config() {
   local persona="$1"
   _source_model_config
 
-  local model_flag="" base_url="" auth_token="" tool_flag="" display_model="" startup_token="" proxy_check="0" auth_source="" extra_flags="" launch_error=""
+  local model_flag="" model_id="" base_url="" auth_token="" tool_flag="" display_model="" startup_token="" proxy_check="0" auth_source="" extra_flags="" launch_error=""
   local cn=""
 
   case "$persona" in
     planner)
       cn="规划者"
-      _configure_anthropic_persona_model "$(_persona_model_alias planner sonnet)"
+      _configure_anthropic_persona_model "$(_persona_model_alias planner)"
       # planner 直连 Anthropic, 清掉 Zhipu env
       base_url=""
       auth_token=""
@@ -179,7 +169,7 @@ get_persona_config() {
       cn="建设者"
       # Main builder keeps full Claude Code interactive/MCP behavior, but its
       # model is config-owned like the other main-screen personas.
-      _configure_anthropic_persona_model "$(_persona_model_alias builder sonnet)"
+      _configure_anthropic_persona_model "$(_persona_model_alias builder)"
       base_url=""
       auth_token=""
       display_model="${display_model}, full tools"
@@ -190,7 +180,7 @@ get_persona_config() {
     evaluator)
       cn="审判官"
       # Product Delivery 的 pane3 是主评审通道，优先稳定性。
-      _configure_anthropic_persona_model "$(_persona_model_alias evaluator sonnet)"
+      _configure_anthropic_persona_model "$(_persona_model_alias evaluator)"
       base_url=""
       auth_token=""
       tool_flag="--allowedTools Read Bash Grep Glob Write"
@@ -199,7 +189,7 @@ get_persona_config() {
       ;;
     pm)
       cn="产品经理"
-      _configure_anthropic_persona_model "$(_persona_model_alias pm sonnet)"
+      _configure_anthropic_persona_model "$(_persona_model_alias pm)"
       base_url=""
       auth_token=""
       tool_flag="--allowedTools Read Bash Grep Glob Write"
@@ -208,7 +198,7 @@ get_persona_config() {
       ;;
     architect)
       cn="架构师"
-      _configure_anthropic_persona_model "$(_persona_model_alias architect sonnet)"
+      _configure_anthropic_persona_model "$(_persona_model_alias architect)"
       base_url=""
       auth_token=""
       tool_flag="--allowedTools Read Bash Grep Glob Write Edit"
@@ -217,7 +207,7 @@ get_persona_config() {
       ;;
     second-builder)
       cn="架构师(sonnet)"
-      _configure_anthropic_persona_model "$(_persona_model_alias second-builder sonnet)"
+      _configure_anthropic_persona_model "$(_persona_model_alias second-builder)"
       base_url=""
       auth_token=""
       tool_flag="--allowedTools Read Bash Grep Glob Write Edit"
@@ -228,50 +218,58 @@ get_persona_config() {
       cn="实验建设者"
       local lab_model
       lab_model="$(_lab_builder_model_for_slot)"
-      if [[ "$lab_model" == "glm" ]] && _zhipu_credentials_available; then
-        model_flag="--model opus"
+      if [[ "$lab_model" == "zhipu-glm-5.1" ]] && _zhipu_credentials_available; then
+        model_id="$lab_model"
+        model_flag="$(solar_model_flag "$lab_model")"
         base_url="${ZHIPU_BASE_URL:-}"
         auth_token="${ZHIPU_AUTH_TOKEN:-}"
         auth_source="zhipu"
         extra_flags="$(_zhipu_coding_plan_flags)"
         display_model="GLM-5.1 (智谱, ${SOLAR_BUILDER_SLOT:-lab-builder})"
-      elif [[ "$lab_model" == "glm" ]]; then
+      elif [[ "$lab_model" == "zhipu-glm-5.1" ]]; then
+        model_id="$lab_model"
         model_flag=""
         base_url=""
         auth_token=""
         display_model="UNAVAILABLE: GLM credentials missing (${SOLAR_BUILDER_SLOT:-lab-builder})"
         launch_error="GLM requested for ${SOLAR_BUILDER_SLOT:-lab-builder}, but ZHIPU credentials are unavailable; refusing Claude fallback"
-      elif [[ "$lab_model" == "sonnet" ]] && _zhipu_credentials_available; then
-        model_flag="--model sonnet"
+      elif [[ "$lab_model" == "zhipu-glm-4.7" ]] && _zhipu_credentials_available; then
+        model_id="$lab_model"
+        model_flag="$(solar_model_flag "$lab_model")"
         base_url="${ZHIPU_BASE_URL:-}"
         auth_token="${ZHIPU_AUTH_TOKEN:-}"
         auth_source="zhipu"
         extra_flags="$(_zhipu_coding_plan_flags)"
         display_model="GLM-4.7 (智谱, ${SOLAR_BUILDER_SLOT:-lab-builder})"
-      elif [[ "$lab_model" == "deepseek" ]] && _deepseek_available; then
-        model_flag="--model sonnet"
+      elif [[ "$lab_model" == "deepseek-v4-pro" ]] && _deepseek_available; then
+        model_id="$lab_model"
+        model_flag="$(solar_model_flag "$lab_model")"
         base_url="https://api.deepseek.com/anthropic"
         auth_source="deepseek"
         extra_flags="$(_gateway_compat_flags)"
         display_model="DeepSeek V4 Pro (${SOLAR_BUILDER_SLOT:-lab-builder})"
         auth_token="$(_deepseek_auth_token 2>/dev/null || true)"
-      elif [[ "$lab_model" == "deepseek" ]]; then
+      elif [[ "$lab_model" == "deepseek-v4-pro" ]]; then
+        model_id="$lab_model"
         model_flag=""
         base_url=""
         auth_token=""
         display_model="UNAVAILABLE: DeepSeek credentials missing (${SOLAR_BUILDER_SLOT:-lab-builder})"
         launch_error="DeepSeek requested for ${SOLAR_BUILDER_SLOT:-lab-builder}, but DEEPSEEK_API_KEY is unavailable; refusing Claude fallback"
-      elif [[ "$lab_model" == "opus" ]]; then
-        model_flag="--model opus"
+      elif [[ "$lab_model" == "claude-opus" ]]; then
+        model_id="$lab_model"
+        model_flag="$(solar_model_flag "$lab_model")"
         base_url=""
         auth_token=""
         display_model="Claude Opus (Anthropic, ${SOLAR_BUILDER_SLOT:-lab-builder})"
-      elif [[ "$lab_model" == "anthropic-sonnet" ]]; then
-        model_flag="--model sonnet"
+      elif [[ "$lab_model" == "claude-sonnet" ]]; then
+        model_id="$lab_model"
+        model_flag="$(solar_model_flag "$lab_model")"
         base_url=""
         auth_token=""
         display_model="Claude Sonnet (Anthropic, ${SOLAR_BUILDER_SLOT:-lab-builder})"
       else
+        model_id="$lab_model"
         model_flag=""
         base_url=""
         auth_token=""
@@ -292,7 +290,7 @@ get_persona_config() {
         extra_flags="$(_zhipu_coding_plan_flags)"
         display_model="GLM-5.1 (智谱)"
       else
-        _configure_anthropic_persona_model "$(_persona_model_alias lab-evaluator sonnet)"
+        _configure_anthropic_persona_model "$(_persona_model_alias lab-evaluator)"
         base_url=""
         auth_token=""
       fi
@@ -310,7 +308,7 @@ get_persona_config() {
         extra_flags="$(_zhipu_coding_plan_flags)"
         display_model="GLM-5.1 (智谱)"
       else
-        _configure_anthropic_persona_model "$(_persona_model_alias observer sonnet)"
+        _configure_anthropic_persona_model "$(_persona_model_alias observer)"
         base_url=""
         auth_token=""
       fi
@@ -328,7 +326,7 @@ get_persona_config() {
         extra_flags="$(_zhipu_coding_plan_flags)"
         display_model="GLM-5.1 (智谱)"
       else
-        _configure_anthropic_persona_model "$(_persona_model_alias "$persona" sonnet)"
+        _configure_anthropic_persona_model "$(_persona_model_alias "$persona")"
         base_url=""
         auth_token=""
       fi
@@ -354,6 +352,7 @@ get_persona_config() {
   local masked_token=""
   [[ -n "$auth_token" ]] && masked_token="<from-env:ZHIPU_AUTH_TOKEN>"
   echo "CN='$cn'"
+  echo "MODEL_ID='$model_id'"
   echo "MODEL_FLAG='$model_flag'"
   echo "BASE_URL='$base_url'"
   echo "AUTH_TOKEN='$masked_token'"
