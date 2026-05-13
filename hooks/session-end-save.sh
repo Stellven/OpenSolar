@@ -17,29 +17,37 @@ fi
 # 2. 检查是否有未文档化的重要讨论
 # 通过检测关键词来判断
 if [ -f "$HOME/.solar/solar.db" ]; then
-  sqlite3 "$HOME/.solar/solar.db" <<EOF
--- 记录会话结束事件
-INSERT INTO evo_memory_semantic (
-  memory_id,
-  namespace,
-  key,
-  value,
-  source_type,
-  confidence
-) VALUES (
-  'session_end_${SESSION_ID}',
-  'system/sessions',
-  'session_end_${SESSION_ID}',
-  json_object(
-    'session_id', '${SESSION_ID}',
-    'project_dir', '${PROJECT_DIR}',
-    'timestamp', datetime('now'),
-    'saved', 1
-  ),
-  'system',
-  1.0
-);
-EOF
+  SESSION_ID="$SESSION_ID" PROJECT_DIR="$PROJECT_DIR" python3 - <<'PY' || true
+import json
+import os
+import sqlite3
+from pathlib import Path
+
+db = Path.home() / ".solar" / "solar.db"
+session_id = os.environ.get("SESSION_ID") or "unknown"
+project_dir = os.environ.get("PROJECT_DIR") or ""
+memory_id = f"session_end_{session_id}"
+payload = {
+    "session_id": session_id,
+    "project_dir": project_dir,
+    "timestamp": None,
+    "saved": 1,
+}
+
+conn = sqlite3.connect(str(db), timeout=5)
+conn.execute(
+    """
+    INSERT OR REPLACE INTO evo_memory_semantic (
+      memory_id, namespace, key, value, source_type, confidence
+    ) VALUES (
+      ?, 'system/sessions', ?, json_set(?, '$.timestamp', datetime('now')), 'system', 1.0
+    )
+    """,
+    (memory_id, memory_id, json.dumps(payload, ensure_ascii=False)),
+)
+conn.commit()
+conn.close()
+PY
 fi
 
 # 3. 自动 git checkpoint (WIP commit)
