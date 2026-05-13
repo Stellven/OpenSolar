@@ -69,6 +69,39 @@ check "dispatch_to_role returns success after fallback candidate" "$rc" "0"
 check "first failed candidate and second fallback were both tried" "$tried" "solar-harness:0.0,solar-harness-lab:0.3"
 check "queue not used when fallback succeeds" "$queue_seen" "no"
 
+>"$ROLE_TRIED"
+rm -f "$QUEUE_CALLED"
+>"$EVENTS"
+
+role_candidate_panes() {
+  local role="$1"
+  [[ "$role" == "planner" ]] || return 1
+  printf '%s\n' 'solar-harness:0.1' 'solar-harness-lab:0.0'
+}
+
+dispatch_to_pane() {
+  local pane="$1"
+  echo "$pane" >> "$ROLE_TRIED"
+  return 3
+}
+
+dispatch_to_role "planner" "sprint-test-terminal-notify" "passed_notify" "/tmp/dispatch.md" "msg"
+rc=$?
+
+tried="$(paste -sd, "$ROLE_TRIED")"
+queue_seen="no"
+[[ -f "$QUEUE_CALLED" ]] && queue_seen="yes"
+event_seen="$(cat "$EVENTS")"
+
+check "terminal passed_notify hook abort is treated as non-blocking" "$rc" "0"
+check "terminal notify tries planner candidates before suppressing" "$tried" "solar-harness:0.1,solar-harness-lab:0.0"
+check "terminal passed_notify is not queued after hook abort" "$queue_seen" "no"
+case "$event_seen" in
+  *dispatch_suppressed*terminal_phase_wake_detected*) got="yes" ;;
+  *) got="no" ;;
+esac
+check "terminal notify suppression emits event" "$got" "yes"
+
 echo ""
 echo "=== RESULT: PASS=$PASS FAIL=$FAIL ==="
 [[ $FAIL -eq 0 ]]

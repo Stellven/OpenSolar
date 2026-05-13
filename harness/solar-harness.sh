@@ -21,6 +21,7 @@ SPRINTS_DIR="$HARNESS_DIR/sprints"
 
 # sprint-20260503-094659 D2: 统一 state helper
 . "$HARNESS_DIR/lib/run-state.sh"
+[[ -f "$HARNESS_DIR/lib/events.sh" ]] && . "$HARNESS_DIR/lib/events.sh"
 
 # Shared qmd resolver. Optional source keeps older installs doctor-capable.
 [[ -f "$HARNESS_DIR/lib/qmd-resolver.sh" ]] && . "$HARNESS_DIR/lib/qmd-resolver.sh"
@@ -868,9 +869,12 @@ EOF
 }
 EOF2
 
-  # Log phase_init event
-  printf '{"ts":"%s","event":"phase_transition","by":"solar-harness","sid":"%s","data":{"from":"none","to":"spec"}}\n' \
-    "$created_at" "$sid" >> "${SPRINTS_DIR}/${sid}.events.jsonl" 2>/dev/null || true
+  # Log phase_init event through unified events + adopt the initial status into
+  # session-log v2, so newly created sprints do not start as legacy-only state.
+  events_emit "solar-harness" "phase_transition" "info" "$sid" '{"from":"none","to":"spec"}' 2>/dev/null || true
+  if [[ -f "$HARNESS_DIR/lib/runtime_bridge.py" ]]; then
+    python3 "$HARNESS_DIR/lib/runtime_bridge.py" adopt "$sid" --quiet 2>/dev/null || true
+  fi
 
   ok "Sprint created: ${sid}"
   log "Contract: ${SPRINTS_DIR}/${sid}.contract.md"
@@ -3606,6 +3610,9 @@ EOF
       adopt|bridge)
         python3 "$_runtime_py_dir/runtime_bridge.py" adopt "$@"
         ;;
+      audit-writes)
+        python3 "$_runtime_py_dir/runtime_write_path_audit.py" "$@"
+        ;;
       status)
         _runtime_sid="${1:-}"; shift || true
         _runtime_status="${1:-}"; shift || true
@@ -3625,6 +3632,7 @@ EOF
         echo "  $0 runtime doctor [sprint_id] [--json] [--all]"
         echo "  $0 runtime project <sprint_id> [--write-cache] [--json]"
         echo "  $0 runtime adopt  <sprint_id>|--all [--write-cache] [--json]"
+        echo "  $0 runtime audit-writes [--json] [--strict]"
         echo "  $0 runtime status <sid> <new_status> [event] [actor] [extra_json] [--bump-round]"
         ;;
       *)

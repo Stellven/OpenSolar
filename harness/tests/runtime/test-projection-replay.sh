@@ -181,6 +181,28 @@ PY
 [[ "$OUT" == "ok" ]] && ok "duplicate command events flagged in projection" \
                       || fail "duplicate command detection: $OUT"
 
+# ---- composite legacy state identity normalizes to embedded status ----
+OUT=$(python3 - "$TMP_DIR" <<'PY'
+import sys
+sys.path.insert(0, 'lib')
+from session_log import SessionLog
+from projection_engine import ProjectionEngine
+
+sid = "sprint-composite-state"
+log = SessionLog(sid, harness_dir=sys.argv[1])
+log.append("activity_failed", actor="coordinator", sprint_id=sid,
+           activity_id="old-dispatch", payload={"error": "old failure"})
+log.append("state_transition", actor="coordinator", sprint_id=sid,
+           payload={"from": "", "to": f"{sid}:passed:eval_passed:_:abc123", "round": 3})
+state = ProjectionEngine(sid, harness_dir=sys.argv[1]).project()
+assert state.status == "passed", state.status
+assert state.stale_activities == [], state.stale_activities
+print("ok")
+PY
+)
+[[ "$OUT" == "ok" ]] && ok "composite legacy state identity normalizes to embedded status" \
+                      || fail "composite legacy state: $OUT"
+
 echo ""
 echo "========================"
 echo "PASS=$PASS FAIL=$FAIL"

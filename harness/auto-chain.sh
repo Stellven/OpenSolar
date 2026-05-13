@@ -4,6 +4,8 @@
 QUEUE=~/.solar/harness/queue/sprint-queue.txt
 LOG=~/.solar/harness/.auto-chain.log
 PIDFILE=~/.solar/harness/.auto-chain.pid
+HARNESS_DIR="${HARNESS_DIR:-$HOME/.solar/harness}"
+SPRINTS_DIR="$HARNESS_DIR/sprints"
 
 # 单实例锁
 if [[ -f "$PIDFILE" ]] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
@@ -54,15 +56,7 @@ while true; do
   <!-- verify: cmd=\"test -f ~/.solar/harness/sprints/$SID.handoff.md\" expected_exit=0 output_pattern=\".*\" -->" >> "$LOG" 2>&1
   
   # active
-  python3 -c "
-import json, datetime
-sf='$HOME/.solar/harness/sprints/$SID.status.json'
-d=json.load(open(sf))
-d['status']='active'
-d['updated_at']=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-d.setdefault('history',[]).append({'ts':d['updated_at'],'event':'auto_chain_started','by':'auto-chain'})
-json.dump(d,open(sf,'w'),indent=2)
-"
+  python3 "$HARNESS_DIR/lib/runtime_status.py" "$SPRINTS_DIR/$SID.status.json" "active" "auto_chain_started" "auto-chain" '{}' >/dev/null 2>&1 || true
   
   # 消费队列
   consume_line "$LINE"

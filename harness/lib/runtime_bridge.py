@@ -24,7 +24,7 @@ from activity_runtime import ActivityRuntime
 from projection_engine import ProjectionEngine
 from session_log import DuplicateEventError, SessionLog
 
-HARNESS_DIR = Path(os.path.expanduser("~/.solar/harness"))
+HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", os.path.expanduser("~/.solar/harness"))).expanduser()
 SPRINTS_DIR = HARNESS_DIR / "sprints"
 
 
@@ -168,7 +168,7 @@ def record_legacy_event(
                 to_status=to_status,
                 round_num=round_num,
             )
-    elif event in {"handle_passed_completed", "parallel_integrated", "mixture_merged"}:
+    elif event in {"handle_passed_completed", "parallel_integrated", "mixture_merged", "graph_parent_ready_passed"}:
         add(
             "activity_succeeded",
             rt.activity_succeeded,

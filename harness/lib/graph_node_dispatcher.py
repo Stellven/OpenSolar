@@ -52,6 +52,12 @@ from graph_scheduler import (  # noqa: E402
 from pane_lease import acquire as acquire_lease, release as release_lease, read_lease  # noqa: E402
 from task_queue import enqueue  # noqa: E402
 try:
+    from runtime_bridge import record_legacy_event  # noqa: E402
+    from runtime_status import transition_status  # noqa: E402
+except Exception:  # pragma: no cover - fail-open in partial test fixtures
+    record_legacy_event = None  # type: ignore
+    transition_status = None  # type: ignore
+try:
     from capability_effects import scan_effect  # noqa: E402
 except Exception:  # pragma: no cover - fail-open in partial test fixtures
     scan_effect = None  # type: ignore
@@ -622,6 +628,18 @@ def _append_event(sid: str, event: dict[str, Any]) -> None:
             f.write(json.dumps(event, ensure_ascii=False) + "\n")
     except Exception:
         pass
+    if record_legacy_event is not None:
+        try:
+            payload = event.get("data") if isinstance(event.get("data"), dict) else dict(event)
+            record_legacy_event(
+                sid,
+                str(event.get("event") or "graph_event"),
+                str(event.get("by") or event.get("actor") or "graph-dispatch"),
+                payload,
+                harness_dir=HARNESS_DIR,
+            )
+        except Exception:
+            pass
 
 
 def _mark_parent_sprint_passed_if_ready(sid: str, parent: dict[str, Any], dry_run: bool) -> bool:
@@ -636,26 +654,44 @@ def _mark_parent_sprint_passed_if_ready(sid: str, parent: dict[str, Any], dry_ru
         return False
 
     now = _utc_now()
-    history = data.get("history")
-    if not isinstance(history, list):
-        history = []
-    history.append({
-        "ts": now,
-        "event": "graph_parent_ready_passed",
-        "by": "graph-dispatch",
-        "note": "All DAG nodes and required gates passed via parent_ready_check.",
-    })
-    data.update({
-        "status": "passed",
-        "phase": "completed",
-        "handoff_to": "done",
-        "target_role": "done",
-        "updated_at": now,
-        "completed_at": now,
-        "graph_parent_ready": parent,
-        "history": history,
-    })
-    status_file.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if transition_status is not None:
+        transition_status(
+            status_file,
+            "passed",
+            "graph_parent_ready_passed",
+            "graph-dispatch",
+            extra={
+                "status_fields": {
+                    "phase": "completed",
+                    "handoff_to": "done",
+                    "target_role": "done",
+                    "completed_at": now,
+                    "graph_parent_ready": parent,
+                },
+                "note": "All DAG nodes and required gates passed via parent_ready_check.",
+            },
+        )
+    else:
+        history = data.get("history")
+        if not isinstance(history, list):
+            history = []
+        history.append({
+            "ts": now,
+            "event": "graph_parent_ready_passed",
+            "by": "graph-dispatch",
+            "note": "All DAG nodes and required gates passed via parent_ready_check.",
+        })
+        data.update({
+            "status": "passed",
+            "phase": "completed",
+            "handoff_to": "done",
+            "target_role": "done",
+            "updated_at": now,
+            "completed_at": now,
+            "graph_parent_ready": parent,
+            "history": history,
+        })
+        status_file.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     _append_event(sid, {
         "event": "graph_parent_ready_passed",
         "by": "graph-dispatch",
