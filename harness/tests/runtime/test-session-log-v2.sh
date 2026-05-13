@@ -93,6 +93,30 @@ PY
 [[ "$OUT" == "ok" ]] && ok "cross-process at-least-once: second instance rejects duplicate" \
                       || fail "cross-process idempotency: $OUT"
 
+# ---- stale first instance: lock-time dedupe rejects keys written by sibling instance ----
+OUT=$(python3 - "$TMP_DIR" <<'PY'
+import sys
+sys.path.insert(0, 'lib')
+from session_log import SessionLog, DuplicateEventError
+
+log1 = SessionLog("test-session-stale-instance", harness_dir=sys.argv[1])
+log2 = SessionLog("test-session-stale-instance", harness_dir=sys.argv[1])
+log2.append("command_issued", actor="coordinator",
+            sprint_id="s", activity_id="a1",
+            idempotency_key="same-key", payload={})
+try:
+    log1.append("command_issued", actor="coordinator",
+               sprint_id="s", activity_id="a1",
+               idempotency_key="same-key", payload={})
+    print("MISSING_ERROR")
+except DuplicateEventError:
+    events = log1.all_events()
+    print("ok" if len(events) == 1 and [e["seq"] for e in events] == [1] else events)
+PY
+)
+[[ "$OUT" == "ok" ]] && ok "lock-time idempotency rejects stale sibling duplicate" \
+                      || fail "lock-time idempotency: $OUT"
+
 # ---- replay filters ----
 OUT=$(python3 - "$TMP_DIR" <<'PY'
 import sys
