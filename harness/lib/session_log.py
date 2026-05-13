@@ -19,6 +19,7 @@ Usage::
 from __future__ import annotations
 
 import fcntl
+import base64
 import json
 import os
 import uuid
@@ -173,6 +174,90 @@ class SessionLog:
 
     def seen_idempotency_keys(self) -> set[str]:
         return set(self._seen_idem)
+
+    def get_events(
+        self,
+        *,
+        cursor: Optional[str] = None,
+        start_seq: Optional[int] = None,
+        end_seq: Optional[int] = None,
+        event_type: Optional[str] = None,
+        activity_id: Optional[str] = None,
+        sprint_id: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Paginated event query with cursor support.
+
+        Returns a dict with keys:
+          events: list of event dicts
+          next_cursor: base64-encoded cursor for next page, or None
+          has_more: bool
+          total_matching: int
+          returned_count: int
+        """
+        effective_start = start_seq
+        if cursor is not None:
+            try:
+                decoded = base64.urlsafe_b64decode(cursor).decode("utf-8")
+                effective_start = int(decoded)
+            except Exception:
+                effective_start = start_seq
+
+        effective_limit = min(limit, 1000) if limit else 1000
+        if effective_limit < 1:
+            effective_limit = 1000
+
+        all_matching: List[Dict[str, Any]] = []
+        if not os.path.exists(self._path):
+            return self._make_page(all_matching, None, effective_limit)
+
+        with open(self._path, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    ev = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                seq = ev.get("seq", 0)
+                if effective_start is not None and seq < effective_start:
+                    continue
+                if end_seq is not None and seq > end_seq:
+                    continue
+                if sprint_id is not None and ev.get("sprint_id") != sprint_id:
+                    continue
+                if event_type is not None and ev.get("type") != event_type:
+                    continue
+                if activity_id is not None and ev.get("activity_id") != activity_id:
+                    continue
+                all_matching.append(ev)
+
+        page_events = all_matching[:effective_limit]
+        has_more = len(all_matching) > effective_limit
+        next_cursor = None
+        if has_more and page_events:
+            last_seq = page_events[-1].get("seq", 0)
+            next_cursor = base64.urlsafe_b64encode(
+                str(last_seq + 1).encode("utf-8")
+            ).decode("utf-8")
+
+        return self._make_page(page_events, next_cursor, effective_limit, len(all_matching))
+
+    @staticmethod
+    def _make_page(
+        events: List[Dict[str, Any]],
+        next_cursor: Optional[str],
+        limit: int,
+        total: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        return {
+            "events": events,
+            "next_cursor": next_cursor,
+            "has_more": next_cursor is not None,
+            "total_matching": total if total is not None else len(events),
+            "returned_count": len(events),
+        }
 
     @classmethod
     def for_sprint(cls, sprint_id: str, *, harness_dir: Optional[str] = None) -> "SessionLog":

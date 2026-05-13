@@ -1687,7 +1687,7 @@ do_main_status() {
          printf '%s\n' "$recent_tail" | grep -qE '\? for shortcuts|new task\? /clear|bypass permissions|shift\+tab to cycle' && \
          ! printf '%s\n' "$recent_tail" | grep -qE 'esc to interrupt|Press up to edit queued messages'; then
         runtime="idle"
-      elif printf '%s\n' "$recent_tail" | grep -qiE 'Generating|thinking|Thinking|Hmm|Reading|Bash|Write|Edit|Update|Inferring|Hatching|Whirlpooling|Enchanting|Meandering|Philosophising|Brewing|Baking|Calculating|Percolating|Marinating|Befuddling|Clauding|Computing|Cooking|Billowing|Frosting|Discombobulating|Levitating|Cultivating|Compacting conversation|Press up to edit queued messages'; then
+      elif printf '%s\n' "$recent_tail" | grep -qiE 'Generating|thinking|Thinking|Hmm|Reading|Bash|Write|Edit|Update|Inferring|Hatching|Whirlpooling|Enchanting|Meandering|Philosophising|Brewing|Baking|Calculating|Percolating|Marinating|Befuddling|Clauding|Computing|Cooking|Billowing|Frosting|Discombobulating|Levitating|Cultivating|Twisting|Perambulating|Jitterbugging|Transfiguring|Cogitating|Channeling|Fluttering|Fiddle-faddling|Warping|Vibing|Whirring|Cascading|Razzmatazzing|Transmuting|Bootstrapping|Churned|Compacting conversation|Press up to edit queued messages'; then
         runtime="active"
       else
         runtime="idle"
