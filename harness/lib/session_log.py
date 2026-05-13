@@ -110,14 +110,39 @@ class SessionLog:
         if event_type not in VALID_TYPES:
             raise ValueError(f"Unknown event type: {event_type!r}")
 
-        if idempotency_key and idempotency_key in self._seen_idem:
-            raise DuplicateEventError(
-                f"Duplicate idempotency_key={idempotency_key!r} — event suppressed"
-            )
-
         event_id = str(uuid.uuid4())
-        with open(self._path, "a", encoding="utf-8") as fh:
+        with open(self._path, "a+", encoding="utf-8") as fh:
             fcntl.flock(fh, fcntl.LOCK_EX)
+            # Re-scan under the file lock. Multiple SessionLog instances can be
+            # alive in the same process or in sibling processes; relying only on
+            # this instance's _seen_idem/_seq lets at-least-once adoption write
+            # duplicate idempotency keys and duplicate seq values.
+            fh.seek(0)
+            locked_seq = 0
+            locked_seen: set[str] = set()
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    ev = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                seq = ev.get("seq", 0)
+                if seq > locked_seq:
+                    locked_seq = seq
+                ik = ev.get("idempotency_key")
+                if ik:
+                    locked_seen.add(ik)
+            if idempotency_key and idempotency_key in locked_seen:
+                self._seq = max(self._seq, locked_seq)
+                self._seen_idem.update(locked_seen)
+                fcntl.flock(fh, fcntl.LOCK_UN)
+                raise DuplicateEventError(
+                    f"Duplicate idempotency_key={idempotency_key!r} — event suppressed"
+                )
+            self._seq = max(self._seq, locked_seq)
+            fh.seek(0, os.SEEK_END)
             self._seq += 1
             event: Dict[str, Any] = {
                 "event_id": event_id,
