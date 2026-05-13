@@ -145,14 +145,25 @@
       "event": "eval_reviewed",
       "by": "evaluator",
       "verdict": "PASS"
+    },
+    {
+      "ts": "2026-05-13T11:19:18Z",
+      "event": "finalized",
+      "by": "coordinator"
     }
   ],
-  "updated_at": "2026-05-13T11:16:28Z",
+  "updated_at": "2026-05-13T11:19:18Z",
   "event_count": 46,
   "last_event_ts": "2026-05-13T01:43:54Z",
   "projected_at": "2026-05-13T01:43:54Z",
   "sid": "sprint-20260512-managed-agent-runtime-interfaces",
   "sprint_id": "sprint-20260512-managed-agent-runtime-interfaces",
   "runtime_state_source": "activity_runtime",
-  "last_handoff_mtime": 1778636727.0
+  "last_handoff_mtime": 1778636727.0,
+  "knowledge_export_status": "exported",
+  "knowledge_export_path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260512-managed-agent-runtime-interfaces.accepted.md",
+  "knowledge_ingest_dispatch": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260512-managed-agent-runtime-interfaces.dispatch.md",
+  "knowledge_exported_at": "2026-05-13T11:19:18Z",
+  "knowledge_ingested_at": null,
+  "knowledge_export_error": null
 }
