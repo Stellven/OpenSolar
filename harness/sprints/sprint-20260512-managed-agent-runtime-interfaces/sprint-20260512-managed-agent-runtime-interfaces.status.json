@@ -1,0 +1,152 @@
+{
+  "id": "sprint-20260512-managed-agent-runtime-interfaces",
+  "title": "Managed Agent Runtime Interfaces",
+  "summary": "把已完成的 session-log/projection/activity foundation 升级为稳定运行时接口层：Session API、Hand API、Worker API、Context Projection API、chaos/effect tests 和 status 可观测性。",
+  "status": "passed",
+  "phase": "eval_passed",
+  "round": 4,
+  "priority": "P0",
+  "lane": "reliability/control-plane",
+  "handoff_to": "",
+  "target_role": "",
+  "bypass_pm": true,
+  "auto_held": false,
+  "created_at": "2026-05-12T21:04:27-04:00",
+  "source": "codex",
+  "parent": "sprint-20260511-managed-agent-runtime-foundation",
+  "contract": "/Users/sihaoli/.solar/harness/sprints/sprint-20260512-managed-agent-runtime-interfaces.contract.md",
+  "design": "/Users/sihaoli/.solar/harness/sprints/sprint-20260512-managed-agent-runtime-interfaces.design.md",
+  "task_graph": "/Users/sihaoli/.solar/harness/sprints/sprint-20260512-managed-agent-runtime-interfaces.task_graph.json",
+  "knowledge_raw": "/Users/sihaoli/Knowledge/_raw/solar-harness/managed-agent-runtime-interfaces-20260512.md",
+  "acceptance_summary": [
+    "定义 Session/Harness/Hand/Worker/ContextProjection 稳定接口",
+    "统一 pane/shell/mock/remote hand adapters",
+    "context projection 从 session events + KB hits 生成带 provenance 的模型视图",
+    "chaos suite 覆盖 crash/duplicate/late/cancel/lease/compaction/secret negative",
+    "runtime doctor/status UI 展示 interface health"
+  ],
+  "history": [
+    {
+      "ts": "2026-05-13T01:08:15Z",
+      "event": "autopilot_active_without_handoff",
+      "by": "solar-autopilot",
+      "note": ""
+    },
+    {
+      "ts": "2026-05-13T01:13:19Z",
+      "event": "autopilot_active_without_handoff",
+      "by": "solar-autopilot",
+      "note": ""
+    },
+    {
+      "ts": "2026-05-13T01:18:24Z",
+      "event": "autopilot_active_without_handoff",
+      "by": "solar-autopilot",
+      "note": ""
+    },
+    {
+      "ts": "2026-05-13T01:23:38Z",
+      "event": "autopilot_active_without_handoff",
+      "by": "solar-autopilot",
+      "note": ""
+    },
+    {
+      "ts": "2026-05-13T01:25:50Z",
+      "event": "autopilot_active_without_handoff",
+      "by": "solar-autopilot",
+      "note": ""
+    },
+    {
+      "ts": "2026-05-13T01:28:42Z",
+      "event": "autopilot_active_without_handoff",
+      "by": "solar-autopilot",
+      "note": ""
+    },
+    {
+      "ts": "2026-05-13T01:32:56Z",
+      "event": "autopilot_active_without_handoff",
+      "by": "solar-autopilot",
+      "note": ""
+    },
+    {
+      "ts": "2026-05-13T01:33:46Z",
+      "event": "autopilot_active_without_handoff",
+      "by": "solar-autopilot",
+      "note": ""
+    },
+    {
+      "ts": "2026-05-13T01:38:49Z",
+      "event": "autopilot_active_without_handoff",
+      "by": "solar-autopilot",
+      "note": ""
+    },
+    {
+      "ts": "2026-05-13T01:43:49Z",
+      "event": "reviewing_blocked_missing_handoff",
+      "by": "coordinator",
+      "raw_extra": "{}}"
+    },
+    {
+      "ts": "2026-05-13T01:43:53Z",
+      "event": "autopilot_active_without_handoff",
+      "by": "solar-autopilot",
+      "note": ""
+    },
+    {
+      "ts": "2026-05-13T01:45:56Z",
+      "event": "handoff_submitted",
+      "by": "builder",
+      "note": "R0-R7 complete, 95 new + 31 regression assertions PASS"
+    },
+    {
+      "ts": "2026-05-13T01:46:10Z",
+      "event": "implementation_completed",
+      "by": "builder",
+      "round": 4
+    },
+    {
+      "ts": "2026-05-13T01:46:16Z",
+      "event": "eval_passed",
+      "by": "codex",
+      "verdict": "PASS_WITH_WARN",
+      "eval": "/Users/sihaoli/.solar/harness/sprints/sprint-20260512-managed-agent-runtime-interfaces.eval.md",
+      "residual_warn": "event log seq gap at 34"
+    },
+    {
+      "ts": "2026-05-13T01:47:08Z",
+      "event": "passed_blocked_invalid_eval",
+      "by": "coordinator",
+      "raw_extra": "{}}"
+    },
+    {
+      "ts": "2026-05-13T01:48:56Z",
+      "event": "eval_passed",
+      "by": "codex",
+      "verdict": "PASS_WITH_WARN",
+      "eval_json": "/Users/sihaoli/.solar/harness/sprints/sprint-20260512-managed-agent-runtime-interfaces.eval.json",
+      "eval_md": "/Users/sihaoli/.solar/harness/sprints/sprint-20260512-managed-agent-runtime-interfaces.eval.md",
+      "residual_warn": "event log seq gap at 34"
+    },
+    {
+      "ts": "2026-05-13T02:10:43Z",
+      "event": "passed_blocked_invalid_eval",
+      "by": "coordinator",
+      "raw_extra": "{}}"
+    },
+    {
+      "ts": "2026-05-13T11:16:28Z",
+      "event": "eval_completed",
+      "by": "evaluator",
+      "verdict": "PASS",
+      "reason": "PASS_WITH_WARN: runtime interfaces accepted; residual event seq gap non-blocking"
+    }
+  ],
+  "updated_at": "2026-05-13T11:16:28Z",
+  "event_count": 46,
+  "last_event_ts": "2026-05-13T01:43:54Z",
+  "projected_at": "2026-05-13T01:43:54Z",
+  "sid": "sprint-20260512-managed-agent-runtime-interfaces",
+  "sprint_id": "sprint-20260512-managed-agent-runtime-interfaces",
+  "runtime_state_source": "activity_runtime",
+  "last_handoff_mtime": 1778636727.0
+}
