@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import hashlib
 import json
 import os
 import subprocess
@@ -31,6 +32,94 @@ LAST_BUILD_FILE = QMD_STATE_DIR / "last-build.json"
 QMD_EMBED_RUNNER = HARNESS_DIR / "lib" / "qmd-embed-runner.sh"
 KNOWLEDGE_DIR = HOME / "Knowledge"
 SOURCES_INGESTED = HARNESS_DIR / "_sources" / "ingested"
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    from hands_runtime import SandboxHand  # noqa: E402
+    from runtime_interfaces import ResultStatus  # noqa: E402
+    _SANDBOX_IMPORT_ERROR = ""
+except Exception as exc:  # pragma: no cover - import safety
+    SandboxHand = None  # type: ignore[assignment]
+    ResultStatus = None  # type: ignore[assignment]
+    _SANDBOX_IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+
+
+def _resolve_qmd_bin() -> str:
+    """Locate the qmd CLI binary without sourcing the harness shell."""
+    candidate = os.environ.get("QMD_BIN", "").strip()
+    if candidate and Path(candidate).exists():
+        return candidate
+    import shutil as _sh
+    found = _sh.which("qmd")
+    if found:
+        return found
+    legacy = HOME / ".npm-global" / "bin" / "qmd"
+    return str(legacy) if legacy.exists() else "qmd"
+
+
+def _qmd_status_sandboxed(timeout: int = 10) -> dict[str, Any]:
+    """Run `qmd status` through SandboxHand (argv mode, evidence file).
+
+    Returns a dict with sandbox routing evidence so callers can prove that
+    the tool-plane probe used the disposable sandbox instead of touching the
+    host shell directly. We invoke the qmd CLI directly rather than the
+    harness wrapper because the wrapper sources files relative to $HOME,
+    which the sandbox intentionally rewrites.
+
+    When SandboxHand is unavailable we fall back to a direct subprocess
+    call and flag the route as `executor=host_fallback` so the activation
+    proof can downgrade the verdict instead of silently passing.
+    """
+    qmd_bin = _resolve_qmd_bin()
+    if SandboxHand is None or ResultStatus is None:
+        reason = _SANDBOX_IMPORT_ERROR or "SandboxHand not importable"
+        return {
+            "ok": False,
+            "exit_code": 99,
+            "stdout": "",
+            "stderr": reason,
+            "executor": "host_fallback",
+            "execution_mode": "argv",
+            "evidence_file": "",
+            "write_guard": {"enabled": False, "violations": []},
+            "fallback_reason": reason,
+            "qmd_bin": qmd_bin,
+        }
+    hand = SandboxHand()
+    ref = hand.provision(capabilities=["qmd-status"])
+    try:
+        idem = hashlib.sha1(f"qmd-status:{os.getpid()}:{datetime.datetime.utcnow().isoformat()}".encode()).hexdigest()[:24]
+        result = hand.execute(
+            ref,
+            "qmd-status",
+            {
+                "argv": [qmd_bin, "status"],
+                "session_id": f"qmd-status-{os.getpid()}",
+                "sprint_id": f"qmd-status-{os.getpid()}",
+                "activity_id": f"qmd-status-{idem}",
+            },
+            idempotency_key=f"qmd-status:{idem}",
+            timeout_seconds=timeout,
+        )
+        stdout = str(result.output or "")
+        stderr = str((result.metadata or {}).get("stderr", "") or result.error or "")
+        ok = result.status == ResultStatus.OK
+        exit_code = 0 if ok else (124 if result.status == ResultStatus.TIMEOUT else 1)
+        return {
+            "ok": ok,
+            "exit_code": exit_code,
+            "stdout": stdout,
+            "stderr": stderr,
+            "executor": "sandbox",
+            "execution_mode": (result.metadata or {}).get("execution_mode", "argv"),
+            "evidence_file": (result.metadata or {}).get("evidence_file", ""),
+            "write_guard": (result.metadata or {}).get("write_guard", {"enabled": False, "violations": []}),
+            "sandbox_status": result.status.value if hasattr(result.status, "value") else str(result.status),
+            "hand_id": ref.hand_id,
+            "qmd_bin": qmd_bin,
+        }
+    finally:
+        hand.dispose(ref)
 
 
 def _now() -> str:
@@ -52,14 +141,8 @@ def _write_last_build(data: dict) -> None:
 
 
 def _qmd_available() -> bool:
-    try:
-        result = subprocess.run(
-            ["bash", str(HARNESS_DIR / "solar-harness.sh"), "wiki", "qmd-status"],
-            capture_output=True, text=True, timeout=10
-        )
-        return result.returncode == 0
-    except Exception:
-        return False
+    """Probe `qmd-status` through SandboxHand (argv mode, evidence file)."""
+    return _qmd_status_sandboxed().get("ok", False)
 
 
 def _find_new_files(since_iso: "str | None") -> list[Path]:
@@ -118,7 +201,8 @@ def _check_wiki_links() -> dict[str, Any]:
 
 def cmd_status(as_json: bool) -> int:
     last = _read_last_build()
-    qmd_ok = _qmd_available()
+    probe = _qmd_status_sandboxed()
+    qmd_ok = probe.get("ok", False)
     drive_status = cmd_drive_status(as_json=False, _return=True)
 
     out = {
@@ -129,12 +213,20 @@ def cmd_status(as_json: bool) -> int:
         "sources_ingested_exists": SOURCES_INGESTED.exists(),
         "knowledge_exists": KNOWLEDGE_DIR.exists(),
         "generated_at": _now(),
+        "executor": probe.get("executor", "host_fallback"),
+        "execution_mode": probe.get("execution_mode", ""),
+        "evidence_file": probe.get("evidence_file", ""),
+        "write_guard": probe.get("write_guard", {"enabled": False, "violations": []}),
+        "sandbox_status": probe.get("sandbox_status", ""),
+        "fallback_reason": probe.get("fallback_reason", ""),
     }
     if as_json:
         print(json.dumps(out, indent=2))
     else:
         print(f"QMD adapter status:")
         print(f"  qmd_available:  {qmd_ok}")
+        print(f"  executor:       {out['executor']} ({out['execution_mode']})")
+        print(f"  evidence_file:  {out['evidence_file'] or '-'}")
         print(f"  last_build:     {last.get('built_at', 'never') if last else 'never'}")
         print(f"  drive_status:   {drive_status.get('status', '?')}")
     return 0

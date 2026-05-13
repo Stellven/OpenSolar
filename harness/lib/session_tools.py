@@ -182,6 +182,107 @@ def pending_model_calls(events: Iterable[Dict[str, Any]]) -> List[str]:
     return sorted(k for k in requested if k not in terminal)
 
 
+def process_audit(events: List[Dict[str, Any]], projection: Dict[str, Any]) -> Dict[str, Any]:
+    """Audit long-running process health from the event log, not artifacts."""
+    command_ids: set[str] = set()
+    started: set[str] = set()
+    terminal: set[str] = set()
+    failed: set[str] = set()
+    tool_requested = tool_terminal = tool_failed = 0
+    model_requested = model_terminal = model_failed = 0
+    context_events = 0
+    human_feedback = 0
+
+    for ev in events:
+        etype = str(ev.get("type") or "")
+        act = str(ev.get("activity_id") or "")
+        payload = ev.get("payload") if isinstance(ev.get("payload"), dict) else {}
+        dispatch_id = str(payload.get("dispatch_id") or act)
+        if etype == "command_issued" and act:
+            command_ids.add(act)
+        elif etype == "activity_started" and act:
+            started.add(act)
+        elif etype in {"activity_succeeded", "activity_failed", "activity_cancelled"} and act:
+            terminal.add(act)
+            if etype == "activity_failed":
+                failed.add(act)
+        elif etype == "tool_call_requested":
+            tool_requested += 1
+        elif etype in {"tool_call_succeeded", "tool_call_failed"}:
+            tool_terminal += 1
+            if etype == "tool_call_failed":
+                tool_failed += 1
+        elif etype == "model_call_requested":
+            model_requested += 1
+        elif etype in {"model_call_succeeded", "model_call_failed"}:
+            model_terminal += 1
+            if etype == "model_call_failed":
+                model_failed += 1
+        elif etype == "context_injected":
+            context_events += 1
+        elif etype == "human_feedback":
+            human_feedback += 1
+        if etype in {"model_call_requested", "model_call_succeeded", "model_call_failed"} and dispatch_id:
+            # model call lifecycle is counted separately; dispatch_id fallback
+            # keeps future provider event formats comparable.
+            pass
+
+    unstarted_commands = sorted(command_ids - started - terminal)
+    started_without_terminal = sorted(started - terminal)
+    terminal_without_start = sorted(terminal - started)
+    stale_activities = list(projection.get("stale_activities") or [])
+    duplicate_commands = list(projection.get("duplicate_commands") or [])
+
+    risks: List[str] = []
+    if unstarted_commands:
+        risks.append("command_without_start")
+    if started_without_terminal:
+        risks.append("activity_without_terminal")
+    if terminal_without_start:
+        risks.append("terminal_without_start")
+    if duplicate_commands:
+        risks.append("duplicate_command_side_effect_risk")
+    if stale_activities:
+        risks.append("stale_activity")
+    if model_requested and model_terminal < model_requested:
+        risks.append("model_call_pending")
+    if tool_requested and tool_terminal < tool_requested:
+        risks.append("tool_call_pending")
+    if not context_events:
+        risks.append("context_projection_missing")
+
+    return {
+        "log_native": True,
+        "side_effect_boundaries": {
+            "commands": len(command_ids),
+            "unstarted_commands": unstarted_commands,
+            "started_without_terminal": started_without_terminal,
+            "terminal_without_start": terminal_without_start,
+            "duplicate_commands": duplicate_commands,
+            "stale_activities": stale_activities,
+        },
+        "model_calls": {
+            "requested": model_requested,
+            "terminal": model_terminal,
+            "failed": model_failed,
+            "pending": max(model_requested - model_terminal, 0),
+        },
+        "tool_calls": {
+            "requested": tool_requested,
+            "terminal": tool_terminal,
+            "failed": tool_failed,
+            "pending": max(tool_requested - tool_terminal, 0),
+            "observable": tool_requested > 0 or tool_terminal > 0,
+        },
+        "context_projection": {
+            "context_injected_events": context_events,
+            "default_path_observed": context_events > 0,
+        },
+        "human_feedback_events": human_feedback,
+        "risks": risks,
+    }
+
+
 def replay_payload(session_id: str, harness_dir: Path, include_events: bool = False) -> Dict[str, Any]:
     events, meta = load_events(session_id, harness_dir)
     payload = {
@@ -410,6 +511,7 @@ def evaluate_payload(session_id: str, harness_dir: Path) -> Dict[str, Any]:
     projection = project_session(session_id, harness_dir)
     event_counts = event_type_counts(events)
     model_pending = pending_model_calls(events)
+    audit = process_audit(events, projection)
     errors: List[str] = []
     warnings: List[str] = []
 
@@ -431,6 +533,15 @@ def evaluate_payload(session_id: str, harness_dir: Path) -> Dict[str, Any]:
         warnings.append("stale_activities")
     if model_pending:
         warnings.append("pending_model_calls")
+    for risk in audit.get("risks") or []:
+        if risk == "context_projection_missing":
+            # A bare historical session can be valid without context projection.
+            # Default dispatch coverage is enforced by dedicated runtime tests.
+            continue
+        if risk in {"duplicate_command_side_effect_risk", "terminal_without_start"}:
+            errors.append(risk)
+        else:
+            warnings.append(risk)
 
     status = str(projection.get("status") or "unknown")
     if status in {"error", "failed", "failed_review", "cancelled"}:
@@ -453,6 +564,7 @@ def evaluate_payload(session_id: str, harness_dir: Path) -> Dict[str, Any]:
         "event_count": meta["event_count"],
         "event_type_counts": event_counts,
         "projection": projection,
+        "process_audit": audit,
         "pending_model_calls": model_pending,
         "errors": errors,
         "warnings": warnings,

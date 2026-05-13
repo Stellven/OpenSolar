@@ -142,12 +142,12 @@ check "dispatch text selected gstack" "$S1_TEXT" "gstack"
 check "dispatch text selected MarkItDown" "$S1_TEXT" "MarkItDown"
 check "dispatch text selected agency-agents" "$S1_TEXT" "agency-agents"
 
-echo "T3: queue consumed and graph status updated"
+echo "T3: dry-run does not enqueue or mutate graph status"
 OUT=$(HARNESS_DIR="$TMPDIR_TEST" python3 "$TMPDIR_TEST/lib/task_queue.py" depth --sprint "$SID" 2>/dev/null)
 check "queue empty" "$OUT" '"depth": 0'
 GRAPH_TEXT=$(cat "$GRAPH")
-check "S1 dispatched in graph" "$GRAPH_TEXT" '"status": "dispatched"'
-check "S2 dispatched in graph" "$GRAPH_TEXT" '"status": "dispatched"'
+if [[ "$GRAPH_TEXT" != *'"assigned_to"'* ]]; then ok "dry-run did not assign panes"; else fail "dry-run wrote assigned_to into graph"; fi
+if [[ "$GRAPH_TEXT" != *'"status": "dispatched"'* ]]; then ok "dry-run did not mark dispatched"; else fail "dry-run marked graph dispatched"; fi
 if [[ "$GRAPH_TEXT" != *'"id": "S3"'*'"status": "dispatched"'* ]]; then ok "S3 not marked dispatched"; else fail "S3 marked dispatched too early"; fi
 
 echo "T4: drain-queue dry-run consumes pre-enqueued graph node payload"

@@ -401,6 +401,37 @@ def _check_model_call_runtime(sprint_id: str) -> Dict[str, Any]:
         return {"ok": False, "warn": True, "message": f"model-call runtime error: {exc}"}
 
 
+def _check_process_audit(sprint_id: str) -> Dict[str, Any]:
+    """Run the log-native process evaluator as a doctor dimension.
+
+    This catches distributed-systems failures that final artifacts cannot show:
+    command issued but never started, activity started but never reached a
+    terminal event, terminal event without a corresponding start, pending model
+    call, pending tool call, and missing context projection evidence.
+    """
+    sys.path.insert(0, os.path.dirname(__file__))
+    try:
+        from session_tools import load_events, process_audit, project_session
+        events, meta = load_events(sprint_id, Path(HARNESS_DIR))
+        projection = project_session(sprint_id, Path(HARNESS_DIR))
+        audit = process_audit(events, projection)
+        risks = list(audit.get("risks") or [])
+        # Historical sessions may legitimately predate context projection. Keep
+        # that as warn, not error, when it is the only risk.
+        hard_risks = [r for r in risks if r != "context_projection_missing"]
+        return {
+            "ok": not hard_risks,
+            "warn": bool(risks),
+            "message": "ok" if not risks else ",".join(risks[:8]),
+            "event_count": meta.get("event_count", 0),
+            "risks": risks,
+            "hard_risks": hard_risks,
+            "audit": audit,
+        }
+    except Exception as exc:
+        return {"ok": False, "warn": True, "message": f"process audit error: {exc}"}
+
+
 # ------------------------------------------------------------------
 # Public API
 # ------------------------------------------------------------------
@@ -432,6 +463,7 @@ def doctor_sprint(
         "interface_health": _check_interface_health(sprint_id),
         "context_runtime": _check_context_runtime(sprint_id),
         "model_call_runtime": _check_model_call_runtime(sprint_id),
+        "process_audit": _check_process_audit(sprint_id),
     }
 
     all_ok  = all(c.get("ok",   True) for c in checks.values())

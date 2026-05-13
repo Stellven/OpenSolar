@@ -41,6 +41,9 @@ assert_contains "$HARNESS_DIR/quota-footer.sh" "MODEL_ID" "footer consumes perso
 assert_contains "$HARNESS_DIR/integrations/solar-config-server.py" "model_registry_options" "config UI exports registry model options"
 assert_contains "$HARNESS_DIR/lib/graph_node_dispatcher.py" "_models_for_pane" "graph dispatcher resolves worker models through registry"
 assert_contains "$HARNESS_DIR/solar-harness.sh" "claude_clean_env_prefix" "launcher uses shared clean env prefix"
+assert_contains "$HARNESS_DIR/pane-launcher.sh" "prepare_sanitized_claude_settings" "pane launcher sanitizes Claude settings"
+assert_contains "$HARNESS_DIR/pane-launcher.sh" "setting-sources" "pane launcher pins setting sources"
+assert_contains "$HARNESS_DIR/pane-launcher.sh" "data.pop(\"env\", None)" "pane launcher strips global Claude env overrides"
 
 assert_not_contains "$HARNESS_DIR/solar-harness.sh" "models set-main <opus|sonnet>" "main model help does not advertise ambiguous bare sonnet"
 assert_not_contains "$HARNESS_DIR/solar-harness.sh" "glm,glm,glm,deepseek" "launcher has no legacy DeepSeek lab default"

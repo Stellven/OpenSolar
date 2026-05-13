@@ -1072,52 +1072,67 @@ else:
     [[ "$pm_actual" == "pm" ]] || LIVE_PM="$LIVE_PLANNER"
   fi
   local target_pane="" target_task=""
+  local workflow_role workflow_stage workflow_reason workflow_violations
+  workflow_role=$(python3 "$HARNESS_DIR/lib/workflow_guard.py" route "$sid" --field route_role 2>/dev/null || echo pm)
+  workflow_stage=$(python3 "$HARNESS_DIR/lib/workflow_guard.py" route "$sid" --field stage 2>/dev/null || echo intake)
+  workflow_reason=$(python3 "$HARNESS_DIR/lib/workflow_guard.py" route "$sid" --field reason 2>/dev/null || echo missing_pm_prd)
+  workflow_violations=$(python3 "$HARNESS_DIR/lib/workflow_guard.py" route "$sid" --field violations 2>/dev/null || echo '[]')
+
+  route_by_workflow_guard() {
+    case "$workflow_role" in
+      none)
+        ok "Sprint ${sid} 已完成或无需派发 (${workflow_stage}/${workflow_reason})"
+        return 2
+        ;;
+      pm)
+        python3 "$HARNESS_DIR/lib/runtime_status.py" "$sf" "drafting" "wake_workflow_guard_to_pm" "wake" '{"status_fields":{"phase":"spec","handoff_to":"pm","target_role":"pm","auto_held":false},"note":"Workflow guard: PM PRD is required before planner or builder dispatch."}' >/dev/null 2>&1 || true
+        st="drafting"
+        target_pane="$LIVE_PM"
+        target_task="Sprint ${sid} 恢复：Workflow Guard 判定必须先走 PM。请研究用户要求，产出正式 PRD 到 ~/.solar/harness/sprints/${sid}.prd.md；完成后只交给 Planner，不要直接给 Builder。原因: ${workflow_reason}; violations=${workflow_violations}"
+        ;;
+      planner)
+        python3 "$HARNESS_DIR/lib/runtime_status.py" "$sf" "drafting" "wake_workflow_guard_to_planner" "wake" '{"status_fields":{"phase":"prd_ready","handoff_to":"planner","target_role":"planner","auto_held":false},"note":"Workflow guard: planner must produce design.md, plan.md, and task_graph.json before builder dispatch."}' >/dev/null 2>&1 || true
+        st="drafting"
+        target_pane="$LIVE_PLANNER"
+        target_task="Sprint ${sid} 恢复：Workflow Guard 判定 PRD 已就绪，请 Planner 读取 PRD/contract，产出 design.md、plan.md、task_graph.json；完成后再进入 builder DAG 派发。原因: ${workflow_reason}; violations=${workflow_violations}"
+        ;;
+      builder|builder_main)
+        python3 "$HARNESS_DIR/lib/runtime_status.py" "$sf" "active" "wake_workflow_guard_to_builder" "wake" '{"status_fields":{"phase":"planning_complete","handoff_to":"builder_main","target_role":"builder_main","auto_held":false},"note":"Workflow guard: PM PRD + planner design/plan/task_graph are ready; builder DAG dispatch is allowed."}' >/dev/null 2>&1 || true
+        st="active"
+        target_pane="$LIVE_BUILDER"
+        target_task="Sprint ${sid} 恢复：Workflow Guard 判定 PM+Planner 产物齐全，请读取 task_graph.json 并按 DAG/并行 builder 流程执行，不要绕开 graph scheduler。"
+        ;;
+      evaluator)
+        target_pane="$LIVE_EVALUATOR"
+        target_task="Sprint ${sid} 恢复：Workflow Guard 判定已有 handoff，需要 Evaluator 评审。cat ~/.solar/harness/sprints/${sid}.handoff.md"
+        ;;
+      *)
+        target_pane="$LIVE_PM"
+        target_task="Sprint ${sid} 恢复：Workflow Guard 未识别 route_role=${workflow_role}，交给 PM 诊断状态，不直接实现。"
+        ;;
+    esac
+    return 0
+  }
 
   case "$st" in
     queued)
       if [[ "$auto_held" == "true" ]]; then
         ok "Sprint ${sid} 当前为 queued/auto_held，wake 不强推。请先人工解除 hold 或 activate。"
         return 0
-      elif [[ "$contract_bypass" == "true" || "$handoff_to" =~ ^builder(_main)?$ || "$contract_handoff" =~ ^builder(_main)?$ || "$contract_target" =~ ^builder(_main)?$ || "$phase" == "planning_complete" ]]; then
-        python3 "$HARNESS_DIR/lib/runtime_status.py" "$sf" "active" "wake_promoted_queued_to_builder" "wake" '{"status_fields":{"phase":"planning_complete","handoff_to":"builder_main","target_role":"builder_main","bypass_pm":true,"auto_held":false},"note":"Queued sprint is implementation-ready; route to builder_main instead of unknown-status fallback."}' >/dev/null 2>&1 || true
-        st="active"
-        target_pane="$LIVE_BUILDER"
-        target_task="Sprint ${sid} 恢复：queued 合约已具备建设条件，禁止转 PM/Planner。请读取 contract/plan 并执行。cat ~/.solar/harness/sprints/${sid}.contract.md"
-      elif [[ "$phase" == "prd_ready" || "$phase" == "contract_ready" || "$handoff_to" == "planner" || "$contract_handoff" == "planner" || "$contract_target" == "planner" ]]; then
-        python3 "$HARNESS_DIR/lib/runtime_status.py" "$sf" "drafting" "wake_promoted_queued_to_planner" "wake" '{"status_fields":{"handoff_to":"planner","target_role":"planner","auto_held":false},"note":"Queued sprint has PRD/contract-ready planner handoff; route to planner explicitly."}' >/dev/null 2>&1 || true
-        st="drafting"
-        target_pane="$LIVE_PLANNER"
-        target_task="Sprint ${sid} 恢复：queued 合约处于 ${phase:-contract_ready}，请读取 PRD/contract，写 design.md 与 plan.md，完成后将 status=active、phase=planning_complete、handoff_to=builder_main。"
-      elif [[ "$handoff_to" == "evaluator" || "$contract_handoff" == "evaluator" || "$contract_target" == "evaluator" ]]; then
-        target_pane="$LIVE_EVALUATOR"
-        target_task="Sprint ${sid} 恢复：queued 合约指定 evaluator，请检查 contract/status 并给出是否放行。cat ~/.solar/harness/sprints/${sid}.contract.md"
       else
-        python3 "$HARNESS_DIR/lib/runtime_status.py" "$sf" "drafting" "wake_promoted_queued_to_pm" "wake" '{"status_fields":{"handoff_to":"pm","target_role":"pm","auto_held":false},"note":"Queued sprint lacks explicit planner/builder/evaluator handoff; route to PM intake."}' >/dev/null 2>&1 || true
-        st="drafting"
-        target_pane="$LIVE_PM"
-        target_task="Sprint ${sid} 恢复：queued 合约缺少明确 handoff，请先补齐产品需求/PRD，再交给 Planner。cat ~/.solar/harness/sprints/${sid}.contract.md"
+        route_by_workflow_guard || return 0
       fi
       ;;
     drafting|drafting_held)
-      if [[ "$contract_bypass" == "true" || "$handoff_to" =~ ^builder(_main)?$ || "$contract_handoff" =~ ^builder(_main)?$ || "$contract_target" =~ ^builder(_main)?$ ]]; then
-        python3 "$HARNESS_DIR/lib/runtime_status.py" "$sf" "active" "wake_promoted_bypass_pm_to_builder" "wake" '{"status_fields":{"phase":"planning_complete","handoff_to":"builder","target_role":"builder","auto_held":false},"note":"Strict wake routing: bypass_pm/handoff_to builder must not route to PM or planner."}' >/dev/null 2>&1 || true
-        st="active"
-        target_pane="$LIVE_BUILDER"
-        target_task="Sprint ${sid} 恢复：这是 bypass_pm/Builder 目标合同，禁止转 PM/Planner。请读取 contract/plan 并执行。cat ~/.solar/harness/sprints/${sid}.contract.md"
-      elif [[ "$auto_held" == "true" || "$st" == "drafting_held" ]]; then
+      if [[ "$auto_held" == "true" || "$st" == "drafting_held" ]]; then
         ok "Sprint ${sid} 当前为 ${st}/auto_held，wake 不强推。请先人工解除 hold 或 activate。"
         return 0
-      elif [[ "$phase" == "prd_ready" || "$handoff_to" == "planner" ]]; then
-        target_pane="$LIVE_PLANNER"
-        target_task="Sprint ${sid} 恢复：PRD 已完成，请读取 PRD 和 contract，写 design.md 与 plan.md，完成后将 status=active、phase=planning_complete、handoff_to=builder_main。"
       else
-        target_pane="$LIVE_PM"
-        target_task="Sprint ${sid} 恢复：请在产品经理窗口研究用户需求并产出 PRD。"
+        route_by_workflow_guard || return 0
       fi
       ;;
     active)
-      target_pane="$LIVE_BUILDER"
-      target_task="Sprint ${sid} 恢复：请读取合约并继续实现。cat ~/.solar/harness/sprints/${sid}.contract.md"
+      route_by_workflow_guard || return 0
       ;;
     planning)
       target_pane="$LIVE_EVALUATOR"
@@ -2893,6 +2908,7 @@ PY
     echo "  $0 autopilot [status|apply|dispatch|loop|start|stop|service-status|queue]  自动监控断头 sprint/pane 并安全推进"
     echo "  $0 symphony [status|dry-run|workspace <sid>]  Symphony 调度"
     echo "  $0 graph-scheduler [validate|ready|batches|enrich-capabilities|enrich-backlog|assign|enqueue-ready|mark|parent-check]  DAG 并行调度"
+    echo "  $0 workflow-guard route <sid> [--json]  PM→Planner→DAG Builder 门禁判定"
     echo "  $0 graph-dispatch [dispatch-ready|drain-queue]  DAG 节点级 pane 派发"
     echo "  $0 mirage [search|doctor|workspace|mounts|exec|provision]  Mirage 统一虚拟文件系统"
     echo "  $0 wiki [install|status|export-sprint|update|query|ingest|chatgpt-import|vault-status|lint|rebuild|export-graph|colorize|history|run-dispatch|dispatch-watch|dispatch-maintenance|import-solar-db|capture-server|audit-uploads|backfill-uploads|quality-gate|reingest-quarantine|reingest-scheduler|qmd-status|qmd-repair|qmd-search|qmd-update|qmd-mcp|qmd-embed|help]  Obsidian Wiki 集成"
@@ -3649,6 +3665,30 @@ EOF
         ;;
       *)
         err "Unknown graph-scheduler subcommand: $_graph_subcmd"; exit 1
+        ;;
+    esac
+    ;;
+
+  workflow-guard)
+    # PM -> Planner -> task_graph -> Builder lifecycle gate
+    shift
+    _workflow_guard_py="$HARNESS_DIR/lib/workflow_guard.py"
+    if [[ ! -f "$_workflow_guard_py" ]]; then
+      err "workflow_guard.py not found: $_workflow_guard_py"; exit 1
+    fi
+    _workflow_guard_subcmd="${1:-help}"; shift || true
+    case "$_workflow_guard_subcmd" in
+      route)
+        python3 "$_workflow_guard_py" route "$@"
+        ;;
+      help|--help|-h|"")
+        echo "Solar Workflow Guard — PM PRD → Planner design/plan/task_graph → DAG Builder"
+        echo ""
+        echo "Usage:"
+        echo "  $0 workflow-guard route <sprint-id> [--json] [--field route_role|stage|violations]"
+        ;;
+      *)
+        err "Unknown workflow-guard subcommand: $_workflow_guard_subcmd"; exit 1
         ;;
     esac
     ;;

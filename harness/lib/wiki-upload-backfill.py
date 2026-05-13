@@ -32,6 +32,17 @@ from typing import Any
 
 from qmd_resolver import resolve_qmd_bin
 
+# Optional SandboxHand routing for document-extract tool-plane CLIs.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    from hands_runtime import SandboxHand  # noqa: E402
+    from runtime_interfaces import ResultStatus  # noqa: E402
+    _SANDBOX_IMPORT_ERROR = ""
+except Exception as exc:  # pragma: no cover - import safety
+    SandboxHand = None  # type: ignore[assignment]
+    ResultStatus = None  # type: ignore[assignment]
+    _SANDBOX_IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+
 VAULT_ROOT = Path(os.environ.get("OBSIDIAN_VAULT_PATH", "/Users/sihaoli/Knowledge"))
 DB_PATH = Path(os.environ.get("SOLAR_DB", str(Path.home() / ".solar" / "solar.db")))
 UPLOAD_DIR: Path | None = None
@@ -41,33 +52,138 @@ REFS_DIR: Path | None = None
 MAX_CONTENT_CHARS = 2000
 _QMD_UPDATE_RAN = False
 
+# Last-route telemetry for tests / activation proof callers.
+LAST_EXTRACT_ROUTE: dict[str, Any] = {}
+
+
+def _run_extract_sandboxed(
+    cli_name: str,
+    argv: list[str],
+    timeout: int,
+) -> dict[str, Any]:
+    """Run a short read-only extract CLI through SandboxHand (argv mode).
+
+    Used for `pdftotext` and `qlmanage` smoke routes so the tool-plane
+    document path emits sandbox evidence by default. The disposable workspace
+    is removed on dispose, so no host state is mutated.
+
+    Returns a record with stdout / stderr / exit_code / executor /
+    execution_mode / evidence_file / write_guard for callers.
+    """
+    base = {
+        "executor": "host_fallback",
+        "execution_mode": "argv",
+        "evidence_file": "",
+        "write_guard": {"enabled": False, "violations": []},
+        "fallback_reason": "",
+        "stdout": "",
+        "stderr": "",
+        "exit_code": 99,
+        "ok": False,
+        "cli": cli_name,
+        "argv": list(argv),
+    }
+    if SandboxHand is None or ResultStatus is None:
+        base["fallback_reason"] = _SANDBOX_IMPORT_ERROR or "SandboxHand not importable"
+        return base
+    hand = SandboxHand()
+    ref = hand.provision(capabilities=["document-extract", cli_name])
+    try:
+        idem = hashlib.sha1(
+            f"doc-extract:{cli_name}:{os.getpid()}:{time.monotonic_ns()}".encode("utf-8")
+        ).hexdigest()[:24]
+        result = hand.execute(
+            ref,
+            f"doc-extract-{cli_name}",
+            {
+                "argv": list(argv),
+                "session_id": f"doc-extract-{os.getpid()}",
+                "sprint_id": f"doc-extract-{os.getpid()}",
+                "activity_id": f"doc-extract-{cli_name}-{idem}",
+            },
+            idempotency_key=f"doc-extract:{cli_name}:{idem}",
+            timeout_seconds=timeout,
+        )
+        stdout = str(result.output or "")
+        stderr = str((result.metadata or {}).get("stderr", "") or "")
+        ok = result.status == ResultStatus.OK
+        exit_code = 0 if ok else (124 if result.status == ResultStatus.TIMEOUT else 1)
+        base.update({
+            "executor": "sandbox",
+            "execution_mode": (result.metadata or {}).get("execution_mode", "argv"),
+            "evidence_file": (result.metadata or {}).get("evidence_file", ""),
+            "write_guard": (result.metadata or {}).get("write_guard", {"enabled": False, "violations": []}),
+            "sandbox_status": result.status.value if hasattr(result.status, "value") else str(result.status),
+            "hand_id": ref.hand_id,
+            "stdout": stdout,
+            "stderr": stderr,
+            "exit_code": exit_code,
+            "ok": ok,
+        })
+        return base
+    finally:
+        hand.dispose(ref)
+
+
 # ── PDF text extraction ──────────────────────────────────────────────────────
 
 def extract_pdf_text(pdf_path: Path, max_chars: int = 3000) -> str:
-    """Extract text from PDF using pdftotext."""
+    """Extract text from PDF using pdftotext, routed through SandboxHand.
+
+    The pdftotext invocation is a short, read-only tool-plane CLI so we route
+    it through the disposable sandbox (argv mode + evidence file). When the
+    sandbox is unavailable we fall back to a direct subprocess call and
+    record the fallback reason in `LAST_EXTRACT_ROUTE`.
+    """
+    global LAST_EXTRACT_ROUTE
+    argv = ["pdftotext", "-l", "3", str(pdf_path), "-"]
+    route = _run_extract_sandboxed("pdftotext", argv, timeout=30)
+    LAST_EXTRACT_ROUTE = route
+    if route.get("ok") and (route.get("stdout") or "").strip():
+        return (route["stdout"] or "").strip()[:max_chars]
+    if route.get("executor") == "sandbox":
+        # Sandbox ran but the binary failed (missing or empty stdout). Stay in
+        # sandbox; do not fall through to host execution.
+        return ""
+    # Sandbox not importable; degrade to host run while recording the reason.
     try:
         result = subprocess.run(
-            ["pdftotext", "-l", "3", str(pdf_path), "-"],
-            capture_output=True, text=True, timeout=30
+            argv, capture_output=True, text=True, timeout=30,
         )
         if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip()[:max_chars]
-    except Exception:
-        pass
+            text = result.stdout.strip()[:max_chars]
+            LAST_EXTRACT_ROUTE.update({"stdout": result.stdout, "ok": True, "exit_code": 0})
+            return text
+    except Exception as exc:
+        LAST_EXTRACT_ROUTE["host_fallback_error"] = f"{type(exc).__name__}: {exc}"
     return ""
 
 
 def extract_pages_text(pages_path: Path, max_chars: int = 3000) -> str:
-    """Attempt to extract text from .pages file via macOS Quick Look."""
+    """Attempt to extract text from .pages file via macOS Quick Look.
+
+    Routed through SandboxHand so the qlmanage CLI smoke emits sandbox
+    evidence by default. When the sandbox is unavailable we keep the previous
+    host fallback to preserve operability.
+    """
+    global LAST_EXTRACT_ROUTE
+    argv = ["qlmanage", "-t", "-p", str(pages_path)]
+    route = _run_extract_sandboxed("qlmanage", argv, timeout=30)
+    LAST_EXTRACT_ROUTE = route
+    if route.get("ok") and (route.get("stdout") or "").strip():
+        return (route["stdout"] or "").strip()[:max_chars]
+    if route.get("executor") == "sandbox":
+        return ""
     try:
         result = subprocess.run(
-            ["qlmanage", "-t", "-p", str(pages_path)],
-            capture_output=True, text=True, timeout=30
+            argv, capture_output=True, text=True, timeout=30,
         )
         if result.stdout.strip():
-            return result.stdout.strip()[:max_chars]
-    except Exception:
-        pass
+            text = result.stdout.strip()[:max_chars]
+            LAST_EXTRACT_ROUTE.update({"stdout": result.stdout, "ok": True, "exit_code": result.returncode})
+            return text
+    except Exception as exc:
+        LAST_EXTRACT_ROUTE["host_fallback_error"] = f"{type(exc).__name__}: {exc}"
     return ""
 
 

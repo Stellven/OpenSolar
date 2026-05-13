@@ -187,16 +187,15 @@ elif st == 'failed':
     role = 'none'
 
 elif st == 'queued':
-    if phase in ('planning_complete',) or handoff_to in ('builder', 'builder_main'):
-        lc = 'building'
-        role = 'builder_main'
-    elif phase in ('prd_ready', 'contract_ready') or handoff_to == 'planner':
-        lc = 'planning'
-        role = 'planner'
-    elif handoff_to == 'evaluator':
+    if handoff_to == 'evaluator':
         lc = 'build_complete'
         role = 'evaluator'
+    elif phase in ('prd_ready',) or handoff_to == 'planner':
+        lc = 'planning'
+        role = 'planner'
     else:
+        # contract_ready and legacy handoff_to=builder must still enter PM
+        # intake unless workflow_guard proves PRD+Planner artifacts exist.
         lc = 'intake'
         role = 'pm'
 

@@ -23,6 +23,7 @@ Slice:  S2
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -31,6 +32,20 @@ import sys
 import time
 from pathlib import Path
 from typing import Any
+
+# Optional SandboxHand routing for QMD search (tool-plane default).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    from hands_runtime import SandboxHand  # noqa: E402
+    from runtime_interfaces import ResultStatus  # noqa: E402
+    _SANDBOX_IMPORT_ERROR = ""
+except Exception as exc:  # pragma: no cover - import safety
+    SandboxHand = None  # type: ignore[assignment]
+    ResultStatus = None  # type: ignore[assignment]
+    _SANDBOX_IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+
+# Last-route telemetry for callers/tests to assert sandbox routing.
+LAST_QMD_ROUTE: dict[str, Any] = {}
 
 # ─── Default allowed mounts for path search ───────────────────────────
 # These are the safe, read-only mounts defined in the design.
@@ -300,30 +315,97 @@ def search_mirage_path(query: str, mounts: list[dict[str, str]],
 
 # ─── Source adapter: qmd ──────────────────────────────────────────────
 
+def _qmd_search_sandboxed(query: str, max_hits: int) -> dict[str, Any]:
+    """Run `qmd search <query>` through SandboxHand (argv mode, evidence file).
+
+    Returns a routing record with stdout/stderr/exit_code, plus executor /
+    execution_mode / evidence_file so callers and tests can assert that the
+    tool-plane QMD search path lands inside the disposable sandbox by default.
+
+    If SandboxHand is unavailable (e.g. pruned install), reports
+    `executor=host_fallback` with `fallback_reason` so activation proof can
+    downgrade the verdict instead of silently passing.
+    """
+    base_payload = {
+        "executor": "host_fallback",
+        "execution_mode": "argv",
+        "evidence_file": "",
+        "write_guard": {"enabled": False, "violations": []},
+        "fallback_reason": "",
+        "stdout": "",
+        "stderr": "",
+        "exit_code": 99,
+        "ok": False,
+        "qmd_bin": QMD_BIN,
+        "collection": QMD_COLLECTION,
+        "argv": [QMD_BIN, "search", query, "-c", QMD_COLLECTION, "--json", "-n", str(max_hits)],
+    }
+    if SandboxHand is None or ResultStatus is None:
+        base_payload["fallback_reason"] = _SANDBOX_IMPORT_ERROR or "SandboxHand not importable"
+        return base_payload
+    hand = SandboxHand()
+    ref = hand.provision(capabilities=["qmd-search"])
+    try:
+        idem = hashlib.sha1(
+            f"qmd-search:{query}:{os.getpid()}:{time.monotonic_ns()}".encode("utf-8")
+        ).hexdigest()[:24]
+        result = hand.execute(
+            ref,
+            "qmd-search",
+            {
+                "argv": base_payload["argv"],
+                "session_id": f"qmd-search-{os.getpid()}",
+                "sprint_id": f"qmd-search-{os.getpid()}",
+                "activity_id": f"qmd-search-{idem}",
+            },
+            idempotency_key=f"qmd-search:{idem}",
+            timeout_seconds=ADAPTER_TIMEOUT_S,
+        )
+        stdout = str(result.output or "")
+        stderr = str((result.metadata or {}).get("stderr", "") or "")
+        ok = result.status == ResultStatus.OK
+        exit_code = 0 if ok else (124 if result.status == ResultStatus.TIMEOUT else 1)
+        base_payload.update({
+            "executor": "sandbox",
+            "execution_mode": (result.metadata or {}).get("execution_mode", "argv"),
+            "evidence_file": (result.metadata or {}).get("evidence_file", ""),
+            "write_guard": (result.metadata or {}).get("write_guard", {"enabled": False, "violations": []}),
+            "sandbox_status": result.status.value if hasattr(result.status, "value") else str(result.status),
+            "hand_id": ref.hand_id,
+            "stdout": stdout,
+            "stderr": stderr,
+            "exit_code": exit_code,
+            "ok": ok,
+        })
+        return base_payload
+    finally:
+        hand.dispose(ref)
+
+
 def search_qmd(query: str, max_hits: int = 5) -> tuple[list[dict[str, Any]], bool]:
-    """Call qmd search and normalize results.
+    """Call qmd search through SandboxHand and normalize results.
 
     Returns (hits, available).  available=False means qmd is not installed
     or search failed; hits will be empty.
+    The most recent sandbox route record is also stored in module global
+    `LAST_QMD_ROUTE` for tests and activation-proof callers.
     """
+    global LAST_QMD_ROUTE
     hits: list[dict[str, Any]] = []
-    try:
-        subprocess.run([QMD_BIN, "--version"], capture_output=True, timeout=2)
-    except Exception:
+    route = _qmd_search_sandboxed(query, max_hits)
+    LAST_QMD_ROUTE = route
+
+    if not route.get("ok"):
+        # `qmd` binary may be absent or sandbox unavailable. Treat as
+        # available=False so the unified-search caller marks the source as
+        # degraded rather than asserting hits.
         return hits, False
 
     try:
-        result = subprocess.run(
-            [QMD_BIN, "search", query, "-c", QMD_COLLECTION, "--json", "-n", str(max_hits)],
-            capture_output=True, text=True,
-            timeout=ADAPTER_TIMEOUT_S,
-        )
-        if result.returncode != 0:
-            return hits, True
-        data = json.loads(result.stdout)
-    except subprocess.TimeoutExpired:
+        data = json.loads(route.get("stdout") or "")
+    except json.JSONDecodeError:
         return hits, True
-    except (json.JSONDecodeError, Exception):
+    except Exception:
         return hits, True
 
     if not isinstance(data, list):

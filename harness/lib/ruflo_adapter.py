@@ -13,10 +13,15 @@ import hashlib
 import shutil
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from hands_runtime import SandboxHand  # noqa: E402
+from runtime_interfaces import ResultStatus  # noqa: E402
 
 
 HOME = Path.home()
@@ -47,6 +52,62 @@ def _run(
         return proc.returncode, (proc.stdout + proc.stderr).strip()
     except Exception as exc:
         return 99, f"{type(exc).__name__}: {exc}"
+
+
+def _run_sandboxed(
+    cmd: list[str],
+    cwd: Path,
+    timeout: int,
+    env: dict[str, str],
+    *,
+    guard_root: Path,
+    command_name: str,
+) -> tuple[int, str, dict[str, Any]]:
+    """Run a Ruflo runtime command through Solar's local SandboxHand.
+
+    Ruflo runtime commands are allowed to touch only the managed Ruflo runtime
+    directory. The disposable hand still provides evidence, argv-mode execution,
+    redaction, activity events, and write-guard telemetry.
+    """
+    hand = SandboxHand()
+    ref = hand.provision(capabilities=["ruflo-runtime", command_name])
+    script = "cd {cwd} && env {env} {cmd}".format(
+        cwd=shlex.quote(str(cwd)),
+        env=" ".join(f"{key}={shlex.quote(str(value))}" for key, value in sorted(env.items())),
+        cmd=" ".join(shlex.quote(str(part)) for part in cmd),
+    )
+    try:
+        result = hand.execute(
+            ref,
+            f"ruflo-{command_name}",
+            {
+                "argv": ["/bin/sh", "-lc", script],
+                "write_guard_roots": [str(guard_root)],
+                "write_allowed_roots": [str(guard_root)],
+                "session_id": f"ruflo-runtime-{os.getpid()}",
+                "sprint_id": f"ruflo-runtime-{os.getpid()}",
+                "activity_id": f"ruflo-{command_name}",
+            },
+            idempotency_key=f"ruflo-runtime:{command_name}:{os.getpid()}:{hashlib.sha1(script.encode()).hexdigest()[:12]}",
+            timeout_seconds=timeout,
+        )
+        output_parts = [str(result.output or "")]
+        stderr = str((result.metadata or {}).get("stderr", "") or "")
+        if stderr:
+            output_parts.append(stderr)
+        code = 0 if result.status == ResultStatus.OK else 1
+        if result.status == ResultStatus.TIMEOUT:
+            code = 124
+        meta = {
+            "executor": "sandbox",
+            "execution_mode": (result.metadata or {}).get("execution_mode", ""),
+            "write_guard": (result.metadata or {}).get("write_guard", {}),
+            "evidence_file": (result.metadata or {}).get("evidence_file", ""),
+            "sandbox_status": result.status.value if hasattr(result.status, "value") else str(result.status),
+        }
+        return code, "\n".join(part for part in output_parts if part).strip(), meta
+    finally:
+        hand.dispose(ref)
 
 
 def _utc_now() -> str:
@@ -145,7 +206,10 @@ def status() -> dict[str, Any]:
 
 
 def _runtime_env(runtime_dir: Path) -> dict[str, str]:
-    env = os.environ.copy()
+    env: dict[str, str] = {}
+    for key in ("PATH", "LANG", "LC_ALL", "TERM", "SHELL"):
+        if key in os.environ:
+            env[key] = os.environ[key]
     env["HOME"] = str(runtime_dir / "home")
     env["npm_config_cache"] = str(runtime_dir / "npm-cache")
     env["CLAUDE_CONFIG_DIR"] = str(runtime_dir / "home" / ".claude")
@@ -313,10 +377,23 @@ def runtime_smoke(runtime_dir: Path = RUFLO_RUNTIME, bootstrap: bool = False) ->
     results = []
     ok = True
     for item in commands:
-        code, out = _run(item["cmd"], cwd=cwd, timeout=item["timeout"], env=env)
+        code, out, sandbox_meta = _run_sandboxed(
+            item["cmd"],
+            cwd=cwd,
+            timeout=item["timeout"],
+            env=env,
+            guard_root=runtime_dir,
+            command_name=item["name"],
+        )
         passed = code == 0 and bool(out.strip())
         ok = ok and passed
-        results.append({"name": item["name"], "ok": passed, "exit_code": code, "output_tail": out[-4000:]})
+        results.append({
+            "name": item["name"],
+            "ok": passed,
+            "exit_code": code,
+            "output_tail": out[-4000:],
+            **sandbox_meta,
+        })
     payload = {
         "ok": ok,
         "checked_at": _utc_now(),

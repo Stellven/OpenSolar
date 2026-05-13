@@ -97,6 +97,14 @@ acquired4=$(python3 -c "import json,sys; print(json.loads(sys.argv[1]).get('acqu
 check "acquire after reap → acquired=True" "$acquired4" "True"
 release_pane_lease "solar-harness:0.3" "d-20260508T100004Z-000000" >/dev/null 2>&1 || true
 
+# T8b: release leaves lock files by design, but reaper must clean orphan locks.
+ORPHAN_LOCK="solar-harness_0_9.json.lock"
+: > "$_PANE_LEASE_DIR/$ORPHAN_LOCK"
+reaped_orphan=$(reap_expired_leases)
+[[ ! -e "$_PANE_LEASE_DIR/$ORPHAN_LOCK" ]] && orphan_removed=1 || orphan_removed=0
+check "reap_expired_leases removes orphan lock" "$orphan_removed" "1"
+check "orphan lock reap counted" "$(( reaped_orphan >= 1 ))" "1"
+
 echo ""
 echo "--- python lease compatibility ---"
 
