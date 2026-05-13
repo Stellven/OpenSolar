@@ -43,6 +43,11 @@ PANE_ASSIGNMENTS = HARNESS_DIR / ".pane-assignments"
 PANE_ASSIGNMENTS_JSON = HARNESS_DIR / ".pane-assignments.json"
 MERMAID_DIST = HARNESS_DIR / "vendor" / "mermaid-viewer" / "node_modules" / "mermaid" / "dist"
 INTEGRATIONS_HEALTH = HARNESS_DIR / "lib" / "external-integrations-health.py"
+KNOWLEDGE_PROBE_HEALTH = HARNESS_DIR / "state" / "knowledge-probe-health.json"
+MODEL_DOCTOR_HEALTH = HARNESS_DIR / "state" / "model-registry-doctor-health.json"
+SKILLS_CERTIFICATION = HARNESS_DIR / "state" / "skills-certification.json"
+SKILLS_INVENTORY = HARNESS_DIR / "state" / "skills-inventory.json"
+CAPABILITY_ACTIVATION_PROOF = HARNESS_DIR / "reports" / "capability-activation-proof-latest.json"
 MMD_ALLOWED_ROOTS = [
     HARNESS_DIR,
     Path.home() / "Knowledge",
@@ -694,6 +699,141 @@ def _read_assignments() -> dict:
         return {}
 
 
+def _read_json_file(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _health_file_summary(path: Path) -> dict:
+    data = _read_json_file(path)
+    if not data:
+        return {"ok": False, "status": "missing", "path": str(path)}
+    return {
+        "ok": bool(data.get("ok")),
+        "status": data.get("status") or ("ok" if data.get("ok") else "warn"),
+        "checked_at": data.get("checked_at") or data.get("generated_at") or "",
+        "probes_passed": data.get("probes_passed"),
+        "probes_failed": data.get("probes_failed"),
+        "path": str(path),
+    }
+
+
+def _activation_proof_summary() -> dict:
+    data = _read_json_file(CAPABILITY_ACTIVATION_PROOF)
+    if not data:
+        return {"ok": False, "status": "missing", "path": str(CAPABILITY_ACTIVATION_PROOF)}
+    return {
+        "ok": bool(data.get("ok")),
+        "status": "ok" if data.get("ok") else "warn",
+        "generated_at": data.get("generated_at", ""),
+        "passed": data.get("passed"),
+        "total": data.get("total"),
+        "path": str(CAPABILITY_ACTIVATION_PROOF),
+    }
+
+
+def _skills_certification_summary() -> dict:
+    cert = _read_json_file(SKILLS_CERTIFICATION)
+    inventory = _read_json_file(SKILLS_INVENTORY)
+    if not cert:
+        return {"ok": False, "status": "missing", "path": str(SKILLS_CERTIFICATION)}
+    readiness = cert.get("readiness_summary") or {}
+    totals = inventory.get("totals") or {}
+    return {
+        "ok": bool(cert.get("ok")) or cert.get("overall_status") == "ok",
+        "status": cert.get("overall_status") or ("ok" if cert.get("ok") else "warn"),
+        "checked_at": cert.get("generated_at", ""),
+        "effective": readiness.get("effective", 0),
+        "executable": readiness.get("executable", 0),
+        "broken": readiness.get("broken", 0),
+        "total_skills": totals.get("total", totals.get("skills", 0)),
+        "path": str(SKILLS_CERTIFICATION),
+    }
+
+
+def _capability_health_summary(runtime_interfaces=None) -> dict:
+    """Project runtime capability evidence for UI and activation proof.
+
+    This is a projection, not a new source of truth: model/knowledge health come
+    from append-only probe artifacts, Mirage/QMD from the data-plane probe, and
+    intent/skill status from activation/certification artifacts.
+    """
+    model = _health_file_summary(MODEL_DOCTOR_HEALTH)
+    knowledge = _health_file_summary(KNOWLEDGE_PROBE_HEALTH)
+    mirage = _mirage_status()
+    qmd = mirage.get("qmd") if isinstance(mirage.get("qmd"), dict) else {}
+    activation = _activation_proof_summary()
+    skills = _skills_certification_summary()
+    runtime_interfaces = runtime_interfaces or {}
+    runtime_dims = runtime_interfaces.get("dimensions") if isinstance(runtime_interfaces.get("dimensions"), dict) else {}
+    sandbox = runtime_dims.get("sandbox_runtime") if isinstance(runtime_dims.get("sandbox_runtime"), dict) else {}
+    intent_ok = bool(activation.get("ok")) and (HARNESS_DIR / "lib" / "intent_engine_adapter.py").exists()
+    qmd_ok = qmd.get("status") == "ok" or mirage.get("qmd_status") == "ok"
+    mirage_ok = bool(mirage.get("enabled")) and qmd_ok
+    sandbox_write_guard_violations = int(sandbox.get("write_guard_violations") or 0)
+    sandbox_ok = (
+        bool(sandbox.get("ok"))
+        and bool(sandbox.get("workspace_removed"))
+        and sandbox.get("execution_mode") == "argv"
+        and bool(sandbox.get("write_guard_enabled"))
+        and sandbox_write_guard_violations == 0
+    )
+    checks = {
+        "model": {
+            "status": "ok" if model.get("ok") else "warn",
+            "label": "Model routing",
+            "detail": f"{model.get('status', 'unknown')} {model.get('checked_at', '')}".strip(),
+            "evidence": model.get("path", ""),
+        },
+        "knowledge": {
+            "status": "ok" if knowledge.get("ok") else "warn",
+            "label": "Knowledge",
+            "detail": f"{knowledge.get('probes_passed', 0)}/{(knowledge.get('probes_passed') or 0) + (knowledge.get('probes_failed') or 0)} probes",
+            "evidence": knowledge.get("path", ""),
+        },
+        "mirage_qmd": {
+            "status": "ok" if mirage_ok else "warn",
+            "label": "Mirage/QMD",
+            "detail": f"qmd={qmd.get('status', mirage.get('qmd_status', 'unknown'))}",
+            "evidence": str(HARNESS_DIR / "state" / "mirage" / "last-probe.json"),
+        },
+        "intent": {
+            "status": "ok" if intent_ok else "warn",
+            "label": "Intent",
+            "detail": f"activation {activation.get('passed', 0)}/{activation.get('total', 0)}",
+            "evidence": activation.get("path", ""),
+        },
+        "skills": {
+            "status": "ok" if skills.get("ok") and int(skills.get("broken") or 0) == 0 else "warn",
+            "label": "Skills",
+            "detail": f"effective={skills.get('effective', 0)} executable={skills.get('executable', 0)} broken={skills.get('broken', 0)}",
+            "evidence": skills.get("path", ""),
+        },
+        "sandbox": {
+            "status": "ok" if sandbox_ok else "warn",
+            "label": "Sandbox",
+            "detail": sandbox.get("message", "runtime doctor unavailable"),
+            "evidence": sandbox.get("evidence_file", ""),
+            "workspace_removed": bool(sandbox.get("workspace_removed")),
+            "execution_mode": sandbox.get("execution_mode", ""),
+            "write_guard_enabled": bool(sandbox.get("write_guard_enabled")),
+            "write_guard_violations": sandbox_write_guard_violations,
+            "boundary": sandbox.get("boundary", "local process sandbox, not VM/container isolation"),
+        },
+    }
+    ok = all(item.get("status") == "ok" for item in checks.values())
+    return {
+        "ok": ok,
+        "status": "ok" if ok else "warn",
+        "checks": checks,
+        "updated_at": max(
+            [str(model.get("checked_at") or ""), str(knowledge.get("checked_at") or ""), str(skills.get("checked_at") or ""), str(activation.get("generated_at") or "")]
+        ),
+    }
+
+
 def _pane_info() -> list:
     """Return list of known pane assignments."""
     d = _read_assignments()
@@ -859,9 +999,10 @@ def _latest_model_call_for_pane(target: str, pane_id: str = "") -> dict:
     }
 
 
-def _pane_snapshot(target: str, role: str, assignment: str = "") -> dict:
+def _pane_snapshot(target: str, role: str, assignment: str = "", capability_health=None) -> dict:
     assignment_meta = _sprint_meta(assignment) if assignment else {}
     pane_id = _run_tmux(["display-message", "-p", "-t", target, "#{pane_id}"])
+    health = capability_health or _capability_health_summary()
     if not pane_id:
         return {
             "target": target,
@@ -872,6 +1013,7 @@ def _pane_snapshot(target: str, role: str, assignment: str = "") -> dict:
             "artifact": _artifact_for_assignment(role, assignment),
             "title": "",
             "model_call": _latest_model_call_for_pane(target, pane_id),
+            "capability_health": health,
         }
     title = _run_tmux(["display-message", "-p", "-t", target, "#{pane_title}"])
     tail = _run_tmux(["capture-pane", "-t", target, "-p", "-S", "-8"], timeout=1.0)
@@ -884,29 +1026,30 @@ def _pane_snapshot(target: str, role: str, assignment: str = "") -> dict:
         "artifact": _artifact_for_assignment(role, assignment),
         "title": title,
         "model_call": _latest_model_call_for_pane(target, pane_id),
+        "capability_health": health,
     }
 
 
-def _main_screen() -> dict:
+def _main_screen(capability_health=None) -> dict:
     assignments = _read_assignments()
     roles = ["PM", "Planner", "Builder", "Evaluator"]
     panes = []
     for idx, role in enumerate(roles):
         target = f"solar-harness:0.{idx}"
-        panes.append(_pane_snapshot(target, role, assignments.get(target, "")))
+        panes.append(_pane_snapshot(target, role, assignments.get(target, ""), capability_health=capability_health))
     return {
         "note": "runtime_state, assignment, and artifact are separate; pane output alone is not proof of progress.",
         "panes": panes,
     }
 
 
-def _lab_screen() -> dict:
+def _lab_screen(capability_health=None) -> dict:
     roles = ["lab-builder-1", "lab-builder-2", "lab-builder-3", "lab-builder-4"]
     lab_dir = SPRINTS_DIR / "obsidian-wiki-lab"
     panes = []
     for idx, role in enumerate(roles):
         target = f"solar-harness-lab:0.{idx}"
-        snap = _pane_snapshot(target, role, "")
+        snap = _pane_snapshot(target, role, "", capability_health=capability_health)
         latest = None
         if lab_dir.exists():
             matches = sorted(lab_dir.glob(f"{role}*handoff.md"), key=lambda p: p.stat().st_mtime if p.exists() else 0)
@@ -1211,20 +1354,23 @@ def _apple_notes_ingest_status() -> dict:
 
 def _status_payload(limit: int = 50) -> dict:
     current = _current_sprint()
+    runtime_interfaces = _runtime_interfaces_status(current.get("sprint_id", ""))
+    capability_health = _capability_health_summary(runtime_interfaces)
     return {
         "current_sprint": current,
         "panes": _pane_info(),
-        "main_screen": _main_screen(),
-        "lab_screen": _lab_screen(),
+        "main_screen": _main_screen(capability_health),
+        "lab_screen": _lab_screen(capability_health),
         "recent_events": _read_jsonl(ALL_EVENTS, limit=limit, filter_synthetic=True),
         "kpi": _kpi(),
         "obsidian_wiki": _obsidian_wiki_readiness(),
         "mirage": _mirage_status(),
+        "capability_health": capability_health,
         "solar_kb": _solar_kb_status(),
         "obsidian_sync": _obsidian_sync_status(),
         "apple_notes_ingest": _apple_notes_ingest_status(),
         "evolution": _evolution_status(),
-        "runtime_interfaces": _runtime_interfaces_status(current.get("sprint_id", "")),
+        "runtime_interfaces": runtime_interfaces,
     }
 
 
@@ -1739,6 +1885,29 @@ td {
   overflow-wrap: anywhere;
   font: 900 0.78rem ui-monospace, SFMono-Regular, Menlo, monospace;
 }
+.capability-evidence {
+  display: grid;
+  gap: 0.38rem;
+  min-width: 190px;
+}
+.capability-chip {
+  display: grid;
+  grid-template-columns: minmax(70px, 0.8fr) auto minmax(0, 1.2fr);
+  gap: 0.42rem;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.38rem 0.48rem;
+  background: rgba(255, 255, 255, 0.36);
+  font-size: 0.78rem;
+}
+.capability-chip b {
+  overflow-wrap: anywhere;
+}
+.capability-chip .detail {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
 .integration-summary {
   display: flex;
   flex-wrap: wrap;
@@ -1828,6 +1997,7 @@ td {
     <div class="overview-bottom">
       <div class="card"><h3>知识库状态</h3><div id="overview-knowledge">Loading...</div></div>
       <div class="card"><h3>Runtime Interfaces</h3><div id="overview-runtime">Loading...</div></div>
+      <div class="card"><h3>Capability Evidence</h3><div id="overview-capabilities">Loading...</div></div>
       <div class="card"><h3>最近风险</h3><div id="overview-risk">Loading...</div></div>
     </div>
   </section>
@@ -2003,6 +2173,42 @@ function modelCallCell(m) {
     '<div class="tech-id">private reasoning visible: ' + esc(String(!!m.private_reasoning_visible)) + '</div>' +
     '</div>';
 }
+function capabilityHealthCell(h) {
+  h = h || {};
+  const checks = h.checks || {};
+  const order = ['model', 'knowledge', 'mirage_qmd', 'intent', 'skills', 'sandbox'];
+  if (!order.some(k => checks[k])) {
+    return '<div class="muted">No capability evidence.</div>';
+  }
+  return '<div class="capability-evidence">' + order.map(k => {
+    const c = checks[k] || {};
+    const label = c.label || k;
+    const st = c.status || 'warn';
+    const detail = c.detail || '';
+    return '<div class="capability-chip">' +
+      '<b>' + esc(label) + '</b>' +
+      statusBadge(st) +
+      '<span class="detail">' + esc(detail) + '</span>' +
+      '</div>';
+  }).join('') + '</div>';
+}
+function renderCapabilityHealthSummary(h) {
+  h = h || {};
+  const checks = h.checks || {};
+  const order = ['model', 'knowledge', 'mirage_qmd', 'intent', 'skills', 'sandbox'];
+  return '<div class="health-metrics">' +
+    '<div class="mini-metric"><div class="kv-label">Overall</div><span class="num">' + esc(h.status || 'unknown') + '</span></div>' +
+    '<div class="mini-metric"><div class="kv-label">Updated</div><span class="num">' + esc((h.updated_at || 'N/A').slice(11, 19) || 'N/A') + '</span></div>' +
+    '</div>' +
+    '<div class="capability-evidence">' + order.map(k => {
+      const c = checks[k] || {};
+      return '<div class="capability-chip">' +
+        '<b>' + esc(c.label || k) + '</b>' +
+        statusBadge(c.status || 'warn') +
+        '<span class="detail">' + esc(c.detail || '-') + '</span>' +
+        '</div>';
+    }).join('') + '</div>';
+}
 function clip(v, limit) {
   const s = String(v || '').replace(/\s+/g, ' ').trim();
   return s.length > limit ? s.slice(0, limit - 1).trim() + '…' : s;
@@ -2061,11 +2267,12 @@ function renderPaneMatrix(cardId, screen) {
     return;
   }
   let t = '<div class="refresh">' + esc((screen && screen.note) || '') + '</div>';
-  t += '<table><tr><th>Pane</th><th>Role</th><th>Runtime</th><th>模型调用</th><th>当前任务</th><th>Artifact</th><th>Title</th></tr>';
+  t += '<table><tr><th>Pane</th><th>Role</th><th>Runtime</th><th>能力证据</th><th>模型调用</th><th>当前任务</th><th>Artifact</th><th>Title</th></tr>';
   panes.forEach(p => {
     t += '<tr><td>' + esc(p.target || '-') + '</td>' +
          '<td>' + esc(p.role || '-') + '</td>' +
          '<td class="' + runtimeClass(p.runtime_state) + '">' + esc(p.runtime_state || '-') + '</td>' +
+         '<td>' + capabilityHealthCell(p.capability_health || {}) + '</td>' +
          '<td>' + modelCallCell(p.model_call) + '</td>' +
          '<td>' + taskCell(p.assignment_meta, p.assignment) + '</td>' +
          '<td>' + artifactLabel(p.artifact) + '</td>' +
@@ -2381,6 +2588,7 @@ function render(data) {
     'Wiki: ' + statusBadge(wiki.ready ? 'ok' : 'warn') + '<br>' +
     'Mirage: ' + statusBadge(mirage.ready ? 'ok' : (mirage.status || 'warn'));
   document.getElementById('overview-runtime').innerHTML = renderRuntimeInterfaces(data.runtime_interfaces || {});
+  document.getElementById('overview-capabilities').innerHTML = renderCapabilityHealthSummary(data.capability_health || {});
 
   document.getElementById('raw-card').textContent = JSON.stringify(data, null, 2);
 }

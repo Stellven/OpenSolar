@@ -21,6 +21,24 @@ assert_contains() {
 
 source "$HARNESS_DIR/lib/harness-config.sh"
 
+assert_eq() {
+  local actual="$1" expected="$2" label="$3"
+  if [[ "$actual" == "$expected" ]]; then
+    ok "$label"
+  else
+    not_ok "$label: expected '$expected', got '$actual'"
+  fi
+}
+
+assert_eq "$(python3 "$HARNESS_DIR/lib/model_registry.py" normalize opus)" "claude-opus" "registry resolves opus to Claude Opus"
+assert_eq "$(python3 "$HARNESS_DIR/lib/model_registry.py" normalize anthropic-sonnet)" "claude-sonnet" "registry resolves explicit Anthropic Sonnet"
+assert_eq "$(python3 "$HARNESS_DIR/lib/model_registry.py" normalize sonnet)" "zhipu-glm-4.7" "registry preserves bare sonnet as Zhipu lab alias"
+if python3 "$HARNESS_DIR/lib/model_registry.py" validate-main glm >/dev/null 2>&1; then
+  not_ok "registry blocks GLM from main screen"
+else
+  ok "registry blocks GLM from main screen"
+fi
+
 matrix="$(solar_lab_builder_matrix)"
 assert_contains "$matrix" "anthropic-sonnet" "config-backed matrix includes explicit Anthropic Sonnet alias"
 
@@ -34,6 +52,13 @@ slot4="$(
 )"
 assert_contains "$slot4" "DISPLAY_MODEL='Claude Sonnet (Anthropic, lab-builder-4)'" "slot 4 reads config and resolves to native Claude Sonnet"
 assert_contains "$slot4" "BASE_URL=''" "native Claude Sonnet does not use Zhipu/DeepSeek gateway"
+assert_contains "$slot4" "MODEL_ID='claude-sonnet'" "slot 4 exposes registry model id"
+
+slot1="$(
+  SOLAR_BUILDER_SLOT=lab-builder-1 \
+  bash "$HARNESS_DIR/lib/persona-config.sh" --print-config lab-builder
+)"
+assert_contains "$slot1" "MODEL_ID='zhipu-glm-5.1'" "slot 1 exposes GLM registry model id"
 
 override="$(
   SOLAR_LAB_BUILDER_MODEL_MATRIX=glm,anthropic-sonnet \
@@ -60,6 +85,7 @@ builder_opus="$(SOLAR_USER_CONFIG="$tmp_cfg" bash "$HARNESS_DIR/lib/persona-conf
 evaluator_opus="$(SOLAR_USER_CONFIG="$tmp_cfg" bash "$HARNESS_DIR/lib/persona-config.sh" --print-config evaluator)"
 rm -f "$tmp_cfg"
 assert_contains "$pm_opus" "MODEL_FLAG='--model opus'" "PM reads main config and resolves to Opus"
+assert_contains "$pm_opus" "MODEL_ID='claude-opus'" "PM exposes registry model id"
 assert_contains "$planner_opus" "MODEL_FLAG='--model opus'" "planner reads main config and resolves to Opus"
 assert_contains "$builder_opus" "MODEL_FLAG='--model opus'" "builder reads main config and resolves to Opus"
 assert_contains "$evaluator_opus" "MODEL_FLAG='--model opus'" "evaluator reads main config and resolves to Opus"

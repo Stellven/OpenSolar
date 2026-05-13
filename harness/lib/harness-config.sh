@@ -12,7 +12,14 @@ SOLAR_HARNESS_CONFIG_SH_LOADED=1
 
 HARNESS_DIR="${HARNESS_DIR:-$HOME/.solar/harness}"
 SOLAR_USER_CONFIG="${SOLAR_USER_CONFIG:-$HARNESS_DIR/config/solar-user-config.json}"
-SOLAR_DEFAULT_LAB_BUILDER_MATRIX="glm,glm,glm,anthropic-sonnet"
+SOLAR_MODEL_REGISTRY="${SOLAR_MODEL_REGISTRY:-$HARNESS_DIR/config/model-registry.json}"
+
+solar_model_registry() {
+  python3 "$HARNESS_DIR/lib/model_registry.py" --registry "$SOLAR_MODEL_REGISTRY" "$@"
+}
+
+SOLAR_DEFAULT_MAIN_MODEL="$(solar_model_registry default main_model 2>/dev/null || printf 'opus')"
+SOLAR_DEFAULT_LAB_BUILDER_MATRIX="$(solar_model_registry validate-lab-matrix "$(solar_model_registry default lab_builder_matrix 2>/dev/null || printf 'glm,glm,glm,anthropic-sonnet')" 2>/dev/null || printf 'glm,glm,glm,anthropic-sonnet')"
 
 solar_config_json_get() {
   local dotted_key="$1"
@@ -98,7 +105,7 @@ solar_lab_builder_matrix() {
 
 solar_persona_model() {
   local persona="$1"
-  local default_value="${2:-sonnet}"
+  local default_value="${2:-$SOLAR_DEFAULT_MAIN_MODEL}"
   local key=""
   case "$persona" in
     pm) key="models.pm" ;;
@@ -135,21 +142,7 @@ solar_set_lab_builder_matrix() {
 
 solar_validate_main_model_alias() {
   local alias="${1:-}"
-  python3 - "$alias" <<'PY'
-import re
-import sys
-
-alias = sys.argv[1].strip().lower()
-allowed = {
-    "sonnet", "anthropic-sonnet", "claude-sonnet", "anthropic",
-    "opus", "claude-opus", "anthropic-opus", "opus-4.7", "opus-4-7",
-    "claude-opus-4.7", "claude-opus-4-7",
-}
-if alias not in allowed or not re.match(r"^[a-z0-9_.-]+$", alias):
-    print("error: unsupported main model alias: " + (alias or "<empty>"), file=sys.stderr)
-    raise SystemExit(1)
-print(alias)
-PY
+  solar_model_registry validate-main "$alias"
 }
 
 solar_set_main_model() {
@@ -162,75 +155,37 @@ solar_set_main_model() {
 
 solar_validate_lab_builder_matrix() {
   local matrix="${1:-}"
-  python3 - "$matrix" <<'PY'
-import re
-import sys
-
-matrix = sys.argv[1].strip()
-allowed = {
-    "glm", "glm-5", "glm-5.1", "zhipu",
-    "sonnet", "glm-4.7", "glm47", "zhipu-sonnet",
-    "deepseek", "deepseek-v4", "deepseek-v4-pro", "deepseek-v4-flash", "ds", "ds-v4",
-    "anthropic-sonnet", "claude", "claude-sonnet", "anthropic",
-    "opus", "claude-opus",
+  solar_model_registry validate-lab-matrix "$matrix"
 }
-items = [x.strip().lower() for x in matrix.split(",") if x.strip()]
-if not items:
-    print("error: empty lab builder matrix", file=sys.stderr)
-    raise SystemExit(1)
-bad = [x for x in items if x not in allowed or not re.match(r"^[a-z0-9_.-]+$", x)]
-if bad:
-    print("error: unsupported lab model alias: " + ",".join(bad), file=sys.stderr)
-    raise SystemExit(1)
-print(matrix)
-PY
+
+solar_model_alias_canonical() {
+  solar_model_registry normalize "${1:-}"
 }
 
 solar_model_alias_label() {
-  local alias
-  alias=$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]' | xargs)
-  case "$alias" in
-    glm|glm-5|glm-5.1|zhipu) printf '%s' "GLM-5.1" ;;
-    sonnet|glm-4.7|glm47|zhipu-sonnet) printf '%s' "GLM-4.7" ;;
-    deepseek|deepseek-v4|deepseek-v4-pro|deepseek-v4-flash|ds|ds-v4) printf '%s' "DeepSeek" ;;
-    anthropic-sonnet|claude|claude-sonnet|anthropic) printf '%s' "Claude Sonnet" ;;
-    opus|claude-opus|anthropic-opus|opus-4.7|opus-4-7|claude-opus-4.7|claude-opus-4-7) printf '%s' "Claude Opus 4.7" ;;
-    *) printf '%s' "${alias:-N/A}" ;;
-  esac
+  solar_model_registry label "${1:-}" 2>/dev/null || printf '%s' "${1:-N/A}"
+}
+
+solar_model_short_label() {
+  solar_model_registry short-label "${1:-}" 2>/dev/null || solar_model_alias_label "${1:-}"
+}
+
+solar_model_key() {
+  solar_model_registry model-key "${1:-}" 2>/dev/null || printf '%s' "${1:-unknown}"
+}
+
+solar_model_provider() {
+  solar_model_registry provider "${1:-}" 2>/dev/null || true
+}
+
+solar_model_flag() {
+  solar_model_registry model-flag "${1:-}" 2>/dev/null || true
 }
 
 solar_lab_builder_matrix_label() {
   local matrix="${1:-}"
   [[ -n "$matrix" ]] || matrix="$(solar_lab_builder_matrix)"
-  python3 - "$matrix" <<'PY'
-from collections import Counter
-import sys
-
-labels = {
-    "glm": "GLM-5.1", "glm-5": "GLM-5.1", "glm-5.1": "GLM-5.1", "zhipu": "GLM-5.1",
-    "sonnet": "GLM-4.7", "glm-4.7": "GLM-4.7", "glm47": "GLM-4.7", "zhipu-sonnet": "GLM-4.7",
-    "deepseek": "DeepSeek", "deepseek-v4": "DeepSeek", "deepseek-v4-pro": "DeepSeek",
-    "deepseek-v4-flash": "DeepSeek", "ds": "DeepSeek", "ds-v4": "DeepSeek",
-    "anthropic-sonnet": "Claude Sonnet", "claude": "Claude Sonnet",
-    "claude-sonnet": "Claude Sonnet", "anthropic": "Claude Sonnet",
-    "opus": "Claude Opus 4.7", "claude-opus": "Claude Opus 4.7",
-    "anthropic-opus": "Claude Opus 4.7", "opus-4.7": "Claude Opus 4.7",
-    "opus-4-7": "Claude Opus 4.7", "claude-opus-4.7": "Claude Opus 4.7",
-    "claude-opus-4-7": "Claude Opus 4.7",
-}
-items = [x.strip().lower() for x in sys.argv[1].split(",") if x.strip()]
-names = [labels.get(x, x or "N/A") for x in items]
-counts = Counter(names)
-parts = []
-seen = set()
-for name in names:
-    if name in seen:
-        continue
-    seen.add(name)
-    n = counts[name]
-    parts.append(f"{n} {name}" if n > 1 else name)
-print(" + ".join(parts) if parts else "N/A")
-PY
+  solar_model_registry matrix-label "$matrix"
 }
 
 solar_lab_builder_matrix_item_label() {
@@ -238,17 +193,6 @@ solar_lab_builder_matrix_item_label() {
   local index="${2:-0}"
   [[ -n "$matrix" ]] || matrix="$(solar_lab_builder_matrix)"
   local item
-  item=$(python3 - "$matrix" "$index" <<'PY'
-import sys
-items = [x.strip() for x in sys.argv[1].split(",") if x.strip()]
-idx = int(sys.argv[2] or 0)
-if not items:
-    print("N/A")
-elif idx < len(items):
-    print(items[idx])
-else:
-    print(items[-1])
-PY
-)
+  item="$(solar_model_registry matrix-item "$matrix" "$index")"
   solar_model_alias_label "$item"
 }

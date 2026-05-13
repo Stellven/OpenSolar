@@ -349,6 +349,212 @@ def proof_model_call_runtime_projection(evidence_dir: Path) -> dict[str, Any]:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def proof_status_ui_capability_health_projection(evidence_dir: Path) -> dict[str, Any]:
+    status_module_path = HARNESS / "lib" / "symphony" / "status-server.py"
+    payload: dict[str, Any] = {}
+    if status_module_path.exists():
+        try:
+            spec = importlib.util.spec_from_file_location("solar_status_server_capability_health", status_module_path)
+            if spec and spec.loader:
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)  # type: ignore[union-attr]
+                payload = mod._status_payload(limit=5)  # type: ignore[attr-defined]
+        except Exception as exc:
+            payload = {"error": f"{type(exc).__name__}: {exc}"}
+    write_json(evidence_dir / "runtime" / "status-ui-capability-health.json", payload)
+
+    health = payload.get("capability_health") if isinstance(payload, dict) else {}
+    checks = health.get("checks") if isinstance(health, dict) else {}
+    required_checks = ["model", "knowledge", "mirage_qmd", "intent", "skills", "sandbox"]
+    missing_checks = [name for name in required_checks if name not in checks]
+    bad_checks = [
+        name for name, item in (checks or {}).items()
+        if name in required_checks and item.get("status") not in {"ok", "warn"}
+    ]
+
+    pane_missing = []
+    for screen_name in ("main_screen", "lab_screen"):
+        panes = ((payload.get(screen_name) or {}).get("panes") or []) if isinstance(payload, dict) else []
+        for pane in panes:
+            pane_health = pane.get("capability_health") or {}
+            pane_checks = pane_health.get("checks") or {}
+            missing = [name for name in required_checks if name not in pane_checks]
+            if missing:
+                pane_missing.append({"pane": pane.get("target"), "missing": missing})
+
+    passed = bool(health) and not missing_checks and not bad_checks and not pane_missing
+    return {
+        "name": "status UI projects model/KB/Mirage/intent/skills/sandbox health per pane",
+        "status": "ok" if passed else "error",
+        "passed": passed,
+        "evidence": {
+            "status_payload": str(evidence_dir / "runtime" / "status-ui-capability-health.json"),
+            "missing_checks": missing_checks,
+            "bad_checks": bad_checks,
+            "pane_missing": pane_missing[:8],
+            "overall_status": health.get("status") if isinstance(health, dict) else "",
+        },
+    }
+
+
+def proof_disposable_sandbox_runtime_lifecycle(evidence_dir: Path) -> dict[str, Any]:
+    sys.path.insert(0, str(HARNESS / "lib"))
+    payload: dict[str, Any] = {}
+    try:
+        from hands_runtime import SandboxHand
+        from runtime_interfaces import ResultStatus
+
+        os.environ["SOLAR_SANDBOX_VISIBLE_TEST"] = "visible"
+        os.environ["SOLAR_SANDBOX_SECRET_TEST"] = "sandbox-secret-value-12345"
+        hand = SandboxHand()
+        ref = hand.provision(capabilities=["shell", "evidence"])
+        guard_root = Path(tempfile.mkdtemp(prefix="solar-activation-sandbox-guard-"))
+        result = hand.execute(
+            ref,
+            "activation-sandbox",
+            {
+                "argv": ["/bin/sh", "-c", 'printf "%s/%s" "$SOLAR_SANDBOX_VISIBLE_TEST" "$TOKEN" > result.txt; cat result.txt'],
+                "env_allow": ["SOLAR_SANDBOX_VISIBLE_TEST"],
+                "secret_refs": {"TOKEN": "env:SOLAR_SANDBOX_SECRET_TEST"},
+                "write_guard_roots": [str(guard_root)],
+                "session_id": f"activation-sandbox-{os.getpid()}",
+                "sprint_id": f"activation-sandbox-{os.getpid()}",
+                "activity_id": "activation-sandbox-lifecycle",
+            },
+            idempotency_key=f"activation-sandbox-{os.getpid()}",
+            timeout_seconds=15,
+        )
+        evidence_file = Path(result.metadata.get("evidence_file", ""))
+        evidence = json.loads(evidence_file.read_text(encoding="utf-8")) if evidence_file.exists() else {}
+        workspace_manifest = evidence.get("workspace_manifest") or {}
+        write_guard = evidence.get("write_guard") or {}
+        write_guard_violations = write_guard.get("violations") or []
+        disposed = hand.dispose(ref)
+        shutil.rmtree(guard_root, ignore_errors=True)
+        workspace_removed = bool(disposed.output.get("workspace_removed"))
+        secret_redacted = (
+            result.output == "visible/[REDACTED]"
+            and "sandbox-secret-value" not in json.dumps(evidence, ensure_ascii=False)
+        )
+        payload = {
+            "hand_id": ref.hand_id,
+            "status": result.status.value if hasattr(result.status, "value") else str(result.status),
+            "output": result.output,
+            "evidence_file": str(evidence_file),
+            "workspace_file_count": workspace_manifest.get("file_count"),
+            "workspace_removed": workspace_removed,
+            "execution_mode": evidence.get("execution_mode", ""),
+            "write_guard_enabled": bool(write_guard.get("enabled")),
+            "write_guard_violations": len(write_guard_violations),
+            "env_allow": evidence.get("env_allow", []),
+            "secret_names": evidence.get("secret_names", []),
+            "secret_redacted": secret_redacted,
+            "boundary": "local process sandbox, not VM/container isolation",
+        }
+        passed = (
+            result.status == ResultStatus.OK
+            and evidence_file.exists()
+            and int(workspace_manifest.get("file_count") or 0) >= 1
+            and workspace_removed
+            and evidence.get("execution_mode") == "argv"
+            and bool(write_guard.get("enabled"))
+            and not write_guard_violations
+            and secret_redacted
+        )
+    except Exception as exc:
+        passed = False
+        payload = {"error": f"{type(exc).__name__}: {exc}"}
+
+    write_json(evidence_dir / "runtime" / "disposable-sandbox-lifecycle.json", payload)
+    return {
+        "name": "disposable sandbox runtime uses argv/write-guard and disposes workspace",
+        "status": "ok" if passed else "error",
+        "passed": passed,
+        "evidence": {
+            "runtime_json": str(evidence_dir / "runtime" / "disposable-sandbox-lifecycle.json"),
+            "evidence_file": payload.get("evidence_file", ""),
+            "workspace_removed": payload.get("workspace_removed", False),
+            "execution_mode": payload.get("execution_mode", ""),
+            "write_guard_enabled": payload.get("write_guard_enabled", False),
+            "write_guard_violations": payload.get("write_guard_violations", 0),
+            "secret_redacted": payload.get("secret_redacted", False),
+            "boundary": payload.get("boundary", ""),
+        },
+    }
+
+
+def proof_sandbox_write_guard_blocks_host_write(evidence_dir: Path) -> dict[str, Any]:
+    sys.path.insert(0, str(HARNESS / "lib"))
+    payload: dict[str, Any] = {}
+    guard_root = Path(tempfile.mkdtemp(prefix="solar-activation-write-guard-"))
+    try:
+        from hands_runtime import SandboxHand
+        from runtime_interfaces import ResultStatus
+
+        hand = SandboxHand()
+        ref = hand.provision(capabilities=["shell", "evidence"])
+        leak_path = guard_root / "host-leak.txt"
+        result = hand.execute(
+            ref,
+            "activation-sandbox-write-guard",
+            {
+                "argv": ["/bin/sh", "-c", f"printf leaked > {str(leak_path)!r}"],
+                "write_guard_roots": [str(guard_root)],
+                "session_id": f"activation-write-guard-{os.getpid()}",
+                "sprint_id": f"activation-write-guard-{os.getpid()}",
+                "activity_id": "activation-sandbox-write-guard",
+            },
+            idempotency_key=f"activation-write-guard-{os.getpid()}",
+            timeout_seconds=15,
+        )
+        evidence_file = Path(result.metadata.get("evidence_file", ""))
+        evidence = json.loads(evidence_file.read_text(encoding="utf-8")) if evidence_file.exists() else {}
+        write_guard = evidence.get("write_guard") or {}
+        violations = write_guard.get("violations") or []
+        disposed = hand.dispose(ref)
+        payload = {
+            "hand_id": ref.hand_id,
+            "status": result.status.value if hasattr(result.status, "value") else str(result.status),
+            "error": result.error,
+            "evidence_file": str(evidence_file),
+            "execution_mode": evidence.get("execution_mode", ""),
+            "write_guard_enabled": bool(write_guard.get("enabled")),
+            "write_guard_violations": violations,
+            "workspace_removed": bool(disposed.output.get("workspace_removed")),
+            "leak_path": str(leak_path),
+            "boundary": "local process sandbox write guard detects host writes; it is not VM/container isolation",
+        }
+        passed = (
+            result.status == ResultStatus.ERROR
+            and "write guard violation" in (result.error or "")
+            and evidence.get("execution_mode") == "argv"
+            and bool(write_guard.get("enabled"))
+            and any(item.get("type") == "created" and str(item.get("path", "")).endswith("host-leak.txt") for item in violations)
+            and bool(disposed.output.get("workspace_removed"))
+        )
+    except Exception as exc:
+        passed = False
+        payload = {"error": f"{type(exc).__name__}: {exc}"}
+    finally:
+        shutil.rmtree(guard_root, ignore_errors=True)
+
+    write_json(evidence_dir / "runtime" / "sandbox-write-guard-negative.json", payload)
+    return {
+        "name": "sandbox write guard detects host writes outside workspace",
+        "status": "ok" if passed else "error",
+        "passed": passed,
+        "evidence": {
+            "runtime_json": str(evidence_dir / "runtime" / "sandbox-write-guard-negative.json"),
+            "evidence_file": payload.get("evidence_file", ""),
+            "execution_mode": payload.get("execution_mode", ""),
+            "write_guard_enabled": payload.get("write_guard_enabled", False),
+            "violation_count": len(payload.get("write_guard_violations") or []),
+            "workspace_removed": payload.get("workspace_removed", False),
+            "boundary": payload.get("boundary", ""),
+        },
+    }
+
+
 def proof_negative_control(evidence_dir: Path) -> dict[str, Any]:
     tmp = Path(tempfile.mkdtemp(prefix="solar-activation-negative-"))
     try:
@@ -417,6 +623,9 @@ def main() -> int:
         proof_runtime_effect(evidence_dir),
         proof_ruflo_runtime_effect(evidence_dir),
         proof_model_call_runtime_projection(evidence_dir),
+        proof_disposable_sandbox_runtime_lifecycle(evidence_dir),
+        proof_sandbox_write_guard_blocks_host_write(evidence_dir),
+        proof_status_ui_capability_health_projection(evidence_dir),
         proof_negative_control(evidence_dir),
     ]
     passed = sum(1 for item in proofs if item["passed"])

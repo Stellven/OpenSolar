@@ -81,6 +81,10 @@ sanitize_tmux_claude_env() {
   tmux set-environment -t "$session" -gu SOLAR_LAB_BUILDER_MODEL_MATRIX 2>/dev/null || true
 }
 
+claude_clean_env_prefix() {
+  printf '%s' "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH -u ANTHROPIC_BASE_URL -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_API_KEY -u ANTHROPIC_DEFAULT_OPUS_MODEL -u ANTHROPIC_DEFAULT_SONNET_MODEL -u ANTHROPIC_DEFAULT_HAIKU_MODEL"
+}
+
 attach_or_print() {
   local session="${1:-$SESSION_NAME}"
   if [[ -t 1 && -n "${TERM:-}" && "${TERM:-}" != "dumb" ]]; then
@@ -132,7 +136,7 @@ apply_product_delivery_models() {
     pane_id=$(tmux display-message -p -t "$target" '#{pane_id}' 2>/dev/null || true)
     work_dir=$(tmux display-message -p -t "$target" '#{pane_current_path}' 2>/dev/null || pwd)
     _esc_work=$(printf '%q' "$work_dir")
-    tmux respawn-pane -k -t "$target" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH -u ANTHROPIC_BASE_URL -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_API_KEY -u ANTHROPIC_DEFAULT_OPUS_MODEL -u ANTHROPIC_DEFAULT_SONNET_MODEL -u ANTHROPIC_DEFAULT_HAIKU_MODEL TMUX_PANE=${pane_id} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" 2>/dev/null || true
+    tmux respawn-pane -k -t "$target" "$(claude_clean_env_prefix) TMUX_PANE=${pane_id} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" 2>/dev/null || true
     sleep 0.3
   done
   configure_product_delivery_labels
@@ -448,7 +452,7 @@ start_harness() {
     local target="$1" persona="$2"
     local pane_id
     pane_id=$(tmux display-message -p -t "$target" '#{pane_id}')
-    tmux send-keys -t "$target" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH TMUX_PANE=${pane_id} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" Enter
+    tmux send-keys -t "$target" "$(claude_clean_env_prefix) TMUX_PANE=${pane_id} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" Enter
   }
   sleep 1
   launch_persona_pane "$SESSION_NAME:Product Delivery.0" "pm"
@@ -708,7 +712,7 @@ ensure_parallel_builder_lab() {
       continue
     fi
     pane_id=$(tmux display-message -p -t "$target" '#{pane_id}')
-    tmux respawn-pane -k -t "$target" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH -u ANTHROPIC_BASE_URL -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_API_KEY -u ANTHROPIC_DEFAULT_OPUS_MODEL -u ANTHROPIC_DEFAULT_SONNET_MODEL -u ANTHROPIC_DEFAULT_HAIKU_MODEL TMUX_PANE=${pane_id} SOLAR_BUILDER_SLOT=${slot} SOLAR_LAB_BUILDER_MODEL_MATRIX=${desired_matrix} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh lab-builder ${_esc_work}"
+    tmux respawn-pane -k -t "$target" "$(claude_clean_env_prefix) TMUX_PANE=${pane_id} SOLAR_BUILDER_SLOT=${slot} SOLAR_LAB_BUILDER_MODEL_MATRIX=${desired_matrix} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh lab-builder ${_esc_work}"
   done
   configure_builder_lab_labels
 }
@@ -756,7 +760,7 @@ start_extension() {
     local target="$1" persona="$2" slot="$3"
     local pane_id
     pane_id=$(tmux display-message -p -t "$target" '#{pane_id}')
-    tmux send-keys -t "$target" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH -u ANTHROPIC_BASE_URL -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_API_KEY -u ANTHROPIC_DEFAULT_OPUS_MODEL -u ANTHROPIC_DEFAULT_SONNET_MODEL -u ANTHROPIC_DEFAULT_HAIKU_MODEL TMUX_PANE=${pane_id} SOLAR_BUILDER_SLOT=${slot} SOLAR_LAB_BUILDER_MODEL_MATRIX=${model_matrix} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" Enter
+    tmux send-keys -t "$target" "$(claude_clean_env_prefix) TMUX_PANE=${pane_id} SOLAR_BUILDER_SLOT=${slot} SOLAR_LAB_BUILDER_MODEL_MATRIX=${model_matrix} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" Enter
   }
   sleep 1
   launch_persona_pane "$LAB_SESSION_NAME:Builder Lab.0" "lab-builder" "lab-builder-1"
@@ -1008,13 +1012,13 @@ wake_sprint() {
     local _esc_h _esc_w
     _esc_h=$(printf '%q' "$HARNESS_DIR")
     _esc_w=$(printf '%q' "$work_dir")
-    tmux send-keys -t "$SESSION_NAME:0.0" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH SOLAR_CLAUDE_BYPASS=1 bash ${_esc_h}/pane-launcher.sh pm ${_esc_w}" Enter
+    tmux send-keys -t "$SESSION_NAME:0.0" "$(claude_clean_env_prefix) SOLAR_CLAUDE_BYPASS=1 bash ${_esc_h}/pane-launcher.sh pm ${_esc_w}" Enter
     sleep 1
-    tmux send-keys -t "$SESSION_NAME:0.1" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH SOLAR_CLAUDE_BYPASS=1 bash ${_esc_h}/pane-launcher.sh planner ${_esc_w}" Enter
+    tmux send-keys -t "$SESSION_NAME:0.1" "$(claude_clean_env_prefix) SOLAR_CLAUDE_BYPASS=1 bash ${_esc_h}/pane-launcher.sh planner ${_esc_w}" Enter
     sleep 1
-    tmux send-keys -t "$SESSION_NAME:0.2" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH SOLAR_CLAUDE_BYPASS=1 bash ${_esc_h}/pane-launcher.sh builder ${_esc_w}" Enter
+    tmux send-keys -t "$SESSION_NAME:0.2" "$(claude_clean_env_prefix) SOLAR_CLAUDE_BYPASS=1 bash ${_esc_h}/pane-launcher.sh builder ${_esc_w}" Enter
     sleep 1
-    tmux send-keys -t "$SESSION_NAME:0.3" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH SOLAR_CLAUDE_BYPASS=1 bash ${_esc_h}/pane-launcher.sh evaluator ${_esc_w}" Enter
+    tmux send-keys -t "$SESSION_NAME:0.3" "$(claude_clean_env_prefix) SOLAR_CLAUDE_BYPASS=1 bash ${_esc_h}/pane-launcher.sh evaluator ${_esc_w}" Enter
     sleep 1
     configure_product_delivery_labels
 
@@ -1807,10 +1811,10 @@ do_models_command() {
       local matrix label source pm_model planner_model builder_model evaluator_model
       matrix="$(solar_lab_builder_matrix)"
       label="$(solar_lab_builder_matrix_label "$matrix")"
-      pm_model="$(solar_persona_model pm sonnet)"
-      planner_model="$(solar_persona_model planner sonnet)"
-      builder_model="$(solar_persona_model builder sonnet)"
-      evaluator_model="$(solar_persona_model evaluator sonnet)"
+      pm_model="$(solar_persona_model pm)"
+      planner_model="$(solar_persona_model planner)"
+      builder_model="$(solar_persona_model builder)"
+      evaluator_model="$(solar_persona_model evaluator)"
       if [[ -n "${SOLAR_LAB_BUILDER_MODEL_MATRIX:-}" ]]; then
         source="env:SOLAR_LAB_BUILDER_MODEL_MATRIX"
       else
@@ -1830,7 +1834,7 @@ do_models_command() {
       ;;
     set-main)
       local alias="${1:-}"
-      [[ -n "$alias" ]] || { err "用法: $0 models set-main <opus|sonnet> [--apply]"; exit 1; }
+      [[ -n "$alias" ]] || { err "用法: $0 models set-main <opus|anthropic-sonnet> [--apply]"; exit 1; }
       solar_set_main_model "$alias"
       ok "已写入主屏模型: pm/planner/builder/evaluator -> $alias"
       if [[ "${2:-}" == "--apply" ]]; then
@@ -1862,12 +1866,44 @@ do_models_command() {
       configure_product_delivery_labels
       configure_builder_lab_labels
       ;;
+    doctor)
+      local guard="$HARNESS_DIR/tests/test-model-registry-guard.sh"
+      local single="$HARNESS_DIR/tests/test-model-config-single-source.sh"
+      local guard_out single_out guard_rc single_rc overall
+      guard_out="$(mktemp)"
+      single_out="$(mktemp)"
+      guard_rc=0
+      single_rc=0
+      bash "$guard" >"$guard_out" 2>&1 || guard_rc=$?
+      bash "$single" >"$single_out" 2>&1 || single_rc=$?
+      overall="ok"
+      [[ "$guard_rc" -eq 0 && "$single_rc" -eq 0 ]] || overall="error"
+      printf '┌──────────────────────────────┬────────┬────────────────────────────────────┐\n'
+      printf '│ %-28s │ %-6s │ %-34s │\n' "检查项" "状态" "证据"
+      printf '├──────────────────────────────┼────────┼────────────────────────────────────┤\n'
+      printf '│ %-28s │ %-6s │ %-34s │\n' "registry guard" "$([[ "$guard_rc" -eq 0 ]] && echo ok || echo error)" "$(tail -1 "$guard_out" | cut -c1-34)"
+      printf '│ %-28s │ %-6s │ %-34s │\n' "model config single source" "$([[ "$single_rc" -eq 0 ]] && echo ok || echo error)" "$(tail -1 "$single_out" | cut -c1-34)"
+      printf '│ %-28s │ %-6s │ %-34s │\n' "overall" "$overall" "$SOLAR_USER_CONFIG"
+      printf '└──────────────────────────────┴────────┴────────────────────────────────────┘\n'
+      if [[ "$overall" != "ok" ]]; then
+        err "models doctor failed"
+        printf '\n--- registry guard ---\n'
+        cat "$guard_out"
+        printf '\n--- model config ---\n'
+        cat "$single_out"
+        rm -f "$guard_out" "$single_out"
+        return 1
+      fi
+      rm -f "$guard_out" "$single_out"
+      ;;
     help|--help|-h)
       echo "Solar Harness Models"
       echo ""
       echo "Usage:"
       echo "  $0 models show"
+      echo "  $0 models doctor"
       echo "  $0 models set-main opus [--apply]"
+      echo "  $0 models set-main anthropic-sonnet [--apply]"
       echo "  $0 models apply-main"
       echo "  $0 models set-lab-matrix glm,glm,glm,anthropic-sonnet [--apply]"
       echo "  $0 models apply-lab"

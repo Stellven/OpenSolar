@@ -39,6 +39,9 @@ KB_PROBE_HEALTH = HARNESS / "state" / "knowledge-probe-health.json"
 KB_PROBE_INTERVAL_SEC = int(os.environ.get("SOLAR_KB_PROBE_INTERVAL_SEC", "1800"))
 KB_PROBE_TRIGGER_COOLDOWN_SEC = int(os.environ.get("SOLAR_KB_PROBE_TRIGGER_COOLDOWN_SEC", "300"))
 KB_PROBE_TIMEOUT_SEC = int(os.environ.get("SOLAR_KB_PROBE_TIMEOUT_SEC", "120"))
+MODEL_DOCTOR_HEALTH = HARNESS / "state" / "model-registry-doctor-health.json"
+MODEL_DOCTOR_INTERVAL_SEC = int(os.environ.get("SOLAR_MODEL_DOCTOR_INTERVAL_SEC", "1800"))
+MODEL_DOCTOR_TIMEOUT_SEC = int(os.environ.get("SOLAR_MODEL_DOCTOR_TIMEOUT_SEC", "120"))
 
 sys.path.insert(0, str(HARNESS / "lib"))
 try:
@@ -50,6 +53,7 @@ TELEMETRY_ONLY_FINDINGS = {
     "knowledge_context_sqlite_only",
     "knowledge_context_timeout",
     "knowledge_probe_failed",
+    "model_registry_doctor_failed",
 }
 
 
@@ -100,6 +104,18 @@ def load_state() -> dict:
     state.setdefault("actions", {})
     state.setdefault("target_actions", {})
     state.setdefault("started_at", utc_now())
+    # State is cache/projection, not the source of truth. If a sprint was
+    # quarantined or deleted, stale action cache entries must not keep nudging
+    # panes with dead dispatch text.
+    for key in list(state.get("actions", {})):
+        sid = key.split(":", 1)[0]
+        if sid.startswith("sprint-") and not (SPRINTS / f"{sid}.status.json").exists():
+            state["actions"].pop(key, None)
+    for key in list(state.get("target_actions", {})):
+        result = (state["target_actions"].get(key) or {}).get("result") or {}
+        sid = str(result.get("sid") or "")
+        if sid.startswith("sprint-") and not (SPRINTS / f"{sid}.status.json").exists():
+            state["target_actions"].pop(key, None)
     return state
 
 
@@ -300,6 +316,85 @@ def run_kb_probe(reason: str, force: bool = False) -> dict:
     append_event(
         "",
         "autopilot_kb_probe_passed" if result.get("ok") else "autopilot_kb_probe_failed",
+        "info" if result.get("ok") else "error",
+        result,
+    )
+    return result
+
+
+def run_model_registry_doctor(reason: str = "periodic", force: bool = False) -> dict:
+    """Run model routing single-source guard without touching panes."""
+    last = load_json(MODEL_DOCTOR_HEALTH)
+    now_epoch = time.time()
+    if not force and last and now_epoch - float(last.get("checked_at_epoch", 0)) < MODEL_DOCTOR_INTERVAL_SEC:
+        last["skipped"] = "cooldown"
+        last["reason"] = reason
+        return last
+
+    harness_cmd = HARNESS / "solar-harness.sh"
+    if not harness_cmd.exists():
+        harness_cmd = HOME / ".solar" / "bin" / "solar-harness"
+    if not harness_cmd.exists():
+        result = {
+            "ok": False,
+            "status": "error",
+            "reason": reason,
+            "error": "solar_harness_command_missing",
+            "checked_at": utc_now(),
+            "checked_at_epoch": now_epoch,
+        }
+        save_json(MODEL_DOCTOR_HEALTH, result)
+        append_event("", "autopilot_model_registry_doctor_failed", "error", result)
+        return result
+
+    try:
+        proc = subprocess.run(
+            [str(harness_cmd), "models", "doctor"],
+            cwd=str(HARNESS),
+            text=True,
+            capture_output=True,
+            timeout=MODEL_DOCTOR_TIMEOUT_SEC,
+        )
+        ok = proc.returncode == 0
+        result = {
+            "ok": ok,
+            "status": "ok" if ok else "error",
+            "reason": reason,
+            "returncode": proc.returncode,
+            "stdout_tail": (proc.stdout or "")[-4000:],
+            "stderr_tail": (proc.stderr or "")[-4000:],
+            "command": str(harness_cmd),
+            "checked_at": utc_now(),
+            "checked_at_epoch": now_epoch,
+        }
+    except subprocess.TimeoutExpired as exc:
+        result = {
+            "ok": False,
+            "status": "error",
+            "reason": reason,
+            "error": "model_doctor_timeout",
+            "timeout_sec": MODEL_DOCTOR_TIMEOUT_SEC,
+            "stdout_tail": (exc.stdout or "")[-4000:] if isinstance(exc.stdout, str) else "",
+            "stderr_tail": (exc.stderr or "")[-4000:] if isinstance(exc.stderr, str) else "",
+            "command": str(harness_cmd),
+            "checked_at": utc_now(),
+            "checked_at_epoch": now_epoch,
+        }
+    except Exception as exc:
+        result = {
+            "ok": False,
+            "status": "error",
+            "reason": reason,
+            "error": f"{type(exc).__name__}: {exc}",
+            "command": str(harness_cmd),
+            "checked_at": utc_now(),
+            "checked_at_epoch": now_epoch,
+        }
+
+    save_json(MODEL_DOCTOR_HEALTH, result)
+    append_event(
+        "",
+        "autopilot_model_registry_doctor_passed" if result.get("ok") else "autopilot_model_registry_doctor_failed",
         "info" if result.get("ok") else "error",
         result,
     )
@@ -950,6 +1045,30 @@ def inspect_knowledge_context(state: dict) -> list[dict]:
     return findings
 
 
+def inspect_model_registry(state: dict) -> list[dict]:
+    """Periodically verify model routing has not drifted back to hardcoding."""
+    probe = run_model_registry_doctor("periodic", force=False)
+    state["model_registry_doctor"] = {
+        "status": "ok" if probe.get("ok") else "error",
+        "checked_at": probe.get("checked_at"),
+        "reason": probe.get("reason"),
+        "skipped": probe.get("skipped", ""),
+    }
+    if probe.get("ok"):
+        return []
+    return [
+        {
+            "sid": "",
+            "type": "model_registry_doctor_failed",
+            "severity": "error",
+            "target": "",
+            "role": "autopilot",
+            "message": "models doctor failed；模型路由单一事实源可能漂移。检查 state/model-registry-doctor-health.json。",
+            "probe": probe,
+        }
+    ]
+
+
 def should_act(state: dict, finding: dict, cooldown: int) -> bool:
     key = f"{finding.get('sid','')}:{finding.get('type','')}:{finding.get('target','')}"
     last = float(state["actions"].get(key, {}).get("at", 0))
@@ -1074,9 +1193,9 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
             result = {"sid": sid, "action": ftype, "requires_codex_pm": True}
             mark_action(state, f, result)
             actions.append(result)
-        elif ftype in ("knowledge_context_sqlite_only", "knowledge_context_timeout", "knowledge_probe_failed"):
+        elif ftype in ("knowledge_context_sqlite_only", "knowledge_context_timeout", "knowledge_probe_failed", "model_registry_doctor_failed"):
             append_event("", f"autopilot_{ftype}", f.get("severity", "warn"), f)
-            # KB probe failures are telemetry, not worker assignments. Sending a
+            # Probe failures are telemetry, not worker assignments. Sending a
             # remediation prompt to a live pane can leave stale text in the TUI
             # and block the next real dispatch. Keep the signal in events/state.
             result = {"sid": sid, "action": ftype, "target": f.get("target", ""), "dispatched": False, "recorded_only": True}
@@ -1108,7 +1227,7 @@ def release_lock() -> None:
 
 def scan_once(args: argparse.Namespace, state: dict) -> dict:
     queue_actions = retry_queue(state, args.dispatch, args.cooldown) if args.apply else []
-    findings = inspect_sprints() + inspect_panes(state, args.stall_seconds) + inspect_knowledge_context(state)
+    findings = inspect_sprints() + inspect_panes(state, args.stall_seconds) + inspect_knowledge_context(state) + inspect_model_registry(state)
     actions = apply_findings(findings, args.dispatch, state, args.cooldown) if args.apply else []
     payload = {
         "ok": True,
