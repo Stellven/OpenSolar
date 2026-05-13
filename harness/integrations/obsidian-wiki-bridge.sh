@@ -635,7 +635,7 @@ _bridge_pane_idle() {
   # Active Claude/Codex UIs can still render the prompt footer while a tool or
   # thinking phase is running. Check these current activity markers before the
   # prompt-footer idle shortcut, otherwise dispatch-watch can overfill panes.
-  if printf '%s\n' "$recent_view" | grep -qE 'Brewing|Baking|Calculating|Percolating|Marinating|Befuddling|Clauding|Computing|Cooking|Billowing|Frosting|Discombobulating|Levitating|Cultivating|Compacting conversation|Thinking|thinking|Hmm|Press up to edit queued messages|Reading [0-9]+ files|Read [0-9]+ files|Bash\(|Edit\(|Write\(|Update\('; then
+  if printf '%s\n' "$recent_view" | grep -qE 'Brewing|Baking|Calculating|Percolating|Marinating|Befuddling|Clauding|Computing|Cooking|Billowing|Frosting|Discombobulating|Levitating|Cultivating|Twisting|Perambulating|Jitterbugging|Transfiguring|Cogitating|Channeling|Fluttering|Fiddle-faddling|Warping|Vibing|Whirring|Cascading|Razzmatazzing|Transmuting|Bootstrapping|Churned|Cooked|Brewed|Compacting conversation|Thinking|thinking|Hmm|Press up to edit queued messages|Reading [0-9]+ files|Read [0-9]+ files|Bash\(|Edit\(|Write\(|Update\('; then
     return 1
   fi
 
@@ -647,20 +647,31 @@ _bridge_pane_idle() {
     return 0
   fi
 
-  if printf '%s\n' "$recent_view" | grep -qE 'esc to interrupt|Press up to edit queued messages|[✻✳✶·] .*[[:alpha:]].*[0-9]+s|Reading [0-9]|Bash\(|Edit\(|Write\(|Update\(|Searched for|Read [0-9]|Listing|Puzzling|Dilly-dallying|Levitating|Newspapering|Cogitating|Crafting|Clauding|Computing|Cooking|Billowing|Frosting|Discombobulating|Cultivating'; then
+  if printf '%s\n' "$recent_view" | grep -qE 'esc to interrupt|Press up to edit queued messages|[✻✳✶·] .*[[:alpha:]].*[0-9]+s|Reading [0-9]|Bash\(|Edit\(|Write\(|Update\(|Searched for|Read [0-9]|Listing|Puzzling|Dilly-dallying|Levitating|Newspapering|Cogitating|Crafting|Clauding|Computing|Cooking|Billowing|Frosting|Discombobulating|Cultivating|Twisting|Perambulating|Jitterbugging|Transfiguring|Channeling|Fluttering|Fiddle-faddling|Warping|Vibing|Whirring|Cascading|Razzmatazzing|Transmuting|Bootstrapping|Churned'; then
     return 1
   fi
   printf '%s\n' "$tail_view" | grep -q '❯' || return 1
   return 0
 }
 
+_bridge_dispatch_lab_builder_limit() {
+  local limit="${SOLAR_WIKI_DISPATCH_MAX_LAB_BUILDERS:-3}"
+  case "$limit" in
+    ''|*[!0-9]*) limit=3 ;;
+  esac
+  (( limit < 1 )) && limit=1
+  (( limit > 4 )) && limit=4
+  echo "$limit"
+}
+
 _bridge_default_builder_pane() {
   local lab_session="${SOLAR_LAB_SESSION_NAME:-solar-harness-lab}"
   local main_session="${SOLAR_SESSION_NAME:-solar-harness}"
-  local i target
+  local i target max_lab_builders
+  max_lab_builders="$(_bridge_dispatch_lab_builder_limit)"
 
   if tmux has-session -t "$lab_session" 2>/dev/null; then
-    for i in 0 1 2 3; do
+    for ((i = 0; i < max_lab_builders; i++)); do
       target="${lab_session}:0.${i}"
       if _bridge_pane_idle "$target"; then
         echo "$target"
@@ -825,7 +836,8 @@ cmd_wiki_dispatch_watch() {
   case "$interval" in ''|*[!0-9]*) _bridge_err "--interval must be a positive integer"; return 1 ;; esac
 
   while :; do
-    local sent=0 file target_idx=1
+    local sent=0 file target_idx=1 max_lab_builders
+    max_lab_builders="$(_bridge_dispatch_lab_builder_limit)"
     while IFS= read -r file; do
       [[ -z "$file" ]] && continue
       if [[ "$dry_run" == true ]]; then
@@ -835,7 +847,7 @@ cmd_wiki_dispatch_watch() {
       fi
       sent=$((sent + 1))
       target_idx=$((target_idx + 1))
-      [[ "$target_idx" -gt 4 ]] && target_idx=1
+      [[ "$target_idx" -gt "$max_lab_builders" ]] && target_idx=1
       [[ "$limit" -gt 0 && "$sent" -ge "$limit" ]] && break
     done < <(_bridge_list_pending_dispatches)
 

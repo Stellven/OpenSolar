@@ -980,8 +980,17 @@ def dispatch_ready(graph_path: str, dry_run: bool = False, ttl: int = 900) -> di
         return {"ok": False, "reason": "no_dispatch_flag", "graph": graph_path, "enqueue": {}, "drain": {}}
     graph = load_graph(graph_path)
     sid = graph.get("sprint_id") or Path(graph_path).stem.replace(".task_graph", "")
-    enqueue_result = enqueue_ready(graph, graph_path, _discover_workers(dry_run), max_parallel=8, lease=not dry_run, ttl=ttl)
-    save_graph(graph_path, graph)
+    enqueue_result = enqueue_ready(
+        graph,
+        graph_path,
+        _discover_workers(dry_run),
+        max_parallel=8,
+        lease=not dry_run,
+        ttl=ttl,
+        dry_run=dry_run,
+    )
+    if not dry_run:
+        save_graph(graph_path, graph)
     drain_result = drain_queue(str(sid), dry_run=dry_run, max_items=len(enqueue_result.get("enqueued", [])), ttl=ttl)
     return {"ok": enqueue_result.get("ok") and drain_result.get("ok"), "enqueue": enqueue_result, "drain": drain_result}
 

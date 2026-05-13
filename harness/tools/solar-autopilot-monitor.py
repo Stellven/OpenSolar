@@ -38,6 +38,7 @@ KB_PROBE_HEALTH = HARNESS / "state" / "knowledge-probe-health.json"
 KB_PROBE_INTERVAL_SEC = int(os.environ.get("SOLAR_KB_PROBE_INTERVAL_SEC", "1800"))
 KB_PROBE_TRIGGER_COOLDOWN_SEC = int(os.environ.get("SOLAR_KB_PROBE_TRIGGER_COOLDOWN_SEC", "300"))
 KB_PROBE_TIMEOUT_SEC = int(os.environ.get("SOLAR_KB_PROBE_TIMEOUT_SEC", "120"))
+QMD_PROXY_HEALTH = HARNESS / "state" / "qmd-mcp-ipv4-health.json"
 
 
 ASK_BOSS_RE = re.compile(r"拍板|要走哪条|你决定|老板.*决定|昊哥拍板|等.*确认|是否.*继续")
@@ -112,6 +113,89 @@ def append_event(sid: str, event: str, severity: str = "info", data: dict | None
             f.write(json.dumps(obj, ensure_ascii=False) + "\n")
 
 
+def ensure_qmd_mcp_ipv4(reason: str) -> dict:
+    """Keep the QMD MCP reachable from strict IPv4 clients before KB probes.
+
+    QMD itself may listen only on ::1. Some Solar-Harness context paths probe
+    127.0.0.1:8181, so a healthy QMD can look unavailable unless the local
+    IPv4 proxy is running. This helper is best-effort and token-free.
+    """
+    harness_sh = HARNESS / "solar-harness.sh"
+    checked_at_epoch = time.time()
+    if os.environ.get("SOLAR_SKIP_QMD_MCP_HEAL") == "1":
+        result = {
+            "ok": True,
+            "status": "skipped",
+            "reason": reason,
+            "skipped": "env_SOLAR_SKIP_QMD_MCP_HEAL",
+            "checked_at": utc_now(),
+            "checked_at_epoch": checked_at_epoch,
+        }
+        save_json(QMD_PROXY_HEALTH, result)
+        return result
+    if not harness_sh.exists():
+        result = {
+            "ok": False,
+            "status": "error",
+            "reason": reason,
+            "error": "solar_harness_sh_missing",
+            "path": str(harness_sh),
+            "checked_at": utc_now(),
+            "checked_at_epoch": checked_at_epoch,
+        }
+        save_json(QMD_PROXY_HEALTH, result)
+        append_event("", "autopilot_qmd_mcp_ipv4_unavailable", "warn", result)
+        return result
+    try:
+        proc = subprocess.run(
+            [str(harness_sh), "wiki", "qmd-mcp", "start"],
+            cwd=str(HARNESS),
+            text=True,
+            capture_output=True,
+            timeout=15,
+        )
+        ok = proc.returncode == 0 and "127.0.0.1:8181" in ((proc.stdout or "") + (proc.stderr or ""))
+        result = {
+            "ok": ok,
+            "status": "ok" if ok else "warn",
+            "reason": reason,
+            "returncode": proc.returncode,
+            "stdout_tail": (proc.stdout or "")[-2000:],
+            "stderr_tail": (proc.stderr or "")[-2000:],
+            "checked_at": utc_now(),
+            "checked_at_epoch": checked_at_epoch,
+        }
+    except subprocess.TimeoutExpired as exc:
+        result = {
+            "ok": False,
+            "status": "warn",
+            "reason": reason,
+            "error": "qmd_mcp_start_timeout",
+            "timeout_sec": 15,
+            "stdout_tail": (exc.stdout or "")[-2000:] if isinstance(exc.stdout, str) else "",
+            "stderr_tail": (exc.stderr or "")[-2000:] if isinstance(exc.stderr, str) else "",
+            "checked_at": utc_now(),
+            "checked_at_epoch": checked_at_epoch,
+        }
+    except Exception as exc:
+        result = {
+            "ok": False,
+            "status": "warn",
+            "reason": reason,
+            "error": f"{type(exc).__name__}: {exc}",
+            "checked_at": utc_now(),
+            "checked_at_epoch": checked_at_epoch,
+        }
+    save_json(QMD_PROXY_HEALTH, result)
+    append_event(
+        "",
+        "autopilot_qmd_mcp_ipv4_ready" if result.get("ok") else "autopilot_qmd_mcp_ipv4_unavailable",
+        "info" if result.get("ok") else "warn",
+        result,
+    )
+    return result
+
+
 def run_kb_probe(reason: str, force: bool = False) -> dict:
     """Run the default knowledge retrieval regression probe.
 
@@ -142,6 +226,7 @@ def run_kb_probe(reason: str, force: bool = False) -> dict:
         save_json(KB_PROBE_HEALTH, result)
         append_event("", "autopilot_kb_probe_missing", "error", result)
         return result
+    qmd_proxy = ensure_qmd_mcp_ipv4(reason)
     try:
         proc = subprocess.run(
             [str(KB_PROBE_SCRIPT)],
@@ -167,6 +252,7 @@ def run_kb_probe(reason: str, force: bool = False) -> dict:
             "script": str(KB_PROBE_SCRIPT),
             "checked_at": utc_now(),
             "checked_at_epoch": now_epoch,
+            "qmd_mcp_ipv4": qmd_proxy,
         }
     except subprocess.TimeoutExpired as exc:
         result = {
@@ -180,6 +266,7 @@ def run_kb_probe(reason: str, force: bool = False) -> dict:
             "script": str(KB_PROBE_SCRIPT),
             "checked_at": utc_now(),
             "checked_at_epoch": now_epoch,
+            "qmd_mcp_ipv4": qmd_proxy,
         }
     except Exception as exc:
         result = {
@@ -190,6 +277,7 @@ def run_kb_probe(reason: str, force: bool = False) -> dict:
             "script": str(KB_PROBE_SCRIPT),
             "checked_at": utc_now(),
             "checked_at_epoch": now_epoch,
+            "qmd_mcp_ipv4": qmd_proxy,
         }
     save_json(KB_PROBE_HEALTH, result)
     append_event(
@@ -593,6 +681,8 @@ def inspect_sprints() -> list[dict]:
         phase = status.get("phase", "")
         handoff = status.get("handoff_to", "")
         priority = status.get("priority", "")
+        if st not in ACTIVE_STATUSES:
+            continue
 
         if priority == "P0" and files["contract"] and not files["prd"]:
             raw_findings.append(
@@ -957,12 +1047,10 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
             actions.append(result)
         elif ftype in ("knowledge_context_sqlite_only", "knowledge_context_timeout", "knowledge_probe_failed"):
             append_event("", f"autopilot_{ftype}", f.get("severity", "warn"), f)
-            sent = False
-            if dispatch and f.get("target") and ftype == "knowledge_probe_failed":
-                sent = tmux_send(f["target"], f.get("message", "KB probe failed；请先恢复 solar-harness context inject 默认路径。"))
-            result = {"sid": sid, "action": ftype, "target": f.get("target", ""), "dispatched": sent}
-            if sent and target:
-                used_targets.add(target)
+            # KB probe failures are telemetry, not worker assignments. Sending a
+            # remediation prompt to a live pane can leave stale text in the TUI
+            # and block the next real dispatch. Keep the signal in events/state.
+            result = {"sid": sid, "action": ftype, "target": f.get("target", ""), "dispatched": False, "recorded_only": True}
             mark_action(state, f, result)
             actions.append(result)
     return actions

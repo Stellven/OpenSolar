@@ -161,6 +161,82 @@ def _check_status_json(sprint_id: str) -> Dict[str, Any]:
         return {"ok": False, "warn": True, "message": f"corrupt: {exc}"}
 
 
+def _check_interface_health(sprint_id: str) -> Dict[str, Any]:
+    """Check runtime interface layer health: modules importable, adapters exist."""
+    sys.path.insert(0, os.path.dirname(__file__))
+    dimensions: Dict[str, Dict[str, Any]] = {}
+
+    # Session API: get_events exists
+    try:
+        from session_log import SessionLog
+        test_sid = f"_doctor-check-{os.getpid()}"
+        log = SessionLog(test_sid, harness_dir=HARNESS_DIR)
+        page = log.get_events(limit=1)
+        ok = "next_cursor" in page and "returned_count" in page
+        dimensions["session_api"] = {"ok": ok, "message": "ok" if ok else "get_events missing fields"}
+        import shutil
+        shutil.rmtree(os.path.join(HARNESS_DIR, "sessions", test_sid), ignore_errors=True)
+    except Exception as exc:
+        dimensions["session_api"] = {"ok": False, "message": str(exc)}
+
+    # Hands runtime: adapters available
+    try:
+        from hands_runtime import available_hand_types, get_hand
+        types = available_hand_types()
+        ok = len(types) >= 3
+        dimensions["hands_runtime"] = {
+            "ok": ok, "message": f"{len(types)} adapters available",
+            "adapters": [t.value for t in types],
+        }
+    except Exception as exc:
+        dimensions["hands_runtime"] = {"ok": False, "message": str(exc)}
+
+    # Worker runtime: register/lease
+    try:
+        from worker_runtime import WorkerRuntime
+        safe_sid = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in sprint_id)
+        tmp_harness = os.path.join(HARNESS_DIR, "run", "runtime-doctor", f"{os.getpid()}-{safe_sid}")
+        wr = WorkerRuntime(harness_dir=tmp_harness)
+        info = wr.register("_doctor-check")
+        ok = info.worker_id == "_doctor-check"
+        import shutil
+        shutil.rmtree(tmp_harness, ignore_errors=True)
+        dimensions["worker_runtime"] = {"ok": ok, "message": "ok" if ok else "register failed"}
+    except Exception as exc:
+        dimensions["worker_runtime"] = {"ok": False, "message": str(exc)}
+
+    # Context projection
+    try:
+        from context_projection import ContextProjection
+        cp = ContextProjection("_doctor-check", harness_dir=HARNESS_DIR)
+        view = cp.build_context()
+        ok = isinstance(view.token_estimate, int)
+        dimensions["context_projection"] = {"ok": ok, "message": "ok" if ok else "build_context failed"}
+    except Exception as exc:
+        dimensions["context_projection"] = {"ok": False, "message": str(exc)}
+
+    # Chaos suite
+    try:
+        from runtime_chaos_suite import CASES
+        ok = len(CASES) >= 6
+        dimensions["chaos_suite"] = {
+            "ok": ok,
+            "message": f"{len(CASES)} scenarios defined",
+            "scenarios": [c[0] for c in CASES],
+        }
+    except Exception as exc:
+        dimensions["chaos_suite"] = {"ok": False, "message": str(exc)}
+
+    all_ok = all(d.get("ok", False) for d in dimensions.values())
+    any_warn = not all_ok and any(d.get("ok") for d in dimensions.values())
+    return {
+        "ok": all_ok,
+        "warn": any_warn,
+        "message": f"{sum(1 for d in dimensions.values() if d['ok'])}/{len(dimensions)} interfaces healthy",
+        "dimensions": dimensions,
+    }
+
+
 # ------------------------------------------------------------------
 # Public API
 # ------------------------------------------------------------------
@@ -189,6 +265,7 @@ def doctor_sprint(
         "duplicate_commands": _check_duplicate_commands(sprint_id),
         "stale_activities":  _check_stale_activities(sprint_id),
         "status_json":       _check_status_json(sprint_id),
+        "interface_health": _check_interface_health(sprint_id),
     }
 
     all_ok  = all(c.get("ok",   True) for c in checks.values())

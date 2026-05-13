@@ -567,7 +567,7 @@ def set_node_status(graph: dict[str, Any], node_id: str, status: str,
 
 def enqueue_ready(graph: dict[str, Any], graph_path: str, workers: list[dict[str, Any]],
                   max_parallel: int | None = None, lease: bool = False,
-                  ttl: int = 600) -> dict[str, Any]:
+                  ttl: int = 600, dry_run: bool = False) -> dict[str, Any]:
     """Assign ready graph nodes and enqueue them as old-control-plane payloads.
 
     This is the compatibility bridge: graph scheduler decides what is safe to
@@ -594,7 +594,7 @@ def enqueue_ready(graph: dict[str, Any], graph_path: str, workers: list[dict[str
         dispatch_id = f"graph-{sid}-{node_id}-{datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}"
 
         lease_result = {"acquired": True, "reason": "lease_disabled"}
-        if acquire is not None:
+        if acquire is not None and not dry_run:
             lease_result = acquire(pane, sid, dispatch_id, ttl)
             if not lease_result.get("acquired"):
                 queued.append({
@@ -613,8 +613,11 @@ def enqueue_ready(graph: dict[str, Any], graph_path: str, workers: list[dict[str
             "dispatch_id": dispatch_id,
             "lease": lease_result,
         }
-        q = enqueue(sid, f"graph_node|node_id={node_id}|pane={pane}", 80, payload)
-        set_node_status(graph, node_id, "dispatched", pane=pane, dispatch_id=dispatch_id)
+        if dry_run:
+            q = {"ok": True, "result": "dry_run", "id": ""}
+        else:
+            q = enqueue(sid, f"graph_node|node_id={node_id}|pane={pane}", 80, payload)
+            set_node_status(graph, node_id, "dispatched", pane=pane, dispatch_id=dispatch_id)
         enqueued.append({"node": node_id, "pane": pane, "queue": q, "dispatch_id": dispatch_id})
 
     return {
@@ -624,6 +627,7 @@ def enqueue_ready(graph: dict[str, Any], graph_path: str, workers: list[dict[str
         "capability_enrichment": assignment.get("capability_enrichment", {}),
         "enqueued": enqueued,
         "queued": queued,
+        "dry_run": dry_run,
     }
 
 

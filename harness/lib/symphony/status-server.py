@@ -545,7 +545,7 @@ def _current_sprint() -> dict:
         try:
             d = json.loads(sf.read_text())
             st = d.get("status", "")
-            if st not in ("passed", "failed", "cancelled", "finalized"):
+            if st not in ("passed", "failed", "cancelled", "finalized", "superseded", "interrupted"):
                 candidates.append(d)
         except (json.JSONDecodeError, OSError):
             continue
@@ -1099,8 +1099,9 @@ def _apple_notes_ingest_status() -> dict:
 
 
 def _status_payload(limit: int = 50) -> dict:
+    current = _current_sprint()
     return {
-        "current_sprint": _current_sprint(),
+        "current_sprint": current,
         "panes": _pane_info(),
         "main_screen": _main_screen(),
         "lab_screen": _lab_screen(),
@@ -1112,7 +1113,43 @@ def _status_payload(limit: int = 50) -> dict:
         "obsidian_sync": _obsidian_sync_status(),
         "apple_notes_ingest": _apple_notes_ingest_status(),
         "evolution": _evolution_status(),
+        "runtime_interfaces": _runtime_interfaces_status(current.get("sprint_id", "")),
     }
+
+
+def _runtime_interfaces_status(sprint_id: str) -> dict:
+    """Return lightweight runtime interface health for /status."""
+    if not sprint_id:
+        return {"ok": False, "status": "unknown", "message": "no current sprint"}
+    doctor = HARNESS_DIR / "lib" / "runtime_doctor.py"
+    if not doctor.exists():
+        return {"ok": False, "status": "error", "message": "runtime_doctor.py missing"}
+    try:
+        proc = subprocess.run(
+            ["python3", str(doctor), sprint_id, "--json"],
+            text=True,
+            capture_output=True,
+            timeout=5,
+        )
+        if proc.returncode not in (0, 1):
+            return {"ok": False, "status": "error", "message": (proc.stderr or proc.stdout)[-500:]}
+        data = json.loads(proc.stdout)
+        ih = data.get("checks", {}).get("interface_health", {})
+        dims = ih.get("dimensions", {})
+        total = len(dims)
+        healthy = sum(1 for d in dims.values() if d.get("ok"))
+        return {
+            "ok": bool(ih.get("ok")),
+            "status": "ok" if ih.get("ok") else "warn",
+            "message": ih.get("message", f"{healthy}/{total} interfaces healthy"),
+            "healthy": healthy,
+            "total": total,
+            "dimensions": dims,
+        }
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "status": "warn", "message": "runtime doctor timeout"}
+    except Exception as exc:
+        return {"ok": False, "status": "error", "message": f"{type(exc).__name__}: {exc}"}
 
 
 # ── HTML Dashboard ──
@@ -1679,6 +1716,7 @@ td {
     </div>
     <div class="overview-bottom">
       <div class="card"><h3>知识库状态</h3><div id="overview-knowledge">Loading...</div></div>
+      <div class="card"><h3>Runtime Interfaces</h3><div id="overview-runtime">Loading...</div></div>
       <div class="card"><h3>最近风险</h3><div id="overview-risk">Loading...</div></div>
     </div>
   </section>
@@ -1951,6 +1989,22 @@ function renderMirageHealth(mirage) {
     '<h3>Mounts</h3><div class="mount-list">' + mountRows + '</div>' +
     '<details style="margin-top:0.85rem"><summary class="muted">查看原始 Mirage JSON</summary><pre class="codebox">' + esc(JSON.stringify(mirage, null, 2)) + '</pre></details>';
 }
+function renderRuntimeInterfaces(rt) {
+  rt = rt || {};
+  const dims = rt.dimensions || {};
+  const rows = Object.keys(dims).map(k => {
+    const d = dims[k] || {};
+    return '<div class="mount-row">' +
+      '<div class="mount-path">' + esc(k) + '</div>' +
+      '<div>' + statusBadge(d.ok ? 'ok' : 'warn') + '</div>' +
+      '<div class="mount-reason">' + esc(d.message || '-') + '</div>' +
+      '</div>';
+  }).join('');
+  return '<div class="health-metrics">' +
+    '<div class="mini-metric"><div class="kv-label">Status</div><span class="num">' + esc(rt.status || 'unknown') + '</span></div>' +
+    '<div class="mini-metric"><div class="kv-label">Healthy</div><span class="num">' + esc((rt.healthy ?? 0) + '/' + (rt.total ?? 0)) + '</span></div>' +
+    '</div><div class="mount-list">' + (rows || '<div class="muted">No runtime interface data.</div>') + '</div>';
+}
 function renderKnowledgeSummary(wiki, mirage) {
   const wikiReady = !!(wiki && wiki.ready);
   const mirageReady = !!(mirage && mirage.enabled);
@@ -2198,6 +2252,7 @@ function render(data) {
   document.getElementById('overview-knowledge').innerHTML =
     'Wiki: ' + statusBadge(wiki.ready ? 'ok' : 'warn') + '<br>' +
     'Mirage: ' + statusBadge(mirage.ready ? 'ok' : (mirage.status || 'warn'));
+  document.getElementById('overview-runtime').innerHTML = renderRuntimeInterfaces(data.runtime_interfaces || {});
 
   document.getElementById('raw-card').textContent = JSON.stringify(data, null, 2);
 }
