@@ -119,6 +119,25 @@ configure_product_delivery_labels() {
   tmux select-pane -t "$SESSION_NAME:0.3" -T "$(pane_footer_label evaluator "Evaluator 审判官")" 2>/dev/null || true
 }
 
+apply_product_delivery_models() {
+  tmux has-session -t "$SESSION_NAME" 2>/dev/null || { warn "主屏未运行: $SESSION_NAME"; return 0; }
+  local personas=(pm planner builder evaluator)
+  local panes=("$SESSION_NAME:Product Delivery.0" "$SESSION_NAME:Product Delivery.1" "$SESSION_NAME:Product Delivery.2" "$SESSION_NAME:Product Delivery.3")
+  local i target persona pane_id work_dir _esc_harness _esc_work
+  _esc_harness=$(printf '%q' "$HARNESS_DIR")
+  for i in 0 1 2 3; do
+    target="${panes[$i]}"
+    persona="${personas[$i]}"
+    tmux display-message -p -t "$target" '#{pane_id}' >/dev/null 2>&1 || continue
+    pane_id=$(tmux display-message -p -t "$target" '#{pane_id}' 2>/dev/null || true)
+    work_dir=$(tmux display-message -p -t "$target" '#{pane_current_path}' 2>/dev/null || pwd)
+    _esc_work=$(printf '%q' "$work_dir")
+    tmux respawn-pane -k -t "$target" "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH -u ANTHROPIC_BASE_URL -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_API_KEY -u ANTHROPIC_DEFAULT_OPUS_MODEL -u ANTHROPIC_DEFAULT_SONNET_MODEL -u ANTHROPIC_DEFAULT_HAIKU_MODEL TMUX_PANE=${pane_id} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" 2>/dev/null || true
+    sleep 0.3
+  done
+  configure_product_delivery_labels
+}
+
 configure_builder_lab_labels() {
   tmux has-session -t "$LAB_SESSION_NAME" 2>/dev/null || return 0
   configure_role_footer_style "$LAB_SESSION_NAME" "#f9e2af"
@@ -1785,9 +1804,13 @@ do_models_command() {
   shift || true
   case "$subcmd" in
     show|status)
-      local matrix label source
+      local matrix label source pm_model planner_model builder_model evaluator_model
       matrix="$(solar_lab_builder_matrix)"
       label="$(solar_lab_builder_matrix_label "$matrix")"
+      pm_model="$(solar_persona_model pm sonnet)"
+      planner_model="$(solar_persona_model planner sonnet)"
+      builder_model="$(solar_persona_model builder sonnet)"
+      evaluator_model="$(solar_persona_model evaluator sonnet)"
       if [[ -n "${SOLAR_LAB_BUILDER_MODEL_MATRIX:-}" ]]; then
         source="env:SOLAR_LAB_BUILDER_MODEL_MATRIX"
       else
@@ -1796,10 +1819,29 @@ do_models_command() {
       printf '┌────────────────────┬──────────────────────────────────────────────┐\n'
       printf '│ %-18s │ %-44s │\n' "配置项" "当前值"
       printf '├────────────────────┼──────────────────────────────────────────────┤\n'
+      printf '│ %-18s │ %-44s │\n' "main pm" "$(printf '%.44s' "$pm_model")"
+      printf '│ %-18s │ %-44s │\n' "main planner" "$(printf '%.44s' "$planner_model")"
+      printf '│ %-18s │ %-44s │\n' "main builder" "$(printf '%.44s' "$builder_model")"
+      printf '│ %-18s │ %-44s │\n' "main evaluator" "$(printf '%.44s' "$evaluator_model")"
       printf '│ %-18s │ %-44s │\n' "lab matrix" "$(printf '%.44s' "$matrix")"
       printf '│ %-18s │ %-44s │\n' "显示" "$(printf '%.44s' "$label")"
       printf '│ %-18s │ %-44s │\n' "来源" "$(printf '%.44s' "$source")"
       printf '└────────────────────┴──────────────────────────────────────────────┘\n'
+      ;;
+    set-main)
+      local alias="${1:-}"
+      [[ -n "$alias" ]] || { err "用法: $0 models set-main <opus|sonnet> [--apply]"; exit 1; }
+      solar_set_main_model "$alias"
+      ok "已写入主屏模型: pm/planner/builder/evaluator -> $alias"
+      if [[ "${2:-}" == "--apply" ]]; then
+        apply_product_delivery_models
+        ok "已按配置刷新 Product Delivery 四分屏"
+      else
+        log "生效方式: solar-harness models apply-main 或重启 solar-harness"
+      fi
+      ;;
+    apply-main)
+      apply_product_delivery_models
       ;;
     set-lab-matrix)
       local matrix="${1:-}"
@@ -1825,6 +1867,8 @@ do_models_command() {
       echo ""
       echo "Usage:"
       echo "  $0 models show"
+      echo "  $0 models set-main opus [--apply]"
+      echo "  $0 models apply-main"
       echo "  $0 models set-lab-matrix glm,glm,glm,anthropic-sonnet [--apply]"
       echo "  $0 models apply-lab"
       echo "  $0 models refresh-labels"
@@ -1845,6 +1889,11 @@ case "${1:-start}" in
   main-status) do_main_status ;;
   lab-status) do_lab_status "${2:-}" ;;
   doctor)    bash "$HARNESS_DIR/doctor.sh" "${2:-}" ;;
+  session)
+    shift || true
+    human_prefix "runtime" "session $*"
+    python3 "$HARNESS_DIR/lib/session_tools.py" "$@"
+    ;;
   verify-integrations|capability-e2e)
     _cap_fail=0
     for _cap_e2e in \
@@ -3613,6 +3662,9 @@ EOF
       audit-writes)
         python3 "$_runtime_py_dir/runtime_write_path_audit.py" "$@"
         ;;
+      context)
+        python3 "$_runtime_py_dir/context_projection.py" "$@"
+        ;;
       status)
         _runtime_sid="${1:-}"; shift || true
         _runtime_status="${1:-}"; shift || true
@@ -3632,6 +3684,7 @@ EOF
         echo "  $0 runtime doctor [sprint_id] [--json] [--all]"
         echo "  $0 runtime project <sprint_id> [--write-cache] [--json]"
         echo "  $0 runtime adopt  <sprint_id>|--all [--write-cache] [--json]"
+        echo "  $0 runtime context <sprint_id> [--query text] [--record] [--format json|markdown]"
         echo "  $0 runtime audit-writes [--json] [--strict]"
         echo "  $0 runtime status <sid> <new_status> [event] [actor] [extra_json] [--bump-round]"
         ;;

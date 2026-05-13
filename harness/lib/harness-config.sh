@@ -133,6 +133,33 @@ solar_set_lab_builder_matrix() {
   solar_config_json_set "models.lab_builder_matrix" "$matrix"
 }
 
+solar_validate_main_model_alias() {
+  local alias="${1:-}"
+  python3 - "$alias" <<'PY'
+import re
+import sys
+
+alias = sys.argv[1].strip().lower()
+allowed = {
+    "sonnet", "anthropic-sonnet", "claude-sonnet", "anthropic",
+    "opus", "claude-opus", "anthropic-opus", "opus-4.7", "opus-4-7",
+    "claude-opus-4.7", "claude-opus-4-7",
+}
+if alias not in allowed or not re.match(r"^[a-z0-9_.-]+$", alias):
+    print("error: unsupported main model alias: " + (alias or "<empty>"), file=sys.stderr)
+    raise SystemExit(1)
+print(alias)
+PY
+}
+
+solar_set_main_model() {
+  local alias="$1"
+  alias="$(solar_validate_main_model_alias "$alias")" || return 1
+  for persona in pm planner builder evaluator; do
+    solar_config_json_set "models.${persona}" "$alias"
+  done
+}
+
 solar_validate_lab_builder_matrix() {
   local matrix="${1:-}"
   python3 - "$matrix" <<'PY'
@@ -167,7 +194,7 @@ solar_model_alias_label() {
     sonnet|glm-4.7|glm47|zhipu-sonnet) printf '%s' "GLM-4.7" ;;
     deepseek|deepseek-v4|deepseek-v4-pro|deepseek-v4-flash|ds|ds-v4) printf '%s' "DeepSeek" ;;
     anthropic-sonnet|claude|claude-sonnet|anthropic) printf '%s' "Claude Sonnet" ;;
-    opus|claude-opus) printf '%s' "Claude Opus" ;;
+    opus|claude-opus|anthropic-opus|opus-4.7|opus-4-7|claude-opus-4.7|claude-opus-4-7) printf '%s' "Claude Opus 4.7" ;;
     *) printf '%s' "${alias:-N/A}" ;;
   esac
 }
@@ -186,7 +213,10 @@ labels = {
     "deepseek-v4-flash": "DeepSeek", "ds": "DeepSeek", "ds-v4": "DeepSeek",
     "anthropic-sonnet": "Claude Sonnet", "claude": "Claude Sonnet",
     "claude-sonnet": "Claude Sonnet", "anthropic": "Claude Sonnet",
-    "opus": "Claude Opus", "claude-opus": "Claude Opus",
+    "opus": "Claude Opus 4.7", "claude-opus": "Claude Opus 4.7",
+    "anthropic-opus": "Claude Opus 4.7", "opus-4.7": "Claude Opus 4.7",
+    "opus-4-7": "Claude Opus 4.7", "claude-opus-4.7": "Claude Opus 4.7",
+    "claude-opus-4-7": "Claude Opus 4.7",
 }
 items = [x.strip().lower() for x in sys.argv[1].split(",") if x.strip()]
 names = [labels.get(x, x or "N/A") for x in items]

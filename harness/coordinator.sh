@@ -1354,6 +1354,15 @@ inject_dispatch_context() {
   fi
   python3 "$skills_py" inject "$dispatch_file" 2>/dev/null || \
     log "${Y}[dispatch] skills inject warn (fail-open): $dispatch_file${N}"
+  local runtime_context_py="$HARNESS_DIR/lib/runtime_context_inject.py"
+  if [[ -f "$runtime_context_py" ]]; then
+    python3 "$runtime_context_py" "$dispatch_file" \
+      --session-id "$sid" \
+      --pane "$pane" \
+      --dispatch-id "${dispatch_id:-}" \
+      --json >/dev/null 2>&1 || \
+      log "${Y}[dispatch] runtime context inject warn (fail-open): $dispatch_file${N}"
+  fi
   local sidecar="${dispatch_file}.intent.json"
   if [[ -f "$sidecar" ]] && type dispatch_ledger_append &>/dev/null; then
     local summary
@@ -1408,6 +1417,16 @@ dispatch_visibility_title() {
   [[ -n "$dispatch_file" && -f "$dispatch_file.intent.json" ]] || { printf '%s' "能力:N/A"; return 0; }
   python3 "$HARNESS_DIR/lib/intent_engine_adapter.py" summarize "$dispatch_file" --title 2>/dev/null || \
     printf '%s' "能力:N/A"
+}
+
+record_model_call_runtime() {
+  local event="${1:-}" sid="${2:-}" pane="${3:-}" dispatch_id="${4:-}" instruction_file="${5:-}" tries="${6:-0}" status="${7:-}" error="${8:-}"
+  local recorder="$HARNESS_DIR/lib/model_call_runtime.py"
+  [[ -n "$event" && -n "$sid" && -f "$recorder" ]] || return 0
+  local args=("$recorder" "$event" "--session-id" "$sid" "--pane" "$pane" "--dispatch-id" "$dispatch_id" "--instruction-file" "$instruction_file" "--actor" "coordinator" "--tries" "$tries")
+  [[ -n "$status" ]] && args+=("--status" "$status")
+  [[ -n "$error" ]] && args+=("--error" "$error")
+  python3 "${args[@]}" >/dev/null 2>&1 || true
 }
 
 set_pane_capability_title() {
@@ -1725,6 +1744,7 @@ dispatch_to_pane() {
   dispatch_keyword=$(basename "$instruction_file")
   local tries=0
   local max_tries=3
+  record_model_call_runtime "request" "$sid" "$pane" "${_dispatch_id:-}" "$instruction_file" 0 "tmux_submit_requested" ""
 
   # sprint-20260508-coordinator-control-plane-v2 S2: ledger.attempted
   type dispatch_ledger_append &>/dev/null && \
@@ -1772,6 +1792,7 @@ dispatch_to_pane() {
       type dispatch_ledger_append &>/dev/null && \
         dispatch_ledger_append "attempted_verified" "$sid" "$pane" "${_dispatch_id:-}" \
           "{\"tries\":$((tries+1)),\"ack_source\":\"capture_verify\"}" || true
+      record_model_call_runtime "succeeded" "$sid" "$pane" "${_dispatch_id:-}" "$instruction_file" "$((tries+1))" "keyword_processing_verified" ""
       # S3: launch background ack-watcher (real ack comes when builder writes ack file)
       type ack_watcher_bg &>/dev/null && ack_watcher_bg "$sid" "${_dispatch_id:-unknown}" 300 || true
       return 0
@@ -1795,6 +1816,7 @@ dispatch_to_pane() {
   type dispatch_ledger_append &>/dev/null && \
     dispatch_ledger_append "nacked" "$sid" "$pane" "${_dispatch_id:-}" \
       "{\"retries\":${max_tries}}" || true
+  record_model_call_runtime "failed" "$sid" "$pane" "${_dispatch_id:-}" "$instruction_file" "$max_tries" "dispatch_failed" "capture_verify_failed"
   # sprint-20260508-coordinator-control-plane-v2 S3: release lease on nack
   [[ -n "${_dispatch_id:-}" ]] && type release_pane_lease &>/dev/null && \
     release_pane_lease "$pane" "$_dispatch_id" "dispatch_failed" 2>/dev/null || true

@@ -253,6 +253,88 @@ def _check_interface_health(sprint_id: str) -> Dict[str, Any]:
     }
 
 
+def _check_context_runtime(sprint_id: str) -> Dict[str, Any]:
+    """Check that context projection is backed by real recall and audit state."""
+    sys.path.insert(0, os.path.dirname(__file__))
+    try:
+        from context_projection import ContextProjection
+        cp = ContextProjection(sprint_id, harness_dir=HARNESS_DIR)
+        view = cp.build_context(query=sprint_id, budget_tokens=1200)
+        real_hits = [
+            h for h in view.kb_hits
+            if h.get("source") not in {"context_projection", "solar-harness"}
+            and "placeholder" not in str(h.get("note", "")).lower()
+        ]
+        context_events = [
+            ev for ev in cp._log.all_events()  # noqa: SLF001 - doctor reads raw runtime evidence
+            if ev.get("type") == "context_injected"
+        ]
+        latest_context = context_events[-1] if context_events else None
+        has_text = bool(((latest_context or {}).get("payload") or {}).get("context_text"))
+        ok = bool(real_hits)
+        warn = not bool(context_events)
+        msg = (
+            f"recall_hits={len(real_hits)} context_events={len(context_events)}"
+            if ok else
+            f"no real recall hits; context_events={len(context_events)}"
+        )
+        return {
+            "ok": ok,
+            "warn": warn,
+            "message": msg,
+            "kb_hit_count": len(view.kb_hits),
+            "real_recall_hit_count": len(real_hits),
+            "context_injected_count": len(context_events),
+            "latest_context_has_text": has_text,
+            "degraded_hits": [h for h in view.kb_hits if h.get("degraded")][:5],
+        }
+    except Exception as exc:
+        return {"ok": False, "warn": True, "message": f"context runtime error: {exc}"}
+
+
+def _check_model_call_runtime(sprint_id: str) -> Dict[str, Any]:
+    """Check observable model-call boundary events for the session."""
+    sys.path.insert(0, os.path.dirname(__file__))
+    try:
+        from session_log import SessionLog
+        log = SessionLog(sprint_id, harness_dir=HARNESS_DIR)
+        events = log.all_events()
+        requested = [e for e in events if e.get("type") == "model_call_requested"]
+        succeeded = [e for e in events if e.get("type") == "model_call_succeeded"]
+        failed = [e for e in events if e.get("type") == "model_call_failed"]
+        sessions_started = [e for e in events if e.get("type") == "model_session_started"]
+        sessions_ended = [e for e in events if e.get("type") == "model_session_ended"]
+        pending = []
+        terminal_ids = {e.get("activity_id") for e in succeeded + failed if e.get("activity_id")}
+        for ev in requested:
+            aid = ev.get("activity_id")
+            if aid and aid not in terminal_ids:
+                pending.append(aid)
+        ok = not pending
+        # Historical sessions created before this bridge will not have model
+        # call events. That is informational, not a health warning; pending
+        # requests are the real runtime problem.
+        warn = False
+        message = (
+            f"requested={len(requested)} succeeded={len(succeeded)} failed={len(failed)} pending={len(pending)}"
+            if requested else
+            f"no model_call_requested events; sessions={len(sessions_started)}/{len(sessions_ended)}"
+        )
+        return {
+            "ok": ok,
+            "warn": warn,
+            "message": message,
+            "requested": len(requested),
+            "succeeded": len(succeeded),
+            "failed": len(failed),
+            "pending_dispatch_ids": pending[:20],
+            "model_sessions_started": len(sessions_started),
+            "model_sessions_ended": len(sessions_ended),
+        }
+    except Exception as exc:
+        return {"ok": False, "warn": True, "message": f"model-call runtime error: {exc}"}
+
+
 # ------------------------------------------------------------------
 # Public API
 # ------------------------------------------------------------------
@@ -282,6 +364,8 @@ def doctor_sprint(
         "stale_activities":  _check_stale_activities(sprint_id),
         "status_json":       _check_status_json(sprint_id),
         "interface_health": _check_interface_health(sprint_id),
+        "context_runtime": _check_context_runtime(sprint_id),
+        "model_call_runtime": _check_model_call_runtime(sprint_id),
     }
 
     all_ok  = all(c.get("ok",   True) for c in checks.values())
