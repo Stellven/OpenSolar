@@ -43,14 +43,14 @@ def db_with_run(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Test: help lists all 14 subcommands
+# Test: help lists all subcommands
 # ---------------------------------------------------------------------------
 
 
 class TestHelpListing:
     def test_all_subcommands_registered(self):
-        """All 14 subcommands are in SUBCOMMANDS dict."""
-        assert len(SUBCOMMANDS) == 14
+        """All declared subcommands are in SUBCOMMANDS dict."""
+        assert len(SUBCOMMANDS) == len(ALL_SUBCOMMANDS)
         for name in ALL_SUBCOMMANDS:
             assert name in SUBCOMMANDS, f"Missing subcommand: {name}"
 
@@ -62,7 +62,7 @@ class TestHelpListing:
             assert name in captured.out, f"--help missing: {name}"
 
     def test_parser_accepts_all_names(self):
-        """All 14 subcommand names are valid parser targets."""
+        """All declared subcommand names are valid parser targets."""
         for name in ALL_SUBCOMMANDS:
             assert name in SUBCOMMANDS, f"Missing handler for: {name}"
             assert callable(SUBCOMMANDS[name])

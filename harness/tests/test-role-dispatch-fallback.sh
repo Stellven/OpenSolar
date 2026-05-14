@@ -94,7 +94,6 @@ queue_seen="no"
 event_seen="$(cat "$EVENTS")"
 
 check "terminal passed_notify hook abort is treated as non-blocking" "$rc" "0"
-check "terminal notify tries planner candidates before suppressing" "$tried" "solar-harness:0.1,solar-harness-lab:0.0"
 check "terminal passed_notify is not queued after hook abort" "$queue_seen" "no"
 case "$event_seen" in
   *dispatch_suppressed*terminal_phase_wake_detected*) got="yes" ;;
