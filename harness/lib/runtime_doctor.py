@@ -416,9 +416,11 @@ def _check_process_audit(sprint_id: str) -> Dict[str, Any]:
         projection = project_session(sprint_id, Path(HARNESS_DIR))
         audit = process_audit(events, projection)
         risks = list(audit.get("risks") or [])
-        # Historical sessions may legitimately predate context projection. Keep
-        # that as warn, not error, when it is the only risk.
-        hard_risks = [r for r in risks if r != "context_projection_missing"]
+        # Historical/bridged sessions may legitimately predate fully paired
+        # activity lifecycle events. Keep those visible as warn while enforcing
+        # hard failure for native runtime command gaps and side-effect risks.
+        soft_risks = {"context_projection_missing", "legacy_unpaired_activity"}
+        hard_risks = [r for r in risks if r not in soft_risks]
         return {
             "ok": not hard_risks,
             "warn": bool(risks),

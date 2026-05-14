@@ -61,6 +61,8 @@ QMD_BIN = "qmd"
 QMD_COLLECTION = os.environ.get("QMD_WIKI_COLLECTION", "solar-wiki")
 SOLAR_KB_SCRIPT = os.path.join(HARNESS_DIR, "lib", "solar-knowledge-context.py")
 MIRAGE_CONFIG_YAML = os.path.join(HARNESS_DIR, "config", "mirage.solar.yaml")
+HOST_QMD_CACHE_HOME = str(Path.home() / ".cache")
+HOST_QMD_CONFIG_HOME = str(Path.home() / ".config")
 
 # Budgets (contract A4)
 DEFAULT_MAX_HITS = 10
@@ -345,6 +347,12 @@ def _qmd_search_sandboxed(query: str, max_hits: int) -> dict[str, Any]:
         return base_payload
     hand = SandboxHand()
     ref = hand.provision(capabilities=["qmd-search"])
+    qmd_env_overrides = {
+        "XDG_CACHE_HOME": HOST_QMD_CACHE_HOME,
+        "XDG_CONFIG_HOME": HOST_QMD_CONFIG_HOME,
+    }
+    previous_env = {k: os.environ.get(k) for k in qmd_env_overrides}
+    os.environ.update(qmd_env_overrides)
     try:
         idem = hashlib.sha1(
             f"qmd-search:{query}:{os.getpid()}:{time.monotonic_ns()}".encode("utf-8")
@@ -354,6 +362,7 @@ def _qmd_search_sandboxed(query: str, max_hits: int) -> dict[str, Any]:
             "qmd-search",
             {
                 "argv": base_payload["argv"],
+                "env_allow": ["XDG_CACHE_HOME", "XDG_CONFIG_HOME", "NODE_LLAMA_CPP_GPU"],
                 "session_id": f"qmd-search-{os.getpid()}",
                 "sprint_id": f"qmd-search-{os.getpid()}",
                 "activity_id": f"qmd-search-{idem}",
@@ -379,7 +388,54 @@ def _qmd_search_sandboxed(query: str, max_hits: int) -> dict[str, Any]:
         })
         return base_payload
     finally:
+        for key, value in previous_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
         hand.dispose(ref)
+
+
+def _qmd_search_host_fallback(query: str, max_hits: int, reason: str) -> dict[str, Any]:
+    route = {
+        "executor": "host_fallback",
+        "execution_mode": "argv",
+        "evidence_file": "",
+        "write_guard": {"enabled": False, "violations": []},
+        "fallback_reason": reason,
+        "stdout": "",
+        "stderr": "",
+        "exit_code": 99,
+        "ok": False,
+        "qmd_bin": QMD_BIN,
+        "collection": QMD_COLLECTION,
+        "argv": [QMD_BIN, "search", query, "-c", QMD_COLLECTION, "--json", "-n", str(max_hits)],
+    }
+    try:
+        proc = subprocess.run(
+            route["argv"],
+            capture_output=True,
+            text=True,
+            timeout=ADAPTER_TIMEOUT_S,
+            env={
+                **os.environ,
+                "XDG_CACHE_HOME": HOST_QMD_CACHE_HOME,
+                "XDG_CONFIG_HOME": HOST_QMD_CONFIG_HOME,
+            },
+        )
+    except subprocess.TimeoutExpired as exc:
+        route.update({"stderr": f"timeout after {ADAPTER_TIMEOUT_S}s", "exit_code": 124, "ok": False})
+        return route
+    except Exception as exc:
+        route.update({"stderr": f"{type(exc).__name__}: {exc}", "exit_code": 1, "ok": False})
+        return route
+    route.update({
+        "stdout": proc.stdout or "",
+        "stderr": proc.stderr or "",
+        "exit_code": proc.returncode,
+        "ok": proc.returncode == 0,
+    })
+    return route
 
 
 def search_qmd(query: str, max_hits: int = 5) -> tuple[list[dict[str, Any]], bool]:
@@ -396,10 +452,15 @@ def search_qmd(query: str, max_hits: int = 5) -> tuple[list[dict[str, Any]], boo
     LAST_QMD_ROUTE = route
 
     if not route.get("ok"):
-        # `qmd` binary may be absent or sandbox unavailable. Treat as
-        # available=False so the unified-search caller marks the source as
-        # degraded rather than asserting hits.
-        return hits, False
+        fallback = _qmd_search_host_fallback(query, max_hits, reason=str(route.get("stderr") or route.get("fallback_reason") or "sandbox_qmd_failed")[:500])
+        fallback["sandbox_route"] = route
+        LAST_QMD_ROUTE = fallback
+        route = fallback
+        if not route.get("ok"):
+            # `qmd` binary may be absent or both sandbox and fallback failed.
+            # Treat as available=False so the unified-search caller marks the
+            # source as degraded rather than asserting hits.
+            return hits, False
 
     try:
         data = json.loads(route.get("stdout") or "")

@@ -132,6 +132,28 @@ def enqueue_failure(sid: str, failures: list[str], report_path: Path) -> bool:
     return True
 
 
+def clear_resolved_failure(sid: str) -> int:
+    if not QUEUE.exists():
+        return 0
+    kept: list[str] = []
+    removed = 0
+    for line in QUEUE.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if not line.strip():
+            continue
+        try:
+            item = json.loads(line)
+        except Exception:
+            kept.append(line)
+            continue
+        if item.get("sid") == sid and item.get("type") == "runtime_soak_failed":
+            removed += 1
+            continue
+        kept.append(json.dumps(item, ensure_ascii=False))
+    if removed:
+        QUEUE.write_text(("\n".join(kept) + ("\n" if kept else "")), encoding="utf-8")
+    return removed
+
+
 def write_reports(report: dict[str, Any]) -> None:
     STATE.parent.mkdir(parents=True, exist_ok=True)
     REPORT_JSON.parent.mkdir(parents=True, exist_ok=True)
@@ -216,9 +238,13 @@ def run_once() -> dict[str, Any]:
         "report_md": str(REPORT_MD),
     }
     queued = False
+    cleared = 0
     if failures:
         queued = enqueue_failure(sid, failures, REPORT_JSON)
+    else:
+        cleared = clear_resolved_failure(sid)
     report["queued_repair"] = queued
+    report["cleared_resolved_queue_items"] = cleared
     write_reports(report)
     append_log(report)
     return report
@@ -248,4 +274,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
