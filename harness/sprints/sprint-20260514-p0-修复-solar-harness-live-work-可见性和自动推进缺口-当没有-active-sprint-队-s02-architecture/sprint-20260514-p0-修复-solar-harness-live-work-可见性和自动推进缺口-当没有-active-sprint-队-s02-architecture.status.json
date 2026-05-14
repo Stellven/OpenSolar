@@ -161,6 +161,12 @@
       "event": "graph_parent_ready_passed",
       "by": "graph-dispatch",
       "note": "All DAG nodes and required gates passed via parent_ready_check."
+    },
+    {
+      "ts": "2026-05-14T15:49:40Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
     }
   ],
   "round": 1,
