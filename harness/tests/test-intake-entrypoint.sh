@@ -97,6 +97,23 @@ mod.QUEUE.write_text(json.dumps({
 actions = mod.retry_queue({}, dispatch=False, cooldown=0)
 assert actions and actions[0].get("dropped") == "stale_sprint", actions
 assert mod.load_queue() == [], mod.load_queue()
+
+sid = "sprint-20990101-terminal"
+(mod.SPRINTS / f"{sid}.status.json").write_text(json.dumps({
+    "sprint_id": sid,
+    "status": "passed",
+    "phase": "completed",
+    "handoff_to": "done",
+}, ensure_ascii=False) + "\n")
+mod.QUEUE.write_text(json.dumps({
+    "sid": sid,
+    "type": "graph_node_idle_assigned",
+    "target": "solar-harness-lab:0.2",
+    "created_at_epoch": 9999999999,
+}, ensure_ascii=False) + "\n")
+actions = mod.retry_queue({}, dispatch=True, cooldown=0)
+assert actions and actions[0].get("dropped") == "terminal_sprint", actions
+assert mod.load_queue() == [], mod.load_queue()
 PY
 
 SOLAR_KNOWLEDGE_RAW_DIR="$RAW_DIR" SOLAR_EPIC_MIN_CHARS=60 "$TMP/solar-harness.sh" intake --no-dispatch \

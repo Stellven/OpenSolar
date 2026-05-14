@@ -893,6 +893,52 @@ load_last_state() {
   [[ -f "$COORD_STATE" ]] && cat "$COORD_STATE" 2>/dev/null | head -1 | tr -d '\n' || echo ""
 }
 
+sanitize_last_state() {
+  local current
+  current=$(load_last_state)
+  [[ -z "$current" ]] && return 0
+
+  local updated=""
+  local removed=0
+  local IFS_OLD="$IFS"
+  IFS='|'
+  local entries=($current)
+  IFS="$IFS_OLD"
+  for entry in "${entries[@]}"; do
+    [[ -z "$entry" ]] && continue
+    local entry_sid="${entry%%:*}"
+    if [[ -z "$entry_sid" || "$entry_sid" != sprint-* ]]; then
+      updated+="${entry}|"
+      continue
+    fi
+    if [[ -f "$SPRINTS_DIR/${entry_sid}.status.json" ]]; then
+      updated+="${entry}|"
+    else
+      removed=$((removed + 1))
+    fi
+  done
+
+  if (( removed > 0 )); then
+    local value="${updated%|}"
+    local encoded
+    encoded=$(printf '%s' "$value" | base64)
+    python3 -c "
+import tempfile, os, base64
+value = base64.b64decode('$encoded').decode('utf-8')
+path = os.path.expanduser('$COORD_STATE')
+dirn = os.path.dirname(path)
+os.makedirs(dirn, exist_ok=True)
+fd, tmp = tempfile.mkstemp(dir=dirn, suffix='.tmp')
+with os.fdopen(fd, 'w') as f:
+    f.write(value + '\n')
+    f.flush()
+    os.fsync(f.fileno())
+os.rename(tmp, path)
+" 2>/dev/null || true
+    log "${Y}[state-recovery] pruned ${removed} orphan coordinator checkpoint entries with missing status.json${N}"
+  fi
+}
+
 state_fingerprint() {
   local sf="$1" sid st phase handoff digest
   sid=$(get_field "$sf" "id")
@@ -4126,15 +4172,8 @@ handle_passed() {
 
 如有新需求，请直接输入。"
 
-  local planner_rc
-  dispatch_to_planner "$sid" "passed_notify" "$SPRINTS_DIR/${sid}.dispatch.md"
-  planner_rc=$?
-  if (( planner_rc != 0 )); then
-    log "${Y}[handle_passed] planner notification dispatch failed (rc=${planner_rc}), inbox notification kept${N}"
-    emit_event "$sid" "dispatch_failed" "coordinator" "{\"to\":\"planner\",\"task\":\"passed\",\"rc\":${planner_rc}}"
-  else
-    emit_event "$sid" "dispatched" "coordinator" "{\"to\":\"planner\",\"task\":\"passed\"}"
-  fi
+  log "${C}[handle_passed] terminal passed_notify kept in dispatch/inbox only; skip pane dispatch to avoid waking completed sprint${N}"
+  emit_event "$sid" "dispatch_suppressed" "coordinator" "{\"to\":\"planner\",\"task\":\"passed\",\"reason\":\"terminal_sprint_no_pane_dispatch\"}"
 
   # 自动归档 (兜底不阻塞)
   (bash "$HARNESS_DIR/archive.sh" auto 2>&1 | head -5 >> "$HARNESS_DIR/.archive-auto.log") || true
@@ -4367,6 +4406,7 @@ with open('$patches_file','w') as f:
   # ── Sprint 20260420-082442 D3 + sprint-20260502-182804 follow-up v3 ──
   # sprint-20260503-104819 D3: 启动时 reload pane assignments
   load_pane_assignments
+  sanitize_last_state
   # bug 演变史:
   # v1 (旧): 启动时把中间态保存为 last_state → 首轮 current==last → 不派发 ❌
   # v2 (旧): 启动时 rm -f COORD_STATE → 首轮必派发 → 协调器重启重复派发中断 builder ❌

@@ -39,7 +39,7 @@ PANE_TUI_UNAVAILABLE_RE = re.compile(
     re.I,
 )
 PANE_QUEUED_PROMPT_RE = re.compile(r"Press up to edit queued messages", re.I)
-PANE_PROMPT_RESIDUE_RE = re.compile(r"^\s*❯[\s\u00a0]+[^\s\u00a0─]", re.M)
+PANE_PROMPT_RESIDUE_RE = re.compile(r"^\s*❯(?![\s\u00a0]+Try\\s+\")[\s\u00a0]+[^\s\u00a0─]", re.M)
 STATE_READ_PREFLIGHT = """<!-- SOLAR_STATE_READ_PREFLIGHT -->
 ## 必须先读状态 (防写入 hook 卡死)
 
@@ -85,10 +85,142 @@ try:
     from architecture_guard import dispatch_policy_block  # noqa: E402
 except Exception:  # pragma: no cover - architecture guard is additive
     dispatch_policy_block = None  # type: ignore
+try:
+    from research import storage as research_storage  # noqa: E402
+    from research.cli import render_human_search_handoff  # noqa: E402
+except Exception:  # pragma: no cover - DeepResearch is additive
+    research_storage = None  # type: ignore
+    render_human_search_handoff = None  # type: ignore
 
 
 def _json(obj: Any) -> str:
     return json.dumps(obj, ensure_ascii=False)
+
+
+HUMAN_SEARCH_CAPABILITIES = {
+    "source.search",
+    "research.source.search",
+    "research.source.web",
+    "research.source.academic",
+    "research.web.search",
+    "research.academic.search",
+    "research.contradiction.search",
+}
+
+
+def _node_capabilities(node: dict[str, Any]) -> set[str]:
+    caps: set[str] = set()
+    for key in ("required_capabilities", "capabilities"):
+        raw = node.get(key, [])
+        if isinstance(raw, str):
+            caps.add(raw)
+        elif isinstance(raw, list):
+            caps.update(str(item) for item in raw if str(item))
+    return caps
+
+
+def _node_requires_human_search(node: dict[str, Any]) -> bool:
+    if node.get("human_search") is False or node.get("human_loop_search") is False:
+        return False
+    if _node_capabilities(node) & HUMAN_SEARCH_CAPABILITIES:
+        return True
+    haystack = " ".join(str(node.get(k, "")) for k in ("id", "goal", "description")).lower()
+    return bool(re.search(r"external[_ -]?search|web[_ -]?search|academic[_ -]?search|source[_ -]?search|contradiction[_ -]?search", haystack))
+
+
+def _ensure_research_run(db_path: Path, topic: str, existing_run_id: str = "") -> str:
+    if research_storage is None:
+        raise RuntimeError("research storage unavailable")
+    conn = research_storage.init_db(str(db_path))
+    if existing_run_id:
+        row = conn.execute("SELECT id FROM research_runs WHERE id = ?", (existing_run_id,)).fetchone()
+        if row:
+            conn.close()
+            return existing_run_id
+    conn.execute(
+        "INSERT INTO research_runs (topic, depth_tier, status) VALUES (?, 'standard', 'pending')",
+        (topic or "Human search run",),
+    )
+    conn.commit()
+    run_id = conn.execute("SELECT id FROM research_runs ORDER BY created_at DESC LIMIT 1").fetchone()["id"]
+    conn.close()
+    return run_id
+
+
+def _prepare_human_search_handoff(sid: str, graph_path: str | Path, node: dict[str, Any], dry_run: bool = False) -> dict[str, Any] | None:
+    """Create a durable human-search handoff instead of dispatching a pane."""
+    if not _node_requires_human_search(node):
+        return None
+    if render_human_search_handoff is None:
+        return {"ok": False, "reason": "human_search_renderer_unavailable", "node": node.get("id")}
+
+    node_id = str(node.get("id") or "")
+    metadata = node.get("human_search") if isinstance(node.get("human_search"), dict) else {}
+    db_path = Path(str(metadata.get("db_path") or SPRINTS_DIR / f"{sid}.research.sqlite"))
+    handoff_md = Path(str(metadata.get("handoff_md") or SPRINTS_DIR / f"{sid}.{node_id}-human-search-handoff.md"))
+    results_md = Path(str(metadata.get("results_md") or SPRINTS_DIR / f"{sid}.{node_id}-human-search-results.md"))
+    query = str(node.get("search_query") or node.get("goal") or node_id)
+    topic = str(node.get("topic") or node.get("goal") or sid)
+    max_results = int(node.get("max_results") or metadata.get("max_results") or 8)
+
+    if dry_run:
+        return {
+            "ok": True,
+            "reason": "human_search_handoff_required",
+            "node": node_id,
+            "handoff_md": str(handoff_md),
+            "results_md": str(results_md),
+            "dry_run": True,
+        }
+
+    run_id = _ensure_research_run(db_path, topic, str(metadata.get("run_id") or ""))
+    handoff_md.parent.mkdir(parents=True, exist_ok=True)
+    handoff_md.write_text(
+        render_human_search_handoff(topic=topic, query=query, run_id=run_id, max_results=max_results),
+        encoding="utf-8",
+    )
+
+    graph = load_graph(graph_path)
+    live = next((n for n in graph.get("nodes", []) if n.get("id") == node_id), node)
+    live["status"] = "waiting_human_search"
+    live["human_search"] = {
+        "provider": "human-in-the-loop",
+        "status": "waiting",
+        "db_path": str(db_path),
+        "run_id": run_id,
+        "handoff_md": str(handoff_md),
+        "results_md": str(results_md),
+        "import_command": (
+            f"solar-harness research import-search {db_path} --run-id {run_id} "
+            f"--input-md {results_md} --continue --output-dir {SPRINTS_DIR / (sid + '.research-out')} "
+            f"--output-md {SPRINTS_DIR / (sid + '.final.md')} --graph {graph_path} --node {node_id}"
+        ),
+    }
+    graph.setdefault("node_results", {})[node_id] = {
+        "status": "waiting_human_search",
+        "updated_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "handoff_md": str(handoff_md),
+        "results_md": str(results_md),
+        "run_id": run_id,
+    }
+    save_graph(graph_path, graph)
+    try:
+        _append_event(sid, {
+            "event": "human_search_handoff_created",
+            "by": "graph-dispatch",
+            "data": {"node": node_id, "handoff_md": str(handoff_md), "results_md": str(results_md), "run_id": run_id},
+        })
+    except Exception:
+        pass
+    return {
+        "ok": True,
+        "reason": "waiting_human_search",
+        "node": node_id,
+        "handoff_md": str(handoff_md),
+        "results_md": str(results_md),
+        "run_id": run_id,
+        "graph_updated": True,
+    }
 
 
 def _no_dispatch_enabled() -> bool:
@@ -747,6 +879,33 @@ def _pane_tui_busy(pane: str) -> bool:
     return False
 
 
+def _clear_stale_prompt_residue(pane: str) -> bool:
+    """Clear idle Claude prompt residue in harness-owned worker panes.
+
+    This is intentionally conservative: it only runs when the bottom of the
+    pane is not actively processing and the visible prompt contains unsubmitted
+    text. Without this, one stale "continue ..." prompt can make a builder pane
+    look permanently busy and strand DAG nodes with no_matching_worker.
+    """
+    tail = _pane_tail(pane)
+    bottom = "\n".join(tail.splitlines()[-12:])
+    if PANE_TUI_BUSY_RE.search(bottom) or PANE_TUI_UNAVAILABLE_RE.search(bottom):
+        return False
+    if not (PANE_QUEUED_PROMPT_RE.search(bottom) or PANE_PROMPT_RESIDUE_RE.search(bottom)):
+        return False
+    try:
+        # Claude Code prompt editing has varied across versions; try both common
+        # line-kill paths. These keys are harmless at an idle prompt.
+        subprocess.run(["tmux", "send-keys", "-t", pane, "C-a", "C-k"], timeout=2)
+        time.sleep(0.15)
+        subprocess.run(["tmux", "send-keys", "-t", pane, "C-u"], timeout=2)
+        time.sleep(0.25)
+    except Exception:
+        return False
+    after = "\n".join(_pane_tail(pane).splitlines()[-12:])
+    return not (PANE_QUEUED_PROMPT_RE.search(after) or PANE_PROMPT_RESIDUE_RE.search(after))
+
+
 def _pane_unavailable_reason(pane: str) -> str:
     health = _pane_health(pane)
     if health.get("unavailable"):
@@ -1278,7 +1437,7 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
                 "instruction_file": str(instruction_file),
                 "requeued": False,
             }
-    if current_status in {"passed", "failed", "skipped", "reviewing"}:
+    if current_status in {"passed", "failed", "skipped", "reviewing", "waiting_human_search"}:
         return {
             "ok": True,
             "reason": "stale_graph_item_node_not_dispatchable",
@@ -1286,6 +1445,9 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
             "status": current_status,
             "dispatch_id": dispatch_id,
         }
+    human_handoff = _prepare_human_search_handoff(sid, graph_path, node, dry_run=dry_run)
+    if human_handoff is not None:
+        return human_handoff
     if current_status in {"assigned", "dispatched", "in_progress", "running"} and current_dispatch_id and current_dispatch_id != dispatch_id:
         return {
             "ok": True,
@@ -1412,6 +1574,7 @@ def drain_queue(sprint_id: str, dry_run: bool = False, max_items: int = 0, ttl: 
 def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
     worker_skills = [
         "bash", "python", "dataclasses", "pytest", "pure-functions", "time-injection", "io", "fsm", "integration-testing", "json-patch", "typescript", "docs", "testing",
+        "http-testing", "negative-testing", "activation-proof", "knowledge-ingest", "release-gate", "documentation",
         "frontend", "flask", "http-routing", "autopilot-hooks", "json-traversal", "html", "javascript", "vanilla-dom",
         "product", "planning", "governance",
         "architecture", "schema", "state-machine", "distributed-systems",
@@ -1424,6 +1587,8 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
     worker_capabilities = [
         "bash", "python", "typescript", "docs", "testing",
         "frontend", "observability",
+        "harness.status", "harness.testing", "harness.failure_recovery", "harness.autopilot",
+        "harness.activation_proof", "harness.reporting", "harness.knowledge", "harness.contracts",
         "documentation", "schema", "state-machine", "storage", "sources",
         "browser.browse", "browser.qa", "code.review",
         "browser.mcp", "browser.automation", "browser.screenshot",
@@ -1475,6 +1640,8 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         if "glm" in title_lower:
             if "quota:exhausted" in title_lower or "quota exhausted" in title_lower:
                 quota_exhausted.extend(_model_alias_set("glm"))
+        if pane.startswith("solar-harness-lab:") or pane == f"{SESSION}:0.2":
+            _clear_stale_prompt_residue(pane)
         unavailable_reason = _pane_unavailable_reason(pane)
         workers.append({
             "pane": pane,

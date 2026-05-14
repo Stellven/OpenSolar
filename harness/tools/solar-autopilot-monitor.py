@@ -81,11 +81,12 @@ PANE_UNAVAILABLE_RE = re.compile(
     r"API Error:\s*400|Invalid API parameter|error\"\s*:\s*\{",
     re.I,
 )
-PANE_PROMPT_RESIDUE_RE = re.compile(r"^\s*❯[\s\u00a0]+[^\s\u00a0─]", re.M)
+PANE_PROMPT_RESIDUE_RE = re.compile(r"^\s*❯(?![\s\u00a0]+Try\\s+\")[\s\u00a0]+[^\s\u00a0─]", re.M)
 SQLITE_ONLY_RE = re.compile(r"sqlite3\s+~?/?.*\.solar/solar\.db", re.I)
 CONTEXT_INJECT_RE = re.compile(r"solar-harness\s+context\s+inject|Solar Unified Context", re.I)
 CONTEXT_TIMEOUT_RE = re.compile(r"context inject[\s\S]{0,240}timeout\s+\d+s|timeout\s+\d+s[\s\S]{0,240}context inject", re.I)
 ACTIVE_STATUSES = {"drafting", "queued", "active", "planning", "approved", "reviewing", "ready_for_review", "needs_human_review", "failed_review"}
+TERMINAL_STATUSES = {"passed", "completed", "finalized", "done", "cancelled", "archived"}
 GRAPH_READY_HANDOFFS = {"builder", "builder_main", "builder_parallel", "builder-lab"}
 GRAPH_EVAL_HANDOFFS = {"evaluator", "reviewer"}
 
@@ -704,6 +705,65 @@ def retry_queue(state: dict, dispatch: bool, cooldown: int) -> list[dict]:
             )
             actions.append({"sid": sid, "action": item.get("type"), "dropped": "stale_sprint", "target": target})
             continue
+        if sid:
+            status = load_json(SPRINTS / f"{sid}.status.json")
+            status_value = str(status.get("status") or "").lower()
+            if status_value in TERMINAL_STATUSES or status_value not in ACTIVE_STATUSES:
+                append_event(
+                    sid,
+                    "autopilot_queue_drop_terminal_sprint",
+                    "info",
+                    {"target": target, "type": item.get("type"), "status": status.get("status"), "phase": status.get("phase")},
+                )
+                actions.append(
+                    {
+                        "sid": sid,
+                        "action": item.get("type"),
+                        "dropped": "terminal_sprint",
+                        "target": target,
+                        "status": status.get("status"),
+                    }
+                )
+                continue
+            if item.get("type") == "graph_node_idle_assigned":
+                graph_node = item.get("graph_node") or {}
+                node_id = str(graph_node.get("node_id") or item.get("node_id") or "")
+                if node_id:
+                    graph_path = graph_path_for(sid)
+                    node_state = ""
+                    handoff_exists = (SPRINTS / f"{sid}.{node_id}-handoff.md").exists()
+                    try:
+                        graph = load_graph(graph_path) if load_graph and graph_path.exists() else {}
+                        for node in graph.get("nodes", []):
+                            if str(node.get("id") or "") == node_id:
+                                node_state = str(node_status(graph, node) if node_status else node.get("status") or "").lower()
+                                break
+                    except Exception:
+                        node_state = ""
+                    if handoff_exists or (node_state and node_state not in {"assigned", "dispatched", "in_progress", "running"}):
+                        append_event(
+                            sid,
+                            "autopilot_queue_drop_completed_graph_node",
+                            "info",
+                            {
+                                "target": target,
+                                "type": item.get("type"),
+                                "node_id": node_id,
+                                "node_state": node_state,
+                                "handoff_exists": handoff_exists,
+                            },
+                        )
+                        actions.append(
+                            {
+                                "sid": sid,
+                                "action": item.get("type"),
+                                "dropped": "completed_graph_node",
+                                "target": target,
+                                "node_id": node_id,
+                                "node_state": node_state,
+                            }
+                        )
+                        continue
         if is_telemetry_only_finding(item):
             append_event(sid, "autopilot_queue_drop_telemetry_only", "info", {"target": target, "type": item.get("type")})
             actions.append({"sid": sid, "action": item.get("type"), "dropped": "telemetry_only", "target": target})

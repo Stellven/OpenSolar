@@ -4,12 +4,12 @@
   "epic_id": "epic-20260514-p0-修复-solar-harness-live-work-可见性和自动推进缺口-当没有-active-sprint-队",
   "title": "调度、自动化与可视化",
   "status": "passed",
-  "phase": "completed",
+  "phase": "finalized",
   "handoff_to": "done",
   "target_role": "done",
   "priority": "P0",
   "created_at": "2026-05-14T14:43:09Z",
-  "updated_at": "2026-05-14T19:46:55Z",
+  "updated_at": "2026-05-14T19:51:11Z",
   "dependency_policy": "activated_by_epic_dag",
   "history": [
     {
@@ -535,6 +535,11 @@
       "event": "graph_parent_ready_passed",
       "by": "graph-dispatch",
       "note": "All DAG nodes and required gates passed via parent_ready_check."
+    },
+    {
+      "ts": "2026-05-14T19:51:11Z",
+      "event": "finalized",
+      "by": "coordinator"
     }
   ],
   "round": 1,
@@ -565,5 +570,11 @@
       "integration-pass"
     ],
     "missing_gates": []
-  }
+  },
+  "knowledge_export_status": "exported",
+  "knowledge_export_path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260514-p0-修复-solar-harness-live-work-可见性和自动推进缺口-当没有-active-sprint-队-s04-orchestration-ui.accepted.md",
+  "knowledge_ingest_dispatch": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260514-p0-修复-solar-harness-live-work-可见性和自动推进缺口-当没有-active-sprint-队-s04-orchestration-ui.dispatch.md",
+  "knowledge_exported_at": "2026-05-14T19:51:11Z",
+  "knowledge_ingested_at": null,
+  "knowledge_export_error": null
 }
