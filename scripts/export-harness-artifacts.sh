@@ -340,6 +340,7 @@ harness = Path(os.environ["REPO_HARNESS"])
 
 allowed_dirs = {
     "ADR",
+    "autopilot",
     "brain",
     "config",
     "docker",
@@ -356,6 +357,7 @@ allowed_dirs = {
     "runbooks",
     "schemas",
     "skills",
+    "status-server",
     "sprints",
     "templates",
     "tests",

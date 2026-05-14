@@ -95,3 +95,4 @@
 {"ts": "2026-05-14T19:46:46Z", "sid": "sprint-20260514-p0-修复-solar-harness-live-work-可见性和自动推进缺口-当没有-active-sprint-队-s04-orchestration-ui", "event": "state_changed", "by": "coordinator"}
 {"event": "graph_parent_ready_passed", "by": "graph-dispatch", "data": {"node_count": 5, "required_gates": ["routes-pass", "hook-pass", "visibility-pass", "ui-pass", "integration-pass"]}, "ts": "2026-05-14T19:46:55Z", "sid": "sprint-20260514-p0-修复-solar-harness-live-work-可见性和自动推进缺口-当没有-active-sprint-队-s04-orchestration-ui"}
 {"ts": "2026-05-14T19:47:46Z", "sid": "sprint-20260514-p0-修复-solar-harness-live-work-可见性和自动推进缺口-当没有-active-sprint-队-s04-orchestration-ui", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-14T19:48:54Z", "sid": "sprint-20260514-p0-修复-solar-harness-live-work-可见性和自动推进缺口-当没有-active-sprint-队-s04-orchestration-ui", "event": "dispatch_suppressed", "by": "coordinator"}
