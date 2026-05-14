@@ -644,8 +644,8 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
     _record_model_call("request", sid, pane, dispatch_id, instruction_file, status="tmux_submit_requested")
     processing_re = re.compile(
         r"Crafting|Cogitating|Orchestrating|Coalescing|Wandering|Sock-hopping|"
-        r"Crunched|Puzzling|Cooking|Baked|Read\(|Reading|Bash\(|Edit\(|"
-        r"Write\(|⎿|✻|✶|✳|⏺"
+        r"Crunched|Puzzling|Cooking|Baked|Thinking|Newspapering|Read\(|"
+        r"Reading|Bash\(|Edit\(|Write\(|⎿|✻|✶|✳|✽|⏺"
     )
     last_error = ""
     for tries in range(1, 4):
@@ -664,7 +664,7 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
             subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=2)
             time.sleep(4.0)
             tail = subprocess.run(
-                ["tmux", "capture-pane", "-pt", pane, "-S", "-40"],
+                ["tmux", "capture-pane", "-pt", pane, "-S", "-80"],
                 text=True,
                 capture_output=True,
                 timeout=2,
@@ -692,7 +692,7 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
                     subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=2)
                     time.sleep(3.0)
                     tail = subprocess.run(
-                        ["tmux", "capture-pane", "-pt", pane, "-S", "-40"],
+                        ["tmux", "capture-pane", "-pt", pane, "-S", "-80"],
                         text=True,
                         capture_output=True,
                         timeout=2,
@@ -726,8 +726,11 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
                 )
                 return True
             last_error = "dispatch text not accepted by pane"
-            # Only clear when the instruction never appeared in the pane.
-            subprocess.run(["tmux", "send-keys", "-t", pane, "C-c"], timeout=2)
+            # Never send C-c from the dispatcher. Claude Code treats C-c as an
+            # interactive interruption and can leave the pane in a Rewind prompt
+            # that blocks automation. If the text was not accepted, report
+            # send_failed and let the caller decide whether to retry, quarantine,
+            # or respawn the pane.
             time.sleep(1.0)
         except Exception as exc:
             last_error = str(exc)
@@ -1055,6 +1058,14 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
 
     instruction_file = _dispatch_file(sid, node_id)
     text_payload = dict(payload, dispatch_id=dispatch_id, sprint_id=sid)
+    # Research node branch: mark fan-out section isolation for R-prefixed nodes
+    # from deepresearch DAG templates. No main-loop edits; this is a single
+    # if-branch that enriches the payload before dispatch text generation.
+    if node_id.startswith("R"):
+        text_payload["research_node"] = True
+        if node.get("fan_out_parent"):
+            text_payload["section_isolation"] = True
+            text_payload["section_id"] = node.get("section_id", "")
     instruction_file.parent.mkdir(parents=True, exist_ok=True)
     instruction_file.write_text(build_dispatch_text(text_payload, pane), encoding="utf-8")
     if not dry_run:
@@ -1118,6 +1129,7 @@ def drain_queue(sprint_id: str, dry_run: bool = False, max_items: int = 0, ttl: 
 def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
     worker_skills = [
         "bash", "python", "typescript", "docs", "testing",
+        "frontend",
         "product", "planning",
         "architecture", "schema", "state-machine", "distributed-systems",
         "routing", "diagnostics", "evaluation",
@@ -1127,6 +1139,7 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
     ]
     worker_capabilities = [
         "bash", "python", "typescript", "docs", "testing",
+        "frontend", "observability",
         "schema", "state-machine", "storage", "sources",
         "browser.browse", "browser.qa", "code.review",
         "browser.mcp", "browser.automation", "browser.screenshot",

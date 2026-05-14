@@ -244,6 +244,12 @@ CORE_SOLAR_SKILLS: list[dict[str, Any]] = [
         "probe": "autopilot_monitor",
         "provider": "solar-autopilot-monitor",
     },
+    {
+        "name": "solar-deep-research",
+        "capabilities": ["source.search", "evidence.extract", "claim.mine", "citation.verify", "report.compile", "factuality.evaluate"],
+        "probe": "deepresearch_probe",
+        "provider": "solar-deep-research",
+    },
 ]
 
 
@@ -938,6 +944,66 @@ CAPABILITY_RULES: list[dict[str, Any]] = [
         "patterns": [
             r"\b(ruflo|ruvflo|claude[- ]flow|swarm|hive[- ]mind|agentdb|ruvector|sparc)\b",
             r"Ruflo|Claude Flow|蜂群|多代理编排|插件市场|自学习|AgentDB|RuVector",
+        ],
+    },
+    {
+        "provider": "DeepResearch Source Search",
+        "capabilities": ["source.search", "research.source.web", "research.source.academic", "research.source.internal"],
+        "why": "任务涉及多源检索、外部搜索、学术搜索、Mirage/QMD 内部源搜索、来源网格。",
+        "use": "使用 research.sources 中的 SourceConnector 子类执行搜索；通过 Mirage VFS 检索内部知识库；记录每个连接器的状态（ok/degraded/failed）。",
+        "patterns": [
+            r"\b(source search|multi.source|external search|academic search|source mesh|brave|exa|tavily|openalex|semantic scholar)\b",
+            r"多源检索|外部搜索|学术搜索|来源网格|知识检索|文献搜索",
+        ],
+    },
+    {
+        "provider": "DeepResearch Evidence Extraction",
+        "capabilities": ["evidence.extract", "research.evidence.extractor", "research.evidence.ledger"],
+        "why": "任务涉及证据提取、span_text 提取、内容规范化、证据账本、EvidenceItem 创建。",
+        "use": "使用 research.extractors 提取原文段落；每个证据必须有 span_text 和 content_hash；写入 evidence.jsonl。",
+        "patterns": [
+            r"\b(evidence extract|span_text|content_hash|evidence.item|extract.*passage|fetch.*extract)\b",
+            r"证据提取|原文段落|内容哈希|证据账本|规范化提取",
+        ],
+    },
+    {
+        "provider": "DeepResearch Claim Mining",
+        "capabilities": ["claim.mine", "research.claim.miner", "research.claim.ledger"],
+        "why": "任务涉及 claim 挖掘、断言提取、claim-evidence 链接、unsupported_claim_rate 计算。",
+        "use": "从 evidence.jsonl 挖掘 claim；标记 is_key；计算 unsupported_claim_rate（关键 claim 必须 <= 5%）；写入 claims.jsonl + claim_evidence.jsonl。",
+        "patterns": [
+            r"\b(claim min|assertion extract|claim.evidence|unsupported.claim|is_key|support_rating|mine.*claim|claim.*mine)\b",
+            r"断言挖掘|claim.*挖掘|证据链接|无支撑断言|关键断言|挖掘断言",
+        ],
+    },
+    {
+        "provider": "DeepResearch Citation Verification",
+        "capabilities": ["citation.verify", "research.factuality_evaluator"],
+        "why": "任务涉及引用验证、citation span 检查、span_text 匹配、引用准确性审核。",
+        "use": "验证 [cite:evidence_id] 标记是否解析为有效证据；检查 cited span_text 是否出现在证据原文中；计算 citation_span_accuracy。",
+        "patterns": [
+            r"\b(citation verif|span.*match|cite.*accuracy|fact.check|citation_span|reference check|citation.*verif|verif.*citation)\b",
+            r"引用验证|引用检查|事实核查|span.*匹配|引用准确性",
+        ],
+    },
+    {
+        "provider": "DeepResearch Report Compilation",
+        "capabilities": ["report.compile", "research.long_report_compiler", "research.report_ast"],
+        "why": "任务涉及报告编译、章节组装、ReportAST 生成、结构化长报告。",
+        "use": "从 report_ast.json 按章节顺序编译报告；R9 节点只拼接不生成新内容；最终报告由 R11 组装。",
+        "patterns": [
+            r"\b(report compil|chapter assembl|report.ast|long.report|section.compile|final export)\b",
+            r"报告编译|章节组装|结构化报告|长报告|报告AST",
+        ],
+    },
+    {
+        "provider": "DeepResearch Factuality Evaluation",
+        "capabilities": ["factuality.evaluate", "research.evaluator.contradiction"],
+        "why": "任务涉及事实审稿、全局一致性检查、unsupported_claim_rate 门禁、contradiction 覆盖率。",
+        "use": "计算 7 项指标（unsupported_claim_rate, citation_span_accuracy, source_authority_score, freshness_score, contradiction_coverage, section_repetition_rate, cross_section_consistency）；不通过则触发 rollback。",
+        "patterns": [
+            r"\b(factuality eval|global consistency|unsupported.rate|repetition rate|cross.section|contradiction coverage)\b",
+            r"事实审稿|全局一致性|重复率|交叉一致性|矛盾覆盖率|质量门禁",
         ],
     },
 ]

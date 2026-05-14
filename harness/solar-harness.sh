@@ -2056,6 +2056,10 @@ print(json.dumps({
   kill|stop) kill_harness ;;
   扩展|extend) start_extension "${2:-$(pwd)}" ;;
   models) shift; do_models_command "$@" ;;
+  research)
+    shift || true
+    python3 "$HARNESS_DIR/lib/research/cli.py" "$@"
+    ;;
   sprint)
     [[ -z "${2:-}" ]] && { err "用法: $0 sprint \"需求描述\""; exit 1; }
     new_sprint "$2"

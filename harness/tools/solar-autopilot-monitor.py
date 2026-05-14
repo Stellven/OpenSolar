@@ -720,14 +720,14 @@ def discover_worker_panes() -> list[str]:
 
 
 def infer_worker_models(pane: str) -> list[str]:
-    if pane.endswith(".0"):
-        return ["sonnet", "glm-5.1"]
-    if pane.endswith(".1"):
-        return ["sonnet"]
+    if pane.startswith("solar-harness-lab:"):
+        if pane.endswith(".3"):
+            return ["sonnet", "anthropic-sonnet", "claude-sonnet"]
+        return ["glm", "glm-5.1", "zhipu"]
     if pane.endswith(".2"):
-        return ["sonnet", "glm-5.1"]
+        return ["opus", "anthropic-opus", "claude-opus"]
     if pane.endswith(".3"):
-        return ["deepseek", "sonnet"]
+        return ["opus", "anthropic-opus", "claude-opus"]
     return ["sonnet"]
 
 
@@ -735,12 +735,14 @@ def graph_workers() -> list[dict]:
     workers = []
     skills = [
         "bash", "python", "typescript", "docs", "testing",
+        "frontend",
         "product", "planning",
         "architecture", "schema", "state-machine", "distributed-systems",
         "routing", "diagnostics", "evaluation", "debug.systematic",
     ]
     capabilities = [
         "bash", "python", "typescript", "docs", "testing",
+        "frontend", "observability",
         "schema", "state-machine", "storage", "sources",
         "code.review", "debug.systematic", "skill.methodology",
         "workflow.planning", "product.requirements", "test.tdd", "browser.browse", "browser.qa",
