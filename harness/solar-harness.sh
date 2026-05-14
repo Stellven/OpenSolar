@@ -18,6 +18,7 @@ SESSION_NAME="solar-harness"
 LAB_SESSION_NAME="solar-harness-lab"
 LEGACY_LAB_SESSION_NAME="solar-harness-strategy"
 SPRINTS_DIR="$HARNESS_DIR/sprints"
+export HARNESS_DIR SPRINTS_DIR
 
 # sprint-20260503-094659 D2: 统一 state helper
 . "$HARNESS_DIR/lib/run-state.sh"
@@ -857,6 +858,138 @@ new_epic_from_request() {
     log "Root child: $(printf "%s" "$out" | jq -r '.children[] | select(.active==true) | .sid' | head -1)"
   fi
   log "Next: autopilot activates child sprints by dependency; each child still goes PM/Planner/DAG/Builder/Evaluator."
+}
+
+write_intake_raw_record() {
+  local req="$1"
+  local result="$2"
+  local ts raw_dir raw_file
+  ts=$(date -u +%Y%m%dT%H%M%SZ)
+  raw_dir="${SOLAR_KNOWLEDGE_RAW_DIR:-$HOME/Knowledge/_raw/solar-harness/intake}"
+  mkdir -p "$raw_dir" 2>/dev/null || return 0
+  raw_file="$raw_dir/intake-${ts}.md"
+  cat > "$raw_file" <<EOF
+# Solar-Harness Intake Record
+
+created_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+source: solar-harness intake
+
+## User Request
+
+${req}
+
+## Intake Result
+
+\`\`\`text
+${result}
+\`\`\`
+
+## Runtime Rule
+
+User requests must enter PM requirements analysis first, then Planner
+architecture/design/plan/task_graph, then DAG builder dispatch and evaluator
+closeout. Do not send a large raw request directly to a builder pane.
+EOF
+  echo "$raw_file"
+}
+
+intake_request() {
+  local req="" file="" use_stdin=0 dispatch=1 json=0 arg
+  local -a parts=()
+  while (($#)); do
+    arg="$1"
+    case "$arg" in
+      --stdin)
+        use_stdin=1
+        ;;
+      --file)
+        shift || { err "intake --file 需要路径"; return 1; }
+        file="$1"
+        ;;
+      --request)
+        shift || { err "intake --request 需要文本"; return 1; }
+        parts+=("$1")
+        ;;
+      --no-dispatch)
+        dispatch=0
+        ;;
+      --json)
+        json=1
+        ;;
+      --help|-h)
+        echo "用法:"
+        echo "  $0 intake \"需求\""
+        echo "  $0 intake --file request.md [--no-dispatch]"
+        echo "  echo \"需求\" | $0 intake --stdin"
+        echo ""
+        echo "行为: 创建 sprint/epic，写 Knowledge/_raw intake 记录，并默认触发一次 autopilot dispatch。"
+        return 0
+        ;;
+      *)
+        parts+=("$arg")
+        ;;
+    esac
+    shift || true
+  done
+
+  if [[ -n "$file" ]]; then
+    [[ -f "$file" ]] || { err "intake file not found: $file"; return 1; }
+    req+=$(cat "$file")
+  fi
+  if [[ "$use_stdin" == "1" ]]; then
+    [[ -n "$req" ]] && req+=$'\n'
+    req+=$(cat)
+  fi
+  if ((${#parts[@]})); then
+    [[ -n "$req" ]] && req+=$'\n'
+    req+="${parts[*]}"
+  fi
+  req="$(printf '%s' "$req" | sed 's/[[:space:]]*$//')"
+  [[ -n "$req" ]] || { err "intake 需要需求文本"; return 1; }
+
+  ensure_dirs
+  local out rc raw_file autopilot_out autopilot_rc
+  set +e
+  out=$(new_sprint "$req" 2>&1)
+  rc=$?
+  set -e
+  raw_file="$(write_intake_raw_record "$req" "$out" 2>/dev/null || true)"
+  if [[ "$rc" != "0" ]]; then
+    echo "$out"
+    return "$rc"
+  fi
+
+  autopilot_out=""
+  autopilot_rc=0
+  if [[ "$dispatch" == "1" && -f "$HARNESS_DIR/tools/solar-autopilot-monitor.py" ]]; then
+    set +e
+    autopilot_out=$(python3 "$HARNESS_DIR/tools/solar-autopilot-monitor.py" --apply --dispatch --max-iterations 1 --json 2>&1)
+    autopilot_rc=$?
+    set -e
+  fi
+
+  if [[ "$json" == "1" ]]; then
+    python3 - "$rc" "$raw_file" "$dispatch" "$autopilot_rc" <<'PY'
+import json, sys
+print(json.dumps({
+    "ok": int(sys.argv[1]) == 0,
+    "raw_record": sys.argv[2],
+    "dispatch_requested": sys.argv[3] == "1",
+    "autopilot_returncode": int(sys.argv[4]),
+}, ensure_ascii=False, indent=2))
+PY
+  else
+    echo "$out"
+    [[ -n "$raw_file" ]] && log "Raw intake: $raw_file"
+    if [[ "$dispatch" == "1" ]]; then
+      if [[ "$autopilot_rc" == "0" ]]; then
+        ok "Autopilot scan/dispatch triggered"
+      else
+        warn "Autopilot dispatch trigger failed rc=${autopilot_rc}"
+        echo "$autopilot_out" | tail -40
+      fi
+    fi
+  fi
 }
 
 new_sprint() {
@@ -2060,9 +2193,14 @@ print(json.dumps({
     shift || true
     python3 "$HARNESS_DIR/lib/research/cli.py" "$@"
     ;;
+  intake|request)
+    shift || true
+    intake_request "$@"
+    ;;
   sprint)
-    [[ -z "${2:-}" ]] && { err "用法: $0 sprint \"需求描述\""; exit 1; }
-    new_sprint "$2"
+    shift || true
+    [[ "$#" -eq 0 ]] && { err "用法: $0 sprint \"需求描述\""; exit 1; }
+    intake_request --no-dispatch "$@"
     ;;
   attach)
     if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
@@ -2948,7 +3086,8 @@ PY
     echo "  $0 doctor              环境自检"
     echo "  $0 kill                关闭"
     echo "  $0 扩展 | extend       启动独立第二四分屏 (solar-harness-lab)"
-    echo "  $0 sprint \"需求\"       创建 Sprint"
+    echo "  $0 intake \"需求\"       默认需求入口：创建 sprint/epic + raw 记录 + 触发 autopilot"
+    echo "  $0 sprint \"需求\"       创建 Sprint/Epic（不主动 dispatch，兼容旧命令）"
     echo "  $0 wake [sprint-id]  列出未完成 Sprint 或恢复指定 Sprint"
     echo "  $0 wake --help       显示 wake 帮助"
     echo "  $0 reload              热加载 coordinator (kill + watchdog 拉新)"

@@ -150,12 +150,31 @@ def _parse_ts(value: Any) -> datetime.datetime | None:
         return None
 
 
+def _status_rank(status: str) -> int:
+    value = str(status or "pending").lower()
+    if value in {"passed", "failed", "skipped", "cancelled"}:
+        return 5
+    if value == "reviewing":
+        return 4
+    if value in {"in_progress", "running", "working"}:
+        return 3
+    if value in {"dispatched", "sent"}:
+        return 2
+    if value in {"assigned", "queued"}:
+        return 1
+    return 0
+
+
 def node_status(graph: dict[str, Any], node_id: str) -> str:
     results = _node_results(graph)
     node = _node_map(graph)[node_id]
     if node_id in results and isinstance(results[node_id], dict):
         result_status = str(results[node_id].get("status", "") or "").lower()
         node_status_value = str(node.get("status", "pending") or "pending").lower()
+        result_rank = _status_rank(result_status)
+        node_rank = _status_rank(node_status_value)
+        if result_rank != node_rank:
+            return result_status if result_rank > node_rank else node_status_value
         result_ts = _parse_ts(results[node_id].get("updated_at"))
         node_ts = _parse_ts(node.get("updated_at"))
         if result_ts and node_ts and node_ts > result_ts:
@@ -659,18 +678,21 @@ def mark_node_result(graph: dict[str, Any], node_id: str, status: str,
     if node_id not in ids:
         raise ValueError(f"unknown node: {node_id}")
 
+    updated_at = _now()
     graph.setdefault("node_results", {})
     graph["node_results"][node_id] = {
         "status": status,
-        "updated_at": _now(),
+        "updated_at": updated_at,
     }
     if note:
         graph["node_results"][node_id]["note"] = note
+    ids[node_id]["status"] = status
+    ids[node_id]["updated_at"] = updated_at
 
     gate = ids[node_id].get("gate")
     if gate and (gate_status or status) == "passed":
         graph.setdefault("gate_results", {})
-        graph["gate_results"][gate] = {"status": "passed", "node": node_id, "updated_at": _now()}
+        graph["gate_results"][gate] = {"status": "passed", "node": node_id, "updated_at": updated_at}
 
     return parent_ready_check(graph)
 
@@ -680,12 +702,25 @@ def set_node_status(graph: dict[str, Any], node_id: str, status: str,
     ids = _node_map(graph)
     if node_id not in ids:
         raise ValueError(f"unknown node: {node_id}")
+    current = node_status(graph, node_id)
+    if _status_rank(current) > _status_rank(status):
+        return
+    updated_at = _now()
     ids[node_id]["status"] = status
-    ids[node_id]["updated_at"] = _now()
+    ids[node_id]["updated_at"] = updated_at
     if pane:
         ids[node_id]["assigned_to"] = pane
     if dispatch_id:
         ids[node_id]["dispatch_id"] = dispatch_id
+    graph.setdefault("node_results", {})
+    graph["node_results"][node_id] = {
+        "status": status,
+        "updated_at": updated_at,
+    }
+    if pane:
+        graph["node_results"][node_id]["assigned_to"] = pane
+    if dispatch_id:
+        graph["node_results"][node_id]["dispatch_id"] = dispatch_id
 
 
 def enqueue_ready(graph: dict[str, Any], graph_path: str, workers: list[dict[str, Any]],
