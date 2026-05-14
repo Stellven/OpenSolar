@@ -67,14 +67,21 @@ COMPACTING_RE = re.compile(r"Compacting conversation|压缩上下文|Compacting"
 PROMPT_IDLE_RE = re.compile(r"Press up to edit queued messages|❯\s*$|Try \"", re.M)
 PANE_BUSY_RE = re.compile(
     r"Compacting conversation|Compacting|✳|✶|✽|✢|⏺ Bash|Running|Effecting|Swooping|thinking|Cogitating|Churning|Ruminating|"
-    r"Working|Mustering|Herding|Baking|Reticulating|Scurrying|Roosting|Crunched|Whirring|Smooshing|[·✳✶✽✢]\s+[A-Za-z][A-Za-z-]*…",
+    r"Working|Mustering|Herding|Baking|Reticulating|Scurrying|Roosting|Whirring|Smooshing|[·✳✶✽✢]\s+[A-Za-z][A-Za-z-]*…",
     re.I,
 )
 PANE_BOTTOM_BUSY_RE = re.compile(
     r"Compacting conversation|Compacting|Press up to edit queued messages|✳|✶|✽|✢|Mustering|Herding|Baking|Cogitating|Churning|Ruminating|Thinking|"
-    r"Reticulating|Scurrying|Roosting|Crunched|Whirring|Smooshing|[·✳✶✽✢]\s+[A-Za-z][A-Za-z-]*…",
+    r"Reticulating|Scurrying|Roosting|Whirring|Smooshing|[·✳✶✽✢]\s+[A-Za-z][A-Za-z-]*…",
     re.I,
 )
+PANE_UNAVAILABLE_RE = re.compile(
+    r"You(?:'|’)ve hit your limit|rate[- ]limit|rate limit|"
+    r"resets\s+\d|/rate-limit-options|Upgrade your plan|"
+    r"API Error:\s*400|Invalid API parameter|error\"\s*:\s*\{",
+    re.I,
+)
+PANE_PROMPT_RESIDUE_RE = re.compile(r"^\s*❯[\s\u00a0]+[^\s\u00a0─]", re.M)
 SQLITE_ONLY_RE = re.compile(r"sqlite3\s+~?/?.*\.solar/solar\.db", re.I)
 CONTEXT_INJECT_RE = re.compile(r"solar-harness\s+context\s+inject|Solar Unified Context", re.I)
 CONTEXT_TIMEOUT_RE = re.compile(r"context inject[\s\S]{0,240}timeout\s+\d+s|timeout\s+\d+s[\s\S]{0,240}context inject", re.I)
@@ -85,9 +92,9 @@ GRAPH_EVAL_HANDOFFS = {"evaluator", "reviewer"}
 import sys
 sys.path.insert(0, str(HARNESS / "lib"))
 try:
-    from graph_scheduler import load_graph, save_graph, enqueue_ready, parent_ready_check, validate_graph, blocked_external_prerequisites, doctor_graph
+    from graph_scheduler import load_graph, save_graph, enqueue_ready, parent_ready_check, validate_graph, blocked_external_prerequisites, doctor_graph, node_status
 except Exception:  # pragma: no cover - fallback for partially installed harnesses
-    load_graph = save_graph = enqueue_ready = parent_ready_check = validate_graph = blocked_external_prerequisites = doctor_graph = None
+    load_graph = save_graph = enqueue_ready = parent_ready_check = validate_graph = blocked_external_prerequisites = doctor_graph = node_status = None
 try:
     from graph_node_dispatcher import dispatch_ready as graph_dispatch_ready
     from graph_node_dispatcher import dispatch_node_evals as graph_dispatch_node_evals
@@ -772,7 +779,11 @@ def wake_sid(sid: str) -> bool:
 def pane_is_busy(target: str) -> bool:
     tail = tmux_capture(target)
     bottom = "\n".join(tail.splitlines()[-12:])
+    if PANE_UNAVAILABLE_RE.search(bottom):
+        return True
     if PANE_BOTTOM_BUSY_RE.search(bottom):
+        return True
+    if PANE_PROMPT_RESIDUE_RE.search(bottom):
         return True
     if pane_at_prompt(tail):
         return False
@@ -880,7 +891,7 @@ def infer_worker_models(pane: str) -> list[str]:
 def graph_workers() -> list[dict]:
     workers = []
     skills = [
-        "bash", "python", "typescript", "docs", "testing",
+        "bash", "python", "dataclasses", "pytest", "pure-functions", "time-injection", "io", "fsm", "integration-testing", "json-patch", "typescript", "docs", "testing",
         "frontend",
         "product", "planning",
         "architecture", "schema", "state-machine", "distributed-systems",
@@ -1169,8 +1180,11 @@ def assigned_graph_node_for_pane(target: str) -> dict:
         except Exception:
             continue
         for node in graph.get("nodes", []):
-            node_status = str(node.get("status") or "").lower()
-            if node.get("assigned_to") != target or node_status not in active_node_statuses:
+            if node_status is not None:
+                node_state = str(node_status(graph, node)).lower()
+            else:
+                node_state = str(node.get("status") or "").lower()
+            if node.get("assigned_to") != target or node_state not in active_node_statuses:
                 continue
             node_id = str(node.get("id") or "")
             handoff = SPRINTS / f"{sid}.{node_id}-handoff.md"
@@ -1179,7 +1193,7 @@ def assigned_graph_node_for_pane(target: str) -> dict:
             return {
                 "sid": str(sid),
                 "node_id": node_id,
-                "status": node_status,
+                "status": node_state,
                 "graph": str(path),
                 "dispatch_file": str(SPRINTS / f"{sid}.{node_id}-dispatch.md"),
                 "dispatch_id": node.get("dispatch_id", ""),
@@ -1522,7 +1536,7 @@ def inspect_panes(state: dict, stall_seconds: int) -> list[dict]:
                         "message": f"{role} pane compacting/stalled; re-wake sprint {sid} to continue missing artifact work.",
                     }
                 )
-        if pane_at_prompt(tail):
+        if pane_at_prompt(tail) and not pane_is_busy(target):
             graph_node = assigned_graph_node_for_pane(target)
             if graph_node:
                 findings.append(
@@ -1565,7 +1579,7 @@ def inspect_panes(state: dict, stall_seconds: int) -> list[dict]:
         if not target.startswith("solar-harness-lab:"):
             continue
         tail = tmux_capture(target)
-        if not pane_at_prompt(tail):
+        if not pane_at_prompt(tail) or pane_is_busy(target):
             continue
         graph_node = assigned_graph_node_for_pane(target)
         if not graph_node:
@@ -1966,12 +1980,15 @@ def main() -> int:
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--dispatch", action="store_true")
     parser.add_argument("--loop", action="store_true", help="run continuously")
+    parser.add_argument("--once", action="store_true", help="run one scan cycle (explicit alias for default)")
     parser.add_argument("--interval", type=int, default=60)
     parser.add_argument("--max-iterations", type=int, default=0, help="0 means forever")
     parser.add_argument("--cooldown", type=int, default=300, help="seconds between repeated actions for same finding")
     parser.add_argument("--stall-seconds", type=int, default=180, help="pane unchanged seconds before compact/stall recovery")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
+    if args.once:
+        args.loop = False
 
     if args.loop and not acquire_lock():
         payload = {"ok": False, "error": "autopilot already running", "lock": str(LOCK)}

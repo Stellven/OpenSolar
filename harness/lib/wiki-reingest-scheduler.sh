@@ -19,12 +19,13 @@ fi
 source "$BRIDGE"
 
 next_pending_reingest() {
-  python3 - "$DISPATCH_DIR" <<'PY'
+  python3 - "$DISPATCH_DIR" "$VAULT" <<'PY'
 import re
 import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
+vault = Path(sys.argv[2])
 
 def field(text: str, name: str) -> str:
     m = re.search(rf"^{re.escape(name)}:\s*(.*)$", text, re.M)
@@ -39,6 +40,20 @@ def order_key(path: Path) -> tuple[int, int, str]:
     non_pdf = 0 if src.lower().endswith(".pdf") else 1
     return (non_pdf, n, path.name)
 
+def source_exists(source: str) -> bool:
+    if not source:
+        return False
+    source_path = Path(source).expanduser()
+    if source_path.is_absolute():
+        return source_path.exists()
+    candidates = (
+        source_path,
+        vault / source_path,
+        vault / "_raw" / source_path,
+        vault / "_raw" / "file-uploads" / source_path.name,
+    )
+    return any(path.exists() for path in candidates)
+
 items = []
 for path in root.glob("wiki-paper-reingest-*.md"):
     try:
@@ -50,6 +65,8 @@ for path in root.glob("wiki-paper-reingest-*.md"):
     if field(text, "action") != "paper-reingest":
         continue
     if field(text, "status") not in ("", "pending", "dispatched"):
+        continue
+    if not source_exists(field(text, "reingest_source")):
         continue
     items.append(path)
 

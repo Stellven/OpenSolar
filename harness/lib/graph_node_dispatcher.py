@@ -27,12 +27,19 @@ SESSION = os.environ.get("SOLAR_HARNESS_SESSION", "solar-harness")
 NO_DISPATCH_FLAG = HARNESS_DIR / "run" / "no-dispatch.flag"
 DISPATCH_LEDGER = HARNESS_DIR / "run" / "dispatch-ledger.jsonl"
 PANE_TUI_BUSY_RE = re.compile(
-    r"Compacting conversation|压缩上下文|Reticulating|Scurrying|Roosting|Crunched|"
+    r"Compacting conversation|压缩上下文|Reticulating|Scurrying|Roosting|"
     r"Mustering|Herding|Baking|Cogitating|Churning|Ruminating|Thinking|"
     r"Whirring|Smooshing|[·✳✶✽✢]\s+[A-Za-z][A-Za-z-]*…|✳|✶|✽|✢",
     re.I,
 )
+PANE_TUI_UNAVAILABLE_RE = re.compile(
+    r"You(?:'|’)ve hit your limit|rate[- ]limit|rate limit|"
+    r"resets\s+\d|/rate-limit-options|Upgrade your plan|"
+    r"API Error:\s*400|Invalid API parameter|error\"\s*:\s*\{",
+    re.I,
+)
 PANE_QUEUED_PROMPT_RE = re.compile(r"Press up to edit queued messages", re.I)
+PANE_PROMPT_RESIDUE_RE = re.compile(r"^\s*❯[\s\u00a0]+[^\s\u00a0─]", re.M)
 STATE_READ_PREFLIGHT = """<!-- SOLAR_STATE_READ_PREFLIGHT -->
 ## 必须先读状态 (防写入 hook 卡死)
 
@@ -718,6 +725,8 @@ def _pane_tail(pane: str, lines: int = 80) -> str:
 def _pane_tui_busy(pane: str) -> bool:
     tail = _pane_tail(pane)
     bottom = "\n".join(tail.splitlines()[-12:])
+    if PANE_TUI_UNAVAILABLE_RE.search(bottom):
+        return True
     if PANE_TUI_BUSY_RE.search(bottom):
         return True
     # Queued prompt residue means this pane needs to drain or be cleared before
@@ -725,7 +734,27 @@ def _pane_tui_busy(pane: str) -> bool:
     # instructions into Claude Code's prompt buffer.
     if PANE_QUEUED_PROMPT_RE.search(bottom):
         return True
+    # A non-empty Claude prompt at the bottom is unsubmitted input residue. If
+    # we dispatch into it, Claude may concatenate unrelated tasks or open the
+    # queued-message UI instead of executing the new node.
+    if PANE_PROMPT_RESIDUE_RE.search(bottom):
+        return True
     return False
+
+
+def _pane_unavailable_reason(pane: str) -> str:
+    health = _pane_health(pane)
+    if health.get("unavailable"):
+        return str(health.get("reason") or "provider_health_unavailable")
+    tail = _pane_tail(pane)
+    bottom = "\n".join(tail.splitlines()[-12:])
+    if PANE_TUI_UNAVAILABLE_RE.search(bottom):
+        return "rate_limit_or_api_error"
+    if PANE_QUEUED_PROMPT_RE.search(bottom):
+        return "queued_prompt_residue"
+    if PANE_PROMPT_RESIDUE_RE.search(bottom):
+        return "unsubmitted_prompt_residue"
+    return ""
 
 
 def _pane_has_matching_queued_prompt(pane: str, instruction_file: Path) -> bool:
@@ -787,7 +816,7 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
         return True
     processing_re = re.compile(
         r"Crafting|Cogitating|Orchestrating|Coalescing|Wandering|Sock-hopping|"
-        r"Crunched|Puzzling|Cooking|Baked|Thinking|Considering|Newspapering|"
+        r"Puzzling|Cooking|Baked|Thinking|Considering|Newspapering|"
         r"Reticulating|Scurrying|Roosting|Mustering|Herding|Ruminating|"
         r"Churning|Baking|Effecting|Swooping|Whirring|Smooshing|[·✳✶✽✢]\s+[A-Za-z][A-Za-z-]*…|Read\(|"
         r"Reading|Bash\(|Edit\(|Write\(|⎿|✻|✶|✳|✽|⏺"
@@ -1222,6 +1251,18 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
     if current_status in {"assigned", "dispatched", "in_progress", "running"} and current_dispatch_id == dispatch_id:
         instruction_file = _dispatch_file(sid, node_id)
         if _pane_tui_busy(pane):
+            if _pane_has_matching_queued_prompt(pane, instruction_file):
+                sent = _send_to_pane(pane, instruction_file, dry_run, sid=sid, dispatch_id=dispatch_id)
+                if sent:
+                    _write_submit_ack(sid, node_id, pane, dispatch_id)
+                    return {
+                        "ok": True,
+                        "reason": "matching_queued_prompt_submitted",
+                        "node": node_id,
+                        "pane": pane,
+                        "dispatch_id": dispatch_id,
+                        "instruction_file": str(instruction_file),
+                    }
             _mark_graph_node(graph_path, node_id, "pending", clear_assignment=True)
             return {
                 "ok": True,
@@ -1365,7 +1406,7 @@ def drain_queue(sprint_id: str, dry_run: bool = False, max_items: int = 0, ttl: 
 
 def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
     worker_skills = [
-        "bash", "python", "typescript", "docs", "testing",
+        "bash", "python", "dataclasses", "pytest", "pure-functions", "time-injection", "io", "fsm", "integration-testing", "json-patch", "typescript", "docs", "testing",
         "frontend",
         "product", "planning", "governance",
         "architecture", "schema", "state-machine", "distributed-systems",
@@ -1398,7 +1439,7 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "research.claim.mine", "research.citation.verify",
         "research.report.compile",
     ]
-    if dry_run:
+    if dry_run and os.environ.get("SOLAR_GRAPH_DISPATCH_FAKE_WORKERS") == "1":
         return [
             {"pane": f"{SESSION}:0.2", "models": _models_for_pane(f"{SESSION}:0.2"), "skills": worker_skills, "capabilities": worker_capabilities},
             {"pane": "solar-harness-lab:0.0", "models": _models_for_pane("solar-harness-lab:0.0"), "skills": worker_skills, "capabilities": worker_capabilities},
@@ -1429,15 +1470,17 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         if "glm" in title_lower:
             if "quota:exhausted" in title_lower or "quota exhausted" in title_lower:
                 quota_exhausted.extend(_model_alias_set("glm"))
+        unavailable_reason = _pane_unavailable_reason(pane)
         workers.append({
             "pane": pane,
             "models": models,
             "skills": worker_skills,
             "capabilities": worker_capabilities,
-            "busy": bool(read_lease(pane)) or _pane_tui_busy(pane) or bool(_pane_health(pane).get("unavailable")),
+            "busy": bool(read_lease(pane)) or _pane_tui_busy(pane) or bool(unavailable_reason),
             "title": title,
             "quota_exhausted": quota_exhausted,
             "health": _pane_health(pane),
+            "unavailable_reason": unavailable_reason,
         })
     return workers
 
@@ -1458,11 +1501,13 @@ def _discover_evaluators(dry_run: bool = False) -> list[dict[str, Any]]:
             continue
         seen.add(pane)
         if _pane_exists(pane):
+            unavailable_reason = _pane_unavailable_reason(pane)
             evaluators.append({
                 "pane": pane,
                 "models": _models_for_pane(pane),
                 "skills": ["review", "testing", "bash"],
-                "busy": bool(read_lease(pane)) or _pane_tui_busy(pane),
+                "busy": bool(read_lease(pane)) or _pane_tui_busy(pane) or bool(unavailable_reason),
+                "unavailable_reason": unavailable_reason,
             })
     return evaluators
 
@@ -1690,6 +1735,8 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
     node["updated_at"] = _utc_now()
     if eval_json:
         node["eval_json"] = eval_json
+    worker_pane = str(node.get("assigned_to") or "")
+    worker_dispatch_id = str(node.get("dispatch_id") or "")
     effect_result: dict[str, Any] = {}
     if scan_effect is not None:
         try:
@@ -1710,9 +1757,14 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
     node.pop("eval_dispatch_id", None)
     save_graph(graph_path, graph)
 
-    lease_released = False
+    worker_lease_released = False
+    eval_lease_released = False
+    if not dry_run and worker_pane and worker_dispatch_id:
+        worker_lease_released = bool(
+            release_lease(worker_pane, worker_dispatch_id, f"node_{status}").get("released")
+        )
     if not dry_run and eval_pane and eval_dispatch_id:
-        lease_released = bool(release_lease(eval_pane, eval_dispatch_id, f"node_{status}").get("released"))
+        eval_lease_released = bool(release_lease(eval_pane, eval_dispatch_id, f"node_{status}").get("released"))
 
     downstream: dict[str, Any] = {"ok": True, "skipped": "verdict_not_passed"}
     if status == "passed" and dispatch_downstream and not parent.get("ready"):
@@ -1728,7 +1780,8 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
         "parent": parent,
         "downstream": downstream,
         "dry_run": dry_run,
-        "eval_lease_released": lease_released,
+        "worker_lease_released": worker_lease_released,
+        "eval_lease_released": eval_lease_released,
         "parent_status_updated": parent_status_updated,
         "capability_effect": effect_result,
     }

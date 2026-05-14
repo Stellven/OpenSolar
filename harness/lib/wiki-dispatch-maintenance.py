@@ -12,12 +12,15 @@ import json
 import re
 import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Optional
 
 
 TERMINAL = {"completed", "success", "failed", "skipped", "chained", "skipped-duplicate"}
 ACTIVE = {"pending", "dispatched", "running", ""}
 STALE_FULL_VAULT_INGEST_CUTOFF = "20260509T000000Z"
+STALE_RUNNING_AFTER = timedelta(hours=6)
 
 
 @dataclass
@@ -118,6 +121,35 @@ def source_is_covered(vault: Path, source: str) -> tuple[bool, str]:
     return False, ""
 
 
+def resolve_source_path(vault: Path, source: str) -> Optional[Path]:
+    if not source:
+        return None
+    source_path = Path(source).expanduser()
+    if source_path.is_absolute():
+        return source_path if source_path.exists() else None
+    candidates = [
+        source_path,
+        vault / source_path,
+        vault / "_raw" / source_path,
+        vault / "_raw" / "file-uploads" / source_path.name,
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def generated_is_stale(generated: str, now: Optional[datetime] = None) -> bool:
+    match = re.match(r"^(\d{8}T\d{6}Z)", generated or "")
+    if not match:
+        return False
+    try:
+        ts = datetime.strptime(match.group(1), "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return False
+    return (now or datetime.now(timezone.utc)) - ts > STALE_RUNNING_AFTER
+
+
 def status_counts(dispatches: list[Dispatch]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for item in dispatches:
@@ -156,6 +188,7 @@ def summarize(dispatch_dir: Path) -> dict:
 def repair(dispatch_dir: Path, vault: Path, apply: bool) -> dict:
     dispatches, ignored = read_dispatches(dispatch_dir)
     done_results = result_dispatches(dispatch_dir)
+    now = datetime.now(timezone.utc)
     actions = []
     for item in dispatches:
         status = item.status
@@ -179,6 +212,19 @@ def repair(dispatch_dir: Path, vault: Path, apply: bool) -> dict:
             actions.append({"file": item.path.name, "from": status or "no_status", "to": "completed", "reason": "matching_success_result"})
             if apply:
                 set_status(item, "completed", "matching_success_result")
+            continue
+        source_path = resolve_source_path(vault, item.source)
+        if status == "running" and generated_is_stale(item.generated, now) and source_path:
+            actions.append({
+                "file": item.path.name,
+                "from": "running",
+                "to": "pending",
+                "reason": "stale_running_requeued",
+                "source": item.source,
+                "resolved_source": str(source_path),
+            })
+            if apply:
+                set_status(item, "pending", "stale_running_requeued")
             continue
         if (
             item.meta.get("action") == "ingest"

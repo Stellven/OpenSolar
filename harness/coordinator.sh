@@ -108,6 +108,18 @@ pane_key() {
   printf '%s' "$pane" | sed 's/[^A-Za-z0-9_.-]/_/g'
 }
 
+run_with_timeout() {
+  local seconds="$1"
+  shift
+  if command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "$seconds" "$@"
+  elif command -v timeout >/dev/null 2>&1; then
+    timeout "$seconds" "$@"
+  else
+    "$@"
+  fi
+}
+
 pane_session() {
   local pane="$1"
   printf '%s' "${pane%%:*}"
@@ -3026,11 +3038,11 @@ EOF
       local graph_rc=0 graph_out="" graph_eval_out="" graph_eval_rc=0
       local graph_dispatch_timeout="${SOLAR_GRAPH_DISPATCH_TIMEOUT_SEC:-35}"
       if [[ -n "${SOLAR_COORD_DRY_RUN:-}" ]]; then
-        graph_eval_out="$(/usr/bin/timeout "$graph_dispatch_timeout" python3 "$graph_dispatcher" dispatch-evals --graph "$SPRINTS_DIR/${sid}.task_graph.json" --dry-run 2>&1)" || graph_eval_rc=$?
-        graph_out="$(/usr/bin/timeout "$graph_dispatch_timeout" python3 "$graph_dispatcher" dispatch-ready --graph "$SPRINTS_DIR/${sid}.task_graph.json" --dry-run 2>&1)" || graph_rc=$?
+        graph_eval_out="$(run_with_timeout "$graph_dispatch_timeout" python3 "$graph_dispatcher" dispatch-evals --graph "$SPRINTS_DIR/${sid}.task_graph.json" --dry-run 2>&1)" || graph_eval_rc=$?
+        graph_out="$(run_with_timeout "$graph_dispatch_timeout" python3 "$graph_dispatcher" dispatch-ready --graph "$SPRINTS_DIR/${sid}.task_graph.json" --dry-run 2>&1)" || graph_rc=$?
       else
-        graph_eval_out="$(/usr/bin/timeout "$graph_dispatch_timeout" python3 "$graph_dispatcher" dispatch-evals --graph "$SPRINTS_DIR/${sid}.task_graph.json" 2>&1)" || graph_eval_rc=$?
-        graph_out="$(/usr/bin/timeout "$graph_dispatch_timeout" python3 "$graph_dispatcher" dispatch-ready --graph "$SPRINTS_DIR/${sid}.task_graph.json" 2>&1)" || graph_rc=$?
+        graph_eval_out="$(run_with_timeout "$graph_dispatch_timeout" python3 "$graph_dispatcher" dispatch-evals --graph "$SPRINTS_DIR/${sid}.task_graph.json" 2>&1)" || graph_eval_rc=$?
+        graph_out="$(run_with_timeout "$graph_dispatch_timeout" python3 "$graph_dispatcher" dispatch-ready --graph "$SPRINTS_DIR/${sid}.task_graph.json" 2>&1)" || graph_rc=$?
       fi
       if (( graph_eval_rc != 0 )); then
         log "${Y}[graph-dispatch] dispatch-evals failed rc=${graph_eval_rc}: ${graph_eval_out}${N}"
