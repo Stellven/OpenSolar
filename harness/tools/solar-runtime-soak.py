@@ -32,7 +32,12 @@ REPORT_MD = HARNESS / "reports" / "runtime-soak-latest.md"
 QUEUE = HARNESS / "run" / "autopilot-queue.jsonl"
 LOCK = HARNESS / "run" / "runtime-soak.lock"
 LOG = HARNESS / "run" / "runtime-soak.log"
-DEFAULT_TARGET = os.environ.get("SOLAR_RUNTIME_SOAK_TARGET", "solar-harness:0.0")
+# Runtime soak is telemetry/control-plane evidence. It must not inject prompts
+# into the PM pane by default; otherwise a periodic health check can interrupt
+# product work and leave Claude Code in Rewind/interrupt UI. Operators may set
+# SOLAR_RUNTIME_SOAK_TARGET explicitly for one-off debugging, but the default is
+# report-only.
+DEFAULT_TARGET = os.environ.get("SOLAR_RUNTIME_SOAK_TARGET", "")
 
 
 def now_iso() -> str:
@@ -107,6 +112,8 @@ def load_queue() -> list[dict[str, Any]]:
 
 
 def enqueue_failure(sid: str, failures: list[str], report_path: Path) -> bool:
+    if not DEFAULT_TARGET:
+        return False
     QUEUE.parent.mkdir(parents=True, exist_ok=True)
     item_key = f"{sid}:runtime_soak_failed:{DEFAULT_TARGET}"
     for item in load_queue():

@@ -54,6 +54,7 @@ TELEMETRY_ONLY_FINDINGS = {
     "knowledge_context_timeout",
     "knowledge_probe_failed",
     "model_registry_doctor_failed",
+    "runtime_soak_failed",
 }
 
 
@@ -715,12 +716,15 @@ def graph_workers() -> list[dict]:
     workers = []
     skills = [
         "bash", "python", "typescript", "docs", "testing",
+        "product", "planning",
         "architecture", "schema", "state-machine", "distributed-systems",
         "routing", "diagnostics", "evaluation", "debug.systematic",
     ]
     capabilities = [
         "code.review", "debug.systematic", "skill.methodology",
-        "workflow.planning", "test.tdd", "browser.browse", "browser.qa",
+        "workflow.planning", "product.requirements", "test.tdd", "browser.browse", "browser.qa",
+        "research.scope_rewrite", "research.source_matrix", "research.evidence.extract",
+        "research.claim.mine", "research.citation.verify", "research.report.compile",
         "document.convert", "document.markdown_extract",
         "ruflo.swarm", "ruflo.plugins", "ruflo.agent_catalog",
         "ruflo.memory", "ruflo.mcp", "ruflo.workflow_templates",
@@ -743,6 +747,61 @@ def graph_workers() -> list[dict]:
 
 def graph_path_for(sid: str) -> Path:
     return SPRINTS / f"{sid}.task_graph.json"
+
+
+def sprint_status_payload(sid: str) -> dict:
+    path = SPRINTS / f"{sid}.status.json"
+    if not path.exists():
+        return {}
+    return load_json(path)
+
+
+def sprint_passed(sid: str) -> bool:
+    return str(sprint_status_payload(sid).get("status", "")).lower() in {"passed", "completed", "eval_passed"}
+
+
+def inspect_epics() -> list[dict]:
+    findings = []
+    for meta_path in sorted(SPRINTS.glob("epic-*.epic.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        meta = load_json(meta_path)
+        epic_id = meta.get("epic_id") or meta_path.name.removesuffix(".epic.json")
+        graph_path = SPRINTS / f"{epic_id}.task_graph.json"
+        if not graph_path.exists():
+            continue
+        graph = load_json(graph_path)
+        nodes = [n for n in graph.get("nodes", []) if isinstance(n, dict)]
+        by_id = {str(n.get("id")): n for n in nodes if n.get("id")}
+        ready = []
+        blocked = []
+        for node in nodes:
+            child_sid = str(node.get("child_sprint_id") or "")
+            if not child_sid:
+                continue
+            st = sprint_status_payload(child_sid)
+            if str(st.get("status", "")).lower() not in {"queued", "drafting"}:
+                continue
+            missing = []
+            for dep in node.get("depends_on", []) or []:
+                dep_sid = str(by_id.get(str(dep), {}).get("child_sprint_id") or "")
+                if dep_sid and not sprint_passed(dep_sid):
+                    missing.append(dep_sid)
+            if missing:
+                blocked.append({"sid": child_sid, "blocked_by": missing})
+            else:
+                ready.append({"sid": child_sid, "node_id": node.get("id")})
+        if ready:
+            findings.append(
+                {
+                    "sid": str(epic_id),
+                    "type": "epic_ready_children",
+                    "severity": "info",
+                    "target": "",
+                    "message": f"{epic_id} has dependency-ready child sprints.",
+                    "ready_children": ready,
+                    "blocked_children": blocked,
+                }
+            )
+    return findings
 
 
 def graph_status(sid: str) -> dict:
@@ -1222,6 +1281,20 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
             append_event(sid, "autopilot_graph_enqueue_ready", "info" if result.get("ok") else "warn", result)
             mark_action(state, f, {"sid": sid, "action": ftype, **result})
             actions.append({"sid": sid, "action": ftype, **result})
+        elif ftype == "epic_ready_children":
+            # This is a local metadata transition, not a pane dispatch. Use the
+            # library entrypoint so tests and alternate HARNESS_DIR installs do
+            # not accidentally activate the user's real sprint directory.
+            cmd = [sys.executable, str(HARNESS / "lib" / "epic_decomposer.py"), "activate-ready", sid, "--max", "2", "--json"]
+            try:
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+                payload = json.loads(proc.stdout) if proc.stdout.strip().startswith("{") else {"stdout": proc.stdout[-2000:]}
+                result = {"sid": sid, "action": ftype, "ok": proc.returncode == 0, "returncode": proc.returncode, **payload}
+            except Exception as exc:
+                result = {"sid": sid, "action": ftype, "ok": False, "error": str(exc)}
+            append_event(sid, "autopilot_epic_activate_ready", "info" if result.get("ok") else "warn", result)
+            mark_action(state, f, result)
+            actions.append(result)
         elif ftype == "graph_node_idle_assigned":
             append_event(sid, "autopilot_graph_node_idle_resume", "warn", f.get("graph_node", {}))
             sent = False
@@ -1332,7 +1405,7 @@ def release_lock() -> None:
 
 def scan_once(args: argparse.Namespace, state: dict) -> dict:
     queue_actions = retry_queue(state, args.dispatch, args.cooldown) if args.apply else []
-    findings = inspect_sprints() + inspect_panes(state, args.stall_seconds) + inspect_knowledge_context(state) + inspect_model_registry(state)
+    findings = inspect_epics() + inspect_sprints() + inspect_panes(state, args.stall_seconds) + inspect_knowledge_context(state) + inspect_model_registry(state)
     actions = apply_findings(findings, args.dispatch, state, args.cooldown) if args.apply else []
     payload = {
         "ok": True,

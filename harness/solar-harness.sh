@@ -801,10 +801,72 @@ start_extension() {
 
 # ---- New Sprint ----
 
+should_epic_decompose_request() {
+  local req="$1"
+  [[ "${SOLAR_EPIC_AUTO_DECOMPOSE:-1}" == "0" ]] && return 1
+  local min_chars="${SOLAR_EPIC_MIN_CHARS:-420}"
+  local min_lines="${SOLAR_EPIC_MIN_LINES:-4}"
+  local min_signals="${SOLAR_EPIC_MIN_SIGNALS:-3}"
+  local chars lines signals
+  chars=$(printf "%s" "$req" | wc -m | tr -d ' ')
+  lines=$(printf "%s" "$req" | awk 'END{print NR}')
+  if (( chars >= min_chars || lines >= min_lines )); then
+    return 0
+  fi
+  signals=0
+  printf "%s" "$req" | grep -Eiq 'PRD|prd|需求|合约|md|文档' && signals=$((signals + 1))
+  printf "%s" "$req" | grep -Eiq '架构|设计|方案|规划|路线图' && signals=$((signals + 1))
+  printf "%s" "$req" | grep -Eiq '任务图|DAG|拆分|依赖|并行|调度|多.*PRD|一系列' && signals=$((signals + 1))
+  printf "%s" "$req" | grep -Eiq '开发|实现|重构|改造|集成|优化|修复' && signals=$((signals + 1))
+  printf "%s" "$req" | grep -Eiq '验证|测试|回归|验收|证明|闭环|端到端' && signals=$((signals + 1))
+  printf "%s" "$req" | grep -Eiq '自动|默认|持续|不要.*问|做完|搞定|防.*半截|半截' && signals=$((signals + 1))
+  printf "%s" "$req" | grep -Eiq '多个|全量|全面|完整|系统|框架|平台|产品化' && signals=$((signals + 1))
+  if (( signals >= min_signals )); then
+    return 0
+  fi
+  return 1
+}
+
+new_epic_from_request() {
+  local req="$1"
+  ensure_dirs
+  local title tmp out rc
+  title=$(printf "%s" "$req" | head -1 | cut -c1-60)
+  [[ -z "$title" ]] && title="Untitled Epic"
+  tmp=$(mktemp "${TMPDIR:-/tmp}/solar-epic-request.XXXXXX")
+  printf "%s\n" "$req" > "$tmp"
+  set +e
+  out=$(python3 "$HARNESS_DIR/lib/epic_decomposer.py" create \
+    --title "$title" \
+    --request-file "$tmp" \
+    --priority "${SOLAR_EPIC_PRIORITY:-P0}" \
+    --activate-ready \
+    --json 2>&1)
+  rc=$?
+  set -e
+  rm -f "$tmp"
+  if [[ "$rc" != "0" ]]; then
+    err "Epic 分解失败，拒绝退回单 sprint 吞复杂需求"
+    echo "$out"
+    return "$rc"
+  fi
+  ok "Requirement decomposed into Epic"
+  echo "$out"
+  if command -v jq >/dev/null 2>&1; then
+    log "Epic: $(printf "%s" "$out" | jq -r '.epic_id')"
+    log "Root child: $(printf "%s" "$out" | jq -r '.children[] | select(.active==true) | .sid' | head -1)"
+  fi
+  log "Next: autopilot activates child sprints by dependency; each child still goes PM/Planner/DAG/Builder/Evaluator."
+}
+
 new_sprint() {
   local req="$1"
   local sid
   ensure_dirs
+  if should_epic_decompose_request "$req"; then
+    new_epic_from_request "$req"
+    return $?
+  fi
   sid=$(date +"sprint-%Y%m%d-%H%M%S")
   while [[ -e "$SPRINTS_DIR/$sid.status.json" || -e "$SPRINTS_DIR/$sid.contract.md" || -e "$SPRINTS_DIR/$sid.events.jsonl" ]]; do
     sleep 1
@@ -3689,6 +3751,34 @@ EOF
         ;;
       *)
         err "Unknown workflow-guard subcommand: $_workflow_guard_subcmd"; exit 1
+        ;;
+    esac
+    ;;
+
+  epic)
+    # Epic Decomposer — large requirement -> child PRDs/contracts + parent DAG
+    shift
+    _epic_py="$HARNESS_DIR/lib/epic_decomposer.py"
+    if [[ ! -f "$_epic_py" ]]; then
+      err "epic_decomposer.py not found: $_epic_py"; exit 1
+    fi
+    _epic_subcmd="${1:-help}"; shift || true
+    case "$_epic_subcmd" in
+      create|validate|activate-ready|status)
+        python3 "$_epic_py" "$_epic_subcmd" "$@"
+        ;;
+      help|--help|-h|"")
+        echo "Solar Epic Decomposer — split large asks into linked PRDs/contracts/task graph"
+        echo ""
+        echo "Usage:"
+        echo "  $0 epic create --title TITLE --request TEXT [--slug SLUG] [--activate-ready] [--json]"
+        echo "  $0 epic create --title TITLE --request-file FILE [--slices 5] [--activate-ready]"
+        echo "  $0 epic activate-ready EPIC_ID [--max N] [--json]"
+        echo "  $0 epic validate EPIC_ID [--json]"
+        echo "  $0 epic status [--latest] [--json]"
+        ;;
+      *)
+        err "Unknown epic subcommand: $_epic_subcmd"; exit 1
         ;;
     esac
     ;;

@@ -968,7 +968,8 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
     text_payload = dict(payload, dispatch_id=dispatch_id, sprint_id=sid)
     instruction_file.parent.mkdir(parents=True, exist_ok=True)
     instruction_file.write_text(build_dispatch_text(text_payload, pane), encoding="utf-8")
-    _inject_dispatch_context(instruction_file, sid=sid, pane=pane, dispatch_id=dispatch_id)
+    if not dry_run:
+        _inject_dispatch_context(instruction_file, sid=sid, pane=pane, dispatch_id=dispatch_id)
 
     sent = _send_to_pane(pane, instruction_file, dry_run, sid=sid, dispatch_id=dispatch_id)
     graph_updated = False
@@ -1028,6 +1029,7 @@ def drain_queue(sprint_id: str, dry_run: bool = False, max_items: int = 0, ttl: 
 def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
     worker_skills = [
         "bash", "python", "typescript", "docs", "testing",
+        "product", "planning",
         "architecture", "schema", "state-machine", "distributed-systems",
         "routing", "diagnostics", "evaluation",
         "browser.browse", "browser.qa", "code.review", "document.convert",
@@ -1048,6 +1050,10 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "agents_sdk.handoff_model",
         "ruflo.swarm", "ruflo.plugins", "ruflo.agent_catalog",
         "ruflo.memory", "ruflo.mcp", "ruflo.workflow_templates",
+        "product.requirements", "research.scope_rewrite",
+        "research.source_matrix", "research.evidence.extract",
+        "research.claim.mine", "research.citation.verify",
+        "research.report.compile",
     ]
     if dry_run:
         return [
