@@ -113,6 +113,23 @@ assert d[\"current_sprint\"].get(\"status\") == \"active\"
 " "$STATUS_BODY"'
 echo ""
 
+# ── TC3b: terminal sprint must not masquerade as current work ──
+echo "TC3b: /status shows idle when only terminal sprints exist"
+cat > "$TEST_TMP/sprints/sprint-test-smoke.status.json" <<'EOF'
+{"id":"sprint-test-smoke","status":"passed","phase":"finalized","round":1,"title":"Smoke Test Sprint","handoff_to":"done"}
+EOF
+STATUS_IDLE_BODY=$(curl -s "$BASE_URL/status" 2>/dev/null || echo "{}")
+assert "current_sprint is idle when no active sprint exists" 'python3 -c "
+import json,sys
+d=json.loads(sys.argv[1])
+sp=d[\"current_sprint\"]
+assert sp.get(\"sprint_id\") == \"\"
+assert sp.get(\"status\") == \"idle\"
+assert sp.get(\"phase\") == \"no_active_sprint\"
+assert sp.get(\"recent_completed\", {}).get(\"sprint_id\") == \"sprint-test-smoke\"
+" "$STATUS_IDLE_BODY"'
+echo ""
+
 # ── TC4: /events returns array ──
 echo "TC4: GET /events returns JSON array"
 EVENTS_BODY=$(curl -s "$BASE_URL/events" 2>/dev/null || echo "[]")

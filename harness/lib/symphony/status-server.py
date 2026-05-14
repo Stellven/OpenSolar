@@ -65,6 +65,17 @@ _MODEL_EVENT_TYPES = {
     "model_session_started",
     "model_session_ended",
 }
+_ACTIVE_SPRINT_STATUSES = {
+    "drafting",
+    "queued",
+    "active",
+    "planning",
+    "approved",
+    "reviewing",
+    "ready_for_review",
+    "needs_human_review",
+    "failed_review",
+}
 
 
 def _is_synthetic_event(obj: dict) -> bool:
@@ -549,31 +560,61 @@ def _external_integrations_payload(refresh: bool = False) -> dict:
 
 
 def _current_sprint() -> dict:
-    """Return {sprint_id, status, phase, round} for the most recently active sprint."""
+    """Return the current non-terminal sprint.
+
+    A passed/finalized sprint is recent history, not current work. Older code
+    fell back to the most recently modified status file, which made the
+    dashboard show completed work as "Current Sprint" and hid the real state:
+    no active queue to dispatch.
+    """
     if not SPRINTS_DIR.exists():
-        return {}
+        return {"sprint_id": "", "status": "idle", "phase": "no_sprints", "is_active": False}
     candidates = []
     for sf in SPRINTS_DIR.glob("sprint-*.status.json"):
         try:
             d = json.loads(sf.read_text())
-            st = d.get("status", "")
-            if st not in ("passed", "failed", "cancelled", "finalized", "superseded", "interrupted"):
+            st = str(d.get("status", "")).lower()
+            if st in _ACTIVE_SPRINT_STATUSES:
+                d["_mtime"] = sf.stat().st_mtime
                 candidates.append(d)
         except (json.JSONDecodeError, OSError):
             continue
     if not candidates:
-        # fall back to most recently modified
-        all_sf = sorted(SPRINTS_DIR.glob("sprint-*.status.json"), key=lambda p: p.stat().st_mtime)
-        if all_sf:
+        recent = {}
+        all_sf = sorted(SPRINTS_DIR.glob("sprint-*.status.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        for sf in all_sf:
             try:
-                candidates = [json.loads(all_sf[-1].read_text())]
+                d = json.loads(sf.read_text())
+                sid = d.get("id", d.get("sprint_id", sf.name.removesuffix(".status.json")))
+                recent = {
+                    "sprint_id": sid,
+                    "status": d.get("status", ""),
+                    "phase": d.get("phase", ""),
+                    "handoff_to": d.get("handoff_to", ""),
+                    "title": d.get("title", ""),
+                    "priority": d.get("priority", ""),
+                    "lane": d.get("lane", ""),
+                    "description": _sprint_description(sid),
+                }
+                break
             except (json.JSONDecodeError, OSError):
-                pass
-    if not candidates:
-        return {}
+                continue
+        return {
+            "sprint_id": "",
+            "status": "idle",
+            "phase": "no_active_sprint",
+            "round": 0,
+            "handoff_to": "",
+            "title": "No active sprint",
+            "priority": "",
+            "lane": "",
+            "description": "当前没有 active/queued/reviewing sprint；coordinator 没有可派发工作。",
+            "is_active": False,
+            "recent_completed": recent,
+        }
     # pick highest-priority non-terminal
-    order = {"active": 0, "reviewing": 1, "planning": 2, "approved": 3}
-    candidates.sort(key=lambda d: order.get(d.get("status", "z"), 9))
+    order = {"active": 0, "reviewing": 1, "ready_for_review": 2, "queued": 3, "planning": 4, "approved": 5, "drafting": 6}
+    candidates.sort(key=lambda d: (order.get(str(d.get("status", "")).lower(), 9), -float(d.get("_mtime", 0))))
     d = candidates[0]
     return {
         "sprint_id": d.get("id", d.get("sprint_id", "")),
@@ -585,6 +626,7 @@ def _current_sprint() -> dict:
         "priority": d.get("priority", ""),
         "lane": d.get("lane", ""),
         "description": _sprint_description(d.get("id", d.get("sprint_id", ""))),
+        "is_active": True,
     }
 
 
@@ -856,7 +898,35 @@ def _run_tmux(args: list, timeout: float = 0.8) -> str:
 
 
 def _runtime_from_tail(tail: str) -> str:
-    """Classify pane runtime from recent Claude Code tail output."""
+    """Classify pane runtime from current Claude Code prompt/footer.
+
+    Scrollback often contains old "Bash/Write/Edit" lines after a task has
+    already returned to the prompt. Treat the current prompt/footer as stronger
+    evidence than historical activity text.
+    """
+    lines = tail.splitlines()
+    footer_re = re.compile(r"⏵.*(auto|accept edits|edit|bypass permissions).*mode on|shift\+tab|esc to interrupt", re.I)
+    footer_indexes = [idx for idx, line in enumerate(lines) if footer_re.search(line)]
+    footer_at = footer_indexes[-1] if footer_indexes else len(lines)
+    prompt_indexes = [idx for idx, line in enumerate(lines) if "❯" in line]
+    for idx in reversed(prompt_indexes):
+        if idx <= footer_at and footer_at - idx <= 8:
+            next_nonempty = ""
+            for line in lines[idx + 1:footer_at + 1]:
+                if line.strip():
+                    next_nonempty = line.strip()
+                    break
+            # Historical submitted prompts are separated from the current input
+            # region by Claude Code's divider line. They must not be reported
+            # as editable prompt residue.
+            if next_nonempty.startswith("─"):
+                continue
+            current = lines[idx].split("❯", 1)[1].replace("\u00a0", " ").strip()
+            if not current or current in {'Try "fix lint errors"', 'Try "summarize this codebase"'}:
+                return "idle"
+            return "prompt_residue"
+    if footer_indexes:
+        return "idle"
     active_re = re.compile(
         r"Generating|thinking\)|Reading|Bash|Write|Edit|Inferring|Hatching|"
         r"Whirlpooling|Enchanting|Meandering|Philosophising",
@@ -2498,7 +2568,7 @@ function render(data) {
   document.getElementById('refresh-ts').textContent = 'Last updated: ' + now;
 
   const sp = data.current_sprint || {};
-  if (sp.sprint_id) {
+  if (sp.sprint_id && sp.is_active !== false) {
     const sprintHtml = sprintBlock({
       title: sp.title || sp.sprint_id,
       status: sp.status,
@@ -2511,8 +2581,14 @@ function render(data) {
     document.getElementById('sprint-card').innerHTML = sprintHtml;
     document.getElementById('overview-sprint').innerHTML = sprintHtml;
   } else {
-    document.getElementById('sprint-card').textContent = 'No active sprint.';
-    document.getElementById('overview-sprint').textContent = 'No active sprint.';
+    const recent = sp.recent_completed || {};
+    const idleHtml = '<div class="state-card idle"><h3>当前无活跃 Sprint</h3>' +
+      '<p>队列为空；coordinator 没有可派发工作。</p>' +
+      (recent.sprint_id ? '<p class="muted">最近完成：' + esc(recent.title || recent.sprint_id) +
+        ' · ' + esc(recent.status || '-') + '/' + esc(recent.phase || '-') + '</p>' : '') +
+      '</div>';
+    document.getElementById('sprint-card').innerHTML = idleHtml;
+    document.getElementById('overview-sprint').innerHTML = idleHtml;
   }
 
   const panes = data.panes || [];

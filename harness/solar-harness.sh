@@ -3709,7 +3709,7 @@ EOF
     fi
     _graph_subcmd="${1:-help}"; shift || true
     case "$_graph_subcmd" in
-      validate|topo|layers|critical-path|ready|batches|enrich-capabilities|enrich-backlog|assign|mark|parent-check|enqueue-ready)
+      validate|topo|layers|critical-path|ready|batches|enrich-capabilities|enrich-backlog|assign|mark|parent-check|doctor|enqueue-ready)
         python3 "$_graph_py" "$_graph_subcmd" "$@"
         ;;
       help|--help|-h|"")
@@ -3725,6 +3725,7 @@ EOF
         echo "  $0 graph-scheduler enrich-capabilities --graph sprint.task_graph.json [--source contract.md] [--in-place]"
         echo "  $0 graph-scheduler enrich-backlog [--sprints-dir DIR] [--dry-run]"
         echo "  $0 graph-scheduler assign         --graph sprint.task_graph.json --workers workers.json [--max-parallel N]"
+        echo "  $0 graph-scheduler doctor         --graph sprint.task_graph.json [--repair --in-place]"
         echo "  $0 graph-scheduler enqueue-ready  --graph sprint.task_graph.json --workers workers.json [--lease] [--in-place]"
         echo "  $0 graph-scheduler mark           --graph sprint.task_graph.json --node S1 --status passed [--in-place]"
         echo "  $0 graph-scheduler parent-check   --graph sprint.task_graph.json"

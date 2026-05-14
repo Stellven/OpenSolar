@@ -844,6 +844,69 @@ def parent_ready_check(graph: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def doctor_graph(graph: dict[str, Any], repair: bool = False) -> dict[str, Any]:
+    """Detect and optionally repair graph state drift.
+
+    The scheduler historically stored status in both inline node fields and
+    node_results. If the two disagree, a stale node_results entry can make a
+    passed node look open forever. This doctor treats newer timestamps as the
+    winner and can repair the older side.
+    """
+    issues: list[dict[str, Any]] = []
+    repairs: list[dict[str, Any]] = []
+    ids = _node_map(graph)
+    results = _node_results(graph)
+
+    for node_id, node in ids.items():
+        inline_status = str(node.get("status", "") or "").lower()
+        result = results.get(node_id) if isinstance(results.get(node_id), dict) else {}
+        result_status = str((result or {}).get("status", "") or "").lower()
+        if not inline_status or not result_status or inline_status == result_status:
+            continue
+        inline_ts = _parse_ts(node.get("updated_at"))
+        result_ts = _parse_ts(result.get("updated_at"))
+        effective = node_status(graph, node_id)
+        issue = {
+            "type": "node_status_drift",
+            "node": node_id,
+            "inline_status": inline_status,
+            "inline_updated_at": node.get("updated_at", ""),
+            "result_status": result_status,
+            "result_updated_at": result.get("updated_at", ""),
+            "effective_status": effective,
+        }
+        issues.append(issue)
+        if not repair:
+            continue
+
+        if inline_ts and result_ts and inline_ts > result_ts:
+            result["status"] = inline_status
+            result["updated_at"] = node.get("updated_at")
+            repairs.append({**issue, "repair": "node_results_updated_from_inline"})
+        elif result_ts and inline_ts and result_ts > inline_ts:
+            node["status"] = result_status
+            node["updated_at"] = result.get("updated_at")
+            repairs.append({**issue, "repair": "inline_updated_from_node_results"})
+        elif inline_status == "passed":
+            result["status"] = inline_status
+            result["updated_at"] = node.get("updated_at") or result.get("updated_at") or _now()
+            repairs.append({**issue, "repair": "node_results_updated_from_inline_passed"})
+        elif result_status == "passed":
+            node["status"] = result_status
+            node["updated_at"] = result.get("updated_at") or node.get("updated_at") or _now()
+            repairs.append({**issue, "repair": "inline_updated_from_node_results_passed"})
+
+    parent = parent_ready_check(graph)
+    return {
+        "ok": not issues,
+        "sprint_id": graph.get("sprint_id"),
+        "issues": issues,
+        "repairs": repairs,
+        "parent": parent,
+        "repaired": bool(repairs),
+    }
+
+
 def _workers_from_file(path: str | None) -> list[dict[str, Any]]:
     if not path:
         return []
@@ -904,6 +967,11 @@ def main() -> int:
 
     p = sub.add_parser("parent-check")
     add_graph(p)
+
+    p = sub.add_parser("doctor")
+    add_graph(p)
+    p.add_argument("--repair", action="store_true")
+    p.add_argument("--in-place", action="store_true")
 
     p = sub.add_parser("enqueue-ready")
     add_graph(p)
@@ -981,6 +1049,13 @@ def main() -> int:
 
         elif args.cmd == "parent-check":
             print(json.dumps(parent_ready_check(load_graph(args.graph)), ensure_ascii=False))
+
+        elif args.cmd == "doctor":
+            graph = load_graph(args.graph)
+            result = doctor_graph(graph, repair=args.repair)
+            if args.in_place and result.get("repaired"):
+                save_graph(args.graph, graph)
+            print(json.dumps(result, ensure_ascii=False))
 
         elif args.cmd == "enqueue-ready":
             graph = load_graph(args.graph)
