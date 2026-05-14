@@ -2,7 +2,7 @@
   "version": 1,
   "defaults": {
     "main_model": "opus",
-    "lab_builder_matrix": "glm,glm,glm,anthropic-sonnet"
+    "lab_builder_matrix": "glm,glm,glm,deepseek"
   },
   "models": {
     "claude-opus": {
@@ -88,8 +88,8 @@
   },
   "matrix_options": [
     {
-      "value": "glm,glm,glm,anthropic-sonnet",
-      "label": "3× GLM 5.1 + Claude Sonnet（当前推荐）"
+      "value": "glm,glm,glm,deepseek",
+      "label": "3× GLM 5.1 + DeepSeek V4 Pro（当前推荐）"
     },
     {
       "value": "glm-5.1,glm-5.1,sonnet,sonnet",
@@ -102,6 +102,10 @@
     {
       "value": "anthropic-sonnet,anthropic-sonnet,anthropic-sonnet,anthropic-sonnet",
       "label": "全 Claude Sonnet"
+    },
+    {
+      "value": "glm,glm,glm,anthropic-sonnet",
+      "label": "3× GLM 5.1 + Claude Sonnet"
     },
     {
       "value": "glm-5.1,anthropic-sonnet,deepseek,anthropic-sonnet",
