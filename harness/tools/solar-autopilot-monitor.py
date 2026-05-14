@@ -66,7 +66,13 @@ ASK_BOSS_RE = re.compile(r"拍板|要走哪条|你决定|老板.*决定|昊哥�
 COMPACTING_RE = re.compile(r"Compacting conversation|压缩上下文|Compacting", re.I)
 PROMPT_IDLE_RE = re.compile(r"Press up to edit queued messages|❯\s*$|Try \"", re.M)
 PANE_BUSY_RE = re.compile(
-    r"✳|✶|⏺ Bash|Running|Effecting|Swooping|thinking|Cogitating|Churning|Ruminating|Working",
+    r"Compacting conversation|Compacting|✳|✶|✽|✢|⏺ Bash|Running|Effecting|Swooping|thinking|Cogitating|Churning|Ruminating|"
+    r"Working|Mustering|Herding|Baking|Reticulating|Scurrying|Roosting|Crunched|Whirring|Smooshing|[·✳✶✽✢]\s+[A-Za-z][A-Za-z-]*…",
+    re.I,
+)
+PANE_BOTTOM_BUSY_RE = re.compile(
+    r"Compacting conversation|Compacting|Press up to edit queued messages|✳|✶|✽|✢|Mustering|Herding|Baking|Cogitating|Churning|Ruminating|Thinking|"
+    r"Reticulating|Scurrying|Roosting|Crunched|Whirring|Smooshing|[·✳✶✽✢]\s+[A-Za-z][A-Za-z-]*…",
     re.I,
 )
 SQLITE_ONLY_RE = re.compile(r"sqlite3\s+~?/?.*\.solar/solar\.db", re.I)
@@ -247,14 +253,21 @@ def run_kb_probe(reason: str, force: bool = False) -> dict:
     """
     last = load_json(KB_PROBE_HEALTH)
     now_epoch = time.time()
-    if force and last and last.get("reason") == reason and now_epoch - float(last.get("checked_at_epoch", 0)) < KB_PROBE_TRIGGER_COOLDOWN_SEC:
+    last_age = now_epoch - float(last.get("checked_at_epoch", 0) or 0) if last else 0
+    last_ok = bool(last.get("ok")) if last else False
+    if force and last and last_ok and last.get("reason") == reason and last_age < KB_PROBE_TRIGGER_COOLDOWN_SEC:
         last["skipped"] = "trigger_cooldown"
         last["reason"] = reason
         return last
-    if not force and last and now_epoch - float(last.get("checked_at_epoch", 0)) < KB_PROBE_INTERVAL_SEC:
+    if not force and last and (last_ok and last_age < KB_PROBE_INTERVAL_SEC):
         last["skipped"] = "cooldown"
         last["reason"] = reason
         return last
+    # Do not cache a failed KB probe as a hard error for the whole cooldown
+    # window. Knowledge recovery is often external (QMD MCP restart, index
+    # refresh, Mirage route repair), and keeping the stale failure makes every
+    # pane look broken even after the default context path is healthy again.
+    # Successful probes still use the normal interval cooldown above.
     if not KB_PROBE_SCRIPT.exists():
         result = {
             "ok": False,
@@ -423,10 +436,40 @@ def tmux_capture(target: str) -> str:
         return ""
 
 
+def pane_current_prompt_line(tail: str) -> str:
+    """Return the current Claude prompt line if the visible pane is at prompt.
+
+    Capture-pane includes scrollback. A plain regex over the whole tail can
+    confuse old "thinking" text with current work. The live prompt is always in
+    the last few non-empty visible lines, often followed by a border/status line.
+    """
+    lines = [line.rstrip() for line in tail.splitlines() if line.strip()]
+    for line in reversed(lines[-10:]):
+        if "❯" in line:
+            return line
+    return ""
+
+
+def pane_at_prompt(tail: str) -> bool:
+    return bool(pane_current_prompt_line(tail))
+
+
+def clear_current_prompt(target: str) -> bool:
+    tail = tmux_capture(target)
+    if not pane_at_prompt(tail):
+        return False
+    try:
+        subprocess.run(["tmux", "send-keys", "-t", target, "C-u"], timeout=1.5)
+        return True
+    except Exception:
+        return False
+
+
 def tmux_send(target: str, text: str) -> bool:
     if no_dispatch_enabled():
         return False
     try:
+        clear_current_prompt(target)
         r = subprocess.run(["tmux", "send-keys", "-t", target, text, "Enter"], timeout=2)
         return r.returncode == 0
     except Exception:
@@ -460,6 +503,29 @@ def normalize_idle_title(title: str) -> str:
     if not base:
         base = "Solar Pane"
     return f"{base} | 状态:idle/no active sprint"
+
+
+def normalize_work_title(title: str, sid: str, action: str) -> str:
+    base = re.split(r"\s+\|\s+(?:能力|状态):", title or "", maxsplit=1)[0].strip()
+    if not base:
+        base = "Solar Pane"
+    short_sid = sid
+    if short_sid.startswith("sprint-"):
+        short_sid = short_sid[len("sprint-"):]
+    if len(short_sid) > 54:
+        short_sid = short_sid[:51] + "..."
+    return f"{base} | 状态:working/{action}:{short_sid}"
+
+
+def update_work_pane_title(target: str, sid: str, action: str) -> None:
+    if not target or not sid:
+        return
+    current = tmux_title(target)
+    if not current:
+        return
+    desired = normalize_work_title(current, sid, action or "dispatch")
+    if current != desired:
+        tmux_set_title(target, desired)
 
 
 def update_idle_pane_titles(state: dict) -> list[dict]:
@@ -622,6 +688,15 @@ def retry_queue(state: dict, dispatch: bool, cooldown: int) -> list[dict]:
     for item in load_queue():
         sid = item.get("sid", "")
         target = item.get("target", "")
+        if sid and not (SPRINTS / f"{sid}.status.json").exists():
+            append_event(
+                sid,
+                "autopilot_queue_drop_stale_sprint",
+                "warn",
+                {"target": target, "type": item.get("type"), "reason": "status_missing"},
+            )
+            actions.append({"sid": sid, "action": item.get("type"), "dropped": "stale_sprint", "target": target})
+            continue
         if is_telemetry_only_finding(item):
             append_event(sid, "autopilot_queue_drop_telemetry_only", "info", {"target": target, "type": item.get("type")})
             actions.append({"sid": sid, "action": item.get("type"), "dropped": "telemetry_only", "target": target})
@@ -648,6 +723,8 @@ def retry_queue(state: dict, dispatch: bool, cooldown: int) -> list[dict]:
             actions.append({"sid": sid, "action": item.get("type"), "queued": True, "reason": "pane_busy", "target": target})
             continue
         sent = False
+        if dispatch and target:
+            clear_current_prompt(target)
         if dispatch and sid:
             sent = wake_sid(sid)
         elif dispatch and target and item.get("message"):
@@ -694,6 +771,11 @@ def wake_sid(sid: str) -> bool:
 
 def pane_is_busy(target: str) -> bool:
     tail = tmux_capture(target)
+    bottom = "\n".join(tail.splitlines()[-12:])
+    if PANE_BOTTOM_BUSY_RE.search(bottom):
+        return True
+    if pane_at_prompt(tail):
+        return False
     return bool(PANE_BUSY_RE.search(tail)) and not bool(PROMPT_IDLE_RE.search(tail))
 
 
@@ -802,6 +884,7 @@ def graph_workers() -> list[dict]:
         "frontend",
         "product", "planning",
         "architecture", "schema", "state-machine", "distributed-systems",
+        "api-design", "data-modeling", "compatibility",
         "routing", "diagnostics", "evaluation", "debug.systematic",
     ]
     capabilities = [
@@ -1135,6 +1218,12 @@ def dispatch_ready_graph_nodes(sid: str, lease: bool = True) -> dict:
 def instruction_for(status: dict, files: dict[str, bool]) -> str:
     sid = status.get("sprint_id") or status.get("id") or ""
     handoff = status.get("handoff_to", "")
+    if handoff == "pm" and files["contract"] and not files["prd"]:
+        return (
+            f"请接手 {sid}：先做 PM 需求分析，不要直接派 Builder。读取 {sid}.contract.md，"
+            f"输出 {sid}.prd.md，必须包含用户目标、范围边界、验收标准、风险、拆分建议。"
+            "完成后把 status 更新为 phase=prd_ready handoff_to=planner target_role=planner。"
+        )
     if handoff == "planner" and files["prd"] and not files["plan"]:
         return (
             f"请接手 {sid}：读取 .prd.md 和 .contract.md，产出 {sid}.plan.md 和 {sid}.task_graph.json。"
@@ -1264,6 +1353,16 @@ def inspect_sprints() -> list[dict]:
                 phase = status.get("phase", "")
                 handoff = status.get("handoff_to", "")
 
+        if files["contract"] and not files["prd"] and handoff in ("", "pm"):
+            raw_findings.append(
+                {
+                    "sid": sid,
+                    "type": "ready_for_pm",
+                    "severity": "info",
+                    "target": pane_target_for_handoff("pm"),
+                    "message": instruction_for({**status, "handoff_to": "pm"}, files),
+                }
+            )
         if priority == "P0" and files["contract"] and not files["prd"]:
             raw_findings.append(
                 {
@@ -1423,7 +1522,7 @@ def inspect_panes(state: dict, stall_seconds: int) -> list[dict]:
                         "message": f"{role} pane compacting/stalled; re-wake sprint {sid} to continue missing artifact work.",
                     }
                 )
-        if PROMPT_IDLE_RE.search(tail) and not PANE_BUSY_RE.search(tail):
+        if pane_at_prompt(tail):
             graph_node = assigned_graph_node_for_pane(target)
             if graph_node:
                 findings.append(
@@ -1466,7 +1565,7 @@ def inspect_panes(state: dict, stall_seconds: int) -> list[dict]:
         if not target.startswith("solar-harness-lab:"):
             continue
         tail = tmux_capture(target)
-        if not PROMPT_IDLE_RE.search(tail) or PANE_BUSY_RE.search(tail):
+        if not pane_at_prompt(tail):
             continue
         graph_node = assigned_graph_node_for_pane(target)
         if not graph_node:
@@ -1530,6 +1629,13 @@ def inspect_knowledge_context(state: dict) -> list[dict]:
                 }
             )
     reason = ",".join(reasons) if reasons else "periodic"
+    last_probe = load_json(KB_PROBE_HEALTH)
+    if not force_probe and last_probe and not last_probe.get("ok"):
+        age = time.time() - float(last_probe.get("checked_at_epoch", 0) or 0)
+        if age >= KB_PROBE_TRIGGER_COOLDOWN_SEC:
+            force_probe = True
+            reasons.append("previous_probe_failed")
+            reason = ",".join(reasons) if reasons else "previous_probe_failed"
     probe = run_kb_probe(reason, force=force_probe)
     if probe.get("ok"):
         state["knowledge_probe"] = {
@@ -1598,8 +1704,9 @@ def mark_action(state: dict, finding: dict, result: dict) -> None:
     key = f"{finding.get('sid','')}:{finding.get('type','')}:{finding.get('target','')}"
     state["actions"][key] = {"at": time.time(), "ts": utc_now(), "result": result}
     target = finding.get("target", "")
-    if target and result.get("dispatched"):
+    if target and (result.get("dispatched") or result.get("dispatched_from_queue")):
         state["target_actions"][target] = {"at": time.time(), "ts": utc_now(), "result": result}
+        update_work_pane_title(target, result.get("sid") or finding.get("sid", ""), result.get("action") or finding.get("type", "dispatch"))
 
 
 def target_recently_dispatched(state: dict, target: str, cooldown: int) -> bool:
@@ -1653,6 +1760,8 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
             mark_action(state, f, result)
             actions.append(result)
             continue
+        if dispatch and target:
+            clear_current_prompt(target)
         if ftype in ("graph_ready_nodes",):
             result = dispatch_ready_graph_nodes(sid, lease=dispatch)
             append_event(sid, "autopilot_graph_enqueue_ready", "info" if result.get("ok") else "warn", result)
@@ -1735,7 +1844,7 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
                 used_targets.add(target)
             mark_action(state, f, result)
             actions.append(result)
-        elif ftype in ("ready_for_planner", "ready_for_builder", "ready_for_evaluator", "active_without_handoff", "pane_compacting_stall", "pane_idle_with_pending_artifact"):
+        elif ftype in ("ready_for_pm", "ready_for_planner", "ready_for_builder", "ready_for_evaluator", "active_without_handoff", "pane_compacting_stall", "pane_idle_with_pending_artifact"):
             status_path = SPRINTS / f"{sid}.status.json"
             status = load_json(status_path)
             hist = status.setdefault("history", [])
@@ -1748,7 +1857,12 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
                 }
             )
             status["updated_at"] = utc_now()
-            if ftype == "ready_for_planner":
+            if ftype == "ready_for_pm":
+                status["status"] = status.get("status") or "drafting"
+                status["phase"] = "spec"
+                status["handoff_to"] = "pm"
+                status["target_role"] = "pm"
+            elif ftype == "ready_for_planner":
                 status["phase"] = "spec"
             save_json(status_path, status)
             append_event(sid, f"autopilot_{ftype}", f.get("severity", "info"), {"target": f.get("target", "")})

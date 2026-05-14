@@ -39,6 +39,9 @@ import graph_node_dispatcher as dispatcher
 workers = dispatcher._discover_workers(dry_run=True)
 assert workers, "dispatcher has no dry-run workers"
 assert any("frontend" in w.get("skills", []) for w in workers), workers
+assert any("api-design" in w.get("skills", []) for w in workers), workers
+assert any("data-modeling" in w.get("skills", []) for w in workers), workers
+assert any("compatibility" in w.get("skills", []) for w in workers), workers
 assert any("observability" in w.get("capabilities", []) for w in workers), workers
 assert any("documentation" in w.get("capabilities", []) for w in workers), workers
 
@@ -49,8 +52,11 @@ spec.loader.exec_module(monitor)
 monitor_workers = monitor.graph_workers()
 assert monitor_workers, "autopilot has no workers"
 assert any("frontend" in w.get("skills", []) for w in monitor_workers), monitor_workers
+assert any("api-design" in w.get("skills", []) for w in monitor_workers), monitor_workers
+assert any("data-modeling" in w.get("skills", []) for w in monitor_workers), monitor_workers
+assert any("compatibility" in w.get("skills", []) for w in monitor_workers), monitor_workers
 assert any("observability" in w.get("capabilities", []) for w in monitor_workers), monitor_workers
 assert any("documentation" in w.get("capabilities", []) for w in monitor_workers), monitor_workers
 PY
 
-echo "PASS worker capability catalog covers frontend/observability"
+echo "PASS worker capability catalog covers frontend/observability/architecture-specialists"

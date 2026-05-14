@@ -2389,14 +2389,21 @@ gate_check() {
   esac
 
   case "$st" in
-    active)
-      local guard_role guard_violations
-      guard_role="$(workflow_guard_route_role "$sid")"
-      guard_violations="$(workflow_guard_violations "$sid")"
-      local req_file=""
-      req_file=$(pm_requirements_file "$sid" 2>/dev/null || true)
-      if [[ -z "$req_file" ]]; then
-        log "${R}门禁拦截: active 状态但 PRD 不存在${N}"
+	    active)
+	      local guard_role guard_violations
+	      guard_role="$(workflow_guard_route_role "$sid")"
+	      guard_violations="$(workflow_guard_violations "$sid")"
+	      if [[ "$guard_role" == "builder_main" || "$guard_role" == "builder" ]]; then
+	        # Once workflow_guard says planner artifacts + task_graph are ready,
+	        # coordinator must not roll the sprint back to PM because of legacy
+	        # PRD schema rules. PM quality belongs before planner completion; DAG
+	        # dispatch is the source of truth after planning_complete.
+	        :
+	      else
+	      local req_file=""
+	      req_file=$(pm_requirements_file "$sid" 2>/dev/null || true)
+	      if [[ -z "$req_file" ]]; then
+	        log "${R}门禁拦截: active 状态但 PRD 不存在${N}"
         dispatch_to_pm "$sid" "gate_missing_prd" "$SPRINTS_DIR/${sid}.dispatch.md" "门禁拦截：Sprint ${sid} 缺少 PM PRD。请先研究用户需求，写 ~/.solar/harness/sprints/${sid}.prd.md，再交给 Planner/架构师。"
         runtime_status_transition "$sid" "drafting" "active_blocked_missing_prd" "coordinator" '{"status_fields":{"phase":"spec","handoff_to":"pm","target_role":"pm"}}' || true
         return 1
@@ -2413,10 +2420,11 @@ gate_check() {
       if [[ "$guard_role" != "builder_main" && "$guard_role" != "builder" ]] && ! status_has_manual_override "$sprint_dir/${sid}.status.json"; then
         log "${R}门禁拦截: active 状态但 Planner 产物未齐 (${guard_violations})${N}"
         dispatch_to_planner "$sid" "gate_missing_planner_artifacts" "$SPRINTS_DIR/${sid}.dispatch.md" "门禁拦截：Sprint ${sid} 已有 PM 需求，但缺少 Planner 产物。请读取 ${req_file} 和 contract.md，补齐 design.md、plan.md、task_graph.json 后再进入 builder。violations=${guard_violations}"
-        runtime_status_transition "$sid" "drafting" "active_blocked_missing_plan" "coordinator" '{"status_fields":{"phase":"prd_ready","handoff_to":"planner","target_role":"planner"}}' || true
-        return 1
-      fi
-      ;;
+	        runtime_status_transition "$sid" "drafting" "active_blocked_missing_plan" "coordinator" '{"status_fields":{"phase":"prd_ready","handoff_to":"planner","target_role":"planner"}}' || true
+	        return 1
+	      fi
+	      fi
+	      ;;
 
     planning)
       # 门禁: plan.md 必须存在 + 结构校验
@@ -3016,12 +3024,13 @@ EOF
         return 0
       fi
       local graph_rc=0 graph_out="" graph_eval_out="" graph_eval_rc=0
+      local graph_dispatch_timeout="${SOLAR_GRAPH_DISPATCH_TIMEOUT_SEC:-35}"
       if [[ -n "${SOLAR_COORD_DRY_RUN:-}" ]]; then
-        graph_eval_out="$(python3 "$graph_dispatcher" dispatch-evals --graph "$SPRINTS_DIR/${sid}.task_graph.json" --dry-run 2>&1)" || graph_eval_rc=$?
-        graph_out="$(python3 "$graph_dispatcher" dispatch-ready --graph "$SPRINTS_DIR/${sid}.task_graph.json" --dry-run 2>&1)" || graph_rc=$?
+        graph_eval_out="$(/usr/bin/timeout "$graph_dispatch_timeout" python3 "$graph_dispatcher" dispatch-evals --graph "$SPRINTS_DIR/${sid}.task_graph.json" --dry-run 2>&1)" || graph_eval_rc=$?
+        graph_out="$(/usr/bin/timeout "$graph_dispatch_timeout" python3 "$graph_dispatcher" dispatch-ready --graph "$SPRINTS_DIR/${sid}.task_graph.json" --dry-run 2>&1)" || graph_rc=$?
       else
-        graph_eval_out="$(python3 "$graph_dispatcher" dispatch-evals --graph "$SPRINTS_DIR/${sid}.task_graph.json" 2>&1)" || graph_eval_rc=$?
-        graph_out="$(python3 "$graph_dispatcher" dispatch-ready --graph "$SPRINTS_DIR/${sid}.task_graph.json" 2>&1)" || graph_rc=$?
+        graph_eval_out="$(/usr/bin/timeout "$graph_dispatch_timeout" python3 "$graph_dispatcher" dispatch-evals --graph "$SPRINTS_DIR/${sid}.task_graph.json" 2>&1)" || graph_eval_rc=$?
+        graph_out="$(/usr/bin/timeout "$graph_dispatch_timeout" python3 "$graph_dispatcher" dispatch-ready --graph "$SPRINTS_DIR/${sid}.task_graph.json" 2>&1)" || graph_rc=$?
       fi
       if (( graph_eval_rc != 0 )); then
         log "${Y}[graph-dispatch] dispatch-evals failed rc=${graph_eval_rc}: ${graph_eval_out}${N}"

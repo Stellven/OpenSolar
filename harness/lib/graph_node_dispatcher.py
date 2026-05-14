@@ -26,6 +26,13 @@ SPRINTS_DIR = HARNESS_DIR / "sprints"
 SESSION = os.environ.get("SOLAR_HARNESS_SESSION", "solar-harness")
 NO_DISPATCH_FLAG = HARNESS_DIR / "run" / "no-dispatch.flag"
 DISPATCH_LEDGER = HARNESS_DIR / "run" / "dispatch-ledger.jsonl"
+PANE_TUI_BUSY_RE = re.compile(
+    r"Compacting conversation|压缩上下文|Reticulating|Scurrying|Roosting|Crunched|"
+    r"Mustering|Herding|Baking|Cogitating|Churning|Ruminating|Thinking|"
+    r"Whirring|Smooshing|[·✳✶✽✢]\s+[A-Za-z][A-Za-z-]*…|✳|✶|✽|✢",
+    re.I,
+)
+PANE_QUEUED_PROMPT_RE = re.compile(r"Press up to edit queued messages", re.I)
 STATE_READ_PREFLIGHT = """<!-- SOLAR_STATE_READ_PREFLIGHT -->
 ## 必须先读状态 (防写入 hook 卡死)
 
@@ -50,7 +57,7 @@ from graph_scheduler import (  # noqa: E402
     mark_node_result,
     parent_ready_check,
 )
-from pane_lease import acquire as acquire_lease, release as release_lease, read_lease  # noqa: E402
+from pane_lease import acquire as acquire_lease, release as release_lease, read_lease, list_leases  # noqa: E402
 from task_queue import enqueue  # noqa: E402
 try:
     from model_registry import load_registry as _load_model_registry, normalize as _normalize_model  # noqa: E402
@@ -261,6 +268,81 @@ def _handoff_file(sid: str, node_id: str) -> Path:
     return SPRINTS_DIR / f"{sid}.{_safe_node_id(node_id)}-handoff.md"
 
 
+def _node_handoff_candidates(sid: str, node: dict[str, Any], graph: dict[str, Any]) -> list[Path]:
+    node_id = str(node.get("id") or "")
+    candidates = [_handoff_file(sid, node_id)]
+    deps = node.get("depends_on") or []
+    gate = str(node.get("gate") or "")
+    if deps and gate in set(str(g) for g in graph.get("required_gates", [])):
+        candidates.append(SPRINTS_DIR / f"{sid}.handoff.md")
+    return candidates
+
+
+def _existing_node_handoff(sid: str, node: dict[str, Any], graph: dict[str, Any]) -> Path | None:
+    for candidate in _node_handoff_candidates(sid, node, graph):
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _ledger_dispatch_for(sid: str, instruction_file: Path) -> dict[str, Any]:
+    if not DISPATCH_LEDGER.exists():
+        return {}
+    needle = str(instruction_file)
+    found: dict[str, Any] = {}
+    for raw in DISPATCH_LEDGER.read_text(encoding="utf-8", errors="ignore").splitlines():
+        try:
+            row = json.loads(raw)
+        except Exception:
+            continue
+        if row.get("sid") != sid or row.get("kind") != "intent_injected":
+            continue
+        text = json.dumps(row, ensure_ascii=False)
+        if needle not in text:
+            continue
+        found = row
+    return found
+
+
+def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path) -> list[dict[str, Any]]:
+    sid = str(graph.get("sprint_id") or Path(graph_path).stem.replace(".task_graph", ""))
+    repaired: list[dict[str, Any]] = []
+    for node in graph.get("nodes", []):
+        node_id = str(node.get("id") or "")
+        if not node_id:
+            continue
+        status = node_status(graph, node_id)
+        handoff_file = _existing_node_handoff(sid, node, graph)
+        if handoff_file and status in {"pending", "queued", "blocked", "assigned", "dispatched", "in_progress", "running", ""}:
+            set_node_status(graph, node_id, "reviewing")
+            node["status"] = "reviewing"
+            node["updated_at"] = _utc_now()
+            repaired.append({"node": node_id, "status": "reviewing", "reason": "handoff_file_exists", "handoff": str(handoff_file)})
+            continue
+        if status not in {"pending", "queued", "blocked", ""}:
+            continue
+        instruction_file = _dispatch_file(sid, node_id)
+        if not instruction_file.exists():
+            continue
+        ledger = _ledger_dispatch_for(sid, instruction_file)
+        if not ledger:
+            continue
+        pane = str(ledger.get("pane") or "")
+        dispatch_id = str(ledger.get("dispatch_id") or "")
+        ack_file = HARNESS_DIR / "sprints" / "graph-acks" / f"{sid}.{node_id}-submit-ack.json"
+        if not ack_file.exists():
+            continue
+        try:
+            ack = json.loads(ack_file.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if str(ack.get("dispatch_id") or "") != dispatch_id:
+            continue
+        set_node_status(graph, node_id, "dispatched", pane=pane or None, dispatch_id=dispatch_id or None)
+        repaired.append({"node": node_id, "pane": pane, "dispatch_id": dispatch_id, "reason": "submit_ack_exists"})
+    return repaired
+
+
 def _eval_dispatch_file(sid: str, node_id: str) -> Path:
     return SPRINTS_DIR / f"{sid}.{_safe_node_id(node_id)}-eval-dispatch.md"
 
@@ -334,12 +416,13 @@ def _graph_node_runtime_state(graph_path: str, node_id: str) -> dict[str, Any]:
         graph = load_graph(graph_path)
         node = _node_by_id(graph, node_id) or {}
         result = (graph.get("node_results") or {}).get(node_id) or {}
-        status = str(result.get("status") or node.get("status") or "pending").lower()
+        status = str(node_status(graph, node_id) or "pending").lower()
+        active_statuses = {"assigned", "dispatched", "in_progress", "running"}
         return {
             "ok": True,
             "status": status,
-            "dispatch_id": node.get("dispatch_id") or result.get("dispatch_id") or "",
-            "assigned_to": node.get("assigned_to") or result.get("assigned_to") or "",
+            "dispatch_id": (node.get("dispatch_id") or result.get("dispatch_id") or "") if status in active_statuses else "",
+            "assigned_to": (node.get("assigned_to") or result.get("assigned_to") or "") if status in active_statuses else "",
         }
     except Exception as exc:
         return {"ok": False, "error": str(exc), "status": ""}
@@ -353,16 +436,29 @@ def _mark_graph_node(graph_path: str, node_id: str, status: str,
         for node in graph.get("nodes", []):
             if node.get("id") != node_id:
                 continue
+            updated_at = _utc_now()
             node["status"] = status
-            node["updated_at"] = _utc_now()
+            node["updated_at"] = updated_at
+            results = graph.setdefault("node_results", {})
+            if status in {"pending", "queued", "blocked", ""}:
+                results.pop(node_id, None)
+            else:
+                results[node_id] = {"status": status, "updated_at": updated_at}
             if clear_assignment:
                 node.pop("assigned_to", None)
                 node.pop("dispatch_id", None)
+                if isinstance(results.get(node_id), dict):
+                    results[node_id].pop("assigned_to", None)
+                    results[node_id].pop("dispatch_id", None)
             else:
                 if pane:
                     node["assigned_to"] = pane
+                    if isinstance(results.get(node_id), dict):
+                        results[node_id]["assigned_to"] = pane
                 if dispatch_id:
                     node["dispatch_id"] = dispatch_id
+                    if isinstance(results.get(node_id), dict):
+                        results[node_id]["dispatch_id"] = dispatch_id
             save_graph(graph_path, graph)
             return True
     except Exception:
@@ -588,6 +684,39 @@ def _pane_exists(pane: str) -> bool:
         return False
 
 
+def _pane_tail(pane: str, lines: int = 80) -> str:
+    try:
+        return subprocess.run(
+            ["tmux", "capture-pane", "-pt", pane, "-S", f"-{lines}"],
+            text=True,
+            capture_output=True,
+            timeout=2,
+        ).stdout
+    except Exception:
+        return ""
+
+
+def _pane_tui_busy(pane: str) -> bool:
+    tail = _pane_tail(pane)
+    bottom = "\n".join(tail.splitlines()[-12:])
+    if PANE_TUI_BUSY_RE.search(bottom):
+        return True
+    # Queued prompt residue means this pane needs to drain or be cleared before
+    # another graph dispatch. Treat it as unavailable instead of piling more
+    # instructions into Claude Code's prompt buffer.
+    if PANE_QUEUED_PROMPT_RE.search(bottom):
+        return True
+    return False
+
+
+def _pane_has_matching_queued_prompt(pane: str, instruction_file: Path) -> bool:
+    tail = _pane_tail(pane, lines=30)
+    if not PANE_QUEUED_PROMPT_RE.search(tail):
+        return False
+    instruction_path = str(instruction_file.resolve())
+    return instruction_file.name in tail or instruction_path in tail
+
+
 def _write_submit_ack(sid: str, node_id: str, pane: str, dispatch_id: str) -> None:
     """Write observable submit evidence so evaluators can verify pane received the dispatch."""
     try:
@@ -637,16 +766,48 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
                   *, sid: str = "", dispatch_id: str = "") -> bool:
     if dry_run:
         return True
+    processing_re = re.compile(
+        r"Crafting|Cogitating|Orchestrating|Coalescing|Wandering|Sock-hopping|"
+        r"Crunched|Puzzling|Cooking|Baked|Thinking|Considering|Newspapering|"
+        r"Reticulating|Scurrying|Roosting|Mustering|Herding|Ruminating|"
+        r"Churning|Baking|Effecting|Swooping|Whirring|Smooshing|[·✳✶✽✢]\s+[A-Za-z][A-Za-z-]*…|Read\(|"
+        r"Reading|Bash\(|Edit\(|Write\(|⎿|✻|✶|✳|✽|⏺"
+    )
+    if _pane_tui_busy(pane):
+        if _pane_has_matching_queued_prompt(pane, instruction_file):
+            for tries in range(1, 3):
+                try:
+                    subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=2)
+                    time.sleep(3.0)
+                    tail = _pane_tail(pane)
+                    if processing_re.search(tail) or not PANE_QUEUED_PROMPT_RE.search(tail):
+                        _record_model_call(
+                            "succeeded",
+                            sid,
+                            pane,
+                            dispatch_id,
+                            instruction_file,
+                            tries=tries,
+                            status="matching_queued_prompt_submitted",
+                        )
+                        return True
+                except Exception:
+                    time.sleep(0.5)
+        _record_model_call(
+            "failed",
+            sid,
+            pane,
+            dispatch_id,
+            instruction_file,
+            status="pane_tui_busy_before_send",
+            error="pane is compacting, processing, or has queued prompt residue",
+        )
+        return False
     _set_pane_capability_title(pane, instruction_file)
     instruction_path = str(instruction_file.resolve())
     dispatch_keyword = instruction_file.name
     short_cmd = f"{_visibility_summary(instruction_file)['text']}; 读取并执行 {instruction_path}"
     _record_model_call("request", sid, pane, dispatch_id, instruction_file, status="tmux_submit_requested")
-    processing_re = re.compile(
-        r"Crafting|Cogitating|Orchestrating|Coalescing|Wandering|Sock-hopping|"
-        r"Crunched|Puzzling|Cooking|Baked|Thinking|Considering|Newspapering|Read\(|"
-        r"Reading|Bash\(|Edit\(|Write\(|⎿|✻|✶|✳|✽|⏺"
-    )
     last_error = ""
     for tries in range(1, 4):
         try:
@@ -663,12 +824,7 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
             time.sleep(0.35)
             subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=2)
             time.sleep(4.0)
-            tail = subprocess.run(
-                ["tmux", "capture-pane", "-pt", pane, "-S", "-80"],
-                text=True,
-                capture_output=True,
-                timeout=2,
-            ).stdout
+            tail = _pane_tail(pane)
             has_keyword = dispatch_keyword in tail or instruction_path in tail
             has_processing = bool(processing_re.search(tail))
             if has_keyword and has_processing:
@@ -691,12 +847,7 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
                 for _ in range(2):
                     subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=2)
                     time.sleep(3.0)
-                    tail = subprocess.run(
-                        ["tmux", "capture-pane", "-pt", pane, "-S", "-80"],
-                        text=True,
-                        capture_output=True,
-                        timeout=2,
-                    ).stdout
+                    tail = _pane_tail(pane)
                     if processing_re.search(tail):
                         _record_model_call(
                             "succeeded",
@@ -725,6 +876,22 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
                     status="keyword_visible_submit_unverified_no_cancel",
                 )
                 return True
+            if has_processing:
+                # Pre-send busy detection already verified the pane was not
+                # active. If it starts processing after our send, the prompt was
+                # accepted even when the wrapped screen tail no longer contains
+                # the full filename. Treat that as a successful submit; durable
+                # handoff/eval artifacts remain the completion source of truth.
+                _record_model_call(
+                    "succeeded",
+                    sid,
+                    pane,
+                    dispatch_id,
+                    instruction_file,
+                    tries=tries,
+                    status="processing_verified_without_keyword",
+                )
+                return True
             last_error = "dispatch text not accepted by pane"
             # Never send C-c from the dispatcher. Claude Code treats C-c as an
             # interactive interruption and can leave the pane in a Rewind prompt
@@ -735,6 +902,18 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
         except Exception as exc:
             last_error = str(exc)
             time.sleep(0.5)
+    tail = _pane_tail(pane)
+    if dispatch_keyword in tail or instruction_path in tail or processing_re.search(tail):
+        _record_model_call(
+            "succeeded",
+            sid,
+            pane,
+            dispatch_id,
+            instruction_file,
+            tries=3,
+            status="late_submit_verification",
+        )
+        return True
     _record_model_call(
         "failed",
         sid,
@@ -1021,6 +1200,19 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
     runtime_state = _graph_node_runtime_state(graph_path, node_id)
     current_status = str(runtime_state.get("status") or "")
     current_dispatch_id = str(runtime_state.get("dispatch_id") or "")
+    if current_status in {"assigned", "dispatched", "in_progress", "running"} and current_dispatch_id == dispatch_id:
+        instruction_file = _dispatch_file(sid, node_id)
+        if _pane_tui_busy(pane):
+            _mark_graph_node(graph_path, node_id, "pending", clear_assignment=True)
+            return {
+                "ok": True,
+                "reason": "pane_busy_retry_later",
+                "node": node_id,
+                "pane": pane,
+                "dispatch_id": dispatch_id,
+                "instruction_file": str(instruction_file),
+                "requeued": False,
+            }
     if current_status in {"passed", "failed", "skipped", "reviewing"}:
         return {
             "ok": True,
@@ -1056,7 +1248,6 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
             "requeued": True,
         }
 
-    instruction_file = _dispatch_file(sid, node_id)
     text_payload = dict(payload, dispatch_id=dispatch_id, sprint_id=sid)
     # Research node branch: mark fan-out section isolation for R-prefixed nodes
     # from deepresearch DAG templates. No main-loop edits; this is a single
@@ -1066,10 +1257,21 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
         if node.get("fan_out_parent"):
             text_payload["section_isolation"] = True
             text_payload["section_id"] = node.get("section_id", "")
+    instruction_file = _dispatch_file(sid, node_id)
+    if dry_run:
+        return {
+            "ok": True,
+            "node": node_id,
+            "pane": pane,
+            "dispatch_id": dispatch_id,
+            "instruction_file": str(instruction_file),
+            "dry_run": True,
+            "graph_updated": False,
+        }
+
     instruction_file.parent.mkdir(parents=True, exist_ok=True)
     instruction_file.write_text(build_dispatch_text(text_payload, pane), encoding="utf-8")
-    if not dry_run:
-        _inject_dispatch_context(instruction_file, sid=sid, pane=pane, dispatch_id=dispatch_id)
+    _inject_dispatch_context(instruction_file, sid=sid, pane=pane, dispatch_id=dispatch_id)
 
     sent = _send_to_pane(pane, instruction_file, dry_run, sid=sid, dispatch_id=dispatch_id)
     graph_updated = False
@@ -1095,6 +1297,22 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
 
     if not dry_run:
         release_lease(pane, dispatch_id, "graph_dispatch_send_failed")
+    if _pane_tui_busy(pane):
+        # The pane is already doing work, compacting, or carrying queued prompt
+        # residue. Do not keep an unsent node in assigned/dispatched state:
+        # that strands the node forever. Also do not requeue immediately,
+        # because that creates duplicate prompt lines. Leave it pending so the
+        # next scheduler cycle can pick any then-idle worker.
+        _mark_graph_node(graph_path, node_id, "pending", clear_assignment=True)
+        return {
+            "ok": True,
+            "reason": "pane_busy_retry_later",
+            "node": node_id,
+            "pane": pane,
+            "instruction_file": str(instruction_file),
+            "dispatch_id": dispatch_id,
+            "requeued": False,
+        }
     enqueue(sid, item.get("intent", f"graph_node|node_id={node_id}"), item.get("priority", 80), payload)
     _mark_graph_node(graph_path, node_id, "pending", clear_assignment=True)
     return {
@@ -1130,8 +1348,9 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
     worker_skills = [
         "bash", "python", "typescript", "docs", "testing",
         "frontend",
-        "product", "planning",
+        "product", "planning", "governance",
         "architecture", "schema", "state-machine", "distributed-systems",
+        "api-design", "data-modeling", "compatibility",
         "routing", "diagnostics", "evaluation",
         "browser.browse", "browser.qa", "code.review", "document.convert",
         "persona.agent", "multi_agent.research", "debug.systematic",
@@ -1196,7 +1415,7 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
             "models": models,
             "skills": worker_skills,
             "capabilities": worker_capabilities,
-            "busy": bool(read_lease(pane)) or bool(_pane_health(pane).get("unavailable")),
+            "busy": bool(read_lease(pane)) or _pane_tui_busy(pane) or bool(_pane_health(pane).get("unavailable")),
             "title": title,
             "quota_exhausted": quota_exhausted,
             "health": _pane_health(pane),
@@ -1224,7 +1443,7 @@ def _discover_evaluators(dry_run: bool = False) -> list[dict[str, Any]]:
                 "pane": pane,
                 "models": _models_for_pane(pane),
                 "skills": ["review", "testing", "bash"],
-                "busy": bool(read_lease(pane)),
+                "busy": bool(read_lease(pane)) or _pane_tui_busy(pane),
             })
     return evaluators
 
@@ -1239,6 +1458,25 @@ def _node_eval_needed(graph: dict[str, Any], sid: str, node: dict[str, Any], for
         return False
     if _eval_json_file(sid, node_id).exists() and not force:
         return False
+    if not force:
+        for lease in list_leases():
+            dispatch_id = str(lease.get("dispatch_id") or "")
+            lease_sid = str(lease.get("sid") or lease.get("sprint_id") or "")
+            if (
+                not lease.get("_expired")
+                and lease_sid == sid
+                and f"-{node_id}-" in dispatch_id
+                and dispatch_id.startswith(f"graph-eval-{sid}-")
+            ):
+                # A previous dispatcher cycle may have accepted the prompt but
+                # failed local submit verification before graph fields were
+                # saved. Reattach graph state to the active evaluator lease
+                # instead of dispatching a duplicate prompt.
+                node["eval_assigned_to"] = str(lease.get("pane") or "")
+                node["eval_dispatch_id"] = dispatch_id
+                node["eval_dispatched_at"] = str(lease.get("acquired_at") or _utc_now())
+                node["eval_recovered_from_lease"] = True
+                return False
     if node.get("eval_dispatched_at") and not force:
         pane = str(node.get("eval_assigned_to") or "")
         dispatch_id = str(node.get("eval_dispatch_id") or "")
@@ -1264,7 +1502,7 @@ def _node_eval_needed(graph: dict[str, Any], sid: str, node: dict[str, Any], for
     status = node_status(graph, node_id)
     if status in {"passed", "failed", "skipped"}:
         return False
-    return _handoff_file(sid, node_id).exists() and status in {"reviewing", "dispatched", "in_progress", "running", ""}
+    return bool(_existing_node_handoff(sid, node, graph)) and status in {"reviewing", "dispatched", "in_progress", "running", ""}
 
 
 def _first_available_evaluator(dry_run: bool = False) -> dict[str, Any] | None:
@@ -1281,6 +1519,7 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
     sid = str(graph.get("sprint_id") or Path(graph_path).stem.replace(".task_graph", ""))
     dispatched: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
+    dry_run_used_panes: set[str] = set()
 
     for node in graph.get("nodes", []):
         if max_items and len(dispatched) >= max_items:
@@ -1293,6 +1532,9 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
             skipped.append({"node": node_id, "reason": "no_available_evaluator"})
             break
         pane = str(evaluator["pane"])
+        if dry_run and pane in dry_run_used_panes:
+            skipped.append({"node": node_id, "reason": "dry_run_evaluator_capacity", "pane": pane})
+            break
         dispatch_id = f"graph-eval-{sid}-{node_id}-{_utc_now().replace(':', '').replace('-', '')}"
         lease_result = _ensure_lease(pane, sid, dispatch_id, ttl, dry_run)
         if not lease_result.get("acquired"):
@@ -1305,6 +1547,16 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
             continue
 
         instruction_file = _eval_dispatch_file(sid, node_id)
+        if dry_run:
+            dry_run_used_panes.add(pane)
+            dispatched.append({
+                "node": node_id,
+                "pane": pane,
+                "dispatch_id": dispatch_id,
+                "instruction_file": str(instruction_file),
+                "dry_run": True,
+            })
+            continue
         instruction_file.parent.mkdir(parents=True, exist_ok=True)
         instruction_file.write_text(
             build_eval_dispatch_text(graph, graph_path, node, pane, dispatch_id),
@@ -1335,7 +1587,8 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
             "instruction_file": str(instruction_file),
         })
 
-    save_graph(graph_path, graph)
+    if not dry_run:
+        save_graph(graph_path, graph)
     return {
         "ok": not skipped,
         "sprint_id": sid,
@@ -1344,16 +1597,22 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
     }
 
 
-def dispatch_ready(graph_path: str, dry_run: bool = False, ttl: int = 900) -> dict[str, Any]:
+def dispatch_ready(graph_path: str, dry_run: bool = False, ttl: int = 900,
+                   max_parallel: int = 8) -> dict[str, Any]:
     if _no_dispatch_enabled() and not dry_run:
         return {"ok": False, "reason": "no_dispatch_flag", "graph": graph_path, "enqueue": {}, "drain": {}}
     graph = load_graph(graph_path)
     sid = graph.get("sprint_id") or Path(graph_path).stem.replace(".task_graph", "")
+    reconciled: list[dict[str, Any]] = []
+    if not dry_run:
+        reconciled = _reconcile_existing_dispatches(graph, graph_path)
+        if reconciled:
+            save_graph(graph_path, graph)
     enqueue_result = enqueue_ready(
         graph,
         graph_path,
         _discover_workers(dry_run),
-        max_parallel=8,
+        max_parallel=max_parallel,
         lease=not dry_run,
         ttl=ttl,
         dry_run=dry_run,
@@ -1375,7 +1634,12 @@ def dispatch_ready(graph_path: str, dry_run: bool = False, ttl: int = 900) -> di
         drain_result = {"ok": all(r.get("ok", False) for r in results), "processed": len(results), "results": results}
     else:
         drain_result = drain_queue(str(sid), dry_run=dry_run, max_items=len(enqueue_result.get("enqueued", [])), ttl=ttl)
-    return {"ok": enqueue_result.get("ok") and drain_result.get("ok"), "enqueue": enqueue_result, "drain": drain_result}
+    return {
+        "ok": enqueue_result.get("ok") and drain_result.get("ok"),
+        "reconciled": reconciled,
+        "enqueue": enqueue_result,
+        "drain": drain_result,
+    }
 
 
 def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
@@ -1465,6 +1729,7 @@ def main() -> int:
     p.add_argument("--graph", required=True)
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--ttl", type=int, default=900)
+    p.add_argument("--max-parallel", type=int, default=8)
 
     p = sub.add_parser("dispatch-evals")
     p.add_argument("--graph", required=True)
@@ -1487,7 +1752,7 @@ def main() -> int:
     if args.cmd == "drain-queue":
         result = drain_queue(args.sprint, args.dry_run, args.max_items, args.ttl)
     elif args.cmd == "dispatch-ready":
-        result = dispatch_ready(args.graph, args.dry_run, args.ttl)
+        result = dispatch_ready(args.graph, args.dry_run, args.ttl, args.max_parallel)
     elif args.cmd == "dispatch-evals":
         result = dispatch_node_evals(args.graph, args.dry_run, args.ttl, args.force, args.max_items)
     elif args.cmd == "node-verdict":
