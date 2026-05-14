@@ -1,5 +1,5 @@
 #!/bin/bash
-# Solar L1 安装 fresh-install smoke test
+# Solar L1 + L2 安装 fresh-install smoke test
 #
 # 用法: ./scripts/smoke-install.sh
 #
@@ -10,14 +10,14 @@
 #   4. 验证沙盒里 .claude/ 和 .solar/ 都建好了
 #   5. 输出 PASS/FAIL + 清理选项
 #
-# 通过条件: install.sh 退出码 0 + 6 项自检全 ✅ + 二次验收 ls 全成功
+# 通过条件: install.sh 退出码 0 + L1/L2 自检全 ✅ + 二次验收 ls 全成功
 
 set -e
 
 SOLAR_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SANDBOX="/tmp/solar-smoke-$(date +%Y%m%d-%H%M%S)"
 
-echo "🧪 Solar L1 Fresh Install Smoke Test"
+echo "🧪 Solar L1 + L2 Fresh Install Smoke Test"
 echo "===================================="
 echo ""
 echo "源仓库: $SOLAR_DIR"
@@ -59,7 +59,7 @@ if [ "$INSTALL_EXIT" -ne 0 ]; then
 fi
 echo "      ✅ install.sh 退出码 0"
 
-# Step 3: 检查 6 项自检
+# Step 3: 检查 L1/L2 自检
 echo ""
 echo "[3/5] 检查 install.sh 自检结果..."
 PASS_COUNT=$(echo "$INSTALL_OUTPUT" | grep -c "  ✅" || true)
@@ -70,8 +70,8 @@ if [ "$FAIL_COUNT" -gt 0 ]; then
     echo "      自检失败,smoke FAIL"
     exit 1
 fi
-if [ "$PASS_COUNT" -lt 6 ]; then
-    echo "      自检 PASS 不足 6 项 ($PASS_COUNT), smoke FAIL"
+if [ "$PASS_COUNT" -lt 13 ]; then
+    echo "      自检 PASS 不足 13 项 ($PASS_COUNT), smoke FAIL"
     exit 1
 fi
 
@@ -85,6 +85,9 @@ TARGETS=(
     "$SANDBOX_HOME/.claude/skills"
     "$SANDBOX_HOME/.claude/agents"
     "$SANDBOX_HOME/.solar"
+    "$SANDBOX_HOME/.solar/harness/solar-harness.sh"
+    "$SANDBOX_HOME/.solar/harness/.runtime-source"
+    "$SANDBOX_HOME/.solar/bin/solar-harness"
 )
 ALL_PASS=true
 for t in "${TARGETS[@]}"; do
@@ -122,7 +125,7 @@ fi
 # 全部通过
 echo ""
 echo "===================================="
-echo "✅ Solar L1 Smoke Test PASSED"
+echo "✅ Solar L1 + L2 Smoke Test PASSED"
 echo "===================================="
 echo ""
 echo "沙盒: $SANDBOX"

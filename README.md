@@ -50,26 +50,28 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-  Repo["GitHub Repo\nlisihao/Solar"] --> LocalInstall["Local install\n~/Solar + ~/.solar + ~/.claude"]
-  LocalInstall --> LocalHarness["Local Solar Harness\n~/.solar/harness"]
+  Repo["GitHub Repo\nlisihao/Solar"] --> RepoHarness["Published Harness\n~/Solar/harness"]
+  Repo --> LocalInstall["Local install\n~/Solar + ~/.solar + ~/.claude"]
+  LocalInstall --> RuntimeHarness["Runtime Harness\n~/.solar/harness"]
+  RepoHarness --> RuntimeHarness
 
   subgraph LocalMachine["Local workstation"]
-    LocalHarness --> MainSession["tmux: solar-harness\nmain control screen"]
+    RuntimeHarness --> MainSession["tmux: solar-harness\nmain control screen"]
     MainSession --> P0["pane 0\nPM / Codex handoff / owner intent"]
     MainSession --> P1["pane 1\nPlanner / Architect\nplan.md + task_graph.json"]
     MainSession --> P2["pane 2\nBuilder main\nimplementation"]
     MainSession --> P3["pane 3\nEvaluator / bridge\nnode verdict + parent gate"]
 
-    LocalHarness --> LabSession["tmux: solar-harness-lab\nparallel builder lab"]
+    RuntimeHarness --> LabSession["tmux: solar-harness-lab\nparallel builder lab"]
     LabSession --> L0["lab pane 0\nBuilder worker"]
     LabSession --> L1["lab pane 1\nBuilder worker"]
     LabSession --> L2["lab pane 2\nBuilder worker"]
     LabSession --> L3["lab pane 3\nBuilder worker"]
 
-    LocalHarness --> StatusUI["Status UI\nlocalhost dashboard / integrations / config"]
+    RuntimeHarness --> StatusUI["Status UI\nlocalhost dashboard / integrations / config"]
   end
 
-  LocalHarness --> RemoteDispatch["solar-remote-dispatch\nsync / dispatch / pull / doctor"]
+  RuntimeHarness --> RemoteDispatch["solar-remote-dispatch\nsync / dispatch / pull / doctor"]
 
   subgraph RemoteMachine["Remote Mac mini or worker host"]
     RemoteDispatch --> RemoteHarness["Remote Solar Harness\n~/.solar/harness"]
@@ -78,7 +80,7 @@ flowchart TB
     RemoteHarness --> RemoteStatus["remote coord-status\nhealth / stale lock / panes"]
   end
 
-  LocalHarness --> Vault["Knowledge Vault\nObsidian + _raw + _sources"]
+  RuntimeHarness --> Vault["Knowledge Vault\nObsidian + _raw + _sources"]
   Vault --> QMD["QMD Index\nsemantic + lexical retrieval"]
   Vault --> Backup["Optional Drive mirror\nbackup only, not primary runtime"]
 ```
@@ -224,13 +226,16 @@ cd ~/Solar
 |------|-----------|------|
 | L1 安装 | `./install.sh` | 安装 Solar Core 到 `~/.claude` / `~/.solar` |
 | Agent 使用 | `@Coder`, `/commit`, `/review` | 通过 Claude/Codex 调用 agents 和 skills |
-| Harness 控制面 | `harness/solar-harness.sh` | sprint 合约、派单、eval、coordinator |
-| Harness 自检 | `cd harness && ./doctor.sh --summary` | 检查本地运行环境和控制面 |
-| Coordinator | `cd harness && ./solar-harness.sh start` | 启动 tmux panes + coordinator |
-| Status UI | `cd harness && ./solar-harness.sh status-server` | 打开本地状态面板、配置页和集成健康 |
+| Harness 发布源 | `~/Solar/harness/` | GitHub 下载后的版本化 Harness 代码 |
+| Harness 运行目录 | `~/.solar/harness/` | 本机实际运行的协调器目录 |
+| Harness 同步 | `./scripts/sync-harness-runtime.sh` | 把 `~/Solar/harness/` 同步到 `~/.solar/harness/` |
+| Harness 控制面 | `~/.solar/bin/solar-harness` | sprint 合约、派单、eval、coordinator |
+| Harness 自检 | `cd ~/.solar/harness && ./doctor.sh --summary` | 检查本地运行环境和控制面 |
+| Coordinator | `~/.solar/bin/solar-harness start` | 启动 tmux panes + coordinator |
+| Status UI | `~/.solar/bin/solar-harness status-server` | 打开本地状态面板、配置页和集成健康 |
 | 远端同步 | `harness/tools/sync-code-to-mac-mini.sh` | 同步 MacBook/Mac mini Harness 代码 |
 | 远端复核 | `solar-remote-dispatch doctor --json` | 检查 SSH、rsync、remote harness、tmux、pane 状态 |
-| 能力证明 | `harness/solar-harness.sh integrations activation-proof --json` | 证明默认 dispatch/DAG/runtime/负例控制 |
+| 能力证明 | `~/.solar/bin/solar-harness integrations activation-proof --json` | 证明默认 dispatch/DAG/runtime/负例控制 |
 
 ## 部署方式
 
@@ -246,16 +251,20 @@ cd ~/Solar
 2. Harness 启动：
 
    ```bash
-   cd ~/Solar/harness
+   cd ~/Solar
+   ./scripts/sync-harness-runtime.sh
+   cd ~/.solar/harness
    ./doctor.sh --summary
-   ./solar-harness.sh start
-   ./solar-harness.sh coord-status
+   ~/.solar/bin/solar-harness start
+   ~/.solar/bin/solar-harness coord-status
    ```
 
 3. 远端 Mac mini 镜像部署（可选）：
 
    ```bash
-   cd ~/Solar/harness
+   cd ~/Solar
+   ./scripts/sync-harness-runtime.sh
+   cd ~/.solar/harness
    ./tools/sync-code-to-mac-mini.sh
    solar-remote-dispatch doctor --host <user@mac-mini-host> --json
    ```
@@ -282,7 +291,7 @@ git clone https://github.com/lisihao/Solar.git ~/Solar
 cd ~/Solar && ./install.sh
 ```
 
-安装完成后会自动 verify 6 项,全 ✅ 表示成功。
+安装完成后会自动 verify L1/L2 项目,全 ✅ 表示成功。
 
 ### 给 AI agent 看：复制整段粘贴给 Claude / Codex / Cursor / Copilot
 
@@ -291,8 +300,8 @@ cd ~/Solar && ./install.sh
 > 1. 严格按 https://raw.githubusercontent.com/lisihao/Solar/main/INSTALL-AGENT.md 的 8 步执行
 > 2. 每步必须先报告"目的+命令+预期输出",我点头才执行
 > 3. 任一步失败立刻停下,告诉我失败的具体输出,不要静默跳过
-> 4. 装完后必须跑 `cd ~/Solar && ./install.sh` 末尾的 6 项自检,全 ✅ 才算成功
-> 5. 基础安装只要求 L1 自检通过；如果需要 L2 Harness，再进入 `~/Solar/harness` 运行 `./doctor.sh --summary`
+> 4. 装完后必须跑 `cd ~/Solar && ./install.sh` 末尾的 L1/L2 自检,全 ✅ 才算成功
+> 5. L2 Harness 的发布源是 `~/Solar/harness`；运行和自检使用 `~/.solar/harness` / `~/.solar/bin/solar-harness`
 >
 > 现在开始 Step 1:系统检测。
 
@@ -304,7 +313,7 @@ cd ~/Solar && ./install.sh
 | 2. 备份 | 现有 `~/.claude/` (如有) | `~/.claude/backup-<时间戳>/` |
 | 3. 复制 | `~/Solar/{CLAUDE.md, rules, skills, agents, hooks, core}` → `~/.claude/` | `~/.claude/` 内容 |
 | 4. 初始化 | 创建 `~/.solar/` + `solar.db` (如有 schema) | `~/.solar/solar.db` |
-| 5. 自检 | 6 项 verify 输出 PASS/FAIL | 退出码 0=成功 |
+| 5. 自检 | L1/L2 verify 输出 PASS/FAIL | 退出码 0=成功 |
 
 ### 验收 (装完跑这一条)
 
@@ -318,7 +327,7 @@ echo "✅ Solar L1 安装就位"
 ### 必需 vs 可选
 
 - **必需** (L1 基础): `~/Solar` 仓库 + `./install.sh` → `~/.claude/` 配置就位 → 启动 Claude Code 输入 `solar` 看启动宣告
-- **可选** (L2 高级): Solar Harness 协调器 / Sprint / DAG 调度 / 远端执行 — 位于 `~/Solar/harness`，先跑 `cd ~/Solar/harness && ./doctor.sh --summary`
+- **可选** (L2 高级): Solar Harness 协调器 / Sprint / DAG 调度 / 远端执行 — 发布源在 `~/Solar/harness`，运行目录在 `~/.solar/harness`；`./install.sh` 会自动同步，也可手动跑 `./scripts/sync-harness-runtime.sh`
 - **可选** (L3 项目): `~/Solar-MAX` 项目模式 — 独立大仓库, 详见 USER-GUIDE
 
 完整 8 步剧本: [INSTALL-AGENT.md](INSTALL-AGENT.md)
@@ -331,7 +340,7 @@ echo "✅ Solar L1 安装就位"
 ./scripts/smoke-install.sh
 ```
 
-输出 `✅ Solar L1 Smoke Test PASSED` 才能 push。
+输出 `✅ Solar L1 + L2 Smoke Test PASSED` 才能 push。
 
 ## 📖 使用说明
 
