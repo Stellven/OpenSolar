@@ -161,7 +161,17 @@ check_contains "queue_peek returns highest priority item" "$priority_peek" "high
 priority_pop=$(queue_pop "sprint-priority")
 check_contains "queue_pop returns highest priority item" "$priority_pop" "high priority item"
 
-# T22: concurrent appends don't corrupt ledger (10 background writes)
+# T22: terminal queue cleanup consumes all pending entries
+queue_enqueue "sprint-terminal" "review stale A" 10 >/dev/null
+queue_enqueue "sprint-terminal" "review stale B" 20 >/dev/null
+consumed_all=$(queue_consume_all "sprint-terminal" "test_terminal_passed")
+check "queue_consume_all returns number consumed" "$consumed_all" "2"
+terminal_depth=$(queue_depth "sprint-terminal")
+check "queue_consume_all leaves depth 0" "$terminal_depth" "0"
+terminal_line=$(grep -m1 'test_terminal_passed' "$_QUEUE_DIR/sprint-terminal.jsonl" || true)
+check_contains "queue_consume_all records reason" "$terminal_line" "test_terminal_passed"
+
+# T23: concurrent appends don't corrupt ledger (10 background writes)
 for i in $(seq 1 10); do
     dispatch_ledger_append "attempted" "sprint-concurrent" "pane:0.$i" "$(new_dispatch_id)" '{}' &
 done

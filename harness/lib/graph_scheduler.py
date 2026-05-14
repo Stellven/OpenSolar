@@ -617,7 +617,11 @@ def enqueue_ready(graph: dict[str, Any], graph_path: str, workers: list[dict[str
             q = {"ok": True, "result": "dry_run", "id": ""}
         else:
             q = enqueue(sid, f"graph_node|node_id={node_id}|pane={pane}", 80, payload)
-            set_node_status(graph, node_id, "dispatched", pane=pane, dispatch_id=dispatch_id)
+            # Queueing is not dispatch. The graph node becomes "dispatched"
+            # only after graph_node_dispatcher writes the instruction file and
+            # successfully submits it to the pane. Marking it dispatched here
+            # creates a false-positive state when queue drain/send fails.
+            set_node_status(graph, node_id, "assigned", pane=pane, dispatch_id=dispatch_id)
         enqueued_item = {"node": node_id, "pane": pane, "queue": q, "dispatch_id": dispatch_id}
         if dry_run:
             # Dry-run callers still need the exact payload so they can render

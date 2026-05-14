@@ -142,16 +142,41 @@ class TestSendToPaneLiteral:
         result = gnd._send_to_pane("test:0.1", Path("/tmp/test-dispatch.md"), dry_run=False)
         assert result is True
 
-        # First call should be C-u (clear line)
-        assert len(calls_log) > 0
-        first_cmd = calls_log[0]
-        assert "C-u" in first_cmd, "Expected C-u (clear line) as first send-keys call"
+        # The first tmux send-keys call should clear the line. A prior
+        # display-message call may update/read pane title before sending.
+        send_key_calls = [c for c in calls_log if isinstance(c, list) and c[:3] == ["tmux", "send-keys", "-t"]]
+        assert send_key_calls, "Expected tmux send-keys calls"
+        assert "C-u" in send_key_calls[0], "Expected C-u (clear line) as first send-keys action"
 
     def test_dry_run_returns_true(self, tmp_harness):
         """_send_to_pane returns True immediately in dry_run mode."""
         import graph_node_dispatcher as gnd
         result = gnd._send_to_pane("test:0.1", Path("/tmp/test.md"), dry_run=True)
         assert result is True
+
+    def test_dry_run_dispatch_skips_context_injection(self, tmp_harness, monkeypatch):
+        """Dry-run must not run slow/side-effecting context injection."""
+        import graph_node_dispatcher as gnd
+
+        _, sprints, sid, _ = tmp_harness
+        injection_calls = []
+        monkeypatch.setattr(gnd, "_inject_dispatch_context", lambda *a, **kw: injection_calls.append(a))
+
+        item = {
+            "intent": "graph_node|node_id=N1",
+            "priority": 80,
+            "payload": {
+                "sprint_id": sid,
+                "node": {"id": "N1", "goal": "Test"},
+                "assignment": {"pane": "test:0.1"},
+                "dispatch_id": "dispatch-123",
+                "graph": str(sprints / f"{sid}.task_graph.json"),
+            },
+        }
+
+        result = gnd.dispatch_queue_item(item, dry_run=True)
+        assert result["ok"] is True
+        assert injection_calls == []
 
 
 # ---------------------------------------------------------------------------
@@ -259,7 +284,7 @@ class TestSubmitFailureRecovery:
         monkeypatch.setattr(gnd, "acquire_lease", lambda *a, **kw: {"acquired": True})
         monkeypatch.setattr(gnd, "_send_to_pane", lambda *a, **kw: True)
         monkeypatch.setattr(gnd, "_write_submit_ack", lambda *a: None)
-        monkeypatch.setattr(gnd, "_inject_dispatch_context", lambda *a: None)
+        monkeypatch.setattr(gnd, "_inject_dispatch_context", lambda *a, **kw: None)
 
         release_calls = []
         def mock_release(*a, **kw):
@@ -316,6 +341,30 @@ class TestSubmitFailureRecovery:
         assert result["ok"] is False
         assert result["reason"] == "pane_missing"
         assert result["requeued"] is True
+
+
+class TestQueueStateSemantics:
+    """Queue assignment is distinct from confirmed pane dispatch."""
+
+    def test_enqueue_ready_marks_assigned_not_dispatched(self, tmp_harness, monkeypatch):
+        """Scheduler queueing cannot claim a pane has received the task."""
+        from graph_scheduler import enqueue_ready
+
+        tmp_path, sprints, sid, graph = tmp_harness
+
+        monkeypatch.setattr("task_queue.enqueue", lambda *a, **kw: {"ok": True, "id": "q-1"})
+        result = enqueue_ready(
+            graph,
+            str(sprints / f"{sid}.task_graph.json"),
+            [{"pane": "test:0.1", "models": ["sonnet"], "skills": ["bash"], "capabilities": []}],
+            lease=False,
+        )
+
+        assert result["ok"] is True
+        assert result["enqueued"][0]["node"] == "N1"
+        assert graph["nodes"][0]["status"] == "assigned"
+        assert graph["nodes"][0]["assigned_to"] == "test:0.1"
+        assert graph["nodes"][0]["dispatch_id"]
 
 
 # ---------------------------------------------------------------------------

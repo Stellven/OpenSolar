@@ -6,6 +6,7 @@
 #   queue_pop     <sid>           → dequeue first item; prints JSON or nothing
 #   queue_peek    <sid>           → peek first item; prints JSON or nothing
 #   queue_depth   <sid>           → prints integer count of pending items
+#   queue_consume_all <sid> [reason] → mark all pending items consumed; prints count
 #
 # Rules:
 #   - One JSONL file per sid: run/queue/<sid>.jsonl
@@ -176,4 +177,57 @@ with open(sys.argv[1]) as f:
         except Exception: pass
 print(count)
 " "$qf" 2>/dev/null || echo 0
+}
+
+# ── queue_consume_all ─────────────────────────────────────────────────────────
+queue_consume_all() {
+    local sid="${1:?queue_consume_all: sid required}"
+    local reason="${2:-terminal_sprint}"
+    local qf
+    qf=$(_queue_file "$sid")
+    [[ -f "$qf" ]] || { echo 0; return 0; }
+
+    python3 -c "
+import json, datetime, fcntl, os, sys
+
+qf = sys.argv[1]
+reason = sys.argv[2]
+lock_path = qf + '.lock'
+now = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+changed = 0
+
+with open(lock_path, 'a') as lf:
+    try:
+        fcntl.flock(lf, fcntl.LOCK_EX)
+        if not os.path.exists(qf):
+            print(0)
+            sys.exit(0)
+
+        items = []
+        with open(qf) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    item = json.loads(line)
+                except Exception:
+                    continue
+                if not item.get('consumed', False):
+                    item['consumed'] = True
+                    item['consumed_at'] = now
+                    item['consumed_by'] = 'queue_consume_all'
+                    item['consume_reason'] = reason
+                    changed += 1
+                items.append(item)
+
+        tmp = qf + '.tmp'
+        with open(tmp, 'w') as f:
+            for item in items:
+                f.write(json.dumps(item, ensure_ascii=False) + '\n')
+        os.replace(tmp, qf)
+        print(changed)
+    finally:
+        fcntl.flock(lf, fcntl.LOCK_UN)
+" "$qf" "$reason" 2>/dev/null || echo 0
 }

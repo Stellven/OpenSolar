@@ -4145,6 +4145,14 @@ else:
 
   # sprint-20260503-104819 D5: 终态释放 pane assignment
   clear_pane_assignment "$sid"
+  if type queue_consume_all &>/dev/null; then
+    local consumed_count
+    consumed_count=$(queue_consume_all "$sid" "terminal_passed" 2>/dev/null || echo 0)
+    if [[ "${consumed_count:-0}" != "0" ]]; then
+      log "${Y}[handle_passed] consumed ${consumed_count} stale queue item(s) for terminal sprint ${sid}${N}"
+      emit_event "$sid" "terminal_queue_consumed" "coordinator" "{\"count\":${consumed_count}}"
+    fi
+  fi
 
   touch "$finalized"
   # sprint-20260503-195627 D2: telemetry emit
