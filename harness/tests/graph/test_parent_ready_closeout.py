@@ -247,6 +247,24 @@ class TestParentReadyCheckIntegration:
         assert result["ready"] is False
         assert "N1" in result["failed_nodes"]
 
+    def test_newer_inline_passed_overrides_stale_node_result_reviewing(self, tmp_harness):
+        """A stale node_results row must not keep a passed node open forever."""
+        from graph_scheduler import node_status, parent_ready_check
+
+        _, sprints, sid, graph = tmp_harness
+
+        graph["nodes"][0]["status"] = "passed"
+        graph["nodes"][0]["updated_at"] = "2026-05-14T07:24:00Z"
+        graph["node_results"] = {
+            "N1": {"status": "reviewing", "updated_at": "2026-05-14T07:23:00Z"}
+        }
+        graph["gate_results"] = {"gate-1": {"status": "passed", "node": "N1"}}
+
+        assert node_status(graph, "N1") == "passed"
+        result = parent_ready_check(graph)
+        assert result["ready"] is True
+        assert result["open_nodes"] == []
+
 
 # ---------------------------------------------------------------------------
 # Run

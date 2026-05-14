@@ -644,7 +644,7 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
     _record_model_call("request", sid, pane, dispatch_id, instruction_file, status="tmux_submit_requested")
     processing_re = re.compile(
         r"Crafting|Cogitating|Orchestrating|Coalescing|Wandering|Sock-hopping|"
-        r"Crunched|Puzzling|Cooking|Baked|Thinking|Newspapering|Read\(|"
+        r"Crunched|Puzzling|Cooking|Baked|Thinking|Considering|Newspapering|Read\(|"
         r"Reading|Bash\(|Edit\(|Write\(|⎿|✻|✶|✳|✽|⏺"
     )
     last_error = ""
@@ -1140,7 +1140,7 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
     worker_capabilities = [
         "bash", "python", "typescript", "docs", "testing",
         "frontend", "observability",
-        "schema", "state-machine", "storage", "sources",
+        "documentation", "schema", "state-machine", "storage", "sources",
         "browser.browse", "browser.qa", "code.review",
         "browser.mcp", "browser.automation", "browser.screenshot",
         "browser.localhost_test",
