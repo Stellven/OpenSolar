@@ -582,7 +582,8 @@ def build_eval_dispatch_text(graph: dict[str, Any], graph_path: str, node: dict[
                              dispatch_id: str) -> str:
     sid = str(graph.get("sprint_id") or Path(graph_path).stem.replace(".task_graph", ""))
     node_id = str(node.get("id") or "")
-    handoff = _handoff_file(sid, node_id)
+    handoff = _existing_node_handoff(sid, node, graph) or _handoff_file(sid, node_id)
+    handoff_candidates = "\n".join(f"- `{candidate}`" for candidate in _node_handoff_candidates(sid, node, graph))
     eval_md = _eval_md_file(sid, node_id)
     eval_json = _eval_json_file(sid, node_id)
     node_dispatch = _dispatch_file(sid, node_id)
@@ -599,6 +600,10 @@ Pane: `{pane}`
 Dispatch ID: `{dispatch_id}`
 Graph: `{graph_path}`
 Handoff: `{handoff}`
+
+## Handoff Candidates
+
+{handoff_candidates}
 
 ## Evaluation Scope
 
@@ -631,7 +636,7 @@ Handoff: `{handoff}`
 cat "{graph_path}"
 cat "{contract}"
 cat "{node_dispatch}"
-cat "{handoff}"
+test -f "{handoff}" && cat "{handoff}"
 solar-harness session evaluate "{sid}" --json
 ```
 
@@ -1407,7 +1412,7 @@ def drain_queue(sprint_id: str, dry_run: bool = False, max_items: int = 0, ttl: 
 def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
     worker_skills = [
         "bash", "python", "dataclasses", "pytest", "pure-functions", "time-injection", "io", "fsm", "integration-testing", "json-patch", "typescript", "docs", "testing",
-        "frontend",
+        "frontend", "flask", "http-routing", "autopilot-hooks", "json-traversal", "html", "javascript", "vanilla-dom",
         "product", "planning", "governance",
         "architecture", "schema", "state-machine", "distributed-systems",
         "api-design", "data-modeling", "compatibility",
@@ -1740,9 +1745,10 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
     effect_result: dict[str, Any] = {}
     if scan_effect is not None:
         try:
+            observed_handoff = _existing_node_handoff(sid, node, graph) or _handoff_file(sid, node_id)
             effect_result = scan_effect(
                 _dispatch_file(sid, node_id),
-                handoff_file=_handoff_file(sid, node_id),
+                handoff_file=observed_handoff,
                 eval_file=_eval_md_file(sid, node_id),
                 eval_json_file=eval_json or _eval_json_file(sid, node_id),
                 verdict=status,

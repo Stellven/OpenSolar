@@ -11,16 +11,28 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from livework.schemas import (
-    AutopilotHeartbeatPayload,
-    EventV2,
-    EventV2Type,
-    PaneDeadlockPayload,
-    PaneStateEntry,
-    PmDraftedPayload,
-    RequirementIntakePayload,
-    RoleTransitionPayload,
-)
+try:
+    from .schemas import (
+        AutopilotHeartbeatPayload,
+        EventV2,
+        EventV2Type,
+        PaneDeadlockPayload,
+        PaneStateEntry,
+        PmDraftedPayload,
+        RequirementIntakePayload,
+        RoleTransitionPayload,
+    )
+except ImportError:  # pragma: no cover - direct script/sys.path fallback
+    from livework.schemas import (
+        AutopilotHeartbeatPayload,
+        EventV2,
+        EventV2Type,
+        PaneDeadlockPayload,
+        PaneStateEntry,
+        PmDraftedPayload,
+        RequirementIntakePayload,
+        RoleTransitionPayload,
+    )
 
 
 def _utcnow() -> str:

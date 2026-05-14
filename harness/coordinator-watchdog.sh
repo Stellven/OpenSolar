@@ -176,13 +176,16 @@ do_check() {
     fi
   done
 
+  bash "$HARNESS_DIR/coordinator.sh" >> "$HARNESS_DIR/.coordinator.log" 2>&1 &
+  log "Coordinator 重启已触发 (spawn PID: $!, pidfile 由 coordinator 接管)"
+
   if [[ -n "$active_sid" ]]; then
-    log "Wake Sprint: ${active_sid}"
-    bash "$HARNESS_DIR/solar-harness.sh" wake "$active_sid" 2>&1 || true
+    log "Wake Sprint: ${active_sid} (async)"
+    (
+      bash "$HARNESS_DIR/solar-harness.sh" wake "$active_sid" >> "$HARNESS_DIR/.watchdog.log" 2>&1 || true
+    ) &
   else
     log "无非终态 sprint, 跳过 wake"
-    bash "$HARNESS_DIR/coordinator.sh" >> "$HARNESS_DIR/.coordinator.log" 2>&1 &
-    log "Coordinator 重启已触发 (spawn PID: $!, pidfile 由 coordinator 接管)"
   fi
 
   # 记录 watchdog 事件
