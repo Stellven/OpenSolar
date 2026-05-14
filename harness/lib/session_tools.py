@@ -188,6 +188,9 @@ def process_audit(events: List[Dict[str, Any]], projection: Dict[str, Any]) -> D
     started: set[str] = set()
     terminal: set[str] = set()
     failed: set[str] = set()
+    legacy_command_ids: set[str] = set()
+    legacy_started: set[str] = set()
+    legacy_terminal: set[str] = set()
     tool_requested = tool_terminal = tool_failed = 0
     model_requested = model_terminal = model_failed = 0
     context_events = 0
@@ -198,14 +201,24 @@ def process_audit(events: List[Dict[str, Any]], projection: Dict[str, Any]) -> D
         act = str(ev.get("activity_id") or "")
         payload = ev.get("payload") if isinstance(ev.get("payload"), dict) else {}
         dispatch_id = str(payload.get("dispatch_id") or act)
+        is_legacy_activity = bool(payload.get("legacy_event"))
         if etype == "command_issued" and act:
-            command_ids.add(act)
+            if is_legacy_activity:
+                legacy_command_ids.add(act)
+            else:
+                command_ids.add(act)
         elif etype == "activity_started" and act:
-            started.add(act)
+            if is_legacy_activity:
+                legacy_started.add(act)
+            else:
+                started.add(act)
         elif etype in {"activity_succeeded", "activity_failed", "activity_cancelled"} and act:
-            terminal.add(act)
-            if etype == "activity_failed":
-                failed.add(act)
+            if is_legacy_activity:
+                legacy_terminal.add(act)
+            else:
+                terminal.add(act)
+                if etype == "activity_failed":
+                    failed.add(act)
         elif etype == "tool_call_requested":
             tool_requested += 1
         elif etype in {"tool_call_succeeded", "tool_call_failed"}:
@@ -230,6 +243,9 @@ def process_audit(events: List[Dict[str, Any]], projection: Dict[str, Any]) -> D
     unstarted_commands = sorted(command_ids - started - terminal)
     started_without_terminal = sorted(started - terminal)
     terminal_without_start = sorted(terminal - started)
+    legacy_unstarted_commands = sorted(legacy_command_ids - legacy_started - legacy_terminal)
+    legacy_started_without_terminal = sorted(legacy_started - legacy_terminal)
+    legacy_terminal_without_start = sorted(legacy_terminal - legacy_started)
     stale_activities = list(projection.get("stale_activities") or [])
     duplicate_commands = list(projection.get("duplicate_commands") or [])
 
@@ -250,6 +266,8 @@ def process_audit(events: List[Dict[str, Any]], projection: Dict[str, Any]) -> D
         risks.append("tool_call_pending")
     if not context_events:
         risks.append("context_projection_missing")
+    if legacy_unstarted_commands or legacy_started_without_terminal or legacy_terminal_without_start:
+        risks.append("legacy_unpaired_activity")
 
     return {
         "log_native": True,
@@ -258,6 +276,10 @@ def process_audit(events: List[Dict[str, Any]], projection: Dict[str, Any]) -> D
             "unstarted_commands": unstarted_commands,
             "started_without_terminal": started_without_terminal,
             "terminal_without_start": terminal_without_start,
+            "legacy_commands": len(legacy_command_ids),
+            "legacy_unstarted_commands": legacy_unstarted_commands,
+            "legacy_started_without_terminal": legacy_started_without_terminal,
+            "legacy_terminal_without_start": legacy_terminal_without_start,
             "duplicate_commands": duplicate_commands,
             "stale_activities": stale_activities,
         },

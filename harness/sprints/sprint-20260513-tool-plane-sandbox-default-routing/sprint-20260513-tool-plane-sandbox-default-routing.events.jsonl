@@ -131,3 +131,10 @@
 {"ts": "2026-05-13T21:45:25Z", "sid": "sprint-20260513-tool-plane-sandbox-default-routing", "event": "dispatch_queued", "by": "coordinator"}
 {"ts": "2026-05-13T21:45:52Z", "event": "eval_passed", "by": "evaluator", "verdict": "pass", "sid": "sprint-20260513-tool-plane-sandbox-default-routing"}
 {"ts": "2026-05-13T21:46:33Z", "sid": "sprint-20260513-tool-plane-sandbox-default-routing", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-13T21:47:00Z", "sid": "sprint-20260513-tool-plane-sandbox-default-routing", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-13T21:47:25Z", "sid": "sprint-20260513-tool-plane-sandbox-default-routing", "event": "dispatch_suppressed", "by": "coordinator"}
+{"ts": "2026-05-13T21:47:52Z", "sid": "sprint-20260513-tool-plane-sandbox-default-routing", "event": "dispatched", "by": "coordinator"}
+{"ts": "2026-05-13T21:48:29Z", "sid": "sprint-20260513-tool-plane-sandbox-default-routing", "event": "handle_passed_completed", "by": "coordinator"}
+{"ts": "2026-05-13T21:48:29Z", "event": "accepted_artifact_exported", "source": "accepted-artifact-export", "path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260513-tool-plane-sandbox-default-routing.accepted.md", "bytes": 40835, "source_hash": "c63ee89b717d00c12e4d21a8b4a9ac7d73aa5e01e848aa230ffc4a64b7993654"}
+{"ts": "2026-05-13T21:48:29Z", "event": "accepted_artifact_ingest_dispatched", "source": "accepted-artifact-export", "dispatch_file": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260513-tool-plane-sandbox-default-routing.dispatch.md"}
+{"ts": "2026-05-13T21:52:01Z", "sprint_id": "sprint-20260513-tool-plane-sandbox-default-routing", "actor": "solar-autopilot", "event": "autopilot_queue_dispatched", "severity": "info", "data": {"target": "solar-harness:0.0", "type": "runtime_soak_failed", "attempts": 1}}
