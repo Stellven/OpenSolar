@@ -1225,8 +1225,7 @@ wait_for_dispatch_window() {
           prompt_quarantine_send_fixkeys "$pane" || true
       sleep 0.8
     elif pane_is_thinking_snapshot "$snapshot"; then
-      log "${Y}目标 pane 正在思考，先发 C-c 解锁: ${pane}${N}"
-      tmux send-keys -t "$pane" C-c 2>/dev/null || true
+      log "${Y}目标 pane 正在思考，跳过本轮派发，禁止 C-c 打断: ${pane}${N}"
       sleep 1.5
     else
       sleep 1
@@ -1802,7 +1801,9 @@ dispatch_to_pane() {
     else
       log "${Y}[dispatch] 指令校验失败, 准备重试: pane=${pane} try=$((tries + 1))/${max_tries}${N}"
     fi
-    tmux send-keys -t "$pane" C-c 2>/dev/null || true
+    # Do not cancel a Claude pane from the coordinator. C-c creates
+    # "Interrupted · What should Claude do instead?" prompts and turns a
+    # recoverable dispatch retry into a human-blocking deadlock.
     sleep 1.5
     # S4: fix-keys centralised in prompt-quarantine.sh
     type prompt_quarantine_send_fixkeys &>/dev/null && \

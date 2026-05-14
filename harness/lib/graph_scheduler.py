@@ -446,13 +446,33 @@ def _worker_quota_exhausted(worker: dict[str, Any], preferred_model: str | None 
     return False
 
 
+def _model_aliases(value: str | None) -> set[str]:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return set()
+    aliases = {raw}
+    if raw in {"sonnet", "claude-sonnet", "anthropic-sonnet"}:
+        aliases.update({"sonnet", "claude-sonnet", "anthropic-sonnet", "claude", "anthropic"})
+    elif raw in {"opus", "claude-opus", "anthropic-opus", "opus-4.7", "opus-4-7", "claude-opus-4.7", "claude-opus-4-7"}:
+        aliases.update({"opus", "claude-opus", "anthropic-opus", "opus-4.7", "opus-4-7", "claude", "anthropic"})
+    elif raw in {"glm", "glm-5", "glm-5.1", "zhipu", "zhipu-glm-5.1"}:
+        aliases.update({"glm", "glm-5", "glm-5.1", "zhipu", "zhipu-glm-5.1"})
+    elif raw in {"deepseek", "deepseek-v4", "deepseek-v4-pro"}:
+        aliases.update({"deepseek", "deepseek-v4", "deepseek-v4-pro"})
+    return aliases
+
+
 def _model_match(worker: dict[str, Any], preferred_model: str | None) -> bool:
     if not preferred_model:
         return True
     models = [str(m).lower() for m in worker.get("models", [])]
     if not models:
         return True
-    return preferred_model.lower() in models
+    preferred = _model_aliases(preferred_model)
+    available: set[str] = set()
+    for model in models:
+        available.update(_model_aliases(model))
+    return bool(preferred & available)
 
 
 def _model_requires_strict_match(preferred_model: str | None, strict_model: bool = False) -> bool:
