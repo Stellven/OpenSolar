@@ -2451,6 +2451,15 @@ gate_check() {
       ;;
 
     passed)
+      # DAG-native sprints can be terminal without a legacy parent eval.md when
+      # workflow_guard proves task_graph parent_ready. Node evals are the review
+      # source of truth in that path; do not bounce them back to reviewing.
+      local passed_guard_role
+      passed_guard_role="$(workflow_guard_route_role "$sid")"
+      if [[ "$passed_guard_role" == "none" ]]; then
+        log "passed accepted: workflow_guard route_role=none (terminal DAG or finalized sprint)"
+        return 0
+      fi
       # 门禁: eval.md 必须存在 + 结构校验 + 无未解决 FAIL
       if [[ ! -f "$sprint_dir/${sid}.eval.md" ]]; then
         log "${R}门禁拦截: passed 但 eval.md 不存在${N}"
@@ -2535,9 +2544,16 @@ handle_queued() {
   local sid="$1" sf="$2"
   local blocked_by
   blocked_by=$(get_field "$sf" "blocked_by")
+  local phase dependency_policy
+  phase=$(get_field "$sf" "phase")
+  dependency_policy=$(get_field "$sf" "dependency_policy")
 
   if [[ -n "$blocked_by" ]] && ! status_is_terminal_for_assignment "$blocked_by"; then
     log "${Y}Queued sprint ${sid} 仍被 ${blocked_by} 阻塞，保持 queued${N}"
+    return 0
+  fi
+  if [[ "$phase" == "epic_waiting_dependency" || "$dependency_policy" == "activated_by_epic_dag" ]]; then
+    log "${Y}Queued epic child ${sid} 由 epic DAG/autopilot 激活，coordinator 不直接推进 PM intake${N}"
     return 0
   fi
 
@@ -3020,6 +3036,14 @@ EOF
       fi
       log "${G}[graph-dispatch] node evals: ${graph_eval_out}${N}"
       log "${G}[graph-dispatch] ready nodes dispatched: ${graph_out}${N}"
+      # Research rule injection: scan dispatched nodes and inject hard rules for R-prefixed nodes
+      local _research_inject_hook="$HOME/.solar/hooks/research_dispatch_inject.sh"
+      if [[ -x "$_research_inject_hook" && -f "$SPRINTS_DIR/${sid}.task_graph.json" ]]; then
+        local _node_id
+        for _node_id in $(python3 -c 'import json,sys; g=json.load(open(sys.argv[1])); print(" ".join(n["id"] for n in g.get("nodes",[]) if n.get("status")=="dispatched"))' "$SPRINTS_DIR/${sid}.task_graph.json" 2>/dev/null); do
+          "$_research_inject_hook" "$SPRINTS_DIR/${sid}.${_node_id}-dispatch.md" "$_node_id" 2>/dev/null || true
+        done
+      fi
       emit_event "$sid" "graph_nodes_dispatched" "coordinator" "$(python3 -c 'import json,sys; print(json.dumps({"eval_output": sys.argv[1][-2000:], "ready_output": sys.argv[2][-2000:]}))' "$graph_eval_out" "$graph_out" 2>/dev/null || echo '{}')"
       mark_builder_flow "$sid" "graph_node_dispatch"
       return 0

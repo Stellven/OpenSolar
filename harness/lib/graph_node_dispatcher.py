@@ -46,6 +46,7 @@ from graph_scheduler import (  # noqa: E402
     save_graph,
     enqueue_ready,
     set_node_status,
+    node_status,
     mark_node_result,
     parent_ready_check,
 )
@@ -637,23 +638,111 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
     if dry_run:
         return True
     _set_pane_capability_title(pane, instruction_file)
-    short_cmd = f"{_visibility_summary(instruction_file)['text']}; 读取并执行 {instruction_file}"
+    instruction_path = str(instruction_file.resolve())
+    dispatch_keyword = instruction_file.name
+    short_cmd = f"{_visibility_summary(instruction_file)['text']}; 读取并执行 {instruction_path}"
     _record_model_call("request", sid, pane, dispatch_id, instruction_file, status="tmux_submit_requested")
-    try:
-        subprocess.run(["tmux", "send-keys", "-t", pane, "C-u"], timeout=2)
-        time.sleep(0.2)
-        # Send as literal text; otherwise tmux may parse punctuation in a
-        # path-like instruction as key names and discard the input.
-        subprocess.run(["tmux", "send-keys", "-t", pane, "-l", short_cmd], timeout=2)
-        time.sleep(0.5)
-        # Single explicit Enter — do NOT also send C-m (would double-submit).
-        subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=2)
-        time.sleep(0.3)
-        _record_model_call("succeeded", sid, pane, dispatch_id, instruction_file, tries=1, status="tmux_submit_accepted")
-        return True
-    except Exception as exc:
-        _record_model_call("failed", sid, pane, dispatch_id, instruction_file, tries=1, status="tmux_submit_failed", error=str(exc))
-        return False
+    processing_re = re.compile(
+        r"Crafting|Cogitating|Orchestrating|Coalescing|Wandering|Sock-hopping|"
+        r"Crunched|Puzzling|Cooking|Baked|Read\(|Reading|Bash\(|Edit\(|"
+        r"Write\(|⎿|✻|✶|✳|⏺"
+    )
+    last_error = ""
+    for tries in range(1, 4):
+        try:
+            subprocess.run(["tmux", "send-keys", "-t", pane, "C-u"], timeout=2)
+            time.sleep(0.2)
+            # Send as literal text; otherwise tmux may parse punctuation in a
+            # path-like instruction as key names and discard the input.
+            subprocess.run(["tmux", "send-keys", "-t", pane, "-l", short_cmd], timeout=2)
+            time.sleep(0.8)
+            # Claude Code TUI can swallow the first return or leave literal
+            # prompt text queued. A second return with no text is harmless, but
+            # leaving a graph node in the prompt is a hard dispatch failure.
+            subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=2)
+            time.sleep(0.35)
+            subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=2)
+            time.sleep(4.0)
+            tail = subprocess.run(
+                ["tmux", "capture-pane", "-pt", pane, "-S", "-40"],
+                text=True,
+                capture_output=True,
+                timeout=2,
+            ).stdout
+            has_keyword = dispatch_keyword in tail or instruction_path in tail
+            has_processing = bool(processing_re.search(tail))
+            if has_keyword and has_processing:
+                _record_model_call(
+                    "succeeded",
+                    sid,
+                    pane,
+                    dispatch_id,
+                    instruction_file,
+                    tries=tries,
+                    status="keyword_processing_verified",
+                )
+                return True
+            if has_keyword and not has_processing:
+                # Residual prompt rescue. Some Claude Code builds show the
+                # instruction in the prompt, but the real key event is not
+                # accepted until the next standalone Enter. Do not cancel first:
+                # cancellation can convert a recoverable prompt residue into an
+                # interrupted task that waits for human choice.
+                for _ in range(2):
+                    subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=2)
+                    time.sleep(3.0)
+                    tail = subprocess.run(
+                        ["tmux", "capture-pane", "-pt", pane, "-S", "-40"],
+                        text=True,
+                        capture_output=True,
+                        timeout=2,
+                    ).stdout
+                    if processing_re.search(tail):
+                        _record_model_call(
+                            "succeeded",
+                            sid,
+                            pane,
+                            dispatch_id,
+                            instruction_file,
+                            tries=tries,
+                            status="keyword_processing_verified_after_residual_rescue",
+                        )
+                        return True
+            if has_keyword:
+                # Do not send C-c after the instruction is visible. Claude Code
+                # may start processing after our verification window; cancelling
+                # here is what creates repeated "Interrupted · What should
+                # Claude do instead?" deadlocks in builder panes. Treat visible
+                # instruction as accepted but unverified, and let watchdog /
+                # handoff detection judge progress from durable artifacts.
+                _record_model_call(
+                    "succeeded",
+                    sid,
+                    pane,
+                    dispatch_id,
+                    instruction_file,
+                    tries=tries,
+                    status="keyword_visible_submit_unverified_no_cancel",
+                )
+                return True
+            last_error = "dispatch text not accepted by pane"
+            # Only clear when the instruction never appeared in the pane.
+            subprocess.run(["tmux", "send-keys", "-t", pane, "C-c"], timeout=2)
+            time.sleep(1.0)
+        except Exception as exc:
+            last_error = str(exc)
+            time.sleep(0.5)
+    _record_model_call(
+        "failed",
+        sid,
+        pane,
+        dispatch_id,
+        instruction_file,
+        tries=3,
+        status="tmux_submit_failed",
+        error=last_error,
+    )
+    return False
 
 
 def _append_dispatch_ledger(kind: str, sid: str, pane: str, dispatch_id: str, extra: dict[str, Any]) -> None:
@@ -768,7 +857,7 @@ def _inject_dispatch_context(instruction_file: Path, sid: str = "", pane: str = 
                 [sys.executable, str(injector), "inject", str(instruction_file)],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                timeout=45,
+                timeout=15,
                 check=False,
             )
         except Exception:
@@ -792,7 +881,7 @@ def _inject_dispatch_context(instruction_file: Path, sid: str = "", pane: str = 
                 ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                timeout=60,
+                timeout=20,
                 check=False,
             )
         except Exception:
@@ -1037,6 +1126,8 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "repair.pr-cot",
     ]
     worker_capabilities = [
+        "bash", "python", "typescript", "docs", "testing",
+        "schema", "state-machine", "storage", "sources",
         "browser.browse", "browser.qa", "code.review",
         "browser.mcp", "browser.automation", "browser.screenshot",
         "browser.localhost_test",
@@ -1046,6 +1137,7 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "agent.inventory", "command.catalog", "rules.catalog", "mcp.catalog",
         "repair.pr-cot", "failure.structured_repair", "routing.complexity_budget",
         "skill.methodology", "workflow.planning", "debug.systematic", "test.tdd",
+        "architecture", "distributed-systems", "evaluation",
         "agents_sdk.design", "agents_sdk.guardrails", "agents_sdk.tracing",
         "agents_sdk.handoff_model",
         "ruflo.swarm", "ruflo.plugins", "ruflo.agent_catalog",
@@ -1135,8 +1227,28 @@ def _node_eval_needed(graph: dict[str, Any], sid: str, node: dict[str, Any], for
     if _eval_json_file(sid, node_id).exists() and not force:
         return False
     if node.get("eval_dispatched_at") and not force:
-        return False
-    status = str(node.get("status", "") or "").lower()
+        pane = str(node.get("eval_assigned_to") or "")
+        dispatch_id = str(node.get("eval_dispatch_id") or "")
+        lease = read_lease(pane) if pane else {}
+        lease_matches = bool(
+            lease
+            and str(lease.get("sid") or lease.get("sprint_id") or "") == sid
+            and str(lease.get("dispatch_id") or "") == dispatch_id
+        )
+        # If the graph says eval was dispatched but no eval artifact exists and
+        # the evaluator lease is gone, the pane likely swallowed/stalled the
+        # prompt. Treat it as retryable instead of permanently blocking.
+        if lease_matches:
+            return False
+        node.pop("eval_assigned_to", None)
+        node.pop("eval_dispatch_id", None)
+        node.pop("eval_dispatched_at", None)
+        node["eval_retry_reason"] = "eval_dispatched_without_artifact_or_active_lease"
+    # Use graph_scheduler.node_status so node_results (the durable scheduler
+    # result map) and inline node.status do not drift. A node can be reviewing
+    # in node_results while its static node entry still says pending; relying
+    # on node.status alone makes evaluator dispatch skip real handoffs forever.
+    status = node_status(graph, node_id)
     if status in {"passed", "failed", "skipped"}:
         return False
     return _handoff_file(sid, node_id).exists() and status in {"reviewing", "dispatched", "in_progress", "running", ""}

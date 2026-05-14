@@ -80,7 +80,7 @@ def tmp_harness(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 class TestSendToPaneLiteral:
-    """send_to_pane uses -l (literal) flag and single Enter."""
+    """send_to_pane uses literal input and verifies Claude actually started."""
 
     def test_uses_literal_flag(self, tmp_harness, monkeypatch):
         """_send_to_pane sends command with -l flag (literal mode)."""
@@ -88,6 +88,8 @@ class TestSendToPaneLiteral:
 
         def mock_run(cmd, **kwargs):
             calls_log.append(cmd)
+            if isinstance(cmd, list) and cmd[:2] == ["tmux", "capture-pane"]:
+                return MagicMock(returncode=0, stdout="test-dispatch.md\n⏺ Reading 2 files")
             return MagicMock(returncode=0)
 
         import graph_node_dispatcher as gnd
@@ -102,12 +104,14 @@ class TestSendToPaneLiteral:
         literal_calls = [c for c in calls_log if "-l" in c]
         assert len(literal_calls) > 0, "Expected -l (literal) flag in tmux send-keys"
 
-    def test_uses_single_enter(self, tmp_harness, monkeypatch):
-        """_send_to_pane sends exactly one Enter key (no double-submit)."""
+    def test_uses_confirmed_enter_submit(self, tmp_harness, monkeypatch):
+        """_send_to_pane submits and verifies processing, avoiding prompt-stuck false positives."""
         calls_log = []
 
         def mock_run(cmd, **kwargs):
             calls_log.append(cmd)
+            if isinstance(cmd, list) and cmd[:2] == ["tmux", "capture-pane"]:
+                return MagicMock(returncode=0, stdout="test-dispatch.md\n⏺ Reading 2 files")
             return MagicMock(returncode=0)
 
         import graph_node_dispatcher as gnd
@@ -122,9 +126,13 @@ class TestSendToPaneLiteral:
         enter_calls = [c for c in calls_log if "Enter" in c and isinstance(c, list)]
         cm_calls = [c for c in calls_log if "C-m" in c and isinstance(c, list)]
 
-        # Should have exactly one Enter, zero C-m
-        assert len(enter_calls) == 1, f"Expected 1 Enter call, got {len(enter_calls)}"
-        assert len(cm_calls) == 0, f"Expected 0 C-m calls, got {len(cm_calls)} — double-submit bug"
+        # Claude Code may swallow the first Enter; the dispatcher now sends a
+        # harmless confirmation Enter and verifies real processing before it
+        # reports success.
+        assert len(enter_calls) >= 2, f"Expected confirmed Enter submit, got {len(enter_calls)}"
+        assert len(cm_calls) == 0, f"Expected 0 C-m calls, got {len(cm_calls)}"
+        capture_calls = [c for c in calls_log if isinstance(c, list) and c[:2] == ["tmux", "capture-pane"]]
+        assert capture_calls, "Expected capture-pane verification after submit"
 
     def test_clears_line_before_send(self, tmp_harness, monkeypatch):
         """_send_to_pane clears the input line before sending command."""
@@ -132,6 +140,8 @@ class TestSendToPaneLiteral:
 
         def mock_run(cmd, **kwargs):
             calls_log.append(cmd)
+            if isinstance(cmd, list) and cmd[:2] == ["tmux", "capture-pane"]:
+                return MagicMock(returncode=0, stdout="test-dispatch.md\n⏺ Reading 2 files")
             return MagicMock(returncode=0)
 
         import graph_node_dispatcher as gnd

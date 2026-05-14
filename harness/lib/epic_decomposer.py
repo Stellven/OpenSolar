@@ -380,6 +380,48 @@ def child_passed(sid: str) -> bool:
     return str(status.get("status", "")).lower() in {"passed", "completed", "eval_passed"}
 
 
+def child_status(sid: str) -> dict[str, Any]:
+    path = SPRINTS_DIR / f"{sid}.status.json"
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def sync_graph_from_children(graph: dict[str, Any]) -> bool:
+    """Project child sprint status into the parent epic DAG.
+
+    The epic graph is a projection, not a second source of truth. Keeping it in
+    sync prevents stale `pending` parent nodes from blocking dependency release
+    after a child sprint has already passed evaluator review.
+    """
+    changed = False
+    for node in graph.get("nodes", []) or []:
+        if not isinstance(node, dict):
+            continue
+        sid = str(node.get("child_sprint_id") or "")
+        if not sid:
+            continue
+        status = child_status(sid)
+        child_state = str(status.get("status", "")).lower()
+        before = str(node.get("status") or "")
+        if child_state in {"passed", "completed", "eval_passed"}:
+            after = "passed"
+        elif child_state == "active":
+            after = "active"
+        elif child_state in {"queued", "drafting"}:
+            after = "pending"
+        else:
+            after = before or "pending"
+        if before != after:
+            node["status"] = after
+            node["updated_at"] = utc_now()
+            changed = True
+    return changed
+
+
 def activate_child(sid: str, epic_id: str) -> dict[str, Any]:
     path = SPRINTS_DIR / f"{sid}.status.json"
     data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"id": sid, "sprint_id": sid}
@@ -401,12 +443,71 @@ def activate_child(sid: str, epic_id: str) -> dict[str, Any]:
     return {"sid": sid, "before": before.get("status"), "after": "active"}
 
 
+def _parse_external_prerequisite(entry: str) -> tuple[str, str]:
+    if ":" not in entry:
+        return entry, "passed"
+    sid, required = entry.rsplit(":", 1)
+    return sid.strip(), (required.strip().lower() or "passed")
+
+
+def blocked_child_graph_prerequisites(sid: str) -> list[dict[str, Any]]:
+    graph_path = SPRINTS_DIR / f"{sid}.task_graph.json"
+    if not graph_path.exists():
+        return []
+    try:
+        graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return [{"requirement": "task_graph", "reason": "parse_error", "error": str(exc)}]
+
+    entries: list[str] = []
+    for raw in graph.get("prerequisites") or []:
+        if str(raw).strip():
+            entries.append(str(raw).strip())
+    policy = graph.get("dependency_policy") or {}
+    if isinstance(policy, dict):
+        for raw in policy.get("blocks_until") or []:
+            if str(raw).strip():
+                entries.append(str(raw).strip())
+
+    blocked: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for entry in entries:
+        if entry in seen:
+            continue
+        seen.add(entry)
+        upstream_sid, required = _parse_external_prerequisite(entry)
+        status_path = SPRINTS_DIR / f"{upstream_sid}.status.json"
+        detail = {"requirement": entry, "sprint_id": upstream_sid, "required": required}
+        if not upstream_sid:
+            detail["reason"] = "empty_sprint_id"
+            blocked.append(detail)
+            continue
+        if not status_path.exists():
+            detail["reason"] = "missing_status"
+            blocked.append(detail)
+            continue
+        status = json.loads(status_path.read_text(encoding="utf-8"))
+        current_status = str(status.get("status") or "").lower()
+        current_phase = str(status.get("phase") or "").lower()
+        detail["current_status"] = current_status
+        detail["current_phase"] = current_phase
+        if required == "passed":
+            ok = current_status == "passed"
+        else:
+            ok = current_status == required or current_phase == required
+        if not ok:
+            detail["reason"] = "status_not_satisfied"
+            blocked.append(detail)
+    return blocked
+
+
 def activate_ready(args: argparse.Namespace) -> dict[str, Any]:
     epic_id = args.epic_id
     graph_path = SPRINTS_DIR / f"{epic_id}.task_graph.json"
     if not graph_path.exists():
         raise SystemExit(f"missing epic task graph: {graph_path}")
     graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    graph_changed = sync_graph_from_children(graph)
     node_by_id = {str(n.get("id")): n for n in graph.get("nodes", []) if n.get("id")}
     activated: list[dict[str, Any]] = []
     blocked: list[dict[str, Any]] = []
@@ -425,16 +526,25 @@ def activate_ready(args: argparse.Namespace) -> dict[str, Any]:
             dep_sid = str(node_by_id.get(dep, {}).get("child_sprint_id") or "")
             if dep_sid and not child_passed(dep_sid):
                 missing.append(dep_sid)
+        child_graph_blocked = blocked_child_graph_prerequisites(sid)
         if missing:
             blocked.append({"sid": sid, "node_id": node_id, "blocked_by": missing})
+            continue
+        if child_graph_blocked:
+            blocked.append({"sid": sid, "node_id": node_id, "blocked_by": child_graph_blocked})
             continue
         if len(activated) >= args.max:
             break
         if not args.dry_run:
             activated.append(activate_child(sid, epic_id))
+            node["status"] = "active"
+            node["updated_at"] = utc_now()
+            graph_changed = True
         else:
             activated.append({"sid": sid, "after": "active", "dry_run": True})
-    return {"ok": True, "epic_id": epic_id, "activated": activated, "blocked": blocked}
+    if graph_changed and not args.dry_run:
+        write_json(graph_path, graph)
+    return {"ok": True, "epic_id": epic_id, "activated": activated, "blocked": blocked, "graph_synced": graph_changed}
 
 
 def validate_epic(args: argparse.Namespace) -> dict[str, Any]:

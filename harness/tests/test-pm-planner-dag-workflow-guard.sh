@@ -97,6 +97,30 @@ assert_route "$SID" "planner" "design+plan without task_graph stays planner"
 write_graph "$SID"
 assert_route "$SID" "builder_main" "PRD+design+plan+task_graph routes builder_main"
 
+SID_BLOCKED="sprint-test-prereq-blocked"
+SID_UPSTREAM="sprint-test-upstream"
+write_status "$SID_BLOCKED" "queued" "epic_waiting_dependency" ""
+cat > "$TMPDIR_TEST/sprints/${SID_BLOCKED}.prd.md" <<< "# PRD"
+cat > "$TMPDIR_TEST/sprints/${SID_BLOCKED}.design.md" <<< "# Design"
+cat > "$TMPDIR_TEST/sprints/${SID_BLOCKED}.plan.md" <<< "# Plan"
+write_graph "$SID_BLOCKED"
+python3 - "$TMPDIR_TEST/sprints/${SID_BLOCKED}.task_graph.json" "$SID_UPSTREAM" <<'PY'
+import json, pathlib, sys
+p=pathlib.Path(sys.argv[1])
+upstream=sys.argv[2]
+g=json.loads(p.read_text())
+g["prerequisites"]=[f"{upstream}:passed"]
+g["dependency_policy"]={"blocks_until":[f"{upstream}:passed"]}
+p.write_text(json.dumps(g, ensure_ascii=False, indent=2))
+PY
+write_status "$SID_UPSTREAM" "active" "planning_complete" "builder_main"
+assert_route "$SID_BLOCKED" "none" "unmet external prerequisite blocks builder route"
+route_field "$SID_BLOCKED" reason | grep -q "external_prerequisite_blocked" \
+  && ok "external prerequisite block reason reported" \
+  || fail "external prerequisite block reason missing"
+write_status "$SID_UPSTREAM" "passed" "eval_passed" ""
+assert_route "$SID_BLOCKED" "builder_main" "passed external prerequisite releases builder route"
+
 SID2="sprint-test-invalid-graph"
 write_status "$SID2" "active" "planning_complete" "builder_main"
 cat > "$TMPDIR_TEST/sprints/${SID2}.prd.md" <<< "# PRD"
