@@ -11,6 +11,7 @@ Spec: sprint-20260513-solar-deepresearch-product-line-s04-orchestration-ui / N1
 from __future__ import annotations
 
 import os
+import glob
 import subprocess
 import sys
 from pathlib import Path
@@ -195,6 +196,8 @@ class TestS04Subcommands:
         out = capsys.readouterr().out
         assert "Exported to" in out
         assert os.path.exists(os.path.join(output_dir, "sources.jsonl"))
+        assert os.path.exists(os.path.join(output_dir, "report_ast.json"))
+        assert glob.glob(os.path.join(output_dir, "*-research_eval.json"))
 
 
 # ---------------------------------------------------------------------------

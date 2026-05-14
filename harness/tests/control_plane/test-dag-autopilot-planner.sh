@@ -119,10 +119,10 @@ check "S1 queued" "$QUEUE_TEXT" 'graph_node|node_id=S1'
 check "S2 queued" "$QUEUE_TEXT" 'graph_node|node_id=S2'
 if [[ "$QUEUE_TEXT" != *'graph_node|node_id=S3'* ]]; then ok "S3 not queued before join"; else fail "S3 queued too early"; fi
 
-echo "T3: graph in-place marks dispatched nodes not ready"
+echo "T3: graph in-place marks assigned nodes not ready"
 GRAPH_TEXT=$(cat "$TMPDIR_TEST/sprints/${SID}.task_graph.json")
-check "S1 status dispatched" "$GRAPH_TEXT" '"status": "dispatched"'
-check "S2 status dispatched" "$GRAPH_TEXT" '"status": "dispatched"'
+check "S1 status assigned" "$GRAPH_TEXT" '"status": "assigned"'
+check "S2 status assigned" "$GRAPH_TEXT" '"status": "assigned"'
 
 echo "T4: task_graph sprint does not use legacy parent evaluator route"
 cat > "$TMPDIR_TEST/sprints/${SID}.handoff.md" <<'EOF'
