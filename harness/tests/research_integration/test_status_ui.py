@@ -35,6 +35,8 @@ _mod = _ilu.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 
 build_research_payload = _mod.build_research_payload
+discover_human_search_waiting = _mod.discover_human_search_waiting
+discover_quality_gates = _mod.discover_quality_gates
 discover_eval_files = _mod.discover_eval_files
 generate_markdown_report = _mod.generate_markdown_report
 load_eval = _mod.load_eval
@@ -50,6 +52,12 @@ def _write_eval(tmpdir: Path, filename: str, data: dict) -> Path:
     return p
 
 
+def _write_graph(tmpdir: Path, filename: str, data: dict) -> Path:
+    p = tmpdir / filename
+    p.write_text(json.dumps(data), encoding="utf-8")
+    return p
+
+
 def _make_eval_data(
     source_count=10,
     evidence_count=50,
@@ -59,8 +67,12 @@ def _make_eval_data(
     span_matches=45,
     total_spans=50,
     status="passed",
+    run_id="run-001",
+    output_dir="",
+    final_md="",
 ):
     return {
+        "run_id": run_id,
         "source_count": source_count,
         "evidence_count": evidence_count,
         "claim_count": claim_count,
@@ -69,6 +81,10 @@ def _make_eval_data(
         "span_matches": span_matches,
         "total_spans": total_spans,
         "status": status,
+        "section_count": 5,
+        "check_count": 5,
+        "output_dir": output_dir,
+        "final_md": final_md,
     }
 
 
@@ -174,8 +190,174 @@ class TestBuildResearchPayload:
         _write_eval(tmp_path, "sid-research_eval.json", _make_eval_data())
         result = build_research_payload(tmp_path, "sid")
         for key in ("sid", "source_count", "evidence_count", "claim_count",
-                     "unsupported_rate", "citation_accuracy", "status", "eval_files"):
+                     "unsupported_rate", "citation_accuracy", "status", "eval_files", "human_search", "quality_gates", "runs", "latest"):
             assert key in result, f"missing key: {key}"
+
+    def test_artifact_paths_project_from_eval_output_dir(self, tmp_path):
+        out = tmp_path / "out"
+        out.mkdir()
+        final = out / "final.md"
+        ast = out / "report_ast.json"
+        bib = out / "final.bibliography.json"
+        final.write_text("# final", encoding="utf-8")
+        ast.write_text(json.dumps({"chapters": [{"sections": [{"id": "s1"}, {"id": "s2"}]}]}), encoding="utf-8")
+        bib.write_text("[]", encoding="utf-8")
+        _write_eval(tmp_path, "sid-research_eval.json", _make_eval_data(
+            run_id="run-artifacts",
+            output_dir=str(out),
+            final_md=str(final),
+        ))
+
+        result = build_research_payload(tmp_path, "sid")
+        run = result["runs"][0]
+
+        assert run["run_id"] == "run-artifacts"
+        assert run["artifact_exists"]["final_md"] is True
+        assert run["artifact_exists"]["report_ast"] is True
+        assert run["artifact_exists"]["bibliography"] is True
+        assert run["artifact_exists"]["eval_json"] is True
+        assert run["report_ast_sections"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Tests: DeepResearch quality gate projection
+# ---------------------------------------------------------------------------
+
+class TestQualityGateProjection:
+    def test_discovers_quality_gate_from_task_graph(self, tmp_path):
+        _write_graph(tmp_path, "sid.task_graph.json", {
+            "sprint_id": "sid",
+            "nodes": [{
+                "id": "R8",
+                "goal": "DeepResearch factuality gate",
+                "status": "passed",
+                "required_capabilities": ["research.factuality_evaluator"],
+                "research_quality_gate": {
+                    "ok": True,
+                    "verdict": "PASS",
+                    "auto_run": True,
+                    "metrics": {"citation_accuracy": 1.0},
+                },
+            }],
+        })
+
+        result = discover_quality_gates(tmp_path, "sid")
+
+        assert result["status"] == "ok"
+        assert result["ok_count"] == 1
+        assert result["items"][0]["node_id"] == "R8"
+        assert result["items"][0]["auto_run"] is True
+
+    def test_marks_required_quality_gate_missing(self, tmp_path):
+        _write_graph(tmp_path, "sid.task_graph.json", {
+            "sprint_id": "sid",
+            "nodes": [{
+                "id": "R8",
+                "goal": "DeepResearch citation check",
+                "status": "reviewing",
+                "required_capabilities": ["research.citation_verify"],
+            }],
+        })
+
+        result = discover_quality_gates(tmp_path, "sid")
+
+        assert result["status"] == "missing"
+        assert result["missing_count"] == 1
+        assert result["items"][0]["ok"] is False
+
+    def test_build_payload_includes_quality_gates(self, tmp_path):
+        _write_eval(tmp_path, "sid-research_eval.json", _make_eval_data())
+        _write_graph(tmp_path, "sid.task_graph.json", {
+            "sprint_id": "sid",
+            "nodes": [{
+                "id": "R8",
+                "goal": "DeepResearch factuality gate",
+                "required_capabilities": ["research.factuality_evaluator"],
+                "research_quality_gate": {"ok": True, "verdict": "PASS", "auto_run": True},
+            }],
+        })
+
+        result = build_research_payload(tmp_path, "sid")
+
+        assert result["quality_gates"]["count"] == 1
+        assert result["quality_gates"]["items"][0]["verdict"] == "PASS"
+
+
+# ---------------------------------------------------------------------------
+# Tests: human-in-loop search discovery
+# ---------------------------------------------------------------------------
+
+class TestHumanSearchDiscovery:
+    def test_discovers_waiting_human_search_node(self, tmp_path):
+        handoff = tmp_path / "handoff.md"
+        handoff.write_text("# handoff", encoding="utf-8")
+        results = tmp_path / "results.md"
+        _write_graph(tmp_path, "sid.task_graph.json", {
+            "sprint_id": "sid",
+            "nodes": [{
+                "id": "R2_external_search",
+                "goal": "wait for web research",
+                "status": "waiting_human_search",
+                "human_search": {
+                    "status": "waiting",
+                    "provider": "human",
+                    "run_id": "sid",
+                    "handoff_md": str(handoff),
+                    "results_md": str(results),
+                    "import_command": "solar-harness research import-search ..."
+                }
+            }]
+        })
+
+        result = discover_human_search_waiting(tmp_path, "sid")
+
+        assert result["status"] == "waiting"
+        assert result["count"] == 1
+        item = result["items"][0]
+        assert item["node_id"] == "R2_external_search"
+        assert item["handoff_exists"] is True
+        assert item["results_exists"] is False
+        assert item["ready_to_import"] is False
+
+    def test_marks_results_ready_when_results_file_exists(self, tmp_path):
+        handoff = tmp_path / "handoff.md"
+        results = tmp_path / "results.md"
+        handoff.write_text("# handoff", encoding="utf-8")
+        results.write_text("# results", encoding="utf-8")
+        _write_graph(tmp_path, "sid.task_graph.json", {
+            "sprint_id": "sid",
+            "node_results": {"R2": {"status": "waiting_human_search"}},
+            "nodes": [{
+                "id": "R2",
+                "goal": "wait for web research",
+                "human_search": {
+                    "status": "waiting",
+                    "handoff_md": str(handoff),
+                    "results_md": str(results),
+                    "import_command": "solar-harness research import-search ..."
+                }
+            }]
+        })
+
+        result = discover_human_search_waiting(tmp_path, "sid")
+
+        assert result["items"][0]["results_exists"] is True
+        assert result["items"][0]["ready_to_import"] is True
+
+    def test_build_payload_includes_human_search(self, tmp_path):
+        _write_eval(tmp_path, "sid-research_eval.json", _make_eval_data())
+        _write_graph(tmp_path, "sid.task_graph.json", {
+            "sprint_id": "sid",
+            "nodes": [{
+                "id": "R2",
+                "status": "waiting_human_search",
+                "human_search": {"status": "waiting"}
+            }]
+        })
+
+        result = build_research_payload(tmp_path, "sid")
+
+        assert result["human_search"]["count"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -201,3 +383,52 @@ class TestMarkdownReport:
         _write_eval(tmp_path, "sid-research_eval.json", _make_eval_data(status="passed"))
         md = generate_markdown_report(tmp_path, "sid")
         assert "**Status**: passed" in md
+
+    def test_includes_research_artifacts(self, tmp_path):
+        out = tmp_path / "out"
+        out.mkdir()
+        final = out / "final.md"
+        final.write_text("# final", encoding="utf-8")
+        (out / "report_ast.json").write_text(json.dumps({"chapters": []}), encoding="utf-8")
+        _write_eval(tmp_path, "sid-research_eval.json", _make_eval_data(
+            run_id="run-artifacts",
+            output_dir=str(out),
+            final_md=str(final),
+        ))
+        md = generate_markdown_report(tmp_path, "sid")
+        assert "## Research Artifacts" in md
+        assert "run-artifacts" in md
+        assert "report_ast.json" in md
+
+    def test_includes_human_search_waiting(self, tmp_path):
+        _write_graph(tmp_path, "sid.task_graph.json", {
+            "sprint_id": "sid",
+            "nodes": [{
+                "id": "R2",
+                "status": "waiting_human_search",
+                "human_search": {
+                    "status": "waiting",
+                    "handoff_md": "/tmp/handoff.md",
+                    "results_md": "/tmp/results.md",
+                    "import_command": "solar-harness research import-search ..."
+                }
+            }]
+        })
+        md = generate_markdown_report(tmp_path, "sid")
+        assert "## Human Search Waiting" in md
+        assert "R2" in md
+
+    def test_includes_quality_gates(self, tmp_path):
+        _write_graph(tmp_path, "sid.task_graph.json", {
+            "sprint_id": "sid",
+            "nodes": [{
+                "id": "R8",
+                "goal": "DeepResearch factuality gate",
+                "required_capabilities": ["research.factuality_evaluator"],
+                "research_quality_gate": {"ok": True, "verdict": "PASS", "auto_run": True},
+            }]
+        })
+        md = generate_markdown_report(tmp_path, "sid")
+        assert "## DeepResearch Quality Gates" in md
+        assert "R8" in md
+        assert "True" in md

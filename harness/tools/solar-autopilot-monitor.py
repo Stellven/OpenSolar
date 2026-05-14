@@ -103,6 +103,26 @@ except Exception:  # pragma: no cover - graph dispatcher may be absent in schedu
     graph_dispatch_ready = graph_dispatch_node_evals = None
 
 
+def node_requires_deepresearch_quality_gate(node: dict) -> bool:
+    caps: set[str] = set()
+    for key in ("required_capabilities", "capabilities"):
+        raw = node.get(key, [])
+        if isinstance(raw, str):
+            caps.add(raw)
+        elif isinstance(raw, list):
+            caps.update(str(item) for item in raw if str(item))
+    if any(cap.startswith("research.") for cap in caps):
+        return True
+    if caps & {"citation.verify", "factuality.evaluate", "report.compile", "evidence.extract", "claim.mine"}:
+        return True
+    haystack = " ".join(str(node.get(k, "")) for k in ("id", "goal", "description")).lower()
+    return bool(re.search(r"deepresearch|research_eval|report_ast|citation|factuality|claim ledger|evidence ledger|report compiler", haystack))
+
+
+def deepresearch_quality_gate_ok(gate: dict) -> bool:
+    return bool(gate.get("ok")) or str(gate.get("verdict") or "").upper() == "PASS"
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -1224,6 +1244,67 @@ def graph_status(sid: str) -> dict:
         return {"exists": True, "ready": False, "path": str(path), "valid": False, "error": str(exc)}
 
 
+def inspect_deepresearch_quality_gates() -> list[dict]:
+    """Find DeepResearch nodes whose completed gate state needs repair.
+
+    Missing gates on pending/reviewing nodes are visibility signals, not bugs.
+    The repair path only targets terminal node states that would otherwise
+    allow a bad parent closeout or leave a failed gate stranded.
+    """
+    findings: list[dict] = []
+    for status in active_statuses():
+        sid = str(status.get("_sid") or status.get("sprint_id") or status.get("id") or "")
+        if not sid:
+            continue
+        graph_path = graph_path_for(sid)
+        if not graph_path.exists():
+            continue
+        try:
+            graph = load_graph(graph_path) if load_graph else load_json(graph_path)
+        except Exception as exc:
+            findings.append({
+                "sid": sid,
+                "type": "deepresearch_quality_gate_repair",
+                "severity": "warn",
+                "target": "",
+                "node_id": "",
+                "message": f"{sid} DeepResearch task_graph cannot be loaded for quality gate scan.",
+                "gate_status": "graph_error",
+                "error": f"{type(exc).__name__}: {exc}",
+            })
+            continue
+        for node in graph.get("nodes", []) or []:
+            if not isinstance(node, dict) or not node_requires_deepresearch_quality_gate(node):
+                continue
+            node_id = str(node.get("id") or "")
+            try:
+                status_value = str(node_status(graph, node_id) if node_status else node.get("status") or "").lower()
+            except Exception:
+                status_value = str(node.get("status") or "").lower()
+            if status_value not in {"passed", "failed"}:
+                continue
+            gate = node.get("research_quality_gate") if isinstance(node.get("research_quality_gate"), dict) else {}
+            if gate and deepresearch_quality_gate_ok(gate):
+                continue
+            gate_status = "missing" if not gate else "failed"
+            findings.append({
+                "sid": sid,
+                "type": "deepresearch_quality_gate_repair",
+                "severity": "warn",
+                "target": "",
+                "node_id": node_id,
+                "graph_path": str(graph_path),
+                "node_status": status_value,
+                "gate_status": gate_status,
+                "gate": gate,
+                "message": (
+                    f"{sid}/{node_id} DeepResearch quality gate is {gate_status} after node status {status_value}; "
+                    "autopilot will reopen node evaluation and dispatch evaluator."
+                ),
+            })
+    return findings
+
+
 def assigned_graph_node_for_pane(target: str) -> dict:
     if load_graph is None:
         return {}
@@ -1240,13 +1321,13 @@ def assigned_graph_node_for_pane(target: str) -> dict:
         except Exception:
             continue
         for node in graph.get("nodes", []):
+            node_id = str(node.get("id") or "")
             if node_status is not None:
-                node_state = str(node_status(graph, node)).lower()
+                node_state = str(node_status(graph, node_id)).lower()
             else:
                 node_state = str(node.get("status") or "").lower()
             if node.get("assigned_to") != target or node_state not in active_node_statuses:
                 continue
-            node_id = str(node.get("id") or "")
             handoff = SPRINTS / f"{sid}.{node_id}-handoff.md"
             if handoff.exists():
                 continue
@@ -1906,6 +1987,55 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
                 used_targets.add(target)
             mark_action(state, f, result)
             actions.append(result)
+        elif ftype == "deepresearch_quality_gate_repair":
+            graph_path = Path(f.get("graph_path") or graph_path_for(sid))
+            node_id = str(f.get("node_id") or "")
+            result = {
+                "sid": sid,
+                "action": ftype,
+                "node_id": node_id,
+                "target": "",
+                "queued": False,
+                "dispatched": False,
+            }
+            try:
+                if not graph_path.exists() or not node_id:
+                    raise RuntimeError("missing_graph_or_node")
+                graph = load_graph(graph_path) if load_graph else load_json(graph_path)
+                repaired = False
+                for node in graph.get("nodes", []) or []:
+                    if not isinstance(node, dict) or str(node.get("id") or "") != node_id:
+                        continue
+                    node["status"] = "reviewing"
+                    node["quality_gate_repair_requested_at"] = utc_now()
+                    node["quality_gate_repair_reason"] = f.get("gate_status", "unknown")
+                    node.pop("eval_assigned_to", None)
+                    node.pop("eval_dispatch_id", None)
+                    node.pop("eval_dispatched_at", None)
+                    node.pop("research_quality_gate", None)
+                    repaired = True
+                    break
+                if not repaired:
+                    raise RuntimeError("node_not_found")
+                node_results = graph.get("node_results") if isinstance(graph.get("node_results"), dict) else {}
+                if node_id in node_results and isinstance(node_results[node_id], dict):
+                    node_results[node_id]["status"] = "reviewing"
+                    node_results[node_id]["gate_status"] = "reviewing"
+                    node_results[node_id]["note"] = "autopilot reopened DeepResearch quality gate repair"
+                graph["node_results"] = node_results
+                if save_graph:
+                    save_graph(graph_path, graph)
+                else:
+                    save_json(graph_path, graph)
+                dispatch_result = dispatch_ready_graph_nodes(sid, lease=dispatch) if dispatch else {"ok": True, "dispatch": "dry_apply_disabled"}
+                result.update({"ok": bool(dispatch_result.get("ok")), "reopened": True, "dispatch_result": dispatch_result})
+                result["dispatched"] = bool((dispatch_result.get("evals") or {}).get("dispatched"))
+                append_event(sid, "autopilot_deepresearch_quality_gate_repair", "warn", result)
+            except Exception as exc:
+                result.update({"ok": False, "error": f"{type(exc).__name__}: {exc}"})
+                append_event(sid, "autopilot_deepresearch_quality_gate_repair_failed", "error", result)
+            mark_action(state, f, result)
+            actions.append(result)
         elif ftype in ("missing_task_graph", "invalid_task_graph"):
             append_event(sid, f"autopilot_{ftype}", "warn", f.get("graph", {}))
             sent = False
@@ -2012,6 +2142,7 @@ def scan_once(args: argparse.Namespace, state: dict) -> dict:
         inspect_epics()
         + inspect_epic_child_state_drift()
         + inspect_sprints()
+        + inspect_deepresearch_quality_gates()
         + inspect_panes(state, args.stall_seconds)
         + inspect_knowledge_context(state)
         + inspect_model_registry(state)

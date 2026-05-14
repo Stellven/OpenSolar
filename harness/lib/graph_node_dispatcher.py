@@ -88,9 +88,11 @@ except Exception:  # pragma: no cover - architecture guard is additive
 try:
     from research import storage as research_storage  # noqa: E402
     from research.cli import render_human_search_handoff  # noqa: E402
+    from research.evaluator import evaluate_artifacts as evaluate_research_artifacts  # noqa: E402
 except Exception:  # pragma: no cover - DeepResearch is additive
     research_storage = None  # type: ignore
     render_human_search_handoff = None  # type: ignore
+    evaluate_research_artifacts = None  # type: ignore
 
 
 def _json(obj: Any) -> str:
@@ -126,6 +128,178 @@ def _node_requires_human_search(node: dict[str, Any]) -> bool:
         return True
     haystack = " ".join(str(node.get(k, "")) for k in ("id", "goal", "description")).lower()
     return bool(re.search(r"external[_ -]?search|web[_ -]?search|academic[_ -]?search|source[_ -]?search|contradiction[_ -]?search", haystack))
+
+
+def _node_requires_deepresearch_quality_gate(node: dict[str, Any]) -> bool:
+    caps = _node_capabilities(node)
+    if any(cap.startswith("research.") for cap in caps):
+        return True
+    if caps & {"citation.verify", "factuality.evaluate", "report.compile", "evidence.extract", "claim.mine"}:
+        return True
+    haystack = " ".join(str(node.get(k, "")) for k in ("id", "goal", "description")).lower()
+    return bool(re.search(r"deepresearch|research_eval|report_ast|citation|factuality|claim ledger|evidence ledger|report compiler", haystack))
+
+
+def _read_json_file(path: str | Path) -> dict[str, Any]:
+    try:
+        data = json.loads(Path(path).expanduser().read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _deepresearch_quality_gate_from_eval(eval_json: str | Path) -> dict[str, Any]:
+    data = _read_json_file(eval_json)
+    gate = data.get("research_quality_gate") or data.get("deepresearch_quality_gate") or {}
+    if isinstance(gate, dict) and gate:
+        ok = bool(gate.get("ok")) or str(gate.get("verdict") or "").upper() == "PASS"
+        return {"present": True, "ok": ok, "gate": gate}
+    return {"present": False, "ok": False, "gate": {}}
+
+
+def _looks_like_research_eval_data(data: dict[str, Any]) -> bool:
+    return any(key in data for key in (
+        "source_count",
+        "evidence_count",
+        "claim_count",
+        "section_count",
+        "unsupported_rate",
+        "citation_accuracy",
+        "output_dir",
+        "final_md",
+        "report_ast",
+    ))
+
+
+def _first_existing_path(candidates: list[Any], base_dir: Path | None = None, *, want_dir: bool | None = None) -> Path:
+    for raw in candidates:
+        raw_text = str(raw or "").strip()
+        if not raw_text:
+            continue
+        path = Path(raw_text).expanduser()
+        if not path.is_absolute() and base_dir is not None:
+            path = base_dir / path
+        if path.exists() and (want_dir is None or (path.is_dir() if want_dir else path.is_file())):
+            return path
+    return Path("")
+
+
+def _discover_deepresearch_artifacts(sid: str, node: dict[str, Any], eval_json: str | Path) -> dict[str, str]:
+    """Find DeepResearch artifacts from evaluator JSON, node metadata, and sprint paths."""
+    eval_path = Path(eval_json).expanduser()
+    eval_data = _read_json_file(eval_path) if eval_path.exists() else {}
+    node_artifacts = node.get("research_artifacts") if isinstance(node.get("research_artifacts"), dict) else {}
+    explicit_research_eval = [
+        eval_data.get("research_eval"),
+        eval_data.get("research_eval_json"),
+        eval_data.get("eval_artifacts_json"),
+        node_artifacts.get("research_eval"),
+        node_artifacts.get("research_eval_json"),
+        node_artifacts.get("eval_artifacts_json"),
+        node.get("research_eval"),
+        node.get("research_eval_json"),
+        node.get("eval_artifacts_json"),
+    ]
+    research_eval = _first_existing_path(explicit_research_eval, eval_path.parent if str(eval_path) else None, want_dir=False)
+    if not research_eval and eval_path.exists() and _looks_like_research_eval_data(eval_data):
+        research_eval = eval_path
+    if not research_eval:
+        for base in [eval_path.parent if str(eval_path) else Path(""), SPRINTS_DIR / sid, SPRINTS_DIR]:
+            if not str(base) or not base.exists():
+                continue
+            found = _first_existing_path(
+                [base / "research_eval.json", base / f"{sid}-research_eval.json", base / "run-research_eval.json"],
+                want_dir=False,
+            )
+            if found:
+                research_eval = found
+                break
+    research_eval_data = _read_json_file(research_eval) if research_eval else {}
+    base_dirs = [
+        eval_path.parent if str(eval_path) else Path(""),
+        SPRINTS_DIR / sid,
+        SPRINTS_DIR,
+    ]
+    output_dir = _first_existing_path([
+        research_eval_data.get("output_dir"),
+        eval_data.get("output_dir"),
+        node_artifacts.get("output_dir"),
+        node.get("research_output_dir"),
+        node.get("output_dir"),
+    ], eval_path.parent if str(eval_path) else None, want_dir=True)
+    if str(output_dir) not in {"", "."}:
+        base_dirs.insert(0, output_dir)
+
+    def pick(keys: list[str], names: list[str]) -> Path:
+        explicit: list[Any] = []
+        for key in keys:
+            explicit.extend([eval_data.get(key), node_artifacts.get(key), node.get(key)])
+        for base in base_dirs:
+            found = _first_existing_path(explicit, base if str(base) else None, want_dir=False)
+            if found:
+                return found
+        for base in base_dirs:
+            if not str(base) or not base.exists():
+                continue
+            for name in names:
+                candidate = base / name
+                if candidate.exists():
+                    return candidate
+        return Path("")
+
+    report_ast = pick(["report_ast", "report_ast_json"], ["report_ast.json"])
+    final_md = pick(["final_md", "final_report", "final_report_md"], ["final.md"])
+    bibliography = pick(["bibliography", "bibliography_json"], ["final.bibliography.json"])
+    def file_str(path: Path) -> str:
+        return str(path) if str(path) not in {"", "."} and path.exists() and path.is_file() else ""
+
+    artifacts = {
+        "eval_json": file_str(research_eval),
+        "report_ast": file_str(report_ast),
+        "final_md": file_str(final_md),
+        "bibliography": file_str(bibliography),
+    }
+    if str(output_dir) not in {"", "."}:
+        artifacts["output_dir"] = str(output_dir)
+    return artifacts
+
+
+def _deepresearch_quality_gate_auto_run(sid: str, node: dict[str, Any], eval_json: str | Path) -> dict[str, Any]:
+    """Run deterministic DeepResearch gate during closeout when evaluator omitted it."""
+    if evaluate_research_artifacts is None:
+        return {
+            "present": True,
+            "ok": False,
+            "auto_run": True,
+            "gate": {
+                "ok": False,
+                "verdict": "FAIL",
+                "errors": ["research_evaluator_unavailable"],
+            },
+        }
+    artifacts = _discover_deepresearch_artifacts(sid, node, eval_json)
+    research_eval = artifacts.get("eval_json") or ""
+    if not research_eval or not Path(research_eval).expanduser().exists():
+        return {
+            "present": False,
+            "ok": False,
+            "auto_run": True,
+            "gate": {
+                "ok": False,
+                "verdict": "FAIL",
+                "errors": [f"research_eval_artifact_missing:{research_eval or 'N/A'}"],
+                "artifacts": artifacts,
+            },
+        }
+    gate = evaluate_research_artifacts(
+        research_eval,
+        report_ast=artifacts.get("report_ast") or None,
+        final_md=artifacts.get("final_md") or None,
+        bibliography=artifacts.get("bibliography") or None,
+    )
+    gate["auto_run"] = True
+    gate["discovered_artifacts"] = artifacts
+    return {"present": True, "ok": bool(gate.get("ok")), "auto_run": True, "gate": gate}
 
 
 def _ensure_research_run(db_path: Path, topic: str, existing_run_id: str = "") -> str:
@@ -779,6 +953,11 @@ solar-harness session evaluate "{sid}" --json
 - 如果 `session evaluate` 返回 errors/warnings，必须逐项解释是否阻塞本 node verdict。
 - 必须检查 `Architecture Guard`：新能力是否为 package/plugin/skill/connector；如触碰 protected core，必须有 `core_patch_allowed=true`、rollback 和 P0 bugfix 证据，否则 FAIL。
 - 涉及 online exploration 的 node 必须验证 >=2 个候选方向和 kill_criteria；否则 FAIL。
+- 如果本 node 涉及 DeepResearch / evidence ledger / claim ledger / citation / report compiler，必须先运行 deterministic artifact gate：
+  ```bash
+  solar-harness research eval-artifacts --eval-json "<path-to-research_eval.json>" --json
+  ```
+  并把返回 JSON 原样写入 `{eval_json}` 的 `research_quality_gate` 字段。没有 `research_quality_gate.ok=true` 不允许 PASS。
 
 ## Required Outputs
 
@@ -817,6 +996,7 @@ solar-harness session evaluate "{sid}" --json
      "node_id": "{node_id}",
      "verdict": "PASS",
      "summary": "",
+     "research_quality_gate": {{}},
      "checked_at": "{_utc_now()}",
      "eval_md_path": "{eval_md}"
    }}
@@ -1895,6 +2075,38 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
     else:
         return {"ok": False, "reason": "invalid_verdict", "verdict": verdict}
 
+    research_quality_gate: dict[str, Any] = {"required": False}
+    if status == "passed" and _node_requires_deepresearch_quality_gate(node):
+        resolved_eval_json = eval_json or _eval_json_file(sid, node_id)
+        research_quality_gate = {
+            "required": True,
+            **_deepresearch_quality_gate_from_eval(resolved_eval_json),
+        }
+        if not research_quality_gate.get("present"):
+            research_quality_gate = {
+                "required": True,
+                **_deepresearch_quality_gate_auto_run(sid, node, resolved_eval_json),
+            }
+            if not research_quality_gate.get("present"):
+                return {
+                    "ok": False,
+                    "reason": "missing_deepresearch_quality_gate",
+                    "node": node_id,
+                    "status": "blocked",
+                    "eval_json": str(resolved_eval_json),
+                    "required_field": "research_quality_gate",
+                    "research_quality_gate": research_quality_gate,
+                }
+        if not research_quality_gate.get("ok"):
+            return {
+                "ok": False,
+                "reason": "deepresearch_quality_gate_failed",
+                "node": node_id,
+                "status": "blocked",
+                "eval_json": str(resolved_eval_json),
+                "research_quality_gate": research_quality_gate,
+            }
+
     note_parts = []
     if reason:
         note_parts.append(reason)
@@ -1907,6 +2119,8 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
     node["updated_at"] = _utc_now()
     if eval_json:
         node["eval_json"] = eval_json
+    if research_quality_gate.get("required"):
+        node["research_quality_gate"] = research_quality_gate.get("gate") or research_quality_gate
     worker_pane = str(node.get("assigned_to") or "")
     worker_dispatch_id = str(node.get("dispatch_id") or "")
     effect_result: dict[str, Any] = {}
@@ -1957,6 +2171,7 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
         "eval_lease_released": eval_lease_released,
         "parent_status_updated": parent_status_updated,
         "capability_effect": effect_result,
+        "research_quality_gate": research_quality_gate,
     }
 
 

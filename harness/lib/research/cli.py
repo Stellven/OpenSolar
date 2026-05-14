@@ -636,6 +636,7 @@ def write_sections_from_claims(conn: sqlite3.Connection, run_id: str) -> int:
     ]
     if not claim_lines:
         claim_lines = ["- No supported claims were mined; add sources or run extraction before writing."]
+    evidence_anchor = claim_lines[0] if "[cite:" in claim_lines[0] else ""
     sections = conn.execute(
         "SELECT id, section_type, title FROM report_sections WHERE run_id = ? ORDER BY section_order",
         (run_id,),
@@ -650,13 +651,15 @@ def write_sections_from_claims(conn: sqlite3.Connection, run_id: str) -> int:
             ).fetchall()
             body = f"# {sec['title']}\n\n" + "\n".join(
                 f"- {s['title']} ({s['source_type']}) {s['url'] or ''}".strip() for s in srcs
-            ) + "\n"
+            ) + ("\n\nEvidence anchor:\n" + evidence_anchor + "\n" if evidence_anchor else "\n")
         elif sec["section_type"] == "evidence_synthesis":
             body = f"# {sec['title']}\n\n" + "\n".join(claim_lines[:20]) + "\n"
         elif sec["section_type"] == "claims_and_implications":
             body = f"# {sec['title']}\n\n" + "\n".join(claim_lines[20:40] or claim_lines[:10]) + "\n"
         else:
             body = f"# {sec['title']}\n\nOpen verification tasks:\n- Re-run search with stricter source filters.\n- Add contradiction-hunt sources.\n- Expand citation-span checks beyond exact evidence IDs.\n"
+            if evidence_anchor:
+                body += "\nCurrent evidence anchor:\n" + evidence_anchor + "\n"
         conn.execute(
             "UPDATE report_sections SET content = ?, char_count = ? WHERE id = ?",
             (body, len(body), sec["id"]),
@@ -726,7 +729,105 @@ def compile_report_to_markdown(conn: sqlite3.Connection, run_id: str, output_md:
     return output_md, len(sections), total_chars
 
 
-def export_run_to_dir(db_path: str, run_id: str, output_dir: str) -> dict:
+def build_report_ast_payload(conn: sqlite3.Connection, run_id: str) -> dict:
+    """Build a structured ReportAST-style JSON payload from report_sections."""
+    run_columns = {row["name"] for row in conn.execute("PRAGMA table_info(research_runs)").fetchall()}
+    target_expr = "char_budget" if "char_budget" in run_columns else "0"
+    used_expr = "char_used" if "char_used" in run_columns else "0"
+    depth_expr = "depth_tier" if "depth_tier" in run_columns else "'standard'"
+    status_expr = "status" if "status" in run_columns else "'unknown'"
+    run = conn.execute(
+        f"SELECT topic, {target_expr} AS target_chars, {used_expr} AS char_used, "
+        f"{depth_expr} AS depth_tier, {status_expr} AS status FROM research_runs WHERE id = ?",
+        (run_id,),
+    ).fetchone()
+    sections = conn.execute(
+        "SELECT id, section_type, title, content, char_count, section_order FROM report_sections "
+        "WHERE run_id = ? ORDER BY section_order",
+        (run_id,),
+    ).fetchall()
+    topic = run["topic"] if run else run_id
+    chapter_sections = []
+    for sec in sections:
+        order = int(sec["section_order"] or len(chapter_sections) + 1)
+        chapter_sections.append({
+            "section_id": ids.section_id(1, order),
+            "db_section_id": sec["id"],
+            "section_type": sec["section_type"],
+            "title": sec["title"],
+            "order": order,
+            "target_chars": max(int(sec["char_count"] or 0), 1),
+            "actual_chars": int(sec["char_count"] or 0),
+            "status": "final" if sec["content"] else "planned",
+        })
+    return {
+        "ast_id": ids.ast_id(run_id),
+        "run_id": run_id,
+        "title": f"DeepResearch Report: {topic}",
+        "target_chars": int((run["target_chars"] if run else 0) or 0),
+        "actual_chars": int((run["char_used"] if run else 0) or 0),
+        "depth_tier": run["depth_tier"] if run else "standard",
+        "status": run["status"] if run else "unknown",
+        "target_chapters": 1,
+        "target_sections": len(chapter_sections),
+        "chapters": [{
+            "chapter_id": ids.chapter_id(1),
+            "title": "Research Synthesis",
+            "order": 1,
+            "status": "final" if chapter_sections else "planned",
+            "sections": chapter_sections,
+        }],
+    }
+
+
+def build_bibliography_payload(conn: sqlite3.Connection, run_id: str) -> list[dict]:
+    sources = conn.execute(
+        "SELECT id, title, url, source_type, fetched_at, content_hash FROM research_sources "
+        "WHERE run_id = ? ORDER BY fetched_at, id",
+        (run_id,),
+    ).fetchall()
+    return [dict(row) for row in sources]
+
+
+def build_research_eval_payload(conn: sqlite3.Connection, run_id: str, output_dir: str = "",
+                                final_md: str | None = None) -> dict:
+    source_count = conn.execute("SELECT COUNT(*) FROM research_sources WHERE run_id = ?", (run_id,)).fetchone()[0]
+    evidence_count = conn.execute("SELECT COUNT(*) FROM evidence_items WHERE run_id = ?", (run_id,)).fetchone()[0]
+    claim_count = conn.execute("SELECT COUNT(*) FROM claims WHERE run_id = ?", (run_id,)).fetchone()[0]
+    link_count = conn.execute("SELECT COUNT(*) FROM claim_evidence WHERE run_id = ?", (run_id,)).fetchone()[0]
+    section_count = conn.execute("SELECT COUNT(*) FROM report_sections WHERE run_id = ?", (run_id,)).fetchone()[0]
+    checks = conn.execute(
+        "SELECT COUNT(*) AS total, SUM(CASE WHEN passed THEN 1 ELSE 0 END) AS passed FROM section_checks WHERE run_id = ?",
+        (run_id,),
+    ).fetchone()
+    total_checks = int(checks["total"] or 0)
+    passed_checks = int(checks["passed"] or 0)
+    unsupported_claims = max(claim_count - link_count, 0)
+    citation_accuracy = round(link_count / claim_count, 4) if claim_count else 0.0
+    unsupported_rate = round(unsupported_claims / claim_count, 4) if claim_count else 0.0
+    status = "passed" if source_count and evidence_count and claim_count and section_count and total_checks == passed_checks else "partial"
+    return {
+        "run_id": run_id,
+        "source_count": source_count,
+        "evidence_count": evidence_count,
+        "claim_count": claim_count,
+        "claim_evidence_count": link_count,
+        "section_count": section_count,
+        "check_count": total_checks,
+        "checks_passed": passed_checks,
+        "unsupported_claims": unsupported_claims,
+        "total_key_claims": claim_count,
+        "span_matches": link_count,
+        "total_spans": claim_count,
+        "unsupported_rate": unsupported_rate,
+        "citation_accuracy": citation_accuracy,
+        "status": status,
+        "output_dir": output_dir,
+        "final_md": final_md or "",
+    }
+
+
+def export_run_to_dir(db_path: str, run_id: str, output_dir: str, final_md: str | None = None) -> dict:
     conn = storage.get_connection(db_path)
     os.makedirs(output_dir, exist_ok=True)
 
@@ -785,6 +886,21 @@ def export_run_to_dir(db_path: str, run_id: str, output_dir: str) -> dict:
     for check in checks:
         storage.append_jsonl(checks_path, dict(check))
 
+    report_ast = build_report_ast_payload(conn, run_id)
+    report_ast_path = os.path.join(output_dir, "report_ast.json")
+    with open(report_ast_path, "w", encoding="utf-8") as f:
+        json.dump(report_ast, f, indent=2, ensure_ascii=False)
+
+    bibliography = build_bibliography_payload(conn, run_id)
+    bibliography_path = os.path.join(output_dir, "final.bibliography.json")
+    with open(bibliography_path, "w", encoding="utf-8") as f:
+        json.dump(bibliography, f, indent=2, ensure_ascii=False)
+
+    eval_payload = build_research_eval_payload(conn, run_id, output_dir=output_dir, final_md=final_md)
+    eval_path = os.path.join(output_dir, f"{run_id}-research_eval.json")
+    with open(eval_path, "w", encoding="utf-8") as f:
+        json.dump(eval_payload, f, indent=2, ensure_ascii=False)
+
     conn.close()
     return {
         "ok": True,
@@ -796,6 +912,9 @@ def export_run_to_dir(db_path: str, run_id: str, output_dir: str) -> dict:
         "claim_evidence": len(links),
         "sections": len(sections),
         "checks": len(checks),
+        "report_ast": 1 if report_ast.get("chapters") else 0,
+        "bibliography": len(bibliography),
+        "research_eval": eval_payload,
         "files": {
             "sources": sources_path,
             "evidence": evidence_path,
@@ -803,6 +922,9 @@ def export_run_to_dir(db_path: str, run_id: str, output_dir: str) -> dict:
             "claim_evidence": links_path,
             "sections": sections_path,
             "section_checks": checks_path,
+            "report_ast": report_ast_path,
+            "bibliography": bibliography_path,
+            "research_eval": eval_path,
         },
     }
 
@@ -974,7 +1096,7 @@ def continue_research_pipeline(db_path: str, run_id: str, output_dir: str, outpu
     final_md = output_md or os.path.join(output_dir, "final.md")
     compiled_path, _, chars = compile_report_to_markdown(conn, run_id, final_md)
     conn.close()
-    export_payload = export_run_to_dir(db_path, run_id, output_dir)
+    export_payload = export_run_to_dir(db_path, run_id, output_dir, final_md=compiled_path)
     return {
         "evidence": len(evidence_ids),
         "claims": claims_count,
@@ -1195,7 +1317,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     compiled_path, _, chars = compile_report_to_markdown(conn, run_id, output_md)
     conn.close()
 
-    export_payload = export_run_to_dir(db_path, run_id, output_dir)
+    export_payload = export_run_to_dir(db_path, run_id, output_dir, final_md=compiled_path)
 
     payload = {
         "ok": True,
@@ -1383,7 +1505,29 @@ def cmd_import_search(args: argparse.Namespace) -> int:
                     break
             parent = mark_node_result(graph, args.node, "passed", gate_status="passed", note="human_search_imported")
             save_graph(args.graph, graph)
-            payload["graph_update"] = {"ok": True, "graph": args.graph, "node": args.node, "status": "passed", "parent": parent}
+            graph_update = {"ok": True, "graph": args.graph, "node": args.node, "status": "passed", "parent": parent}
+            if not getattr(args, "no_dispatch_downstream", False) and not parent.get("ready"):
+                try:
+                    if getattr(args, "dry_run_dispatch", False):
+                        os.environ.setdefault("SOLAR_GRAPH_DISPATCH_FAKE_WORKERS", "1")
+                    from graph_node_dispatcher import dispatch_ready  # noqa: WPS433
+
+                    graph_update["downstream"] = dispatch_ready(
+                        args.graph,
+                        dry_run=bool(getattr(args, "dry_run_dispatch", False)),
+                        ttl=int(getattr(args, "dispatch_ttl", 900) or 900),
+                    )
+                except Exception as exc:
+                    graph_update["downstream"] = {
+                        "ok": False,
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+            else:
+                graph_update["downstream"] = {
+                    "ok": True,
+                    "skipped": "disabled_or_parent_ready",
+                }
+            payload["graph_update"] = graph_update
         except Exception as exc:
             payload["graph_update"] = {"ok": False, "error": str(exc), "graph": args.graph, "node": args.node}
     if emit_json(args, payload):
@@ -1545,6 +1689,32 @@ def cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_eval_artifacts(args: argparse.Namespace) -> int:
+    """Run deterministic DeepResearch quality gate over exported artifacts."""
+    from research.evaluator import evaluate_artifacts
+
+    payload = evaluate_artifacts(
+        args.eval_json,
+        report_ast=args.report_ast or None,
+        final_md=args.final_md or None,
+        bibliography=args.bibliography or None,
+        max_unsupported_rate=args.max_unsupported_rate,
+        min_citation_accuracy=args.min_citation_accuracy,
+    )
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") else 1
+    print(f"DeepResearch artifact verdict: {payload['verdict']}")
+    if payload.get("errors"):
+        print("Errors:")
+        for err in payload["errors"]:
+            print(f"- {err}")
+    if payload.get("warnings"):
+        print("Warnings:")
+        for warn in payload["warnings"]:
+            print(f"- {warn}")
+    return 0 if payload.get("ok") else 1
+
+
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
@@ -1552,7 +1722,7 @@ def cmd_export(args: argparse.Namespace) -> int:
 ALL_SUBCOMMANDS = [
     "init", "add-source", "extract", "ledger", "status",
     "run", "plan", "search", "handoff-search", "import-search",
-    "mine", "outline", "write", "check", "compile", "export",
+    "mine", "outline", "write", "check", "compile", "export", "eval-artifacts",
 ]
 
 SUBCOMMANDS = {
@@ -1572,6 +1742,7 @@ SUBCOMMANDS = {
     "check": cmd_check,
     "compile": cmd_compile,
     "export": cmd_export,
+    "eval-artifacts": cmd_eval_artifacts,
 }
 
 
@@ -1666,6 +1837,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_import.add_argument("--output-md", default="", help="Path for final markdown when --continue is used")
     p_import.add_argument("--graph", default="", help="Optional task_graph.json to mark after import")
     p_import.add_argument("--node", default="", help="Optional graph node id to mark passed after import")
+    p_import.add_argument("--no-dispatch-downstream", action="store_true",
+                          help="Do not automatically enqueue/dispatch newly ready downstream graph nodes")
+    p_import.add_argument("--dry-run-dispatch", action="store_true",
+                          help="After import, validate downstream dispatch with fake workers instead of sending to panes")
+    p_import.add_argument("--dispatch-ttl", type=int, default=900, help="Pane lease TTL for downstream dispatch")
     p_import.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     p_mine = sub.add_parser("mine", help="Mine claims from evidence")
@@ -1700,6 +1876,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_export.add_argument("--run-id", required=True, help="Research run ID")
     p_export.add_argument("--output-dir", required=True, help="Output directory")
     p_export.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_eval_artifacts = sub.add_parser("eval-artifacts", help="Evaluate DeepResearch exported artifacts")
+    p_eval_artifacts.add_argument("--eval-json", required=True, help="Path to <run_id>-research_eval.json")
+    p_eval_artifacts.add_argument("--report-ast", default="", help="Optional report_ast.json override")
+    p_eval_artifacts.add_argument("--final-md", default="", help="Optional final.md override")
+    p_eval_artifacts.add_argument("--bibliography", default="", help="Optional final.bibliography.json override")
+    p_eval_artifacts.add_argument("--max-unsupported-rate", type=float, default=0.05)
+    p_eval_artifacts.add_argument("--min-citation-accuracy", type=float, default=0.95)
+    p_eval_artifacts.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     return parser
 

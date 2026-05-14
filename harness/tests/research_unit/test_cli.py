@@ -210,6 +210,21 @@ class TestWebResearch:
         assert (out / "sources.jsonl").exists()
         assert (out / "evidence.jsonl").exists()
         assert (out / "claims.jsonl").exists()
+        assert (out / "claim_evidence.jsonl").exists()
+        assert (out / "sections.jsonl").exists()
+        assert (out / "section_checks.jsonl").exists()
+        assert (out / "report_ast.json").exists()
+        assert (out / "final.bibliography.json").exists()
+        eval_files = list(out.glob("*-research_eval.json"))
+        assert eval_files
+        eval_payload = json.loads(eval_files[0].read_text())
+        assert eval_payload["status"] == "passed"
+        assert eval_payload["source_count"] == 1
+        assert eval_payload["evidence_count"] >= 1
+        assert eval_payload["claim_count"] >= 1
+        ast = json.loads((out / "report_ast.json").read_text())
+        assert ast["target_sections"] >= 1
+        assert ast["chapters"][0]["sections"]
 
     def test_auto_provider_prefers_browser_use_over_http(self, db_path, monkeypatch):
         """Auto provider must use browser-use first and avoid HTTP if it succeeds."""

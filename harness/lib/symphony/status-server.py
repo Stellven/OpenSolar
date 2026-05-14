@@ -28,6 +28,7 @@ import subprocess
 import sys
 import re
 import html
+import importlib.util
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -1422,6 +1423,76 @@ def _apple_notes_ingest_status() -> dict:
     }
 
 
+def _human_search_waiting_status(limit: int = 20) -> dict:
+    """Project DeepResearch human-search DAG waits into /status."""
+    routes_path = HARNESS_DIR / "status-server" / "research_routes.py"
+    if not routes_path.exists():
+        return {
+            "ok": False,
+            "status": "error",
+            "count": 0,
+            "items": [],
+            "errors": [{"error": "research_routes.py missing", "path": str(routes_path)}],
+        }
+    try:
+        spec = importlib.util.spec_from_file_location("solar_research_routes_status", str(routes_path))
+        if spec is None or spec.loader is None:
+            raise RuntimeError("unable to load research_routes.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        data = mod.discover_human_search_waiting(SPRINTS_DIR, "", limit=limit)
+        return data if isinstance(data, dict) else {"ok": False, "status": "error", "count": 0, "items": []}
+    except Exception as exc:
+        return {
+            "ok": False,
+            "status": "error",
+            "count": 0,
+            "items": [],
+            "errors": [{"error": f"{type(exc).__name__}: {exc}"}],
+        }
+
+
+def _research_status_summary(limit: int = 5) -> dict:
+    """Project latest DeepResearch eval/report artifacts into /status."""
+    routes_path = HARNESS_DIR / "status-server" / "research_routes.py"
+    if not routes_path.exists():
+        return {"ok": False, "status": "error", "runs": [], "errors": ["research_routes.py missing"]}
+    try:
+        spec = importlib.util.spec_from_file_location("solar_research_routes_summary", str(routes_path))
+        if spec is None or spec.loader is None:
+            raise RuntimeError("unable to load research_routes.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        eval_files = sorted(SPRINTS_DIR.glob("*research_eval*.json"), key=lambda p: p.stat().st_mtime)
+        runs: list[dict] = []
+        gates: list[dict] = []
+        for ef in eval_files[-limit:]:
+            # build_research_payload expects a sid prefix; derive it from the
+            # eval filename while tolerating run-id-only eval files.
+            sid = ef.name.split("-research_eval", 1)[0]
+            payload = mod.build_research_payload(SPRINTS_DIR, sid)
+            for run in payload.get("runs") or []:
+                run = dict(run)
+                run["sid"] = sid
+                runs.append(run)
+            for gate in (payload.get("quality_gates") or {}).get("items") or []:
+                gate = dict(gate)
+                gate["sid"] = sid
+                gates.append(gate)
+        status = "idle"
+        if runs or gates:
+            status = "ok" if all(r.get("status") == "passed" for r in runs[-limit:]) and all(g.get("ok") for g in gates[-limit:]) else "warn"
+        return {
+            "ok": status == "ok" or not runs,
+            "status": status,
+            "count": len(runs),
+            "runs": runs[-limit:],
+            "quality_gates": gates[-limit:],
+        }
+    except Exception as exc:
+        return {"ok": False, "status": "error", "runs": [], "errors": [f"{type(exc).__name__}: {exc}"]}
+
+
 def _status_payload(limit: int = 50) -> dict:
     current = _current_sprint()
     runtime_interfaces = _runtime_interfaces_status(current.get("sprint_id", ""))
@@ -1441,6 +1512,8 @@ def _status_payload(limit: int = 50) -> dict:
         "apple_notes_ingest": _apple_notes_ingest_status(),
         "evolution": _evolution_status(),
         "runtime_interfaces": runtime_interfaces,
+        "human_search": _human_search_waiting_status(),
+        "research": _research_status_summary(),
     }
 
 
@@ -1955,6 +2028,33 @@ td {
   overflow-wrap: anywhere;
   font: 900 0.78rem ui-monospace, SFMono-Regular, Menlo, monospace;
 }
+.human-search-grid {
+  display: grid;
+  gap: 0.85rem;
+}
+.human-search-item {
+  border: 1px solid rgba(190, 112, 55, 0.24);
+  border-radius: 18px;
+  padding: 0.85rem;
+  background: rgba(255, 247, 226, 0.62);
+}
+.human-search-item.ready {
+  border-color: rgba(56, 128, 93, 0.30);
+  background: rgba(221, 240, 234, 0.66);
+}
+.human-search-title {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.65rem;
+}
+.copy-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+}
 .capability-evidence {
   display: grid;
   gap: 0.38rem;
@@ -2068,6 +2168,8 @@ td {
       <div class="card"><h3>知识库状态</h3><div id="overview-knowledge">Loading...</div></div>
       <div class="card"><h3>Runtime Interfaces</h3><div id="overview-runtime">Loading...</div></div>
       <div class="card"><h3>Capability Evidence</h3><div id="overview-capabilities">Loading...</div></div>
+      <div class="card"><h3>DeepResearch Human Search</h3><div id="overview-human-search">Loading...</div></div>
+      <div class="card"><h3>DeepResearch Quality</h3><div id="overview-research">Loading...</div></div>
       <div class="card"><h3>最近风险</h3><div id="overview-risk">Loading...</div></div>
     </div>
   </section>
@@ -2075,6 +2177,10 @@ td {
   <section class="panel" id="tab-sprint">
     <h2>Current Sprint</h2>
     <div class="card" id="sprint-card">Loading...</div>
+    <h2>DeepResearch Human Search</h2>
+    <div class="card" id="human-search-card">Loading...</div>
+    <h2>DeepResearch Quality</h2>
+    <div class="card" id="research-card">Loading...</div>
     <h2>Pane Assignments</h2>
     <div class="card" id="panes-card">Loading...</div>
   </section>
@@ -2410,6 +2516,111 @@ function renderRuntimeInterfaces(rt) {
     '<div class="mini-metric"><div class="kv-label">Healthy</div><span class="num">' + esc((rt.healthy ?? 0) + '/' + (rt.total ?? 0)) + '</span></div>' +
     '</div><div class="mount-list">' + (rows || '<div class="muted">No runtime interface data.</div>') + '</div>';
 }
+function renderHumanSearch(hs, compact) {
+  hs = hs || {};
+  const items = hs.items || [];
+  if (!items.length) {
+    return '<div class="health-metrics">' +
+      '<div class="mini-metric"><div class="kv-label">Status</div><span class="num">idle</span></div>' +
+      '<div class="mini-metric"><div class="kv-label">Waiting</div><span class="num">0</span></div>' +
+      '</div><div class="muted">没有等待人工搜索的 DeepResearch DAG 节点。</div>';
+  }
+  const visible = compact ? items.slice(0, 2) : items;
+  const cards = visible.map(item => {
+    const ready = !!item.ready_to_import;
+    const cmd = item.import_command || '';
+    return '<div class="human-search-item ' + (ready ? 'ready' : '') + '">' +
+      '<div class="human-search-title"><div><strong>' + esc(item.node_id || '-') + '</strong>' +
+      '<div class="muted">' + esc(item.sprint_id || '-') + '</div></div>' +
+      '<div>' + statusBadge(ready ? 'ok' : 'warn') + '</div></div>' +
+      (compact ? '' : '<div class="muted">' + esc(clip(item.goal || '', 180)) + '</div>') +
+      '<div class="kv-grid" style="margin-top:.65rem">' +
+        kv('handoff', item.handoff_exists ? 'exists' : 'missing') +
+        kv('results', item.results_exists ? 'ready' : 'waiting') +
+        kv('provider', item.provider || 'human') +
+      '</div>' +
+      (compact ? '' : '<pre class="codebox" style="margin-top:.7rem">' +
+        'Handoff: ' + esc(item.handoff_md || '-') + '\\n' +
+        'Results: ' + esc(item.results_md || '-') + '\\n\\n' +
+        esc(cmd || 'N/A') + '</pre>') +
+      '<div class="copy-row">' +
+        '<button class="btn" data-copy="' + esc(item.handoff_md || '') + '" onclick="copyText(this.dataset.copy)">复制 handoff</button>' +
+        '<button class="btn" data-copy="' + esc(item.results_md || '') + '" onclick="copyText(this.dataset.copy)">复制 results 路径</button>' +
+        '<button class="btn primary" data-copy="' + esc(cmd) + '" onclick="copyText(this.dataset.copy)">复制导入命令</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  return '<div class="health-metrics">' +
+    '<div class="mini-metric"><div class="kv-label">Status</div><span class="num">' + esc(hs.status || 'waiting') + '</span></div>' +
+    '<div class="mini-metric"><div class="kv-label">Waiting</div><span class="num">' + esc(hs.count || items.length) + '</span></div>' +
+    '</div><div class="human-search-grid">' + cards +
+    (compact && items.length > visible.length ? '<div class="muted">还有 ' + (items.length - visible.length) + ' 个等待项，打开 Sprint 标签查看。</div>' : '') +
+    '</div>';
+}
+function renderResearchStatus(research, compact) {
+  research = research || {};
+  const runs = research.runs || [];
+  const gates = research.quality_gates || [];
+  if (!runs.length && !gates.length) {
+    return '<div class="health-metrics">' +
+      '<div class="mini-metric"><div class="kv-label">Status</div><span class="num">idle</span></div>' +
+      '<div class="mini-metric"><div class="kv-label">Runs</div><span class="num">0</span></div>' +
+      '</div><div class="muted">还没有可展示的 DeepResearch research_eval 产物。</div>';
+  }
+  const visible = compact ? runs.slice(-2) : runs;
+  const cards = visible.map(run => {
+    const artifacts = run.artifacts || {};
+    const exists = run.artifact_exists || {};
+    const status = run.status || 'unknown';
+    const ok = status === 'passed';
+    return '<div class="human-search-item ' + (ok ? 'ready' : '') + '">' +
+      '<div class="human-search-title"><div><strong>' + esc(run.run_id || run.sid || '-') + '</strong>' +
+      '<div class="muted">' + esc(run.sid || '-') + '</div></div><div>' + statusBadge(ok ? 'ok' : 'warn') + '</div></div>' +
+      '<div class="health-metrics">' +
+        '<div class="mini-metric"><div class="kv-label">Sources</div><span class="num">' + esc(run.source_count || 0) + '</span></div>' +
+        '<div class="mini-metric"><div class="kv-label">Evidence</div><span class="num">' + esc(run.evidence_count || 0) + '</span></div>' +
+        '<div class="mini-metric"><div class="kv-label">Claims</div><span class="num">' + esc(run.claim_count || 0) + '</span></div>' +
+        '<div class="mini-metric"><div class="kv-label">Citation</div><span class="num">' + esc(Math.round((run.citation_accuracy || 0) * 100)) + '%</span></div>' +
+      '</div>' +
+      (compact ? '' : '<div class="kv-grid">' +
+        kv('Final MD', exists.final_md ? 'exists' : 'missing') +
+        kv('ReportAST', exists.report_ast ? 'exists' : 'missing') +
+        kv('Eval JSON', exists.eval_json ? 'exists' : 'missing') +
+        kv('AST Sections', run.report_ast_sections || 0) +
+      '</div><pre class="codebox" style="margin-top:.7rem">' +
+        'final.md: ' + esc(artifacts.final_md || '-') + '\\n' +
+        'report_ast: ' + esc(artifacts.report_ast || '-') + '\\n' +
+        'eval: ' + esc(artifacts.eval_json || '-') + '</pre>') +
+      '<div class="copy-row">' +
+        '<button class="btn" data-copy="' + esc(artifacts.final_md || '') + '" onclick="copyText(this.dataset.copy)">复制 final.md</button>' +
+        '<button class="btn" data-copy="' + esc(artifacts.report_ast || '') + '" onclick="copyText(this.dataset.copy)">复制 ReportAST</button>' +
+        '<button class="btn primary" data-copy="' + esc(artifacts.eval_json || '') + '" onclick="copyText(this.dataset.copy)">复制 Eval JSON</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  const visibleGates = compact ? gates.slice(-3) : gates;
+  const gateCards = visibleGates.map(gate => {
+    const ok = !!gate.ok;
+    const status = gate.status || (ok ? 'ok' : 'missing');
+    const errors = (gate.errors || []).slice(0, 2).join('; ');
+    return '<div class="human-search-item ' + (ok ? 'ready' : '') + '">' +
+      '<div class="human-search-title"><div><strong>' + esc(gate.node_id || '-') + '</strong>' +
+      '<div class="muted">' + esc(gate.sid || gate.sprint_id || '-') + '</div></div><div>' + statusBadge(ok ? 'ok' : 'warn') + '</div></div>' +
+      '<div class="health-metrics">' +
+        '<div class="mini-metric"><div class="kv-label">Gate</div><span class="num">' + esc(status) + '</span></div>' +
+        '<div class="mini-metric"><div class="kv-label">Verdict</div><span class="num">' + esc(gate.verdict || '-') + '</span></div>' +
+        '<div class="mini-metric"><div class="kv-label">Auto</div><span class="num">' + (gate.auto_run ? 'yes' : 'no') + '</span></div>' +
+      '</div>' +
+      (compact ? '' : '<div class="muted">' + esc(gate.goal || '') + '</div>' +
+        (errors ? '<pre class="codebox" style="margin-top:.7rem">' + esc(errors) + '</pre>' : '')) +
+    '</div>';
+  }).join('');
+  return '<div class="health-metrics">' +
+    '<div class="mini-metric"><div class="kv-label">Status</div><span class="num">' + esc(research.status || 'unknown') + '</span></div>' +
+    '<div class="mini-metric"><div class="kv-label">Runs</div><span class="num">' + esc(research.count || runs.length) + '</span></div>' +
+    '<div class="mini-metric"><div class="kv-label">Gates</div><span class="num">' + esc(gates.length) + '</span></div>' +
+    '</div><div class="human-search-grid">' + cards + gateCards + '</div>';
+}
 function renderKnowledgeSummary(wiki, mirage) {
   const wikiReady = !!(wiki && wiki.ready);
   const mirageReady = !!(mirage && mirage.enabled);
@@ -2665,6 +2876,10 @@ function render(data) {
     'Mirage: ' + statusBadge(mirage.ready ? 'ok' : (mirage.status || 'warn'));
   document.getElementById('overview-runtime').innerHTML = renderRuntimeInterfaces(data.runtime_interfaces || {});
   document.getElementById('overview-capabilities').innerHTML = renderCapabilityHealthSummary(data.capability_health || {});
+  document.getElementById('overview-human-search').innerHTML = renderHumanSearch(data.human_search || {}, true);
+  document.getElementById('human-search-card').innerHTML = renderHumanSearch(data.human_search || {}, false);
+  document.getElementById('overview-research').innerHTML = renderResearchStatus(data.research || {}, true);
+  document.getElementById('research-card').innerHTML = renderResearchStatus(data.research || {}, false);
 
   document.getElementById('raw-card').textContent = JSON.stringify(data, null, 2);
 }
@@ -2727,6 +2942,19 @@ class StatusHandler(BaseHTTPRequestHandler):
 
         elif path == "/status":
             self._send_json(_status_payload(limit=50))
+
+        elif path.startswith("/research/"):
+            sid = path.split("/research/", 1)[1].strip("/")
+            routes_path = HARNESS_DIR / "status-server" / "research_routes.py"
+            try:
+                spec = importlib.util.spec_from_file_location("solar_research_routes_http", str(routes_path))
+                if spec is None or spec.loader is None:
+                    raise RuntimeError("unable to load research_routes.py")
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                self._send_json(mod.build_research_payload(SPRINTS_DIR, sid))
+            except Exception as exc:
+                self._send_json({"error": f"{type(exc).__name__}: {exc}", "sid": sid}, status=500)
 
         elif path == "/events":
             sprint_id = params.get("sprint_id", [""])[0]
