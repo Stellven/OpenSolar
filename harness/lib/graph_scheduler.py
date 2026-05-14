@@ -228,6 +228,15 @@ def validate_graph(graph: dict[str, Any]) -> dict[str, Any]:
     except ValueError as exc:
         errors.append(str(exc))
 
+    try:
+        from architecture_guard import assess_graph  # noqa: WPS433
+
+        arch = assess_graph(graph)
+        errors.extend(f"architecture_guard:{e}" for e in arch.get("errors", []))
+        warnings.extend(f"architecture_guard:{w}" for w in arch.get("warnings", []))
+    except Exception as exc:
+        warnings.append(f"architecture_guard unavailable: {type(exc).__name__}")
+
     return {
         "ok": not errors,
         "sprint_id": graph.get("sprint_id"),
