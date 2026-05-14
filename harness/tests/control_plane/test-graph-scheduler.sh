@@ -28,6 +28,7 @@ CAP_GRAPH="$TMPDIR_TEST/capability.task_graph.json"
 CAP_WORKERS="$TMPDIR_TEST/capability-workers.json"
 INFER_GRAPH="$TMPDIR_TEST/infer-capability.task_graph.json"
 INFER_SOURCE="$TMPDIR_TEST/infer-capability.contract.md"
+PREREQ_GRAPH="$TMPDIR_TEST/prereq.task_graph.json"
 BACKLOG_DIR="$TMPDIR_TEST/backlog-sprints"
 
 cat > "$GRAPH" <<'JSON'
@@ -196,6 +197,26 @@ cat > "$INFER_SOURCE" <<'MD'
 需要使用 Ruflo / Claude Flow 的 swarm、MCP 和 workflow templates 能力，不能只按普通 Python 任务派发。
 MD
 
+cat > "$PREREQ_GRAPH" <<'JSON'
+{
+  "sprint_id": "sprint-prereq",
+  "prerequisites": ["sprint-upstream:passed"],
+  "dependency_policy": {
+    "blocks_until": ["sprint-upstream:passed"]
+  },
+  "nodes": [
+    {
+      "id": "P1",
+      "goal": "must wait for upstream",
+      "depends_on": [],
+      "write_scope": ["/tmp/prereq"],
+      "required_skills": ["python"],
+      "acceptance": ["blocked until upstream passed"]
+    }
+  ]
+}
+JSON
+
 mkdir -p "$BACKLOG_DIR"
 cp "$INFER_GRAPH" "$BACKLOG_DIR/sprint-backlog.task_graph.json"
 cp "$INFER_SOURCE" "$BACKLOG_DIR/sprint-backlog.contract.md"
@@ -249,6 +270,12 @@ check "S1 ready" "$OUT" '"S1"'
 check "S2 ready" "$OUT" '"S2"'
 check "S6 ready" "$OUT" '"S6"'
 if [[ "$OUT" != *'"S3"'* ]]; then ok "S3 blocked until S1/S2/S6 pass"; else fail "S3 dispatched too early"; fi
+OUT=$(HARNESS_DIR="$TMPDIR_TEST" python3 "$LIB/graph_scheduler.py" ready --graph "$PREREQ_GRAPH" 2>/dev/null)
+if [[ "$OUT" == *'"nodes": []'* && "$OUT" == *'"blocked_prerequisites"'* ]]; then ok "external prerequisite blocks ready nodes"; else fail "external prerequisite failed to block ready nodes (out=$OUT)"; fi
+mkdir -p "$TMPDIR_TEST/sprints"
+printf '{"status":"passed","phase":"eval_passed"}\n' > "$TMPDIR_TEST/sprints/sprint-upstream.status.json"
+OUT=$(HARNESS_DIR="$TMPDIR_TEST" python3 "$LIB/graph_scheduler.py" ready --graph "$PREREQ_GRAPH" 2>/dev/null)
+check "external prerequisite pass releases ready node" "$OUT" '"P1"'
 
 echo "T5: write_scope conflict split"
 OUT=$(python3 "$LIB/graph_scheduler.py" batches --graph "$CONFLICT" --max-parallel 8 2>/dev/null)

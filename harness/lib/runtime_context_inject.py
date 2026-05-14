@@ -26,9 +26,26 @@ END = "</solar-runtime-context>"
 def _derive_query(text: str, explicit: str = "") -> str:
     if explicit.strip():
         return explicit.strip()[:500]
-    cleaned = re.sub(r"<[^>]+>", " ", text)
+    # Do not feed the whole dispatch prompt into KB search. It contains hook
+    # preflight text, shell snippets, and file paths; using it verbatim causes
+    # slow/noisy retrieval and can block pane dispatch. Build a compact semantic
+    # query from the task fields that actually describe the work.
+    pieces: list[str] = []
+    for heading in ("Node Goal", "Required Capabilities", "Required Skills", "Acceptance"):
+        match = re.search(rf"## {re.escape(heading)}\n+(.+?)(?:\n## |\Z)", text, re.S)
+        if match:
+            value = re.sub(r"`|\\[|\\]|[*#>-]", " ", match.group(1))
+            value = re.sub(r"\s+", " ", value).strip()
+            if value:
+                pieces.append(value)
+    if not pieces:
+        for key in ("Sprint", "Node"):
+            match = re.search(rf"^{re.escape(key)}:\s*`?([^`\n]+)`?", text, re.M)
+            if match:
+                pieces.append(match.group(1).strip())
+    cleaned = re.sub(r"<[^>]+>", " ", " ".join(pieces) or text)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
-    return cleaned[:500] or "solar harness runtime context"
+    return cleaned[:300] or "solar harness runtime context"
 
 
 def inject(

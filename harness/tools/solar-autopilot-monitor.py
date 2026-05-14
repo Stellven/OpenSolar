@@ -48,6 +48,10 @@ try:
     from runtime_bridge import record_legacy_event
 except Exception:  # pragma: no cover - monitor must fail open
     record_legacy_event = None  # type: ignore
+try:
+    from workflow_guard import route as workflow_route
+except Exception:  # pragma: no cover - older harness installs may not have it
+    workflow_route = None  # type: ignore
 QMD_PROXY_HEALTH = HARNESS / "state" / "qmd-mcp-ipv4-health.json"
 TELEMETRY_ONLY_FINDINGS = {
     "knowledge_context_sqlite_only",
@@ -70,13 +74,14 @@ CONTEXT_INJECT_RE = re.compile(r"solar-harness\s+context\s+inject|Solar Unified 
 CONTEXT_TIMEOUT_RE = re.compile(r"context inject[\s\S]{0,240}timeout\s+\d+s|timeout\s+\d+s[\s\S]{0,240}context inject", re.I)
 ACTIVE_STATUSES = {"drafting", "queued", "active", "planning", "approved", "reviewing", "ready_for_review", "needs_human_review", "failed_review"}
 GRAPH_READY_HANDOFFS = {"builder", "builder_main", "builder_parallel", "builder-lab"}
+GRAPH_EVAL_HANDOFFS = {"evaluator", "reviewer"}
 
 import sys
 sys.path.insert(0, str(HARNESS / "lib"))
 try:
-    from graph_scheduler import load_graph, enqueue_ready, parent_ready_check, validate_graph
+    from graph_scheduler import load_graph, enqueue_ready, parent_ready_check, validate_graph, blocked_external_prerequisites
 except Exception:  # pragma: no cover - fallback for partially installed harnesses
-    load_graph = enqueue_ready = parent_ready_check = validate_graph = None
+    load_graph = enqueue_ready = parent_ready_check = validate_graph = blocked_external_prerequisites = None
 try:
     from graph_node_dispatcher import dispatch_ready as graph_dispatch_ready
     from graph_node_dispatcher import dispatch_node_evals as graph_dispatch_node_evals
@@ -479,7 +484,7 @@ def pane_assignment(target: str) -> dict:
 
 
 def enqueue_action(finding: dict, reason: str, detail: dict | None = None) -> None:
-    if finding.get("type") in TELEMETRY_ONLY_FINDINGS:
+    if is_telemetry_only_finding(finding):
         append_event(
             finding.get("sid", ""),
             "autopilot_queue_skip_telemetry_only",
@@ -506,6 +511,20 @@ def enqueue_action(finding: dict, reason: str, detail: dict | None = None) -> No
     }
     with QUEUE.open("a") as q:
         q.write(json.dumps(item, ensure_ascii=False) + "\n")
+
+
+def is_telemetry_only_finding(finding: dict) -> bool:
+    """Signals that must never become pane work items.
+
+    PM pane 0 is the user's intake surface. Autopilot can record PM residue and
+    health failures, but must not push remediation prompts into that pane.
+    """
+    ftype = finding.get("type")
+    target = finding.get("target", "")
+    role = finding.get("role", "")
+    if ftype in TELEMETRY_ONLY_FINDINGS:
+        return True
+    return ftype == "pane_asks_boss" and (role == "pm" or target == f"{SESSION}:0.0")
 
 
 def load_queue() -> list[dict]:
@@ -539,7 +558,7 @@ def retry_queue(state: dict, dispatch: bool, cooldown: int) -> list[dict]:
     for item in load_queue():
         sid = item.get("sid", "")
         target = item.get("target", "")
-        if item.get("type") in TELEMETRY_ONLY_FINDINGS:
+        if is_telemetry_only_finding(item):
             append_event(sid, "autopilot_queue_drop_telemetry_only", "info", {"target": target, "type": item.get("type")})
             actions.append({"sid": sid, "action": item.get("type"), "dropped": "telemetry_only", "target": target})
             continue
@@ -721,8 +740,11 @@ def graph_workers() -> list[dict]:
         "routing", "diagnostics", "evaluation", "debug.systematic",
     ]
     capabilities = [
+        "bash", "python", "typescript", "docs", "testing",
+        "schema", "state-machine", "storage", "sources",
         "code.review", "debug.systematic", "skill.methodology",
         "workflow.planning", "product.requirements", "test.tdd", "browser.browse", "browser.qa",
+        "architecture", "distributed-systems", "evaluation",
         "research.scope_rewrite", "research.source_matrix", "research.evidence.extract",
         "research.claim.mine", "research.citation.verify", "research.report.compile",
         "document.convert", "document.markdown_extract",
@@ -760,6 +782,107 @@ def sprint_passed(sid: str) -> bool:
     return str(sprint_status_payload(sid).get("status", "")).lower() in {"passed", "completed", "eval_passed"}
 
 
+def epic_dep_passed(dep_node: dict) -> bool:
+    dep_sid = str(dep_node.get("child_sprint_id") or "")
+    dep_node_state = str(dep_node.get("status") or "").lower()
+    return dep_node_state in {"passed", "completed", "eval_passed"} or (dep_sid and sprint_passed(dep_sid))
+
+
+def epic_child_dependency_ready(sid: str) -> tuple[bool, list[str]]:
+    status = sprint_status_payload(sid)
+    epic_id = str(status.get("epic_id") or "")
+    if not epic_id:
+        return True, []
+    graph_path = SPRINTS / f"{epic_id}.task_graph.json"
+    if not graph_path.exists():
+        return True, []
+    graph = load_json(graph_path)
+    nodes = [n for n in graph.get("nodes", []) if isinstance(n, dict)]
+    by_id = {str(n.get("id")): n for n in nodes if n.get("id")}
+    child_node = None
+    for node in nodes:
+        if str(node.get("child_sprint_id") or "") == sid:
+            child_node = node
+            break
+    if not child_node:
+        return True, []
+    blocked_by: list[str] = []
+    for dep in child_node.get("depends_on", []) or []:
+        dep_node = by_id.get(str(dep), {})
+        dep_sid = str(dep_node.get("child_sprint_id") or "")
+        if dep_sid and not epic_dep_passed(dep_node):
+            blocked_by.append(dep_sid)
+    return not blocked_by, blocked_by
+
+
+def child_graph_external_prerequisite_blocks(sid: str) -> list[dict]:
+    graph_path = SPRINTS / f"{sid}.task_graph.json"
+    if not graph_path.exists():
+        return []
+    graph = load_json(graph_path)
+    entries: list[str] = []
+    for raw in graph.get("prerequisites") or []:
+        if str(raw).strip():
+            entries.append(str(raw).strip())
+    policy = graph.get("dependency_policy") or {}
+    if isinstance(policy, dict):
+        for raw in policy.get("blocks_until") or []:
+            if str(raw).strip():
+                entries.append(str(raw).strip())
+    blocked: list[dict] = []
+    seen: set[str] = set()
+    for entry in entries:
+        if entry in seen:
+            continue
+        seen.add(entry)
+        if ":" in entry:
+            upstream_sid, required = entry.rsplit(":", 1)
+        else:
+            upstream_sid, required = entry, "passed"
+        upstream_sid = upstream_sid.strip()
+        required = (required.strip().lower() or "passed")
+        status = sprint_status_payload(upstream_sid)
+        current_status = str(status.get("status") or "").lower()
+        current_phase = str(status.get("phase") or "").lower()
+        ok = current_status == "passed" if required == "passed" else (
+            current_status == required or current_phase == required
+        )
+        if not ok:
+            blocked.append({
+                "requirement": entry,
+                "sprint_id": upstream_sid,
+                "required": required,
+                "current_status": current_status,
+                "current_phase": current_phase,
+                "reason": "status_not_satisfied" if status else "missing_status",
+            })
+    return blocked
+
+
+def set_epic_child_node_status(sid: str, node_status: str) -> bool:
+    status = sprint_status_payload(sid)
+    epic_id = str(status.get("epic_id") or "")
+    if not epic_id:
+        return False
+    graph_path = SPRINTS / f"{epic_id}.task_graph.json"
+    if not graph_path.exists():
+        return False
+    graph = load_json(graph_path)
+    changed = False
+    for node in graph.get("nodes", []) or []:
+        if not isinstance(node, dict):
+            continue
+        if str(node.get("child_sprint_id") or "") != sid:
+            continue
+        if str(node.get("status") or "") != node_status:
+            node["status"] = node_status
+            node["updated_at"] = utc_now()
+            changed = True
+    if changed:
+        save_json(graph_path, graph)
+    return changed
+
+
 def inspect_epics() -> list[dict]:
     findings = []
     for meta_path in sorted(SPRINTS.glob("epic-*.epic.json"), key=lambda p: p.stat().st_mtime, reverse=True):
@@ -782,12 +905,21 @@ def inspect_epics() -> list[dict]:
                 continue
             missing = []
             for dep in node.get("depends_on", []) or []:
-                dep_sid = str(by_id.get(str(dep), {}).get("child_sprint_id") or "")
-                if dep_sid and not sprint_passed(dep_sid):
+                dep_node = by_id.get(str(dep), {})
+                dep_sid = str(dep_node.get("child_sprint_id") or "")
+                if dep_sid and not epic_dep_passed(dep_node):
                     missing.append(dep_sid)
             if missing:
                 blocked.append({"sid": child_sid, "blocked_by": missing})
             else:
+                child_graph_blocked = child_graph_external_prerequisite_blocks(child_sid)
+                route = workflow_guard_route(child_sid)
+                if child_graph_blocked or route.get("reason") == "external_prerequisite_blocked":
+                    blocked.append({
+                        "sid": child_sid,
+                        "blocked_by": child_graph_blocked or route.get("blocked_prerequisites", []),
+                    })
+                    continue
                 ready.append({"sid": child_sid, "node_id": node.get("id")})
         if ready:
             findings.append(
@@ -801,6 +933,47 @@ def inspect_epics() -> list[dict]:
                     "blocked_children": blocked,
                 }
             )
+    return findings
+
+
+def inspect_epic_child_state_drift() -> list[dict]:
+    """Find child sprints whose live state violates parent DAG dependencies."""
+    findings: list[dict] = []
+    for meta_path in sorted(SPRINTS.glob("epic-*.epic.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        meta = load_json(meta_path)
+        epic_id = str(meta.get("epic_id") or meta_path.name.removesuffix(".epic.json"))
+        graph_path = SPRINTS / f"{epic_id}.task_graph.json"
+        if not graph_path.exists():
+            continue
+        graph = load_json(graph_path)
+        nodes = [n for n in graph.get("nodes", []) if isinstance(n, dict)]
+        by_id = {str(n.get("id")): n for n in nodes if n.get("id")}
+        for node in nodes:
+            sid = str(node.get("child_sprint_id") or "")
+            if not sid:
+                continue
+            status = sprint_status_payload(sid)
+            child_state = str(status.get("status", "")).lower()
+            if child_state not in {"active", "approved", "reviewing", "ready_for_review"}:
+                continue
+            blocked_by: list[str] = []
+            for dep in node.get("depends_on", []) or []:
+                dep_node = by_id.get(str(dep), {})
+                dep_sid = str(dep_node.get("child_sprint_id") or "")
+                if dep_sid and not epic_dep_passed(dep_node):
+                    blocked_by.append(dep_sid)
+            if blocked_by:
+                findings.append(
+                    {
+                        "sid": sid,
+                        "type": "epic_child_dependency_blocked",
+                        "severity": "warn",
+                        "target": "",
+                        "message": f"{sid} is active before dependencies passed; autopilot will downgrade to queued.",
+                        "blocked_by": blocked_by,
+                        "epic_id": epic_id,
+                    }
+                )
     return findings
 
 
@@ -904,6 +1077,74 @@ def instruction_for(status: dict, files: dict[str, bool]) -> str:
     return ""
 
 
+def workflow_guard_route(sid: str) -> dict:
+    if workflow_route is None:
+        return {}
+    try:
+        return workflow_route(sid)
+    except Exception as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+def normalize_status_to_workflow_route(sid: str, status: dict, route: dict) -> bool:
+    role = str(route.get("route_role") or "")
+    stage = str(route.get("stage") or "")
+    if role == "none" and stage == "done":
+        fields = ("passed", "completed", "done", "done")
+    elif not role or role == "pm":
+        return False
+    else:
+        fields = {
+            "planner": ("drafting", "prd_ready", "planner", "planner"),
+            "builder_main": ("active", "planning_complete", "builder_main", "builder_main"),
+            "builder": ("active", "planning_complete", "builder", "builder"),
+            "evaluator": ("reviewing", "handoff_ready", "evaluator", "evaluator"),
+        }.get(role)
+        if not fields:
+            return False
+    new_status, new_phase, handoff, target_role = fields
+    changed = any(
+        str(status.get(k, "")) != v
+        for k, v in {
+            "status": new_status,
+            "phase": new_phase,
+            "handoff_to": handoff,
+            "target_role": target_role,
+        }.items()
+    )
+    if not changed:
+        return False
+    status.update(
+        {
+            "status": new_status,
+            "phase": new_phase,
+            "handoff_to": handoff,
+            "target_role": target_role,
+            "updated_at": utc_now(),
+        }
+    )
+    hist = status.setdefault("history", [])
+    if isinstance(hist, list):
+        hist.append(
+            {
+                "ts": utc_now(),
+                "event": "autopilot_workflow_route_normalized",
+                "by": "solar-autopilot",
+                "route_role": role,
+                "stage": stage,
+                "reason": route.get("reason", ""),
+            }
+        )
+    save_json(SPRINTS / f"{sid}.status.json", status)
+    append_event(
+        sid,
+        "autopilot_workflow_route_normalized",
+        "info",
+        {"route_role": role, "stage": stage, "reason": route.get("reason", "")},
+    )
+    return True
+
+
 def inspect_sprints() -> list[dict]:
     raw_findings = []
     for path in sorted(SPRINTS.glob("sprint-*.status.json")):
@@ -916,6 +1157,39 @@ def inspect_sprints() -> list[dict]:
         priority = status.get("priority", "")
         if st not in ACTIVE_STATUSES:
             continue
+        dep_ready, blocked_by = epic_child_dependency_ready(str(sid))
+        if not dep_ready:
+            raw_findings.append(
+                {
+                    "sid": sid,
+                    "type": "epic_child_dependency_blocked",
+                    "severity": "warn",
+                    "target": "",
+                    "blocked_by": blocked_by,
+                    "message": "Epic child sprint dependency is not satisfied; keep queued and do not dispatch.",
+                }
+            )
+            continue
+
+        route = workflow_guard_route(str(sid))
+        if route.get("reason") == "external_prerequisite_blocked":
+            raw_findings.append(
+                {
+                    "sid": sid,
+                    "type": "epic_child_dependency_blocked",
+                    "severity": "warn",
+                    "target": "",
+                    "blocked_by": route.get("blocked_prerequisites", []),
+                    "message": "Child task_graph prerequisite is not satisfied; keep queued and do not dispatch.",
+                }
+            )
+            continue
+        if route.get("ok") and not route.get("violations"):
+            if normalize_status_to_workflow_route(str(sid), status, route):
+                status = load_json(path)
+                st = status.get("status", "")
+                phase = status.get("phase", "")
+                handoff = status.get("handoff_to", "")
 
         if priority == "P0" and files["contract"] and not files["prd"]:
             raw_findings.append(
@@ -950,7 +1224,7 @@ def inspect_sprints() -> list[dict]:
                     ),
                 }
             )
-        if files["plan"] and files["task_graph"] and handoff in GRAPH_READY_HANDOFFS:
+        if files["plan"] and files["task_graph"] and handoff in (GRAPH_READY_HANDOFFS | GRAPH_EVAL_HANDOFFS):
             gs = graph_status(sid)
             if gs.get("parent_ready"):
                 raw_findings.append(
@@ -970,7 +1244,10 @@ def inspect_sprints() -> list[dict]:
                         "type": "graph_ready_nodes",
                         "severity": "info",
                         "target": "",
-                        "message": f"{sid} task_graph valid；autopilot 将只派发 ready DAG nodes。",
+                        "message": (
+                            f"{sid} task_graph valid；autopilot 将派发 ready DAG nodes "
+                            "并处理 reviewing node evaluator。"
+                        ),
                         "graph": gs,
                     }
                 )
@@ -1032,6 +1309,21 @@ def inspect_panes(state: dict, stall_seconds: int) -> list[dict]:
         if changed:
             state["pane"][target] = {"hash": h, "seen_at": now_epoch, "role": role}
         if ASK_BOSS_RE.search(tail):
+            # PM pane is the user's intake surface. If it is stuck in Claude
+            # Rewind/interrupt UI or contains old prompt residue, do not send
+            # another auto-reply into the same pane. Record the signal only.
+            if role == "pm" and ("Rewind" in tail or "Interrupted · What should Claude do instead?" in tail):
+                findings.append(
+                    {
+                        "sid": "",
+                        "type": "pm_pane_interrupt_residue",
+                        "severity": "warn",
+                        "target": target,
+                        "role": role,
+                        "message": "PM pane contains interrupt/Rewind residue; do not auto-dispatch into user intake pane.",
+                    }
+                )
+                continue
             sid = candidate_sid_for_role(role)
             if sid:
                 findings.append(
@@ -1251,6 +1543,18 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
         sid = f.get("sid", "")
         ftype = f.get("type", "")
         target = f.get("target", "")
+        if is_telemetry_only_finding(f):
+            append_event(sid, f"autopilot_{ftype}", f.get("severity", "warn"), f)
+            result = {
+                "sid": sid,
+                "action": ftype,
+                "target": target,
+                "dispatched": False,
+                "recorded_only": True,
+            }
+            mark_action(state, f, result)
+            actions.append(result)
+            continue
         if target and target in used_targets:
             actions.append({"sid": sid, "action": ftype, "skipped": "target_already_used_this_scan", "target": target})
             continue
@@ -1305,6 +1609,37 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
                 used_targets.add(target)
             mark_action(state, f, result)
             actions.append(result)
+        elif ftype == "epic_child_dependency_blocked":
+            status_path = SPRINTS / f"{sid}.status.json"
+            status = load_json(status_path)
+            status.update({
+                "status": "queued",
+                "phase": "epic_waiting_dependency",
+                "handoff_to": "",
+                "target_role": "",
+                "updated_at": utc_now(),
+            })
+            hist = status.setdefault("history", [])
+            if isinstance(hist, list):
+                hist.append({
+                    "ts": utc_now(),
+                    "event": "autopilot_epic_child_dependency_blocked",
+                    "by": "solar-autopilot",
+                    "note": "Dependency not satisfied; dispatch suppressed.",
+                    "blocked_by": f.get("blocked_by", []),
+                })
+            save_json(status_path, status)
+            graph_updated = set_epic_child_node_status(sid, "pending")
+            append_event(sid, "autopilot_epic_child_dependency_blocked", "warn", {"blocked_by": f.get("blocked_by", [])})
+            result = {
+                "sid": sid,
+                "action": ftype,
+                "queued": True,
+                "blocked_by": f.get("blocked_by", []),
+                "parent_graph_updated": graph_updated,
+            }
+            mark_action(state, f, result)
+            actions.append(result)
         elif ftype in ("graph_parent_ready",):
             append_event(sid, "autopilot_graph_parent_ready", "info", f.get("graph", {}))
             sent = False
@@ -1357,7 +1692,9 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
         elif ftype == "pane_asks_boss":
             append_event("", "autopilot_detected_boss_question", "warn", f)
             sent = False
-            if dispatch and sid:
+            if f.get("role") == "pm" or f.get("target") == f"{SESSION}:0.0":
+                sent = False
+            elif dispatch and sid:
                 sent = wake_sid(sid)
             elif dispatch and f.get("target"):
                 sent = tmux_send(f["target"], f.get("message", "不要等待用户拍板；按 safe default 继续。"))
@@ -1366,12 +1703,17 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
                 used_targets.add(target)
             mark_action(state, f, result)
             actions.append(result)
+        elif ftype == "pm_pane_interrupt_residue":
+            append_event("", "autopilot_pm_pane_interrupt_residue", "warn", f)
+            result = {"sid": sid, "action": ftype, "target": f.get("target", ""), "dispatched": False, "recorded_only": True}
+            mark_action(state, f, result)
+            actions.append(result)
         elif ftype == "missing_prd":
             append_event(sid, "autopilot_missing_prd", "warn", f)
             result = {"sid": sid, "action": ftype, "requires_codex_pm": True}
             mark_action(state, f, result)
             actions.append(result)
-        elif ftype in ("knowledge_context_sqlite_only", "knowledge_context_timeout", "knowledge_probe_failed", "model_registry_doctor_failed"):
+        elif ftype in TELEMETRY_ONLY_FINDINGS:
             append_event("", f"autopilot_{ftype}", f.get("severity", "warn"), f)
             # Probe failures are telemetry, not worker assignments. Sending a
             # remediation prompt to a live pane can leave stale text in the TUI
@@ -1405,7 +1747,14 @@ def release_lock() -> None:
 
 def scan_once(args: argparse.Namespace, state: dict) -> dict:
     queue_actions = retry_queue(state, args.dispatch, args.cooldown) if args.apply else []
-    findings = inspect_epics() + inspect_sprints() + inspect_panes(state, args.stall_seconds) + inspect_knowledge_context(state) + inspect_model_registry(state)
+    findings = (
+        inspect_epics()
+        + inspect_epic_child_state_drift()
+        + inspect_sprints()
+        + inspect_panes(state, args.stall_seconds)
+        + inspect_knowledge_context(state)
+        + inspect_model_registry(state)
+    )
     actions = apply_findings(findings, args.dispatch, state, args.cooldown) if args.apply else []
     payload = {
         "ok": True,

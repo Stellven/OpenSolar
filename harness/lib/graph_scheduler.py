@@ -33,6 +33,7 @@ TERMINAL_STATUSES = {"passed", "failed", "skipped"}
 ACTIVE_STATUSES = {"assigned", "dispatched", "in_progress", "running", "reviewing"}
 READY_STATUSES = {"pending", "queued", "blocked", ""}
 PASS_STATUSES = {"passed"}
+SPRINTS_DIR = Path(os.environ.get("HARNESS_SPRINTS_DIR", HARNESS_DIR / "sprints"))
 
 
 def _now() -> str:
@@ -271,10 +272,86 @@ def _is_passed(graph: dict[str, Any], node_id: str) -> bool:
     return node_status(graph, node_id) in PASS_STATUSES
 
 
+def _external_prerequisites(graph: dict[str, Any]) -> list[str]:
+    entries: list[str] = []
+    for raw in graph.get("prerequisites") or []:
+        if str(raw).strip():
+            entries.append(str(raw).strip())
+
+    policy = graph.get("dependency_policy") or {}
+    if isinstance(policy, dict):
+        for raw in policy.get("blocks_until") or []:
+            if str(raw).strip():
+                entries.append(str(raw).strip())
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for item in entries:
+        if item not in seen:
+            deduped.append(item)
+            seen.add(item)
+    return deduped
+
+
+def _parse_external_prerequisite(entry: str) -> tuple[str, str]:
+    if ":" not in entry:
+        return entry, "passed"
+    sprint_id, required = entry.rsplit(":", 1)
+    sprint_id = sprint_id.strip()
+    required = required.strip().lower() or "passed"
+    return sprint_id, required
+
+
+def _external_prerequisite_satisfied(entry: str) -> tuple[bool, dict[str, Any]]:
+    sprint_id, required = _parse_external_prerequisite(entry)
+    status_path = SPRINTS_DIR / f"{sprint_id}.status.json"
+    detail: dict[str, Any] = {
+        "requirement": entry,
+        "sprint_id": sprint_id,
+        "required": required,
+        "status_path": str(status_path),
+    }
+    if not sprint_id:
+        detail["reason"] = "empty_sprint_id"
+        return False, detail
+    if not status_path.exists():
+        detail["reason"] = "missing_status"
+        return False, detail
+    try:
+        status = json.loads(status_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        detail["reason"] = "status_corrupt"
+        detail["error"] = str(exc)
+        return False, detail
+
+    current_status = str(status.get("status", "") or "").lower()
+    current_phase = str(status.get("phase", "") or "").lower()
+    detail["current_status"] = current_status
+    detail["current_phase"] = current_phase
+    if required == "passed":
+        ok = current_status == "passed"
+    else:
+        ok = current_status == required or current_phase == required
+    if not ok:
+        detail["reason"] = "status_not_satisfied"
+    return ok, detail
+
+
+def blocked_external_prerequisites(graph: dict[str, Any]) -> list[dict[str, Any]]:
+    blocked: list[dict[str, Any]] = []
+    for entry in _external_prerequisites(graph):
+        ok, detail = _external_prerequisite_satisfied(entry)
+        if not ok:
+            blocked.append(detail)
+    return blocked
+
+
 def ready_nodes(graph: dict[str, Any]) -> list[dict[str, Any]]:
     validation = validate_graph(graph)
     if not validation["ok"]:
         raise ValueError("; ".join(validation["errors"]))
+    if blocked_external_prerequisites(graph):
+        return []
 
     ids = _node_map(graph)
     ready: list[dict[str, Any]] = []
@@ -337,11 +414,13 @@ def _batch_ready_nodes(nodes: list[dict[str, Any]], max_parallel: int | None = N
 
 
 def make_batches(graph: dict[str, Any], max_parallel: int | None = None) -> dict[str, Any]:
+    blocked = blocked_external_prerequisites(graph)
     nodes = ready_nodes(graph)
     batches = _batch_ready_nodes(nodes, max_parallel=max_parallel)
     return {
         "ok": True,
         "sprint_id": graph.get("sprint_id"),
+        "blocked_prerequisites": blocked,
         "batch_count": len(batches),
         "batches": [
             {
@@ -517,6 +596,9 @@ def assign_ready(graph: dict[str, Any], workers: list[dict[str, Any]],
                  graph_path: str | Path | None = None,
                  source: str | Path | None = None) -> dict[str, Any]:
     graph = auto_enrich_graph(graph, graph_path=graph_path, source=source)
+    blocked = blocked_external_prerequisites(graph)
+    if blocked:
+        return {"ok": True, "assigned": [], "queued": [], "batch": [], "blocked_prerequisites": blocked}
     batches = _batch_ready_nodes(ready_nodes(graph), max_parallel=max_parallel)
     if not batches:
         return {"ok": True, "assigned": [], "queued": [], "batch": []}
@@ -634,6 +716,7 @@ def enqueue_ready(graph: dict[str, Any], graph_path: str, workers: list[dict[str
         "ok": True,
         "sprint_id": sid,
         "batch": assignment.get("batch", []),
+        "blocked_prerequisites": assignment.get("blocked_prerequisites", []),
         "capability_enrichment": assignment.get("capability_enrichment", {}),
         "enqueued": enqueued,
         "queued": queued,
@@ -816,7 +899,11 @@ def main() -> int:
 
         elif args.cmd == "ready":
             graph = load_graph(args.graph)
-            print(json.dumps({"ok": True, "nodes": [n["id"] for n in ready_nodes(graph)]}, ensure_ascii=False))
+            print(json.dumps({
+                "ok": True,
+                "nodes": [n["id"] for n in ready_nodes(graph)],
+                "blocked_prerequisites": blocked_external_prerequisites(graph),
+            }, ensure_ascii=False))
 
         elif args.cmd == "batches":
             graph = load_graph(args.graph)
