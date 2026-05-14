@@ -74,6 +74,10 @@ try:
     from capability_effects import scan_effect  # noqa: E402
 except Exception:  # pragma: no cover - fail-open in partial test fixtures
     scan_effect = None  # type: ignore
+try:
+    from architecture_guard import dispatch_policy_block  # noqa: E402
+except Exception:  # pragma: no cover - architecture guard is additive
+    dispatch_policy_block = None  # type: ignore
 
 
 def _json(obj: Any) -> str:
@@ -472,6 +476,12 @@ def build_dispatch_text(payload: dict[str, Any], pane: str) -> str:
     node_id = node.get("id") or payload.get("node_id") or _node_id_from_intent(payload.get("intent", ""))
     graph_path = payload.get("graph") or str(SPRINTS_DIR / f"{sid}.task_graph.json")
     dispatch_id = payload.get("dispatch_id", "")
+    graph_for_policy: dict[str, Any] = {}
+    try:
+        graph_for_policy = load_graph(graph_path)
+    except Exception:
+        graph_for_policy = {"nodes": [node]}
+    architecture_block = dispatch_policy_block(node, graph_for_policy) if dispatch_policy_block else "## Architecture Guard\n\n- unavailable"
 
     return f"""{STATE_READ_PREFLIGHT}
 
@@ -502,6 +512,8 @@ Graph: `{graph_path}`
 ## Write Scope
 
 {_scope_lines(node.get("write_scope"))}
+
+{architecture_block}
 
 ## Acceptance
 
@@ -568,6 +580,7 @@ def build_eval_dispatch_text(graph: dict[str, Any], graph_path: str, node: dict[
     eval_json = _eval_json_file(sid, node_id)
     node_dispatch = _dispatch_file(sid, node_id)
     contract = SPRINTS_DIR / f"{sid}.contract.md"
+    architecture_block = dispatch_policy_block(node, graph) if dispatch_policy_block else "## Architecture Guard\n\n- unavailable"
 
     return f"""{STATE_READ_PREFLIGHT}
 
@@ -603,6 +616,8 @@ Handoff: `{handoff}`
 
 {_scope_lines(node.get("write_scope"))}
 
+{architecture_block}
+
 ## Required Reads
 
 ```bash
@@ -618,6 +633,8 @@ solar-harness session evaluate "{sid}" --json
 - 评审必须消费 append-only session log，不得只看最终 handoff 文件。
 - 在 eval.md 的 `Evidence Checked` 中写入 `Session Log: solar-harness session evaluate used`。
 - 如果 `session evaluate` 返回 errors/warnings，必须逐项解释是否阻塞本 node verdict。
+- 必须检查 `Architecture Guard`：新能力是否为 package/plugin/skill/connector；如触碰 protected core，必须有 `core_patch_allowed=true`、rollback 和 P0 bugfix 证据，否则 FAIL。
+- 涉及 online exploration 的 node 必须验证 >=2 个候选方向和 kill_criteria；否则 FAIL。
 
 ## Required Outputs
 
@@ -640,6 +657,8 @@ solar-harness session evaluate "{sid}" --json
    ## Acceptance Result
 
    ## Scope Compliance
+
+   ## Architecture Guard Compliance
 
    ## Risks
 
