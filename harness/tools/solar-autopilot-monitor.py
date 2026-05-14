@@ -79,9 +79,9 @@ GRAPH_EVAL_HANDOFFS = {"evaluator", "reviewer"}
 import sys
 sys.path.insert(0, str(HARNESS / "lib"))
 try:
-    from graph_scheduler import load_graph, enqueue_ready, parent_ready_check, validate_graph, blocked_external_prerequisites
+    from graph_scheduler import load_graph, save_graph, enqueue_ready, parent_ready_check, validate_graph, blocked_external_prerequisites, doctor_graph
 except Exception:  # pragma: no cover - fallback for partially installed harnesses
-    load_graph = enqueue_ready = parent_ready_check = validate_graph = blocked_external_prerequisites = None
+    load_graph = save_graph = enqueue_ready = parent_ready_check = validate_graph = blocked_external_prerequisites = doctor_graph = None
 try:
     from graph_node_dispatcher import dispatch_ready as graph_dispatch_ready
     from graph_node_dispatcher import dispatch_node_evals as graph_dispatch_node_evals
@@ -431,6 +431,70 @@ def tmux_send(target: str, text: str) -> bool:
         return r.returncode == 0
     except Exception:
         return False
+
+
+def tmux_title(target: str) -> str:
+    try:
+        r = subprocess.run(
+            ["tmux", "display-message", "-p", "-t", target, "#{pane_title}"],
+            capture_output=True,
+            text=True,
+            timeout=1.5,
+        )
+        return r.stdout.strip() if r.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
+def tmux_set_title(target: str, title: str) -> bool:
+    try:
+        r = subprocess.run(["tmux", "select-pane", "-t", target, "-T", title], timeout=1.5)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def normalize_idle_title(title: str) -> str:
+    """Strip stale dispatch capability text and mark the pane as truly idle."""
+    base = re.split(r"\s+\|\s+(?:能力|状态):", title or "", maxsplit=1)[0].strip()
+    if not base:
+        base = "Solar Pane"
+    return f"{base} | 状态:idle/no active sprint"
+
+
+def update_idle_pane_titles(state: dict) -> list[dict]:
+    """Make no-work state visible in tmux instead of leaving old task residue.
+
+    This does not send text into Claude. It only updates pane border titles, so
+    it is safe when all sprint/queue sources say there is no active work.
+    """
+    if active_statuses() or load_queue():
+        return []
+    updated: list[dict] = []
+    targets = [
+        f"{SESSION}:0.0",
+        f"{SESSION}:0.1",
+        f"{SESSION}:0.2",
+        f"{SESSION}:0.3",
+        "solar-harness-lab:0.0",
+        "solar-harness-lab:0.1",
+        "solar-harness-lab:0.2",
+        "solar-harness-lab:0.3",
+    ]
+    for target in targets:
+        current = tmux_title(target)
+        if not current:
+            continue
+        desired = normalize_idle_title(current)
+        if current == desired:
+            continue
+        if tmux_set_title(target, desired):
+            updated.append({"target": target, "title": desired})
+    if updated:
+        state.setdefault("idle_title_updates", []).append({"ts": utc_now(), "panes": updated})
+        state["idle_title_updates"] = state["idle_title_updates"][-20:]
+        append_event("", "autopilot_idle_titles_updated", "info", {"panes": updated})
+    return updated
 
 
 def no_dispatch_enabled() -> bool:
@@ -985,6 +1049,12 @@ def graph_status(sid: str) -> dict:
         return {"exists": path.exists(), "ready": False, "path": str(path)}
     try:
         graph = load_graph(path)
+        doctor = {}
+        if doctor_graph is not None:
+            doctor = doctor_graph(graph, repair=True)
+            if doctor.get("repaired") and save_graph is not None:
+                save_graph(path, graph)
+                append_event(sid, "autopilot_graph_doctor_repaired", "warn", doctor)
         validation = validate_graph(graph) if validate_graph else {"ok": False, "errors": ["graph_scheduler_unavailable"]}
         parent = parent_ready_check(graph) if parent_ready_check else {"ready": False}
         return {
@@ -992,6 +1062,7 @@ def graph_status(sid: str) -> dict:
             "path": str(path),
             "valid": bool(validation.get("ok")),
             "validation": validation,
+            "doctor": doctor,
             "parent_ready": bool(parent.get("ready")),
             "parent": parent,
         }
@@ -1758,13 +1829,16 @@ def scan_once(args: argparse.Namespace, state: dict) -> dict:
         + inspect_model_registry(state)
     )
     actions = apply_findings(findings, args.dispatch, state, args.cooldown) if args.apply else []
+    idle_title_actions = update_idle_pane_titles(state) if args.apply else []
     payload = {
         "ok": True,
         "apply": args.apply,
         "dispatch": args.dispatch,
         "loop": args.loop,
         "findings": findings,
-        "actions": queue_actions + actions,
+        "actions": queue_actions + actions + [
+            {"action": "idle_titles_updated", "panes": idle_title_actions, "dispatched": False}
+        ] if idle_title_actions else queue_actions + actions,
         "queue_actions": queue_actions,
         "queue_depth": len(load_queue()),
         "state_path": str(STATE),
