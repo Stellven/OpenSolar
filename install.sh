@@ -7,7 +7,7 @@
 #     2. 把仓库内 CLAUDE.md/rules/skills/agents/hooks/core 复制到 ~/.claude/
 #     3. 创建 ~/.solar/ 目录 + 初始化 solar.db (如有 schema)
 #   L2 高级:
-#     4. 把 harness/ → ~/.solar/harness/ + 创建 ~/.solar/bin/solar-harness 软链
+#     4. 把仓库发布目录 harness/ → ~/.solar/harness/ + 创建 ~/.solar/bin/solar-harness 软链
 #     5. 把 mempalace/ → ~/.solar/mempalace/
 #     6. 把 codex-bridge/ → ~/.solar/codex-bridge/
 #   验收:
@@ -86,20 +86,10 @@ if [ ! -f "$SOLAR_HOME/solar.db" ]; then
     fi
 fi
 
-# Step 5: L2 复制 harness/
+# Step 5: L2 同步 harness/
 if [ -d "$SOLAR_DIR/harness" ]; then
-    echo "🔧 [L2] 复制 Solar Harness 协调器系统 ..."
-    mkdir -p "$SOLAR_HOME/harness"
-    rsync -a "$SOLAR_DIR/harness/" "$SOLAR_HOME/harness/"
-    chmod +x "$SOLAR_HOME/harness/"*.sh 2>/dev/null || true
-    chmod +x "$SOLAR_HOME/harness/lib/"*.sh 2>/dev/null || true
-    chmod +x "$SOLAR_HOME/harness/tests/"*.sh 2>/dev/null || true
-
-    # 创建 solar-harness 软链
-    if [ -f "$SOLAR_HOME/harness/solar-harness.sh" ]; then
-        ln -sf "$SOLAR_HOME/harness/solar-harness.sh" "$SOLAR_HOME/bin/solar-harness"
-        echo "🔗 [L2] $SOLAR_HOME/bin/solar-harness → solar-harness.sh"
-    fi
+    echo "🔧 [L2] 同步 Solar Harness: $SOLAR_DIR/harness → $SOLAR_HOME/harness ..."
+    SOLAR_DIR="$SOLAR_DIR" SOLAR_HOME="$SOLAR_HOME" "$SOLAR_DIR/scripts/sync-harness-runtime.sh"
 else
     echo "⚠️  仓库无 harness/, 跳过 L2 协调器安装"
 fi
@@ -151,11 +141,12 @@ check "[L2] harness/coordinator.sh"         "test -f $SOLAR_HOME/harness/coordin
 check "[L2] harness/chain-watcher.sh"       "test -f $SOLAR_HOME/harness/chain-watcher.sh"
 check "[L2] harness/personas/ 5 化身"        "[ \$(ls $SOLAR_HOME/harness/personas/ 2>/dev/null | wc -l) -ge 5 ]"
 check "[L2] solar-harness CLI 软链"          "test -L $SOLAR_HOME/bin/solar-harness"
+check "[L2] harness runtime source 标记"      "grep -q \"source=$SOLAR_DIR/harness\" $SOLAR_HOME/harness/.runtime-source"
 check "[L2] mempalace_mcp_server.py"        "test -f $SOLAR_HOME/mempalace/mempalace_mcp_server.py"
 check "[L2] codex-bridge/CODEX-PROTOCOL.md" "test -f $SOLAR_HOME/codex-bridge/CODEX-PROTOCOL.md"
 
 echo ""
-TOTAL=12
+TOTAL=13
 if [ "$FAIL" -eq 0 ]; then
     echo "✅ Solar L1 + L2 安装完成 ($PASS/$TOTAL 通过)"
     echo ""

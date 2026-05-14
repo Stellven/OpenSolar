@@ -6,14 +6,14 @@
 
 ## 协议
 
-- **L1 基础** = 本剧本承诺的范围: clone 仓库 → `./install.sh` → 6 项自检 PASS → 启动 Claude Code 输入 `solar`
-- **L2 高级** (协调器/Sprint) = 当前未打包到本仓库, 不在本剧本范围, 见 Step 8
+- **L1 基础** = clone 仓库 → `./install.sh` → L1 自检 PASS → 启动 Claude Code 输入 `solar`
+- **L2 高级** (协调器/Sprint) = 仓库 `harness/` 发布源 → `./install.sh` 同步到 `~/.solar/harness/`, 见 Step 8
 - **L3 项目** (Solar-MAX) = 完全可选, 见 Step 8
 
 **严格规则**:
 - 每步必须先报告 "目的 + 命令 + 预期输出", 等用户点头才执行
 - 任一步失败立刻停下, 报告失败的具体输出, **不要静默跳过**
-- 不要承诺剧本里没写的命令 (例如 `solar-harness doctor`)
+- 不要承诺剧本里没写的命令；L2 命令以 `~/.solar/bin/solar-harness` 和 `~/.solar/harness/` 为准
 - 全程不需要 root/sudo
 
 ---
@@ -285,14 +285,21 @@ agents 数量:   <若干>
 
 # Step 8: 高级模式 (可选, 跳过也能正常用)
 
-L1 安装完成已经能用 Solar 大部分功能 (触发词、agents、skills、rules)。下面是**当前未打包**的可选模式:
+L1 安装完成已经能用 Solar 大部分功能 (触发词、agents、skills、rules)。仓库现在同时发布 L2 Harness:
 
 ## L2 高级模式: Solar Harness (协调器 / Sprint / 牛马链路)
 
 - **是什么**: bash + python 协调系统, 实现"规划者→建设者→审判官"多 pane 自动派发
 - **能做什么**: Sprint 状态机, verify cmd 自动跑, 牛马 (GLM/Gemini/DeepSeek) 调用
-- **当前状态**: ⚠️ **不在 ~/Solar 仓库内**, 实际位置 `~/.solar/harness/` 是作者本机历史积累
-- **如何获得**: 暂无打包发布, 关注后续 sprint。监护人会在仓库里追加 `harness/` 子目录后再来更新本剧本
+- **发布目录**: `~/Solar/harness/`，来自 GitHub 仓库 `lisihao/Solar`
+- **运行目录**: `~/.solar/harness/`
+- **安装方式**: `./install.sh` 会自动运行 `scripts/sync-harness-runtime.sh`，把 `~/Solar/harness/` 同步到 `~/.solar/harness/`，并创建 `~/.solar/bin/solar-harness`
+- **手动重同步**:
+
+```bash
+cd ~/Solar
+./scripts/sync-harness-runtime.sh
+```
 
 ## L3 项目模式: Solar-MAX
 
@@ -342,7 +349,7 @@ echo "🎉 Solar L1 全链路 PASS"
 | 2 | `git`, `bash`, `sqlite3` 都 `which` 命中 |
 | 3 | `~/Solar/install.sh` + `~/Solar/CLAUDE.md` 同时存在 |
 | 4 | `.env` 已创建 (或用户选择跳过) |
-| 5 | `install.sh` 退出码 0 + "6/6 通过" |
+| 5 | `install.sh` 退出码 0 + L1/L2 自检通过 |
 | 6 | `~/.claude/{CLAUDE.md,rules,skills,agents}` + `~/.solar/` 都存在 |
 | 7 | Troubleshoot 表查不到的问题已开 issue |
 | 8 | 用户决定是否进高级模式 (L1 已可用) |
@@ -355,5 +362,5 @@ echo "🎉 Solar L1 全链路 PASS"
 1. **不擅自跳步** — 上一步未通过不进下一步
 2. **不假报成功** — 命令 exit code 非 0 必须报告
 3. **不静默修复** — 失败处理之前先告诉用户错误是什么
-4. **不假装存在** — `solar-harness doctor` 在 L1 不存在, 不要让用户跑
+4. **不假装路径** — L2 Harness 的发布源是 `~/Solar/harness`, 运行源是 `~/.solar/harness`
 5. **不超出范围** — 用户没要求 L2/L3, 不主动安装
