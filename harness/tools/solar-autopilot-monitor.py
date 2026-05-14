@@ -743,7 +743,7 @@ def graph_workers() -> list[dict]:
     capabilities = [
         "bash", "python", "typescript", "docs", "testing",
         "frontend", "observability",
-        "schema", "state-machine", "storage", "sources",
+        "documentation", "schema", "state-machine", "storage", "sources",
         "code.review", "debug.systematic", "skill.methodology",
         "workflow.planning", "product.requirements", "test.tdd", "browser.browse", "browser.qa",
         "architecture", "distributed-systems", "evaluation",

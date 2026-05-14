@@ -135,11 +135,32 @@ def _node_results(graph: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return results if isinstance(results, dict) else {}
 
 
+def _parse_ts(value: Any) -> datetime.datetime | None:
+    if not value:
+        return None
+    try:
+        raw = str(value).strip()
+        if raw.endswith("Z"):
+            raw = raw[:-1] + "+00:00"
+        parsed = datetime.datetime.fromisoformat(raw)
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+        return parsed
+    except Exception:
+        return None
+
+
 def node_status(graph: dict[str, Any], node_id: str) -> str:
     results = _node_results(graph)
-    if node_id in results and isinstance(results[node_id], dict):
-        return str(results[node_id].get("status", "") or "").lower()
     node = _node_map(graph)[node_id]
+    if node_id in results and isinstance(results[node_id], dict):
+        result_status = str(results[node_id].get("status", "") or "").lower()
+        node_status_value = str(node.get("status", "pending") or "pending").lower()
+        result_ts = _parse_ts(results[node_id].get("updated_at"))
+        node_ts = _parse_ts(node.get("updated_at"))
+        if result_ts and node_ts and node_ts > result_ts:
+            return node_status_value
+        return result_status
     return str(node.get("status", "pending") or "pending").lower()
 
 

@@ -23,9 +23,10 @@ import pytest
 from research.schemas import (
     BibEntry, Bibliography, Chapter, Claim, ClaimEvidenceLink, CitationSpan,
     CONNECTOR_TYPES, EVIDENCE_SOURCE_TYPES, EVIDENCE_TYPES, LINK_TYPES,
-    QualityReport, ReportAST, SECTION_MAX_CHARS_CEILING, SECTION_MIN_CHARS_FLOOR,
+    QualityReport, REPORT_STATUSES, ReportAST, Section,
+    SECTION_MAX_CHARS_CEILING, SECTION_MIN_CHARS_FLOOR,
     SOURCE_TIERS, SUPPORT_DIRECTIONS, SUPPORT_RATINGS, CORE_MODELS, NESTED_MODELS,
-    SourceConnector, SourceDocument, SourceHit, model_field_names, to_dict,
+    SourceConnector, SourceDocument, SourceHit, EvidenceItem, model_field_names, to_dict,
 )
 
 
@@ -229,7 +230,7 @@ class TestEvidenceItem:
         from research.hashing import content_hash
         text = "evidence span text"
         ei = EvidenceItem(
-            evidence_id="ev_abc", source_id="doc_123",
+            evidence_id="ev_abc", source_id="doc_123", source_type="document",
             content_hash=content_hash(text), span_start=0, span_end=len(text),
             span_text=text,
         )
@@ -240,7 +241,7 @@ class TestEvidenceItem:
         from research.hashing import content_hash
         with pytest.raises(ValueError, match="source_id must be non-null"):
             EvidenceItem(
-                evidence_id="ev_x", source_id="",
+                evidence_id="ev_x", source_id="", source_type="document",
                 content_hash=content_hash("t"), span_start=0, span_end=1, span_text="t",
             )
 
@@ -257,7 +258,7 @@ class TestEvidenceItem:
         from research.hashing import content_hash
         with pytest.raises(ValueError, match="span_start must be >= 0"):
             EvidenceItem(
-                evidence_id="ev_x", source_id="doc_1",
+                evidence_id="ev_x", source_id="doc_1", source_type="document",
                 content_hash=content_hash("t"), span_start=-1, span_end=1, span_text="t",
             )
 
@@ -265,7 +266,7 @@ class TestEvidenceItem:
         from research.hashing import content_hash
         with pytest.raises(ValueError, match="span_end.*must be > span_start"):
             EvidenceItem(
-                evidence_id="ev_x", source_id="doc_1",
+                evidence_id="ev_x", source_id="doc_1", source_type="document",
                 content_hash=content_hash("t"), span_start=5, span_end=5, span_text="t",
             )
 
@@ -273,14 +274,14 @@ class TestEvidenceItem:
         from research.hashing import content_hash
         with pytest.raises(ValueError, match="span_text must be non-empty"):
             EvidenceItem(
-                evidence_id="ev_x", source_id="doc_1",
-                content_hash=content_hash(""), span_start=0, span_end=0, span_text="",
+                evidence_id="ev_x", source_id="doc_1", source_type="document",
+                content_hash="a" * 64, span_start=0, span_end=1, span_text="",
             )
 
     def test_rejects_hash_mismatch(self):
         with pytest.raises(ValueError, match="content_hash mismatch"):
             EvidenceItem(
-                evidence_id="ev_x", source_id="doc_1",
+                evidence_id="ev_x", source_id="doc_1", source_type="document",
                 content_hash="badhash0000000000000000000000000000000",
                 span_start=0, span_end=3, span_text="abc",
             )
@@ -289,7 +290,7 @@ class TestEvidenceItem:
         from research.hashing import content_hash
         with pytest.raises(ValueError, match="evidence_type"):
             EvidenceItem(
-                evidence_id="ev_x", source_id="doc_1",
+                evidence_id="ev_x", source_id="doc_1", source_type="document",
                 content_hash=content_hash("t"), span_start=0, span_end=1, span_text="t",
                 evidence_type="hearsay",
             )
@@ -297,7 +298,7 @@ class TestEvidenceItem:
     def test_relevance_score_bounds(self):
         from research.hashing import content_hash
         ei = EvidenceItem(
-            evidence_id="ev_x", source_id="doc_1",
+            evidence_id="ev_x", source_id="doc_1", source_type="document",
             content_hash=content_hash("t"), span_start=0, span_end=1, span_text="t",
             relevance_score=0.0,
         )
@@ -307,7 +308,7 @@ class TestEvidenceItem:
         from research.hashing import content_hash
         with pytest.raises(ValueError, match="relevance_score"):
             EvidenceItem(
-                evidence_id="ev_x", source_id="doc_1",
+                evidence_id="ev_x", source_id="doc_1", source_type="document",
                 content_hash=content_hash("t"), span_start=0, span_end=1, span_text="t",
                 relevance_score=1.5,
             )
@@ -491,7 +492,7 @@ class TestReportStructures:
     def test_to_dict_returns_dict(self):
         from research.hashing import content_hash
         ei = EvidenceItem(
-            evidence_id="ev_x", source_id="doc_1",
+            evidence_id="ev_x", source_id="doc_1", source_type="document",
             content_hash=content_hash("t"), span_start=0, span_end=1, span_text="t",
         )
         d = to_dict(ei)

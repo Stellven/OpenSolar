@@ -40,6 +40,7 @@ workers = dispatcher._discover_workers(dry_run=True)
 assert workers, "dispatcher has no dry-run workers"
 assert any("frontend" in w.get("skills", []) for w in workers), workers
 assert any("observability" in w.get("capabilities", []) for w in workers), workers
+assert any("documentation" in w.get("capabilities", []) for w in workers), workers
 
 spec = importlib.util.spec_from_file_location("solar_autopilot_monitor", root / "solar-autopilot-monitor.py")
 monitor = importlib.util.module_from_spec(spec)
@@ -49,6 +50,7 @@ monitor_workers = monitor.graph_workers()
 assert monitor_workers, "autopilot has no workers"
 assert any("frontend" in w.get("skills", []) for w in monitor_workers), monitor_workers
 assert any("observability" in w.get("capabilities", []) for w in monitor_workers), monitor_workers
+assert any("documentation" in w.get("capabilities", []) for w in monitor_workers), monitor_workers
 PY
 
 echo "PASS worker capability catalog covers frontend/observability"
