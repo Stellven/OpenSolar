@@ -51,6 +51,8 @@ assert any("json-patch" in w.get("skills", []) for w in workers), workers
 assert any("api-design" in w.get("skills", []) for w in workers), workers
 assert any("data-modeling" in w.get("skills", []) for w in workers), workers
 assert any("compatibility" in w.get("skills", []) for w in workers), workers
+for skill in ["flask", "http-routing", "autopilot-hooks", "json-traversal", "html", "javascript", "vanilla-dom"]:
+    assert any(skill in w.get("skills", []) for w in workers), (skill, workers)
 assert any("observability" in w.get("capabilities", []) for w in workers), workers
 assert any("documentation" in w.get("capabilities", []) for w in workers), workers
 
@@ -73,6 +75,8 @@ assert any("json-patch" in w.get("skills", []) for w in monitor_workers), monito
 assert any("api-design" in w.get("skills", []) for w in monitor_workers), monitor_workers
 assert any("data-modeling" in w.get("skills", []) for w in monitor_workers), monitor_workers
 assert any("compatibility" in w.get("skills", []) for w in monitor_workers), monitor_workers
+for skill in ["flask", "http-routing", "autopilot-hooks", "json-traversal", "html", "javascript", "vanilla-dom"]:
+    assert any(skill in w.get("skills", []) for w in monitor_workers), (skill, monitor_workers)
 assert any("observability" in w.get("capabilities", []) for w in monitor_workers), monitor_workers
 assert any("documentation" in w.get("capabilities", []) for w in monitor_workers), monitor_workers
 PY

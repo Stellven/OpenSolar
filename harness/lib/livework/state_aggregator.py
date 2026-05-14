@@ -12,10 +12,16 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
-from harness.lib.livework.schemas import (
-    NodeSummary,
-    PaneStateEntry,
-)
+try:
+    from .schemas import (
+        NodeSummary,
+        PaneStateEntry,
+    )
+except ImportError:  # pragma: no cover - direct script/sys.path fallback
+    from livework.schemas import (
+        NodeSummary,
+        PaneStateEntry,
+    )
 
 
 @dataclass
