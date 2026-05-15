@@ -47,11 +47,15 @@ def test_compile_section_and_survey(tmp_path):
     result = compile_section(tmp_path, "ch01/sec01")
     assert result["ok"] is True
     assert result["rounds"] >= 1
+    assert result["writer_backend"] == "deterministic"
     assert (tmp_path / "sections" / "ch01" / "sec01" / "final.md").exists()
     assert (tmp_path / "sections" / "ch01" / "sec01" / "revision_trace.json").exists()
+    assert (tmp_path / "sections" / "ch01" / "sec01" / "prompt_packets" / "round_00.json").exists()
+    assert (tmp_path / "sections" / "ch01" / "sec01" / "prompt_packets" / "round_00.md").exists()
     compiled = compile_survey(tmp_path)
     assert compiled["ok"] is True
     assert (tmp_path / "final.md").exists()
+    assert (tmp_path / "chapters" / "ch01" / "editorial_review.json").exists()
 
 
 def test_revision_loop_requires_enough_detail(tmp_path):

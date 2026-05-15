@@ -2399,13 +2399,18 @@ def cmd_survey_pack(args: argparse.Namespace) -> int:
 def cmd_survey_write_section(args: argparse.Namespace) -> int:
     from research.survey.writing_loop import run_section_revision_loop
 
-    payload = run_section_revision_loop(
-        args.output_dir,
-        args.section_id,
-        finalize=not args.draft_only,
-        max_rounds=args.max_revisions,
-        min_chars=args.min_chars,
-    )
+    try:
+        payload = run_section_revision_loop(
+            args.output_dir,
+            args.section_id,
+            finalize=not args.draft_only,
+            max_rounds=args.max_revisions,
+            min_chars=args.min_chars,
+            writer_backend=args.writer_backend,
+            emit_prompt_packet=not args.no_prompt_packet,
+        )
+    except ValueError as exc:
+        payload = {"ok": False, "reason": str(exc)}
     if emit_json(args, payload):
         return 0 if payload.get("ok") else 1
     print(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -2415,12 +2420,17 @@ def cmd_survey_write_section(args: argparse.Namespace) -> int:
 def cmd_survey_run_sections(args: argparse.Namespace) -> int:
     from research.survey.writing_loop import run_ready_sections
 
-    payload = run_ready_sections(
-        args.output_dir,
-        limit=args.limit,
-        max_rounds=args.max_revisions,
-        min_chars=args.min_chars,
-    )
+    try:
+        payload = run_ready_sections(
+            args.output_dir,
+            limit=args.limit,
+            max_rounds=args.max_revisions,
+            min_chars=args.min_chars,
+            writer_backend=args.writer_backend,
+            emit_prompt_packet=not args.no_prompt_packet,
+        )
+    except ValueError as exc:
+        payload = {"ok": False, "reason": str(exc)}
     if emit_json(args, payload):
         return 0 if payload.get("ok") else 1
     print(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -2979,6 +2989,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_write.add_argument("--draft-only", action="store_true")
     p_survey_write.add_argument("--max-revisions", type=int, default=3)
     p_survey_write.add_argument("--min-chars", type=int, default=1200)
+    p_survey_write.add_argument("--writer-backend", default="deterministic")
+    p_survey_write.add_argument("--no-prompt-packet", action="store_true")
     p_survey_write.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     p_survey_run = sub.add_parser("survey-run-sections", help="Write ready survey sections through revision loops")
@@ -2986,6 +2998,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_run.add_argument("--limit", type=int, default=3, help="Number of ready sections to process; 0 means all")
     p_survey_run.add_argument("--max-revisions", type=int, default=3)
     p_survey_run.add_argument("--min-chars", type=int, default=1200)
+    p_survey_run.add_argument("--writer-backend", default="deterministic")
+    p_survey_run.add_argument("--no-prompt-packet", action="store_true")
     p_survey_run.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     p_survey_review = sub.add_parser("survey-review", help="Run non-strict survey review")
