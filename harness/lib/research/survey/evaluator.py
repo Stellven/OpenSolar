@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 
 from .schemas import SurveyScorecard, to_dict
+from .quality import assess_survey_quality
 
 
 def _read_json(path: Path) -> dict:
@@ -72,6 +73,9 @@ def evaluate_survey(
     finalized = sum(1 for path in section_dirs if (path / "final.md").exists())
     reviews = [_read_json(path / "review.json") for path in section_dirs if (path / "review.json").exists()]
     blocked_sections = int(packs.get("blocked") or 0) if isinstance(packs, dict) else len(sections)
+    quality = assess_survey_quality(root, ast=ast, packs=packs)
+    taxonomy = quality.get("taxonomy", {})
+    contradiction_matrix = quality.get("contradiction_matrix", {})
     issues: list[str] = []
     if len(chapters) < 8:
         issues.append(f"chapter_count_low:{len(chapters)}<8")
@@ -100,6 +104,12 @@ def evaluate_survey(
             ready_pack_ratio = ready_packs / max(len(sections), 1)
             if ready_pack_ratio < 0.80:
                 issues.append(f"ready_pack_ratio_low:{ready_pack_ratio:.4f}<0.8000")
+        taxonomy_score = float(taxonomy.get("taxonomy_depth_score") or 0.0)
+        contradiction_score = float(contradiction_matrix.get("contradiction_coverage") or 0.0)
+        if taxonomy_score < 0.75:
+            issues.append(f"taxonomy_depth_score_low:{taxonomy_score:.4f}<0.7500")
+        if contradiction_score < 0.80:
+            issues.append(f"contradiction_coverage_low:{contradiction_score:.4f}<0.8000")
     required_finalized = len(sections) if require_complete else (min_finalized if min_finalized is not None else 3)
     if strict and finalized < required_finalized:
         issues.append(f"finalized_sections_low:{finalized}<{required_finalized}")
@@ -126,8 +136,8 @@ def evaluate_survey(
         issues.append(f"section_repetition_rate_high:{section_repetition_rate:.4f}")
     source_diversity_values = [float(r.get("source_diversity_score") or 0.0) for r in reviews]
     source_diversity = sum(source_diversity_values) / len(source_diversity_values) if source_diversity_values else 0.0
-    contradiction_coverage = 1.0 if packs and blocked_sections == 0 else 0.0
-    taxonomy_depth = min(len(chapters) / 8, 1.0) * min(len(sections) / 30, 1.0)
+    contradiction_coverage = float(contradiction_matrix.get("contradiction_coverage") or 0.0)
+    taxonomy_depth = float(taxonomy.get("taxonomy_depth_score") or 0.0)
     verdict = "PASS" if not issues else "FAIL"
     if not strict and issues and all(item.startswith(("blocked_sections", "finalized_sections_low")) for item in issues):
         verdict = "WARN"
@@ -162,6 +172,8 @@ def evaluate_survey(
             "evidence_source_coverage": round(evidence_source_coverage, 4),
             "claim_support_coverage": round(claim_support_coverage, 4),
         },
+        "taxonomy": taxonomy,
+        "contradiction_matrix": contradiction_matrix,
     }
     (root / "survey_eval.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return payload
