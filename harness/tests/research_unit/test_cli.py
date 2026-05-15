@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -23,6 +24,7 @@ if _HARNESS_LIB not in sys.path:
 
 from research import cli as research_cli
 from research.cli import build_parser, main
+from research.evaluator import ANALYSIS_TERMS_RE, TOKEN_RE, evaluate_artifacts
 
 
 @pytest.fixture
@@ -426,6 +428,119 @@ Relevant Quotes:
         assert (out / "claims.jsonl").exists()
 
 
+class TestTechnicalArchitectureProfile:
+    def test_continue_pipeline_produces_profile_dense_sections(self, db_path, tmp_path):
+        assert main(["init", db_path, "--topic", "latent reasoning technical architecture"]) == 0
+
+        import sqlite3
+        conn = sqlite3.connect(db_path)
+        run_id = conn.execute("SELECT id FROM research_runs LIMIT 1").fetchone()[0]
+        conn.close()
+
+        seed_sources = [
+            (
+                "paper",
+                "https://arxiv.org/abs/2412.06769",
+                "Coconut paper",
+                "Coconut uses continuous thought and hidden state recurrence for latent reasoning. "
+                "The architecture changes test-time compute, reasoning state, and evaluation requirements.",
+            ),
+            (
+                "code",
+                "https://github.com/facebookresearch/coconut",
+                "Coconut code",
+                "The code repository exposes implementation boundaries for recurrent latent reasoning. "
+                "Deployment requires reproducible checkpoints, pipeline gates, and audit evidence.",
+            ),
+            (
+                "official_doc",
+                "https://docs.example.edu/latent-reasoning",
+                "OpenReview submission",
+                "The official submission describes design tradeoffs, evaluation risk, and model-family constraints. "
+                "Runtime integration must preserve provenance, citation support, and replayable artifacts.",
+            ),
+            (
+                "benchmark",
+                "https://paperswithcode.com/paper/softcot-soft-chain-of-thought-for-efficient",
+                "SoftCoT benchmark",
+                "Benchmark evidence compares soft chain of thought against visible token reasoning. "
+                "Evaluation should track pass rate, token cost, wall time, and deployment failure modes.",
+            ),
+        ]
+        for source_type, url, title, text in seed_sources:
+            assert main([
+                "add-source", db_path,
+                "--run-id", run_id,
+                "--source-type", source_type,
+                "--url", url,
+                "--title", title,
+                "--text", text,
+            ]) == 0
+
+        out = tmp_path / "out"
+        payload = research_cli.continue_research_pipeline(db_path, run_id, str(out), str(out / "final.md"))
+        eval_path = out / f"{run_id}-research_eval.json"
+        result = evaluate_artifacts(
+            eval_path,
+            report_ast=out / "report_ast.json",
+            final_md=out / "final.md",
+            bibliography=out / "final.bibliography.json",
+            expert_md=out / "expert_synthesis.md",
+            require_expert=True,
+            research_profile="technical_architecture",
+            strict_profile=True,
+        )
+
+        assert payload["claims"] >= 4
+        assert result["ok"] is True
+        assert not any(str(w).startswith("section_coverage_low_analysis_density") for w in result["warnings"])
+        for raw in (out / "sections.jsonl").read_text(encoding="utf-8").splitlines():
+            row = json.loads(raw)
+            if row["section_type"] == "source_landscape":
+                continue
+            content = row["content"]
+            density = len(ANALYSIS_TERMS_RE.findall(content)) / max(len(TOKEN_RE.findall(content)), 1)
+            assert density >= 0.12, row["section_type"]
+
+    def test_continue_pipeline_rewrites_sections_when_claims_already_exist(self, db_path, tmp_path):
+        assert main(["init", db_path, "--topic", "latent reasoning rewrite regression"]) == 0
+
+        import sqlite3
+        conn = sqlite3.connect(db_path)
+        run_id = conn.execute("SELECT id FROM research_runs LIMIT 1").fetchone()[0]
+        conn.close()
+
+        assert main([
+            "add-source", db_path,
+            "--run-id", run_id,
+            "--source-type", "paper",
+            "--url", "https://arxiv.org/abs/2412.06769",
+            "--title", "Coconut paper",
+            "--text", "Coconut uses continuous thought for latent reasoning architecture and runtime evaluation.",
+        ]) == 0
+
+        first_out = tmp_path / "first"
+        first = research_cli.continue_research_pipeline(db_path, run_id, str(first_out), str(first_out / "final.md"))
+        assert first["claims"] >= 1
+
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "UPDATE report_sections SET content = ? WHERE run_id = ? AND section_type = ?",
+            ("# stale section\n\nNo architecture gate ledger.\n", run_id, "executive_summary"),
+        )
+        conn.commit()
+        conn.close()
+
+        second_out = tmp_path / "second"
+        second = research_cli.continue_research_pipeline(db_path, run_id, str(second_out), str(second_out / "final.md"))
+        assert second["claims"] == first["claims"]
+        assert second["claims_inserted"] == 0
+
+        sections = [json.loads(line) for line in (second_out / "sections.jsonl").read_text(encoding="utf-8").splitlines()]
+        executive = next(row for row in sections if row["section_type"] == "executive_summary")
+        assert "Architecture Gate Ledger" in executive["content"]
+
+
 class TestDoctorUnaffected:
     def test_doctor_not_broken(self):
         """A10: doctor subcommand is not affected by research routing."""
@@ -597,6 +712,8 @@ class TestPolicyCli:
         harness = tmp_path / "harness"
         (harness / "run" / "queue").mkdir(parents=True)
         (harness / "run" / "pane-leases").mkdir(parents=True)
+        real_queue = Path.home() / ".solar" / "harness" / "run" / "queue" / "sprint-test.jsonl"
+        real_queue_before = real_queue.read_text(encoding="utf-8") if real_queue.exists() else None
         out = tmp_path / "out"
         out.mkdir()
         graph = harness / "sprints" / "sprint-test.task_graph.json"
@@ -648,3 +765,5 @@ class TestPolicyCli:
         assert queue_items[0]["intent"].startswith("graph_node|node_id=DR_SOURCE_GAP_QUEUE")
         assert queue_items[0]["payload"]["node"]["id"] == "DR_SOURCE_GAP_QUEUE"
         assert queue_items[0]["payload"]["assignment"]["pane"] == "controlled:0.0"
+        real_queue_after = real_queue.read_text(encoding="utf-8") if real_queue.exists() else None
+        assert real_queue_after == real_queue_before
