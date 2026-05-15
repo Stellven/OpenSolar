@@ -22,12 +22,22 @@ check "policy names Mirage" "$POLICY" "Mirage VFS"
 check "policy names QMD" "$POLICY" "QMD solar-wiki"
 check "policy forbids sqlite-first" "$POLICY" "不得把 \`sqlite3 ~/.solar/solar.db"
 check "policy requires visibility line" "$POLICY" "Knowledge Context: solar-harness context inject used"
+check "policy includes Definition of Done gate" "$POLICY" "Definition of Done · Mandatory Completion Gate"
+check "policy requires evidence before success" "$POLICY" "没有证据，不许报喜"
+check "policy requires structured closeout" "$POLICY" "已完成 · 已验证 · 未验证 · 风险 · 后续待办"
 
 if grep -q '_runtime_policy=$(inject_runtime_policy "$PERSONA")' "$HARNESS_DIR/pane-launcher.sh" \
   && grep -q '\$CLAUDE_CMD --append-system-prompt "\$_runtime_policy' "$HARNESS_DIR/pane-launcher.sh"; then
   ok "pane-launcher prepends runtime policy in append-system-prompt"
 else
   fail "pane-launcher does not append runtime policy"
+fi
+
+if grep -q '_runtime_policy=$(inject_runtime_policy "$PERSONA")' "$HARNESS_DIR/start-incarnation.sh" \
+  && grep -q '\$CLAUDE_CMD --append-system-prompt "\$_runtime_policy' "$HARNESS_DIR/start-incarnation.sh"; then
+  ok "start-incarnation prepends runtime policy in append-system-prompt"
+else
+  fail "start-incarnation does not append runtime policy"
 fi
 
 check "PM persona has zero-law context rule" "$(sed -n '1,40p' "$HARNESS_DIR/personas/pm.md")" "第零铁律：先查 Solar Unified Context"
