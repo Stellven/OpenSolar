@@ -1,0 +1,199 @@
+{
+  "sprint_id": "sprint-20260515-professor-grade-deepresearch-survey",
+  "title": "Solar DeepResearch Professor-Grade Survey Pipeline",
+  "status": "passed",
+  "phase": "finalized",
+  "priority": "P0",
+  "lane": "research-runtime",
+  "handoff_to": "",
+  "target_role": "coordinator",
+  "created_at": "2026-05-15T19:27:12Z",
+  "updated_at": "2026-05-15T23:39:52Z",
+  "contract": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.contract.md",
+  "prd": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.prd.md",
+  "design": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.design.md",
+  "plan": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.plan.md",
+  "task_graph": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.task_graph.json",
+  "current_truth": "Professor-grade survey package now includes deterministic/human/local/pane writer backends, artifact watcher automation, strict evidence coverage gates, taxonomy/contradiction quality gates, and section-level factual audit. Strict survey-eval emits coverage, taxonomy, contradiction_matrix, and section_factual_audit evidence and fails out-of-pack claim/evidence tags.",
+  "id": "sprint-20260515-professor-grade-deepresearch-survey",
+  "history": [
+    {
+      "ts": "2026-05-15T19:30:33Z",
+      "event": "status_identity_repaired",
+      "by": "coordinator",
+      "note": "Recovered missing id/sprint_id from status filename so scanner can route the sprint."
+    },
+    {
+      "ts": "2026-05-15T19:47:37Z",
+      "event": "reviewing_blocked_invalid_handoff",
+      "by": "coordinator",
+      "raw_extra": "{}}"
+    },
+    {
+      "ts": "2026-05-15T19:49:06Z",
+      "event": "approved_graph_ready",
+      "by": "coordinator",
+      "raw_extra": "{\"status_fields\":{\"phase\":\"planning_complete\",\"handoff_to\":\"builder_main\",\"target_role\":\"builder_main\"},\"note\":\"Approved legacy state normalized to DAG dispatch.\"}}"
+    },
+    {
+      "ts": "2026-05-15T19:53:36Z",
+      "event": "active_blocked_missing_graph_phase",
+      "by": "coordinator",
+      "raw_extra": "{\"status_fields\":{\"phase\":\"prd_ready\",\"handoff_to\":\"planner\",\"target_role\":\"planner\"},\"note\":\"Single-builder fallback disabled; planner DAG is required.\"}}"
+    },
+    {
+      "ts": "2026-05-15T19:54:00Z",
+      "event": "handoff_schema_fixed",
+      "by": "builder solar-harness:0.2",
+      "note": "Added Chinese section headers (变更文件列表 / Done 条件达成证据 / 验证方法) to satisfy schemas/validate.sh handoff gate. Validator now PASS."
+    },
+    {
+      "ts": "2026-05-15T19:55:55Z",
+      "event": "parent_review_blocked_dag_not_ready",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-15T20:54:49Z",
+      "event": "survey_writing_loop_complete",
+      "by": "codex",
+      "note": "Added writing_loop.py, survey-run-sections CLI, revision_trace artifacts, and runtime/source regressions: 68 passed on both paths."
+    },
+    {
+      "ts": "2026-05-15T20:57:42Z",
+      "event": "parent_review_blocked_dag_not_ready",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-15T21:45:07Z",
+      "event": "pluggable_writer_backend_complete",
+      "by": "codex",
+      "note": "Added SurveyWriterBackend, deterministic backend, prompt packet artifacts, chapter editorial_review.json, and runtime/source regressions: 70 passed on both paths."
+    },
+    {
+      "ts": "2026-05-15T21:48:50Z",
+      "event": "parent_review_blocked_dag_not_ready",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-15T21:51:32Z",
+      "event": "human_packet_backend_complete",
+      "by": "codex",
+      "note": "Added human-packet and human-packet-fallback backends. Runtime/source regressions: 74 passed. CLI smoke verified WAITING_FOR_HUMAN then response consumption PASS."
+    },
+    {
+      "ts": "2026-05-15T21:54:45Z",
+      "event": "parent_review_blocked_dag_not_ready",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-15T21:56:46Z",
+      "event": "local_command_backend_complete",
+      "by": "codex",
+      "note": "Added local-command backend. Runtime/source regressions: 78 passed. CLI smoke verified stdin prompt packet -> stdout Markdown -> PASS."
+    },
+    {
+      "ts": "2026-05-15T21:59:55Z",
+      "event": "parent_review_blocked_dag_not_ready",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-15T22:08:16Z",
+      "event": "pane_packet_backend_complete",
+      "by": "codex",
+      "note": "Added pane-packet backend. Runtime/source regressions: 82 passed. CLI smoke verified pane_dispatch artifact and WAITING_FOR_PANE state without default send-keys."
+    },
+    {
+      "ts": "2026-05-15T22:42:02Z",
+      "event": "parent_review_blocked_dag_not_ready",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-15T23:05:13Z",
+      "event": "pane_response_watch_complete",
+      "by": "codex",
+      "note": "Added survey-watch-responses artifact watcher. Runtime/source regressions: 85 passed. CLI smoke verified pending_responses and response finalization without pane screen parsing."
+    },
+    {
+      "ts": "2026-05-15T23:08:53Z",
+      "event": "parent_review_blocked_dag_not_ready",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-15T23:14:45Z",
+      "event": "survey_watch_automation_complete",
+      "by": "codex",
+      "note": "Added research.survey.watch_automation package, survey-watch-register/tick CLI, and runtime-soak integration. Runtime/source regressions: 90 passed. CLI smoke verified pending_total=32 without fake completion."
+    },
+    {
+      "ts": "2026-05-15T23:18:17Z",
+      "event": "parent_review_blocked_dag_not_ready",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-15T23:25:12Z",
+      "event": "survey_quality_gate_complete",
+      "by": "codex",
+      "note": "Added strict evaluator coverage gates for source types, evidence count, claim count, evidence-source coverage, claim-evidence support, and ready pack ratio. Runtime/source regressions: 92 passed. CLI smoke verified plan-only survey fails with coverage issues."
+    },
+    {
+      "ts": "2026-05-15T23:28:56Z",
+      "event": "contract_patrol_repaired_stale_graph_node_status",
+      "by": "contract-patrol",
+      "node": "N1_survey_schemas",
+      "reason": "task_graph gate survey-schemas-pass was passed but node/node_results still reviewing, blocking parent-ready evaluator dispatch"
+    },
+    {
+      "ts": "2026-05-15T23:29:21Z",
+      "event": "parent_review_blocked_dag_not_ready",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-15T23:31:06Z",
+      "event": "implementation_completed",
+      "by": "builder",
+      "round": 2
+    },
+    {
+      "ts": "2026-05-15T23:33:26Z",
+      "event": "sprint_passed",
+      "by": "evaluator",
+      "note": "All 7 DAG nodes PASS; 94 tests pass; strict survey-eval correctly rejects plan-only; package-first boundary honored; main CLI compat preserved. D1-D7 + Non-Negotiables + Stop Rules satisfied."
+    },
+    {
+      "ts": "2026-05-15T23:31:56Z",
+      "event": "survey_taxonomy_contradiction_gate_complete",
+      "by": "codex",
+      "note": "Added research.survey.quality module, survey_taxonomy.json, survey_contradiction_matrix.json, and strict evaluator gates for taxonomy_depth_score and contradiction_coverage. Runtime/source regressions: 94 passed."
+    },
+    {
+      "ts": "2026-05-15T23:36:51Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-05-15T23:39:52Z",
+      "event": "finalized",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-15T23:39:40Z",
+      "event": "survey_section_factual_audit_complete",
+      "by": "codex",
+      "note": "Added section-level factual audit for finalized survey sections. Final text claim/evidence tags must exist in the section evidence_pack. Runtime/source regressions: 96 passed."
+    }
+  ],
+  "round": 2,
+  "event_count": 183,
+  "last_event_ts": "2026-05-15T23:29:55Z",
+  "projected_at": "2026-05-15T23:29:55Z",
+  "sid": "sprint-20260515-professor-grade-deepresearch-survey",
+  "runtime_state_source": "activity_runtime",
+  "last_handoff_mtime": 1778878511.0,
+  "knowledge_export_status": "exported",
+  "knowledge_export_path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260515-professor-grade-deepresearch-survey.accepted.md",
+  "knowledge_ingest_dispatch": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260515-professor-grade-deepresearch-survey.dispatch.md",
+  "knowledge_exported_at": "2026-05-15T23:39:52Z",
+  "knowledge_ingested_at": null,
+  "knowledge_export_error": null
+}
