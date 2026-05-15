@@ -2359,6 +2359,83 @@ def cmd_source_audit(args: argparse.Namespace) -> int:
     return 0 if payload.get("ok") else 1
 
 
+def cmd_survey_plan(args: argparse.Namespace) -> int:
+    """Plan a professor-grade survey without embedding survey logic in cli.py."""
+    from research.survey.planner import create_survey_plan, write_survey_plan
+
+    plan = create_survey_plan(
+        args.brief,
+        target_chars=args.target_chars,
+        audience=args.audience,
+        domain=args.domain,
+        run_id=args.run_id or None,
+    )
+    files = write_survey_plan(plan, args.output_dir)
+    payload = {
+        "ok": True,
+        "run_id": plan["run"]["run_id"],
+        "chapter_count": len(plan["report_ast"]["chapters"]),
+        "section_count": len(plan["report_ast"]["sections"]),
+        "files": files,
+    }
+    if emit_json(args, payload):
+        return 0
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_survey_pack(args: argparse.Namespace) -> int:
+    from research.survey.evidence_pack import build_evidence_packs
+
+    ast_path = Path(args.report_ast or Path(args.output_dir) / "survey_report_ast.json").expanduser()
+    ast = json.loads(ast_path.read_text(encoding="utf-8"))
+    payload = build_evidence_packs(args.output_dir, ast)
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") else 1
+
+
+def cmd_survey_write_section(args: argparse.Namespace) -> int:
+    from research.survey.section_compiler import compile_section
+
+    payload = compile_section(args.output_dir, args.section_id, finalize=not args.draft_only)
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") else 1
+
+
+def cmd_survey_review(args: argparse.Namespace) -> int:
+    from research.survey.evaluator import evaluate_survey
+
+    payload = evaluate_survey(args.output_dir, strict=False)
+    if emit_json(args, payload):
+        return 0
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_survey_compile(args: argparse.Namespace) -> int:
+    from research.survey.section_compiler import compile_survey
+
+    payload = compile_survey(args.output_dir)
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") else 1
+
+
+def cmd_survey_eval(args: argparse.Namespace) -> int:
+    from research.survey.evaluator import evaluate_survey
+
+    payload = evaluate_survey(args.output_dir, strict=args.strict)
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") or not args.strict else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") or not args.strict else 1
+
+
 def _source_audit_handoff_markdown(payload: dict, query: str = "") -> str:
     """Build a human/browser-use search handoff for missing profile sources."""
     profile = payload.get("research_profile", "general")
@@ -2647,6 +2724,7 @@ ALL_SUBCOMMANDS = [
     "mine", "outline", "write", "check", "compile", "synthesize", "export", "eval-artifacts",
     "policy-doctor", "policy-explain",
     "source-audit",
+    "survey-plan", "survey-pack", "survey-write-section", "survey-review", "survey-compile", "survey-eval",
 ]
 
 SUBCOMMANDS = {
@@ -2671,6 +2749,12 @@ SUBCOMMANDS = {
     "policy-doctor": cmd_policy_doctor,
     "policy-explain": cmd_policy_explain,
     "source-audit": cmd_source_audit,
+    "survey-plan": cmd_survey_plan,
+    "survey-pack": cmd_survey_pack,
+    "survey-write-section": cmd_survey_write_section,
+    "survey-review": cmd_survey_review,
+    "survey-compile": cmd_survey_compile,
+    "survey-eval": cmd_survey_eval,
 }
 
 
@@ -2852,6 +2936,39 @@ def build_parser() -> argparse.ArgumentParser:
     p_source_audit.add_argument("--ttl", type=int, default=900, help="Pane lease TTL for followup enqueue")
     p_source_audit.add_argument("--dry-run", action="store_true", help="Plan followup enqueue without mutating the queue")
     p_source_audit.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_plan = sub.add_parser("survey-plan", help="Plan a professor-grade survey")
+    p_survey_plan.add_argument("--brief", required=True, help="Survey topic/brief")
+    p_survey_plan.add_argument("--target-chars", type=int, default=50000)
+    p_survey_plan.add_argument("--audience", default="technical")
+    p_survey_plan.add_argument("--domain", default="ai")
+    p_survey_plan.add_argument("--run-id", default="")
+    p_survey_plan.add_argument("--output-dir", required=True)
+    p_survey_plan.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_pack = sub.add_parser("survey-pack", help="Build per-section survey evidence packs")
+    p_survey_pack.add_argument("--output-dir", required=True)
+    p_survey_pack.add_argument("--report-ast", default="")
+    p_survey_pack.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_write = sub.add_parser("survey-write-section", help="Write one survey section from its evidence pack")
+    p_survey_write.add_argument("--output-dir", required=True)
+    p_survey_write.add_argument("--section-id", required=True)
+    p_survey_write.add_argument("--draft-only", action="store_true")
+    p_survey_write.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_review = sub.add_parser("survey-review", help="Run non-strict survey review")
+    p_survey_review.add_argument("--output-dir", required=True)
+    p_survey_review.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_compile = sub.add_parser("survey-compile", help="Compile survey section artifacts")
+    p_survey_compile.add_argument("--output-dir", required=True)
+    p_survey_compile.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_eval = sub.add_parser("survey-eval", help="Evaluate professor-grade survey readiness")
+    p_survey_eval.add_argument("--output-dir", required=True)
+    p_survey_eval.add_argument("--strict", action="store_true")
+    p_survey_eval.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     return parser
 
