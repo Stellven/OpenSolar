@@ -51,6 +51,8 @@ fi
 rsync_excludes=(
   --exclude '.*'
   --exclude '.DS_Store'
+  --exclude '__pycache__/***'
+  --exclude '*.pyc'
   --exclude '.*.pid'
   --exclude '.*.port'
   --exclude '*.pid'
@@ -365,6 +367,7 @@ allowed_dirs = {
 }
 top_suffixes = {".sh", ".ts", ".json", ".md", ".toml", ".plist"}
 top_names = {"VERSION"}
+deny_suffixes = {".pyc"}
 deny_names = {
     ".DS_Store",
     "STATE.md",
@@ -384,12 +387,14 @@ deny_fragments = [
     ".lock",
     ".state",
 ]
-deny_dir_names = {"inbox", "cache", "quarantine", "telemetry", "reports", "events", "logs", "run", "state", "venvs", "vendor"}
+deny_dir_names = {"__pycache__", "inbox", "cache", "quarantine", "telemetry", "reports", "events", "logs", "run", "state", "venvs", "vendor"}
 
 def denied(path: Path) -> bool:
     parts = path.parts
     name = path.name
     if name in deny_names:
+        return True
+    if path.suffix in deny_suffixes:
         return True
     if any(part.startswith(".") for part in parts):
         return True
