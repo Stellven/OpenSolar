@@ -7,7 +7,8 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .schemas import SectionReview, SectionRevisionTrace, to_dict
+from .backends import get_writer_backend
+from .schemas import SectionPromptPacket, SectionReview, SectionRevisionTrace, to_dict
 
 
 def _read_json(path: Path) -> dict:
@@ -64,6 +65,77 @@ def _dedupe_sentences(text: str) -> str:
             seen.add(key)
         lines.append(line)
     return "\n".join(lines).strip() + "\n"
+
+
+def build_section_prompt_packet(root: Path, section_id: str, round_index: int = 0, writer_backend: str = "deterministic") -> dict:
+    section_dir = root / "sections" / section_id
+    spec = _read_json(section_dir / "section.spec.json")
+    pack = _read_json(section_dir / "evidence_pack.json")
+    packet = SectionPromptPacket(
+        section_id=section_id,
+        round_index=round_index,
+        writer_backend=writer_backend,
+        role="professor-grade technical survey section writer",
+        task=f"Write or revise section '{spec.get('title') or section_id}' from the provided evidence pack only.",
+        constraints=[
+            "Use the section evidence pack as the source of truth.",
+            "Bind important factual claims to [claim:<id>] and [evidence:<id>] tags.",
+            "Separate architecture synthesis, evaluation limits, contradiction slots, and open problems.",
+            "Do not invent sources, results, paper names, URLs, or benchmark numbers.",
+            "Preserve uncertainty when evidence is weak or contradictory.",
+        ],
+        output_contract=[
+            "Markdown section draft.",
+            "At least six second-level headings.",
+            "Include Architecture Synthesis, Evaluation And Risk Boundary, Contradiction Slots, and Open Problems.",
+            "All core claims must reference claim_id and evidence_id tags.",
+        ],
+        artifact_paths={
+            "section_spec": str(section_dir / "section.spec.json"),
+            "evidence_pack": str(section_dir / "evidence_pack.json"),
+            "draft": str(section_dir / "draft.md"),
+            "review": str(section_dir / "review.json"),
+            "revision_trace": str(section_dir / "revision_trace.json"),
+            "final": str(section_dir / "final.md"),
+        },
+    )
+    payload = to_dict(packet)
+    payload["section_spec"] = spec
+    payload["evidence_pack"] = pack
+    payload["required_claim_ids"] = list(pack.get("claim_ids", [])[:6])
+    payload["required_evidence_ids"] = list(pack.get("evidence_ids", [])[:8])
+    return payload
+
+
+def _write_prompt_packet(section_dir: Path, packet: dict) -> None:
+    prompt_dir = section_dir / "prompt_packets"
+    prompt_dir.mkdir(parents=True, exist_ok=True)
+    round_index = int(packet.get("round_index") or 0)
+    json_path = prompt_dir / f"round_{round_index:02d}.json"
+    md_path = prompt_dir / f"round_{round_index:02d}.md"
+    json_path.write_text(json.dumps(packet, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    md = [
+        f"# Survey Section Prompt Packet: {packet.get('section_id')}",
+        "",
+        f"- Backend: {packet.get('writer_backend')}",
+        f"- Round: {round_index}",
+        f"- Role: {packet.get('role')}",
+        "",
+        "## Task",
+        "",
+        str(packet.get("task") or ""),
+        "",
+        "## Constraints",
+        "",
+    ]
+    md.extend(f"- {item}" for item in packet.get("constraints", []))
+    md.extend(["", "## Output Contract", ""])
+    md.extend(f"- {item}" for item in packet.get("output_contract", []))
+    md.extend(["", "## Required Claims", ""])
+    md.extend(f"- {item}" for item in packet.get("required_claim_ids", []))
+    md.extend(["", "## Required Evidence", ""])
+    md.extend(f"- {item}" for item in packet.get("required_evidence_ids", []))
+    md_path.write_text("\n".join(md) + "\n", encoding="utf-8")
 
 
 def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> str:
@@ -210,6 +282,8 @@ def run_section_revision_loop(
     finalize: bool = True,
     max_rounds: int = 3,
     min_chars: int = 1200,
+    writer_backend: str = "deterministic",
+    emit_prompt_packet: bool = True,
 ) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
     section_dir = root / "sections" / section_id
@@ -236,8 +310,13 @@ def run_section_revision_loop(
     traces: list[dict] = []
     text = ""
     review = None
+    backend = get_writer_backend(writer_backend)
     for round_index in range(max(max_rounds, 1)):
-        text = build_section_draft(root, section_id, round_index=round_index)
+        packet = build_section_prompt_packet(root, section_id, round_index=round_index, writer_backend=backend.name)
+        if emit_prompt_packet:
+            _write_prompt_packet(section_dir, packet)
+        fallback_text = build_section_draft(root, section_id, round_index=round_index)
+        text = backend.write(packet, fallback_text)
         review = review_section_text(root, section_id, text, min_chars=min_chars)
         traces.append(to_dict(SectionRevisionTrace(
             section_id=section_id,
@@ -262,11 +341,21 @@ def run_section_revision_loop(
         "section_id": section_id,
         "finalized": bool(finalize and review.verdict == "PASS"),
         "rounds": len(traces),
+        "writer_backend": backend.name,
+        "prompt_packets": str(section_dir / "prompt_packets") if emit_prompt_packet else "",
         "review": to_dict(review),
     }
 
 
-def run_ready_sections(output_dir: str | Path, *, limit: int = 3, max_rounds: int = 3, min_chars: int = 1200) -> dict[str, Any]:
+def run_ready_sections(
+    output_dir: str | Path,
+    *,
+    limit: int = 3,
+    max_rounds: int = 3,
+    min_chars: int = 1200,
+    writer_backend: str = "deterministic",
+    emit_prompt_packet: bool = True,
+) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
     packs = _read_json(root / "survey_evidence_packs.json")
     results: list[dict] = []
@@ -280,7 +369,14 @@ def run_ready_sections(output_dir: str | Path, *, limit: int = 3, max_rounds: in
         final = root / "sections" / section_id / "final.md"
         if final.exists():
             continue
-        results.append(run_section_revision_loop(root, section_id, max_rounds=max_rounds, min_chars=min_chars))
+        results.append(run_section_revision_loop(
+            root,
+            section_id,
+            max_rounds=max_rounds,
+            min_chars=min_chars,
+            writer_backend=writer_backend,
+            emit_prompt_packet=emit_prompt_packet,
+        ))
         if not unlimited and len(results) >= limit:
             break
     return {

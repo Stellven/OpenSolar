@@ -114,6 +114,29 @@ class SectionRevisionTrace:
 
 
 @dataclass
+class SectionPromptPacket:
+    section_id: str
+    round_index: int
+    writer_backend: str
+    role: str
+    task: str
+    constraints: list[str]
+    output_contract: list[str]
+    artifact_paths: dict[str, str]
+    schema_version: str = SCHEMA_VERSION
+
+
+@dataclass
+class ChapterEditorialReview:
+    chapter_id: str
+    verdict: str
+    finalized_sections: int
+    missing_sections: list[str] = field(default_factory=list)
+    issues: list[str] = field(default_factory=list)
+    schema_version: str = SCHEMA_VERSION
+
+
+@dataclass
 class SurveyScorecard:
     verdict: str
     chapter_count: int

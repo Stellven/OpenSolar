@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .schemas import SectionReview, to_dict
+from .schemas import ChapterEditorialReview, SectionReview, to_dict
 from .writing_loop import run_section_revision_loop
 
 
@@ -59,8 +59,28 @@ def compile_survey(output_dir: str | Path) -> dict:
                 finalized += 1
             else:
                 lines.extend([f"### {section.get('title')}", "", "Status: pending final section.", ""])
+        missing: list[str] = []
+        chapter_section_ids = [
+            str(section.get("section_id"))
+            for section in ast.get("sections", [])
+            if section.get("chapter_id") == chapter.get("chapter_id")
+        ]
+        for section_id in chapter_section_ids:
+            if not (root / "sections" / section_id / "final.md").exists():
+                missing.append(section_id)
+        issues = []
+        if missing:
+            issues.append(f"missing_sections:{len(missing)}")
+        review = ChapterEditorialReview(
+            chapter_id=str(chapter.get("chapter_id")),
+            verdict="PASS" if not missing else "REVISE",
+            finalized_sections=len(chapter_section_ids) - len(missing),
+            missing_sections=missing,
+            issues=issues,
+        )
         (chapter_dir / "synthesis.md").write_text("\n".join(chapter_lines), encoding="utf-8")
-        (chapter_dir / "review.json").write_text(json.dumps({"verdict": "PASS" if chapter_lines else "PENDING"}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        (chapter_dir / "editorial_review.json").write_text(json.dumps(to_dict(review), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        (chapter_dir / "review.json").write_text(json.dumps(to_dict(review), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     final_path = root / "final.md"
     final_path.write_text("\n".join(lines), encoding="utf-8")
     return {"ok": True, "final_md": str(final_path), "finalized_sections": finalized, "total_sections": len(ast.get("sections", []))}
