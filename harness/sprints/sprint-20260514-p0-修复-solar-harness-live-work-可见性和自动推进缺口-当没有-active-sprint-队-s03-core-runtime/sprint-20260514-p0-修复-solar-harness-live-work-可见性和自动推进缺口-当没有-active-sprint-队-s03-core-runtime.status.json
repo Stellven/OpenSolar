@@ -4,12 +4,12 @@
   "epic_id": "epic-20260514-p0-修复-solar-harness-live-work-可见性和自动推进缺口-当没有-active-sprint-队",
   "title": "核心实现与数据模型",
   "status": "passed",
-  "phase": "completed",
+  "phase": "finalized",
   "handoff_to": "done",
   "target_role": "done",
   "priority": "P0",
   "created_at": "2026-05-14T14:43:09Z",
-  "updated_at": "2026-05-14T19:22:01Z",
+  "updated_at": "2026-05-15T01:16:26Z",
   "dependency_policy": "activated_by_epic_dag",
   "history": [
     {
@@ -248,6 +248,12 @@
       "event": "graph_parent_ready_passed",
       "by": "graph-dispatch",
       "note": "All DAG nodes and required gates passed via parent_ready_check."
+    },
+    {
+      "ts": "2026-05-15T01:16:26Z",
+      "event": "phase_finalized_repaired",
+      "by": "contract-patrol",
+      "reason": "passed terminal sprint had phase=completed; normalized to finalized for live-work status consistency"
     }
   ],
   "round": 1,

@@ -82,6 +82,7 @@ PANE_UNAVAILABLE_RE = re.compile(
     re.I,
 )
 PANE_PROMPT_RESIDUE_RE = re.compile(r"^\s*❯(?![\s\u00a0]+Try\\s+\")[\s\u00a0]+[^\s\u00a0─]", re.M)
+SAFE_CONTINUE_PROMPT_RE = re.compile(r"^\s*❯[\s\u00a0]*(继续|continue|继续\s+N\d+|continue\s+N\d+)\s*$", re.I | re.M)
 SQLITE_ONLY_RE = re.compile(r"sqlite3\s+~?/?.*\.solar/solar\.db", re.I)
 CONTEXT_INJECT_RE = re.compile(r"solar-harness\s+context\s+inject|Solar Unified Context", re.I)
 CONTEXT_TIMEOUT_RE = re.compile(r"context inject[\s\S]{0,240}timeout\s+\d+s|timeout\s+\d+s[\s\S]{0,240}context inject", re.I)
@@ -115,8 +116,26 @@ def node_requires_deepresearch_quality_gate(node: dict) -> bool:
         return True
     if caps & {"citation.verify", "factuality.evaluate", "report.compile", "evidence.extract", "claim.mine"}:
         return True
-    haystack = " ".join(str(node.get(k, "")) for k in ("id", "goal", "description")).lower()
-    return bool(re.search(r"deepresearch|research_eval|report_ast|citation|factuality|claim ledger|evidence ledger|report compiler", haystack))
+    artifact_values: list[str] = []
+    artifacts = node.get("artifacts") if isinstance(node.get("artifacts"), dict) else {}
+    artifact_values.extend(str(value) for value in artifacts.values())
+    for key in (
+        "research_eval",
+        "research_eval_json",
+        "eval_artifacts_json",
+        "report_ast",
+        "final_report",
+        "final_md",
+    ):
+        if node.get(key):
+            artifact_values.append(str(node.get(key)))
+    raw_scope = node.get("write_scope", [])
+    if isinstance(raw_scope, str):
+        artifact_values.append(raw_scope)
+    elif isinstance(raw_scope, list):
+        artifact_values.extend(str(item) for item in raw_scope)
+    artifact_text = " ".join(artifact_values).lower()
+    return bool(re.search(r"research_eval|report_ast|final\\.md|final_report|evidence\\.jsonl|claims\\.jsonl", artifact_text))
 
 
 def deepresearch_quality_gate_ok(gate: dict) -> bool:
@@ -480,6 +499,11 @@ def pane_current_prompt_line(tail: str) -> str:
 
 def pane_at_prompt(tail: str) -> bool:
     return bool(pane_current_prompt_line(tail))
+
+
+def pane_safe_continue_prompt(tail: str) -> bool:
+    bottom = "\n".join(tail.splitlines()[-12:])
+    return bool(SAFE_CONTINUE_PROMPT_RE.search(bottom))
 
 
 def clear_current_prompt(target: str) -> bool:
@@ -863,7 +887,7 @@ def pane_is_busy(target: str) -> bool:
         return True
     if PANE_BOTTOM_BUSY_RE.search(bottom):
         return True
-    if PANE_PROMPT_RESIDUE_RE.search(bottom):
+    if PANE_PROMPT_RESIDUE_RE.search(bottom) and not pane_safe_continue_prompt(tail):
         return True
     if pane_at_prompt(tail):
         return False
@@ -1677,6 +1701,21 @@ def inspect_panes(state: dict, stall_seconds: int) -> list[dict]:
                         "message": f"{role} pane compacting/stalled; re-wake sprint {sid} to continue missing artifact work.",
                     }
                 )
+        if pane_safe_continue_prompt(tail) and not PANE_BOTTOM_BUSY_RE.search("\n".join(tail.splitlines()[-12:])):
+            graph_node = assigned_graph_node_for_pane(target)
+            if graph_node:
+                findings.append(
+                    {
+                        "sid": graph_node["sid"],
+                        "type": "pane_safe_continue_prompt",
+                        "severity": "info",
+                        "target": target,
+                        "role": role,
+                        "graph_node": graph_node,
+                        "message": "pane has safe continue prompt residue; submit Enter to resume assigned graph node.",
+                    }
+                )
+                continue
         if pane_at_prompt(tail) and not pane_is_busy(target):
             graph_node = assigned_graph_node_for_pane(target)
             if graph_node:
@@ -2097,6 +2136,19 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
         elif ftype == "pm_pane_interrupt_residue":
             append_event("", "autopilot_pm_pane_interrupt_residue", "warn", f)
             result = {"sid": sid, "action": ftype, "target": f.get("target", ""), "dispatched": False, "recorded_only": True}
+            mark_action(state, f, result)
+            actions.append(result)
+        elif ftype == "pane_safe_continue_prompt":
+            sent = False
+            if dispatch and f.get("target"):
+                try:
+                    sent = subprocess.run(["tmux", "send-keys", "-t", f["target"], "Enter"], timeout=2).returncode == 0
+                except Exception:
+                    sent = False
+            append_event(f.get("sid", ""), "autopilot_submitted_safe_continue_prompt", "info" if sent else "warn", f)
+            result = {"sid": sid, "action": ftype, "target": f.get("target", ""), "dispatched": sent}
+            if sent and target:
+                used_targets.add(target)
             mark_action(state, f, result)
             actions.append(result)
         elif ftype == "missing_prd":

@@ -4,12 +4,12 @@
   "epic_id": "epic-20260513-solar-deepresearch-product-line",
   "title": "验证、回归与发布证据",
   "status": "passed",
-  "phase": "finalized",
+  "phase": "completed",
   "handoff_to": "done",
   "target_role": "done",
   "priority": "P0",
   "created_at": "2026-05-14T01:26:14Z",
-  "updated_at": "2026-05-14T07:46:41Z",
+  "updated_at": "2026-05-15T01:05:46Z",
   "dependency_policy": "activated_by_epic_dag",
   "round": 1,
   "runtime_state_source": "activity_runtime",
@@ -935,6 +935,12 @@
       "ts": "2026-05-14T07:46:41Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-15T01:05:46Z",
+      "event": "graph_parent_ready_passed",
+      "by": "graph-dispatch",
+      "note": "All DAG nodes and required gates passed via parent_ready_check."
     }
   ],
   "event_count": 23,
@@ -947,7 +953,7 @@
     "plan": "sprints/sprint-20260513-solar-deepresearch-product-line-s05-verification-release.plan.md",
     "task_graph": "sprints/sprint-20260513-solar-deepresearch-product-line-s05-verification-release.task_graph.json"
   },
-  "completed_at": "2026-05-14T07:43:36Z",
+  "completed_at": "2026-05-15T01:05:46Z",
   "graph_parent_ready": {
     "ok": true,
     "sprint_id": "sprint-20260513-solar-deepresearch-product-line-s05-verification-release",

@@ -136,8 +136,26 @@ def _node_requires_deepresearch_quality_gate(node: dict[str, Any]) -> bool:
         return True
     if caps & {"citation.verify", "factuality.evaluate", "report.compile", "evidence.extract", "claim.mine"}:
         return True
-    haystack = " ".join(str(node.get(k, "")) for k in ("id", "goal", "description")).lower()
-    return bool(re.search(r"deepresearch|research_eval|report_ast|citation|factuality|claim ledger|evidence ledger|report compiler", haystack))
+    artifact_values: list[str] = []
+    artifacts = node.get("artifacts") if isinstance(node.get("artifacts"), dict) else {}
+    artifact_values.extend(str(value) for value in artifacts.values())
+    for key in (
+        "research_eval",
+        "research_eval_json",
+        "eval_artifacts_json",
+        "report_ast",
+        "final_report",
+        "final_md",
+    ):
+        if node.get(key):
+            artifact_values.append(str(node.get(key)))
+    raw_scope = node.get("write_scope", [])
+    if isinstance(raw_scope, str):
+        artifact_values.append(raw_scope)
+    elif isinstance(raw_scope, list):
+        artifact_values.extend(str(item) for item in raw_scope)
+    artifact_text = " ".join(artifact_values).lower()
+    return bool(re.search(r"research_eval|report_ast|final\\.md|final_report|evidence\\.jsonl|claims\\.jsonl", artifact_text))
 
 
 def _read_json_file(path: str | Path) -> dict[str, Any]:
@@ -1868,11 +1886,12 @@ def _node_eval_needed(graph: dict[str, Any], sid: str, node: dict[str, Any], for
     node_id = str(node.get("id") or "")
     if not node_id:
         return False
+    repair_mode = bool(node.get("quality_gate_repair_requested_at")) and _node_requires_deepresearch_quality_gate(node)
     results = graph.get("node_results") or {}
     result = results.get(node_id) if isinstance(results, dict) else None
     if isinstance(result, dict) and str(result.get("status", "")).lower() in {"passed", "failed", "skipped"}:
         return False
-    if _eval_json_file(sid, node_id).exists() and not force:
+    if _eval_json_file(sid, node_id).exists() and not force and not repair_mode:
         return False
     if not force:
         for lease in list_leases():
@@ -1918,6 +1937,8 @@ def _node_eval_needed(graph: dict[str, Any], sid: str, node: dict[str, Any], for
     status = node_status(graph, node_id)
     if status in {"passed", "failed", "skipped"}:
         return False
+    if repair_mode and status in {"reviewing", "dispatched", "in_progress", "running", ""}:
+        return True
     return bool(_existing_node_handoff(sid, node, graph)) and status in {"reviewing", "dispatched", "in_progress", "running", ""}
 
 

@@ -43,6 +43,18 @@ def _section_count(report_ast: dict[str, Any]) -> int:
     return sum(len(ch.get("sections") or []) for ch in chapters if isinstance(ch, dict))
 
 
+def _first_number(data: dict[str, Any], *keys: str, default: float = 0.0) -> float:
+    for key in keys:
+        value = data.get(key)
+        if value is None or value == "":
+            continue
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            continue
+    return default
+
+
 def evaluate_artifacts(
     eval_json: str | Path,
     report_ast: str | Path | None = None,
@@ -82,8 +94,8 @@ def evaluate_artifacts(
     evidence_count = int(eval_data.get("evidence_count") or 0)
     claim_count = int(eval_data.get("claim_count") or 0)
     section_count = int(eval_data.get("section_count") or 0)
-    unsupported_rate = float(eval_data.get("unsupported_rate") or 0.0)
-    citation_accuracy = float(eval_data.get("citation_accuracy") or 0.0)
+    unsupported_rate = _first_number(eval_data, "unsupported_rate", "unsupported_claim_rate")
+    citation_accuracy = _first_number(eval_data, "citation_accuracy", "citation_span_accuracy")
     eval_status = str(eval_data.get("status") or "unknown").lower()
 
     metrics.update({
@@ -126,7 +138,7 @@ def evaluate_artifacts(
         final_text = final_path.read_text(encoding="utf-8", errors="replace")
         if not final_text.strip():
             errors.append("final_md_empty")
-        if not re.search(r"\[cite:ev_[0-9a-f]+", final_text):
+        if not re.search(r"\[cite:ev_[A-Za-z0-9_-]+", final_text):
             errors.append("final_md_missing_evidence_citations")
 
     if not bibliography_path.exists():
