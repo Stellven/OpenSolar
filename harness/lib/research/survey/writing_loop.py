@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .backends import HumanResponseMissingError, get_writer_backend
+from .backends import HumanResponseMissingError, LocalCommandWriterError, get_writer_backend
 from .schemas import SectionPromptPacket, SectionReview, SectionRevisionTrace, to_dict
 
 
@@ -294,6 +294,8 @@ def run_section_revision_loop(
     max_rounds: int = 3,
     min_chars: int = 1200,
     writer_backend: str = "deterministic",
+    writer_command: str = "",
+    writer_timeout: int = 120,
     emit_prompt_packet: bool = True,
 ) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
@@ -321,7 +323,7 @@ def run_section_revision_loop(
     traces: list[dict] = []
     text = ""
     review = None
-    backend = get_writer_backend(writer_backend)
+    backend = get_writer_backend(writer_backend, local_command=writer_command, timeout_seconds=writer_timeout)
     for round_index in range(max(max_rounds, 1)):
         packet = build_section_prompt_packet(root, section_id, round_index=round_index, writer_backend=backend.name)
         if emit_prompt_packet:
@@ -357,6 +359,36 @@ def run_section_revision_loop(
                 "writer_backend": backend.name,
                 "prompt_packets": str(section_dir / "prompt_packets") if emit_prompt_packet else "",
                 "expected_response": exc.response_path,
+                "review": to_dict(review),
+            }
+        except LocalCommandWriterError as exc:
+            trace = SectionRevisionTrace(
+                section_id=section_id,
+                round_index=round_index,
+                verdict="WRITER_FAILED",
+                changed=False,
+                issues_before=[str(exc)],
+                actions=["fix_writer_command", "rerun_survey_write_section"],
+            )
+            traces.append(to_dict(trace))
+            review = SectionReview(
+                section_id=section_id,
+                verdict="WRITER_FAILED",
+                unsupported_claim_rate=1.0,
+                citation_span_accuracy=0.0,
+                source_diversity_score=0.0,
+                repetition_score=0.0,
+                issues=[str(exc)],
+            )
+            (section_dir / "review.json").write_text(json.dumps(to_dict(review), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            (section_dir / "revision_trace.json").write_text(json.dumps({"section_id": section_id, "rounds": traces}, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            return {
+                "ok": False,
+                "section_id": section_id,
+                "reason": "writer_failed",
+                "writer_backend": backend.name,
+                "prompt_packets": str(section_dir / "prompt_packets") if emit_prompt_packet else "",
+                "writer_error": exc.reason,
                 "review": to_dict(review),
             }
         review = review_section_text(root, section_id, text, min_chars=min_chars)
@@ -396,6 +428,8 @@ def run_ready_sections(
     max_rounds: int = 3,
     min_chars: int = 1200,
     writer_backend: str = "deterministic",
+    writer_command: str = "",
+    writer_timeout: int = 120,
     emit_prompt_packet: bool = True,
 ) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
@@ -417,6 +451,8 @@ def run_ready_sections(
             max_rounds=max_rounds,
             min_chars=min_chars,
             writer_backend=writer_backend,
+            writer_command=writer_command,
+            writer_timeout=writer_timeout,
             emit_prompt_packet=emit_prompt_packet,
         ))
         if not unlimited and len(results) >= limit:

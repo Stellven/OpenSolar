@@ -97,3 +97,27 @@ def test_survey_write_human_packet_returns_expected_response(tmp_path, capsys):
     payload = json.loads(capsys.readouterr().out)
     assert payload["reason"] == "human_response_missing"
     assert payload["expected_response"].endswith("human_responses/round_00.md")
+
+
+def test_survey_write_local_command_requires_command(tmp_path, capsys):
+    section_dir = tmp_path / "sections" / "ch01" / "sec01"
+    section_dir.mkdir(parents=True)
+    (section_dir / "section.spec.json").write_text(json.dumps({"section_id": "ch01/sec01", "title": "Test"}, ensure_ascii=False), encoding="utf-8")
+    (section_dir / "evidence_pack.json").write_text(json.dumps({
+        "section_id": "ch01/sec01",
+        "status": "ready",
+        "claim_ids": ["cl_1", "cl_2", "cl_3"],
+        "evidence_ids": ["ev_1", "ev_2", "ev_3", "ev_4"],
+        "source_types": ["paper", "code"],
+    }, ensure_ascii=False), encoding="utf-8")
+    rc = main([
+        "survey-write-section",
+        "--output-dir", str(tmp_path),
+        "--section-id", "ch01/sec01",
+        "--writer-backend", "local-command",
+        "--json",
+    ])
+    assert rc == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["reason"] == "writer_failed"
+    assert payload["writer_error"] == "missing_command"

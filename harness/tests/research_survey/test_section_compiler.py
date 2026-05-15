@@ -121,3 +121,58 @@ def test_human_packet_fallback_keeps_automation_running(tmp_path):
     result = run_section_revision_loop(tmp_path, "ch01/sec01", writer_backend="human-packet-fallback")
     assert result["ok"] is True
     assert result["writer_backend"] == "human-packet-fallback"
+
+
+def test_local_command_backend_consumes_stdout(tmp_path):
+    _strong_fixture(tmp_path)
+    section_dir = tmp_path / "sections" / "ch01" / "sec01"
+    pack = json.loads((section_dir / "evidence_pack.json").read_text(encoding="utf-8"))
+    claim_ids = pack["claim_ids"][:3]
+    evidence_ids = pack["evidence_ids"][:4]
+    script = tmp_path / "writer.py"
+    script.write_text(
+        "import sys\n"
+        "sys.stdin.read()\n"
+        "print('# Local Command Section')\n"
+        "print('\\n## Architecture Synthesis\\n')\n"
+        f"print('Local command with [claim:{claim_ids[0]}] [evidence:{evidence_ids[0]}].')\n"
+        "print('\\n## Evaluation And Risk Boundary\\n')\n"
+        f"print('Evaluation with [claim:{claim_ids[1]}] [evidence:{evidence_ids[1]}].')\n"
+        "print('\\n## Contradiction Slots\\n')\n"
+        f"print('Contradiction with [claim:{claim_ids[2]}] [evidence:{evidence_ids[2]}] [evidence:{evidence_ids[3]}].')\n"
+        "print('\\n## Source Map\\nSources preserved.')\n"
+        "print('\\n## Claim Map\\nClaims preserved.')\n"
+        "print('\\n## Open Problems\\nOpen problems preserved.')\n",
+        encoding="utf-8",
+    )
+    result = run_section_revision_loop(
+        tmp_path,
+        "ch01/sec01",
+        writer_backend="local-command",
+        writer_command=f"{sys.executable} {script}",
+        min_chars=100,
+    )
+    assert result["ok"] is True
+    assert result["writer_backend"] == "local-command"
+    assert "Local command" in (section_dir / "final.md").read_text(encoding="utf-8")
+
+
+def test_local_command_backend_reports_missing_command(tmp_path):
+    _strong_fixture(tmp_path)
+    result = run_section_revision_loop(tmp_path, "ch01/sec01", writer_backend="local-command")
+    assert result["ok"] is False
+    assert result["reason"] == "writer_failed"
+    assert result["writer_error"] == "missing_command"
+
+
+def test_local_command_backend_reports_nonzero_exit(tmp_path):
+    _strong_fixture(tmp_path)
+    result = run_section_revision_loop(
+        tmp_path,
+        "ch01/sec01",
+        writer_backend="local-command",
+        writer_command=f"{sys.executable} -c 'import sys; print(\"bad\", file=sys.stderr); sys.exit(7)'",
+    )
+    assert result["ok"] is False
+    assert result["reason"] == "writer_failed"
+    assert result["writer_error"].startswith("exit_7:")
