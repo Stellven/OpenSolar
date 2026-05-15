@@ -23,7 +23,7 @@ No contract deviations. No stop-rule violations (no product code modified, no de
 | 1 | Run `integrations benchmark --threshold 90` | **PASS** | Re-ran by evaluator: average=100.0, minimum=100, 7/7 PASS at threshold 90. Matches handoff. |
 | 2 | Run `integrations platform-benchmark --threshold 80` | **PASS** | Re-ran: average=100.0, minimum=100, 8/8 PASS at threshold 80 (rows #18-#25). Matches handoff. |
 | 3 | Run `verify-integrations` | **PASS** | Re-ran: PASS=25 (Capability Plane E2E) + PASS=38 (Expanded Plane E2E) + PASS=13 (Fusion Benchmark Test) + PASS=11 (Platform Workflow Benchmark Test) = 87 total / 0 FAIL. Matches handoff. |
-| 4 | Write handoff to specified path | **PASS** | `/Users/sihaoli/.solar/harness/sprints/sprint-20260509-solar-benchmark-proof-run.handoff.md` exists, 99 lines. |
+| 4 | Write handoff to specified path | **PASS** | `/Users/lisihao/.solar/harness/sprints/sprint-20260509-solar-benchmark-proof-run.handoff.md` exists, 99 lines. |
 
 ## Handoff Must Include — 逐条
 

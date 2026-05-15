@@ -21,11 +21,11 @@ are passed:
 ## Verification
 
 ```bash
-python3 -m pytest /Users/sihaoli/.solar/harness/tests/data_plane -q
+python3 -m pytest /Users/lisihao/.solar/harness/tests/data_plane -q
 # 82 passed in 14.13s
 
-/Users/sihaoli/.solar/harness/solar-harness.sh graph-scheduler parent-check \
-  --graph /Users/sihaoli/.solar/harness/sprints/sprint-20260510-data-plane-storage-access-unification.task_graph.json
+/Users/lisihao/.solar/harness/solar-harness.sh graph-scheduler parent-check \
+  --graph /Users/lisihao/.solar/harness/sprints/sprint-20260510-data-plane-storage-access-unification.task_graph.json
 # ready=true, open_nodes=[], failed_nodes=[], missing_gates=[]
 ```
 

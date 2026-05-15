@@ -5,7 +5,7 @@
 
 在任何 Write/Edit/handoff/eval/status 更新之前，必须先用 Claude/Codex 的 **Read 工具**读取：
 
-`/Users/sihaoli/.solar/STATE.md`
+`/Users/lisihao/.solar/STATE.md`
 
 不要用 `cat` 替代这一步；本地 `state-read-enforcer.sh` hook 只认 Read 工具标记。
 

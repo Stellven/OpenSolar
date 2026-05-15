@@ -31,9 +31,9 @@ Pane evidence:
 
 Machine report:
 
-- `/Users/sihaoli/.solar/harness/reports/heavy-proof-benchmark-latest.json`
-- `/Users/sihaoli/.solar/harness/reports/heavy-proof-benchmark-latest.md`
-- `/Users/sihaoli/.solar/harness/reports/heavy-proof-evidence/latest`
+- `/Users/lisihao/.solar/harness/reports/heavy-proof-benchmark-latest.json`
+- `/Users/lisihao/.solar/harness/reports/heavy-proof-benchmark-latest.md`
+- `/Users/lisihao/.solar/harness/reports/heavy-proof-evidence/latest`
 
 ## Fix Included During This Run
 
@@ -46,14 +46,14 @@ Browser-use MCP had a real runtime break:
 
 Changed file:
 
-- `/Users/sihaoli/.claude/mcp-servers/browser-use/server.py`
+- `/Users/lisihao/.claude/mcp-servers/browser-use/server.py`
 
 ## Scope Boundary
 
 This proves selected heavy runtime paths, not every production scenario:
 
 - MemPalace proof is real embedding-model load + live Chroma query.
-- Apple Notes proof uses isolated mock source and temporary vault to avoid polluting `/Users/sihaoli/Knowledge`.
+- Apple Notes proof uses isolated mock source and temporary vault to avoid polluting `/Users/lisihao/Knowledge`.
 - Accepted artifact proof exports a real finalized sprint into an isolated temporary vault.
 - Browser-use proof verifies deterministic navigation and screenshot, not token-consuming AI extraction.
 

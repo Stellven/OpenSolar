@@ -50,10 +50,10 @@ Round: 1
 
 ```bash
 # 完整测试套件 (A1-A7)
-bash /Users/sihaoli/.solar/harness/tests/test-everything-claude-code-integration.sh
+bash /Users/lisihao/.solar/harness/tests/test-everything-claude-code-integration.sh
 
 # A5 单独跑
-bash /Users/sihaoli/.solar/harness/tests/test-everything-claude-code-integration.sh --case sync-rollback
+bash /Users/lisihao/.solar/harness/tests/test-everything-claude-code-integration.sh --case sync-rollback
 
 # A2 验证
 solar-harness everything-claude-code inventory --json \
@@ -69,7 +69,7 @@ solar-harness integrations status --json \
 
 # sync CLI (手动测试)
 solar-harness everything-claude-code sync \
-  --allowlist /Users/sihaoli/.solar/harness/config/everything-claude-code.allowlist.json \
+  --allowlist /Users/lisihao/.solar/harness/config/everything-claude-code.allowlist.json \
   --dry-run --json
 
 # rollback CLI (手动测试)

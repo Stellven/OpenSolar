@@ -1,0 +1,79 @@
+{
+  "id": "sprint-20260502-191700",
+  "title": "solar-harness 6 大类修复: D1 启动链统一(pane-launcher 与 start-incarna",
+  "status": "passed",
+  "phase": "eval_passed",
+  "created_at": "2026-05-02T23:17:00Z",
+  "round": 2,
+  "history": [
+    {
+      "ts": "2026-05-02T23:17:00Z",
+      "event": "contract_created",
+      "by": "user"
+    },
+    {
+      "ts": "2026-05-02T23:19:50Z",
+      "event": "done_criteria_filled",
+      "by": "planner"
+    },
+    {
+      "ts": "2026-05-02T23:22:51Z",
+      "event": "plan_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-02T23:25:08Z",
+      "event": "plan_reviewed",
+      "by": "evaluator",
+      "verdict": "APPROVE"
+    },
+    {
+      "ts": "2026-05-02T23:45:00Z",
+      "event": "implementation_completed",
+      "by": "builder"
+    },
+    {
+      "ts": "2026-05-02T23:37:31Z",
+      "event": "implementation_completed",
+      "by": "builder",
+      "round": 2
+    },
+    {
+      "ts": "2026-05-02T23:37:53Z",
+      "event": "handoff_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-02T23:41:51Z",
+      "event": "eval_completed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-05-02T23:41:58Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-05-02T23:41:59Z",
+      "event": "finalized",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-11T00:06:44Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": "impl",
+        "handoff_to": null,
+        "target_role": null
+      }
+    }
+  ],
+  "updated_at": "2026-05-11T00:06:44Z",
+  "last_handoff_mtime": 1777765022.0,
+  "handoff_to": "done",
+  "target_role": "done"
+}

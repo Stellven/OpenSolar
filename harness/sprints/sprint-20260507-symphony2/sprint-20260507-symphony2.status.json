@@ -6,13 +6,13 @@
   "handoff_to": "done",
   "predecessor": "sprint-20260506-symphony1",
   "created_at": "2026-05-07T14:42:08Z",
-  "updated_at": "2026-05-12T19:43:23Z",
-  "product_brief": "/Users/sihaoli/.solar/harness/sprints/sprint-20260507-symphony2.product-brief.md",
+  "updated_at": "2026-05-10T14:52:54Z",
+  "product_brief": "/Users/lisihao/.solar/harness/sprints/sprint-20260507-symphony2.product-brief.md",
   "auto_generated": false,
   "source": "pm-manual-2026-05-07",
   "phase": "eval_passed",
   "title": "Symphony Sprint 2 — workspace 4 hook 生命周期 + 强隔离 + Sprint 1 D6",
-  "contract": "/Users/sihaoli/.solar/harness/sprints/sprint-20260507-symphony2.contract.md",
+  "contract": "/Users/lisihao/.solar/harness/sprints/sprint-20260507-symphony2.contract.md",
   "crew": {
     "builder_main": "glm-5.1",
     "builder_fallback": "deepseek-v3",
@@ -97,11 +97,5 @@
   "last_handoff_mtime": 1778180332.0,
   "last_exported_sprint": "sprint-20260507-symphony2",
   "last_exported_at": "2026-05-07T23:25:54Z",
-  "target_role": "done",
-  "knowledge_export_status": "exported",
-  "knowledge_export_path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260507-symphony2.accepted.md",
-  "knowledge_ingest_dispatch": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260507-symphony2.dispatch.md",
-  "knowledge_exported_at": "2026-05-12T19:43:23Z",
-  "knowledge_ingested_at": null,
-  "knowledge_export_error": null
+  "target_role": "done"
 }

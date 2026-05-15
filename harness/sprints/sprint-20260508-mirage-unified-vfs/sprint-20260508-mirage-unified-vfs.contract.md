@@ -33,8 +33,8 @@ Source links:
 
 ## Current Solar Evidence
 
-- Solar already has `/Users/sihaoli/.solar/solar.db`, Cortex code under `/Users/sihaoli/.claude/core/cortex`, and sprint artifacts under `/Users/sihaoli/.solar/harness/sprints`.
-- Obsidian vault is `/Users/sihaoli/Knowledge`.
+- Solar already has `/Users/lisihao/.solar/solar.db`, Cortex code under `/Users/lisihao/.claude/core/cortex`, and sprint artifacts under `/Users/lisihao/.solar/harness/sprints`.
+- Obsidian vault is `/Users/lisihao/Knowledge`.
 - QMD/MinerU collection `solar-wiki` is configured and can search/read the vault.
 - Existing `solar-harness wiki ...` commands handle ingest/query/export; Mirage must call or complement them, not bypass their semantics.
 
@@ -43,37 +43,37 @@ Source links:
 - Do not replace `solar-harness wiki`, QMD/MinerU, Solar DB retrieval, or Cortex.
 - Do not default to FUSE or require macOS kernel/system-extension setup.
 - Do not implement full Google OAuth UX if credentials are not already available.
-- Do not mount the entire `/Users/sihaoli` home directory.
+- Do not mount the entire `/Users/lisihao` home directory.
 - Do not write directly into finalized Obsidian wiki pages; staging writes go to `_raw/`.
 
 ## Deliverables
 
-1. `/Users/sihaoli/.solar/harness/config/mirage.solar.yaml`
+1. `/Users/lisihao/.solar/harness/config/mirage.solar.yaml`
    - Default Solar Mirage workspace manifest.
    - Defines allowlisted mounts and per-mount modes.
    - Supports env expansion but never prints secret values.
 
-2. `/Users/sihaoli/.solar/harness/lib/solar_mirage.py` or `/Users/sihaoli/.solar/harness/lib/solar-mirage.ts`
+2. `/Users/lisihao/.solar/harness/lib/solar_mirage.py` or `/Users/lisihao/.solar/harness/lib/solar-mirage.ts`
    - Wrapper around Mirage SDK/CLI.
    - Implements doctor, workspace creation, exec, search, provision/dry-run.
    - Normalizes output for status server and tests.
 
-3. `/Users/sihaoli/.solar/harness/solar-harness.sh`
+3. `/Users/lisihao/.solar/harness/solar-harness.sh`
    - Adds `solar-harness mirage ...` command family.
    - Must be non-interactive and scriptable.
 
-4. `/Users/sihaoli/.solar/harness/lib/symphony/status-server.py`
+4. `/Users/lisihao/.solar/harness/lib/symphony/status-server.py`
    - Adds `mirage` status section to `/status`.
    - Keeps `/healthz` dependency-free and fast.
 
-5. `/Users/sihaoli/.solar/harness/lib/mirage-search.py` or equivalent
+5. `/Users/lisihao/.solar/harness/lib/mirage-search.py` or equivalent
    - Combines Mirage path search, QMD search, and Solar DB retrieval.
    - Returns bounded sourced results.
 
-6. `/Users/sihaoli/.solar/harness/docs/mirage-unified-vfs.md`
+6. `/Users/lisihao/.solar/harness/docs/mirage-unified-vfs.md`
    - Install, configure, credentials, security model, examples, rollback.
 
-7. `/Users/sihaoli/.solar/harness/tests/test-mirage-unified-vfs.sh`
+7. `/Users/lisihao/.solar/harness/tests/test-mirage-unified-vfs.sh`
    - End-to-end test suite with temp mounts and no real Drive writes.
 
 ## Acceptance Criteria
@@ -96,11 +96,11 @@ solar-harness mirage doctor --json \
 ### A2 — Default Workspace Mounts
 
 Required mounts:
-- `/knowledge` -> `/Users/sihaoli/Knowledge` read-only.
-- `/raw` -> `/Users/sihaoli/Knowledge/_raw` write-staging only.
-- `/sprints` -> `/Users/sihaoli/.solar/harness/sprints` read-only.
-- `/solar` -> `/Users/sihaoli/.solar` read-only with redaction.
-- `/cortex` -> `/Users/sihaoli/.claude/core/cortex` read-only.
+- `/knowledge` -> `/Users/lisihao/Knowledge` read-only.
+- `/raw` -> `/Users/lisihao/Knowledge/_raw` write-staging only.
+- `/sprints` -> `/Users/lisihao/.solar/harness/sprints` read-only.
+- `/solar` -> `/Users/lisihao/.solar` read-only with redaction.
+- `/cortex` -> `/Users/lisihao/.claude/core/cortex` read-only.
 - `/projects` -> allowlisted project roots only.
 - `/drive` -> optional Google Drive mount.
 
@@ -178,10 +178,10 @@ Verify:
 solar-harness mirage exec -- 'echo "mirage smoke" > /raw/mirage-smoke.md'
 solar-harness mirage exec -- 'echo "bad" > /solar/mirage-bad.txt' \
   && exit 1 || true
-rg -n '"event": ?"mirage_write_denied"' /Users/sihaoli/.solar/harness/sprints/warn.events.jsonl /Users/sihaoli/.solar/harness/sprints/*.events.jsonl >/dev/null
+rg -n '"event": ?"mirage_write_denied"' /Users/lisihao/.solar/harness/sprints/warn.events.jsonl /Users/lisihao/.solar/harness/sprints/*.events.jsonl >/dev/null
 ```
 
-<!-- verify: cmd="solar-harness mirage exec -- 'echo \"mirage smoke\" > /raw/mirage-smoke.md' && (solar-harness mirage exec -- 'echo \"bad\" > /solar/mirage-bad.txt' && exit 1 || true) && rg -n '\"event\": ?\"mirage_write_denied\"' /Users/sihaoli/.solar/harness/sprints/warn.events.jsonl /Users/sihaoli/.solar/harness/sprints/*.events.jsonl >/dev/null" -->
+<!-- verify: cmd="solar-harness mirage exec -- 'echo \"mirage smoke\" > /raw/mirage-smoke.md' && (solar-harness mirage exec -- 'echo \"bad\" > /solar/mirage-bad.txt' && exit 1 || true) && rg -n '\"event\": ?\"mirage_write_denied\"' /Users/lisihao/.solar/harness/sprints/warn.events.jsonl /Users/lisihao/.solar/harness/sprints/*.events.jsonl >/dev/null" -->
 
 ### A7 — Status Server Observability
 
@@ -209,14 +209,14 @@ Required behavior:
 Verify:
 
 ```bash
-bash /Users/sihaoli/.solar/harness/tests/test-mirage-unified-vfs.sh
+bash /Users/lisihao/.solar/harness/tests/test-mirage-unified-vfs.sh
 ```
 
-<!-- verify: cmd="bash /Users/sihaoli/.solar/harness/tests/test-mirage-unified-vfs.sh" -->
+<!-- verify: cmd="bash /Users/lisihao/.solar/harness/tests/test-mirage-unified-vfs.sh" -->
 
 ## Stop Rules
 
-- Stop if implementation requires mounting all of `/Users/sihaoli` by default.
+- Stop if implementation requires mounting all of `/Users/lisihao` by default.
 - Stop if Google credentials are printed, copied into status/events, or committed into config.
 - Stop if Drive write is enabled by default.
 - Stop if Mirage failure blocks coordinator, status server, or existing wiki commands.
@@ -226,9 +226,9 @@ bash /Users/sihaoli/.solar/harness/tests/test-mirage-unified-vfs.sh
 ## Planner Instructions
 
 1. Produce design:
-   `/Users/sihaoli/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.design.md`
+   `/Users/lisihao/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.design.md`
 2. Produce plan:
-   `/Users/sihaoli/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.plan.md`
+   `/Users/lisihao/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.plan.md`
 3. Split implementation into three slices:
    - Slice 1: install/doctor/workspace manifest/CLI shell.
    - Slice 2: unified search bridge across Mirage paths + QMD + Solar DB.

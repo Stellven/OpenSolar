@@ -27,9 +27,9 @@ owner: solar-harness
 
 ### In Scope
 
-- `/Users/sihaoli/.solar/bin/solar-remote-dispatch`
-- `/Users/sihaoli/.solar/harness/lib/graph_node_dispatcher.py`
-- `/Users/sihaoli/.solar/harness/lib/graph_scheduler.py`
+- `/Users/lisihao/.solar/bin/solar-remote-dispatch`
+- `/Users/lisihao/.solar/harness/lib/graph_node_dispatcher.py`
+- `/Users/lisihao/.solar/harness/lib/graph_scheduler.py`
 - 新增远端配置、doctor、reconcile/pull 状态所需的轻量脚本或 Python 模块。
 - 新增测试：fake ssh/rsync/wake、graph dispatch pane submit、parent_ready_check、Mac mini smoke。
 - 状态页面或 CLI 至少要能显示 remote sprint 的核心状态。
@@ -63,10 +63,10 @@ owner: solar-harness
 ## Verify Commands
 
 ```bash
-bash -n /Users/sihaoli/.solar/bin/solar-remote-dispatch
-python3 -m py_compile /Users/sihaoli/.solar/harness/lib/graph_node_dispatcher.py
-/Users/sihaoli/.solar/bin/solar-remote-dispatch doctor --json
-/Users/sihaoli/.solar/bin/solar-harness graph-scheduler validate --graph /Users/sihaoli/.solar/harness/sprints/sprint-20260510-remote-dispatch-productization.task_graph.json
+bash -n /Users/lisihao/.solar/bin/solar-remote-dispatch
+python3 -m py_compile /Users/lisihao/.solar/harness/lib/graph_node_dispatcher.py
+/Users/lisihao/.solar/bin/solar-remote-dispatch doctor --json
+/Users/lisihao/.solar/bin/solar-harness graph-scheduler validate --graph /Users/lisihao/.solar/harness/sprints/sprint-20260510-remote-dispatch-productization.task_graph.json
 ```
 
 ## Required Evidence

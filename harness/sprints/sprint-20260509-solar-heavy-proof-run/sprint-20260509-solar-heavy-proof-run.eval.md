@@ -10,7 +10,7 @@ Evaluator: Solar pane attempted evaluation; Codex controller fallback finalized 
 ## Verification Commands
 
 ```bash
-cd /Users/sihaoli/.solar/harness
+cd /Users/lisihao/.solar/harness
 bash solar-harness.sh integrations heavy-proof --threshold 100
 cat reports/heavy-proof-benchmark-latest.json
 file reports/heavy-proof-evidence/latest/runtime/browser-use-screenshot.png
@@ -34,11 +34,11 @@ file reports/heavy-proof-evidence/latest/runtime/browser-use-screenshot.png
 
 ## Evidence Paths
 
-- `/Users/sihaoli/.solar/harness/reports/heavy-proof-benchmark-latest.json`
-- `/Users/sihaoli/.solar/harness/reports/heavy-proof-benchmark-latest.md`
-- `/Users/sihaoli/.solar/harness/reports/heavy-proof-evidence/latest/commands`
-- `/Users/sihaoli/.solar/harness/reports/heavy-proof-evidence/latest/runtime`
-- `/Users/sihaoli/.solar/harness/sprints/sprint-20260509-solar-heavy-proof-run.handoff.md`
+- `/Users/lisihao/.solar/harness/reports/heavy-proof-benchmark-latest.json`
+- `/Users/lisihao/.solar/harness/reports/heavy-proof-benchmark-latest.md`
+- `/Users/lisihao/.solar/harness/reports/heavy-proof-evidence/latest/commands`
+- `/Users/lisihao/.solar/harness/reports/heavy-proof-evidence/latest/runtime`
+- `/Users/lisihao/.solar/harness/sprints/sprint-20260509-solar-heavy-proof-run.handoff.md`
 
 ## Important Findings
 

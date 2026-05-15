@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LIVE_HARNESS="${LIVE_HARNESS:-/Users/sihaoli/.solar/harness}"
-SOLAR_REPO="${SOLAR_REPO:-/Users/sihaoli/Solar}"
+LIVE_HARNESS="${LIVE_HARNESS:-$HOME/.solar/harness}"
+SOLAR_REPO="${SOLAR_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 REPO_HARNESS="${REPO_HARNESS:-$SOLAR_REPO/harness}"
-KNOWLEDGE_DIR="${KNOWLEDGE_DIR:-/Users/sihaoli/.solar/extracted_knowledge}"
+KNOWLEDGE_DIR="${KNOWLEDGE_DIR:-$HOME/.solar/extracted_knowledge}"
 ELIGIBLE_STATUSES="${ELIGIBLE_STATUSES:-passed}"
 DO_COMMIT=0
 
@@ -17,9 +17,9 @@ tracked Solar repo harness/ directory, writes knowledge extraction markdown, and
 optionally commits only the controlled Solar harness paths.
 
 Environment:
-  LIVE_HARNESS       default /Users/sihaoli/.solar/harness
-  SOLAR_REPO         default /Users/sihaoli/Solar
-  KNOWLEDGE_DIR      default /Users/sihaoli/.solar/extracted_knowledge
+  LIVE_HARNESS       default $HOME/.solar/harness
+  SOLAR_REPO         default (auto-detect from script location)
+  KNOWLEDGE_DIR      default $HOME/.solar/extracted_knowledge
   ELIGIBLE_STATUSES  default passed
 USAGE
 }

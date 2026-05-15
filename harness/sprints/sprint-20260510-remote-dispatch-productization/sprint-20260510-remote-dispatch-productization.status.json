@@ -116,8 +116,8 @@
   "last_handoff_mtime": 1778421991.0,
   "completed_at": "2026-05-11T00:51:54Z",
   "knowledge_export_status": "exported",
-  "knowledge_export_path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260510-remote-dispatch-productization.accepted.md",
-  "knowledge_ingest_dispatch": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260510-remote-dispatch-productization.dispatch.md",
+  "knowledge_export_path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260510-remote-dispatch-productization.accepted.md",
+  "knowledge_ingest_dispatch": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260510-remote-dispatch-productization.dispatch.md",
   "knowledge_exported_at": "2026-05-11T00:56:54Z",
   "knowledge_ingested_at": null,
   "knowledge_export_error": null

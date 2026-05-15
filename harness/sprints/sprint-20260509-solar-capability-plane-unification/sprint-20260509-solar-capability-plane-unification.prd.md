@@ -8,7 +8,7 @@
 
 ## 背景 / Context
 
-Solar 现在已经形成三层分裂：`/Users/sihaoli/Solar` 保存原始架构、skills、agents、rules；`/Users/sihaoli/.solar` 保存运行数据和数据库；`/Users/sihaoli/.solar/harness` 是真实 live orchestration。`solar-harness.sh` 又演化成 2790 行总控脚本，直接分发到 coordinator、pane launcher、wiki、mirage、qmd、symphony、autopilot、Everything Claude Code 等子系统。
+Solar 现在已经形成三层分裂：`/Users/lisihao/Solar` 保存原始架构、skills、agents、rules；`/Users/lisihao/.solar` 保存运行数据和数据库；`/Users/lisihao/.solar/harness` 是真实 live orchestration。`solar-harness.sh` 又演化成 2790 行总控脚本，直接分发到 coordinator、pane launcher、wiki、mirage、qmd、symphony、autopilot、Everything Claude Code 等子系统。
 
 当前最大缺口不是能力不存在，而是能力没有统一进入执行面。Builder pane 被派发时通常只收到 `读取并执行 <dispatch.md>`，不会自动知道可用 skills、MCP 状态、KB context，也不会知道任务应该优先使用哪些 Solar 原生 skill。状态面板也无法回答“这个 pane 实际可用什么”。
 
@@ -27,7 +27,7 @@ Solar 现在已经形成三层分裂：`/Users/sihaoli/Solar` 保存原始架构
 - coordinator 每次派发前自动把任务相关 skills 和 KB context 注入 dispatch 文件，不再只发裸指令。
 - status UI 显示每个 pane 的 persona、model、MCP 模式、top skills、KB context 状态。
 - 用户运行 `solar-harness graph` 可以输出 harness 依赖图，覆盖代码、skills、MCP、Markdown/schema/vendor。
-- 从 `/Users/sihaoli/Solar` 原架构提取可复用 skills，并以安全方式纳入 harness inventory，不覆盖用户现有 skill。
+- 从 `/Users/lisihao/Solar` 原架构提取可复用 skills，并以安全方式纳入 harness inventory，不覆盖用户现有 skill。
 
 ## 用户故事 / User Stories
 
@@ -47,7 +47,7 @@ Solar 现在已经形成三层分裂：`/Users/sihaoli/Solar` 保存原始架构
 - R6: 清理 `solar-harness.sh` 中重复/不可达 `mirage`、`data-plane` case 分支，保持 CLI 行为兼容。
 - R7: 修改 `pane-launcher.sh` 或 persona banner，启动时显示 persona、model、MCP mode、skill root summary、KB context mode。
 - R8: 修改 status-server UI/API，新增 pane capability card，展示每个 pane 实际可用 skill/MCP/context。
-- R9: 提取 `/Users/sihaoli/Solar/skills` 的 38 个原生 skills，写入 inventory，并标注 `usable | conflict | stale | needs_migration`。
+- R9: 提取 `/Users/lisihao/Solar/skills` 的 38 个原生 skills，写入 inventory，并标注 `usable | conflict | stale | needs_migration`。
 - R10: 所有新增命令必须有 tests，且不能打印 token、API key、secret。
 
 ## 验收标准 / Acceptance Criteria

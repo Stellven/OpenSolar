@@ -1,0 +1,3 @@
+{"ts":"2026-05-03T14:48:19Z","event":"phase_transition","by":"solar-harness","sid":"sprint-20260503-104819","data":{"from":"none","to":"spec"}}
+{"ts": "2026-05-03T18:31:59Z", "event": "handoff_submitted", "by": "builder", "sid": "sprint-20260503-104819", "data": {"round": "1"}}
+{"ts":"2026-05-03T18:39:26Z","event":"planner_notified","by":"coordinator","data":{"status":"passed"}}

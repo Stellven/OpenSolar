@@ -86,7 +86,7 @@ stdout:
 conclusion: 子路径黑名单在 exec 层生效, P0 修复确认 ✅
 
 smoke test: redact_on_read
-cmd: echo "API_KEY=sk-12345678901234567890" > /Users/sihaoli/.solar/test-redact/redact-test.txt && \
+cmd: echo "API_KEY=sk-12345678901234567890" > /Users/lisihao/.solar/test-redact/redact-test.txt && \
      solar-harness mirage exec -- 'cat /solar/test-redact/redact-test.txt'
 stdout:
   API_KEY=[REDACTED]
@@ -113,7 +113,7 @@ conclusion: 全套 33 项验证通过 ✅
 
 ## Stop Rules 自检
 
-- ✅ 未挂载整个 `/Users/sihaoli` (仅 8 个 allowlisted mount)
+- ✅ 未挂载整个 `/Users/lisihao` (仅 8 个 allowlisted mount)
 - ✅ Drive 默认只读+无 explicit `--allow-write-drive` 标志开启
 - ✅ 无凭证不打印
 - ✅ FUSE 不要求 (degraded 模式工作)

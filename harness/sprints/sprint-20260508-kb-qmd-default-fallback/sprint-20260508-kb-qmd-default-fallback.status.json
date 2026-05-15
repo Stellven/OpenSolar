@@ -7,8 +7,8 @@
   "lane": "reliability",
   "handoff_to": "done",
   "created_at": "2026-05-08T15:24:00Z",
-  "updated_at": "2026-05-12T19:43:23Z",
-  "contract": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-kb-qmd-default-fallback.contract.md",
+  "updated_at": "2026-05-10T14:52:54Z",
+  "contract": "/Users/lisihao/.solar/harness/sprints/sprint-20260508-kb-qmd-default-fallback.contract.md",
   "phase": "eval_passed",
   "topology": "standard",
   "source": "codex-manual-2026-05-08",
@@ -21,7 +21,7 @@
     "sprint-20260508-wiki-upload-ingest-closure"
   ],
   "evidence": [
-    "UserPromptSubmit hook is registered for /Users/sihaoli/.claude/hooks/solar-knowledge-context.sh.",
+    "UserPromptSubmit hook is registered for /Users/lisihao/.claude/hooks/solar-knowledge-context.sh.",
     "solar-knowledge-context.py exists but returns empty hits for query 大模型热力学.",
     "qmd search in collection solar-wiki returns qmd://solar-wiki/synthesis/大模型热力学-thermodynamics-of-large-models.md.",
     "obsidian_vault_index is absent from ~/.solar/solar.db, so DB-only retrieval misses vault content."
@@ -96,16 +96,10 @@
       }
     }
   ],
-  "prd": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-kb-qmd-default-fallback.prd.md",
-  "design": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-kb-qmd-default-fallback.design.md",
-  "plan": "/Users/sihaoli/.solar/harness/sprints/sprint-20260508-kb-qmd-default-fallback.plan.md",
+  "prd": "/Users/lisihao/.solar/harness/sprints/sprint-20260508-kb-qmd-default-fallback.prd.md",
+  "design": "/Users/lisihao/.solar/harness/sprints/sprint-20260508-kb-qmd-default-fallback.design.md",
+  "plan": "/Users/lisihao/.solar/harness/sprints/sprint-20260508-kb-qmd-default-fallback.plan.md",
   "round": 2,
   "last_handoff_mtime": 1778256483.0,
-  "target_role": "done",
-  "knowledge_export_status": "exported",
-  "knowledge_export_path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260508-kb-qmd-default-fallback.accepted.md",
-  "knowledge_ingest_dispatch": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260508-kb-qmd-default-fallback.dispatch.md",
-  "knowledge_exported_at": "2026-05-12T19:43:23Z",
-  "knowledge_ingested_at": null,
-  "knowledge_export_error": null
+  "target_role": "done"
 }

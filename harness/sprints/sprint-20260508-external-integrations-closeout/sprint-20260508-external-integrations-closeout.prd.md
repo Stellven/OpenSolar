@@ -179,8 +179,8 @@ UI 不能显示一个 logical mount=ready 让用户以为是真的挂上了 Driv
 ## 约束 / Constraints
 
 - **C1**：所有探测和 verify 必须 read-only + ≤ 30s timeout，不能产生副作用
-- **C2**：不挂载 `/Users/sihaoli` 整个家目录
-- **C3**：不直接写 `/Users/sihaoli/Knowledge/concepts` 等正式知识库目录，只能写 `_raw/` staging
+- **C2**：不挂载 `/Users/lisihao` 整个家目录
+- **C3**：不直接写 `/Users/lisihao/Knowledge/concepts` 等正式知识库目录，只能写 `_raw/` staging
 - **C4**：报告/JSON 不泄漏 secret（OAuth token、refresh token、API key 必须 redacted）
 - **C5**：必须基于现有 `solar-harness` CLI、`status-server`、`events.jsonl`，不引入新组件、不引入新语言
 - **C6**：不修任何 sprint 的 contract.md（contract 是 immutable）

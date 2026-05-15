@@ -39,11 +39,11 @@ These are pre-existing ledger gaps not introduced by this sprint. Fix owner: mas
 **PASS**
 
 ```bash
-solar-harness wiki status --json → configured=True, vault_path="/Users/sihaoli/Knowledge"
+solar-harness wiki status --json → configured=True, vault_path="/Users/lisihao/Knowledge"
 solar-harness wiki qmd-search "Solar Harness Obsidian" -n 2 --json → 2 hits
 ```
 
-Contract: `configured and vault_path == "/Users/sihaoli/Knowledge"` + `len(d) >= 1`
+Contract: `configured and vault_path == "/Users/lisihao/Knowledge"` + `len(d) >= 1`
 Result: ✅ Both assertions pass.
 
 ---
@@ -126,7 +126,7 @@ Result: ✅ Both pass. Sprint correctly queued with documented blocker (KB P0 = 
 
 ```bash
 solar-harness wiki capture-server status → status=running, pid=92021, url=http://127.0.0.1:8788
-test -d /Users/sihaoli/Knowledge/_raw → OK
+test -d /Users/lisihao/Knowledge/_raw → OK
 ```
 
 Contract: `capture-server status` succeeds + `_raw` dir exists.

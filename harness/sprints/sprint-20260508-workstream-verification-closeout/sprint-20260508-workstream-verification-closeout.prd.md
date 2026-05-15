@@ -25,7 +25,7 @@
 - `sprint-20260507-obsidian-wiki` 已 passed。
 - `sprint-20260507-symphony2` 已 passed。
 - `sprint-20260507-symphony3` 已 passed。
-- `solar-harness wiki status --json` 可用，vault 是 `/Users/sihaoli/Knowledge`，skills 安装到 Codex/Claude/Agents。
+- `solar-harness wiki status --json` 可用，vault 是 `/Users/lisihao/Knowledge`，skills 安装到 Codex/Claude/Agents。
 - QMD/MinerU `solar-wiki` collection 有 1103 文件 indexed，搜索可返回 Obsidian 页面。
 - QMD vectors 仍是 `0 embedded`，1102 pending embedding。
 - status-server `http://127.0.0.1:8765/healthz` 返回 ok，`/status` 可返回 JSON。
@@ -102,8 +102,8 @@
 ### R4 — 安全边界
 
 - 不真实写 Google Drive。
-- 不挂载 `/Users/sihaoli` 整个家目录。
-- 不直接写 `/Users/sihaoli/Knowledge/concepts` 等正式知识库目录（只能写 `_raw/` staging）。
+- 不挂载 `/Users/lisihao` 整个家目录。
+- 不直接写 `/Users/lisihao/Knowledge/concepts` 等正式知识库目录（只能写 `_raw/` staging）。
 - 不在报告/fix 里泄漏 secret（OAuth token、refresh token、API key 必须 redacted）。
 
 ### R5 — 不阻塞 Coordinator

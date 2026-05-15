@@ -141,18 +141,18 @@
       "reason": "PASS_WITH_WARN: runtime interfaces accepted; residual event seq gap non-blocking"
     },
     {
-      "ts": "2026-05-13T11:17:30Z",
+      "ts": "2026-05-13T11:17:53Z",
       "event": "eval_reviewed",
       "by": "evaluator",
       "verdict": "PASS"
     },
     {
-      "ts": "2026-05-13T11:19:18Z",
+      "ts": "2026-05-13T11:18:32Z",
       "event": "finalized",
       "by": "coordinator"
     }
   ],
-  "updated_at": "2026-05-13T11:19:18Z",
+  "updated_at": "2026-05-13T11:18:32Z",
   "event_count": 46,
   "last_event_ts": "2026-05-13T01:43:54Z",
   "projected_at": "2026-05-13T01:43:54Z",
@@ -161,9 +161,9 @@
   "runtime_state_source": "activity_runtime",
   "last_handoff_mtime": 1778636727.0,
   "knowledge_export_status": "exported",
-  "knowledge_export_path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260512-managed-agent-runtime-interfaces.accepted.md",
-  "knowledge_ingest_dispatch": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260512-managed-agent-runtime-interfaces.dispatch.md",
-  "knowledge_exported_at": "2026-05-13T11:19:18Z",
+  "knowledge_export_path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260512-managed-agent-runtime-interfaces.accepted.md",
+  "knowledge_ingest_dispatch": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260512-managed-agent-runtime-interfaces.dispatch.md",
+  "knowledge_exported_at": "2026-05-13T11:18:32Z",
   "knowledge_ingested_at": null,
   "knowledge_export_error": null
 }

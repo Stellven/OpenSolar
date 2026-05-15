@@ -49,7 +49,7 @@ Solar 集成面板 `/integrations` 当前对 **MinerU Document Explorer** 与 **
 - bootstrap 失败时报 actionable 错误（缺什么包、缺什么权限）
 
 ### FR-2 PDF 深度抽取 (对应 A2)
-- 至少 2 个真实 PDF（来自 `/Users/sihaoli/Knowledge/_raw/file-uploads`）端到端抽取成功
+- 至少 2 个真实 PDF（来自 `/Users/lisihao/Knowledge/_raw/file-uploads`）端到端抽取成功
 - 输出落在 Obsidian Knowledge 库 `references/` 下
 - 每页生成的 markdown 含 `provenance:` frontmatter（源 PDF 路径 + 页码）
 - 产出 audit report 列出 `source -> generated pages` 映射

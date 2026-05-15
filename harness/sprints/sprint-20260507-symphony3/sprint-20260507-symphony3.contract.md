@@ -1,7 +1,7 @@
 # Sprint Contract Seed — sprint-20260507-symphony3
 
 Status: seed
-Source: /Users/sihaoli/.solar/harness/sprints/sprint-20260507-symphony3.product-brief.md
+Source: /Users/lisihao/.solar/harness/sprints/sprint-20260507-symphony3.product-brief.md
 Priority: P2
 Lane: delivery
 

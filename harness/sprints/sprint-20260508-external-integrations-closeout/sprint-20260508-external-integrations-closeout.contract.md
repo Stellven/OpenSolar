@@ -4,7 +4,7 @@ Priority: P0
 Lane: reliability  
 Owner: Solar Harness  
 Created: 2026-05-08  
-Source audit: `/Users/sihaoli/.solar/harness/reports/solar-open-source-integrations-audit-20260508.md`
+Source audit: `/Users/lisihao/.solar/harness/reports/solar-open-source-integrations-audit-20260508.md`
 
 ## Intent
 
@@ -31,7 +31,7 @@ External integrations in scope:
 
 ## Already Done By Codex
 
-- Added `/Users/sihaoli/.solar/harness/lib/external-integrations-health.py`
+- Added `/Users/lisihao/.solar/harness/lib/external-integrations-health.py`
 - Added `solar-harness integrations status [--json]`
 - Added status-server `GET /integrations`
 - Restored wiki capture server runtime

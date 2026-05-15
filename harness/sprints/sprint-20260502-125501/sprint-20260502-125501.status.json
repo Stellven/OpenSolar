@@ -1,0 +1,61 @@
+{
+  "id": "sprint-20260502-125501",
+  "title": "协调器 round-N+1 dispatch 漏洞修复 (B4): 当 sprint round-N FAIL → pl",
+  "status": "passed",
+  "phase": "eval_passed",
+  "created_at": "2026-05-02T16:55:01Z",
+  "round": 1,
+  "history": [
+    {
+      "ts": "2026-05-02T16:55:01Z",
+      "event": "contract_created",
+      "by": "user"
+    },
+    {
+      "ts": "2026-05-02T17:03:46Z",
+      "event": "done_criteria_filled",
+      "by": "planner"
+    },
+    {
+      "ts": "2026-05-02T22:02:24Z",
+      "event": "plan_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-02T22:07:25Z",
+      "event": "handoff_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-02T22:12:35Z",
+      "event": "eval_completed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-05-02T22:12:44Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-05-02T22:12:44Z",
+      "event": "finalized",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-11T00:06:44Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": "spec",
+        "handoff_to": null,
+        "target_role": null
+      }
+    }
+  ],
+  "updated_at": "2026-05-11T00:06:44Z",
+  "handoff_to": "done",
+  "target_role": "done"
+}

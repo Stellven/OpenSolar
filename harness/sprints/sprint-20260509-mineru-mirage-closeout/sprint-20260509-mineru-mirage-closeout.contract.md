@@ -17,7 +17,7 @@ Close the two integrations that are currently only partially usable: MinerU Docu
 | ID | Requirement | Verification |
 |---|---|---|
 | A1 | MinerU vendor has reproducible `.venv` bootstrap command and lock/report | `solar-harness wiki mineru-doctor --json` returns venv=ok |
-| A2 | MinerU can deep-extract at least 2 PDFs from `/Users/sihaoli/Knowledge/_raw/file-uploads` into Obsidian reference pages with provenance | audit report lists source -> generated pages |
+| A2 | MinerU can deep-extract at least 2 PDFs from `/Users/lisihao/Knowledge/_raw/file-uploads` into Obsidian reference pages with provenance | audit report lists source -> generated pages |
 | A3 | QMD MCP remains reachable on both `127.0.0.1:8181` and `::1:8181` after shell exits | `solar-harness wiki qmd-mcp status` shows both hosts |
 | A4 | Mirage official SDK/FUSE decision is explicit: installed and exercised, or ADR says why Solar logical wrapper remains the boundary | `reports/mirage-sdk-fuse-decision-*.md` |
 | A5 | Mirage mounts expose Knowledge, raw, sprints, Solar DB, QMD; Google Drive is either real credentialed mount or explicitly degraded in UI | `solar-harness mirage doctor --json` |

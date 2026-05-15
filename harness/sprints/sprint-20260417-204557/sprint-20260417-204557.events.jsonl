@@ -1,4 +1,2 @@
 {"ts": "2026-04-20T02:41:32Z", "sid": "sprint-20260417-204557", "event": "dispatched", "by": "coordinator", "data": {"to": "planner", "task": "passed"}}
 {"ts": "2026-04-20T02:41:33Z", "sid": "sprint-20260417-204557", "event": "handle_passed_completed", "by": "coordinator", "data": {"finalized_at": "2026-04-20T02:41:33Z"}}
-{"ts": "2026-05-12T19:43:23Z", "event": "accepted_artifact_exported", "source": "accepted-artifact-export", "path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260417-204557.accepted.md", "bytes": 8122, "source_hash": "4c04ea2a7eac6a205e7f82647b114408fa247906d26938e0d4e30e3c50547022"}
-{"ts": "2026-05-12T19:43:23Z", "event": "accepted_artifact_ingest_dispatched", "source": "accepted-artifact-export", "dispatch_file": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260417-204557.dispatch.md"}

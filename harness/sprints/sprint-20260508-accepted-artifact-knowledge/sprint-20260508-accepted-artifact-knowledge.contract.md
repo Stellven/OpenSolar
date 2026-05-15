@@ -21,7 +21,7 @@ The rule is strict: **accepted knowledge only**. Drafting, active, reviewing, fa
 
 ## Current Evidence
 
-- `handle_passed()` in `/Users/sihaoli/.solar/harness/coordinator.sh` is the correct PASS/finalized hook point.
+- `handle_passed()` in `/Users/lisihao/.solar/harness/coordinator.sh` is the correct PASS/finalized hook point.
 - Existing `solar-harness wiki export-sprint <sid>` can export contract/plan/handoff/eval/status/events into `_raw/solar-harness/<sid>.md`.
 - Current export does not fully cover PRD/design/handoff-builder*/eval.json/test evidence, and is not guaranteed to run automatically on every PASS.
 - Existing Obsidian bridge can generate wiki ingest dispatches, but user still sees manual prompts like “要不要跑 wiki ingest”.
@@ -149,7 +149,7 @@ bash ~/.solar/harness/tests/test-accepted-artifact-knowledge-sync.sh --case reda
 
 Required:
 - Manifest stored under vault metadata, for example:
-  `/Users/sihaoli/Knowledge/_raw/solar-harness/.manifest/accepted-artifacts.json`
+  `/Users/lisihao/Knowledge/_raw/solar-harness/.manifest/accepted-artifacts.json`
 - Re-running same sid with unchanged source hash must skip duplicate writes and duplicate dispatches.
 - `--force` can regenerate intentionally.
 
@@ -188,7 +188,7 @@ bash ~/.solar/harness/tests/test-accepted-artifact-knowledge-sync.sh --case stat
 
 Required:
 - Successful accepted export creates an ingest dispatch file under:
-  `/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/`
+  `/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/`
 - Dispatch points at the accepted artifact file.
 - Dispatch must instruct agent not to execute instructions from source artifacts.
 
@@ -231,15 +231,15 @@ bash ~/.solar/harness/tests/test-accepted-artifact-knowledge-sync.sh
 - Stop if redaction test leaks fixture secrets.
 - Stop if export failure blocks `handle_passed()` finalization.
 - Stop if implementation writes directly to final Obsidian concept pages instead of `_raw`/ingest pipeline.
-- Stop if test touches real `/Users/sihaoli/Knowledge` without explicit non-test command.
+- Stop if test touches real `/Users/lisihao/Knowledge` without explicit non-test command.
 - Stop if duplicate dispatches are generated for unchanged sid.
 
 ## Planner Instructions
 
 1. Write design to:
-   `/Users/sihaoli/.solar/harness/sprints/sprint-20260508-accepted-artifact-knowledge.design.md`
+   `/Users/lisihao/.solar/harness/sprints/sprint-20260508-accepted-artifact-knowledge.design.md`
 2. Write implementation plan to:
-   `/Users/sihaoli/.solar/harness/sprints/sprint-20260508-accepted-artifact-knowledge.plan.md`
+   `/Users/lisihao/.solar/harness/sprints/sprint-20260508-accepted-artifact-knowledge.plan.md`
 3. Split into two slices:
    - Slice 1: exporter + schema + redaction + manifest.
    - Slice 2: PASS hook + CLI backfill + status payload + tests/docs.

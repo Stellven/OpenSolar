@@ -8,7 +8,7 @@ triggers: [pm-manual]
 Created: 2026-05-07T14:42:08Z
 Status: active
 Phase: spec
-Project: /Users/sihaoli
+Project: /Users/lisihao
 
 ## When to Use
 

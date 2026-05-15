@@ -11,12 +11,12 @@ Round: 1 | Sprint: sprint-20260509-solar-product-platform | Subtask: S0-snapshot
 | # | 条件 | 判定 | 证据 |
 |---|------|------|------|
 | S0.1 | snapshot creates manifest.json + archive + sha256 | PASS | Live snapshot (snap-20260509T032206Z): file_count=98, archive_sha256=ca2edf12..., manifest+archive present at backups/product-snapshots/snap-20260509T032206Z/. Fresh snapshot at custom out-dir works (snap-20260509T035006Z, sha256=4d69f83c...). |
-| S0.2 | restore --dry-run lists exact restore plan | PASS | `solar-harness.sh product restore --latest --dry-run` → JSON {ok:true, restore_plan_count:98, would_overwrite:98, target_dir:/Users/sihaoli, sample_plan:[…dest/size/overwrite per file…]}. |
+| S0.2 | restore --dry-run lists exact restore plan | PASS | `solar-harness.sh product restore --latest --dry-run` → JSON {ok:true, restore_plan_count:98, would_overwrite:98, target_dir:/Users/lisihao, sample_plan:[…dest/size/overwrite per file…]}. |
 | S0.3 | verify validates manifest/archive hashes | PASS | `verify --latest` → {ok:true, archive_sha256_match:true, files_spot_checked:20, errors:[], warnings:[]}. Custom out-dir verify also passes. |
 | S0.4 | secrets excluded by default (.env*, *.key, *.pem, *token*) | PASS | Real-time test: created lib/.env.fake-test-s0 + lib/test-token-fake.txt → snapshot --dry-run reports would_exclude=2, sample_excluded lists both paths. Pattern enforcement is live. |
 | S0.5 | excluded paths listed without values | PASS | sample_excluded entries are absolute path strings only; no contents/values surfaced. Tarball content grep for sk-/Bearer/AUTH_TOKEN= returned 0 matches. |
 | S0.6 | sandbox round-trip test passes | PASS | bash tests/snapshot/test-s0-snapshot-roundtrip.sh → T1-T8, PASS=15 FAIL=0. |
-| S0.7 | existing commands still pass: doctor, wiki qmd-status | PASS | `solar-harness doctor` returns full JSON including symphony/coordinator/skill blocks. `wiki qmd-status` returns "MinerU Document Explorer — Status / Index: /Users/sihaoli/.cache/qmd/index.sqlite / Size: 103.4 MB". Both unchanged. |
+| S0.7 | existing commands still pass: doctor, wiki qmd-status | PASS | `solar-harness doctor` returns full JSON including symphony/coordinator/skill blocks. `wiki qmd-status` returns "MinerU Document Explorer — Status / Index: /Users/lisihao/.cache/qmd/index.sqlite / Size: 103.4 MB". Both unchanged. |
 | S0.8 | no PDF/source migration, no launchd mutation | PASS | Write scope confined per s0-snapshot.contract.md: lib/product_snapshot.py, solar-harness.sh product subcmd, tests/snapshot/, backups/product-snapshots/. No launchd plist touched. No _sources/ creation. |
 
 ## 自动检测 (verify-all)
@@ -96,7 +96,7 @@ cmd: `cd ~/.solar/harness && touch lib/.env.fake-test-s0 lib/test-token-fake.txt
 stdout:
 ```
 include= 98 exclude= 2
-sample_excluded: ['/Users/sihaoli/.solar/harness/lib/.env.fake-test-s0', '/Users/sihaoli/.solar/harness/lib/test-token-fake.txt']
+sample_excluded: ['/Users/lisihao/.solar/harness/lib/.env.fake-test-s0', '/Users/lisihao/.solar/harness/lib/test-token-fake.txt']
 ```
 conclusion: Pattern-based exclusion is enforced live (not hardcoded count); fake secrets diverted to excluded list, not archived.
 

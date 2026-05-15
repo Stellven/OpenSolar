@@ -20,8 +20,8 @@ Only D1 was rechecked. Round 1 already passed D2-D5 and failed only D1.
 
 ## Fixed Artifacts
 
-- `/Users/sihaoli/.solar/harness/reports/contract-housekeeping/no-status-audit.json`
-- `/Users/sihaoli/.solar/harness/reports/contract-housekeeping/no-status-audit.md`
+- `/Users/lisihao/.solar/harness/reports/contract-housekeeping/no-status-audit.json`
+- `/Users/lisihao/.solar/harness/reports/contract-housekeeping/no-status-audit.md`
 
 ## Final Done Status
 

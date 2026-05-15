@@ -1,0 +1,74 @@
+{
+  "id": "sprint-20260503-195627",
+  "title": "P2 RecursiveMAS v3 — telemetry-driven optimization (全系统 cred",
+  "status": "passed",
+  "phase": "eval_passed",
+  "created_at": "2026-05-03T23:56:27Z",
+  "round": 1,
+  "history": [
+    {
+      "ts": "2026-05-03T23:56:27Z",
+      "event": "contract_created",
+      "by": "user"
+    },
+    {
+      "ts": "2026-05-03T23:56:59Z",
+      "event": "done_criteria_filled",
+      "by": "planner",
+      "note": "P2 telemetry-driven optimization — v3 RecursiveMAS 工程化完成最后一块. P1.5 distillation 监护人决定不做."
+    },
+    {
+      "ts": "2026-05-04T00:00:56Z",
+      "event": "plan_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-04T00:01:51Z",
+      "event": "plan_reviewed",
+      "by": "evaluator",
+      "verdict": "APPROVE"
+    },
+    {
+      "ts": "2026-05-04T00:11:45Z",
+      "event": "implementation_completed",
+      "by": "builder"
+    },
+    {
+      "ts": "2026-05-04T00:12:10Z",
+      "event": "handoff_received",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-04T00:14:50Z",
+      "event": "eval_completed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-05-04T00:15:02Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-05-04T00:15:03Z",
+      "event": "finalized",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-11T00:06:44Z",
+      "event": "terminal_tuple_repaired_by_contract_patrol",
+      "by": "contract-patrol",
+      "from": {
+        "status": "passed",
+        "phase": "spec",
+        "handoff_to": null,
+        "target_role": null
+      }
+    }
+  ],
+  "updated_at": "2026-05-11T00:06:44Z",
+  "last_handoff_mtime": 1777853497.0,
+  "handoff_to": "done",
+  "target_role": "done"
+}

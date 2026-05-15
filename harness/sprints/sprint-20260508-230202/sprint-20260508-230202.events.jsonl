@@ -1,0 +1,7 @@
+{"ts":"2026-05-09T03:02:02Z","event":"phase_transition","by":"solar-harness","sid":"sprint-20260508-230202","data":{"from":"none","to":"spec"}}
+{"ts":"2026-05-09T03:02:02Z","event":"bypass_pm_promoted","by":"chain-watcher","sid":"sprint-20260508-230202","data":{"to":"builder","plan":"/Users/lisihao/.solar/harness/sprints/sprint-20260508-230202.plan.md"}}
+{"event": "waked", "by": "wake", "data": {"from_status": "active", "target_pane": "solar-harness:0.2"}, "ts": "2026-05-09T03:04:59Z", "sid": "sprint-20260508-230202"}
+{"event": "watchdog_restart", "by": "watchdog", "data": {"failure_count": 1}, "ts": "2026-05-09T03:04:59Z", "sid": "sprint-20260508-230202"}
+{"ts": "2026-05-09T03:08:36Z", "event": "handoff_submitted", "by": "builder", "sid": "sprint-20260508-230202"}
+{"event": "waked", "by": "wake", "data": {"from_status": "reviewing", "target_pane": "solar-harness:0.3"}, "ts": "2026-05-09T03:15:47Z", "sid": "sprint-20260508-230202"}
+{"ts":"2026-05-09T03:18:19Z","event":"planner_notified","by":"coordinator","data":{"status":"passed"}}

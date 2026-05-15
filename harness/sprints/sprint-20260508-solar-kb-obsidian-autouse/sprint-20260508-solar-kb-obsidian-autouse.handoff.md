@@ -10,13 +10,13 @@ Round: 3
 ## Done 定义达成 (Round 3 修复 A2/A5)
 
 ### A2 - Vault Hits 返回绝对路径 (Round 2 FAIL → Round 3 FIX)
-✅ `_vault_hits()` 返回 `source=str(VAULT_PATH)` = `/Users/sihaoli/Knowledge`
-✅ `path=str(VAULT_PATH / fpath)` = `/Users/sihaoli/Knowledge/references/...`
+✅ `_vault_hits()` 返回 `source=str(VAULT_PATH)` = `/Users/lisihao/Knowledge`
+✅ `path=str(VAULT_PATH / fpath)` = `/Users/lisihao/Knowledge/references/...`
 ✅ 多 token 查询 ("orbital data center Lumen Orbit") 返回 8 hits，其中 5 个来自 vault 带 "Knowledge" 路径
 ✅ 验证命令通过:
 ```
 python3 ~/.solar/harness/lib/solar-knowledge-context.py --query "orbital data center Lumen Orbit" --json
-→ hits[3-7]: source=/Users/sihaoli/Knowledge, path=/Users/sihaoli/Knowledge/references/...
+→ hits[3-7]: source=/Users/lisihao/Knowledge, path=/Users/lisihao/Knowledge/references/...
 → A2 PASS
 ```
 
@@ -81,7 +81,7 @@ print("A5 PASS")
 
 ## 备注
 
-- status-server.py 如已运行旧版本需重启: `pkill -f "status-server.py" && python3 /Users/sihaoli/.solar/harness/lib/symphony/status-server.py &`
+- status-server.py 如已运行旧版本需重启: `pkill -f "status-server.py" && python3 /Users/lisihao/.solar/harness/lib/symphony/status-server.py &`
 - `_solar_kb_status()` 使用 `timeout=0.3` 防止 DB 锁死阻塞状态接口
 - `_obsidian_sync_status()` 读取 `state/knowledge-manifest.json` (可能不存在，容错处理)
 - 两个 helper 函数均 never raises — 异常时返回 `ok: False, error: <msg>`

@@ -47,12 +47,12 @@ $ ls -la ~/.solar/CLAUDE.md \
         ~/.solar/harness/docs/mirage-data-substrate-codex-solar.md \
         ~/.solar/harness/lib/symphony/status-server.py \
         ~/.solar/harness/integrations/solar-config-server.py
--rw-r--r--  1 sihaoli  staff   1164 May  9 00:15 /Users/sihaoli/.solar/CLAUDE.md
--rwxr-xr-x  1 sihaoli  staff   6930 May  9 00:31 /Users/sihaoli/.solar/harness/tests/test-mirage-substrate.sh
--rw-r--r--  1 sihaoli  staff   3213 May  9 00:18 /Users/sihaoli/.solar/harness/docs/mirage-runbook.md
--rw-r--r--  1 sihaoli  staff   4936 May  9 00:18 /Users/sihaoli/.solar/harness/docs/mirage-data-substrate-codex-solar.md
--rw-r--r--  1 sihaoli  staff  81869 May  9 00:25 /Users/sihaoli/.solar/harness/lib/symphony/status-server.py
--rw-r--r--  1 sihaoli  staff  26567 May  9 00:31 /Users/sihaoli/.solar/harness/integrations/solar-config-server.py
+-rw-r--r--  1 sihaoli  staff   1164 May  9 00:15 /Users/lisihao/.solar/CLAUDE.md
+-rwxr-xr-x  1 sihaoli  staff   6930 May  9 00:31 /Users/lisihao/.solar/harness/tests/test-mirage-substrate.sh
+-rw-r--r--  1 sihaoli  staff   3213 May  9 00:18 /Users/lisihao/.solar/harness/docs/mirage-runbook.md
+-rw-r--r--  1 sihaoli  staff   4936 May  9 00:18 /Users/lisihao/.solar/harness/docs/mirage-data-substrate-codex-solar.md
+-rw-r--r--  1 sihaoli  staff  81869 May  9 00:25 /Users/lisihao/.solar/harness/lib/symphony/status-server.py
+-rw-r--r--  1 sihaoli  staff  26567 May  9 00:31 /Users/lisihao/.solar/harness/integrations/solar-config-server.py
 ```
 所有文件存在, 字节非零, 时间戳在 sprint 派发后. 通过.
 

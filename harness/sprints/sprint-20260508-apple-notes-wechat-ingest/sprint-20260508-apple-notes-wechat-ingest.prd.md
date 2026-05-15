@@ -12,7 +12,7 @@
 
 现有知识库能力已经具备：
 
-- `/Users/sihaoli/Knowledge/_raw/` staging。
+- `/Users/lisihao/Knowledge/_raw/` staging。
 - `solar-harness wiki ingest --source ... --mode append`。
 - `solar-harness wiki dispatch-watch`。
 - QMD/MinerU `solar-wiki` collection。
@@ -25,7 +25,7 @@
 - 在微信看到好文章后，通过系统分享或复制粘贴保存到 Apple 备忘录。
 - Solar 每 1/2/6/24 小时自动扫描指定备忘录。
 - 只处理用户明确标记的内容，例如 Notes 文件夹 `Solar Inbox` 或标签 `#solar-ingest`。
-- 把新/变更内容导出为 Markdown 到 `/Users/sihaoli/Knowledge/_raw/apple-notes/`。
+- 把新/变更内容导出为 Markdown 到 `/Users/lisihao/Knowledge/_raw/apple-notes/`。
 - 自动触发 wiki ingest，让大模型提炼成 concepts/entities/projects/skills 等页面。
 - 避免重复导入、避免泄露隐私、保留来源链接和原始笔记引用。
 
@@ -54,7 +54,7 @@
   - `solar-harness notes install-scheduler --interval 3600|7200|21600|86400`
   - `solar-harness notes uninstall-scheduler`
 - 导出 Markdown 到：
-  `/Users/sihaoli/Knowledge/_raw/apple-notes/YYYYMMDD/<note-id>.md`
+  `/Users/lisihao/Knowledge/_raw/apple-notes/YYYYMMDD/<note-id>.md`
 - 每个导出文件包含 frontmatter：
   - `source: apple-notes`
   - `source_app: WeChat|Apple Notes|unknown`
@@ -70,7 +70,7 @@
 ### R3 — Delta Manifest
 
 - 新增 manifest：
-  `/Users/sihaoli/.solar/harness/state/apple-notes-ingest/manifest.json`
+  `/Users/lisihao/.solar/harness/state/apple-notes-ingest/manifest.json`
 - 用 `note_id + updated_at + content_hash` 判断新/变更。
 - 重复扫描不得重复生成同一内容。
 - 删除 Notes 不删除知识库页面，只标记 source missing。
@@ -80,7 +80,7 @@
 - 每次扫描导出新 Markdown 后，调用：
   `solar-harness wiki ingest --source <exported.md> --mode append`
 - 或批量生成 dispatch 到：
-  `/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/`
+  `/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/`
 - dispatch 必须要求大模型做：
   - 提取概念、实体、观点、关系、开放问题。
   - 归并已有 wiki 页面。
@@ -90,12 +90,12 @@
 ### R5 — Scheduler
 
 - 使用 launchd，创建：
-  `/Users/sihaoli/Library/LaunchAgents/com.solar.apple-notes-ingest.plist`
+  `/Users/lisihao/Library/LaunchAgents/com.solar.apple-notes-ingest.plist`
 - 默认间隔 2 小时。
 - 支持 1h/2h/6h/24h。
 - 日志：
-  - `/Users/sihaoli/.solar/harness/logs/apple-notes-ingest.out.log`
-  - `/Users/sihaoli/.solar/harness/logs/apple-notes-ingest.err.log`
+  - `/Users/lisihao/.solar/harness/logs/apple-notes-ingest.out.log`
+  - `/Users/lisihao/.solar/harness/logs/apple-notes-ingest.err.log`
 
 ### R6 — Privacy / Safety
 
@@ -151,14 +151,14 @@
 ### C3 — 写入路径白名单
 
 允许写入：
-- `/Users/sihaoli/Knowledge/_raw/apple-notes/YYYYMMDD/<note-id>.md`（staging）
-- `/Users/sihaoli/.solar/harness/state/apple-notes-ingest/manifest.json`
-- `/Users/sihaoli/.solar/harness/logs/apple-notes-ingest.{out,err}.log`
-- `/Users/sihaoli/Library/LaunchAgents/com.solar.apple-notes-ingest.plist`
-- 通过既有 `solar-harness wiki ingest` 接口产生的 dispatch（`/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/`）
+- `/Users/lisihao/Knowledge/_raw/apple-notes/YYYYMMDD/<note-id>.md`（staging）
+- `/Users/lisihao/.solar/harness/state/apple-notes-ingest/manifest.json`
+- `/Users/lisihao/.solar/harness/logs/apple-notes-ingest.{out,err}.log`
+- `/Users/lisihao/Library/LaunchAgents/com.solar.apple-notes-ingest.plist`
+- 通过既有 `solar-harness wiki ingest` 接口产生的 dispatch（`/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/`）
 
 禁止直接写：
-- `/Users/sihaoli/Knowledge/concepts/`、`/entities/`、`/projects/`、`/skills/` 等 wiki 正式页面（必须经 wiki ingest）。
+- `/Users/lisihao/Knowledge/concepts/`、`/entities/`、`/projects/`、`/skills/` 等 wiki 正式页面（必须经 wiki ingest）。
 - 用户 Notes 数据库（`~/Library/Group Containers/group.com.apple.notes/...`）— 只读访问。
 
 ### C4 — 隐私与脱敏
@@ -222,7 +222,7 @@ Planner 拆 deliverables 时按以下顺序，**不允许跳序**：
 ### 必须复用的现有基础设施
 
 - `solar-harness wiki ingest --source ... --mode append`（不要新写 ingest）。
-- `/Users/sihaoli/Knowledge/_raw/` staging 约定（不要建新目录树）。
+- `/Users/lisihao/Knowledge/_raw/` staging 约定（不要建新目录树）。
 - `solar-harness wiki dispatch-watch`（不要新建 watcher）。
 - `~/.solar/harness/logs/` 日志目录与 events.jsonl schema。
 - `~/.solar/harness/state/` 状态目录（manifest 进 `apple-notes-ingest/` 子目录）。

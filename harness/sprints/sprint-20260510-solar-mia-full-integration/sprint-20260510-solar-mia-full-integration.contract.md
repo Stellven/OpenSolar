@@ -49,11 +49,11 @@ upstream_head: d428f4897782c996ca34ec46fd61fc4620c0884d
 ## Verify Commands
 
 ```bash
-test -d /Users/sihaoli/.solar/harness/vendor/MIA
-git -C /Users/sihaoli/.solar/harness/vendor/MIA rev-parse HEAD
-test -f /Users/sihaoli/.solar/harness/reports/mia-integration/inventory.md
-test -f /Users/sihaoli/.solar/harness/reports/mia-integration/collision-report.md
-test -f /Users/sihaoli/.solar/harness/reports/mia-integration/fusion-design.md
+test -d /Users/lisihao/.solar/harness/vendor/MIA
+git -C /Users/lisihao/.solar/harness/vendor/MIA rev-parse HEAD
+test -f /Users/lisihao/.solar/harness/reports/mia-integration/inventory.md
+test -f /Users/lisihao/.solar/harness/reports/mia-integration/collision-report.md
+test -f /Users/lisihao/.solar/harness/reports/mia-integration/fusion-design.md
 ```
 
 ## Required Evidence

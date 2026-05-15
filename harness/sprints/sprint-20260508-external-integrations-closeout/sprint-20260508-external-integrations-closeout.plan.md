@@ -31,7 +31,7 @@ S2/S3/S5 互不冲突可并行；S4 依赖 S1 根因；S6 依赖 S2-S5 全部就
 **Read-only 探查范围**:
 - `~/.solar/harness/lib/wiki-*`、`~/.solar/harness/lib/external-integrations-health.py`
 - `~/.solar/harness/events/events.jsonl`（grep `wiki_dispatch_*`、`wiki_db_*`）
-- `/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/*.md`（已落盘的 dispatch 文件）
+- `/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/*.md`（已落盘的 dispatch 文件）
 - 当前批次 audit JSON 实测数据
 
 **Done 条件（必须全过）**:
@@ -227,8 +227,8 @@ grep -c -E '^## §' ~/.solar/harness/reports/solar-open-source-integrations-audi
 ```
 任何 sprint 的 contract.md
 ~/.solar/harness/trajectories/
-/Users/sihaoli/Knowledge/concepts/
-/Users/sihaoli/Knowledge/canonical/
+/Users/lisihao/Knowledge/concepts/
+/Users/lisihao/Knowledge/canonical/
 ~/.config/google-oauth.json 等凭据文件
 ~/.solar/harness/vendor/mermaid-viewer/         (mermaid 是 ok，不动)
 任何 live tmux pane (no-live-pane-mutation)

@@ -45,9 +45,9 @@ Round: 1
 ## 验证方法
 
 ```bash
-test -f /Users/sihaoli/.solar/harness/reports/contract-housekeeping/no-status-audit.json && echo OK
-test -f /Users/sihaoli/.solar/harness/reports/contract-housekeeping/queue-audit.json && echo OK
-test -f /Users/sihaoli/.solar/harness/sprints/sprint-20260510-contract-housekeeping.handoff.md && echo OK
+test -f /Users/lisihao/.solar/harness/reports/contract-housekeeping/no-status-audit.json && echo OK
+test -f /Users/lisihao/.solar/harness/reports/contract-housekeeping/queue-audit.json && echo OK
+test -f /Users/lisihao/.solar/harness/sprints/sprint-20260510-contract-housekeeping.handoff.md && echo OK
 ```
 
 ## 备注

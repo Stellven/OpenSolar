@@ -32,6 +32,6 @@ Write handoff with stdout evidence, update status to `reviewing`.
 
 ## 风险点
 
-- **Mac mini path discrepancy**: Contract mentions `/Users/lisihao/.solar/harness` but files exist at `/Users/sihaoli/.solar/harness` locally. Verification runs on the local harness — same codebase, same adapters.
+- **Mac mini path discrepancy**: Contract mentions `/Users/lisihao/.solar/harness` but files exist at `/Users/lisihao/.solar/harness` locally. Verification runs on the local harness — same codebase, same adapters.
 - **Hermes runtime absent**: All 8 public benchmark adapters report `pending` (no runners installed). Per contract constraint: "如果 Hermes runtime 缺失，只能记录为 pending，不算本 sprint 失败."
 - **No real benchmark data**: Correct. Fake adapter pattern (A5 tests) proves the adapter accepts injected score files without downloading real datasets.

@@ -4,7 +4,7 @@
 > Topology: **solo** (single builder, narrow surface)
 > Builder model: **Sonnet 4.6 default**. GLM-5.1 disabled per memory rule (4 prior burns).
 > Round: 1
-> Reads: contract.md, prd.md, design.md, vendor inventory at /Users/sihaoli/.solar/harness/vendor/everything-claude-code/
+> Reads: contract.md, prd.md, design.md, vendor inventory at /Users/lisihao/.solar/harness/vendor/everything-claude-code/
 
 ## 0. Operating Frame
 
@@ -45,7 +45,7 @@ solar-harness everything-claude-code inventory --json | python3 -c 'import json,
 
 # overridden path
 ECC_HOME_OVERRIDE=/tmp/ecc-test-home ECC_STAGING=/tmp/ecc-test-staging \
-  python3 /Users/sihaoli/.solar/harness/lib/everything_claude_code_adapter.py inventory \
+  python3 /Users/lisihao/.solar/harness/lib/everything_claude_code_adapter.py inventory \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); assert "counts" in d'
 ```
 
@@ -82,8 +82,8 @@ ECC_HOME_OVERRIDE=/tmp/ecc-test-home ECC_STAGING=/tmp/ecc-test-staging \
 ```bash
 # Empty allowlist baseline
 ECC_HOME_OVERRIDE=/tmp/ecc-sync-test ECC_STAGING=/tmp/ecc-sync-test/staging \
-  python3 /Users/sihaoli/.solar/harness/lib/everything_claude_code_adapter.py sync \
-    --allowlist /Users/sihaoli/.solar/harness/config/everything-claude-code.allowlist.json \
+  python3 /Users/lisihao/.solar/harness/lib/everything_claude_code_adapter.py sync \
+    --allowlist /Users/lisihao/.solar/harness/config/everything-claude-code.allowlist.json \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["live_hook_changes"]==0 and d["counts"]["staged"]==0'
 
 # Idempotency: 2 runs == 1 ledger pair
@@ -116,7 +116,7 @@ ls -la "$RUN_DIR/ecc-sync-ledger.jsonl" 2>/dev/null && wc -l "$RUN_DIR/ecc-sync-
 ```bash
 # Rollback on empty state
 ECC_HOME_OVERRIDE=/tmp/ecc-rollback-test ECC_STAGING=/tmp/ecc-rollback-test/staging \
-  python3 /Users/sihaoli/.solar/harness/lib/everything_claude_code_adapter.py rollback \
+  python3 /Users/lisihao/.solar/harness/lib/everything_claude_code_adapter.py rollback \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["status"]=="empty"'
 ```
 
@@ -136,14 +136,14 @@ ECC_HOME_OVERRIDE=/tmp/ecc-rollback-test ECC_STAGING=/tmp/ecc-rollback-test/stag
 - [ ] `solar-harness everything-claude-code sync --allowlist <path> [--dry-run] [--json]` dispatches to `adapter.sync()`
 - [ ] `solar-harness everything-claude-code rollback [--sync-ts <ts>] [--json]` dispatches to `adapter.rollback()`
 - [ ] `--json` flag returns the function's dict as JSON
-- [ ] Default allowlist path: `/Users/sihaoli/.solar/harness/config/everything-claude-code.allowlist.json`
+- [ ] Default allowlist path: `/Users/lisihao/.solar/harness/config/everything-claude-code.allowlist.json`
 - [ ] Existing subcommands (`doctor`, `inventory`, `report`, `install --dry-run`) untouched
 - [ ] `solar-harness everything-claude-code` (no subcommand) prints help including new subcommands
 - [ ] Bogus flag → exit code ≠ 0 with usage hint (avoid wiki-upload D7 trap)
 
 **Verify:**
 ```bash
-solar-harness everything-claude-code sync --allowlist /Users/sihaoli/.solar/harness/config/everything-claude-code.allowlist.json --dry-run --json \
+solar-harness everything-claude-code sync --allowlist /Users/lisihao/.solar/harness/config/everything-claude-code.allowlist.json --dry-run --json \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["live_hook_changes"]==0'
 
 solar-harness everything-claude-code rollback --json \
@@ -211,20 +211,20 @@ solar-harness integrations status --json \
 **Verify:**
 ```bash
 # All cases
-bash /Users/sihaoli/.solar/harness/tests/test-everything-claude-code-integration.sh
+bash /Users/lisihao/.solar/harness/tests/test-everything-claude-code-integration.sh
 echo "exit=$?"  # must be 0
 
 # Individual case
-bash /Users/sihaoli/.solar/harness/tests/test-everything-claude-code-integration.sh --case sync-rollback
+bash /Users/lisihao/.solar/harness/tests/test-everything-claude-code-integration.sh --case sync-rollback
 
 # Bogus case
-bash /Users/sihaoli/.solar/harness/tests/test-everything-claude-code-integration.sh --case bogus-xyz
+bash /Users/lisihao/.solar/harness/tests/test-everything-claude-code-integration.sh --case bogus-xyz
 echo "exit=$?"  # must be 2
 
 # Live ~/.claude untouched
 LIVE_BEFORE=$(find ~/.claude -newer /tmp/_marker_empty 2>/dev/null | wc -l || echo 0)
 touch /tmp/_ecc_test_marker
-bash /Users/sihaoli/.solar/harness/tests/test-everything-claude-code-integration.sh
+bash /Users/lisihao/.solar/harness/tests/test-everything-claude-code-integration.sh
 LIVE_AFTER=$(find ~/.claude -newer /tmp/_ecc_test_marker 2>/dev/null | wc -l)
 test "$LIVE_AFTER" -eq 0 || { echo "FAIL: tests touched live ~/.claude"; exit 1; }
 ```
@@ -261,8 +261,8 @@ test "$LIVE_AFTER" -eq 0 || { echo "FAIL: tests touched live ~/.claude"; exit 1;
 
 **Verify:**
 ```bash
-test -f /Users/sihaoli/.solar/harness/sprints/sprint-20260508-everything-claude-code-integration.handoff.md
-grep -c 'A[1-7]' /Users/sihaoli/.solar/harness/sprints/sprint-20260508-everything-claude-code-integration.handoff.md
+test -f /Users/lisihao/.solar/harness/sprints/sprint-20260508-everything-claude-code-integration.handoff.md
+grep -c 'A[1-7]' /Users/lisihao/.solar/harness/sprints/sprint-20260508-everything-claude-code-integration.handoff.md
 ```
 
 **Stop rule:** if any A1-A7 fails → builder writes failure into handoff.md, status stays for evaluator review (do NOT silently retry).

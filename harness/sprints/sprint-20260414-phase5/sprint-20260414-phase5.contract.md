@@ -1,7 +1,7 @@
 # Sprint Contract — sprint-20260414-phase5
 Created: 2026-04-14
 Status: ready_for_builder
-Project: /Users/sihaoli
+Project: /Users/lisihao
 
 ## 需求
 

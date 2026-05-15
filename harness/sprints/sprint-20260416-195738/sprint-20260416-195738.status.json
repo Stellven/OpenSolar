@@ -44,15 +44,9 @@
       }
     }
   ],
-  "updated_at": "2026-05-12T19:43:22Z",
+  "updated_at": "2026-05-10T14:52:54Z",
   "reverted_from_merge": "sprint-20260416-191955",
   "phase": "eval_passed",
   "handoff_to": "done",
-  "target_role": "done",
-  "knowledge_export_status": "exported",
-  "knowledge_export_path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260416-195738.accepted.md",
-  "knowledge_ingest_dispatch": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260416-195738.dispatch.md",
-  "knowledge_exported_at": "2026-05-12T19:43:22Z",
-  "knowledge_ingested_at": null,
-  "knowledge_export_error": null
+  "target_role": "done"
 }

@@ -8,14 +8,14 @@
 
 在任何 Write/Edit/handoff/eval/status 更新之前，必须先用 Claude/Codex 的 **Read 工具**读取：
 
-`/Users/sihaoli/.solar/STATE.md`
+`/Users/lisihao/.solar/STATE.md`
 
 不要用 `cat` 替代这一步；本地 `state-read-enforcer.sh` hook 只认 Read 工具标记。
 
 如果 Write/Edit hook 仍阻断，立刻 Read 上面的 STATE 文件后重试原写入一次，不要停在“已读”等待。
 
 ## 通用步骤说明
-1. 先用 Read 工具读取 `/Users/sihaoli/.solar/STATE.md`
+1. 先用 Read 工具读取 `/Users/lisihao/.solar/STATE.md`
 2. 读取合约: 路径格式 `~/.solar/harness/sprints/<sid>.contract.md`
 3. 按指令执行，不超出范围
 4. 完成后写 handoff/eval + 更新 status.json
@@ -41,9 +41,9 @@
 | 维度 | Strategist (战略家) | Planner (规划者) |
 |------|-------------------|-----------------|
 | 定位 | Solar 双签人格 A 面 | Solar Harness 任务规划组件 |
-[/Users/sihaoli/Knowledge/references/对谈田渊栋-ai走向何方-我们需要怎样的深度学习理论.md] 对谈田渊栋：AI走向何方？我们需要怎样的深度学习理论: title: "对谈田渊栋：AI走向何方？我们需要怎样的深度学习理论"
-[/Users/sihaoli/Knowledge/references/distflow-distributed-rl-framework-llm-post-training.md] DistFlow: A Fully Distributed RL Framework for Scalable LLM Post-Training: title: "DistFlow: A Fully Distributed RL Framework for Scalable LLM Post-Training"
-[/Users/sihaoli/Knowledge/references/bgrpo-algebraic-structures-transformers.md] Discovering Hidden Algebraic Structures via Transformers with Rank-Aware Beam GRPO: title: "Discovering Hidden Algebraic Structures via Transformers with Rank-Aware Beam GRPO"
+[/Users/lisihao/Knowledge/references/对谈田渊栋-ai走向何方-我们需要怎样的深度学习理论.md] 对谈田渊栋：AI走向何方？我们需要怎样的深度学习理论: title: "对谈田渊栋：AI走向何方？我们需要怎样的深度学习理论"
+[/Users/lisihao/Knowledge/references/distflow-distributed-rl-framework-llm-post-training.md] DistFlow: A Fully Distributed RL Framework for Scalable LLM Post-Training: title: "DistFlow: A Fully Distributed RL Framework for Scalable LLM Post-Training"
+[/Users/lisihao/Knowledge/references/bgrpo-algebraic-structures-transformers.md] Discovering Hidden Algebraic Structures via Transformers with Rank-Aware Beam GRPO: title: "Discovering Hidden Algebraic Structures via Transformers with Rank-Aware Beam GRPO"
 [qmd://solar-wiki/raw/solar-harness/artifact-ingest/20260508t155745z/harness-sprints/sprint-20260506-141055-contract.md] Sprint Contract — sprint-20260506-141055: 
 > (规划者填写)
 

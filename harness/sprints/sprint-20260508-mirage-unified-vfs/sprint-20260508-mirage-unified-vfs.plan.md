@@ -5,9 +5,9 @@ Phase: planning_complete
 Created: 2026-05-08T14:24:00Z  
 Inputs:
 
-- `/Users/sihaoli/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.prd.md`
-- `/Users/sihaoli/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.contract.md`
-- `/Users/sihaoli/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.design.md`
+- `/Users/lisihao/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.prd.md`
+- `/Users/lisihao/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.contract.md`
+- `/Users/lisihao/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.design.md`
 
 ## 1. Planning Summary
 
@@ -37,31 +37,31 @@ Recommended concurrency:
 
 S1 owns:
 
-- `/Users/sihaoli/.solar/harness/config/mirage.solar.yaml`
-- `/Users/sihaoli/.solar/harness/lib/solar_mirage.py`
-- `/Users/sihaoli/.solar/harness/solar-harness.sh` only the `mirage)` command family
-- `/Users/sihaoli/.solar/harness/state/mirage/` runtime files
+- `/Users/lisihao/.solar/harness/config/mirage.solar.yaml`
+- `/Users/lisihao/.solar/harness/lib/solar_mirage.py`
+- `/Users/lisihao/.solar/harness/solar-harness.sh` only the `mirage)` command family
+- `/Users/lisihao/.solar/harness/state/mirage/` runtime files
 
 S2 owns:
 
-- `/Users/sihaoli/.solar/harness/lib/mirage_search.py`
-- Search-related additions inside `/Users/sihaoli/.solar/harness/lib/solar_mirage.py`
+- `/Users/lisihao/.solar/harness/lib/mirage_search.py`
+- Search-related additions inside `/Users/lisihao/.solar/harness/lib/solar_mirage.py`
 - No changes to P0-owned `solar-knowledge-context.py`; call it if it exists, skip if missing.
 
 S3 owns:
 
-- `/Users/sihaoli/.solar/harness/lib/symphony/status-server.py` only `mirage` status section
-- `/Users/sihaoli/.solar/harness/lib/mirage_events.py`
-- `/Users/sihaoli/.solar/harness/tests/test-mirage-unified-vfs.sh`
-- `/Users/sihaoli/.solar/harness/docs/mirage-unified-vfs.md`
+- `/Users/lisihao/.solar/harness/lib/symphony/status-server.py` only `mirage` status section
+- `/Users/lisihao/.solar/harness/lib/mirage_events.py`
+- `/Users/lisihao/.solar/harness/tests/test-mirage-unified-vfs.sh`
+- `/Users/lisihao/.solar/harness/docs/mirage-unified-vfs.md`
 
 Do not touch:
 
-- `/Users/sihaoli/.claude/hooks/*`
-- `/Users/sihaoli/.solar/harness/lib/solar-knowledge-context.py`
-- `/Users/sihaoli/.solar/harness/integrations/wiki-capture-server.py`
-- `/Users/sihaoli/.solar/harness/integrations/obsidian-wiki-bridge.sh`
-- `/Users/sihaoli/Knowledge` except temp smoke file under `_raw` during explicit integration test.
+- `/Users/lisihao/.claude/hooks/*`
+- `/Users/lisihao/.solar/harness/lib/solar-knowledge-context.py`
+- `/Users/lisihao/.solar/harness/integrations/wiki-capture-server.py`
+- `/Users/lisihao/.solar/harness/integrations/obsidian-wiki-bridge.sh`
+- `/Users/lisihao/Knowledge` except temp smoke file under `_raw` during explicit integration test.
 
 ## 4. S1 Detailed Plan — Install, Doctor, Manifest, Exec
 
@@ -79,7 +79,7 @@ Steps:
    - `which mirage`
    - `python3 -c 'import mirage'`
    - `npm list -g @struktoai/mirage-node`
-4. Implement local-only degraded workspace state under `/Users/sihaoli/.solar/harness/state/mirage/solar-default.json`.
+4. Implement local-only degraded workspace state under `/Users/lisihao/.solar/harness/state/mirage/solar-default.json`.
 5. Implement mount resolver:
    - logical path to physical path
    - deny subpaths
@@ -110,7 +110,7 @@ Steps:
 1. Add source adapters:
    - `mirage_path`: bounded grep over `/knowledge`, `/sprints`, `/cortex`, `/projects` allowlist.
    - `qmd`: call `solar-harness wiki qmd-search "<query>" --json` if available.
-   - `solar_db`: call `/Users/sihaoli/.solar/harness/lib/solar-knowledge-context.py --query ... --json` if present.
+   - `solar_db`: call `/Users/lisihao/.solar/harness/lib/solar-knowledge-context.py --query ... --json` if present.
 2. Normalize hits:
    - `mount`
    - `path`
@@ -176,14 +176,14 @@ Acceptance commands:
 curl -fsS http://127.0.0.1:8765/status \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); assert "mirage" in d'
 
-bash /Users/sihaoli/.solar/harness/tests/test-mirage-unified-vfs.sh
+bash /Users/lisihao/.solar/harness/tests/test-mirage-unified-vfs.sh
 ```
 
 ## 7. Security Gate
 
 Block merge if any condition is true:
 
-- `/Users/sihaoli` home directory is mounted as a whole.
+- `/Users/lisihao` home directory is mounted as a whole.
 - `/drive` write succeeds without `--allow-write-drive`.
 - secret patterns appear in stdout, events, status, or generated docs.
 - tests write to real Google Drive.
@@ -198,7 +198,7 @@ Builder S1 prompt:
 读取 sprint-20260508-mirage-unified-vfs.contract/design/plan。
 只做 S1：install/doctor/manifest/CLI/workspace/exec。
 你不独占代码库；不要改 P0 sprint 文件，不要改 hooks，不要碰 status-server/search/tests/docs。
-完成后写 /Users/sihaoli/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.handoff-s1.md。
+完成后写 /Users/lisihao/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.handoff-s1.md。
 ```
 
 Builder S2 prompt:
@@ -207,7 +207,7 @@ Builder S2 prompt:
 读取 sprint-20260508-mirage-unified-vfs.contract/design/plan。
 只做 S2：mirage_search.py 和 solar-harness mirage search。
 你不独占代码库；不要改 hooks，不要改 P0-owned solar-knowledge-context.py，只能调用它。
-完成后写 /Users/sihaoli/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.handoff-s2.md。
+完成后写 /Users/lisihao/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.handoff-s2.md。
 ```
 
 Builder S3 prompt:
@@ -216,7 +216,7 @@ Builder S3 prompt:
 等 S1/S2 handoff 到齐后执行。
 只做 S3：status/events/security/tests/docs。
 不得真实写 Google Drive；测试必须 temp。
-完成后写 /Users/sihaoli/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.handoff.md。
+完成后写 /Users/lisihao/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.handoff.md。
 ```
 
 ## 9. Evaluator Checklist
@@ -236,8 +236,8 @@ Evaluator must verify:
 Rollback steps:
 
 ```bash
-rm -rf /Users/sihaoli/.solar/harness/state/mirage
-rm -f /Users/sihaoli/.solar/harness/config/mirage.solar.yaml
+rm -rf /Users/lisihao/.solar/harness/state/mirage
+rm -f /Users/lisihao/.solar/harness/config/mirage.solar.yaml
 ```
 
 Then revert only the `mirage)` block in `solar-harness.sh` and the `mirage` section in `status-server.py`. Do not touch wiki/QMD/Solar DB data.

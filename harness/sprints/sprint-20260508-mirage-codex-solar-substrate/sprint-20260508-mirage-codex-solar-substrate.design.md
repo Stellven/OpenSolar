@@ -131,9 +131,9 @@ supersedes: 2026-05-08 thin design (extended into 7-section planner handoff)
 
 **抗 RK1 (探针补丁绕过) 设计**:
 - P1 路径 rotation：从下表抽取 1 条 (`$RANDOM % 3`)；探针文件注释中写明 "evaluator round 应抽测不同 path"
-  - `/Users/sihaoli/.zshrc` / `/private/etc/hosts` / `/Users/sihaoli/.ssh/config`
+  - `/Users/lisihao/.zshrc` / `/private/etc/hosts` / `/Users/lisihao/.ssh/config`
 - P2 固定 `/etc/passwd` (经典符号性目标)
-- P3 优先 `/Users/sihaoli/.aws/credentials`，不存在 fallback `/Users/sihaoli/.gitconfig`
+- P3 优先 `/Users/lisihao/.aws/credentials`，不存在 fallback `/Users/lisihao/.gitconfig`
 - evaluator round 3 时 PM 手动追加 1 条新 path (e.g. `/private/var/db/...`) 抽检；探针套件不固化此 path
 
 **Pass 标准**:
@@ -309,7 +309,7 @@ evaluator A5 验收时 grep 这些关键 token 集合 (`["use wiki ingest", "use
   | `rg ~/Knowledge ...` | `solar-harness mirage search ...` |
   | `find ~/.solar/harness/sprints ...` | `solar-harness mirage exec -- 'find /sprints ...'` |
   | `sqlite3 ~/.solar/solar.db 'SELECT ... FROM cortex_sources ...'` | `solar-harness mirage search ...` (覆盖 cortex 源) |
-  | 直接 `cat /Users/sihaoli/Knowledge/concepts/x.md` | `solar-harness mirage exec -- 'cat /knowledge/concepts/x.md'` |
+  | 直接 `cat /Users/lisihao/Knowledge/concepts/x.md` | `solar-harness mirage exec -- 'cat /knowledge/concepts/x.md'` |
   | 直写 Knowledge / Drive / Sprint / Config | 走专用接口 (wiki ingest / drive ro / coordinator / config UI) |
 
 - 新增章节 `## 正例 (Canonical Patterns)` ≥ 6 条：跨源 search、读 sprint 合约、读 Knowledge 文档、读 cortex 段、读 qmd 资源、写 `/raw` 草稿

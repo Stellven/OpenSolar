@@ -103,8 +103,8 @@ conclusion: solar.db 真在 WAL；factory 同时设 busy_timeout=5000ms → A3 �
 cmd: solar status; solar-harness status
 stdout (solar):
 solar CLI v1.x — local flow mode
-runtime:    /Users/sihaoli/.agents/skills/solar/scripts/run.sh
-state file: /Users/sihaoli/.solar/flow-state.json  (local only)
+runtime:    /Users/lisihao/.agents/skills/solar/scripts/run.sh
+state file: /Users/lisihao/.solar/flow-state.json  (local only)
 harness:    NOT connected (by design)
 flow: inactive
 For production harness status, run: solar-harness status

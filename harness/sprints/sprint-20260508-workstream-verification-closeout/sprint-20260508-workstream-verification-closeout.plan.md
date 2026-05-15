@@ -4,11 +4,11 @@ plan_for: planner_then_builder_main
 plan_version: 1
 priority: P0
 lane: reliability
-related_prd: /Users/sihaoli/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.prd.md
-related_contract: /Users/sihaoli/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.contract.md
-related_matrix_md: /Users/sihaoli/.solar/harness/reports/solar-workstream-verification-20260508.md
-related_matrix_json: /Users/sihaoli/.solar/harness/reports/solar-workstream-verification-20260508.json
-related_fix_dispatch: /Users/sihaoli/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.fix-dispatch.md
+related_prd: /Users/lisihao/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.prd.md
+related_contract: /Users/lisihao/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.contract.md
+related_matrix_md: /Users/lisihao/.solar/harness/reports/solar-workstream-verification-20260508.md
+related_matrix_json: /Users/lisihao/.solar/harness/reports/solar-workstream-verification-20260508.json
+related_fix_dispatch: /Users/lisihao/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.fix-dispatch.md
 created_at: 2026-05-08T16:55:00Z
 created_by: planner
 ---
@@ -41,7 +41,7 @@ created_by: planner
 | status-server `/status` | `curl 127.0.0.1:8765/status` | JSON 含 current_sprint/panes/main_screen/lab_screen/recent_events/kpi/obsidian_wiki |
 | QMD MCP `/health` | `curl localhost:8181/health` | `{"status":"ok","uptime":1446}` |
 | `qmd status` | CLI | 1103 indexed, **0 vectors embedded**, 1102 pending |
-| `solar-harness wiki status --json` | CLI | configured=true, vault=/Users/sihaoli/Knowledge, skills installed (codex/claude/agents)=true |
+| `solar-harness wiki status --json` | CLI | configured=true, vault=/Users/lisihao/Knowledge, skills installed (codex/claude/agents)=true |
 | `solar-harness wiki qmd-search "Solar Harness Obsidian"` | CLI | 返回 ≥1 命中 (concepts/solar-harness-obsidian-memory.md, score 0.93) |
 | `solar-harness mirage doctor --json` | CLI | enabled=true, sdk.kind=none (degraded), drive.status=degraded (no creds), qmd.status=missing (probe bug), 8 mounts |
 | `solar-harness wiki capture-server status` | CLI | **status=stopped** url=127.0.0.1:8788 |
@@ -102,8 +102,8 @@ solar-harness-lab:0  4 lab builders (active/idle/idle/active)
 | A10 | Fix Dispatch | 由本计划生成 fix-dispatch.md | (输出) |
 
 输出：
-- `/Users/sihaoli/.solar/harness/reports/solar-workstream-verification-20260508.md` (人读)
-- `/Users/sihaoli/.solar/harness/reports/solar-workstream-verification-20260508.json` (机读)
+- `/Users/lisihao/.solar/harness/reports/solar-workstream-verification-20260508.md` (人读)
+- `/Users/lisihao/.solar/harness/reports/solar-workstream-verification-20260508.json` (机读)
 
 ### Step 3 — 生成 fix-dispatch.md
 
@@ -158,8 +158,8 @@ solar-harness-lab:0  4 lab builders (active/idle/idle/active)
 - `sprint-20260508-solar-kb-obsidian-autouse.lib/*` —— P0 builder 仍在写（即使 dispatch_failed）
 - `~/.claude/hooks/*` —— P0 sprint 拥有
 - 真实 Google Drive
-- `/Users/sihaoli/Knowledge/concepts/`、`/Users/sihaoli/Knowledge/projects/` 等正式 wiki 页
-- 整个 `/Users/sihaoli`（不可挂载）
+- `/Users/lisihao/Knowledge/concepts/`、`/Users/lisihao/Knowledge/projects/` 等正式 wiki 页
+- 整个 `/Users/lisihao`（不可挂载）
 
 ### §3.3 Fix-dispatch 派工时也必须遵守 §3.2
 
@@ -170,8 +170,8 @@ solar-harness-lab:0  4 lab builders (active/idle/idle/active)
 - 评估器**禁止**在没跑 verify 命令的情况下 PASS
 - **禁止**用 status 字段当证据
 - **禁止**任何 fix 写入真 Google Drive
-- **禁止**任何 fix 挂 `/Users/sihaoli`
-- **禁止**测试写 temp 路径之外（除 `/Users/sihaoli/Knowledge/_raw` 显式 smoke test）
+- **禁止**任何 fix 挂 `/Users/lisihao`
+- **禁止**测试写 temp 路径之外（除 `/Users/lisihao/Knowledge/_raw` 显式 smoke test）
 - **禁止**在本 closeout 报告产出之前启动新 feature sprint
 - 遇到 plan mode 卡住 / GLM 1210 / coordinator 不派发 → 列入 fix-dispatch，**不**自己补救
 

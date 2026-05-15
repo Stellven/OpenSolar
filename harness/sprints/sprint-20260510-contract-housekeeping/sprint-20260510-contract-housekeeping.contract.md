@@ -40,7 +40,7 @@ owner: solar-harness
 ## Verify Commands
 
 ```bash
-test -f /Users/sihaoli/.solar/harness/reports/contract-housekeeping/no-status-audit.json
-test -f /Users/sihaoli/.solar/harness/reports/contract-housekeeping/queue-audit.json
-test -f /Users/sihaoli/.solar/harness/sprints/sprint-20260510-contract-housekeeping.handoff.md
+test -f /Users/lisihao/.solar/harness/reports/contract-housekeeping/no-status-audit.json
+test -f /Users/lisihao/.solar/harness/reports/contract-housekeeping/queue-audit.json
+test -f /Users/lisihao/.solar/harness/sprints/sprint-20260510-contract-housekeeping.handoff.md
 ```

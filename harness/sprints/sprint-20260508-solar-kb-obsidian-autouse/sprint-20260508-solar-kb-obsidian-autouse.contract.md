@@ -13,7 +13,7 @@ handoff_to: planner
 
 ## Intent
 
-Make Solar's knowledge layer actually usable by default: every relevant agent session should receive bounded, sourced context from `~/.solar/solar.db`, and `/Users/sihaoli/Knowledge` should sync bidirectionally enough that Obsidian notes are searchable by Solar and Solar DB knowledge is exportable to Obsidian without manual glue.
+Make Solar's knowledge layer actually usable by default: every relevant agent session should receive bounded, sourced context from `~/.solar/solar.db`, and `/Users/lisihao/Knowledge` should sync bidirectionally enough that Obsidian notes are searchable by Solar and Solar DB knowledge is exportable to Obsidian without manual glue.
 
 This sprint fixes the current gap: Solar has a large database-backed knowledge base, but active hooks mostly inject reminders or small fixed snippets; Obsidian integration exists, but is not yet a seamless default retrieval path.
 
@@ -23,9 +23,9 @@ This sprint fixes the current gap: Solar has a large database-backed knowledge b
 - `solar-session-start.sh` reads `v_startup_context`, but that view only injects core rules, personality, and up to 5 high-confidence learnings.
 - `unified-query.ts` and `knowledge-query.ts` exist, but are not automatically called by active hooks for every relevant prompt.
 - `memory-influence.sh` appears schema-incompatible with `evo_memory_semantic`: it queries `content`, while the table uses `value`; it also needs explicit SQL parentheses around namespace/content matching.
-- `knowledge-sync.ts` has Obsidian support, but currently points at old paths, not `/Users/sihaoli/Knowledge`.
+- `knowledge-sync.ts` has Obsidian support, but currently points at old paths, not `/Users/lisihao/Knowledge`.
 - No active `com.solar.knowledge-sync` LaunchAgent or knowledge-sync daemon was found.
-- Existing Obsidian bridge can export Solar DB rows into `_raw/solar-db-export/`, but `/Users/sihaoli/Knowledge` content is not indexed into `fts_unified_search` by default.
+- Existing Obsidian bridge can export Solar DB rows into `_raw/solar-db-export/`, but `/Users/lisihao/Knowledge` content is not indexed into `fts_unified_search` by default.
 
 ## Non-Goals
 
@@ -53,7 +53,7 @@ This sprint fixes the current gap: Solar has a large database-backed knowledge b
    - Keep output bounded and sourced.
 
 4. `~/.claude/core/cortex/knowledge-sync.ts`
-   - Add `/Users/sihaoli/Knowledge` as first-class Obsidian vault source.
+   - Add `/Users/lisihao/Knowledge` as first-class Obsidian vault source.
    - Prefer configured vault path from Solar wiki config when available.
    - Sync markdown summaries/frontmatter into Solar searchable tables.
 
@@ -96,7 +96,7 @@ python3 ~/.solar/harness/lib/solar-knowledge-context.py \
 
 ### A2 — Obsidian Vault Is Indexed Into Solar Search
 
-Given `/Users/sihaoli/Knowledge` contains wiki pages, Solar search must find those pages without manual grep.
+Given `/Users/lisihao/Knowledge` contains wiki pages, Solar search must find those pages without manual grep.
 
 Required behavior:
 - Markdown title, tags, summary/frontmatter, path, and selected body snippets are indexed.
@@ -119,7 +119,7 @@ python3 ~/.solar/harness/lib/solar-knowledge-context.py \
 Existing command `solar-harness wiki import-solar-db` must remain functional and safe.
 
 Required behavior:
-- Writes generated markdown under `/Users/sihaoli/Knowledge/_raw/solar-db-export/`.
+- Writes generated markdown under `/Users/lisihao/Knowledge/_raw/solar-db-export/`.
 - Does not expose obvious secrets.
 - Does not overwrite true user-authored vault pages.
 - Supports dry/no-dispatch mode for tests.
@@ -128,10 +128,10 @@ Verify:
 
 ```bash
 solar-harness wiki import-solar-db --scope solar --per-table-limit 3 --no-dispatch
-test -d /Users/sihaoli/Knowledge/_raw/solar-db-export
+test -d /Users/lisihao/Knowledge/_raw/solar-db-export
 ```
 
-<!-- verify: cmd="solar-harness wiki import-solar-db --scope solar --per-table-limit 3 --no-dispatch && test -d /Users/sihaoli/Knowledge/_raw/solar-db-export" -->
+<!-- verify: cmd="solar-harness wiki import-solar-db --scope solar --per-table-limit 3 --no-dispatch && test -d /Users/lisihao/Knowledge/_raw/solar-db-export" -->
 
 ### A4 — `memory-influence.sh` No Longer Silently Misses Semantic Memory
 
@@ -210,7 +210,7 @@ bash ~/.solar/harness/tests/test-solar-kb-obsidian-autouse.sh
 ## Planner Instructions
 
 1. Read this contract and produce an implementation plan:
-   `/Users/sihaoli/.solar/harness/sprints/sprint-20260508-solar-kb-obsidian-autouse.plan.md`
+   `/Users/lisihao/.solar/harness/sprints/sprint-20260508-solar-kb-obsidian-autouse.plan.md`
 2. Split implementation into three independent slices:
    - Slice 1: retrieval hook + `memory-influence.sh` fix.
    - Slice 2: Obsidian-to-Solar indexing + DB-to-Obsidian export hardening.

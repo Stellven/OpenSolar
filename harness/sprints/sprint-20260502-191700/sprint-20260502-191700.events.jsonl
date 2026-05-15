@@ -1,0 +1,5 @@
+{"ts":"2026-05-02T23:17:00Z","event":"phase_transition","by":"solar-harness","sid":"sprint-20260502-191700","data":{"from":"none","to":"spec"}}
+{"ts": "2026-05-02T23:25:08Z", "event": "plan_verdict", "by": "evaluator", "verdict": "approve", "sid": "sprint-20260502-191700"}
+{"ts": "2026-05-02T23:37:31Z", "event": "handoff_submitted", "by": "builder", "sid": "sprint-20260502-191700", "data": {"round": "2"}}
+{"ts": "2026-05-02T23:41:51Z", "event": "eval_passed", "by": "evaluator", "verdict": "pass", "sid": "sprint-20260502-191700"}
+{"ts":"2026-05-02T23:41:59Z","event":"planner_notified","by":"coordinator","data":{"status":"passed"}}

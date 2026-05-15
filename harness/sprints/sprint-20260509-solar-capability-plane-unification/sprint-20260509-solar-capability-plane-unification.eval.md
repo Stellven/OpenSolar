@@ -19,7 +19,7 @@ D1–D10 全部通过 contract 内嵌 verify 命令实证. 38 个 solar-native s
 | D5 | graph JSON + Mermaid 含核心依赖 | PASS | tests/test-harness-graph.sh → PROBES_PASSED=3 PROBES_FAILED=0; nodes=18 edges=18 missing=0 invalid=0 |
 | D6 | 无 mirage/data-plane 重复 top-level case | PASS | check-top-level-case-duplicates.py → no duplicate (31 unique labels); mirage/ at line 2354 only, data-plane/ at line 1920 only |
 | D7 | status UI/API 暴露 pane capability 摘要 | PASS | py_compile OK; 25 keyword hits (capabilit/skills/mcp_mode/kb_context); _pane_capability_summary 在 836 行, /api/capability 路由在 2153 行 |
-| D8 | pane-launcher --print-config 暴露 MCP mode | PASS | EXTRA_FLAGS='--bare --tools default --strict-mcp-config --mcp-config /Users/sihaoli/.solar/harness/config/empty-mcp.json' |
+| D8 | pane-launcher --print-config 暴露 MCP mode | PASS | EXTRA_FLAGS='--bare --tools default --strict-mcp-config --mcp-config /Users/lisihao/.solar/harness/config/empty-mcp.json' |
 | D9 | solar-native skill 抽取产出分类 cache | PASS | state/solar-native-skills.json 存在; len(skills)=38; 全部含 status 字段 |
 | D10 | bash -n + py_compile 全绿 | PASS | solar-harness.sh / coordinator.sh / pane-launcher.sh / solar_skills.py / harness_graph.py 全过 |
 
@@ -66,8 +66,8 @@ $ solar-harness skills inventory --json
 {
   "totals": { "skills": 1600, "agents_skills": 1562, "solar_native": 38 },
   "sources": {
-    "agents-skills": { "path": "/Users/sihaoli/.agents/skills", "count": 1562 },
-    "solar-native": { "path": "/Users/sihaoli/Solar/skills", "count": 38,
+    "agents-skills": { "path": "/Users/lisihao/.agents/skills", "count": 1562 },
+    "solar-native": { "path": "/Users/lisihao/Solar/skills", "count": 38,
       "skills": ["a2a-hub", "agent", "agent-orchestrator", "apple-calendar",
         "banner", "benchmark", "browser-automation", "build", "clawdwork",
         "commit", "docs", "email-to-calendar", "fast-browser-use",

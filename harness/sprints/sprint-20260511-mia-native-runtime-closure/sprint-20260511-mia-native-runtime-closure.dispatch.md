@@ -8,14 +8,14 @@
 
 在任何 Write/Edit/handoff/eval/status 更新之前，必须先用 Claude/Codex 的 **Read 工具**读取：
 
-`/Users/sihaoli/.solar/STATE.md`
+`/Users/lisihao/.solar/STATE.md`
 
 不要用 `cat` 替代这一步；本地 `state-read-enforcer.sh` hook 只认 Read 工具标记。
 
 如果 Write/Edit hook 仍阻断，立刻 Read 上面的 STATE 文件后重试原写入一次，不要停在“已读”等待。
 
 ## 通用步骤说明
-1. 先用 Read 工具读取 `/Users/sihaoli/.solar/STATE.md`
+1. 先用 Read 工具读取 `/Users/lisihao/.solar/STATE.md`
 2. 读取合约: 路径格式 `~/.solar/harness/sprints/<sid>.contract.md`
 3. 按指令执行，不超出范围
 4. 完成后写 handoff/eval + 更新 status.json
@@ -45,12 +45,12 @@
 - 模式：程序员+测试员、规划者+执行者、动态协商
 - 战略控制点：协作模式的可扩展性与涌现能力
 
-[/Users/sihaoli/Knowledge/synthesis/独家对话OpenAI姚顺雨-生成新世界的系统.md] 独家对话OpenAI姚顺雨：生成新世界的系统: title: 独家对话OpenAI姚顺雨：生成新世界的系统
+[/Users/lisihao/Knowledge/synthesis/独家对话OpenAI姚顺雨-生成新世界的系统.md] 独家对话OpenAI姚顺雨：生成新世界的系统: title: 独家对话OpenAI姚顺雨：生成新世界的系统
 [qmd://solar-wiki/raw/web-captures/20260508t130232z-untitled-capture.md] Untitled Capture: 
 你说需求 → 规划者写合约 → 建设者实现 → 审判官审核 → 通过/修复
 Sprint 状态流转
 drafting → planning → building → testing → reviewing → shipped
-[/Users/sihaoli/Knowledge/references/bgrpo-algebraic-structures-transformers.md] Discovering Hidden Algebraic Structures via Transformers with Rank-Aware Beam GRPO: title: "Discovering Hidden Algebraic Structures via Transformers with Rank-Aware Beam GRPO"
+[/Users/lisihao/Knowledge/references/bgrpo-algebraic-structures-transformers.md] Discovering Hidden Algebraic Structures via Transformers with Rank-Aware Beam GRPO: title: "Discovering Hidden Algebraic Structures via Transformers with Rank-Aware Beam GRPO"
 [qmd://solar-wiki/raw/solar-harness/artifact-ingest/20260508t155745z/harness-sprints/sprint-20260506-141408-contract.md] Sprint Contract — sprint-20260506-141408: 
 > (规划者填写)
 

@@ -10,9 +10,9 @@ Lane: reliability
 ┌──────────────────────────────┬────────────────────────────────────────────────────┐
 │ Layer                        │ Reality                                            │
 ├──────────────────────────────┼────────────────────────────────────────────────────┤
-│ Solar source                  │ /Users/sihaoli/Solar, contains 38 native skills    │
-│ Solar runtime                 │ /Users/sihaoli/.solar, contains solar.db/cortex    │
-│ Harness live control          │ /Users/sihaoli/.solar/harness, real CLI/coordinator│
+│ Solar source                  │ /Users/lisihao/Solar, contains 38 native skills    │
+│ Solar runtime                 │ /Users/lisihao/.solar, contains solar.db/cortex    │
+│ Harness live control          │ /Users/lisihao/.solar/harness, real CLI/coordinator│
 │ Skills universe               │ ~/.agents + ~/.claude + ~/.codex + ~/Solar + vendor│
 │ Dispatch path                 │ tmux send-keys reads .dispatch.md                 │
 └──────────────────────────────┴────────────────────────────────────────────────────┘
@@ -75,9 +75,9 @@ Each skill record:
 ```json
 {
   "name": "review",
-  "root": "/Users/sihaoli/Solar/skills",
+  "root": "/Users/lisihao/Solar/skills",
   "runtime": "solar-native",
-  "path": "/Users/sihaoli/Solar/skills/review/SKILL.md",
+  "path": "/Users/lisihao/Solar/skills/review/SKILL.md",
   "description": "first heading or frontmatter description",
   "status": "usable",
   "conflicts": ["~/.agents/skills/review"]
@@ -86,7 +86,7 @@ Each skill record:
 
 Runtime labels:
 
-- `solar-native`: `/Users/sihaoli/Solar/skills`
+- `solar-native`: `/Users/lisihao/Solar/skills`
 - `claude`: `~/.claude/skills`
 - `codex`: `~/.codex/skills`
 - `agents`: `~/.agents/skills`

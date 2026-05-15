@@ -80,7 +80,7 @@ Removed:
 
 Output:
 ```
-EXTRA_FLAGS='--bare --tools default --strict-mcp-config --mcp-config /Users/sihaoli/.solar/harness/config/empty-mcp.json'
+EXTRA_FLAGS='--bare --tools default --strict-mcp-config --mcp-config /Users/lisihao/.solar/harness/config/empty-mcp.json'
 ```
 
 ### D9: Solar native skill extraction produces classified cache/report
@@ -97,7 +97,7 @@ All 3 bash scripts pass `bash -n`; both Python modules pass `py_compile`.
 ## 验证方法
 
 ```bash
-cd /Users/sihaoli/.solar/harness
+cd /Users/lisihao/.solar/harness
 
 # D1
 solar-harness skills inventory --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["totals"]["skills"] >= 1600; assert d["sources"].get("solar-native",{}).get("count") == 38; print("D1 PASS")'

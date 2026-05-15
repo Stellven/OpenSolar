@@ -49,17 +49,17 @@ Round: closeout
 ## 验证命令
 
 ```bash
-bash -n /Users/sihaoli/.solar/bin/solar-remote-dispatch
-python3 -m pytest /Users/sihaoli/.solar/harness/tests/remote/test_remote_dispatch_core.py /Users/sihaoli/.solar/harness/tests/remote/test_remote_dispatch_cli.py -q
-python3 -m pytest /Users/sihaoli/.solar/harness/tests/graph/test_graph_dispatch_submit.py /Users/sihaoli/.solar/harness/tests/graph/test_parent_ready_closeout.py -q
-/Users/sihaoli/.solar/harness/tests/integrations/test-remote-dispatch-productization.sh
-SOLAR_REMOTE_USER=lisihao SOLAR_REMOTE_HOST=100.122.223.55 SOLAR_REMOTE_PATH=/Users/lisihao /Users/sihaoli/.solar/bin/solar-remote-dispatch doctor --json
+bash -n /Users/lisihao/.solar/bin/solar-remote-dispatch
+python3 -m pytest /Users/lisihao/.solar/harness/tests/remote/test_remote_dispatch_core.py /Users/lisihao/.solar/harness/tests/remote/test_remote_dispatch_cli.py -q
+python3 -m pytest /Users/lisihao/.solar/harness/tests/graph/test_graph_dispatch_submit.py /Users/lisihao/.solar/harness/tests/graph/test_parent_ready_closeout.py -q
+/Users/lisihao/.solar/harness/tests/integrations/test-remote-dispatch-productization.sh
+SOLAR_REMOTE_USER=lisihao SOLAR_REMOTE_HOST=100.122.223.55 SOLAR_REMOTE_PATH=/Users/lisihao /Users/lisihao/.solar/bin/solar-remote-dispatch doctor --json
 ```
 
 ## Evidence Paths
 
-- `/Users/sihaoli/.solar/harness/reports/remote-dispatch-productization/20260511T004504Z/report.json`
-- `/Users/sihaoli/.solar/harness/reports/remote-dispatch-productization/20260511T004504Z/e2e-mac-mini.json`
-- `/Users/sihaoli/.solar/harness/README-remote-dispatch.md`
-- `/Users/sihaoli/.solar/harness/tests/remote/test_remote_dispatch_cli.py`
-- `/Users/sihaoli/.solar/harness/tests/integrations/test-remote-dispatch-productization.sh`
+- `/Users/lisihao/.solar/harness/reports/remote-dispatch-productization/20260511T004504Z/report.json`
+- `/Users/lisihao/.solar/harness/reports/remote-dispatch-productization/20260511T004504Z/e2e-mac-mini.json`
+- `/Users/lisihao/.solar/harness/README-remote-dispatch.md`
+- `/Users/lisihao/.solar/harness/tests/remote/test_remote_dispatch_cli.py`
+- `/Users/lisihao/.solar/harness/tests/integrations/test-remote-dispatch-productization.sh`

@@ -17,7 +17,7 @@
       "ts": "2026-05-09T13:36:05Z",
       "event": "bypass_pm_contract_promoted_to_builder",
       "by": "chain-watcher",
-      "contract": "/Users/sihaoli/.solar/codex-bridge/from-codex/execution-contract-routing-local-e2e-20260509T133501Z.md"
+      "contract": "/Users/lisihao/.solar/codex-bridge/from-codex/execution-contract-routing-local-e2e-20260509T133501Z.md"
     },
     {
       "ts": "2026-05-09T13:37:09Z",
@@ -66,8 +66,8 @@
   "updated_at": "2026-05-10T14:52:54Z",
   "last_handoff_mtime": 1778333824.0,
   "knowledge_export_status": "exported",
-  "knowledge_export_path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260509-093604.accepted.md",
-  "knowledge_ingest_dispatch": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260509-093604.dispatch.md",
+  "knowledge_export_path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260509-093604.accepted.md",
+  "knowledge_ingest_dispatch": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260509-093604.dispatch.md",
   "knowledge_exported_at": "2026-05-09T13:42:38Z",
   "knowledge_ingested_at": null,
   "knowledge_export_error": null,
