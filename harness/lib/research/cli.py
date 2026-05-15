@@ -22,6 +22,8 @@ import sqlite3
 import subprocess
 import time
 import tempfile
+import datetime
+import hashlib
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -1184,10 +1186,19 @@ def export_run_to_dir(db_path: str, run_id: str, output_dir: str, final_md: str 
     }
 
 
-def perform_online_search(conn: sqlite3.Connection, run_id: str, query: str, max_results: int, fetch: bool, provider: str = "auto") -> dict:
+def perform_online_search(
+    conn: sqlite3.Connection,
+    run_id: str,
+    query: str,
+    max_results: int,
+    fetch: bool,
+    provider: str = "auto",
+    source_type: str = "web",
+) -> dict:
     hits, errors = web_search(query, max_results, provider=provider)
     source_ids: list[str] = []
     fetch_errors: list[str] = []
+    normalized_source_type = normalize_source_type(source_type)
     for hit in hits:
         url = hit.get("url") or ""
         title = hit.get("title") or url or "Untitled web result"
@@ -1209,7 +1220,7 @@ def perform_online_search(conn: sqlite3.Connection, run_id: str, query: str, max
             title=title,
             text=text,
             url=url,
-            source_type="web",
+            source_type=normalized_source_type,
             relevance_score=max(0.1, 1.0 - (int(hit.get("rank") or 1) - 1) * 0.08),
         )
         source_ids.append(sid)
@@ -1219,12 +1230,151 @@ def perform_online_search(conn: sqlite3.Connection, run_id: str, query: str, max
     )
     conn.commit()
     used_provider = hits[0].get("connector") if hits else provider
-    return {"query": query, "provider": used_provider, "hits": hits, "source_ids": source_ids, "errors": errors, "fetch_errors": fetch_errors}
+    return {
+        "query": query,
+        "source_type": normalized_source_type,
+        "provider": used_provider,
+        "hits": hits,
+        "source_ids": source_ids,
+        "errors": errors,
+        "fetch_errors": fetch_errors,
+    }
 
 
-def render_human_search_handoff(topic: str, query: str, run_id: str | None, max_results: int) -> str:
+SOURCE_TYPE_QUERY_HINTS = {
+    "paper": "papers arXiv scholarly review benchmark evaluation",
+    "code": "GitHub implementation repository code release examples",
+    "official_doc": "official documentation technical architecture docs release notes",
+    "benchmark": "benchmark results leaderboard evaluation dataset",
+    "dataset": "dataset corpus data card benchmark dataset",
+    "news": "news analysis industry report announcement",
+    "company": "company official blog product announcement whitepaper",
+    "standard": "standard specification RFC NIST IEEE ISO W3C",
+}
+
+SOURCE_TYPE_ALIASES = {
+    "official": "official_doc",
+    "official docs": "official_doc",
+    "official_doc": "official_doc",
+    "official-doc": "official_doc",
+    "official documentation": "official_doc",
+    "repo": "code",
+    "repository": "code",
+    "github": "code",
+    "code repo": "code",
+    "paper": "paper",
+    "academic": "paper",
+    "preprint": "paper",
+    "benchmark": "benchmark",
+    "dataset": "dataset",
+    "data": "dataset",
+    "news": "news",
+    "company": "company",
+    "standard": "standard",
+    "standards": "standard",
+    "web": "web",
+    "blog": "web",
+    "other": "other",
+}
+
+
+def normalize_source_type(raw: str | None) -> str:
+    """Normalize human-search source type labels into profile-gate vocabulary."""
+    value = re.sub(r"[^a-z0-9_\- ]+", "", str(raw or "").strip().lower()).replace("-", "_")
+    value = re.sub(r"\s+", " ", value)
+    return SOURCE_TYPE_ALIASES.get(value, value.replace(" ", "_") or "human_search")
+
+
+def _source_type_search_plan(query: str, target_source_types: list[str], max_results: int) -> list[dict[str, str | int]]:
+    if not target_source_types:
+        return [{"source_type": "general", "query": query, "min_results": max_results}]
+    per_type = max(1, max_results // max(len(target_source_types), 1))
+    plan = []
+    for source_type in target_source_types:
+        hint = SOURCE_TYPE_QUERY_HINTS.get(source_type, source_type)
+        plan.append({
+            "source_type": source_type,
+            "query": f"{query} {hint}",
+            "min_results": per_type,
+        })
+    return plan
+
+
+def perform_profile_online_search(
+    conn: sqlite3.Connection,
+    run_id: str,
+    query: str,
+    max_results: int,
+    fetch: bool,
+    provider: str = "auto",
+    research_profile: str = "general",
+) -> dict:
+    """Run profile-aware online search, one query per target source type."""
+    from research.evaluator import source_requirements_for_profile
+
+    requirements = source_requirements_for_profile(research_profile)
+    plan = _source_type_search_plan(query, requirements["target_source_types"], max_results)
+    results = []
+    source_ids: list[str] = []
+    hits: list[dict] = []
+    errors: list[str] = []
+    fetch_errors: list[str] = []
+    for item in plan:
+        result = perform_online_search(
+            conn,
+            run_id,
+            str(item["query"]),
+            int(item["min_results"]),
+            fetch=fetch,
+            provider=provider,
+            source_type=str(item["source_type"]),
+        )
+        results.append(result)
+        source_ids.extend(result["source_ids"])
+        hits.extend(result["hits"])
+        errors.extend(result["errors"])
+        fetch_errors.extend(result["fetch_errors"])
+
+    conn.execute(
+        "UPDATE research_runs SET config_json = json_set(COALESCE(config_json,'{}'), "
+        "'$.last_search_profile', ?, '$.last_search_plan', ?, '$.last_search_hits', ?) WHERE id = ?",
+        (requirements["profile"], json.dumps(plan, ensure_ascii=False), len(source_ids), run_id),
+    )
+    conn.commit()
+    return {
+        "query": query,
+        "provider": provider,
+        "research_profile": requirements["profile"],
+        "requirements": requirements,
+        "search_plan": plan,
+        "profile_results": results,
+        "hits": hits,
+        "source_ids": source_ids,
+        "errors": errors,
+        "fetch_errors": fetch_errors,
+    }
+
+
+def render_human_search_handoff(
+    topic: str,
+    query: str,
+    run_id: str | None,
+    max_results: int,
+    research_profile: str = "general",
+) -> str:
     """Render a Markdown request that a human can paste into Gemini/GPT."""
+    from research.evaluator import source_requirements_for_profile
+
+    requirements = source_requirements_for_profile(research_profile)
+    search_plan = _source_type_search_plan(query, requirements["target_source_types"], max_results)
     run_line = f"- Run ID: `{run_id}`\n" if run_id else ""
+    target_types = ", ".join(requirements["target_source_types"]) or "general"
+    required_types = ", ".join(requirements["required_source_types"]) or "N/A"
+    recommended_types = ", ".join(requirements["recommended_source_types"]) or "N/A"
+    plan_lines = "\n".join(
+        f"| {item['source_type']} | {item['min_results']} | `{item['query']}` |"
+        for item in search_plan
+    )
     return f"""# Solar DeepResearch Human Search Handoff
 
 你现在扮演外部搜索研究员。请联网搜索并返回可被 Solar-Harness 导入的 Markdown。
@@ -1235,13 +1385,28 @@ def render_human_search_handoff(topic: str, query: str, run_id: str | None, max_
 ## Search Query
 {query}
 
+## Research Profile
+- Profile: `{requirements['profile']}`
+- Required source types: {required_types}
+- Recommended source types: {recommended_types}
+- Target source types for this handoff: {target_types}
+- Minimum distinct source types: {requirements['min_source_types']}
+
+## Source Matrix / Query Plan
+
+| Source Type | Min Results | Query |
+|---|---:|---|
+{plan_lines}
+
 ## Constraints
-- Prefer primary sources: official docs, papers, standards, reputable news, code repos.
+- Prefer primary sources for each requested source type.
+- Cover the Source Matrix before adding optional sources.
 - Return at most {max_results} high-quality sources.
 - Do not invent links.
 - Every source must include a URL.
 - Include disagreements, uncertainty, or contradictions if found.
 - Keep summaries factual and citation-ready.
+- Use these normalized Source Type values when possible: `paper`, `code`, `official_doc`, `benchmark`, `dataset`, `news`, `company`, `standard`, `web`, `other`.
 
 ## Solar Metadata
 {run_line}- Import target: `solar-harness research import-search`
@@ -1255,7 +1420,7 @@ def render_human_search_handoff(topic: str, query: str, run_id: str | None, max_
 URL: <https://...>
 Publisher: <publisher or N/A>
 Published: <date or N/A>
-Source Type: <official|paper|news|blog|repo|standard|other>
+Source Type: <paper|code|official_doc|benchmark|dataset|news|company|standard|web|other>
 
 Summary:
 - <2-5 factual bullets>
@@ -1271,7 +1436,7 @@ Relevant Quotes:
 URL: <https://...>
 Publisher: <publisher or N/A>
 Published: <date or N/A>
-Source Type: <official|paper|news|blog|repo|standard|other>
+Source Type: <paper|code|official_doc|benchmark|dataset|news|company|standard|web|other>
 
 Summary:
 - ...
@@ -1324,7 +1489,7 @@ def parse_human_search_markdown(markdown: str) -> list[dict]:
         records.append({
             "title": title,
             "url": url,
-            "source_type": (source_type_match.group(1).strip().lower() if source_type_match else "human_search"),
+            "source_type": normalize_source_type(source_type_match.group(1) if source_type_match else "human_search"),
             "content": content,
         })
     if records:
@@ -1565,7 +1730,18 @@ def cmd_run(args: argparse.Namespace) -> int:
         with open(args.source_file, "r", encoding="utf-8") as f:
             source_ids.append(insert_source(conn, run_id, os.path.basename(args.source_file), f.read(), url=args.source_file, source_type="file"))
     if args.web_query:
-        search_result = perform_online_search(conn, run_id, args.web_query, args.max_results, fetch=True, provider=args.search_provider)
+        if args.research_profile and args.research_profile != "general":
+            search_result = perform_profile_online_search(
+                conn,
+                run_id,
+                args.web_query,
+                args.max_results,
+                fetch=True,
+                provider=args.search_provider,
+                research_profile=args.research_profile,
+            )
+        else:
+            search_result = perform_online_search(conn, run_id, args.web_query, args.max_results, fetch=True, provider=args.search_provider)
         source_ids.extend(search_result["source_ids"])
 
     evidence_ids = extract_all_sources(conn, run_id) if source_ids else []
@@ -1660,7 +1836,18 @@ def cmd_search(args: argparse.Namespace) -> int:
         print(f"Max results: {max_results}")
         print(f"Run: {run_id}")
 
-    result = perform_online_search(conn, run_id, query, max_results, fetch=args.fetch, provider=args.provider)
+    if args.research_profile and args.research_profile != "general":
+        result = perform_profile_online_search(
+            conn,
+            run_id,
+            query,
+            max_results,
+            fetch=args.fetch,
+            provider=args.provider,
+            research_profile=args.research_profile,
+        )
+    else:
+        result = perform_online_search(conn, run_id, query, max_results, fetch=args.fetch, provider=args.provider)
     conn.close()
     ok = bool(result["source_ids"])
     if getattr(args, "require_online", False) and not ok:
@@ -1686,7 +1873,13 @@ def cmd_handoff_search(args: argparse.Namespace) -> int:
         conn.close()
         if row:
             topic = args.topic or row["topic"]
-    content = render_human_search_handoff(topic=topic, query=args.query, run_id=run_id, max_results=args.max_results)
+    content = render_human_search_handoff(
+        topic=topic,
+        query=args.query,
+        run_id=run_id,
+        max_results=args.max_results,
+        research_profile=args.research_profile,
+    )
     output_md = args.output_md or os.path.join(
         tempfile.gettempdir(),
         f"solar-human-search-{int(time.time())}.md",
@@ -1702,6 +1895,7 @@ def cmd_handoff_search(args: argparse.Namespace) -> int:
         "topic": topic,
         "query": args.query,
         "max_results": args.max_results,
+        "research_profile": args.research_profile,
     }
     if getattr(args, "print", False):
         print(content)
@@ -1979,6 +2173,8 @@ def cmd_eval_artifacts(args: argparse.Namespace) -> int:
         require_expert=bool(args.require_expert),
         max_unsupported_rate=args.max_unsupported_rate,
         min_citation_accuracy=args.min_citation_accuracy,
+        research_profile=args.research_profile,
+        strict_profile=bool(args.strict_profile),
     )
     if emit_json(args, payload):
         return 0 if payload.get("ok") else 1
@@ -1994,6 +2190,370 @@ def cmd_eval_artifacts(args: argparse.Namespace) -> int:
     return 0 if payload.get("ok") else 1
 
 
+def cmd_policy_doctor(args: argparse.Namespace) -> int:
+    """Inspect active DeepResearch policy package."""
+    from research.evaluator import policy_doctor
+
+    payload = policy_doctor()
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") else 1
+    print(f"Policy: {payload['policy_path']}")
+    print(f"Version: {payload['version']}")
+    print(f"Profiles: {', '.join(payload['profiles'])}")
+    print(f"Authority types: {', '.join(payload['source_authority_types'])}")
+    print(f"High authority threshold: {payload['high_authority_threshold']}")
+    if payload["errors"]:
+        print("Errors:")
+        for err in payload["errors"]:
+            print(f"- {err}")
+    if payload["warnings"]:
+        print("Warnings:")
+        for warn in payload["warnings"]:
+            print(f"- {warn}")
+    return 0 if payload.get("ok") else 1
+
+
+def cmd_policy_explain(args: argparse.Namespace) -> int:
+    """Explain source authority score for one candidate."""
+    from research.evaluator import explain_source_authority
+
+    text = args.text
+    if args.text_file:
+        with open(args.text_file, "r", encoding="utf-8") as f:
+            text = f.read()
+    payload = explain_source_authority(args.source_type, url=args.url, title=args.title, text=text)
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") else 1
+    print(f"Policy: {payload['policy_path']}")
+    print(f"Source type: {payload['source_type']}")
+    print(f"Score: {payload['score']}")
+    print(f"High authority: {payload['high_authority']}")
+    print(f"Matched rule index: {payload['matched_rule']['index']}")
+    if payload["matched_rule"].get("host_hits"):
+        print(f"Host hits: {', '.join(payload['matched_rule']['host_hits'])}")
+    if payload["matched_rule"].get("text_hits"):
+        print(f"Text hits: {', '.join(payload['matched_rule']['text_hits'])}")
+    return 0 if payload.get("ok") else 1
+
+
+def cmd_source_audit(args: argparse.Namespace) -> int:
+    """Audit exported DeepResearch sources for authority and profile gaps."""
+    from research.evaluator import audit_sources
+
+    payload = audit_sources(args.output_dir, research_profile=args.research_profile, strict_profile=bool(args.strict_profile))
+    if getattr(args, "write_handoff", "") or getattr(args, "enqueue_followup", False):
+        handoff_path = Path(args.write_handoff or (Path(args.output_dir).expanduser() / "source-gap-handoff.md")).expanduser()
+        handoff_path.parent.mkdir(parents=True, exist_ok=True)
+        query = getattr(args, "handoff_query", "") or Path(args.output_dir).name.replace("-", " ")
+        handoff_path.write_text(_source_audit_handoff_markdown(payload, query=query), encoding="utf-8")
+        payload["handoff_path"] = str(handoff_path)
+    if getattr(args, "enqueue_followup", False):
+        payload["followup"] = _enqueue_source_audit_followup(args, payload)
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") else 1
+    print(f"Source audit: {payload['output_dir']}")
+    print(f"Profile: {payload['research_profile']} strict={payload['strict_profile']}")
+    print(f"Sources: {payload['source_count']}")
+    print(f"Types: {payload['source_type_counts']}")
+    print(f"Authority average: {payload['source_authority_average']}")
+    print(f"High authority: {payload['source_high_authority_count']}")
+    if payload["errors"]:
+        print("Errors:")
+        for err in payload["errors"]:
+            print(f"- {err}")
+    if payload["warnings"]:
+        print("Warnings:")
+        for warn in payload["warnings"]:
+            print(f"- {warn}")
+    if payload["replacement_suggestions"]:
+        print("Replacement suggestions:")
+        for suggestion in payload["replacement_suggestions"]:
+            print(f"- {suggestion}")
+    if payload.get("handoff_path"):
+        print(f"Handoff: {payload['handoff_path']}")
+    if payload.get("followup"):
+        print(f"Followup: {payload['followup']}")
+    return 0 if payload.get("ok") else 1
+
+
+def _source_audit_handoff_markdown(payload: dict, query: str = "") -> str:
+    """Build a human/browser-use search handoff for missing profile sources."""
+    profile = payload.get("research_profile", "general")
+    missing_required = list(payload.get("missing_required_source_types") or [])
+    missing_recommended = list(payload.get("missing_recommended_source_types") or [])
+    missing = missing_required + [x for x in missing_recommended if x not in missing_required]
+    if not missing:
+        missing = ["higher_authority_source"]
+    suggestions = payload.get("replacement_suggestions") or []
+    current_rows = payload.get("sources") or []
+    current_table = [
+        "| source_type | authority | title | url |",
+        "|---|---:|---|---|",
+    ]
+    for row in current_rows[:20]:
+        current_table.append(
+            "| {source_type} | {authority:.2f} | {title} | {url} |".format(
+                source_type=str(row.get("source_type") or "unknown"),
+                authority=float(row.get("authority_score") or 0.0),
+                title=str(row.get("title") or "").replace("|", "\\|"),
+                url=str(row.get("url") or "").replace("|", "\\|"),
+            )
+        )
+    missing_lines = "\n".join(f"- {item}" for item in missing)
+    suggestion_lines = "\n".join(f"- {item}" for item in suggestions) or "- N/A"
+    query_text = query or "N/A"
+    search_tasks = "\n".join(
+        f"- Search for `{query_text}` with source type `{source_type}`. Prefer primary/canonical sources and reject SEO summaries."
+        for source_type in missing
+    )
+    template = """## Source 1
+Title:
+URL:
+Source Type: paper|code|official_doc|benchmark|dataset|news|company|standard
+Publisher:
+Published:
+Summary:
+- 
+Key Claims:
+- 
+Relevant Quotes:
+> 
+Why this source fixes the gap:
+- 
+"""
+    return f"""# DeepResearch Source Gap Handoff
+
+## Audit Result
+- Profile: `{profile}`
+- Output dir: `{payload.get("output_dir", "")}`
+- Status: `{"ok" if payload.get("ok") else "failed"}`
+- Source count: `{payload.get("source_count", 0)}`
+- Source type counts: `{json.dumps(payload.get("source_type_counts") or {}, ensure_ascii=False)}`
+- Authority average: `{payload.get("source_authority_average", 0)}`
+- Errors: `{", ".join(payload.get("errors") or []) or "N/A"}`
+- Warnings: `{", ".join(payload.get("warnings") or []) or "N/A"}`
+
+## Missing Source Types
+{missing_lines}
+
+## Replacement Suggestions
+{suggestion_lines}
+
+## Current Sources
+{chr(10).join(current_table)}
+
+## Search Tasks
+{search_tasks}
+
+## Instructions For Gemini/GPT/Browser-Use
+Find sources that close the missing source-type gaps. Return concise source blocks only. Do not write the final report. Prioritize canonical artifacts:
+- `code`: GitHub repository, official implementation, reproducibility repo, release notes.
+- `official_doc`: vendor/lab/project documentation, model card, official blog, standard/spec.
+- `benchmark`: benchmark paper, leaderboard, evaluation suite, dataset card, official result table.
+- `paper`: arXiv/OpenReview/DOI/Semantic Scholar primary paper.
+
+## Required Return Format
+```markdown
+{template}
+```
+
+## Continue Command
+After saving the returned Markdown, import it with:
+
+```bash
+solar-harness research import-search <db_path> --run-id <run_id> --input-md <returned_sources.md> --continue --output-dir {payload.get("output_dir", "")}
+```
+"""
+
+
+def _utc_now() -> str:
+    return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _source_gap_node_id(payload: dict, explicit: str = "") -> str:
+    if explicit:
+        return explicit
+    material = "|".join([
+        str(payload.get("research_profile") or "general"),
+        ",".join(payload.get("missing_required_source_types") or []),
+        ",".join(payload.get("missing_recommended_source_types") or []),
+    ])
+    digest = hashlib.sha256(material.encode("utf-8")).hexdigest()[:8]
+    return f"DR_SOURCE_GAP_{digest}"
+
+
+def _source_gap_node(args: argparse.Namespace, payload: dict) -> dict:
+    node_id = _source_gap_node_id(payload, getattr(args, "followup_node_id", ""))
+    handoff_path = str(payload.get("handoff_path") or "")
+    output_dir = str(payload.get("output_dir") or getattr(args, "output_dir", ""))
+    missing = list(payload.get("missing_required_source_types") or [])
+    missing.extend(x for x in (payload.get("missing_recommended_source_types") or []) if x not in missing)
+    missing_text = ", ".join(missing) or "higher-authority replacement sources"
+    depends_on = [
+        item.strip() for item in str(getattr(args, "depends_on", "") or "").split(",")
+        if item.strip()
+    ]
+    return {
+        "id": node_id,
+        "goal": (
+            "Acquire missing DeepResearch sources and re-import them. "
+            f"Missing source types: {missing_text}. Use handoff: {handoff_path}"
+        ),
+        "depends_on": depends_on,
+        "write_scope": [
+            handoff_path,
+            str(Path(output_dir) / "sources.jsonl"),
+            str(Path(output_dir) / "evidence.jsonl"),
+            str(Path(output_dir) / "claims.jsonl"),
+            str(Path(output_dir) / "source-audit-followup.json"),
+        ],
+        "required_skills": ["multi_agent.research", "browser.browse", "documentation"],
+        "required_capabilities": [
+            "research.source_matrix",
+            "research.evidence.extract",
+            "browser.browse",
+        ],
+        "acceptance": [
+            "Read the source-gap handoff Markdown before searching.",
+            "Add at least one canonical source for each missing source type when available.",
+            "Run import-search --continue to regenerate evidence, claims, sections, and final report artifacts.",
+            "Run source-audit with the same research profile and record the result.",
+        ],
+        "status": "pending",
+        "gate": f"{node_id.lower()}_passed",
+        "metadata": {
+            "type": "deepresearch_source_gap_followup",
+            "research_profile": payload.get("research_profile"),
+            "missing_required_source_types": payload.get("missing_required_source_types") or [],
+            "missing_recommended_source_types": payload.get("missing_recommended_source_types") or [],
+            "handoff_path": handoff_path,
+            "created_at": _utc_now(),
+        },
+    }
+
+
+def _source_gap_workers(args: argparse.Namespace) -> list[dict]:
+    caps = [
+        "research.source_matrix",
+        "research.evidence.extract",
+        "browser.browse",
+        "browser.qa",
+        "code.review",
+        "browser.mcp",
+        "browser.automation",
+        "browser.screenshot",
+        "browser.localhost_test",
+        "harness.context_preflight",
+        "harness.intent",
+        "harness.dispatch_visibility",
+        "harness.contracts",
+        "harness.dag",
+        "harness.status",
+        "harness.model_routing",
+    ]
+    skills = ["multi_agent.research", "browser.browse", "documentation"]
+    if getattr(args, "pane", ""):
+        return [{"pane": args.pane, "skills": skills, "capabilities": caps, "models": []}]
+    if getattr(args, "dry_run", False):
+        return [{"pane": "dry-run:0.0", "skills": skills, "capabilities": caps, "models": []}]
+    try:
+        from graph_node_dispatcher import _discover_workers  # noqa: WPS433
+
+        workers = _discover_workers(dry_run=False)
+        for worker in workers:
+            worker["capabilities"] = sorted(set(worker.get("capabilities") or []) | set(caps))
+            worker["skills"] = sorted(set(worker.get("skills") or []) | set(skills))
+        return workers
+    except Exception:
+        return []
+
+
+def _enqueue_source_audit_followup(args: argparse.Namespace, payload: dict) -> dict:
+    raw_graph = str(getattr(args, "graph", "") or "").strip()
+    if not raw_graph:
+        return {"ok": False, "reason": "missing_graph"}
+    graph_path = Path(raw_graph).expanduser()
+    if not graph_path.exists():
+        return {"ok": False, "reason": "graph_not_found", "graph": str(graph_path)}
+    try:
+        import graph_scheduler  # noqa: WPS433
+    except Exception as exc:
+        return {"ok": False, "reason": "graph_scheduler_unavailable", "error": f"{type(exc).__name__}: {exc}"}
+
+    try:
+        _sync_harness_runtime_paths()
+        graph = graph_scheduler.load_graph(graph_path)
+        node = _source_gap_node(args, payload)
+        nodes = graph.setdefault("nodes", [])
+        existing = next((idx for idx, row in enumerate(nodes) if row.get("id") == node["id"]), None)
+        if existing is None:
+            nodes.append(node)
+            action = "appended"
+        else:
+            previous_status = nodes[existing].get("status", "pending")
+            nodes[existing].update(node)
+            nodes[existing]["status"] = previous_status if str(previous_status).lower() not in {"passed", "failed"} else "pending"
+            action = "updated"
+        graph.setdefault("metadata", {})["deepresearch_source_audit_followup"] = {
+            "node_id": node["id"],
+            "handoff_path": payload.get("handoff_path"),
+            "updated_at": _utc_now(),
+        }
+        graph_scheduler.save_graph(graph_path, graph)
+        workers = _source_gap_workers(args)
+        enqueue_result = graph_scheduler.enqueue_ready(
+            graph,
+            str(graph_path),
+            workers,
+            max_parallel=1,
+            lease=False,
+            ttl=int(getattr(args, "ttl", 900) or 900),
+            dry_run=bool(getattr(args, "dry_run", False)),
+        )
+        graph_scheduler.save_graph(graph_path, graph)
+        followup_path = Path(payload.get("output_dir") or args.output_dir).expanduser() / "source-audit-followup.json"
+        followup = {
+            "ok": True,
+            "action": action,
+            "graph": str(graph_path),
+            "node_id": node["id"],
+            "handoff_path": payload.get("handoff_path"),
+            "enqueue": enqueue_result,
+        }
+        followup_path.write_text(json.dumps(followup, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        followup["followup_path"] = str(followup_path)
+        return followup
+    except Exception as exc:
+        return {"ok": False, "reason": "enqueue_followup_failed", "error": f"{type(exc).__name__}: {exc}", "graph": str(graph_path)}
+
+
+def _sync_harness_runtime_paths() -> None:
+    """Keep imported scheduler/queue modules aligned with current HARNESS_DIR.
+
+    The research CLI is often called from tests or subprocess wrappers that set
+    HARNESS_DIR after Python has already imported graph/task queue modules.
+    Those modules cache path constants at import time, so sync them explicitly
+    before writing queue files.
+    """
+    harness = Path(os.environ.get("HARNESS_DIR") or (Path.home() / ".solar" / "harness")).expanduser()
+    try:
+        import graph_scheduler  # noqa: WPS433
+
+        graph_scheduler.HARNESS_DIR = harness
+        graph_scheduler.SPRINTS_DIR = Path(os.environ.get("HARNESS_SPRINTS_DIR") or (harness / "sprints")).expanduser()
+        graph_scheduler.STATE_DB = Path(os.environ.get("HARNESS_STATE_DB") or (harness / "run" / "state.db")).expanduser()
+    except Exception:
+        pass
+    try:
+        import task_queue  # noqa: WPS433
+
+        task_queue.HARNESS_DIR = harness
+        task_queue.QUEUE_DIR = harness / "run" / "queue"
+        task_queue.LEASE_DIR = harness / "run" / "pane-leases"
+    except Exception:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
@@ -2002,6 +2562,8 @@ ALL_SUBCOMMANDS = [
     "init", "add-source", "extract", "ledger", "status",
     "run", "plan", "search", "handoff-search", "import-search",
     "mine", "outline", "write", "check", "compile", "synthesize", "export", "eval-artifacts",
+    "policy-doctor", "policy-explain",
+    "source-audit",
 ]
 
 SUBCOMMANDS = {
@@ -2023,6 +2585,9 @@ SUBCOMMANDS = {
     "synthesize": cmd_synthesize,
     "export": cmd_export,
     "eval-artifacts": cmd_eval_artifacts,
+    "policy-doctor": cmd_policy_doctor,
+    "policy-explain": cmd_policy_explain,
+    "source-audit": cmd_source_audit,
 }
 
 
@@ -2074,6 +2639,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--text", default="", help="Inline source text to ingest before extraction")
     p_run.add_argument("--source-file", default="", help="Local UTF-8 source file to ingest")
     p_run.add_argument("--web-query", default="", help="Online query to search and fetch into sources")
+    p_run.add_argument("--research-profile", default="general", help="Profile-aware web search plan for --web-query")
     p_run.add_argument("--max-results", type=int, default=5, help="Max web results for --web-query")
     p_run.add_argument("--search-provider", default="auto", choices=["auto", "browser-use", "http"],
                        help="Search provider: auto prefers browser-use and falls back to HTTP")
@@ -2090,6 +2656,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_search.add_argument("db_path", help="Path to the SQLite database")
     p_search.add_argument("--run-id", required=True, help="Research run ID")
     p_search.add_argument("--query", required=True, help="Search query")
+    p_search.add_argument("--research-profile", default="general", help="Profile-aware search plan")
     p_search.add_argument("--max-results", type=int, default=10, help="Max results")
     p_search.add_argument("--provider", default="auto", choices=["auto", "browser-use", "http"],
                           help="Search provider: auto prefers browser-use and falls back to HTTP")
@@ -2102,6 +2669,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_handoff.add_argument("--run-id", default="", help="Research run ID")
     p_handoff.add_argument("--topic", default="", help="Research topic override")
     p_handoff.add_argument("--query", required=True, help="Search query for Gemini/GPT")
+    p_handoff.add_argument("--research-profile", default="general", help="Research profile: general|technical_architecture|scientific_review|market_landscape")
     p_handoff.add_argument("--max-results", type=int, default=8, help="Requested external sources")
     p_handoff.add_argument("--output-md", default="", help="Where to write handoff Markdown")
     p_handoff.add_argument("--print", action="store_true", help="Print the Markdown to stdout")
@@ -2170,9 +2738,37 @@ def build_parser() -> argparse.ArgumentParser:
     p_eval_artifacts.add_argument("--bibliography", default="", help="Optional final.bibliography.json override")
     p_eval_artifacts.add_argument("--expert-md", default="", help="Optional expert_synthesis.md override")
     p_eval_artifacts.add_argument("--require-expert", action="store_true", help="Require expert synthesis quality gate")
+    p_eval_artifacts.add_argument("--research-profile", default="general", help="Research profile: general|technical_architecture|scientific_review|market_landscape")
+    p_eval_artifacts.add_argument("--strict-profile", action="store_true", help="Fail when profile-specific source/coverage requirements are not met")
     p_eval_artifacts.add_argument("--max-unsupported-rate", type=float, default=0.05)
     p_eval_artifacts.add_argument("--min-citation-accuracy", type=float, default=0.95)
     p_eval_artifacts.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_policy_doctor = sub.add_parser("policy-doctor", help="Inspect active DeepResearch policy package")
+    p_policy_doctor.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_policy_explain = sub.add_parser("policy-explain", help="Explain source authority score")
+    p_policy_explain.add_argument("--source-type", required=True, help="Source type to score")
+    p_policy_explain.add_argument("--url", default="", help="Candidate source URL")
+    p_policy_explain.add_argument("--title", default="", help="Candidate source title")
+    p_policy_explain.add_argument("--text", default="", help="Candidate source text")
+    p_policy_explain.add_argument("--text-file", default="", help="Read candidate source text from file")
+    p_policy_explain.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_source_audit = sub.add_parser("source-audit", help="Audit exported DeepResearch sources")
+    p_source_audit.add_argument("--output-dir", required=True, help="Directory containing sources.jsonl/evidence.jsonl")
+    p_source_audit.add_argument("--research-profile", default="general", help="Research profile for gap checks")
+    p_source_audit.add_argument("--strict-profile", action="store_true", help="Return non-zero if profile source audit fails")
+    p_source_audit.add_argument("--write-handoff", default="", help="Write a source-gap handoff Markdown to this path")
+    p_source_audit.add_argument("--handoff-query", default="", help="Topic/query to embed in the source-gap handoff")
+    p_source_audit.add_argument("--enqueue-followup", action="store_true", help="Append and enqueue a DAG node for missing source acquisition")
+    p_source_audit.add_argument("--graph", default="", help="task_graph.json to update when --enqueue-followup is used")
+    p_source_audit.add_argument("--followup-node-id", default="", help="Override generated source-gap followup node id")
+    p_source_audit.add_argument("--depends-on", default="", help="Comma-separated dependency node ids for the followup node")
+    p_source_audit.add_argument("--pane", default="", help="Optional pane assignment for the followup graph node")
+    p_source_audit.add_argument("--ttl", type=int, default=900, help="Pane lease TTL for followup enqueue")
+    p_source_audit.add_argument("--dry-run", action="store_true", help="Plan followup enqueue without mutating the queue")
+    p_source_audit.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     return parser
 
