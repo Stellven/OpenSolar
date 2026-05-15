@@ -55,6 +55,7 @@ def test_strict_eval_passes_controlled_strong_fixture(tmp_path):
     assert result["coverage"]["claim_support_coverage"] == 1.0
     assert result["taxonomy"]["taxonomy_depth_score"] >= 0.75
     assert result["contradiction_matrix"]["contradiction_coverage"] >= 0.80
+    assert result["section_factual_audit"]["section_factual_accuracy"] == 1.0
 
 
 def test_strict_eval_fails_when_claims_have_no_evidence_links(tmp_path):
@@ -143,3 +144,57 @@ def test_strict_eval_fails_when_contradiction_slots_are_missing(tmp_path):
     result = evaluate_survey(tmp_path, strict=True)
     assert result["ok"] is False
     assert "contradiction_coverage_low:0.0000<0.8000" in result["scorecard"]["issues"]
+
+
+def test_strict_eval_fails_when_section_references_out_of_pack_claim(tmp_path):
+    plan = create_survey_plan("latent reasoning", target_chars=50000)
+    write_survey_plan(plan, tmp_path)
+    sources = [{"id": f"src_{i}", "source_type": t, "title": t} for i, t in enumerate(["paper", "official_doc", "code", "benchmark"])]
+    evidence = [{"id": f"ev_{i}", "source_id": sources[i % 4]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
+    claims = [{"id": f"cl_{i}", "claim_text": "latent reasoning architecture requires evaluation evidence"} for i in range(40)]
+    links = [{"claim_id": f"cl_{i}", "evidence_id": f"ev_{i}"} for i in range(40)]
+    _append_jsonl(tmp_path / "sources.jsonl", sources)
+    _append_jsonl(tmp_path / "evidence.jsonl", evidence)
+    _append_jsonl(tmp_path / "claims.jsonl", claims)
+    _append_jsonl(tmp_path / "claim_evidence.jsonl", links)
+    build_evidence_packs(tmp_path, plan["report_ast"])
+    for section in plan["report_ast"]["sections"][:3]:
+        compile_section(tmp_path, section["section_id"])
+    bad_final = tmp_path / "sections" / plan["report_ast"]["sections"][0]["section_id"] / "final.md"
+    bad_final.write_text(
+        bad_final.read_text(encoding="utf-8") + "\n\nInvalid unsupported claim [claim:cl_not_in_pack] [evidence:ev_not_in_pack]\n",
+        encoding="utf-8",
+    )
+    compile_survey(tmp_path)
+
+    result = evaluate_survey(tmp_path, strict=True)
+    assert result["ok"] is False
+    assert "section_factual_accuracy_low:0.6667<0.9500" in result["scorecard"]["issues"]
+    failed = result["section_factual_audit"]["failed_sections"]
+    assert failed[0]["unknown_claim_ids"] == ["cl_not_in_pack"]
+    assert failed[0]["unknown_evidence_ids"] == ["ev_not_in_pack"]
+
+
+def test_strict_eval_fails_when_section_has_no_claim_or_evidence_tags(tmp_path):
+    plan = create_survey_plan("latent reasoning", target_chars=50000)
+    write_survey_plan(plan, tmp_path)
+    sources = [{"id": f"src_{i}", "source_type": t, "title": t} for i, t in enumerate(["paper", "official_doc", "code", "benchmark"])]
+    evidence = [{"id": f"ev_{i}", "source_id": sources[i % 4]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
+    claims = [{"id": f"cl_{i}", "claim_text": "latent reasoning architecture requires evaluation evidence"} for i in range(40)]
+    links = [{"claim_id": f"cl_{i}", "evidence_id": f"ev_{i}"} for i in range(40)]
+    _append_jsonl(tmp_path / "sources.jsonl", sources)
+    _append_jsonl(tmp_path / "evidence.jsonl", evidence)
+    _append_jsonl(tmp_path / "claims.jsonl", claims)
+    _append_jsonl(tmp_path / "claim_evidence.jsonl", links)
+    build_evidence_packs(tmp_path, plan["report_ast"])
+    for section in plan["report_ast"]["sections"][:3]:
+        compile_section(tmp_path, section["section_id"])
+    bad_final = tmp_path / "sections" / plan["report_ast"]["sections"][0]["section_id"] / "final.md"
+    bad_final.write_text("A polished section with no factual tags.\n", encoding="utf-8")
+    compile_survey(tmp_path)
+
+    result = evaluate_survey(tmp_path, strict=True)
+    assert result["ok"] is False
+    failed = result["section_factual_audit"]["failed_sections"]
+    assert failed[0]["missing_claim_tags"] is True
+    assert failed[0]["missing_evidence_tags"] is True

@@ -69,6 +69,58 @@ def _chapter_axis(chapter_title: str) -> str:
     return "other"
 
 
+def _extract_tags(text: str, tag: str) -> set[str]:
+    return {item.strip() for item in re.findall(rf"\[{re.escape(tag)}:([^\]]+)\]", text or "") if item.strip()}
+
+
+def _section_factual_audit(root: Path, sections: list[dict[str, Any]], pack_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    audited = 0
+    passed = 0
+    missing_final: list[str] = []
+    section_results: list[dict[str, Any]] = []
+    for section in sections:
+        section_id = str(section.get("section_id") or "")
+        if not section_id:
+            continue
+        final_path = root / "sections" / section_id / "final.md"
+        pack = next((row for row in pack_rows if str(row.get("section_id") or "") == section_id), {})
+        allowed_claims = {str(item) for item in pack.get("claim_ids", []) if str(item)}
+        allowed_evidence = {str(item) for item in pack.get("evidence_ids", []) if str(item)}
+        if not final_path.exists():
+            missing_final.append(section_id)
+            continue
+        audited += 1
+        text = final_path.read_text(encoding="utf-8", errors="ignore")
+        claim_tags = _extract_tags(text, "claim")
+        evidence_tags = _extract_tags(text, "evidence")
+        unknown_claims = sorted(claim_tags - allowed_claims)
+        unknown_evidence = sorted(evidence_tags - allowed_evidence)
+        missing_claim_tags = not bool(claim_tags)
+        missing_evidence_tags = not bool(evidence_tags)
+        ok = not unknown_claims and not unknown_evidence and not missing_claim_tags and not missing_evidence_tags
+        if ok:
+            passed += 1
+        section_results.append({
+            "section_id": section_id,
+            "ok": ok,
+            "claim_tags": sorted(claim_tags),
+            "evidence_tags": sorted(evidence_tags),
+            "unknown_claim_ids": unknown_claims,
+            "unknown_evidence_ids": unknown_evidence,
+            "missing_claim_tags": missing_claim_tags,
+            "missing_evidence_tags": missing_evidence_tags,
+        })
+    accuracy = round(passed / max(audited, 1), 4)
+    return {
+        "ok": accuracy >= 0.95,
+        "section_factual_accuracy": accuracy,
+        "audited_sections": audited,
+        "passed_sections": passed,
+        "missing_final_sections": missing_final[:50],
+        "failed_sections": [item for item in section_results if not item.get("ok")][:50],
+    }
+
+
 def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs: dict | None = None) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
     ast = ast or _read_json(root / "survey_report_ast.json")
@@ -120,12 +172,15 @@ def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs
         "missing_section_ids": missing[:50],
         "contradiction_axis_present": contradiction_axis_present,
     }
+    section_factual_audit = _section_factual_audit(root, sections, pack_rows)
 
     payload = {
-        "ok": taxonomy["ok"] and contradiction_matrix["ok"],
+        "ok": taxonomy["ok"] and contradiction_matrix["ok"] and section_factual_audit["ok"],
         "taxonomy": taxonomy,
         "contradiction_matrix": contradiction_matrix,
+        "section_factual_audit": section_factual_audit,
     }
     (root / "survey_taxonomy.json").write_text(json.dumps(taxonomy, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_contradiction_matrix.json").write_text(json.dumps(contradiction_matrix, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    (root / "survey_section_factual_audit.json").write_text(json.dumps(section_factual_audit, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return payload
