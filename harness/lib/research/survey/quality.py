@@ -73,9 +73,62 @@ def _extract_tags(text: str, tag: str) -> set[str]:
     return {item.strip() for item in re.findall(rf"\[{re.escape(tag)}:([^\]]+)\]", text or "") if item.strip()}
 
 
-def _section_factual_audit(root: Path, sections: list[dict[str, Any]], pack_rows: list[dict[str, Any]]) -> dict[str, Any]:
+def _evidence_text(row: dict[str, Any]) -> str:
+    return str(row.get("content") or row.get("span_text") or row.get("clean_markdown") or row.get("text") or row.get("title") or "")
+
+
+def _tokens(text: str) -> set[str]:
+    ascii_words = {part.lower() for part in re.findall(r"[A-Za-z][A-Za-z0-9_-]{3,}", text or "")}
+    cjk = re.findall(r"[\u4e00-\u9fff]{2,}", text or "")
+    cjk_bigrams: set[str] = set()
+    for chunk in cjk:
+        cjk_bigrams.update(chunk[idx:idx + 2] for idx in range(max(len(chunk) - 1, 0)))
+    return ascii_words | cjk_bigrams
+
+
+def _grounding_checks(text: str, evidence_tags: set[str], evidence_by_id: dict[str, str]) -> list[dict[str, Any]]:
+    checks: list[dict[str, Any]] = []
+    for line_no, line in enumerate((text or "").splitlines(), start=1):
+        tags = _extract_tags(line, "evidence")
+        if not tags:
+            continue
+        context_tokens = _tokens(line)
+        for evidence_id in sorted(tags):
+            evidence_tokens = _tokens(evidence_by_id.get(evidence_id, ""))
+            if not evidence_tokens:
+                checks.append({
+                    "evidence_id": evidence_id,
+                    "line": line_no,
+                    "ok": False,
+                    "reason": "evidence_span_text_missing",
+                    "overlap": [],
+                })
+                continue
+            overlap = sorted(context_tokens & evidence_tokens)
+            checks.append({
+                "evidence_id": evidence_id,
+                "line": line_no,
+                "ok": bool(overlap),
+                "reason": "" if overlap else "citation_context_not_grounded",
+                "overlap": overlap[:12],
+            })
+    return checks
+
+
+def _section_factual_audit(
+    root: Path,
+    sections: list[dict[str, Any]],
+    pack_rows: list[dict[str, Any]],
+    evidence_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    evidence_by_id = {
+        str(row.get("id") or row.get("evidence_id")): _evidence_text(row)
+        for row in evidence_rows
+        if str(row.get("id") or row.get("evidence_id") or "")
+    }
     audited = 0
     passed = 0
+    grounded = 0
     missing_final: list[str] = []
     section_results: list[dict[str, Any]] = []
     for section in sections:
@@ -97,9 +150,14 @@ def _section_factual_audit(root: Path, sections: list[dict[str, Any]], pack_rows
         unknown_evidence = sorted(evidence_tags - allowed_evidence)
         missing_claim_tags = not bool(claim_tags)
         missing_evidence_tags = not bool(evidence_tags)
-        ok = not unknown_claims and not unknown_evidence and not missing_claim_tags and not missing_evidence_tags
+        grounding_checks = _grounding_checks(text, evidence_tags, evidence_by_id)
+        grounding_failures = [item for item in grounding_checks if not item.get("ok")]
+        grounding_ok = bool(grounding_checks) and not grounding_failures
+        ok = not unknown_claims and not unknown_evidence and not missing_claim_tags and not missing_evidence_tags and grounding_ok
         if ok:
             passed += 1
+        if grounding_ok:
+            grounded += 1
         section_results.append({
             "section_id": section_id,
             "ok": ok,
@@ -109,13 +167,18 @@ def _section_factual_audit(root: Path, sections: list[dict[str, Any]], pack_rows
             "unknown_evidence_ids": unknown_evidence,
             "missing_claim_tags": missing_claim_tags,
             "missing_evidence_tags": missing_evidence_tags,
+            "grounding_ok": grounding_ok,
+            "grounding_failures": grounding_failures[:20],
         })
     accuracy = round(passed / max(audited, 1), 4)
+    grounding_accuracy = round(grounded / max(audited, 1), 4)
     return {
         "ok": accuracy >= 0.95,
         "section_factual_accuracy": accuracy,
+        "section_grounding_accuracy": grounding_accuracy,
         "audited_sections": audited,
         "passed_sections": passed,
+        "grounded_sections": grounded,
         "missing_final_sections": missing_final[:50],
         "failed_sections": [item for item in section_results if not item.get("ok")][:50],
     }
@@ -128,6 +191,7 @@ def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs
     chapters = ast.get("chapters", []) if isinstance(ast.get("chapters"), list) else []
     sections = ast.get("sections", []) if isinstance(ast.get("sections"), list) else []
     sources = _read_jsonl(root / "sources.jsonl")
+    evidence_rows = _read_jsonl(root / "evidence.jsonl")
     source_types = {str(row.get("source_type") or "") for row in sources if row.get("source_type")}
     required_source_types = _required_types_from_source_matrix(root)
     chapter_axes = sorted({_chapter_axis(str(row.get("title") or "")) for row in chapters if isinstance(row, dict)})
@@ -172,7 +236,7 @@ def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs
         "missing_section_ids": missing[:50],
         "contradiction_axis_present": contradiction_axis_present,
     }
-    section_factual_audit = _section_factual_audit(root, sections, pack_rows)
+    section_factual_audit = _section_factual_audit(root, sections, pack_rows, evidence_rows)
 
     payload = {
         "ok": taxonomy["ok"] and contradiction_matrix["ok"] and section_factual_audit["ok"],
