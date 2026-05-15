@@ -2460,6 +2460,34 @@ def cmd_survey_watch_responses(args: argparse.Namespace) -> int:
     return 0 if payload.get("ok") or args.allow_pending else 1
 
 
+def cmd_survey_watch_register(args: argparse.Namespace) -> int:
+    from research.survey.watch_automation import register_watch_run
+
+    payload = register_watch_run(
+        args.output_dir,
+        config_path=args.config,
+        enabled=not args.disabled,
+        min_chars=args.min_chars,
+        round_index=args.round_index,
+        limit=args.limit,
+        append=not args.replace,
+    )
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") else 1
+
+
+def cmd_survey_watch_tick(args: argparse.Namespace) -> int:
+    from research.survey.watch_automation import tick_watch_config
+
+    payload = tick_watch_config(args.config)
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") or args.allow_pending else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") or args.allow_pending else 1
+
+
 def cmd_survey_review(args: argparse.Namespace) -> int:
     from research.survey.evaluator import evaluate_survey
 
@@ -2778,7 +2806,7 @@ ALL_SUBCOMMANDS = [
     "mine", "outline", "write", "check", "compile", "synthesize", "export", "eval-artifacts",
     "policy-doctor", "policy-explain",
     "source-audit",
-    "survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-review", "survey-compile", "survey-eval",
+    "survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-watch-register", "survey-watch-tick", "survey-review", "survey-compile", "survey-eval",
 ]
 
 SUBCOMMANDS = {
@@ -2808,6 +2836,8 @@ SUBCOMMANDS = {
     "survey-write-section": cmd_survey_write_section,
     "survey-run-sections": cmd_survey_run_sections,
     "survey-watch-responses": cmd_survey_watch_responses,
+    "survey-watch-register": cmd_survey_watch_register,
+    "survey-watch-tick": cmd_survey_watch_tick,
     "survey-review": cmd_survey_review,
     "survey-compile": cmd_survey_compile,
     "survey-eval": cmd_survey_eval,
@@ -3041,6 +3071,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_watch.add_argument("--round-index", type=int, default=0)
     p_survey_watch.add_argument("--allow-pending", action="store_true", help="Return zero when no responses are ready yet")
     p_survey_watch.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_watch_register = sub.add_parser("survey-watch-register", help="Register a survey run for periodic response watching")
+    p_survey_watch_register.add_argument("--output-dir", required=True)
+    p_survey_watch_register.add_argument("--config", default="", help="Watch config path; defaults to ~/.solar/harness/run/research-survey-watch.json")
+    p_survey_watch_register.add_argument("--limit", type=int, default=0, help="Number of response sections to process per tick; 0 means all")
+    p_survey_watch_register.add_argument("--min-chars", type=int, default=1200)
+    p_survey_watch_register.add_argument("--round-index", type=int, default=0)
+    p_survey_watch_register.add_argument("--disabled", action="store_true")
+    p_survey_watch_register.add_argument("--replace", action="store_true", help="Replace existing watch config instead of appending/upserting")
+    p_survey_watch_register.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_watch_tick = sub.add_parser("survey-watch-tick", help="Run one periodic survey response watcher tick")
+    p_survey_watch_tick.add_argument("--config", default="", help="Watch config path; defaults to ~/.solar/harness/run/research-survey-watch.json")
+    p_survey_watch_tick.add_argument("--allow-pending", action="store_true", help="Return zero when no responses are ready yet")
+    p_survey_watch_tick.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     p_survey_review = sub.add_parser("survey-review", help="Run non-strict survey review")
     p_survey_review.add_argument("--output-dir", required=True)
