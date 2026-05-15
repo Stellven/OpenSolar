@@ -50,6 +50,23 @@ def test_evaluate_artifacts_passes_complete_artifact_set(tmp_path):
     assert result["artifact_exists"]["final_md"] is True
 
 
+def test_evaluate_artifacts_accepts_smoke_metric_aliases_and_named_evidence_ids(tmp_path):
+    eval_json = _write_good_artifacts(
+        tmp_path,
+        unsupported_rate=None,
+        citation_accuracy=None,
+        unsupported_claim_rate=0.0,
+        citation_span_accuracy=1.0,
+    )
+    (tmp_path / "final.md").write_text("# Final\n\nSupported claim [cite:ev_vaswani_self_attention]\n", encoding="utf-8")
+
+    result = evaluate_artifacts(eval_json)
+
+    assert result["ok"] is True
+    assert result["metrics"]["unsupported_rate"] == 0.0
+    assert result["metrics"]["citation_accuracy"] == 1.0
+
+
 def test_evaluate_artifacts_fails_missing_claims(tmp_path):
     eval_json = _write_good_artifacts(tmp_path, claim_count=0, citation_accuracy=0.0)
 

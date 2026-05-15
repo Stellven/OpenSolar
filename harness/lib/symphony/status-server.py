@@ -2740,18 +2740,22 @@ function renderEvolution(evolution) {
     el.innerHTML = '<div class="muted">Evolution scorecard unavailable.</div>';
     return;
   }
-  const rows = (evolution.scorecards || []).slice(0, 10);
+  const allRows = evolution.scorecards || [];
+  const critical = allRows.filter(r => r.status === 'degraded' || r.status === 'demoted' || r.capability === 'deepresearch.quality_gate');
+  const rows = allRows.slice(0, 10).concat(critical).filter((r, idx, arr) =>
+    arr.findIndex(x => x.capability === r.capability && x.provider === r.provider) === idx
+  ).slice(0, 16);
   if (!rows.length) {
     el.innerHTML = '<div class="muted">No scorecards yet. Run solar-harness evolution scorecard --json.</div>';
     return;
   }
-  el.innerHTML = '<table><tr><th>Capability</th><th>Provider</th><th>Score</th><th>Level</th><th>Runtime</th></tr>' +
+  el.innerHTML = '<table><tr><th>Capability</th><th>Provider</th><th>Score</th><th>Level</th><th>Status</th></tr>' +
     rows.map(r => '<tr>' +
       '<td>' + esc(r.capability || '-') + '</td>' +
       '<td>' + esc(r.provider || '-') + '</td>' +
       '<td><strong>' + esc(r.score || '-') + '</strong></td>' +
       '<td>' + levelBadge(r.level || '-') + '</td>' +
-      '<td>' + esc([r.runtime_level, r.runtime_backend, r.runtime_version ? 'v' + r.runtime_version : ''].filter(Boolean).join(' · ') || 'N/A') + '</td>' +
+      '<td>' + esc(r.status || 'N/A') + '</td>' +
     '</tr>').join('') + '</table>';
 }
 function refreshIntegrations(force) {
