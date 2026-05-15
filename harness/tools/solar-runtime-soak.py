@@ -5,6 +5,7 @@ Runs cheap, token-free control-plane checks:
   - runtime audit-writes --strict
   - runtime doctor for current sprint
   - autopilot monitor --apply --json
+  - DeepResearch survey response watcher tick
 
 On failure, writes a report and enqueues a remediation item into the existing
 autopilot queue. The persistent autopilot LaunchAgent owns dispatch/retry.
@@ -38,6 +39,9 @@ LOG = HARNESS / "run" / "runtime-soak.log"
 # SOLAR_RUNTIME_SOAK_TARGET explicitly for one-off debugging, but the default is
 # report-only.
 DEFAULT_TARGET = os.environ.get("SOLAR_RUNTIME_SOAK_TARGET", "")
+SURVEY_WATCH_CONFIG = Path(
+    os.environ.get("SOLAR_SURVEY_WATCH_CONFIG", HARNESS / "run" / "research-survey-watch.json")
+).expanduser()
 
 
 def now_iso() -> str:
@@ -231,6 +235,15 @@ def run_once() -> dict[str, Any]:
     else:
         steps["runtime_doctor"] = {"ok": False, "returncode": 2, "stdout": "", "stderr": "no sprint_id", "duration_sec": 0}
     steps["autopilot"] = run_cmd(["python3", str(HARNESS / "tools" / "solar-autopilot-monitor.py"), "--apply", "--json"], timeout=90)
+    steps["survey_watch_tick"] = run_cmd([
+        "python3",
+        str(HARNESS / "lib" / "research" / "cli.py"),
+        "survey-watch-tick",
+        "--config",
+        str(SURVEY_WATCH_CONFIG),
+        "--allow-pending",
+        "--json",
+    ], timeout=90)
 
     failures = [name for name, step in steps.items() if not step.get("ok")]
     parsed = {name: parse_json_step(step) for name, step in steps.items()}
