@@ -115,6 +115,21 @@ def _grounding_checks(text: str, evidence_tags: set[str], evidence_by_id: dict[s
     return checks
 
 
+def _grounding_failures_for_evidence(evidence_tags: set[str], checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    failures: list[dict[str, Any]] = []
+    for evidence_id in sorted(evidence_tags):
+        related = [item for item in checks if item.get("evidence_id") == evidence_id]
+        if any(item.get("ok") for item in related):
+            continue
+        failures.append({
+            "evidence_id": evidence_id,
+            "ok": False,
+            "reason": related[0].get("reason") if related else "citation_context_missing",
+            "lines": [item.get("line") for item in related if item.get("line")],
+        })
+    return failures
+
+
 def _section_factual_audit(
     root: Path,
     sections: list[dict[str, Any]],
@@ -151,7 +166,7 @@ def _section_factual_audit(
         missing_claim_tags = not bool(claim_tags)
         missing_evidence_tags = not bool(evidence_tags)
         grounding_checks = _grounding_checks(text, evidence_tags, evidence_by_id)
-        grounding_failures = [item for item in grounding_checks if not item.get("ok")]
+        grounding_failures = _grounding_failures_for_evidence(evidence_tags, grounding_checks)
         grounding_ok = bool(grounding_checks) and not grounding_failures
         ok = not unknown_claims and not unknown_evidence and not missing_claim_tags and not missing_evidence_tags and grounding_ok
         if ok:
