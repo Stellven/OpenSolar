@@ -4,14 +4,14 @@
 # 行为:
 #   L1 基础:
 #     1. 备份 ~/.claude/ 现有内容 (如有)
-#     2. 把仓库内 CLAUDE.md/rules/skills/agents/hooks/core 复制到 ~/.claude/
+#     2. 把仓库内 CLAUDE.md/rules/skills/agents/hooks/core/.claude/prompts 复制到 ~/.claude/
 #     3. 创建 ~/.solar/ 目录 + 初始化 solar.db (如有 schema)
 #   L2 高级:
 #     4. 把仓库发布目录 harness/ → ~/.solar/harness/ + 创建 ~/.solar/bin/solar-harness 软链
 #     5. 把 mempalace/ → ~/.solar/mempalace/
 #     6. 把 codex-bridge/ → ~/.solar/codex-bridge/
 #   验收:
-#     7. 自检 12 项 verify
+#     7. 自检 14 项 verify
 #
 # 不做的事 (诚实):
 #   - 不 git clone 别的仓库
@@ -41,7 +41,7 @@ if [ -f "$CLAUDE_DIR/CLAUDE.md" ]; then
     echo "💾 备份现有配置到 $BACKUP_DIR ..."
     mkdir -p "$BACKUP_DIR"
     [ -f "$CLAUDE_DIR/CLAUDE.md" ] && cp "$CLAUDE_DIR/CLAUDE.md" "$BACKUP_DIR/"
-    for sub in rules skills agents hooks core; do
+    for sub in rules skills agents hooks core prompts; do
         [ -d "$CLAUDE_DIR/$sub" ] && cp -r "$CLAUDE_DIR/$sub" "$BACKUP_DIR/" 2>/dev/null || true
     done
 fi
@@ -67,6 +67,12 @@ copy_dir "skills"
 copy_dir "agents"
 copy_dir "hooks"
 copy_dir "core"
+
+if [ -d "$SOLAR_DIR/.claude/prompts" ]; then
+    echo "📋 [L1] 复制 prompts ..."
+    mkdir -p "$CLAUDE_DIR/prompts"
+    cp -r "$SOLAR_DIR/.claude/prompts/"* "$CLAUDE_DIR/prompts/" 2>/dev/null || true
+fi
 
 # 给 hooks 加可执行权限
 chmod +x "$CLAUDE_DIR/hooks/"*.sh 2>/dev/null || true
@@ -134,6 +140,7 @@ check "[L1] CLAUDE.md 是 v2.0 完整版"  "[ \$(wc -l < $CLAUDE_DIR/CLAUDE.md) 
 check "[L1] ~/.claude/rules/ 就位"     "test -d $CLAUDE_DIR/rules && [ \$(ls $CLAUDE_DIR/rules 2>/dev/null | wc -l) -gt 5 ]"
 check "[L1] ~/.claude/agents/ 就位"    "test -d $CLAUDE_DIR/agents && [ \$(ls $CLAUDE_DIR/agents 2>/dev/null | wc -l) -gt 10 ]"
 check "[L1] ~/.claude/hooks/ 就位"     "test -d $CLAUDE_DIR/hooks && [ \$(ls $CLAUDE_DIR/hooks 2>/dev/null | wc -l) -gt 10 ]"
+check "[L1] safe-impl prompt 就位"      "test -f $CLAUDE_DIR/prompts/safe-impl.md"
 check "[L1] ~/.solar/ 目录已建"         "test -d $SOLAR_HOME"
 
 # L2
@@ -146,7 +153,7 @@ check "[L2] mempalace_mcp_server.py"        "test -f $SOLAR_HOME/mempalace/mempa
 check "[L2] codex-bridge/CODEX-PROTOCOL.md" "test -f $SOLAR_HOME/codex-bridge/CODEX-PROTOCOL.md"
 
 echo ""
-TOTAL=13
+TOTAL=14
 if [ "$FAIL" -eq 0 ]; then
     echo "✅ Solar L1 + L2 安装完成 ($PASS/$TOTAL 通过)"
     echo ""

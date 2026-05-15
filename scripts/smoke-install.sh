@@ -70,8 +70,8 @@ if [ "$FAIL_COUNT" -gt 0 ]; then
     echo "      自检失败,smoke FAIL"
     exit 1
 fi
-if [ "$PASS_COUNT" -lt 13 ]; then
-    echo "      自检 PASS 不足 13 项 ($PASS_COUNT), smoke FAIL"
+if [ "$PASS_COUNT" -lt 14 ]; then
+    echo "      自检 PASS 不足 14 项 ($PASS_COUNT), smoke FAIL"
     exit 1
 fi
 
@@ -84,6 +84,7 @@ TARGETS=(
     "$SANDBOX_HOME/.claude/rules"
     "$SANDBOX_HOME/.claude/skills"
     "$SANDBOX_HOME/.claude/agents"
+    "$SANDBOX_HOME/.claude/prompts/safe-impl.md"
     "$SANDBOX_HOME/.solar"
     "$SANDBOX_HOME/.solar/harness/solar-harness.sh"
     "$SANDBOX_HOME/.solar/harness/.runtime-source"
