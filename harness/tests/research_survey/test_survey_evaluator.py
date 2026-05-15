@@ -56,6 +56,7 @@ def test_strict_eval_passes_controlled_strong_fixture(tmp_path):
     assert result["taxonomy"]["taxonomy_depth_score"] >= 0.75
     assert result["contradiction_matrix"]["contradiction_coverage"] >= 0.80
     assert result["section_factual_audit"]["section_factual_accuracy"] == 1.0
+    assert result["section_factual_audit"]["section_grounding_accuracy"] == 1.0
 
 
 def test_strict_eval_fails_when_claims_have_no_evidence_links(tmp_path):
@@ -198,3 +199,35 @@ def test_strict_eval_fails_when_section_has_no_claim_or_evidence_tags(tmp_path):
     failed = result["section_factual_audit"]["failed_sections"]
     assert failed[0]["missing_claim_tags"] is True
     assert failed[0]["missing_evidence_tags"] is True
+
+
+def test_strict_eval_fails_when_evidence_tag_context_is_not_grounded(tmp_path):
+    plan = create_survey_plan("latent reasoning", target_chars=50000)
+    write_survey_plan(plan, tmp_path)
+    sources = [{"id": f"src_{i}", "source_type": t, "title": t} for i, t in enumerate(["paper", "official_doc", "code", "benchmark"])]
+    evidence = [{"id": f"ev_{i}", "source_id": sources[i % 4]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
+    claims = [{"id": f"cl_{i}", "claim_text": "latent reasoning architecture requires evaluation evidence"} for i in range(40)]
+    links = [{"claim_id": f"cl_{i}", "evidence_id": f"ev_{i}"} for i in range(40)]
+    _append_jsonl(tmp_path / "sources.jsonl", sources)
+    _append_jsonl(tmp_path / "evidence.jsonl", evidence)
+    _append_jsonl(tmp_path / "claims.jsonl", claims)
+    _append_jsonl(tmp_path / "claim_evidence.jsonl", links)
+    build_evidence_packs(tmp_path, plan["report_ast"])
+    for section in plan["report_ast"]["sections"][:3]:
+        compile_section(tmp_path, section["section_id"])
+    section_id = plan["report_ast"]["sections"][0]["section_id"]
+    pack = json.loads((tmp_path / "sections" / section_id / "evidence_pack.json").read_text(encoding="utf-8"))
+    allowed_claim = pack["claim_ids"][0]
+    allowed_evidence = pack["evidence_ids"][0]
+    bad_final = tmp_path / "sections" / section_id / "final.md"
+    bad_final.write_text(
+        f"# Bad Section\n\n## Claim\n\nBanana ocean unrelated sentence [claim:{allowed_claim}] [evidence:{allowed_evidence}]\n",
+        encoding="utf-8",
+    )
+    compile_survey(tmp_path)
+
+    result = evaluate_survey(tmp_path, strict=True)
+    assert result["ok"] is False
+    assert "section_grounding_accuracy_low:0.6667<0.9500" in result["scorecard"]["issues"]
+    failed = result["section_factual_audit"]["failed_sections"]
+    assert failed[0]["grounding_failures"][0]["reason"] == "citation_context_not_grounded"
