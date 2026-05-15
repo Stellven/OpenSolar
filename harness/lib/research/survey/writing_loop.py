@@ -511,3 +511,55 @@ def run_ready_sections(
         "failed": sum(1 for item in results if not item.get("ok")),
         "results": results,
     }
+
+
+def watch_pane_responses(
+    output_dir: str | Path,
+    *,
+    limit: int = 0,
+    min_chars: int = 1200,
+    round_index: int = 0,
+) -> dict[str, Any]:
+    """Finalize sections whose pane/human response artifact already exists."""
+    root = Path(output_dir).expanduser()
+    ast = _read_json(root / "survey_report_ast.json")
+    sections = ast.get("sections", []) if isinstance(ast.get("sections"), list) else []
+    results: list[dict] = []
+    pending: list[str] = []
+    skipped_final: list[str] = []
+    unlimited = limit <= 0
+    for section in sections:
+        section_id = str(section.get("section_id") or "")
+        if not section_id:
+            continue
+        section_dir = root / "sections" / section_id
+        final = section_dir / "final.md"
+        response = section_dir / "human_responses" / f"round_{round_index:02d}.md"
+        if final.exists():
+            skipped_final.append(section_id)
+            continue
+        if not response.exists() or not response.read_text(encoding="utf-8").strip():
+            pending.append(section_id)
+            continue
+        results.append(run_section_revision_loop(
+            root,
+            section_id,
+            max_rounds=1,
+            min_chars=min_chars,
+            writer_backend="human-packet",
+            emit_prompt_packet=True,
+        ))
+        if not unlimited and len(results) >= limit:
+            break
+    payload = {
+        "ok": all(item.get("ok") for item in results) if results else False,
+        "processed": len(results),
+        "passed": sum(1 for item in results if item.get("ok")),
+        "failed": sum(1 for item in results if not item.get("ok")),
+        "pending_responses": len(pending),
+        "skipped_final": len(skipped_final),
+        "results": results,
+        "pending_section_ids": pending[:20],
+    }
+    (root / "pane_response_watch.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return payload
