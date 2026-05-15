@@ -283,6 +283,100 @@ class TestHumanSearchLoop:
         assert "human loop query" in text
         assert "Required Output Format" in text
 
+    def test_handoff_search_uses_research_profile_source_matrix(self, db_path, tmp_path):
+        assert main(["init", db_path, "--topic", "technical architecture topic"]) == 0
+
+        import sqlite3
+        conn = sqlite3.connect(db_path)
+        run_id = conn.execute("SELECT id FROM research_runs LIMIT 1").fetchone()[0]
+        conn.close()
+
+        out = tmp_path / "handoff-profile.md"
+        assert main([
+            "handoff-search", db_path,
+            "--run-id", run_id,
+            "--query", "latent reasoning architecture",
+            "--research-profile", "technical_architecture",
+            "--max-results", "8",
+            "--output-md", str(out),
+        ]) == 0
+        text = out.read_text()
+        assert "Profile: `technical_architecture`" in text
+        assert "Required source types: paper" in text
+        assert "Recommended source types: benchmark, code, official_doc" in text
+        assert "| paper |" in text
+        assert "| code |" in text
+        assert "| official_doc |" in text
+        assert "| benchmark |" in text
+        assert "Source Type: <paper|code|official_doc|benchmark" in text
+        assert "Source Type: <official|paper|news|blog|repo|standard|other>" not in text
+
+    def test_import_search_normalizes_profile_source_type_aliases(self):
+        markdown = """# External Search Results
+
+## Source 1: Official Docs
+URL: https://example.com/docs
+Source Type: official
+
+Summary:
+- Official documentation.
+
+## Source 2: GitHub Repo
+URL: https://github.com/example/repo
+Source Type: repo
+
+Summary:
+- Code repository.
+"""
+        records = research_cli.parse_human_search_markdown(markdown)
+
+        assert [record["source_type"] for record in records] == ["official_doc", "code"]
+
+    def test_profile_aware_online_search_writes_profile_source_types(self, db_path, monkeypatch):
+        assert main(["init", db_path, "--topic", "profile online search topic"]) == 0
+
+        import sqlite3
+        conn = sqlite3.connect(db_path)
+        run_id = conn.execute("SELECT id FROM research_runs LIMIT 1").fetchone()[0]
+        conn.close()
+
+        def fake_web_search(query, max_results, provider="auto"):
+            if "GitHub" in query:
+                kind = "code"
+            elif "official documentation" in query:
+                kind = "official"
+            elif "benchmark results" in query:
+                kind = "benchmark"
+            else:
+                kind = "paper"
+            return ([{
+                "title": f"{kind} result",
+                "url": f"https://example.com/{kind}",
+                "snippet": f"{kind} evidence about latent reasoning architecture.",
+                "rank": 1,
+                "connector": provider,
+            }], [])
+
+        monkeypatch.setattr(research_cli, "web_search", fake_web_search)
+
+        assert main([
+            "search", db_path,
+            "--run-id", run_id,
+            "--query", "latent reasoning architecture",
+            "--research-profile", "technical_architecture",
+            "--max-results", "8",
+            "--json",
+        ]) == 0
+
+        conn = sqlite3.connect(db_path)
+        source_types = sorted(row[0] for row in conn.execute(
+            "SELECT DISTINCT source_type FROM research_sources WHERE run_id = ?",
+            (run_id,),
+        ).fetchall())
+        conn.close()
+
+        assert source_types == ["benchmark", "code", "official_doc", "paper"]
+
     def test_import_search_can_continue_pipeline(self, db_path, tmp_path):
         assert main(["init", db_path, "--topic", "human loop topic"]) == 0
 
@@ -339,3 +433,218 @@ class TestDoctorUnaffected:
         # We just verify the CLI parser still works after our changes.
         parser = build_parser()
         assert parser.prog == "solar-harness research"
+
+
+class TestPolicyCli:
+    def test_policy_doctor_lists_profiles(self, capsys):
+        assert main(["policy-doctor", "--json"]) == 0
+        payload = json.loads(capsys.readouterr().out)
+
+        assert payload["ok"] is True
+        assert "technical_architecture" in payload["profiles"]
+        assert "paper" in payload["source_authority_types"]
+        assert payload["policy_path"].endswith("source_authority.json")
+
+    def test_policy_explain_scores_arxiv_paper(self, capsys):
+        assert main([
+            "policy-explain",
+            "--source-type", "paper",
+            "--url", "https://arxiv.org/abs/2501.00001",
+            "--title", "Paper",
+            "--json",
+        ]) == 0
+        payload = json.loads(capsys.readouterr().out)
+
+        assert payload["ok"] is True
+        assert payload["score"] == 0.9
+        assert payload["high_authority"] is True
+        assert "arxiv.org" in payload["matched_rule"]["host_hits"]
+
+    def test_source_audit_reports_profile_gaps(self, tmp_path, capsys):
+        out = tmp_path / "out"
+        out.mkdir()
+        (out / "sources.jsonl").write_text(
+            json.dumps({
+                "id": "src_1",
+                "source_type": "paper",
+                "title": "Paper",
+                "url": "https://arxiv.org/abs/2501.00001",
+            }) + "\n",
+            encoding="utf-8",
+        )
+        (out / "evidence.jsonl").write_text(
+            json.dumps({
+                "id": "ev_1",
+                "source_id": "src_1",
+                "content": "Abstract: latent reasoning paper.",
+            }) + "\n",
+            encoding="utf-8",
+        )
+
+        assert main([
+            "source-audit",
+            "--output-dir", str(out),
+            "--research-profile", "technical_architecture",
+            "--strict-profile",
+            "--json",
+        ]) == 1
+        payload = json.loads(capsys.readouterr().out)
+
+        assert payload["ok"] is False
+        assert payload["source_authority_average"] == 0.9
+        assert payload["missing_recommended_source_types"] == ["benchmark", "code", "official_doc"]
+        assert any(err.startswith("source_type_count_too_low") for err in payload["errors"])
+        assert any("Add code source" in suggestion for suggestion in payload["replacement_suggestions"])
+
+    def test_source_audit_writes_gap_handoff(self, tmp_path, capsys):
+        out = tmp_path / "out"
+        out.mkdir()
+        handoff = tmp_path / "gap.md"
+        (out / "sources.jsonl").write_text(
+            json.dumps({
+                "id": "src_1",
+                "source_type": "paper",
+                "title": "Paper",
+                "url": "https://arxiv.org/abs/2501.00001",
+            }) + "\n",
+            encoding="utf-8",
+        )
+        (out / "evidence.jsonl").write_text(
+            json.dumps({
+                "id": "ev_1",
+                "source_id": "src_1",
+                "content": "Abstract: latent reasoning paper.",
+            }) + "\n",
+            encoding="utf-8",
+        )
+
+        assert main([
+            "source-audit",
+            "--output-dir", str(out),
+            "--research-profile", "technical_architecture",
+            "--strict-profile",
+            "--write-handoff", str(handoff),
+            "--handoff-query", "latent reasoning architecture",
+            "--json",
+        ]) == 1
+        payload = json.loads(capsys.readouterr().out)
+        text = handoff.read_text(encoding="utf-8")
+
+        assert payload["handoff_path"] == str(handoff)
+        assert "DeepResearch Source Gap Handoff" in text
+        assert "latent reasoning architecture" in text
+        assert "Source Type: paper|code|official_doc|benchmark" in text
+        assert "Add code source" in text
+
+    def test_source_audit_enqueue_followup_appends_graph_node(self, tmp_path, capsys):
+        out = tmp_path / "out"
+        out.mkdir()
+        graph = tmp_path / "sprint-test.task_graph.json"
+        graph.write_text(
+            json.dumps({
+                "sprint_id": "sprint-test",
+                "nodes": [],
+                "node_results": {},
+                "gate_results": {},
+            }) + "\n",
+            encoding="utf-8",
+        )
+        (out / "sources.jsonl").write_text(
+            json.dumps({
+                "id": "src_1",
+                "source_type": "paper",
+                "title": "Paper",
+                "url": "https://arxiv.org/abs/2501.00001",
+            }) + "\n",
+            encoding="utf-8",
+        )
+        (out / "evidence.jsonl").write_text(
+            json.dumps({
+                "id": "ev_1",
+                "source_id": "src_1",
+                "content": "Abstract: latent reasoning paper.",
+            }) + "\n",
+            encoding="utf-8",
+        )
+
+        assert main([
+            "source-audit",
+            "--output-dir", str(out),
+            "--research-profile", "technical_architecture",
+            "--strict-profile",
+            "--enqueue-followup",
+            "--graph", str(graph),
+            "--followup-node-id", "DR_SOURCE_GAP_TEST",
+            "--handoff-query", "latent reasoning architecture",
+            "--dry-run",
+            "--json",
+        ]) == 1
+        payload = json.loads(capsys.readouterr().out)
+        graph_payload = json.loads(graph.read_text(encoding="utf-8"))
+        node = graph_payload["nodes"][0]
+        followup = json.loads((out / "source-audit-followup.json").read_text(encoding="utf-8"))
+
+        assert payload["followup"]["ok"] is True
+        assert payload["followup"]["node_id"] == "DR_SOURCE_GAP_TEST"
+        assert payload["followup"]["enqueue"]["dry_run"] is True
+        assert payload["followup"]["enqueue"]["enqueued"][0]["node"] == "DR_SOURCE_GAP_TEST"
+        assert node["id"] == "DR_SOURCE_GAP_TEST"
+        assert "research.source_matrix" in node["required_capabilities"]
+        assert "source-gap-handoff.md" in payload["handoff_path"]
+        assert followup["node_id"] == "DR_SOURCE_GAP_TEST"
+
+    def test_source_audit_enqueue_followup_writes_real_queue(self, tmp_path, capsys, monkeypatch):
+        harness = tmp_path / "harness"
+        (harness / "run" / "queue").mkdir(parents=True)
+        (harness / "run" / "pane-leases").mkdir(parents=True)
+        out = tmp_path / "out"
+        out.mkdir()
+        graph = harness / "sprints" / "sprint-test.task_graph.json"
+        graph.parent.mkdir(parents=True)
+        graph.write_text(
+            json.dumps({
+                "sprint_id": "sprint-test",
+                "nodes": [],
+                "node_results": {},
+                "gate_results": {},
+            }) + "\n",
+            encoding="utf-8",
+        )
+        (out / "sources.jsonl").write_text(
+            json.dumps({
+                "id": "src_1",
+                "source_type": "paper",
+                "title": "Paper",
+                "url": "https://arxiv.org/abs/2501.00001",
+            }) + "\n",
+            encoding="utf-8",
+        )
+        (out / "evidence.jsonl").write_text(
+            json.dumps({
+                "id": "ev_1",
+                "source_id": "src_1",
+                "content": "Abstract: latent reasoning paper.",
+            }) + "\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("HARNESS_DIR", str(harness))
+
+        assert main([
+            "source-audit",
+            "--output-dir", str(out),
+            "--research-profile", "technical_architecture",
+            "--strict-profile",
+            "--enqueue-followup",
+            "--graph", str(graph),
+            "--followup-node-id", "DR_SOURCE_GAP_QUEUE",
+            "--pane", "controlled:0.0",
+            "--json",
+        ]) == 1
+        payload = json.loads(capsys.readouterr().out)
+        queue_file = harness / "run" / "queue" / "sprint-test.jsonl"
+        queue_items = [json.loads(line) for line in queue_file.read_text(encoding="utf-8").splitlines()]
+
+        assert payload["followup"]["enqueue"]["enqueued"][0]["queue"]["result"] == "enqueued"
+        assert queue_items[0]["intent"].startswith("graph_node|node_id=DR_SOURCE_GAP_QUEUE")
+        assert queue_items[0]["payload"]["node"]["id"] == "DR_SOURCE_GAP_QUEUE"
+        assert queue_items[0]["payload"]["assignment"]["pane"] == "controlled:0.0"
