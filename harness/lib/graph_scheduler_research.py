@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any
 
 HOME = Path.home()
-HARNESS_DIR = Path.home() / ".solar" / "harness"
-SPRINTS_DIR = HARNESS_DIR / "sprints"
+HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness")).expanduser()
+SPRINTS_DIR = Path(os.environ.get("HARNESS_SPRINTS_DIR", HARNESS_DIR / "sprints")).expanduser()
 
 _TEMPLATE_GLOB = "*.deepresearch.dag-template.json"
 
