@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from .schemas import SectionReview, to_dict
+from .writing_loop import run_section_revision_loop
 
 
 def _read_json(path: Path) -> dict:
@@ -34,47 +35,7 @@ def compile_section(output_dir: str | Path, section_id: str, finalize: bool = Tr
         )
         (section_dir / "review.json").write_text(json.dumps(to_dict(review), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         return {"ok": False, "section_id": section_id, "reason": "evidence_pack_blocked", "review": to_dict(review)}
-
-    claim_refs = ", ".join(pack.get("claim_ids", [])[:6]) or "N/A"
-    evidence_refs = ", ".join(pack.get("evidence_ids", [])[:8]) or "N/A"
-    source_types = ", ".join(pack.get("source_types", [])) or "N/A"
-    title = spec.get("title") or section_id
-    body = f"""# {title}
-
-## Research Question
-
-{spec.get("research_question", "")}
-
-## Evidence Pack
-
-- Claim IDs: {claim_refs}
-- Evidence IDs: {evidence_refs}
-- Source types: {source_types}
-
-## Survey Analysis
-
-This section is generated from a survey evidence pack, not from free-form memory. The argument must connect taxonomy, architecture, evaluation, deployment, risk, and open problems back to explicit claim and evidence identifiers.
-
-## Draft Findings
-
-1. The section should classify the design space before discussing individual systems. [claims:{claim_refs}] [evidence:{evidence_refs}]
-2. The section should separate mechanism, implementation, evaluation, and deployment constraints. [claims:{claim_refs}] [evidence:{evidence_refs}]
-3. The section should preserve uncertainty and contradiction slots for later chapter synthesis. [claims:{claim_refs}] [evidence:{evidence_refs}]
-"""
-    (section_dir / "draft.md").write_text(body, encoding="utf-8")
-    review = SectionReview(
-        section_id=section_id,
-        verdict="PASS",
-        unsupported_claim_rate=0.0,
-        citation_span_accuracy=1.0,
-        source_diversity_score=min(len(pack.get("source_types", [])) / 4, 1.0),
-        repetition_score=0.0,
-        issues=[],
-    )
-    (section_dir / "review.json").write_text(json.dumps(to_dict(review), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    if finalize:
-        (section_dir / "final.md").write_text(body + "\n## Section Review\n\nVerdict: PASS\n", encoding="utf-8")
-    return {"ok": True, "section_id": section_id, "finalized": finalize, "review": to_dict(review)}
+    return run_section_revision_loop(output_dir, section_id, finalize=finalize)
 
 
 def compile_survey(output_dir: str | Path) -> dict:
