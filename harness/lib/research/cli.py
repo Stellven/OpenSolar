@@ -2409,6 +2409,8 @@ def cmd_survey_write_section(args: argparse.Namespace) -> int:
             writer_backend=args.writer_backend,
             writer_command=args.writer_command,
             writer_timeout=args.writer_timeout,
+            pane_target=args.pane_target,
+            pane_send=args.pane_send,
             emit_prompt_packet=not args.no_prompt_packet,
         )
     except ValueError as exc:
@@ -2431,6 +2433,8 @@ def cmd_survey_run_sections(args: argparse.Namespace) -> int:
             writer_backend=args.writer_backend,
             writer_command=args.writer_command,
             writer_timeout=args.writer_timeout,
+            pane_target=args.pane_target,
+            pane_send=args.pane_send,
             emit_prompt_packet=not args.no_prompt_packet,
         )
     except ValueError as exc:
@@ -2996,6 +3000,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_write.add_argument("--writer-backend", default="deterministic")
     p_survey_write.add_argument("--writer-command", default="", help="Local command for --writer-backend local-command; receives prompt JSON on stdin and emits Markdown on stdout")
     p_survey_write.add_argument("--writer-timeout", type=int, default=120)
+    p_survey_write.add_argument("--pane-target", default="", help="tmux pane target for --writer-backend pane-packet with --pane-send")
+    p_survey_write.add_argument("--pane-send", action="store_true", help="Actually send the pane packet to --pane-target via tmux send-keys")
     p_survey_write.add_argument("--no-prompt-packet", action="store_true")
     p_survey_write.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
@@ -3007,6 +3013,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_run.add_argument("--writer-backend", default="deterministic")
     p_survey_run.add_argument("--writer-command", default="", help="Local command for --writer-backend local-command; receives prompt JSON on stdin and emits Markdown on stdout")
     p_survey_run.add_argument("--writer-timeout", type=int, default=120)
+    p_survey_run.add_argument("--pane-target", default="", help="tmux pane target for --writer-backend pane-packet with --pane-send")
+    p_survey_run.add_argument("--pane-send", action="store_true", help="Actually send the pane packet to --pane-target via tmux send-keys")
     p_survey_run.add_argument("--no-prompt-packet", action="store_true")
     p_survey_run.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 

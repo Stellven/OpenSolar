@@ -34,6 +34,17 @@ class LocalCommandWriterError(RuntimeError):
         self.reason = reason
 
 
+class PanePacketPendingError(RuntimeError):
+    """Raised when a pane packet has been prepared but no response exists yet."""
+
+    def __init__(self, response_path: str, dispatch_path: str, pane_target: str = "", submitted: bool = False) -> None:
+        super().__init__(f"pane_response_missing:{response_path}")
+        self.response_path = response_path
+        self.dispatch_path = dispatch_path
+        self.pane_target = pane_target
+        self.submitted = submitted
+
+
 @dataclass
 class DeterministicSurveyWriterBackend:
     """Built-in backend used for local/offline verification."""
@@ -96,11 +107,87 @@ class LocalCommandSurveyWriterBackend:
         return output + "\n"
 
 
+@dataclass
+class PanePacketSurveyWriterBackend:
+    """Backend that prepares a pane dispatch packet and consumes its response."""
+
+    pane_target: str = ""
+    send: bool = False
+    allow_fallback: bool = False
+    timeout_seconds: int = 120
+    name: str = "pane-packet"
+
+    def write(self, prompt_packet: dict, fallback_text: str) -> str:
+        paths = prompt_packet.get("artifact_paths") or {}
+        response_path = str(paths.get("human_response") or "")
+        dispatch_path = str(paths.get("pane_dispatch") or "")
+        if not response_path or not dispatch_path:
+            raise PanePacketPendingError(response_path or "N/A", dispatch_path or "N/A", self.pane_target, False)
+        response = Path(response_path).expanduser()
+        if response.exists() and response.read_text(encoding="utf-8").strip():
+            return response.read_text(encoding="utf-8")
+        dispatch = Path(dispatch_path).expanduser()
+        dispatch.parent.mkdir(parents=True, exist_ok=True)
+        self._write_dispatch(dispatch, prompt_packet, response)
+        submitted = False
+        if self.send:
+            submitted = self._send_to_pane(dispatch, response)
+        if self.allow_fallback:
+            return fallback_text
+        raise PanePacketPendingError(str(response), str(dispatch), self.pane_target, submitted)
+
+    def _write_dispatch(self, dispatch: Path, prompt_packet: dict, response: Path) -> None:
+        lines = [
+            f"# Pane Survey Writer Dispatch: {prompt_packet.get('section_id')}",
+            "",
+            "## Goal",
+            "",
+            "Write the survey section using only the prompt packet constraints and evidence identifiers.",
+            "",
+            "## Prompt Packet",
+            "",
+            str((prompt_packet.get("artifact_paths") or {}).get("prompt_packet_md") or "N/A"),
+            "",
+            "## Response Path",
+            "",
+            str(response),
+            "",
+            "## Rules",
+            "",
+            "- Write only the completed Markdown section to the response path.",
+            "- Preserve [claim:<id>] and [evidence:<id>] tags.",
+            "- Do not invent sources, URLs, papers, metrics, or benchmark results.",
+            "- Include Architecture Synthesis, Evaluation And Risk Boundary, Contradiction Slots, Source Map, Claim Map, and Open Problems.",
+        ]
+        dispatch.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def _send_to_pane(self, dispatch: Path, response: Path) -> bool:
+        if not self.pane_target.strip():
+            raise LocalCommandWriterError("pane_target_missing")
+        prompt = f"读取并执行 {dispatch}; 完成后只把正文写入 {response}"
+        try:
+            result = subprocess.run(
+                ["tmux", "send-keys", "-t", self.pane_target, prompt, "Enter"],
+                text=True,
+                capture_output=True,
+                timeout=self.timeout_seconds,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise LocalCommandWriterError(f"pane_send_timeout:{self.timeout_seconds}") from exc
+        if result.returncode != 0:
+            stderr = (result.stderr or "").strip().replace("\n", " ")[:500]
+            raise LocalCommandWriterError(f"pane_send_exit_{result.returncode}:{stderr}")
+        return True
+
+
 def get_writer_backend(
     name: str | None = None,
     *,
     local_command: str = "",
     timeout_seconds: int = 120,
+    pane_target: str = "",
+    pane_send: bool = False,
 ) -> SurveyWriterBackend:
     normalized = (name or "deterministic").strip().lower()
     if normalized == "deterministic":
@@ -111,4 +198,14 @@ def get_writer_backend(
         return HumanPacketSurveyWriterBackend(name="human-packet-fallback", allow_fallback=True)
     if normalized in {"local-command", "local-llm-command", "command"}:
         return LocalCommandSurveyWriterBackend(command=local_command, timeout_seconds=timeout_seconds)
+    if normalized == "pane-packet":
+        return PanePacketSurveyWriterBackend(pane_target=pane_target, send=pane_send, timeout_seconds=timeout_seconds)
+    if normalized in {"pane-packet-fallback", "pane-fallback"}:
+        return PanePacketSurveyWriterBackend(
+            pane_target=pane_target,
+            send=pane_send,
+            allow_fallback=True,
+            timeout_seconds=timeout_seconds,
+            name="pane-packet-fallback",
+        )
     raise ValueError(f"unsupported_survey_writer_backend:{normalized}")

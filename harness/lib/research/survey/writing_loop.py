@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .backends import HumanResponseMissingError, LocalCommandWriterError, get_writer_backend
+from .backends import HumanResponseMissingError, LocalCommandWriterError, PanePacketPendingError, get_writer_backend
 from .schemas import SectionPromptPacket, SectionReview, SectionRevisionTrace, to_dict
 
 
@@ -94,6 +94,8 @@ def build_section_prompt_packet(root: Path, section_id: str, round_index: int = 
             "section_spec": str(section_dir / "section.spec.json"),
             "evidence_pack": str(section_dir / "evidence_pack.json"),
             "human_response": str(section_dir / "human_responses" / f"round_{round_index:02d}.md"),
+            "pane_dispatch": str(section_dir / "pane_dispatch" / f"round_{round_index:02d}.md"),
+            "prompt_packet_md": str(section_dir / "prompt_packets" / f"round_{round_index:02d}.md"),
             "draft": str(section_dir / "draft.md"),
             "review": str(section_dir / "review.json"),
             "revision_trace": str(section_dir / "revision_trace.json"),
@@ -296,6 +298,8 @@ def run_section_revision_loop(
     writer_backend: str = "deterministic",
     writer_command: str = "",
     writer_timeout: int = 120,
+    pane_target: str = "",
+    pane_send: bool = False,
     emit_prompt_packet: bool = True,
 ) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
@@ -323,7 +327,13 @@ def run_section_revision_loop(
     traces: list[dict] = []
     text = ""
     review = None
-    backend = get_writer_backend(writer_backend, local_command=writer_command, timeout_seconds=writer_timeout)
+    backend = get_writer_backend(
+        writer_backend,
+        local_command=writer_command,
+        timeout_seconds=writer_timeout,
+        pane_target=pane_target,
+        pane_send=pane_send,
+    )
     for round_index in range(max(max_rounds, 1)):
         packet = build_section_prompt_packet(root, section_id, round_index=round_index, writer_backend=backend.name)
         if emit_prompt_packet:
@@ -391,6 +401,39 @@ def run_section_revision_loop(
                 "writer_error": exc.reason,
                 "review": to_dict(review),
             }
+        except PanePacketPendingError as exc:
+            trace = SectionRevisionTrace(
+                section_id=section_id,
+                round_index=round_index,
+                verdict="WAITING_FOR_PANE",
+                changed=False,
+                issues_before=[str(exc)],
+                actions=["let_pane_write_response_markdown", "rerun_survey_write_section"],
+            )
+            traces.append(to_dict(trace))
+            review = SectionReview(
+                section_id=section_id,
+                verdict="WAITING_FOR_PANE",
+                unsupported_claim_rate=1.0,
+                citation_span_accuracy=0.0,
+                source_diversity_score=0.0,
+                repetition_score=0.0,
+                issues=[str(exc)],
+            )
+            (section_dir / "review.json").write_text(json.dumps(to_dict(review), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            (section_dir / "revision_trace.json").write_text(json.dumps({"section_id": section_id, "rounds": traces}, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            return {
+                "ok": False,
+                "section_id": section_id,
+                "reason": "pane_response_missing",
+                "writer_backend": backend.name,
+                "prompt_packets": str(section_dir / "prompt_packets") if emit_prompt_packet else "",
+                "pane_dispatch": exc.dispatch_path,
+                "expected_response": exc.response_path,
+                "pane_target": exc.pane_target,
+                "pane_submitted": exc.submitted,
+                "review": to_dict(review),
+            }
         review = review_section_text(root, section_id, text, min_chars=min_chars)
         traces.append(to_dict(SectionRevisionTrace(
             section_id=section_id,
@@ -430,6 +473,8 @@ def run_ready_sections(
     writer_backend: str = "deterministic",
     writer_command: str = "",
     writer_timeout: int = 120,
+    pane_target: str = "",
+    pane_send: bool = False,
     emit_prompt_packet: bool = True,
 ) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
@@ -453,6 +498,8 @@ def run_ready_sections(
             writer_backend=writer_backend,
             writer_command=writer_command,
             writer_timeout=writer_timeout,
+            pane_target=pane_target,
+            pane_send=pane_send,
             emit_prompt_packet=emit_prompt_packet,
         ))
         if not unlimited and len(results) >= limit:
