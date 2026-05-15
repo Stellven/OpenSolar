@@ -114,6 +114,9 @@ def evaluate_survey(
         section_factual_accuracy = float(section_factual_audit.get("section_factual_accuracy") or 0.0)
         if finalized and section_factual_accuracy < 0.95:
             issues.append(f"section_factual_accuracy_low:{section_factual_accuracy:.4f}<0.9500")
+        section_grounding_accuracy = float(section_factual_audit.get("section_grounding_accuracy") or 0.0)
+        if finalized and section_grounding_accuracy < 0.95:
+            issues.append(f"section_grounding_accuracy_low:{section_grounding_accuracy:.4f}<0.9500")
     required_finalized = len(sections) if require_complete else (min_finalized if min_finalized is not None else 3)
     if strict and finalized < required_finalized:
         issues.append(f"finalized_sections_low:{finalized}<{required_finalized}")
