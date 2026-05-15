@@ -136,8 +136,12 @@ EXIT_LOG="$HARNESS_DIR/logs/pane-exit.jsonl"
 mkdir -p "$(dirname "$EXIT_LOG")" 2>/dev/null || true
 
 set +e
+_runtime_policy=$(inject_runtime_policy "$PERSONA")
+_prefix_policy=$(inject_prefix_policy "$PERSONA")
 _whisper=$(inject_whisper "$PERSONA")
-$CLAUDE_CMD --append-system-prompt "$(cat "$PERSONA_FILE")$_whisper"
+$CLAUDE_CMD --append-system-prompt "$_runtime_policy
+$_prefix_policy
+$(cat "$PERSONA_FILE")$_whisper"
 CLAUDE_EXIT=$?
 set -e
 

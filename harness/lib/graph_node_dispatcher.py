@@ -54,6 +54,23 @@ STATE_READ_PREFLIGHT = """<!-- SOLAR_STATE_READ_PREFLIGHT -->
 ---
 """
 
+DEFINITION_OF_DONE_POLICY = """## DEFINITION OF DONE · 强制完成约束
+
+任务没有完成，除非同时满足以下 7 条。交付不是输出代码；交付是用证据证明功能真的工作。
+
+1. 真实调用链接入 — 所有新增/修改功能已接入真实调用链，不允许只写孤立模块。
+2. 禁止硬编码 — 不允许硬编码业务数据、测试数据、路径、token、feature flag。
+3. 测试必须运行 — 必须运行相关测试；如果不能运行，必须明确说明原因。
+4. 执行证据齐全 — 必须给出实际执行过的命令和结果摘要，不接受“应该可以工作”。
+5. Diff 自审 — 必须检查 diff，列出每个改动文件的目的。
+6. 禁用乐观词 — 如果存在未完成项，禁止使用 “done / complete / implemented”。
+7. 结构化收尾 — 最终回答必须分为：已完成 · 已验证 · 未验证 · 风险 · 后续待办。
+
+硬性判定：没有证据，不许报喜；存在未验证项时只能标 `未验证` 或 `风险`，不能标完成。
+
+---
+"""
+
 sys.path.insert(0, str(HARNESS_DIR / "lib"))
 from graph_scheduler import (  # noqa: E402
     load_graph,
@@ -815,6 +832,7 @@ def build_dispatch_text(payload: dict[str, Any], pane: str) -> str:
     architecture_block = dispatch_policy_block(node, graph_for_policy) if dispatch_policy_block else "## Architecture Guard\n\n- unavailable"
 
     return f"""{STATE_READ_PREFLIGHT}
+{DEFINITION_OF_DONE_POLICY}
 
 # DAG Node Dispatch — {sid} / {node_id}
 
@@ -915,6 +933,7 @@ def build_eval_dispatch_text(graph: dict[str, Any], graph_path: str, node: dict[
     architecture_block = dispatch_policy_block(node, graph) if dispatch_policy_block else "## Architecture Guard\n\n- unavailable"
 
     return f"""{STATE_READ_PREFLIGHT}
+{DEFINITION_OF_DONE_POLICY}
 
 # DAG Node Evaluation Dispatch — {sid} / {node_id}
 
