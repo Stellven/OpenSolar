@@ -1,0 +1,39 @@
+version: 1
+name: YouTube Influence Transcript Digest
+
+mac_mini_only: true
+allowed_hostnames:
+  - lisihaodeMac-mini-3.local
+  - lisihaodeMac-mini-3
+
+timezone: America/Toronto
+schedule:
+  # launchd uses local machine time.
+  hours: [8, 13, 18]
+  minute: 17
+
+output:
+  raw_dir: /Users/lisihao/Knowledge/_raw/youtube-influence-digest
+  state_dir: /Users/lisihao/.solar/harness/state/youtube-influence-digest
+  max_videos_per_run: 30
+  per_channel_limit: 3
+  lookback_hours: 72
+  keep_seen_days: 45
+  transcript_max_chars: 60000
+
+fetch:
+  timeout_seconds: 15
+  sleep_between_channels_seconds: 0.4
+  sleep_between_videos_seconds: 0.5
+  user_agent: "Solar-YouTube-Influence-Digest/1.0 (+local transcript capture)"
+
+channels: []
+
+analysis_keywords:
+  model_release: [model, launch, released, api, benchmark, gpt, claude, gemini, llama, qwen, deepseek]
+  research: [paper, arxiv, reasoning, training, alignment, interpretability, eval, dataset]
+  agent: [agent, automation, workflow, tool, browser, computer use, coding, autonomous]
+  compute: [gpu, tpu, hbm, datacenter, inference, cuda, rocm, chip, semiconductor]
+  product: [product, app, feature, pricing, enterprise, startup, users, release]
+  tutorial: [tutorial, walkthrough, demo, build, guide, explain, course]
+  market: [funding, revenue, earnings, capex, valuation, market, investment]
