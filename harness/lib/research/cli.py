@@ -2445,6 +2445,21 @@ def cmd_survey_run_sections(args: argparse.Namespace) -> int:
     return 0 if payload.get("ok") else 1
 
 
+def cmd_survey_watch_responses(args: argparse.Namespace) -> int:
+    from research.survey.writing_loop import watch_pane_responses
+
+    payload = watch_pane_responses(
+        args.output_dir,
+        limit=args.limit,
+        min_chars=args.min_chars,
+        round_index=args.round_index,
+    )
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") or args.allow_pending else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") or args.allow_pending else 1
+
+
 def cmd_survey_review(args: argparse.Namespace) -> int:
     from research.survey.evaluator import evaluate_survey
 
@@ -2763,7 +2778,7 @@ ALL_SUBCOMMANDS = [
     "mine", "outline", "write", "check", "compile", "synthesize", "export", "eval-artifacts",
     "policy-doctor", "policy-explain",
     "source-audit",
-    "survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-review", "survey-compile", "survey-eval",
+    "survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-review", "survey-compile", "survey-eval",
 ]
 
 SUBCOMMANDS = {
@@ -2792,6 +2807,7 @@ SUBCOMMANDS = {
     "survey-pack": cmd_survey_pack,
     "survey-write-section": cmd_survey_write_section,
     "survey-run-sections": cmd_survey_run_sections,
+    "survey-watch-responses": cmd_survey_watch_responses,
     "survey-review": cmd_survey_review,
     "survey-compile": cmd_survey_compile,
     "survey-eval": cmd_survey_eval,
@@ -3017,6 +3033,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_run.add_argument("--pane-send", action="store_true", help="Actually send the pane packet to --pane-target via tmux send-keys")
     p_survey_run.add_argument("--no-prompt-packet", action="store_true")
     p_survey_run.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_watch = sub.add_parser("survey-watch-responses", help="Finalize survey sections that already have pane/human response files")
+    p_survey_watch.add_argument("--output-dir", required=True)
+    p_survey_watch.add_argument("--limit", type=int, default=0, help="Number of response sections to process; 0 means all")
+    p_survey_watch.add_argument("--min-chars", type=int, default=1200)
+    p_survey_watch.add_argument("--round-index", type=int, default=0)
+    p_survey_watch.add_argument("--allow-pending", action="store_true", help="Return zero when no responses are ready yet")
+    p_survey_watch.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     p_survey_review = sub.add_parser("survey-review", help="Run non-strict survey review")
     p_survey_review.add_argument("--output-dir", required=True)

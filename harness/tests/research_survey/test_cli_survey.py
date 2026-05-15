@@ -13,7 +13,7 @@ from research.cli import build_parser, main
 
 def test_survey_cli_commands_registered():
     subs = build_parser()._subparsers._group_actions[0].choices
-    for name in ["survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-review", "survey-compile", "survey-eval"]:
+    for name in ["survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-review", "survey-compile", "survey-eval"]:
         assert name in subs
 
 
@@ -147,3 +147,24 @@ def test_survey_write_pane_packet_returns_dispatch(tmp_path, capsys):
     assert payload["pane_dispatch"].endswith("pane_dispatch/round_00.md")
     assert payload["expected_response"].endswith("human_responses/round_00.md")
     assert payload["pane_submitted"] is False
+
+
+def test_survey_watch_responses_allow_pending(tmp_path, capsys):
+    assert main([
+        "survey-plan",
+        "--brief", "隐空间推理技术架构和演进方向",
+        "--target-chars", "50000",
+        "--output-dir", str(tmp_path),
+        "--json",
+    ]) == 0
+    capsys.readouterr()
+    rc = main([
+        "survey-watch-responses",
+        "--output-dir", str(tmp_path),
+        "--allow-pending",
+        "--json",
+    ])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["processed"] == 0
+    assert payload["pending_responses"] >= 30

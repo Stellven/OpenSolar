@@ -11,7 +11,7 @@ if _HARNESS_LIB not in sys.path:
 from research.survey.evidence_pack import build_evidence_packs
 from research.survey.planner import create_survey_plan, write_survey_plan
 from research.survey.section_compiler import compile_section, compile_survey
-from research.survey.writing_loop import run_ready_sections, run_section_revision_loop
+from research.survey.writing_loop import run_ready_sections, run_section_revision_loop, watch_pane_responses
 
 
 def _append_jsonl(path, rows):
@@ -226,3 +226,43 @@ def test_pane_packet_fallback_keeps_automation_running(tmp_path):
     result = run_section_revision_loop(tmp_path, "ch01/sec01", writer_backend="pane-packet-fallback")
     assert result["ok"] is True
     assert result["writer_backend"] == "pane-packet-fallback"
+
+
+def test_watch_pane_responses_reports_pending(tmp_path):
+    _strong_fixture(tmp_path)
+    result = watch_pane_responses(tmp_path)
+    assert result["ok"] is False
+    assert result["processed"] == 0
+    assert result["pending_responses"] >= 30
+    assert (tmp_path / "pane_response_watch.json").exists()
+
+
+def test_watch_pane_responses_finalizes_existing_response(tmp_path):
+    _strong_fixture(tmp_path)
+    section_dir = tmp_path / "sections" / "ch01" / "sec01"
+    pack = json.loads((section_dir / "evidence_pack.json").read_text(encoding="utf-8"))
+    claim_ids = pack["claim_ids"][:3]
+    evidence_ids = pack["evidence_ids"][:4]
+    response = section_dir / "human_responses" / "round_00.md"
+    response.parent.mkdir(parents=True)
+    response.write_text(
+        "# Watched Pane Section\n\n"
+        "## Architecture Synthesis\n\n"
+        f"Watched response with [claim:{claim_ids[0]}] [evidence:{evidence_ids[0]}].\n\n"
+        "## Evaluation And Risk Boundary\n\n"
+        f"Evaluation response with [claim:{claim_ids[1]}] [evidence:{evidence_ids[1]}].\n\n"
+        "## Contradiction Slots\n\n"
+        f"Contradiction response with [claim:{claim_ids[2]}] [evidence:{evidence_ids[2]}] [evidence:{evidence_ids[3]}].\n\n"
+        "## Source Map\n\n"
+        "Sources are preserved.\n\n"
+        "## Claim Map\n\n"
+        "Claims are preserved.\n\n"
+        "## Open Problems\n\n"
+        "Open problems are preserved.\n",
+        encoding="utf-8",
+    )
+    result = watch_pane_responses(tmp_path, limit=1, min_chars=100)
+    assert result["ok"] is True
+    assert result["processed"] == 1
+    assert result["passed"] == 1
+    assert "Watched response" in (section_dir / "final.md").read_text(encoding="utf-8")
