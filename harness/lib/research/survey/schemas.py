@@ -103,6 +103,17 @@ class SectionReview:
 
 
 @dataclass
+class SectionRevisionTrace:
+    section_id: str
+    round_index: int
+    verdict: str
+    changed: bool
+    issues_before: list[str] = field(default_factory=list)
+    actions: list[str] = field(default_factory=list)
+    schema_version: str = SCHEMA_VERSION
+
+
+@dataclass
 class SurveyScorecard:
     verdict: str
     chapter_count: int

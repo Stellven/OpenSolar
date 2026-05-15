@@ -12,6 +12,7 @@ from research.survey.evaluator import evaluate_survey
 from research.survey.evidence_pack import build_evidence_packs
 from research.survey.planner import create_survey_plan, write_survey_plan
 from research.survey.section_compiler import compile_section, compile_survey
+from research.survey.writing_loop import run_ready_sections
 
 
 def _append_jsonl(path, rows):
@@ -39,9 +40,21 @@ def test_e2e_professor_survey_smoke(tmp_path):
 
     strong = build_evidence_packs(tmp_path, plan["report_ast"])
     assert strong["ready"] >= 30
-    for section in plan["report_ast"]["sections"][:3]:
-        assert compile_section(tmp_path, section["section_id"])["ok"] is True
+    batch = run_ready_sections(tmp_path, limit=3, max_rounds=3)
+    assert batch["ok"] is True
+    assert batch["processed"] == 3
     assert compile_survey(tmp_path)["ok"] is True
     result = evaluate_survey(tmp_path, strict=True)
     assert result["ok"] is True
     assert result["scorecard"]["finalized_sections"] == 3
+    incomplete = evaluate_survey(tmp_path, strict=True, require_complete=True)
+    assert incomplete["ok"] is False
+    assert any(item.startswith("incomplete_sections:") for item in incomplete["scorecard"]["issues"])
+
+    batch_all = run_ready_sections(tmp_path, limit=0, max_rounds=3)
+    assert batch_all["ok"] is True
+    assert batch_all["processed"] == len(plan["report_ast"]["sections"]) - 3
+    assert compile_survey(tmp_path)["ok"] is True
+    complete = evaluate_survey(tmp_path, strict=True, require_complete=True)
+    assert complete["ok"] is True
+    assert complete["scorecard"]["finalized_sections"] == len(plan["report_ast"]["sections"])

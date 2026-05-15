@@ -2397,9 +2397,30 @@ def cmd_survey_pack(args: argparse.Namespace) -> int:
 
 
 def cmd_survey_write_section(args: argparse.Namespace) -> int:
-    from research.survey.section_compiler import compile_section
+    from research.survey.writing_loop import run_section_revision_loop
 
-    payload = compile_section(args.output_dir, args.section_id, finalize=not args.draft_only)
+    payload = run_section_revision_loop(
+        args.output_dir,
+        args.section_id,
+        finalize=not args.draft_only,
+        max_rounds=args.max_revisions,
+        min_chars=args.min_chars,
+    )
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") else 1
+
+
+def cmd_survey_run_sections(args: argparse.Namespace) -> int:
+    from research.survey.writing_loop import run_ready_sections
+
+    payload = run_ready_sections(
+        args.output_dir,
+        limit=args.limit,
+        max_rounds=args.max_revisions,
+        min_chars=args.min_chars,
+    )
     if emit_json(args, payload):
         return 0 if payload.get("ok") else 1
     print(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -2409,7 +2430,7 @@ def cmd_survey_write_section(args: argparse.Namespace) -> int:
 def cmd_survey_review(args: argparse.Namespace) -> int:
     from research.survey.evaluator import evaluate_survey
 
-    payload = evaluate_survey(args.output_dir, strict=False)
+    payload = evaluate_survey(args.output_dir, strict=False, min_finalized=args.min_finalized, require_complete=args.require_complete)
     if emit_json(args, payload):
         return 0
     print(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -2429,7 +2450,7 @@ def cmd_survey_compile(args: argparse.Namespace) -> int:
 def cmd_survey_eval(args: argparse.Namespace) -> int:
     from research.survey.evaluator import evaluate_survey
 
-    payload = evaluate_survey(args.output_dir, strict=args.strict)
+    payload = evaluate_survey(args.output_dir, strict=args.strict, min_finalized=args.min_finalized, require_complete=args.require_complete)
     if emit_json(args, payload):
         return 0 if payload.get("ok") or not args.strict else 1
     print(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -2724,7 +2745,7 @@ ALL_SUBCOMMANDS = [
     "mine", "outline", "write", "check", "compile", "synthesize", "export", "eval-artifacts",
     "policy-doctor", "policy-explain",
     "source-audit",
-    "survey-plan", "survey-pack", "survey-write-section", "survey-review", "survey-compile", "survey-eval",
+    "survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-review", "survey-compile", "survey-eval",
 ]
 
 SUBCOMMANDS = {
@@ -2752,6 +2773,7 @@ SUBCOMMANDS = {
     "survey-plan": cmd_survey_plan,
     "survey-pack": cmd_survey_pack,
     "survey-write-section": cmd_survey_write_section,
+    "survey-run-sections": cmd_survey_run_sections,
     "survey-review": cmd_survey_review,
     "survey-compile": cmd_survey_compile,
     "survey-eval": cmd_survey_eval,
@@ -2955,10 +2977,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_write.add_argument("--output-dir", required=True)
     p_survey_write.add_argument("--section-id", required=True)
     p_survey_write.add_argument("--draft-only", action="store_true")
+    p_survey_write.add_argument("--max-revisions", type=int, default=3)
+    p_survey_write.add_argument("--min-chars", type=int, default=1200)
     p_survey_write.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_run = sub.add_parser("survey-run-sections", help="Write ready survey sections through revision loops")
+    p_survey_run.add_argument("--output-dir", required=True)
+    p_survey_run.add_argument("--limit", type=int, default=3, help="Number of ready sections to process; 0 means all")
+    p_survey_run.add_argument("--max-revisions", type=int, default=3)
+    p_survey_run.add_argument("--min-chars", type=int, default=1200)
+    p_survey_run.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     p_survey_review = sub.add_parser("survey-review", help="Run non-strict survey review")
     p_survey_review.add_argument("--output-dir", required=True)
+    p_survey_review.add_argument("--min-finalized", type=int, default=None)
+    p_survey_review.add_argument("--require-complete", action="store_true")
     p_survey_review.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     p_survey_compile = sub.add_parser("survey-compile", help="Compile survey section artifacts")
@@ -2968,6 +3001,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_eval = sub.add_parser("survey-eval", help="Evaluate professor-grade survey readiness")
     p_survey_eval.add_argument("--output-dir", required=True)
     p_survey_eval.add_argument("--strict", action="store_true")
+    p_survey_eval.add_argument("--min-finalized", type=int, default=None)
+    p_survey_eval.add_argument("--require-complete", action="store_true")
     p_survey_eval.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     return parser

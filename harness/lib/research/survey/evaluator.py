@@ -13,7 +13,13 @@ def _read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
 
 
-def evaluate_survey(output_dir: str | Path, strict: bool = False) -> dict:
+def evaluate_survey(
+    output_dir: str | Path,
+    strict: bool = False,
+    *,
+    min_finalized: int | None = None,
+    require_complete: bool = False,
+) -> dict:
     root = Path(output_dir).expanduser()
     ast = _read_json(root / "survey_report_ast.json")
     packs = _read_json(root / "survey_evidence_packs.json")
@@ -32,10 +38,13 @@ def evaluate_survey(output_dir: str | Path, strict: bool = False) -> dict:
         issues.append("evidence_packs_missing")
     if blocked_sections:
         issues.append(f"blocked_sections:{blocked_sections}")
-    if strict and finalized < 3:
-        issues.append(f"finalized_sections_low:{finalized}<3")
-    if finalized and finalized < min(3, len(sections)):
-        issues.append(f"finalized_sections_low:{finalized}<3")
+    required_finalized = len(sections) if require_complete else (min_finalized if min_finalized is not None else 3)
+    if strict and finalized < required_finalized:
+        issues.append(f"finalized_sections_low:{finalized}<{required_finalized}")
+    elif not strict and finalized and finalized < min(required_finalized, len(sections)):
+        issues.append(f"finalized_sections_low:{finalized}<{required_finalized}")
+    if require_complete and finalized != len(sections):
+        issues.append(f"incomplete_sections:{len(sections) - finalized}")
     final_md = root / "final.md"
     text = final_md.read_text(encoding="utf-8") if final_md.exists() else ""
     finalized_texts: list[str] = []

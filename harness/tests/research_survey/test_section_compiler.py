@@ -11,6 +11,7 @@ if _HARNESS_LIB not in sys.path:
 from research.survey.evidence_pack import build_evidence_packs
 from research.survey.planner import create_survey_plan, write_survey_plan
 from research.survey.section_compiler import compile_section, compile_survey
+from research.survey.writing_loop import run_ready_sections, run_section_revision_loop
 
 
 def _append_jsonl(path, rows):
@@ -45,7 +46,26 @@ def test_compile_section_and_survey(tmp_path):
     _strong_fixture(tmp_path)
     result = compile_section(tmp_path, "ch01/sec01")
     assert result["ok"] is True
+    assert result["rounds"] >= 1
     assert (tmp_path / "sections" / "ch01" / "sec01" / "final.md").exists()
+    assert (tmp_path / "sections" / "ch01" / "sec01" / "revision_trace.json").exists()
     compiled = compile_survey(tmp_path)
     assert compiled["ok"] is True
     assert (tmp_path / "final.md").exists()
+
+
+def test_revision_loop_requires_enough_detail(tmp_path):
+    _strong_fixture(tmp_path)
+    result = run_section_revision_loop(tmp_path, "ch01/sec01", min_chars=2600, max_rounds=3)
+    assert result["ok"] is True
+    assert result["rounds"] > 1
+    review = json.loads((tmp_path / "sections" / "ch01" / "sec01" / "review.json").read_text(encoding="utf-8"))
+    assert review["verdict"] == "PASS"
+
+
+def test_run_ready_sections_batches_without_manual_continue(tmp_path):
+    _strong_fixture(tmp_path)
+    result = run_ready_sections(tmp_path, limit=2, max_rounds=3, min_chars=1200)
+    assert result["ok"] is True
+    assert result["processed"] == 2
+    assert result["passed"] == 2
