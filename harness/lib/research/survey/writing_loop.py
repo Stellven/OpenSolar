@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .backends import get_writer_backend
+from .backends import HumanResponseMissingError, get_writer_backend
 from .schemas import SectionPromptPacket, SectionReview, SectionRevisionTrace, to_dict
 
 
@@ -93,6 +93,7 @@ def build_section_prompt_packet(root: Path, section_id: str, round_index: int = 
         artifact_paths={
             "section_spec": str(section_dir / "section.spec.json"),
             "evidence_pack": str(section_dir / "evidence_pack.json"),
+            "human_response": str(section_dir / "human_responses" / f"round_{round_index:02d}.md"),
             "draft": str(section_dir / "draft.md"),
             "review": str(section_dir / "review.json"),
             "revision_trace": str(section_dir / "revision_trace.json"),
@@ -135,6 +136,16 @@ def _write_prompt_packet(section_dir: Path, packet: dict) -> None:
     md.extend(f"- {item}" for item in packet.get("required_claim_ids", []))
     md.extend(["", "## Required Evidence", ""])
     md.extend(f"- {item}" for item in packet.get("required_evidence_ids", []))
+    md.extend([
+        "",
+        "## Human Response Path",
+        "",
+        str((packet.get("artifact_paths") or {}).get("human_response") or "N/A"),
+        "",
+        "## Return Instructions",
+        "",
+        "Write the completed Markdown section to the human response path above, then rerun the same survey command.",
+    ])
     md_path.write_text("\n".join(md) + "\n", encoding="utf-8")
 
 
@@ -316,7 +327,38 @@ def run_section_revision_loop(
         if emit_prompt_packet:
             _write_prompt_packet(section_dir, packet)
         fallback_text = build_section_draft(root, section_id, round_index=round_index)
-        text = backend.write(packet, fallback_text)
+        try:
+            text = backend.write(packet, fallback_text)
+        except HumanResponseMissingError as exc:
+            trace = SectionRevisionTrace(
+                section_id=section_id,
+                round_index=round_index,
+                verdict="WAITING_FOR_HUMAN",
+                changed=False,
+                issues_before=[str(exc)],
+                actions=["fill_human_response_markdown", "rerun_survey_write_section"],
+            )
+            traces.append(to_dict(trace))
+            review = SectionReview(
+                section_id=section_id,
+                verdict="WAITING_FOR_HUMAN",
+                unsupported_claim_rate=1.0,
+                citation_span_accuracy=0.0,
+                source_diversity_score=0.0,
+                repetition_score=0.0,
+                issues=[str(exc)],
+            )
+            (section_dir / "review.json").write_text(json.dumps(to_dict(review), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            (section_dir / "revision_trace.json").write_text(json.dumps({"section_id": section_id, "rounds": traces}, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            return {
+                "ok": False,
+                "section_id": section_id,
+                "reason": "human_response_missing",
+                "writer_backend": backend.name,
+                "prompt_packets": str(section_dir / "prompt_packets") if emit_prompt_packet else "",
+                "expected_response": exc.response_path,
+                "review": to_dict(review),
+            }
         review = review_section_text(root, section_id, text, min_chars=min_chars)
         traces.append(to_dict(SectionRevisionTrace(
             section_id=section_id,
