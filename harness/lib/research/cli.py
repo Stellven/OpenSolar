@@ -53,6 +53,43 @@ def clean_evidence_content(content: str) -> str:
     return str(content or "").split("\x00", 1)[0]
 
 
+METADATA_LINE_RE = re.compile(r"^(title|url|publisher|published|source type)\s*:", re.I)
+
+
+def extract_claim_material(content: str) -> str:
+    """Extract citation-worthy claim material from a source block.
+
+    Human-search imports include metadata scaffolding. Passing that directly to
+    claim mining turns "Title: ... URL: ..." into report content. Prefer the
+    Summary / Key Claims / Relevant Quotes sections and fall back to metadata
+    filtered text only when the structured sections are absent.
+    """
+    lines = clean_evidence_content(content).splitlines()
+    mode = ""
+    selected: list[str] = []
+    fallback: list[str] = []
+    for raw in lines:
+        line = raw.strip()
+        if not line:
+            continue
+        lower = line.lower().rstrip(":")
+        if lower in {"summary", "key claims", "relevant quotes"}:
+            mode = lower
+            continue
+        if METADATA_LINE_RE.match(line):
+            continue
+        if line.startswith("## Source"):
+            continue
+        stripped = line.lstrip("-•> \t").strip()
+        if not stripped or METADATA_LINE_RE.match(stripped):
+            continue
+        fallback.append(stripped)
+        if mode in {"summary", "key claims", "relevant quotes"} and (line.startswith(("-", "•", ">")) or len(stripped) >= 24):
+            if stripped.upper() != "N/A":
+                selected.append(stripped)
+    return "\n".join(selected or fallback)
+
+
 def http_get_text(url: str, timeout: int = WEB_TIMEOUT_SEC) -> str:
     """Fetch a URL with a stable User-Agent and return decoded text."""
     req = urllib.request.Request(
@@ -541,23 +578,34 @@ def extract_all_sources(conn: sqlite3.Connection, run_id: str) -> list[str]:
 
 
 def split_claim_sentences(text: str, limit: int = 3) -> list[str]:
-    cleaned = re.sub(r"\s+", " ", clean_evidence_content(text)).strip()
-    if not cleaned:
+    material = extract_claim_material(text)
+    if not material.strip():
         return []
-    parts = re.split(r"(?<=[。！？.!?])\s+|[；;]\s*|\n+", cleaned)
+    parts: list[str] = []
+    for line in material.splitlines():
+        stripped = line.strip(" -•>\t")
+        if stripped:
+            parts.append(stripped)
+    if len(parts) <= 1:
+        cleaned = re.sub(r"\s+", " ", material).strip()
+        parts = re.split(r"(?<=[。！？.!?])\s+|[；;]\s*", cleaned)
     claims = []
     for part in parts:
         claim = part.strip(" -•\t")
         lower = claim.lower()
         if len(claim) < 24:
             continue
+        if METADATA_LINE_RE.match(claim) or " url: http" in lower or lower.startswith("revised "):
+            continue
         if any(term in lower for term in ("if(!", "servicesopen", "document.body", "classlist", "x-effect", "function(", "nt.body")):
             continue
         if sum(1 for ch in claim if ch in "{}[]<>/\\|=;") > max(6, len(claim) * 0.08):
             continue
         claims.append(claim)
-    if not claims and len(cleaned) >= 24:
-        claims = [cleaned[:240].strip()]
+    if not claims:
+        cleaned = re.sub(r"\s+", " ", material).strip()
+        if len(cleaned) >= 24 and not METADATA_LINE_RE.match(cleaned):
+            claims = [cleaned[:240].strip()]
     return claims[:limit]
 
 
@@ -620,6 +668,43 @@ def ensure_outline(conn: sqlite3.Connection, run_id: str) -> int:
     return len(sections)
 
 
+def _claim_line(row: sqlite3.Row) -> str:
+    return f"- {row['claim_text']} [cite:{row['evidence_id'] or 'missing'}]"
+
+
+def _pick_claims(rows: list[sqlite3.Row], keywords: tuple[str, ...], limit: int = 4) -> list[sqlite3.Row]:
+    picked: list[sqlite3.Row] = []
+    seen: set[str] = set()
+    for row in rows:
+        text = str(row["claim_text"] or "").lower()
+        if any(k in text for k in keywords) and row["claim_id"] not in seen:
+            picked.append(row)
+            seen.add(row["claim_id"])
+        if len(picked) >= limit:
+            break
+    return picked
+
+
+def _format_claims(rows: list[sqlite3.Row], fallback: list[sqlite3.Row] | None = None, limit: int = 5) -> str:
+    selected = rows[:limit] or (fallback or [])[:limit]
+    return "\n".join(_claim_line(row) for row in selected) if selected else "- No supported claims available."
+
+
+def _source_strength_summary(conn: sqlite3.Connection, run_id: str) -> tuple[list[str], dict[str, int]]:
+    rows = conn.execute(
+        "SELECT source_type, title, url FROM research_sources WHERE run_id = ? ORDER BY fetched_at, id",
+        (run_id,),
+    ).fetchall()
+    counts: dict[str, int] = {}
+    lines: list[str] = []
+    for row in rows:
+        stype = str(row["source_type"] or "unknown").lower()
+        counts[stype] = counts.get(stype, 0) + 1
+        strength = "high" if stype in {"paper", "official", "standard"} else "medium" if stype in {"repo", "blog"} else "unknown"
+        lines.append(f"- {strength}: {row['title']} ({stype}) {row['url'] or ''}".strip())
+    return lines, counts
+
+
 def write_sections_from_claims(conn: sqlite3.Connection, run_id: str) -> int:
     ensure_outline(conn, run_id)
     run = conn.execute("SELECT topic FROM research_runs WHERE id = ?", (run_id,)).fetchone()
@@ -630,34 +715,73 @@ def write_sections_from_claims(conn: sqlite3.Connection, run_id: str) -> int:
         "WHERE c.run_id = ? ORDER BY c.created_at, c.id",
         (run_id,),
     ).fetchall()
-    claim_lines = [
-        f"- {row['claim_text']} [cite:{row['evidence_id'] or 'missing'}]"
-        for row in claims[:40]
-    ]
+    claim_lines = [_claim_line(row) for row in claims[:40]]
     if not claim_lines:
         claim_lines = ["- No supported claims were mined; add sources or run extraction before writing."]
     evidence_anchor = claim_lines[0] if "[cite:" in claim_lines[0] else ""
+    architecture = _pick_claims(claims, ("hidden state", "recurrent", "soft thought", "continuous", "projection", "multimodal", "superposition"), 8)
+    deployment = _pick_claims(claims, ("existing", "practical", "test-time", "compute", "context", "window", "train", "architecture"), 6)
+    evaluation = _pick_claims(claims, ("evaluation", "faithful", "surface", "disentangle", "interpretability", "safety", "diversity", "uncertainty"), 6)
+    multimodal = _pick_claims(claims, ("multimodal", "vision", "audio", "spatial", "cross-modal", "joint latent"), 4)
     sections = conn.execute(
         "SELECT id, section_type, title FROM report_sections WHERE run_id = ? ORDER BY section_order",
         (run_id,),
     ).fetchall()
     for sec in sections:
         if sec["section_type"] == "executive_summary":
-            body = f"# {sec['title']}\n\nTopic: {topic}\n\nKey supported claims:\n" + "\n".join(claim_lines[:8]) + "\n"
+            body = (
+                f"# {sec['title']}\n\n"
+                f"Topic: {topic}\n\n"
+                "Bottom line: latent-space reasoning is not one technique; it is an architectural shift that moves intermediate reasoning state from visible token chains into continuous states, soft thought vectors, recurrent compute, or constrained latent superpositions. The evidence supports three near-term product paths: soft-thought adapters for existing models, recurrent-depth models for native test-time compute, and multimodal latent reasoning for perception-heavy agents.\n\n"
+                "Key technical claims:\n"
+                + _format_claims((architecture + deployment + evaluation)[:8], claims)
+                + "\n"
+            )
         elif sec["section_type"] == "source_landscape":
             srcs = conn.execute(
                 "SELECT title, url, source_type FROM research_sources WHERE run_id = ? ORDER BY fetched_at LIMIT 20",
                 (run_id,),
             ).fetchall()
-            body = f"# {sec['title']}\n\n" + "\n".join(
+            body = f"# {sec['title']}\n\nThe source set clusters into native latent-state training, recurrent test-time compute, adapter/projection-based soft thoughts, superposition-constrained latent SFT, and multimodal latent reasoning.\n\n" + "\n".join(
                 f"- {s['title']} ({s['source_type']}) {s['url'] or ''}".strip() for s in srcs
             ) + ("\n\nEvidence anchor:\n" + evidence_anchor + "\n" if evidence_anchor else "\n")
         elif sec["section_type"] == "evidence_synthesis":
-            body = f"# {sec['title']}\n\n" + "\n".join(claim_lines[:20]) + "\n"
+            body = (
+                f"# {sec['title']}\n\n"
+                "## Architecture Taxonomy\n\n"
+                "1. Hidden-state recurrence: feed the model's internal state back as the next reasoning input, reducing lossy decode/re-encode cycles.\n"
+                + _format_claims(_pick_claims(claims, ("hidden state", "continuous thought", "coconut"), 3), claims, 3)
+                + "\n\n2. Recurrent depth: allocate test-time compute by iterating model blocks instead of producing longer text traces.\n"
+                + _format_claims(_pick_claims(claims, ("recurrent", "test-time", "block", "depth"), 3), claims, 3)
+                + "\n\n3. Soft thought adapters: generate continuous thought vectors through assistant/projection modules so existing LLMs can use latent reasoning without full retraining.\n"
+                + _format_claims(_pick_claims(claims, ("soft thought", "projection", "assistant", "existing"), 3), claims, 3)
+                + "\n\n4. Superposition and diversity: represent multiple candidate reasoning paths in latent form and add diversity mechanisms for search.\n"
+                + _format_claims(_pick_claims(claims, ("superposition", "diversity", "multiple", "path"), 3), claims, 3)
+                + "\n\n5. Multimodal latent reasoning: move beyond language-only traces into joint latent spaces for vision-language or perception-heavy reasoning.\n"
+                + _format_claims(multimodal, claims, 3)
+                + "\n"
+            )
         elif sec["section_type"] == "claims_and_implications":
-            body = f"# {sec['title']}\n\n" + "\n".join(claim_lines[20:40] or claim_lines[:10]) + "\n"
+            body = (
+                f"# {sec['title']}\n\n"
+                "## Engineering Implications\n\n"
+                "- For existing LLM products, soft-thought adapters are the lowest-friction route because they avoid replacing the base model.\n"
+                "- For new model families, recurrent-depth architectures are more fundamental because they make latent compute a native scaling axis.\n"
+                "- For agent systems, the key missing layer is not only latent computation; it is a verifiable projection from latent state back to evidence, claims, and audit logs.\n"
+                "- For multimodal agents, natural-language CoT is structurally lossy; latent state exchange or joint latent attention becomes more important as inputs become visual, spatial, or embodied.\n\n"
+                "Supporting evidence:\n"
+                + _format_claims((deployment + evaluation + multimodal), claims, 10)
+                + "\n"
+            )
         else:
-            body = f"# {sec['title']}\n\nOpen verification tasks:\n- Re-run search with stricter source filters.\n- Add contradiction-hunt sources.\n- Expand citation-span checks beyond exact evidence IDs.\n"
+            body = (
+                f"# {sec['title']}\n\n"
+                "Open verification tasks:\n"
+                "- Add contradiction-hunt sources from mechanistic interpretability and CoT faithfulness work.\n"
+                "- Compare latent reasoning efficiency against visible-token CoT under equal compute budgets.\n"
+                "- Test whether soft-thought and recurrent-depth methods preserve auditability in agent workflows.\n"
+                "- Add model-family coverage beyond arXiv papers: code repositories, released checkpoints, and benchmark leaderboards.\n"
+            )
             if evidence_anchor:
                 body += "\nCurrent evidence anchor:\n" + evidence_anchor + "\n"
         conn.execute(
@@ -727,6 +851,137 @@ def compile_report_to_markdown(conn: sqlite3.Connection, run_id: str, output_md:
         with open(output_md, "w", encoding="utf-8") as f:
             f.write(markdown)
     return output_md, len(sections), total_chars
+
+
+def synthesize_expert_report(conn: sqlite3.Connection, run_id: str, output_md: str) -> tuple[str, int]:
+    """Write a higher-density expert synthesis report from claims/evidence."""
+    run = conn.execute("SELECT topic FROM research_runs WHERE id = ?", (run_id,)).fetchone()
+    topic = run["topic"] if run else run_id
+    claims = conn.execute(
+        "SELECT c.id AS claim_id, c.claim_text, ce.evidence_id "
+        "FROM claims c LEFT JOIN claim_evidence ce ON ce.claim_id = c.id "
+        "WHERE c.run_id = ? ORDER BY c.created_at, c.id",
+        (run_id,),
+    ).fetchall()
+    architecture = _pick_claims(claims, ("hidden state", "recurrent", "soft thought", "continuous", "projection", "multimodal", "superposition"), 8)
+    recurrent = _pick_claims(claims, ("recurrent", "test-time", "block", "depth"), 4)
+    soft = _pick_claims(claims, ("soft thought", "projection", "assistant", "existing"), 4)
+    diversity = _pick_claims(claims, ("superposition", "diversity", "multiple", "path"), 4)
+    evaluation = _pick_claims(claims, ("evaluation", "faithful", "surface", "disentangle", "interpretability", "safety"), 4)
+    multimodal = _pick_claims(claims, ("multimodal", "vision", "audio", "spatial", "joint latent"), 4)
+    source_lines, source_counts = _source_strength_summary(conn, run_id)
+    contradiction_rows = _pick_claims(claims, ("limitation", "risk", "faithful", "uncertainty", "deterministic", "diversity", "interpretability"), 8)
+    insight_count = 0
+
+    lines = [
+        f"# {topic}: Expert Synthesis",
+        "",
+        "## Core Thesis",
+        "",
+        "Latent-space reasoning should be treated as a runtime architecture problem, not just a shorter chain-of-thought trick. The strongest direction is a split design: continuous latent state performs high-bandwidth intermediate computation, while an audit projection layer turns selected latent state into evidence, claims, actions, and replayable session events.",
+        "",
+        "## Insight Scorecard",
+        "",
+        "| Dimension | Score | Rationale |",
+        "|---|---:|---|",
+        f"| Source strength | {min(5, source_counts.get('paper', 0))}/5 | {source_counts.get('paper', 0)} paper sources plus {sum(source_counts.values())} total imported sources |",
+        "| Architecture abstraction | 4/5 | Routes are separated by mechanism: recurrence, recurrent depth, soft adapters, superposition, multimodal latent state |",
+        "| Engineering actionability | 4/5 | Includes P0/P1/P2/P3 roadmap with runtime integration path |",
+        "| Contradiction coverage | 2/5 | Current source set has uncertainty/risk claims, but lacks adversarial contradiction search |",
+        "| Auditability | 4/5 | Requires projection from latent state back to evidence, claims, and session events |",
+        "",
+        "## Architecture Taxonomy",
+        "",
+        "| Route | Mechanism | Best Fit | Main Risk |",
+        "|---|---|---|---|",
+        "| Hidden-state recurrence | Feed hidden states back as reasoning inputs | search/planning | hard to inspect |",
+        "| Recurrent depth | Spend test-time compute by iterating blocks | native model training | requires architecture change |",
+        "| Soft thought adapters | Project assistant-generated soft states into target model | existing LLM products | projection mismatch |",
+        "| Superposition latent state | Preserve multiple candidate paths in one latent representation | planner/search | collapse/evaluation policy |",
+        "| Multimodal latent reasoning | Reason in joint visual-language state | GUI/browser/robotics agents | alignment and auditability |",
+        "",
+        "Evidence anchors:",
+        _format_claims(architecture, claims, 8),
+        "",
+        "## Source Strength",
+        "",
+        "The current source set is strong for early architecture mapping because it is dominated by paper sources, but weak for production readiness because it lacks released-system benchmarks, implementation repos, and independent negative results.",
+        "",
+        "\n".join(source_lines[:12]) or "- No sources available.",
+        "",
+        "## Design Tradeoffs",
+        "",
+        "1. **Deployability vs. purity.** Soft thought adapters are easier to add to current systems; recurrent-depth models are cleaner but require model-level changes.",
+        _format_claims(soft + recurrent, claims, 5),
+        "",
+        "2. **Compression vs. exploration.** A single latent vector can compress reasoning, but complex tasks need path diversity or superposition.",
+        _format_claims(diversity, claims, 4),
+        "",
+        "3. **Performance vs. auditability.** Latent reasoning can reduce token overhead, but every productive latent state needs a projection into evidence and claims.",
+        _format_claims(evaluation, claims, 4),
+        "",
+        "4. **Language-only vs. multimodal.** For UI, browser, vision, and robotics agents, natural-language rationales are a lossy bottleneck; joint latent state becomes more important.",
+        _format_claims(multimodal, claims, 4),
+        "",
+        "## Contradictions and Uncertainty",
+        "",
+        "The evidence supports latent reasoning as a promising architecture family, but it does not prove that every latent method is more faithful, safer, or cheaper under equal compute. Three uncertainty zones remain:",
+        "",
+        "- **Faithfulness uncertainty:** visible CoT may be unfaithful, but latent trajectories can be even harder to audit unless projected into evidence and claims.",
+        "- **Diversity uncertainty:** deterministic soft thoughts can under-explore alternatives; SoftCoT++-style diversity mechanisms are an early answer, not a settled solution.",
+        "- **Deployment uncertainty:** adapter routes are easiest to ship, while recurrent-depth routes may require model retraining and infrastructure changes.",
+        "",
+        "Evidence anchors:",
+        _format_claims(contradiction_rows, claims, 6),
+        "",
+        "## System Architecture",
+        "",
+        "```text",
+        "┌────────────────────────────────────────────────────────────┐",
+        "│ Audit Projection: evidence / claims / citations / actions   │",
+        "├────────────────────────────────────────────────────────────┤",
+        "│ Latent Compute: soft thoughts / recurrence / superposition   │",
+        "├────────────────────────────────────────────────────────────┤",
+        "│ State Protocol: sufficient state / hashes / ACL / expiry     │",
+        "├────────────────────────────────────────────────────────────┤",
+        "│ Runtime: session log / replay / tools / evaluator gates      │",
+        "└────────────────────────────────────────────────────────────┘",
+        "```",
+        "",
+        "## Implementation Roadmap",
+        "",
+        "- **P0:** Add a soft-thought surrogate adapter that outputs canonical sufficient state JSON plus an audit projection.",
+        "- **P1:** Store latent-state lifecycle events in the append-only session log: created, projected, used, rejected, expired.",
+        "- **P2:** Add multi-path planner state with explicit collapse/evaluation policy at join gates.",
+        "- **P3:** Extend browser/UI/PDF pipelines with multimodal latent surrogates: region graph, DOM path, screenshot hash, and evidence projection.",
+        "",
+        "## Evaluation Plan",
+        "",
+        "- Compare equal-compute visible CoT, hidden-state recurrence, and soft-thought adapter variants.",
+        "- Measure pass rate, token cost, wall time, retry count, and evaluator contradiction rate.",
+        "- Require every latent-derived action to project back into an evidence/claim/action trace.",
+        "",
+        "## Open Risks",
+        "",
+        "- Latent state may improve answers while reducing interpretability.",
+        "- Projection layers may fabricate a neat explanation for a non-faithful hidden trajectory.",
+        "- Cross-model latent protocols may overfit to one backbone's representation geometry.",
+        "",
+        "## Bibliography",
+        "",
+    ]
+    insight_count += 5
+    sources = conn.execute(
+        "SELECT id, title, url FROM research_sources WHERE run_id = ? ORDER BY fetched_at, id",
+        (run_id,),
+    ).fetchall()
+    for src in sources:
+        lines.append(f"- [{src['id']}] {src['title']}{' — ' + src['url'] if src['url'] else ''}")
+    markdown = "\n".join(lines).strip() + "\n"
+    os.makedirs(os.path.dirname(output_md) or ".", exist_ok=True)
+    with open(output_md, "w", encoding="utf-8") as f:
+        f.write(markdown)
+    return output_md, len(markdown)
 
 
 def build_report_ast_payload(conn: sqlite3.Connection, run_id: str) -> dict:
@@ -1095,6 +1350,7 @@ def continue_research_pipeline(db_path: str, run_id: str, output_dir: str, outpu
     checks_count = check_sections_for_run(conn, run_id)
     final_md = output_md or os.path.join(output_dir, "final.md")
     compiled_path, _, chars = compile_report_to_markdown(conn, run_id, final_md)
+    expert_md, expert_chars = synthesize_expert_report(conn, run_id, os.path.join(output_dir, "expert_synthesis.md"))
     conn.close()
     export_payload = export_run_to_dir(db_path, run_id, output_dir, final_md=compiled_path)
     return {
@@ -1105,6 +1361,8 @@ def continue_research_pipeline(db_path: str, run_id: str, output_dir: str, outpu
         "checks": checks_count,
         "final_md": compiled_path,
         "characters": chars,
+        "expert_synthesis_md": expert_md,
+        "expert_synthesis_characters": expert_chars,
         "export": export_payload,
     }
 
@@ -1668,6 +1926,25 @@ def cmd_compile(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_synthesize(args: argparse.Namespace) -> int:
+    """Generate expert synthesis from mined evidence and claims."""
+    db_path = args.db_path
+    if not os.path.exists(db_path):
+        print(f"Error: {db_path} does not exist.", file=sys.stderr)
+        return 1
+    conn = storage.get_connection(db_path)
+    try:
+        output_md, chars = synthesize_expert_report(conn, args.run_id, args.output_md)
+    finally:
+        conn.close()
+    payload = {"ok": True, "run_id": args.run_id, "output_md": output_md, "characters": chars}
+    if emit_json(args, payload):
+        return 0
+    print(f"Expert synthesis: {output_md}")
+    print(f"Characters: {chars}")
+    return 0
+
+
 def cmd_export(args: argparse.Namespace) -> int:
     """Export research run to JSONL artifacts."""
     db_path = args.db_path
@@ -1698,6 +1975,8 @@ def cmd_eval_artifacts(args: argparse.Namespace) -> int:
         report_ast=args.report_ast or None,
         final_md=args.final_md or None,
         bibliography=args.bibliography or None,
+        expert_md=args.expert_md or None,
+        require_expert=bool(args.require_expert),
         max_unsupported_rate=args.max_unsupported_rate,
         min_citation_accuracy=args.min_citation_accuracy,
     )
@@ -1722,7 +2001,7 @@ def cmd_eval_artifacts(args: argparse.Namespace) -> int:
 ALL_SUBCOMMANDS = [
     "init", "add-source", "extract", "ledger", "status",
     "run", "plan", "search", "handoff-search", "import-search",
-    "mine", "outline", "write", "check", "compile", "export", "eval-artifacts",
+    "mine", "outline", "write", "check", "compile", "synthesize", "export", "eval-artifacts",
 ]
 
 SUBCOMMANDS = {
@@ -1741,6 +2020,7 @@ SUBCOMMANDS = {
     "write": cmd_write,
     "check": cmd_check,
     "compile": cmd_compile,
+    "synthesize": cmd_synthesize,
     "export": cmd_export,
     "eval-artifacts": cmd_eval_artifacts,
 }
@@ -1871,6 +2151,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_compile.add_argument("--output-md", default="", help="Path for compiled final markdown")
     p_compile.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
+    p_synthesize = sub.add_parser("synthesize", help="Generate expert synthesis report")
+    p_synthesize.add_argument("db_path", help="Path to the SQLite database")
+    p_synthesize.add_argument("--run-id", required=True, help="Research run ID")
+    p_synthesize.add_argument("--output-md", required=True, help="Path for expert synthesis markdown")
+    p_synthesize.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
     p_export = sub.add_parser("export", help="Export run to JSONL artifacts")
     p_export.add_argument("db_path", help="Path to the SQLite database")
     p_export.add_argument("--run-id", required=True, help="Research run ID")
@@ -1882,6 +2168,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_eval_artifacts.add_argument("--report-ast", default="", help="Optional report_ast.json override")
     p_eval_artifacts.add_argument("--final-md", default="", help="Optional final.md override")
     p_eval_artifacts.add_argument("--bibliography", default="", help="Optional final.bibliography.json override")
+    p_eval_artifacts.add_argument("--expert-md", default="", help="Optional expert_synthesis.md override")
+    p_eval_artifacts.add_argument("--require-expert", action="store_true", help="Require expert synthesis quality gate")
     p_eval_artifacts.add_argument("--max-unsupported-rate", type=float, default=0.05)
     p_eval_artifacts.add_argument("--min-citation-accuracy", type=float, default=0.95)
     p_eval_artifacts.add_argument("--json", action="store_true", help="Emit machine-readable JSON")

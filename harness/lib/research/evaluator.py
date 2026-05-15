@@ -60,6 +60,8 @@ def evaluate_artifacts(
     report_ast: str | Path | None = None,
     final_md: str | Path | None = None,
     bibliography: str | Path | None = None,
+    expert_md: str | Path | None = None,
+    require_expert: bool = False,
     max_unsupported_rate: float = DEFAULT_MAX_UNSUPPORTED_RATE,
     min_citation_accuracy: float = DEFAULT_MIN_CITATION_ACCURACY,
 ) -> dict[str, Any]:
@@ -89,6 +91,7 @@ def evaluate_artifacts(
     )
     report_ast_path = Path(report_ast).expanduser() if report_ast else output_dir / "report_ast.json"
     bibliography_path = Path(bibliography).expanduser() if bibliography else output_dir / "final.bibliography.json"
+    expert_path = Path(expert_md).expanduser() if expert_md else output_dir / "expert_synthesis.md"
 
     source_count = int(eval_data.get("source_count") or 0)
     evidence_count = int(eval_data.get("evidence_count") or 0)
@@ -140,9 +143,50 @@ def evaluate_artifacts(
             errors.append("final_md_empty")
         if not re.search(r"\[cite:ev_[A-Za-z0-9_-]+", final_text):
             errors.append("final_md_missing_evidence_citations")
+        metadata_noise = len(re.findall(r"(?im)^\s*-?\s*(Title|URL|Publisher|Published|Source Type):", final_text))
+        metrics["metadata_noise_lines"] = metadata_noise
+        if metadata_noise > 3:
+            errors.append(f"final_md_metadata_noise:{metadata_noise}>3")
+        if len(re.findall(r"(?im)^##?\s+(Architecture|架构|Taxonomy|技术路线|Engineering Implications|工程)", final_text)) == 0:
+            warnings.append("final_md_missing_architecture_or_implication_section")
 
     if not bibliography_path.exists():
         warnings.append(f"bibliography_missing:{bibliography_path}")
+    if require_expert:
+        if not expert_path.exists():
+            errors.append(f"expert_synthesis_missing:{expert_path}")
+            expert_text = ""
+        else:
+            expert_text = expert_path.read_text(encoding="utf-8", errors="replace")
+            tradeoff_count = len(re.findall(r"(?i)tradeoff|trade-off|取舍|vs\\.", expert_text))
+            roadmap_count = len(re.findall(r"(?m)^- \*\*P[0-2]\*\*|\bP[0-2]\b", expert_text))
+            has_taxonomy = bool(re.search(r"(?i)architecture taxonomy|架构分类|taxonomy", expert_text))
+            has_source_strength = bool(re.search(r"(?i)source strength|source score|来源强度|证据强度", expert_text))
+            has_contradiction = bool(re.search(r"(?i)contradictions? and uncertainty|contradiction|uncertainty|反证|不确定", expert_text))
+            insight_scorecard_rows = len(re.findall(r"(?m)^\| [^|\n]+ \|\s*\d+/5\s*\|", expert_text))
+            metrics.update({
+                "expert_chars": len(expert_text),
+                "expert_tradeoff_mentions": tradeoff_count,
+                "expert_roadmap_mentions": roadmap_count,
+                "expert_has_taxonomy": has_taxonomy,
+                "expert_has_source_strength": has_source_strength,
+                "expert_has_contradiction_uncertainty": has_contradiction,
+                "expert_insight_scorecard_rows": insight_scorecard_rows,
+            })
+            if len(expert_text) < 1800:
+                errors.append(f"expert_synthesis_too_short:{len(expert_text)}<1800")
+            if not has_taxonomy:
+                errors.append("expert_synthesis_missing_taxonomy")
+            if tradeoff_count < 1:
+                errors.append("expert_synthesis_missing_tradeoffs")
+            if roadmap_count < 3:
+                errors.append(f"expert_synthesis_missing_p0_p1_p2_roadmap:{roadmap_count}<3")
+            if not has_source_strength:
+                errors.append("expert_synthesis_missing_source_strength")
+            if not has_contradiction:
+                errors.append("expert_synthesis_missing_contradiction_uncertainty")
+            if insight_scorecard_rows < 3:
+                errors.append(f"expert_synthesis_insight_scorecard_too_thin:{insight_scorecard_rows}<3")
 
     artifacts = {
         "eval_json": str(eval_path),
@@ -150,6 +194,7 @@ def evaluate_artifacts(
         "report_ast": str(report_ast_path),
         "final_md": str(final_path),
         "bibliography": str(bibliography_path),
+        "expert_synthesis": str(expert_path),
     }
     exists = {name: bool(path and Path(path).exists()) for name, path in artifacts.items()}
     verdict = "FAIL" if errors else "PASS"
