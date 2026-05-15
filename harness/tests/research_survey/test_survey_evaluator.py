@@ -53,6 +53,8 @@ def test_strict_eval_passes_controlled_strong_fixture(tmp_path):
     assert result["scorecard"]["section_count"] >= 30
     assert result["coverage"]["source_type_count"] == 4
     assert result["coverage"]["claim_support_coverage"] == 1.0
+    assert result["taxonomy"]["taxonomy_depth_score"] >= 0.75
+    assert result["contradiction_matrix"]["contradiction_coverage"] >= 0.80
 
 
 def test_strict_eval_fails_when_claims_have_no_evidence_links(tmp_path):
@@ -92,3 +94,52 @@ def test_strict_eval_fails_when_source_types_are_too_narrow(tmp_path):
     result = evaluate_survey(tmp_path, strict=True)
     assert result["ok"] is False
     assert "source_type_count_low:1<4" in result["scorecard"]["issues"]
+
+
+def test_strict_eval_fails_when_taxonomy_is_shallow(tmp_path):
+    plan = create_survey_plan("latent reasoning", target_chars=50000)
+    for chapter in plan["report_ast"]["chapters"]:
+        chapter["title"] = "General Notes"
+    write_survey_plan(plan, tmp_path)
+    sources = [{"id": f"src_{i}", "source_type": t, "title": t} for i, t in enumerate(["paper", "official_doc", "code", "benchmark"])]
+    evidence = [{"id": f"ev_{i}", "source_id": sources[i % 4]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
+    claims = [{"id": f"cl_{i}", "claim_text": "latent reasoning architecture requires evaluation evidence"} for i in range(40)]
+    links = [{"claim_id": f"cl_{i}", "evidence_id": f"ev_{i}"} for i in range(40)]
+    _append_jsonl(tmp_path / "sources.jsonl", sources)
+    _append_jsonl(tmp_path / "evidence.jsonl", evidence)
+    _append_jsonl(tmp_path / "claims.jsonl", claims)
+    _append_jsonl(tmp_path / "claim_evidence.jsonl", links)
+    build_evidence_packs(tmp_path, plan["report_ast"])
+    for section in plan["report_ast"]["sections"][:3]:
+        compile_section(tmp_path, section["section_id"])
+    compile_survey(tmp_path)
+
+    result = evaluate_survey(tmp_path, strict=True)
+    assert result["ok"] is False
+    assert any(item.startswith("taxonomy_depth_score_low:") for item in result["scorecard"]["issues"])
+
+
+def test_strict_eval_fails_when_contradiction_slots_are_missing(tmp_path):
+    plan = create_survey_plan("latent reasoning", target_chars=50000)
+    write_survey_plan(plan, tmp_path)
+    sources = [{"id": f"src_{i}", "source_type": t, "title": t} for i, t in enumerate(["paper", "official_doc", "code", "benchmark"])]
+    evidence = [{"id": f"ev_{i}", "source_id": sources[i % 4]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
+    claims = [{"id": f"cl_{i}", "claim_text": "latent reasoning architecture requires evaluation evidence"} for i in range(40)]
+    links = [{"claim_id": f"cl_{i}", "evidence_id": f"ev_{i}"} for i in range(40)]
+    _append_jsonl(tmp_path / "sources.jsonl", sources)
+    _append_jsonl(tmp_path / "evidence.jsonl", evidence)
+    _append_jsonl(tmp_path / "claims.jsonl", claims)
+    _append_jsonl(tmp_path / "claim_evidence.jsonl", links)
+    packs = build_evidence_packs(tmp_path, plan["report_ast"])
+    for pack in packs["packs"]:
+        pack["contradiction_slots"] = []
+        section_pack = tmp_path / "sections" / pack["section_id"] / "evidence_pack.json"
+        section_pack.write_text(json.dumps(pack, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (tmp_path / "survey_evidence_packs.json").write_text(json.dumps(packs, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    for section in plan["report_ast"]["sections"][:3]:
+        compile_section(tmp_path, section["section_id"])
+    compile_survey(tmp_path)
+
+    result = evaluate_survey(tmp_path, strict=True)
+    assert result["ok"] is False
+    assert "contradiction_coverage_low:0.0000<0.8000" in result["scorecard"]["issues"]
