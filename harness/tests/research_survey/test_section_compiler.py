@@ -22,7 +22,7 @@ def _strong_fixture(root):
     plan = create_survey_plan("latent reasoning", target_chars=50000)
     write_survey_plan(plan, root)
     sources = [{"id": f"src_{i}", "source_type": t, "title": t} for i, t in enumerate(["paper", "official_doc", "code", "benchmark"])]
-    evidence = [{"id": f"ev_{i}", "source_id": sources[i % 4]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(16)]
+    evidence = [{"id": f"ev_{i}", "source_id": sources[i % len(sources)]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(16)]
     claims = [{"id": f"cl_{i}", "claim_text": "latent reasoning architecture requires evaluation evidence"} for i in range(12)]
     links = [{"claim_id": f"cl_{i % 12}", "evidence_id": f"ev_{i}"} for i in range(16)]
     _append_jsonl(root / "sources.jsonl", sources)

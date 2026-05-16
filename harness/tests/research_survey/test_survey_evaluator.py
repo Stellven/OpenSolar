@@ -49,7 +49,7 @@ def test_strict_eval_passes_controlled_strong_fixture(tmp_path):
     plan = create_survey_plan("latent reasoning", target_chars=50000)
     write_survey_plan(plan, tmp_path)
     sources = _strong_sources()
-    evidence = [{"id": f"ev_{i}", "source_id": sources[i % 4]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
+    evidence = [{"id": f"ev_{i}", "source_id": sources[i % len(sources)]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
     claims = [{"id": f"cl_{i}", "claim_text": "latent reasoning architecture requires evaluation evidence"} for i in range(40)]
     links = [{"claim_id": f"cl_{i}", "evidence_id": f"ev_{i}"} for i in range(40)]
     _append_jsonl(tmp_path / "sources.jsonl", sources)
@@ -78,7 +78,7 @@ def test_strict_eval_fails_when_claims_have_no_evidence_links(tmp_path):
     plan = create_survey_plan("latent reasoning", target_chars=50000)
     write_survey_plan(plan, tmp_path)
     sources = _strong_sources()
-    evidence = [{"id": f"ev_{i}", "source_id": sources[i % 4]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
+    evidence = [{"id": f"ev_{i}", "source_id": sources[i % len(sources)]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
     claims = [{"id": f"cl_{i}", "claim_text": "latent reasoning architecture requires evaluation evidence"} for i in range(40)]
     _append_jsonl(tmp_path / "sources.jsonl", sources)
     _append_jsonl(tmp_path / "evidence.jsonl", evidence)
@@ -119,7 +119,7 @@ def test_strict_eval_fails_when_taxonomy_is_shallow(tmp_path):
         chapter["title"] = "General Notes"
     write_survey_plan(plan, tmp_path)
     sources = _strong_sources()
-    evidence = [{"id": f"ev_{i}", "source_id": sources[i % 4]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
+    evidence = [{"id": f"ev_{i}", "source_id": sources[i % len(sources)]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
     claims = [{"id": f"cl_{i}", "claim_text": "latent reasoning architecture requires evaluation evidence"} for i in range(40)]
     links = [{"claim_id": f"cl_{i}", "evidence_id": f"ev_{i}"} for i in range(40)]
     _append_jsonl(tmp_path / "sources.jsonl", sources)
@@ -140,7 +140,7 @@ def test_strict_eval_fails_when_contradiction_slots_are_missing(tmp_path):
     plan = create_survey_plan("latent reasoning", target_chars=50000)
     write_survey_plan(plan, tmp_path)
     sources = _strong_sources()
-    evidence = [{"id": f"ev_{i}", "source_id": sources[i % 4]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
+    evidence = [{"id": f"ev_{i}", "source_id": sources[i % len(sources)]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
     claims = [{"id": f"cl_{i}", "claim_text": "latent reasoning architecture requires evaluation evidence"} for i in range(40)]
     links = [{"claim_id": f"cl_{i}", "evidence_id": f"ev_{i}"} for i in range(40)]
     _append_jsonl(tmp_path / "sources.jsonl", sources)
@@ -166,7 +166,7 @@ def test_strict_eval_fails_when_section_references_out_of_pack_claim(tmp_path):
     plan = create_survey_plan("latent reasoning", target_chars=50000)
     write_survey_plan(plan, tmp_path)
     sources = _strong_sources()
-    evidence = [{"id": f"ev_{i}", "source_id": sources[i % 4]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
+    evidence = [{"id": f"ev_{i}", "source_id": sources[i % len(sources)]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
     claims = [{"id": f"cl_{i}", "claim_text": "latent reasoning architecture requires evaluation evidence"} for i in range(40)]
     links = [{"claim_id": f"cl_{i}", "evidence_id": f"ev_{i}"} for i in range(40)]
     _append_jsonl(tmp_path / "sources.jsonl", sources)
@@ -199,7 +199,7 @@ def test_strict_eval_fails_when_section_has_no_claim_or_evidence_tags(tmp_path):
     plan = create_survey_plan("latent reasoning", target_chars=50000)
     write_survey_plan(plan, tmp_path)
     sources = _strong_sources()
-    evidence = [{"id": f"ev_{i}", "source_id": sources[i % 4]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
+    evidence = [{"id": f"ev_{i}", "source_id": sources[i % len(sources)]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
     claims = [{"id": f"cl_{i}", "claim_text": "latent reasoning architecture requires evaluation evidence"} for i in range(40)]
     links = [{"claim_id": f"cl_{i}", "evidence_id": f"ev_{i}"} for i in range(40)]
     _append_jsonl(tmp_path / "sources.jsonl", sources)
@@ -224,7 +224,7 @@ def test_strict_eval_fails_when_evidence_tag_context_is_not_grounded(tmp_path):
     plan = create_survey_plan("latent reasoning", target_chars=50000)
     write_survey_plan(plan, tmp_path)
     sources = _strong_sources()
-    evidence = [{"id": f"ev_{i}", "source_id": sources[i % 4]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
+    evidence = [{"id": f"ev_{i}", "source_id": sources[i % len(sources)]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
     claims = [{"id": f"cl_{i}", "claim_text": "latent reasoning architecture requires evaluation evidence"} for i in range(40)]
     links = [{"claim_id": f"cl_{i}", "evidence_id": f"ev_{i}"} for i in range(40)]
     _append_jsonl(tmp_path / "sources.jsonl", sources)
@@ -257,7 +257,7 @@ def test_section_scorecard_ranks_rewrite_candidates(tmp_path):
     plan = create_survey_plan("latent reasoning", target_chars=50000)
     write_survey_plan(plan, tmp_path)
     sources = _strong_sources()
-    evidence = [{"id": f"ev_{i}", "source_id": sources[i % 4]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
+    evidence = [{"id": f"ev_{i}", "source_id": sources[i % len(sources)]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
     claims = [{"id": f"cl_{i}", "claim_text": "latent reasoning architecture requires evaluation evidence"} for i in range(40)]
     links = [{"claim_id": f"cl_{i}", "evidence_id": f"ev_{i}"} for i in range(40)]
     _append_jsonl(tmp_path / "sources.jsonl", sources)
@@ -287,7 +287,7 @@ def test_complete_professor_gate_rejects_tiny_tagged_sections(tmp_path):
     plan = create_survey_plan("latent reasoning", target_chars=50000)
     write_survey_plan(plan, tmp_path)
     sources = _strong_sources()
-    evidence = [{"id": f"ev_{i}", "source_id": sources[i % 4]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(80)]
+    evidence = [{"id": f"ev_{i}", "source_id": sources[i % len(sources)]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(80)]
     claims = [{"id": f"cl_{i}", "claim_text": "latent reasoning architecture requires evaluation evidence"} for i in range(80)]
     links = [{"claim_id": f"cl_{i}", "evidence_id": f"ev_{i}"} for i in range(80)]
     _append_jsonl(tmp_path / "sources.jsonl", sources)

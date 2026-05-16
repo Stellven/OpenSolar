@@ -8,13 +8,13 @@
   "handoff_to": "",
   "target_role": "coordinator",
   "created_at": "2026-05-15T19:27:12Z",
-  "updated_at": "2026-05-15T21:54:20-0400",
+  "updated_at": "2026-05-15T22:05:42-0400",
   "contract": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.contract.md",
   "prd": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.prd.md",
   "design": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.design.md",
   "plan": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.plan.md",
   "task_graph": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.task_graph.json",
-  "current_truth": "Professor-grade DeepResearch survey now has final-quality gating, require-complete auto-continuation, and source-authority coverage gates: weak web/blog-heavy source sets stop at source_gap_handoff_required, while canonical paper/official/code/benchmark ledgers can complete with source_coverage_ok=true.",
+  "current_truth": "Professor-grade DeepResearch survey now has final-quality gating, require-complete auto-continuation, source-authority coverage, literature map, controversy matrix, and chapter-level review artifacts. Runtime CLI smoke completed require-complete with all three new gates ok.",
   "id": "sprint-20260515-professor-grade-deepresearch-survey",
   "history": [
     {
@@ -307,6 +307,20 @@
         "source canonical-source smoke passed source_count=16 authority_avg=0.8594"
       ],
       "evidence": "/Users/sihaoli/Knowledge/_raw/solar-harness/deepresearch-survey-source-authority-coverage-gate-20260515T215420-0400.md"
+    },
+    {
+      "ts": "2026-05-15T22:05:42-0400",
+      "event": "survey_literature_controversy_chapter_review_complete",
+      "status": "ok",
+      "summary": "Added survey_literature_map.json, survey_controversy_matrix.json, and survey_chapter_review.json with strict evaluator consumption.",
+      "verification": [
+        "source focused evaluator 12 passed",
+        "source survey suite 83 passed",
+        "source regression 137 passed",
+        "runtime focused survey checks 24 passed",
+        "runtime CLI smoke require-complete status=done literature_ok=true controversy_ok=true chapter_review_ok=true"
+      ],
+      "evidence": "/Users/sihaoli/Knowledge/_raw/solar-harness/deepresearch-survey-literature-controversy-chapter-review-20260515T220542-0400.md"
     }
   ]
 }
