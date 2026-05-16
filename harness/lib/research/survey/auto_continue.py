@@ -26,6 +26,7 @@ def continue_survey_run(
     repair_limit: int = 0,
     min_finalized: int | None = None,
     min_chars: int = 1200,
+    require_complete: bool = False,
 ) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
     root.mkdir(parents=True, exist_ok=True)
@@ -33,7 +34,7 @@ def continue_survey_run(
     max_steps = max(1, max_steps)
 
     for index in range(max_steps):
-        status = survey_status_next_action(root, brief=brief, returned_md=returned_md)
+        status = survey_status_next_action(root, brief=brief, returned_md=returned_md, require_complete=require_complete)
         state = str(status.get("status") or "unknown")
         step: dict[str, Any] = {
             "index": index,
@@ -64,19 +65,22 @@ def continue_survey_run(
                 "final_status": status,
             }
 
-        if state in {"not_started", "ready_to_finalize"}:
+        if state in {"not_started", "ready_to_finalize", "needs_more_sections"}:
+            effective_section_limit = 0 if require_complete and state == "needs_more_sections" else section_limit
             result = finalize_survey_run(
                 root,
                 brief=brief,
                 target_chars=target_chars,
                 audience=audience,
                 domain=domain,
-                section_limit=section_limit,
+                section_limit=effective_section_limit,
                 repair_limit=repair_limit,
                 min_finalized=min_finalized,
                 min_chars=min_chars,
+                require_complete=require_complete,
             )
             step["executed"] = "survey-finalize-run"
+            step["section_limit"] = effective_section_limit
             step["result_ok"] = bool(result.get("ok"))
             step["result_reason"] = result.get("reason") or ""
             continue
@@ -92,13 +96,14 @@ def continue_survey_run(
                 repair_limit=repair_limit,
                 min_finalized=min_finalized,
                 min_chars=min_chars,
+                require_complete=require_complete,
             )
             step["executed"] = "survey-import-search-results"
             step["input_md"] = str(input_md)
             step["result_ok"] = bool(result.get("ok"))
             step["result_reason"] = result.get("reason") or ""
             if not result.get("ok"):
-                final_status = survey_status_next_action(root, brief=brief, returned_md=returned_md)
+                final_status = survey_status_next_action(root, brief=brief, returned_md=returned_md, require_complete=require_complete)
                 return {
                     "ok": False,
                     "completed": False,
@@ -118,7 +123,7 @@ def continue_survey_run(
             "final_status": status,
         }
 
-    final_status = survey_status_next_action(root, brief=brief, returned_md=returned_md)
+    final_status = survey_status_next_action(root, brief=brief, returned_md=returned_md, require_complete=require_complete)
     return {
         "ok": final_status.get("status") == "done",
         "completed": final_status.get("status") == "done",

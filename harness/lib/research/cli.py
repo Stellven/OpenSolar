@@ -2609,6 +2609,7 @@ def cmd_survey_import_search_results(args: argparse.Namespace) -> int:
         repair_limit=args.repair_limit,
         min_finalized=args.min_finalized,
         min_chars=args.min_chars,
+        require_complete=args.require_complete,
     )
     if emit_json(args, payload):
         return 0 if payload.get("ok") and (not args.continue_finalize or (payload.get("finalize") or {}).get("ok")) else 1
@@ -2623,6 +2624,7 @@ def cmd_survey_status_next_action(args: argparse.Namespace) -> int:
         args.output_dir,
         brief=args.brief,
         returned_md=args.returned_md,
+        require_complete=args.require_complete,
     )
     if emit_json(args, payload):
         return 0 if payload.get("ok") else 1
@@ -2645,6 +2647,7 @@ def cmd_survey_continue(args: argparse.Namespace) -> int:
         repair_limit=args.repair_limit,
         min_finalized=args.min_finalized,
         min_chars=args.min_chars,
+        require_complete=args.require_complete,
     )
     if emit_json(args, payload):
         return 0 if payload.get("ok") and (payload.get("completed") or args.allow_pending) else 1
@@ -3338,12 +3341,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_import.add_argument("--repair-limit", type=int, default=0)
     p_survey_import.add_argument("--min-finalized", type=int, default=None)
     p_survey_import.add_argument("--min-chars", type=int, default=1200)
+    p_survey_import.add_argument("--require-complete", action="store_true", help="Require every planned section plus final quality gate when --continue-finalize is used")
     p_survey_import.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     p_survey_status_next = sub.add_parser("survey-status-next-action", help="Show the next actionable step for a survey DeepResearch output directory")
     p_survey_status_next.add_argument("--output-dir", required=True)
     p_survey_status_next.add_argument("--brief", default="")
     p_survey_status_next.add_argument("--returned-md", default="", help="Returned external search Markdown path; defaults to <output-dir>/returned_sources.md")
+    p_survey_status_next.add_argument("--require-complete", action="store_true", help="Include complete-survey next-action hints")
     p_survey_status_next.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     p_survey_continue = sub.add_parser("survey-continue", help="Safely continue a survey DeepResearch run until done or a human/source-gap pause")
@@ -3358,6 +3363,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_continue.add_argument("--repair-limit", type=int, default=0)
     p_survey_continue.add_argument("--min-finalized", type=int, default=None)
     p_survey_continue.add_argument("--min-chars", type=int, default=1200)
+    p_survey_continue.add_argument("--require-complete", action="store_true", help="Require every planned section plus final quality gate before completion")
     p_survey_continue.add_argument("--allow-pending", action="store_true", help="Return zero when safely paused for source search or writer response")
     p_survey_continue.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 

@@ -64,3 +64,27 @@ def test_status_next_done_when_finalize_passed(tmp_path):
     payload = survey_status_next_action(tmp_path)
     assert payload["status"] == "done"
     assert payload["next_action"].startswith("open ")
+
+
+def test_status_next_detects_incomplete_quality_gate(tmp_path):
+    _write_json(tmp_path / "survey_finalize_run.json", {
+        "ok": False,
+        "reason": "final_eval_failed",
+        "final_eval": {"scorecard": {"issues": ["incomplete_sections:29", "pending_placeholder_count:29"]}},
+    })
+    _write_json(tmp_path / "survey_final_quality.json", {"pending_placeholder_count": 29})
+    payload = survey_status_next_action(tmp_path, brief="latent reasoning", require_complete=True)
+    assert payload["status"] == "needs_more_sections"
+    assert payload["reason"] == "complete_survey_sections_required"
+    assert "--require-complete" in payload["next_action"]
+
+
+def test_status_next_detects_quality_gate_failure(tmp_path):
+    _write_json(tmp_path / "survey_finalize_run.json", {
+        "ok": False,
+        "reason": "final_eval_failed",
+        "final_eval": {"scorecard": {"issues": ["final_char_count_low:100<30000"]}},
+    })
+    payload = survey_status_next_action(tmp_path)
+    assert payload["status"] == "quality_gate_failed"
+    assert "survey-auto-repair" in payload["next_action"]

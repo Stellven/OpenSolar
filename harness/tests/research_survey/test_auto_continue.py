@@ -96,3 +96,35 @@ def test_continue_survey_cli_requires_completion_without_allow_pending(tmp_path,
     assert rc == 1
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "need_search_results"
+
+
+def test_continue_survey_supports_require_complete(tmp_path):
+    payload = continue_survey_run(
+        tmp_path,
+        brief="latent reasoning",
+        max_steps=2,
+        require_complete=True,
+    )
+    assert payload["status"] == "need_search_results"
+    assert (tmp_path / "survey_finalize_run.json").exists()
+
+
+def test_continue_survey_require_complete_writes_remaining_sections(tmp_path):
+    plan = create_survey_plan("latent reasoning", target_chars=50000)
+    write_survey_plan(plan, tmp_path)
+    returned = tmp_path / "returned_sources.md"
+    returned.write_text(_search_results(), encoding="utf-8")
+    payload = continue_survey_run(
+        tmp_path,
+        brief="latent reasoning",
+        returned_md=returned,
+        max_steps=5,
+        section_limit=1,
+        repair_limit=1,
+        min_chars=100,
+        require_complete=True,
+    )
+    assert payload["ok"] is True
+    assert payload["completed"] is True
+    assert payload["status"] == "done"
+    assert any(step.get("status") == "needs_more_sections" and step.get("section_limit") == 0 for step in payload["steps"])

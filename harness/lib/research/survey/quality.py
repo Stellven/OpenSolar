@@ -269,6 +269,81 @@ def _build_section_scorecard(
     }
 
 
+def _build_final_quality(root: Path, ast: dict[str, Any], sections: list[dict[str, Any]]) -> dict[str, Any]:
+    final_path = root / "final.md"
+    final_text = final_path.read_text(encoding="utf-8", errors="ignore") if final_path.exists() else ""
+    target_chars = int(ast.get("target_chars") or sum(int(section.get("target_chars") or 0) for section in sections) or 0)
+    finalized_lengths: list[int] = []
+    missing_sections: list[str] = []
+    for section in sections:
+        section_id = str(section.get("section_id") or "")
+        if not section_id:
+            continue
+        path = root / "sections" / section_id / "final.md"
+        if not path.exists():
+            missing_sections.append(section_id)
+            continue
+        finalized_lengths.append(len(path.read_text(encoding="utf-8", errors="ignore")))
+    final_char_count = len(final_text)
+    finalized_count = len(finalized_lengths)
+    avg_section_chars = round(sum(finalized_lengths) / max(finalized_count, 1), 2)
+    pending_placeholder_count = len(re.findall(r"Status:\s*pending final section\.", final_text))
+    heading_count = len(re.findall(r"^#{2,4}\s+", final_text, flags=re.M))
+    claim_tag_count = len(re.findall(r"\[claim:[^\]]+\]", final_text))
+    evidence_tag_count = len(re.findall(r"\[evidence:[^\]]+\]", final_text))
+    chars_k = max(final_char_count / 1000.0, 1.0)
+    claim_tag_density = round(claim_tag_count / chars_k, 4)
+    evidence_tag_density = round(evidence_tag_count / chars_k, 4)
+    paragraphs = []
+    for item in final_text.split("\n\n"):
+        cleaned = re.sub(r"\[[a-z]+:[^\]]+\]", "", item.strip().lower())
+        cleaned = re.sub(r"^#+\s+", "", cleaned, flags=re.M)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        if len(cleaned) >= 80:
+            paragraphs.append(cleaned)
+    repetition_rate = round(1.0 - (len(set(paragraphs)) / max(len(paragraphs), 1)), 4)
+    per_section_target = target_chars / max(len(sections), 1) if target_chars else 0
+    min_final_chars = int(target_chars * 0.60) if target_chars else 0
+    min_avg_section_chars = int(max(min(per_section_target * 0.45, 1200), 500)) if per_section_target else 500
+    min_heading_count = max(finalized_count * 5, 1) if finalized_count else 0
+    issues: list[str] = []
+    if target_chars and final_char_count < min_final_chars:
+        issues.append(f"final_char_count_low:{final_char_count}<{min_final_chars}")
+    if finalized_count and avg_section_chars < min_avg_section_chars:
+        issues.append(f"avg_section_chars_low:{avg_section_chars:.2f}<{min_avg_section_chars}")
+    if pending_placeholder_count:
+        issues.append(f"pending_placeholder_count:{pending_placeholder_count}")
+    if finalized_count and heading_count < min_heading_count:
+        issues.append(f"final_heading_count_low:{heading_count}<{min_heading_count}")
+    if finalized_count and claim_tag_density < 0.80:
+        issues.append(f"claim_tag_density_low:{claim_tag_density:.4f}<0.8000")
+    if finalized_count and evidence_tag_density < 0.80:
+        issues.append(f"evidence_tag_density_low:{evidence_tag_density:.4f}<0.8000")
+    if repetition_rate > 0.99:
+        issues.append(f"final_repetition_rate_high:{repetition_rate:.4f}>0.9900")
+    return {
+        "ok": not issues,
+        "final_md": str(final_path),
+        "target_chars": target_chars,
+        "final_char_count": final_char_count,
+        "min_final_chars": min_final_chars,
+        "finalized_sections": finalized_count,
+        "total_sections": len(sections),
+        "missing_sections": missing_sections[:50],
+        "avg_section_chars": avg_section_chars,
+        "min_avg_section_chars": min_avg_section_chars,
+        "pending_placeholder_count": pending_placeholder_count,
+        "heading_count": heading_count,
+        "min_heading_count": min_heading_count,
+        "claim_tag_count": claim_tag_count,
+        "evidence_tag_count": evidence_tag_count,
+        "claim_tag_density_per_1k_chars": claim_tag_density,
+        "evidence_tag_density_per_1k_chars": evidence_tag_density,
+        "repetition_rate": repetition_rate,
+        "issues": issues,
+    }
+
+
 def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs: dict | None = None) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
     ast = ast or _read_json(root / "survey_report_ast.json")
@@ -323,16 +398,19 @@ def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs
     }
     section_factual_audit = _section_factual_audit(root, sections, pack_rows, evidence_rows)
     section_scorecard = _build_section_scorecard(root, sections, pack_rows, section_factual_audit)
+    final_quality = _build_final_quality(root, ast, sections)
 
     payload = {
-        "ok": taxonomy["ok"] and contradiction_matrix["ok"] and section_factual_audit["ok"] and section_scorecard["ok"],
+        "ok": taxonomy["ok"] and contradiction_matrix["ok"] and section_factual_audit["ok"] and section_scorecard["ok"] and final_quality["ok"],
         "taxonomy": taxonomy,
         "contradiction_matrix": contradiction_matrix,
         "section_factual_audit": section_factual_audit,
         "section_scorecard": section_scorecard,
+        "final_quality": final_quality,
     }
     (root / "survey_taxonomy.json").write_text(json.dumps(taxonomy, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_contradiction_matrix.json").write_text(json.dumps(contradiction_matrix, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_section_factual_audit.json").write_text(json.dumps(section_factual_audit, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_section_scorecard.json").write_text(json.dumps(section_scorecard, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    (root / "survey_final_quality.json").write_text(json.dumps(final_quality, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return payload
