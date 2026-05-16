@@ -294,6 +294,7 @@ def run_section_revision_loop(
     *,
     finalize: bool = True,
     max_rounds: int = 3,
+    start_round_index: int = 0,
     min_chars: int = 1200,
     writer_backend: str = "deterministic",
     writer_command: str = "",
@@ -334,7 +335,8 @@ def run_section_revision_loop(
         pane_target=pane_target,
         pane_send=pane_send,
     )
-    for round_index in range(max(max_rounds, 1)):
+    start_round = max(int(start_round_index or 0), 0)
+    for round_index in range(start_round, start_round + max(max_rounds, 1)):
         packet = build_section_prompt_packet(root, section_id, round_index=round_index, writer_backend=backend.name)
         if emit_prompt_packet:
             _write_prompt_packet(section_dir, packet)
@@ -439,7 +441,7 @@ def run_section_revision_loop(
             section_id=section_id,
             round_index=round_index,
             verdict=review.verdict,
-            changed=round_index > 0,
+            changed=round_index > start_round,
             issues_before=list(review.issues),
             actions=[] if review.verdict == "PASS" else ["expand_structure", "bind_missing_citations", "add_evaluation_or_contradiction"],
         )))
