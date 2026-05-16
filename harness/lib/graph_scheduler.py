@@ -168,9 +168,18 @@ def _status_rank(status: str) -> int:
 def node_status(graph: dict[str, Any], node_id: str) -> str:
     results = _node_results(graph)
     node = _node_map(graph)[node_id]
+    gate = node.get("gate")
+    gate_results = graph.get("gate_results") or {}
+    gate_passed = bool(
+        gate
+        and isinstance(gate_results.get(gate), dict)
+        and gate_results[gate].get("status") == "passed"
+    )
     if node_id in results and isinstance(results[node_id], dict):
         result_status = str(results[node_id].get("status", "") or "").lower()
         node_status_value = str(node.get("status", "pending") or "pending").lower()
+        if gate_passed and "failed" not in {result_status, node_status_value}:
+            return "passed"
         result_rank = _status_rank(result_status)
         node_rank = _status_rank(node_status_value)
         if result_rank != node_rank:
@@ -180,6 +189,8 @@ def node_status(graph: dict[str, Any], node_id: str) -> str:
         if result_ts and node_ts and node_ts > result_ts:
             return node_status_value
         return result_status
+    if gate_passed and str(node.get("status", "pending") or "pending").lower() != "failed":
+        return "passed"
     return str(node.get("status", "pending") or "pending").lower()
 
 
