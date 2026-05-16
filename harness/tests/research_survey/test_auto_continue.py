@@ -15,12 +15,22 @@ from research.survey.planner import create_survey_plan, write_survey_plan
 
 def _search_results(count: int = 16) -> str:
     source_types = ["paper", "repo", "official_doc", "benchmark"]
+    url_templates = {
+        "paper": ["https://arxiv.org/abs/2412.06769", "https://openreview.net/forum?id=latent-reasoning", "https://doi.org/10.1145/latent-reasoning", "https://ieeexplore.ieee.org/document/123456"],
+        "repo": ["https://github.com/example/latent-reasoning", "https://github.com/facebookresearch/coconut"],
+        "official_doc": ["https://docs.example.edu/latent-reasoning", "https://docs.example.edu/latent-reasoning/api"],
+        "benchmark": ["https://paperswithcode.com/task/latent-reasoning", "https://huggingface.co/datasets/example/latent-reasoning"],
+    }
+    type_seen = {key: 0 for key in url_templates}
     blocks = ["# External Search Results: latent reasoning"]
     for idx in range(1, count + 1):
         source_type = source_types[(idx - 1) % len(source_types)]
+        urls = url_templates[source_type]
+        url = urls[type_seen[source_type] % len(urls)]
+        type_seen[source_type] += 1
         blocks.append(f"""
 ## Source {idx}: Latent Reasoning Source {idx}
-URL: https://example.com/latent-auto-{idx}
+URL: {url}
 Publisher: Example
 Published: 2025-01-{idx:02d}
 Source Type: {source_type}
