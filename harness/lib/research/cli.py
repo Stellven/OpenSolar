@@ -2503,6 +2503,32 @@ def cmd_survey_rewrite_queue(args: argparse.Namespace) -> int:
     return 0 if payload.get("ok") else 1
 
 
+def cmd_survey_rewrite_run(args: argparse.Namespace) -> int:
+    from research.survey.rewrite_runner import run_rewrite_queue
+
+    try:
+        payload = run_rewrite_queue(
+            args.output_dir,
+            limit=args.limit,
+            max_rounds=args.max_revisions,
+            min_chars=args.min_chars,
+            writer_backend=args.writer_backend,
+            writer_command=args.writer_command,
+            writer_timeout=args.writer_timeout,
+            pane_target=args.pane_target,
+            pane_send=args.pane_send,
+            emit_prompt_packet=not args.no_prompt_packet,
+            build_if_missing=not args.no_build_queue,
+            replace_final=not args.no_replace_final,
+        )
+    except ValueError as exc:
+        payload = {"ok": False, "reason": str(exc)}
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") or (args.allow_pending and payload.get("waiting", 0) > 0) else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") or (args.allow_pending and payload.get("waiting", 0) > 0) else 1
+
+
 def cmd_survey_review(args: argparse.Namespace) -> int:
     from research.survey.evaluator import evaluate_survey
 
@@ -2821,7 +2847,7 @@ ALL_SUBCOMMANDS = [
     "mine", "outline", "write", "check", "compile", "synthesize", "export", "eval-artifacts",
     "policy-doctor", "policy-explain",
     "source-audit",
-    "survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-watch-register", "survey-watch-tick", "survey-rewrite-queue", "survey-review", "survey-compile", "survey-eval",
+    "survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-watch-register", "survey-watch-tick", "survey-rewrite-queue", "survey-rewrite-run", "survey-review", "survey-compile", "survey-eval",
 ]
 
 SUBCOMMANDS = {
@@ -2854,6 +2880,7 @@ SUBCOMMANDS = {
     "survey-watch-register": cmd_survey_watch_register,
     "survey-watch-tick": cmd_survey_watch_tick,
     "survey-rewrite-queue": cmd_survey_rewrite_queue,
+    "survey-rewrite-run": cmd_survey_rewrite_run,
     "survey-review": cmd_survey_review,
     "survey-compile": cmd_survey_compile,
     "survey-eval": cmd_survey_eval,
@@ -3109,6 +3136,22 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_rewrite_queue.add_argument("--min-risk-score", type=int, default=25)
     p_survey_rewrite_queue.add_argument("--limit", type=int, default=0)
     p_survey_rewrite_queue.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_rewrite_run = sub.add_parser("survey-rewrite-run", help="Consume survey_rewrite_queue.json and execute section rewrites")
+    p_survey_rewrite_run.add_argument("--output-dir", required=True)
+    p_survey_rewrite_run.add_argument("--limit", type=int, default=0, help="Number of rewrite queue items to process; 0 means all")
+    p_survey_rewrite_run.add_argument("--max-revisions", type=int, default=2)
+    p_survey_rewrite_run.add_argument("--min-chars", type=int, default=1200)
+    p_survey_rewrite_run.add_argument("--writer-backend", default="deterministic")
+    p_survey_rewrite_run.add_argument("--writer-command", default="", help="Local command for --writer-backend local-command; receives prompt JSON on stdin and emits Markdown on stdout")
+    p_survey_rewrite_run.add_argument("--writer-timeout", type=int, default=120)
+    p_survey_rewrite_run.add_argument("--pane-target", default="", help="tmux pane target for --writer-backend pane-packet with --pane-send")
+    p_survey_rewrite_run.add_argument("--pane-send", action="store_true", help="Actually send the pane packet to --pane-target via tmux send-keys")
+    p_survey_rewrite_run.add_argument("--no-prompt-packet", action="store_true")
+    p_survey_rewrite_run.add_argument("--no-build-queue", action="store_true", help="Fail empty if survey_rewrite_queue.json is missing instead of building it")
+    p_survey_rewrite_run.add_argument("--no-replace-final", action="store_true", help="Do not archive/remove existing final.md before rewrite")
+    p_survey_rewrite_run.add_argument("--allow-pending", action="store_true", help="Return zero when all processed rewrites are waiting for human/pane response")
+    p_survey_rewrite_run.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     p_survey_review = sub.add_parser("survey-review", help="Run non-strict survey review")
     p_survey_review.add_argument("--output-dir", required=True)
