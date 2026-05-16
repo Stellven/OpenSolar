@@ -1,0 +1,175 @@
+from __future__ import annotations
+
+import json
+import os
+import sys
+
+_HARNESS_LIB = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "lib")
+if _HARNESS_LIB not in sys.path:
+    sys.path.insert(0, _HARNESS_LIB)
+
+from research.cli import main
+from research.survey.import_results import import_survey_search_results, parse_survey_search_markdown
+from research.survey.planner import create_survey_plan, write_survey_plan
+
+
+MARKDOWN = """# External Search Results: latent reasoning
+
+## Source 1: Coconut Paper
+URL: https://arxiv.org/abs/2412.06769
+Publisher: arXiv
+Published: 2024-12-09
+Source Type: paper
+
+Summary:
+- Coconut uses continuous latent thought for reasoning.
+- The method changes evaluation and compute tradeoffs.
+
+Key Claims:
+- Latent reasoning can shift reasoning from text tokens into hidden states.
+- Continuous thought creates new evaluation requirements.
+
+Relevant Quotes:
+> Continuous thought changes reasoning dynamics.
+
+## Source 2: Coconut Code
+URL: https://github.com/facebookresearch/coconut
+Publisher: GitHub
+Published: N/A
+Source Type: repo
+
+Summary:
+- The repository exposes reproducibility and implementation boundaries.
+
+Key Claims:
+- Code availability is needed to evaluate implementation constraints.
+- Repository details expose reproducibility boundaries.
+
+Relevant Quotes:
+> N/A
+"""
+
+
+OFFICIAL_AND_BENCHMARK_MARKDOWN = """# External Search Results: latent reasoning
+
+## Source 1: Coconut Official Notes
+URL: https://example.com/coconut-official
+Publisher: Example Lab
+Published: 2025-01-01
+Source Type: official_doc
+
+Summary:
+- Official notes describe latent reasoning architecture constraints.
+
+Key Claims:
+- Official documentation is needed to bound deployment assumptions.
+- Official docs preserve terminology and system scope.
+
+Relevant Quotes:
+> Official notes preserve system boundaries.
+
+## Source 2: Coconut Benchmark
+URL: https://example.com/coconut-benchmark
+Publisher: Example Eval
+Published: 2025-02-01
+Source Type: benchmark
+
+Summary:
+- Benchmark evidence defines evaluation coverage and failure modes.
+
+Key Claims:
+- Benchmark evidence is needed to compare latent reasoning methods.
+- Benchmark design exposes failure modes and coverage limits.
+
+Relevant Quotes:
+> Benchmark coverage controls evaluation claims.
+"""
+
+
+def test_parse_survey_search_markdown_normalizes_source_types():
+    records = parse_survey_search_markdown(MARKDOWN)
+    assert len(records) == 2
+    assert records[0]["source_type"] == "paper"
+    assert records[1]["source_type"] == "code"
+    assert len(records[0]["key_claims"]) == 2
+
+
+def test_import_survey_search_results_writes_ledgers(tmp_path):
+    md = tmp_path / "results.md"
+    md.write_text(MARKDOWN, encoding="utf-8")
+    payload = import_survey_search_results(tmp_path, md)
+    assert payload["ok"] is True
+    assert payload["imported_sources"] == 2
+    assert payload["imported_evidence"] == 4
+    assert payload["imported_claims"] == 4
+    assert payload["imported_links"] == 4
+    assert len((tmp_path / "sources.jsonl").read_text(encoding="utf-8").splitlines()) == 2
+    assert len((tmp_path / "evidence.jsonl").read_text(encoding="utf-8").splitlines()) == 4
+    assert len((tmp_path / "claims.jsonl").read_text(encoding="utf-8").splitlines()) == 4
+    assert (tmp_path / "survey_import_search_results.json").exists()
+
+
+def test_import_survey_search_results_dedupes_sources(tmp_path):
+    md = tmp_path / "results.md"
+    md.write_text(MARKDOWN, encoding="utf-8")
+    first = import_survey_search_results(tmp_path, md)
+    second = import_survey_search_results(tmp_path, md)
+    assert first["imported_sources"] == 2
+    assert second["imported_sources"] == 0
+    assert second["imported_evidence"] == 0
+    assert second["imported_claims"] == 0
+
+
+def test_import_survey_search_results_continue_finalize(tmp_path):
+    plan = create_survey_plan("latent reasoning", target_chars=50000)
+    write_survey_plan(plan, tmp_path)
+    md = tmp_path / "results.md"
+    source_types = ["paper", "repo", "official_doc", "benchmark"]
+    blocks = ["# External Search Results: latent reasoning"]
+    for idx in range(1, 17):
+        source_type = source_types[(idx - 1) % len(source_types)]
+        blocks.append(f"""
+## Source {idx}: Latent Reasoning Source {idx}
+URL: https://example.com/latent-source-{idx}
+Publisher: Example
+Published: 2025-01-{idx:02d}
+Source Type: {source_type}
+
+Summary:
+- Latent reasoning source {idx} covers architecture evaluation deployment.
+
+Key Claims:
+- Latent reasoning claim {idx}A requires evidence for architecture evaluation.
+- Latent reasoning claim {idx}B requires evidence for deployment constraints.
+
+Relevant Quotes:
+> Latent reasoning source {idx} preserves evidence boundaries.
+""")
+    md.write_text("\n".join(blocks), encoding="utf-8")
+    payload = import_survey_search_results(
+        tmp_path,
+        md,
+        continue_finalize=True,
+        brief="latent reasoning",
+        section_limit=1,
+        repair_limit=1,
+        min_finalized=1,
+        min_chars=100,
+    )
+    assert payload["ok"] is True
+    assert payload["finalize"]["ok"] is True
+    assert (tmp_path / "final.md").exists()
+
+
+def test_import_survey_search_results_cli(tmp_path, capsys):
+    md = tmp_path / "results.md"
+    md.write_text(MARKDOWN, encoding="utf-8")
+    rc = main([
+        "survey-import-search-results",
+        "--output-dir", str(tmp_path),
+        "--input-md", str(md),
+        "--json",
+    ])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["imported_sources"] == 2

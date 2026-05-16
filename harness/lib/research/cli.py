@@ -2597,6 +2597,25 @@ def cmd_survey_finalize_run(args: argparse.Namespace) -> int:
     return 0 if payload.get("ok") or args.allow_incomplete else 1
 
 
+def cmd_survey_import_search_results(args: argparse.Namespace) -> int:
+    from research.survey.import_results import import_survey_search_results
+
+    payload = import_survey_search_results(
+        args.output_dir,
+        args.input_md,
+        continue_finalize=args.continue_finalize,
+        brief=args.brief,
+        section_limit=args.section_limit,
+        repair_limit=args.repair_limit,
+        min_finalized=args.min_finalized,
+        min_chars=args.min_chars,
+    )
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") and (not args.continue_finalize or (payload.get("finalize") or {}).get("ok")) else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") and (not args.continue_finalize or (payload.get("finalize") or {}).get("ok")) else 1
+
+
 def cmd_survey_review(args: argparse.Namespace) -> int:
     from research.survey.evaluator import evaluate_survey
 
@@ -2915,7 +2934,7 @@ ALL_SUBCOMMANDS = [
     "mine", "outline", "write", "check", "compile", "synthesize", "export", "eval-artifacts",
     "policy-doctor", "policy-explain",
     "source-audit",
-    "survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-watch-register", "survey-watch-tick", "survey-rewrite-queue", "survey-rewrite-run", "survey-auto-repair", "survey-finalize-run", "survey-review", "survey-compile", "survey-eval",
+    "survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-watch-register", "survey-watch-tick", "survey-rewrite-queue", "survey-rewrite-run", "survey-auto-repair", "survey-finalize-run", "survey-import-search-results", "survey-review", "survey-compile", "survey-eval",
 ]
 
 SUBCOMMANDS = {
@@ -2951,6 +2970,7 @@ SUBCOMMANDS = {
     "survey-rewrite-run": cmd_survey_rewrite_run,
     "survey-auto-repair": cmd_survey_auto_repair,
     "survey-finalize-run": cmd_survey_finalize_run,
+    "survey-import-search-results": cmd_survey_import_search_results,
     "survey-review": cmd_survey_review,
     "survey-compile": cmd_survey_compile,
     "survey-eval": cmd_survey_eval,
@@ -3270,6 +3290,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_finalize.add_argument("--min-claims", type=int, default=8)
     p_survey_finalize.add_argument("--allow-incomplete", action="store_true", help="Return zero even if final strict eval fails")
     p_survey_finalize.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_import = sub.add_parser("survey-import-search-results", help="Import human/Gemini/GPT survey search Markdown into ledger JSONL files")
+    p_survey_import.add_argument("--output-dir", required=True)
+    p_survey_import.add_argument("--input-md", required=True)
+    p_survey_import.add_argument("--continue-finalize", action="store_true")
+    p_survey_import.add_argument("--brief", default="")
+    p_survey_import.add_argument("--section-limit", type=int, default=3)
+    p_survey_import.add_argument("--repair-limit", type=int, default=0)
+    p_survey_import.add_argument("--min-finalized", type=int, default=None)
+    p_survey_import.add_argument("--min-chars", type=int, default=1200)
+    p_survey_import.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     p_survey_review = sub.add_parser("survey-review", help="Run non-strict survey review")
     p_survey_review.add_argument("--output-dir", required=True)
