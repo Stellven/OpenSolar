@@ -51,6 +51,10 @@ fi
 rsync_excludes=(
   --exclude '.*'
   --exclude '.DS_Store'
+  # Guardrails: some live harness hooks may accidentally create literal
+  # placeholder filenames when env vars are missing. Never archive these.
+  --exclude '$KPI_FILE'
+  --exclude '$NEEDS_IMP_FILE'
   --exclude '.*.pid'
   --exclude '.*.port'
   --exclude '*.pid'
@@ -374,6 +378,8 @@ deny_names = {
     "capability-graph.jsonl",
     "kpi.json",
     "codex-budget.json",
+    "$KPI_FILE",
+    "$NEEDS_IMP_FILE",
 }
 deny_fragments = [
     ".bak",
