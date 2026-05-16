@@ -199,6 +199,76 @@ def _section_factual_audit(
     }
 
 
+def _build_section_scorecard(
+    root: Path,
+    sections: list[dict[str, Any]],
+    pack_rows: list[dict[str, Any]],
+    section_factual_audit: dict[str, Any],
+) -> dict[str, Any]:
+    failed_by_id = {
+        str(item.get("section_id") or ""): item
+        for item in section_factual_audit.get("failed_sections", [])
+        if isinstance(item, dict)
+    }
+    rows: list[dict[str, Any]] = []
+    for section in sections:
+        section_id = str(section.get("section_id") or "")
+        if not section_id:
+            continue
+        final_path = root / "sections" / section_id / "final.md"
+        review = _read_json(root / "sections" / section_id / "review.json")
+        pack = next((row for row in pack_rows if str(row.get("section_id") or "") == section_id), {})
+        issues: list[dict[str, Any]] = []
+        pending = False
+        if not final_path.exists():
+            pending = True
+        failed = failed_by_id.get(section_id, {})
+        if failed.get("unknown_claim_ids"):
+            issues.append({"severity": "P0", "code": "unknown_claim_ids", "detail": failed.get("unknown_claim_ids")})
+        if failed.get("unknown_evidence_ids"):
+            issues.append({"severity": "P0", "code": "unknown_evidence_ids", "detail": failed.get("unknown_evidence_ids")})
+        if failed.get("missing_claim_tags"):
+            issues.append({"severity": "P0", "code": "missing_claim_tags", "detail": True})
+        if failed.get("missing_evidence_tags"):
+            issues.append({"severity": "P0", "code": "missing_evidence_tags", "detail": True})
+        if failed.get("grounding_failures"):
+            issues.append({"severity": "P0", "code": "grounding_failures", "detail": failed.get("grounding_failures")})
+        if pack.get("status") != "ready":
+            issues.append({"severity": "P0", "code": "evidence_pack_not_ready", "detail": pack.get("blockers", [])})
+        for issue in review.get("issues", []) if isinstance(review.get("issues"), list) else []:
+            code = str(issue)
+            severity = "P1" if re.search(r"contradiction|evaluation|source_diversity", code, re.I) else "P2"
+            issues.append({"severity": severity, "code": code.split(":", 1)[0], "detail": code})
+        if final_path.exists():
+            text = final_path.read_text(encoding="utf-8", errors="ignore")
+            headings = len(re.findall(r"^##\s+", text, flags=re.M))
+            if headings < 6:
+                issues.append({"severity": "P1", "code": "section_structure_shallow", "detail": f"{headings}<6"})
+            paragraphs = [re.sub(r"\s+", " ", p.strip().lower()) for p in text.split("\n\n") if p.strip()]
+            repetition = 1.0 - (len(set(paragraphs)) / max(len(paragraphs), 1))
+            if repetition > 0.20:
+                issues.append({"severity": "P2", "code": "section_repetition_high", "detail": round(repetition, 4)})
+        severity_weight = {"P0": 100, "P1": 25, "P2": 5}
+        risk_score = sum(severity_weight.get(str(item.get("severity")), 1) for item in issues)
+        rows.append({
+            "section_id": section_id,
+            "status": "pending" if pending else "pass" if not issues else "needs_rewrite",
+            "risk_score": risk_score,
+            "p0_count": sum(1 for item in issues if item.get("severity") == "P0"),
+            "p1_count": sum(1 for item in issues if item.get("severity") == "P1"),
+            "p2_count": sum(1 for item in issues if item.get("severity") == "P2"),
+            "issues": issues,
+            "rewrite_recommended": (not pending) and risk_score >= 25,
+        })
+    rows.sort(key=lambda item: (-int(item.get("risk_score") or 0), str(item.get("section_id") or "")))
+    return {
+        "ok": not any(item.get("p0_count") for item in rows),
+        "section_count": len(rows),
+        "needs_rewrite_count": sum(1 for item in rows if item.get("rewrite_recommended")),
+        "top_issues": rows[:20],
+    }
+
+
 def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs: dict | None = None) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
     ast = ast or _read_json(root / "survey_report_ast.json")
@@ -252,14 +322,17 @@ def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs
         "contradiction_axis_present": contradiction_axis_present,
     }
     section_factual_audit = _section_factual_audit(root, sections, pack_rows, evidence_rows)
+    section_scorecard = _build_section_scorecard(root, sections, pack_rows, section_factual_audit)
 
     payload = {
-        "ok": taxonomy["ok"] and contradiction_matrix["ok"] and section_factual_audit["ok"],
+        "ok": taxonomy["ok"] and contradiction_matrix["ok"] and section_factual_audit["ok"] and section_scorecard["ok"],
         "taxonomy": taxonomy,
         "contradiction_matrix": contradiction_matrix,
         "section_factual_audit": section_factual_audit,
+        "section_scorecard": section_scorecard,
     }
     (root / "survey_taxonomy.json").write_text(json.dumps(taxonomy, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_contradiction_matrix.json").write_text(json.dumps(contradiction_matrix, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_section_factual_audit.json").write_text(json.dumps(section_factual_audit, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    (root / "survey_section_scorecard.json").write_text(json.dumps(section_scorecard, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return payload

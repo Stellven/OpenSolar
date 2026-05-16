@@ -57,6 +57,8 @@ def test_strict_eval_passes_controlled_strong_fixture(tmp_path):
     assert result["contradiction_matrix"]["contradiction_coverage"] >= 0.80
     assert result["section_factual_audit"]["section_factual_accuracy"] == 1.0
     assert result["section_factual_audit"]["section_grounding_accuracy"] == 1.0
+    assert result["section_scorecard"]["ok"] is True
+    assert result["section_scorecard"]["needs_rewrite_count"] == 0
 
 
 def test_strict_eval_fails_when_claims_have_no_evidence_links(tmp_path):
@@ -174,6 +176,10 @@ def test_strict_eval_fails_when_section_references_out_of_pack_claim(tmp_path):
     failed = result["section_factual_audit"]["failed_sections"]
     assert failed[0]["unknown_claim_ids"] == ["cl_not_in_pack"]
     assert failed[0]["unknown_evidence_ids"] == ["ev_not_in_pack"]
+    top = result["section_scorecard"]["top_issues"][0]
+    assert top["section_id"] == plan["report_ast"]["sections"][0]["section_id"]
+    assert top["p0_count"] >= 2
+    assert top["rewrite_recommended"] is True
 
 
 def test_strict_eval_fails_when_section_has_no_claim_or_evidence_tags(tmp_path):
@@ -231,3 +237,34 @@ def test_strict_eval_fails_when_evidence_tag_context_is_not_grounded(tmp_path):
     assert "section_grounding_accuracy_low:0.6667<0.9500" in result["scorecard"]["issues"]
     failed = result["section_factual_audit"]["failed_sections"]
     assert failed[0]["grounding_failures"][0]["reason"] == "citation_context_not_grounded"
+    assert result["section_scorecard"]["top_issues"][0]["issues"][0]["severity"] == "P0"
+
+
+def test_section_scorecard_ranks_rewrite_candidates(tmp_path):
+    plan = create_survey_plan("latent reasoning", target_chars=50000)
+    write_survey_plan(plan, tmp_path)
+    sources = [{"id": f"src_{i}", "source_type": t, "title": t} for i, t in enumerate(["paper", "official_doc", "code", "benchmark"])]
+    evidence = [{"id": f"ev_{i}", "source_id": sources[i % 4]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
+    claims = [{"id": f"cl_{i}", "claim_text": "latent reasoning architecture requires evaluation evidence"} for i in range(40)]
+    links = [{"claim_id": f"cl_{i}", "evidence_id": f"ev_{i}"} for i in range(40)]
+    _append_jsonl(tmp_path / "sources.jsonl", sources)
+    _append_jsonl(tmp_path / "evidence.jsonl", evidence)
+    _append_jsonl(tmp_path / "claims.jsonl", claims)
+    _append_jsonl(tmp_path / "claim_evidence.jsonl", links)
+    build_evidence_packs(tmp_path, plan["report_ast"])
+    for section in plan["report_ast"]["sections"][:3]:
+        compile_section(tmp_path, section["section_id"])
+    first = plan["report_ast"]["sections"][0]["section_id"]
+    second = plan["report_ast"]["sections"][1]["section_id"]
+    (tmp_path / "sections" / first / "final.md").write_text("No tags here.\n", encoding="utf-8")
+    review = tmp_path / "sections" / second / "review.json"
+    data = json.loads(review.read_text(encoding="utf-8"))
+    data["issues"] = ["section_structure_shallow:3<6"]
+    review.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    compile_survey(tmp_path)
+
+    result = evaluate_survey(tmp_path, strict=True)
+    top = result["section_scorecard"]["top_issues"]
+    assert top[0]["section_id"] == first
+    assert top[0]["p0_count"] == 2
+    assert top[0]["risk_score"] > top[1]["risk_score"]

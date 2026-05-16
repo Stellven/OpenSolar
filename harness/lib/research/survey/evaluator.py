@@ -77,6 +77,7 @@ def evaluate_survey(
     taxonomy = quality.get("taxonomy", {})
     contradiction_matrix = quality.get("contradiction_matrix", {})
     section_factual_audit = quality.get("section_factual_audit", {})
+    section_scorecard = quality.get("section_scorecard", {})
     issues: list[str] = []
     if len(chapters) < 8:
         issues.append(f"chapter_count_low:{len(chapters)}<8")
@@ -117,6 +118,9 @@ def evaluate_survey(
         section_grounding_accuracy = float(section_factual_audit.get("section_grounding_accuracy") or 0.0)
         if finalized and section_grounding_accuracy < 0.95:
             issues.append(f"section_grounding_accuracy_low:{section_grounding_accuracy:.4f}<0.9500")
+        p0_sections = sum(1 for item in section_scorecard.get("top_issues", []) if item.get("p0_count"))
+        if p0_sections:
+            issues.append(f"section_p0_issue_count:{p0_sections}")
     required_finalized = len(sections) if require_complete else (min_finalized if min_finalized is not None else 3)
     if strict and finalized < required_finalized:
         issues.append(f"finalized_sections_low:{finalized}<{required_finalized}")
@@ -182,6 +186,7 @@ def evaluate_survey(
         "taxonomy": taxonomy,
         "contradiction_matrix": contradiction_matrix,
         "section_factual_audit": section_factual_audit,
+        "section_scorecard": section_scorecard,
     }
     (root / "survey_eval.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return payload
