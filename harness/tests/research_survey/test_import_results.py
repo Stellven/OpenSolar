@@ -53,7 +53,7 @@ Relevant Quotes:
 OFFICIAL_AND_BENCHMARK_MARKDOWN = """# External Search Results: latent reasoning
 
 ## Source 1: Coconut Official Notes
-URL: https://example.com/coconut-official
+URL: https://docs.example.edu/coconut-official
 Publisher: Example Lab
 Published: 2025-01-01
 Source Type: official_doc
@@ -69,7 +69,7 @@ Relevant Quotes:
 > Official notes preserve system boundaries.
 
 ## Source 2: Coconut Benchmark
-URL: https://example.com/coconut-benchmark
+URL: https://paperswithcode.com/task/coconut-benchmark
 Publisher: Example Eval
 Published: 2025-02-01
 Source Type: benchmark
@@ -84,6 +84,18 @@ Key Claims:
 Relevant Quotes:
 > Benchmark coverage controls evaluation claims.
 """
+
+
+def _source_url(source_type: str, idx: int) -> str:
+    occurrence = (idx - 1) // 4
+    urls = {
+        "paper": ["https://arxiv.org/abs/2412.06769", "https://openreview.net/forum?id=latent-reasoning", "https://doi.org/10.1145/latent-reasoning", "https://ieeexplore.ieee.org/document/123456"],
+        "repo": ["https://github.com/example/latent-reasoning", "https://github.com/facebookresearch/coconut", "https://github.com/example/latent-eval", "https://github.com/example/continuous-thought"],
+        "official_doc": ["https://docs.example.edu/latent-reasoning", "https://docs.example.edu/latent-reasoning/api", "https://docs.example.edu/latent-reasoning/eval", "https://docs.example.edu/latent-reasoning/deploy"],
+        "benchmark": ["https://paperswithcode.com/task/latent-reasoning", "https://huggingface.co/datasets/example/latent-reasoning", "https://paperswithcode.com/dataset/latent-eval", "https://huggingface.co/spaces/example/latent-benchmark"],
+    }
+    values = urls[source_type]
+    return values[occurrence % len(values)]
 
 
 def test_parse_survey_search_markdown_normalizes_source_types():
@@ -130,7 +142,7 @@ def test_import_survey_search_results_continue_finalize(tmp_path):
         source_type = source_types[(idx - 1) % len(source_types)]
         blocks.append(f"""
 ## Source {idx}: Latent Reasoning Source {idx}
-URL: https://example.com/latent-source-{idx}
+URL: {_source_url(source_type, idx)}
 Publisher: Example
 Published: 2025-01-{idx:02d}
 Source Type: {source_type}
@@ -171,7 +183,7 @@ def test_import_survey_search_results_continue_finalize_require_complete(tmp_pat
         source_type = source_types[(idx - 1) % len(source_types)]
         blocks.append(f"""
 ## Source {idx}: Latent Reasoning Source {idx}
-URL: https://example.com/latent-complete-source-{idx}
+URL: {_source_url(source_type, idx)}
 Publisher: Example
 Published: 2025-01-{idx:02d}
 Source Type: {source_type}
