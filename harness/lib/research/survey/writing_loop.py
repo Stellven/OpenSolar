@@ -10,6 +10,36 @@ from typing import Any
 from .backends import HumanResponseMissingError, LocalCommandWriterError, PanePacketPendingError, get_writer_backend
 from .schemas import SectionPromptPacket, SectionReview, SectionRevisionTrace, to_dict
 
+PROFESSOR_GRADE_WRITING_POLICY = {
+    "policy_id": "solar.survey.professor_grade_writing.v1",
+    "purpose": "Turn evidence packs into auditable professor-grade survey sections instead of generic long-form summaries.",
+    "section_template": [
+        "Research Question",
+        "Position",
+        "Claim Map",
+        "Evidence Map",
+        "Source Map",
+        "Architecture Synthesis",
+        "Comparative Positioning",
+        "Evaluation And Risk Boundary",
+        "Limitations And Failure Modes",
+        "Contradiction Slots",
+        "Open Problems",
+    ],
+    "synthesis_rules": [
+        "Separate mechanism, system, evaluation, and deployment claims.",
+        "State which source type supports each important conclusion.",
+        "Prefer bounded conclusions when evidence comes from narrow benchmarks or partial implementations.",
+        "Surface contradictions and missing evidence in the main body, not only in footnotes.",
+        "Preserve claim/evidence tags so factuality gates can audit the section mechanically.",
+    ],
+    "forbidden_patterns": [
+        "Do not invent source names, URLs, metrics, benchmarks, or paper results.",
+        "Do not collapse paper evidence, official docs, code, and benchmarks into one undifferentiated citation bucket.",
+        "Do not turn open problems into vague future-work filler.",
+    ],
+}
+
 
 def _read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
@@ -67,10 +97,50 @@ def _dedupe_sentences(text: str) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
+def _chapter_context(root: Path, section_id: str, spec: dict) -> dict[str, Any]:
+    ast = _read_json(root / "survey_report_ast.json")
+    chapter_id = str(spec.get("chapter_id") or section_id.split("/", 1)[0])
+    chapters = ast.get("chapters", []) if isinstance(ast.get("chapters"), list) else []
+    sections = ast.get("sections", []) if isinstance(ast.get("sections"), list) else []
+    chapter = next((row for row in chapters if str(row.get("chapter_id") or "") == chapter_id), {})
+    sibling_sections = [
+        {
+            "section_id": str(row.get("section_id") or ""),
+            "title": str(row.get("title") or ""),
+            "research_question": str(row.get("research_question") or ""),
+        }
+        for row in sections
+        if str(row.get("chapter_id") or "") == chapter_id
+    ]
+    return {
+        "chapter_id": chapter_id,
+        "chapter_title": str(chapter.get("title") or chapter_id),
+        "chapter_objective": str(chapter.get("objective") or ""),
+        "section_order_in_chapter": next((idx + 1 for idx, row in enumerate(sibling_sections) if row.get("section_id") == section_id), 0),
+        "sibling_sections": sibling_sections,
+        "chapter_prompt_packet": str(root / "chapters" / chapter_id / "prompt_packet.md"),
+    }
+
+
+def _source_type_guidance(source_types: list[str]) -> list[str]:
+    guidance = {
+        "paper": "Use papers for mechanisms, assumptions, experimental claims, and limits of generalization.",
+        "preprint": "Treat preprints as useful but provisional; preserve uncertainty.",
+        "official_doc": "Use official docs for system boundaries, APIs, deployment constraints, and supported behavior.",
+        "code": "Use code repositories for reproducibility, implementation cost, integration boundaries, and maintenance risk.",
+        "repo": "Use repositories for reproducibility, implementation cost, integration boundaries, and maintenance risk.",
+        "benchmark": "Use benchmarks for evaluation scope, metric caveats, and comparability limits.",
+        "dataset": "Use datasets for task coverage, distribution assumptions, leakage, and annotation limits.",
+    }
+    return [guidance.get(str(item), f"Use {item} sources only for claims they directly support.") for item in source_types]
+
+
 def build_section_prompt_packet(root: Path, section_id: str, round_index: int = 0, writer_backend: str = "deterministic") -> dict:
     section_dir = root / "sections" / section_id
     spec = _read_json(section_dir / "section.spec.json")
     pack = _read_json(section_dir / "evidence_pack.json")
+    source_types = [str(item) for item in pack.get("source_types", []) if str(item)] if isinstance(pack.get("source_types"), list) else []
+    chapter_context = _chapter_context(root, section_id, spec)
     packet = SectionPromptPacket(
         section_id=section_id,
         round_index=round_index,
@@ -87,7 +157,8 @@ def build_section_prompt_packet(root: Path, section_id: str, round_index: int = 
         output_contract=[
             "Markdown section draft.",
             "At least six second-level headings.",
-            "Include Architecture Synthesis, Evaluation And Risk Boundary, Contradiction Slots, and Open Problems.",
+            "Follow the professor-grade section template in writing_policy.section_template.",
+            "Include Architecture Synthesis, Comparative Positioning, Evaluation And Risk Boundary, Limitations And Failure Modes, Contradiction Slots, and Open Problems.",
             "All core claims must reference claim_id and evidence_id tags.",
         ],
         artifact_paths={
@@ -105,9 +176,65 @@ def build_section_prompt_packet(root: Path, section_id: str, round_index: int = 
     payload = to_dict(packet)
     payload["section_spec"] = spec
     payload["evidence_pack"] = pack
+    payload["chapter_context"] = chapter_context
+    payload["writing_policy"] = PROFESSOR_GRADE_WRITING_POLICY
+    payload["source_type_guidance"] = _source_type_guidance(source_types)
+    payload["synthesis_outline"] = [
+        "Define the local research question and scope.",
+        "Map claims to evidence and source types.",
+        "Synthesize architecture mechanisms before evaluation claims.",
+        "Compare source families instead of flattening them into citations.",
+        "State evaluation limits and failure modes.",
+        "End with open problems that can feed chapter-level synthesis.",
+    ]
     payload["required_claim_ids"] = list(pack.get("claim_ids", [])[:6])
     payload["required_evidence_ids"] = list(pack.get("evidence_ids", [])[:8])
     return payload
+
+
+def _write_chapter_prompt_packet(root: Path, packet: dict) -> None:
+    chapter = packet.get("chapter_context") if isinstance(packet.get("chapter_context"), dict) else {}
+    chapter_id = str(chapter.get("chapter_id") or "")
+    if not chapter_id:
+        return
+    chapter_dir = root / "chapters" / chapter_id
+    chapter_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "chapter_id": chapter_id,
+        "chapter_title": chapter.get("chapter_title") or chapter_id,
+        "chapter_objective": chapter.get("chapter_objective") or "",
+        "active_section_id": packet.get("section_id"),
+        "writer_backend": packet.get("writer_backend"),
+        "writing_policy": packet.get("writing_policy"),
+        "sibling_sections": chapter.get("sibling_sections") or [],
+        "chapter_synthesis_contract": [
+            "Ensure sibling sections do not repeat the same argument.",
+            "Keep terminology consistent across the chapter.",
+            "Preserve contradiction slots for chief-editor review.",
+            "Make source-type differences visible in section conclusions.",
+        ],
+    }
+    (chapter_dir / "prompt_packet.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    lines = [
+        f"# Chapter Prompt Packet: {payload['chapter_title']}",
+        "",
+        f"- Chapter ID: {chapter_id}",
+        f"- Active Section: {payload.get('active_section_id')}",
+        "",
+        "## Objective",
+        "",
+        str(payload.get("chapter_objective") or ""),
+        "",
+        "## Professor-Grade Section Template",
+        "",
+    ]
+    lines.extend(f"- {item}" for item in (payload.get("writing_policy") or {}).get("section_template", []))
+    lines.extend(["", "## Sibling Sections", ""])
+    for section in payload.get("sibling_sections", []):
+        lines.append(f"- {section.get('section_id')}: {section.get('title')}")
+    lines.extend(["", "## Chapter Synthesis Contract", ""])
+    lines.extend(f"- {item}" for item in payload.get("chapter_synthesis_contract", []))
+    (chapter_dir / "prompt_packet.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _write_prompt_packet(section_dir: Path, packet: dict) -> None:
@@ -134,6 +261,19 @@ def _write_prompt_packet(section_dir: Path, packet: dict) -> None:
     md.extend(f"- {item}" for item in packet.get("constraints", []))
     md.extend(["", "## Output Contract", ""])
     md.extend(f"- {item}" for item in packet.get("output_contract", []))
+    md.extend(["", "## Chapter Context", ""])
+    chapter = packet.get("chapter_context") if isinstance(packet.get("chapter_context"), dict) else {}
+    md.extend([
+        f"- Chapter: {chapter.get('chapter_id', 'N/A')} / {chapter.get('chapter_title', 'N/A')}",
+        f"- Section Order In Chapter: {chapter.get('section_order_in_chapter', 'N/A')}",
+        f"- Chapter Packet: {chapter.get('chapter_prompt_packet', 'N/A')}",
+    ])
+    md.extend(["", "## Professor-Grade Section Template", ""])
+    md.extend(f"- {item}" for item in (packet.get("writing_policy") or {}).get("section_template", []))
+    md.extend(["", "## Source-Type Guidance", ""])
+    md.extend(f"- {item}" for item in packet.get("source_type_guidance", []))
+    md.extend(["", "## Synthesis Outline", ""])
+    md.extend(f"- {item}" for item in packet.get("synthesis_outline", []))
     md.extend(["", "## Required Claims", ""])
     md.extend(f"- {item}" for item in packet.get("required_claim_ids", []))
     md.extend(["", "## Required Evidence", ""])
@@ -149,6 +289,7 @@ def _write_prompt_packet(section_dir: Path, packet: dict) -> None:
         "Write the completed Markdown section to the human response path above, then rerun the same survey command.",
     ])
     md_path.write_text("\n".join(md) + "\n", encoding="utf-8")
+    _write_chapter_prompt_packet(section_dir.parents[2], packet)
 
 
 def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> str:
@@ -228,9 +369,17 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
 
 从技术架构角度看，本节主题需要拆成机制层、系统层和评价层。机制层回答“模型或系统为什么可能有效”；系统层回答“它如何被实现、调度、复现和迁移”；评价层回答“现有证据是否足以支持结论”。这三层必须分开，否则长报告会把概念说明、经验判断和工程结论混在一起，形成看似深入但不可审计的叙述。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
 
+## Comparative Positioning
+
+本节需要把不同来源类型放在同一个比较框架下：paper 说明理论机制和实验假设，official_doc 约束真实系统能力边界，code 反映实现路径和维护成本，benchmark 则校准评价任务和指标口径。若某一来源类型缺失，结论应降级为局部判断；若多类来源相互支持，才可以上升为章节级 survey 判断。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+
 ## Evaluation And Risk Boundary
 
 评价部分必须显式说明数据集、任务形态、指标口径和外推边界。若证据来自论文，应检查实验设置和 baseline；若证据来自代码，应检查可运行性、维护状态和实现约束；若证据来自 benchmark，应检查任务覆盖和指标是否与真实场景一致。缺少这些边界时，该节只能给出弱结论，不能进入教授级 survey 的主结论层。 [claim:{claim_ids[1] if len(claim_ids) > 1 else 'claim_missing'}] [evidence:{evidence_ids[1] if len(evidence_ids) > 1 else 'evidence_missing'}]
+
+## Limitations And Failure Modes
+
+本节必须把失败模式写在正文中：证据可能只覆盖短任务、单模型、单 benchmark 或不可复现实验；代码可能缺少生产约束；官方文档可能只描述支持路径而不覆盖失败路径。因此，结论需要标注适用条件、不可外推区域和需要后续 evidence miner 补充的缺口。 [claim:{claim_ids[1] if len(claim_ids) > 1 else 'claim_missing'}] [evidence:{evidence_ids[1] if len(evidence_ids) > 1 else 'evidence_missing'}]
 
 ## Contradiction Slots
 
@@ -268,6 +417,10 @@ def review_section_text(root: Path, section_id: str, text: str, min_chars: int =
         issues.append("contradiction_section_missing")
     if not re.search(r"Evaluation|评价|评估", text, flags=re.I):
         issues.append("evaluation_section_missing")
+    if not re.search(r"Comparative Positioning|比较|对比", text, flags=re.I):
+        issues.append("comparative_positioning_missing")
+    if not re.search(r"Limitations|Failure Modes|局限|失败模式", text, flags=re.I):
+        issues.append("limitations_failure_modes_missing")
     source_types = pack.get("source_types", [])
     source_diversity = min(len(source_types) / 4, 1.0)
     if source_diversity < 0.5:
