@@ -52,6 +52,11 @@ def test_compile_section_and_survey(tmp_path):
     assert (tmp_path / "sections" / "ch01" / "sec01" / "revision_trace.json").exists()
     assert (tmp_path / "sections" / "ch01" / "sec01" / "prompt_packets" / "round_00.json").exists()
     assert (tmp_path / "sections" / "ch01" / "sec01" / "prompt_packets" / "round_00.md").exists()
+    packet = json.loads((tmp_path / "sections" / "ch01" / "sec01" / "prompt_packets" / "round_00.json").read_text(encoding="utf-8"))
+    assert packet["writing_policy"]["policy_id"] == "solar.survey.professor_grade_writing.v1"
+    assert packet["chapter_context"]["chapter_id"] == "ch01"
+    assert (tmp_path / "chapters" / "ch01" / "prompt_packet.md").exists()
+    assert "Professor-Grade Section Template" in (tmp_path / "chapters" / "ch01" / "prompt_packet.md").read_text(encoding="utf-8")
     compiled = compile_survey(tmp_path)
     assert compiled["ok"] is True
     assert (tmp_path / "final.md").exists()
@@ -60,7 +65,7 @@ def test_compile_section_and_survey(tmp_path):
 
 def test_revision_loop_requires_enough_detail(tmp_path):
     _strong_fixture(tmp_path)
-    result = run_section_revision_loop(tmp_path, "ch01/sec01", min_chars=2600, max_rounds=3)
+    result = run_section_revision_loop(tmp_path, "ch01/sec01", min_chars=3200, max_rounds=3)
     assert result["ok"] is True
     assert result["rounds"] > 1
     review = json.loads((tmp_path / "sections" / "ch01" / "sec01" / "review.json").read_text(encoding="utf-8"))
@@ -98,8 +103,12 @@ def test_human_packet_backend_consumes_response(tmp_path):
         "# Human Section\n\n"
         "## Architecture Synthesis\n\n"
         f"Human response with [claim:{claim_ids[0]}] [evidence:{evidence_ids[0]}].\n\n"
+        "## Comparative Positioning\n\n"
+        f"Comparison response with [claim:{claim_ids[0]}] [evidence:{evidence_ids[0]}].\n\n"
         "## Evaluation And Risk Boundary\n\n"
         f"Evaluation response with [claim:{claim_ids[1]}] [evidence:{evidence_ids[1]}].\n\n"
+        "## Limitations And Failure Modes\n\n"
+        f"Limitations response with [claim:{claim_ids[1]}] [evidence:{evidence_ids[1]}].\n\n"
         "## Contradiction Slots\n\n"
         f"Contradiction response with [claim:{claim_ids[2]}] [evidence:{evidence_ids[2]}] [evidence:{evidence_ids[3]}].\n\n"
         "## Source Map\n\n"
@@ -136,8 +145,12 @@ def test_local_command_backend_consumes_stdout(tmp_path):
         "print('# Local Command Section')\n"
         "print('\\n## Architecture Synthesis\\n')\n"
         f"print('Local command with [claim:{claim_ids[0]}] [evidence:{evidence_ids[0]}].')\n"
+        "print('\\n## Comparative Positioning\\n')\n"
+        f"print('Comparison with [claim:{claim_ids[0]}] [evidence:{evidence_ids[0]}].')\n"
         "print('\\n## Evaluation And Risk Boundary\\n')\n"
         f"print('Evaluation with [claim:{claim_ids[1]}] [evidence:{evidence_ids[1]}].')\n"
+        "print('\\n## Limitations And Failure Modes\\n')\n"
+        f"print('Limitations with [claim:{claim_ids[1]}] [evidence:{evidence_ids[1]}].')\n"
         "print('\\n## Contradiction Slots\\n')\n"
         f"print('Contradiction with [claim:{claim_ids[2]}] [evidence:{evidence_ids[2]}] [evidence:{evidence_ids[3]}].')\n"
         "print('\\n## Source Map\\nSources preserved.')\n"
@@ -203,8 +216,12 @@ def test_pane_packet_backend_consumes_response(tmp_path):
         "# Pane Section\n\n"
         "## Architecture Synthesis\n\n"
         f"Pane response with [claim:{claim_ids[0]}] [evidence:{evidence_ids[0]}].\n\n"
+        "## Comparative Positioning\n\n"
+        f"Comparison response with [claim:{claim_ids[0]}] [evidence:{evidence_ids[0]}].\n\n"
         "## Evaluation And Risk Boundary\n\n"
         f"Evaluation response with [claim:{claim_ids[1]}] [evidence:{evidence_ids[1]}].\n\n"
+        "## Limitations And Failure Modes\n\n"
+        f"Limitations response with [claim:{claim_ids[1]}] [evidence:{evidence_ids[1]}].\n\n"
         "## Contradiction Slots\n\n"
         f"Contradiction response with [claim:{claim_ids[2]}] [evidence:{evidence_ids[2]}] [evidence:{evidence_ids[3]}].\n\n"
         "## Source Map\n\n"
@@ -249,8 +266,12 @@ def test_watch_pane_responses_finalizes_existing_response(tmp_path):
         "# Watched Pane Section\n\n"
         "## Architecture Synthesis\n\n"
         f"Watched response with [claim:{claim_ids[0]}] [evidence:{evidence_ids[0]}].\n\n"
+        "## Comparative Positioning\n\n"
+        f"Comparison response with [claim:{claim_ids[0]}] [evidence:{evidence_ids[0]}].\n\n"
         "## Evaluation And Risk Boundary\n\n"
         f"Evaluation response with [claim:{claim_ids[1]}] [evidence:{evidence_ids[1]}].\n\n"
+        "## Limitations And Failure Modes\n\n"
+        f"Limitations response with [claim:{claim_ids[1]}] [evidence:{evidence_ids[1]}].\n\n"
         "## Contradiction Slots\n\n"
         f"Contradiction response with [claim:{claim_ids[2]}] [evidence:{evidence_ids[2]}] [evidence:{evidence_ids[3]}].\n\n"
         "## Source Map\n\n"
