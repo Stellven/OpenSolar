@@ -39,7 +39,7 @@ def test_source_gap_passes_with_minimal_diverse_ledgers(tmp_path):
         {"id": "src_c", "source_type": "code", "title": "code"},
         {"id": "src_b", "source_type": "benchmark", "title": "benchmark"},
     ]
-    evidence = [{"id": f"ev_{i}", "source_id": sources[i % 4]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(8)]
+    evidence = [{"id": f"ev_{i}", "source_id": sources[i % len(sources)]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(8)]
     claims = [{"id": f"cl_{i}", "claim_text": "latent reasoning architecture requires evaluation evidence"} for i in range(8)]
     _append_jsonl(tmp_path / "sources.jsonl", sources)
     _append_jsonl(tmp_path / "evidence.jsonl", evidence)

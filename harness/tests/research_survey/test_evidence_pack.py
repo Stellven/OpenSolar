@@ -33,7 +33,7 @@ def test_evidence_pack_ready_with_diverse_sources(tmp_path):
         {"id": "src_c", "source_type": "code", "title": "code"},
         {"id": "src_b", "source_type": "benchmark", "title": "benchmark"},
     ]
-    evidence = [{"id": f"ev_{i}", "source_id": sources[i % 4]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(12)]
+    evidence = [{"id": f"ev_{i}", "source_id": sources[i % len(sources)]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(12)]
     claims = [{"id": f"cl_{i}", "claim_text": "latent reasoning architecture requires evaluation evidence"} for i in range(8)]
     links = [{"claim_id": f"cl_{i % 8}", "evidence_id": f"ev_{i}"} for i in range(12)]
     _append_jsonl(tmp_path / "sources.jsonl", sources)

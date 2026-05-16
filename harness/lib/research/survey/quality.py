@@ -405,6 +405,257 @@ def _build_source_coverage(root: Path, sections: list[dict[str, Any]]) -> dict[s
     }
 
 
+def _build_literature_map(
+    root: Path,
+    chapters: list[dict[str, Any]],
+    sections: list[dict[str, Any]],
+    pack_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    sources = _read_jsonl(root / "sources.jsonl")
+    evidence_rows = _read_jsonl(root / "evidence.jsonl")
+    claims = _read_jsonl(root / "claims.jsonl")
+    links = _read_jsonl(root / "claim_evidence.jsonl")
+    source_by_id = {str(row.get("id") or row.get("source_id") or ""): row for row in sources}
+    evidence_by_id = {str(row.get("id") or row.get("evidence_id") or ""): row for row in evidence_rows}
+    evidence_to_claims: dict[str, set[str]] = {}
+    for link in links:
+        claim_id = str(link.get("claim_id") or "")
+        evidence_id = str(link.get("evidence_id") or "")
+        if claim_id and evidence_id:
+            evidence_to_claims.setdefault(evidence_id, set()).add(claim_id)
+    section_by_id = {str(row.get("section_id") or ""): row for row in sections}
+    chapter_by_id = {str(row.get("chapter_id") or ""): row for row in chapters}
+    source_chapters: dict[str, set[str]] = {sid: set() for sid in source_by_id}
+    source_sections: dict[str, set[str]] = {sid: set() for sid in source_by_id}
+    source_evidence: dict[str, set[str]] = {sid: set() for sid in source_by_id}
+    source_claims: dict[str, set[str]] = {sid: set() for sid in source_by_id}
+
+    for evidence_id, evidence in evidence_by_id.items():
+        source_id = str(evidence.get("source_id") or "")
+        if source_id in source_by_id:
+            source_evidence.setdefault(source_id, set()).add(evidence_id)
+            source_claims.setdefault(source_id, set()).update(evidence_to_claims.get(evidence_id, set()))
+
+    for pack in pack_rows:
+        section_id = str(pack.get("section_id") or "")
+        chapter_id = str(section_by_id.get(section_id, {}).get("chapter_id") or "")
+        for source_id in pack.get("source_ids", []) if isinstance(pack.get("source_ids"), list) else []:
+            sid = str(source_id or "")
+            if sid in source_by_id:
+                source_sections.setdefault(sid, set()).add(section_id)
+                if chapter_id:
+                    source_chapters.setdefault(sid, set()).add(chapter_id)
+        for evidence_id in pack.get("evidence_ids", []) if isinstance(pack.get("evidence_ids"), list) else []:
+            eid = str(evidence_id or "")
+            ev = evidence_by_id.get(eid, {})
+            sid = str(ev.get("source_id") or "")
+            if sid in source_by_id:
+                source_sections.setdefault(sid, set()).add(section_id)
+                if chapter_id:
+                    source_chapters.setdefault(sid, set()).add(chapter_id)
+
+    rows: list[dict[str, Any]] = []
+    for source_id, source in sorted(source_by_id.items()):
+        rows.append({
+            "source_id": source_id,
+            "source_type": str(source.get("source_type") or "unknown"),
+            "title": str(source.get("title") or ""),
+            "url": str(source.get("url") or ""),
+            "chapter_ids": sorted(source_chapters.get(source_id, set())),
+            "section_ids": sorted(source_sections.get(source_id, set())),
+            "evidence_ids": sorted(source_evidence.get(source_id, set())),
+            "claim_ids": sorted(source_claims.get(source_id, set())),
+        })
+
+    chapter_rows: list[dict[str, Any]] = []
+    covered_chapters = 0
+    for chapter in chapters:
+        chapter_id = str(chapter.get("chapter_id") or "")
+        chapter_sources = [row for row in rows if chapter_id in row["chapter_ids"]]
+        source_types = sorted({str(row.get("source_type") or "unknown") for row in chapter_sources})
+        evidence_count = sum(len(row.get("evidence_ids") or []) for row in chapter_sources)
+        claim_count = len({claim_id for row in chapter_sources for claim_id in row.get("claim_ids", [])})
+        ok = len(source_types) >= 2 and evidence_count >= 2 and claim_count >= 1
+        if ok:
+            covered_chapters += 1
+        chapter_rows.append({
+            "chapter_id": chapter_id,
+            "title": str(chapter.get("title") or ""),
+            "axis": _chapter_axis(str(chapter.get("title") or "")),
+            "ok": ok,
+            "source_count": len(chapter_sources),
+            "source_types": source_types,
+            "evidence_count": evidence_count,
+            "claim_count": claim_count,
+        })
+
+    source_types = sorted({str(row.get("source_type") or "unknown") for row in rows})
+    chapter_coverage = round(covered_chapters / max(len(chapters), 1), 4)
+    evidence_backed_sources = sum(1 for row in rows if row.get("evidence_ids"))
+    evidence_backed_ratio = round(evidence_backed_sources / max(len(rows), 1), 4)
+    claim_backed_sources = sum(1 for row in rows if row.get("claim_ids"))
+    claim_backed_ratio = round(claim_backed_sources / max(len(rows), 1), 4)
+    issues: list[str] = []
+    if len(source_types) < 4:
+        issues.append(f"literature_source_type_count_low:{len(source_types)}<4")
+    if chapter_coverage < 0.80:
+        issues.append(f"literature_chapter_coverage_low:{chapter_coverage:.4f}<0.8000")
+    if evidence_backed_ratio < 0.75:
+        issues.append(f"literature_evidence_backed_source_ratio_low:{evidence_backed_ratio:.4f}<0.7500")
+    if claims and claim_backed_ratio < 0.50:
+        issues.append(f"literature_claim_backed_source_ratio_low:{claim_backed_ratio:.4f}<0.5000")
+    return {
+        "ok": not issues,
+        "source_count": len(rows),
+        "source_types": source_types,
+        "chapter_count": len(chapters),
+        "covered_chapters": covered_chapters,
+        "chapter_coverage": chapter_coverage,
+        "evidence_backed_source_ratio": evidence_backed_ratio,
+        "claim_backed_source_ratio": claim_backed_ratio,
+        "sources": rows,
+        "chapters": chapter_rows,
+        "issues": issues,
+    }
+
+
+def _build_controversy_review(
+    chapters: list[dict[str, Any]],
+    sections: list[dict[str, Any]],
+    pack_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    section_by_id = {str(row.get("section_id") or ""): row for row in sections}
+    chapter_axes = {_chapter_axis(str(row.get("title") or "")) for row in chapters}
+    rows: list[dict[str, Any]] = []
+    covered_chapters: set[str] = set()
+    covered_sections = 0
+    mixed_source_sections = 0
+    for pack in pack_rows:
+        section_id = str(pack.get("section_id") or "")
+        section = section_by_id.get(section_id, {})
+        chapter_id = str(section.get("chapter_id") or "")
+        slots = [str(slot) for slot in pack.get("contradiction_slots", []) if str(slot).strip()] if isinstance(pack.get("contradiction_slots"), list) else []
+        source_types = {str(item) for item in pack.get("source_types", []) if str(item)} if isinstance(pack.get("source_types"), list) else set()
+        evidence_count = len(pack.get("evidence_ids", []) if isinstance(pack.get("evidence_ids"), list) else [])
+        ok = bool(slots) and evidence_count >= 2
+        if ok:
+            covered_sections += 1
+            if chapter_id:
+                covered_chapters.add(chapter_id)
+        if len(source_types) >= 2:
+            mixed_source_sections += 1
+        rows.append({
+            "section_id": section_id,
+            "chapter_id": chapter_id,
+            "axis": _chapter_axis(str(section.get("title") or "")),
+            "ok": ok,
+            "contradiction_slots": slots,
+            "source_types": sorted(source_types),
+            "evidence_count": evidence_count,
+            "mixed_source_evidence": len(source_types) >= 2,
+        })
+    section_coverage = round(covered_sections / max(len(sections), 1), 4)
+    chapter_coverage = round(len(covered_chapters) / max(len(chapters), 1), 4)
+    mixed_source_ratio = round(mixed_source_sections / max(len(pack_rows), 1), 4)
+    axes_with_controversy_set = {row["axis"] for row in rows if row.get("ok")}
+    axes_with_controversy = sorted(axes_with_controversy_set)
+    issues: list[str] = []
+    if section_coverage < 0.80:
+        issues.append(f"controversy_section_coverage_low:{section_coverage:.4f}<0.8000")
+    if chapter_coverage < 0.80:
+        issues.append(f"controversy_chapter_coverage_low:{chapter_coverage:.4f}<0.8000")
+    if mixed_source_ratio < 0.80:
+        issues.append(f"controversy_mixed_source_ratio_low:{mixed_source_ratio:.4f}<0.8000")
+    if len(axes_with_controversy_set & chapter_axes) < min(4, len(chapter_axes)):
+        issues.append(f"controversy_axis_coverage_low:{len(axes_with_controversy_set & chapter_axes)}<{min(4, len(chapter_axes))}")
+    return {
+        "ok": not issues,
+        "section_coverage": section_coverage,
+        "chapter_coverage": chapter_coverage,
+        "mixed_source_ratio": mixed_source_ratio,
+        "axes_with_controversy": axes_with_controversy,
+        "rows": rows[:200],
+        "issues": issues,
+    }
+
+
+def _build_chapter_review(
+    root: Path,
+    chapters: list[dict[str, Any]],
+    sections: list[dict[str, Any]],
+    pack_rows: list[dict[str, Any]],
+    section_scorecard: dict[str, Any],
+) -> dict[str, Any]:
+    pack_by_section = {str(row.get("section_id") or ""): row for row in pack_rows}
+    score_by_section = {
+        str(row.get("section_id") or ""): row
+        for row in section_scorecard.get("top_issues", [])
+        if isinstance(row, dict)
+    }
+    rows: list[dict[str, Any]] = []
+    for chapter in chapters:
+        chapter_id = str(chapter.get("chapter_id") or "")
+        chapter_sections = [row for row in sections if str(row.get("chapter_id") or "") == chapter_id]
+        ready_packs = 0
+        source_types: set[str] = set()
+        p0_count = 0
+        p1_count = 0
+        missing_finals: list[str] = []
+        total_chars = 0
+        finalized = 0
+        issues: list[dict[str, Any]] = []
+        for section in chapter_sections:
+            section_id = str(section.get("section_id") or "")
+            pack = pack_by_section.get(section_id, {})
+            if pack.get("status") == "ready":
+                ready_packs += 1
+            source_types.update(str(item) for item in pack.get("source_types", []) if str(item)) if isinstance(pack.get("source_types"), list) else None
+            score = score_by_section.get(section_id, {})
+            p0_count += int(score.get("p0_count") or 0)
+            p1_count += int(score.get("p1_count") or 0)
+            final_path = root / "sections" / section_id / "final.md"
+            if final_path.exists():
+                total_chars += len(final_path.read_text(encoding="utf-8", errors="ignore"))
+                finalized += 1
+            else:
+                missing_finals.append(section_id)
+        ready_ratio = round(ready_packs / max(len(chapter_sections), 1), 4)
+        avg_final_chars = round(total_chars / max(finalized, 1), 2)
+        if ready_ratio < 0.80:
+            issues.append({"severity": "P0", "code": "chapter_ready_pack_ratio_low", "detail": f"{ready_ratio:.4f}<0.8000"})
+        if len(source_types) < 2:
+            issues.append({"severity": "P1", "code": "chapter_source_diversity_low", "detail": f"{len(source_types)}<2"})
+        if p0_count:
+            issues.append({"severity": "P0", "code": "chapter_section_p0_issues", "detail": p0_count})
+        if p1_count >= max(len(chapter_sections), 1):
+            issues.append({"severity": "P1", "code": "chapter_section_p1_issue_density_high", "detail": p1_count})
+        if missing_finals:
+            issues.append({"severity": "P2", "code": "chapter_missing_final_sections", "detail": missing_finals[:10]})
+        rows.append({
+            "chapter_id": chapter_id,
+            "title": str(chapter.get("title") or ""),
+            "axis": _chapter_axis(str(chapter.get("title") or "")),
+            "section_count": len(chapter_sections),
+            "ready_pack_ratio": ready_ratio,
+            "source_types": sorted(source_types),
+            "finalized_sections": finalized,
+            "avg_final_chars": avg_final_chars,
+            "p0_count": p0_count,
+            "p1_count": p1_count,
+            "issues": issues,
+        })
+    p0_chapters = sum(1 for row in rows for issue in row.get("issues", []) if issue.get("severity") == "P0")
+    p1_chapters = sum(1 for row in rows for issue in row.get("issues", []) if issue.get("severity") == "P1")
+    return {
+        "ok": p0_chapters == 0,
+        "chapter_count": len(rows),
+        "p0_chapter_issue_count": p0_chapters,
+        "p1_chapter_issue_count": p1_chapters,
+        "chapters": rows,
+        "issues": [f"chapter_p0_issue_count:{p0_chapters}" for _ in [0] if p0_chapters],
+    }
+
+
 def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs: dict | None = None) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
     ast = ast or _read_json(root / "survey_report_ast.json")
@@ -461,15 +712,21 @@ def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs
     section_scorecard = _build_section_scorecard(root, sections, pack_rows, section_factual_audit)
     final_quality = _build_final_quality(root, ast, sections)
     source_coverage = _build_source_coverage(root, sections)
+    literature_map = _build_literature_map(root, chapters, sections, pack_rows)
+    controversy_review = _build_controversy_review(chapters, sections, pack_rows)
+    chapter_review = _build_chapter_review(root, chapters, sections, pack_rows, section_scorecard)
 
     payload = {
-        "ok": taxonomy["ok"] and contradiction_matrix["ok"] and section_factual_audit["ok"] and section_scorecard["ok"] and final_quality["ok"] and source_coverage["ok"],
+        "ok": taxonomy["ok"] and contradiction_matrix["ok"] and section_factual_audit["ok"] and section_scorecard["ok"] and final_quality["ok"] and source_coverage["ok"] and literature_map["ok"] and controversy_review["ok"] and chapter_review["ok"],
         "taxonomy": taxonomy,
         "contradiction_matrix": contradiction_matrix,
         "section_factual_audit": section_factual_audit,
         "section_scorecard": section_scorecard,
         "final_quality": final_quality,
         "source_coverage": source_coverage,
+        "literature_map": literature_map,
+        "controversy_review": controversy_review,
+        "chapter_review": chapter_review,
     }
     (root / "survey_taxonomy.json").write_text(json.dumps(taxonomy, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_contradiction_matrix.json").write_text(json.dumps(contradiction_matrix, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -477,4 +734,7 @@ def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs
     (root / "survey_section_scorecard.json").write_text(json.dumps(section_scorecard, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_final_quality.json").write_text(json.dumps(final_quality, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_source_coverage.json").write_text(json.dumps(source_coverage, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    (root / "survey_literature_map.json").write_text(json.dumps(literature_map, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    (root / "survey_controversy_matrix.json").write_text(json.dumps(controversy_review, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    (root / "survey_chapter_review.json").write_text(json.dumps(chapter_review, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return payload

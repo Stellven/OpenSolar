@@ -80,6 +80,9 @@ def evaluate_survey(
     section_scorecard = quality.get("section_scorecard", {})
     final_quality = quality.get("final_quality", {})
     source_coverage = quality.get("source_coverage", {})
+    literature_map = quality.get("literature_map", {})
+    controversy_review = quality.get("controversy_review", {})
+    chapter_review = quality.get("chapter_review", {})
     issues: list[str] = []
     if len(chapters) < 8:
         issues.append(f"chapter_count_low:{len(chapters)}<8")
@@ -124,6 +127,12 @@ def evaluate_survey(
         if p0_sections:
             issues.append(f"section_p0_issue_count:{p0_sections}")
         for issue in source_coverage.get("issues", []):
+            issues.append(str(issue))
+        for issue in literature_map.get("issues", []):
+            issues.append(str(issue))
+        for issue in controversy_review.get("issues", []):
+            issues.append(str(issue))
+        for issue in chapter_review.get("issues", []):
             issues.append(str(issue))
         if require_complete:
             for issue in final_quality.get("issues", []):
@@ -196,6 +205,9 @@ def evaluate_survey(
         "section_scorecard": section_scorecard,
         "final_quality": final_quality,
         "source_coverage": source_coverage,
+        "literature_map": literature_map,
+        "controversy_review": controversy_review,
+        "chapter_review": chapter_review,
     }
     (root / "survey_eval.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return payload
