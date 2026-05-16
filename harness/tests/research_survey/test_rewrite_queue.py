@@ -112,3 +112,25 @@ def test_rewrite_queue_cli(tmp_path, capsys):
     ]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["queue_count"] == 2
+
+
+def test_rewrite_queue_adds_chapter_review_items(tmp_path):
+    (tmp_path / "sections" / "ch03" / "sec01").mkdir(parents=True)
+    (tmp_path / "sections" / "ch03" / "sec01" / "final.md").write_text("current", encoding="utf-8")
+    (tmp_path / "sections" / "ch03" / "sec01" / "section.spec.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "sections" / "ch03" / "sec01" / "evidence_pack.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "survey_section_scorecard.json").write_text(json.dumps({"top_issues": []}), encoding="utf-8")
+    (tmp_path / "survey_chapter_review.json").write_text(json.dumps({
+        "chapters": [
+            {
+                "chapter_id": "ch03",
+                "title": "核心架构范式",
+                "section_ids": ["ch03/sec01", "ch03/sec02"],
+                "issues": [{"severity": "P1", "code": "chapter_source_diversity_low", "detail": "1<2"}],
+            }
+        ]
+    }), encoding="utf-8")
+    result = build_rewrite_queue(tmp_path)
+    assert result["queue_count"] == 1
+    assert result["items"][0]["chapter_id"] == "ch03"
+    assert result["items"][0]["action"] == "rewrite_section_from_chapter_review"
