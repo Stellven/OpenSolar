@@ -2616,6 +2616,20 @@ def cmd_survey_import_search_results(args: argparse.Namespace) -> int:
     return 0 if payload.get("ok") and (not args.continue_finalize or (payload.get("finalize") or {}).get("ok")) else 1
 
 
+def cmd_survey_status_next_action(args: argparse.Namespace) -> int:
+    from research.survey.status_next import survey_status_next_action
+
+    payload = survey_status_next_action(
+        args.output_dir,
+        brief=args.brief,
+        returned_md=args.returned_md,
+    )
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") else 1
+
+
 def cmd_survey_review(args: argparse.Namespace) -> int:
     from research.survey.evaluator import evaluate_survey
 
@@ -2971,6 +2985,7 @@ SUBCOMMANDS = {
     "survey-auto-repair": cmd_survey_auto_repair,
     "survey-finalize-run": cmd_survey_finalize_run,
     "survey-import-search-results": cmd_survey_import_search_results,
+    "survey-status-next-action": cmd_survey_status_next_action,
     "survey-review": cmd_survey_review,
     "survey-compile": cmd_survey_compile,
     "survey-eval": cmd_survey_eval,
@@ -3301,6 +3316,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_import.add_argument("--min-finalized", type=int, default=None)
     p_survey_import.add_argument("--min-chars", type=int, default=1200)
     p_survey_import.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_status_next = sub.add_parser("survey-status-next-action", help="Show the next actionable step for a survey DeepResearch output directory")
+    p_survey_status_next.add_argument("--output-dir", required=True)
+    p_survey_status_next.add_argument("--brief", default="")
+    p_survey_status_next.add_argument("--returned-md", default="", help="Returned external search Markdown path; defaults to <output-dir>/returned_sources.md")
+    p_survey_status_next.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     p_survey_review = sub.add_parser("survey-review", help="Run non-strict survey review")
     p_survey_review.add_argument("--output-dir", required=True)
