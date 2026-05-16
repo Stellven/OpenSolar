@@ -42,7 +42,7 @@ def test_finalize_run_builds_pipeline_and_compiles(tmp_path):
     )
     assert payload["ok"] is True
     assert payload["reason"] == "passed"
-    assert [step["step"] for step in payload["steps"]] == ["plan", "pack", "write", "eval", "auto_repair", "compile", "final_eval"]
+    assert [step["step"] for step in payload["steps"]] == ["plan", "source_gap", "pack", "write", "eval", "auto_repair", "compile", "final_eval"]
     assert payload["compile"]["finalized_sections"] >= 1
     assert (tmp_path / "final.md").exists()
     assert (tmp_path / "survey_finalize_run.json").exists()
@@ -63,13 +63,25 @@ def test_finalize_run_can_reuse_existing_plan_and_pack(tmp_path):
     )
     assert payload["ok"] is True
     assert payload["steps"][0]["skipped"] is True
-    assert payload["steps"][1]["skipped"] is True
+    assert payload["steps"][2]["skipped"] is True
 
 
 def test_finalize_run_requires_brief_when_planning(tmp_path):
     payload = finalize_survey_run(tmp_path)
     assert payload["ok"] is False
     assert payload["reason"] == "brief_required_for_plan"
+
+
+def test_finalize_run_stops_and_writes_handoff_when_ledgers_missing(tmp_path):
+    payload = finalize_survey_run(tmp_path, brief="latent reasoning")
+    assert payload["ok"] is False
+    assert payload["reason"] == "source_gap_handoff_required"
+    assert payload["handoff_path"].endswith("survey_source_gap_handoff.md")
+    assert (tmp_path / "survey_source_gap_handoff.md").exists()
+    assert (tmp_path / "survey_source_gap.json").exists()
+    text = (tmp_path / "survey_source_gap_handoff.md").read_text(encoding="utf-8")
+    assert "External Search Results" in text
+    assert "paper" in text
 
 
 def test_finalize_run_cli(tmp_path, capsys):

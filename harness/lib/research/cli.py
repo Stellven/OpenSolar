@@ -2584,6 +2584,10 @@ def cmd_survey_finalize_run(args: argparse.Namespace) -> int:
             emit_prompt_packet=not args.no_prompt_packet,
             skip_plan=args.skip_plan,
             skip_pack=args.skip_pack,
+            allow_source_gap=args.allow_source_gap,
+            min_sources=args.min_sources,
+            min_evidence=args.min_evidence,
+            min_claims=args.min_claims,
         )
     except ValueError as exc:
         payload = {"ok": False, "reason": str(exc)}
@@ -3260,6 +3264,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_finalize.add_argument("--no-prompt-packet", action="store_true")
     p_survey_finalize.add_argument("--skip-plan", action="store_true")
     p_survey_finalize.add_argument("--skip-pack", action="store_true")
+    p_survey_finalize.add_argument("--allow-source-gap", action="store_true", help="Continue even when source/evidence/claim ledgers are below survey thresholds")
+    p_survey_finalize.add_argument("--min-sources", type=int, default=4)
+    p_survey_finalize.add_argument("--min-evidence", type=int, default=8)
+    p_survey_finalize.add_argument("--min-claims", type=int, default=8)
     p_survey_finalize.add_argument("--allow-incomplete", action="store_true", help="Return zero even if final strict eval fails")
     p_survey_finalize.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
