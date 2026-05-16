@@ -24,6 +24,7 @@ ARTIFACT_NAMES = [
     "survey_report_ast.json",
     "survey_evidence_packs.json",
     "survey_section_scorecard.json",
+    "survey_final_quality.json",
 ]
 
 
@@ -108,6 +109,7 @@ def survey_status_next_action(
     *,
     brief: str = "",
     returned_md: str | Path = "",
+    require_complete: bool = False,
 ) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
     returned_path = _returned_markdown(root, returned_md)
@@ -122,6 +124,8 @@ def survey_status_next_action(
     finalize = _read_json(root / "survey_finalize_run.json")
     source_gap = _read_json(root / "survey_source_gap.json")
     imported = _read_json(root / "survey_import_search_results.json")
+    survey_eval = _read_json(root / "survey_eval.json")
+    final_quality = _read_json(root / "survey_final_quality.json")
     final_path = root / "final.md"
     handoff_path = Path(str(source_gap.get("handoff_path") or root / "survey_source_gap_handoff.md")).expanduser()
 
@@ -172,6 +176,30 @@ def survey_status_next_action(
                 f"open {_q(handoff_path)}; save returned Markdown to {_q(returned_path)}; "
                 f"then run: {_cmd('survey-import-search-results', root, brief=brief, returned_md=returned_path)}"
             ),
+        })
+        return payload
+
+    if finalize.get("reason") == "final_eval_failed":
+        issues = list(((finalize.get("final_eval") or {}).get("scorecard") or {}).get("issues") or [])
+        if not issues:
+            issues = list((survey_eval.get("scorecard") or {}).get("issues") or [])
+        incomplete = any(
+            str(issue).startswith(("incomplete_sections:", "finalized_sections_low:", "pending_placeholder_count:"))
+            for issue in issues
+        ) or int(final_quality.get("pending_placeholder_count") or 0) > 0
+        if incomplete:
+            payload.update({
+                "status": "needs_more_sections",
+                "reason": "complete_survey_sections_required",
+                "quality_issues": issues,
+                "next_action": _cmd("survey-finalize-run", root, brief=brief) + (" --require-complete" if require_complete else ""),
+            })
+            return payload
+        payload.update({
+            "status": "quality_gate_failed",
+            "reason": "final_eval_failed",
+            "quality_issues": issues,
+            "next_action": f"solar-harness research survey-auto-repair --output-dir {_q(root)} --json",
         })
         return payload
 

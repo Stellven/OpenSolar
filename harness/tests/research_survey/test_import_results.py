@@ -161,6 +161,47 @@ Relevant Quotes:
     assert (tmp_path / "final.md").exists()
 
 
+def test_import_survey_search_results_continue_finalize_require_complete(tmp_path):
+    plan = create_survey_plan("latent reasoning", target_chars=50000)
+    write_survey_plan(plan, tmp_path)
+    md = tmp_path / "results.md"
+    source_types = ["paper", "repo", "official_doc", "benchmark"]
+    blocks = ["# External Search Results: latent reasoning"]
+    for idx in range(1, 17):
+        source_type = source_types[(idx - 1) % len(source_types)]
+        blocks.append(f"""
+## Source {idx}: Latent Reasoning Source {idx}
+URL: https://example.com/latent-complete-source-{idx}
+Publisher: Example
+Published: 2025-01-{idx:02d}
+Source Type: {source_type}
+
+Summary:
+- Latent reasoning source {idx} covers architecture evaluation deployment.
+
+Key Claims:
+- Latent reasoning claim {idx}A requires evidence for architecture evaluation.
+- Latent reasoning claim {idx}B requires evidence for deployment constraints.
+
+Relevant Quotes:
+> Latent reasoning source {idx} preserves evidence boundaries.
+""")
+    md.write_text("\n".join(blocks), encoding="utf-8")
+    payload = import_survey_search_results(
+        tmp_path,
+        md,
+        continue_finalize=True,
+        brief="latent reasoning",
+        section_limit=1,
+        min_finalized=1,
+        min_chars=100,
+        require_complete=True,
+    )
+    assert payload["ok"] is True
+    assert payload["finalize"]["ok"] is False
+    assert any(item.startswith("incomplete_sections:") for item in payload["finalize"]["final_eval"]["scorecard"]["issues"])
+
+
 def test_import_survey_search_results_cli(tmp_path, capsys):
     md = tmp_path / "results.md"
     md.write_text(MARKDOWN, encoding="utf-8")

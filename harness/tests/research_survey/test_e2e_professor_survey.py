@@ -50,6 +50,8 @@ def test_e2e_professor_survey_smoke(tmp_path):
     incomplete = evaluate_survey(tmp_path, strict=True, require_complete=True)
     assert incomplete["ok"] is False
     assert any(item.startswith("incomplete_sections:") for item in incomplete["scorecard"]["issues"])
+    assert incomplete["final_quality"]["pending_placeholder_count"] > 0
+    assert any(item.startswith("pending_placeholder_count:") for item in incomplete["scorecard"]["issues"])
 
     batch_all = run_ready_sections(tmp_path, limit=0, max_rounds=3)
     assert batch_all["ok"] is True
@@ -58,3 +60,4 @@ def test_e2e_professor_survey_smoke(tmp_path):
     complete = evaluate_survey(tmp_path, strict=True, require_complete=True)
     assert complete["ok"] is True
     assert complete["scorecard"]["finalized_sections"] == len(plan["report_ast"]["sections"])
+    assert complete["final_quality"]["ok"] is True

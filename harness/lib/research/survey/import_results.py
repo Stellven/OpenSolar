@@ -139,6 +139,7 @@ def import_survey_search_results(
     repair_limit: int = 0,
     min_finalized: int | None = None,
     min_chars: int = 1200,
+    require_complete: bool = False,
 ) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
     root.mkdir(parents=True, exist_ok=True)
@@ -250,6 +251,7 @@ def import_survey_search_results(
             repair_limit=repair_limit,
             min_finalized=min_finalized,
             min_chars=min_chars,
+            require_complete=require_complete,
         )
     (root / "survey_import_search_results.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return payload

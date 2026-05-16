@@ -268,3 +268,34 @@ def test_section_scorecard_ranks_rewrite_candidates(tmp_path):
     assert top[0]["section_id"] == first
     assert top[0]["p0_count"] == 2
     assert top[0]["risk_score"] > top[1]["risk_score"]
+
+
+def test_complete_professor_gate_rejects_tiny_tagged_sections(tmp_path):
+    plan = create_survey_plan("latent reasoning", target_chars=50000)
+    write_survey_plan(plan, tmp_path)
+    sources = [{"id": f"src_{i}", "source_type": t, "title": t} for i, t in enumerate(["paper", "official_doc", "code", "benchmark"])]
+    evidence = [{"id": f"ev_{i}", "source_id": sources[i % 4]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(80)]
+    claims = [{"id": f"cl_{i}", "claim_text": "latent reasoning architecture requires evaluation evidence"} for i in range(80)]
+    links = [{"claim_id": f"cl_{i}", "evidence_id": f"ev_{i}"} for i in range(80)]
+    _append_jsonl(tmp_path / "sources.jsonl", sources)
+    _append_jsonl(tmp_path / "evidence.jsonl", evidence)
+    _append_jsonl(tmp_path / "claims.jsonl", claims)
+    _append_jsonl(tmp_path / "claim_evidence.jsonl", links)
+    build_evidence_packs(tmp_path, plan["report_ast"])
+    for section in plan["report_ast"]["sections"]:
+        section_id = section["section_id"]
+        pack = json.loads((tmp_path / "sections" / section_id / "evidence_pack.json").read_text(encoding="utf-8"))
+        claim_id = pack["claim_ids"][0]
+        evidence_id = pack["evidence_ids"][0]
+        final = tmp_path / "sections" / section_id / "final.md"
+        final.write_text(
+            f"# Tiny\n\n## Claim\n\nlatent reasoning architecture evaluation deployment [claim:{claim_id}] [evidence:{evidence_id}]\n",
+            encoding="utf-8",
+        )
+    compile_survey(tmp_path)
+
+    result = evaluate_survey(tmp_path, strict=True, require_complete=True)
+    assert result["ok"] is False
+    assert result["final_quality"]["ok"] is False
+    assert any(item.startswith("final_char_count_low:") for item in result["scorecard"]["issues"])
+    assert any(item.startswith("avg_section_chars_low:") for item in result["scorecard"]["issues"])
