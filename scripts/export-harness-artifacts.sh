@@ -357,6 +357,7 @@ allowed_dirs = {
     "plugins",
     "release",
     "runbooks",
+    "scripts",
     "schemas",
     "skills",
     "status-server",
@@ -365,7 +366,7 @@ allowed_dirs = {
     "tests",
     "tools",
 }
-top_suffixes = {".sh", ".ts", ".json", ".md", ".toml", ".plist"}
+top_suffixes = {".sh", ".ts", ".json", ".md", ".toml", ".plist", ".py"}
 top_names = {"VERSION"}
 deny_suffixes = {".pyc"}
 deny_names = {
