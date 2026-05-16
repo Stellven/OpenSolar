@@ -11,6 +11,7 @@ from .evaluator import evaluate_survey
 from .evidence_pack import build_evidence_packs
 from .planner import create_survey_plan, write_survey_plan
 from .section_compiler import compile_survey
+from .source_gap import write_source_gap_handoff
 from .writing_loop import run_ready_sections
 
 
@@ -47,6 +48,10 @@ def finalize_survey_run(
     emit_prompt_packet: bool = True,
     skip_plan: bool = False,
     skip_pack: bool = False,
+    allow_source_gap: bool = False,
+    min_sources: int = 4,
+    min_evidence: int = 8,
+    min_claims: int = 8,
 ) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
     root.mkdir(parents=True, exist_ok=True)
@@ -68,6 +73,26 @@ def finalize_survey_run(
         steps.append({"step": "plan", "ok": True, "files": files, "section_count": len(ast.get("sections", []))})
     else:
         steps.append({"step": "plan", "ok": True, "skipped": True, "section_count": len(ast.get("sections", []))})
+
+    source_gap = write_source_gap_handoff(
+        root,
+        brief=brief or ast.get("title", ""),
+        min_sources=min_sources,
+        min_evidence=min_evidence,
+        min_claims=min_claims,
+    )
+    steps.append({"step": "source_gap", "ok": source_gap.get("ok"), "issues": source_gap.get("issues", []), "handoff_path": source_gap.get("handoff_path")})
+    if not source_gap.get("ok") and not allow_source_gap:
+        payload = {
+            "ok": False,
+            "reason": "source_gap_handoff_required",
+            "steps": steps,
+            "source_gap": source_gap,
+            "handoff_path": source_gap.get("handoff_path"),
+            "run_path": str(root / "survey_finalize_run.json"),
+        }
+        (root / "survey_finalize_run.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        return payload
 
     packs = _read_json(root / "survey_evidence_packs.json")
     if not skip_pack or not packs:
