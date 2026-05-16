@@ -72,6 +72,8 @@ def test_strict_eval_passes_controlled_strong_fixture(tmp_path):
     assert result["section_factual_audit"]["section_grounding_accuracy"] == 1.0
     assert result["section_scorecard"]["ok"] is True
     assert result["section_scorecard"]["needs_rewrite_count"] == 0
+    assert result["chief_editor_review"]["ok"] is True
+    assert (tmp_path / "survey_chief_editor.json").exists()
 
 
 def test_strict_eval_fails_when_claims_have_no_evidence_links(tmp_path):
@@ -336,3 +338,29 @@ def test_strict_eval_fails_low_authority_web_heavy_sources(tmp_path):
     assert result["source_coverage"]["ok"] is False
     assert any(item.startswith("survey_missing_required_source_types:") for item in result["scorecard"]["issues"])
     assert any(item.startswith("low_value_source_ratio_high:") for item in result["scorecard"]["issues"])
+
+
+def test_chief_editor_gate_flags_duplicate_complete_sections(tmp_path):
+    plan = create_survey_plan("latent reasoning", target_chars=50000)
+    write_survey_plan(plan, tmp_path)
+    sources = _strong_sources()
+    evidence = [{"id": f"ev_{i}", "source_id": sources[i % len(sources)]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(80)]
+    claims = [{"id": f"cl_{i}", "claim_text": "latent reasoning architecture requires evaluation evidence"} for i in range(80)]
+    links = [{"claim_id": f"cl_{i}", "evidence_id": f"ev_{i}"} for i in range(80)]
+    _append_jsonl(tmp_path / "sources.jsonl", sources)
+    _append_jsonl(tmp_path / "evidence.jsonl", evidence)
+    _append_jsonl(tmp_path / "claims.jsonl", claims)
+    _append_jsonl(tmp_path / "claim_evidence.jsonl", links)
+    build_evidence_packs(tmp_path, plan["report_ast"])
+    duplicate_body = "# Duplicate\n\n## Claim\n\nlatent reasoning architecture evaluation deployment [claim:{claim_id}] [evidence:{evidence_id}]\n"
+    for section in plan["report_ast"]["sections"]:
+        section_id = section["section_id"]
+        pack = json.loads((tmp_path / "sections" / section_id / "evidence_pack.json").read_text(encoding="utf-8"))
+        final = tmp_path / "sections" / section_id / "final.md"
+        final.write_text(duplicate_body.format(claim_id=pack["claim_ids"][0], evidence_id=pack["evidence_ids"][0]), encoding="utf-8")
+    compile_survey(tmp_path)
+
+    result = evaluate_survey(tmp_path, strict=True, require_complete=True)
+    assert result["ok"] is False
+    assert result["chief_editor_review"]["ok"] is False
+    assert any(item.startswith("chief_editor_section_duplicate_rate_high:") for item in result["scorecard"]["issues"])

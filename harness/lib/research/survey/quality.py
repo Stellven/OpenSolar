@@ -635,6 +635,7 @@ def _build_chapter_review(
             "chapter_id": chapter_id,
             "title": str(chapter.get("title") or ""),
             "axis": _chapter_axis(str(chapter.get("title") or "")),
+            "section_ids": [str(row.get("section_id") or "") for row in chapter_sections if str(row.get("section_id") or "")],
             "section_count": len(chapter_sections),
             "ready_pack_ratio": ready_ratio,
             "source_types": sorted(source_types),
@@ -653,6 +654,99 @@ def _build_chapter_review(
         "p1_chapter_issue_count": p1_chapters,
         "chapters": rows,
         "issues": [f"chapter_p0_issue_count:{p0_chapters}" for _ in [0] if p0_chapters],
+    }
+
+
+def _normalized_section_fingerprint(text: str) -> str:
+    cleaned = re.sub(r"\[[a-z]+:[^\]]+\]", "", text or "")
+    cleaned = re.sub(r"^#+\s+.*$", "", cleaned, flags=re.M)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip().lower()
+    return cleaned[:800]
+
+
+def _build_chief_editor_review(
+    root: Path,
+    chapters: list[dict[str, Any]],
+    sections: list[dict[str, Any]],
+    chapter_review: dict[str, Any],
+    literature_map: dict[str, Any],
+    controversy_review: dict[str, Any],
+) -> dict[str, Any]:
+    section_by_chapter: dict[str, list[str]] = {}
+    finalized_by_chapter: dict[str, int] = {}
+    fingerprints: list[str] = []
+    terminology_counts = {
+        "latent_reasoning": 0,
+        "continuous_thought": 0,
+        "chain_of_thought": 0,
+        "coconut": 0,
+        "hidden_state": 0,
+    }
+    for section in sections:
+        section_id = str(section.get("section_id") or "")
+        chapter_id = str(section.get("chapter_id") or "")
+        if section_id:
+            section_by_chapter.setdefault(chapter_id, []).append(section_id)
+        final_path = root / "sections" / section_id / "final.md"
+        if not final_path.exists():
+            continue
+        finalized_by_chapter[chapter_id] = finalized_by_chapter.get(chapter_id, 0) + 1
+        text = final_path.read_text(encoding="utf-8", errors="ignore")
+        fingerprint = _normalized_section_fingerprint(text)
+        if fingerprint:
+            fingerprints.append(fingerprint)
+        lowered = text.lower()
+        terminology_counts["latent_reasoning"] += len(re.findall(r"latent reasoning|隐空间推理|潜空间推理", lowered))
+        terminology_counts["continuous_thought"] += len(re.findall(r"continuous thought|continuous reasoning", lowered))
+        terminology_counts["chain_of_thought"] += len(re.findall(r"chain[- ]of[- ]thought|\bcot\b", lowered))
+        terminology_counts["coconut"] += len(re.findall(r"\bcoconut\b", lowered))
+        terminology_counts["hidden_state"] += len(re.findall(r"hidden state|latent state|隐状态", lowered))
+
+    finalized_sections = len(fingerprints)
+    duplicate_rate = round(1.0 - (len(set(fingerprints)) / max(finalized_sections, 1)), 4)
+    chapters_with_final = len([chapter for chapter in chapters if finalized_by_chapter.get(str(chapter.get("chapter_id") or ""), 0)])
+    chapter_final_coverage = round(chapters_with_final / max(len(chapters), 1), 4)
+    complete_context = bool(sections) and finalized_sections == len(sections)
+    chapter_p0_issue_count = int(chapter_review.get("p0_chapter_issue_count") or 0)
+    issues: list[str] = []
+    warnings: list[str] = []
+    if complete_context and chapter_final_coverage < 1.0:
+        issues.append(f"chief_editor_chapter_final_coverage_low:{chapter_final_coverage:.4f}<1.0000")
+    if complete_context and duplicate_rate > 0.75:
+        issues.append(f"chief_editor_section_duplicate_rate_high:{duplicate_rate:.4f}>0.7500")
+    if complete_context and chapter_p0_issue_count:
+        issues.append(f"chief_editor_chapter_p0_issue_count:{chapter_p0_issue_count}")
+    if complete_context and not literature_map.get("ok"):
+        issues.append("chief_editor_literature_map_not_ok")
+    if complete_context and not controversy_review.get("ok"):
+        issues.append("chief_editor_controversy_matrix_not_ok")
+    if not complete_context and finalized_sections:
+        warnings.append(f"chief_editor_partial_review:{finalized_sections}/{len(sections)}")
+    terminology_variants = [key for key, value in terminology_counts.items() if value]
+    if complete_context and len(terminology_variants) < 2:
+        warnings.append("chief_editor_terminology_signal_sparse")
+    chapter_rows = []
+    for chapter in chapters:
+        chapter_id = str(chapter.get("chapter_id") or "")
+        chapter_rows.append({
+            "chapter_id": chapter_id,
+            "title": str(chapter.get("title") or ""),
+            "section_count": len(section_by_chapter.get(chapter_id, [])),
+            "finalized_sections": finalized_by_chapter.get(chapter_id, 0),
+            "ready_for_chief_edit": finalized_by_chapter.get(chapter_id, 0) == len(section_by_chapter.get(chapter_id, [])) and bool(section_by_chapter.get(chapter_id, [])),
+        })
+    return {
+        "ok": not issues,
+        "complete_context": complete_context,
+        "finalized_sections": finalized_sections,
+        "total_sections": len(sections),
+        "chapter_final_coverage": chapter_final_coverage,
+        "section_duplicate_rate": duplicate_rate,
+        "terminology_counts": terminology_counts,
+        "terminology_variants": terminology_variants,
+        "chapters": chapter_rows,
+        "warnings": warnings,
+        "issues": issues,
     }
 
 
@@ -715,9 +809,10 @@ def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs
     literature_map = _build_literature_map(root, chapters, sections, pack_rows)
     controversy_review = _build_controversy_review(chapters, sections, pack_rows)
     chapter_review = _build_chapter_review(root, chapters, sections, pack_rows, section_scorecard)
+    chief_editor_review = _build_chief_editor_review(root, chapters, sections, chapter_review, literature_map, controversy_review)
 
     payload = {
-        "ok": taxonomy["ok"] and contradiction_matrix["ok"] and section_factual_audit["ok"] and section_scorecard["ok"] and final_quality["ok"] and source_coverage["ok"] and literature_map["ok"] and controversy_review["ok"] and chapter_review["ok"],
+        "ok": taxonomy["ok"] and contradiction_matrix["ok"] and section_factual_audit["ok"] and section_scorecard["ok"] and final_quality["ok"] and source_coverage["ok"] and literature_map["ok"] and controversy_review["ok"] and chapter_review["ok"] and chief_editor_review["ok"],
         "taxonomy": taxonomy,
         "contradiction_matrix": contradiction_matrix,
         "section_factual_audit": section_factual_audit,
@@ -727,6 +822,7 @@ def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs
         "literature_map": literature_map,
         "controversy_review": controversy_review,
         "chapter_review": chapter_review,
+        "chief_editor_review": chief_editor_review,
     }
     (root / "survey_taxonomy.json").write_text(json.dumps(taxonomy, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_contradiction_matrix.json").write_text(json.dumps(contradiction_matrix, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -737,4 +833,5 @@ def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs
     (root / "survey_literature_map.json").write_text(json.dumps(literature_map, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_controversy_matrix.json").write_text(json.dumps(controversy_review, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_chapter_review.json").write_text(json.dumps(chapter_review, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    (root / "survey_chief_editor.json").write_text(json.dumps(chief_editor_review, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return payload
