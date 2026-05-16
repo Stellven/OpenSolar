@@ -60,7 +60,20 @@ def test_compile_section_and_survey(tmp_path):
     compiled = compile_survey(tmp_path)
     assert compiled["ok"] is True
     assert (tmp_path / "final.md").exists()
+    assert (tmp_path / "survey_contribution_matrix.json").exists()
+    assert (tmp_path / "survey_final_summary.json").exists()
     assert (tmp_path / "chapters" / "ch01" / "editorial_review.json").exists()
+    final_text = (tmp_path / "final.md").read_text(encoding="utf-8")
+    assert "## Executive Summary" in final_text
+    assert "## Technical Summary" in final_text
+    assert "## Contribution Matrix" in final_text
+    assert "## Roadmap" in final_text
+    assert "## Chapter Synthesis" in final_text
+    matrix = json.loads((tmp_path / "survey_contribution_matrix.json").read_text(encoding="utf-8"))
+    assert matrix["finalized_sections"] == 1
+    assert matrix["rows"][0]["has_comparative_positioning"] is True
+    summary = json.loads((tmp_path / "survey_final_summary.json").read_text(encoding="utf-8"))
+    assert summary["technical_summary"]
 
 
 def test_revision_loop_requires_enough_detail(tmp_path):
