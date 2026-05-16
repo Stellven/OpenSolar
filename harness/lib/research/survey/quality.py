@@ -7,6 +7,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from research.evaluator import audit_sources
+
 
 def _read_json(path: Path) -> Any:
     if not path.exists():
@@ -344,6 +346,65 @@ def _build_final_quality(root: Path, ast: dict[str, Any], sections: list[dict[st
     }
 
 
+def _build_source_coverage(root: Path, sections: list[dict[str, Any]]) -> dict[str, Any]:
+    sources = _read_jsonl(root / "sources.jsonl")
+    evidence_rows = _read_jsonl(root / "evidence.jsonl")
+    source_audit = audit_sources(root, research_profile="technical_architecture", strict_profile=True)
+    type_counts = {
+        str(key): int(value)
+        for key, value in (source_audit.get("source_type_counts") or {}).items()
+    }
+    source_count = int(source_audit.get("source_count") or len(sources))
+    required_types = {"paper", "official_doc", "code", "benchmark"}
+    observed_types = set(type_counts.keys())
+    missing_required = sorted(required_types - observed_types)
+    paper_like_count = sum(type_counts.get(item, 0) for item in ("paper", "preprint"))
+    low_value_count = sum(type_counts.get(item, 0) for item in ("web", "blog", "other", "unknown"))
+    low_value_ratio = round(low_value_count / max(source_count, 1), 4)
+    evidence_source_ids = {str(row.get("source_id") or "") for row in evidence_rows if row.get("source_id")}
+    cited_source_ratio = round(len(evidence_source_ids) / max(source_count, 1), 4)
+    high_authority_count = int(source_audit.get("source_high_authority_count") or 0)
+    authority_average = float(source_audit.get("source_authority_average") or 0.0)
+    min_sources = 8 if len(sections) >= 30 else 4
+    min_paper_like = 4 if len(sections) >= 30 else 2
+    min_high_authority = 4 if len(sections) >= 30 else 2
+    issues: list[str] = []
+    if source_count < min_sources:
+        issues.append(f"survey_source_count_low:{source_count}<{min_sources}")
+    if missing_required:
+        issues.append("survey_missing_required_source_types:" + ",".join(missing_required))
+    if paper_like_count < min_paper_like:
+        issues.append(f"paper_like_source_count_low:{paper_like_count}<{min_paper_like}")
+    if high_authority_count < min_high_authority:
+        issues.append(f"high_authority_source_count_low:{high_authority_count}<{min_high_authority}")
+    if authority_average < 0.55:
+        issues.append(f"source_authority_average_low:{authority_average:.4f}<0.5500")
+    if low_value_ratio > 0.40:
+        issues.append(f"low_value_source_ratio_high:{low_value_ratio:.4f}>0.4000")
+    if cited_source_ratio < 0.50:
+        issues.append(f"cited_source_ratio_low:{cited_source_ratio:.4f}<0.5000")
+    for issue in source_audit.get("errors", []):
+        issues.append(str(issue))
+    return {
+        "ok": not issues,
+        "source_count": source_count,
+        "min_sources": min_sources,
+        "source_type_counts": type_counts,
+        "required_source_types": sorted(required_types),
+        "missing_required_source_types": missing_required,
+        "paper_like_source_count": paper_like_count,
+        "min_paper_like_sources": min_paper_like,
+        "high_authority_source_count": high_authority_count,
+        "min_high_authority_sources": min_high_authority,
+        "source_authority_average": authority_average,
+        "low_value_source_count": low_value_count,
+        "low_value_source_ratio": low_value_ratio,
+        "cited_source_ratio": cited_source_ratio,
+        "source_audit": source_audit,
+        "issues": issues,
+    }
+
+
 def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs: dict | None = None) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
     ast = ast or _read_json(root / "survey_report_ast.json")
@@ -399,18 +460,21 @@ def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs
     section_factual_audit = _section_factual_audit(root, sections, pack_rows, evidence_rows)
     section_scorecard = _build_section_scorecard(root, sections, pack_rows, section_factual_audit)
     final_quality = _build_final_quality(root, ast, sections)
+    source_coverage = _build_source_coverage(root, sections)
 
     payload = {
-        "ok": taxonomy["ok"] and contradiction_matrix["ok"] and section_factual_audit["ok"] and section_scorecard["ok"] and final_quality["ok"],
+        "ok": taxonomy["ok"] and contradiction_matrix["ok"] and section_factual_audit["ok"] and section_scorecard["ok"] and final_quality["ok"] and source_coverage["ok"],
         "taxonomy": taxonomy,
         "contradiction_matrix": contradiction_matrix,
         "section_factual_audit": section_factual_audit,
         "section_scorecard": section_scorecard,
         "final_quality": final_quality,
+        "source_coverage": source_coverage,
     }
     (root / "survey_taxonomy.json").write_text(json.dumps(taxonomy, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_contradiction_matrix.json").write_text(json.dumps(contradiction_matrix, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_section_factual_audit.json").write_text(json.dumps(section_factual_audit, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_section_scorecard.json").write_text(json.dumps(section_scorecard, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_final_quality.json").write_text(json.dumps(final_quality, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    (root / "survey_source_coverage.json").write_text(json.dumps(source_coverage, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return payload
