@@ -8,13 +8,13 @@
   "handoff_to": "",
   "target_role": "coordinator",
   "created_at": "2026-05-15T19:27:12Z",
-  "updated_at": "2026-05-16T08:48:36-0400",
+  "updated_at": "2026-05-16T09:13:08-0400",
   "contract": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.contract.md",
   "prd": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.prd.md",
   "design": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.design.md",
   "plan": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.plan.md",
   "task_graph": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.task_graph.json",
-  "current_truth": "Professor-grade DeepResearch survey now has final-quality gates, source/literature/chief-editor review, chapter rewrite queue items, and a professor-grade writing policy that emits section and chapter prompt packets. Runtime CLI smoke verified policy_id and new section template blocks.",
+  "current_truth": "Professor-grade DeepResearch survey now has final-quality gates, authority/source coverage, literature/controversy/chapter/chief-editor review, pluggable writing packets, and final assembly artifacts: executive/technical summary, contribution matrix, roadmap, and chapter synthesis. Runtime CLI smoke verified status=done with 32 finalized sections.",
   "id": "sprint-20260515-professor-grade-deepresearch-survey",
   "history": [
     {
@@ -236,11 +236,17 @@
       "by": "contract-patrol",
       "node": "N1_survey_schemas",
       "reason": "graph_scheduler.node_status now treats passed gate as durable node closeout unless failed"
+    },
+    {
+      "ts": "2026-05-16T09:13:08-0400",
+      "event": "survey_final_assembly_complete",
+      "by": "codex",
+      "note": "Added survey_contribution_matrix.json, survey_final_summary.json, final.md executive/technical summaries, roadmap, contribution matrix, and chapter synthesis. Runtime CLI smoke completed status=done with 32 finalized sections."
     }
   ],
   "round": 2,
-  "event_count": 183,
-  "last_event_ts": "2026-05-15T23:29:55Z",
+  "event_count": 184,
+  "last_event_ts": "2026-05-16T09:13:08-0400",
   "projected_at": "2026-05-15T23:29:55Z",
   "sid": "sprint-20260515-professor-grade-deepresearch-survey",
   "runtime_state_source": "activity_runtime",
@@ -349,6 +355,20 @@
         "runtime CLI smoke policy_id=solar.survey.professor_grade_writing.v1 chapter_prompt_packet=true"
       ],
       "evidence": "/Users/sihaoli/Knowledge/_raw/solar-harness/deepresearch-survey-writing-policy-chapter-packets-20260516T084836-0400.md"
+    },
+    {
+      "ts": "2026-05-16T09:13:08-0400",
+      "event": "survey_final_assembly_complete",
+      "status": "ok",
+      "summary": "Added final survey assembly outputs: executive/technical summary, contribution matrix, roadmap, and per-chapter synthesis in final.md.",
+      "verification": [
+        "source focused 15 passed",
+        "source survey suite 85 passed",
+        "source regression 139 passed",
+        "runtime focused 15 passed",
+        "runtime CLI smoke status=done finalized_sections=32 contribution_rows=32 required_headings=true"
+      ],
+      "evidence": "/Users/sihaoli/Knowledge/_raw/solar-harness/deepresearch-survey-final-assembly-20260516T091308-0400.md"
     }
   ]
 }
