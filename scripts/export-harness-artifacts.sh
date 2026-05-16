@@ -50,6 +50,7 @@ fi
 
 rsync_excludes=(
   --exclude '.*'
+  --exclude '$*'
   --exclude '.DS_Store'
   --exclude '__pycache__/***'
   --exclude '*.pyc'
@@ -84,6 +85,7 @@ rsync_excludes=(
   --exclude 'quarantine/***'
   --exclude 'pm-predrafts/***'
   --exclude 'sprints/***'
+  --exclude 'codex-bridge.deprecated.*/***'
   --exclude '.backup-*/***'
 )
 
