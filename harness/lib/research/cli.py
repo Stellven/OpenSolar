@@ -2630,6 +2630,28 @@ def cmd_survey_status_next_action(args: argparse.Namespace) -> int:
     return 0 if payload.get("ok") else 1
 
 
+def cmd_survey_continue(args: argparse.Namespace) -> int:
+    from research.survey.auto_continue import continue_survey_run
+
+    payload = continue_survey_run(
+        args.output_dir,
+        brief=args.brief,
+        returned_md=args.returned_md,
+        max_steps=args.max_steps,
+        target_chars=args.target_chars,
+        audience=args.audience,
+        domain=args.domain,
+        section_limit=args.section_limit,
+        repair_limit=args.repair_limit,
+        min_finalized=args.min_finalized,
+        min_chars=args.min_chars,
+    )
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") and (payload.get("completed") or args.allow_pending) else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") and (payload.get("completed") or args.allow_pending) else 1
+
+
 def cmd_survey_review(args: argparse.Namespace) -> int:
     from research.survey.evaluator import evaluate_survey
 
@@ -2986,6 +3008,7 @@ SUBCOMMANDS = {
     "survey-finalize-run": cmd_survey_finalize_run,
     "survey-import-search-results": cmd_survey_import_search_results,
     "survey-status-next-action": cmd_survey_status_next_action,
+    "survey-continue": cmd_survey_continue,
     "survey-review": cmd_survey_review,
     "survey-compile": cmd_survey_compile,
     "survey-eval": cmd_survey_eval,
@@ -3322,6 +3345,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_status_next.add_argument("--brief", default="")
     p_survey_status_next.add_argument("--returned-md", default="", help="Returned external search Markdown path; defaults to <output-dir>/returned_sources.md")
     p_survey_status_next.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_continue = sub.add_parser("survey-continue", help="Safely continue a survey DeepResearch run until done or a human/source-gap pause")
+    p_survey_continue.add_argument("--output-dir", required=True)
+    p_survey_continue.add_argument("--brief", default="")
+    p_survey_continue.add_argument("--returned-md", default="", help="Returned external search Markdown path; defaults to <output-dir>/returned_sources.md")
+    p_survey_continue.add_argument("--max-steps", type=int, default=4)
+    p_survey_continue.add_argument("--target-chars", type=int, default=50000)
+    p_survey_continue.add_argument("--audience", default="technical")
+    p_survey_continue.add_argument("--domain", default="ai")
+    p_survey_continue.add_argument("--section-limit", type=int, default=3)
+    p_survey_continue.add_argument("--repair-limit", type=int, default=0)
+    p_survey_continue.add_argument("--min-finalized", type=int, default=None)
+    p_survey_continue.add_argument("--min-chars", type=int, default=1200)
+    p_survey_continue.add_argument("--allow-pending", action="store_true", help="Return zero when safely paused for source search or writer response")
+    p_survey_continue.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     p_survey_review = sub.add_parser("survey-review", help="Run non-strict survey review")
     p_survey_review.add_argument("--output-dir", required=True)
