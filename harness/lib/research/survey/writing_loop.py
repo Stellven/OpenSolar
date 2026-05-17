@@ -21,6 +21,7 @@ PROFESSOR_GRADE_WRITING_POLICY = {
         "Source Map",
         "Architecture Synthesis",
         "Comparative Positioning",
+        "Terminology Evolution",
         "Evaluation And Risk Boundary",
         "Limitations And Failure Modes",
         "Contradiction Slots",
@@ -204,7 +205,7 @@ def build_section_prompt_packet(root: Path, section_id: str, round_index: int = 
             "Markdown section draft.",
             "At least six second-level headings.",
             "Follow the professor-grade section template in writing_policy.section_template.",
-            "Include Architecture Synthesis, Comparative Positioning, Evaluation And Risk Boundary, Limitations And Failure Modes, Contradiction Slots, and Open Problems.",
+            "Include Architecture Synthesis, Comparative Positioning, Terminology Evolution, Evaluation And Risk Boundary, Limitations And Failure Modes, Contradiction Slots, and Open Problems.",
             "All core claims must reference claim_id and evidence_id tags.",
         ],
         artifact_paths={
@@ -418,6 +419,10 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
 
 {anchor} treats `{lens['primary_source']}` as the primary source family and `{lens['secondary_source']}` as calibration evidence; missing families lower confidence. [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
 
+## Terminology Evolution
+
+{anchor} tracks the terminology path from chain-of-thought and explicit reasoning chains toward continuous thought, hidden-state deliberation, Coconut-style latent reasoning, and auditable hybrid systems. [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+
 ## Evaluation And Risk Boundary
 
 {anchor} checks task form, metric scope, reproducibility, and deployment transfer before allowing strong conclusions. [claim:{claim_ids[1] if len(claim_ids) > 1 else 'claim_missing'}] [evidence:{evidence_ids[1] if len(evidence_ids) > 1 else 'evidence_missing'}]
@@ -442,6 +447,10 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
 ## Revision: Architecture And Evaluation Detail
 
 {anchor} 的本轮修订围绕 {lens['focus']} 展开，而不是复述通用写作模板；`{source_types}` 证据被拆成主来源 `{lens['primary_source']}` 与校验来源 `{lens['secondary_source']}`，前者限定论证入口，后者校准评价或工程边界。该节结论必须显式标注 `{lens['risk']}` 这一降级条件，避免把局部实验直接升级为通用规律。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+
+## Revision: Terminology Evolution And Academic Survey Frame
+
+{anchor} 将术语演进显式写入正文：chain-of-thought 或显式推理链强调 token-level narration，continuous thought 强调连续隐变量计算，hidden-state deliberation 强调内部状态迁移，Coconut-style latent reasoning 则把这些机制放入可训练和可评估的架构 taxonomy。教授级 survey 必须同时记录 baseline、ablation、evaluation protocol、reproducibility、deployment 和 auditability，否则长文只是材料堆叠。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
 """
     if round_index >= 2:
         expansion += f"""

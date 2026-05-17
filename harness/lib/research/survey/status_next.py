@@ -25,6 +25,7 @@ ARTIFACT_NAMES = [
     "survey_evidence_packs.json",
     "survey_section_scorecard.json",
     "survey_final_quality.json",
+    "survey_depth_profile.json",
 ]
 
 
