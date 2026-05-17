@@ -2605,10 +2605,6 @@ def cmd_survey_import_search_results(args: argparse.Namespace) -> int:
         args.input_md,
         continue_finalize=args.continue_finalize,
         brief=args.brief,
-        target_chars=args.target_chars,
-        audience=args.audience,
-        domain=args.domain,
-        run_id=args.run_id,
         section_limit=args.section_limit,
         repair_limit=args.repair_limit,
         min_finalized=args.min_finalized,
@@ -3341,10 +3337,6 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_import.add_argument("--input-md", required=True)
     p_survey_import.add_argument("--continue-finalize", action="store_true")
     p_survey_import.add_argument("--brief", default="")
-    p_survey_import.add_argument("--target-chars", type=int, default=50000)
-    p_survey_import.add_argument("--audience", default="technical")
-    p_survey_import.add_argument("--domain", default="ai")
-    p_survey_import.add_argument("--run-id", default="")
     p_survey_import.add_argument("--section-limit", type=int, default=3)
     p_survey_import.add_argument("--repair-limit", type=int, default=0)
     p_survey_import.add_argument("--min-finalized", type=int, default=None)
