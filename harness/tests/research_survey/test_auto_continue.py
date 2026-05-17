@@ -34,6 +34,7 @@ URL: {url}
 Publisher: Example
 Published: 2025-01-{idx:02d}
 Source Type: {source_type}
+Research Angles: {["literature_lineage", "method_taxonomy", "evaluation_protocol", "controversy", "engineering"][(idx - 1) % 5]}
 
 Summary:
 - Latent reasoning source {idx} covers architecture evaluation deployment.
@@ -126,7 +127,6 @@ def test_continue_survey_require_complete_writes_remaining_sections(tmp_path):
     returned.write_text(_search_results(), encoding="utf-8")
     payload = continue_survey_run(
         tmp_path,
-        brief="latent reasoning",
         returned_md=returned,
         max_steps=5,
         section_limit=1,

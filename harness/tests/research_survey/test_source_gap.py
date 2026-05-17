@@ -33,6 +33,13 @@ def test_source_gap_reports_missing_ledgers_and_writes_handoff(tmp_path):
     assert "solar-harness research survey-continue" in text
     assert "## Source 1: <title>" in text
     assert "Source Type: paper" in text
+    assert "Research Angles: literature_lineage" in text
+    assert "Required Research Angles" in text
+    assert "literature_lineage" in text
+    assert "method_taxonomy" in text
+    assert "evaluation_protocol" in text
+    assert "controversy" in text
+    assert "engineering" in text
     assert "Required returned Source blocks" in text
 
 
@@ -46,6 +53,8 @@ def test_source_gap_handoff_scales_template_to_claim_and_evidence_gap(tmp_path):
     assert "Claims: `0/32`" in text
     assert "Required returned Source blocks: `16` minimum" in text
     assert "## Source 16: <title>" in text
+    for angle in ["literature_lineage", "method_taxonomy", "evaluation_protocol", "controversy", "engineering"]:
+        assert f"Research Angles: {angle}" in text
 
 
 def test_source_gap_passes_with_minimal_diverse_ledgers(tmp_path):
