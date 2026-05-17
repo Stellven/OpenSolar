@@ -13,7 +13,7 @@ from research.cli import build_parser, main
 
 def test_survey_cli_commands_registered():
     subs = build_parser()._subparsers._group_actions[0].choices
-    for name in ["survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-watch-register", "survey-watch-tick", "survey-rewrite-queue", "survey-rewrite-run", "survey-auto-repair", "survey-finalize-run", "survey-import-search-results", "survey-status-next-action", "survey-continue", "survey-review", "survey-compile", "survey-eval"]:
+    for name in ["survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-watch-register", "survey-watch-tick", "survey-rewrite-queue", "survey-rewrite-run", "survey-auto-repair", "survey-finalize-run", "survey-import-search-results", "survey-status-next-action", "survey-continue", "survey-review", "survey-compile", "survey-eval", "survey-diagnose"]:
         assert name in subs
 
 
@@ -52,6 +52,33 @@ def test_survey_eval_cli_require_complete_fails_plan_only(tmp_path, capsys):
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is False
     assert any(item.startswith("finalized_sections_low:0<") for item in payload["scorecard"]["issues"])
+
+
+def test_survey_diagnose_cli_reports_issue_groups_and_next_action(tmp_path, capsys):
+    assert main([
+        "survey-plan",
+        "--brief", "隐空间推理技术架构和演进方向",
+        "--target-chars", "50000",
+        "--output-dir", str(tmp_path),
+        "--json",
+    ]) == 0
+    capsys.readouterr()
+    rc = main([
+        "survey-diagnose",
+        "--output-dir", str(tmp_path),
+        "--write-md",
+        "--json",
+    ])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert payload["status"] == "fail"
+    assert payload["summary"]["sections"] >= 30
+    assert payload["summary"]["issue_count"] > 0
+    assert any(item["group"] == "completion" for item in payload["issue_groups"])
+    assert "survey-continue" in payload["next_action"] or "survey-import-search-results" in payload["next_action"]
+    assert (tmp_path / "survey_diagnosis.json").exists()
+    assert (tmp_path / "survey_diagnosis.md").exists()
 
 
 def test_survey_write_rejects_unknown_backend(tmp_path):

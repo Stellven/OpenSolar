@@ -2689,6 +2689,22 @@ def cmd_survey_eval(args: argparse.Namespace) -> int:
     return 0 if payload.get("ok") or not args.strict else 1
 
 
+def cmd_survey_diagnose(args: argparse.Namespace) -> int:
+    from research.survey.diagnose import diagnose_survey, render_survey_diagnosis_markdown
+
+    payload = diagnose_survey(
+        args.output_dir,
+        strict=args.strict,
+        min_finalized=args.min_finalized,
+        require_complete=args.require_complete,
+        write_md=args.write_md,
+    )
+    if emit_json(args, payload):
+        return 0
+    print(render_survey_diagnosis_markdown(payload))
+    return 0
+
+
 def _source_audit_handoff_markdown(payload: dict, query: str = "") -> str:
     """Build a human/browser-use search handoff for missing profile sources."""
     profile = payload.get("research_profile", "general")
@@ -2977,7 +2993,7 @@ ALL_SUBCOMMANDS = [
     "mine", "outline", "write", "check", "compile", "synthesize", "export", "eval-artifacts",
     "policy-doctor", "policy-explain",
     "source-audit",
-    "survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-watch-register", "survey-watch-tick", "survey-rewrite-queue", "survey-rewrite-run", "survey-auto-repair", "survey-finalize-run", "survey-import-search-results", "survey-review", "survey-compile", "survey-eval",
+    "survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-watch-register", "survey-watch-tick", "survey-rewrite-queue", "survey-rewrite-run", "survey-auto-repair", "survey-finalize-run", "survey-import-search-results", "survey-review", "survey-compile", "survey-eval", "survey-diagnose",
 ]
 
 SUBCOMMANDS = {
@@ -3019,6 +3035,7 @@ SUBCOMMANDS = {
     "survey-review": cmd_survey_review,
     "survey-compile": cmd_survey_compile,
     "survey-eval": cmd_survey_eval,
+    "survey-diagnose": cmd_survey_diagnose,
 }
 
 
@@ -3391,6 +3408,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_eval.add_argument("--min-finalized", type=int, default=None)
     p_survey_eval.add_argument("--require-complete", action="store_true")
     p_survey_eval.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_diagnose = sub.add_parser("survey-diagnose", help="Diagnose survey quality issues and next actions")
+    p_survey_diagnose.add_argument("--output-dir", required=True)
+    p_survey_diagnose.add_argument("--strict", action="store_true", default=True)
+    p_survey_diagnose.add_argument("--min-finalized", type=int, default=None)
+    p_survey_diagnose.add_argument("--require-complete", action="store_true", default=True)
+    p_survey_diagnose.add_argument("--write-md", action="store_true", help="Write survey_diagnosis.md next to survey artifacts")
+    p_survey_diagnose.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     return parser
 

@@ -8,13 +8,13 @@
   "handoff_to": "",
   "target_role": "coordinator",
   "created_at": "2026-05-15T19:27:12Z",
-  "updated_at": "2026-05-16T20:19:28-0400",
+  "updated_at": "2026-05-16T20:23:46-0400",
   "contract": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.contract.md",
   "prd": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.prd.md",
   "design": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.design.md",
   "plan": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.plan.md",
   "task_graph": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.task_graph.json",
-  "current_truth": "Professor-grade DeepResearch survey supports final-quality gates, target-scale propagation, and human-in-loop search UX guardrails. Handoff now emits a copy/paste returned_sources.md template; malformed returned Markdown gets actionable import diagnostics.",
+  "current_truth": "Professor-grade DeepResearch survey now has final-quality gates, target-scale propagation, human-in-loop search guardrails, and a one-shot survey-diagnose command that groups quality issues and emits next actions.",
   "id": "sprint-20260515-professor-grade-deepresearch-survey",
   "history": [
     {
@@ -254,11 +254,17 @@
       "event": "survey_human_loop_search_ux_complete",
       "by": "codex",
       "note": "Added copy/paste returned_sources.md template to survey source-gap handoff and structured diagnostics for no_importable_sources. Runtime smoke verified template and diagnostics."
+    },
+    {
+      "ts": "2026-05-16T20:23:46-0400",
+      "event": "survey_diagnose_command_complete",
+      "by": "codex",
+      "note": "Added survey-diagnose CLI and package module. Runtime smoke verified issue groups, JSON/Markdown artifacts, and next_action output."
     }
   ],
   "round": 2,
-  "event_count": 186,
-  "last_event_ts": "2026-05-16T20:19:28-0400",
+  "event_count": 187,
+  "last_event_ts": "2026-05-16T20:23:46-0400",
   "projected_at": "2026-05-15T23:29:55Z",
   "sid": "sprint-20260515-professor-grade-deepresearch-survey",
   "runtime_state_source": "activity_runtime",
@@ -407,6 +413,19 @@
         "source regression 142 passed"
       ],
       "evidence": "/Users/sihaoli/Knowledge/_raw/solar-harness/deepresearch-human-loop-search-ux-20260516T201928-0400.md"
+    },
+    {
+      "ts": "2026-05-16T20:23:46-0400",
+      "event": "survey_diagnose_command_complete",
+      "status": "ok",
+      "summary": "Added survey-diagnose command for one-shot report quality diagnosis, issue grouping, Markdown/JSON artifacts, and actionable next command.",
+      "verification": [
+        "source focused 9 passed",
+        "runtime focused 9 passed",
+        "runtime smoke survey_diagnose issue_count=27 markdown=true json=true",
+        "source regression 143 passed"
+      ],
+      "evidence": "/Users/sihaoli/Knowledge/_raw/solar-harness/deepresearch-survey-diagnose-command-20260516T202346-0400.md"
     }
   ]
 }
