@@ -364,3 +364,79 @@ def test_chief_editor_gate_flags_duplicate_complete_sections(tmp_path):
     assert result["ok"] is False
     assert result["chief_editor_review"]["ok"] is False
     assert any(item.startswith("chief_editor_section_duplicate_rate_high:") for item in result["scorecard"]["issues"])
+
+
+def test_final_quality_flags_repeated_long_sentences_across_complete_report(tmp_path):
+    plan = create_survey_plan("latent reasoning", target_chars=50000)
+    write_survey_plan(plan, tmp_path)
+    sources = _strong_sources()
+    evidence = [
+        {
+            "id": f"ev_{i}",
+            "source_id": sources[i % len(sources)]["id"],
+            "content": "latent reasoning architecture evaluation deployment hidden state planning explicit verbalization benchmark coverage implementation constraints",
+        }
+        for i in range(96)
+    ]
+    claims = [
+        {
+            "id": f"cl_{i}",
+            "claim_text": f"latent reasoning architecture claim {i} requires evaluation evidence and implementation constraints",
+        }
+        for i in range(96)
+    ]
+    links = [{"claim_id": f"cl_{i}", "evidence_id": f"ev_{i}"} for i in range(96)]
+    _append_jsonl(tmp_path / "sources.jsonl", sources)
+    _append_jsonl(tmp_path / "evidence.jsonl", evidence)
+    _append_jsonl(tmp_path / "claims.jsonl", claims)
+    _append_jsonl(tmp_path / "claim_evidence.jsonl", links)
+    build_evidence_packs(tmp_path, plan["report_ast"])
+    repeated = (
+        "Latent reasoning architecture evaluation deployment requires a balanced analysis of hidden state planning, "
+        "explicit verbalization, benchmark coverage, and implementation constraints."
+    )
+    for section in plan["report_ast"]["sections"]:
+        section_id = section["section_id"]
+        pack = json.loads((tmp_path / "sections" / section_id / "evidence_pack.json").read_text(encoding="utf-8"))
+        claim_ids = pack["claim_ids"][:3]
+        evidence_ids = pack["evidence_ids"][:4]
+        final = tmp_path / "sections" / section_id / "final.md"
+        final.write_text(
+            f"# {section['title']}\n\n"
+            "## Research Question\n\n"
+            f"{section['research_question']}\n\n"
+            "## Position\n\n"
+            f"{repeated} [claim:{claim_ids[0]}] [evidence:{evidence_ids[0]}]\n\n"
+            "## Claim Map\n\n"
+            f"1. Section-specific claim for {section_id} [claim:{claim_ids[0]}] [evidence:{evidence_ids[0]}]\n"
+            f"2. Section-specific implementation constraint {section_id} [claim:{claim_ids[1]}] [evidence:{evidence_ids[1]}]\n"
+            f"3. Section-specific evaluation boundary {section_id} [claim:{claim_ids[2]}] [evidence:{evidence_ids[2]}]\n\n"
+            "## Evidence Map\n\n"
+            f"- Evidence for architecture evaluation deployment {section_id} [evidence:{evidence_ids[0]}]\n"
+            f"- Evidence for hidden state planning {section_id} [evidence:{evidence_ids[1]}]\n"
+            f"- Evidence for benchmark coverage {section_id} [evidence:{evidence_ids[2]}]\n"
+            f"- Evidence for implementation constraints {section_id} [evidence:{evidence_ids[3]}]\n\n"
+            "## Source Map\n\n"
+            "The section uses paper, official, code, and benchmark sources.\n\n"
+            "## Architecture Synthesis\n\n"
+            f"{repeated} This unique section {section_id} ties the repeated frame to a local architectural decision. "
+            "The analysis expands the design axis, runtime implications, and evaluation constraints with grounded evidence.\n\n"
+            "## Comparative Positioning\n\n"
+            f"Compared with token-only chain-of-thought, section {section_id} separates latent search, explicit narration, and benchmark-facing outputs.\n\n"
+            "## Evaluation And Risk Boundary\n\n"
+            f"Evaluation for {section_id} must separate benchmark gains, hidden-state opacity, and reproducibility constraints. [claim:{claim_ids[1]}] [evidence:{evidence_ids[1]}]\n\n"
+            "## Limitations And Failure Modes\n\n"
+            f"Failure modes for {section_id} include hidden-state drift, unverifiable reasoning traces, and benchmark overfitting. [claim:{claim_ids[2]}] [evidence:{evidence_ids[2]}]\n\n"
+            "## Contradiction Slots\n\n"
+            f"Contradiction slot for {section_id}: latent compression can improve compute efficiency while reducing interpretability. [evidence:{evidence_ids[3]}]\n\n"
+            "## Open Problems\n\n"
+            f"Open problems for {section_id} include controllable latent planning, robust evaluation, and reproducible implementation contracts.\n",
+            encoding="utf-8",
+        )
+    compile_survey(tmp_path)
+
+    result = evaluate_survey(tmp_path, strict=True, require_complete=True)
+    assert result["ok"] is False
+    assert result["final_quality"]["ok"] is False
+    assert result["final_quality"]["max_duplicate_long_sentence_count"] >= 8
+    assert any(item.startswith("final_duplicate_sentence_count_high:") for item in result["scorecard"]["issues"])

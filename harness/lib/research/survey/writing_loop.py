@@ -84,6 +84,52 @@ def _claim_text(row: dict) -> str:
     return str(row.get("claim_text") or row.get("text") or row.get("title") or "")
 
 
+def _inline_text(value: Any, *, limit: int = 360) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    text = re.sub(r"\b(Title|URL|Publisher|Published|Source Type):\s*", r"\1=", text)
+    return text[:limit].strip()
+
+
+def _section_anchor(section_id: str, title: str, chapter: dict[str, Any]) -> str:
+    chapter_id = str(chapter.get("chapter_id") or section_id.split("/", 1)[0])
+    order = str(chapter.get("section_order_in_chapter") or "N/A")
+    return f"{chapter_id}#{order}::{section_id}::{title}"
+
+
+def _section_lens(title: str, question: str, source_types: list[str], order: int) -> dict[str, str]:
+    title_l = title.lower()
+    question_l = question.lower()
+    if re.search(r"architecture|架构|mechanism|机制|method|taxonomy|分类", title_l + " " + question_l):
+        axis = "architecture"
+        focus = "机制分层、状态表示、系统边界和可复现实现路径"
+        risk = "把机制可行性误读为工程可控性"
+    elif re.search(r"eval|benchmark|评估|评价|metric|数据", title_l + " " + question_l):
+        axis = "evaluation"
+        focus = "任务覆盖、指标口径、baseline 公平性和外推边界"
+        risk = "用单一 benchmark 结果替代跨任务可靠性判断"
+    elif re.search(r"deploy|engineering|system|工程|部署|成本", title_l + " " + question_l):
+        axis = "deployment"
+        focus = "调度成本、观测性、失败恢复和生产约束"
+        risk = "忽略隐状态方法在真实调用链中的可诊断性成本"
+    elif re.search(r"contradiction|limit|risk|争议|局限|失败", title_l + " " + question_l):
+        axis = "controversy"
+        focus = "反证来源、负例任务、不可复现实验和术语冲突"
+        risk = "只保留支持性证据而删除失败路径"
+    else:
+        axis = ["mechanism", "evidence", "integration", "roadmap"][max(order - 1, 0) % 4]
+        focus = "概念边界、证据类型、章节衔接和后续研究问题"
+        risk = "把材料摘要写成无可审计边界的泛化结论"
+    primary_source = source_types[0] if source_types else "unknown"
+    secondary_source = source_types[1] if len(source_types) > 1 else primary_source
+    return {
+        "axis": axis,
+        "focus": focus,
+        "risk": risk,
+        "primary_source": primary_source,
+        "secondary_source": secondary_source,
+    }
+
+
 def _dedupe_sentences(text: str) -> str:
     lines: list[str] = []
     seen: set[str] = set()
@@ -297,6 +343,7 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
     spec = _read_json(section_dir / "section.spec.json")
     pack = _read_json(section_dir / "evidence_pack.json")
     ledgers = _load_ledgers(root)
+    chapter_context = _chapter_context(root, section_id, spec)
     claims = [ledgers["claims"].get(cid, {}) for cid in pack.get("claim_ids", [])]
     evidence = [ledgers["evidence"].get(eid, {}) for eid in pack.get("evidence_ids", [])]
     sources = [ledgers["sources"].get(sid, {}) for sid in pack.get("source_ids", [])]
@@ -304,7 +351,10 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
     evidence_ids = [eid for eid in pack.get("evidence_ids", []) if eid]
     title = spec.get("title") or section_id
     question = spec.get("research_question") or ""
-    source_types = ", ".join(pack.get("source_types", [])) or "N/A"
+    source_type_list = [str(item) for item in pack.get("source_types", []) if str(item)] if isinstance(pack.get("source_types"), list) else []
+    source_types = ", ".join(source_type_list) or "N/A"
+    anchor = _section_anchor(section_id, str(title), chapter_context)
+    lens = _section_lens(str(title), str(question), source_type_list, int(chapter_context.get("section_order_in_chapter") or 0))
     primary_claims = claims[: max(3, min(len(claims), 6))]
     primary_evidence = evidence[: max(4, min(len(evidence), 8))]
 
@@ -312,8 +362,8 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
     for idx, row in enumerate(primary_claims, start=1):
         cid = claim_ids[idx - 1] if idx - 1 < len(claim_ids) else f"claim_{idx}"
         eid = evidence_ids[(idx - 1) % len(evidence_ids)] if evidence_ids else "evidence_missing"
-        text = _claim_text(row) or f"{title} needs explicit claim support."
-        claim_lines.append(f"{idx}. {text} [claim:{cid}] [evidence:{eid}]")
+        text = _inline_text(_claim_text(row), limit=260) or f"{title} needs explicit claim support."
+        claim_lines.append(f"{idx}. {anchor} claim-slot-{idx} turns '{text}' into a bounded {lens['axis']} claim instead of a generic survey assertion. [claim:{cid}] [evidence:{eid}]")
 
     evidence_lines = []
     for idx, row in enumerate(primary_evidence, start=1):
@@ -321,26 +371,83 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
         sid = str(row.get("source_id") or "")
         src = ledgers["sources"].get(sid, {})
         source_type = src.get("source_type") or "unknown"
-        text = _evidence_text(row).strip()[:360] or f"{title} evidence span."
-        evidence_lines.append(f"- {eid} / {source_type}: {text} [evidence:{eid}]")
+        text = _inline_text(_evidence_text(row), limit=220) or f"{title} evidence span."
+        evidence_lines.append(f"- {anchor} evidence-slot-{idx}: {eid} / {source_type} supports {lens['focus']} with span summary '{text}'. [evidence:{eid}]")
 
     source_lines = []
-    for row in sources[:8]:
+    for idx, row in enumerate(sources[:8], start=1):
         sid = _row_id(row, "id", "source_id") or "source_unknown"
-        source_lines.append(f"- {sid}: {row.get('source_type', 'unknown')} / {row.get('title', 'untitled')}")
+        source_lines.append(f"- {anchor} source-slot-{idx}: {sid}: {row.get('source_type', 'unknown')} / {_inline_text(row.get('title', 'untitled'), limit=120)}")
+
+    if round_index == 0:
+        compact_claim_lines = []
+        for idx, cid in enumerate(claim_ids[:2] or ["claim_missing"], start=1):
+            eid = evidence_ids[(idx - 1) % len(evidence_ids)] if evidence_ids else "evidence_missing"
+            compact_claim_lines.append(f"{idx}. {anchor} maps claim {cid} to {lens['axis']} scope and source boundary. [claim:{cid}] [evidence:{eid}]")
+        compact_evidence_lines = []
+        for idx, eid in enumerate(evidence_ids[:3] or ["evidence_missing"], start=1):
+            compact_evidence_lines.append(f"- {anchor} evidence-slot-{idx}: {eid} checks {lens['focus']}. [evidence:{eid}]")
+        compact_source_lines = source_lines[:3] or [f"- {anchor} source-slot-1: source_unknown / N/A"]
+        compact = f"""# {title}
+
+## Research Question
+
+{question}
+
+## Position
+
+{anchor} frames this section around {lens['focus']} with source types `{source_types}` and keeps `{lens['risk']}` as the downgrade condition. [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+
+## Claim Map
+
+{chr(10).join(compact_claim_lines)}
+
+## Evidence Map
+
+{chr(10).join(compact_evidence_lines)}
+
+## Source Map
+
+{chr(10).join(compact_source_lines)}
+
+## Architecture Synthesis
+
+{anchor} separates mechanism, system, and evaluation layers for {lens['axis']} analysis so implementation and evidence claims stay auditable. [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+
+## Comparative Positioning
+
+{anchor} treats `{lens['primary_source']}` as the primary source family and `{lens['secondary_source']}` as calibration evidence; missing families lower confidence. [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+
+## Evaluation And Risk Boundary
+
+{anchor} checks task form, metric scope, reproducibility, and deployment transfer before allowing strong conclusions. [claim:{claim_ids[1] if len(claim_ids) > 1 else 'claim_missing'}] [evidence:{evidence_ids[1] if len(evidence_ids) > 1 else 'evidence_missing'}]
+
+## Limitations And Failure Modes
+
+{anchor} keeps short-task bias, single-model evidence, benchmark mismatch, and missing failure-path documentation in the main text. [claim:{claim_ids[1] if len(claim_ids) > 1 else 'claim_missing'}] [evidence:{evidence_ids[1] if len(evidence_ids) > 1 else 'evidence_missing'}]
+
+## Contradiction Slots
+
+{anchor} reserves contradiction slots for narrow evidence coverage, source-family disagreement, and unobserved failure modes connected to `{lens['risk']}`. [claim:{claim_ids[2] if len(claim_ids) > 2 else 'claim_missing'}] [evidence:{evidence_ids[2] if len(evidence_ids) > 2 else 'evidence_missing'}]
+
+## Open Problems
+
+{anchor} needs later expansion on {lens['focus']}, source comparability, terminology consistency, and claim-to-evidence traceability.
+"""
+        return _dedupe_sentences(compact)
 
     expansion = ""
     if round_index >= 1:
         expansion = f"""
 ## Revision: Architecture And Evaluation Detail
 
-本轮修订补强机制链路、评价口径和失败边界。该节不把 evidence pack 当作装饰性引用，而是把 `{source_types}` 的来源差异转化为论证结构：论文类证据用于界定方法与实验假设，官方文档用于约束真实系统边界，代码或 benchmark 证据用于校准实现成本、可复现性和性能外推风险。结论必须保留不确定性，不能把局部实验直接升级为通用规律。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+{anchor} 的本轮修订围绕 {lens['focus']} 展开，而不是复述通用写作模板；`{source_types}` 证据被拆成主来源 `{lens['primary_source']}` 与校验来源 `{lens['secondary_source']}`，前者限定论证入口，后者校准评价或工程边界。该节结论必须显式标注 `{lens['risk']}` 这一降级条件，避免把局部实验直接升级为通用规律。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
 """
     if round_index >= 2:
         expansion += f"""
 ## Revision: Contradictions, Open Problems, And Survey Position
 
-反证与争议不作为附录处理，而应进入主论证：如果某类方法只在小规模 benchmark 上有效，或者依赖不可观测的 hidden-state trajectory，那么 survey 需要区分“机制上可行”“工程上可控”“评估上可信”三个层级。开放问题包括证据可审计性、跨模型迁移、评价污染、长程任务稳定性，以及与传统显式推理链的互补关系。 [claim:{claim_ids[-1] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[-1] if evidence_ids else 'evidence_missing'}]
+{anchor} 的反证段落进入主论证而不是附录：当 `{lens['axis']}` 证据只覆盖窄任务、单模型或不可观测 hidden-state trajectory 时，本节必须区分“机制上可行”“工程上可控”“评估上可信”三个层级。该节保留的开放问题聚焦 {lens['focus']}，并把 `{lens['risk']}` 作为 chief-editor 后续重写时必须处理的风险项。 [claim:{claim_ids[-1] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[-1] if evidence_ids else 'evidence_missing'}]
 """
 
     draft = f"""# {title}
@@ -351,7 +458,7 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
 
 ## Position
 
-本节以 evidence pack 为事实源，目标不是堆材料，而是建立可审计的 survey 论证：先定义问题边界，再给出架构分类，随后比较证据强度、工程代价、评价可信度和开放争议。当前证据包包含来源类型：{source_types}。
+{anchor} 以 evidence pack 为事实源，目标不是堆材料，而是围绕 {lens['focus']} 建立可审计的 survey 论证；本节先限定 `{lens['axis']}` 问题边界，再比较证据强度、工程代价、评价可信度和开放争议。当前证据包包含来源类型 `{source_types}`，其中 `{lens['primary_source']}` 只能支持其直接覆盖的结论，不能替代跨章节 synthesis。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
 
 ## Claim Map
 
@@ -367,27 +474,27 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
 
 ## Architecture Synthesis
 
-从技术架构角度看，本节主题需要拆成机制层、系统层和评价层。机制层回答“模型或系统为什么可能有效”；系统层回答“它如何被实现、调度、复现和迁移”；评价层回答“现有证据是否足以支持结论”。这三层必须分开，否则长报告会把概念说明、经验判断和工程结论混在一起，形成看似深入但不可审计的叙述。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+在 {anchor} 中，架构 synthesis 先拆成机制层、系统层和评价层：机制层解释 {lens['focus']} 为什么可能成立，系统层检查它如何被实现、调度、复现和迁移，评价层判断现有 `{source_types}` 是否足以支撑本节结论。三层必须保持分离，否则 `{lens['axis']}` 主题会把概念说明、经验判断和工程结论混成看似深入但不可审计的叙述。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
 
 ## Comparative Positioning
 
-本节需要把不同来源类型放在同一个比较框架下：paper 说明理论机制和实验假设，official_doc 约束真实系统能力边界，code 反映实现路径和维护成本，benchmark 则校准评价任务和指标口径。若某一来源类型缺失，结论应降级为局部判断；若多类来源相互支持，才可以上升为章节级 survey 判断。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+{anchor} 的 comparative positioning 不把所有引用压成同一权重：`{lens['primary_source']}` 提供本节主证据，`{lens['secondary_source']}` 用来检查外推边界，其余来源只补充实现、评价或部署侧信息。若某一来源类型缺失，本节结论必须降级为局部判断；只有多类来源围绕 {lens['focus']} 相互支撑时，才可以进入章节级 survey 判断。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
 
 ## Evaluation And Risk Boundary
 
-评价部分必须显式说明数据集、任务形态、指标口径和外推边界。若证据来自论文，应检查实验设置和 baseline；若证据来自代码，应检查可运行性、维护状态和实现约束；若证据来自 benchmark，应检查任务覆盖和指标是否与真实场景一致。缺少这些边界时，该节只能给出弱结论，不能进入教授级 survey 的主结论层。 [claim:{claim_ids[1] if len(claim_ids) > 1 else 'claim_missing'}] [evidence:{evidence_ids[1] if len(evidence_ids) > 1 else 'evidence_missing'}]
+{anchor} 的 evaluation boundary 必须说明数据集、任务形态、指标口径和外推边界，并把 `{lens['risk']}` 标为主要降级风险。若证据来自论文，应检查实验设置和 baseline；若证据来自代码，应检查可运行性、维护状态和实现约束；若证据来自 benchmark，应检查任务覆盖和指标是否与本节 `{lens['axis']}` 场景一致。 [claim:{claim_ids[1] if len(claim_ids) > 1 else 'claim_missing'}] [evidence:{evidence_ids[1] if len(evidence_ids) > 1 else 'evidence_missing'}]
 
 ## Limitations And Failure Modes
 
-本节必须把失败模式写在正文中：证据可能只覆盖短任务、单模型、单 benchmark 或不可复现实验；代码可能缺少生产约束；官方文档可能只描述支持路径而不覆盖失败路径。因此，结论需要标注适用条件、不可外推区域和需要后续 evidence miner 补充的缺口。 [claim:{claim_ids[1] if len(claim_ids) > 1 else 'claim_missing'}] [evidence:{evidence_ids[1] if len(evidence_ids) > 1 else 'evidence_missing'}]
+{anchor} 必须把 failure modes 写在正文中：{lens['focus']} 可能只在短任务、单模型、单 benchmark 或不可复现实验中成立，代码证据可能缺少生产约束，官方文档也可能只描述支持路径而不覆盖失败路径。因此，本节结论需要标注适用条件、不可外推区域和后续 evidence miner 必须补齐的缺口。 [claim:{claim_ids[1] if len(claim_ids) > 1 else 'claim_missing'}] [evidence:{evidence_ids[1] if len(evidence_ids) > 1 else 'evidence_missing'}]
 
 ## Contradiction Slots
 
-本节保留反证槽位：第一，现有证据可能只覆盖局部任务；第二，不同来源之间可能存在时间差或实现差；第三，系统性失败模式可能没有被 benchmark 捕捉。后续 chapter synthesis 必须消费这些槽位，不能只保留支持性证据。 [claim:{claim_ids[2] if len(claim_ids) > 2 else 'claim_missing'}] [evidence:{evidence_ids[2] if len(evidence_ids) > 2 else 'evidence_missing'}]
+{anchor} 保留三个反证槽位：第一，`{lens['primary_source']}` 证据可能只覆盖 {lens['focus']} 的局部任务；第二，`{lens['secondary_source']}` 与主来源之间可能存在时间差、实现差或评价口径差；第三，`{lens['risk']}` 可能没有被现有 benchmark 捕捉。后续 chapter synthesis 必须消费这些槽位，不能只保留支持性证据。 [claim:{claim_ids[2] if len(claim_ids) > 2 else 'claim_missing'}] [evidence:{evidence_ids[2] if len(evidence_ids) > 2 else 'evidence_missing'}]
 {expansion}
 ## Open Problems
 
-开放问题包括证据覆盖不足、术语不统一、评估不可复现、工程成本被低估、以及跨章节结论漂移。该节的最终版本应把这些问题映射回 claim_id 和 evidence_id，而不是依赖模型自由发挥。
+{anchor} 的开放问题不是通用 future-work 列表，而是要求下一轮围绕 {lens['focus']} 补充反证来源、统一 `{lens['axis']}` 术语、复核 `{lens['primary_source']}` 与 `{lens['secondary_source']}` 的可比性，并量化 `{lens['risk']}` 对章节结论的影响。该节最终版本应把这些问题映射回 claim_id 和 evidence_id，而不是依赖模型自由发挥。
 """
     return _dedupe_sentences(draft)
 

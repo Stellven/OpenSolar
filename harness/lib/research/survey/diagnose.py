@@ -17,7 +17,7 @@ ISSUE_GROUPS = {
     "sources": ("source_type_count_low", "survey_missing_required_source_types", "low_value_source_ratio_high", "source_count_low"),
     "structure": ("chapter_count_low", "section_count_low", "taxonomy_depth_score_low", "ready_pack_ratio_low"),
     "review": ("section_p0_issue_count", "section_factual_accuracy_low", "section_grounding_accuracy_low", "chapter_", "chief_editor_"),
-    "repetition": ("section_repetition_rate_high", "final_repetition_rate_high", "chief_editor_section_duplicate_rate_high"),
+    "repetition": ("section_repetition_rate_high", "final_repetition_rate_high", "final_duplicate_sentence_", "chief_editor_section_duplicate_rate_high"),
 }
 
 
