@@ -787,6 +787,144 @@ def _build_chief_editor_review(
     }
 
 
+def _count_pattern(text: str, pattern: str) -> int:
+    return len(re.findall(pattern, text or "", flags=re.I))
+
+
+def _terminology_counts(text: str) -> dict[str, int]:
+    lowered = (text or "").lower()
+    return {
+        "latent_reasoning": _count_pattern(lowered, r"latent reasoning|隐空间推理|潜空间推理"),
+        "continuous_thought": _count_pattern(lowered, r"continuous[- ]thought|continuous reasoning|连续思维|连续推理"),
+        "chain_of_thought": _count_pattern(lowered, r"chain[- ]of[- ]thought|\bcot\b|思维链|显式推理链"),
+        "coconut": _count_pattern(lowered, r"\bcoconut\b"),
+        "hidden_state": _count_pattern(lowered, r"hidden[- ]state|latent[- ]state|隐状态|潜状态"),
+    }
+
+
+def _academic_marker_counts(text: str) -> dict[str, int]:
+    markers = {
+        "taxonomy": r"taxonomy|分类|谱系",
+        "mechanism": r"mechanism|机制|representation|表示",
+        "evaluation_protocol": r"evaluation protocol|评估协议|metric|指标|benchmark|基准",
+        "baseline_or_ablation": r"baseline|ablation|对照|消融",
+        "reproducibility": r"reproducib|可复现|replication|复现实验",
+        "deployment": r"deployment|部署|production|生产|engineering|工程",
+        "failure_mode": r"failure mode|失败模式|局限|limitation",
+        "controversy": r"contradiction|controversy|争议|反证|negative evidence",
+        "auditability": r"audit|可审计|traceability|可追踪|observability|观测性",
+        "evolution": r"evolution|演进|historical|历史|roadmap|路线图",
+    }
+    return {key: _count_pattern(text, pattern) for key, pattern in markers.items()}
+
+
+def _build_depth_profile(
+    root: Path,
+    chapters: list[dict[str, Any]],
+    sections: list[dict[str, Any]],
+    final_quality: dict[str, Any],
+    literature_map: dict[str, Any],
+    controversy_review: dict[str, Any],
+) -> dict[str, Any]:
+    contribution = _read_json(root / "survey_contribution_matrix.json")
+    rows = contribution.get("rows") if isinstance(contribution, dict) and isinstance(contribution.get("rows"), list) else []
+    final_path = root / "final.md"
+    final_text = final_path.read_text(encoding="utf-8", errors="ignore") if final_path.exists() else ""
+    finalized_sections = int(final_quality.get("finalized_sections") or 0)
+    total_sections = len(sections)
+    complete_context = bool(total_sections) and finalized_sections == total_sections
+
+    structure_keys = [
+        "has_architecture_synthesis",
+        "has_comparative_positioning",
+        "has_evaluation_boundary",
+        "has_limitations_failure_modes",
+        "has_contradiction_slots",
+    ]
+    complete_structure_rows = 0
+    for row in rows:
+        if all(row.get(key) for key in structure_keys):
+            complete_structure_rows += 1
+    chapter_structure_coverage = round(complete_structure_rows / max(len(rows), 1), 4)
+
+    marker_counts = _academic_marker_counts(final_text)
+    marker_variants = sorted(key for key, value in marker_counts.items() if value)
+    terminology_counts = _terminology_counts(final_text)
+    terminology_variants = sorted(key for key, value in terminology_counts.items() if value)
+    evolution_edges = [
+        "chain_of_thought->continuous_thought"
+        for _ in [0]
+        if terminology_counts.get("chain_of_thought") and terminology_counts.get("continuous_thought")
+    ]
+    if terminology_counts.get("continuous_thought") and terminology_counts.get("hidden_state"):
+        evolution_edges.append("continuous_thought->hidden_state")
+    if terminology_counts.get("hidden_state") and terminology_counts.get("latent_reasoning"):
+        evolution_edges.append("hidden_state->latent_reasoning")
+    if terminology_counts.get("coconut") and terminology_counts.get("latent_reasoning"):
+        evolution_edges.append("coconut->latent_reasoning")
+
+    section_marker_rows: list[dict[str, Any]] = []
+    covered_sections = 0
+    for section in sections:
+        section_id = str(section.get("section_id") or "")
+        text_path = root / "sections" / section_id / "final.md"
+        if not text_path.exists():
+            continue
+        counts = _academic_marker_counts(text_path.read_text(encoding="utf-8", errors="ignore"))
+        variants = sorted(key for key, value in counts.items() if value)
+        ok = len(variants) >= 5
+        if ok:
+            covered_sections += 1
+        section_marker_rows.append({
+            "section_id": section_id,
+            "academic_marker_count": len(variants),
+            "academic_markers": variants,
+            "ok": ok,
+        })
+    section_marker_coverage = round(covered_sections / max(finalized_sections, 1), 4)
+
+    claim_density = float(final_quality.get("claim_tag_density_per_1k_chars") or 0.0)
+    evidence_density = float(final_quality.get("evidence_tag_density_per_1k_chars") or 0.0)
+    issues: list[str] = []
+    if complete_context and claim_density < 1.20:
+        issues.append(f"depth_claim_tag_density_low:{claim_density:.4f}<1.2000")
+    if complete_context and evidence_density < 1.50:
+        issues.append(f"depth_evidence_tag_density_low:{evidence_density:.4f}<1.5000")
+    if complete_context and chapter_structure_coverage < 0.95:
+        issues.append(f"depth_chapter_structure_coverage_low:{chapter_structure_coverage:.4f}<0.9500")
+    if complete_context and len(marker_variants) < 8:
+        issues.append(f"depth_academic_marker_variety_low:{len(marker_variants)}<8")
+    if complete_context and section_marker_coverage < 0.80:
+        issues.append(f"depth_section_marker_coverage_low:{section_marker_coverage:.4f}<0.8000")
+    if complete_context and len(terminology_variants) < 4:
+        issues.append(f"depth_terminology_variant_count_low:{len(terminology_variants)}<4")
+    if complete_context and len(evolution_edges) < 2:
+        issues.append(f"depth_terminology_evolution_edges_low:{len(evolution_edges)}<2")
+    if complete_context and not literature_map.get("ok"):
+        issues.append("depth_literature_map_not_ok")
+    if complete_context and not controversy_review.get("ok"):
+        issues.append("depth_controversy_matrix_not_ok")
+    return {
+        "ok": not issues,
+        "complete_context": complete_context,
+        "finalized_sections": finalized_sections,
+        "total_sections": total_sections,
+        "claim_tag_density_per_1k_chars": claim_density,
+        "evidence_tag_density_per_1k_chars": evidence_density,
+        "chapter_structure_coverage": chapter_structure_coverage,
+        "academic_marker_counts": marker_counts,
+        "academic_marker_variants": marker_variants,
+        "section_marker_coverage": section_marker_coverage,
+        "section_marker_rows": section_marker_rows[:200],
+        "terminology_counts": terminology_counts,
+        "terminology_variants": terminology_variants,
+        "terminology_evolution_edges": evolution_edges,
+        "literature_map_ok": bool(literature_map.get("ok")),
+        "controversy_matrix_ok": bool(controversy_review.get("ok")),
+        "issues": issues,
+    }
+
+
 def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs: dict | None = None) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
     ast = ast or _read_json(root / "survey_report_ast.json")
@@ -847,9 +985,10 @@ def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs
     controversy_review = _build_controversy_review(chapters, sections, pack_rows)
     chapter_review = _build_chapter_review(root, chapters, sections, pack_rows, section_scorecard)
     chief_editor_review = _build_chief_editor_review(root, chapters, sections, chapter_review, literature_map, controversy_review)
+    depth_profile = _build_depth_profile(root, chapters, sections, final_quality, literature_map, controversy_review)
 
     payload = {
-        "ok": taxonomy["ok"] and contradiction_matrix["ok"] and section_factual_audit["ok"] and section_scorecard["ok"] and final_quality["ok"] and source_coverage["ok"] and literature_map["ok"] and controversy_review["ok"] and chapter_review["ok"] and chief_editor_review["ok"],
+        "ok": taxonomy["ok"] and contradiction_matrix["ok"] and section_factual_audit["ok"] and section_scorecard["ok"] and final_quality["ok"] and source_coverage["ok"] and literature_map["ok"] and controversy_review["ok"] and chapter_review["ok"] and chief_editor_review["ok"] and depth_profile["ok"],
         "taxonomy": taxonomy,
         "contradiction_matrix": contradiction_matrix,
         "section_factual_audit": section_factual_audit,
@@ -860,6 +999,7 @@ def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs
         "controversy_review": controversy_review,
         "chapter_review": chapter_review,
         "chief_editor_review": chief_editor_review,
+        "depth_profile": depth_profile,
     }
     (root / "survey_taxonomy.json").write_text(json.dumps(taxonomy, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_contradiction_matrix.json").write_text(json.dumps(contradiction_matrix, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -871,4 +1011,5 @@ def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs
     (root / "survey_controversy_matrix.json").write_text(json.dumps(controversy_review, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_chapter_review.json").write_text(json.dumps(chapter_review, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_chief_editor.json").write_text(json.dumps(chief_editor_review, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    (root / "survey_depth_profile.json").write_text(json.dumps(depth_profile, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return payload

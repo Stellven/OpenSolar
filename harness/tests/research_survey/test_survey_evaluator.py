@@ -73,7 +73,9 @@ def test_strict_eval_passes_controlled_strong_fixture(tmp_path):
     assert result["section_scorecard"]["ok"] is True
     assert result["section_scorecard"]["needs_rewrite_count"] == 0
     assert result["chief_editor_review"]["ok"] is True
+    assert result["depth_profile"]["ok"] is True
     assert (tmp_path / "survey_chief_editor.json").exists()
+    assert (tmp_path / "survey_depth_profile.json").exists()
 
 
 def test_strict_eval_fails_when_claims_have_no_evidence_links(tmp_path):
@@ -440,3 +442,84 @@ def test_final_quality_flags_repeated_long_sentences_across_complete_report(tmp_
     assert result["final_quality"]["ok"] is False
     assert result["final_quality"]["max_duplicate_long_sentence_count"] >= 8
     assert any(item.startswith("final_duplicate_sentence_count_high:") for item in result["scorecard"]["issues"])
+
+
+def test_depth_profile_rejects_long_but_shallow_complete_survey(tmp_path):
+    plan = create_survey_plan("latent reasoning", target_chars=50000)
+    write_survey_plan(plan, tmp_path)
+    sources = _strong_sources()
+    evidence = [
+        {
+            "id": f"ev_{i}",
+            "source_id": sources[i % len(sources)]["id"],
+            "content": "latent reasoning architecture evaluation deployment evidence supports source-specific claims",
+        }
+        for i in range(96)
+    ]
+    claims = [
+        {
+            "id": f"cl_{i}",
+            "claim_text": "latent reasoning architecture evaluation deployment requires evidence",
+        }
+        for i in range(96)
+    ]
+    links = [{"claim_id": f"cl_{i}", "evidence_id": f"ev_{i}"} for i in range(96)]
+    _append_jsonl(tmp_path / "sources.jsonl", sources)
+    _append_jsonl(tmp_path / "evidence.jsonl", evidence)
+    _append_jsonl(tmp_path / "claims.jsonl", claims)
+    _append_jsonl(tmp_path / "claim_evidence.jsonl", links)
+    build_evidence_packs(tmp_path, plan["report_ast"])
+    for section in plan["report_ast"]["sections"]:
+        section_id = section["section_id"]
+        pack = json.loads((tmp_path / "sections" / section_id / "evidence_pack.json").read_text(encoding="utf-8"))
+        claim_ids = pack["claim_ids"][:3]
+        evidence_ids = pack["evidence_ids"][:4]
+        def shallow_sentence(label: str, idx: int) -> str:
+            return (
+                f"latent reasoning architecture evaluation deployment evidence section {section_id} "
+                f"uses source-specific wording for {label} detail {idx} while still remaining shallow."
+            )
+
+        def shallow_block(label: str, count: int) -> str:
+            return " ".join(shallow_sentence(label, idx) for idx in range(1, count + 1))
+
+        final = tmp_path / "sections" / section_id / "final.md"
+        final.write_text(
+            f"# {section['title']}\n\n"
+            "## Research Question\n\n"
+            f"{section['research_question']}\n\n"
+            "## Position\n\n"
+            f"{shallow_block('position', 4)} [claim:{claim_ids[0]}] [evidence:{evidence_ids[0]}]\n\n"
+            "## Claim Map\n\n"
+            f"1. {shallow_sentence('claim', 1)} [claim:{claim_ids[0]}] [evidence:{evidence_ids[0]}]\n"
+            f"2. {shallow_sentence('claim', 2)} [claim:{claim_ids[1]}] [evidence:{evidence_ids[1]}]\n"
+            f"3. {shallow_sentence('claim', 3)} [claim:{claim_ids[2]}] [evidence:{evidence_ids[2]}]\n\n"
+            "## Evidence Map\n\n"
+            f"- {shallow_sentence('evidence', 1)} [evidence:{evidence_ids[0]}]\n"
+            f"- {shallow_sentence('evidence', 2)} [evidence:{evidence_ids[1]}]\n"
+            f"- {shallow_sentence('evidence', 3)} [evidence:{evidence_ids[2]}]\n"
+            f"- {shallow_sentence('evidence', 4)} [evidence:{evidence_ids[3]}]\n\n"
+            "## Source Map\n\n"
+            f"Source families for {section_id} are listed as paper, official, code, and benchmark evidence without additional synthesis claims.\n\n"
+            "## Architecture Synthesis\n\n"
+            f"{shallow_block('architecture', 3)} [claim:{claim_ids[0]}] [evidence:{evidence_ids[0]}]\n\n"
+            "## Comparative Positioning\n\n"
+            f"{shallow_block('comparison', 3)} [claim:{claim_ids[1]}] [evidence:{evidence_ids[1]}]\n\n"
+            "## Evaluation And Risk Boundary\n\n"
+            f"{shallow_block('evaluation', 3)} [claim:{claim_ids[2]}] [evidence:{evidence_ids[2]}]\n\n"
+            "## Limitations And Failure Modes\n\n"
+            f"{shallow_block('limitations', 3)} [claim:{claim_ids[2]}] [evidence:{evidence_ids[2]}]\n\n"
+            "## Contradiction Slots\n\n"
+            f"{shallow_block('contradiction', 2)} [evidence:{evidence_ids[3]}]\n\n"
+            "## Open Problems\n\n"
+            f"{shallow_block('open-problems', 2)}\n",
+            encoding="utf-8",
+        )
+    compile_survey(tmp_path)
+
+    result = evaluate_survey(tmp_path, strict=True, require_complete=True)
+    assert result["ok"] is False
+    assert result["depth_profile"]["ok"] is False
+    assert result["final_quality"]["ok"] is True
+    assert any(item.startswith("depth_academic_marker_variety_low:") for item in result["scorecard"]["issues"])
+    assert any(item.startswith("depth_terminology_variant_count_low:") for item in result["scorecard"]["issues"])

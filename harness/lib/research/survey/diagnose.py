@@ -13,9 +13,9 @@ from .status_next import survey_status_next_action
 ISSUE_GROUPS = {
     "completion": ("finalized_sections_low", "incomplete_sections", "pending_placeholder_count", "blocked_sections"),
     "length": ("final_char_count_low", "avg_section_chars_low", "final_heading_count_low"),
-    "evidence": ("evidence_count_low", "claim_count_low", "claim_support_coverage_low", "evidence_source_coverage_low", "claim_tag_density_low", "evidence_tag_density_low"),
+    "evidence": ("evidence_count_low", "claim_count_low", "claim_support_coverage_low", "evidence_source_coverage_low", "claim_tag_density_low", "evidence_tag_density_low", "depth_claim_tag_density_low", "depth_evidence_tag_density_low", "depth_literature_map_not_ok", "depth_controversy_matrix_not_ok"),
     "sources": ("source_type_count_low", "survey_missing_required_source_types", "low_value_source_ratio_high", "source_count_low"),
-    "structure": ("chapter_count_low", "section_count_low", "taxonomy_depth_score_low", "ready_pack_ratio_low"),
+    "structure": ("chapter_count_low", "section_count_low", "taxonomy_depth_score_low", "ready_pack_ratio_low", "depth_chapter_structure_", "depth_academic_marker_", "depth_section_marker_", "depth_terminology_"),
     "review": ("section_p0_issue_count", "section_factual_accuracy_low", "section_grounding_accuracy_low", "chapter_", "chief_editor_"),
     "repetition": ("section_repetition_rate_high", "final_repetition_rate_high", "final_duplicate_sentence_", "chief_editor_section_duplicate_rate_high"),
 }
