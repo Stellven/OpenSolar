@@ -9,7 +9,7 @@ if _HARNESS_LIB not in sys.path:
     sys.path.insert(0, _HARNESS_LIB)
 
 from research.cli import main
-from research.survey.import_results import import_survey_search_results, parse_survey_search_markdown
+from research.survey.import_results import diagnose_survey_search_markdown, import_survey_search_results, parse_survey_search_markdown
 from research.survey.planner import create_survey_plan, write_survey_plan
 
 
@@ -104,6 +104,28 @@ def test_parse_survey_search_markdown_normalizes_source_types():
     assert records[0]["source_type"] == "paper"
     assert records[1]["source_type"] == "code"
     assert len(records[0]["key_claims"]) == 2
+
+
+def test_diagnose_survey_search_markdown_reports_missing_schema_fields():
+    diagnostics = diagnose_survey_search_markdown("# Notes\n\n## Source 1: Missing URL\nSource Type: paper\n")
+    assert diagnostics["source_heading_count"] == 1
+    assert diagnostics["url_count"] == 0
+    assert diagnostics["has_external_search_results_heading"] is False
+    assert diagnostics["missing_fields_by_source"][0]["missing_fields"] == ["URL", "Summary", "Key Claims"]
+    assert "## Source 1: <title>" in diagnostics["example"]
+
+
+def test_import_survey_search_results_failure_writes_actionable_diagnostics(tmp_path):
+    md = tmp_path / "bad.md"
+    md.write_text("# Search notes\n- https://example.com only\n", encoding="utf-8")
+    payload = import_survey_search_results(tmp_path, md)
+    assert payload["ok"] is False
+    assert payload["reason"] == "no_importable_sources"
+    assert payload["diagnostics"]["source_heading_count"] == 0
+    assert payload["diagnostics"]["url_count"] == 1
+    assert "returned_sources.md" in payload["diagnostics"]["repair_hint"]
+    persisted = json.loads((tmp_path / "survey_import_search_results.json").read_text(encoding="utf-8"))
+    assert persisted["diagnostics"]["expected_source_heading"] == "## Source 1: <title>"
 
 
 def test_import_survey_search_results_writes_ledgers(tmp_path):

@@ -28,6 +28,11 @@ def test_source_gap_reports_missing_ledgers_and_writes_handoff(tmp_path):
     text = handoff.read_text(encoding="utf-8")
     assert "Solar DeepResearch Survey Source Gap Handoff" in text
     assert "External Search Results" in text
+    assert "Copy/Paste returned_sources.md Template" in text
+    assert "returned_sources.md" in text
+    assert "solar-harness research survey-continue" in text
+    assert "## Source 1: <title>" in text
+    assert "Source Type: paper" in text
 
 
 def test_source_gap_passes_with_minimal_diverse_ledgers(tmp_path):
