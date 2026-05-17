@@ -14,7 +14,7 @@
   "design": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.design.md",
   "plan": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.plan.md",
   "task_graph": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.task_graph.json",
-  "current_truth": "Professor-grade DeepResearch survey now has final-quality gates, target-scale propagation, human-in-loop search guardrails, and a one-shot survey-diagnose command that groups quality issues and emits next actions.",
+  "current_truth": "Professor-grade DeepResearch survey now rejects duplicated long-sentence report slop, writes section/chapter-specific synthesis, scales human-loop search handoff to complete-survey evidence requirements, and passes runtime end-to-end 32/32-section sample diagnosis.",
   "id": "sprint-20260515-professor-grade-deepresearch-survey",
   "history": [
     {
@@ -426,6 +426,20 @@
         "source regression 143 passed"
       ],
       "evidence": "/Users/sihaoli/Knowledge/_raw/solar-harness/deepresearch-survey-diagnose-command-20260516T202346-0400.md"
+    },
+    {
+      "ts": "2026-05-16T20:44:39-0400",
+      "event": "survey_repetition_quality_gate_complete",
+      "status": "ok",
+      "summary": "Added duplicate-long-sentence final-quality gate, grouped repetition diagnostics, section/chapter-specific deterministic writer output, and strict-scale source handoff requirements.",
+      "verification": [
+        "source focused 4 passed",
+        "source source-gap/finalize/continue focused 10 passed",
+        "source regression 145 passed",
+        "runtime focused 7 passed",
+        "runtime sample status=done diag=pass finalized=32/32 final_chars=239565 duplicate_ratio=0.0 max_duplicate_sentence=0"
+      ],
+      "evidence": "/Users/sihaoli/Knowledge/_raw/solar-harness/deepresearch-survey-repetition-quality-gate-20260516T204439-0400.md"
     }
   ]
 }

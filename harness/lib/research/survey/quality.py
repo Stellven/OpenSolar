@@ -271,6 +271,36 @@ def _build_section_scorecard(
     }
 
 
+def _normalized_long_sentences(text: str) -> list[str]:
+    cleaned = re.sub(r"\[[a-z]+:[^\]]+\]", "", text or "")
+    cleaned = re.sub(r"https?://\S+", "", cleaned)
+    cleaned = re.sub(r"^\s*[#|>-].*$", " ", cleaned, flags=re.M)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip().lower()
+    sentences = re.split(r"(?<=[.!?。！？])\s+", cleaned)
+    return [item.strip() for item in sentences if len(item.strip()) >= 80]
+
+
+def _duplicate_sentence_stats(sentences: list[str]) -> dict[str, Any]:
+    counts: dict[str, int] = {}
+    for sentence in sentences:
+        counts[sentence] = counts.get(sentence, 0) + 1
+    repeated = [
+        {"sentence": sentence, "count": count}
+        for sentence, count in counts.items()
+        if count > 1
+    ]
+    repeated.sort(key=lambda item: (-int(item["count"]), str(item["sentence"])[:80]))
+    duplicate_occurrences = sum(int(item["count"]) - 1 for item in repeated)
+    return {
+        "long_sentence_count": len(sentences),
+        "unique_long_sentence_count": len(counts),
+        "duplicate_long_sentence_occurrences": duplicate_occurrences,
+        "duplicate_long_sentence_ratio": round(duplicate_occurrences / max(len(sentences), 1), 4),
+        "max_duplicate_long_sentence_count": int(repeated[0]["count"]) if repeated else 0,
+        "top_duplicate_long_sentences": repeated[:10],
+    }
+
+
 def _build_final_quality(root: Path, ast: dict[str, Any], sections: list[dict[str, Any]]) -> dict[str, Any]:
     final_path = root / "final.md"
     final_text = final_path.read_text(encoding="utf-8", errors="ignore") if final_path.exists() else ""
@@ -304,6 +334,7 @@ def _build_final_quality(root: Path, ast: dict[str, Any], sections: list[dict[st
         if len(cleaned) >= 80:
             paragraphs.append(cleaned)
     repetition_rate = round(1.0 - (len(set(paragraphs)) / max(len(paragraphs), 1)), 4)
+    sentence_stats = _duplicate_sentence_stats(_normalized_long_sentences(final_text))
     per_section_target = target_chars / max(len(sections), 1) if target_chars else 0
     min_final_chars = int(target_chars * 0.60) if target_chars else 0
     min_avg_section_chars = int(max(min(per_section_target * 0.45, 1200), 500)) if per_section_target else 500
@@ -323,6 +354,11 @@ def _build_final_quality(root: Path, ast: dict[str, Any], sections: list[dict[st
         issues.append(f"evidence_tag_density_low:{evidence_tag_density:.4f}<0.8000")
     if repetition_rate > 0.99:
         issues.append(f"final_repetition_rate_high:{repetition_rate:.4f}>0.9900")
+    duplicate_sentence_threshold = max(6, int(finalized_count * 0.25)) if finalized_count else 6
+    if sentence_stats["max_duplicate_long_sentence_count"] >= duplicate_sentence_threshold:
+        issues.append(f"final_duplicate_sentence_count_high:{sentence_stats['max_duplicate_long_sentence_count']}>={duplicate_sentence_threshold}")
+    if finalized_count and sentence_stats["duplicate_long_sentence_ratio"] > 0.25:
+        issues.append(f"final_duplicate_sentence_ratio_high:{sentence_stats['duplicate_long_sentence_ratio']:.4f}>0.2500")
     return {
         "ok": not issues,
         "final_md": str(final_path),
@@ -342,6 +378,7 @@ def _build_final_quality(root: Path, ast: dict[str, Any], sections: list[dict[st
         "claim_tag_density_per_1k_chars": claim_tag_density,
         "evidence_tag_density_per_1k_chars": evidence_tag_density,
         "repetition_rate": repetition_rate,
+        **sentence_stats,
         "issues": issues,
     }
 

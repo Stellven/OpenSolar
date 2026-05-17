@@ -33,6 +33,19 @@ def test_source_gap_reports_missing_ledgers_and_writes_handoff(tmp_path):
     assert "solar-harness research survey-continue" in text
     assert "## Source 1: <title>" in text
     assert "Source Type: paper" in text
+    assert "Required returned Source blocks" in text
+
+
+def test_source_gap_handoff_scales_template_to_claim_and_evidence_gap(tmp_path):
+    plan = create_survey_plan("latent reasoning", target_chars=50000)
+    write_survey_plan(plan, tmp_path)
+    payload = write_source_gap_handoff(tmp_path, brief="latent reasoning", min_evidence=32, min_claims=32, max_results=12)
+    assert payload["ok"] is False
+    text = (tmp_path / "survey_source_gap_handoff.md").read_text(encoding="utf-8")
+    assert "Evidence: `0/32`" in text
+    assert "Claims: `0/32`" in text
+    assert "Required returned Source blocks: `16` minimum" in text
+    assert "## Source 16: <title>" in text
 
 
 def test_source_gap_passes_with_minimal_diverse_ledgers(tmp_path):

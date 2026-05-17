@@ -121,6 +121,7 @@ def _chapter_sections(ast: dict, chapter_id: str) -> list[dict]:
 def _build_chapter_synthesis(root: Path, chapter: dict, sections: list[dict], matrix_rows: list[dict]) -> tuple[str, list[str]]:
     chapter_id = str(chapter.get("chapter_id") or "")
     title = str(chapter.get("title") or chapter_id)
+    objective = str(chapter.get("objective") or "N/A")
     finalized_rows = [row for row in matrix_rows if row.get("chapter_id") == chapter_id and row.get("status") == "finalized"]
     missing = [str(section.get("section_id") or "") for section in sections if not _section_final(root, str(section.get("section_id") or ""))]
     claim_total = sum(int(row.get("claim_count") or 0) for row in finalized_rows)
@@ -135,12 +136,15 @@ def _build_chapter_synthesis(root: Path, chapter: dict, sections: list[dict], ma
     ]:
         covered = sum(1 for row in finalized_rows if row.get(key))
         coverage_bits.append(f"{label}:{covered}/{max(len(finalized_rows), 1)}")
+    primary_gap = "missing finalized section evidence" if missing else "cross-section claim alignment"
+    section_titles = [str(row.get("title") or row.get("section_id") or "") for row in finalized_rows[:3]]
+    section_focus = "; ".join(section_titles) if section_titles else "N/A"
     synthesis = [
         f"# {title}",
         "",
         "## Chapter Synthesis",
         "",
-        f"This chapter compiles {len(finalized_rows)}/{len(sections)} finalized sections. It carries {claim_total} claim tags and {evidence_total} evidence tags into the final report.",
+        f"{chapter_id} compiles {len(finalized_rows)}/{len(sections)} finalized sections for '{title}'. It carries {claim_total} claim tags and {evidence_total} evidence tags into the final report while preserving the chapter objective: {objective}.",
         "",
         "## Contribution Coverage",
         "",
@@ -148,7 +152,7 @@ def _build_chapter_synthesis(root: Path, chapter: dict, sections: list[dict], ma
         "",
         "## Chapter-Level Open Problems",
         "",
-        "The chapter synthesis preserves unresolved evidence gaps, contradiction slots, and cross-section consistency risks for chief-editor review.",
+        f"{chapter_id} preserves unresolved evidence gaps around {primary_gap}, contradiction slots from {len(finalized_rows)} finalized sections, and consistency risks across representative sections: {section_focus}. Chief-editor review for '{title}' should verify that this chapter objective remains bounded: {objective}.",
         "",
     ]
     return "\n".join(synthesis), missing

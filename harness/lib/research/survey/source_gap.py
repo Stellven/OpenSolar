@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -79,6 +80,9 @@ def assess_source_gap(
         "source_count": len(sources),
         "evidence_count": len(evidence),
         "claim_count": len(claims),
+        "min_sources": min_sources,
+        "min_evidence": min_evidence,
+        "min_claims": min_claims,
         "source_type_counts": source_type_counts,
         "required_source_types": sorted(required),
         "missing_source_types": missing_types,
@@ -94,14 +98,24 @@ def render_source_gap_handoff(gap: dict[str, Any], *, max_results: int = 12) -> 
     missing = list(gap.get("missing_source_types") or [])
     if not missing:
         missing = list(gap.get("required_source_types") or ["paper", "official_doc", "code", "benchmark"])
+    evidence_gap = max(int(gap.get("min_evidence", 0) or 0) - int(gap.get("evidence_count", 0) or 0), 0)
+    claim_gap = max(int(gap.get("min_claims", 0) or 0) - int(gap.get("claim_count", 0) or 0), 0)
+    required_types = list(gap.get("required_source_types") or [])
+    needed_results = max(
+        int(max_results or 0),
+        len(required_types) * 2,
+        math.ceil(evidence_gap / 2) if evidence_gap else 0,
+        math.ceil(claim_gap / 2) if claim_gap else 0,
+    )
+    needed_results = max(needed_results, 1)
     query_plan = "\n".join(
-        f"| {source_type} | 2 | `{brief} {source_type} primary source architecture evaluation` |"
+        f"| {source_type} | {max(2, math.ceil(needed_results / max(len(missing), 1)))} | `{brief} {source_type} primary source architecture evaluation` |"
         for source_type in missing
     )
     issues = "\n".join(f"- {item}" for item in gap.get("issues", [])) or "- N/A"
     slot_types = (missing or list(gap.get("required_source_types") or [])) or ["paper", "official_doc", "code", "benchmark"]
     template_blocks = []
-    for idx in range(1, max_results + 1):
+    for idx in range(1, needed_results + 1):
         source_type = slot_types[(idx - 1) % len(slot_types)]
         template_blocks.append(f"""## Source {idx}: <title>
 URL: <https://...>
@@ -133,8 +147,9 @@ Why this source fixes the gap:
 ## Current Gap
 - Output dir: `{gap.get("output_dir", "")}`
 - Sources: `{gap.get("source_count", 0)}`
-- Evidence: `{gap.get("evidence_count", 0)}`
-- Claims: `{gap.get("claim_count", 0)}`
+- Evidence: `{gap.get("evidence_count", 0)}/{gap.get("min_evidence", "N/A")}`
+- Claims: `{gap.get("claim_count", 0)}/{gap.get("min_claims", "N/A")}`
+- Required returned Source blocks: `{needed_results}` minimum
 - Required source types: `{", ".join(gap.get("required_source_types") or [])}`
 - Missing source types: `{", ".join(missing)}`
 - Issues:
@@ -158,7 +173,7 @@ solar-harness research survey-continue --output-dir "{gap.get('output_dir', '')}
 ```
 
 ## Rules
-- Return at most {max_results} high-quality sources.
+- Fill all {needed_results} `## Source N:` blocks. Each block should include at least two Key Claims and enough quote/summary detail to import as evidence.
 - Prefer primary/canonical sources: papers, official docs, GitHub repos, benchmarks, standards, model cards.
 - Do not invent links, paper names, benchmark numbers, or quotes.
 - Include contradiction/negative evidence when found.

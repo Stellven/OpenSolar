@@ -74,12 +74,15 @@ def finalize_survey_run(
     else:
         steps.append({"step": "plan", "ok": True, "skipped": True, "section_count": len(ast.get("sections", []))})
 
+    section_count = len(ast.get("sections", [])) if isinstance(ast.get("sections"), list) else 0
+    effective_min_evidence = max(min_evidence, section_count) if require_complete else min_evidence
+    effective_min_claims = max(min_claims, section_count) if require_complete else min_claims
     source_gap = write_source_gap_handoff(
         root,
         brief=brief or ast.get("title", ""),
         min_sources=min_sources,
-        min_evidence=min_evidence,
-        min_claims=min_claims,
+        min_evidence=effective_min_evidence,
+        min_claims=effective_min_claims,
     )
     steps.append({"step": "source_gap", "ok": source_gap.get("ok"), "issues": source_gap.get("issues", []), "handoff_path": source_gap.get("handoff_path")})
     if not source_gap.get("ok") and not allow_source_gap:
