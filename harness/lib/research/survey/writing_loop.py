@@ -19,11 +19,15 @@ PROFESSOR_GRADE_WRITING_POLICY = {
         "Claim Map",
         "Evidence Map",
         "Source Map",
+        "Literature Lineage",
+        "Method Taxonomy",
         "Architecture Synthesis",
         "Comparative Positioning",
         "Terminology Evolution",
+        "Evaluation Protocol Matrix",
         "Evaluation And Risk Boundary",
         "Limitations And Failure Modes",
+        "Controversy Matrix",
         "Contradiction Slots",
         "Open Problems",
     ],
@@ -205,7 +209,7 @@ def build_section_prompt_packet(root: Path, section_id: str, round_index: int = 
             "Markdown section draft.",
             "At least six second-level headings.",
             "Follow the professor-grade section template in writing_policy.section_template.",
-            "Include Architecture Synthesis, Comparative Positioning, Terminology Evolution, Evaluation And Risk Boundary, Limitations And Failure Modes, Contradiction Slots, and Open Problems.",
+            "Include Literature Lineage, Method Taxonomy, Architecture Synthesis, Comparative Positioning, Terminology Evolution, Evaluation Protocol Matrix, Evaluation And Risk Boundary, Limitations And Failure Modes, Controversy Matrix, Contradiction Slots, and Open Problems.",
             "All core claims must reference claim_id and evidence_id tags.",
         ],
         artifact_paths={
@@ -411,6 +415,14 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
 
 {chr(10).join(compact_source_lines)}
 
+## Literature Lineage
+
+{anchor} maps the local literature lineage from explicit reasoning-chain baselines to continuous thought, hidden-state deliberation, and Coconut-style latent reasoning while keeping paper, code, benchmark, and official documentation evidence separate. [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+
+## Method Taxonomy
+
+{anchor} classifies methods by representation, control policy, supervision signal, and observability boundary so latent-state architecture claims do not collapse into one generic mechanism bucket. [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+
 ## Architecture Synthesis
 
 {anchor} separates mechanism, system, and evaluation layers for {lens['axis']} analysis so implementation and evidence claims stay auditable. [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
@@ -427,9 +439,17 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
 
 {anchor} checks task form, metric scope, reproducibility, and deployment transfer before allowing strong conclusions. [claim:{claim_ids[1] if len(claim_ids) > 1 else 'claim_missing'}] [evidence:{evidence_ids[1] if len(evidence_ids) > 1 else 'evidence_missing'}]
 
+## Evaluation Protocol Matrix
+
+{anchor} compares benchmark task family, baseline or ablation design, metric interpretation, reproducibility evidence, and deployment transfer risk before any claim can become a chapter-level conclusion. [claim:{claim_ids[1] if len(claim_ids) > 1 else 'claim_missing'}] [evidence:{evidence_ids[1] if len(evidence_ids) > 1 else 'evidence_missing'}]
+
 ## Limitations And Failure Modes
 
 {anchor} keeps short-task bias, single-model evidence, benchmark mismatch, and missing failure-path documentation in the main text. [claim:{claim_ids[1] if len(claim_ids) > 1 else 'claim_missing'}] [evidence:{evidence_ids[1] if len(evidence_ids) > 1 else 'evidence_missing'}]
+
+## Controversy Matrix
+
+{anchor} separates support evidence, negative evidence, baseline disputes, interpretability disputes, and deployment-risk disputes so the section does not hide controversy behind a single limitations paragraph. [claim:{claim_ids[2] if len(claim_ids) > 2 else 'claim_missing'}] [evidence:{evidence_ids[2] if len(evidence_ids) > 2 else 'evidence_missing'}]
 
 ## Contradiction Slots
 
@@ -481,6 +501,14 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
 
 {chr(10).join(source_lines)}
 
+## Literature Lineage
+
+{anchor} 的 literature lineage 不按来源顺序机械拼接，而是把显式 chain-of-thought 基线、continuous thought 过渡、hidden-state deliberation、Coconut-style latent reasoning 和生产可审计混合系统放到一条可批判的演进线上。论文证据负责机制与实验假设，代码证据负责可复现路径，benchmark 证据负责评价协议，official_doc 负责部署边界。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+
+## Method Taxonomy
+
+{anchor} 的 method taxonomy 按四个轴拆分：representation 轴区分 token、continuous state 与 hidden state；control policy 轴区分固定步数、adaptive deliberation 与 verifier-coupled search；supervision 轴区分 imitation、RL、self-training 与 synthetic traces；observability 轴区分可审计 token trace、弱可解释 latent trajectory 与黑箱内部状态。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+
 ## Architecture Synthesis
 
 在 {anchor} 中，架构 synthesis 先拆成机制层、系统层和评价层：机制层解释 {lens['focus']} 为什么可能成立，系统层检查它如何被实现、调度、复现和迁移，评价层判断现有 `{source_types}` 是否足以支撑本节结论。三层必须保持分离，否则 `{lens['axis']}` 主题会把概念说明、经验判断和工程结论混成看似深入但不可审计的叙述。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
@@ -489,6 +517,14 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
 
 {anchor} 的 comparative positioning 不把所有引用压成同一权重：`{lens['primary_source']}` 提供本节主证据，`{lens['secondary_source']}` 用来检查外推边界，其余来源只补充实现、评价或部署侧信息。若某一来源类型缺失，本节结论必须降级为局部判断；只有多类来源围绕 {lens['focus']} 相互支撑时，才可以进入章节级 survey 判断。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
 
+## Terminology Evolution
+
+{anchor} tracks the terminology path from chain-of-thought and explicit reasoning chains toward continuous thought, hidden-state deliberation, Coconut-style latent reasoning, and auditable hybrid systems. [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+
+## Evaluation Protocol Matrix
+
+{anchor} 的 evaluation protocol matrix 至少比较五列：task family 是否覆盖长程推理，baseline/ablation 是否公平，metric 是否区分准确率、成本与可审计性，reproducibility 是否能由代码或数据卡复核，deployment transfer 是否会引入观测性和回滚成本。缺任一列时，本节结论必须降级。 [claim:{claim_ids[1] if len(claim_ids) > 1 else 'claim_missing'}] [evidence:{evidence_ids[1] if len(evidence_ids) > 1 else 'evidence_missing'}]
+
 ## Evaluation And Risk Boundary
 
 {anchor} 的 evaluation boundary 必须说明数据集、任务形态、指标口径和外推边界，并把 `{lens['risk']}` 标为主要降级风险。若证据来自论文，应检查实验设置和 baseline；若证据来自代码，应检查可运行性、维护状态和实现约束；若证据来自 benchmark，应检查任务覆盖和指标是否与本节 `{lens['axis']}` 场景一致。 [claim:{claim_ids[1] if len(claim_ids) > 1 else 'claim_missing'}] [evidence:{evidence_ids[1] if len(evidence_ids) > 1 else 'evidence_missing'}]
@@ -496,6 +532,10 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
 ## Limitations And Failure Modes
 
 {anchor} 必须把 failure modes 写在正文中：{lens['focus']} 可能只在短任务、单模型、单 benchmark 或不可复现实验中成立，代码证据可能缺少生产约束，官方文档也可能只描述支持路径而不覆盖失败路径。因此，本节结论需要标注适用条件、不可外推区域和后续 evidence miner 必须补齐的缺口。 [claim:{claim_ids[1] if len(claim_ids) > 1 else 'claim_missing'}] [evidence:{evidence_ids[1] if len(evidence_ids) > 1 else 'evidence_missing'}]
+
+## Controversy Matrix
+
+{anchor} 的 controversy matrix 分成支持证据、负面证据、baseline 争议、interpretability 争议和 deployment-risk 争议五栏。若 `{lens['primary_source']}` 与 `{lens['secondary_source']}` 在任务规模、实现假设或评价口径上冲突，本节必须把冲突保留为争议项，而不是在 narrative synthesis 中抹平。 [claim:{claim_ids[2] if len(claim_ids) > 2 else 'claim_missing'}] [evidence:{evidence_ids[2] if len(evidence_ids) > 2 else 'evidence_missing'}]
 
 ## Contradiction Slots
 

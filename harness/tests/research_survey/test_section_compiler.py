@@ -54,6 +54,11 @@ def test_compile_section_and_survey(tmp_path):
     assert (tmp_path / "sections" / "ch01" / "sec01" / "prompt_packets" / "round_00.md").exists()
     packet = json.loads((tmp_path / "sections" / "ch01" / "sec01" / "prompt_packets" / "round_00.json").read_text(encoding="utf-8"))
     assert packet["writing_policy"]["policy_id"] == "solar.survey.professor_grade_writing.v1"
+    template = packet["writing_policy"]["section_template"]
+    assert "Literature Lineage" in template
+    assert "Method Taxonomy" in template
+    assert "Evaluation Protocol Matrix" in template
+    assert "Controversy Matrix" in template
     assert packet["chapter_context"]["chapter_id"] == "ch01"
     assert (tmp_path / "chapters" / "ch01" / "prompt_packet.md").exists()
     assert "Professor-Grade Section Template" in (tmp_path / "chapters" / "ch01" / "prompt_packet.md").read_text(encoding="utf-8")
@@ -71,9 +76,33 @@ def test_compile_section_and_survey(tmp_path):
     assert "## Chapter Synthesis" in final_text
     matrix = json.loads((tmp_path / "survey_contribution_matrix.json").read_text(encoding="utf-8"))
     assert matrix["finalized_sections"] == 1
+    assert matrix["rows"][0]["has_literature_lineage"] is True
+    assert matrix["rows"][0]["has_method_taxonomy"] is True
     assert matrix["rows"][0]["has_comparative_positioning"] is True
+    assert matrix["rows"][0]["has_terminology_evolution"] is True
+    assert matrix["rows"][0]["has_evaluation_protocol_matrix"] is True
+    assert matrix["rows"][0]["has_controversy_matrix"] is True
     summary = json.loads((tmp_path / "survey_final_summary.json").read_text(encoding="utf-8"))
     assert summary["technical_summary"]
+
+
+def test_deterministic_writer_outputs_professor_survey_scaffolds(tmp_path):
+    _strong_fixture(tmp_path)
+    result = run_section_revision_loop(tmp_path, "ch01/sec01", min_chars=3200, max_rounds=3)
+    assert result["ok"] is True
+    text = (tmp_path / "sections" / "ch01" / "sec01" / "final.md").read_text(encoding="utf-8")
+    for heading in [
+        "## Literature Lineage",
+        "## Method Taxonomy",
+        "## Terminology Evolution",
+        "## Evaluation Protocol Matrix",
+        "## Controversy Matrix",
+    ]:
+        assert heading in text
+    assert "chain-of-thought" in text
+    assert "baseline" in text
+    assert "ablation" in text
+    assert "negative evidence" in text or "负面证据" in text
 
 
 def test_revision_loop_requires_enough_detail(tmp_path):
