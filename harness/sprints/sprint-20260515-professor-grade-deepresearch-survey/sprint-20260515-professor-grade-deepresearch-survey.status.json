@@ -8,13 +8,13 @@
   "handoff_to": "",
   "target_role": "coordinator",
   "created_at": "2026-05-15T19:27:12Z",
-  "updated_at": "2026-05-16T21:12:48-0400",
+  "updated_at": "2026-05-16T21:30:00-0400",
   "contract": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.contract.md",
   "prd": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.prd.md",
   "design": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.design.md",
   "plan": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.plan.md",
   "task_graph": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.task_graph.json",
-  "current_truth": "Professor-grade DeepResearch survey now has strict depth gates and writer-side professor scaffolds: literature lineage, method taxonomy, terminology evolution, evaluation protocol matrix, and controversy matrix are generated and tracked across all sections.",
+  "current_truth": "DeepResearch survey now enforces professor-grade source acquisition angles in human/browser returned_sources.md: literature lineage, method taxonomy, evaluation protocol, controversy, and engineering are required, imported into ledgers, diagnosed, and verified by runtime survey-continue E2E.",
   "id": "sprint-20260515-professor-grade-deepresearch-survey",
   "history": [
     {
@@ -260,6 +260,12 @@
       "event": "survey_diagnose_command_complete",
       "by": "codex",
       "note": "Added survey-diagnose CLI and package module. Runtime smoke verified issue groups, JSON/Markdown artifacts, and next_action output."
+    },
+    {
+      "ts": "2026-05-16T21:30:00-0400",
+      "event": "survey_human_search_angle_handoff_complete",
+      "by": "codex",
+      "note": "Added five research-angle handoff/import coverage for returned_sources.md and fixed survey-continue require-complete replanning. Source regression: 148 passed. Runtime focused: 19 passed. Runtime E2E done with all five angles covered and final.md generated."
     }
   ],
   "round": 2,

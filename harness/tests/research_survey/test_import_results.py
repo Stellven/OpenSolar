@@ -20,6 +20,7 @@ URL: https://arxiv.org/abs/2412.06769
 Publisher: arXiv
 Published: 2024-12-09
 Source Type: paper
+Research Angles: literature_lineage, method_taxonomy
 
 Summary:
 - Coconut uses continuous latent thought for reasoning.
@@ -37,6 +38,7 @@ URL: https://github.com/facebookresearch/coconut
 Publisher: GitHub
 Published: N/A
 Source Type: repo
+Research Angles: engineering
 
 Summary:
 - The repository exposes reproducibility and implementation boundaries.
@@ -57,6 +59,7 @@ URL: https://docs.example.edu/coconut-official
 Publisher: Example Lab
 Published: 2025-01-01
 Source Type: official_doc
+Research Angles: literature_lineage
 
 Summary:
 - Official notes describe latent reasoning architecture constraints.
@@ -73,6 +76,7 @@ URL: https://paperswithcode.com/task/coconut-benchmark
 Publisher: Example Eval
 Published: 2025-02-01
 Source Type: benchmark
+Research Angles: evaluation_protocol, controversy
 
 Summary:
 - Benchmark evidence defines evaluation coverage and failure modes.
@@ -102,7 +106,9 @@ def test_parse_survey_search_markdown_normalizes_source_types():
     records = parse_survey_search_markdown(MARKDOWN)
     assert len(records) == 2
     assert records[0]["source_type"] == "paper"
+    assert records[0]["research_angles"] == ["literature_lineage", "method_taxonomy"]
     assert records[1]["source_type"] == "code"
+    assert records[1]["research_angles"] == ["engineering"]
     assert len(records[0]["key_claims"]) == 2
 
 
@@ -111,8 +117,10 @@ def test_diagnose_survey_search_markdown_reports_missing_schema_fields():
     assert diagnostics["source_heading_count"] == 1
     assert diagnostics["url_count"] == 0
     assert diagnostics["has_external_search_results_heading"] is False
-    assert diagnostics["missing_fields_by_source"][0]["missing_fields"] == ["URL", "Summary", "Key Claims"]
+    assert diagnostics["missing_fields_by_source"][0]["missing_fields"] == ["URL", "Research Angles", "Summary", "Key Claims"]
+    assert diagnostics["missing_research_angles"] == ["literature_lineage", "method_taxonomy", "evaluation_protocol", "controversy", "engineering"]
     assert "## Source 1: <title>" in diagnostics["example"]
+    assert "Research Angles:" in diagnostics["example"]
 
 
 def test_import_survey_search_results_failure_writes_actionable_diagnostics(tmp_path):
@@ -140,7 +148,44 @@ def test_import_survey_search_results_writes_ledgers(tmp_path):
     assert len((tmp_path / "sources.jsonl").read_text(encoding="utf-8").splitlines()) == 2
     assert len((tmp_path / "evidence.jsonl").read_text(encoding="utf-8").splitlines()) == 4
     assert len((tmp_path / "claims.jsonl").read_text(encoding="utf-8").splitlines()) == 4
+    source_rows = [json.loads(line) for line in (tmp_path / "sources.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert source_rows[0]["research_angle"] == "literature_lineage"
+    assert source_rows[0]["research_angles"] == ["literature_lineage", "method_taxonomy"]
+    evidence_text = (tmp_path / "evidence.jsonl").read_text(encoding="utf-8")
+    assert "Research Angles: literature_lineage, method_taxonomy" in evidence_text
     assert (tmp_path / "survey_import_search_results.json").exists()
+
+
+def test_import_survey_search_results_tracks_research_angle_coverage(tmp_path):
+    md = tmp_path / "results.md"
+    angles = ["literature_lineage", "method_taxonomy", "evaluation_protocol", "controversy", "engineering"]
+    blocks = ["# External Search Results: latent reasoning"]
+    for idx, angle in enumerate(angles, start=1):
+        blocks.append(f"""
+## Source {idx}: Angle Source {idx}
+URL: https://example.com/source-{idx}
+Publisher: Example
+Published: 2025-01-{idx:02d}
+Source Type: paper
+Research Angles: {angle}
+
+Summary:
+- This source covers {angle} for latent reasoning.
+
+Key Claims:
+- Latent reasoning requires {angle} evidence.
+- Professor-grade surveys must distinguish {angle} from generic source stuffing.
+
+Relevant Quotes:
+> Angle-specific evidence matters.
+""")
+    md.write_text("\n".join(blocks), encoding="utf-8")
+    payload = import_survey_search_results(tmp_path, md)
+    assert payload["ok"] is True
+    assert payload["missing_research_angles"] == []
+    assert payload["research_angle_counts"] == {angle: 1 for angle in angles}
+    source_rows = [json.loads(line) for line in (tmp_path / "sources.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert [row["research_angle"] for row in source_rows] == angles
 
 
 def test_import_survey_search_results_dedupes_sources(tmp_path):
@@ -168,6 +213,7 @@ URL: {_source_url(source_type, idx)}
 Publisher: Example
 Published: 2025-01-{idx:02d}
 Source Type: {source_type}
+Research Angles: {["literature_lineage", "method_taxonomy", "evaluation_protocol", "controversy", "engineering"][(idx - 1) % 5]}
 
 Summary:
 - Latent reasoning source {idx} covers architecture evaluation deployment.
@@ -209,6 +255,7 @@ URL: {_source_url(source_type, idx)}
 Publisher: Example
 Published: 2025-01-{idx:02d}
 Source Type: {source_type}
+Research Angles: {["literature_lineage", "method_taxonomy", "evaluation_protocol", "controversy", "engineering"][(idx - 1) % 5]}
 
 Summary:
 - Latent reasoning source {idx} covers architecture evaluation deployment.
@@ -262,6 +309,7 @@ URL: {_source_url(source_type, idx)}
 Publisher: Example
 Published: 2025-01-{idx:02d}
 Source Type: {source_type}
+Research Angles: {["literature_lineage", "method_taxonomy", "evaluation_protocol", "controversy", "engineering"][(idx - 1) % 5]}
 
 Summary:
 - Latent reasoning source {idx} covers architecture evaluation deployment.

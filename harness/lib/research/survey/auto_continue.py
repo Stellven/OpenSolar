@@ -78,6 +78,7 @@ def continue_survey_run(
                 min_finalized=min_finalized,
                 min_chars=min_chars,
                 require_complete=require_complete,
+                skip_plan=(root / "survey_report_ast.json").exists(),
             )
             step["executed"] = "survey-finalize-run"
             step["section_limit"] = effective_section_limit

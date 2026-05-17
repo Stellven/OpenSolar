@@ -7,6 +7,14 @@ import math
 from pathlib import Path
 from typing import Any
 
+RESEARCH_ANGLES = {
+    "literature_lineage": "文献谱系 / Literature lineage",
+    "method_taxonomy": "方法分类 / Method taxonomy",
+    "evaluation_protocol": "评估协议 / Evaluation protocol",
+    "controversy": "争议反证 / Controversy and negative evidence",
+    "engineering": "工程部署 / Engineering and deployment",
+}
+
 
 def _read_json(path: Path) -> dict[str, Any]:
     if not path.exists():
@@ -109,22 +117,28 @@ def render_source_gap_handoff(gap: dict[str, Any], *, max_results: int = 12) -> 
     )
     needed_results = max(needed_results, 1)
     query_plan = "\n".join(
-        f"| {source_type} | {max(2, math.ceil(needed_results / max(len(missing), 1)))} | `{brief} {source_type} primary source architecture evaluation` |"
+        f"| {source_type} | {max(2, math.ceil(needed_results / max(len(missing), 1)))} | `{brief} {source_type} primary source literature lineage method taxonomy evaluation protocol controversy engineering` |"
         for source_type in missing
+    )
+    angle_plan = "\n".join(
+        f"| {angle} | {label} | `{brief} {label} primary source` |"
+        for angle, label in RESEARCH_ANGLES.items()
     )
     issues = "\n".join(f"- {item}" for item in gap.get("issues", [])) or "- N/A"
     slot_types = (missing or list(gap.get("required_source_types") or [])) or ["paper", "official_doc", "code", "benchmark"]
     template_blocks = []
     for idx in range(1, needed_results + 1):
         source_type = slot_types[(idx - 1) % len(slot_types)]
+        angle = list(RESEARCH_ANGLES.keys())[(idx - 1) % len(RESEARCH_ANGLES)]
         template_blocks.append(f"""## Source {idx}: <title>
 URL: <https://...>
 Publisher: <publisher or N/A>
 Published: <date or N/A>
 Source Type: {source_type}
+Research Angles: {angle}
 
 Summary:
-- <2-5 factual bullets>
+- <2-5 factual bullets covering the selected Research Angles>
 
 Key Claims:
 - <claim supported by this source>
@@ -134,7 +148,7 @@ Relevant Quotes:
 > <short quote or N/A>
 
 Why this source fixes the gap:
-- <which missing source type or claim gap it covers>
+- <which missing source type, research angle, or claim gap it covers>
 """)
     returned_template = "\n\n".join([f"# External Search Results: {brief}", *template_blocks])
     return f"""# Solar DeepResearch Survey Source Gap Handoff
@@ -161,6 +175,14 @@ Why this source fixes the gap:
 |---|---:|---|
 {query_plan}
 
+## Required Research Angles
+
+每个返回源必须填写 `Research Angles:`，并且整份 `returned_sources.md` 至少覆盖以下五类。一个 source 可以覆盖多类，用逗号分隔；不要只堆链接，必须说明它补的是谱系、方法、评估、争议还是工程缺口。
+
+| Angle Key | Meaning | Query |
+|---|---|---|
+{angle_plan}
+
 ## How To Use
 
 1. Copy the entire block under `Copy/Paste returned_sources.md Template`.
@@ -169,11 +191,13 @@ Why this source fixes the gap:
 4. Continue with:
 
 ```bash
-solar-harness research survey-continue --output-dir "{gap.get('output_dir', '')}" --returned-md "{gap.get('output_dir', '')}/returned_sources.md" --require-complete --json
+solar-harness research survey-continue --output-dir "{gap.get('output_dir', '')}" --brief "{brief}" --returned-md "{gap.get('output_dir', '')}/returned_sources.md" --require-complete --json
 ```
 
 ## Rules
 - Fill all {needed_results} `## Source N:` blocks. Each block should include at least two Key Claims and enough quote/summary detail to import as evidence.
+- Every source must include `Research Angles:` using one or more keys: `{", ".join(RESEARCH_ANGLES)}`.
+- Across the whole file, cover all five research angles at least once: literature lineage, method taxonomy, evaluation protocol, controversy/negative evidence, and engineering/deployment.
 - Prefer primary/canonical sources: papers, official docs, GitHub repos, benchmarks, standards, model cards.
 - Do not invent links, paper names, benchmark numbers, or quotes.
 - Include contradiction/negative evidence when found.
