@@ -138,7 +138,7 @@ def test_import_survey_search_results_continue_finalize(tmp_path):
     md = tmp_path / "results.md"
     source_types = ["paper", "repo", "official_doc", "benchmark"]
     blocks = ["# External Search Results: latent reasoning"]
-    for idx in range(1, 17):
+    for idx in range(1, 33):
         source_type = source_types[(idx - 1) % len(source_types)]
         blocks.append(f"""
 ## Source {idx}: Latent Reasoning Source {idx}
@@ -226,3 +226,48 @@ def test_import_survey_search_results_cli(tmp_path, capsys):
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["imported_sources"] == 2
+
+
+def test_import_survey_search_results_cli_continue_finalize_preserves_target_chars(tmp_path, capsys):
+    md = tmp_path / "results.md"
+    source_types = ["paper", "repo", "official_doc", "benchmark"]
+    blocks = ["# External Search Results: latent reasoning"]
+    for idx in range(1, 33):
+        source_type = source_types[(idx - 1) % len(source_types)]
+        blocks.append(f"""
+## Source {idx}: Latent Reasoning Source {idx}
+URL: {_source_url(source_type, idx)}
+Publisher: Example
+Published: 2025-01-{idx:02d}
+Source Type: {source_type}
+
+Summary:
+- Latent reasoning source {idx} covers architecture evaluation deployment.
+
+Key Claims:
+- Latent reasoning claim {idx}A requires evidence for architecture evaluation.
+- Latent reasoning claim {idx}B requires evidence for deployment constraints.
+
+Relevant Quotes:
+> Latent reasoning source {idx} preserves evidence boundaries.
+""")
+    md.write_text("\n".join(blocks), encoding="utf-8")
+    rc = main([
+        "survey-import-search-results",
+        "--output-dir", str(tmp_path),
+        "--input-md", str(md),
+        "--continue-finalize",
+        "--brief", "latent reasoning",
+        "--target-chars", "100000",
+        "--section-limit", "1",
+        "--min-finalized", "1",
+        "--min-chars", "100",
+        "--json",
+    ])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    ast = json.loads((tmp_path / "survey_report_ast.json").read_text(encoding="utf-8"))
+    assert payload["ok"] is True
+    assert ast["target_chars"] == 100000
+    assert len(ast["chapters"]) == 12
+    assert len(ast["sections"]) == 60
