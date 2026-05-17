@@ -332,41 +332,49 @@ def _is_passed(graph: dict[str, Any], node_id: str) -> bool:
     return node_status(graph, node_id) in PASS_STATUSES
 
 
-def _external_prerequisites(graph: dict[str, Any]) -> list[str]:
-    entries: list[str] = []
+def _external_prerequisites(graph: dict[str, Any]) -> list[Any]:
+    entries: list[Any] = []
     for raw in graph.get("prerequisites") or []:
         if str(raw).strip():
-            entries.append(str(raw).strip())
+            entries.append(raw)
 
     policy = graph.get("dependency_policy") or {}
     if isinstance(policy, dict):
         for raw in policy.get("blocks_until") or []:
             if str(raw).strip():
-                entries.append(str(raw).strip())
+                entries.append(raw)
 
-    deduped: list[str] = []
+    deduped: list[Any] = []
     seen: set[str] = set()
     for item in entries:
-        if item not in seen:
+        requirement, sprint_id, required = _parse_external_prerequisite(item)
+        dedupe_key = f"{sprint_id}:{required}"
+        if dedupe_key not in seen:
             deduped.append(item)
-            seen.add(item)
+            seen.add(dedupe_key)
     return deduped
 
 
-def _parse_external_prerequisite(entry: str) -> tuple[str, str]:
+def _parse_external_prerequisite(entry: Any) -> tuple[str, str, str]:
+    if isinstance(entry, dict):
+        sprint_id = str(entry.get("sprint_id") or entry.get("sid") or entry.get("child_sprint_id") or "").strip()
+        required = str(entry.get("required_status") or entry.get("status") or entry.get("required") or "passed").strip().lower() or "passed"
+        requirement = json.dumps(entry, ensure_ascii=False, sort_keys=True)
+        return requirement, sprint_id, required
+    entry = str(entry).strip()
     if ":" not in entry:
-        return entry, "passed"
+        return entry, entry, "passed"
     sprint_id, required = entry.rsplit(":", 1)
     sprint_id = sprint_id.strip()
     required = required.strip().lower() or "passed"
-    return sprint_id, required
+    return entry, sprint_id, required
 
 
-def _external_prerequisite_satisfied(entry: str) -> tuple[bool, dict[str, Any]]:
-    sprint_id, required = _parse_external_prerequisite(entry)
+def _external_prerequisite_satisfied(entry: Any) -> tuple[bool, dict[str, Any]]:
+    requirement, sprint_id, required = _parse_external_prerequisite(entry)
     status_path = SPRINTS_DIR / f"{sprint_id}.status.json"
     detail: dict[str, Any] = {
-        "requirement": entry,
+        "requirement": requirement,
         "sprint_id": sprint_id,
         "required": required,
         "status_path": str(status_path),

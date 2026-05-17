@@ -92,11 +92,17 @@ def _graph_parent_ready(path: Path) -> bool:
     return required.issubset(passed_gates)
 
 
-def _parse_external_prerequisite(entry: str) -> tuple[str, str]:
+def _parse_external_prerequisite(entry: Any) -> tuple[str, str, str]:
+    if isinstance(entry, dict):
+        sid = str(entry.get("sprint_id") or entry.get("sid") or entry.get("child_sprint_id") or "").strip()
+        required = str(entry.get("required_status") or entry.get("status") or entry.get("required") or "passed").strip().lower() or "passed"
+        requirement = json.dumps(entry, ensure_ascii=False, sort_keys=True)
+        return requirement, sid, required
+    entry = str(entry).strip()
     if ":" not in entry:
-        return entry, "passed"
+        return entry, entry, "passed"
     sid, required = entry.rsplit(":", 1)
-    return sid.strip(), (required.strip().lower() or "passed")
+    return entry, sid.strip(), (required.strip().lower() or "passed")
 
 
 def _blocked_external_prerequisites(path: Path) -> list[dict[str, Any]]:
@@ -107,25 +113,26 @@ def _blocked_external_prerequisites(path: Path) -> list[dict[str, Any]]:
     except Exception as exc:
         return [{"requirement": "task_graph", "reason": "parse_error", "error": str(exc)}]
 
-    entries: list[str] = []
+    entries: list[Any] = []
     for raw in graph.get("prerequisites") or []:
         if str(raw).strip():
-            entries.append(str(raw).strip())
+            entries.append(raw)
     policy = graph.get("dependency_policy") or {}
     if isinstance(policy, dict):
         for raw in policy.get("blocks_until") or []:
             if str(raw).strip():
-                entries.append(str(raw).strip())
+                entries.append(raw)
 
     blocked: list[dict[str, Any]] = []
     seen: set[str] = set()
     for entry in entries:
-        if entry in seen:
+        requirement, upstream_sid, required = _parse_external_prerequisite(entry)
+        dedupe_key = f"{upstream_sid}:{required}"
+        if dedupe_key in seen:
             continue
-        seen.add(entry)
-        upstream_sid, required = _parse_external_prerequisite(entry)
+        seen.add(dedupe_key)
         detail: dict[str, Any] = {
-            "requirement": entry,
+            "requirement": requirement,
             "sprint_id": upstream_sid,
             "required": required,
         }
