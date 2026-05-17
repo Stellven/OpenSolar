@@ -8,13 +8,13 @@
   "handoff_to": "",
   "target_role": "coordinator",
   "created_at": "2026-05-15T19:27:12Z",
-  "updated_at": "2026-05-16T20:13:27-0400",
+  "updated_at": "2026-05-16T20:19:28-0400",
   "contract": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.contract.md",
   "prd": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.prd.md",
   "design": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.design.md",
   "plan": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.plan.md",
   "task_graph": "/Users/sihaoli/.solar/harness/sprints/sprint-20260515-professor-grade-deepresearch-survey.task_graph.json",
-  "current_truth": "Professor-grade DeepResearch survey supports final-quality gates, authority/source coverage, literature/chief-editor review, final assembly, and target-scale propagation. Runtime CLI smoke verified target_chars=100000 preserved through returned Markdown import, producing 12 chapters, 60 sections, and a passed final report.",
+  "current_truth": "Professor-grade DeepResearch survey supports final-quality gates, target-scale propagation, and human-in-loop search UX guardrails. Handoff now emits a copy/paste returned_sources.md template; malformed returned Markdown gets actionable import diagnostics.",
   "id": "sprint-20260515-professor-grade-deepresearch-survey",
   "history": [
     {
@@ -248,11 +248,17 @@
       "event": "survey_target_chars_propagation_complete",
       "by": "codex",
       "note": "Forwarded target_chars/audience/domain/run_id through survey-import-search-results and survey-continue import branch. Runtime CLI smoke verified target_chars=100000 produced 12 chapters, 60 sections, and passed final quality."
+    },
+    {
+      "ts": "2026-05-16T20:19:28-0400",
+      "event": "survey_human_loop_search_ux_complete",
+      "by": "codex",
+      "note": "Added copy/paste returned_sources.md template to survey source-gap handoff and structured diagnostics for no_importable_sources. Runtime smoke verified template and diagnostics."
     }
   ],
   "round": 2,
-  "event_count": 185,
-  "last_event_ts": "2026-05-16T20:13:27-0400",
+  "event_count": 186,
+  "last_event_ts": "2026-05-16T20:19:28-0400",
   "projected_at": "2026-05-15T23:29:55Z",
   "sid": "sprint-20260515-professor-grade-deepresearch-survey",
   "runtime_state_source": "activity_runtime",
@@ -388,6 +394,19 @@
         "runtime CLI smoke target_chars=100000 chapters=12 sections=60 status=done final_chars=275834"
       ],
       "evidence": "/Users/sihaoli/Knowledge/_raw/solar-harness/deepresearch-survey-target-chars-propagation-20260516T201327-0400.md"
+    },
+    {
+      "ts": "2026-05-16T20:19:28-0400",
+      "event": "survey_human_loop_search_ux_complete",
+      "status": "ok",
+      "summary": "Improved human-in-loop search handoff with copy/paste returned_sources.md template and actionable import diagnostics for malformed search Markdown.",
+      "verification": [
+        "source focused 11 passed",
+        "runtime focused 11 passed",
+        "runtime smoke handoff_template=true import_diagnostics=true",
+        "source regression 142 passed"
+      ],
+      "evidence": "/Users/sihaoli/Knowledge/_raw/solar-harness/deepresearch-human-loop-search-ux-20260516T201928-0400.md"
     }
   ]
 }

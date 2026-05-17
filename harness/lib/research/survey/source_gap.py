@@ -99,6 +99,30 @@ def render_source_gap_handoff(gap: dict[str, Any], *, max_results: int = 12) -> 
         for source_type in missing
     )
     issues = "\n".join(f"- {item}" for item in gap.get("issues", [])) or "- N/A"
+    slot_types = (missing or list(gap.get("required_source_types") or [])) or ["paper", "official_doc", "code", "benchmark"]
+    template_blocks = []
+    for idx in range(1, max_results + 1):
+        source_type = slot_types[(idx - 1) % len(slot_types)]
+        template_blocks.append(f"""## Source {idx}: <title>
+URL: <https://...>
+Publisher: <publisher or N/A>
+Published: <date or N/A>
+Source Type: {source_type}
+
+Summary:
+- <2-5 factual bullets>
+
+Key Claims:
+- <claim supported by this source>
+- <claim supported by this source>
+
+Relevant Quotes:
+> <short quote or N/A>
+
+Why this source fixes the gap:
+- <which missing source type or claim gap it covers>
+""")
+    returned_template = "\n\n".join([f"# External Search Results: {brief}", *template_blocks])
     return f"""# Solar DeepResearch Survey Source Gap Handoff
 
 你现在扮演外部搜索研究员。请联网搜索并返回可导入 Solar DeepResearch 的 Markdown。不要写最终报告，只补证据。
@@ -122,6 +146,17 @@ def render_source_gap_handoff(gap: dict[str, Any], *, max_results: int = 12) -> 
 |---|---:|---|
 {query_plan}
 
+## How To Use
+
+1. Copy the entire block under `Copy/Paste returned_sources.md Template`.
+2. Ask Gemini/GPT/browser research to fill every `## Source N:` block with real sources.
+3. Save the filled Markdown as `{gap.get('output_dir', '')}/returned_sources.md`.
+4. Continue with:
+
+```bash
+solar-harness research survey-continue --output-dir "{gap.get('output_dir', '')}" --returned-md "{gap.get('output_dir', '')}/returned_sources.md" --require-complete --json
+```
+
 ## Rules
 - Return at most {max_results} high-quality sources.
 - Prefer primary/canonical sources: papers, official docs, GitHub repos, benchmarks, standards, model cards.
@@ -130,29 +165,10 @@ def render_source_gap_handoff(gap: dict[str, Any], *, max_results: int = 12) -> 
 - Keep summaries factual and citation-ready.
 - Use Source Type values: `paper`, `official_doc`, `code`, `benchmark`, `dataset`, `standard`, `web`, `other`.
 
-## Required Return Format
+## Copy/Paste returned_sources.md Template
 
 ```markdown
-# External Search Results: {brief}
-
-## Source 1: <title>
-URL: <https://...>
-Publisher: <publisher or N/A>
-Published: <date or N/A>
-Source Type: <paper|official_doc|code|benchmark|dataset|standard|web|other>
-
-Summary:
-- <2-5 factual bullets>
-
-Key Claims:
-- <claim supported by this source>
-- <claim supported by this source>
-
-Relevant Quotes:
-> <short quote or N/A>
-
-Why this source fixes the gap:
-- <which missing source type or claim gap it covers>
+{returned_template}
 ```
 """
 

@@ -26,6 +26,25 @@ SOURCE_TYPE_ALIASES = {
     "other": "other",
 }
 
+RETURN_FORMAT_EXAMPLE = """# External Search Results: <brief>
+
+## Source 1: <title>
+URL: <https://...>
+Publisher: <publisher or N/A>
+Published: <date or N/A>
+Source Type: <paper|official_doc|code|benchmark|dataset|standard|web|other>
+
+Summary:
+- <2-5 factual bullets>
+
+Key Claims:
+- <claim supported by this source>
+- <claim supported by this source>
+
+Relevant Quotes:
+> <short quote or N/A>
+"""
+
 
 def _stable_id(prefix: str, *parts: str) -> str:
     text = "\n".join(parts)
@@ -76,6 +95,36 @@ def _section_lines(block: str, heading: str) -> list[str]:
         if item and item.upper() != "N/A":
             lines.append(item)
     return lines
+
+
+def diagnose_survey_search_markdown(markdown: str) -> dict[str, Any]:
+    text = markdown or ""
+    blocks = re.split(r"(?im)^##\s+Source\s+\d+\s*:\s*", text)
+    source_blocks = blocks[1:]
+    missing: list[dict[str, Any]] = []
+    for idx, block in enumerate(source_blocks, start=1):
+        fields = []
+        if not _field(block, "URL") and not re.findall(r"https?://[^\s>)]+", block):
+            fields.append("URL")
+        if not _field(block, "Source Type"):
+            fields.append("Source Type")
+        if not _section_lines(block, "Summary"):
+            fields.append("Summary")
+        if not _section_lines(block, "Key Claims"):
+            fields.append("Key Claims")
+        if fields:
+            title = block.strip().splitlines()[0].strip(" #\t") if block.strip().splitlines() else ""
+            missing.append({"source_index": idx, "title": title or "N/A", "missing_fields": fields})
+    return {
+        "source_heading_count": len(source_blocks),
+        "url_count": len(re.findall(r"https?://[^\s>)]+", text)),
+        "has_external_search_results_heading": bool(re.search(r"(?im)^#\s+External Search Results:", text)),
+        "missing_fields_by_source": missing[:20],
+        "expected_source_heading": "## Source 1: <title>",
+        "expected_fields": ["URL", "Publisher", "Published", "Source Type", "Summary", "Key Claims", "Relevant Quotes"],
+        "repair_hint": "Paste results into returned_sources.md using the exact Source block schema from survey_source_gap_handoff.md.",
+        "example": RETURN_FORMAT_EXAMPLE,
+    }
 
 
 def parse_survey_search_markdown(markdown: str) -> list[dict[str, Any]]:
@@ -150,7 +199,13 @@ def import_survey_search_results(
     markdown = Path(input_md).expanduser().read_text(encoding="utf-8")
     records = parse_survey_search_markdown(markdown)
     if not records:
-        payload = {"ok": False, "reason": "no_importable_sources", "imported_sources": 0}
+        payload = {
+            "ok": False,
+            "reason": "no_importable_sources",
+            "imported_sources": 0,
+            "input_md": str(Path(input_md).expanduser()),
+            "diagnostics": diagnose_survey_search_markdown(markdown),
+        }
         (root / "survey_import_search_results.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         return payload
 
