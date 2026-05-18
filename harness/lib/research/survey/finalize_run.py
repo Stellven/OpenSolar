@@ -52,6 +52,8 @@ def finalize_survey_run(
     min_sources: int = 4,
     min_evidence: int = 8,
     min_claims: int = 8,
+    golden_benchmark_html: str | Path = "",
+    require_golden_style: bool = False,
 ) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
     root.mkdir(parents=True, exist_ok=True)
@@ -118,7 +120,14 @@ def finalize_survey_run(
     )
     steps.append({"step": "write", **write_result})
 
-    initial_eval = evaluate_survey(root, strict=True, min_finalized=min_finalized, require_complete=require_complete)
+    initial_eval = evaluate_survey(
+        root,
+        strict=True,
+        min_finalized=min_finalized,
+        require_complete=require_complete,
+        golden_benchmark_html=golden_benchmark_html or None,
+        require_golden_style=require_golden_style,
+    )
     steps.append({"step": "eval", "ok": initial_eval.get("ok"), "issues": (initial_eval.get("scorecard") or {}).get("issues", [])})
 
     repair = {"ok": initial_eval.get("ok"), "reason": "not_needed", "iterations": []}
@@ -142,7 +151,14 @@ def finalize_survey_run(
 
     compiled = compile_survey(root)
     steps.append({"step": "compile", **compiled})
-    final_eval = evaluate_survey(root, strict=True, min_finalized=min_finalized, require_complete=require_complete)
+    final_eval = evaluate_survey(
+        root,
+        strict=True,
+        min_finalized=min_finalized,
+        require_complete=require_complete,
+        golden_benchmark_html=golden_benchmark_html or None,
+        require_golden_style=require_golden_style,
+    )
     steps.append({"step": "final_eval", "ok": final_eval.get("ok"), "issues": (final_eval.get("scorecard") or {}).get("issues", [])})
 
     payload = {
@@ -154,6 +170,8 @@ def finalize_survey_run(
         "compile": compiled,
         "final_eval": final_eval,
         "final_md": compiled.get("final_md", str(root / "final.md")),
+        "golden_benchmark_html": str(golden_benchmark_html or ""),
+        "require_golden_style": require_golden_style,
         "run_path": str(root / "survey_finalize_run.json"),
     }
     (root / "survey_finalize_run.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

@@ -81,6 +81,20 @@ def test_survey_golden_style_cli_rejects_underbuilt_report(tmp_path, capsys):
     assert (tmp_path / "survey_golden_style.json").exists()
 
 
+def test_survey_golden_style_cli_requires_benchmark_when_requested(tmp_path, capsys):
+    (tmp_path / "final.md").write_text("# Report\n\n## 判断\n\n不是摘要，而是测试。\n", encoding="utf-8")
+    rc = main([
+        "survey-golden-style",
+        "--output-dir", str(tmp_path),
+        "--require-benchmark",
+        "--json",
+    ])
+    assert rc == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["required"] is True
+    assert "golden_benchmark_required_missing" in payload["issues"]
+
+
 def test_survey_diagnose_cli_reports_issue_groups_and_next_action(tmp_path, capsys):
     assert main([
         "survey-plan",
