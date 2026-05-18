@@ -20,6 +20,8 @@ import os
 import re
 import sqlite3
 import subprocess
+import shutil
+import shlex
 import time
 import tempfile
 import datetime
@@ -27,6 +29,7 @@ import hashlib
 import urllib.error
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 _HARNESS_LIB = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -40,6 +43,12 @@ WEB_TIMEOUT_SEC = 12
 BROWSER_USE_ROOT = Path.home() / ".claude" / "mcp-servers" / "browser-use"
 BROWSER_USE_SERVER = BROWSER_USE_ROOT / "server.py"
 BROWSER_USE_PYTHON = BROWSER_USE_ROOT / ".venv" / "bin" / "python"
+GOOGLE_CSE_OAUTH_SCOPE = "https://www.googleapis.com/auth/cse"
+GOOGLE_CSE_CLIENT_SECRET = Path.home() / ".solar" / "harness" / "google-cse-client_secret.json"
+GOOGLE_CSE_TOKEN = Path.home() / ".solar" / "harness" / "google-cse-token.json"
+SEARCH_PROVIDERS = ["auto", "serper", "google-cse", "google-cse-oauth", "google-cse-element", "arxiv", "google-arxiv", "browser-use", "http"]
+SERPER_DEFAULT_MONTHLY_LIMIT = 2500
+SERPER_USAGE_PATH = Path.home() / ".solar" / "harness" / "usage" / "serper_usage.jsonl"
 
 
 def emit_json(args: argparse.Namespace, payload: dict) -> bool:
@@ -274,6 +283,440 @@ def _normalize_search_hits(raw_hits: list[dict], provider: str, max_results: int
     return hits
 
 
+def _current_usage_month() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m")
+
+
+def _serper_monthly_limit() -> int:
+    raw = os.getenv("SERPER_MONTHLY_LIMIT", str(SERPER_DEFAULT_MONTHLY_LIMIT)).strip()
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return SERPER_DEFAULT_MONTHLY_LIMIT
+
+
+def _serper_usage_path() -> Path:
+    return Path(os.getenv("SERPER_USAGE_PATH") or SERPER_USAGE_PATH).expanduser()
+
+
+def _serper_usage_entries(lines: list[str], usage_month: str) -> list[tuple[str, int]]:
+    entries: list[tuple[str, int]] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            event = json.loads(stripped)
+        except json.JSONDecodeError:
+            continue
+        if event.get("month") == usage_month:
+            key = str(event.get("event_id") or hashlib.sha256(stripped.encode("utf-8")).hexdigest())
+            entries.append((key, int(event.get("requests") or 0)))
+    return entries
+
+
+def _sum_serper_usage_lines(lines: list[str], usage_month: str) -> int:
+    return sum(requests for _, requests in _serper_usage_entries(lines, usage_month))
+
+
+def _serper_shared_usage_config() -> tuple[str, str]:
+    return (
+        os.getenv("SERPER_SHARED_USAGE_SSH", "").strip(),
+        os.getenv("SERPER_SHARED_USAGE_PATH", "").strip(),
+    )
+
+
+def _read_serper_remote_usage_lines() -> tuple[list[str], str]:
+    ssh_target, remote_path = _serper_shared_usage_config()
+    if not ssh_target or not remote_path:
+        return [], ""
+    try:
+        result = subprocess.run(
+            ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", ssh_target, "cat", remote_path],
+            text=True,
+            capture_output=True,
+            timeout=8,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return [], f"shared_usage_read_failed:{exc}"
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip().replace("\n", " ")[:200]
+        return [], f"shared_usage_read_failed:{detail or result.returncode}"
+    return result.stdout.splitlines(), ""
+
+
+def serper_usage_snapshot(month: str | None = None, include_shared: bool = True) -> dict:
+    usage_month = month or _current_usage_month()
+    path = _serper_usage_path()
+    local_used = 0
+    local_entries: list[tuple[str, int]] = []
+    if path.exists():
+        local_entries = _serper_usage_entries(path.read_text(encoding="utf-8", errors="replace").splitlines(), usage_month)
+        local_used = sum(requests for _, requests in local_entries)
+    shared_used = 0
+    shared_entries: list[tuple[str, int]] = []
+    sync_errors: list[str] = []
+    if include_shared:
+        remote_lines, error = _read_serper_remote_usage_lines()
+        if error:
+            sync_errors.append(error)
+        elif remote_lines:
+            shared_entries = _serper_usage_entries(remote_lines, usage_month)
+            shared_used = sum(requests for _, requests in shared_entries)
+    unique_events: dict[str, int] = {}
+    for key, requests in [*local_entries, *shared_entries]:
+        unique_events[key] = max(unique_events.get(key, 0), requests)
+    used = sum(unique_events.values())
+    limit = _serper_monthly_limit()
+    remaining = max(0, limit - used)
+    pct = round((used / limit) * 100, 2) if limit else 0.0
+    status = "ok"
+    if used >= limit:
+        status = "error"
+    elif pct >= 80:
+        status = "warn"
+    return {
+        "ok": used < limit,
+        "status": status,
+        "month": usage_month,
+        "used": used,
+        "local_used": local_used,
+        "shared_used": shared_used,
+        "limit": limit,
+        "remaining": remaining,
+        "percent_used": pct,
+        "path": str(path),
+        "shared_path": _serper_shared_usage_config()[1],
+        "sync_errors": sync_errors,
+    }
+
+
+def _append_serper_remote_usage_event(line: str) -> str:
+    ssh_target, remote_path = _serper_shared_usage_config()
+    if not ssh_target or not remote_path:
+        return ""
+    remote_dir = os.path.dirname(remote_path.rstrip("/")) or "."
+    remote_cmd = f"mkdir -p {shlex.quote(remote_dir)} && cat >> {shlex.quote(remote_path)} && chmod 600 {shlex.quote(remote_path)}"
+    try:
+        result = subprocess.run(
+            ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", ssh_target, remote_cmd],
+            input=line + "\n",
+            text=True,
+            capture_output=True,
+            timeout=8,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return f"shared_usage_write_failed:{exc}"
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip().replace("\n", " ")[:200]
+        return f"shared_usage_write_failed:{detail or result.returncode}"
+    return ""
+
+
+def _record_serper_usage(query: str, max_results: int, status: str, error: str = "") -> None:
+    if os.getenv("SERPER_DISABLE_METERING") == "1":
+        return
+    path = _serper_usage_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    event = {
+        "ts": ts,
+        "month": _current_usage_month(),
+        "requests": 1,
+        "query_hash": hashlib.sha256(query.encode("utf-8")).hexdigest()[:16],
+        "max_results": max_results,
+        "status": status,
+        "error": error[:160],
+    }
+    event["event_id"] = hashlib.sha256(f"{ts}:{event['query_hash']}:{max_results}:{os.getpid()}".encode("utf-8")).hexdigest()[:20]
+    line = json.dumps(event, ensure_ascii=False, sort_keys=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(line + "\n")
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+    remote_error = _append_serper_remote_usage_event(line)
+    if remote_error and os.getenv("SERPER_USAGE_SYNC_WARN") == "1":
+        print(f"Warning: {remote_error}", file=sys.stderr)
+
+
+def google_cse_search(query: str, max_results: int) -> tuple[list[dict], list[str]]:
+    """Search Google Custom Search JSON API when credentials are configured."""
+    api_key = os.getenv("GOOGLE_CSE_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    cx = os.getenv("GOOGLE_CSE_ID") or os.getenv("GOOGLE_SEARCH_ENGINE_ID")
+    if not api_key or not cx:
+        return [], ["google-cse missing GOOGLE_CSE_API_KEY/GOOGLE_API_KEY or GOOGLE_CSE_ID/GOOGLE_SEARCH_ENGINE_ID"]
+    url = "https://www.googleapis.com/customsearch/v1?" + urllib.parse.urlencode({
+        "key": api_key,
+        "cx": cx,
+        "q": query,
+        "num": max(1, min(max_results, 10)),
+    })
+    try:
+        payload = json.loads(http_get_text(url))
+    except (json.JSONDecodeError, urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+        return [], [f"google-cse: {exc}"]
+    raw_hits = [
+        {
+            "title": item.get("title") or "",
+            "url": item.get("link") or "",
+            "snippet": item.get("snippet") or "",
+        }
+        for item in payload.get("items") or []
+        if isinstance(item, dict)
+    ]
+    return _normalize_search_hits(raw_hits, "google-cse", max_results), []
+
+
+def serper_search(query: str, max_results: int) -> tuple[list[dict], list[str]]:
+    """Search Google results through Serper's JSON API."""
+    api_key = os.getenv("SERPER_API_KEY")
+    if not api_key:
+        return [], ["serper missing SERPER_API_KEY"]
+    usage = serper_usage_snapshot()
+    if usage["used"] >= usage["limit"] and os.getenv("SERPER_ALLOW_OVER_LIMIT") != "1":
+        return [], [f"serper quota exhausted: used={usage['used']} limit={usage['limit']} month={usage['month']}"]
+    endpoint = os.getenv("SERPER_SEARCH_URL", "https://google.serper.dev/search")
+    payload = json.dumps({
+        "q": query,
+        "num": max(1, min(max_results, 20)),
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        endpoint,
+        data=payload,
+        headers={
+            "X-API-KEY": api_key,
+            "Content-Type": "application/json",
+            "User-Agent": WEB_USER_AGENT,
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=WEB_TIMEOUT_SEC) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="replace"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace").strip()
+        _record_serper_usage(query, max_results, "http_error", f"HTTP {exc.code}: {detail}")
+        return [], [f"serper: HTTP {exc.code}: {detail[:240]}"]
+    except (json.JSONDecodeError, urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+        _record_serper_usage(query, max_results, "error", str(exc))
+        return [], [f"serper: {exc}"]
+    _record_serper_usage(query, max_results, "ok")
+    raw_hits = [
+        {
+            "title": item.get("title") or "",
+            "url": item.get("link") or "",
+            "snippet": item.get("snippet") or "",
+        }
+        for item in data.get("organic") or []
+        if isinstance(item, dict)
+    ]
+    return _normalize_search_hits(raw_hits, "serper", max_results), []
+
+
+def google_cse_oauth_search(query: str, max_results: int) -> tuple[list[dict], list[str]]:
+    """Search Google CSE using OAuth desktop credentials and cached token."""
+    cx = os.getenv("GOOGLE_CSE_ID") or os.getenv("GOOGLE_SEARCH_ENGINE_ID")
+    client_secret = Path(os.getenv("GOOGLE_CSE_CLIENT_SECRET") or GOOGLE_CSE_CLIENT_SECRET).expanduser()
+    token_path = Path(os.getenv("GOOGLE_CSE_TOKEN") or GOOGLE_CSE_TOKEN).expanduser()
+    if not cx:
+        return [], ["google-cse-oauth missing GOOGLE_CSE_ID/GOOGLE_SEARCH_ENGINE_ID"]
+    if not client_secret.exists():
+        return [], [f"google-cse-oauth missing client secret: {client_secret}"]
+    try:
+        from google.auth.transport.requests import Request
+        from google.oauth2.credentials import Credentials
+        from google_auth_oauthlib.flow import InstalledAppFlow
+        from googleapiclient.discovery import build
+    except ImportError as exc:
+        return [], [f"google-cse-oauth missing dependency: {exc.name or exc}"]
+
+    creds = None
+    if token_path.exists():
+        try:
+            creds = Credentials.from_authorized_user_file(str(token_path), [GOOGLE_CSE_OAUTH_SCOPE])
+        except Exception:
+            creds = None
+    try:
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            else:
+                token_path.parent.mkdir(parents=True, exist_ok=True)
+                flow = InstalledAppFlow.from_client_secrets_file(str(client_secret), [GOOGLE_CSE_OAUTH_SCOPE])
+                creds = flow.run_local_server(port=0)
+            token_path.write_text(creds.to_json(), encoding="utf-8")
+            try:
+                token_path.chmod(0o600)
+            except OSError:
+                pass
+        service = build("customsearch", "v1", credentials=creds, cache_discovery=False)
+        result = service.cse().list(q=query, cx=cx, num=max(1, min(max_results, 10))).execute()
+    except Exception as exc:
+        return [], [f"google-cse-oauth: {type(exc).__name__}: {exc}"]
+    raw_hits = [
+        {
+            "title": item.get("title") or "",
+            "url": item.get("link") or "",
+            "snippet": item.get("snippet") or "",
+        }
+        for item in result.get("items") or []
+        if isinstance(item, dict)
+    ]
+    return _normalize_search_hits(raw_hits, "google-cse-oauth", max_results), []
+
+
+def google_cse_element_search(query: str, max_results: int, timeout: int = 90) -> tuple[list[dict], list[str]]:
+    """Search via Google's CSE front-end element when JSON API access is blocked."""
+    cx = os.getenv("GOOGLE_CSE_ID") or os.getenv("GOOGLE_SEARCH_ENGINE_ID")
+    if not cx:
+        return [], ["google-cse-element missing GOOGLE_CSE_ID/GOOGLE_SEARCH_ENGINE_ID"]
+    if os.getenv("SOLAR_RESEARCH_DISABLE_BROWSER_USE") == "1":
+        return [], ["browser-use disabled by SOLAR_RESEARCH_DISABLE_BROWSER_USE=1"]
+
+    python_bin = str(BROWSER_USE_PYTHON if BROWSER_USE_PYTHON.exists() else sys.executable)
+    script = r"""
+import asyncio, json, pathlib, sys, tempfile, urllib.parse
+
+async def main():
+    query = %(query)r
+    cx = %(cx)r
+    max_results = %(max_results)d
+    try:
+        from playwright.async_api import async_playwright
+        html = f'''<!doctype html>
+<html><head><meta charset="utf-8"><title>Solar CSE</title>
+<script async src="https://cse.google.com/cse.js?cx={cx}"></script>
+</head><body><div class="gcse-searchresults-only" data-queryParameterName="q"></div></body></html>'''
+        tmp = tempfile.NamedTemporaryFile("w", suffix="-solar-cse.html", delete=False, encoding="utf-8")
+        tmp.write(html)
+        tmp.close()
+        search_url = pathlib.Path(tmp.name).as_uri() + "?q=" + urllib.parse.quote(query)
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            page = await browser.new_page()
+            await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=30000)
+            except Exception:
+                pass
+            try:
+                await page.wait_for_selector(".gsc-webResult, .gsc-result, a.gs-title, iframe, a[href^='http']", timeout=30000)
+            except Exception:
+                pass
+            links = await page.evaluate('''(maxResults) => {
+                const rows = Array.from(document.querySelectorAll('.gsc-webResult, .gsc-result, .gs-webResult'));
+                const out = [];
+                for (const row of rows) {
+                    const anchor = row.querySelector('a.gs-title, a.gsc-title, a');
+                    if (!anchor) continue;
+                    const title = (anchor.innerText || anchor.textContent || '').trim();
+                    let url = anchor.href || '';
+                    const snippetEl = row.querySelector('.gs-snippet, .gsc-table-result, .gsc-url-bottom, .gsc-result-info');
+                    const snippet = (snippetEl?.innerText || '').trim();
+                    if (!title || !url || url.startsWith('javascript:')) continue;
+                    out.push({title, url, snippet});
+                    if (out.length >= maxResults) break;
+                }
+                if (!out.length) {
+                    for (const anchor of Array.from(document.querySelectorAll('a[href^="http"]'))) {
+                        const title = (anchor.innerText || anchor.textContent || '').trim();
+                        const url = anchor.href || '';
+                        if (!title || !url || /google\\.|gstatic\\.|schema\\.org/.test(new URL(url).hostname)) continue;
+                        out.push({title, url, snippet: (anchor.closest('div')?.innerText || '').trim()});
+                        if (out.length >= maxResults) break;
+                    }
+                }
+                return out;
+            }''', max_results)
+            await browser.close()
+        pathlib.Path(tmp.name).unlink(missing_ok=True)
+        print(json.dumps({"ok": True, "links": links}, ensure_ascii=False))
+    except Exception as exc:
+        print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False))
+        raise
+
+asyncio.run(main())
+""" % {"query": query, "cx": cx, "max_results": max(1, max_results)}
+    with tempfile.NamedTemporaryFile("w", suffix="-google-cse-element.py", delete=False, encoding="utf-8") as f:
+        f.write(script)
+        script_path = f.name
+    try:
+        result = subprocess.run(
+            [python_bin, script_path],
+            cwd=str(BROWSER_USE_ROOT if BROWSER_USE_ROOT.exists() else Path.cwd()),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return [], [f"google-cse-element timeout after {timeout}s"]
+    finally:
+        try:
+            os.unlink(script_path)
+        except OSError:
+            pass
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip().splitlines()[-3:]
+        return [], ["google-cse-element failed: " + " | ".join(detail)]
+    try:
+        payload = json.loads(result.stdout.strip().splitlines()[-1])
+    except json.JSONDecodeError:
+        return [], ["google-cse-element returned non-json stdout"]
+    if not payload.get("ok"):
+        return [], [f"google-cse-element error: {payload.get('error') or 'unknown'}"]
+    hits = _normalize_search_hits(payload.get("links") or [], "google-cse-element", max_results)
+    if not hits:
+        search_url = "https://cse.google.com/cse?" + urllib.parse.urlencode({"cx": cx, "q": query})
+        return [], [f"google-cse-element produced no parseable search hits; open manually: {search_url}"]
+    return hits, []
+
+
+def arxiv_search(query: str, max_results: int) -> tuple[list[dict], list[str]]:
+    """Search arXiv's official Atom API for paper sources."""
+    if max_results <= 0:
+        return [], ["max_results must be > 0"]
+    search_query = "all:" + re.sub(r"\s+", "+", query.strip())
+    url = "https://export.arxiv.org/api/query?" + urllib.parse.urlencode({
+        "search_query": search_query,
+        "start": 0,
+        "max_results": max(1, min(max_results, 25)),
+        "sortBy": "relevance",
+        "sortOrder": "descending",
+    })
+    try:
+        raw = http_get_text(url, timeout=20)
+        root = ET.fromstring(raw)
+    except (ET.ParseError, urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+        return [], [f"arxiv: {exc}"]
+    ns = {"atom": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
+    raw_hits: list[dict] = []
+    for entry in root.findall("atom:entry", ns):
+        title = re.sub(r"\s+", " ", (entry.findtext("atom:title", default="", namespaces=ns) or "")).strip()
+        summary = re.sub(r"\s+", " ", (entry.findtext("atom:summary", default="", namespaces=ns) or "")).strip()
+        abs_url = ""
+        pdf_url = ""
+        for link in entry.findall("atom:link", ns):
+            href = link.attrib.get("href") or ""
+            rel = link.attrib.get("rel") or ""
+            title_attr = link.attrib.get("title") or ""
+            if rel == "alternate":
+                abs_url = href
+            if title_attr == "pdf":
+                pdf_url = href
+        raw_hits.append({
+            "title": title,
+            "url": abs_url or pdf_url,
+            "snippet": summary,
+            "source_type": "paper",
+        })
+    return _normalize_search_hits(raw_hits, "arxiv", max_results), []
+
+
 def browser_use_search(query: str, max_results: int, timeout: int = 90) -> tuple[list[dict], list[str]]:
     """Use browser rendering for search pages when available.
 
@@ -289,7 +732,7 @@ def browser_use_search(query: str, max_results: int, timeout: int = 90) -> tuple
         return [], [f"browser-use server missing: {BROWSER_USE_SERVER}"]
 
     python_bin = str(BROWSER_USE_PYTHON if BROWSER_USE_PYTHON.exists() else sys.executable)
-    search_url = "https://www.bing.com/search?" + urllib.parse.urlencode({"q": query})
+    search_url = "https://www.google.com/search?" + urllib.parse.urlencode({"q": query})
     script = """
 import asyncio, importlib.util, json, sys
 spec = importlib.util.spec_from_file_location("solar_browser_use_server", %(server)r)
@@ -360,39 +803,50 @@ asyncio.run(main())
 
 
 def http_web_search(query: str, max_results: int) -> tuple[list[dict], list[str]]:
-    """Search the web using dependency-free public endpoints as fallback.
+    """Legacy HTTP search is intentionally disabled for survey quality.
 
-    The command never fabricates hits: failures are returned as explicit errors.
+    DeepResearch previously fell back to Jina Search and DuckDuckGo HTML. Those
+    endpoints are too noisy for professor-grade source acquisition, so callers
+    should use serper, google-cse, arxiv, google-arxiv, or browser-use.
     """
-    errors: list[str] = []
-    if max_results <= 0:
-        return [], ["max_results must be > 0"]
-
-    encoded = urllib.parse.urlencode({"q": query})
-    providers = [
-        ("jina", f"https://s.jina.ai/?{encoded}"),
-        ("duckduckgo", f"https://duckduckgo.com/html/?{encoded}"),
-    ]
-    raw_hits: list[dict] = []
-    for provider, url in providers:
-        try:
-            raw = http_get_text(url)
-            parsed = _parse_jina_search(raw, max_results) if provider == "jina" else _parse_duckduckgo_html(raw, max_results)
-            for hit in parsed:
-                hit["connector"] = provider
-                raw_hits.append(hit)
-                if len(raw_hits) >= max_results:
-                    return _normalize_search_hits(raw_hits, provider, max_results), errors
-        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
-            errors.append(f"{provider}: {exc}")
-    return _normalize_search_hits(raw_hits, "http-fallback", max_results), errors
+    return [], ["legacy http search disabled: use serper, google-cse, arxiv, google-arxiv, or browser-use"]
 
 
 def web_search(query: str, max_results: int, provider: str = "auto") -> tuple[list[dict], list[str]]:
-    """Search provider router: browser-use first, HTTP only as fallback."""
+    """Search provider router with high-quality providers only."""
     errors: list[str] = []
-    if provider not in {"auto", "browser-use", "http"}:
+    if provider not in set(SEARCH_PROVIDERS):
         return [], [f"unknown search provider: {provider}"]
+
+    if provider in {"auto", "serper"}:
+        hits, serper_errors = serper_search(query, max_results)
+        errors.extend(serper_errors)
+        if hits or provider == "serper":
+            return hits, errors
+
+    if provider in {"auto", "google-cse", "google-arxiv"}:
+        hits, google_errors = google_cse_search(query, max_results)
+        errors.extend(google_errors)
+        if hits or provider == "google-cse":
+            return hits, errors
+
+    if provider in {"auto", "google-cse-oauth", "google-arxiv"}:
+        hits, oauth_errors = google_cse_oauth_search(query, max_results)
+        errors.extend(oauth_errors)
+        if hits or provider == "google-cse-oauth":
+            return hits, errors
+
+    if provider in {"auto", "google-cse-element", "google-arxiv"}:
+        hits, element_errors = google_cse_element_search(query, max_results)
+        errors.extend(element_errors)
+        if hits or provider == "google-cse-element":
+            return hits, errors
+
+    if provider in {"auto", "arxiv", "google-arxiv"}:
+        hits, arxiv_errors = arxiv_search(query, max_results)
+        errors.extend(arxiv_errors)
+        if hits or provider in {"arxiv", "google-arxiv"}:
+            return hits, errors
 
     if provider in {"auto", "browser-use"}:
         hits, browser_errors = browser_use_search(query, max_results)
@@ -403,6 +857,150 @@ def web_search(query: str, max_results: int, provider: str = "auto") -> tuple[li
     hits, http_errors = http_web_search(query, max_results)
     errors.extend(http_errors)
     return hits, errors
+
+
+def _doctor_check_chief_editor_model(model: str, timeout: int) -> dict:
+    claude = shutil.which("claude")
+    if not claude:
+        return {"status": "error", "ok": False, "reason": "claude_cli_missing", "model": model}
+    prompt = "Return exactly: SOLAR_OK"
+    try:
+        result = subprocess.run(
+            [claude, "--bare", "-p", "--model", model, prompt],
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return {"status": "error", "ok": False, "reason": f"claude_cli_timeout_after_{timeout}s", "model": model}
+    output = (result.stdout or "").strip()
+    detail = ((result.stderr or result.stdout or "").strip().replace("\n", " "))[:500]
+    if result.returncode != 0:
+        return {
+            "status": "error",
+            "ok": False,
+            "reason": f"claude_cli_failed:{result.returncode}:{detail}",
+            "model": model,
+        }
+    if "SOLAR_OK" not in output:
+        return {"status": "warn", "ok": True, "reason": "claude_cli_unexpected_probe_output", "model": model, "output": output[:200]}
+    return {"status": "ok", "ok": True, "model": model}
+
+
+def _doctor_check_google_cse(query: str, live_search: bool, require_google: bool) -> dict:
+    has_key = bool(os.getenv("GOOGLE_CSE_API_KEY") or os.getenv("GOOGLE_API_KEY"))
+    has_cx = bool(os.getenv("GOOGLE_CSE_ID") or os.getenv("GOOGLE_SEARCH_ENGINE_ID"))
+    if not has_key or not has_cx:
+        status = "error" if require_google else "pending"
+        return {
+            "status": status,
+            "ok": not require_google,
+            "reason": "google_cse_config_missing",
+            "has_api_key": has_key,
+            "has_search_engine_id": has_cx,
+        }
+    if not live_search:
+        return {"status": "ok", "ok": True, "reason": "google_cse_config_present", "has_api_key": True, "has_search_engine_id": True}
+    hits, errors = google_cse_search(query, 1)
+    if hits:
+        return {"status": "ok", "ok": True, "hit_count": len(hits), "first_title": hits[0].get("title")}
+    status = "error" if require_google else "warn"
+    return {"status": status, "ok": not require_google, "reason": "google_cse_live_search_failed", "errors": errors}
+
+
+def _doctor_check_serper(query: str, live_search: bool, require_serper: bool) -> dict:
+    has_key = bool(os.getenv("SERPER_API_KEY"))
+    if not has_key:
+        status = "error" if require_serper else "pending"
+        return {"status": status, "ok": not require_serper, "reason": "serper_config_missing", "has_api_key": False}
+    if not live_search:
+        return {"status": "ok", "ok": True, "reason": "serper_config_present", "has_api_key": True}
+    hits, errors = serper_search(query, 1)
+    if hits:
+        return {"status": "ok", "ok": True, "hit_count": len(hits), "first_title": hits[0].get("title"), "first_url": hits[0].get("url")}
+    return {"status": "error", "ok": False, "reason": "serper_live_search_failed", "errors": errors}
+
+
+def _doctor_check_arxiv(query: str, live_search: bool, require_arxiv: bool) -> dict:
+    if not live_search:
+        return {"status": "pending", "ok": True, "reason": "live_search_not_requested"}
+    hits, errors = arxiv_search(query, 1)
+    if hits:
+        return {"status": "ok", "ok": True, "hit_count": len(hits), "first_title": hits[0].get("title"), "first_url": hits[0].get("url")}
+    status = "error" if require_arxiv else "warn"
+    return {"status": status, "ok": not require_arxiv, "reason": "arxiv_live_search_failed", "errors": errors}
+
+
+def build_deepresearch_doctor(
+    *,
+    model: str = "opus",
+    model_candidates: str = "",
+    timeout: int = 45,
+    query: str = "agentic runtime durable execution",
+    live_search: bool = False,
+    skip_model: bool = False,
+    require_serper: bool = False,
+    require_google: bool = False,
+    require_arxiv: bool = False,
+) -> dict:
+    """Return machine-readable readiness for professor-grade DeepResearch."""
+    checks: dict[str, dict] = {}
+    candidate_models = []
+    for raw in [model, *re.split(r"[, ]+", model_candidates or "")]:
+        item = raw.strip()
+        if item and item not in candidate_models:
+            candidate_models.append(item)
+    if not candidate_models:
+        candidate_models = ["opus"]
+    if skip_model:
+        checks["chief_editor_model"] = {
+            "status": "pending",
+            "ok": True,
+            "reason": "model_probe_skipped",
+            "model": model,
+            "candidates": candidate_models,
+        }
+    else:
+        model_checks = [_doctor_check_chief_editor_model(candidate, timeout) for candidate in candidate_models]
+        usable = [item for item in model_checks if item.get("ok")]
+        checks["chief_editor_model"] = {
+            "status": "ok" if usable and usable[0].get("model") == model else ("warn" if usable else "error"),
+            "ok": bool(usable),
+            "model": model,
+            "selected_model": usable[0].get("model") if usable else "",
+            "candidates": model_checks,
+            "reason": "" if usable else "no_usable_chief_editor_model",
+        }
+    checks["serper"] = _doctor_check_serper(query, live_search, require_serper)
+    checks["google_cse"] = _doctor_check_google_cse(query, live_search, require_google)
+    checks["arxiv"] = _doctor_check_arxiv(query, live_search, require_arxiv)
+    http_hits, http_errors = http_web_search(query, 1)
+    checks["legacy_http_search"] = {
+        "status": "ok" if not http_hits and any("legacy http search disabled" in item for item in http_errors) else "error",
+        "ok": not http_hits and any("legacy http search disabled" in item for item in http_errors),
+        "errors": http_errors,
+    }
+    errors = [name for name, check in checks.items() if check.get("status") == "error"]
+    warnings = [name for name, check in checks.items() if check.get("status") == "warn"]
+    pending = [name for name, check in checks.items() if check.get("status") == "pending"]
+    return {
+        "ok": not errors,
+        "status": "ok" if not errors and not pending and not warnings else ("error" if errors else ("warn" if warnings else "pending")),
+        "model": model,
+        "model_candidates": candidate_models,
+        "query": query,
+        "live_search": live_search,
+        "checks": checks,
+        "errors": errors,
+        "warnings": warnings,
+        "pending": pending,
+        "next_action": (
+            "fix errors before running survey-chief-editor"
+            if errors
+            else ("resolve pending configuration for full web coverage" if pending else "ready")
+        ),
+    }
 
 
 def fetch_url_readable(url: str) -> tuple[str, str | None]:
@@ -1945,6 +2543,19 @@ def cmd_search(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serper_usage(args: argparse.Namespace) -> int:
+    """Show local Serper usage meter."""
+    payload = serper_usage_snapshot(month=args.month or None)
+    if emit_json(args, payload):
+        return 0 if payload.get("status") != "error" else 2
+    print(f"Serper usage month: {payload['month']}")
+    print(f"Used: {payload['used']} / {payload['limit']} ({payload['percent_used']}%)")
+    print(f"Remaining: {payload['remaining']}")
+    print(f"Status: {payload['status']}")
+    print(f"Ledger: {payload['path']}")
+    return 0 if payload.get("status") != "error" else 2
+
+
 def cmd_handoff_search(args: argparse.Namespace) -> int:
     """Generate a human-in-the-loop search request Markdown."""
     db_path = args.db_path
@@ -2359,6 +2970,395 @@ def cmd_source_audit(args: argparse.Namespace) -> int:
     return 0 if payload.get("ok") else 1
 
 
+def cmd_survey_plan(args: argparse.Namespace) -> int:
+    """Plan a professor-grade survey without embedding survey logic in cli.py."""
+    from research.survey.planner import create_survey_plan, write_survey_plan
+
+    plan = create_survey_plan(
+        args.brief,
+        target_chars=args.target_chars,
+        audience=args.audience,
+        domain=args.domain,
+        run_id=args.run_id or None,
+    )
+    files = write_survey_plan(plan, args.output_dir)
+    payload = {
+        "ok": True,
+        "run_id": plan["run"]["run_id"],
+        "chapter_count": len(plan["report_ast"]["chapters"]),
+        "section_count": len(plan["report_ast"]["sections"]),
+        "files": files,
+    }
+    if emit_json(args, payload):
+        return 0
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_survey_pack(args: argparse.Namespace) -> int:
+    from research.survey.evidence_pack import build_evidence_packs
+
+    ast_path = Path(args.report_ast or Path(args.output_dir) / "survey_report_ast.json").expanduser()
+    ast = json.loads(ast_path.read_text(encoding="utf-8"))
+    payload = build_evidence_packs(args.output_dir, ast)
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") else 1
+
+
+def cmd_survey_write_section(args: argparse.Namespace) -> int:
+    from research.survey.writing_loop import run_section_revision_loop
+
+    try:
+        payload = run_section_revision_loop(
+            args.output_dir,
+            args.section_id,
+            finalize=not args.draft_only,
+            max_rounds=args.max_revisions,
+            min_chars=args.min_chars,
+            writer_backend=args.writer_backend,
+            writer_command=args.writer_command,
+            writer_timeout=args.writer_timeout,
+            pane_target=args.pane_target,
+            pane_send=args.pane_send,
+            emit_prompt_packet=not args.no_prompt_packet,
+        )
+    except ValueError as exc:
+        payload = {"ok": False, "reason": str(exc)}
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") else 1
+
+
+def cmd_survey_run_sections(args: argparse.Namespace) -> int:
+    from research.survey.writing_loop import run_ready_sections
+
+    try:
+        payload = run_ready_sections(
+            args.output_dir,
+            limit=args.limit,
+            max_rounds=args.max_revisions,
+            min_chars=args.min_chars,
+            writer_backend=args.writer_backend,
+            writer_command=args.writer_command,
+            writer_timeout=args.writer_timeout,
+            pane_target=args.pane_target,
+            pane_send=args.pane_send,
+            emit_prompt_packet=not args.no_prompt_packet,
+        )
+    except ValueError as exc:
+        payload = {"ok": False, "reason": str(exc)}
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") else 1
+
+
+def cmd_survey_watch_responses(args: argparse.Namespace) -> int:
+    from research.survey.writing_loop import watch_pane_responses
+
+    payload = watch_pane_responses(
+        args.output_dir,
+        limit=args.limit,
+        min_chars=args.min_chars,
+        round_index=args.round_index,
+    )
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") or args.allow_pending else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") or args.allow_pending else 1
+
+
+def cmd_survey_watch_register(args: argparse.Namespace) -> int:
+    from research.survey.watch_automation import register_watch_run
+
+    payload = register_watch_run(
+        args.output_dir,
+        config_path=args.config,
+        enabled=not args.disabled,
+        min_chars=args.min_chars,
+        round_index=args.round_index,
+        limit=args.limit,
+        append=not args.replace,
+    )
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") else 1
+
+
+def cmd_survey_watch_tick(args: argparse.Namespace) -> int:
+    from research.survey.watch_automation import tick_watch_config
+
+    payload = tick_watch_config(args.config)
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") or args.allow_pending else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") or args.allow_pending else 1
+
+
+def cmd_survey_rewrite_queue(args: argparse.Namespace) -> int:
+    from research.survey.rewrite_queue import build_rewrite_queue
+
+    payload = build_rewrite_queue(
+        args.output_dir,
+        max_severity=args.max_severity,
+        limit=args.limit,
+        min_risk_score=args.min_risk_score,
+    )
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") else 1
+
+
+def cmd_survey_rewrite_run(args: argparse.Namespace) -> int:
+    from research.survey.rewrite_runner import run_rewrite_queue
+
+    try:
+        payload = run_rewrite_queue(
+            args.output_dir,
+            limit=args.limit,
+            max_rounds=args.max_revisions,
+            min_chars=args.min_chars,
+            writer_backend=args.writer_backend,
+            writer_command=args.writer_command,
+            writer_timeout=args.writer_timeout,
+            pane_target=args.pane_target,
+            pane_send=args.pane_send,
+            emit_prompt_packet=not args.no_prompt_packet,
+            build_if_missing=not args.no_build_queue,
+            replace_final=not args.no_replace_final,
+        )
+    except ValueError as exc:
+        payload = {"ok": False, "reason": str(exc)}
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") or (args.allow_pending and payload.get("waiting", 0) > 0) else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") or (args.allow_pending and payload.get("waiting", 0) > 0) else 1
+
+
+def cmd_survey_auto_repair(args: argparse.Namespace) -> int:
+    from research.survey.auto_repair import run_auto_repair
+
+    try:
+        payload = run_auto_repair(
+            args.output_dir,
+            max_passes=args.max_passes,
+            per_pass_limit=args.limit,
+            max_rounds=args.max_revisions,
+            min_chars=args.min_chars,
+            min_finalized=args.min_finalized,
+            require_complete=args.require_complete,
+            max_severity=args.max_severity,
+            min_risk_score=args.min_risk_score,
+            writer_backend=args.writer_backend,
+            writer_command=args.writer_command,
+            writer_timeout=args.writer_timeout,
+            pane_target=args.pane_target,
+            pane_send=args.pane_send,
+            emit_prompt_packet=not args.no_prompt_packet,
+        )
+    except ValueError as exc:
+        payload = {"ok": False, "reason": str(exc)}
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") or (args.allow_pending and payload.get("waiting", 0) > 0) else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") or (args.allow_pending and payload.get("waiting", 0) > 0) else 1
+
+
+def cmd_survey_finalize_run(args: argparse.Namespace) -> int:
+    from research.survey.finalize_run import finalize_survey_run
+
+    try:
+        payload = finalize_survey_run(
+            args.output_dir,
+            brief=args.brief,
+            target_chars=args.target_chars,
+            audience=args.audience,
+            domain=args.domain,
+            run_id=args.run_id,
+            section_limit=args.section_limit,
+            repair_limit=args.repair_limit,
+            max_revisions=args.max_revisions,
+            repair_passes=args.repair_passes,
+            min_chars=args.min_chars,
+            min_finalized=args.min_finalized,
+            require_complete=args.require_complete,
+            writer_backend=args.writer_backend,
+            writer_command=args.writer_command,
+            writer_timeout=args.writer_timeout,
+            pane_target=args.pane_target,
+            pane_send=args.pane_send,
+            emit_prompt_packet=not args.no_prompt_packet,
+            skip_plan=args.skip_plan,
+            skip_pack=args.skip_pack,
+            allow_source_gap=args.allow_source_gap,
+            min_sources=args.min_sources,
+            min_evidence=args.min_evidence,
+            min_claims=args.min_claims,
+        )
+    except ValueError as exc:
+        payload = {"ok": False, "reason": str(exc)}
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") or args.allow_incomplete else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") or args.allow_incomplete else 1
+
+
+def cmd_survey_import_search_results(args: argparse.Namespace) -> int:
+    from research.survey.import_results import import_survey_search_results
+
+    payload = import_survey_search_results(
+        args.output_dir,
+        args.input_md,
+        continue_finalize=args.continue_finalize,
+        brief=args.brief,
+        target_chars=args.target_chars,
+        audience=args.audience,
+        domain=args.domain,
+        run_id=args.run_id,
+        section_limit=args.section_limit,
+        repair_limit=args.repair_limit,
+        min_finalized=args.min_finalized,
+        min_chars=args.min_chars,
+        require_complete=args.require_complete,
+    )
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") and (not args.continue_finalize or (payload.get("finalize") or {}).get("ok")) else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") and (not args.continue_finalize or (payload.get("finalize") or {}).get("ok")) else 1
+
+
+def cmd_survey_status_next_action(args: argparse.Namespace) -> int:
+    from research.survey.status_next import survey_status_next_action
+
+    payload = survey_status_next_action(
+        args.output_dir,
+        brief=args.brief,
+        returned_md=args.returned_md,
+        require_complete=args.require_complete,
+    )
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") else 1
+
+
+def cmd_survey_continue(args: argparse.Namespace) -> int:
+    from research.survey.auto_continue import continue_survey_run
+
+    payload = continue_survey_run(
+        args.output_dir,
+        brief=args.brief,
+        returned_md=args.returned_md,
+        max_steps=args.max_steps,
+        target_chars=args.target_chars,
+        audience=args.audience,
+        domain=args.domain,
+        section_limit=args.section_limit,
+        repair_limit=args.repair_limit,
+        min_finalized=args.min_finalized,
+        min_chars=args.min_chars,
+        require_complete=args.require_complete,
+    )
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") and (payload.get("completed") or args.allow_pending) else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") and (payload.get("completed") or args.allow_pending) else 1
+
+
+def cmd_survey_review(args: argparse.Namespace) -> int:
+    from research.survey.evaluator import evaluate_survey
+
+    payload = evaluate_survey(args.output_dir, strict=False, min_finalized=args.min_finalized, require_complete=args.require_complete)
+    if emit_json(args, payload):
+        return 0
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_survey_compile(args: argparse.Namespace) -> int:
+    from research.survey.section_compiler import compile_survey
+
+    payload = compile_survey(args.output_dir)
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") else 1
+
+
+def cmd_survey_chief_editor(args: argparse.Namespace) -> int:
+    from research.survey.chief_editor import run_chief_editor
+
+    try:
+        payload = run_chief_editor(
+            args.output_dir,
+            source_path=args.source_path,
+            output_path=args.output_path,
+            backend=args.backend,
+            model=args.model,
+            command=args.command,
+            timeout=args.timeout,
+            max_budget_usd=args.max_budget_usd,
+            fallback_models=args.fallback_models,
+            min_chars=args.min_chars,
+            require_hitl=args.require_hitl,
+        )
+    except (RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
+        payload = {"ok": False, "reason": str(exc), "output_dir": args.output_dir}
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") or args.allow_pending else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") or args.allow_pending else 1
+
+
+def cmd_survey_doctor(args: argparse.Namespace) -> int:
+    payload = build_deepresearch_doctor(
+        model=args.model,
+        model_candidates=args.model_candidates,
+        timeout=args.timeout,
+        query=args.query,
+        live_search=args.live_search,
+        skip_model=args.skip_model,
+        require_serper=args.require_serper,
+        require_google=args.require_google,
+        require_arxiv=args.require_arxiv,
+    )
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") or args.allow_pending else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") or args.allow_pending else 1
+
+
+def cmd_survey_eval(args: argparse.Namespace) -> int:
+    from research.survey.evaluator import evaluate_survey
+
+    payload = evaluate_survey(args.output_dir, strict=args.strict, min_finalized=args.min_finalized, require_complete=args.require_complete)
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") or not args.strict else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") or not args.strict else 1
+
+
+def cmd_survey_diagnose(args: argparse.Namespace) -> int:
+    from research.survey.diagnose import diagnose_survey, render_survey_diagnosis_markdown
+
+    payload = diagnose_survey(
+        args.output_dir,
+        strict=args.strict,
+        min_finalized=args.min_finalized,
+        require_complete=args.require_complete,
+        write_md=args.write_md,
+    )
+    if emit_json(args, payload):
+        return 0
+    print(render_survey_diagnosis_markdown(payload))
+    return 0
+
+
 def _source_audit_handoff_markdown(payload: dict, query: str = "") -> str:
     """Build a human/browser-use search handoff for missing profile sources."""
     profile = payload.get("research_profile", "general")
@@ -2643,10 +3643,11 @@ def _sync_harness_runtime_paths() -> None:
 
 ALL_SUBCOMMANDS = [
     "init", "add-source", "extract", "ledger", "status",
-    "run", "plan", "search", "handoff-search", "import-search",
+    "run", "plan", "search", "serper-usage", "handoff-search", "import-search",
     "mine", "outline", "write", "check", "compile", "synthesize", "export", "eval-artifacts",
     "policy-doctor", "policy-explain",
     "source-audit",
+    "survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-watch-register", "survey-watch-tick", "survey-rewrite-queue", "survey-rewrite-run", "survey-auto-repair", "survey-finalize-run", "survey-import-search-results", "survey-status-next-action", "survey-continue", "survey-review", "survey-compile", "survey-chief-editor", "survey-doctor", "survey-eval", "survey-diagnose",
 ]
 
 SUBCOMMANDS = {
@@ -2658,6 +3659,7 @@ SUBCOMMANDS = {
     "run": cmd_run,
     "plan": cmd_plan,
     "search": cmd_search,
+    "serper-usage": cmd_serper_usage,
     "handoff-search": cmd_handoff_search,
     "import-search": cmd_import_search,
     "mine": cmd_mine,
@@ -2671,6 +3673,26 @@ SUBCOMMANDS = {
     "policy-doctor": cmd_policy_doctor,
     "policy-explain": cmd_policy_explain,
     "source-audit": cmd_source_audit,
+    "survey-plan": cmd_survey_plan,
+    "survey-pack": cmd_survey_pack,
+    "survey-write-section": cmd_survey_write_section,
+    "survey-run-sections": cmd_survey_run_sections,
+    "survey-watch-responses": cmd_survey_watch_responses,
+    "survey-watch-register": cmd_survey_watch_register,
+    "survey-watch-tick": cmd_survey_watch_tick,
+    "survey-rewrite-queue": cmd_survey_rewrite_queue,
+    "survey-rewrite-run": cmd_survey_rewrite_run,
+    "survey-auto-repair": cmd_survey_auto_repair,
+    "survey-finalize-run": cmd_survey_finalize_run,
+    "survey-import-search-results": cmd_survey_import_search_results,
+    "survey-status-next-action": cmd_survey_status_next_action,
+    "survey-continue": cmd_survey_continue,
+    "survey-review": cmd_survey_review,
+    "survey-compile": cmd_survey_compile,
+    "survey-chief-editor": cmd_survey_chief_editor,
+    "survey-doctor": cmd_survey_doctor,
+    "survey-eval": cmd_survey_eval,
+    "survey-diagnose": cmd_survey_diagnose,
 }
 
 
@@ -2724,8 +3746,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--web-query", default="", help="Online query to search and fetch into sources")
     p_run.add_argument("--research-profile", default="general", help="Profile-aware web search plan for --web-query")
     p_run.add_argument("--max-results", type=int, default=5, help="Max web results for --web-query")
-    p_run.add_argument("--search-provider", default="auto", choices=["auto", "browser-use", "http"],
-                       help="Search provider: auto prefers browser-use and falls back to HTTP")
+    p_run.add_argument("--search-provider", default="auto", choices=SEARCH_PROVIDERS,
+                       help="Search provider: auto tries Serper, Google CSE JSON/OAuth/element, arXiv, then Google browser-use; legacy http is disabled")
     p_run.add_argument("--output-dir", default="", help="Directory for JSONL artifacts")
     p_run.add_argument("--output-md", default="", help="Path for compiled final markdown")
     p_run.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
@@ -2741,11 +3763,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_search.add_argument("--query", required=True, help="Search query")
     p_search.add_argument("--research-profile", default="general", help="Profile-aware search plan")
     p_search.add_argument("--max-results", type=int, default=10, help="Max results")
-    p_search.add_argument("--provider", default="auto", choices=["auto", "browser-use", "http"],
-                          help="Search provider: auto prefers browser-use and falls back to HTTP")
+    p_search.add_argument("--provider", default="auto", choices=SEARCH_PROVIDERS,
+                          help="Search provider: auto tries Serper, Google CSE JSON/OAuth/element, arXiv, then Google browser-use; legacy http is disabled")
     p_search.add_argument("--fetch", action="store_true", help="Fetch and store readable page text for each hit")
     p_search.add_argument("--require-online", action="store_true", help="Return non-zero if no online source is written")
     p_search.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_serper_usage = sub.add_parser("serper-usage", help="Show Serper monthly usage meter")
+    p_serper_usage.add_argument("--month", default="", help="Usage month in YYYY-MM; defaults to current UTC month")
+    p_serper_usage.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     p_handoff = sub.add_parser("handoff-search", help="Generate human-in-the-loop search Markdown")
     p_handoff.add_argument("db_path", nargs="?", default="", help="Path to the SQLite database")
@@ -2852,6 +3878,233 @@ def build_parser() -> argparse.ArgumentParser:
     p_source_audit.add_argument("--ttl", type=int, default=900, help="Pane lease TTL for followup enqueue")
     p_source_audit.add_argument("--dry-run", action="store_true", help="Plan followup enqueue without mutating the queue")
     p_source_audit.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_plan = sub.add_parser("survey-plan", help="Plan a professor-grade survey")
+    p_survey_plan.add_argument("--brief", required=True, help="Survey topic/brief")
+    p_survey_plan.add_argument("--target-chars", type=int, default=50000)
+    p_survey_plan.add_argument("--audience", default="technical")
+    p_survey_plan.add_argument("--domain", default="ai")
+    p_survey_plan.add_argument("--run-id", default="")
+    p_survey_plan.add_argument("--output-dir", required=True)
+    p_survey_plan.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_pack = sub.add_parser("survey-pack", help="Build per-section survey evidence packs")
+    p_survey_pack.add_argument("--output-dir", required=True)
+    p_survey_pack.add_argument("--report-ast", default="")
+    p_survey_pack.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_write = sub.add_parser("survey-write-section", help="Write one survey section from its evidence pack")
+    p_survey_write.add_argument("--output-dir", required=True)
+    p_survey_write.add_argument("--section-id", required=True)
+    p_survey_write.add_argument("--draft-only", action="store_true")
+    p_survey_write.add_argument("--max-revisions", type=int, default=3)
+    p_survey_write.add_argument("--min-chars", type=int, default=1200)
+    p_survey_write.add_argument("--writer-backend", default="deterministic")
+    p_survey_write.add_argument("--writer-command", default="", help="Local command for --writer-backend local-command; receives prompt JSON on stdin and emits Markdown on stdout")
+    p_survey_write.add_argument("--writer-timeout", type=int, default=120)
+    p_survey_write.add_argument("--pane-target", default="", help="tmux pane target for --writer-backend pane-packet with --pane-send")
+    p_survey_write.add_argument("--pane-send", action="store_true", help="Actually send the pane packet to --pane-target via tmux send-keys")
+    p_survey_write.add_argument("--no-prompt-packet", action="store_true")
+    p_survey_write.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_run = sub.add_parser("survey-run-sections", help="Write ready survey sections through revision loops")
+    p_survey_run.add_argument("--output-dir", required=True)
+    p_survey_run.add_argument("--limit", type=int, default=3, help="Number of ready sections to process; 0 means all")
+    p_survey_run.add_argument("--max-revisions", type=int, default=3)
+    p_survey_run.add_argument("--min-chars", type=int, default=1200)
+    p_survey_run.add_argument("--writer-backend", default="deterministic")
+    p_survey_run.add_argument("--writer-command", default="", help="Local command for --writer-backend local-command; receives prompt JSON on stdin and emits Markdown on stdout")
+    p_survey_run.add_argument("--writer-timeout", type=int, default=120)
+    p_survey_run.add_argument("--pane-target", default="", help="tmux pane target for --writer-backend pane-packet with --pane-send")
+    p_survey_run.add_argument("--pane-send", action="store_true", help="Actually send the pane packet to --pane-target via tmux send-keys")
+    p_survey_run.add_argument("--no-prompt-packet", action="store_true")
+    p_survey_run.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_watch = sub.add_parser("survey-watch-responses", help="Finalize survey sections that already have pane/human response files")
+    p_survey_watch.add_argument("--output-dir", required=True)
+    p_survey_watch.add_argument("--limit", type=int, default=0, help="Number of response sections to process; 0 means all")
+    p_survey_watch.add_argument("--min-chars", type=int, default=1200)
+    p_survey_watch.add_argument("--round-index", type=int, default=0)
+    p_survey_watch.add_argument("--allow-pending", action="store_true", help="Return zero when no responses are ready yet")
+    p_survey_watch.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_watch_register = sub.add_parser("survey-watch-register", help="Register a survey run for periodic response watching")
+    p_survey_watch_register.add_argument("--output-dir", required=True)
+    p_survey_watch_register.add_argument("--config", default="", help="Watch config path; defaults to ~/.solar/harness/run/research-survey-watch.json")
+    p_survey_watch_register.add_argument("--limit", type=int, default=0, help="Number of response sections to process per tick; 0 means all")
+    p_survey_watch_register.add_argument("--min-chars", type=int, default=1200)
+    p_survey_watch_register.add_argument("--round-index", type=int, default=0)
+    p_survey_watch_register.add_argument("--disabled", action="store_true")
+    p_survey_watch_register.add_argument("--replace", action="store_true", help="Replace existing watch config instead of appending/upserting")
+    p_survey_watch_register.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_watch_tick = sub.add_parser("survey-watch-tick", help="Run one periodic survey response watcher tick")
+    p_survey_watch_tick.add_argument("--config", default="", help="Watch config path; defaults to ~/.solar/harness/run/research-survey-watch.json")
+    p_survey_watch_tick.add_argument("--allow-pending", action="store_true", help="Return zero when no responses are ready yet")
+    p_survey_watch_tick.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_rewrite_queue = sub.add_parser("survey-rewrite-queue", help="Build section rewrite queue from survey_section_scorecard.json")
+    p_survey_rewrite_queue.add_argument("--output-dir", required=True)
+    p_survey_rewrite_queue.add_argument("--max-severity", choices=["P0", "P1", "P2"], default="P1")
+    p_survey_rewrite_queue.add_argument("--min-risk-score", type=int, default=25)
+    p_survey_rewrite_queue.add_argument("--limit", type=int, default=0)
+    p_survey_rewrite_queue.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_rewrite_run = sub.add_parser("survey-rewrite-run", help="Consume survey_rewrite_queue.json and execute section rewrites")
+    p_survey_rewrite_run.add_argument("--output-dir", required=True)
+    p_survey_rewrite_run.add_argument("--limit", type=int, default=0, help="Number of rewrite queue items to process; 0 means all")
+    p_survey_rewrite_run.add_argument("--max-revisions", type=int, default=2)
+    p_survey_rewrite_run.add_argument("--min-chars", type=int, default=1200)
+    p_survey_rewrite_run.add_argument("--writer-backend", default="deterministic")
+    p_survey_rewrite_run.add_argument("--writer-command", default="", help="Local command for --writer-backend local-command; receives prompt JSON on stdin and emits Markdown on stdout")
+    p_survey_rewrite_run.add_argument("--writer-timeout", type=int, default=120)
+    p_survey_rewrite_run.add_argument("--pane-target", default="", help="tmux pane target for --writer-backend pane-packet with --pane-send")
+    p_survey_rewrite_run.add_argument("--pane-send", action="store_true", help="Actually send the pane packet to --pane-target via tmux send-keys")
+    p_survey_rewrite_run.add_argument("--no-prompt-packet", action="store_true")
+    p_survey_rewrite_run.add_argument("--no-build-queue", action="store_true", help="Fail empty if survey_rewrite_queue.json is missing instead of building it")
+    p_survey_rewrite_run.add_argument("--no-replace-final", action="store_true", help="Do not archive/remove existing final.md before rewrite")
+    p_survey_rewrite_run.add_argument("--allow-pending", action="store_true", help="Return zero when all processed rewrites are waiting for human/pane response")
+    p_survey_rewrite_run.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_auto_repair = sub.add_parser("survey-auto-repair", help="Strict-eval survey, rewrite failed sections, then re-eval")
+    p_survey_auto_repair.add_argument("--output-dir", required=True)
+    p_survey_auto_repair.add_argument("--max-passes", type=int, default=2)
+    p_survey_auto_repair.add_argument("--limit", type=int, default=0, help="Number of rewrite queue items to process per pass; 0 means all")
+    p_survey_auto_repair.add_argument("--max-revisions", type=int, default=2)
+    p_survey_auto_repair.add_argument("--min-chars", type=int, default=1200)
+    p_survey_auto_repair.add_argument("--min-finalized", type=int, default=None)
+    p_survey_auto_repair.add_argument("--require-complete", action="store_true")
+    p_survey_auto_repair.add_argument("--max-severity", choices=["P0", "P1", "P2"], default="P1")
+    p_survey_auto_repair.add_argument("--min-risk-score", type=int, default=25)
+    p_survey_auto_repair.add_argument("--writer-backend", default="deterministic")
+    p_survey_auto_repair.add_argument("--writer-command", default="", help="Local command for --writer-backend local-command; receives prompt JSON on stdin and emits Markdown on stdout")
+    p_survey_auto_repair.add_argument("--writer-timeout", type=int, default=120)
+    p_survey_auto_repair.add_argument("--pane-target", default="", help="tmux pane target for --writer-backend pane-packet with --pane-send")
+    p_survey_auto_repair.add_argument("--pane-send", action="store_true", help="Actually send the pane packet to --pane-target via tmux send-keys")
+    p_survey_auto_repair.add_argument("--no-prompt-packet", action="store_true")
+    p_survey_auto_repair.add_argument("--allow-pending", action="store_true", help="Return zero when repair is waiting for human/pane response")
+    p_survey_auto_repair.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_finalize = sub.add_parser("survey-finalize-run", help="Run survey plan/pack/write/eval/auto-repair/compile as one pipeline")
+    p_survey_finalize.add_argument("--output-dir", required=True)
+    p_survey_finalize.add_argument("--brief", default="")
+    p_survey_finalize.add_argument("--target-chars", type=int, default=50000)
+    p_survey_finalize.add_argument("--audience", default="technical")
+    p_survey_finalize.add_argument("--domain", default="ai")
+    p_survey_finalize.add_argument("--run-id", default="")
+    p_survey_finalize.add_argument("--section-limit", type=int, default=3, help="Number of ready sections to write before eval; 0 means all")
+    p_survey_finalize.add_argument("--repair-limit", type=int, default=0, help="Number of rewrite queue items per auto-repair pass; 0 means all")
+    p_survey_finalize.add_argument("--max-revisions", type=int, default=3)
+    p_survey_finalize.add_argument("--repair-passes", type=int, default=2)
+    p_survey_finalize.add_argument("--min-chars", type=int, default=1200)
+    p_survey_finalize.add_argument("--min-finalized", type=int, default=None)
+    p_survey_finalize.add_argument("--require-complete", action="store_true")
+    p_survey_finalize.add_argument("--writer-backend", default="deterministic")
+    p_survey_finalize.add_argument("--writer-command", default="", help="Local command for --writer-backend local-command; receives prompt JSON on stdin and emits Markdown on stdout")
+    p_survey_finalize.add_argument("--writer-timeout", type=int, default=120)
+    p_survey_finalize.add_argument("--pane-target", default="", help="tmux pane target for --writer-backend pane-packet with --pane-send")
+    p_survey_finalize.add_argument("--pane-send", action="store_true", help="Actually send the pane packet to --pane-target via tmux send-keys")
+    p_survey_finalize.add_argument("--no-prompt-packet", action="store_true")
+    p_survey_finalize.add_argument("--skip-plan", action="store_true")
+    p_survey_finalize.add_argument("--skip-pack", action="store_true")
+    p_survey_finalize.add_argument("--allow-source-gap", action="store_true", help="Continue even when source/evidence/claim ledgers are below survey thresholds")
+    p_survey_finalize.add_argument("--min-sources", type=int, default=4)
+    p_survey_finalize.add_argument("--min-evidence", type=int, default=8)
+    p_survey_finalize.add_argument("--min-claims", type=int, default=8)
+    p_survey_finalize.add_argument("--allow-incomplete", action="store_true", help="Return zero even if final strict eval fails")
+    p_survey_finalize.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_import = sub.add_parser("survey-import-search-results", help="Import human/Gemini/GPT survey search Markdown into ledger JSONL files")
+    p_survey_import.add_argument("--output-dir", required=True)
+    p_survey_import.add_argument("--input-md", required=True)
+    p_survey_import.add_argument("--continue-finalize", action="store_true")
+    p_survey_import.add_argument("--brief", default="")
+    p_survey_import.add_argument("--target-chars", type=int, default=50000)
+    p_survey_import.add_argument("--audience", default="technical")
+    p_survey_import.add_argument("--domain", default="ai")
+    p_survey_import.add_argument("--run-id", default="")
+    p_survey_import.add_argument("--section-limit", type=int, default=3)
+    p_survey_import.add_argument("--repair-limit", type=int, default=0)
+    p_survey_import.add_argument("--min-finalized", type=int, default=None)
+    p_survey_import.add_argument("--min-chars", type=int, default=1200)
+    p_survey_import.add_argument("--require-complete", action="store_true", help="Require every planned section plus final quality gate when --continue-finalize is used")
+    p_survey_import.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_status_next = sub.add_parser("survey-status-next-action", help="Show the next actionable step for a survey DeepResearch output directory")
+    p_survey_status_next.add_argument("--output-dir", required=True)
+    p_survey_status_next.add_argument("--brief", default="")
+    p_survey_status_next.add_argument("--returned-md", default="", help="Returned external search Markdown path; defaults to <output-dir>/returned_sources.md")
+    p_survey_status_next.add_argument("--require-complete", action="store_true", help="Include complete-survey next-action hints")
+    p_survey_status_next.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_continue = sub.add_parser("survey-continue", help="Safely continue a survey DeepResearch run until done or a human/source-gap pause")
+    p_survey_continue.add_argument("--output-dir", required=True)
+    p_survey_continue.add_argument("--brief", default="")
+    p_survey_continue.add_argument("--returned-md", default="", help="Returned external search Markdown path; defaults to <output-dir>/returned_sources.md")
+    p_survey_continue.add_argument("--max-steps", type=int, default=4)
+    p_survey_continue.add_argument("--target-chars", type=int, default=50000)
+    p_survey_continue.add_argument("--audience", default="technical")
+    p_survey_continue.add_argument("--domain", default="ai")
+    p_survey_continue.add_argument("--section-limit", type=int, default=3)
+    p_survey_continue.add_argument("--repair-limit", type=int, default=0)
+    p_survey_continue.add_argument("--min-finalized", type=int, default=None)
+    p_survey_continue.add_argument("--min-chars", type=int, default=1200)
+    p_survey_continue.add_argument("--require-complete", action="store_true", help="Require every planned section plus final quality gate before completion")
+    p_survey_continue.add_argument("--allow-pending", action="store_true", help="Return zero when safely paused for source search or writer response")
+    p_survey_continue.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_review = sub.add_parser("survey-review", help="Run non-strict survey review")
+    p_survey_review.add_argument("--output-dir", required=True)
+    p_survey_review.add_argument("--min-finalized", type=int, default=None)
+    p_survey_review.add_argument("--require-complete", action="store_true")
+    p_survey_review.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_compile = sub.add_parser("survey-compile", help="Compile survey section artifacts")
+    p_survey_compile.add_argument("--output-dir", required=True)
+    p_survey_compile.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_chief = sub.add_parser("survey-chief-editor", help="Rewrite human_final.md with a chief-editor backend")
+    p_survey_chief.add_argument("--output-dir", required=True)
+    p_survey_chief.add_argument("--source-path", default="", help="Defaults to <output-dir>/human_final.md")
+    p_survey_chief.add_argument("--output-path", default="", help="Defaults to <output-dir>/chief_editor_final.md")
+    p_survey_chief.add_argument("--backend", default="claude-cli", choices=["claude-cli", "opus", "claude", "local-command", "command", "deterministic"])
+    p_survey_chief.add_argument("--model", default="opus", help="Claude CLI model alias, e.g. opus")
+    p_survey_chief.add_argument("--fallback-models", default="", help="Comma/space-separated Claude CLI fallback models, e.g. sonnet")
+    p_survey_chief.add_argument("--command", default="", help="Local command for --backend local-command; receives chapter prompt on stdin")
+    p_survey_chief.add_argument("--timeout", type=int, default=240)
+    p_survey_chief.add_argument("--max-budget-usd", type=float, default=3.0)
+    p_survey_chief.add_argument("--min-chars", type=int, default=8000)
+    p_survey_chief.add_argument("--require-hitl", action="store_true", help="Require chief_editor_approval.txt containing APPROVED")
+    p_survey_chief.add_argument("--allow-pending", action="store_true", help="Return zero when waiting for HITL approval")
+    p_survey_chief.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_doctor = sub.add_parser("survey-doctor", help="Preflight DeepResearch model and source-search readiness")
+    p_survey_doctor.add_argument("--model", default="opus", help="Claude CLI model alias or full model ID to probe")
+    p_survey_doctor.add_argument("--model-candidates", default="", help="Comma/space-separated fallback model candidates to probe")
+    p_survey_doctor.add_argument("--timeout", type=int, default=45)
+    p_survey_doctor.add_argument("--query", default="agentic runtime durable execution", help="Probe query for live search checks")
+    p_survey_doctor.add_argument("--live-search", action="store_true", help="Run live Google/arXiv search probes")
+    p_survey_doctor.add_argument("--skip-model", action="store_true", help="Skip Claude CLI model probe")
+    p_survey_doctor.add_argument("--require-serper", action="store_true", help="Treat missing or failed Serper search as error")
+    p_survey_doctor.add_argument("--require-google", action="store_true", help="Treat missing Google CSE config as error")
+    p_survey_doctor.add_argument("--require-arxiv", action="store_true", help="Treat failed arXiv live probe as error")
+    p_survey_doctor.add_argument("--allow-pending", action="store_true", help="Return zero when only pending checks remain")
+    p_survey_doctor.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_eval = sub.add_parser("survey-eval", help="Evaluate professor-grade survey readiness")
+    p_survey_eval.add_argument("--output-dir", required=True)
+    p_survey_eval.add_argument("--strict", action="store_true")
+    p_survey_eval.add_argument("--min-finalized", type=int, default=None)
+    p_survey_eval.add_argument("--require-complete", action="store_true")
+    p_survey_eval.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_diagnose = sub.add_parser("survey-diagnose", help="Diagnose survey quality issues and next actions")
+    p_survey_diagnose.add_argument("--output-dir", required=True)
+    p_survey_diagnose.add_argument("--strict", action="store_true", default=True)
+    p_survey_diagnose.add_argument("--min-finalized", type=int, default=None)
+    p_survey_diagnose.add_argument("--require-complete", action="store_true", default=True)
+    p_survey_diagnose.add_argument("--write-md", action="store_true", help="Write survey_diagnosis.md next to survey artifacts")
+    p_survey_diagnose.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     return parser
 
