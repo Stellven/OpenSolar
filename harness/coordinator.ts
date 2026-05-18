@@ -57,10 +57,10 @@ const ENABLED_FLAG = join(HARNESS_DIR, "coordinator-ts-enabled");
 const SESSION_NAME = "solar-harness";
 
 const PANE = {
-  PLANNER: `${SESSION_NAME}:0.0`,
-  BUILDER: `${SESSION_NAME}:0.1`,
-  EVALUATOR: `${SESSION_NAME}:0.2`,
-  MONITOR: `${SESSION_NAME}:0.3`,
+  PM: `${SESSION_NAME}:0.0`,
+  PLANNER: `${SESSION_NAME}:0.1`,
+  BUILDER: `${SESSION_NAME}:0.2`,
+  EVALUATOR: `${SESSION_NAME}:0.3`,
 };
 
 // ── 日志 ──
@@ -124,13 +124,14 @@ function getFileMtime(): number {
 
 function getTargetPane(state: string): string {
   switch (state) {
-    case "active": return PANE.BUILDER;
-    case "planning": return PANE.BUILDER;
-    case "approved": return PANE.EVALUATOR;
+    case "drafting": return PANE.PM;
+    case "active": return PANE.PLANNER;
+    case "planning": return PANE.EVALUATOR;
+    case "approved": return PANE.BUILDER;
     case "reviewing": return PANE.EVALUATOR;
-    case "passed": return PANE.PLANNER;
+    case "passed": return PANE.PM;
     case "failed": return PANE.BUILDER;
-    default: return PANE.PLANNER;
+    default: return PANE.PM;
   }
 }
 
@@ -161,8 +162,8 @@ function dispatchToPane(pane: string, message: string, sid: string): boolean {
   const shortCmd = `读取并执行 ${instructionFile}`;
 
   try {
-    // D3: pre-unlock for builder/evaluator panes
-    if (/\.(1|2)$/.test(pane)) {
+    // D3: pre-unlock for builder/evaluator panes in the current 4-pane layout.
+    if (pane === PANE.BUILDER || pane === PANE.EVALUATOR) {
       execSync(`tmux send-keys -t ${pane} Escape 2>/dev/null`, { timeout: 3000 });
       execSync(`tmux send-keys -t ${pane} C-u 2>/dev/null`, { timeout: 3000 });
     }
