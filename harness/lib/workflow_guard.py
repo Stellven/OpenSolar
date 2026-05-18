@@ -204,6 +204,8 @@ def route(sid: str) -> dict[str, Any]:
     design = SPRINTS_DIR / f"{sid}.design.md"
     plan = SPRINTS_DIR / f"{sid}.plan.md"
     graph = SPRINTS_DIR / f"{sid}.task_graph.json"
+    prd_html = SPRINTS_DIR / f"{sid}.prd.html"
+    planning_html = SPRINTS_DIR / f"{sid}.planning.html"
     handoff = SPRINTS_DIR / f"{sid}.handoff.md"
     eval_md = SPRINTS_DIR / f"{sid}.eval.md"
 
@@ -215,6 +217,8 @@ def route(sid: str) -> dict[str, Any]:
         "product_brief": _nonempty(product_brief),
         "design": _nonempty(design),
         "plan": _nonempty(plan),
+        "prd_html": _nonempty(prd_html),
+        "planning_html": _nonempty(planning_html),
         "task_graph": graph_ok,
         "task_graph_parent_ready": graph_parent_ready,
         "handoff": _nonempty(handoff),

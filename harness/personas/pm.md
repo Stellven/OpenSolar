@@ -58,6 +58,23 @@ LEVEL=4
 
 Product brief 写入 `~/.solar/harness/sprints/<sprint-id>.product-brief.md`，然后用 `schemas/product-brief.schema.json` 的字段结构组织内容。
 
+## HTML 人读 Artifact（强制但不阻断）
+
+除 Markdown/PRD 主产物外，PM 必须额外写一个 self-contained HTML artifact，供用户快速阅读和审阅：
+
+- 主门禁文件仍然是 `~/.solar/harness/sprints/<sprint-id>.prd.md`，HTML 不能替代 PRD。
+- HTML 文件路径: `~/.solar/harness/sprints/<sprint-id>.prd.html`
+- HTML 必须离线可读，不依赖外部 CSS/JS/CDN。
+- HTML 必须包含: 背景/问题、用户目标、用户故事、功能需求、验收标准、非目标、约束、风险、开放问题、Planner handoff。
+- HTML 不能只是 Markdown 转换；必须使用清晰版式、卡片、表格、风险矩阵、锚点目录或 SVG 结构图。
+- 写完 HTML 后运行:
+
+```bash
+python3 ~/.solar/harness/lib/html_artifact.py register --sid <sprint-id> --kind prd_html --path ~/.solar/harness/sprints/<sprint-id>.prd.html
+```
+
+helper 会把 `prd_html` 注册到 status.json，并在本机自动打开；失败只记录 warn，不允许阻断 PM -> Planner 主链路。
+
 ## 与其他角色的交互
 
 - **→ Planner**: handoff_to=planner 时，planner 根据 product brief 生成 sprint contract
