@@ -2053,6 +2053,104 @@ td {
   align-items: flex-start;
   margin-bottom: 0.65rem;
 }
+.research-shell {
+  display: grid;
+  gap: 0.9rem;
+}
+.research-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
+  gap: 0.6rem;
+}
+.research-stat {
+  border: 1px solid rgba(62, 107, 179, 0.18);
+  border-radius: 18px;
+  padding: 0.75rem 0.85rem;
+  background: linear-gradient(135deg, rgba(255,255,255,0.72), rgba(233,241,255,0.54));
+}
+.research-stat strong {
+  display: block;
+  margin-top: 0.18rem;
+  color: var(--accent-2);
+  font: 950 1.1rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+.research-run-list {
+  display: grid;
+  gap: 0.75rem;
+}
+.research-run-card {
+  border: 1px solid rgba(62, 107, 179, 0.20);
+  border-radius: 22px;
+  padding: 0.95rem;
+  background: rgba(255, 252, 244, 0.68);
+}
+.research-run-card.ok {
+  border-color: rgba(56, 128, 93, 0.30);
+  background: rgba(236, 247, 242, 0.72);
+}
+.research-run-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.8rem;
+  align-items: start;
+}
+.research-run-title {
+  font: 950 0.95rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+.research-run-sub {
+  margin-top: 0.18rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+.research-metric-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+  gap: 0.48rem;
+  margin-top: 0.8rem;
+}
+.research-metric {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0.55rem 0.62rem;
+  background: rgba(255, 255, 255, 0.48);
+}
+.research-metric b {
+  display: block;
+  margin-top: 0.12rem;
+  color: var(--ink);
+  font: 900 0.94rem ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.research-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.55rem;
+  margin-top: 0.8rem;
+}
+.research-paths {
+  margin-top: 0.75rem;
+  display: grid;
+  gap: 0.38rem;
+}
+.research-path {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.45rem 0.55rem;
+  background: rgba(255, 255, 255, 0.36);
+  color: var(--muted);
+  font: 800 0.72rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+.research-section-title {
+  margin: 0.35rem 0 0.55rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
 .copy-row {
   display: flex;
   flex-wrap: wrap;
@@ -2571,46 +2669,51 @@ function renderResearchStatus(research, compact) {
   const runs = research.runs || [];
   const gates = research.quality_gates || [];
   if (!runs.length && !gates.length) {
-    return '<div class="health-metrics">' +
-      '<div class="mini-metric"><div class="kv-label">Status</div><span class="num">idle</span></div>' +
-      '<div class="mini-metric"><div class="kv-label">Runs</div><span class="num">0</span></div>' +
-      '</div><div class="muted">还没有可展示的 DeepResearch research_eval 产物。</div>';
+    return '<div class="research-shell">' +
+      '<div class="research-overview">' +
+        '<div class="research-stat"><div class="kv-label">Status</div><strong>idle</strong></div>' +
+        '<div class="research-stat"><div class="kv-label">Runs</div><strong>0</strong></div>' +
+      '</div><div class="muted">还没有可展示的 DeepResearch research_eval 产物。</div></div>';
   }
-  const visible = compact ? runs.slice(-2) : runs;
+  const latest = runs[runs.length - 1] || {};
+  const latestCitation = latest.citation_accuracy == null ? 'N/A' : Math.round((latest.citation_accuracy || 0) * 100) + '%';
+  const visible = compact ? runs.slice(-1) : runs;
   const cards = visible.map(run => {
     const artifacts = run.artifacts || {};
     const exists = run.artifact_exists || {};
     const status = run.status || 'unknown';
     const ok = status === 'passed';
-    return '<div class="human-search-item ' + (ok ? 'ready' : '') + '">' +
-      '<div class="human-search-title"><div><strong>' + esc(run.run_id || run.sid || '-') + '</strong>' +
-      '<div class="muted">' + esc(run.sid || '-') + '</div></div><div>' + statusBadge(ok ? 'ok' : 'warn') + '</div></div>' +
-      '<div class="health-metrics">' +
-        '<div class="mini-metric"><div class="kv-label">Sources</div><span class="num">' + esc(run.source_count || 0) + '</span></div>' +
-        '<div class="mini-metric"><div class="kv-label">Evidence</div><span class="num">' + esc(run.evidence_count || 0) + '</span></div>' +
-        '<div class="mini-metric"><div class="kv-label">Claims</div><span class="num">' + esc(run.claim_count || 0) + '</span></div>' +
-        '<div class="mini-metric"><div class="kv-label">Citation</div><span class="num">' + esc(Math.round((run.citation_accuracy || 0) * 100)) + '%</span></div>' +
-        '<div class="mini-metric"><div class="kv-label">Words</div><span class="num">' + esc(run.word_count ?? 'N/A') + '</span></div>' +
-        '<div class="mini-metric"><div class="kv-label">Tokens</div><span class="num">' + esc(run.total_tokens ?? 'N/A') + '</span></div>' +
+    const citation = run.citation_accuracy == null ? 'N/A' : Math.round((run.citation_accuracy || 0) * 100) + '%';
+    return '<div class="research-run-card ' + (ok ? 'ok' : '') + '">' +
+      '<div class="research-run-head">' +
+        '<div><div class="research-run-title">' + esc(run.run_id || run.sid || '-') + '</div>' +
+        '<div class="research-run-sub">' + esc(run.sid || '-') + '</div></div>' +
+        '<div>' + statusBadge(ok ? 'ok' : 'warn') + '</div>' +
       '</div>' +
-      (compact ? '' : '<div class="kv-grid">' +
-        kv('Final MD', exists.final_md ? 'exists' : 'missing') +
-        kv('ReportAST', exists.report_ast ? 'exists' : 'missing') +
-        kv('Eval JSON', exists.eval_json ? 'exists' : 'missing') +
+      '<div class="research-metric-row">' +
+        '<div class="research-metric"><div class="kv-label">Words</div><b>' + esc(run.word_count ?? 'N/A') + '</b></div>' +
+        '<div class="research-metric"><div class="kv-label">Tokens</div><b>' + esc(run.total_tokens ?? 'N/A') + '</b></div>' +
+        '<div class="research-metric"><div class="kv-label">Citation</div><b>' + esc(citation) + '</b></div>' +
+        '<div class="research-metric"><div class="kv-label">Sources</div><b>' + esc(run.source_count || 0) + '</b></div>' +
+      '</div>' +
+      (compact ? '' : '<div class="research-detail-grid">' +
+        kv('Evidence', run.evidence_count || 0) +
+        kv('Claims', run.claim_count || 0) +
         kv('AST Sections', run.report_ast_sections || 0) +
         kv('Usage Source', run.usage_source || 'N/A') +
         kv('Estimated', run.estimated === null || run.estimated === undefined ? 'N/A' : String(run.estimated)) +
         kv('State', run.state || 'unknown') +
         '<div><div class="kv-label">Fallback</div>' + fallbackBadge(run.fallback_level) + '</div>' +
-      '</div><pre class="codebox" style="margin-top:.7rem">' +
-        'final.md: ' + esc(artifacts.final_md || '-') + '\\n' +
-        'report_ast: ' + esc(artifacts.report_ast || '-') + '\\n' +
-        'eval: ' + esc(artifacts.eval_json || '-') + '</pre>') +
-      '<div class="copy-row">' +
+        kv('Final MD', exists.final_md ? 'exists' : 'missing') +
+      '</div><div class="research-paths">' +
+        '<div class="research-path">final.md: ' + esc(artifacts.final_md || '-') + '</div>' +
+        '<div class="research-path">report_ast: ' + esc(artifacts.report_ast || '-') + '</div>' +
+        '<div class="research-path">eval: ' + esc(artifacts.eval_json || '-') + '</div>' +
+      '</div><div class="copy-row">' +
         '<button class="btn" data-copy="' + esc(artifacts.final_md || '') + '" onclick="copyText(this.dataset.copy)">复制 final.md</button>' +
         '<button class="btn" data-copy="' + esc(artifacts.report_ast || '') + '" onclick="copyText(this.dataset.copy)">复制 ReportAST</button>' +
         '<button class="btn primary" data-copy="' + esc(artifacts.eval_json || '') + '" onclick="copyText(this.dataset.copy)">复制 Eval JSON</button>' +
-      '</div>' +
+      '</div>') +
     '</div>';
   }).join('');
   const visibleGates = compact ? gates.slice(-3) : gates;
@@ -2630,11 +2733,19 @@ function renderResearchStatus(research, compact) {
         (errors ? '<pre class="codebox" style="margin-top:.7rem">' + esc(errors) + '</pre>' : '')) +
     '</div>';
   }).join('');
-  return '<div class="health-metrics">' +
-    '<div class="mini-metric"><div class="kv-label">Status</div><span class="num">' + esc(research.status || 'unknown') + '</span></div>' +
-    '<div class="mini-metric"><div class="kv-label">Runs</div><span class="num">' + esc(research.count || runs.length) + '</span></div>' +
-    '<div class="mini-metric"><div class="kv-label">Gates</div><span class="num">' + esc(gates.length) + '</span></div>' +
-    '</div><div class="human-search-grid">' + cards + gateCards + '</div>';
+  return '<div class="research-shell">' +
+    '<div class="research-overview">' +
+      '<div class="research-stat"><div class="kv-label">Status</div><strong>' + esc(research.status || 'unknown') + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Runs</div><strong>' + esc(research.count || runs.length) + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Latest Words</div><strong>' + esc(latest.word_count ?? 'N/A') + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Latest Tokens</div><strong>' + esc(latest.total_tokens ?? 'N/A') + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Citation</div><strong>' + esc(latestCitation) + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Fallback</div><strong>' + esc(latest.fallback_level || 'N/A') + '</strong></div>' +
+    '</div>' +
+    '<div class="research-section-title">' + (compact ? 'Latest Run' : 'Research Runs') + '</div>' +
+    '<div class="research-run-list">' + cards + '</div>' +
+    (gateCards ? '<div class="research-section-title">Quality Gates</div><div class="human-search-grid">' + gateCards + '</div>' : '') +
+    '</div>';
 }
 function renderKnowledgeSummary(wiki, mirage) {
   const wikiReady = !!(wiki && wiki.ready);
