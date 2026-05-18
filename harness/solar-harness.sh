@@ -1932,6 +1932,13 @@ do_main_status() {
   else
     printf '%s\n' "layout: error expected=${EXPECTED_PRODUCT_DELIVERY_PANES} actual=${physical_panes}"
   fi
+  local route_out route_rc route_status
+  route_out="$(models_live_route_check 2>&1)" || route_rc=$?
+  route_rc="${route_rc:-0}"
+  route_status="ok"
+  [[ "$route_rc" -eq 1 ]] && route_status="error"
+  [[ "$route_rc" -eq 2 ]] && route_status="warn"
+  printf '%s\n' "route: ${route_status} $(printf '%s' "$route_out" | tail -1)"
   printf '%s\n' ""
   printf '┌────────────┬────────────┬──────────────┬────────────────────────────┬─────────────────────┬────────────────────────────┐\n'
   printf '│ Pane       │ Role       │ Runtime      │ Assignment                 │ Artifact            │ Title                      │\n'
