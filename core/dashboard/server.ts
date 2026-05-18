@@ -1132,6 +1132,27 @@ const server = Bun.serve({
       }
     }
 
+    // S04: /research/:sid — proxy to status-server
+    const researchMatch = url.pathname.match(/^\/research\/(.+)$/);
+    if (researchMatch) {
+      const sid = researchMatch[1];
+      const statusServerPort = Number(process.env.STATUS_SERVER_PORT || 8765);
+      const upstreamUrl = `http://127.0.0.1:${statusServerPort}/research/${encodeURIComponent(sid)}`;
+      try {
+        const upstream = await fetch(upstreamUrl, { signal: AbortSignal.timeout(10000) });
+        const body = await upstream.text();
+        return new Response(body, {
+          status: upstream.status,
+          headers: { ...corsHeaders, "Content-Type": upstream.headers.get("Content-Type") || "application/json" },
+        });
+      } catch (err) {
+        return Response.json(
+          { ok: false, error: "status-server unavailable", detail: err instanceof Error ? err.message : String(err) },
+          { headers: corsHeaders, status: 503 },
+        );
+      }
+    }
+
     // 主页面（旧）
     if (url.pathname === "/" || url.pathname === "/dashboard") {
       return new Response(DASHBOARD_FILE, {

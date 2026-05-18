@@ -2292,6 +2292,82 @@ def scan_once(args: argparse.Namespace, state: dict) -> dict:
     return payload
 
 
+def epic_status_matrix(epic_id: str = "", output_json: bool = False) -> int:
+    """Print epic child sprint state matrix (S04 --epic-status-matrix subcommand).
+
+    Reads all sprint-*.status.json files and outputs a markdown table with
+    sprint_id / status / phase / handoff_to / blocked_by / capability columns.
+    With --json outputs a jq-parsable JSON object.
+    """
+    rows: list[dict] = []
+    for status_path in sorted(SPRINTS.glob("sprint-*.status.json")):
+        try:
+            data = json.loads(status_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+
+        sid = str(data.get("sprint_id") or data.get("id") or status_path.name.removesuffix(".status.json"))
+        sprint_epic = str(data.get("epic_id") or "")
+
+        if epic_id and sprint_epic != epic_id:
+            continue
+
+        status_val = str(data.get("status") or "")
+        phase_val = str(data.get("phase") or "")
+        handoff_to = str(data.get("handoff_to") or "")
+
+        # blocked_by: from last history entry that has blocked_by
+        blocked_by = ""
+        for entry in reversed(data.get("history") or []):
+            if isinstance(entry, dict) and entry.get("blocked_by"):
+                blockers = entry["blocked_by"]
+                blocked_by = ", ".join(str(b) for b in blockers) if isinstance(blockers, list) else str(blockers)
+                break
+
+        # capability: from task_graph.json required_capabilities (first node)
+        capability = ""
+        task_graph_path = status_path.parent / status_path.name.replace(".status.json", ".task_graph.json")
+        if task_graph_path.exists():
+            try:
+                graph = json.loads(task_graph_path.read_text(encoding="utf-8"))
+                nodes = graph.get("nodes") or []
+                caps: list[str] = []
+                for node in nodes[:3]:
+                    for cap in (node.get("required_capabilities") or [])[:2]:
+                        if cap and cap not in caps:
+                            caps.append(str(cap))
+                capability = "; ".join(caps[:3])
+            except Exception:
+                pass
+
+        rows.append({
+            "sprint_id": sid,
+            "status": status_val,
+            "phase": phase_val,
+            "handoff_to": handoff_to,
+            "blocked_by": blocked_by,
+            "capability": capability,
+            "epic_id": sprint_epic,
+        })
+
+    if output_json:
+        print(json.dumps({"ok": True, "count": len(rows), "rows": rows}, ensure_ascii=False, indent=2))
+        return 0
+
+    # Markdown table output
+    header = "| sprint_id | status | phase | handoff_to | blocked_by | capability |"
+    sep    = "|-----------|--------|-------|------------|------------|------------|"
+    print(header)
+    print(sep)
+    for row in rows:
+        sid_short = row["sprint_id"][-40:] if len(row["sprint_id"]) > 40 else row["sprint_id"]
+        print(
+            f"| {sid_short} | {row['status']} | {row['phase']} | {row['handoff_to']}"
+            f" | {row['blocked_by'] or '—'} | {row['capability'] or '—'} |"
+        )
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true")
@@ -2303,7 +2379,14 @@ def main() -> int:
     parser.add_argument("--cooldown", type=int, default=300, help="seconds between repeated actions for same finding")
     parser.add_argument("--stall-seconds", type=int, default=180, help="pane unchanged seconds before compact/stall recovery")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--epic-status-matrix", action="store_true", dest="epic_status_matrix",
+                        help="Print epic child sprint state matrix and exit")
+    parser.add_argument("--epic", default="", help="Filter --epic-status-matrix by epic_id")
     args = parser.parse_args()
+
+    # S04: early exit for epic-status-matrix subcommand (does not enter main loop)
+    if args.epic_status_matrix:
+        return epic_status_matrix(epic_id=args.epic, output_json=args.json)
     if args.once:
         args.loop = False
 
