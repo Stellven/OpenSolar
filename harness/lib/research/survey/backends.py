@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -164,6 +166,7 @@ class PanePacketSurveyWriterBackend:
     def _send_to_pane(self, dispatch: Path, response: Path) -> bool:
         if not self.pane_target.strip():
             raise LocalCommandWriterError("pane_target_missing")
+        self._guard_pane_target()
         prompt = f"读取并执行 {dispatch}; 完成后只把正文写入 {response}"
         try:
             result = subprocess.run(
@@ -179,6 +182,32 @@ class PanePacketSurveyWriterBackend:
             stderr = (result.stderr or "").strip().replace("\n", " ")[:500]
             raise LocalCommandWriterError(f"pane_send_exit_{result.returncode}:{stderr}")
         return True
+
+    def _guard_pane_target(self) -> None:
+        if os.environ.get("SOLAR_ALLOW_MAIN_PANE_SURVEY_SEND") == "1":
+            return
+        try:
+            result = subprocess.run(
+                ["tmux", "display-message", "-p", "-t", self.pane_target, "#{session_name}\t#{pane_title}"],
+                text=True,
+                capture_output=True,
+                timeout=self.timeout_seconds,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise LocalCommandWriterError(f"pane_target_probe_timeout:{self.timeout_seconds}") from exc
+        if result.returncode != 0:
+            stderr = (result.stderr or "").strip().replace("\n", " ")[:500]
+            raise LocalCommandWriterError(f"pane_target_probe_exit_{result.returncode}:{stderr}")
+        raw = (result.stdout or "").strip()
+        session, _, title = raw.partition("\t")
+        title = title.strip()
+        if session == "solar-harness" and not re.search(r"\b(lab-builder|Builder [1-4])\b", title):
+            raise LocalCommandWriterError(
+                f"pane_target_role_forbidden:{self.pane_target}:"
+                "survey pane-send must use lab-builder panes; "
+                "set SOLAR_ALLOW_MAIN_PANE_SURVEY_SEND=1 only for explicit manual override"
+            )
 
 
 def get_writer_backend(
