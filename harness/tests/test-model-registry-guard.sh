@@ -44,6 +44,7 @@ assert_contains "$HARNESS_DIR/solar-harness.sh" "claude_clean_env_prefix" "launc
 assert_contains "$HARNESS_DIR/pane-launcher.sh" "prepare_sanitized_claude_settings" "pane launcher sanitizes Claude settings"
 assert_contains "$HARNESS_DIR/pane-launcher.sh" "setting-sources" "pane launcher pins setting sources"
 assert_contains "$HARNESS_DIR/pane-launcher.sh" "data.pop(\"env\", None)" "pane launcher strips global Claude env overrides"
+assert_contains "$HARNESS_DIR/solar-harness.sh" "models_live_route_check" "models doctor checks live pane route"
 
 assert_not_contains "$HARNESS_DIR/solar-harness.sh" "models set-main <opus|sonnet>" "main model help does not advertise ambiguous bare sonnet"
 assert_not_contains "$HARNESS_DIR/solar-harness.sh" "glm,glm,glm,deepseek" "launcher has no legacy DeepSeek lab default"

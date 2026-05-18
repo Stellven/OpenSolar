@@ -2046,6 +2046,82 @@ do_lab_status() {
   printf '└───────────────┴──────────────┴──────────────┴─────────────────────┴────────────────────────────┘\n'
 }
 
+models_live_route_check() {
+  if ! command -v tmux >/dev/null 2>&1; then
+    printf 'skipped: tmux unavailable\n'
+    return 2
+  fi
+  if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+    printf 'skipped: session %s unavailable\n' "$SESSION_NAME"
+    return 2
+  fi
+
+  local panes pane_count errors checked
+  panes="$(tmux list-panes -t "$SESSION_NAME:0" -F '#{pane_index} #{pane_id}' 2>/dev/null || true)"
+  pane_count="$(printf '%s\n' "$panes" | awk 'NF {n++} END {print n+0}')"
+  if [[ "$pane_count" -lt "$EXPECTED_PRODUCT_DELIVERY_PANES" ]]; then
+    printf 'error: live layout has %s panes, expected %s\n' "$pane_count" "$EXPECTED_PRODUCT_DELIVERY_PANES"
+    return 1
+  fi
+
+  errors=0
+  checked=0
+  local index pane_id pane_safe persona configured expected_flag marker tail_text
+  for index in 0 1 2 3; do
+    case "$index" in
+      0) persona="pm" ;;
+      1) persona="planner" ;;
+      2) persona="builder" ;;
+      3) persona="evaluator" ;;
+    esac
+    pane_id="$(printf '%s\n' "$panes" | awk -v idx="$index" '$1 == idx {print $2; exit}')"
+    if [[ -z "$pane_id" ]]; then
+      printf 'error: missing pane index %s\n' "$index"
+      errors=$((errors + 1))
+      continue
+    fi
+    checked=$((checked + 1))
+
+    configured="$(solar_persona_model "$persona" 2>/dev/null || printf 'N/A')"
+    expected_flag="$(solar_model_flag "$configured" 2>/dev/null || true)"
+    pane_safe="${pane_id//[^A-Za-z0-9_.-]/_}"
+    marker="$HARNESS_DIR/run/pane-env/${pane_safe}.json"
+    if [[ -f "$marker" && -n "$expected_flag" ]]; then
+      local marker_flag
+      marker_flag="$(python3 - "$marker" <<'PY' 2>/dev/null || true
+import json, sys
+print(json.load(open(sys.argv[1], encoding="utf-8")).get("model_flag", ""))
+PY
+)"
+      if [[ -n "$marker_flag" && "$marker_flag" != "$expected_flag" ]]; then
+        printf 'error: pane%d %s marker model_flag=%s expected=%s\n' "$index" "$persona" "$marker_flag" "$expected_flag"
+        errors=$((errors + 1))
+      fi
+    fi
+
+    tail_text="$(tmux capture-pane -t "$SESSION_NAME:0.$index" -p -S -80 2>/dev/null | tail -80 || true)"
+    if [[ "$configured" == "claude-opus" && "$tail_text" == *"API Usage Billing"* ]]; then
+      printf 'error: pane%d %s configured Opus but live banner is API Usage Billing\n' "$index" "$persona"
+      errors=$((errors + 1))
+    fi
+    if [[ "$tail_text" == *"API Error: 400"* && "$tail_text" == *"1210"* ]]; then
+      if [[ "$tail_text" == *"API Usage Billing"* ]]; then
+        printf 'error: pane%d %s live output contains API Usage Billing plus API 400 code=1210\n' "$index" "$persona"
+      else
+        printf 'error: pane%d %s live output contains API 400 code=1210\n' "$index" "$persona"
+      fi
+      errors=$((errors + 1))
+    fi
+  done
+
+  if [[ "$errors" -gt 0 ]]; then
+    printf 'checked=%s errors=%s\n' "$checked" "$errors"
+    return 1
+  fi
+  printf 'checked=%s errors=0\n' "$checked"
+  return 0
+}
+
 do_models_command() {
   local subcmd="${1:-show}"
   shift || true
@@ -2112,32 +2188,41 @@ do_models_command() {
     doctor)
       local guard="$HARNESS_DIR/tests/test-model-registry-guard.sh"
       local single="$HARNESS_DIR/tests/test-model-config-single-source.sh"
-      local guard_out single_out guard_rc single_rc overall
+      local live_out guard_out single_out live_rc guard_rc single_rc overall live_status
+      live_out="$(mktemp)"
       guard_out="$(mktemp)"
       single_out="$(mktemp)"
+      live_rc=0
       guard_rc=0
       single_rc=0
+      models_live_route_check >"$live_out" 2>&1 || live_rc=$?
       bash "$guard" >"$guard_out" 2>&1 || guard_rc=$?
       bash "$single" >"$single_out" 2>&1 || single_rc=$?
       overall="ok"
-      [[ "$guard_rc" -eq 0 && "$single_rc" -eq 0 ]] || overall="error"
+      [[ "$guard_rc" -eq 0 && "$single_rc" -eq 0 && "$live_rc" -ne 1 ]] || overall="error"
+      live_status="ok"
+      [[ "$live_rc" -eq 1 ]] && live_status="error"
+      [[ "$live_rc" -eq 2 ]] && live_status="warn"
       printf '┌──────────────────────────────┬────────┬────────────────────────────────────┐\n'
       printf '│ %-28s │ %-6s │ %-34s │\n' "检查项" "状态" "证据"
       printf '├──────────────────────────────┼────────┼────────────────────────────────────┤\n'
+      printf '│ %-28s │ %-6s │ %-34s │\n' "live pane route" "$live_status" "$(tail -1 "$live_out" | cut -c1-34)"
       printf '│ %-28s │ %-6s │ %-34s │\n' "registry guard" "$([[ "$guard_rc" -eq 0 ]] && echo ok || echo error)" "$(tail -1 "$guard_out" | cut -c1-34)"
       printf '│ %-28s │ %-6s │ %-34s │\n' "model config single source" "$([[ "$single_rc" -eq 0 ]] && echo ok || echo error)" "$(tail -1 "$single_out" | cut -c1-34)"
       printf '│ %-28s │ %-6s │ %-34s │\n' "overall" "$overall" "$SOLAR_USER_CONFIG"
       printf '└──────────────────────────────┴────────┴────────────────────────────────────┘\n'
       if [[ "$overall" != "ok" ]]; then
         err "models doctor failed"
+        printf '\n--- live pane route ---\n'
+        cat "$live_out"
         printf '\n--- registry guard ---\n'
         cat "$guard_out"
         printf '\n--- model config ---\n'
         cat "$single_out"
-        rm -f "$guard_out" "$single_out"
+        rm -f "$live_out" "$guard_out" "$single_out"
         return 1
       fi
-      rm -f "$guard_out" "$single_out"
+      rm -f "$live_out" "$guard_out" "$single_out"
       ;;
     help|--help|-h)
       echo "Solar Harness Models"
