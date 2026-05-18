@@ -70,14 +70,21 @@ def test_compile_section_and_survey(tmp_path):
     assert (tmp_path / "survey_contribution_matrix.json").exists()
     assert (tmp_path / "survey_final_summary.json").exists()
     assert (tmp_path / "survey_human_final_summary.json").exists()
+    assert (tmp_path / "survey_execution_metrics.json").exists()
+    assert (tmp_path / "survey_human_execution_metrics.json").exists()
     assert (tmp_path / "chapters" / "ch01" / "editorial_review.json").exists()
     assert compiled["human_final_md"].endswith("human_final.md")
+    assert compiled["execution_metrics"]["document_word_count"] > 0
+    assert compiled["execution_metrics"]["total_token_consumption"] > 0
     final_text = (tmp_path / "final.md").read_text(encoding="utf-8")
     assert "## Executive Summary" in final_text
     assert "## Technical Summary" in final_text
     assert "## Contribution Matrix" in final_text
     assert "## Roadmap" in final_text
     assert "## Chapter Synthesis" in final_text
+    assert "## Execution Metrics" in final_text
+    assert "Total token consumption" in final_text
+    assert "Document word count" in final_text
     human_text = (tmp_path / "human_final.md").read_text(encoding="utf-8")
     assert "## Contribution Matrix" not in human_text
     assert "## Technical Summary" not in human_text
@@ -100,6 +107,7 @@ def test_compile_section_and_survey(tmp_path):
     assert human_summary["ok"] is True
     assert human_summary["template_heading_count"] == 0
     assert human_summary["char_count"] < len(final_text)
+    assert human_summary["execution_metrics"]["document_word_count"] > 0
 
 
 def test_deterministic_writer_outputs_professor_survey_scaffolds(tmp_path):
