@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 from .schemas import ChapterEditorialReview, SectionReview, to_dict
 from .writing_loop import run_section_revision_loop
@@ -65,6 +66,14 @@ def _source_type_counts(root: Path) -> dict[str, int]:
         source_type = str(row.get("source_type") or "unknown")
         counts[source_type] = counts.get(source_type, 0) + 1
     return counts
+
+
+def _source_lookup(root: Path) -> dict[str, dict[str, Any]]:
+    return {str(row.get("id") or row.get("source_id") or ""): row for row in _read_jsonl(root / "sources.jsonl")}
+
+
+def _evidence_lookup(root: Path) -> dict[str, dict[str, Any]]:
+    return {str(row.get("id") or row.get("evidence_id") or ""): row for row in _read_jsonl(root / "evidence.jsonl")}
 
 
 def _section_final(root: Path, section_id: str) -> str:
@@ -194,6 +203,253 @@ def _build_final_summary(root: Path, ast: dict, contribution: dict, chapter_revi
     return payload
 
 
+_HUMAN_SECTION_HEADINGS = {
+    "position",
+    "architecture synthesis",
+    "comparative positioning",
+    "evaluation and risk boundary",
+    "limitations and failure modes",
+    "controversy matrix",
+    "contradiction slots",
+    "open problems",
+}
+
+_HUMAN_DROP_PATTERNS = [
+    re.compile(r"prompt packet", re.I),
+    re.compile(r"只使用\s*prompt", re.I),
+    re.compile(r"未列入清单"),
+    re.compile(r"不得编造"),
+    re.compile(r"本节坚持"),
+    re.compile(r"本节不引入"),
+    re.compile(r"本节只"),
+    re.compile(r"本节不"),
+    re.compile(r"Source Map", re.I),
+    re.compile(r"Claim Map", re.I),
+    re.compile(r"Evidence Map", re.I),
+    re.compile(r"本节闭合于"),
+    re.compile(r"本节向章级综合"),
+    re.compile(r"为支持主编辑"),
+    re.compile(r"矛盾槽位"),
+    re.compile(r"Contradiction", re.I),
+]
+
+
+def _split_markdown_sections(text: str) -> dict[str, str]:
+    blocks: dict[str, list[str]] = {}
+    current = ""
+    for line in (text or "").splitlines():
+        match = re.match(r"^##\s+(.+?)\s*$", line)
+        if match:
+            current = match.group(1).strip().lower()
+            blocks.setdefault(current, [])
+            continue
+        if current:
+            blocks.setdefault(current, []).append(line)
+    return {key: "\n".join(value).strip() for key, value in blocks.items() if "\n".join(value).strip()}
+
+
+def _clean_human_text(text: str, evidence_numbers: dict[str, int]) -> str:
+    cleaned_lines: list[str] = []
+    for raw in (text or "").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        line = re.sub(r"^\s*[-*]\s+", "", line).strip()
+        line = re.sub(r"^\s*\d+[.)]\s*", "", line).strip()
+        if not line or re.fullmatch(r"\d+[.)]?", line):
+            continue
+        if line.endswith(("：", ":")):
+            continue
+        if any(pattern.search(line) for pattern in _HUMAN_DROP_PATTERNS):
+            continue
+        line = re.sub(r"^本节(?:的)?立场(?:是)?[：:]\s*", "", line)
+        line = re.sub(r"^本节(?:的)?(?:认为|判断|主张)(?:是)?[：:]?\s*", "", line)
+        line = re.sub(r"^本节(?:的)?工程风险边界", "工程风险边界", line)
+        line = re.sub(r"^本节(?:的)?风险边界", "风险边界", line)
+        line = re.sub(r"^本节(?:的)?局限", "局限", line)
+        line = re.sub(r"^本节存在", "这里存在", line)
+        line = re.sub(r"^本节绑定", "绑定", line)
+        line = re.sub(r"^本节据此", "据此", line)
+        for old, new in {
+            "落到本节绑定的": "落到绑定的",
+            "本节绑定": "绑定",
+            "本节按": "按",
+            "本节通过": "通过",
+            "本节据此": "据此",
+            "本节因此": "因此",
+            "本节明确反对": "本文反对",
+            "本节自我设定": "这里设定",
+            "本节使用的": "这里使用的",
+            "本节给出": "这里给出",
+            "本节定义": "这里定义",
+            "本节立场是": "本文判断",
+            "本节立场": "本文判断",
+            "本节认为": "本文认为",
+            "本节无法": "目前无法",
+            "与本节": "与上述",
+        }.items():
+            line = line.replace(old, new)
+        line = re.sub(r"\[claim:[^\]]+\]", "", line)
+        line = re.sub(
+            r"\[evidence:([^\]]+)\]",
+            lambda match: f"[^{evidence_numbers.setdefault(match.group(1), len(evidence_numbers) + 1)}]",
+            line,
+        )
+        line = re.sub(r"\s+", " ", line).strip()
+        if line:
+            cleaned_lines.append(line)
+    return "\n".join(cleaned_lines).strip()
+
+
+def _first_units(text: str, limit: int = 2, max_chars: int = 700) -> list[str]:
+    cleaned = re.sub(r"\n+", "\n", text or "").strip()
+    units: list[str] = []
+    for part in re.split(r"(?<=[。！？.!?])\s+|\n+", cleaned):
+        part = part.strip()
+        if not part:
+            continue
+        if len(part) < 24:
+            continue
+        if part.endswith(("：", ":")):
+            continue
+        if re.fullmatch(r"\d+[.)]?", part):
+            continue
+        if re.match(r"^(把|按|在|从|将).{0,28}(如下|可见|对照|排开|合成|组合|分类)", part):
+            continue
+        if "开放问题" in part and len(part) < 80:
+            continue
+        units.append(part)
+        if len(units) >= limit or sum(len(item) for item in units) >= max_chars:
+            break
+    return units
+
+
+def _append_unique(items: list[str], candidates: list[str], *, max_items: int) -> None:
+    seen = {re.sub(r"\s+", " ", item).strip() for item in items}
+    for candidate in candidates:
+        key = re.sub(r"\s+", " ", candidate).strip()
+        if not key or key in seen:
+            continue
+        items.append(candidate)
+        seen.add(key)
+        if len(items) >= max_items:
+            break
+
+
+def _human_chapter_block(root: Path, chapter: dict, sections: list[dict], evidence_numbers: dict[str, int]) -> tuple[str, dict[str, int]]:
+    title = str(chapter.get("title") or chapter.get("chapter_id") or "N/A")
+    positions: list[str] = []
+    mechanisms: list[str] = []
+    comparisons: list[str] = []
+    risks: list[str] = []
+    open_problems: list[str] = []
+    for section in sections:
+        text = _section_final(root, str(section.get("section_id") or ""))
+        if not text:
+            continue
+        blocks = _split_markdown_sections(text)
+        for heading, target, limit in [
+            ("position", positions, 2),
+            ("architecture synthesis", mechanisms, 2),
+            ("comparative positioning", comparisons, 1),
+            ("evaluation and risk boundary", risks, 1),
+            ("limitations and failure modes", risks, 1),
+            ("controversy matrix", risks, 1),
+            ("contradiction slots", risks, 1),
+            ("open problems", open_problems, 1),
+        ]:
+            content = blocks.get(heading, "")
+            if not content:
+                continue
+            cleaned = _clean_human_text(content, evidence_numbers)
+            _append_unique(target, _first_units(cleaned, limit=limit), max_items=6)
+
+    metrics = {
+        "positions": len(positions),
+        "mechanisms": len(mechanisms),
+        "comparisons": len(comparisons),
+        "risks": len(risks),
+        "open_problems": len(open_problems),
+    }
+    lines = [f"## {title}", ""]
+    if positions:
+        lines.extend(["### 本章判断", "", *[f"- {item}" for item in positions[:4]], ""])
+    if mechanisms:
+        lines.extend(["### 技术机制", "", *[f"- {item}" for item in mechanisms[:4]], ""])
+    if comparisons:
+        lines.extend(["### 横向比较", "", *[f"- {item}" for item in comparisons[:3]], ""])
+    if risks:
+        lines.extend(["### 风险与争议", "", *[f"- {item}" for item in risks[:4]], ""])
+    if open_problems:
+        lines.extend(["### 未解问题", "", *[f"- {item}" for item in open_problems[:3]], ""])
+    return "\n".join(lines).strip() + "\n", metrics
+
+
+def _build_human_readable_final(root: Path, ast: dict, contribution: dict) -> dict:
+    evidence_numbers: dict[str, int] = {}
+    source_counts = contribution.get("source_type_counts") if isinstance(contribution.get("source_type_counts"), dict) else {}
+    evidence_rows = _evidence_lookup(root)
+    source_rows = _source_lookup(root)
+    chapters = ast.get("chapters", []) if isinstance(ast.get("chapters"), list) else []
+    sections = ast.get("sections", []) if isinstance(ast.get("sections"), list) else []
+    section_by_chapter: dict[str, list[dict]] = {}
+    for section in sections:
+        section_by_chapter.setdefault(str(section.get("chapter_id") or ""), []).append(section)
+
+    chapter_blocks: list[str] = []
+    chapter_metrics: list[dict[str, Any]] = []
+    for chapter in chapters:
+        chapter_id = str(chapter.get("chapter_id") or "")
+        block, metrics = _human_chapter_block(root, chapter, section_by_chapter.get(chapter_id, []), evidence_numbers)
+        chapter_blocks.append(block)
+        chapter_metrics.append({"chapter_id": chapter_id, **metrics})
+
+    source_summary = "、".join(f"{key} {value}" for key, value in sorted(source_counts.items())) or "N/A"
+    title = str(ast.get("title") or "Professor-Grade Survey")
+    lines = [
+        f"# {title}",
+        "",
+        "## 核心结论",
+        "",
+        "2026 年的 Agentic Runtime 已经从“会调用工具的 LLM 应用”变成一类独立的执行系统：它必须同时处理长时状态、可恢复执行、控制权转移、执行边界安全、动作/权限/副作用风险，以及 session/state/artifact 生命周期治理。当前行业的主要矛盾不是缺少框架，而是框架文档、源码实现、外部 benchmark 与生产部署证据之间尚未形成闭环。",
+        "",
+        "## 证据基础",
+        "",
+        f"本报告基于 {int(contribution.get('finalized_sections') or 0)}/{int(contribution.get('section_count') or 0)} 个已审阅 section，来源类型覆盖：{source_summary}。正文只保留关键脚注；完整 claim/evidence ledger 保留在机器审计产物中。",
+        "",
+        *chapter_blocks,
+    ]
+
+    if evidence_numbers:
+        lines.extend(["## 证据脚注", ""])
+        for evidence_id, number in sorted(evidence_numbers.items(), key=lambda item: item[1]):
+            evidence = evidence_rows.get(evidence_id, {})
+            source = source_rows.get(str(evidence.get("source_id") or ""), {})
+            title_text = str(source.get("title") or evidence.get("title") or evidence_id)
+            source_type = str(source.get("source_type") or "unknown")
+            url = str(source.get("url") or "")
+            line = f"[^{number}]: {title_text} ({source_type})"
+            if url:
+                line += f" {url}"
+            lines.append(line)
+        lines.append("")
+
+    text = "\n".join(lines).strip() + "\n"
+    human_path = root / "human_final.md"
+    human_path.write_text(text, encoding="utf-8")
+    summary = {
+        "ok": True,
+        "human_final_md": str(human_path),
+        "char_count": len(text),
+        "chapter_count": len(chapters),
+        "evidence_note_count": len(evidence_numbers),
+        "template_heading_count": sum(text.count(f"## {heading}") for heading in _HUMAN_SECTION_HEADINGS),
+        "chapter_metrics": chapter_metrics,
+    }
+    (root / "survey_human_final_summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return summary
+
+
 def compile_survey(output_dir: str | Path) -> dict:
     root = Path(output_dir).expanduser()
     ast = _read_json(root / "survey_report_ast.json")
@@ -271,11 +527,14 @@ def compile_survey(output_dir: str | Path) -> dict:
     lines.extend(["", *chapter_blocks])
     final_path = root / "final.md"
     final_path.write_text("\n".join(lines), encoding="utf-8")
+    human_summary = _build_human_readable_final(root, ast, contribution)
     return {
         "ok": True,
         "final_md": str(final_path),
+        "human_final_md": human_summary.get("human_final_md"),
         "finalized_sections": finalized,
         "total_sections": len(ast.get("sections", [])),
         "contribution_matrix": str(root / "survey_contribution_matrix.json"),
         "final_summary": str(root / "survey_final_summary.json"),
+        "human_final_summary": str(root / "survey_human_final_summary.json"),
     }
