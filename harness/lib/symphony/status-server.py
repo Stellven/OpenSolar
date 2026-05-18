@@ -29,7 +29,9 @@ import sys
 import re
 import html
 import importlib.util
+import time
 import urllib.parse
+from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -67,6 +69,14 @@ _MODEL_EVENT_TYPES = {
     "model_session_started",
     "model_session_ended",
 }
+_MODEL_CALL_CACHE = {}
+_MODEL_CALL_CACHE_TTL_SECONDS = 8.0
+_MODEL_CALL_SESSION_FILE_LIMIT = 8
+_MODEL_CALL_FILE_TAIL_LINES = 80
+_MODEL_CALL_SCAN_BUDGET_SECONDS = 0.025
+_RUNTIME_INTERFACES_CACHE = {}
+_RUNTIME_INTERFACES_CACHE_TTL_SECONDS = 20.0
+_RUNTIME_INTERFACES_TIMEOUT_SECONDS = 1.0
 _ACTIVE_SPRINT_STATUSES = {
     "drafting",
     "queued",
@@ -992,6 +1002,14 @@ def _model_label_from_payload(payload: dict) -> str:
     return " / ".join(parts)
 
 
+def _tail_jsonl_lines(path: Path, max_lines: int) -> list:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return list(deque(fh, maxlen=max_lines))
+    except OSError:
+        return []
+
+
 def _latest_model_call_for_pane(target: str, pane_id: str = "") -> dict:
     """Project the newest observable model-call boundary event for one pane.
 
@@ -1000,6 +1018,12 @@ def _latest_model_call_for_pane(target: str, pane_id: str = "") -> dict:
     submission and pane process lifecycle. It does not claim private model
     reasoning visibility.
     """
+    cache_key = f"{target}|{pane_id}"
+    now = time.monotonic()
+    cached = _MODEL_CALL_CACHE.get(cache_key)
+    if cached and now - cached.get("ts", 0.0) <= _MODEL_CALL_CACHE_TTL_SECONDS:
+        return dict(cached.get("value") or {})
+
     aliases = {target}
     if pane_id:
         aliases.add(pane_id)
@@ -1010,40 +1034,43 @@ def _latest_model_call_for_pane(target: str, pane_id: str = "") -> dict:
             SESSIONS_DIR.glob("*/events.jsonl"),
             key=lambda p: p.stat().st_mtime if p.exists() else 0,
             reverse=True,
-        )[:240]
+        )[:_MODEL_CALL_SESSION_FILE_LIMIT]
     except Exception:
         candidate_files = []
 
     newest = None
     newest_key = ("", -1)
+    timed_out = False
     for path in candidate_files:
+        if time.monotonic() - now > _MODEL_CALL_SCAN_BUDGET_SECONDS:
+            timed_out = True
+            break
         try:
-            with open(path, encoding="utf-8") as fh:
-                for raw in fh:
-                    raw = raw.strip()
-                    if not raw:
-                        continue
-                    try:
-                        ev = json.loads(raw)
-                    except json.JSONDecodeError:
-                        continue
-                    ev_type = ev.get("type")
-                    if ev_type not in _MODEL_EVENT_TYPES:
-                        continue
-                    payload = ev.get("payload") if isinstance(ev.get("payload"), dict) else {}
-                    ev_pane = str(payload.get("pane") or "")
-                    session_id = str(ev.get("session_id") or "")
-                    if ev_pane not in aliases and session_id != f"pane-{safe_pane_id}":
-                        continue
-                    key = (str(ev.get("ts") or ""), int(ev.get("seq") or 0))
-                    if key >= newest_key:
-                        newest_key = key
-                        newest = ev
+            for raw in _tail_jsonl_lines(path, _MODEL_CALL_FILE_TAIL_LINES):
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    ev = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+                ev_type = ev.get("type")
+                if ev_type not in _MODEL_EVENT_TYPES:
+                    continue
+                payload = ev.get("payload") if isinstance(ev.get("payload"), dict) else {}
+                ev_pane = str(payload.get("pane") or "")
+                session_id = str(ev.get("session_id") or "")
+                if ev_pane not in aliases and session_id != f"pane-{safe_pane_id}":
+                    continue
+                key = (str(ev.get("ts") or ""), int(ev.get("seq") or 0))
+                if key >= newest_key:
+                    newest_key = key
+                    newest = ev
         except OSError:
             continue
 
     if not newest:
-        return {
+        value = {
             "status": "unknown",
             "event_type": "",
             "ts": "",
@@ -1053,10 +1080,13 @@ def _latest_model_call_for_pane(target: str, pane_id: str = "") -> dict:
             "error": "",
             "instruction_preview": "",
             "private_reasoning_visible": False,
+            "observability_boundary": "bounded_session_tail_scan_timeout" if timed_out else "bounded_session_tail_scan",
         }
+        _MODEL_CALL_CACHE[cache_key] = {"ts": now, "value": value}
+        return dict(value)
 
     payload = newest.get("payload") if isinstance(newest.get("payload"), dict) else {}
-    return {
+    value = {
         "status": _model_call_status(str(newest.get("type") or ""), payload),
         "event_type": newest.get("type") or "",
         "ts": newest.get("ts") or "",
@@ -1067,11 +1097,28 @@ def _latest_model_call_for_pane(target: str, pane_id: str = "") -> dict:
         "error": payload.get("error") or "",
         "instruction_preview": payload.get("instruction_preview") or "",
         "private_reasoning_visible": bool(payload.get("private_reasoning_visible", False)),
-        "observability_boundary": payload.get("observability_boundary") or "",
+        "observability_boundary": payload.get("observability_boundary") or ("bounded_session_tail_scan_timeout" if timed_out else "bounded_session_tail_scan"),
+    }
+    _MODEL_CALL_CACHE[cache_key] = {"ts": now, "value": value}
+    return dict(value)
+
+
+def _skipped_model_call_status() -> dict:
+    return {
+        "status": "unknown",
+        "event_type": "",
+        "ts": "",
+        "session_id": "",
+        "dispatch_id": "",
+        "model": "",
+        "error": "",
+        "instruction_preview": "",
+        "private_reasoning_visible": False,
+        "observability_boundary": "status_fast_path_model_call_skipped",
     }
 
 
-def _pane_snapshot(target: str, role: str, assignment: str = "", capability_health=None) -> dict:
+def _pane_snapshot(target: str, role: str, assignment: str = "", capability_health=None, include_model_call: bool = True) -> dict:
     assignment_meta = _sprint_meta(assignment) if assignment else {}
     pane_id = _run_tmux(["display-message", "-p", "-t", target, "#{pane_id}"])
     health = capability_health or _capability_health_summary()
@@ -1084,7 +1131,7 @@ def _pane_snapshot(target: str, role: str, assignment: str = "", capability_heal
             "assignment_meta": assignment_meta,
             "artifact": _artifact_for_assignment(role, assignment),
             "title": "",
-            "model_call": _latest_model_call_for_pane(target, pane_id),
+            "model_call": _latest_model_call_for_pane(target, pane_id) if include_model_call else _skipped_model_call_status(),
             "capability_health": health,
         }
     title = _run_tmux(["display-message", "-p", "-t", target, "#{pane_title}"])
@@ -1097,31 +1144,31 @@ def _pane_snapshot(target: str, role: str, assignment: str = "", capability_heal
         "assignment_meta": assignment_meta,
         "artifact": _artifact_for_assignment(role, assignment),
         "title": title,
-        "model_call": _latest_model_call_for_pane(target, pane_id),
+        "model_call": _latest_model_call_for_pane(target, pane_id) if include_model_call else _skipped_model_call_status(),
         "capability_health": health,
     }
 
 
-def _main_screen(capability_health=None) -> dict:
+def _main_screen(capability_health=None, include_model_call: bool = True) -> dict:
     assignments = _read_assignments()
     roles = ["PM", "Planner", "Builder", "Evaluator"]
     panes = []
     for idx, role in enumerate(roles):
         target = f"solar-harness:0.{idx}"
-        panes.append(_pane_snapshot(target, role, assignments.get(target, ""), capability_health=capability_health))
+        panes.append(_pane_snapshot(target, role, assignments.get(target, ""), capability_health=capability_health, include_model_call=include_model_call))
     return {
         "note": "runtime_state, assignment, and artifact are separate; pane output alone is not proof of progress.",
         "panes": panes,
     }
 
 
-def _lab_screen(capability_health=None) -> dict:
+def _lab_screen(capability_health=None, include_model_call: bool = True) -> dict:
     roles = ["lab-builder-1", "lab-builder-2", "lab-builder-3", "lab-builder-4"]
     lab_dir = SPRINTS_DIR / "obsidian-wiki-lab"
     panes = []
     for idx, role in enumerate(roles):
         target = f"solar-harness-lab:0.{idx}"
-        snap = _pane_snapshot(target, role, "", capability_health=capability_health)
+        snap = _pane_snapshot(target, role, "", capability_health=capability_health, include_model_call=include_model_call)
         latest = None
         if lab_dir.exists():
             matches = sorted(lab_dir.glob(f"{role}*handoff.md"), key=lambda p: p.stat().st_mtime if p.exists() else 0)
@@ -1459,30 +1506,91 @@ def _research_status_summary(limit: int = 5) -> dict:
     if not routes_path.exists():
         return {"ok": False, "status": "error", "runs": [], "errors": ["research_routes.py missing"]}
     try:
+        def load_json(path: Path) -> dict:
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                return data if isinstance(data, dict) else {}
+            except Exception:
+                return {}
+
+        def metric_int(metrics: dict, *keys: str):
+            for key in keys:
+                if key not in metrics:
+                    continue
+                try:
+                    return int(metrics.get(key) or 0)
+                except Exception:
+                    continue
+            return None
+
+        def fallback_level(metrics: dict):
+            usage = metrics.get("usage_source") or metrics.get("token_usage_source") or ""
+            estimated = metrics.get("estimated")
+            if estimated is None:
+                estimated = metrics.get("token_usage_is_estimated", False)
+            reason = metrics.get("fallback_reason") or ""
+            if usage == "provider_usage_ledger" and not estimated:
+                return "L1"
+            if usage == "hybrid":
+                return "L2"
+            if usage == "estimated" or str(usage).startswith("estimated_"):
+                return "L3" if reason in ("cli_no_usage", "cli_rate_limit") else "L4"
+            return None
+
+        def run_from_eval(ef: Path) -> dict:
+            data = load_json(ef)
+            output_dir = Path(str(data.get("output_dir") or ef.parent)).expanduser()
+            final_md = Path(str(data.get("final_md") or output_dir / "final.md")).expanduser()
+            metrics = data.get("execution_metrics") if isinstance(data.get("execution_metrics"), dict) else {}
+            if not metrics:
+                metrics_path = output_dir / "research_execution_metrics.json"
+                metrics = load_json(metrics_path) if metrics_path.exists() else {}
+            usage_source = metrics.get("usage_source") or metrics.get("token_usage_source")
+            estimated = metrics.get("estimated")
+            if estimated is None and metrics:
+                estimated = bool(metrics.get("token_usage_is_estimated", False))
+            return {
+                "run_id": str(data.get("run_id") or ef.name.split("-research_eval", 1)[0]),
+                "sid": ef.name.split("-research_eval", 1)[0],
+                "status": str(data.get("status") or "unknown"),
+                "source_count": data.get("source_count", 0),
+                "evidence_count": data.get("evidence_count", 0),
+                "claim_count": data.get("claim_count", 0),
+                "citation_accuracy": data.get("citation_accuracy", 0.0),
+                "report_ast_sections": data.get("section_count", 0),
+                "word_count": metric_int(metrics, "word_count", "document_word_count"),
+                "total_tokens": metric_int(metrics, "total_tokens", "total_token_consumption"),
+                "usage_source": usage_source,
+                "estimated": estimated,
+                "state": metrics.get("state", "unknown") if metrics else "unknown",
+                "fallback_level": fallback_level(metrics),
+                "artifacts": {
+                    "eval_json": str(ef),
+                    "output_dir": str(output_dir),
+                    "final_md": str(final_md),
+                    "report_ast": str(output_dir / "report_ast.json"),
+                    "bibliography": str(output_dir / "final.bibliography.json"),
+                },
+                "artifact_exists": {
+                    "eval_json": ef.exists(),
+                    "output_dir": output_dir.exists(),
+                    "final_md": final_md.exists(),
+                    "report_ast": (output_dir / "report_ast.json").exists(),
+                    "bibliography": (output_dir / "final.bibliography.json").exists(),
+                },
+            }
+
         spec = importlib.util.spec_from_file_location("solar_research_routes_summary", str(routes_path))
         if spec is None or spec.loader is None:
             raise RuntimeError("unable to load research_routes.py")
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         eval_files = sorted(
-            list(SPRINTS_DIR.glob("*research_eval*.json")) + list(REPORTS_DIR.glob("**/*research_eval*.json")),
+            list(SPRINTS_DIR.glob("*research_eval*.json")) + list(REPORTS_DIR.glob("*/*research_eval*.json")),
             key=lambda p: p.stat().st_mtime,
         )
-        runs: list[dict] = []
-        gates: list[dict] = []
-        for ef in eval_files[-limit:]:
-            # build_research_payload expects a sid prefix; derive it from the
-            # eval filename while tolerating run-id-only eval files.
-            sid = ef.name.split("-research_eval", 1)[0]
-            payload = mod.build_research_payload(ef.parent, sid)
-            for run in payload.get("runs") or []:
-                run = dict(run)
-                run["sid"] = sid
-                runs.append(run)
-            for gate in (payload.get("quality_gates") or {}).get("items") or []:
-                gate = dict(gate)
-                gate["sid"] = sid
-                gates.append(gate)
+        runs = [run_from_eval(ef) for ef in eval_files[-limit:]]
+        gates = (mod.discover_quality_gates(SPRINTS_DIR, "", limit=limit).get("items") or [])[-limit:]
         status = "idle"
         if runs or gates:
             status = "ok" if all(r.get("status") == "passed" for r in runs[-limit:]) and all(g.get("ok") for g in gates[-limit:]) else "warn"
@@ -1504,8 +1612,8 @@ def _status_payload(limit: int = 50) -> dict:
     return {
         "current_sprint": current,
         "panes": _pane_info(),
-        "main_screen": _main_screen(capability_health),
-        "lab_screen": _lab_screen(capability_health),
+        "main_screen": _main_screen(capability_health, include_model_call=False),
+        "lab_screen": _lab_screen(capability_health, include_model_call=False),
         "recent_events": _read_jsonl(ALL_EVENTS, limit=limit, filter_synthetic=True),
         "kpi": _kpi(),
         "obsidian_wiki": _obsidian_wiki_readiness(),
@@ -1525,6 +1633,12 @@ def _runtime_interfaces_status(sprint_id: str) -> dict:
     """Return lightweight runtime interface health for /status."""
     if not sprint_id:
         return {"ok": False, "status": "unknown", "message": "no current sprint"}
+    now = time.monotonic()
+    cached = _RUNTIME_INTERFACES_CACHE.get(sprint_id)
+    if cached and now - cached.get("ts", 0.0) <= _RUNTIME_INTERFACES_CACHE_TTL_SECONDS:
+        value = dict(cached.get("value") or {})
+        value["cache"] = "hit"
+        return value
     doctor = HARNESS_DIR / "lib" / "runtime_doctor.py"
     if not doctor.exists():
         return {"ok": False, "status": "error", "message": "runtime_doctor.py missing"}
@@ -1533,7 +1647,7 @@ def _runtime_interfaces_status(sprint_id: str) -> dict:
             ["python3", str(doctor), sprint_id, "--json"],
             text=True,
             capture_output=True,
-            timeout=5,
+            timeout=_RUNTIME_INTERFACES_TIMEOUT_SECONDS,
         )
         if proc.returncode not in (0, 1):
             return {"ok": False, "status": "error", "message": (proc.stderr or proc.stdout)[-500:]}
@@ -1542,18 +1656,25 @@ def _runtime_interfaces_status(sprint_id: str) -> dict:
         dims = ih.get("dimensions", {})
         total = len(dims)
         healthy = sum(1 for d in dims.values() if d.get("ok"))
-        return {
+        value = {
             "ok": bool(ih.get("ok")),
             "status": "ok" if ih.get("ok") else "warn",
             "message": ih.get("message", f"{healthy}/{total} interfaces healthy"),
             "healthy": healthy,
             "total": total,
             "dimensions": dims,
+            "cache": "miss",
         }
+        _RUNTIME_INTERFACES_CACHE[sprint_id] = {"ts": now, "value": value}
+        return dict(value)
     except subprocess.TimeoutExpired:
-        return {"ok": False, "status": "warn", "message": "runtime doctor timeout"}
+        value = {"ok": False, "status": "warn", "message": "runtime doctor timeout", "cache": "miss"}
+        _RUNTIME_INTERFACES_CACHE[sprint_id] = {"ts": now, "value": value}
+        return dict(value)
     except Exception as exc:
-        return {"ok": False, "status": "error", "message": f"{type(exc).__name__}: {exc}"}
+        value = {"ok": False, "status": "error", "message": f"{type(exc).__name__}: {exc}", "cache": "miss"}
+        _RUNTIME_INTERFACES_CACHE[sprint_id] = {"ts": now, "value": value}
+        return dict(value)
 
 
 # ── HTML Dashboard ──
