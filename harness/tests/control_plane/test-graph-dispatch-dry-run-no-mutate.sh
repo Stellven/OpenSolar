@@ -65,7 +65,7 @@ print("python_dry_run_ok")
 PY
 
 before_sha="$(shasum -a 256 "$TMPDIR_TEST/graph.json" | awk '{print $1}')"
-python3 "$HARNESS_DIR_REAL/lib/graph_node_dispatcher.py" dispatch-ready --graph "$TMPDIR_TEST/graph.json" --dry-run >/tmp/graph-dispatch-dry-run.json
+SOLAR_GRAPH_DISPATCH_FAKE_WORKERS=1 python3 "$HARNESS_DIR_REAL/lib/graph_node_dispatcher.py" dispatch-ready --graph "$TMPDIR_TEST/graph.json" --dry-run >/tmp/graph-dispatch-dry-run.json
 after_sha="$(shasum -a 256 "$TMPDIR_TEST/graph.json" | awk '{print $1}')"
 [[ "$before_sha" == "$after_sha" ]] || fail "graph-dispatch --dry-run mutated graph file"
 
