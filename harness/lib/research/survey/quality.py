@@ -712,13 +712,7 @@ def _build_chief_editor_review(
     section_by_chapter: dict[str, list[str]] = {}
     finalized_by_chapter: dict[str, int] = {}
     fingerprints: list[str] = []
-    terminology_counts = {
-        "latent_reasoning": 0,
-        "continuous_thought": 0,
-        "chain_of_thought": 0,
-        "coconut": 0,
-        "hidden_state": 0,
-    }
+    terminology_text_parts: list[str] = []
     for section in sections:
         section_id = str(section.get("section_id") or "")
         chapter_id = str(section.get("chapter_id") or "")
@@ -729,15 +723,10 @@ def _build_chief_editor_review(
             continue
         finalized_by_chapter[chapter_id] = finalized_by_chapter.get(chapter_id, 0) + 1
         text = final_path.read_text(encoding="utf-8", errors="ignore")
+        terminology_text_parts.append(text)
         fingerprint = _normalized_section_fingerprint(text)
         if fingerprint:
             fingerprints.append(fingerprint)
-        lowered = text.lower()
-        terminology_counts["latent_reasoning"] += len(re.findall(r"latent reasoning|隐空间推理|潜空间推理", lowered))
-        terminology_counts["continuous_thought"] += len(re.findall(r"continuous thought|continuous reasoning", lowered))
-        terminology_counts["chain_of_thought"] += len(re.findall(r"chain[- ]of[- ]thought|\bcot\b", lowered))
-        terminology_counts["coconut"] += len(re.findall(r"\bcoconut\b", lowered))
-        terminology_counts["hidden_state"] += len(re.findall(r"hidden state|latent state|隐状态", lowered))
 
     finalized_sections = len(fingerprints)
     duplicate_rate = round(1.0 - (len(set(fingerprints)) / max(finalized_sections, 1)), 4)
@@ -759,6 +748,8 @@ def _build_chief_editor_review(
         issues.append("chief_editor_controversy_matrix_not_ok")
     if not complete_context and finalized_sections:
         warnings.append(f"chief_editor_partial_review:{finalized_sections}/{len(sections)}")
+    terminology_profile = _terminology_profile("\n".join(terminology_text_parts))
+    terminology_counts = dict(terminology_profile.get("counts") or {})
     terminology_variants = [key for key, value in terminology_counts.items() if value]
     if complete_context and len(terminology_variants) < 2:
         warnings.append("chief_editor_terminology_signal_sparse")
@@ -779,6 +770,7 @@ def _build_chief_editor_review(
         "total_sections": len(sections),
         "chapter_final_coverage": chapter_final_coverage,
         "section_duplicate_rate": duplicate_rate,
+        "terminology_profile": str(terminology_profile.get("profile") or ""),
         "terminology_counts": terminology_counts,
         "terminology_variants": terminology_variants,
         "chapters": chapter_rows,
@@ -791,7 +783,7 @@ def _count_pattern(text: str, pattern: str) -> int:
     return len(re.findall(pattern, text or "", flags=re.I))
 
 
-def _terminology_counts(text: str) -> dict[str, int]:
+def _latent_reasoning_terminology_counts(text: str) -> dict[str, int]:
     lowered = (text or "").lower()
     return {
         "latent_reasoning": _count_pattern(lowered, r"latent reasoning|隐空间推理|潜空间推理"),
@@ -800,6 +792,74 @@ def _terminology_counts(text: str) -> dict[str, int]:
         "coconut": _count_pattern(lowered, r"\bcoconut\b"),
         "hidden_state": _count_pattern(lowered, r"hidden[- ]state|latent[- ]state|隐状态|潜状态"),
     }
+
+
+def _agentic_runtime_terminology_counts(text: str) -> dict[str, int]:
+    lowered = (text or "").lower()
+    return {
+        "runtime_orchestration": _count_pattern(lowered, r"agentic runtime|agent runtime|runtime|运行时|orchestrat|编排|orchestrator"),
+        "tool_execution": _count_pattern(lowered, r"tool[- ]?(use|execution|calling)|function calling|mcp|工具调用|工具执行|动作|action"),
+        "memory_state": _count_pattern(lowered, r"memory|state|checkpoint|durable execution|持久执行|状态|记忆|检查点"),
+        "multi_agent_handoff": _count_pattern(lowered, r"multi[- ]agent|handoff|agent graph|agent network|多智能体|移交"),
+        "evaluation_benchmark": _count_pattern(lowered, r"evaluation|eval|benchmark|metric|评估|基准|指标"),
+        "safety_governance": _count_pattern(lowered, r"guardrail|policy|sandbox|permission|安全|治理|权限|策略"),
+        "observability_trace": _count_pattern(lowered, r"trace|tracing|observability|telemetry|audit|可观测|追踪|审计"),
+    }
+
+
+def _terminology_profile(text: str) -> dict[str, Any]:
+    """Return the dominant technical terminology profile for the report topic.
+
+    The original depth gate was built for latent-reasoning surveys.  DeepResearch
+    now supports other technical architecture domains, so the terminology check
+    must score the actual report vocabulary instead of a fixed topic-specific
+    lexicon.
+    """
+    latent_counts = _latent_reasoning_terminology_counts(text)
+    runtime_counts = _agentic_runtime_terminology_counts(text)
+    latent_signal = sum(latent_counts.values())
+    runtime_signal = sum(runtime_counts.values())
+    if runtime_signal > latent_signal:
+        counts = runtime_counts
+        edges = []
+        if counts.get("runtime_orchestration") and counts.get("tool_execution"):
+            edges.append("runtime_orchestration->tool_execution")
+        if counts.get("tool_execution") and counts.get("memory_state"):
+            edges.append("tool_execution->memory_state")
+        if counts.get("memory_state") and counts.get("multi_agent_handoff"):
+            edges.append("memory_state->multi_agent_handoff")
+        if counts.get("multi_agent_handoff") and counts.get("evaluation_benchmark"):
+            edges.append("multi_agent_handoff->evaluation_benchmark")
+        if counts.get("evaluation_benchmark") and counts.get("safety_governance"):
+            edges.append("evaluation_benchmark->safety_governance")
+        if counts.get("safety_governance") and counts.get("observability_trace"):
+            edges.append("safety_governance->observability_trace")
+        return {
+            "profile": "agentic_runtime",
+            "counts": counts,
+            "evolution_edges": edges,
+        }
+
+    edges = [
+        "chain_of_thought->continuous_thought"
+        for _ in [0]
+        if latent_counts.get("chain_of_thought") and latent_counts.get("continuous_thought")
+    ]
+    if latent_counts.get("continuous_thought") and latent_counts.get("hidden_state"):
+        edges.append("continuous_thought->hidden_state")
+    if latent_counts.get("hidden_state") and latent_counts.get("latent_reasoning"):
+        edges.append("hidden_state->latent_reasoning")
+    if latent_counts.get("coconut") and latent_counts.get("latent_reasoning"):
+        edges.append("coconut->latent_reasoning")
+    return {
+        "profile": "latent_reasoning",
+        "counts": latent_counts,
+        "evolution_edges": edges,
+    }
+
+
+def _terminology_counts(text: str) -> dict[str, int]:
+    return dict(_terminology_profile(text).get("counts") or {})
 
 
 def _academic_marker_counts(text: str) -> dict[str, int]:
@@ -849,19 +909,10 @@ def _build_depth_profile(
 
     marker_counts = _academic_marker_counts(final_text)
     marker_variants = sorted(key for key, value in marker_counts.items() if value)
-    terminology_counts = _terminology_counts(final_text)
+    terminology_profile = _terminology_profile(final_text)
+    terminology_counts = dict(terminology_profile.get("counts") or {})
     terminology_variants = sorted(key for key, value in terminology_counts.items() if value)
-    evolution_edges = [
-        "chain_of_thought->continuous_thought"
-        for _ in [0]
-        if terminology_counts.get("chain_of_thought") and terminology_counts.get("continuous_thought")
-    ]
-    if terminology_counts.get("continuous_thought") and terminology_counts.get("hidden_state"):
-        evolution_edges.append("continuous_thought->hidden_state")
-    if terminology_counts.get("hidden_state") and terminology_counts.get("latent_reasoning"):
-        evolution_edges.append("hidden_state->latent_reasoning")
-    if terminology_counts.get("coconut") and terminology_counts.get("latent_reasoning"):
-        evolution_edges.append("coconut->latent_reasoning")
+    evolution_edges = list(terminology_profile.get("evolution_edges") or [])
 
     section_marker_rows: list[dict[str, Any]] = []
     covered_sections = 0
@@ -916,6 +967,7 @@ def _build_depth_profile(
         "academic_marker_variants": marker_variants,
         "section_marker_coverage": section_marker_coverage,
         "section_marker_rows": section_marker_rows[:200],
+        "terminology_profile": str(terminology_profile.get("profile") or ""),
         "terminology_counts": terminology_counts,
         "terminology_variants": terminology_variants,
         "terminology_evolution_edges": evolution_edges,
