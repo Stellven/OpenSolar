@@ -1772,6 +1772,9 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
             text_payload["section_isolation"] = True
             text_payload["section_id"] = node.get("section_id", "")
     instruction_file = _dispatch_file(sid, node_id)
+    instruction_file.parent.mkdir(parents=True, exist_ok=True)
+    instruction_file.write_text(build_dispatch_text(text_payload, pane), encoding="utf-8")
+    _inject_dispatch_context(instruction_file, sid=sid, pane=pane, dispatch_id=dispatch_id)
     if dry_run:
         return {
             "ok": True,
@@ -1782,10 +1785,6 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
             "dry_run": True,
             "graph_updated": False,
         }
-
-    instruction_file.parent.mkdir(parents=True, exist_ok=True)
-    instruction_file.write_text(build_dispatch_text(text_payload, pane), encoding="utf-8")
-    _inject_dispatch_context(instruction_file, sid=sid, pane=pane, dispatch_id=dispatch_id)
 
     sent = _send_to_pane(pane, instruction_file, dry_run, sid=sid, dispatch_id=dispatch_id)
     graph_updated = False
@@ -1878,6 +1877,8 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "frontend", "observability",
         "harness.context_preflight", "harness.intent", "harness.dispatch_visibility", "harness.contracts",
         "harness.dag", "harness.status", "harness.model_routing",
+        "intent.match", "intent.audit", "dispatch.intent_telemetry",
+        "models.show", "models.lab_matrix", "models.footer_labels",
         "dag.validate", "dag.ready_nodes", "dag.join_gate",
         "harness.testing", "harness.failure_recovery", "harness.autopilot",
         "harness.activation_proof", "harness.reporting", "harness.knowledge", "harness.contracts",
@@ -1899,6 +1900,8 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "ruflo.swarm", "ruflo.plugins", "ruflo.agent_catalog",
         "ruflo.memory", "ruflo.mcp", "ruflo.workflow_templates",
         "product.requirements", "research.scope_rewrite",
+        "research.empirical_pipeline", "research.literature_review",
+        "analysis.causal_inference",
         "research.source_matrix", "research.evidence.extract",
         "research.claim.mine", "research.citation.verify",
         "research.report.compile",
@@ -2089,6 +2092,12 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
             continue
 
         instruction_file = _eval_dispatch_file(sid, node_id)
+        instruction_file.parent.mkdir(parents=True, exist_ok=True)
+        instruction_file.write_text(
+            build_eval_dispatch_text(graph, graph_path, node, pane, dispatch_id),
+            encoding="utf-8",
+        )
+        _inject_dispatch_context(instruction_file, sid=sid, pane=pane, dispatch_id=dispatch_id)
         if dry_run:
             dry_run_used_panes.add(pane)
             dispatched.append({
@@ -2099,12 +2108,6 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
                 "dry_run": True,
             })
             continue
-        instruction_file.parent.mkdir(parents=True, exist_ok=True)
-        instruction_file.write_text(
-            build_eval_dispatch_text(graph, graph_path, node, pane, dispatch_id),
-            encoding="utf-8",
-        )
-        _inject_dispatch_context(instruction_file, sid=sid, pane=pane, dispatch_id=dispatch_id)
         sent = _send_to_pane(pane, instruction_file, dry_run, sid=sid, dispatch_id=dispatch_id)
         if not sent:
             if not dry_run:
