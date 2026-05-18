@@ -1064,6 +1064,39 @@ def _pane_exists(pane: str) -> bool:
         return False
 
 
+def _pane_title(pane: str) -> str:
+    try:
+        return subprocess.run(
+            ["tmux", "display-message", "-p", "-t", pane, "#{pane_title}"],
+            text=True,
+            capture_output=True,
+            timeout=2,
+        ).stdout.strip()
+    except Exception:
+        return ""
+
+
+def _pane_title_matches_role(pane: str, title: str, role: str) -> bool:
+    if os.environ.get("SOLAR_GRAPH_ALLOW_ANY_ROLE_PANE") == "1":
+        return True
+    title = title or _pane_title(pane)
+    negative = re.compile(r"PM|产品经理|Planner|规划者|Builder|建设者|Evaluator|审判官", re.I)
+    if role == "builder":
+        if pane == f"{SESSION}:0.2" or pane.startswith("solar-harness-lab:"):
+            return bool(re.search(r"Builder|建设者|lab-builder", title, re.I)) and not bool(
+                re.search(r"PM|产品经理|Planner|规划者|Evaluator|审判官", title, re.I)
+            )
+        return False
+    if role == "evaluator":
+        if pane != f"{SESSION}:0.3":
+            return False
+        non_role_title = re.sub(r"Evaluator|审判官", "", title, flags=re.I)
+        return bool(re.search(r"Evaluator|审判官", title, re.I)) and not bool(
+            negative.search(non_role_title)
+        )
+    return False
+
+
 def _pane_tail(pane: str, lines: int = 80) -> str:
     try:
         return subprocess.run(
@@ -1895,6 +1928,8 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         # panes share the session prefix but must not be treated as builders.
         if pane != f"{SESSION}:0.2" and not pane.startswith("solar-harness-lab:"):
             continue
+        if not _pane_title_matches_role(pane, title, "builder"):
+            continue
         models = _models_for_pane(pane, title)
         quota_exhausted: list[str] = []
         title_lower = title.lower()
@@ -1936,16 +1971,9 @@ def _discover_evaluators(dry_run: bool = False) -> list[dict[str, Any]]:
             continue
         seen.add(pane)
         if _pane_exists(pane):
-            title = ""
-            try:
-                title = subprocess.run(
-                    ["tmux", "display-message", "-p", "-t", pane, "#{pane_title}"],
-                    text=True,
-                    capture_output=True,
-                    timeout=2,
-                ).stdout.strip()
-            except Exception:
-                title = ""
+            title = _pane_title(pane)
+            if not _pane_title_matches_role(pane, title, "evaluator"):
+                continue
             runtime_unavailable_reason = _pane_runtime_unavailable_reason(pane, title)
             unavailable_reason = runtime_unavailable_reason or _pane_unavailable_reason(pane)
             evaluators.append({
