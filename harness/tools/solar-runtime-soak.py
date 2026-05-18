@@ -42,6 +42,15 @@ DEFAULT_TARGET = os.environ.get("SOLAR_RUNTIME_SOAK_TARGET", "")
 SURVEY_WATCH_CONFIG = Path(
     os.environ.get("SOLAR_SURVEY_WATCH_CONFIG", HARNESS / "run" / "research-survey-watch.json")
 ).expanduser()
+SPRINTS = HARNESS / "sprints"
+
+# S04: 4 required footer fields in final.md (exact text for grep verification)
+RESEARCH_FOOTER_FIELDS = [
+    "Document word count",
+    "Total token consumption",
+    "Token usage source",
+    "Token usage estimated",
+]
 
 
 def now_iso() -> str:
@@ -226,6 +235,31 @@ def release_lock() -> None:
         pass
 
 
+def check_research_footer_fields(sid: str) -> dict[str, Any]:
+    """Check that S03 footer fields appear in final.md for the given sprint.
+
+    Returns a dict with 'ok', 'sid', and 'checks' list.
+    Each check has: file, field, present.
+    Searches tail-50 lines of each final.md to handle long reports efficiently.
+    """
+    final_md_paths = list(SPRINTS.glob(f"{sid}*final.md")) if sid else []
+    results: dict[str, Any] = {"sid": sid, "checks": [], "ok": True, "files_found": len(final_md_paths)}
+    for path in final_md_paths:
+        try:
+            lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+            tail = "\n".join(lines[-50:]) if len(lines) > 50 else "\n".join(lines)
+        except OSError:
+            tail = ""
+        for field in RESEARCH_FOOTER_FIELDS:
+            present = field in tail
+            results["checks"].append({"file": str(path), "field": field, "present": present})
+            if not present:
+                results["ok"] = False
+    if not final_md_paths:
+        results["ok"] = False
+    return results
+
+
 def run_once() -> dict[str, Any]:
     sid = current_sprint()
     steps: dict[str, dict[str, Any]] = {}
@@ -244,6 +278,17 @@ def run_once() -> dict[str, Any]:
         "--allow-pending",
         "--json",
     ], timeout=90)
+
+    # S04: check research footer fields in final.md
+    footer_result = check_research_footer_fields(sid)
+    steps["research_footer"] = {
+        "ok": footer_result["ok"],
+        "returncode": 0 if footer_result["ok"] else 1,
+        "stdout": json.dumps(footer_result, ensure_ascii=False),
+        "stderr": "",
+        "duration_sec": 0,
+        "cmd": ["check_research_footer_fields", sid],
+    }
 
     failures = [name for name, step in steps.items() if not step.get("ok")]
     parsed = {name: parse_json_step(step) for name, step in steps.items()}
@@ -274,7 +319,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run one Solar-Harness runtime soak check.")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--strict", action="store_true", help="Exit nonzero on failed soak")
+    parser.add_argument("--once", action="store_true", help="Run one check cycle (default behavior)")
+    parser.add_argument("--check-footer", metavar="SID", default="",
+                        help="Check research footer fields for sprint SID and exit")
     args = parser.parse_args()
+
+    # S04: --check-footer <sid> early exit (no lock needed)
+    if args.check_footer:
+        result = check_research_footer_fields(args.check_footer)
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else str(result))
+        return 0 if result["ok"] else 1
 
     if not acquire_lock():
         payload = {"ok": True, "skipped": "already_running", "checked_at": now_iso(), "lock": str(LOCK)}
