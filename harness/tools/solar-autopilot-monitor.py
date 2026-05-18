@@ -996,6 +996,8 @@ def graph_workers() -> list[dict]:
     workers = []
     skills = [
         "bash", "python", "dataclasses", "pytest", "pure-functions", "time-injection", "io", "fsm", "integration-testing", "json-patch", "typescript", "docs", "testing",
+        "stub-llm", "e2e-test", "cli-view-assertion", "negative-control", "verifier", "registry-introspection",
+        "technical-writing", "markdown", "evidence-aggregation", "handoff-authoring", "traceability-patch", "knowledge-raw-writeback",
         "frontend", "flask", "http-routing", "autopilot-hooks", "json-traversal", "html", "javascript", "vanilla-dom",
         "product", "planning",
         "architecture", "schema", "state-machine", "distributed-systems",
@@ -1005,6 +1007,12 @@ def graph_workers() -> list[dict]:
     capabilities = [
         "bash", "python", "typescript", "docs", "testing",
         "frontend", "observability",
+        "harness.context_preflight", "harness.intent", "harness.dispatch_visibility", "harness.contracts",
+        "harness.dag", "harness.status", "harness.model_routing",
+        "dag.validate", "dag.ready_nodes", "dag.join_gate",
+        "harness.testing", "harness.reporting", "harness.knowledge",
+        "activation.proof", "negative_control", "runtime_artifacts",
+        "autopilot.monitor", "autopilot.safe_apply", "pane.deadlock_detection",
         "documentation", "schema", "state-machine", "storage", "sources",
         "code.review", "debug.systematic", "skill.methodology",
         "workflow.planning", "product.requirements", "test.tdd", "browser.browse", "browser.qa",

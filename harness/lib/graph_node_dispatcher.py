@@ -39,7 +39,7 @@ PANE_TUI_UNAVAILABLE_RE = re.compile(
     re.I,
 )
 PANE_QUEUED_PROMPT_RE = re.compile(r"Press up to edit queued messages", re.I)
-PANE_PROMPT_RESIDUE_RE = re.compile(r"^\s*❯(?![\s\u00a0]+Try\\s+\")[\s\u00a0]+[^\s\u00a0─]", re.M)
+PANE_PROMPT_RESIDUE_RE = re.compile(r"^\s*❯(?![\s\u00a0]+Try\s+\")[\s\u00a0]+[^\s\u00a0─]", re.M)
 STATE_READ_PREFLIGHT = """<!-- SOLAR_STATE_READ_PREFLIGHT -->
 ## 必须先读状态 (防写入 hook 卡死)
 
@@ -1076,6 +1076,18 @@ def _pane_tail(pane: str, lines: int = 80) -> str:
         return ""
 
 
+def _pane_current_command(pane: str) -> str:
+    try:
+        return subprocess.run(
+            ["tmux", "display-message", "-p", "-t", pane, "#{pane_current_command}"],
+            text=True,
+            capture_output=True,
+            timeout=2,
+        ).stdout.strip()
+    except Exception:
+        return ""
+
+
 def _pane_tui_busy(pane: str) -> bool:
     tail = _pane_tail(pane)
     bottom = "\n".join(tail.splitlines()[-12:])
@@ -1096,6 +1108,20 @@ def _pane_tui_busy(pane: str) -> bool:
     return False
 
 
+def _pane_runtime_unavailable_reason(pane: str, title: str = "") -> str:
+    command = _pane_current_command(pane).lower()
+    if command not in {"bash", "zsh", "sh", "fish"}:
+        return ""
+    title_lower = title.lower()
+    if "idle/no active sprint" not in title_lower:
+        return ""
+    tail = _pane_tail(pane)
+    bottom = "\n".join(tail.splitlines()[-12:])
+    if PANE_PROMPT_RESIDUE_RE.search(bottom) or PANE_QUEUED_PROMPT_RE.search(bottom):
+        return "worker_runtime_not_running"
+    return ""
+
+
 def _clear_stale_prompt_residue(pane: str) -> bool:
     """Clear idle Claude prompt residue in harness-owned worker panes.
 
@@ -1106,17 +1132,23 @@ def _clear_stale_prompt_residue(pane: str) -> bool:
     """
     tail = _pane_tail(pane)
     bottom = "\n".join(tail.splitlines()[-12:])
-    if PANE_TUI_BUSY_RE.search(bottom) or PANE_TUI_UNAVAILABLE_RE.search(bottom):
+    has_residue = bool(PANE_QUEUED_PROMPT_RE.search(bottom) or PANE_PROMPT_RESIDUE_RE.search(bottom))
+    if PANE_TUI_UNAVAILABLE_RE.search(bottom):
         return False
-    if not (PANE_QUEUED_PROMPT_RE.search(bottom) or PANE_PROMPT_RESIDUE_RE.search(bottom)):
+    if not has_residue:
+        if PANE_TUI_BUSY_RE.search(bottom):
+            return False
         return False
     try:
-        # Claude Code prompt editing has varied across versions; try both common
-        # line-kill paths. These keys are harmless at an idle prompt.
-        subprocess.run(["tmux", "send-keys", "-t", pane, "C-a", "C-k"], timeout=2)
-        time.sleep(0.15)
-        subprocess.run(["tmux", "send-keys", "-t", pane, "C-u"], timeout=2)
-        time.sleep(0.25)
+        # Claude Code prompt editing has varied across versions. Check after
+        # each conservative idle-prompt clear path so active output is never
+        # touched unless the pane already looked idle-with-residue.
+        for keys in (("C-a", "C-k"), ("C-u",), ("C-c",), ("Escape", "C-u")):
+            subprocess.run(["tmux", "send-keys", "-t", pane, *keys], timeout=2)
+            time.sleep(0.2)
+            after = "\n".join(_pane_tail(pane).splitlines()[-12:])
+            if not (PANE_QUEUED_PROMPT_RE.search(after) or PANE_PROMPT_RESIDUE_RE.search(after)):
+                return True
     except Exception:
         return False
     after = "\n".join(_pane_tail(pane).splitlines()[-12:])
@@ -1518,6 +1550,11 @@ def _lease_active_for(pane: str, sid: str, dispatch_id: str) -> bool:
     )
 
 
+def _pane_has_active_lease(pane: str) -> bool:
+    lease = read_lease(pane)
+    return bool(lease and lease.get("expires_at", "") > _utc_now())
+
+
 def _utc_now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -1792,6 +1829,8 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
     worker_skills = [
         "bash", "python", "dataclasses", "pytest", "pure-functions", "time-injection", "io", "fsm", "integration-testing", "json-patch", "typescript", "docs", "testing",
         "http-testing", "negative-testing", "activation-proof", "knowledge-ingest", "release-gate", "documentation",
+        "stub-llm", "e2e-test", "cli-view-assertion", "negative-control", "verifier", "registry-introspection",
+        "technical-writing", "markdown", "evidence-aggregation", "handoff-authoring", "traceability-patch", "knowledge-raw-writeback",
         "frontend", "flask", "http-routing", "autopilot-hooks", "json-traversal", "html", "javascript", "vanilla-dom",
         "product", "planning", "governance",
         "architecture", "schema", "state-machine", "distributed-systems",
@@ -1804,8 +1843,13 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
     worker_capabilities = [
         "bash", "python", "typescript", "docs", "testing",
         "frontend", "observability",
-        "harness.status", "harness.testing", "harness.failure_recovery", "harness.autopilot",
+        "harness.context_preflight", "harness.intent", "harness.dispatch_visibility", "harness.contracts",
+        "harness.dag", "harness.status", "harness.model_routing",
+        "dag.validate", "dag.ready_nodes", "dag.join_gate",
+        "harness.testing", "harness.failure_recovery", "harness.autopilot",
         "harness.activation_proof", "harness.reporting", "harness.knowledge", "harness.contracts",
+        "activation.proof", "negative_control", "runtime_artifacts",
+        "autopilot.monitor", "autopilot.safe_apply", "pane.deadlock_detection",
         "documentation", "schema", "state-machine", "storage", "sources",
         "browser.browse", "browser.qa", "code.review",
         "browser.mcp", "browser.automation", "browser.screenshot",
@@ -1859,17 +1903,19 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
                 quota_exhausted.extend(_model_alias_set("glm"))
         if pane.startswith("solar-harness-lab:") or pane == f"{SESSION}:0.2":
             _clear_stale_prompt_residue(pane)
-        unavailable_reason = _pane_unavailable_reason(pane)
+        runtime_unavailable_reason = _pane_runtime_unavailable_reason(pane, title)
+        unavailable_reason = runtime_unavailable_reason or _pane_unavailable_reason(pane)
         workers.append({
             "pane": pane,
             "models": models,
             "skills": worker_skills,
             "capabilities": worker_capabilities,
-            "busy": bool(read_lease(pane)) or _pane_tui_busy(pane) or bool(unavailable_reason),
+            "busy": _pane_has_active_lease(pane) or _pane_tui_busy(pane) or bool(unavailable_reason),
             "title": title,
             "quota_exhausted": quota_exhausted,
             "health": _pane_health(pane),
             "unavailable_reason": unavailable_reason,
+            "current_command": _pane_current_command(pane),
         })
     return workers
 
@@ -1890,13 +1936,25 @@ def _discover_evaluators(dry_run: bool = False) -> list[dict[str, Any]]:
             continue
         seen.add(pane)
         if _pane_exists(pane):
-            unavailable_reason = _pane_unavailable_reason(pane)
+            title = ""
+            try:
+                title = subprocess.run(
+                    ["tmux", "display-message", "-p", "-t", pane, "#{pane_title}"],
+                    text=True,
+                    capture_output=True,
+                    timeout=2,
+                ).stdout.strip()
+            except Exception:
+                title = ""
+            runtime_unavailable_reason = _pane_runtime_unavailable_reason(pane, title)
+            unavailable_reason = runtime_unavailable_reason or _pane_unavailable_reason(pane)
             evaluators.append({
                 "pane": pane,
                 "models": _models_for_pane(pane),
                 "skills": ["review", "testing", "bash"],
-                "busy": bool(read_lease(pane)) or _pane_tui_busy(pane) or bool(unavailable_reason),
+                "busy": _pane_has_active_lease(pane) or _pane_tui_busy(pane) or bool(unavailable_reason),
                 "unavailable_reason": unavailable_reason,
+                "current_command": _pane_current_command(pane),
             })
     return evaluators
 
