@@ -1879,6 +1879,7 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "harness.dag", "harness.status", "harness.model_routing",
         "intent.match", "intent.audit", "dispatch.intent_telemetry",
         "models.show", "models.lab_matrix", "models.footer_labels",
+        "context.inject", "wiki.status", "data_plane.audit",
         "dag.validate", "dag.ready_nodes", "dag.join_gate",
         "harness.testing", "harness.failure_recovery", "harness.autopilot",
         "harness.activation_proof", "harness.reporting", "harness.knowledge", "harness.contracts",
@@ -1904,7 +1905,8 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "analysis.causal_inference",
         "research.source_matrix", "research.evidence.extract",
         "research.claim.mine", "research.citation.verify",
-        "research.report.compile",
+        "research.report.compile", "report.compile",
+        "research.long_report_compiler", "research.report_ast",
     ]
     if dry_run and os.environ.get("SOLAR_GRAPH_DISPATCH_FAKE_WORKERS") == "1":
         return [
