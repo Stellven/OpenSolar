@@ -541,6 +541,40 @@ def tmux_title(target: str) -> str:
         return ""
 
 
+def pane_title_matches_role(target: str, role: str, title: str | None = None) -> bool:
+    if os.environ.get("SOLAR_AUTOPILOT_ALLOW_ANY_ROLE_PANE") == "1":
+        return True
+    title = tmux_title(target) if title is None else title
+    if role in ("builder", "lab-builder"):
+        if target == f"{SESSION}:0.2" or target.startswith("solar-harness-lab:"):
+            return bool(re.search(r"Builder|建设者|lab-builder", title, re.I)) and not bool(
+                re.search(r"PM|产品经理|Planner|规划者|Evaluator|审判官", title, re.I)
+            )
+        return False
+    if role == "evaluator":
+        if target != f"{SESSION}:0.3":
+            return False
+        non_role_title = re.sub(r"Evaluator|审判官", "", title, flags=re.I)
+        return bool(re.search(r"Evaluator|审判官", title, re.I)) and not bool(
+            re.search(r"PM|产品经理|Planner|规划者|Builder|建设者", non_role_title, re.I)
+        )
+    if role == "planner":
+        if target != f"{SESSION}:0.1":
+            return False
+        non_role_title = re.sub(r"Planner|规划者", "", title, flags=re.I)
+        return bool(re.search(r"Planner|规划者", title, re.I)) and not bool(
+            re.search(r"PM|产品经理|Builder|建设者|Evaluator|审判官", non_role_title, re.I)
+        )
+    if role == "pm":
+        if target != f"{SESSION}:0.0":
+            return False
+        non_role_title = re.sub(r"PM|产品经理", "", title, flags=re.I)
+        return bool(re.search(r"PM|产品经理", title, re.I)) and not bool(
+            re.search(r"Planner|规划者|Builder|建设者|Evaluator|审判官", non_role_title, re.I)
+        )
+    return False
+
+
 def tmux_set_title(target: str, title: str) -> bool:
     try:
         r = subprocess.run(["tmux", "select-pane", "-t", target, "-T", title], timeout=1.5)
@@ -834,7 +868,7 @@ def retry_queue(state: dict, dispatch: bool, cooldown: int) -> list[dict]:
             actions.append({"sid": sid, "action": item.get("type"), "queued": True, "reason": "pane_busy", "target": target})
             continue
         sent = False
-        if dispatch and target:
+        if dispatch and target and item.get("type") != "pane_safe_continue_prompt":
             clear_current_prompt(target)
         if dispatch and sid:
             sent = wake_sid(sid)
@@ -966,15 +1000,21 @@ def pane_target_for_handoff(handoff: str) -> str:
 def discover_worker_panes() -> list[str]:
     try:
         r = subprocess.run(
-            ["tmux", "list-panes", "-a", "-F", "#{session_name}:#{window_index}.#{pane_index}"],
+            ["tmux", "list-panes", "-a", "-F", "#{session_name}:#{window_index}.#{pane_index}\t#{pane_title}"],
             capture_output=True,
             text=True,
             timeout=2,
         )
         if r.returncode == 0:
-            panes = [p.strip() for p in r.stdout.splitlines() if p.strip()]
-            builders = [p for p in panes if p.startswith(f"{SESSION}:") or p.startswith("solar-harness-lab:")]
-            return builders or panes
+            rows = [p.rstrip("\n").split("\t", 1) for p in r.stdout.splitlines() if p.strip()]
+            builders = [
+                row[0].strip()
+                for row in rows
+                if row
+                and (row[0].strip().startswith(f"{SESSION}:") or row[0].strip().startswith("solar-harness-lab:"))
+                and pane_title_matches_role(row[0].strip(), "builder", row[1].strip() if len(row) > 1 else "")
+            ]
+            return builders
     except Exception:
         pass
     return [f"{SESSION}:0.2"]
@@ -1979,7 +2019,7 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
             mark_action(state, f, result)
             actions.append(result)
             continue
-        if dispatch and target:
+        if dispatch and target and ftype != "pane_safe_continue_prompt":
             clear_current_prompt(target)
         if ftype in ("graph_ready_nodes",):
             result = dispatch_ready_graph_nodes(sid, lease=dispatch)
@@ -2165,13 +2205,16 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
             actions.append(result)
         elif ftype == "pane_safe_continue_prompt":
             sent = False
-            if dispatch and f.get("target"):
+            role_ok = pane_title_matches_role(f.get("target", ""), f.get("role", ""))
+            if dispatch and f.get("target") and role_ok:
                 try:
                     sent = subprocess.run(["tmux", "send-keys", "-t", f["target"], "Enter"], timeout=2).returncode == 0
                 except Exception:
                     sent = False
             append_event(f.get("sid", ""), "autopilot_submitted_safe_continue_prompt", "info" if sent else "warn", f)
             result = {"sid": sid, "action": ftype, "target": f.get("target", ""), "dispatched": sent}
+            if not role_ok:
+                result["skipped"] = "role_mismatch"
             if sent and target:
                 used_targets.add(target)
             mark_action(state, f, result)
