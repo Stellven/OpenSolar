@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from research.report_metrics import append_model_usage_event, build_model_usage_event, parse_model_cli_output
+from .style_contract import render_golden_style_contract_markdown
 
 
 INTRO_HEADINGS = {"核心结论", "证据基础"}
@@ -52,6 +53,7 @@ def _split_h2(text: str) -> tuple[str, list[dict[str, str]], str]:
 
 
 def _chapter_prompt(title: str, heading: str, body: str) -> str:
+    style_contract = render_golden_style_contract_markdown()
     return f"""你是教授级技术 survey 的 chief editor。请把下面章节重写成自然、专业、可发表的中文章节。
 
 硬规则：
@@ -62,6 +64,10 @@ def _chapter_prompt(title: str, heading: str, body: str) -> str:
 - 不要编造论文、URL、benchmark 数字、发布日期。
 - 删除“本节立场/本节绑定/本节通过”这类生成器口吻，改成自然论述。
 - 保留明确判断、争议、局限和未解问题，不要写成宣传稿。
+- 按 Golden-Style 合同重写：每章必须有判断、机制解释、证据怎么读、硬伤/局限和最终判断。
+- 不要把章节写成资料摘要；要写成“这个方向为什么重要、解决了什么、没有解决什么、应该如何评价”的专家解释。
+
+{style_contract}
 
 报告题目：
 {title}
@@ -153,6 +159,7 @@ def _quality_gate(text: str, chapter_headings: list[str], min_chars: int) -> dic
         "ok": not issues,
         "char_count": len(text),
         "chapter_count": len(chapter_headings),
+        "style_marker_count": len(re.findall(r"不是|而是|评价|硬伤|怎么读|最终判断|关键|机制|解决", text)),
         "issues": issues,
     }
 
