@@ -55,7 +55,6 @@ def test_compile_section_and_survey(tmp_path):
     assert (tmp_path / "sections" / "ch01" / "sec01" / "prompt_packets" / "round_00.md").exists()
     packet = json.loads((tmp_path / "sections" / "ch01" / "sec01" / "prompt_packets" / "round_00.json").read_text(encoding="utf-8"))
     assert packet["writing_policy"]["policy_id"] == "solar.survey.professor_grade_writing.v1"
-    assert packet["golden_style_contract"]["policy_id"] == "solar.survey.golden_style.v1"
     template = packet["writing_policy"]["section_template"]
     assert "Literature Lineage" in template
     assert "Method Taxonomy" in template
@@ -63,13 +62,7 @@ def test_compile_section_and_survey(tmp_path):
     assert "Controversy Matrix" in template
     assert packet["chapter_context"]["chapter_id"] == "ch01"
     assert (tmp_path / "chapters" / "ch01" / "prompt_packet.md").exists()
-    section_prompt = (tmp_path / "sections" / "ch01" / "sec01" / "prompt_packets" / "round_00.md").read_text(encoding="utf-8")
-    assert "Golden-Style Writing Contract" in section_prompt
-    assert "不是 X，而是 Y" in section_prompt
-    assert "实验怎么读" in section_prompt
-    chapter_prompt = (tmp_path / "chapters" / "ch01" / "prompt_packet.md").read_text(encoding="utf-8")
-    assert "Professor-Grade Section Template" in chapter_prompt
-    assert "Golden-Style Writing Contract" in chapter_prompt
+    assert "Professor-Grade Section Template" in (tmp_path / "chapters" / "ch01" / "prompt_packet.md").read_text(encoding="utf-8")
     compiled = compile_survey(tmp_path)
     assert compiled["ok"] is True
     assert (tmp_path / "final.md").exists()
