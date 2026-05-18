@@ -13,7 +13,7 @@ from research.cli import build_parser, main
 
 def test_survey_cli_commands_registered():
     subs = build_parser()._subparsers._group_actions[0].choices
-    for name in ["survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-watch-register", "survey-watch-tick", "survey-rewrite-queue", "survey-rewrite-run", "survey-auto-repair", "survey-finalize-run", "survey-import-search-results", "survey-status-next-action", "survey-continue", "survey-review", "survey-compile", "survey-chief-editor", "survey-doctor", "survey-eval", "survey-golden-style", "survey-diagnose"]:
+    for name in ["survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-watch-register", "survey-watch-tick", "survey-rewrite-queue", "survey-rewrite-run", "survey-auto-repair", "survey-finalize-run", "survey-import-search-results", "survey-status-next-action", "survey-continue", "survey-review", "survey-compile", "survey-chief-editor", "survey-doctor", "survey-eval", "survey-diagnose"]:
         assert name in subs
 
 
@@ -52,47 +52,6 @@ def test_survey_eval_cli_require_complete_fails_plan_only(tmp_path, capsys):
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is False
     assert any(item.startswith("finalized_sections_low:0<") for item in payload["scorecard"]["issues"])
-
-
-def test_survey_golden_style_cli_rejects_underbuilt_report(tmp_path, capsys):
-    benchmark = tmp_path / "quality_golden.html"
-    benchmark.write_text(
-        """
-        <html><body>
-        <section><h1>Benchmark</h1><h2>不是摘要，而是判断</h2></section>
-        <section><h2>机制评价</h2><figure><svg></svg></figure><table><tr><td>risk</td></tr></table></section>
-        </body></html>
-        """,
-        encoding="utf-8",
-    )
-    (tmp_path / "final.md").write_text("# Thin\n\nThis section should become a real report.\n", encoding="utf-8")
-    rc = main([
-        "survey-golden-style",
-        "--output-dir", str(tmp_path),
-        "--benchmark-html", str(benchmark),
-        "--json",
-    ])
-    assert rc == 1
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["ok"] is False
-    assert payload["enabled"] is True
-    assert any(item.startswith("golden_final_chars_low:") for item in payload["issues"])
-    assert any(item.startswith("golden_template_residue_count:") for item in payload["issues"])
-    assert (tmp_path / "survey_golden_style.json").exists()
-
-
-def test_survey_golden_style_cli_requires_benchmark_when_requested(tmp_path, capsys):
-    (tmp_path / "final.md").write_text("# Report\n\n## 判断\n\n不是摘要，而是测试。\n", encoding="utf-8")
-    rc = main([
-        "survey-golden-style",
-        "--output-dir", str(tmp_path),
-        "--require-benchmark",
-        "--json",
-    ])
-    assert rc == 1
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["required"] is True
-    assert "golden_benchmark_required_missing" in payload["issues"]
 
 
 def test_survey_diagnose_cli_reports_issue_groups_and_next_action(tmp_path, capsys):

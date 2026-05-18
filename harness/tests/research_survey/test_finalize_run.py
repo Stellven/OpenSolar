@@ -97,24 +97,6 @@ def test_finalize_run_stops_and_writes_handoff_when_ledgers_missing(tmp_path):
     assert "paper" in text
 
 
-def test_finalize_run_can_require_golden_style_benchmark(tmp_path):
-    _ledgers(tmp_path)
-    payload = finalize_survey_run(
-        tmp_path,
-        brief="latent reasoning",
-        section_limit=1,
-        repair_limit=1,
-        min_finalized=1,
-        min_chars=100,
-        repair_passes=1,
-        require_golden_style=True,
-    )
-    assert payload["ok"] is False
-    assert payload["reason"] == "final_eval_failed"
-    assert payload["require_golden_style"] is True
-    assert "golden_benchmark_required_missing" in payload["final_eval"]["scorecard"]["issues"]
-
-
 def test_finalize_run_cli(tmp_path, capsys):
     _ledgers(tmp_path)
     rc = main([
