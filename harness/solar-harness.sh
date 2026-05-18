@@ -709,7 +709,10 @@ ensure_parallel_builder_lab() {
     target="$LAB_SESSION_NAME:0.$i"
     slot="lab-builder-$((i + 1))"
     content=$(tmux capture-pane -t "$target" -p -S -80 2>/dev/null | tail -80 || true)
-    if (( rebuild_for_model_matrix == 0 )) && printf '%s\n' "$content" | grep -qE "Persona:[[:space:]]*lab-builder([[:space:]]|$)"; then
+    current_cmd=$(tmux display-message -p -t "$target" '#{pane_current_command}' 2>/dev/null || echo "")
+    if (( rebuild_for_model_matrix == 0 )) \
+      && [[ ! "$current_cmd" =~ ^(bash|zsh|sh|fish)$ ]] \
+      && printf '%s\n' "$content" | grep -qE "Persona:[[:space:]]*lab-builder([[:space:]]|$)"; then
       continue
     fi
     pane_id=$(tmux display-message -p -t "$target" '#{pane_id}')
