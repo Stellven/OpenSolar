@@ -83,9 +83,11 @@ def test_chief_editor_can_require_hitl_approval(tmp_path):
 def test_chief_editor_uses_fallback_model_after_primary_failure(tmp_path, monkeypatch):
     _write_human_final(tmp_path)
     calls = []
+    prompts = []
 
     def fake_run_claude(prompt, *, model, timeout, max_budget_usd):
         calls.append(model)
+        prompts.append(prompt)
         if model == "opus":
             raise RuntimeError("claude_cli_failed:1:opus unavailable")
         return "## 架构范式\n\n改写后的架构范式章节。\n" if "架构范式" in prompt else "## 评估体系\n\n改写后的评估体系章节。\n"
@@ -104,6 +106,9 @@ def test_chief_editor_uses_fallback_model_after_primary_failure(tmp_path, monkey
     assert payload["requested_model"] == "opus"
     assert payload["model"] == "sonnet"
     assert calls == ["opus", "sonnet", "sonnet"]
+    assert any("Golden-Style Writing Contract" in prompt for prompt in prompts)
+    assert any("实验怎么读" in prompt for prompt in prompts)
+    assert any("最终判断" in prompt for prompt in prompts)
     assert any(item["model"] == "opus" and item["ok"] is False for item in payload["model_attempts"])
     usage_rows = [
         json.loads(line)

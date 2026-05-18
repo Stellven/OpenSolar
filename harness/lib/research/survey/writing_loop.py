@@ -9,6 +9,7 @@ from typing import Any
 
 from .backends import HumanResponseMissingError, LocalCommandWriterError, PanePacketPendingError, get_writer_backend
 from .schemas import SectionPromptPacket, SectionReview, SectionRevisionTrace, to_dict
+from .style_contract import GOLDEN_STYLE_CONTRACT, render_golden_style_contract_markdown
 
 PROFESSOR_GRADE_WRITING_POLICY = {
     "policy_id": "solar.survey.professor_grade_writing.v1",
@@ -37,6 +38,7 @@ PROFESSOR_GRADE_WRITING_POLICY = {
         "Prefer bounded conclusions when evidence comes from narrow benchmarks or partial implementations.",
         "Surface contradictions and missing evidence in the main body, not only in footnotes.",
         "Preserve claim/evidence tags so factuality gates can audit the section mechanically.",
+        "Write interpretive judgments, not source-by-source summaries: explain what each mechanism solves, what it breaks, and how to read the evidence.",
     ],
     "forbidden_patterns": [
         "Do not invent source names, URLs, metrics, benchmarks, or paper results.",
@@ -209,6 +211,7 @@ def build_section_prompt_packet(root: Path, section_id: str, round_index: int = 
             "Markdown section draft.",
             "At least six second-level headings.",
             "Follow the professor-grade section template in writing_policy.section_template.",
+            "Follow golden_style_contract: every major section needs a thesis, mechanism explanation, experiment/evidence reading, hard limitation, and final judgment.",
             "Include Literature Lineage, Method Taxonomy, Architecture Synthesis, Comparative Positioning, Terminology Evolution, Evaluation Protocol Matrix, Evaluation And Risk Boundary, Limitations And Failure Modes, Controversy Matrix, Contradiction Slots, and Open Problems.",
             "All core claims must reference claim_id and evidence_id tags.",
         ],
@@ -230,6 +233,7 @@ def build_section_prompt_packet(root: Path, section_id: str, round_index: int = 
     payload["evidence_pack"] = pack
     payload["chapter_context"] = chapter_context
     payload["writing_policy"] = PROFESSOR_GRADE_WRITING_POLICY
+    payload["golden_style_contract"] = GOLDEN_STYLE_CONTRACT
     payload["source_type_guidance"] = _source_type_guidance(source_types)
     payload["synthesis_outline"] = [
         "Define the local research question and scope.",
@@ -237,7 +241,7 @@ def build_section_prompt_packet(root: Path, section_id: str, round_index: int = 
         "Synthesize architecture mechanisms before evaluation claims.",
         "Compare source families instead of flattening them into citations.",
         "State evaluation limits and failure modes.",
-        "End with open problems that can feed chapter-level synthesis.",
+        "End with an explicit final judgment that can feed chapter-level synthesis.",
     ]
     payload["required_claim_ids"] = list(pack.get("claim_ids", [])[:6])
     payload["required_evidence_ids"] = list(pack.get("evidence_ids", [])[:8])
@@ -258,12 +262,14 @@ def _write_chapter_prompt_packet(root: Path, packet: dict) -> None:
         "active_section_id": packet.get("section_id"),
         "writer_backend": packet.get("writer_backend"),
         "writing_policy": packet.get("writing_policy"),
+        "golden_style_contract": packet.get("golden_style_contract"),
         "sibling_sections": chapter.get("sibling_sections") or [],
         "chapter_synthesis_contract": [
             "Ensure sibling sections do not repeat the same argument.",
             "Keep terminology consistent across the chapter.",
             "Preserve contradiction slots for chief-editor review.",
             "Make source-type differences visible in section conclusions.",
+            "Make the chapter read like expert judgment: thesis first, mechanism next, evidence reading after, hard limitation before final judgment.",
         ],
     }
     (chapter_dir / "prompt_packet.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -281,6 +287,7 @@ def _write_chapter_prompt_packet(root: Path, packet: dict) -> None:
         "",
     ]
     lines.extend(f"- {item}" for item in (payload.get("writing_policy") or {}).get("section_template", []))
+    lines.extend(["", render_golden_style_contract_markdown(payload.get("golden_style_contract") or GOLDEN_STYLE_CONTRACT).strip(), ""])
     lines.extend(["", "## Sibling Sections", ""])
     for section in payload.get("sibling_sections", []):
         lines.append(f"- {section.get('section_id')}: {section.get('title')}")
@@ -322,6 +329,7 @@ def _write_prompt_packet(section_dir: Path, packet: dict) -> None:
     ])
     md.extend(["", "## Professor-Grade Section Template", ""])
     md.extend(f"- {item}" for item in (packet.get("writing_policy") or {}).get("section_template", []))
+    md.extend(["", render_golden_style_contract_markdown(packet.get("golden_style_contract") or GOLDEN_STYLE_CONTRACT).strip(), ""])
     md.extend(["", "## Source-Type Guidance", ""])
     md.extend(f"- {item}" for item in packet.get("source_type_guidance", []))
     md.extend(["", "## Synthesis Outline", ""])
