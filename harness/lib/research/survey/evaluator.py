@@ -44,6 +44,8 @@ def evaluate_survey(
     *,
     min_finalized: int | None = None,
     require_complete: bool = False,
+    golden_benchmark_html: str | Path | None = None,
+    require_golden_style: bool = False,
 ) -> dict:
     root = Path(output_dir).expanduser()
     ast = _read_json(root / "survey_report_ast.json")
@@ -73,7 +75,13 @@ def evaluate_survey(
     finalized = sum(1 for path in section_dirs if (path / "final.md").exists())
     reviews = [_read_json(path / "review.json") for path in section_dirs if (path / "review.json").exists()]
     blocked_sections = int(packs.get("blocked") or 0) if isinstance(packs, dict) else len(sections)
-    quality = assess_survey_quality(root, ast=ast, packs=packs)
+    quality = assess_survey_quality(
+        root,
+        ast=ast,
+        packs=packs,
+        golden_benchmark_html=golden_benchmark_html,
+        require_golden_style=require_golden_style,
+    )
     taxonomy = quality.get("taxonomy", {})
     contradiction_matrix = quality.get("contradiction_matrix", {})
     section_factual_audit = quality.get("section_factual_audit", {})
@@ -85,6 +93,7 @@ def evaluate_survey(
     chapter_review = quality.get("chapter_review", {})
     chief_editor_review = quality.get("chief_editor_review", {})
     depth_profile = quality.get("depth_profile", {})
+    golden_style = quality.get("golden_style", {})
     issues: list[str] = []
     if len(chapters) < 8:
         issues.append(f"chapter_count_low:{len(chapters)}<8")
@@ -140,6 +149,9 @@ def evaluate_survey(
             issues.append(str(issue))
         for issue in depth_profile.get("issues", []):
             issues.append(str(issue))
+        if golden_style.get("enabled") or golden_style.get("required"):
+            for issue in golden_style.get("issues", []):
+                issues.append(str(issue))
         if require_complete:
             for issue in final_quality.get("issues", []):
                 issues.append(str(issue))
@@ -195,6 +207,7 @@ def evaluate_survey(
         "ok": verdict == "PASS",
         "scorecard": to_dict(scorecard),
         "strict": strict,
+        "require_golden_style": require_golden_style,
         "coverage": {
             "source_count": len(sources),
             "source_type_count": len(source_types),
@@ -216,6 +229,7 @@ def evaluate_survey(
         "chapter_review": chapter_review,
         "chief_editor_review": chief_editor_review,
         "depth_profile": depth_profile,
+        "golden_style": golden_style,
     }
     (root / "survey_eval.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return payload
