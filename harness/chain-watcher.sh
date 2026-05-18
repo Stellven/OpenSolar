@@ -32,12 +32,31 @@ notify_planner_codex_file() {
   printf '%s\n' "- [ ] [${ts}] [${type}] ${base} (~/.solar/codex-bridge/from-codex/)" >> "$PLANNER_INBOX"
 }
 
-# sprint-20260503-150911 — pane 0 (planner) 强制通知
+# sprint-20260503-150911 — Planner 强制通知
 # 解决问题: 规划者反复漏看 PLANNER-INBOX, Codex review 卡很久没人处理
-# 机制: tmux send-keys 直接写到 solar-harness:0.0 (planner pane) input box + C-m 提交
-PANE0_TARGET="solar-harness:0.0"
+# 机制: 运行时按 pane title 查找 Planner，避免新四分屏中 pane0=PM 时错投
+PANE_PLANNER_FALLBACK_TARGET="solar-harness:0.1"
 PANE0_THROTTLE_FILE="$HOME/.solar/harness/.chain-watcher-pane0-throttle"
 PANE0_THROTTLE_WINDOW=60   # 同 type 60s 内最多 1 条 send-keys (PLANNER-INBOX 不限频)
+
+resolve_planner_pane_target() {
+  if [ -n "${SOLAR_CHAIN_WATCHER_PLANNER_PANE:-}" ]; then
+    printf '%s\n' "$SOLAR_CHAIN_WATCHER_PLANNER_PANE"
+    return 0
+  fi
+
+  local idx title
+  while IFS= read -r idx; do
+    [ -n "$idx" ] || continue
+    title=$(tmux display-message -p -t "solar-harness:0.${idx}" '#{pane_title}' 2>/dev/null || true)
+    if printf '%s\n' "$title" | grep -Eq 'Planner|规划者'; then
+      printf 'solar-harness:0.%s\n' "$idx"
+      return 0
+    fi
+  done < <(tmux list-panes -t "solar-harness:0" -F '#{pane_index}' 2>/dev/null || true)
+
+  printf '%s\n' "$PANE_PLANNER_FALLBACK_TARGET"
+}
 
 notify_pane0_planner() {
   local type="$1" base="$2"
@@ -56,20 +75,21 @@ notify_pane0_planner() {
     fi
   fi
 
-  # D3: pane 0 idle 检测 (busy 时仍发 send-keys, claude TUI 自带 queue, 不打断思考)
-  local pane_tail busy=0
-  pane_tail=$(tmux capture-pane -t "$PANE0_TARGET" -p 2>/dev/null | tail -3)
+  # D3: Planner idle 检测 (busy 时仍发 send-keys, claude TUI 自带 queue, 不打断思考)
+  local target pane_tail busy=0
+  target=$(resolve_planner_pane_target)
+  pane_tail=$(tmux capture-pane -t "$target" -p 2>/dev/null | tail -3)
   if echo "$pane_tail" | grep -qE 'Cerebrating|Churning|Honking|Whatchamacalliting|Lollygagging|Skedaddling|Discombobulating|Embellishing|Razzmatazzing|Topsy-turvying|Infusing|Flowing'; then
     busy=1
   fi
 
   # 实际发送
   local msg="[CODEX-NOTIFY] 收到 ${type}: ${base}. 立刻读 ~/.solar/harness/PLANNER-INBOX.md 末尾处理 (不要等 watch)."
-  if tmux send-keys -t "$PANE0_TARGET" "$msg" C-m 2>/dev/null; then
+  if tmux send-keys -t "$target" "$msg" C-m 2>/dev/null; then
     if [ "$busy" = "1" ]; then
-      echo "[$(date '+%H:%M:%S')] pane 0 busy when notifying, queued: ${type} ${base}"
+      echo "[$(date '+%H:%M:%S')] planner pane busy when notifying, queued: ${type} ${base} (${target})"
     else
-      echo "[$(date '+%H:%M:%S')] pane 0 notified (idle): ${type} ${base}"
+      echo "[$(date '+%H:%M:%S')] planner pane notified (idle): ${type} ${base} (${target})"
     fi
     # 更新 throttle: 删旧行 + 写新 type:last_ts
     if [ -f "$PANE0_THROTTLE_FILE" ]; then
@@ -80,7 +100,7 @@ notify_pane0_planner() {
     echo "${type_key}:${now}" >> "${PANE0_THROTTLE_FILE}.tmp"
     mv "${PANE0_THROTTLE_FILE}.tmp" "$PANE0_THROTTLE_FILE"
   else
-    echo "[$(date '+%H:%M:%S')] pane 0 send-keys FAILED for ${type} ${base} (target ${PANE0_TARGET} not reachable?)"
+    echo "[$(date '+%H:%M:%S')] planner pane send-keys FAILED for ${type} ${base} (target ${target} not reachable?)"
   fi
 }
 
