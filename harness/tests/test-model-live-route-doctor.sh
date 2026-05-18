@@ -56,4 +56,11 @@ if [[ "$OUT" != *"live pane route"* || "$OUT" != *"API Usage Billing"* || "$OUT"
   exit 1
 fi
 
-echo "PASS: models doctor fails on live Opus API Billing/1210 route"
+STATUS_OUT=$(PATH="$TMPDIR_TEST/bin:$PATH" HOME="$TMPDIR_TEST/home" "$HARNESS_DIR_REAL/solar-harness.sh" main-status 2>&1)
+if [[ "$STATUS_OUT" != *"route: error"* ]]; then
+  echo "FAIL: main-status did not expose live route error"
+  echo "$STATUS_OUT"
+  exit 1
+fi
+
+echo "PASS: models doctor and main-status catch live Opus API Billing/1210 route"

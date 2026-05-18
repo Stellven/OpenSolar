@@ -131,6 +131,53 @@ fi
 [[ -n "$TOOL_FLAG" ]] && CLAUDE_CMD="$CLAUDE_CMD $TOOL_FLAG"
 [[ -n "${EXTRA_FLAGS:-}" ]] && CLAUDE_CMD="$CLAUDE_CMD $EXTRA_FLAGS"
 
+prepare_sanitized_claude_settings() {
+  local persona="$1"
+  local settings_dir="$HARNESS_DIR/run/claude-settings"
+  local pane_safe="${TMUX_PANE:-unknown}"
+  pane_safe="${pane_safe//[^A-Za-z0-9_.-]/_}"
+  local out="$settings_dir/${pane_safe}-${persona}.json"
+  mkdir -p "$settings_dir"
+  python3 - "$HOME/.claude/settings.json" "$out" "$HARNESS_DIR" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+src = Path(sys.argv[1])
+out = Path(sys.argv[2])
+harness_dir = Path(sys.argv[3])
+
+data = {}
+if src.exists():
+    data = json.loads(src.read_text(encoding="utf-8"))
+
+data.pop("env", None)
+hooks = data.setdefault("hooks", {})
+
+def append_hook(event_name, phase):
+    entries = hooks.setdefault(event_name, [])
+    command = f"python3 {harness_dir}/lib/claude_hook_event_bridge.py {phase}"
+    for entry in entries:
+        for hook in entry.get("hooks") or []:
+            if hook.get("command") == command:
+                return
+    entries.append({
+        "matcher": "",
+        "hooks": [{"type": "command", "command": command}],
+    })
+
+append_hook("PreToolUse", "pre-tool")
+append_hook("PostToolUse", "post-tool")
+out.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+  printf '%s\n' "$out"
+}
+
+CLAUDE_SETTINGS_FILE="$(prepare_sanitized_claude_settings "$PERSONA")"
+export SOLAR_CLAUDE_SETTINGS_FILE="$CLAUDE_SETTINGS_FILE"
+export SOLAR_CLAUDE_SETTING_SOURCES="local"
+CLAUDE_CMD="$CLAUDE_CMD --setting-sources ${SOLAR_CLAUDE_SETTING_SOURCES} --settings ${CLAUDE_SETTINGS_FILE}"
+
 # 退出信号捕获 → pane-exit.jsonl
 EXIT_LOG="$HARNESS_DIR/logs/pane-exit.jsonl"
 mkdir -p "$(dirname "$EXIT_LOG")" 2>/dev/null || true
