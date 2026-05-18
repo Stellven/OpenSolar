@@ -10,6 +10,7 @@ experiments/
 inbox/
 reports/
 telemetry/
+usage/
 brain/pending-improvements.jsonl
 capability-graph.jsonl
 codex-budget.json
