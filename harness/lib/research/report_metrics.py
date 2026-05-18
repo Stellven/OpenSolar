@@ -264,6 +264,7 @@ def build_execution_metrics(final_text: str, output_dir: str | Path | None = Non
         total_tokens = input_tokens + output_tokens
         source = "estimated_from_report_artifacts"
         estimated = True
+    fallback_reason = None if not estimated else "no_provider_usage"
     return {
         "document_word_count": document_word_count(final_text),
         "document_char_count": len(final_text),
@@ -272,6 +273,9 @@ def build_execution_metrics(final_text: str, output_dir: str | Path | None = Non
         "output_tokens": int(output_tokens),
         "token_usage_source": source,
         "token_usage_is_estimated": estimated,
+        "usage_source": source,
+        "estimated": estimated,
+        "fallback_reason": fallback_reason,
         "token_usage_files": usage_files,
     }
 
@@ -289,8 +293,12 @@ def render_execution_metrics_section(metrics: dict[str, Any]) -> str:
         f"| Input tokens | {int(metrics.get('input_tokens') or 0)} |",
         f"| Output tokens | {int(metrics.get('output_tokens') or 0)} |",
         "",
-        f"- Token usage source: `{metrics.get('token_usage_source') or 'N/A'}`",
-        f"- Token usage estimated: `{estimate_note}`",
+        "---",
+        f"Document word count: {int(metrics.get('document_word_count') or 0)}",
+        f"Total token consumption: {int(metrics.get('total_token_consumption') or 0)}",
+        f"Token usage source: {metrics.get('token_usage_source') or 'N/A'}",
+        f"Token usage estimated: {estimate_note}",
+        "---",
     ]).strip() + "\n"
 
 

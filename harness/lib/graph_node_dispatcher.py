@@ -1121,6 +1121,52 @@ def _pane_current_command(pane: str) -> str:
         return ""
 
 
+def _pane_current_prompt_has_residue(text: str) -> bool:
+    """Return true only when the visible current prompt has unsubmitted text.
+
+    `capture-pane` includes prompt history. Searching the whole tail for
+    `❯ text` makes an idle pane unavailable after any recent submitted command.
+    Only inspect the final prompt line and stop at status/footer lines.
+    """
+    lines = [line.rstrip() for line in text.splitlines()]
+    for line in reversed(lines):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith(("⏵", "?", "────────────────", "Esc ", "esc ", "Tab ", "Press up ")):
+            continue
+        if stripped.startswith("❯"):
+            remainder = stripped[1:].strip()
+            return bool(remainder) and not remainder.startswith("Try ")
+        return False
+    return False
+
+
+def _pane_prompt_residue_is_stale_scrollback(pane: str, text: str) -> bool:
+    """Return true for old completed Claude output, not live editable input.
+
+    In some panes `capture-pane` keeps the last completed Claude prompt visible
+    after the process has returned to a shell. That prompt line is scrollback,
+    but treating it as live input makes evaluator discovery report
+    `no_available_evaluator` forever.
+    """
+    if not _pane_current_prompt_has_residue(text):
+        return False
+    command = _pane_current_command(pane).lower()
+    if command not in {"bash", "zsh", "sh", "fish"}:
+        return False
+    return any(
+        marker in text
+        for marker in (
+            "✻ Churned for",
+            "✻ Cogitated for",
+            "✻ Baked for",
+            "✻ Brewed for",
+            "✻ Thought for",
+        )
+    )
+
+
 def _pane_tui_busy(pane: str) -> bool:
     tail = _pane_tail(pane)
     bottom = "\n".join(tail.splitlines()[-12:])
@@ -1136,7 +1182,7 @@ def _pane_tui_busy(pane: str) -> bool:
     # A non-empty Claude prompt at the bottom is unsubmitted input residue. If
     # we dispatch into it, Claude may concatenate unrelated tasks or open the
     # queued-message UI instead of executing the new node.
-    if PANE_PROMPT_RESIDUE_RE.search(bottom):
+    if _pane_current_prompt_has_residue(bottom) and not _pane_prompt_residue_is_stale_scrollback(pane, bottom):
         return True
     return False
 
@@ -1150,7 +1196,7 @@ def _pane_runtime_unavailable_reason(pane: str, title: str = "") -> str:
         return ""
     tail = _pane_tail(pane)
     bottom = "\n".join(tail.splitlines()[-12:])
-    if PANE_PROMPT_RESIDUE_RE.search(bottom) or PANE_QUEUED_PROMPT_RE.search(bottom):
+    if _pane_current_prompt_has_residue(bottom) or PANE_QUEUED_PROMPT_RE.search(bottom):
         return "worker_runtime_not_running"
     return ""
 
@@ -1165,7 +1211,7 @@ def _clear_stale_prompt_residue(pane: str) -> bool:
     """
     tail = _pane_tail(pane)
     bottom = "\n".join(tail.splitlines()[-12:])
-    has_residue = bool(PANE_QUEUED_PROMPT_RE.search(bottom) or PANE_PROMPT_RESIDUE_RE.search(bottom))
+    has_residue = bool(PANE_QUEUED_PROMPT_RE.search(bottom) or _pane_current_prompt_has_residue(bottom))
     if PANE_TUI_UNAVAILABLE_RE.search(bottom):
         return False
     if not has_residue:
@@ -1180,12 +1226,12 @@ def _clear_stale_prompt_residue(pane: str) -> bool:
             subprocess.run(["tmux", "send-keys", "-t", pane, *keys], timeout=2)
             time.sleep(0.2)
             after = "\n".join(_pane_tail(pane).splitlines()[-12:])
-            if not (PANE_QUEUED_PROMPT_RE.search(after) or PANE_PROMPT_RESIDUE_RE.search(after)):
+            if not (PANE_QUEUED_PROMPT_RE.search(after) or _pane_current_prompt_has_residue(after)):
                 return True
     except Exception:
         return False
     after = "\n".join(_pane_tail(pane).splitlines()[-12:])
-    return not (PANE_QUEUED_PROMPT_RE.search(after) or PANE_PROMPT_RESIDUE_RE.search(after))
+    return not (PANE_QUEUED_PROMPT_RE.search(after) or _pane_current_prompt_has_residue(after))
 
 
 def _pane_unavailable_reason(pane: str) -> str:
@@ -1198,7 +1244,7 @@ def _pane_unavailable_reason(pane: str) -> str:
         return "rate_limit_or_api_error"
     if PANE_QUEUED_PROMPT_RE.search(bottom):
         return "queued_prompt_residue"
-    if PANE_PROMPT_RESIDUE_RE.search(bottom):
+    if _pane_current_prompt_has_residue(bottom) and not _pane_prompt_residue_is_stale_scrollback(pane, bottom):
         return "unsubmitted_prompt_residue"
     return ""
 

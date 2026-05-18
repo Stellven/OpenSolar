@@ -3,13 +3,22 @@
 from __future__ import annotations
 
 import datetime
+import os
 from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "lib"))
+os.environ.setdefault("HARNESS_DIR", str(ROOT))
+LIB = str(ROOT / "lib")
+sys.path.insert(0, LIB)
 
 import graph_node_dispatcher as gnd  # noqa: E402
+
+while LIB in sys.path:
+    sys.path.remove(LIB)
+for module_name in list(sys.modules):
+    if module_name == "research" or module_name.startswith("research."):
+        sys.modules.pop(module_name, None)
 
 
 def _ts(delta_seconds: int) -> str:
@@ -36,6 +45,41 @@ def test_default_claude_try_prompt_is_not_prompt_residue() -> None:
 def test_non_default_prompt_text_is_prompt_residue() -> None:
     tail = "────────────────\n❯\u00a0继续执行下一个 dispatch 文件\n────────────────\n"
     assert gnd.PANE_PROMPT_RESIDUE_RE.search(tail)
+
+
+def test_current_prompt_residue_ignores_submitted_prompt_history() -> None:
+    tail = "\n".join([
+        "❯ 开评 N5",
+        "⏺ N5 PASS submitted.",
+        "✻ Cooked for 2m 11s",
+        "────────────────",
+        "❯\u00a0",
+        "────────────────",
+        "  ⏵⏵ bypass permissions on (shift+tab to cycle)",
+    ])
+    assert gnd.PANE_PROMPT_RESIDUE_RE.search(tail)
+    assert gnd._pane_current_prompt_has_residue(tail) is False
+
+
+def test_current_prompt_residue_detects_visible_unsubmitted_input() -> None:
+    tail = "\n".join([
+        "✻ Cooked for 2m 11s",
+        "────────────────",
+        "❯\u00a0派 N9 N10 评审",
+        "────────────────",
+        "  ⏵⏵ bypass permissions on (shift+tab to cycle)",
+    ])
+    assert gnd._pane_current_prompt_has_residue(tail) is True
+
+
+def test_current_prompt_residue_skips_tui_footer_lines() -> None:
+    tail = "\n".join([
+        "────────────────",
+        "❯\u00a0",
+        "────────────────",
+        "Esc to cancel · Tab to amend",
+    ])
+    assert gnd._pane_current_prompt_has_residue(tail) is False
 
 
 def test_worker_discovery_ignores_expired_lease(monkeypatch) -> None:
