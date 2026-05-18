@@ -27,6 +27,7 @@ import hashlib
 import urllib.error
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 _HARNESS_LIB = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -274,6 +275,75 @@ def _normalize_search_hits(raw_hits: list[dict], provider: str, max_results: int
     return hits
 
 
+def google_cse_search(query: str, max_results: int) -> tuple[list[dict], list[str]]:
+    """Search Google Custom Search JSON API when credentials are configured."""
+    api_key = os.getenv("GOOGLE_CSE_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    cx = os.getenv("GOOGLE_CSE_ID") or os.getenv("GOOGLE_SEARCH_ENGINE_ID")
+    if not api_key or not cx:
+        return [], ["google-cse missing GOOGLE_CSE_API_KEY/GOOGLE_API_KEY or GOOGLE_CSE_ID/GOOGLE_SEARCH_ENGINE_ID"]
+    url = "https://www.googleapis.com/customsearch/v1?" + urllib.parse.urlencode({
+        "key": api_key,
+        "cx": cx,
+        "q": query,
+        "num": max(1, min(max_results, 10)),
+    })
+    try:
+        payload = json.loads(http_get_text(url))
+    except (json.JSONDecodeError, urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+        return [], [f"google-cse: {exc}"]
+    raw_hits = [
+        {
+            "title": item.get("title") or "",
+            "url": item.get("link") or "",
+            "snippet": item.get("snippet") or "",
+        }
+        for item in payload.get("items") or []
+        if isinstance(item, dict)
+    ]
+    return _normalize_search_hits(raw_hits, "google-cse", max_results), []
+
+
+def arxiv_search(query: str, max_results: int) -> tuple[list[dict], list[str]]:
+    """Search arXiv's official Atom API for paper sources."""
+    if max_results <= 0:
+        return [], ["max_results must be > 0"]
+    search_query = "all:" + re.sub(r"\s+", "+", query.strip())
+    url = "https://export.arxiv.org/api/query?" + urllib.parse.urlencode({
+        "search_query": search_query,
+        "start": 0,
+        "max_results": max(1, min(max_results, 25)),
+        "sortBy": "relevance",
+        "sortOrder": "descending",
+    })
+    try:
+        raw = http_get_text(url, timeout=20)
+        root = ET.fromstring(raw)
+    except (ET.ParseError, urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+        return [], [f"arxiv: {exc}"]
+    ns = {"atom": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
+    raw_hits: list[dict] = []
+    for entry in root.findall("atom:entry", ns):
+        title = re.sub(r"\s+", " ", (entry.findtext("atom:title", default="", namespaces=ns) or "")).strip()
+        summary = re.sub(r"\s+", " ", (entry.findtext("atom:summary", default="", namespaces=ns) or "")).strip()
+        abs_url = ""
+        pdf_url = ""
+        for link in entry.findall("atom:link", ns):
+            href = link.attrib.get("href") or ""
+            rel = link.attrib.get("rel") or ""
+            title_attr = link.attrib.get("title") or ""
+            if rel == "alternate":
+                abs_url = href
+            if title_attr == "pdf":
+                pdf_url = href
+        raw_hits.append({
+            "title": title,
+            "url": abs_url or pdf_url,
+            "snippet": summary,
+            "source_type": "paper",
+        })
+    return _normalize_search_hits(raw_hits, "arxiv", max_results), []
+
+
 def browser_use_search(query: str, max_results: int, timeout: int = 90) -> tuple[list[dict], list[str]]:
     """Use browser rendering for search pages when available.
 
@@ -289,7 +359,7 @@ def browser_use_search(query: str, max_results: int, timeout: int = 90) -> tuple
         return [], [f"browser-use server missing: {BROWSER_USE_SERVER}"]
 
     python_bin = str(BROWSER_USE_PYTHON if BROWSER_USE_PYTHON.exists() else sys.executable)
-    search_url = "https://www.bing.com/search?" + urllib.parse.urlencode({"q": query})
+    search_url = "https://www.google.com/search?" + urllib.parse.urlencode({"q": query})
     script = """
 import asyncio, importlib.util, json, sys
 spec = importlib.util.spec_from_file_location("solar_browser_use_server", %(server)r)
@@ -360,39 +430,32 @@ asyncio.run(main())
 
 
 def http_web_search(query: str, max_results: int) -> tuple[list[dict], list[str]]:
-    """Search the web using dependency-free public endpoints as fallback.
+    """Legacy HTTP search is intentionally disabled for survey quality.
 
-    The command never fabricates hits: failures are returned as explicit errors.
+    DeepResearch previously fell back to Jina Search and DuckDuckGo HTML. Those
+    endpoints are too noisy for professor-grade source acquisition, so callers
+    should use google-cse, arxiv, google-arxiv, or browser-use.
     """
-    errors: list[str] = []
-    if max_results <= 0:
-        return [], ["max_results must be > 0"]
-
-    encoded = urllib.parse.urlencode({"q": query})
-    providers = [
-        ("jina", f"https://s.jina.ai/?{encoded}"),
-        ("duckduckgo", f"https://duckduckgo.com/html/?{encoded}"),
-    ]
-    raw_hits: list[dict] = []
-    for provider, url in providers:
-        try:
-            raw = http_get_text(url)
-            parsed = _parse_jina_search(raw, max_results) if provider == "jina" else _parse_duckduckgo_html(raw, max_results)
-            for hit in parsed:
-                hit["connector"] = provider
-                raw_hits.append(hit)
-                if len(raw_hits) >= max_results:
-                    return _normalize_search_hits(raw_hits, provider, max_results), errors
-        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
-            errors.append(f"{provider}: {exc}")
-    return _normalize_search_hits(raw_hits, "http-fallback", max_results), errors
+    return [], ["legacy http search disabled: use google-cse, arxiv, google-arxiv, or browser-use"]
 
 
 def web_search(query: str, max_results: int, provider: str = "auto") -> tuple[list[dict], list[str]]:
-    """Search provider router: browser-use first, HTTP only as fallback."""
+    """Search provider router with high-quality providers only."""
     errors: list[str] = []
-    if provider not in {"auto", "browser-use", "http"}:
+    if provider not in {"auto", "google-cse", "arxiv", "google-arxiv", "browser-use", "http"}:
         return [], [f"unknown search provider: {provider}"]
+
+    if provider in {"auto", "google-cse", "google-arxiv"}:
+        hits, google_errors = google_cse_search(query, max_results)
+        errors.extend(google_errors)
+        if hits or provider == "google-cse":
+            return hits, errors
+
+    if provider in {"auto", "arxiv", "google-arxiv"}:
+        hits, arxiv_errors = arxiv_search(query, max_results)
+        errors.extend(arxiv_errors)
+        if hits or provider in {"arxiv", "google-arxiv"}:
+            return hits, errors
 
     if provider in {"auto", "browser-use"}:
         hits, browser_errors = browser_use_search(query, max_results)
@@ -2679,6 +2742,30 @@ def cmd_survey_compile(args: argparse.Namespace) -> int:
     return 0 if payload.get("ok") else 1
 
 
+def cmd_survey_chief_editor(args: argparse.Namespace) -> int:
+    from research.survey.chief_editor import run_chief_editor
+
+    try:
+        payload = run_chief_editor(
+            args.output_dir,
+            source_path=args.source_path,
+            output_path=args.output_path,
+            backend=args.backend,
+            model=args.model,
+            command=args.command,
+            timeout=args.timeout,
+            max_budget_usd=args.max_budget_usd,
+            min_chars=args.min_chars,
+            require_hitl=args.require_hitl,
+        )
+    except (RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
+        payload = {"ok": False, "reason": str(exc), "output_dir": args.output_dir}
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") or args.allow_pending else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") or args.allow_pending else 1
+
+
 def cmd_survey_eval(args: argparse.Namespace) -> int:
     from research.survey.evaluator import evaluate_survey
 
@@ -2993,7 +3080,7 @@ ALL_SUBCOMMANDS = [
     "mine", "outline", "write", "check", "compile", "synthesize", "export", "eval-artifacts",
     "policy-doctor", "policy-explain",
     "source-audit",
-    "survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-watch-register", "survey-watch-tick", "survey-rewrite-queue", "survey-rewrite-run", "survey-auto-repair", "survey-finalize-run", "survey-import-search-results", "survey-review", "survey-compile", "survey-eval", "survey-diagnose",
+    "survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-watch-register", "survey-watch-tick", "survey-rewrite-queue", "survey-rewrite-run", "survey-auto-repair", "survey-finalize-run", "survey-import-search-results", "survey-status-next-action", "survey-continue", "survey-review", "survey-compile", "survey-chief-editor", "survey-eval", "survey-diagnose",
 ]
 
 SUBCOMMANDS = {
@@ -3034,6 +3121,7 @@ SUBCOMMANDS = {
     "survey-continue": cmd_survey_continue,
     "survey-review": cmd_survey_review,
     "survey-compile": cmd_survey_compile,
+    "survey-chief-editor": cmd_survey_chief_editor,
     "survey-eval": cmd_survey_eval,
     "survey-diagnose": cmd_survey_diagnose,
 }
@@ -3089,8 +3177,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--web-query", default="", help="Online query to search and fetch into sources")
     p_run.add_argument("--research-profile", default="general", help="Profile-aware web search plan for --web-query")
     p_run.add_argument("--max-results", type=int, default=5, help="Max web results for --web-query")
-    p_run.add_argument("--search-provider", default="auto", choices=["auto", "browser-use", "http"],
-                       help="Search provider: auto prefers browser-use and falls back to HTTP")
+    p_run.add_argument("--search-provider", default="auto", choices=["auto", "google-cse", "arxiv", "google-arxiv", "browser-use", "http"],
+                       help="Search provider: auto tries Google CSE, arXiv, then Google browser-use; legacy http is disabled")
     p_run.add_argument("--output-dir", default="", help="Directory for JSONL artifacts")
     p_run.add_argument("--output-md", default="", help="Path for compiled final markdown")
     p_run.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
@@ -3106,8 +3194,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_search.add_argument("--query", required=True, help="Search query")
     p_search.add_argument("--research-profile", default="general", help="Profile-aware search plan")
     p_search.add_argument("--max-results", type=int, default=10, help="Max results")
-    p_search.add_argument("--provider", default="auto", choices=["auto", "browser-use", "http"],
-                          help="Search provider: auto prefers browser-use and falls back to HTTP")
+    p_search.add_argument("--provider", default="auto", choices=["auto", "google-cse", "arxiv", "google-arxiv", "browser-use", "http"],
+                          help="Search provider: auto tries Google CSE, arXiv, then Google browser-use; legacy http is disabled")
     p_search.add_argument("--fetch", action="store_true", help="Fetch and store readable page text for each hit")
     p_search.add_argument("--require-online", action="store_true", help="Return non-zero if no online source is written")
     p_search.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
@@ -3401,6 +3489,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_compile = sub.add_parser("survey-compile", help="Compile survey section artifacts")
     p_survey_compile.add_argument("--output-dir", required=True)
     p_survey_compile.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_chief = sub.add_parser("survey-chief-editor", help="Rewrite human_final.md with a chief-editor backend")
+    p_survey_chief.add_argument("--output-dir", required=True)
+    p_survey_chief.add_argument("--source-path", default="", help="Defaults to <output-dir>/human_final.md")
+    p_survey_chief.add_argument("--output-path", default="", help="Defaults to <output-dir>/chief_editor_final.md")
+    p_survey_chief.add_argument("--backend", default="claude-cli", choices=["claude-cli", "opus", "claude", "local-command", "command", "deterministic"])
+    p_survey_chief.add_argument("--model", default="opus", help="Claude CLI model alias, e.g. opus")
+    p_survey_chief.add_argument("--command", default="", help="Local command for --backend local-command; receives chapter prompt on stdin")
+    p_survey_chief.add_argument("--timeout", type=int, default=240)
+    p_survey_chief.add_argument("--max-budget-usd", type=float, default=3.0)
+    p_survey_chief.add_argument("--min-chars", type=int, default=8000)
+    p_survey_chief.add_argument("--require-hitl", action="store_true", help="Require chief_editor_approval.txt containing APPROVED")
+    p_survey_chief.add_argument("--allow-pending", action="store_true", help="Return zero when waiting for HITL approval")
+    p_survey_chief.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     p_survey_eval = sub.add_parser("survey-eval", help="Evaluate professor-grade survey readiness")
     p_survey_eval.add_argument("--output-dir", required=True)

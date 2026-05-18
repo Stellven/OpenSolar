@@ -65,15 +65,26 @@ def test_compile_section_and_survey(tmp_path):
     compiled = compile_survey(tmp_path)
     assert compiled["ok"] is True
     assert (tmp_path / "final.md").exists()
+    assert (tmp_path / "human_final.md").exists()
     assert (tmp_path / "survey_contribution_matrix.json").exists()
     assert (tmp_path / "survey_final_summary.json").exists()
+    assert (tmp_path / "survey_human_final_summary.json").exists()
     assert (tmp_path / "chapters" / "ch01" / "editorial_review.json").exists()
+    assert compiled["human_final_md"].endswith("human_final.md")
     final_text = (tmp_path / "final.md").read_text(encoding="utf-8")
     assert "## Executive Summary" in final_text
     assert "## Technical Summary" in final_text
     assert "## Contribution Matrix" in final_text
     assert "## Roadmap" in final_text
     assert "## Chapter Synthesis" in final_text
+    human_text = (tmp_path / "human_final.md").read_text(encoding="utf-8")
+    assert "## Contribution Matrix" not in human_text
+    assert "## Technical Summary" not in human_text
+    assert "## Claim Map" not in human_text
+    assert "## Evidence Map" not in human_text
+    assert "prompt packet" not in human_text.lower()
+    assert "## 核心结论" in human_text
+    assert "## 证据基础" in human_text
     matrix = json.loads((tmp_path / "survey_contribution_matrix.json").read_text(encoding="utf-8"))
     assert matrix["finalized_sections"] == 1
     assert matrix["rows"][0]["has_literature_lineage"] is True
@@ -84,6 +95,10 @@ def test_compile_section_and_survey(tmp_path):
     assert matrix["rows"][0]["has_controversy_matrix"] is True
     summary = json.loads((tmp_path / "survey_final_summary.json").read_text(encoding="utf-8"))
     assert summary["technical_summary"]
+    human_summary = json.loads((tmp_path / "survey_human_final_summary.json").read_text(encoding="utf-8"))
+    assert human_summary["ok"] is True
+    assert human_summary["template_heading_count"] == 0
+    assert human_summary["char_count"] < len(final_text)
 
 
 def test_deterministic_writer_outputs_professor_survey_scaffolds(tmp_path):

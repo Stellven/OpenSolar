@@ -18,6 +18,7 @@ SESSION_NAME="solar-harness"
 LAB_SESSION_NAME="solar-harness-lab"
 LEGACY_LAB_SESSION_NAME="solar-harness-strategy"
 SPRINTS_DIR="$HARNESS_DIR/sprints"
+EXPECTED_PRODUCT_DELIVERY_PANES=4
 export HARNESS_DIR SPRINTS_DIR
 
 # sprint-20260503-094659 D2: 统一 state helper
@@ -122,6 +123,23 @@ configure_product_delivery_labels() {
   tmux select-pane -t "$SESSION_NAME:0.1" -T "$(pane_footer_label planner "Planner 规划者")" 2>/dev/null || true
   tmux select-pane -t "$SESSION_NAME:0.2" -T "$(pane_footer_label builder "Builder 主建设者")" 2>/dev/null || true
   tmux select-pane -t "$SESSION_NAME:0.3" -T "$(pane_footer_label evaluator "Evaluator 审判官")" 2>/dev/null || true
+}
+
+product_delivery_pane_count() {
+  tmux has-session -t "$SESSION_NAME" 2>/dev/null || { printf '0\n'; return 1; }
+  tmux list-panes -t "$SESSION_NAME:Product Delivery" 2>/dev/null | wc -l | tr -d ' '
+}
+
+warn_if_product_delivery_layout_incomplete() {
+  tmux has-session -t "$SESSION_NAME" 2>/dev/null || return 0
+  local panes_count
+  panes_count="$(product_delivery_pane_count 2>/dev/null || printf '0')"
+  if [[ "$panes_count" != "$EXPECTED_PRODUCT_DELIVERY_PANES" ]]; then
+    warn "Product Delivery layout 异常: expected=${EXPECTED_PRODUCT_DELIVERY_PANES} actual=${panes_count}; 当前不是健康四分屏"
+    warn "不要只看 status 报喜；请先修复 tmux layout，再派发/唤醒任务"
+    return 1
+  fi
+  return 0
 }
 
 apply_product_delivery_models() {
@@ -398,11 +416,16 @@ start_harness() {
     # 旧逻辑只数 current_command=claude，容易把真实运行中的 session 误判为死
     # session 并 kill 掉用户现场。已有 session 一律复用/attach，不自动销毁。
     local panes_count
-    panes_count=$(tmux list-panes -t "$SESSION_NAME" 2>/dev/null | wc -l | tr -d ' ')
-    ok "Solar Harness 已在运行 (${panes_count} panes)，直接接入"
+    panes_count="$(product_delivery_pane_count 2>/dev/null || printf '0')"
+    if [[ "$panes_count" == "$EXPECTED_PRODUCT_DELIVERY_PANES" ]]; then
+      ok "Solar Harness 已在运行 (${panes_count} panes)，直接接入"
+    else
+      warn "Solar Harness 已在运行，但 Product Delivery layout 异常 (${panes_count}/${EXPECTED_PRODUCT_DELIVERY_PANES} panes)"
+    fi
     if tmux list-windows -t "$SESSION_NAME" -F '#{window_name}' 2>/dev/null | grep -qx "Product Delivery"; then
       tmux select-window -t "$SESSION_NAME:Product Delivery" 2>/dev/null || true
     fi
+    warn_if_product_delivery_layout_incomplete || true
     configure_product_delivery_labels
     attach_or_print
     return
@@ -1902,6 +1925,13 @@ PY
 do_main_status() {
   printf '%s\n' "Solar Harness Main Status"
   printf '%s\n' "runtime != assignment != artifact: pane output alone is not proof of progress."
+  local physical_panes
+  physical_panes="$(product_delivery_pane_count 2>/dev/null || printf '0')"
+  if [[ "$physical_panes" == "$EXPECTED_PRODUCT_DELIVERY_PANES" ]]; then
+    printf '%s\n' "layout: ok expected=${EXPECTED_PRODUCT_DELIVERY_PANES} actual=${physical_panes}"
+  else
+    printf '%s\n' "layout: error expected=${EXPECTED_PRODUCT_DELIVERY_PANES} actual=${physical_panes}"
+  fi
   printf '%s\n' ""
   printf '┌────────────┬────────────┬──────────────┬────────────────────────────┬─────────────────────┬────────────────────────────┐\n'
   printf '│ Pane       │ Role       │ Runtime      │ Assignment                 │ Artifact            │ Title                      │\n'
