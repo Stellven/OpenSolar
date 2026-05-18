@@ -1079,32 +1079,49 @@ def epic_child_dependency_ready(sid: str) -> tuple[bool, list[str]]:
     return not blocked_by, blocked_by
 
 
+def normalize_external_prerequisite(raw) -> tuple[str, str, str] | None:
+    if isinstance(raw, dict):
+        upstream_sid = str(raw.get("sprint_id") or raw.get("sid") or raw.get("child_sprint_id") or "").strip()
+        required = str(raw.get("required_status") or raw.get("status") or raw.get("required") or "passed").strip().lower() or "passed"
+        label = json.dumps(raw, ensure_ascii=False, sort_keys=True)
+        return (label, upstream_sid, required) if upstream_sid else None
+    entry = str(raw).strip()
+    if not entry:
+        return None
+    if ":" in entry:
+        upstream_sid, required = entry.rsplit(":", 1)
+    else:
+        upstream_sid, required = entry, "passed"
+    upstream_sid = upstream_sid.strip()
+    required = required.strip().lower() or "passed"
+    return (entry, upstream_sid, required) if upstream_sid else None
+
+
 def child_graph_external_prerequisite_blocks(sid: str) -> list[dict]:
     graph_path = SPRINTS / f"{sid}.task_graph.json"
     if not graph_path.exists():
         return []
     graph = load_json(graph_path)
-    entries: list[str] = []
+    entries: list = []
     for raw in graph.get("prerequisites") or []:
-        if str(raw).strip():
-            entries.append(str(raw).strip())
+        if normalize_external_prerequisite(raw):
+            entries.append(raw)
     policy = graph.get("dependency_policy") or {}
     if isinstance(policy, dict):
         for raw in policy.get("blocks_until") or []:
-            if str(raw).strip():
-                entries.append(str(raw).strip())
+            if normalize_external_prerequisite(raw):
+                entries.append(raw)
     blocked: list[dict] = []
     seen: set[str] = set()
     for entry in entries:
-        if entry in seen:
+        parsed = normalize_external_prerequisite(entry)
+        if not parsed:
             continue
-        seen.add(entry)
-        if ":" in entry:
-            upstream_sid, required = entry.rsplit(":", 1)
-        else:
-            upstream_sid, required = entry, "passed"
-        upstream_sid = upstream_sid.strip()
-        required = (required.strip().lower() or "passed")
+        requirement, upstream_sid, required = parsed
+        dedupe_key = f"{upstream_sid}:{required}"
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
         status = sprint_status_payload(upstream_sid)
         current_status = str(status.get("status") or "").lower()
         current_phase = str(status.get("phase") or "").lower()
@@ -1113,7 +1130,7 @@ def child_graph_external_prerequisite_blocks(sid: str) -> list[dict]:
         )
         if not ok:
             blocked.append({
-                "requirement": entry,
+                "requirement": requirement,
                 "sprint_id": upstream_sid,
                 "required": required,
                 "current_status": current_status,
