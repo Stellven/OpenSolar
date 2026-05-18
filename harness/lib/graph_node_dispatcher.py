@@ -39,7 +39,7 @@ PANE_TUI_UNAVAILABLE_RE = re.compile(
     re.I,
 )
 PANE_QUEUED_PROMPT_RE = re.compile(r"Press up to edit queued messages", re.I)
-PANE_PROMPT_RESIDUE_RE = re.compile(r"^\s*❯(?![\s\u00a0]+Try\\s+\")[\s\u00a0]+[^\s\u00a0─]", re.M)
+PANE_PROMPT_RESIDUE_RE = re.compile(r"^\s*❯(?![\s\u00a0]+Try\s+\")[\s\u00a0]+[^\s\u00a0─]", re.M)
 STATE_READ_PREFLIGHT = """<!-- SOLAR_STATE_READ_PREFLIGHT -->
 ## 必须先读状态 (防写入 hook 卡死)
 
@@ -1064,6 +1064,39 @@ def _pane_exists(pane: str) -> bool:
         return False
 
 
+def _pane_title(pane: str) -> str:
+    try:
+        return subprocess.run(
+            ["tmux", "display-message", "-p", "-t", pane, "#{pane_title}"],
+            text=True,
+            capture_output=True,
+            timeout=2,
+        ).stdout.strip()
+    except Exception:
+        return ""
+
+
+def _pane_title_matches_role(pane: str, title: str, role: str) -> bool:
+    if os.environ.get("SOLAR_GRAPH_ALLOW_ANY_ROLE_PANE") == "1":
+        return True
+    title = title or _pane_title(pane)
+    negative = re.compile(r"PM|产品经理|Planner|规划者|Builder|建设者|Evaluator|审判官", re.I)
+    if role == "builder":
+        if pane == f"{SESSION}:0.2" or pane.startswith("solar-harness-lab:"):
+            return bool(re.search(r"Builder|建设者|lab-builder", title, re.I)) and not bool(
+                re.search(r"PM|产品经理|Planner|规划者|Evaluator|审判官", title, re.I)
+            )
+        return False
+    if role == "evaluator":
+        if pane != f"{SESSION}:0.3":
+            return False
+        non_role_title = re.sub(r"Evaluator|审判官", "", title, flags=re.I)
+        return bool(re.search(r"Evaluator|审判官", title, re.I)) and not bool(
+            negative.search(non_role_title)
+        )
+    return False
+
+
 def _pane_tail(pane: str, lines: int = 80) -> str:
     try:
         return subprocess.run(
@@ -1074,6 +1107,64 @@ def _pane_tail(pane: str, lines: int = 80) -> str:
         ).stdout
     except Exception:
         return ""
+
+
+def _pane_current_command(pane: str) -> str:
+    try:
+        return subprocess.run(
+            ["tmux", "display-message", "-p", "-t", pane, "#{pane_current_command}"],
+            text=True,
+            capture_output=True,
+            timeout=2,
+        ).stdout.strip()
+    except Exception:
+        return ""
+
+
+def _pane_current_prompt_has_residue(text: str) -> bool:
+    """Return true only when the visible current prompt has unsubmitted text.
+
+    `capture-pane` includes prompt history. Searching the whole tail for
+    `❯ text` makes an idle pane unavailable after any recent submitted command.
+    Only inspect the final prompt line and stop at status/footer lines.
+    """
+    lines = [line.rstrip() for line in text.splitlines()]
+    for line in reversed(lines):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith(("⏵", "?", "────────────────", "Esc ", "esc ", "Tab ", "Press up ")):
+            continue
+        if stripped.startswith("❯"):
+            remainder = stripped[1:].strip()
+            return bool(remainder) and not remainder.startswith("Try ")
+        return False
+    return False
+
+
+def _pane_prompt_residue_is_stale_scrollback(pane: str, text: str) -> bool:
+    """Return true for old completed Claude output, not live editable input.
+
+    In some panes `capture-pane` keeps the last completed Claude prompt visible
+    after the process has returned to a shell. That prompt line is scrollback,
+    but treating it as live input makes evaluator discovery report
+    `no_available_evaluator` forever.
+    """
+    if not _pane_current_prompt_has_residue(text):
+        return False
+    command = _pane_current_command(pane).lower()
+    if command not in {"bash", "zsh", "sh", "fish"}:
+        return False
+    return any(
+        marker in text
+        for marker in (
+            "✻ Churned for",
+            "✻ Cogitated for",
+            "✻ Baked for",
+            "✻ Brewed for",
+            "✻ Thought for",
+        )
+    )
 
 
 def _pane_tui_busy(pane: str) -> bool:
@@ -1091,9 +1182,23 @@ def _pane_tui_busy(pane: str) -> bool:
     # A non-empty Claude prompt at the bottom is unsubmitted input residue. If
     # we dispatch into it, Claude may concatenate unrelated tasks or open the
     # queued-message UI instead of executing the new node.
-    if PANE_PROMPT_RESIDUE_RE.search(bottom):
+    if _pane_current_prompt_has_residue(bottom) and not _pane_prompt_residue_is_stale_scrollback(pane, bottom):
         return True
     return False
+
+
+def _pane_runtime_unavailable_reason(pane: str, title: str = "") -> str:
+    command = _pane_current_command(pane).lower()
+    if command not in {"bash", "zsh", "sh", "fish"}:
+        return ""
+    title_lower = title.lower()
+    if "idle/no active sprint" not in title_lower:
+        return ""
+    tail = _pane_tail(pane)
+    bottom = "\n".join(tail.splitlines()[-12:])
+    if _pane_current_prompt_has_residue(bottom) or PANE_QUEUED_PROMPT_RE.search(bottom):
+        return "worker_runtime_not_running"
+    return ""
 
 
 def _clear_stale_prompt_residue(pane: str) -> bool:
@@ -1106,21 +1211,27 @@ def _clear_stale_prompt_residue(pane: str) -> bool:
     """
     tail = _pane_tail(pane)
     bottom = "\n".join(tail.splitlines()[-12:])
-    if PANE_TUI_BUSY_RE.search(bottom) or PANE_TUI_UNAVAILABLE_RE.search(bottom):
+    has_residue = bool(PANE_QUEUED_PROMPT_RE.search(bottom) or _pane_current_prompt_has_residue(bottom))
+    if PANE_TUI_UNAVAILABLE_RE.search(bottom):
         return False
-    if not (PANE_QUEUED_PROMPT_RE.search(bottom) or PANE_PROMPT_RESIDUE_RE.search(bottom)):
+    if not has_residue:
+        if PANE_TUI_BUSY_RE.search(bottom):
+            return False
         return False
     try:
-        # Claude Code prompt editing has varied across versions; try both common
-        # line-kill paths. These keys are harmless at an idle prompt.
-        subprocess.run(["tmux", "send-keys", "-t", pane, "C-a", "C-k"], timeout=2)
-        time.sleep(0.15)
-        subprocess.run(["tmux", "send-keys", "-t", pane, "C-u"], timeout=2)
-        time.sleep(0.25)
+        # Claude Code prompt editing has varied across versions. Check after
+        # each conservative idle-prompt clear path so active output is never
+        # touched unless the pane already looked idle-with-residue.
+        for keys in (("C-a", "C-k"), ("C-u",), ("C-c",), ("Escape", "C-u")):
+            subprocess.run(["tmux", "send-keys", "-t", pane, *keys], timeout=2)
+            time.sleep(0.2)
+            after = "\n".join(_pane_tail(pane).splitlines()[-12:])
+            if not (PANE_QUEUED_PROMPT_RE.search(after) or _pane_current_prompt_has_residue(after)):
+                return True
     except Exception:
         return False
     after = "\n".join(_pane_tail(pane).splitlines()[-12:])
-    return not (PANE_QUEUED_PROMPT_RE.search(after) or PANE_PROMPT_RESIDUE_RE.search(after))
+    return not (PANE_QUEUED_PROMPT_RE.search(after) or _pane_current_prompt_has_residue(after))
 
 
 def _pane_unavailable_reason(pane: str) -> str:
@@ -1133,7 +1244,7 @@ def _pane_unavailable_reason(pane: str) -> str:
         return "rate_limit_or_api_error"
     if PANE_QUEUED_PROMPT_RE.search(bottom):
         return "queued_prompt_residue"
-    if PANE_PROMPT_RESIDUE_RE.search(bottom):
+    if _pane_current_prompt_has_residue(bottom) and not _pane_prompt_residue_is_stale_scrollback(pane, bottom):
         return "unsubmitted_prompt_residue"
     return ""
 
@@ -1518,6 +1629,11 @@ def _lease_active_for(pane: str, sid: str, dispatch_id: str) -> bool:
     )
 
 
+def _pane_has_active_lease(pane: str) -> bool:
+    lease = read_lease(pane)
+    return bool(lease and lease.get("expires_at", "") > _utc_now())
+
+
 def _utc_now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -1702,6 +1818,9 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
             text_payload["section_isolation"] = True
             text_payload["section_id"] = node.get("section_id", "")
     instruction_file = _dispatch_file(sid, node_id)
+    instruction_file.parent.mkdir(parents=True, exist_ok=True)
+    instruction_file.write_text(build_dispatch_text(text_payload, pane), encoding="utf-8")
+    _inject_dispatch_context(instruction_file, sid=sid, pane=pane, dispatch_id=dispatch_id)
     if dry_run:
         return {
             "ok": True,
@@ -1712,10 +1831,6 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
             "dry_run": True,
             "graph_updated": False,
         }
-
-    instruction_file.parent.mkdir(parents=True, exist_ok=True)
-    instruction_file.write_text(build_dispatch_text(text_payload, pane), encoding="utf-8")
-    _inject_dispatch_context(instruction_file, sid=sid, pane=pane, dispatch_id=dispatch_id)
 
     sent = _send_to_pane(pane, instruction_file, dry_run, sid=sid, dispatch_id=dispatch_id)
     graph_updated = False
@@ -1792,6 +1907,8 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
     worker_skills = [
         "bash", "python", "dataclasses", "pytest", "pure-functions", "time-injection", "io", "fsm", "integration-testing", "json-patch", "typescript", "docs", "testing",
         "http-testing", "negative-testing", "activation-proof", "knowledge-ingest", "release-gate", "documentation",
+        "stub-llm", "e2e-test", "cli-view-assertion", "negative-control", "verifier", "registry-introspection",
+        "technical-writing", "markdown", "evidence-aggregation", "handoff-authoring", "traceability-patch", "knowledge-raw-writeback",
         "frontend", "flask", "http-routing", "autopilot-hooks", "json-traversal", "html", "javascript", "vanilla-dom",
         "product", "planning", "governance",
         "architecture", "schema", "state-machine", "distributed-systems",
@@ -1804,8 +1921,16 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
     worker_capabilities = [
         "bash", "python", "typescript", "docs", "testing",
         "frontend", "observability",
-        "harness.status", "harness.testing", "harness.failure_recovery", "harness.autopilot",
+        "harness.context_preflight", "harness.intent", "harness.dispatch_visibility", "harness.contracts",
+        "harness.dag", "harness.status", "harness.model_routing",
+        "intent.match", "intent.audit", "dispatch.intent_telemetry",
+        "models.show", "models.lab_matrix", "models.footer_labels",
+        "context.inject", "wiki.status", "data_plane.audit",
+        "dag.validate", "dag.ready_nodes", "dag.join_gate",
+        "harness.testing", "harness.failure_recovery", "harness.autopilot",
         "harness.activation_proof", "harness.reporting", "harness.knowledge", "harness.contracts",
+        "activation.proof", "negative_control", "runtime_artifacts",
+        "autopilot.monitor", "autopilot.safe_apply", "pane.deadlock_detection",
         "documentation", "schema", "state-machine", "storage", "sources",
         "browser.browse", "browser.qa", "code.review",
         "browser.mcp", "browser.automation", "browser.screenshot",
@@ -1822,9 +1947,12 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "ruflo.swarm", "ruflo.plugins", "ruflo.agent_catalog",
         "ruflo.memory", "ruflo.mcp", "ruflo.workflow_templates",
         "product.requirements", "research.scope_rewrite",
+        "research.empirical_pipeline", "research.literature_review",
+        "analysis.causal_inference",
         "research.source_matrix", "research.evidence.extract",
         "research.claim.mine", "research.citation.verify",
-        "research.report.compile",
+        "research.report.compile", "report.compile",
+        "research.long_report_compiler", "research.report_ast",
     ]
     if dry_run and os.environ.get("SOLAR_GRAPH_DISPATCH_FAKE_WORKERS") == "1":
         return [
@@ -1851,6 +1979,8 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         # panes share the session prefix but must not be treated as builders.
         if pane != f"{SESSION}:0.2" and not pane.startswith("solar-harness-lab:"):
             continue
+        if not _pane_title_matches_role(pane, title, "builder"):
+            continue
         models = _models_for_pane(pane, title)
         quota_exhausted: list[str] = []
         title_lower = title.lower()
@@ -1859,17 +1989,19 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
                 quota_exhausted.extend(_model_alias_set("glm"))
         if pane.startswith("solar-harness-lab:") or pane == f"{SESSION}:0.2":
             _clear_stale_prompt_residue(pane)
-        unavailable_reason = _pane_unavailable_reason(pane)
+        runtime_unavailable_reason = _pane_runtime_unavailable_reason(pane, title)
+        unavailable_reason = runtime_unavailable_reason or _pane_unavailable_reason(pane)
         workers.append({
             "pane": pane,
             "models": models,
             "skills": worker_skills,
             "capabilities": worker_capabilities,
-            "busy": bool(read_lease(pane)) or _pane_tui_busy(pane) or bool(unavailable_reason),
+            "busy": _pane_has_active_lease(pane) or _pane_tui_busy(pane) or bool(unavailable_reason),
             "title": title,
             "quota_exhausted": quota_exhausted,
             "health": _pane_health(pane),
             "unavailable_reason": unavailable_reason,
+            "current_command": _pane_current_command(pane),
         })
     return workers
 
@@ -1890,13 +2022,18 @@ def _discover_evaluators(dry_run: bool = False) -> list[dict[str, Any]]:
             continue
         seen.add(pane)
         if _pane_exists(pane):
-            unavailable_reason = _pane_unavailable_reason(pane)
+            title = _pane_title(pane)
+            if not _pane_title_matches_role(pane, title, "evaluator"):
+                continue
+            runtime_unavailable_reason = _pane_runtime_unavailable_reason(pane, title)
+            unavailable_reason = runtime_unavailable_reason or _pane_unavailable_reason(pane)
             evaluators.append({
                 "pane": pane,
                 "models": _models_for_pane(pane),
                 "skills": ["review", "testing", "bash"],
-                "busy": bool(read_lease(pane)) or _pane_tui_busy(pane) or bool(unavailable_reason),
+                "busy": _pane_has_active_lease(pane) or _pane_tui_busy(pane) or bool(unavailable_reason),
                 "unavailable_reason": unavailable_reason,
+                "current_command": _pane_current_command(pane),
             })
     return evaluators
 
@@ -2003,6 +2140,12 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
             continue
 
         instruction_file = _eval_dispatch_file(sid, node_id)
+        instruction_file.parent.mkdir(parents=True, exist_ok=True)
+        instruction_file.write_text(
+            build_eval_dispatch_text(graph, graph_path, node, pane, dispatch_id),
+            encoding="utf-8",
+        )
+        _inject_dispatch_context(instruction_file, sid=sid, pane=pane, dispatch_id=dispatch_id)
         if dry_run:
             dry_run_used_panes.add(pane)
             dispatched.append({
@@ -2013,12 +2156,6 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
                 "dry_run": True,
             })
             continue
-        instruction_file.parent.mkdir(parents=True, exist_ok=True)
-        instruction_file.write_text(
-            build_eval_dispatch_text(graph, graph_path, node, pane, dispatch_id),
-            encoding="utf-8",
-        )
-        _inject_dispatch_context(instruction_file, sid=sid, pane=pane, dispatch_id=dispatch_id)
         sent = _send_to_pane(pane, instruction_file, dry_run, sid=sid, dispatch_id=dispatch_id)
         if not sent:
             if not dry_run:
