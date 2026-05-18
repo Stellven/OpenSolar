@@ -9,6 +9,7 @@ if _HARNESS_LIB not in sys.path:
     sys.path.insert(0, _HARNESS_LIB)
 
 from research.survey.evidence_pack import build_evidence_packs
+from research.survey.backends import LocalCommandWriterError, PanePacketSurveyWriterBackend
 from research.survey.planner import create_survey_plan, write_survey_plan
 from research.survey.section_compiler import compile_section, compile_survey
 from research.survey.writing_loop import run_ready_sections, run_section_revision_loop, watch_pane_responses
@@ -259,6 +260,57 @@ def test_pane_packet_backend_prepares_dispatch_and_waits(tmp_path):
     assert (tmp_path / "sections" / "ch01" / "sec01" / "pane_dispatch" / "round_00.md").exists()
     review = json.loads((tmp_path / "sections" / "ch01" / "sec01" / "review.json").read_text(encoding="utf-8"))
     assert review["verdict"] == "WAITING_FOR_PANE"
+
+
+def test_pane_packet_send_rejects_product_delivery_main_pane(monkeypatch):
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+
+        class Result:
+            returncode = 0
+            stdout = "solar-harness\tPM 产品经理 | 模型:Opus\n"
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.delenv("SOLAR_ALLOW_MAIN_PANE_SURVEY_SEND", raising=False)
+    monkeypatch.setattr("research.survey.backends.subprocess.run", fake_run)
+    backend = PanePacketSurveyWriterBackend(pane_target="solar-harness:0.0", send=True)
+
+    try:
+        backend._send_to_pane("/tmp/dispatch.md", "/tmp/response.md")
+    except LocalCommandWriterError as exc:
+        assert exc.reason.startswith("pane_target_role_forbidden:solar-harness:0.0")
+    else:
+        raise AssertionError("Product Delivery PM pane should be rejected for survey pane-send")
+
+    assert calls == [["tmux", "display-message", "-p", "-t", "solar-harness:0.0", "#{session_name}\t#{pane_title}"]]
+
+
+def test_pane_packet_send_allows_lab_builder_pane(monkeypatch):
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+
+        class Result:
+            returncode = 0
+            stderr = ""
+
+        if cmd[:2] == ["tmux", "display-message"]:
+            Result.stdout = "solar-harness-lab\tBuilder 1 | 模型:GLM\n"
+        else:
+            Result.stdout = ""
+        return Result()
+
+    monkeypatch.delenv("SOLAR_ALLOW_MAIN_PANE_SURVEY_SEND", raising=False)
+    monkeypatch.setattr("research.survey.backends.subprocess.run", fake_run)
+    backend = PanePacketSurveyWriterBackend(pane_target="solar-harness-lab:0.0", send=True)
+
+    assert backend._send_to_pane("/tmp/dispatch.md", "/tmp/response.md") is True
+    assert any(cmd[:3] == ["tmux", "send-keys", "-t"] for cmd in calls)
 
 
 def test_pane_packet_backend_consumes_response(tmp_path):
