@@ -1537,6 +1537,24 @@ def _research_status_summary(limit: int = 5) -> dict:
                 return "L3" if reason in ("cli_no_usage", "cli_rate_limit") else "L4"
             return None
 
+        def first_markdown_heading(path: Path) -> str:
+            try:
+                for line in path.read_text(encoding="utf-8", errors="ignore").splitlines()[:80]:
+                    stripped = line.strip()
+                    if stripped.startswith("#"):
+                        return stripped.lstrip("#").strip()
+            except Exception:
+                return ""
+            return ""
+
+        def title_from_dir(path: Path) -> str:
+            name = path.name
+            name = re.sub(r"^deepresearch[-_]*", "", name, flags=re.IGNORECASE)
+            name = re.sub(r"[-_]20\d{6}T\d{6}[-+]\d{4}$", "", name)
+            name = re.sub(r"[-_]20\d{6}$", "", name)
+            name = re.sub(r"[-_]20\d{4}$", "", name)
+            return " ".join(part for part in re.split(r"[-_]+", name) if part).strip()
+
         def run_from_eval(ef: Path) -> dict:
             data = load_json(ef)
             output_dir = Path(str(data.get("output_dir") or ef.parent)).expanduser()
@@ -1549,9 +1567,20 @@ def _research_status_summary(limit: int = 5) -> dict:
             estimated = metrics.get("estimated")
             if estimated is None and metrics:
                 estimated = bool(metrics.get("token_usage_is_estimated", False))
+            run_id = str(data.get("run_id") or ef.name.split("-research_eval", 1)[0])
+            task_title = (
+                str(data.get("title") or data.get("task_title") or data.get("topic") or "").strip()
+                or first_markdown_heading(final_md)
+                or title_from_dir(output_dir)
+                or ef.name.split("-research_eval", 1)[0]
+            )
+            task_description = title_from_dir(output_dir) or str(output_dir.name)
             return {
-                "run_id": str(data.get("run_id") or ef.name.split("-research_eval", 1)[0]),
+                "run_id": run_id,
+                "short_run_id": run_id[:10],
                 "sid": ef.name.split("-research_eval", 1)[0],
+                "task_title": task_title,
+                "task_description": task_description,
                 "status": str(data.get("status") or "unknown"),
                 "source_count": data.get("source_count", 0),
                 "evidence_count": data.get("evidence_count", 0),
@@ -2217,13 +2246,14 @@ td {
   align-items: start;
 }
 .research-run-title {
-  font: 950 0.95rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 950 0.96rem "Avenir Next", "Trebuchet MS", sans-serif;
+  line-height: 1.26;
   overflow-wrap: anywhere;
 }
 .research-run-sub {
   margin-top: 0.18rem;
   color: var(--muted);
-  font-size: 0.78rem;
+  font: 760 0.76rem ui-monospace, SFMono-Regular, Menlo, monospace;
   overflow-wrap: anywhere;
 }
 .research-metric-row {
@@ -2805,10 +2835,14 @@ function renderResearchStatus(research, compact) {
     const status = run.status || 'unknown';
     const ok = status === 'passed';
     const citation = run.citation_accuracy == null ? 'N/A' : Math.round((run.citation_accuracy || 0) * 100) + '%';
+    const runId = run.run_id || run.sid || '-';
+    const shortRunId = run.short_run_id || String(runId).slice(0, 10);
+    const taskTitle = run.task_title || run.task_description || run.sid || runId;
+    const taskSub = (run.task_description && run.task_description !== taskTitle ? run.task_description + ' · ' : '') + 'run ' + shortRunId;
     return '<div class="research-run-card ' + (ok ? 'ok' : '') + '">' +
       '<div class="research-run-head">' +
-        '<div><div class="research-run-title">' + esc(run.run_id || run.sid || '-') + '</div>' +
-        '<div class="research-run-sub">' + esc(run.sid || '-') + '</div></div>' +
+        '<div><div class="research-run-title">' + esc(taskTitle) + '</div>' +
+        '<div class="research-run-sub" title="' + esc(runId) + '">' + esc(taskSub) + '</div></div>' +
         '<div>' + statusBadge(ok ? 'ok' : 'warn') + '</div>' +
       '</div>' +
       '<div class="research-metric-row">' +
