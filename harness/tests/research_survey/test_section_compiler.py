@@ -234,6 +234,55 @@ def test_local_command_backend_consumes_stdout(tmp_path):
     assert result["ok"] is True
     assert result["writer_backend"] == "local-command"
     assert "Local command" in (section_dir / "final.md").read_text(encoding="utf-8")
+    usage_rows = [
+        json.loads(line)
+        for line in (tmp_path / "model_usage.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert usage_rows
+    assert usage_rows[0]["token_usage_is_estimated"] is True
+
+
+def test_local_command_backend_records_real_usage_json(tmp_path):
+    _strong_fixture(tmp_path)
+    section_dir = tmp_path / "sections" / "ch01" / "sec01"
+    pack = json.loads((section_dir / "evidence_pack.json").read_text(encoding="utf-8"))
+    claim_ids = pack["claim_ids"][:3]
+    evidence_ids = pack["evidence_ids"][:4]
+    script = tmp_path / "writer_json.py"
+    body = (
+        "## Architecture Synthesis\n\n"
+        f"JSON writer with [claim:{claim_ids[0]}] [evidence:{evidence_ids[0]}].\n\n"
+        "## Comparative Positioning\n\nComparison text.\n\n"
+        f"## Evaluation And Risk Boundary\n\nEvaluation with [claim:{claim_ids[1]}] [evidence:{evidence_ids[1]}].\n\n"
+        f"## Limitations And Failure Modes\n\nLimitations with [claim:{claim_ids[1]}] [evidence:{evidence_ids[1]}].\n\n"
+        f"## Contradiction Slots\n\nContradiction with [claim:{claim_ids[2]}] [evidence:{evidence_ids[2]}] [evidence:{evidence_ids[3]}].\n\n"
+        "## Source Map\n\nSources.\n\n"
+        "## Claim Map\n\nClaims.\n\n"
+        "## Open Problems\n\nOpen problems.\n"
+    )
+    script.write_text(
+        "import json, sys\n"
+        "sys.stdin.read()\n"
+        f"print(json.dumps({{'result': {body!r}, 'usage': {{'input_tokens': 123, 'output_tokens': 45, 'total_tokens': 168}}}}))\n",
+        encoding="utf-8",
+    )
+    result = run_section_revision_loop(
+        tmp_path,
+        "ch01/sec01",
+        writer_backend="local-command",
+        writer_command=f"{sys.executable} {script}",
+        min_chars=100,
+    )
+    assert result["ok"] is True
+    assert "JSON writer" in (section_dir / "final.md").read_text(encoding="utf-8")
+    usage_rows = [
+        json.loads(line)
+        for line in (tmp_path / "model_usage.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert usage_rows[0]["token_usage_is_estimated"] is False
+    assert usage_rows[0]["total_tokens"] == 168
 
 
 def test_local_command_backend_reports_missing_command(tmp_path):

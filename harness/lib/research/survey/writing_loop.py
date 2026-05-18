@@ -222,6 +222,7 @@ def build_section_prompt_packet(root: Path, section_id: str, round_index: int = 
             "review": str(section_dir / "review.json"),
             "revision_trace": str(section_dir / "revision_trace.json"),
             "final": str(section_dir / "final.md"),
+            "model_usage": str(root / "model_usage.jsonl"),
         },
     )
     payload = to_dict(packet)

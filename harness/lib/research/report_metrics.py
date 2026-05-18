@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -55,6 +56,121 @@ def _walk_json(value: Any) -> dict[str, int]:
     return totals
 
 
+def extract_token_usage(value: Any) -> dict[str, int]:
+    """Extract provider token fields from a nested JSON-like payload."""
+    return _walk_json(value)
+
+
+def extract_text_from_model_payload(value: Any) -> str:
+    """Best-effort extraction for model CLI JSON outputs."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        for key in ("result", "completion", "content", "text", "output"):
+            item = value.get(key)
+            if isinstance(item, str) and item.strip():
+                return item
+        content = value.get("content")
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if isinstance(item, dict) and isinstance(item.get("text"), str):
+                    parts.append(item["text"])
+                elif isinstance(item, str):
+                    parts.append(item)
+            if parts:
+                return "\n".join(parts)
+    return ""
+
+
+def parse_model_cli_output(stdout: str, stderr: str = "") -> tuple[str, dict[str, int], list[dict[str, Any]]]:
+    """Parse text/json/stream-json model CLI output into text plus token usage."""
+    text = (stdout or "").strip()
+    usage: dict[str, int] = {}
+    payloads: list[dict[str, Any]] = []
+    raw = "\n".join(part for part in (stdout, stderr) if part)
+
+    def merge(row: dict[str, int]) -> None:
+        for key, value in row.items():
+            usage[key] = usage.get(key, 0) + value
+
+    try:
+        value = json.loads(stdout)
+        if isinstance(value, dict):
+            payloads.append(value)
+            merge(_walk_json(value))
+            extracted = extract_text_from_model_payload(value)
+            if extracted:
+                text = extracted.strip()
+            return text, usage, payloads
+    except json.JSONDecodeError:
+        pass
+
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line or not line.startswith("{"):
+            continue
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            payloads.append(value)
+            merge(_walk_json(value))
+            extracted = extract_text_from_model_payload(value)
+            if extracted:
+                text = extracted.strip()
+    return text, usage, payloads
+
+
+def build_model_usage_event(
+    *,
+    backend: str,
+    model: str = "",
+    prompt: str = "",
+    output: str = "",
+    usage: dict[str, int] | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    real_usage = {key: int(value) for key, value in (usage or {}).items() if key in TOKEN_KEYS and int(value or 0) >= 0}
+    if real_usage:
+        input_tokens = int(real_usage.get("input_tokens") or real_usage.get("prompt_tokens") or 0)
+        output_tokens = int(real_usage.get("output_tokens") or real_usage.get("completion_tokens") or 0)
+        total_tokens = int(real_usage.get("total_tokens") or sum(real_usage.values()))
+        event: dict[str, Any] = {
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "backend": backend,
+            "model": model,
+            "token_usage_source": "provider_usage_ledger",
+            "token_usage_is_estimated": False,
+            "total_tokens": total_tokens,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            **real_usage,
+        }
+    else:
+        event = {
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "backend": backend,
+            "model": model,
+            "token_usage_source": "estimated_from_model_io",
+            "token_usage_is_estimated": True,
+            "estimated_total_tokens": estimate_tokens(prompt) + estimate_tokens(output),
+            "estimated_input_tokens": estimate_tokens(prompt),
+            "estimated_output_tokens": estimate_tokens(output),
+        }
+    if metadata:
+        event["metadata"] = metadata
+    return event
+
+
+def append_model_usage_event(path: str | Path, event: dict[str, Any]) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
+
+
 def _read_usage_json(path: Path) -> list[dict[str, int]]:
     rows: list[dict[str, int]] = []
     try:
@@ -66,12 +182,18 @@ def _read_usage_json(path: Path) -> list[dict[str, int]]:
             if not line.strip():
                 continue
             try:
-                rows.append(_walk_json(json.loads(line)))
+                value = json.loads(line)
+                if isinstance(value, dict) and value.get("token_usage_is_estimated") is True:
+                    continue
+                rows.append(_walk_json(value))
             except json.JSONDecodeError:
                 continue
     else:
         try:
-            rows.append(_walk_json(json.loads(text)))
+            value = json.loads(text)
+            if isinstance(value, dict) and value.get("token_usage_is_estimated") is True:
+                return rows
+            rows.append(_walk_json(value))
         except json.JSONDecodeError:
             return rows
     return [row for row in rows if any(row.values())]
