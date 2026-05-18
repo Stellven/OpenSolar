@@ -100,6 +100,7 @@ def _run_claude(prompt: str, *, model: str, timeout: int, max_budget_usd: float)
     # deployments reject client-only flags such as tool lists or budget caps.
     cmd = [
         claude,
+        "--bare",
         "-p",
         "--model",
         model,
@@ -112,6 +113,15 @@ def _run_claude(prompt: str, *, model: str, timeout: int, max_budget_usd: float)
     if not output:
         raise RuntimeError("claude_cli_empty_stdout")
     return output
+
+
+def _model_candidates(model: str, fallback_models: str) -> list[str]:
+    candidates: list[str] = []
+    for raw in [model, *re.split(r"[, ]+", fallback_models or "")]:
+        item = raw.strip()
+        if item and item not in candidates:
+            candidates.append(item)
+    return candidates or ["opus"]
 
 
 def _quality_gate(text: str, chapter_headings: list[str], min_chars: int) -> dict[str, Any]:
@@ -164,6 +174,7 @@ def run_chief_editor(
     command: str = "",
     timeout: int = 240,
     max_budget_usd: float = 3.0,
+    fallback_models: str = "",
     min_chars: int = 8000,
     require_hitl: bool = False,
 ) -> dict[str, Any]:
@@ -191,6 +202,10 @@ def run_chief_editor(
         rewritten.extend([f"## {item['heading']}", "", item["body"].strip(), ""])
 
     normalized_backend = backend.strip().lower()
+    requested_model = model
+    active_model = model
+    model_candidates = _model_candidates(model, fallback_models)
+    model_attempts: list[dict[str, Any]] = []
     chapter_results: list[dict[str, Any]] = []
     for idx, chapter in enumerate(chapters, start=1):
         heading = chapter["heading"]
@@ -203,7 +218,33 @@ def run_chief_editor(
         elif normalized_backend in {"local-command", "command"}:
             chapter_text = _run_command(command, prompt, timeout)
         elif normalized_backend in {"claude-cli", "opus", "claude"}:
-            chapter_text = _run_claude(prompt, model=model, timeout=timeout, max_budget_usd=max_budget_usd)
+            last_error = ""
+            chapter_text = ""
+            for candidate in ([active_model] if active_model else model_candidates):
+                try:
+                    chapter_text = _run_claude(prompt, model=candidate, timeout=timeout, max_budget_usd=max_budget_usd)
+                    active_model = candidate
+                    model_attempts.append({"chapter": heading, "model": candidate, "ok": True})
+                    break
+                except RuntimeError as exc:
+                    last_error = str(exc)
+                    model_attempts.append({"chapter": heading, "model": candidate, "ok": False, "reason": last_error})
+                    if active_model == candidate:
+                        active_model = ""
+            if not chapter_text:
+                for candidate in model_candidates:
+                    if any(item.get("chapter") == heading and item.get("model") == candidate for item in model_attempts):
+                        continue
+                    try:
+                        chapter_text = _run_claude(prompt, model=candidate, timeout=timeout, max_budget_usd=max_budget_usd)
+                        active_model = candidate
+                        model_attempts.append({"chapter": heading, "model": candidate, "ok": True})
+                        break
+                    except RuntimeError as exc:
+                        last_error = str(exc)
+                        model_attempts.append({"chapter": heading, "model": candidate, "ok": False, "reason": last_error})
+            if not chapter_text:
+                raise RuntimeError(last_error or "claude_cli_failed_all_models")
         else:
             raise ValueError(f"unsupported_chief_editor_backend:{backend}")
         if not chapter_text.lstrip().startswith("## "):
@@ -227,7 +268,10 @@ def run_chief_editor(
     payload: dict[str, Any] = {
         "ok": bool(quality["ok"]),
         "backend": normalized_backend,
-        "model": model,
+        "model": active_model if normalized_backend in {"claude-cli", "opus", "claude"} else model,
+        "requested_model": requested_model,
+        "fallback_models": model_candidates[1:],
+        "model_attempts": model_attempts,
         "source_path": str(source),
         "chief_editor_final": str(target),
         "chapter_results": chapter_results,

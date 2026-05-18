@@ -8,7 +8,7 @@ _HARNESS_LIB = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.p
 if _HARNESS_LIB not in sys.path:
     sys.path.insert(0, _HARNESS_LIB)
 
-from research.survey.chief_editor import run_chief_editor
+from research.survey import chief_editor
 
 
 def _write_human_final(root):
@@ -53,7 +53,7 @@ Sources cover papers and official docs.
 
 def test_chief_editor_deterministic_writes_quality_payload(tmp_path):
     _write_human_final(tmp_path)
-    payload = run_chief_editor(tmp_path, backend="deterministic", min_chars=100)
+    payload = chief_editor.run_chief_editor(tmp_path, backend="deterministic", min_chars=100)
 
     assert payload["ok"] is True
     assert (tmp_path / "chief_editor_final.md").exists()
@@ -67,14 +67,41 @@ def test_chief_editor_deterministic_writes_quality_payload(tmp_path):
 
 def test_chief_editor_can_require_hitl_approval(tmp_path):
     _write_human_final(tmp_path)
-    payload = run_chief_editor(tmp_path, backend="deterministic", min_chars=100, require_hitl=True)
+    payload = chief_editor.run_chief_editor(tmp_path, backend="deterministic", min_chars=100, require_hitl=True)
 
     assert payload["ok"] is False
     assert payload["reason"] == "hitl_approval_required"
     assert (tmp_path / "survey_chief_editor_hitl.md").exists()
 
     (tmp_path / "chief_editor_approval.txt").write_text("APPROVED", encoding="utf-8")
-    approved = run_chief_editor(tmp_path, backend="deterministic", min_chars=100, require_hitl=True)
+    approved = chief_editor.run_chief_editor(tmp_path, backend="deterministic", min_chars=100, require_hitl=True)
     assert approved["ok"] is True
     saved = json.loads((tmp_path / "survey_chief_editor_backend.json").read_text(encoding="utf-8"))
     assert saved["hitl_approved"] is True
+
+
+def test_chief_editor_uses_fallback_model_after_primary_failure(tmp_path, monkeypatch):
+    _write_human_final(tmp_path)
+    calls = []
+
+    def fake_run_claude(prompt, *, model, timeout, max_budget_usd):
+        calls.append(model)
+        if model == "opus":
+            raise RuntimeError("claude_cli_failed:1:opus unavailable")
+        return "## 架构范式\n\n改写后的架构范式章节。\n" if "架构范式" in prompt else "## 评估体系\n\n改写后的评估体系章节。\n"
+
+    monkeypatch.setattr(chief_editor, "_run_claude", fake_run_claude)
+
+    payload = chief_editor.run_chief_editor(
+        tmp_path,
+        backend="claude-cli",
+        model="opus",
+        fallback_models="sonnet",
+        min_chars=40,
+    )
+
+    assert payload["ok"] is True
+    assert payload["requested_model"] == "opus"
+    assert payload["model"] == "sonnet"
+    assert calls == ["opus", "sonnet", "sonnet"]
+    assert any(item["model"] == "opus" and item["ok"] is False for item in payload["model_attempts"])
