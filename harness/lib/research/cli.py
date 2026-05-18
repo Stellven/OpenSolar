@@ -21,6 +21,7 @@ import re
 import sqlite3
 import subprocess
 import shutil
+import shlex
 import time
 import tempfile
 import datetime
@@ -45,6 +46,9 @@ BROWSER_USE_PYTHON = BROWSER_USE_ROOT / ".venv" / "bin" / "python"
 GOOGLE_CSE_OAUTH_SCOPE = "https://www.googleapis.com/auth/cse"
 GOOGLE_CSE_CLIENT_SECRET = Path.home() / ".solar" / "harness" / "google-cse-client_secret.json"
 GOOGLE_CSE_TOKEN = Path.home() / ".solar" / "harness" / "google-cse-token.json"
+SEARCH_PROVIDERS = ["auto", "serper", "google-cse", "google-cse-oauth", "google-cse-element", "arxiv", "google-arxiv", "browser-use", "http"]
+SERPER_DEFAULT_MONTHLY_LIMIT = 2500
+SERPER_USAGE_PATH = Path.home() / ".solar" / "harness" / "usage" / "serper_usage.jsonl"
 
 
 def emit_json(args: argparse.Namespace, payload: dict) -> bool:
@@ -279,6 +283,166 @@ def _normalize_search_hits(raw_hits: list[dict], provider: str, max_results: int
     return hits
 
 
+def _current_usage_month() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m")
+
+
+def _serper_monthly_limit() -> int:
+    raw = os.getenv("SERPER_MONTHLY_LIMIT", str(SERPER_DEFAULT_MONTHLY_LIMIT)).strip()
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return SERPER_DEFAULT_MONTHLY_LIMIT
+
+
+def _serper_usage_path() -> Path:
+    return Path(os.getenv("SERPER_USAGE_PATH") or SERPER_USAGE_PATH).expanduser()
+
+
+def _serper_usage_entries(lines: list[str], usage_month: str) -> list[tuple[str, int]]:
+    entries: list[tuple[str, int]] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            event = json.loads(stripped)
+        except json.JSONDecodeError:
+            continue
+        if event.get("month") == usage_month:
+            key = str(event.get("event_id") or hashlib.sha256(stripped.encode("utf-8")).hexdigest())
+            entries.append((key, int(event.get("requests") or 0)))
+    return entries
+
+
+def _sum_serper_usage_lines(lines: list[str], usage_month: str) -> int:
+    return sum(requests for _, requests in _serper_usage_entries(lines, usage_month))
+
+
+def _serper_shared_usage_config() -> tuple[str, str]:
+    return (
+        os.getenv("SERPER_SHARED_USAGE_SSH", "").strip(),
+        os.getenv("SERPER_SHARED_USAGE_PATH", "").strip(),
+    )
+
+
+def _read_serper_remote_usage_lines() -> tuple[list[str], str]:
+    ssh_target, remote_path = _serper_shared_usage_config()
+    if not ssh_target or not remote_path:
+        return [], ""
+    try:
+        result = subprocess.run(
+            ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", ssh_target, "cat", remote_path],
+            text=True,
+            capture_output=True,
+            timeout=8,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return [], f"shared_usage_read_failed:{exc}"
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip().replace("\n", " ")[:200]
+        return [], f"shared_usage_read_failed:{detail or result.returncode}"
+    return result.stdout.splitlines(), ""
+
+
+def serper_usage_snapshot(month: str | None = None, include_shared: bool = True) -> dict:
+    usage_month = month or _current_usage_month()
+    path = _serper_usage_path()
+    local_used = 0
+    local_entries: list[tuple[str, int]] = []
+    if path.exists():
+        local_entries = _serper_usage_entries(path.read_text(encoding="utf-8", errors="replace").splitlines(), usage_month)
+        local_used = sum(requests for _, requests in local_entries)
+    shared_used = 0
+    shared_entries: list[tuple[str, int]] = []
+    sync_errors: list[str] = []
+    if include_shared:
+        remote_lines, error = _read_serper_remote_usage_lines()
+        if error:
+            sync_errors.append(error)
+        elif remote_lines:
+            shared_entries = _serper_usage_entries(remote_lines, usage_month)
+            shared_used = sum(requests for _, requests in shared_entries)
+    unique_events: dict[str, int] = {}
+    for key, requests in [*local_entries, *shared_entries]:
+        unique_events[key] = max(unique_events.get(key, 0), requests)
+    used = sum(unique_events.values())
+    limit = _serper_monthly_limit()
+    remaining = max(0, limit - used)
+    pct = round((used / limit) * 100, 2) if limit else 0.0
+    status = "ok"
+    if used >= limit:
+        status = "error"
+    elif pct >= 80:
+        status = "warn"
+    return {
+        "ok": used < limit,
+        "status": status,
+        "month": usage_month,
+        "used": used,
+        "local_used": local_used,
+        "shared_used": shared_used,
+        "limit": limit,
+        "remaining": remaining,
+        "percent_used": pct,
+        "path": str(path),
+        "shared_path": _serper_shared_usage_config()[1],
+        "sync_errors": sync_errors,
+    }
+
+
+def _append_serper_remote_usage_event(line: str) -> str:
+    ssh_target, remote_path = _serper_shared_usage_config()
+    if not ssh_target or not remote_path:
+        return ""
+    remote_dir = os.path.dirname(remote_path.rstrip("/")) or "."
+    remote_cmd = f"mkdir -p {shlex.quote(remote_dir)} && cat >> {shlex.quote(remote_path)} && chmod 600 {shlex.quote(remote_path)}"
+    try:
+        result = subprocess.run(
+            ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", ssh_target, remote_cmd],
+            input=line + "\n",
+            text=True,
+            capture_output=True,
+            timeout=8,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return f"shared_usage_write_failed:{exc}"
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip().replace("\n", " ")[:200]
+        return f"shared_usage_write_failed:{detail or result.returncode}"
+    return ""
+
+
+def _record_serper_usage(query: str, max_results: int, status: str, error: str = "") -> None:
+    if os.getenv("SERPER_DISABLE_METERING") == "1":
+        return
+    path = _serper_usage_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    event = {
+        "ts": ts,
+        "month": _current_usage_month(),
+        "requests": 1,
+        "query_hash": hashlib.sha256(query.encode("utf-8")).hexdigest()[:16],
+        "max_results": max_results,
+        "status": status,
+        "error": error[:160],
+    }
+    event["event_id"] = hashlib.sha256(f"{ts}:{event['query_hash']}:{max_results}:{os.getpid()}".encode("utf-8")).hexdigest()[:20]
+    line = json.dumps(event, ensure_ascii=False, sort_keys=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(line + "\n")
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+    remote_error = _append_serper_remote_usage_event(line)
+    if remote_error and os.getenv("SERPER_USAGE_SYNC_WARN") == "1":
+        print(f"Warning: {remote_error}", file=sys.stderr)
+
+
 def google_cse_search(query: str, max_results: int) -> tuple[list[dict], list[str]]:
     """Search Google Custom Search JSON API when credentials are configured."""
     api_key = os.getenv("GOOGLE_CSE_API_KEY") or os.getenv("GOOGLE_API_KEY")
@@ -305,6 +469,52 @@ def google_cse_search(query: str, max_results: int) -> tuple[list[dict], list[st
         if isinstance(item, dict)
     ]
     return _normalize_search_hits(raw_hits, "google-cse", max_results), []
+
+
+def serper_search(query: str, max_results: int) -> tuple[list[dict], list[str]]:
+    """Search Google results through Serper's JSON API."""
+    api_key = os.getenv("SERPER_API_KEY")
+    if not api_key:
+        return [], ["serper missing SERPER_API_KEY"]
+    usage = serper_usage_snapshot()
+    if usage["used"] >= usage["limit"] and os.getenv("SERPER_ALLOW_OVER_LIMIT") != "1":
+        return [], [f"serper quota exhausted: used={usage['used']} limit={usage['limit']} month={usage['month']}"]
+    endpoint = os.getenv("SERPER_SEARCH_URL", "https://google.serper.dev/search")
+    payload = json.dumps({
+        "q": query,
+        "num": max(1, min(max_results, 20)),
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        endpoint,
+        data=payload,
+        headers={
+            "X-API-KEY": api_key,
+            "Content-Type": "application/json",
+            "User-Agent": WEB_USER_AGENT,
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=WEB_TIMEOUT_SEC) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="replace"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace").strip()
+        _record_serper_usage(query, max_results, "http_error", f"HTTP {exc.code}: {detail}")
+        return [], [f"serper: HTTP {exc.code}: {detail[:240]}"]
+    except (json.JSONDecodeError, urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+        _record_serper_usage(query, max_results, "error", str(exc))
+        return [], [f"serper: {exc}"]
+    _record_serper_usage(query, max_results, "ok")
+    raw_hits = [
+        {
+            "title": item.get("title") or "",
+            "url": item.get("link") or "",
+            "snippet": item.get("snippet") or "",
+        }
+        for item in data.get("organic") or []
+        if isinstance(item, dict)
+    ]
+    return _normalize_search_hits(raw_hits, "serper", max_results), []
 
 
 def google_cse_oauth_search(query: str, max_results: int) -> tuple[list[dict], list[str]]:
@@ -597,16 +807,22 @@ def http_web_search(query: str, max_results: int) -> tuple[list[dict], list[str]
 
     DeepResearch previously fell back to Jina Search and DuckDuckGo HTML. Those
     endpoints are too noisy for professor-grade source acquisition, so callers
-    should use google-cse, arxiv, google-arxiv, or browser-use.
+    should use serper, google-cse, arxiv, google-arxiv, or browser-use.
     """
-    return [], ["legacy http search disabled: use google-cse, arxiv, google-arxiv, or browser-use"]
+    return [], ["legacy http search disabled: use serper, google-cse, arxiv, google-arxiv, or browser-use"]
 
 
 def web_search(query: str, max_results: int, provider: str = "auto") -> tuple[list[dict], list[str]]:
     """Search provider router with high-quality providers only."""
     errors: list[str] = []
-    if provider not in {"auto", "google-cse", "google-cse-oauth", "google-cse-element", "arxiv", "google-arxiv", "browser-use", "http"}:
+    if provider not in set(SEARCH_PROVIDERS):
         return [], [f"unknown search provider: {provider}"]
+
+    if provider in {"auto", "serper"}:
+        hits, serper_errors = serper_search(query, max_results)
+        errors.extend(serper_errors)
+        if hits or provider == "serper":
+            return hits, errors
 
     if provider in {"auto", "google-cse", "google-arxiv"}:
         hits, google_errors = google_cse_search(query, max_results)
@@ -689,7 +905,21 @@ def _doctor_check_google_cse(query: str, live_search: bool, require_google: bool
     hits, errors = google_cse_search(query, 1)
     if hits:
         return {"status": "ok", "ok": True, "hit_count": len(hits), "first_title": hits[0].get("title")}
-    return {"status": "error", "ok": False, "reason": "google_cse_live_search_failed", "errors": errors}
+    status = "error" if require_google else "warn"
+    return {"status": status, "ok": not require_google, "reason": "google_cse_live_search_failed", "errors": errors}
+
+
+def _doctor_check_serper(query: str, live_search: bool, require_serper: bool) -> dict:
+    has_key = bool(os.getenv("SERPER_API_KEY"))
+    if not has_key:
+        status = "error" if require_serper else "pending"
+        return {"status": status, "ok": not require_serper, "reason": "serper_config_missing", "has_api_key": False}
+    if not live_search:
+        return {"status": "ok", "ok": True, "reason": "serper_config_present", "has_api_key": True}
+    hits, errors = serper_search(query, 1)
+    if hits:
+        return {"status": "ok", "ok": True, "hit_count": len(hits), "first_title": hits[0].get("title"), "first_url": hits[0].get("url")}
+    return {"status": "error", "ok": False, "reason": "serper_live_search_failed", "errors": errors}
 
 
 def _doctor_check_arxiv(query: str, live_search: bool, require_arxiv: bool) -> dict:
@@ -710,6 +940,7 @@ def build_deepresearch_doctor(
     query: str = "agentic runtime durable execution",
     live_search: bool = False,
     skip_model: bool = False,
+    require_serper: bool = False,
     require_google: bool = False,
     require_arxiv: bool = False,
 ) -> dict:
@@ -741,6 +972,7 @@ def build_deepresearch_doctor(
             "candidates": model_checks,
             "reason": "" if usable else "no_usable_chief_editor_model",
         }
+    checks["serper"] = _doctor_check_serper(query, live_search, require_serper)
     checks["google_cse"] = _doctor_check_google_cse(query, live_search, require_google)
     checks["arxiv"] = _doctor_check_arxiv(query, live_search, require_arxiv)
     http_hits, http_errors = http_web_search(query, 1)
@@ -2311,6 +2543,19 @@ def cmd_search(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serper_usage(args: argparse.Namespace) -> int:
+    """Show local Serper usage meter."""
+    payload = serper_usage_snapshot(month=args.month or None)
+    if emit_json(args, payload):
+        return 0 if payload.get("status") != "error" else 2
+    print(f"Serper usage month: {payload['month']}")
+    print(f"Used: {payload['used']} / {payload['limit']} ({payload['percent_used']}%)")
+    print(f"Remaining: {payload['remaining']}")
+    print(f"Status: {payload['status']}")
+    print(f"Ledger: {payload['path']}")
+    return 0 if payload.get("status") != "error" else 2
+
+
 def cmd_handoff_search(args: argparse.Namespace) -> int:
     """Generate a human-in-the-loop search request Markdown."""
     db_path = args.db_path
@@ -3078,6 +3323,7 @@ def cmd_survey_doctor(args: argparse.Namespace) -> int:
         query=args.query,
         live_search=args.live_search,
         skip_model=args.skip_model,
+        require_serper=args.require_serper,
         require_google=args.require_google,
         require_arxiv=args.require_arxiv,
     )
@@ -3397,7 +3643,7 @@ def _sync_harness_runtime_paths() -> None:
 
 ALL_SUBCOMMANDS = [
     "init", "add-source", "extract", "ledger", "status",
-    "run", "plan", "search", "handoff-search", "import-search",
+    "run", "plan", "search", "serper-usage", "handoff-search", "import-search",
     "mine", "outline", "write", "check", "compile", "synthesize", "export", "eval-artifacts",
     "policy-doctor", "policy-explain",
     "source-audit",
@@ -3413,6 +3659,7 @@ SUBCOMMANDS = {
     "run": cmd_run,
     "plan": cmd_plan,
     "search": cmd_search,
+    "serper-usage": cmd_serper_usage,
     "handoff-search": cmd_handoff_search,
     "import-search": cmd_import_search,
     "mine": cmd_mine,
@@ -3499,8 +3746,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--web-query", default="", help="Online query to search and fetch into sources")
     p_run.add_argument("--research-profile", default="general", help="Profile-aware web search plan for --web-query")
     p_run.add_argument("--max-results", type=int, default=5, help="Max web results for --web-query")
-    p_run.add_argument("--search-provider", default="auto", choices=["auto", "google-cse", "google-cse-oauth", "google-cse-element", "arxiv", "google-arxiv", "browser-use", "http"],
-                       help="Search provider: auto tries Google CSE JSON, OAuth, CSE element, arXiv, then Google browser-use; legacy http is disabled")
+    p_run.add_argument("--search-provider", default="auto", choices=SEARCH_PROVIDERS,
+                       help="Search provider: auto tries Serper, Google CSE JSON/OAuth/element, arXiv, then Google browser-use; legacy http is disabled")
     p_run.add_argument("--output-dir", default="", help="Directory for JSONL artifacts")
     p_run.add_argument("--output-md", default="", help="Path for compiled final markdown")
     p_run.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
@@ -3516,11 +3763,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_search.add_argument("--query", required=True, help="Search query")
     p_search.add_argument("--research-profile", default="general", help="Profile-aware search plan")
     p_search.add_argument("--max-results", type=int, default=10, help="Max results")
-    p_search.add_argument("--provider", default="auto", choices=["auto", "google-cse", "google-cse-oauth", "google-cse-element", "arxiv", "google-arxiv", "browser-use", "http"],
-                          help="Search provider: auto tries Google CSE JSON, OAuth, CSE element, arXiv, then Google browser-use; legacy http is disabled")
+    p_search.add_argument("--provider", default="auto", choices=SEARCH_PROVIDERS,
+                          help="Search provider: auto tries Serper, Google CSE JSON/OAuth/element, arXiv, then Google browser-use; legacy http is disabled")
     p_search.add_argument("--fetch", action="store_true", help="Fetch and store readable page text for each hit")
     p_search.add_argument("--require-online", action="store_true", help="Return non-zero if no online source is written")
     p_search.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_serper_usage = sub.add_parser("serper-usage", help="Show Serper monthly usage meter")
+    p_serper_usage.add_argument("--month", default="", help="Usage month in YYYY-MM; defaults to current UTC month")
+    p_serper_usage.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     p_handoff = sub.add_parser("handoff-search", help="Generate human-in-the-loop search Markdown")
     p_handoff.add_argument("db_path", nargs="?", default="", help="Path to the SQLite database")
@@ -3834,6 +4085,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_doctor.add_argument("--query", default="agentic runtime durable execution", help="Probe query for live search checks")
     p_survey_doctor.add_argument("--live-search", action="store_true", help="Run live Google/arXiv search probes")
     p_survey_doctor.add_argument("--skip-model", action="store_true", help="Skip Claude CLI model probe")
+    p_survey_doctor.add_argument("--require-serper", action="store_true", help="Treat missing or failed Serper search as error")
     p_survey_doctor.add_argument("--require-google", action="store_true", help="Treat missing Google CSE config as error")
     p_survey_doctor.add_argument("--require-arxiv", action="store_true", help="Treat failed arXiv live probe as error")
     p_survey_doctor.add_argument("--allow-pending", action="store_true", help="Return zero when only pending checks remain")
