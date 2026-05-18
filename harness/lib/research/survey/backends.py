@@ -13,21 +13,6 @@ from typing import Protocol
 from research.report_metrics import append_model_usage_event, build_model_usage_event, parse_model_cli_output
 
 
-def _add_usage_source_alias(event: dict) -> dict:
-    """Add S02-naming aliases to a model usage event dict.
-
-    Codex code uses ``token_usage_source`` / ``token_usage_is_estimated``.
-    S02 schema uses ``usage_source`` / ``estimated``.  This helper adds the
-    S02 keys as aliases so consumers can use either naming convention.
-    The original Codex keys are preserved (ADR-004: extend, don't break).
-    """
-    if "token_usage_source" in event and "usage_source" not in event:
-        event["usage_source"] = event["token_usage_source"]
-    if "token_usage_is_estimated" in event and "estimated" not in event:
-        event["estimated"] = event["token_usage_is_estimated"]
-    return event
-
-
 class SurveyWriterBackend(Protocol):
     """Minimal interface for section writer implementations."""
 
@@ -125,7 +110,8 @@ class LocalCommandSurveyWriterBackend:
             raise LocalCommandWriterError("empty_stdout")
         usage_path = str((prompt_packet.get("artifact_paths") or {}).get("model_usage") or "")
         if usage_path:
-            event = _add_usage_source_alias(
+            append_model_usage_event(
+                usage_path,
                 build_model_usage_event(
                     backend=self.name,
                     model=self.command,
@@ -137,9 +123,8 @@ class LocalCommandSurveyWriterBackend:
                         "section_id": prompt_packet.get("section_id"),
                         "round_index": prompt_packet.get("round_index"),
                     },
-                )
+                ),
             )
-            append_model_usage_event(usage_path, event)
         return output + "\n"
 
 
