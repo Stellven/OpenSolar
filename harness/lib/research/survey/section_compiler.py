@@ -7,6 +7,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from research.report_metrics import append_execution_metrics_section, write_execution_metrics
+
 from .schemas import ChapterEditorialReview, SectionReview, to_dict
 from .writing_loop import run_section_revision_loop
 
@@ -435,8 +437,11 @@ def _build_human_readable_final(root: Path, ast: dict, contribution: dict) -> di
         lines.append("")
 
     text = "\n".join(lines).strip() + "\n"
+    text, execution_metrics = append_execution_metrics_section(text, root)
     human_path = root / "human_final.md"
     human_path.write_text(text, encoding="utf-8")
+    metrics_path = root / "survey_human_execution_metrics.json"
+    write_execution_metrics(metrics_path, execution_metrics)
     summary = {
         "ok": True,
         "human_final_md": str(human_path),
@@ -445,6 +450,8 @@ def _build_human_readable_final(root: Path, ast: dict, contribution: dict) -> di
         "evidence_note_count": len(evidence_numbers),
         "template_heading_count": sum(text.count(f"## {heading}") for heading in _HUMAN_SECTION_HEADINGS),
         "chapter_metrics": chapter_metrics,
+        "execution_metrics": execution_metrics,
+        "execution_metrics_path": str(metrics_path),
     }
     (root / "survey_human_final_summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return summary
@@ -525,8 +532,11 @@ def compile_survey(output_dir: str | Path) -> dict:
     lines.extend(["", "## Roadmap", ""])
     lines.extend(f"- {item}" for item in final_summary["roadmap"])
     lines.extend(["", *chapter_blocks])
+    final_text, execution_metrics = append_execution_metrics_section("\n".join(lines), root)
     final_path = root / "final.md"
-    final_path.write_text("\n".join(lines), encoding="utf-8")
+    final_path.write_text(final_text, encoding="utf-8")
+    metrics_path = root / "survey_execution_metrics.json"
+    write_execution_metrics(metrics_path, execution_metrics)
     human_summary = _build_human_readable_final(root, ast, contribution)
     return {
         "ok": True,
@@ -537,4 +547,7 @@ def compile_survey(output_dir: str | Path) -> dict:
         "contribution_matrix": str(root / "survey_contribution_matrix.json"),
         "final_summary": str(root / "survey_final_summary.json"),
         "human_final_summary": str(root / "survey_human_final_summary.json"),
+        "execution_metrics": execution_metrics,
+        "execution_metrics_path": str(metrics_path),
+        "human_execution_metrics": human_summary.get("execution_metrics"),
     }

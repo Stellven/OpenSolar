@@ -37,6 +37,7 @@ if _HARNESS_LIB not in sys.path:
     sys.path.insert(0, _HARNESS_LIB)
 
 from research import hashing, ids, schemas, storage
+from research.report_metrics import append_execution_metrics_section, build_execution_metrics, write_execution_metrics
 
 WEB_USER_AGENT = "Solar-Harness-DeepResearch/1.0 (+local; evidence-ledger)"
 WEB_TIMEOUT_SEC = 12
@@ -1489,7 +1490,7 @@ def check_sections_for_run(conn: sqlite3.Connection, run_id: str) -> int:
     return len(sections)
 
 
-def compile_report_to_markdown(conn: sqlite3.Connection, run_id: str, output_md: str | None = None) -> tuple[str | None, int, int]:
+def compile_report_to_markdown(conn: sqlite3.Connection, run_id: str, output_md: str | None = None) -> tuple[str | None, int, int, dict]:
     sections = conn.execute(
         "SELECT section_type, title, content, char_count FROM report_sections WHERE run_id = ? ORDER BY section_order",
         (run_id,),
@@ -1513,6 +1514,8 @@ def compile_report_to_markdown(conn: sqlite3.Connection, run_id: str, output_md:
     for src in sources:
         lines.append(f"- [{src['id']}] {src['title']}{' — ' + src['url'] if src['url'] else ''}")
     markdown = "\n".join(lines).strip() + "\n"
+    metrics_dir = os.path.dirname(output_md) if output_md else None
+    markdown, execution_metrics = append_execution_metrics_section(markdown, metrics_dir)
     total_chars = len(markdown)
     conn.execute(
         "UPDATE research_runs SET char_used = ?, total_sources = ?, total_evidence = ?, total_claims = ?, status = 'completed', completed_at = datetime('now') WHERE id = ?",
@@ -1529,7 +1532,8 @@ def compile_report_to_markdown(conn: sqlite3.Connection, run_id: str, output_md:
         os.makedirs(os.path.dirname(output_md) or ".", exist_ok=True)
         with open(output_md, "w", encoding="utf-8") as f:
             f.write(markdown)
-    return output_md, len(sections), total_chars
+        write_execution_metrics(os.path.join(os.path.dirname(output_md) or ".", "research_execution_metrics.json"), execution_metrics)
+    return output_md, len(sections), total_chars, execution_metrics
 
 
 def synthesize_expert_report(conn: sqlite3.Connection, run_id: str, output_md: str) -> tuple[str, int]:
@@ -1740,7 +1744,7 @@ def build_research_eval_payload(conn: sqlite3.Connection, run_id: str, output_di
     citation_accuracy = round(link_count / claim_count, 4) if claim_count else 0.0
     unsupported_rate = round(unsupported_claims / claim_count, 4) if claim_count else 0.0
     status = "passed" if source_count and evidence_count and claim_count and section_count and total_checks == passed_checks else "partial"
-    return {
+    payload = {
         "run_id": run_id,
         "source_count": source_count,
         "evidence_count": evidence_count,
@@ -1759,6 +1763,26 @@ def build_research_eval_payload(conn: sqlite3.Connection, run_id: str, output_di
         "output_dir": output_dir,
         "final_md": final_md or "",
     }
+    execution_metrics = _load_or_build_execution_metrics(output_dir, final_md)
+    if execution_metrics:
+        payload["execution_metrics"] = execution_metrics
+    return payload
+
+
+def _load_or_build_execution_metrics(output_dir: str = "", final_md: str | None = None) -> dict:
+    root = Path(output_dir).expanduser() if output_dir else None
+    metrics_path = root / "research_execution_metrics.json" if root else None
+    if metrics_path and metrics_path.exists():
+        try:
+            value = json.loads(metrics_path.read_text(encoding="utf-8"))
+            if isinstance(value, dict):
+                return value
+        except json.JSONDecodeError:
+            pass
+    if final_md and Path(final_md).exists():
+        text = Path(final_md).read_text(encoding="utf-8", errors="replace")
+        return build_execution_metrics(text, root)
+    return {}
 
 
 def export_run_to_dir(db_path: str, run_id: str, output_dir: str, final_md: str | None = None) -> dict:
@@ -1820,7 +1844,10 @@ def export_run_to_dir(db_path: str, run_id: str, output_dir: str, final_md: str 
     for check in checks:
         storage.append_jsonl(checks_path, dict(check))
 
+    execution_metrics = _load_or_build_execution_metrics(output_dir, final_md)
     report_ast = build_report_ast_payload(conn, run_id)
+    if execution_metrics:
+        report_ast["execution_metrics"] = execution_metrics
     report_ast_path = os.path.join(output_dir, "report_ast.json")
     with open(report_ast_path, "w", encoding="utf-8") as f:
         json.dump(report_ast, f, indent=2, ensure_ascii=False)
@@ -1849,6 +1876,7 @@ def export_run_to_dir(db_path: str, run_id: str, output_dir: str, final_md: str 
         "report_ast": 1 if report_ast.get("chapters") else 0,
         "bibliography": len(bibliography),
         "research_eval": eval_payload,
+        "execution_metrics": execution_metrics,
         "files": {
             "sources": sources_path,
             "evidence": evidence_path,
@@ -2193,7 +2221,7 @@ def continue_research_pipeline(db_path: str, run_id: str, output_dir: str, outpu
     sections_count = write_sections_from_claims(conn, run_id) if total_claims else ensure_outline(conn, run_id)
     checks_count = check_sections_for_run(conn, run_id)
     final_md = output_md or os.path.join(output_dir, "final.md")
-    compiled_path, _, chars = compile_report_to_markdown(conn, run_id, final_md)
+    compiled_path, _, chars, execution_metrics = compile_report_to_markdown(conn, run_id, final_md)
     expert_md, expert_chars = synthesize_expert_report(conn, run_id, os.path.join(output_dir, "expert_synthesis.md"))
     conn.close()
     export_payload = export_run_to_dir(db_path, run_id, output_dir, final_md=compiled_path)
@@ -2207,6 +2235,7 @@ def continue_research_pipeline(db_path: str, run_id: str, output_dir: str, outpu
         "checks": checks_count,
         "final_md": compiled_path,
         "characters": chars,
+        "execution_metrics": execution_metrics,
         "expert_synthesis_md": expert_md,
         "expert_synthesis_characters": expert_chars,
         "export": export_payload,
@@ -2429,7 +2458,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     claims_count, links_count = mine_claims_for_run(conn, run_id) if evidence_ids else (0, 0)
     sections_count = write_sections_from_claims(conn, run_id) if claims_count else ensure_outline(conn, run_id)
     checks_count = check_sections_for_run(conn, run_id)
-    compiled_path, _, chars = compile_report_to_markdown(conn, run_id, output_md)
+    compiled_path, _, chars, execution_metrics = compile_report_to_markdown(conn, run_id, output_md)
     conn.close()
 
     export_payload = export_run_to_dir(db_path, run_id, output_dir, final_md=compiled_path)
@@ -2449,6 +2478,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         "checks": checks_count,
         "final_md": compiled_path,
         "characters": chars,
+        "execution_metrics": execution_metrics,
         "export": export_payload,
         "web": search_result,
     }
@@ -2799,16 +2829,18 @@ def cmd_compile(args: argparse.Namespace) -> int:
     run_id = args.run_id
 
     try:
-        output_md, sections_count, total_chars = compile_report_to_markdown(conn, run_id, args.output_md)
+        output_md, sections_count, total_chars, execution_metrics = compile_report_to_markdown(conn, run_id, args.output_md)
     except ValueError:
         print("No sections to compile.", file=sys.stderr)
         conn.close()
         return 1
     conn.close()
 
-    if emit_json(args, {"ok": True, "run_id": run_id, "sections": sections_count, "characters": total_chars, "output_md": output_md}):
+    if emit_json(args, {"ok": True, "run_id": run_id, "sections": sections_count, "characters": total_chars, "output_md": output_md, "execution_metrics": execution_metrics}):
         return 0
     print(f"Report compiled: {sections_count} sections, {total_chars} chars")
+    print(f"Words: {execution_metrics['document_word_count']}")
+    print(f"Total tokens: {execution_metrics['total_token_consumption']} ({execution_metrics['token_usage_source']})")
     if output_md:
         print(f"Final report: {output_md}")
     return 0
