@@ -36,6 +36,7 @@ from pathlib import Path
 # ── Paths ──
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", str(Path.home() / ".solar" / "harness")))
 SPRINTS_DIR = HARNESS_DIR / "sprints"
+REPORTS_DIR = HARNESS_DIR / "reports"
 SESSIONS_DIR = HARNESS_DIR / "sessions"
 EVENTS_DIR = HARNESS_DIR / "events"
 ALL_EVENTS = EVENTS_DIR / "all.jsonl"
@@ -1463,14 +1464,17 @@ def _research_status_summary(limit: int = 5) -> dict:
             raise RuntimeError("unable to load research_routes.py")
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
-        eval_files = sorted(SPRINTS_DIR.glob("*research_eval*.json"), key=lambda p: p.stat().st_mtime)
+        eval_files = sorted(
+            list(SPRINTS_DIR.glob("*research_eval*.json")) + list(REPORTS_DIR.glob("**/*research_eval*.json")),
+            key=lambda p: p.stat().st_mtime,
+        )
         runs: list[dict] = []
         gates: list[dict] = []
         for ef in eval_files[-limit:]:
             # build_research_payload expects a sid prefix; derive it from the
             # eval filename while tolerating run-id-only eval files.
             sid = ef.name.split("-research_eval", 1)[0]
-            payload = mod.build_research_payload(SPRINTS_DIR, sid)
+            payload = mod.build_research_payload(ef.parent, sid)
             for run in payload.get("runs") or []:
                 run = dict(run)
                 run["sid"] = sid
@@ -2317,6 +2321,11 @@ function statusBadge(st) {
   const cls = s === 'failed' || s === 'error' ? 'error-badge' : s === 'warn' ? 'warn-badge' : s;
   return '<span class="badge ' + esc(cls) + '">' + esc(s) + '</span>';
 }
+function fallbackBadge(level) {
+  const s = level || 'N/A';
+  const cls = s === 'L1' ? 'ok' : s === 'L2' ? 'warn' : s === 'L3' || s === 'L4' ? 'error-badge' : 'default';
+  return '<span class="badge ' + esc(cls) + '">' + esc(s) + '</span>';
+}
 function levelBadge(level) {
   const s = level || 'unknown';
   const cls = s === 'closed_loop' ? 'ok' : s === 'default_usable' ? 'default' : s === 'basic_usable' ? 'warn' : 'missing';
@@ -2581,12 +2590,18 @@ function renderResearchStatus(research, compact) {
         '<div class="mini-metric"><div class="kv-label">Evidence</div><span class="num">' + esc(run.evidence_count || 0) + '</span></div>' +
         '<div class="mini-metric"><div class="kv-label">Claims</div><span class="num">' + esc(run.claim_count || 0) + '</span></div>' +
         '<div class="mini-metric"><div class="kv-label">Citation</div><span class="num">' + esc(Math.round((run.citation_accuracy || 0) * 100)) + '%</span></div>' +
+        '<div class="mini-metric"><div class="kv-label">Words</div><span class="num">' + esc(run.word_count ?? 'N/A') + '</span></div>' +
+        '<div class="mini-metric"><div class="kv-label">Tokens</div><span class="num">' + esc(run.total_tokens ?? 'N/A') + '</span></div>' +
       '</div>' +
       (compact ? '' : '<div class="kv-grid">' +
         kv('Final MD', exists.final_md ? 'exists' : 'missing') +
         kv('ReportAST', exists.report_ast ? 'exists' : 'missing') +
         kv('Eval JSON', exists.eval_json ? 'exists' : 'missing') +
         kv('AST Sections', run.report_ast_sections || 0) +
+        kv('Usage Source', run.usage_source || 'N/A') +
+        kv('Estimated', run.estimated === null || run.estimated === undefined ? 'N/A' : String(run.estimated)) +
+        kv('State', run.state || 'unknown') +
+        '<div><div class="kv-label">Fallback</div>' + fallbackBadge(run.fallback_level) + '</div>' +
       '</div><pre class="codebox" style="margin-top:.7rem">' +
         'final.md: ' + esc(artifacts.final_md || '-') + '\\n' +
         'report_ast: ' + esc(artifacts.report_ast || '-') + '\\n' +
@@ -2956,7 +2971,10 @@ class StatusHandler(BaseHTTPRequestHandler):
                     raise RuntimeError("unable to load research_routes.py")
                 mod = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(mod)
-                self._send_json(mod.build_research_payload(SPRINTS_DIR, sid))
+                if params.get("format", [""])[0].lower() == "html":
+                    self._send_text(mod.render_html_report(SPRINTS_DIR, sid), content_type="text/html; charset=utf-8")
+                else:
+                    self._send_json(mod.build_research_payload(SPRINTS_DIR, sid))
             except Exception as exc:
                 self._send_json({"error": f"{type(exc).__name__}: {exc}", "sid": sid}, status=500)
 
