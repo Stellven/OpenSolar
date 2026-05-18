@@ -56,6 +56,10 @@ MMD_ALLOWED_ROOTS = [
     HARNESS_DIR,
     Path.home() / "Knowledge",
 ]
+OPEN_ALLOWED_ROOTS = [
+    HARNESS_DIR,
+    Path.home() / "Knowledge",
+]
 
 BIND_HOST = "127.0.0.1"
 PORT_RANGE = range(8765, 8776)
@@ -147,6 +151,26 @@ def _allowed_mmd_path(path: Path) -> bool:
     if path.suffix.lower() != ".mmd":
         return False
     return any(_is_within(path, root) for root in MMD_ALLOWED_ROOTS)
+
+
+def _allowed_open_path(path: Path) -> bool:
+    return any(_is_within(path, root) for root in OPEN_ALLOWED_ROOTS)
+
+
+def _resolve_open_file(raw: str):
+    raw = urllib.parse.unquote(raw or "").strip()
+    if not raw:
+        return None
+    candidate = Path(raw).expanduser()
+    if not candidate.is_absolute():
+        candidate = HARNESS_DIR / candidate
+    try:
+        candidate = candidate.resolve()
+    except OSError:
+        return None
+    if candidate.exists() and candidate.is_file() and _allowed_open_path(candidate):
+        return candidate
+    return None
 
 
 def _resolve_mmd_file(raw: str):
@@ -2286,6 +2310,10 @@ td {
   gap: 0.38rem;
 }
 .research-path {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: center;
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 0.45rem 0.55rem;
@@ -2293,6 +2321,19 @@ td {
   color: var(--muted);
   font: 800 0.72rem ui-monospace, SFMono-Regular, Menlo, monospace;
   overflow-wrap: anywhere;
+}
+.research-path-actions {
+  display: inline-flex;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+.research-path-actions a {
+  color: var(--accent-2);
+  font: 950 0.74rem "Avenir Next", "Gill Sans", sans-serif;
+  text-decoration: none;
+}
+.research-path-actions a:hover {
+  text-decoration: underline;
 }
 .research-section-title {
   margin: 0.35rem 0 0.55rem;
@@ -2694,6 +2735,22 @@ function taskCell(meta, sid) {
 function copyText(text) {
   navigator.clipboard.writeText(text).catch(() => {});
 }
+function fileOpenUrl(path) {
+  return '/file/open?path=' + encodeURIComponent(path || '');
+}
+function fileViewUrl(path) {
+  return '/file/view?path=' + encodeURIComponent(path || '');
+}
+function researchPathLink(label, path, exists) {
+  if (!path) {
+    return '<div class="research-path"><span>' + esc(label) + '</span><span class="muted">missing</span></div>';
+  }
+  const state = exists ? '打开' : 'missing';
+  const link = exists
+    ? '<a href="' + fileOpenUrl(path) + '" target="_blank" rel="noopener">打开</a><a href="' + fileViewUrl(path) + '" target="_blank" rel="noopener">查看</a>'
+    : '<span class="muted">missing</span>';
+  return '<div class="research-path"><span>' + esc(label) + ': ' + esc(path) + '</span><span class="research-path-actions">' + link + '</span></div>';
+}
 function renderPaneMatrix(cardId, screen) {
   const panes = (screen && screen.panes) || [];
   if (!panes.length) {
@@ -2861,9 +2918,9 @@ function renderResearchStatus(research, compact) {
         '<div><div class="kv-label">Fallback</div>' + fallbackBadge(run.fallback_level) + '</div>' +
         kv('Final MD', exists.final_md ? 'exists' : 'missing') +
       '</div><div class="research-paths">' +
-        '<div class="research-path">final.md: ' + esc(artifacts.final_md || '-') + '</div>' +
-        '<div class="research-path">report_ast: ' + esc(artifacts.report_ast || '-') + '</div>' +
-        '<div class="research-path">eval: ' + esc(artifacts.eval_json || '-') + '</div>' +
+        researchPathLink('final.md', artifacts.final_md, exists.final_md) +
+        researchPathLink('report_ast', artifacts.report_ast, exists.report_ast) +
+        researchPathLink('eval', artifacts.eval_json, exists.eval_json) +
       '</div><div class="copy-row">' +
         '<button class="btn" data-copy="' + esc(artifacts.final_md || '') + '" onclick="copyText(this.dataset.copy)">复制 final.md</button>' +
         '<button class="btn" data-copy="' + esc(artifacts.report_ast || '') + '" onclick="copyText(this.dataset.copy)">复制 ReportAST</button>' +
@@ -3284,6 +3341,35 @@ class StatusHandler(BaseHTTPRequestHandler):
                 self._send_json({"error": "mmd not found or not allowed"}, status=404)
             else:
                 self._send_text(mmd.read_text(errors="ignore"), content_type="text/plain; charset=utf-8")
+
+        elif path == "/file/open":
+            target = _resolve_open_file(params.get("path", [""])[0])
+            if not target:
+                self._send_json({"ok": False, "status": "error", "error": "file not found or not allowed"}, status=404)
+            elif sys.platform != "darwin":
+                self._send_json({"ok": False, "status": "warn", "error": "open is only supported on macOS", "path": str(target)}, status=501)
+            else:
+                try:
+                    subprocess.run(["open", str(target)], check=False, timeout=2)
+                    self._send_text(
+                        f"Opened {html.escape(str(target))}. You may close this tab.",
+                        content_type="text/html; charset=utf-8",
+                    )
+                except Exception as exc:
+                    self._send_json({"ok": False, "status": "warn", "error": f"{type(exc).__name__}: {exc}", "path": str(target)}, status=500)
+
+        elif path == "/file/view":
+            target = _resolve_open_file(params.get("path", [""])[0])
+            if not target:
+                self._send_json({"ok": False, "status": "error", "error": "file not found or not allowed"}, status=404)
+            else:
+                suffix = target.suffix.lower()
+                content_type = "text/plain; charset=utf-8"
+                if suffix == ".json":
+                    content_type = "application/json; charset=utf-8"
+                elif suffix in (".md", ".markdown"):
+                    content_type = "text/markdown; charset=utf-8"
+                self._send_text(target.read_text(encoding="utf-8", errors="ignore"), content_type=content_type)
 
         elif path.startswith("/mermaid/assets/"):
             asset = _asset_path(path.removeprefix("/mermaid/assets/"))
