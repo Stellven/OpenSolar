@@ -3375,6 +3375,20 @@ def cmd_survey_eval(args: argparse.Namespace) -> int:
     return 0 if payload.get("ok") or not args.strict else 1
 
 
+def cmd_survey_golden_style(args: argparse.Namespace) -> int:
+    from research.survey.golden_style_gate import assess_golden_style
+
+    payload = assess_golden_style(
+        args.output_dir,
+        final_md=args.final_md or None,
+        benchmark_html=args.benchmark_html or None,
+    )
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") or not payload.get("enabled") else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") or not payload.get("enabled") else 1
+
+
 def cmd_survey_diagnose(args: argparse.Namespace) -> int:
     from research.survey.diagnose import diagnose_survey, render_survey_diagnosis_markdown
 
@@ -3679,7 +3693,7 @@ ALL_SUBCOMMANDS = [
     "mine", "outline", "write", "check", "compile", "synthesize", "export", "eval-artifacts",
     "policy-doctor", "policy-explain",
     "source-audit",
-    "survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-watch-register", "survey-watch-tick", "survey-rewrite-queue", "survey-rewrite-run", "survey-auto-repair", "survey-finalize-run", "survey-import-search-results", "survey-status-next-action", "survey-continue", "survey-review", "survey-compile", "survey-chief-editor", "survey-doctor", "survey-eval", "survey-diagnose",
+    "survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-watch-register", "survey-watch-tick", "survey-rewrite-queue", "survey-rewrite-run", "survey-auto-repair", "survey-finalize-run", "survey-import-search-results", "survey-status-next-action", "survey-continue", "survey-review", "survey-compile", "survey-chief-editor", "survey-doctor", "survey-eval", "survey-golden-style", "survey-diagnose",
 ]
 
 SUBCOMMANDS = {
@@ -3724,6 +3738,7 @@ SUBCOMMANDS = {
     "survey-chief-editor": cmd_survey_chief_editor,
     "survey-doctor": cmd_survey_doctor,
     "survey-eval": cmd_survey_eval,
+    "survey-golden-style": cmd_survey_golden_style,
     "survey-diagnose": cmd_survey_diagnose,
 }
 
@@ -4129,6 +4144,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_eval.add_argument("--min-finalized", type=int, default=None)
     p_survey_eval.add_argument("--require-complete", action="store_true")
     p_survey_eval.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_golden = sub.add_parser("survey-golden-style", help="Check final.md against a high-quality HTML benchmark")
+    p_survey_golden.add_argument("--output-dir", required=True)
+    p_survey_golden.add_argument("--benchmark-html", default="", help="Reference HTML report; defaults to quality_golden.html or SOLAR_DEEPRESEARCH_GOLDEN_HTML")
+    p_survey_golden.add_argument("--final-md", default="", help="Final Markdown report path; defaults to <output-dir>/final.md")
+    p_survey_golden.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     p_survey_diagnose = sub.add_parser("survey-diagnose", help="Diagnose survey quality issues and next actions")
     p_survey_diagnose.add_argument("--output-dir", required=True)
