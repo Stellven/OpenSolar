@@ -78,6 +78,7 @@ rsync_excludes=(
   --exclude '.planner-inbox.md'
   --exclude 'PLANNER-INBOX.md'
   --exclude 'cache/***'
+  --exclude 'usage/***'
   --exclude 'logs/***'
   --exclude 'run/***'
   --exclude 'state/***'
@@ -390,7 +391,7 @@ deny_fragments = [
     ".lock",
     ".state",
 ]
-deny_dir_names = {"inbox", "cache", "quarantine", "telemetry", "reports", "events", "logs", "run", "state", "venvs", "vendor"}
+deny_dir_names = {"inbox", "cache", "quarantine", "telemetry", "usage", "reports", "events", "logs", "run", "state", "venvs", "vendor"}
 
 def denied(path: Path) -> bool:
     parts = path.parts
