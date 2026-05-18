@@ -149,8 +149,10 @@ def assess_golden_style(
     *,
     final_md: str | Path | None = None,
     benchmark_html: str | Path | None = None,
+    require_benchmark: bool = False,
 ) -> dict[str, Any]:
     report_root = Path(root).expanduser()
+    report_root.mkdir(parents=True, exist_ok=True)
     final_path = Path(final_md).expanduser() if final_md else report_root / "final.md"
     benchmark_path = _benchmark_path(report_root, benchmark_html)
     text = _read_text(final_path)
@@ -178,6 +180,10 @@ def assess_golden_style(
         min_commentary_density = 10.0
 
     issues: list[str] = []
+    if require_benchmark and not benchmark_path:
+        issues.append("golden_benchmark_required_missing")
+    if benchmark_path and not benchmark.get("exists"):
+        issues.append(f"golden_benchmark_missing:{benchmark_path}")
     if not final_path.exists():
         issues.append(f"golden_final_md_missing:{final_path}")
     if chars < min_chars:
@@ -198,6 +204,7 @@ def assess_golden_style(
     payload = {
         "ok": not issues,
         "enabled": bool(benchmark_path),
+        "required": require_benchmark,
         "benchmark": benchmark,
         "final_md": str(final_path),
         "char_count": chars,

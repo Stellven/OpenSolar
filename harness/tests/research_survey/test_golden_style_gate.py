@@ -47,6 +47,15 @@ def test_golden_style_gate_rejects_smoke_like_report(tmp_path):
     assert (tmp_path / "survey_golden_style.json").exists()
 
 
+def test_golden_style_gate_can_require_benchmark(tmp_path):
+    (tmp_path / "final.md").write_text("# Report\n\n## 判断\n\n不是摘要，而是测试。\n", encoding="utf-8")
+    payload = assess_golden_style(tmp_path, require_benchmark=True)
+    assert payload["enabled"] is False
+    assert payload["required"] is True
+    assert payload["ok"] is False
+    assert "golden_benchmark_required_missing" in payload["issues"]
+
+
 def test_survey_eval_includes_enabled_golden_style_issues(tmp_path):
     (tmp_path / "quality_golden.html").write_text("<html><body><section><h2>golden</h2><p>不是而是评价硬伤最终判断</p></section></body></html>", encoding="utf-8")
     (tmp_path / "survey_report_ast.json").write_text(
@@ -63,3 +72,20 @@ def test_survey_eval_includes_enabled_golden_style_issues(tmp_path):
     assert result["golden_style"]["enabled"] is True
     assert result["golden_style"]["ok"] is False
     assert any(issue.startswith("golden_") for issue in result["scorecard"]["issues"])
+
+
+def test_survey_eval_can_require_golden_style_without_benchmark(tmp_path):
+    (tmp_path / "survey_report_ast.json").write_text(
+        json.dumps({
+            "title": "brief",
+            "chapters": [{"chapter_id": "ch1", "title": "Brief"}],
+            "sections": [{"section_id": "ch1/sec1", "chapter_id": "ch1", "title": "S1"}],
+        }),
+        encoding="utf-8",
+    )
+    (tmp_path / "survey_evidence_packs.json").write_text(json.dumps({"packs": [], "blocked": 0}), encoding="utf-8")
+    (tmp_path / "final.md").write_text("# tiny\n\n## Summary\n\n不是摘要，而是测试\n", encoding="utf-8")
+    result = evaluate_survey(tmp_path, strict=True, require_golden_style=True)
+    assert result["require_golden_style"] is True
+    assert result["golden_style"]["required"] is True
+    assert "golden_benchmark_required_missing" in result["scorecard"]["issues"]
