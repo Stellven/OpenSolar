@@ -338,6 +338,7 @@ if [[ "$DO_COMMIT" == "1" ]]; then
   python3 <<'PY' > "$stage_file"
 import os
 from pathlib import Path
+import re
 
 repo = Path(os.environ["SOLAR_REPO"])
 harness = Path(os.environ["REPO_HARNESS"])
@@ -380,6 +381,7 @@ deny_names = {
     "capability-graph.jsonl",
     "kpi.json",
     "codex-budget.json",
+    "google-cse-token.json",
 }
 deny_fragments = [
     ".bak",
@@ -391,11 +393,14 @@ deny_fragments = [
     ".state",
 ]
 deny_dir_names = {"__pycache__", "inbox", "cache", "quarantine", "telemetry", "reports", "events", "logs", "run", "state", "venvs", "vendor"}
+deny_name_re = re.compile(r'(^|[-_.])(token|tokens|oauth|refresh_token|credential|credentials)([-_.]|$)')
 
 def denied(path: Path) -> bool:
     parts = path.parts
     name = path.name
     if name in deny_names:
+        return True
+    if deny_name_re.search(name.lower()) and name.lower().endswith(".json"):
         return True
     if path.suffix in deny_suffixes:
         return True
