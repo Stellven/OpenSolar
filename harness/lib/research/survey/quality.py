@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from research.evaluator import audit_sources
+from .golden_style_gate import assess_golden_style
 
 
 def _read_json(path: Path) -> Any:
@@ -977,7 +978,14 @@ def _build_depth_profile(
     }
 
 
-def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs: dict | None = None) -> dict[str, Any]:
+def assess_survey_quality(
+    output_dir: str | Path,
+    ast: dict | None = None,
+    packs: dict | None = None,
+    *,
+    golden_benchmark_html: str | Path | None = None,
+    require_golden_style: bool = False,
+) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
     ast = ast or _read_json(root / "survey_report_ast.json")
     packs = packs or _read_json(root / "survey_evidence_packs.json")
@@ -1038,9 +1046,14 @@ def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs
     chapter_review = _build_chapter_review(root, chapters, sections, pack_rows, section_scorecard)
     chief_editor_review = _build_chief_editor_review(root, chapters, sections, chapter_review, literature_map, controversy_review)
     depth_profile = _build_depth_profile(root, chapters, sections, final_quality, literature_map, controversy_review)
+    golden_style = assess_golden_style(
+        root,
+        benchmark_html=golden_benchmark_html,
+        require_benchmark=require_golden_style,
+    )
 
     payload = {
-        "ok": taxonomy["ok"] and contradiction_matrix["ok"] and section_factual_audit["ok"] and section_scorecard["ok"] and final_quality["ok"] and source_coverage["ok"] and literature_map["ok"] and controversy_review["ok"] and chapter_review["ok"] and chief_editor_review["ok"] and depth_profile["ok"],
+        "ok": taxonomy["ok"] and contradiction_matrix["ok"] and section_factual_audit["ok"] and section_scorecard["ok"] and final_quality["ok"] and source_coverage["ok"] and literature_map["ok"] and controversy_review["ok"] and chapter_review["ok"] and chief_editor_review["ok"] and depth_profile["ok"] and (golden_style["ok"] or (not golden_style.get("enabled") and not golden_style.get("required"))),
         "taxonomy": taxonomy,
         "contradiction_matrix": contradiction_matrix,
         "section_factual_audit": section_factual_audit,
@@ -1052,6 +1065,7 @@ def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs
         "chapter_review": chapter_review,
         "chief_editor_review": chief_editor_review,
         "depth_profile": depth_profile,
+        "golden_style": golden_style,
     }
     (root / "survey_taxonomy.json").write_text(json.dumps(taxonomy, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_contradiction_matrix.json").write_text(json.dumps(contradiction_matrix, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
