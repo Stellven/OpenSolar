@@ -105,3 +105,39 @@ def test_chief_editor_uses_fallback_model_after_primary_failure(tmp_path, monkey
     assert payload["model"] == "sonnet"
     assert calls == ["opus", "sonnet", "sonnet"]
     assert any(item["model"] == "opus" and item["ok"] is False for item in payload["model_attempts"])
+    usage_rows = [
+        json.loads(line)
+        for line in (tmp_path / "model_usage.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert len(usage_rows) == 2
+    assert usage_rows[0]["token_usage_is_estimated"] is True
+
+
+def test_chief_editor_local_command_records_real_usage_json(tmp_path):
+    _write_human_final(tmp_path)
+    script = tmp_path / "chief_json.py"
+    script.write_text(
+        "import json, sys\n"
+        "prompt = sys.stdin.read()\n"
+        "heading = '架构范式' if '架构范式' in prompt else '评估体系'\n"
+        "result = f'## {heading}\\n\\nJSON chief editor output.\\n'\n"
+        "print(json.dumps({'result': result, 'usage': {'input_tokens': 222, 'output_tokens': 33, 'total_tokens': 255}}))\n",
+        encoding="utf-8",
+    )
+    payload = chief_editor.run_chief_editor(
+        tmp_path,
+        backend="local-command",
+        command=f"{sys.executable} {script}",
+        min_chars=40,
+    )
+
+    assert payload["ok"] is True
+    usage_rows = [
+        json.loads(line)
+        for line in (tmp_path / "model_usage.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert len(usage_rows) == 2
+    assert usage_rows[0]["token_usage_is_estimated"] is False
+    assert usage_rows[0]["total_tokens"] == 255

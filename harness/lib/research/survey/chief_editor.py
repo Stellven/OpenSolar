@@ -9,6 +9,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from research.report_metrics import append_model_usage_event, build_model_usage_event, parse_model_cli_output
+
 
 INTRO_HEADINGS = {"核心结论", "证据基础"}
 FOOTNOTE_HEADING = "证据脚注"
@@ -71,7 +73,14 @@ def _chapter_prompt(title: str, heading: str, body: str) -> str:
 """
 
 
-def _run_command(command: str, prompt: str, timeout: int) -> str:
+def _normalize_model_result(value: Any) -> tuple[str, dict[str, int]]:
+    if isinstance(value, tuple) and len(value) == 2:
+        text, usage = value
+        return str(text), usage if isinstance(usage, dict) else {}
+    return str(value), {}
+
+
+def _run_command(command: str, prompt: str, timeout: int) -> tuple[str, dict[str, int]]:
     if not command.strip():
         raise RuntimeError("chief_editor_command_missing")
     result = subprocess.run(
@@ -86,13 +95,13 @@ def _run_command(command: str, prompt: str, timeout: int) -> str:
     if result.returncode != 0:
         stderr = (result.stderr or "").strip().replace("\n", " ")[:500]
         raise RuntimeError(f"chief_editor_command_failed:{result.returncode}:{stderr}")
-    output = (result.stdout or "").strip()
+    output, usage, _ = parse_model_cli_output(result.stdout or "", result.stderr or "")
     if not output:
         raise RuntimeError("chief_editor_command_empty_stdout")
-    return output
+    return output, usage
 
 
-def _run_claude(prompt: str, *, model: str, timeout: int, max_budget_usd: float) -> str:
+def _run_claude(prompt: str, *, model: str, timeout: int, max_budget_usd: float) -> tuple[str, dict[str, int]]:
     claude = shutil.which("claude")
     if not claude:
         raise RuntimeError("claude_cli_missing")
@@ -102,6 +111,10 @@ def _run_claude(prompt: str, *, model: str, timeout: int, max_budget_usd: float)
         claude,
         "--bare",
         "-p",
+        "--output-format",
+        "json",
+        "--max-budget-usd",
+        str(max_budget_usd),
         "--model",
         model,
     ]
@@ -109,10 +122,10 @@ def _run_claude(prompt: str, *, model: str, timeout: int, max_budget_usd: float)
     if result.returncode != 0:
         detail = (result.stderr or result.stdout or "").strip().replace("\n", " ")[:500]
         raise RuntimeError(f"claude_cli_failed:{result.returncode}:{detail}")
-    output = (result.stdout or "").strip()
+    output, usage, _ = parse_model_cli_output(result.stdout or "", result.stderr or "")
     if not output:
         raise RuntimeError("claude_cli_empty_stdout")
-    return output
+    return output, usage
 
 
 def _model_candidates(model: str, fallback_models: str) -> list[str]:
@@ -194,6 +207,7 @@ def run_chief_editor(
     work_dir = root / "chief_editor"
     prompt_dir = work_dir / "prompts"
     chapter_dir = work_dir / "chapters"
+    usage_path = root / "model_usage.jsonl"
     prompt_dir.mkdir(parents=True, exist_ok=True)
     chapter_dir.mkdir(parents=True, exist_ok=True)
 
@@ -215,14 +229,18 @@ def run_chief_editor(
         prompt_path.write_text(prompt, encoding="utf-8")
         if normalized_backend == "deterministic":
             chapter_text = f"## {heading}\n\n{chapter['body'].strip()}\n"
+            chapter_usage: dict[str, int] = {}
         elif normalized_backend in {"local-command", "command"}:
-            chapter_text = _run_command(command, prompt, timeout)
+            chapter_text, chapter_usage = _normalize_model_result(_run_command(command, prompt, timeout))
         elif normalized_backend in {"claude-cli", "opus", "claude"}:
             last_error = ""
             chapter_text = ""
+            chapter_usage = {}
             for candidate in ([active_model] if active_model else model_candidates):
                 try:
-                    chapter_text = _run_claude(prompt, model=candidate, timeout=timeout, max_budget_usd=max_budget_usd)
+                    chapter_text, chapter_usage = _normalize_model_result(
+                        _run_claude(prompt, model=candidate, timeout=timeout, max_budget_usd=max_budget_usd)
+                    )
                     active_model = candidate
                     model_attempts.append({"chapter": heading, "model": candidate, "ok": True})
                     break
@@ -236,7 +254,9 @@ def run_chief_editor(
                     if any(item.get("chapter") == heading and item.get("model") == candidate for item in model_attempts):
                         continue
                     try:
-                        chapter_text = _run_claude(prompt, model=candidate, timeout=timeout, max_budget_usd=max_budget_usd)
+                        chapter_text, chapter_usage = _normalize_model_result(
+                            _run_claude(prompt, model=candidate, timeout=timeout, max_budget_usd=max_budget_usd)
+                        )
                         active_model = candidate
                         model_attempts.append({"chapter": heading, "model": candidate, "ok": True})
                         break
@@ -249,6 +269,23 @@ def run_chief_editor(
             raise ValueError(f"unsupported_chief_editor_backend:{backend}")
         if not chapter_text.lstrip().startswith("## "):
             chapter_text = f"## {heading}\n\n{chapter_text.strip()}\n"
+        if normalized_backend != "deterministic":
+            append_model_usage_event(
+                usage_path,
+                build_model_usage_event(
+                    backend=normalized_backend,
+                    model=active_model if normalized_backend in {"claude-cli", "opus", "claude"} else command,
+                    prompt=prompt,
+                    output=chapter_text,
+                    usage=chapter_usage,
+                    metadata={
+                        "stage": "chief_editor",
+                        "chapter": heading,
+                        "prompt_path": str(prompt_path),
+                        "output_path": str(out_path),
+                    },
+                ),
+            )
         out_path.write_text(chapter_text.strip() + "\n", encoding="utf-8")
         rewritten.extend([chapter_text.strip(), ""])
         chapter_results.append({
@@ -276,6 +313,7 @@ def run_chief_editor(
         "chief_editor_final": str(target),
         "chapter_results": chapter_results,
         "quality_gate": quality,
+        "model_usage_path": str(usage_path),
         "hitl_path": str(hitl_path),
         "approval_path": str(approval_path),
         "hitl_required": require_hitl,

@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from research.report_metrics import append_model_usage_event, build_model_usage_event, parse_model_cli_output
+
 
 class SurveyWriterBackend(Protocol):
     """Minimal interface for section writer implementations."""
@@ -103,9 +105,26 @@ class LocalCommandSurveyWriterBackend:
         if result.returncode != 0:
             stderr = (result.stderr or "").strip().replace("\n", " ")[:500]
             raise LocalCommandWriterError(f"exit_{result.returncode}:{stderr}")
-        output = (result.stdout or "").strip()
+        output, usage, _ = parse_model_cli_output(result.stdout or "", result.stderr or "")
         if not output:
             raise LocalCommandWriterError("empty_stdout")
+        usage_path = str((prompt_packet.get("artifact_paths") or {}).get("model_usage") or "")
+        if usage_path:
+            append_model_usage_event(
+                usage_path,
+                build_model_usage_event(
+                    backend=self.name,
+                    model=self.command,
+                    prompt=payload,
+                    output=output,
+                    usage=usage,
+                    metadata={
+                        "stage": "survey_section_writer",
+                        "section_id": prompt_packet.get("section_id"),
+                        "round_index": prompt_packet.get("round_index"),
+                    },
+                ),
+            )
         return output + "\n"
 
 
