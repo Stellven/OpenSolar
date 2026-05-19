@@ -105,18 +105,24 @@ def _run_claude(prompt: str, *, model: str, timeout: int, max_budget_usd: float)
     claude = shutil.which("claude")
     if not claude:
         raise RuntimeError("claude_cli_missing")
-    # Keep the Claude CLI invocation conservative. Some gateway-compatible
-    # deployments reject client-only flags such as tool lists or budget caps.
+    # Claude Code 2.x removed older client flags such as --bare. Keep this
+    # invocation on the documented non-interactive path so the chief-editor
+    # pass can run in real harness sessions instead of silently falling back.
     cmd = [
         claude,
-        "--bare",
-        "-p",
+        "--print",
         "--output-format",
         "json",
         "--max-budget-usd",
         str(max_budget_usd),
         "--model",
         model,
+        "--no-session-persistence",
+        "--mcp-config",
+        "{}",
+        "--strict-mcp-config",
+        "--tools",
+        "",
     ]
     result = subprocess.run(cmd, input=prompt, text=True, capture_output=True, timeout=timeout, check=False)
     if result.returncode != 0:
