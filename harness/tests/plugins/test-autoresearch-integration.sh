@@ -184,6 +184,26 @@ OUT=$(python3 "$HARNESS_DIR/lib/autoresearch_pane_optimizer.py" \
   --task "Round N+1 修复/继续实现" \
   --status-file "$TMP_TELEMETRY/status.json" \
   --eval-json "$TMP_TELEMETRY/eval.json" \
+  --record-status \
+  --format json)
+python3 - "$OUT" "$TMP_TELEMETRY/status.json" <<'PY' && ok "pane optimizer records status artifact" || fail "pane optimizer records status artifact"
+import json, sys
+payload=json.loads(sys.argv[1])
+status=json.load(open(sys.argv[2], encoding="utf-8"))
+assert payload["record_status"]["ok"] is True, payload
+artifact=status["artifacts"]["autoresearch_optimizer"]
+assert artifact["trigger_level"] == "strong", artifact
+assert artifact["telemetry"]["eval_verdict"] == "FAIL", artifact
+assert "missing_evidence" in artifact["telemetry"]["failed_conditions"], artifact
+assert artifact["execution_policy"]["replaces_builder"] is False, artifact
+assert any(h.get("event") == "autoresearch_optimizer_recorded" for h in status["history"]), status
+PY
+OUT=$(python3 "$HARNESS_DIR/lib/autoresearch_pane_optimizer.py" \
+  --sid sprint-test \
+  --role "建设者" \
+  --task "Round N+1 修复/继续实现" \
+  --status-file "$TMP_TELEMETRY/status.json" \
+  --eval-json "$TMP_TELEMETRY/eval.json" \
   --format markdown)
 grep -q "Telemetry trigger" <<<"$OUT" \
   && grep -q "missing_evidence" <<<"$OUT" \
