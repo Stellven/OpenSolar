@@ -56,6 +56,20 @@ def _dedupe(values: list[str]) -> list[str]:
 
 PROVIDER_ALIASES: dict[str, list[str]] = {
     "ruflo": ["ruflo", "ruvflo", "claude-flow", "claude flow"],
+    "autoresearch": [
+        "autoresearch",
+        "auto research",
+        "issue-loop",
+        "issue loop",
+        "local issue",
+        "implementation loop",
+        "score-gated",
+        "score gate",
+        "passing score",
+        "自动实现 issue",
+        "多代理迭代",
+        "评分门禁",
+    ],
     "everything claude code": ["everything-claude-code", "everything claude code"],
     "browser-use mcp": ["browser-use", "browser use", "browser mcp"],
     "gstack": ["gstack"],

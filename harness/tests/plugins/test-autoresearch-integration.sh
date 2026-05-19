@@ -10,7 +10,12 @@ ok() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1"; FAIL=$((FAIL + 1)); }
 
 echo "A1 — modules compile"
-python3 -m py_compile "$HARNESS_DIR/lib/autoresearch_adapter.py" "$HARNESS_DIR/lib/external-integrations-health.py" \
+python3 -m py_compile \
+  "$HARNESS_DIR/lib/autoresearch_adapter.py" \
+  "$HARNESS_DIR/lib/external-integrations-health.py" \
+  "$HARNESS_DIR/lib/intent_engine_adapter.py" \
+  "$HARNESS_DIR/lib/capability_inference.py" \
+  "$HARNESS_DIR/lib/solar_skills.py" \
   && ok "autoresearch modules compile" || fail "autoresearch modules compile"
 
 echo "A2 — status is readable even before vendor"
@@ -69,7 +74,45 @@ assert d["found"] is True
 assert d["providers"][0]["provider"] == "autoresearch"
 PY
 
-echo "A5 — unified health exposes autoresearch"
+echo "A5 — planner/builder dispatch can see autoresearch but does not auto-execute"
+intent="$("$HARNESS_DIR/solar-harness.sh" intent match "Use autoresearch issue loop for this local issue with score gate" 2>/dev/null)"
+grep -q "autoresearch" <<<"$intent" && ok "autoresearch intent route" || fail "autoresearch intent route"
+plain_intent="$("$HARNESS_DIR/solar-harness.sh" intent match "请写一段普通总结，不要运行本地问题循环" 2>/dev/null)"
+if grep -q "autoresearch" <<<"$plain_intent"; then
+  fail "negative intent should not route to autoresearch"
+else
+  ok "negative intent avoids autoresearch"
+fi
+
+TMP_DISPATCH=$(mktemp /tmp/solar-autoresearch-dispatch.XXXXXX.md)
+cat > "$TMP_DISPATCH" <<'EOF'
+# Planner Handoff
+
+Implement the local issue through an explicit autoresearch issue-loop.
+Use score-gated iterations, but do not execute without user approval.
+EOF
+"$HARNESS_DIR/solar-harness.sh" skills inject "$TMP_DISPATCH" >/dev/null
+grep -q "Autoresearch (autoresearch.issue_loop" "$TMP_DISPATCH" \
+  && grep -q "不得自动运行" "$TMP_DISPATCH" \
+  && ok "Autoresearch capability injected with stop rules" \
+  || fail "Autoresearch capability injected with stop rules"
+python3 - "$TMP_DISPATCH.intent.json" <<'PY' && ok "autoresearch telemetry visible" || fail "autoresearch telemetry visible"
+import json, sys
+d=json.load(open(sys.argv[1], encoding="utf-8"))
+assert any(m.get("source") == "autoresearch" for m in d["intent"]["matches"]), d["intent"]
+assert any(c.get("provider") == "Autoresearch" for c in d["capabilities"]), d["capabilities"]
+assert d["worker_visible"]["solar_intent_context"] is True, d["worker_visible"]
+assert d["worker_visible"]["solar_capability_context"] is True, d["worker_visible"]
+PY
+OUT=$(python3 "$HARNESS_DIR/lib/capability_inference.py" infer --text "Create a local issue and run an autoresearch score gate implementation loop")
+python3 - "$OUT" <<'PY' && ok "capability inference routes autoresearch" || fail "capability inference routes autoresearch"
+import json, sys
+d=json.loads(sys.argv[1])
+matches=d.get("matches", [])
+assert any(m.get("provider") == "Autoresearch" and "autoresearch.issue_loop" in m.get("capabilities", []) for m in matches), matches
+PY
+
+echo "A6 — unified health exposes autoresearch"
 OUT=$("$HARNESS_DIR/solar-harness.sh" integrations status --json --refresh)
 python3 - "$OUT" <<'PY' && ok "autoresearch unified health present" || fail "autoresearch unified health present"
 import json, sys

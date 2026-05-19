@@ -34,6 +34,12 @@ background_safety:
   max_runtime_s: 3600
   max_memory_mb: 2048
 
+stop_rules:
+  - "Never run from Planner/Builder automatically; route only as a visible capability recommendation."
+  - "Default to dry-run. Real execution requires explicit user approval and the --execute flag."
+  - "Do not execute against an ambiguous, dirty, or non-isolated target repository."
+  - "Always bound max iterations and record issue file, command, score/test evidence and rollback path."
+
 eval_packs:
   - "tests/plugins/test-autoresearch-integration.sh"
 
