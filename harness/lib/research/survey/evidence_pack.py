@@ -29,12 +29,24 @@ def _tokens(text: str) -> set[str]:
     return {part.lower() for part in str(text or "").replace("/", " ").replace("_", " ").split() if len(part) >= 3}
 
 
+def _compact_text(text: str) -> str:
+    return "".join(ch.lower() for ch in str(text or "") if ch.isalnum() or "\u4e00" <= ch <= "\u9fff")
+
+
 def _ranked(rows: list[dict], section: dict, text_key: str) -> list[dict]:
     section_tokens = _tokens(" ".join(str(section.get(k, "")) for k in ("title", "research_question", "section_id")))
+    title_key = _compact_text(section.get("title") or "")
+    section_id_key = _compact_text(section.get("section_id") or "")
     scored = []
     for idx, row in enumerate(rows):
-        row_tokens = _tokens(str(row.get(text_key) or row.get("content") or row.get("claim_text") or row.get("title") or ""))
+        row_text = str(row.get(text_key) or row.get("content") or row.get("claim_text") or row.get("title") or "")
+        row_tokens = _tokens(row_text)
         score = len(section_tokens & row_tokens)
+        row_key = _compact_text(row_text)
+        if title_key and title_key in row_key:
+            score += 100
+        if section_id_key and section_id_key in _compact_text(row.get("id") or row.get("claim_id") or row.get("evidence_id") or ""):
+            score += 20
         scored.append((-score, idx, row))
     scored.sort(key=lambda item: (item[0], item[1]))
     return [row for _score, _idx, row in scored]
