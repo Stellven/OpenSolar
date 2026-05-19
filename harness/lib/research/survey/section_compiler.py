@@ -291,9 +291,6 @@ def _clean_human_text(text: str, evidence_numbers: dict[str, int]) -> str:
             "与本节": "与上述",
         }.items():
             line = line.replace(old, new)
-        line = re.sub(r"\bch\d{1,3}#\d+::(?:ch\d{1,3}/sec\d{1,3}::)?", "", line)
-        line = re.sub(r"\bch\d{1,3}/sec\d{1,3}\b", "", line)
-        line = re.sub(r"\s+([，。；：,.])", r"\1", line)
         line = re.sub(r"\[claim:[^\]]+\]", "", line)
         line = re.sub(
             r"\[evidence:([^\]]+)\]",
