@@ -25,7 +25,32 @@ def test_expired_lease_does_not_make_pane_busy(monkeypatch) -> None:
 
 def test_active_lease_makes_pane_busy(monkeypatch) -> None:
     monkeypatch.setattr(gnd, "read_lease", lambda pane: {"expires_at": _ts(60)})
+    monkeypatch.setattr(gnd, "_pane_tail", lambda pane: "")
     assert gnd._pane_has_active_lease("solar-harness-lab:0.0") is True
+
+
+def test_idle_api_timeout_releases_active_lease(monkeypatch) -> None:
+    released: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(
+        gnd,
+        "read_lease",
+        lambda pane: {"expires_at": _ts(60), "dispatch_id": "eval-123"},
+    )
+    monkeypatch.setattr(
+        gnd,
+        "_pane_tail",
+        lambda pane: "⎿ \u00a0API Error: Request timed out. Check your internet connection and proxy settings\n\n❯\u00a0\n",
+    )
+    monkeypatch.setattr(
+        gnd,
+        "release_lease",
+        lambda pane, dispatch_id, reason: released.append((pane, dispatch_id, reason)) or {"released": True},
+    )
+
+    assert gnd._pane_has_active_lease("solar-harness:0.3") is False
+    assert released == [
+        ("solar-harness:0.3", "eval-123", "active_lease_released_after_idle_api_timeout")
+    ]
 
 
 def test_default_claude_try_prompt_is_not_prompt_residue() -> None:
@@ -55,6 +80,56 @@ def test_worker_discovery_ignores_expired_lease(monkeypatch) -> None:
     assert len(workers) == 1
     assert workers[0]["pane"] == "solar-harness-lab:0.0"
     assert workers[0]["busy"] is False
+
+
+def test_worker_discovery_supports_pandoc_render_nodes(monkeypatch) -> None:
+    monkeypatch.setattr(
+        gnd.subprocess,
+        "check_output",
+        lambda *a, **kw: b"solar-harness-lab:0.0\tbuilder-glm\n",
+    )
+    monkeypatch.setattr(gnd, "read_lease", lambda pane: None)
+    monkeypatch.setattr(gnd, "_clear_stale_prompt_residue", lambda pane: False)
+    monkeypatch.setattr(gnd, "_pane_unavailable_reason", lambda pane: "")
+    monkeypatch.setattr(gnd, "_pane_tui_busy", lambda pane: False)
+    monkeypatch.setattr(gnd, "_pane_health", lambda pane: {})
+
+    workers = gnd._discover_workers(dry_run=False)
+
+    assert "pandoc" in workers[0]["skills"]
+
+
+def test_worker_discovery_supports_s05_release_skill_aliases(monkeypatch) -> None:
+    monkeypatch.setattr(
+        gnd.subprocess,
+        "check_output",
+        lambda *a, **kw: b"solar-harness-lab:0.0\tbuilder-glm\n",
+    )
+    monkeypatch.setattr(gnd, "read_lease", lambda pane: None)
+    monkeypatch.setattr(gnd, "_clear_stale_prompt_residue", lambda pane: False)
+    monkeypatch.setattr(gnd, "_pane_unavailable_reason", lambda pane: "")
+    monkeypatch.setattr(gnd, "_pane_tui_busy", lambda pane: False)
+    monkeypatch.setattr(gnd, "_pane_health", lambda pane: {})
+
+    workers = gnd._discover_workers(dry_run=False)
+
+    for skill in [
+        "ui",
+        "security",
+        "grep",
+        "http",
+        "curl",
+        "deepresearch",
+        "cli",
+        "claude-cli",
+        "survey",
+        "fixture",
+        "release",
+        "evidence",
+        "autopilot",
+        "epic",
+    ]:
+        assert skill in workers[0]["skills"]
 
 
 def test_worker_discovery_marks_shell_prompt_residue_as_runtime_not_running(monkeypatch) -> None:

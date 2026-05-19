@@ -209,6 +209,26 @@ class TestParentReadyCloseout:
 class TestParentReadyCheckIntegration:
     """Integration test: graph_scheduler.parent_ready_check is the source of truth."""
 
+    def test_shared_gate_does_not_pass_until_all_gate_nodes_pass(self):
+        from graph_scheduler import mark_node_result
+
+        graph = {
+            "sprint_id": "shared-gate",
+            "required_gates": ["gate-shared"],
+            "nodes": [
+                {"id": "N1", "depends_on": [], "status": "reviewing", "gate": "gate-shared"},
+                {"id": "N2", "depends_on": [], "status": "failed", "gate": "gate-shared"},
+            ],
+            "node_results": {"N2": {"status": "failed", "updated_at": "2026-05-19T00:00:00Z"}},
+            "gate_results": {},
+        }
+
+        parent = mark_node_result(graph, "N1", "passed", gate_status="passed")
+
+        assert parent["ready"] is False
+        assert graph["gate_results"]["gate-shared"]["status"] == "blocked"
+        assert graph["gate_results"]["gate-shared"]["open_nodes"] == ["N2"]
+
     def test_all_passed_means_ready(self, tmp_harness):
         """When all nodes and gates pass, parent_ready_check returns ready."""
         from graph_scheduler import parent_ready_check

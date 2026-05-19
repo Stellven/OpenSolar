@@ -52,14 +52,6 @@ def finalize_survey_run(
     min_sources: int = 4,
     min_evidence: int = 8,
     min_claims: int = 8,
-    narrative_backend: str = "off",
-    narrative_model: str = "opus",
-    narrative_fallback_models: str = "",
-    narrative_command: str = "",
-    narrative_timeout: int = 240,
-    narrative_max_budget_usd: float = 3.0,
-    narrative_min_chars: int = 8000,
-    narrative_require_hitl: bool = False,
 ) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
     root.mkdir(parents=True, exist_ok=True)
@@ -153,51 +145,15 @@ def finalize_survey_run(
     final_eval = evaluate_survey(root, strict=True, min_finalized=min_finalized, require_complete=require_complete)
     steps.append({"step": "final_eval", "ok": final_eval.get("ok"), "issues": (final_eval.get("scorecard") or {}).get("issues", [])})
 
-    narrative = {"ok": True, "skipped": True, "backend": "off"}
-    normalized_narrative_backend = (narrative_backend or "off").strip().lower()
-    if normalized_narrative_backend not in {"", "off", "none", "skip"}:
-        from .chief_editor import run_chief_editor
-
-        try:
-            narrative = run_chief_editor(
-                root,
-                source_path=compiled.get("human_final_md") or root / "human_final.md",
-                backend=normalized_narrative_backend,
-                model=narrative_model,
-                fallback_models=narrative_fallback_models,
-                command=narrative_command,
-                timeout=narrative_timeout,
-                max_budget_usd=narrative_max_budget_usd,
-                min_chars=narrative_min_chars,
-                require_hitl=narrative_require_hitl,
-            )
-        except Exception as exc:
-            narrative = {"ok": False, "reason": f"narrative_rewrite_failed:{exc}", "backend": normalized_narrative_backend}
-        steps.append({
-            "step": "narrative_rewrite",
-            "ok": narrative.get("ok"),
-            "backend": narrative.get("backend", normalized_narrative_backend),
-            "reason": narrative.get("reason"),
-            "chief_editor_final": narrative.get("chief_editor_final"),
-            "issues": (narrative.get("quality_gate") or {}).get("issues", []),
-        })
-
-    pipeline_ok = bool(final_eval.get("ok")) and bool(narrative.get("ok", True))
-    final_md = compiled.get("final_md", str(root / "final.md"))
-    if narrative.get("ok") and narrative.get("chief_editor_final"):
-        final_md = str(narrative.get("chief_editor_final"))
     payload = {
-        "ok": pipeline_ok,
-        "reason": "passed" if pipeline_ok else "narrative_rewrite_failed" if final_eval.get("ok") else "final_eval_failed",
+        "ok": bool(final_eval.get("ok")),
+        "reason": "passed" if final_eval.get("ok") else "final_eval_failed",
         "steps": steps,
         "initial_eval": initial_eval,
         "repair": repair,
         "compile": compiled,
         "final_eval": final_eval,
-        "compiled_final_md": compiled.get("final_md", str(root / "final.md")),
-        "human_final_md": compiled.get("human_final_md"),
-        "narrative_rewrite": narrative,
-        "final_md": final_md,
+        "final_md": compiled.get("final_md", str(root / "final.md")),
         "run_path": str(root / "survey_finalize_run.json"),
     }
     (root / "survey_finalize_run.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

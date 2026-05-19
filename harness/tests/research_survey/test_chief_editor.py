@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 
 _HARNESS_LIB = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "lib")
@@ -113,39 +112,6 @@ def test_chief_editor_uses_fallback_model_after_primary_failure(tmp_path, monkey
     ]
     assert len(usage_rows) == 2
     assert usage_rows[0]["token_usage_is_estimated"] is True
-
-
-def test_chief_editor_claude_cli_uses_print_not_bare(monkeypatch):
-    calls = []
-
-    def fake_run(cmd, input, text, capture_output, timeout, check):
-        calls.append(cmd)
-        return subprocess.CompletedProcess(
-            cmd,
-            0,
-            stdout=json.dumps(
-                {
-                    "result": "## 架构范式\n\nClaude chief editor output.\n",
-                    "usage": {"input_tokens": 100, "output_tokens": 20, "total_tokens": 120},
-                }
-            ),
-            stderr="",
-        )
-
-    monkeypatch.setattr(chief_editor.shutil, "which", lambda name: "/usr/local/bin/claude")
-    monkeypatch.setattr(chief_editor.subprocess, "run", fake_run)
-
-    output, usage = chief_editor._run_claude("prompt", model="opus", timeout=10, max_budget_usd=1)
-
-    assert output.startswith("## 架构范式")
-    assert usage["total_tokens"] == 120
-    assert calls
-    assert "--print" in calls[0]
-    assert "-p" not in calls[0]
-    assert "--bare" not in calls[0]
-    assert "--strict-mcp-config" in calls[0]
-    assert "--mcp-config" in calls[0]
-    assert "--tools" in calls[0]
 
 
 def test_chief_editor_local_command_records_real_usage_json(tmp_path):

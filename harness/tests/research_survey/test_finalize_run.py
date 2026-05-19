@@ -79,29 +79,6 @@ def test_finalize_run_can_reuse_existing_plan_and_pack(tmp_path):
     assert payload["steps"][2]["skipped"] is True
 
 
-def test_finalize_run_can_run_narrative_rewrite_pass(tmp_path):
-    _ledgers(tmp_path)
-    payload = finalize_survey_run(
-        tmp_path,
-        brief="latent reasoning",
-        section_limit=1,
-        repair_limit=1,
-        min_finalized=1,
-        min_chars=100,
-        repair_passes=1,
-        narrative_backend="deterministic",
-        narrative_min_chars=100,
-    )
-    assert payload["ok"] is True
-    assert payload["reason"] == "passed"
-    assert any(step["step"] == "narrative_rewrite" and step["ok"] is True for step in payload["steps"])
-    assert payload["compiled_final_md"].endswith("final.md")
-    assert payload["human_final_md"].endswith("human_final.md")
-    assert payload["final_md"].endswith("chief_editor_final.md")
-    assert (tmp_path / "chief_editor_final.md").exists()
-    assert (tmp_path / "survey_chief_editor_backend.json").exists()
-
-
 def test_finalize_run_requires_brief_when_planning(tmp_path):
     payload = finalize_survey_run(tmp_path)
     assert payload["ok"] is False

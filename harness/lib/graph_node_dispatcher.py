@@ -38,6 +38,10 @@ PANE_TUI_UNAVAILABLE_RE = re.compile(
     r"API Error:\s*400|Invalid API parameter|error\"\s*:\s*\{",
     re.I,
 )
+PANE_DISPATCH_FAILED_IDLE_RE = re.compile(
+    r"API Error:\s*Request timed out|Check your internet connection and proxy settings",
+    re.I,
+)
 PANE_QUEUED_PROMPT_RE = re.compile(r"Press up to edit queued messages", re.I)
 PANE_PROMPT_RESIDUE_RE = re.compile(r"^\s*❯(?![\s\u00a0]+Try\s+\")[\s\u00a0]+[^\s\u00a0─]", re.M)
 STATE_READ_PREFLIGHT = """<!-- SOLAR_STATE_READ_PREFLIGHT -->
@@ -623,10 +627,11 @@ def _handoff_file(sid: str, node_id: str) -> Path:
 def _node_handoff_candidates(sid: str, node: dict[str, Any], graph: dict[str, Any]) -> list[Path]:
     node_id = str(node.get("id") or "")
     candidates = [_handoff_file(sid, node_id)]
-    deps = node.get("depends_on") or []
-    gate = str(node.get("gate") or "")
-    if deps and gate in set(str(g) for g in graph.get("required_gates", [])):
-        candidates.append(SPRINTS_DIR / f"{sid}.handoff.md")
+    parent_handoff = f"sprints/{sid}.handoff.md"
+    for scope in node.get("write_scope") or []:
+        if str(scope).endswith(parent_handoff) or str(scope).endswith(f"{sid}.handoff.md"):
+            candidates.append(SPRINTS_DIR / f"{sid}.handoff.md")
+            break
     return candidates
 
 
@@ -1633,7 +1638,18 @@ def _lease_active_for(pane: str, sid: str, dispatch_id: str) -> bool:
 
 def _pane_has_active_lease(pane: str) -> bool:
     lease = read_lease(pane)
-    return bool(lease and lease.get("expires_at", "") > _utc_now())
+    if not lease or lease.get("expires_at", "") <= _utc_now():
+        return False
+    tail = _pane_tail(pane)
+    bottom = "\n".join(tail.splitlines()[-12:])
+    if PANE_DISPATCH_FAILED_IDLE_RE.search(tail) and not PANE_TUI_BUSY_RE.search(bottom):
+        release_lease(
+            pane,
+            str(lease.get("dispatch_id") or ""),
+            "active_lease_released_after_idle_api_timeout",
+        )
+        return False
+    return True
 
 
 def _utc_now() -> str:
@@ -1822,7 +1838,8 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
     instruction_file = _dispatch_file(sid, node_id)
     instruction_file.parent.mkdir(parents=True, exist_ok=True)
     instruction_file.write_text(build_dispatch_text(text_payload, pane), encoding="utf-8")
-    _inject_dispatch_context(instruction_file, sid=sid, pane=pane, dispatch_id=dispatch_id)
+    if not dry_run:
+        _inject_dispatch_context(instruction_file, sid=sid, pane=pane, dispatch_id=dispatch_id)
     if dry_run:
         return {
             "ok": True,
@@ -1910,8 +1927,10 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "bash", "python", "dataclasses", "pytest", "pure-functions", "time-injection", "io", "fsm", "integration-testing", "json-patch", "typescript", "docs", "testing",
         "http-testing", "negative-testing", "activation-proof", "knowledge-ingest", "release-gate", "documentation",
         "stub-llm", "e2e-test", "cli-view-assertion", "negative-control", "verifier", "registry-introspection",
-        "technical-writing", "markdown", "evidence-aggregation", "handoff-authoring", "traceability-patch", "knowledge-raw-writeback",
-        "frontend", "flask", "http-routing", "autopilot-hooks", "json-traversal", "html", "jinja", "javascript", "vanilla-dom",
+        "technical-writing", "markdown", "pandoc", "evidence-aggregation", "handoff-authoring", "traceability-patch", "knowledge-raw-writeback",
+        "frontend", "ui", "flask", "http", "curl", "http-routing", "autopilot-hooks", "json-traversal", "html", "jinja", "javascript", "vanilla-dom",
+        "security", "grep", "secret-scan",
+        "deepresearch", "cli", "claude-cli", "survey", "fixture", "release", "evidence", "autopilot", "epic",
         "product", "planning", "governance",
         "architecture", "schema", "state-machine", "distributed-systems",
         "api-design", "data-modeling", "compatibility",
