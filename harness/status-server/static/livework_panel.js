@@ -57,18 +57,18 @@
     }).join("");
   }
 
-  var BADGE_STYLES = {
-    "badge-fallback-L1": "color:#2e7d32",
-    "badge-fallback-L2": "color:#f9a825",
-    "badge-fallback-L3": "color:#ef6c00",
-    "badge-fallback-L4": "color:#c62828",
-    "badge-fallback-unknown": "color:#9e9e9e",
+  var FALLBACK_COLORS = {
+    L1: "color:#2e7d32",
+    L2: "color:#f9a825",
+    L3: "color:#ef6c00",
+    L4: "color:#c62828",
+    unknown: "color:#9e9e9e",
   };
 
   function formatFallbackLevel(level) {
-    var cls = "badge-fallback-" + (level || "unknown");
-    var style = BADGE_STYLES[cls] || "color:#9e9e9e";
-    return '<span class="badge ' + cls + '" style="' + style + '">' + (level || "unknown") + "</span>";
+    var key = level || "unknown";
+    var style = FALLBACK_COLORS[key] || FALLBACK_COLORS.unknown;
+    return '<span class="badge badge-fallback-' + key + '" style="' + style + '">' + key + "</span>";
   }
 
   function formatStateTransition(data) {
