@@ -947,16 +947,6 @@ CAPABILITY_RULES: list[dict[str, Any]] = [
         ],
     },
     {
-        "provider": "Autoresearch",
-        "capabilities": ["autoresearch.issue_loop", "autoresearch.local_issue", "autoresearch.agent_iteration", "autoresearch.score_gate"],
-        "why": "任务涉及把明确 issue 转成 bounded 本地实现循环：生成 local issue、迭代实现、运行评分/测试门禁，再输出结果。",
-        "use": "只推荐，不自动执行。默认使用 solar-harness integrations autoresearch-run-local ... --json 做 dry-run；真正执行必须显式加 --execute、确认 target repo 干净或隔离、限定 max-iterations，并在 handoff 写明 issue 文件、命令、评分和回滚证据。",
-        "patterns": [
-            r"\b(autoresearch|auto research|issue[- ]loop|local issue|implementation loop|score[- ]gate|passing score)\b",
-            r"自动实现.*issue|issue.*自动实现|本地.*issue|多代理.*迭代|评分门禁|分数门禁|实现循环|修复循环",
-        ],
-    },
-    {
         "provider": "DeepResearch Source Search",
         "capabilities": ["source.search", "research.source.web", "research.source.academic", "research.source.internal"],
         "why": "任务涉及多源检索、外部搜索、学术搜索、Mirage/QMD 内部源搜索、来源网格。",
@@ -1106,7 +1096,6 @@ def _rank_rule(rule: dict[str, Any], scores: dict[str, dict[str, Any]]) -> dict[
         "atlas": "atlas",
         "everything-claude-code": "everything-claude-code",
         "agent-rules-books": "agent-rules-books",
-        "autoresearch": "autoresearch",
         "solar-harness-runtime": "solar-harness-runtime",
         "solar-data-plane": "solar-data-plane",
     }
@@ -1237,7 +1226,6 @@ def _build_capability_block(dispatch_text: str, selected: list[dict[str, Any]] |
         "## Dispatch Rules",
         "",
         "- 这些 capability 是自动选择的执行辅助，不替换 Solar coordinator / planner / evaluator。",
-        "- Autoresearch 只能作为显式本地 issue-loop 建议；没有用户授权、--execute、清洁/隔离工作树和 bounded max-iterations 时不得自动运行。",
         "- 若 capability 缺失或不可用，必须 fail-open：继续完成主任务，并在 handoff 写明降级证据。",
         "- 遇到失败、超时、hook/tool 异常时，优先触发 ATLAS structured repair，不要停在等待人工决策。",
         _CAP_CLOSE,
