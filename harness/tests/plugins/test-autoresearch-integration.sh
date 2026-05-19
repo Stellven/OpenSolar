@@ -12,11 +12,16 @@ fail() { echo "  FAIL: $1"; FAIL=$((FAIL + 1)); }
 echo "A1 — modules compile"
 python3 -m py_compile \
   "$HARNESS_DIR/lib/autoresearch_adapter.py" \
+  "$HARNESS_DIR/lib/autoresearch_pane_optimizer.py" \
   "$HARNESS_DIR/lib/external-integrations-health.py" \
   "$HARNESS_DIR/lib/intent_engine_adapter.py" \
   "$HARNESS_DIR/lib/capability_inference.py" \
   "$HARNESS_DIR/lib/solar_skills.py" \
   && ok "autoresearch modules compile" || fail "autoresearch modules compile"
+bash -n "$HARNESS_DIR/coordinator.sh" \
+  && grep -q "build_autoresearch_optimizer_context" "$HARNESS_DIR/coordinator.sh" \
+  && ok "coordinator injects autoresearch optimizer" \
+  || fail "coordinator injects autoresearch optimizer"
 
 echo "A2 — status is readable even before vendor"
 OUT=$("$HARNESS_DIR/solar-harness.sh" integrations autoresearch-status --json)
@@ -24,9 +29,11 @@ python3 - "$OUT" <<'PY' && ok "autoresearch status schema" || fail "autoresearch
 import json, sys
 d=json.loads(sys.argv[1])
 assert d["source"]["repo"] == "https://github.com/smallnest/autoresearch.git"
-assert d["mode"] == "explicit_local_issue_runner"
+assert d["mode"] == "pane_optimizer_advisor_and_explicit_local_issue_runner"
 assert d["safety"]["default_execution"] == "dry_run"
 assert d["safety"]["execute_requires_flag"] == "--execute"
+assert d["safety"]["replaces_builder"] is False
+assert d["safety"]["pane_optimizer_advisor"] is True
 PY
 
 echo "A3 — dry-run local issue creates controlled issue file and does not execute"
@@ -84,7 +91,7 @@ else
   ok "negative intent avoids autoresearch"
 fi
 
-TMP_DISPATCH=$(mktemp /tmp/solar-autoresearch-dispatch.XXXXXX.md)
+TMP_DISPATCH="$(mktemp -t solar-autoresearch-dispatch).md"
 cat > "$TMP_DISPATCH" <<'EOF'
 # Planner Handoff
 
@@ -92,7 +99,7 @@ Implement the local issue through an explicit autoresearch issue-loop.
 Use score-gated iterations, but do not execute without user approval.
 EOF
 "$HARNESS_DIR/solar-harness.sh" skills inject "$TMP_DISPATCH" >/dev/null
-grep -q "Autoresearch (autoresearch.issue_loop" "$TMP_DISPATCH" \
+grep -q "Autoresearch (autoresearch.pane_optimizer" "$TMP_DISPATCH" \
   && grep -q "不得自动运行" "$TMP_DISPATCH" \
   && ok "Autoresearch capability injected with stop rules" \
   || fail "Autoresearch capability injected with stop rules"
@@ -112,7 +119,25 @@ matches=d.get("matches", [])
 assert any(m.get("provider") == "Autoresearch" and "autoresearch.issue_loop" in m.get("capabilities", []) for m in matches), matches
 PY
 
-echo "A6 — unified health exposes autoresearch"
+echo "A6 — pane optimizer renders role-specific advisor blocks"
+for role in "产品经理" "规划者" "建设者" "审判官"; do
+  OUT=$(python3 "$HARNESS_DIR/lib/autoresearch_pane_optimizer.py" --sid sprint-test --role "$role" --task "需要提升 pane 执行质量、验收和 score gate" --format json)
+  python3 - "$OUT" <<'PY' || fail "pane optimizer json for role"
+import json, sys
+d=json.loads(sys.argv[1])
+assert d["recommended"] is True, d
+assert d["execution_policy"]["replaces_builder"] is False, d
+assert "autoresearch.pane_optimizer" in d["capabilities"], d
+PY
+done
+ok "pane optimizer recommends for all main panes"
+OUT=$(python3 "$HARNESS_DIR/lib/autoresearch_pane_optimizer.py" --sid sprint-test --role "规划者" --task "基于 PRD 产出 DAG 和 write_scope" --format markdown)
+grep -q "Autoresearch Pane Optimizer" <<<"$OUT" \
+  && grep -q "不替代" <<<"$OUT" \
+  && ok "pane optimizer markdown is advisor-only" \
+  || fail "pane optimizer markdown is advisor-only"
+
+echo "A7 — unified health exposes autoresearch"
 OUT=$("$HARNESS_DIR/solar-harness.sh" integrations status --json --refresh)
 python3 - "$OUT" <<'PY' && ok "autoresearch unified health present" || fail "autoresearch unified health present"
 import json, sys
@@ -120,7 +145,8 @@ d=json.loads(sys.argv[1])
 items=[x for x in d.get("integrations", []) if "autoresearch" in x.get("name", "").lower()]
 assert items, "autoresearch integration missing"
 ev=items[0].get("evidence", {})
-assert ev.get("dispatch_capability") == "autoresearch.issue_loop"
+assert ev.get("dispatch_capability") == "autoresearch.pane_optimizer"
+assert ev.get("issue_loop_capability") == "autoresearch.issue_loop"
 assert ev.get("execute_requires") == "--execute"
 PY
 

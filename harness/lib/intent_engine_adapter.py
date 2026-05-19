@@ -115,6 +115,22 @@ AGENT_RULES_BOOKS_RULES: tuple[IntentRule, ...] = (
 )
 
 
+AUTORESEARCH_RULES: tuple[IntentRule, ...] = (
+    IntentRule(
+        "hint",
+        "skill_hint",
+        0.87,
+        (
+            r"\b(autoresearch|auto research|pane optimizer|execution optimizer|dispatch advisor|issue[- ]loop|local issue|implementation loop|score[- ]gate|passing score)\b",
+            r"自动实现.*issue|issue.*自动实现|本地.*issue|多代理.*迭代|评分门禁|分数门禁|执行优化器|质量优化|实现循环|修复循环",
+        ),
+        "建议使用 autoresearch.pane_optimizer / issue_loop 提升 pane 输出质量；默认只 advisor/dry-run，执行必须有 --execute 和明确授权。",
+        "autoresearch",
+        "pane-optimizer",
+    ),
+)
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -163,6 +179,11 @@ def match_static(text: str) -> list[dict[str, Any]]:
 
     for rule in AGENT_RULES_BOOKS_RULES:
         if any(re.search(p, lowered, re.IGNORECASE) for p in rule.patterns):
+            matches.append(as_match(rule, normalized))
+            return matches
+
+    for rule in AUTORESEARCH_RULES:
+        if any(re.search(p, normalized, re.IGNORECASE) for p in rule.patterns):
             matches.append(as_match(rule, normalized))
             return matches
 

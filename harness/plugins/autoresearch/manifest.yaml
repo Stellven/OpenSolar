@@ -1,8 +1,8 @@
 ---
 id: autoresearch
-name: "Autoresearch Issue Implementation Loop"
+name: "Autoresearch Pane Optimizer"
 version: "0.1.0"
-description: "Safe Solar-Harness integration for smallnest/autoresearch: local issue files, multi-agent implementation iterations, scoring and explicit execution. It is not a default builder; execution requires --execute."
+description: "Safe Solar-Harness integration for smallnest/autoresearch: pane-level execution optimization, local issue files, multi-agent implementation iterations, scoring and explicit execution. It improves PM/Planner/Builder/Evaluator output quality but does not replace Builder; execution requires --execute."
 status: enabled
 
 write_scope:
@@ -16,6 +16,8 @@ read_scope:
   - "<target-project>"
 
 capabilities:
+  - "autoresearch.pane_optimizer"
+  - "autoresearch.dispatch_advisor"
   - "autoresearch.issue_loop"
   - "autoresearch.local_issue"
   - "autoresearch.agent_iteration"
@@ -33,6 +35,12 @@ background_safety:
   rate_limit: "manual --execute only"
   max_runtime_s: 3600
   max_memory_mb: 2048
+
+stop_rules:
+  - "Never replace Builder. Use autoresearch as a pane optimizer/advisor unless explicitly executing an approved local issue loop."
+  - "Default to dry-run. Real execution requires explicit user approval and the --execute flag."
+  - "Do not execute against an ambiguous, dirty, or non-isolated target repository."
+  - "Always bound max iterations and record issue file, command, score/test evidence and rollback path."
 
 stop_rules:
   - "Never run from Planner/Builder automatically; route only as a visible capability recommendation."

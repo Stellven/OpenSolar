@@ -2184,8 +2184,9 @@ EOF
 
 generate_dispatch() {
   local sid="$1" role="$2" task="$3"
-  local kb_context
+  local kb_context autoresearch_optimizer_context
   kb_context="$(build_dispatch_kb_context "$sid" "$role" "$task")"
+  autoresearch_optimizer_context="$(build_autoresearch_optimizer_context "$sid" "$role" "$task")"
   cat > "$SPRINTS_DIR/${sid}.dispatch.md" << EOF
 <!-- === STABLE PREFIX (cached) === -->
 # 协调器指令模板 v1
@@ -2231,9 +2232,17 @@ generate_dispatch() {
 - 角色: ${role}
 - 具体任务: ${task}
 ${kb_context}
+${autoresearch_optimizer_context}
 EOF
   # D3: bridge ledger — reviewed event
   type ledger_emit &>/dev/null && ledger_emit "reviewed" "$sid" "{\"role\":\"$role\",\"task\":\"$task\",\"by\":\"coordinator\"}" 2>/dev/null || true
+}
+
+build_autoresearch_optimizer_context() {
+  local sid="$1" role="$2" task="$3"
+  local optimizer_py="$HARNESS_DIR/lib/autoresearch_pane_optimizer.py"
+  [[ -f "$optimizer_py" ]] || return 0
+  python3 "$optimizer_py" --sid "$sid" --role "$role" --task "$task" --format markdown 2>/dev/null || true
 }
 
 # 追加内容到已有 dispatch.md
