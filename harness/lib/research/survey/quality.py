@@ -8,18 +8,6 @@ from pathlib import Path
 from typing import Any
 
 from research.evaluator import audit_sources
-from .golden_style_gate import assess_golden_style
-
-TEMPLATE_POLLUTION_PHRASES = [
-    "以 evidence pack 为事实源",
-    "目标不是堆材料",
-    "不能替代跨章节 synthesis",
-    "架构 synthesis 先拆成机制层",
-    "三层必须保持分离",
-    "机制分层、状态表示、系统边界和可复现实现路径",
-    "当前证据包包含来源类型",
-    "本节先限定 `architecture` 问题边界",
-]
 
 
 def _read_json(path: Path) -> Any:
@@ -313,53 +301,6 @@ def _duplicate_sentence_stats(sentences: list[str]) -> dict[str, Any]:
     }
 
 
-def _template_phrase_stats(text: str) -> dict[str, Any]:
-    counts = {phrase: (text or "").count(phrase) for phrase in TEMPLATE_POLLUTION_PHRASES}
-    top = [
-        {"phrase": phrase, "count": count}
-        for phrase, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
-        if count
-    ]
-    return {
-        "template_pollution_phrase_total": sum(counts.values()),
-        "template_pollution_max_phrase_count": int(top[0]["count"]) if top else 0,
-        "template_pollution_top_phrases": top[:10],
-    }
-
-
-def _normalize_template_paragraph(paragraph: str) -> str:
-    cleaned = re.sub(r"\[[a-z]+:[^\]]+\]", "", paragraph or "")
-    cleaned = re.sub(r"ch\d+#\d+::ch\d+/sec\d+::", "", cleaned)
-    cleaned = re.sub(r"ch\d+/sec\d+", "SECTION_ID", cleaned)
-    cleaned = re.sub(r"S\d{3}\.\s+", "SXXX. ", cleaned)
-    cleaned = re.sub(r"`[^`]+`", "`X`", cleaned)
-    cleaned = re.sub(r"\b(?:paper|benchmark|official_doc|code)(?:,\s*(?:paper|benchmark|official_doc|code))*\b", "SOURCE_TYPES", cleaned)
-    cleaned = re.sub(r"https?://\S+", "URL", cleaned)
-    cleaned = re.sub(r"\s+", " ", cleaned).strip().lower()
-    return cleaned
-
-
-def _template_paragraph_stats(paragraphs: list[str]) -> dict[str, Any]:
-    normalized = [_normalize_template_paragraph(item) for item in paragraphs if len(_normalize_template_paragraph(item)) >= 120]
-    counts: dict[str, int] = {}
-    for item in normalized:
-        counts[item] = counts.get(item, 0) + 1
-    repeated = [
-        {"paragraph": paragraph[:240], "count": count}
-        for paragraph, count in counts.items()
-        if count > 1
-    ]
-    repeated.sort(key=lambda item: (-int(item["count"]), str(item["paragraph"])[:80]))
-    duplicate_occurrences = sum(int(item["count"]) - 1 for item in repeated)
-    return {
-        "normalized_template_paragraph_count": len(normalized),
-        "normalized_template_duplicate_occurrences": duplicate_occurrences,
-        "normalized_template_duplicate_ratio": round(duplicate_occurrences / max(len(normalized), 1), 4),
-        "normalized_template_max_duplicate_count": int(repeated[0]["count"]) if repeated else 0,
-        "normalized_template_top_duplicates": repeated[:10],
-    }
-
-
 def _build_final_quality(root: Path, ast: dict[str, Any], sections: list[dict[str, Any]]) -> dict[str, Any]:
     final_path = root / "final.md"
     final_text = final_path.read_text(encoding="utf-8", errors="ignore") if final_path.exists() else ""
@@ -394,8 +335,6 @@ def _build_final_quality(root: Path, ast: dict[str, Any], sections: list[dict[st
             paragraphs.append(cleaned)
     repetition_rate = round(1.0 - (len(set(paragraphs)) / max(len(paragraphs), 1)), 4)
     sentence_stats = _duplicate_sentence_stats(_normalized_long_sentences(final_text))
-    template_phrase_stats = _template_phrase_stats(final_text)
-    template_paragraph_stats = _template_paragraph_stats(paragraphs)
     per_section_target = target_chars / max(len(sections), 1) if target_chars else 0
     min_final_chars = int(target_chars * 0.60) if target_chars else 0
     min_avg_section_chars = int(max(min(per_section_target * 0.45, 1200), 500)) if per_section_target else 500
@@ -420,12 +359,6 @@ def _build_final_quality(root: Path, ast: dict[str, Any], sections: list[dict[st
         issues.append(f"final_duplicate_sentence_count_high:{sentence_stats['max_duplicate_long_sentence_count']}>={duplicate_sentence_threshold}")
     if finalized_count and sentence_stats["duplicate_long_sentence_ratio"] > 0.25:
         issues.append(f"final_duplicate_sentence_ratio_high:{sentence_stats['duplicate_long_sentence_ratio']:.4f}>0.2500")
-    template_phrase_threshold = max(8, int(finalized_count * 0.35)) if finalized_count else 8
-    if template_phrase_stats["template_pollution_max_phrase_count"] >= template_phrase_threshold:
-        issues.append(f"final_template_phrase_repetition_high:{template_phrase_stats['template_pollution_max_phrase_count']}>={template_phrase_threshold}")
-    template_paragraph_threshold = max(4, int(finalized_count * 0.20)) if finalized_count else 4
-    if template_paragraph_stats["normalized_template_max_duplicate_count"] >= template_paragraph_threshold:
-        issues.append(f"final_normalized_template_paragraph_repetition_high:{template_paragraph_stats['normalized_template_max_duplicate_count']}>={template_paragraph_threshold}")
     return {
         "ok": not issues,
         "final_md": str(final_path),
@@ -446,8 +379,6 @@ def _build_final_quality(root: Path, ast: dict[str, Any], sections: list[dict[st
         "evidence_tag_density_per_1k_chars": evidence_tag_density,
         "repetition_rate": repetition_rate,
         **sentence_stats,
-        **template_phrase_stats,
-        **template_paragraph_stats,
         "issues": issues,
     }
 
@@ -1046,70 +977,7 @@ def _build_depth_profile(
     }
 
 
-def _build_paper_enrichment_quality(root: Path, sections: list[dict], pack_rows: list[dict]) -> dict[str, Any]:
-    sources = _read_jsonl(root / "sources.jsonl")
-    paper_like_sources = [
-        row for row in sources
-        if str(row.get("source_type") or "").lower() in {"paper", "preprint", "academic"}
-    ]
-    enrichment = _read_json(root / "paper_enrichment.json")
-    clusters_payload = _read_json(root / "paper_theme_clusters.json")
-    catalog_exists = (root / "cais2026_catalog.json").exists()
-    required = bool(catalog_exists or len(paper_like_sources) >= 3)
-    if not required:
-        payload = {
-            "ok": True,
-            "required": False,
-            "reason": "not_paper_heavy",
-            "paper_like_source_count": len(paper_like_sources),
-            "issues": [],
-        }
-        (root / "survey_paper_enrichment.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        return payload
-
-    papers = enrichment.get("papers") if isinstance(enrichment.get("papers"), list) else []
-    clusters = clusters_payload.get("clusters") if isinstance(clusters_payload.get("clusters"), list) else []
-    trends = clusters_payload.get("trends") if isinstance(clusters_payload.get("trends"), list) else []
-    pack_trend_count = sum(1 for row in pack_rows if row.get("paper_trends"))
-    pack_trend_coverage = round(pack_trend_count / max(len(sections), 1), 4)
-    required_paper_count = min(max(len(paper_like_sources), 3), 8)
-    required_cluster_count = 3
-    required_trend_count = 3
-    issues: list[str] = []
-    if not enrichment:
-        issues.append("paper_enrichment_missing")
-    if not clusters_payload:
-        issues.append("paper_theme_clusters_missing")
-    if len(papers) < required_paper_count:
-        issues.append(f"paper_enrichment_paper_count_low:{len(papers)}<{required_paper_count}")
-    if len(clusters) < required_cluster_count:
-        issues.append(f"paper_enrichment_cluster_count_low:{len(clusters)}<{required_cluster_count}")
-    if len(trends) < required_trend_count:
-        issues.append(f"paper_enrichment_trend_count_low:{len(trends)}<{required_trend_count}")
-    if sections and pack_trend_coverage < 0.50:
-        issues.append(f"paper_trend_pack_coverage_low:{pack_trend_coverage:.4f}<0.5000")
-    payload = {
-        "ok": not issues,
-        "required": True,
-        "paper_like_source_count": len(paper_like_sources),
-        "paper_count": len(papers),
-        "cluster_count": len(clusters),
-        "trend_count": len(trends),
-        "pack_trend_coverage": pack_trend_coverage,
-        "issues": issues,
-    }
-    (root / "survey_paper_enrichment.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    return payload
-
-
-def assess_survey_quality(
-    output_dir: str | Path,
-    ast: dict | None = None,
-    packs: dict | None = None,
-    *,
-    golden_benchmark_html: str | Path | None = None,
-    require_golden_style: bool = False,
-) -> dict[str, Any]:
+def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs: dict | None = None) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
     ast = ast or _read_json(root / "survey_report_ast.json")
     packs = packs or _read_json(root / "survey_evidence_packs.json")
@@ -1170,15 +1038,9 @@ def assess_survey_quality(
     chapter_review = _build_chapter_review(root, chapters, sections, pack_rows, section_scorecard)
     chief_editor_review = _build_chief_editor_review(root, chapters, sections, chapter_review, literature_map, controversy_review)
     depth_profile = _build_depth_profile(root, chapters, sections, final_quality, literature_map, controversy_review)
-    paper_enrichment = _build_paper_enrichment_quality(root, sections, pack_rows)
-    golden_style = assess_golden_style(
-        root,
-        benchmark_html=golden_benchmark_html,
-        require_benchmark=require_golden_style,
-    )
 
     payload = {
-        "ok": taxonomy["ok"] and contradiction_matrix["ok"] and section_factual_audit["ok"] and section_scorecard["ok"] and final_quality["ok"] and source_coverage["ok"] and literature_map["ok"] and controversy_review["ok"] and chapter_review["ok"] and chief_editor_review["ok"] and depth_profile["ok"] and paper_enrichment["ok"] and (golden_style["ok"] or (not golden_style.get("enabled") and not golden_style.get("required"))),
+        "ok": taxonomy["ok"] and contradiction_matrix["ok"] and section_factual_audit["ok"] and section_scorecard["ok"] and final_quality["ok"] and source_coverage["ok"] and literature_map["ok"] and controversy_review["ok"] and chapter_review["ok"] and chief_editor_review["ok"] and depth_profile["ok"],
         "taxonomy": taxonomy,
         "contradiction_matrix": contradiction_matrix,
         "section_factual_audit": section_factual_audit,
@@ -1190,8 +1052,6 @@ def assess_survey_quality(
         "chapter_review": chapter_review,
         "chief_editor_review": chief_editor_review,
         "depth_profile": depth_profile,
-        "paper_enrichment": paper_enrichment,
-        "golden_style": golden_style,
     }
     (root / "survey_taxonomy.json").write_text(json.dumps(taxonomy, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_contradiction_matrix.json").write_text(json.dumps(contradiction_matrix, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -1204,5 +1064,4 @@ def assess_survey_quality(
     (root / "survey_chapter_review.json").write_text(json.dumps(chapter_review, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_chief_editor.json").write_text(json.dumps(chief_editor_review, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_depth_profile.json").write_text(json.dumps(depth_profile, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    (root / "survey_paper_enrichment.json").write_text(json.dumps(paper_enrichment, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return payload

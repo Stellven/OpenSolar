@@ -3231,17 +3231,6 @@ def cmd_survey_finalize_run(args: argparse.Namespace) -> int:
             min_sources=args.min_sources,
             min_evidence=args.min_evidence,
             min_claims=args.min_claims,
-            golden_benchmark_html=args.benchmark_html,
-            require_golden_style=args.require_golden_style,
-            paper_enrichment=not args.no_paper_enrichment,
-            paper_search=args.paper_search,
-            paper_search_provider=args.paper_search_provider,
-            paper_catalog_json=args.paper_catalog_json,
-            paper_input_titles=args.paper_input_titles,
-            paper_max_papers=args.paper_max_papers,
-            paper_max_results=args.paper_max_results,
-            paper_recursion_depth=args.paper_recursion_depth,
-            paper_search_fn=web_search if args.paper_search else None,
         )
     except ValueError as exc:
         payload = {"ok": False, "reason": str(exc)}
@@ -3249,26 +3238,6 @@ def cmd_survey_finalize_run(args: argparse.Namespace) -> int:
         return 0 if payload.get("ok") or args.allow_incomplete else 1
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0 if payload.get("ok") or args.allow_incomplete else 1
-
-
-def cmd_survey_enrich_papers(args: argparse.Namespace) -> int:
-    from research.survey.paper_enrichment import enrich_papers
-
-    payload = enrich_papers(
-        args.output_dir,
-        input_titles=args.input_titles,
-        catalog_json=args.catalog_json,
-        provider=args.provider,
-        max_papers=args.max_papers,
-        max_results=args.max_results,
-        recursion_depth=args.recursion_depth,
-        allow_search=args.paper_search,
-        search_fn=web_search if args.paper_search else None,
-    )
-    if emit_json(args, payload):
-        return 0 if payload.get("ok") else 1
-    print(json.dumps(payload, ensure_ascii=False, indent=2))
-    return 0 if payload.get("ok") else 1
 
 
 def cmd_survey_import_search_results(args: argparse.Namespace) -> int:
@@ -3399,33 +3368,11 @@ def cmd_survey_doctor(args: argparse.Namespace) -> int:
 def cmd_survey_eval(args: argparse.Namespace) -> int:
     from research.survey.evaluator import evaluate_survey
 
-    payload = evaluate_survey(
-        args.output_dir,
-        strict=args.strict,
-        min_finalized=args.min_finalized,
-        require_complete=args.require_complete,
-        golden_benchmark_html=args.benchmark_html or None,
-        require_golden_style=args.require_golden_style,
-    )
+    payload = evaluate_survey(args.output_dir, strict=args.strict, min_finalized=args.min_finalized, require_complete=args.require_complete)
     if emit_json(args, payload):
         return 0 if payload.get("ok") or not args.strict else 1
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0 if payload.get("ok") or not args.strict else 1
-
-
-def cmd_survey_golden_style(args: argparse.Namespace) -> int:
-    from research.survey.golden_style_gate import assess_golden_style
-
-    payload = assess_golden_style(
-        args.output_dir,
-        final_md=args.final_md or None,
-        benchmark_html=args.benchmark_html or None,
-        require_benchmark=args.require_benchmark,
-    )
-    if emit_json(args, payload):
-        return 0 if payload.get("ok") or (not payload.get("enabled") and not payload.get("required")) else 1
-    print(json.dumps(payload, ensure_ascii=False, indent=2))
-    return 0 if payload.get("ok") or (not payload.get("enabled") and not payload.get("required")) else 1
 
 
 def cmd_survey_diagnose(args: argparse.Namespace) -> int:
@@ -3732,7 +3679,7 @@ ALL_SUBCOMMANDS = [
     "mine", "outline", "write", "check", "compile", "synthesize", "export", "eval-artifacts",
     "policy-doctor", "policy-explain",
     "source-audit",
-    "survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-watch-register", "survey-watch-tick", "survey-rewrite-queue", "survey-rewrite-run", "survey-auto-repair", "survey-finalize-run", "survey-enrich-papers", "survey-import-search-results", "survey-status-next-action", "survey-continue", "survey-review", "survey-compile", "survey-chief-editor", "survey-doctor", "survey-eval", "survey-golden-style", "survey-diagnose",
+    "survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-watch-register", "survey-watch-tick", "survey-rewrite-queue", "survey-rewrite-run", "survey-auto-repair", "survey-finalize-run", "survey-import-search-results", "survey-status-next-action", "survey-continue", "survey-review", "survey-compile", "survey-chief-editor", "survey-doctor", "survey-eval", "survey-diagnose",
 ]
 
 SUBCOMMANDS = {
@@ -3769,7 +3716,6 @@ SUBCOMMANDS = {
     "survey-rewrite-run": cmd_survey_rewrite_run,
     "survey-auto-repair": cmd_survey_auto_repair,
     "survey-finalize-run": cmd_survey_finalize_run,
-    "survey-enrich-papers": cmd_survey_enrich_papers,
     "survey-import-search-results": cmd_survey_import_search_results,
     "survey-status-next-action": cmd_survey_status_next_action,
     "survey-continue": cmd_survey_continue,
@@ -3778,7 +3724,6 @@ SUBCOMMANDS = {
     "survey-chief-editor": cmd_survey_chief_editor,
     "survey-doctor": cmd_survey_doctor,
     "survey-eval": cmd_survey_eval,
-    "survey-golden-style": cmd_survey_golden_style,
     "survey-diagnose": cmd_survey_diagnose,
 }
 
@@ -4098,29 +4043,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_finalize.add_argument("--min-sources", type=int, default=4)
     p_survey_finalize.add_argument("--min-evidence", type=int, default=8)
     p_survey_finalize.add_argument("--min-claims", type=int, default=8)
-    p_survey_finalize.add_argument("--benchmark-html", default="", help="Approved HTML benchmark for golden-style final report quality")
-    p_survey_finalize.add_argument("--require-golden-style", action="store_true", help="Fail strict eval unless golden-style benchmark exists and final.md passes it")
-    p_survey_finalize.add_argument("--no-paper-enrichment", action="store_true", help="Disable recursive paper enrichment and theme clustering before survey-pack")
-    p_survey_finalize.add_argument("--paper-search", action="store_true", help="Use live search recursively for paper title enrichment")
-    p_survey_finalize.add_argument("--paper-search-provider", default="auto", choices=SEARCH_PROVIDERS, help="Search provider for --paper-search")
-    p_survey_finalize.add_argument("--paper-catalog-json", default="", help="Catalog JSON with papers/demos/items; defaults to <output-dir>/cais2026_catalog.json")
-    p_survey_finalize.add_argument("--paper-input-titles", default="", help="Newline or JSON file containing seed paper titles")
-    p_survey_finalize.add_argument("--paper-max-papers", type=int, default=40)
-    p_survey_finalize.add_argument("--paper-max-results", type=int, default=3)
-    p_survey_finalize.add_argument("--paper-recursion-depth", type=int, default=1)
     p_survey_finalize.add_argument("--allow-incomplete", action="store_true", help="Return zero even if final strict eval fails")
     p_survey_finalize.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
-
-    p_survey_enrich = sub.add_parser("survey-enrich-papers", help="Recursively enrich paper titles and synthesize theme/trend clusters")
-    p_survey_enrich.add_argument("--output-dir", required=True)
-    p_survey_enrich.add_argument("--input-titles", default="", help="Newline or JSON file containing seed paper titles")
-    p_survey_enrich.add_argument("--catalog-json", default="", help="Catalog JSON with papers/demos/items; defaults to <output-dir>/cais2026_catalog.json")
-    p_survey_enrich.add_argument("--paper-search", action="store_true", help="Use live search recursively instead of only local catalog/sources")
-    p_survey_enrich.add_argument("--provider", default="auto", choices=SEARCH_PROVIDERS)
-    p_survey_enrich.add_argument("--max-papers", type=int, default=40)
-    p_survey_enrich.add_argument("--max-results", type=int, default=3)
-    p_survey_enrich.add_argument("--recursion-depth", type=int, default=1)
-    p_survey_enrich.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     p_survey_import = sub.add_parser("survey-import-search-results", help="Import human/Gemini/GPT survey search Markdown into ledger JSONL files")
     p_survey_import.add_argument("--output-dir", required=True)
@@ -4204,16 +4128,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_eval.add_argument("--strict", action="store_true")
     p_survey_eval.add_argument("--min-finalized", type=int, default=None)
     p_survey_eval.add_argument("--require-complete", action="store_true")
-    p_survey_eval.add_argument("--benchmark-html", default="", help="Approved HTML benchmark for golden-style final report quality")
-    p_survey_eval.add_argument("--require-golden-style", action="store_true", help="Fail strict eval unless golden-style benchmark exists and final.md passes it")
     p_survey_eval.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
-
-    p_survey_golden = sub.add_parser("survey-golden-style", help="Check final.md against a high-quality HTML benchmark")
-    p_survey_golden.add_argument("--output-dir", required=True)
-    p_survey_golden.add_argument("--benchmark-html", default="", help="Reference HTML report; defaults to quality_golden.html or SOLAR_DEEPRESEARCH_GOLDEN_HTML")
-    p_survey_golden.add_argument("--final-md", default="", help="Final Markdown report path; defaults to <output-dir>/final.md")
-    p_survey_golden.add_argument("--require-benchmark", action="store_true", help="Fail when no benchmark HTML is configured")
-    p_survey_golden.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     p_survey_diagnose = sub.add_parser("survey-diagnose", help="Diagnose survey quality issues and next actions")
     p_survey_diagnose.add_argument("--output-dir", required=True)

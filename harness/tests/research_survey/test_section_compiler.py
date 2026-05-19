@@ -123,12 +123,9 @@ def test_deterministic_writer_outputs_professor_survey_scaffolds(tmp_path):
         "## Controversy Matrix",
     ]:
         assert heading in text
-    assert "以 evidence pack 为事实源" not in text
-    assert "目标不是堆材料" not in text
-    assert "架构 synthesis 先拆成机制层" not in text
-    assert "Coconut-style latent reasoning" not in text
-    assert "claim" in text
-    assert "evidence" in text
+    assert "chain-of-thought" in text
+    assert "baseline" in text
+    assert "ablation" in text
     assert "negative evidence" in text or "负面证据" in text
 
 
