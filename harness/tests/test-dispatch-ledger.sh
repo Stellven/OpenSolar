@@ -17,7 +17,10 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 DISPATCH_LEDGER_FILE="$TMP_DIR/dispatch-ledger.jsonl"
 _QUEUE_DIR="$TMP_DIR/queue"
+SPRINTS_DIR="$TMP_DIR/sprints"
+QUEUE_ARCHIVE_DIR="$TMP_DIR/run/queue-archive"
 mkdir -p "$_QUEUE_DIR"
+mkdir -p "$SPRINTS_DIR"
 
 check() {
     local label="$1" got="$2" want="$3"
@@ -171,7 +174,66 @@ check "queue_consume_all leaves depth 0" "$terminal_depth" "0"
 terminal_line=$(grep -m1 'test_terminal_passed' "$_QUEUE_DIR/sprint-terminal.jsonl" || true)
 check_contains "queue_consume_all records reason" "$terminal_line" "test_terminal_passed"
 
-# T23: concurrent appends don't corrupt ledger (10 background writes)
+# T23: consumed terminal queue files are archived, not left as false backlog
+cat > "$SPRINTS_DIR/sprint-terminal.status.json" <<'JSON'
+{"status":"passed","phase":"eval_passed","handoff_to":"done"}
+JSON
+python3 - "$_QUEUE_DIR/sprint-terminal.jsonl" "$_QUEUE_DIR/sprint-terminal.jsonl.lock" <<'PY'
+import os, sys, time
+old = time.time() - 48 * 3600
+for path in sys.argv[1:]:
+    os.utime(path, (old, old))
+PY
+reap_result=$(queue_archive_consumed_terminal 24 "test-reaper")
+check_contains "queue_archive_consumed_terminal reports archive" "$reap_result" '"archived": 1'
+if compgen -G "$_QUEUE_DIR/sprint-terminal.jsonl*" >/dev/null; then
+    echo "  ❌ queue_archive_consumed_terminal moved terminal queue files"
+    FAIL=$((FAIL+1))
+else
+    echo "  ✅ queue_archive_consumed_terminal moved terminal queue files"
+    PASS=$((PASS+1))
+fi
+archive_manifest=$(find "$TMP_DIR/run/queue-archive" -name manifest.json -print -quit 2>/dev/null || true)
+check_contains "queue_archive_consumed_terminal writes manifest" "$archive_manifest" "manifest.json"
+
+# T24: consumed orphan test queues are archived without a status file
+queue_enqueue "sprint-test-orphan" "old consumed test" 10 >/dev/null
+queue_consume_all "sprint-test-orphan" "test_orphan" >/dev/null
+python3 - "$_QUEUE_DIR/sprint-test-orphan.jsonl" "$_QUEUE_DIR/sprint-test-orphan.jsonl.lock" <<'PY'
+import os, sys, time
+old = time.time() - 48 * 3600
+for path in sys.argv[1:]:
+    os.utime(path, (old, old))
+PY
+orphan_reap_result=$(queue_archive_consumed_terminal 24 "test-orphan-reaper")
+check_contains "queue_archive_consumed_terminal archives orphan test queue" "$orphan_reap_result" '"archived": 1'
+if compgen -G "$_QUEUE_DIR/sprint-test-orphan.jsonl*" >/dev/null; then
+    echo "  ❌ orphan test queue moved aside"
+    FAIL=$((FAIL+1))
+else
+    echo "  ✅ orphan test queue moved aside"
+    PASS=$((PASS+1))
+fi
+
+# T25: orphan queue sidecars are archived when their .jsonl is gone
+touch "$_QUEUE_DIR/sprint-sidecar-only.jsonl.lock" "$_QUEUE_DIR/sprint-sidecar-only.jsonl.bak-20260101T000000Z"
+python3 - "$_QUEUE_DIR/sprint-sidecar-only.jsonl.lock" "$_QUEUE_DIR/sprint-sidecar-only.jsonl.bak-20260101T000000Z" <<'PY'
+import os, sys, time
+old = time.time() - 48 * 3600
+for path in sys.argv[1:]:
+    os.utime(path, (old, old))
+PY
+sidecar_reap_result=$(queue_archive_consumed_terminal 24 "test-sidecar-reaper")
+check_contains "queue_archive_consumed_terminal archives orphan sidecars" "$sidecar_reap_result" '"archived": 2'
+if compgen -G "$_QUEUE_DIR/sprint-sidecar-only.jsonl*" >/dev/null; then
+    echo "  ❌ orphan sidecars moved aside"
+    FAIL=$((FAIL+1))
+else
+    echo "  ✅ orphan sidecars moved aside"
+    PASS=$((PASS+1))
+fi
+
+# T26: concurrent appends don't corrupt ledger (10 background writes)
 for i in $(seq 1 10); do
     dispatch_ledger_append "attempted" "sprint-concurrent" "pane:0.$i" "$(new_dispatch_id)" '{}' &
 done

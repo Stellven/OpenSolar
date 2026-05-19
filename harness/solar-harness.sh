@@ -18,6 +18,7 @@ SESSION_NAME="solar-harness"
 LAB_SESSION_NAME="solar-harness-lab"
 LEGACY_LAB_SESSION_NAME="solar-harness-strategy"
 SPRINTS_DIR="$HARNESS_DIR/sprints"
+EXPECTED_PRODUCT_DELIVERY_PANES=4
 export HARNESS_DIR SPRINTS_DIR
 
 # sprint-20260503-094659 D2: 统一 state helper
@@ -122,6 +123,23 @@ configure_product_delivery_labels() {
   tmux select-pane -t "$SESSION_NAME:0.1" -T "$(pane_footer_label planner "Planner 规划者")" 2>/dev/null || true
   tmux select-pane -t "$SESSION_NAME:0.2" -T "$(pane_footer_label builder "Builder 主建设者")" 2>/dev/null || true
   tmux select-pane -t "$SESSION_NAME:0.3" -T "$(pane_footer_label evaluator "Evaluator 审判官")" 2>/dev/null || true
+}
+
+product_delivery_pane_count() {
+  tmux has-session -t "$SESSION_NAME" 2>/dev/null || { printf '0\n'; return 1; }
+  tmux list-panes -t "$SESSION_NAME:Product Delivery" 2>/dev/null | wc -l | tr -d ' '
+}
+
+warn_if_product_delivery_layout_incomplete() {
+  tmux has-session -t "$SESSION_NAME" 2>/dev/null || return 0
+  local panes_count
+  panes_count="$(product_delivery_pane_count 2>/dev/null || printf '0')"
+  if [[ "$panes_count" != "$EXPECTED_PRODUCT_DELIVERY_PANES" ]]; then
+    warn "Product Delivery layout 异常: expected=${EXPECTED_PRODUCT_DELIVERY_PANES} actual=${panes_count}; 当前不是健康四分屏"
+    warn "不要只看 status 报喜；请先修复 tmux layout，再派发/唤醒任务"
+    return 1
+  fi
+  return 0
 }
 
 apply_product_delivery_models() {
@@ -398,11 +416,16 @@ start_harness() {
     # 旧逻辑只数 current_command=claude，容易把真实运行中的 session 误判为死
     # session 并 kill 掉用户现场。已有 session 一律复用/attach，不自动销毁。
     local panes_count
-    panes_count=$(tmux list-panes -t "$SESSION_NAME" 2>/dev/null | wc -l | tr -d ' ')
-    ok "Solar Harness 已在运行 (${panes_count} panes)，直接接入"
+    panes_count="$(product_delivery_pane_count 2>/dev/null || printf '0')"
+    if [[ "$panes_count" == "$EXPECTED_PRODUCT_DELIVERY_PANES" ]]; then
+      ok "Solar Harness 已在运行 (${panes_count} panes)，直接接入"
+    else
+      warn "Solar Harness 已在运行，但 Product Delivery layout 异常 (${panes_count}/${EXPECTED_PRODUCT_DELIVERY_PANES} panes)"
+    fi
     if tmux list-windows -t "$SESSION_NAME" -F '#{window_name}' 2>/dev/null | grep -qx "Product Delivery"; then
       tmux select-window -t "$SESSION_NAME:Product Delivery" 2>/dev/null || true
     fi
+    warn_if_product_delivery_layout_incomplete || true
     configure_product_delivery_labels
     attach_or_print
     return
@@ -709,7 +732,10 @@ ensure_parallel_builder_lab() {
     target="$LAB_SESSION_NAME:0.$i"
     slot="lab-builder-$((i + 1))"
     content=$(tmux capture-pane -t "$target" -p -S -80 2>/dev/null | tail -80 || true)
-    if (( rebuild_for_model_matrix == 0 )) && printf '%s\n' "$content" | grep -qE "Persona:[[:space:]]*lab-builder([[:space:]]|$)"; then
+    current_cmd=$(tmux display-message -p -t "$target" '#{pane_current_command}' 2>/dev/null || echo "")
+    if (( rebuild_for_model_matrix == 0 )) \
+      && [[ ! "$current_cmd" =~ ^(bash|zsh|sh|fish)$ ]] \
+      && printf '%s\n' "$content" | grep -qE "Persona:[[:space:]]*lab-builder([[:space:]]|$)"; then
       continue
     fi
     pane_id=$(tmux display-message -p -t "$target" '#{pane_id}')
@@ -1899,6 +1925,20 @@ PY
 do_main_status() {
   printf '%s\n' "Solar Harness Main Status"
   printf '%s\n' "runtime != assignment != artifact: pane output alone is not proof of progress."
+  local physical_panes
+  physical_panes="$(product_delivery_pane_count 2>/dev/null || printf '0')"
+  if [[ "$physical_panes" == "$EXPECTED_PRODUCT_DELIVERY_PANES" ]]; then
+    printf '%s\n' "layout: ok expected=${EXPECTED_PRODUCT_DELIVERY_PANES} actual=${physical_panes}"
+  else
+    printf '%s\n' "layout: error expected=${EXPECTED_PRODUCT_DELIVERY_PANES} actual=${physical_panes}"
+  fi
+  local route_out route_rc route_status
+  route_out="$(models_live_route_check 2>&1)" || route_rc=$?
+  route_rc="${route_rc:-0}"
+  route_status="ok"
+  [[ "$route_rc" -eq 1 ]] && route_status="error"
+  [[ "$route_rc" -eq 2 ]] && route_status="warn"
+  printf '%s\n' "route: ${route_status} $(printf '%s' "$route_out" | tail -1)"
   printf '%s\n' ""
   printf '┌────────────┬────────────┬──────────────┬────────────────────────────┬─────────────────────┬────────────────────────────┐\n'
   printf '│ Pane       │ Role       │ Runtime      │ Assignment                 │ Artifact            │ Title                      │\n'
@@ -2013,6 +2053,82 @@ do_lab_status() {
   printf '└───────────────┴──────────────┴──────────────┴─────────────────────┴────────────────────────────┘\n'
 }
 
+models_live_route_check() {
+  if ! command -v tmux >/dev/null 2>&1; then
+    printf 'skipped: tmux unavailable\n'
+    return 2
+  fi
+  if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+    printf 'skipped: session %s unavailable\n' "$SESSION_NAME"
+    return 2
+  fi
+
+  local panes pane_count errors checked
+  panes="$(tmux list-panes -t "$SESSION_NAME:0" -F '#{pane_index} #{pane_id}' 2>/dev/null || true)"
+  pane_count="$(printf '%s\n' "$panes" | awk 'NF {n++} END {print n+0}')"
+  if [[ "$pane_count" -lt "$EXPECTED_PRODUCT_DELIVERY_PANES" ]]; then
+    printf 'error: live layout has %s panes, expected %s\n' "$pane_count" "$EXPECTED_PRODUCT_DELIVERY_PANES"
+    return 1
+  fi
+
+  errors=0
+  checked=0
+  local index pane_id pane_safe persona configured expected_flag marker tail_text
+  for index in 0 1 2 3; do
+    case "$index" in
+      0) persona="pm" ;;
+      1) persona="planner" ;;
+      2) persona="builder" ;;
+      3) persona="evaluator" ;;
+    esac
+    pane_id="$(printf '%s\n' "$panes" | awk -v idx="$index" '$1 == idx {print $2; exit}')"
+    if [[ -z "$pane_id" ]]; then
+      printf 'error: missing pane index %s\n' "$index"
+      errors=$((errors + 1))
+      continue
+    fi
+    checked=$((checked + 1))
+
+    configured="$(solar_persona_model "$persona" 2>/dev/null || printf 'N/A')"
+    expected_flag="$(solar_model_flag "$configured" 2>/dev/null || true)"
+    pane_safe="${pane_id//[^A-Za-z0-9_.-]/_}"
+    marker="$HARNESS_DIR/run/pane-env/${pane_safe}.json"
+    if [[ -f "$marker" && -n "$expected_flag" ]]; then
+      local marker_flag
+      marker_flag="$(python3 - "$marker" <<'PY' 2>/dev/null || true
+import json, sys
+print(json.load(open(sys.argv[1], encoding="utf-8")).get("model_flag", ""))
+PY
+)"
+      if [[ -n "$marker_flag" && "$marker_flag" != "$expected_flag" ]]; then
+        printf 'error: pane%d %s marker model_flag=%s expected=%s\n' "$index" "$persona" "$marker_flag" "$expected_flag"
+        errors=$((errors + 1))
+      fi
+    fi
+
+    tail_text="$(tmux capture-pane -t "$SESSION_NAME:0.$index" -p -S -80 2>/dev/null | tail -80 || true)"
+    if [[ "$configured" == "claude-opus" && "$tail_text" == *"API Usage Billing"* ]]; then
+      printf 'error: pane%d %s configured Opus but live banner is API Usage Billing\n' "$index" "$persona"
+      errors=$((errors + 1))
+    fi
+    if [[ "$tail_text" == *"API Error: 400"* && "$tail_text" == *"1210"* ]]; then
+      if [[ "$tail_text" == *"API Usage Billing"* ]]; then
+        printf 'error: pane%d %s live output contains API Usage Billing plus API 400 code=1210\n' "$index" "$persona"
+      else
+        printf 'error: pane%d %s live output contains API 400 code=1210\n' "$index" "$persona"
+      fi
+      errors=$((errors + 1))
+    fi
+  done
+
+  if [[ "$errors" -gt 0 ]]; then
+    printf 'checked=%s errors=%s\n' "$checked" "$errors"
+    return 1
+  fi
+  printf 'checked=%s errors=0\n' "$checked"
+  return 0
+}
+
 do_models_command() {
   local subcmd="${1:-show}"
   shift || true
@@ -2079,32 +2195,41 @@ do_models_command() {
     doctor)
       local guard="$HARNESS_DIR/tests/test-model-registry-guard.sh"
       local single="$HARNESS_DIR/tests/test-model-config-single-source.sh"
-      local guard_out single_out guard_rc single_rc overall
+      local live_out guard_out single_out live_rc guard_rc single_rc overall live_status
+      live_out="$(mktemp)"
       guard_out="$(mktemp)"
       single_out="$(mktemp)"
+      live_rc=0
       guard_rc=0
       single_rc=0
+      models_live_route_check >"$live_out" 2>&1 || live_rc=$?
       bash "$guard" >"$guard_out" 2>&1 || guard_rc=$?
       bash "$single" >"$single_out" 2>&1 || single_rc=$?
       overall="ok"
-      [[ "$guard_rc" -eq 0 && "$single_rc" -eq 0 ]] || overall="error"
+      [[ "$guard_rc" -eq 0 && "$single_rc" -eq 0 && "$live_rc" -ne 1 ]] || overall="error"
+      live_status="ok"
+      [[ "$live_rc" -eq 1 ]] && live_status="error"
+      [[ "$live_rc" -eq 2 ]] && live_status="warn"
       printf '┌──────────────────────────────┬────────┬────────────────────────────────────┐\n'
       printf '│ %-28s │ %-6s │ %-34s │\n' "检查项" "状态" "证据"
       printf '├──────────────────────────────┼────────┼────────────────────────────────────┤\n'
+      printf '│ %-28s │ %-6s │ %-34s │\n' "live pane route" "$live_status" "$(tail -1 "$live_out" | cut -c1-34)"
       printf '│ %-28s │ %-6s │ %-34s │\n' "registry guard" "$([[ "$guard_rc" -eq 0 ]] && echo ok || echo error)" "$(tail -1 "$guard_out" | cut -c1-34)"
       printf '│ %-28s │ %-6s │ %-34s │\n' "model config single source" "$([[ "$single_rc" -eq 0 ]] && echo ok || echo error)" "$(tail -1 "$single_out" | cut -c1-34)"
       printf '│ %-28s │ %-6s │ %-34s │\n' "overall" "$overall" "$SOLAR_USER_CONFIG"
       printf '└──────────────────────────────┴────────┴────────────────────────────────────┘\n'
       if [[ "$overall" != "ok" ]]; then
         err "models doctor failed"
+        printf '\n--- live pane route ---\n'
+        cat "$live_out"
         printf '\n--- registry guard ---\n'
         cat "$guard_out"
         printf '\n--- model config ---\n'
         cat "$single_out"
-        rm -f "$guard_out" "$single_out"
+        rm -f "$live_out" "$guard_out" "$single_out"
         return 1
       fi
-      rm -f "$guard_out" "$single_out"
+      rm -f "$live_out" "$guard_out" "$single_out"
       ;;
     help|--help|-h)
       echo "Solar Harness Models"
@@ -2185,6 +2310,12 @@ print(json.dumps({
   # Sprint 20260420-090726 D2: 僵尸文件清理
   clean-corrupted)
     do_clean_corrupted "${2:-}"
+    ;;
+  queue-reap-stale)
+    # Archive old terminal queue files whose events are already consumed.
+    # This prevents consumed .jsonl/.lock residue from looking like live backlog.
+    . "$HARNESS_DIR/lib/queue.sh"
+    queue_archive_consumed_terminal "${2:-24}" "${3:-queue-reaper}"
     ;;
   kill|stop) kill_harness ;;
   扩展|extend) start_extension "${2:-$(pwd)}" ;;
@@ -2492,7 +2623,7 @@ print(json.dumps({
     _failure_py="$HARNESS_DIR/lib/failure_miner.py"
     _eval_py="$HARNESS_DIR/lib/eval_runner.py"
     case "${1:-status}" in
-      status|scorecard|recommend|run-loop|promote|demote-degraded)
+      status|scorecard|recommend|run-loop|promote|demote-degraded|repair-deepresearch-gates|restore-nonrequired-deepresearch-repairs)
         [[ -f "$_evolution_py" ]] || { err "evolution_engine not found: $_evolution_py"; exit 1; }
         python3 "$_evolution_py" "$@"
         ;;
@@ -2507,7 +2638,7 @@ print(json.dumps({
         python3 "$_eval_py" run "$@"
         ;;
       *)
-        err "用法: $0 evolution [status|scorecard|recommend|run-loop|promote|demote-degraded|mine-failures|eval-run] [--json]"
+        err "用法: $0 evolution [status|scorecard|recommend|run-loop|promote|demote-degraded|mine-failures|eval-run|repair-deepresearch-gates|restore-nonrequired-deepresearch-repairs] [--json]"
         exit 1
         ;;
     esac
@@ -2625,13 +2756,15 @@ print(json.dumps({
       certify|certification|cert) shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "certify"; python3 "$_skills_py" certify "$@" ;;
       inject)        shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "inject"; python3 "$_skills_py" inject "$@" ;;
       effect-scan)   shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "effect-scan"; python3 "$_skills_py" effect-scan "$@" ;;
+      healthcheck|skill-healthcheck) shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "healthcheck"; python3 "$HARNESS_DIR/lib/skill_healthcheck.py" "$@" ;;
+      evolve|evolution) shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "evolution"; python3 "$HARNESS_DIR/lib/skill_evolution_runner.py" "$@" ;;
       native-extract) shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "native-extract"; python3 "$_skills_py" native-extract "$@" ;;
       registry)      shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "registry"; python3 "$_skills_py" registry "$@" ;;
       eval)          shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "eval"; python3 "$_skills_py" eval "$@" ;;
       promote)       shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "promote"; python3 "$_skills_py" promote "$@" ;;
       rollback)      shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "rollback"; python3 "$_skills_py" rollback "$@" ;;
       export)        shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "export"; python3 "$_skills_py" export "$@" ;;
-      *) err "用法: solar-harness skills <inventory|doctor|readiness|certify|inject|effect-scan|export|eval|promote|rollback|registry> [opts]"; exit 1 ;;
+      *) err "用法: solar-harness skills <inventory|doctor|readiness|certify|inject|effect-scan|healthcheck|evolve|export|eval|promote|rollback|registry> [opts]"; exit 1 ;;
     esac
     ;;
   intent)
