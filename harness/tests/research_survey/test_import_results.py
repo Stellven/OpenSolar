@@ -235,7 +235,6 @@ Relevant Quotes:
         repair_limit=1,
         min_finalized=1,
         min_chars=100,
-        narrative_backend="off",
     )
     assert payload["ok"] is True
     assert payload["finalize"]["ok"] is True
@@ -278,7 +277,6 @@ Relevant Quotes:
         min_finalized=1,
         min_chars=100,
         require_complete=True,
-        narrative_backend="off",
     )
     assert payload["ok"] is True
     assert payload["finalize"]["ok"] is False
@@ -334,7 +332,6 @@ Relevant Quotes:
         "--section-limit", "1",
         "--min-finalized", "1",
         "--min-chars", "100",
-        "--narrative-backend", "off",
         "--json",
     ])
     assert rc == 0

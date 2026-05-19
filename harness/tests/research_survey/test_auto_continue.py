@@ -73,7 +73,6 @@ def test_continue_survey_imports_returned_markdown_and_finishes(tmp_path):
         repair_limit=1,
         min_finalized=1,
         min_chars=100,
-        narrative_backend="off",
     )
     assert payload["ok"] is True
     assert payload["completed"] is True
@@ -134,7 +133,6 @@ def test_continue_survey_require_complete_writes_remaining_sections(tmp_path):
         repair_limit=1,
         min_chars=100,
         require_complete=True,
-        narrative_backend="off",
     )
     assert payload["ok"] is True
     assert payload["completed"] is True

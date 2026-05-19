@@ -222,6 +222,34 @@ def _discover_token_usage(root: Path | None) -> tuple[dict[str, int], list[str]]
     return totals, sorted(set(files))
 
 
+def _usage_ledger_metadata(root: Path | None) -> tuple[str, int]:
+    if not root or not root.exists():
+        return "", 0
+    candidates = sorted(
+        path for path in root.rglob("*")
+        if path.is_file()
+        and path.suffix in {".json", ".jsonl"}
+        and ("usage" in path.name.lower() or "token" in path.name.lower())
+        and "execution_metrics" not in path.name
+    )
+    ledger_path = ""
+    ledger_lines = 0
+    for path in candidates:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if not text.strip():
+            continue
+        if not ledger_path or path.name == "model_usage.jsonl":
+            ledger_path = str(path)
+        if path.suffix == ".jsonl":
+            ledger_lines += sum(1 for line in text.splitlines() if line.strip())
+        else:
+            ledger_lines += 1
+    return ledger_path, ledger_lines
+
+
 def _estimate_input_tokens(root: Path | None) -> int:
     if not root or not root.exists():
         return 0
@@ -240,6 +268,7 @@ def _estimate_input_tokens(root: Path | None) -> int:
 def build_execution_metrics(final_text: str, output_dir: str | Path | None = None) -> dict[str, Any]:
     root = Path(output_dir).expanduser() if output_dir else None
     provider_usage, usage_files = _discover_token_usage(root)
+    ledger_path, ledger_lines = _usage_ledger_metadata(root)
     output_tokens = estimate_tokens(final_text)
     if provider_usage:
         total_tokens = int(provider_usage.get("total_tokens") or 0)
@@ -266,9 +295,12 @@ def build_execution_metrics(final_text: str, output_dir: str | Path | None = Non
         estimated = True
     fallback_reason = None if not estimated else "no_provider_usage"
     return {
+        "sprint_id": root.name if root else "",
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "document_word_count": document_word_count(final_text),
         "document_char_count": len(final_text),
         "total_token_consumption": int(total_tokens),
+        "total_tokens": int(total_tokens),
         "input_tokens": int(input_tokens),
         "output_tokens": int(output_tokens),
         "token_usage_source": source,
@@ -277,6 +309,8 @@ def build_execution_metrics(final_text: str, output_dir: str | Path | None = Non
         "estimated": estimated,
         "fallback_reason": fallback_reason,
         "token_usage_files": usage_files,
+        "ledger_path": ledger_path,
+        "ledger_lines": int(ledger_lines),
     }
 
 

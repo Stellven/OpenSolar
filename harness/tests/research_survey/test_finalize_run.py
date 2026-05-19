@@ -52,7 +52,6 @@ def test_finalize_run_builds_pipeline_and_compiles(tmp_path):
         min_finalized=1,
         min_chars=100,
         repair_passes=1,
-        narrative_backend="off",
     )
     assert payload["ok"] is True
     assert payload["reason"] == "passed"
@@ -74,7 +73,6 @@ def test_finalize_run_can_reuse_existing_plan_and_pack(tmp_path):
         section_limit=1,
         min_finalized=1,
         min_chars=100,
-        narrative_backend="off",
     )
     assert payload["ok"] is True
     assert payload["steps"][0]["skipped"] is True
@@ -110,68 +108,9 @@ def test_finalize_run_cli(tmp_path, capsys):
         "--min-finalized", "1",
         "--min-chars", "100",
         "--repair-passes", "1",
-        "--narrative-backend", "off",
         "--json",
     ])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is True
     assert payload["reason"] == "passed"
-
-
-def test_finalize_run_default_requires_narrative_rewrite(tmp_path, monkeypatch):
-    from research.survey import chief_editor
-
-    _ledgers(tmp_path)
-
-    def fake_run_claude(prompt, *, model, timeout, max_budget_usd):
-        import re
-
-        match = re.search(r"从 `## (.+?)` 开始", prompt)
-        heading = match.group(1) if match else "章节"
-        body = ("Claude narrative rewrite output with enough report prose. " * 5).strip()
-        return f"## {heading}\n\n{body}\n", {"total_tokens": 12}
-
-    monkeypatch.setattr(chief_editor, "_run_claude", fake_run_claude)
-    payload = finalize_survey_run(
-        tmp_path,
-        brief="latent reasoning",
-        section_limit=1,
-        repair_limit=1,
-        min_finalized=1,
-        min_chars=100,
-        repair_passes=1,
-        narrative_min_chars=40,
-    )
-
-    assert payload["ok"] is True
-    assert payload["narrative_rewrite"]["backend"] == "claude-cli"
-    assert payload["final_md"].endswith("chief_editor_final.md")
-    assert any(step["step"] == "narrative_rewrite" and step["ok"] is True for step in payload["steps"])
-
-
-def test_finalize_run_fails_when_default_narrative_times_out(tmp_path, monkeypatch):
-    from research.survey import chief_editor
-
-    _ledgers(tmp_path)
-
-    def fake_run_claude(prompt, *, model, timeout, max_budget_usd):
-        raise RuntimeError("claude_cli_timeout:45s")
-
-    monkeypatch.setattr(chief_editor, "_run_claude", fake_run_claude)
-    payload = finalize_survey_run(
-        tmp_path,
-        brief="latent reasoning",
-        section_limit=1,
-        repair_limit=1,
-        min_finalized=1,
-        min_chars=100,
-        repair_passes=1,
-        narrative_timeout=45,
-        narrative_min_chars=40,
-    )
-
-    assert payload["ok"] is False
-    assert payload["reason"] == "narrative_rewrite_failed"
-    assert payload["final_eval"]["ok"] is True
-    assert "claude_cli_timeout" in payload["narrative_rewrite"]["reason"]
