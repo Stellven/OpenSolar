@@ -52,6 +52,9 @@ MODEL_DOCTOR_HEALTH = HARNESS_DIR / "state" / "model-registry-doctor-health.json
 SKILLS_CERTIFICATION = HARNESS_DIR / "state" / "skills-certification.json"
 SKILLS_INVENTORY = HARNESS_DIR / "state" / "skills-inventory.json"
 CAPABILITY_ACTIVATION_PROOF = HARNESS_DIR / "reports" / "capability-activation-proof-latest.json"
+META_HARNESS_DIR = Path(os.environ.get("SOLAR_META_HARNESS_DIR", str(Path.home() / ".solar" / "meta-harness")))
+META_HARNESS_TOOL = Path(os.environ.get("SOLAR_META_HARNESS_TOOL", str(Path.home() / ".claude" / "core" / "solar-farm" / "meta-harness.ts")))
+META_HARNESS_SKILL = Path(os.environ.get("SOLAR_META_HARNESS_SKILL", str(Path.home() / ".claude" / "skills" / "meta-harness" / "SKILL.md")))
 MMD_ALLOWED_ROOTS = [
     HARNESS_DIR,
     Path.home() / "Knowledge",
@@ -1764,6 +1767,83 @@ def _autoresearch_impact_summary(limit: int = 12) -> dict:
         return {"ok": False, "status": "error", "count": 0, "items": [], "errors": [f"{type(exc).__name__}: {exc}"]}
 
 
+def _meta_harness_summary() -> dict:
+    """Summarize Meta-Harness outer-loop optimizer state without running it."""
+    def _load_json(path: Path, default):
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return default
+
+    try:
+        config = _load_json(META_HARNESS_DIR / "config.json", {})
+        if not isinstance(config, dict):
+            config = {}
+        eval_set = _load_json(META_HARNESS_DIR / "evaluation_set.json", [])
+        eval_count = len(eval_set) if isinstance(eval_set, list) else 0
+        pareto_data = _load_json(META_HARNESS_DIR / "pareto.json", {})
+        if not isinstance(pareto_data, dict):
+            pareto_data = {}
+        pareto = pareto_data.get("pareto") if isinstance(pareto_data.get("pareto"), list) else []
+        all_runs = pareto_data.get("all_runs") if isinstance(pareto_data.get("all_runs"), list) else []
+        runs_dir = META_HARNESS_DIR / "runs"
+        run_dirs = sorted([p for p in runs_dir.iterdir() if p.is_dir()], key=lambda p: p.stat().st_mtime, reverse=True) if runs_dir.exists() else []
+        latest_command = _read_json_file(REPORTS_DIR / "meta-harness" / "latest-command.json")
+        ok = META_HARNESS_TOOL.exists() and META_HARNESS_DIR.exists() and META_HARNESS_SKILL.exists() and eval_count > 0
+        if not META_HARNESS_TOOL.exists():
+            status = "error"
+        elif not META_HARNESS_DIR.exists() or eval_count <= 0:
+            status = "pending"
+        elif not pareto and not run_dirs:
+            status = "ready"
+        else:
+            status = "ok"
+        best = pareto[0] if pareto and isinstance(pareto[0], dict) else {}
+        return {
+            "ok": ok,
+            "status": status,
+            "integration_level": "solar_harness_cli_adapter" if ok else "external_tool_detected" if META_HARNESS_TOOL.exists() else "missing",
+            "tool": {"path": str(META_HARNESS_TOOL), "exists": META_HARNESS_TOOL.exists()},
+            "skill": {"path": str(META_HARNESS_SKILL), "exists": META_HARNESS_SKILL.exists()},
+            "store": {
+                "path": str(META_HARNESS_DIR),
+                "exists": META_HARNESS_DIR.exists(),
+                "evaluation_count": eval_count,
+                "proposer_model": config.get("proposer_model", ""),
+                "evaluator_model": config.get("evaluator_model", ""),
+                "max_iterations": config.get("max_iterations", ""),
+            },
+            "pareto": {
+                "path": str(META_HARNESS_DIR / "pareto.json"),
+                "exists": (META_HARNESS_DIR / "pareto.json").exists(),
+                "pareto_count": len(pareto),
+                "all_runs_count": len(all_runs),
+                "best_run_id": str(best.get("run_id") or best.get("id") or ""),
+            },
+            "runs": {
+                "runs_dir": str(runs_dir),
+                "exists": runs_dir.exists(),
+                "count": len(run_dirs),
+                "latest": run_dirs[0].name if run_dirs else "",
+            },
+            "latest_command": latest_command if isinstance(latest_command, dict) else {},
+            "safety": {
+                "default_execution": "dry_run",
+                "real_run_requires_execute": True,
+                "real_apply_requires_execute": True,
+                "coordinator_autorun": False,
+            },
+            "commands": {
+                "status": "solar-harness meta-harness status --json",
+                "doctor": "solar-harness meta-harness doctor --json",
+                "run_dry": "solar-harness meta-harness run 3 hooks --json",
+                "apply_dry": "solar-harness meta-harness apply <run_id> --json",
+            },
+        }
+    except Exception as exc:
+        return {"ok": False, "status": "error", "errors": [f"{type(exc).__name__}: {exc}"]}
+
+
 def _status_payload(limit: int = 50) -> dict:
     current = _current_sprint()
     runtime_interfaces = _runtime_interfaces_status(current.get("sprint_id", ""))
@@ -1786,6 +1866,7 @@ def _status_payload(limit: int = 50) -> dict:
         "human_search": _human_search_waiting_status(),
         "research": _research_status_summary(),
         "autoresearch_impact": _autoresearch_impact_summary(),
+        "meta_harness": _meta_harness_summary(),
     }
 
 
@@ -2600,6 +2681,7 @@ td {
       <div class="card"><h3>Runtime Interfaces</h3><div id="overview-runtime">Loading...</div></div>
       <div class="card"><h3>Capability Evidence</h3><div id="overview-capabilities">Loading...</div></div>
       <div class="card"><h3>Autoresearch Impact</h3><div id="overview-autoresearch-impact">Loading...</div></div>
+      <div class="card"><h3>Meta-Harness</h3><div id="overview-meta-harness">Loading...</div></div>
       <div class="card"><h3>DeepResearch Human Search</h3><div id="overview-human-search">Loading...</div></div>
       <div class="card"><h3>DeepResearch Quality</h3><div id="overview-research">Loading...</div></div>
       <div class="card"><h3>最近风险</h3><div id="overview-risk">Loading...</div></div>
@@ -2611,6 +2693,8 @@ td {
     <div class="card" id="sprint-card">Loading...</div>
     <h2>Autoresearch Impact</h2>
     <div class="card" id="autoresearch-impact-card">Loading...</div>
+    <h2>Meta-Harness</h2>
+    <div class="card" id="meta-harness-card">Loading...</div>
     <h2>DeepResearch Human Search</h2>
     <div class="card" id="human-search-card">Loading...</div>
     <h2>DeepResearch Quality</h2>
@@ -3155,6 +3239,47 @@ function renderAutoresearchImpact(impact, compact) {
     '<div class="impact-note">Trend is observational: it counts outcomes after optimizer triggers, not causal proof.</div>' +
     '<div class="research-section-title">' + (compact ? 'Latest Optimizer Trigger' : 'Optimizer Triggers') + '</div>' +
     '<div class="impact-list">' + cards + '</div>' +
+	    '</div>';
+}
+function renderMetaHarness(meta, compact) {
+  meta = meta || {};
+  const store = meta.store || {};
+  const pareto = meta.pareto || {};
+  const runs = meta.runs || {};
+  const safety = meta.safety || {};
+  const latest = meta.latest_command || {};
+  const commandRows = meta.commands || {};
+  const status = meta.status || 'unknown';
+  const note = safety.coordinator_autorun === false
+    ? 'Controlled provider: coordinator does not autorun it; run/apply stay dry-run unless --execute is explicit.'
+    : 'Check coordinator autorun policy before using.';
+  const actions = compact ? '' :
+    '<div class="copy-row">' +
+      '<button class="btn" data-copy="' + esc(commandRows.status || 'solar-harness meta-harness status --json') + '" onclick="copyText(this.dataset.copy)">复制 status</button>' +
+      '<button class="btn" data-copy="' + esc(commandRows.run_dry || 'solar-harness meta-harness run 3 hooks --json') + '" onclick="copyText(this.dataset.copy)">复制 dry-run</button>' +
+      '<button class="btn" data-copy="' + esc(commandRows.apply_dry || 'solar-harness meta-harness apply <run_id> --json') + '" onclick="copyText(this.dataset.copy)">复制 apply dry-run</button>' +
+    '</div>';
+  const latestLine = latest && latest.subcommand
+    ? '<div class="impact-note"><b>Latest command:</b> ' + esc(latest.subcommand) + ' · ' + esc(latest.mode || 'N/A') + ' · executed=' + esc(latest.executed === true ? 'true' : 'false') + '</div>'
+    : '';
+  return '<div class="research-shell">' +
+    '<div class="research-overview">' +
+      '<div class="research-stat"><div class="kv-label">Status</div><strong>' + esc(status) + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Eval Set</div><strong>' + esc(store.evaluation_count ?? 0) + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Pareto</div><strong>' + esc(pareto.pareto_count ?? 0) + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Runs</div><strong>' + esc(runs.count ?? 0) + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Best</div><strong>' + esc(pareto.best_run_id || 'N/A') + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Dry Run</div><strong>' + esc(safety.default_execution || 'N/A') + '</strong></div>' +
+    '</div>' +
+    '<div class="research-detail-grid">' +
+      kv('Tool', (meta.tool || {}).path || 'N/A') +
+      kv('Store', store.path || 'N/A') +
+      kv('Proposer', store.proposer_model || 'N/A') +
+      kv('Evaluator', store.evaluator_model || 'N/A') +
+    '</div>' +
+    '<div class="impact-note">' + esc(note) + '</div>' +
+    latestLine +
+    actions +
     '</div>';
 }
 function renderKnowledgeSummary(wiki, mirage) {
@@ -3418,6 +3543,8 @@ function render(data) {
   document.getElementById('overview-capabilities').innerHTML = renderCapabilityHealthSummary(data.capability_health || {});
   document.getElementById('overview-autoresearch-impact').innerHTML = renderAutoresearchImpact(data.autoresearch_impact || {}, true);
   document.getElementById('autoresearch-impact-card').innerHTML = renderAutoresearchImpact(data.autoresearch_impact || {}, false);
+  document.getElementById('overview-meta-harness').innerHTML = renderMetaHarness(data.meta_harness || {}, true);
+  document.getElementById('meta-harness-card').innerHTML = renderMetaHarness(data.meta_harness || {}, false);
   document.getElementById('overview-human-search').innerHTML = renderHumanSearch(data.human_search || {}, true);
   document.getElementById('human-search-card').innerHTML = renderHumanSearch(data.human_search || {}, false);
   document.getElementById('overview-research').innerHTML = renderResearchStatus(data.research || {}, true);
