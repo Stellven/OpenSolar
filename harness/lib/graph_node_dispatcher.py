@@ -1911,7 +1911,7 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "http-testing", "negative-testing", "activation-proof", "knowledge-ingest", "release-gate", "documentation",
         "stub-llm", "e2e-test", "cli-view-assertion", "negative-control", "verifier", "registry-introspection",
         "technical-writing", "markdown", "evidence-aggregation", "handoff-authoring", "traceability-patch", "knowledge-raw-writeback",
-        "frontend", "flask", "http-routing", "autopilot-hooks", "json-traversal", "html", "javascript", "vanilla-dom",
+        "frontend", "flask", "http-routing", "autopilot-hooks", "json-traversal", "html", "jinja", "javascript", "vanilla-dom",
         "product", "planning", "governance",
         "architecture", "schema", "state-machine", "distributed-systems",
         "api-design", "data-modeling", "compatibility",
