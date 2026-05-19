@@ -3231,6 +3231,14 @@ def cmd_survey_finalize_run(args: argparse.Namespace) -> int:
             min_sources=args.min_sources,
             min_evidence=args.min_evidence,
             min_claims=args.min_claims,
+            narrative_backend=args.narrative_backend,
+            narrative_model=args.narrative_model,
+            narrative_fallback_models=args.narrative_fallback_models,
+            narrative_command=args.narrative_command,
+            narrative_timeout=args.narrative_timeout,
+            narrative_max_budget_usd=args.narrative_max_budget_usd,
+            narrative_min_chars=args.narrative_min_chars,
+            narrative_require_hitl=args.narrative_require_hitl,
         )
     except ValueError as exc:
         payload = {"ok": False, "reason": str(exc)}
@@ -3262,6 +3270,25 @@ def cmd_survey_import_search_results(args: argparse.Namespace) -> int:
         return 0 if payload.get("ok") and (not args.continue_finalize or (payload.get("finalize") or {}).get("ok")) else 1
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0 if payload.get("ok") and (not args.continue_finalize or (payload.get("finalize") or {}).get("ok")) else 1
+
+
+def cmd_survey_enrich_papers(args: argparse.Namespace) -> int:
+    from research.survey.paper_enrichment import enrich_papers
+
+    payload = enrich_papers(
+        args.output_dir,
+        catalog_json=args.catalog_json,
+        input_titles=args.input_titles,
+        max_papers=args.max_papers,
+        max_results=args.max_results,
+        recursion_depth=args.recursion_depth,
+        allow_search=args.search,
+        provider=args.provider,
+    )
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") else 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok") else 1
 
 
 def cmd_survey_status_next_action(args: argparse.Namespace) -> int:
@@ -3368,7 +3395,13 @@ def cmd_survey_doctor(args: argparse.Namespace) -> int:
 def cmd_survey_eval(args: argparse.Namespace) -> int:
     from research.survey.evaluator import evaluate_survey
 
-    payload = evaluate_survey(args.output_dir, strict=args.strict, min_finalized=args.min_finalized, require_complete=args.require_complete)
+    payload = evaluate_survey(
+        args.output_dir,
+        strict=args.strict,
+        min_finalized=args.min_finalized,
+        require_complete=args.require_complete,
+        require_golden_style=args.require_golden_style,
+    )
     if emit_json(args, payload):
         return 0 if payload.get("ok") or not args.strict else 1
     print(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -3679,7 +3712,7 @@ ALL_SUBCOMMANDS = [
     "mine", "outline", "write", "check", "compile", "synthesize", "export", "eval-artifacts",
     "policy-doctor", "policy-explain",
     "source-audit",
-    "survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-watch-register", "survey-watch-tick", "survey-rewrite-queue", "survey-rewrite-run", "survey-auto-repair", "survey-finalize-run", "survey-import-search-results", "survey-status-next-action", "survey-continue", "survey-review", "survey-compile", "survey-chief-editor", "survey-doctor", "survey-eval", "survey-diagnose",
+    "survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-watch-register", "survey-watch-tick", "survey-rewrite-queue", "survey-rewrite-run", "survey-auto-repair", "survey-finalize-run", "survey-import-search-results", "survey-enrich-papers", "survey-status-next-action", "survey-continue", "survey-review", "survey-compile", "survey-chief-editor", "survey-doctor", "survey-eval", "survey-diagnose",
 ]
 
 SUBCOMMANDS = {
@@ -3717,6 +3750,7 @@ SUBCOMMANDS = {
     "survey-auto-repair": cmd_survey_auto_repair,
     "survey-finalize-run": cmd_survey_finalize_run,
     "survey-import-search-results": cmd_survey_import_search_results,
+    "survey-enrich-papers": cmd_survey_enrich_papers,
     "survey-status-next-action": cmd_survey_status_next_action,
     "survey-continue": cmd_survey_continue,
     "survey-review": cmd_survey_review,
@@ -4043,6 +4077,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_finalize.add_argument("--min-sources", type=int, default=4)
     p_survey_finalize.add_argument("--min-evidence", type=int, default=8)
     p_survey_finalize.add_argument("--min-claims", type=int, default=8)
+    p_survey_finalize.add_argument("--narrative-backend", default="off", choices=["off", "none", "skip", "claude-cli", "opus", "claude", "local-command", "command", "deterministic"], help="Optional chief-editor narrative rewrite after strict final eval")
+    p_survey_finalize.add_argument("--narrative-model", default="opus", help="Model alias for --narrative-backend claude-cli/opus/claude")
+    p_survey_finalize.add_argument("--narrative-fallback-models", default="", help="Comma/space-separated narrative rewrite fallback models")
+    p_survey_finalize.add_argument("--narrative-command", default="", help="Local command for --narrative-backend local-command; receives chapter prompt on stdin")
+    p_survey_finalize.add_argument("--narrative-timeout", type=int, default=240)
+    p_survey_finalize.add_argument("--narrative-max-budget-usd", type=float, default=3.0)
+    p_survey_finalize.add_argument("--narrative-min-chars", type=int, default=8000)
+    p_survey_finalize.add_argument("--narrative-require-hitl", action="store_true", help="Require chief_editor_approval.txt containing APPROVED after narrative rewrite")
     p_survey_finalize.add_argument("--allow-incomplete", action="store_true", help="Return zero even if final strict eval fails")
     p_survey_finalize.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
@@ -4061,6 +4103,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_import.add_argument("--min-chars", type=int, default=1200)
     p_survey_import.add_argument("--require-complete", action="store_true", help="Require every planned section plus final quality gate when --continue-finalize is used")
     p_survey_import.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_survey_enrich = sub.add_parser("survey-enrich-papers", help="Recursively enrich survey paper titles and synthesize trend clusters")
+    p_survey_enrich.add_argument("--output-dir", required=True)
+    p_survey_enrich.add_argument("--catalog-json", default="", help="Optional CAIS/catalog JSON file; defaults to <output-dir>/cais2026_catalog.json when present")
+    p_survey_enrich.add_argument("--input-titles", default="", help="Optional newline-delimited paper title file")
+    p_survey_enrich.add_argument("--max-papers", type=int, default=40)
+    p_survey_enrich.add_argument("--max-results", type=int, default=3)
+    p_survey_enrich.add_argument("--recursion-depth", type=int, default=1)
+    p_survey_enrich.add_argument("--search", action="store_true", help="Enable live recursive search for title and related-work queries")
+    p_survey_enrich.add_argument("--provider", default="serper")
+    p_survey_enrich.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     p_survey_status_next = sub.add_parser("survey-status-next-action", help="Show the next actionable step for a survey DeepResearch output directory")
     p_survey_status_next.add_argument("--output-dir", required=True)
@@ -4128,6 +4181,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_eval.add_argument("--strict", action="store_true")
     p_survey_eval.add_argument("--min-finalized", type=int, default=None)
     p_survey_eval.add_argument("--require-complete", action="store_true")
+    p_survey_eval.add_argument("--require-golden-style", action="store_true")
     p_survey_eval.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     p_survey_diagnose = sub.add_parser("survey-diagnose", help="Diagnose survey quality issues and next actions")

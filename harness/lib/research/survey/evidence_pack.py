@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .paper_enrichment import load_matching_paper_trends
 from .schemas import EvidencePack, to_dict
 
 
@@ -113,10 +114,15 @@ def build_evidence_packs(output_dir: str | Path, ast: dict) -> dict:
             status="blocked" if blockers else "ready",
             blockers=blockers,
         )
-        packs.append(to_dict(pack))
+        pack_payload = to_dict(pack)
+        matching_trends = load_matching_paper_trends(root, section, limit=3)
+        if matching_trends:
+            pack_payload["paper_trends"] = matching_trends
+            pack_payload["paper_trend_ids"] = [str(item.get("trend_id") or item.get("theme_id") or "") for item in matching_trends]
+        packs.append(pack_payload)
         section_dir = root / "sections" / section_id
         section_dir.mkdir(parents=True, exist_ok=True)
-        (section_dir / "evidence_pack.json").write_text(json.dumps(to_dict(pack), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        (section_dir / "evidence_pack.json").write_text(json.dumps(pack_payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         (section_dir / "section.spec.json").write_text(json.dumps(section, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     payload = {"ok": True, "packs": packs, "ready": sum(1 for p in packs if p["status"] == "ready"), "blocked": sum(1 for p in packs if p["status"] == "blocked")}
