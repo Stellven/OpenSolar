@@ -2687,14 +2687,22 @@ PY
 3. 作为 PM，你要研究、分析、拆解用户原话，写正式 PRD 到:
    ~/.solar/harness/sprints/${sid}.prd.md
 
-4. PRD 至少包含: 背景/问题、用户目标、用户故事、功能需求、非目标、约束、验收标准、风险、开放问题、交给架构师/Planner 的问题。
+4. 额外写人读 HTML artifact 到:
+   ~/.solar/harness/sprints/${sid}.prd.html
+   HTML 是给用户阅读和审阅的可视化 artifact，不能替代 prd.md。必须 self-contained，不依赖外部 CSS/JS/CDN；必须用清晰版式、卡片、表格、风险矩阵、锚点目录或 SVG 结构图组织信息，不能只是 Markdown 转 HTML。
 
-5. 完成后更新 status.json:
+5. 写完 HTML 后注册并自动打开:
+   python3 ~/.solar/harness/lib/html_artifact.py register --sid ${sid} --kind prd_html --path ~/.solar/harness/sprints/${sid}.prd.html
+   helper 失败只记录 warn，不允许阻断 PM -> Planner 主链路。
+
+6. PRD 至少包含: 背景/问题、用户目标、用户故事、功能需求、非目标、约束、验收标准、风险、开放问题、交给架构师/Planner 的问题。
+
+7. 完成后更新 status.json:
    - phase: prd_ready
    - updated_at
    - history 追加 prd_completed
 
-6. 不要直接给 Builder 派任务；PRD 必须先交给 Planner/架构师。
+8. 不要直接给 Builder 派任务；PRD 必须先交给 Planner/架构师。
 
 **不要写代码，不要重启 harness，不要触碰 live tmux pane。**"
 
@@ -2761,17 +2769,26 @@ PY
 5. 写机器可执行 DAG 任务图到:
    ~/.solar/harness/sprints/${sid}.task_graph.json
 
-6. task_graph.json 每个节点必须包含: id、goal、depends_on、write_scope、read_scope、required_skills、preferred_model、gate、acceptance、estimated_cost。没有 write_scope 的节点不得并行。
+6. 额外写人读 HTML artifact 到:
+   ~/.solar/harness/sprints/${sid}.planning.html
+   HTML 是给用户阅读和审阅的可视化 artifact，不能替代 design.md、plan.md 或 task_graph.json。必须 self-contained，不依赖外部 CSS/JS/CDN；必须展示架构方案、DAG/并发边界、文件级写范围、验证命令、风险矩阵和 stop rules。
 
-7. plan 必须包含: 交付切片顺序、文件级写入范围、并发边界、验证命令、no-live-pane-mutation 保护、rollback/stop rule。
+7. 写完 HTML 后注册并自动打开:
+   python3 ~/.solar/harness/lib/html_artifact.py register --sid ${sid} --kind planning_html --path ~/.solar/harness/sprints/${sid}.planning.html
+   helper 失败只记录 warn，不允许阻断 Planner -> Builder 主链路。
 
-8. 完成后更新 status.json:
+8. task_graph.json 每个节点必须包含: id、goal、depends_on、write_scope、read_scope、required_skills、preferred_model、gate、acceptance、estimated_cost。没有 write_scope 的节点不得并行。
+
+9. plan 必须包含: 交付切片顺序、文件级写入范围、并发边界、验证命令、no-live-pane-mutation 保护、rollback/stop rule。
+
+10. 完成后更新 status.json:
    - status: active
    - phase: planning_complete
    - handoff_to: builder_main
+   - artifacts 追加 planning_html: sprints/${sid}.planning.html
    - history 追加 planner_plan_completed
 
-9. 不要直接给 Builder 写自然语言任务；Builder 派发必须由 graph scheduler / graph-dispatch 根据 task_graph.json 生成。
+11. 不要直接给 Builder 写自然语言任务；Builder 派发必须由 graph scheduler / graph-dispatch 根据 task_graph.json 生成。
 
 **不要写业务代码，不要重启 harness，不要触碰 live tmux pane。**"
 
