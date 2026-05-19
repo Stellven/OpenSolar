@@ -27,6 +27,14 @@ def continue_survey_run(
     min_finalized: int | None = None,
     min_chars: int = 1200,
     require_complete: bool = False,
+    narrative_backend: str = "claude-cli",
+    narrative_model: str = "opus",
+    narrative_fallback_models: str = "sonnet",
+    narrative_command: str = "",
+    narrative_timeout: int = 240,
+    narrative_max_budget_usd: float = 3.0,
+    narrative_min_chars: int = 8000,
+    narrative_require_hitl: bool = False,
 ) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
     root.mkdir(parents=True, exist_ok=True)
@@ -79,6 +87,14 @@ def continue_survey_run(
                 min_chars=min_chars,
                 require_complete=require_complete,
                 skip_plan=(root / "survey_report_ast.json").exists(),
+                narrative_backend=narrative_backend,
+                narrative_model=narrative_model,
+                narrative_fallback_models=narrative_fallback_models,
+                narrative_command=narrative_command,
+                narrative_timeout=narrative_timeout,
+                narrative_max_budget_usd=narrative_max_budget_usd,
+                narrative_min_chars=narrative_min_chars,
+                narrative_require_hitl=narrative_require_hitl,
             )
             step["executed"] = "survey-finalize-run"
             step["section_limit"] = effective_section_limit
@@ -101,6 +117,14 @@ def continue_survey_run(
                 min_finalized=min_finalized,
                 min_chars=min_chars,
                 require_complete=require_complete,
+                narrative_backend=narrative_backend,
+                narrative_model=narrative_model,
+                narrative_fallback_models=narrative_fallback_models,
+                narrative_command=narrative_command,
+                narrative_timeout=narrative_timeout,
+                narrative_max_budget_usd=narrative_max_budget_usd,
+                narrative_min_chars=narrative_min_chars,
+                narrative_require_hitl=narrative_require_hitl,
             )
             step["executed"] = "survey-import-search-results"
             step["input_md"] = str(input_md)

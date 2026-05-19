@@ -37,7 +37,13 @@ if _HARNESS_LIB not in sys.path:
     sys.path.insert(0, _HARNESS_LIB)
 
 from research import hashing, ids, schemas, storage
-from research.report_metrics import append_execution_metrics_section, build_execution_metrics, write_execution_metrics
+from research.report_metrics import (
+    append_execution_metrics_section,
+    append_model_usage_event,
+    build_execution_metrics,
+    build_model_usage_event,
+    write_execution_metrics,
+)
 
 WEB_USER_AGENT = "Solar-Harness-DeepResearch/1.0 (+local; evidence-ledger)"
 WEB_TIMEOUT_SEC = 12
@@ -1515,6 +1521,18 @@ def compile_report_to_markdown(conn: sqlite3.Connection, run_id: str, output_md:
         lines.append(f"- [{src['id']}] {src['title']}{' — ' + src['url'] if src['url'] else ''}")
     markdown = "\n".join(lines).strip() + "\n"
     metrics_dir = os.path.dirname(output_md) if output_md else None
+    if metrics_dir:
+        os.makedirs(metrics_dir, exist_ok=True)
+        append_model_usage_event(
+            os.path.join(metrics_dir, "model_usage.jsonl"),
+            build_model_usage_event(
+                backend="deepresearch-cli",
+                model="local-report-compiler",
+                prompt=run["topic"] if run else run_id,
+                output=markdown,
+                metadata={"run_id": run_id, "source": "compile_report_to_markdown"},
+            ),
+        )
     markdown, execution_metrics = append_execution_metrics_section(markdown, metrics_dir)
     total_chars = len(markdown)
     conn.execute(
@@ -3231,6 +3249,14 @@ def cmd_survey_finalize_run(args: argparse.Namespace) -> int:
             min_sources=args.min_sources,
             min_evidence=args.min_evidence,
             min_claims=args.min_claims,
+            narrative_backend=args.narrative_backend,
+            narrative_model=args.narrative_model,
+            narrative_fallback_models=args.narrative_fallback_models,
+            narrative_command=args.narrative_command,
+            narrative_timeout=args.narrative_timeout,
+            narrative_max_budget_usd=args.narrative_max_budget_usd,
+            narrative_min_chars=args.narrative_min_chars,
+            narrative_require_hitl=args.narrative_require_hitl,
         )
     except ValueError as exc:
         payload = {"ok": False, "reason": str(exc)}
@@ -3257,6 +3283,14 @@ def cmd_survey_import_search_results(args: argparse.Namespace) -> int:
         min_finalized=args.min_finalized,
         min_chars=args.min_chars,
         require_complete=args.require_complete,
+        narrative_backend=args.narrative_backend,
+        narrative_model=args.narrative_model,
+        narrative_fallback_models=args.narrative_fallback_models,
+        narrative_command=args.narrative_command,
+        narrative_timeout=args.narrative_timeout,
+        narrative_max_budget_usd=args.narrative_max_budget_usd,
+        narrative_min_chars=args.narrative_min_chars,
+        narrative_require_hitl=args.narrative_require_hitl,
     )
     if emit_json(args, payload):
         return 0 if payload.get("ok") and (not args.continue_finalize or (payload.get("finalize") or {}).get("ok")) else 1
@@ -3314,6 +3348,14 @@ def cmd_survey_continue(args: argparse.Namespace) -> int:
         min_finalized=args.min_finalized,
         min_chars=args.min_chars,
         require_complete=args.require_complete,
+        narrative_backend=args.narrative_backend,
+        narrative_model=args.narrative_model,
+        narrative_fallback_models=args.narrative_fallback_models,
+        narrative_command=args.narrative_command,
+        narrative_timeout=args.narrative_timeout,
+        narrative_max_budget_usd=args.narrative_max_budget_usd,
+        narrative_min_chars=args.narrative_min_chars,
+        narrative_require_hitl=args.narrative_require_hitl,
     )
     if emit_json(args, payload):
         return 0 if payload.get("ok") and (payload.get("completed") or args.allow_pending) else 1
@@ -4069,6 +4111,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_finalize.add_argument("--min-sources", type=int, default=4)
     p_survey_finalize.add_argument("--min-evidence", type=int, default=8)
     p_survey_finalize.add_argument("--min-claims", type=int, default=8)
+    p_survey_finalize.add_argument("--narrative-backend", default="claude-cli", choices=["off", "none", "skip", "claude-cli", "opus", "claude", "local-command", "command", "deterministic"], help="Chief-editor narrative rewrite after strict final eval; defaults to claude-cli")
+    p_survey_finalize.add_argument("--narrative-model", default="opus", help="Model alias for --narrative-backend claude-cli/opus/claude")
+    p_survey_finalize.add_argument("--narrative-fallback-models", default="sonnet", help="Comma/space-separated narrative rewrite fallback models")
+    p_survey_finalize.add_argument("--narrative-command", default="", help="Local command for --narrative-backend local-command; receives chapter prompt on stdin")
+    p_survey_finalize.add_argument("--narrative-timeout", type=int, default=240)
+    p_survey_finalize.add_argument("--narrative-max-budget-usd", type=float, default=3.0)
+    p_survey_finalize.add_argument("--narrative-min-chars", type=int, default=8000)
+    p_survey_finalize.add_argument("--narrative-require-hitl", action="store_true", help="Require chief_editor_approval.txt containing APPROVED after narrative rewrite")
     p_survey_finalize.add_argument("--allow-incomplete", action="store_true", help="Return zero even if final strict eval fails")
     p_survey_finalize.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
@@ -4086,6 +4136,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_import.add_argument("--min-finalized", type=int, default=None)
     p_survey_import.add_argument("--min-chars", type=int, default=1200)
     p_survey_import.add_argument("--require-complete", action="store_true", help="Require every planned section plus final quality gate when --continue-finalize is used")
+    p_survey_import.add_argument("--narrative-backend", default="claude-cli", choices=["off", "none", "skip", "claude-cli", "opus", "claude", "local-command", "command", "deterministic"], help="Chief-editor narrative rewrite when --continue-finalize runs")
+    p_survey_import.add_argument("--narrative-model", default="opus")
+    p_survey_import.add_argument("--narrative-fallback-models", default="sonnet")
+    p_survey_import.add_argument("--narrative-command", default="")
+    p_survey_import.add_argument("--narrative-timeout", type=int, default=240)
+    p_survey_import.add_argument("--narrative-max-budget-usd", type=float, default=3.0)
+    p_survey_import.add_argument("--narrative-min-chars", type=int, default=8000)
+    p_survey_import.add_argument("--narrative-require-hitl", action="store_true")
     p_survey_import.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     p_survey_enrich = sub.add_parser("survey-enrich-papers", help="Recursively enrich survey paper titles and synthesize trend clusters")
@@ -4119,6 +4177,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_continue.add_argument("--min-finalized", type=int, default=None)
     p_survey_continue.add_argument("--min-chars", type=int, default=1200)
     p_survey_continue.add_argument("--require-complete", action="store_true", help="Require every planned section plus final quality gate before completion")
+    p_survey_continue.add_argument("--narrative-backend", default="claude-cli", choices=["off", "none", "skip", "claude-cli", "opus", "claude", "local-command", "command", "deterministic"], help="Chief-editor narrative rewrite when finalizing")
+    p_survey_continue.add_argument("--narrative-model", default="opus")
+    p_survey_continue.add_argument("--narrative-fallback-models", default="sonnet")
+    p_survey_continue.add_argument("--narrative-command", default="")
+    p_survey_continue.add_argument("--narrative-timeout", type=int, default=240)
+    p_survey_continue.add_argument("--narrative-max-budget-usd", type=float, default=3.0)
+    p_survey_continue.add_argument("--narrative-min-chars", type=int, default=8000)
+    p_survey_continue.add_argument("--narrative-require-hitl", action="store_true")
     p_survey_continue.add_argument("--allow-pending", action="store_true", help="Return zero when safely paused for source search or writer response")
     p_survey_continue.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
