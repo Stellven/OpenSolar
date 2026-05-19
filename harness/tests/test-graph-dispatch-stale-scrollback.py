@@ -34,6 +34,35 @@ S03 sprint 全部 10 个节点收官
     assert mod._pane_unavailable_reason("solar-harness:0.3") == ""
     assert mod._pane_tui_busy("solar-harness:0.3") is False
 
+    distant_marker_tail = """
+Evaluator finished prior node review.
+
+✻ Sautéed for 4m 1s
+
+old lines 01
+old lines 02
+old lines 03
+old lines 04
+old lines 05
+old lines 06
+old lines 07
+old lines 08
+old lines 09
+old lines 10
+old lines 11
+old lines 12
+old lines 13
+────────────────────────────────────────────────────────────────
+❯ 看下 N2 N3 N4 跑完没
+────────────────────────────────────────────────────────────────
+  ⏵⏵ bypass permissions on (shift+tab to cycle)
+"""
+    mod._pane_tail = lambda pane, lines=80: distant_marker_tail
+    assert mod._pane_current_prompt_has_residue("\n".join(distant_marker_tail.splitlines()[-12:]))
+    assert mod._pane_prompt_residue_is_stale_scrollback("solar-harness:0.3", distant_marker_tail)
+    assert mod._pane_unavailable_reason("solar-harness:0.3") == ""
+    assert mod._pane_tui_busy("solar-harness:0.3") is False
+
     live_prompt = """
 ────────────────────────────────────────────────────────────────
 ❯ finalize sprint
