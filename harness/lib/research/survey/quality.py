@@ -10,6 +10,17 @@ from typing import Any
 from research.evaluator import audit_sources
 from .golden_style_gate import assess_golden_style
 
+TEMPLATE_POLLUTION_PHRASES = [
+    "以 evidence pack 为事实源",
+    "目标不是堆材料",
+    "不能替代跨章节 synthesis",
+    "架构 synthesis 先拆成机制层",
+    "三层必须保持分离",
+    "机制分层、状态表示、系统边界和可复现实现路径",
+    "当前证据包包含来源类型",
+    "本节先限定 `architecture` 问题边界",
+]
+
 
 def _read_json(path: Path) -> Any:
     if not path.exists():
@@ -302,6 +313,53 @@ def _duplicate_sentence_stats(sentences: list[str]) -> dict[str, Any]:
     }
 
 
+def _template_phrase_stats(text: str) -> dict[str, Any]:
+    counts = {phrase: (text or "").count(phrase) for phrase in TEMPLATE_POLLUTION_PHRASES}
+    top = [
+        {"phrase": phrase, "count": count}
+        for phrase, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+        if count
+    ]
+    return {
+        "template_pollution_phrase_total": sum(counts.values()),
+        "template_pollution_max_phrase_count": int(top[0]["count"]) if top else 0,
+        "template_pollution_top_phrases": top[:10],
+    }
+
+
+def _normalize_template_paragraph(paragraph: str) -> str:
+    cleaned = re.sub(r"\[[a-z]+:[^\]]+\]", "", paragraph or "")
+    cleaned = re.sub(r"ch\d+#\d+::ch\d+/sec\d+::", "", cleaned)
+    cleaned = re.sub(r"ch\d+/sec\d+", "SECTION_ID", cleaned)
+    cleaned = re.sub(r"S\d{3}\.\s+", "SXXX. ", cleaned)
+    cleaned = re.sub(r"`[^`]+`", "`X`", cleaned)
+    cleaned = re.sub(r"\b(?:paper|benchmark|official_doc|code)(?:,\s*(?:paper|benchmark|official_doc|code))*\b", "SOURCE_TYPES", cleaned)
+    cleaned = re.sub(r"https?://\S+", "URL", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip().lower()
+    return cleaned
+
+
+def _template_paragraph_stats(paragraphs: list[str]) -> dict[str, Any]:
+    normalized = [_normalize_template_paragraph(item) for item in paragraphs if len(_normalize_template_paragraph(item)) >= 120]
+    counts: dict[str, int] = {}
+    for item in normalized:
+        counts[item] = counts.get(item, 0) + 1
+    repeated = [
+        {"paragraph": paragraph[:240], "count": count}
+        for paragraph, count in counts.items()
+        if count > 1
+    ]
+    repeated.sort(key=lambda item: (-int(item["count"]), str(item["paragraph"])[:80]))
+    duplicate_occurrences = sum(int(item["count"]) - 1 for item in repeated)
+    return {
+        "normalized_template_paragraph_count": len(normalized),
+        "normalized_template_duplicate_occurrences": duplicate_occurrences,
+        "normalized_template_duplicate_ratio": round(duplicate_occurrences / max(len(normalized), 1), 4),
+        "normalized_template_max_duplicate_count": int(repeated[0]["count"]) if repeated else 0,
+        "normalized_template_top_duplicates": repeated[:10],
+    }
+
+
 def _build_final_quality(root: Path, ast: dict[str, Any], sections: list[dict[str, Any]]) -> dict[str, Any]:
     final_path = root / "final.md"
     final_text = final_path.read_text(encoding="utf-8", errors="ignore") if final_path.exists() else ""
@@ -336,6 +394,8 @@ def _build_final_quality(root: Path, ast: dict[str, Any], sections: list[dict[st
             paragraphs.append(cleaned)
     repetition_rate = round(1.0 - (len(set(paragraphs)) / max(len(paragraphs), 1)), 4)
     sentence_stats = _duplicate_sentence_stats(_normalized_long_sentences(final_text))
+    template_phrase_stats = _template_phrase_stats(final_text)
+    template_paragraph_stats = _template_paragraph_stats(paragraphs)
     per_section_target = target_chars / max(len(sections), 1) if target_chars else 0
     min_final_chars = int(target_chars * 0.60) if target_chars else 0
     min_avg_section_chars = int(max(min(per_section_target * 0.45, 1200), 500)) if per_section_target else 500
@@ -360,6 +420,12 @@ def _build_final_quality(root: Path, ast: dict[str, Any], sections: list[dict[st
         issues.append(f"final_duplicate_sentence_count_high:{sentence_stats['max_duplicate_long_sentence_count']}>={duplicate_sentence_threshold}")
     if finalized_count and sentence_stats["duplicate_long_sentence_ratio"] > 0.25:
         issues.append(f"final_duplicate_sentence_ratio_high:{sentence_stats['duplicate_long_sentence_ratio']:.4f}>0.2500")
+    template_phrase_threshold = max(8, int(finalized_count * 0.35)) if finalized_count else 8
+    if template_phrase_stats["template_pollution_max_phrase_count"] >= template_phrase_threshold:
+        issues.append(f"final_template_phrase_repetition_high:{template_phrase_stats['template_pollution_max_phrase_count']}>={template_phrase_threshold}")
+    template_paragraph_threshold = max(4, int(finalized_count * 0.20)) if finalized_count else 4
+    if template_paragraph_stats["normalized_template_max_duplicate_count"] >= template_paragraph_threshold:
+        issues.append(f"final_normalized_template_paragraph_repetition_high:{template_paragraph_stats['normalized_template_max_duplicate_count']}>={template_paragraph_threshold}")
     return {
         "ok": not issues,
         "final_md": str(final_path),
@@ -380,6 +446,8 @@ def _build_final_quality(root: Path, ast: dict[str, Any], sections: list[dict[st
         "evidence_tag_density_per_1k_chars": evidence_tag_density,
         "repetition_rate": repetition_rate,
         **sentence_stats,
+        **template_phrase_stats,
+        **template_paragraph_stats,
         "issues": issues,
     }
 
