@@ -130,11 +130,21 @@ def _promotion_decision(candidate: dict[str, Any], health: dict[str, Any], eval_
     verdict = "promoted" if promoted else "proposed"
     if gate.get("regressions") or not eval_result.get("ok"):
         verdict = "blocked"
+    gate_blockers = set(gate.get("promotion_blockers") or [])
+    if eval_result.get("ok"):
+        gate_blockers.discard("external_eval_pack_not_passed")
+    effective_gate = {
+        "promotion_allowed": promoted,
+        "promotion_blockers": sorted(gate_blockers | set(blockers)),
+        "external_eval_ok": bool(eval_result.get("ok")),
+        "raw_promotion_allowed": bool(gate.get("promotion_allowed")),
+    }
     return {
         "promoted": promoted,
         "verdict": verdict,
         "reward": reward,
         "blockers": sorted(set(blockers)),
+        "effective_gate": effective_gate,
         "policy": "stable promotion requires implemented skill, MemRL ready, evolution engine ok, no regression, and eval pack pass",
     }
 
