@@ -1164,6 +1164,7 @@ def _pane_prompt_residue_is_stale_scrollback(pane: str, text: str) -> bool:
             "✻ Brewed for",
             "✻ Sautéed for",
             "✻ Thought for",
+            "✻ Worked for",
         )
     )
 
