@@ -290,6 +290,7 @@ def test_import_survey_search_results_cli(tmp_path, capsys):
         "survey-import-search-results",
         "--output-dir", str(tmp_path),
         "--input-md", str(md),
+        "--narrative-backend", "skip",
         "--json",
     ])
     assert rc == 0
@@ -332,6 +333,7 @@ Relevant Quotes:
         "--section-limit", "1",
         "--min-finalized", "1",
         "--min-chars", "100",
+        "--narrative-backend", "skip",
         "--json",
     ])
     assert rc == 0

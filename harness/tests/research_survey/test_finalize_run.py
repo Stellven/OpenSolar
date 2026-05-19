@@ -108,6 +108,7 @@ def test_finalize_run_cli(tmp_path, capsys):
         "--min-finalized", "1",
         "--min-chars", "100",
         "--repair-passes", "1",
+        "--narrative-backend", "skip",
         "--json",
     ])
     assert rc == 0

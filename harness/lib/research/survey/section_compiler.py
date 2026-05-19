@@ -83,6 +83,20 @@ def _section_final(root: Path, section_id: str) -> str:
     return path.read_text(encoding="utf-8", errors="ignore") if path.exists() else ""
 
 
+def _reader_safe_text(text: str) -> str:
+    def label(match: re.Match[str]) -> str:
+        groups = [item for item in match.groups() if item is not None]
+        chapter = int(groups[0]) if groups else 0
+        section = int(groups[-1]) if len(groups) > 1 else 0
+        return f"section {chapter:02d}.{section:02d}"
+
+    cleaned = re.sub(r"\bch(\d{1,3})#\d+::ch\d{1,3}/sec(\d{1,3})::", label, text or "", flags=re.I)
+    cleaned = re.sub(r"\bch(\d{1,3})/sec(\d{1,3})::", label, cleaned, flags=re.I)
+    cleaned = re.sub(r"\bch(\d{1,3})/sec(\d{1,3})\b", label, cleaned, flags=re.I)
+    cleaned = re.sub(r"\bch(\d{1,3})#(\d+)::", label, cleaned, flags=re.I)
+    return cleaned
+
+
 def _build_contribution_matrix(root: Path, ast: dict) -> dict:
     rows = []
     for section in ast.get("sections", []):
@@ -93,6 +107,7 @@ def _build_contribution_matrix(root: Path, ast: dict) -> dict:
         headings = [line.strip("# ").strip() for line in text.splitlines() if line.startswith("## ")]
         rows.append({
             "section_id": section_id,
+            "section_label": str(section.get("title") or section_id),
             "chapter_id": str(section.get("chapter_id") or ""),
             "title": str(section.get("title") or section_id),
             "status": "finalized" if text else "pending",
@@ -436,7 +451,7 @@ def _build_human_readable_final(root: Path, ast: dict, contribution: dict) -> di
             lines.append(line)
         lines.append("")
 
-    text = "\n".join(lines).strip() + "\n"
+    text = _reader_safe_text("\n".join(lines).strip() + "\n")
     text, execution_metrics = append_execution_metrics_section(text, root)
     human_path = root / "human_final.md"
     human_path.write_text(text, encoding="utf-8")
@@ -478,7 +493,8 @@ def compile_survey(output_dir: str | Path) -> dict:
             final = root / "sections" / str(section.get("section_id")) / "final.md"
             if final.exists():
                 text = final.read_text(encoding="utf-8")
-                block_lines.extend([text, ""])
+                safe_text = _reader_safe_text(text)
+                block_lines.extend([safe_text, ""])
                 chapter_lines.extend([text, ""])
                 finalized += 1
             else:
@@ -522,7 +538,7 @@ def compile_survey(output_dir: str | Path) -> dict:
     ]
     for row in matrix_rows:
         lines.append(
-            f"| {row.get('section_id')} | {row.get('claim_count')} | {row.get('evidence_count')} | "
+            f"| {row.get('section_label') or row.get('title')} | {row.get('claim_count')} | {row.get('evidence_count')} | "
             f"{'yes' if row.get('has_architecture_synthesis') else 'no'} | "
             f"{'yes' if row.get('has_comparative_positioning') else 'no'} | "
             f"{'yes' if row.get('has_evaluation_boundary') else 'no'} | "

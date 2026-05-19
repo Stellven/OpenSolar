@@ -90,7 +90,9 @@ def _read_text(path: Path) -> str:
 
 def _candidate_reader_artifacts(root: Path, final_path: Path) -> list[Path]:
     candidates: list[Path] = []
-    for path in [root / "chief_editor_final.md", root / "human_final.md"]:
+    if final_path.exists():
+        candidates.append(final_path)
+    for path in [root / "chief_editor_final.md"]:
         if path.exists() and path not in candidates:
             candidates.append(path)
     for path in sorted(root.glob("*.html")):
