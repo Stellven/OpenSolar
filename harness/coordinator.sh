@@ -2241,8 +2241,18 @@ EOF
 build_autoresearch_optimizer_context() {
   local sid="$1" role="$2" task="$3"
   local optimizer_py="$HARNESS_DIR/lib/autoresearch_pane_optimizer.py"
+  local status_file="$SPRINTS_DIR/${sid}.status.json"
+  local eval_json="$SPRINTS_DIR/${sid}.eval.json"
+  local eval_md="$SPRINTS_DIR/${sid}.eval.md"
   [[ -f "$optimizer_py" ]] || return 0
-  python3 "$optimizer_py" --sid "$sid" --role "$role" --task "$task" --format markdown 2>/dev/null || true
+  python3 "$optimizer_py" \
+    --sid "$sid" \
+    --role "$role" \
+    --task "$task" \
+    --status-file "$status_file" \
+    --eval-json "$eval_json" \
+    --eval-md "$eval_md" \
+    --format markdown 2>/dev/null || true
 }
 
 # 追加内容到已有 dispatch.md

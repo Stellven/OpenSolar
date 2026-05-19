@@ -137,6 +137,61 @@ grep -q "Autoresearch Pane Optimizer" <<<"$OUT" \
   && ok "pane optimizer markdown is advisor-only" \
   || fail "pane optimizer markdown is advisor-only"
 
+TMP_TELEMETRY=$(mktemp -d /tmp/solar-autoresearch-telemetry.XXXXXX)
+cat > "$TMP_TELEMETRY/status.json" <<'EOF'
+{
+  "status": "failed_review",
+  "phase": "eval_failed",
+  "round": 2,
+  "target_role": "builder"
+}
+EOF
+cat > "$TMP_TELEMETRY/eval.json" <<'EOF'
+{
+  "verdict": "FAIL",
+  "failed_conditions": [
+    {"id": "missing_evidence", "fix_hint": "Bind each claim to source evidence."},
+    {"id": "weak_stop_rule", "fix_hint": "Add measurable stop rules."}
+  ],
+  "errors": [
+    {"cond": "regression", "message": "Quality gate failed after review."}
+  ]
+}
+EOF
+OUT=$(python3 "$HARNESS_DIR/lib/autoresearch_pane_optimizer.py" \
+  --sid sprint-test \
+  --role "建设者" \
+  --task "Round N+1 修复/继续实现" \
+  --status-file "$TMP_TELEMETRY/status.json" \
+  --eval-json "$TMP_TELEMETRY/eval.json" \
+  --format json)
+python3 - "$OUT" <<'PY' && ok "pane optimizer uses eval/status telemetry" || fail "pane optimizer uses eval/status telemetry"
+import json, sys
+d=json.loads(sys.argv[1])
+assert d["recommended"] is True, d
+assert d["trigger_level"] == "strong", d
+assert d["telemetry"]["status"] == "failed_review", d
+assert d["telemetry"]["phase"] == "eval_failed", d
+assert d["telemetry"]["round"] == 2, d
+assert d["telemetry"]["eval_verdict"] == "FAIL", d
+assert "missing_evidence" in d["telemetry"]["failed_conditions"], d
+assert d["execution_policy"]["replaces_builder"] is False, d
+assert "repair_round_delta" in d["quality_metrics"]["must_measure"], d
+PY
+OUT=$(python3 "$HARNESS_DIR/lib/autoresearch_pane_optimizer.py" \
+  --sid sprint-test \
+  --role "建设者" \
+  --task "Round N+1 修复/继续实现" \
+  --status-file "$TMP_TELEMETRY/status.json" \
+  --eval-json "$TMP_TELEMETRY/eval.json" \
+  --format markdown)
+grep -q "Telemetry trigger" <<<"$OUT" \
+  && grep -q "missing_evidence" <<<"$OUT" \
+  && grep -q "repair_round_delta" <<<"$OUT" \
+  && ok "pane optimizer markdown exposes telemetry trigger" \
+  || fail "pane optimizer markdown exposes telemetry trigger"
+rm -rf "$TMP_TELEMETRY"
+
 echo "A7 — unified health exposes autoresearch"
 OUT=$("$HARNESS_DIR/solar-harness.sh" integrations status --json --refresh)
 python3 - "$OUT" <<'PY' && ok "autoresearch unified health present" || fail "autoresearch unified health present"

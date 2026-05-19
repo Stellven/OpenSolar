@@ -11,6 +11,7 @@ import argparse
 import json
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 
@@ -75,6 +76,22 @@ GENERAL_PATTERNS = [
 
 
 ROLE_DEFAULT_ENABLED = {"pm", "planner", "builder", "evaluator"}
+FAIL_STATUSES = {
+    "failed",
+    "failed_review",
+    "blocked",
+    "repair",
+    "repairing",
+    "reviewing",
+}
+FAIL_PHASE_PATTERNS = [
+    r"fail",
+    r"repair",
+    r"blocked",
+    r"retry",
+    r"round",
+    r"eval",
+]
 
 
 def normalize_role(role: str) -> str:
@@ -97,9 +114,145 @@ def should_recommend(role: str, task: str) -> tuple[bool, list[str]]:
     return bool(reasons and canonical in PROFILES), reasons
 
 
-def advisory_payload(sid: str, role: str, task: str) -> dict[str, Any]:
+def read_json_file(path: str | None) -> tuple[dict[str, Any], str]:
+    if not path:
+        return {}, ""
+    p = Path(path).expanduser()
+    if not p.exists():
+        return {}, "missing"
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except Exception as exc:  # pragma: no cover - exact parse text is not stable.
+        return {}, f"parse_error:{exc}"
+    return data if isinstance(data, dict) else {"value": data}, ""
+
+
+def as_list(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+def compact_item(item: Any) -> str:
+    if isinstance(item, dict):
+        for key in ("condition", "cond", "id", "name", "title", "message", "fix_hint", "evidence"):
+            value = item.get(key)
+            if value:
+                return str(value)
+        return json.dumps(item, ensure_ascii=False, sort_keys=True)[:220]
+    return str(item)
+
+
+def first_text(data: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = data.get(key)
+        if value is not None and value != "":
+            return str(value)
+    return ""
+
+
+def parse_round(value: Any) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return 0
+
+
+def telemetry_snapshot(status_file: str | None, eval_json: str | None, eval_md: str | None) -> dict[str, Any]:
+    status_data, status_error = read_json_file(status_file)
+    eval_data, eval_error = read_json_file(eval_json)
+    status = first_text(status_data, "status", "state")
+    phase = first_text(status_data, "phase", "handoff_to", "target_role")
+    round_no = parse_round(status_data.get("round") or status_data.get("repair_round") or status_data.get("review_round"))
+    verdict = first_text(eval_data, "verdict", "overall", "status").upper()
+    failed_conditions = [compact_item(x) for x in as_list(eval_data.get("failed_conditions"))]
+    failed_conditions.extend(compact_item(x) for x in as_list(eval_data.get("failures")))
+    errors = [compact_item(x) for x in as_list(eval_data.get("errors"))]
+    warnings = [compact_item(x) for x in as_list(eval_data.get("warnings"))]
+    eval_md_present = bool(eval_md and Path(eval_md).expanduser().exists())
+    return {
+        "status_file": status_file or "",
+        "status_file_error": status_error,
+        "eval_json": eval_json or "",
+        "eval_json_error": eval_error,
+        "eval_md": eval_md or "",
+        "eval_md_present": eval_md_present,
+        "status": status,
+        "phase": phase,
+        "round": round_no,
+        "eval_verdict": verdict,
+        "failed_conditions": failed_conditions[:12],
+        "errors": errors[:12],
+        "warnings": warnings[:12],
+        "error_count": len(errors),
+        "warning_count": len(warnings),
+    }
+
+
+def telemetry_triggers(telemetry: dict[str, Any]) -> tuple[str, list[str]]:
+    reasons: list[str] = []
+    status = telemetry.get("status", "").lower()
+    phase = telemetry.get("phase", "").lower()
+    verdict = telemetry.get("eval_verdict", "").upper()
+    if status in FAIL_STATUSES or status.startswith("failed") or status.startswith("blocked"):
+        reasons.append(f"status:{status}")
+    if any(re.search(pattern, phase, re.IGNORECASE) for pattern in FAIL_PHASE_PATTERNS):
+        reasons.append(f"phase:{phase}")
+    if telemetry.get("round", 0) > 0:
+        reasons.append(f"round:{telemetry['round']}")
+    if verdict in {"FAIL", "FAILED", "ERROR", "NOT_READY", "NOT READY"}:
+        reasons.append(f"eval_verdict:{verdict}")
+    if telemetry.get("failed_conditions"):
+        reasons.append(f"failed_conditions:{len(telemetry['failed_conditions'])}")
+    if telemetry.get("error_count", 0) > 0:
+        reasons.append(f"errors:{telemetry['error_count']}")
+    if telemetry.get("status_file_error"):
+        reasons.append(f"status_file:{telemetry['status_file_error']}")
+    if telemetry.get("eval_json_error"):
+        reasons.append(f"eval_json:{telemetry['eval_json_error']}")
+    if any(reason.startswith(("eval_verdict:", "failed_conditions:", "errors:")) for reason in reasons):
+        return "strong", reasons
+    if reasons:
+        return "recommended", reasons
+    return "advisory", reasons
+
+
+def quality_metrics(role: str, trigger_level: str) -> dict[str, Any]:
+    canonical = normalize_role(role)
+    expected_effect = {
+        "pm": ["reduce_requirement_ambiguity", "surface_acceptance_gaps"],
+        "planner": ["reduce_dag_rework", "harden_write_scope_and_stop_rules"],
+        "builder": ["reduce_repair_rounds", "turn_eval_failures_into_local_issues"],
+        "evaluator": ["improve_fail_reproducibility", "produce_builder_actionable_feedback"],
+    }.get(canonical, ["improve_evidence_linkage"])
+    return {
+        "trigger_level": trigger_level,
+        "expected_effect": expected_effect,
+        "must_measure": [
+            "repair_round_delta",
+            "eval_failure_recurrence",
+            "evidence_gap_count",
+        ],
+    }
+
+
+def advisory_payload(
+    sid: str,
+    role: str,
+    task: str,
+    status_file: str | None = None,
+    eval_json: str | None = None,
+    eval_md: str | None = None,
+) -> dict[str, Any]:
     canonical = normalize_role(role)
     recommended, reasons = should_recommend(role, task)
+    telemetry = telemetry_snapshot(status_file, eval_json, eval_md)
+    trigger_level, telemetry_reasons = telemetry_triggers(telemetry)
+    if telemetry_reasons and canonical in PROFILES:
+        recommended = True
+        reasons.extend(f"telemetry:{reason}" for reason in telemetry_reasons)
     profile = PROFILES.get(canonical)
     return {
         "ok": True,
@@ -108,6 +261,10 @@ def advisory_payload(sid: str, role: str, task: str) -> dict[str, Any]:
         "canonical_role": canonical,
         "recommended": recommended,
         "reasons": reasons,
+        "trigger_level": trigger_level,
+        "telemetry": telemetry,
+        "telemetry_reasons": telemetry_reasons,
+        "quality_metrics": quality_metrics(role, trigger_level),
         "capabilities": [
             "autoresearch.pane_optimizer",
             "autoresearch.issue_loop",
@@ -128,17 +285,34 @@ def render_markdown(payload: dict[str, Any]) -> str:
         return ""
     profile = payload.get("profile") or {}
     caps = ", ".join(payload.get("capabilities") or [])
+    telemetry = payload.get("telemetry") or {}
+    telemetry_lines = ""
+    if payload.get("telemetry_reasons"):
+        failed = telemetry.get("failed_conditions") or []
+        failed_text = "\n".join(f"  - {item}" for item in failed[:5]) or "  - N/A"
+        telemetry_lines = f"""
+### Telemetry trigger
+
+- Trigger level: {payload.get("trigger_level", "advisory")}
+- Status/phase/round: {telemetry.get("status") or "N/A"} / {telemetry.get("phase") or "N/A"} / {telemetry.get("round", 0)}
+- Eval verdict: {telemetry.get("eval_verdict") or "N/A"}
+- Failed conditions:
+{failed_text}
+- Measurement: 记录 repair_round_delta、eval_failure_recurrence、evidence_gap_count，证明 autoresearch 是否真的降低返工。
+"""
     return f"""## Autoresearch Pane Optimizer
 
 Status: advisor_only
 Capability: {caps}
 Role fit: {profile.get("title", payload.get("canonical_role", "unknown"))}
+Trigger level: {payload.get("trigger_level", "advisory")}
 
 - When to use: {profile.get("trigger", "N/A")}
 - How it improves this pane: {profile.get("use", "N/A")}
 - Stop rule: {profile.get("stop", "N/A")}
 - Execution gate: 默认只 dry-run；只有用户明确授权且命令包含 `--execute` 时，才允许运行 autoresearch 执行循环。
 - Boundary: Autoresearch 不替代 PM/Planner/Builder/Evaluator；它只提供 issue 化拆解、score-gate、反例/风险和验证增强建议。
+{telemetry_lines}
 """
 
 
@@ -147,10 +321,13 @@ def main() -> int:
     ap.add_argument("--sid", default="")
     ap.add_argument("--role", required=True)
     ap.add_argument("--task", required=True)
+    ap.add_argument("--status-file", default="")
+    ap.add_argument("--eval-json", default="")
+    ap.add_argument("--eval-md", default="")
     ap.add_argument("--format", choices=("markdown", "json"), default="markdown")
     args = ap.parse_args()
 
-    payload = advisory_payload(args.sid, args.role, args.task)
+    payload = advisory_payload(args.sid, args.role, args.task, args.status_file, args.eval_json, args.eval_md)
     if args.format == "json":
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
