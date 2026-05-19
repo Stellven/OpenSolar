@@ -1709,9 +1709,30 @@ def _autoresearch_impact_summary(limit: int = 12) -> dict:
             items.append(item)
             if len(items) >= limit:
                 break
+        terminal_pass = {"passed", "done", "eval_pass", "finalized", "eval_passed"}
+        failing_statuses = {"failed", "failed_review", "needs_human_review", "blocked"}
         strong_count = sum(1 for item in items if item.get("trigger_level") == "strong")
         recommended_count = sum(1 for item in items if item.get("recommended"))
         fail_verdict_count = sum(1 for item in items if str(item.get("eval_verdict", "")).upper() in {"FAIL", "FAILED", "ERROR", "NOT_READY", "NOT READY"})
+        pass_after_trigger = sum(1 for item in items if str(item.get("status", "")).lower() in terminal_pass)
+        still_failing = sum(1 for item in items if str(item.get("status", "")).lower() in failing_statuses or str(item.get("eval_verdict", "")).upper() in {"FAIL", "FAILED", "ERROR", "NOT_READY", "NOT READY"})
+        fail_recurrence = sum(1 for item in items if item.get("trigger_level") == "strong" and str(item.get("eval_verdict", "")).upper() in {"FAIL", "FAILED", "ERROR", "NOT_READY", "NOT READY"} and str(item.get("status", "")).lower() not in terminal_pass)
+        rounds = []
+        for item in items:
+            try:
+                rounds.append(int(item.get("round") or 0))
+            except Exception:
+                continue
+        avg_round = round(sum(rounds) / len(rounds), 2) if rounds else 0
+        max_round = max(rounds) if rounds else 0
+        if not items:
+            effect_status = "insufficient"
+        elif pass_after_trigger and not still_failing:
+            effect_status = "promising"
+        elif still_failing and not pass_after_trigger:
+            effect_status = "warn"
+        else:
+            effect_status = "mixed"
         roles: dict[str, int] = {}
         for item in items:
             role = str(item.get("role") or "unknown")
@@ -1726,6 +1747,15 @@ def _autoresearch_impact_summary(limit: int = 12) -> dict:
             "strong_count": strong_count,
             "recommended_count": recommended_count,
             "fail_verdict_count": fail_verdict_count,
+            "trend": {
+                "effect_status": effect_status,
+                "pass_after_trigger": pass_after_trigger,
+                "still_failing": still_failing,
+                "fail_recurrence": fail_recurrence,
+                "avg_round": avg_round,
+                "max_round": max_round,
+                "window_size": len(items),
+            },
             "roles": roles,
             "latest": items[0] if items else {},
             "items": items,
@@ -3072,6 +3102,7 @@ function renderResearchStatus(research, compact) {
 function renderAutoresearchImpact(impact, compact) {
   impact = impact || {};
   const items = impact.items || [];
+  const trend = impact.trend || {};
   if (!items.length) {
     return '<div class="research-shell">' +
       '<div class="research-overview">' +
@@ -3116,7 +3147,12 @@ function renderAutoresearchImpact(impact, compact) {
       '<div class="research-stat"><div class="kv-label">FAIL Verdict</div><strong>' + esc(impact.fail_verdict_count || 0) + '</strong></div>' +
       '<div class="research-stat"><div class="kv-label">Latest Role</div><strong>' + esc(latest.role || 'N/A') + '</strong></div>' +
       '<div class="research-stat"><div class="kv-label">Latest Round</div><strong>' + esc(latest.round ?? 'N/A') + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Effect</div><strong>' + esc(trend.effect_status || 'insufficient') + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Pass After</div><strong>' + esc(trend.pass_after_trigger || 0) + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Still Failing</div><strong>' + esc(trend.still_failing || 0) + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Avg Round</div><strong>' + esc(trend.avg_round ?? 0) + '</strong></div>' +
     '</div>' +
+    '<div class="impact-note">Trend is observational: it counts outcomes after optimizer triggers, not causal proof.</div>' +
     '<div class="research-section-title">' + (compact ? 'Latest Optimizer Trigger' : 'Optimizer Triggers') + '</div>' +
     '<div class="impact-list">' + cards + '</div>' +
     '</div>';
