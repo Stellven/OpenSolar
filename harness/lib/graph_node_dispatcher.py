@@ -1162,6 +1162,7 @@ def _pane_prompt_residue_is_stale_scrollback(pane: str, text: str) -> bool:
             "✻ Cogitated for",
             "✻ Baked for",
             "✻ Brewed for",
+            "✻ Sautéed for",
             "✻ Thought for",
         )
     )
@@ -1182,7 +1183,7 @@ def _pane_tui_busy(pane: str) -> bool:
     # A non-empty Claude prompt at the bottom is unsubmitted input residue. If
     # we dispatch into it, Claude may concatenate unrelated tasks or open the
     # queued-message UI instead of executing the new node.
-    if _pane_current_prompt_has_residue(bottom) and not _pane_prompt_residue_is_stale_scrollback(pane, bottom):
+    if _pane_current_prompt_has_residue(bottom) and not _pane_prompt_residue_is_stale_scrollback(pane, tail):
         return True
     return False
 
@@ -1244,7 +1245,7 @@ def _pane_unavailable_reason(pane: str) -> str:
         return "rate_limit_or_api_error"
     if PANE_QUEUED_PROMPT_RE.search(bottom):
         return "queued_prompt_residue"
-    if _pane_current_prompt_has_residue(bottom) and not _pane_prompt_residue_is_stale_scrollback(pane, bottom):
+    if _pane_current_prompt_has_residue(bottom) and not _pane_prompt_residue_is_stale_scrollback(pane, tail):
         return "unsubmitted_prompt_residue"
     return ""
 
