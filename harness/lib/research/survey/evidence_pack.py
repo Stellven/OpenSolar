@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 from .schemas import EvidencePack, to_dict
-from .paper_enrichment import load_matching_paper_trends
 
 
 def _read_jsonl(path: Path) -> list[dict]:
@@ -29,24 +28,12 @@ def _tokens(text: str) -> set[str]:
     return {part.lower() for part in str(text or "").replace("/", " ").replace("_", " ").split() if len(part) >= 3}
 
 
-def _compact_text(text: str) -> str:
-    return "".join(ch.lower() for ch in str(text or "") if ch.isalnum() or "\u4e00" <= ch <= "\u9fff")
-
-
 def _ranked(rows: list[dict], section: dict, text_key: str) -> list[dict]:
     section_tokens = _tokens(" ".join(str(section.get(k, "")) for k in ("title", "research_question", "section_id")))
-    title_key = _compact_text(section.get("title") or "")
-    section_id_key = _compact_text(section.get("section_id") or "")
     scored = []
     for idx, row in enumerate(rows):
-        row_text = str(row.get(text_key) or row.get("content") or row.get("claim_text") or row.get("title") or "")
-        row_tokens = _tokens(row_text)
+        row_tokens = _tokens(str(row.get(text_key) or row.get("content") or row.get("claim_text") or row.get("title") or ""))
         score = len(section_tokens & row_tokens)
-        row_key = _compact_text(row_text)
-        if title_key and title_key in row_key:
-            score += 100
-        if section_id_key and section_id_key in _compact_text(row.get("id") or row.get("claim_id") or row.get("evidence_id") or ""):
-            score += 20
         scored.append((-score, idx, row))
     scored.sort(key=lambda item: (item[0], item[1]))
     return [row for _score, _idx, row in scored]
@@ -126,15 +113,10 @@ def build_evidence_packs(output_dir: str | Path, ast: dict) -> dict:
             status="blocked" if blockers else "ready",
             blockers=blockers,
         )
-        pack_payload = to_dict(pack)
-        matching_trends = load_matching_paper_trends(root, section, limit=3)
-        if matching_trends:
-            pack_payload["paper_trends"] = matching_trends
-            pack_payload["paper_trend_ids"] = [str(item.get("trend_id") or item.get("theme_id") or "") for item in matching_trends]
-        packs.append(pack_payload)
+        packs.append(to_dict(pack))
         section_dir = root / "sections" / section_id
         section_dir.mkdir(parents=True, exist_ok=True)
-        (section_dir / "evidence_pack.json").write_text(json.dumps(pack_payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        (section_dir / "evidence_pack.json").write_text(json.dumps(to_dict(pack), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         (section_dir / "section.spec.json").write_text(json.dumps(section, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     payload = {"ok": True, "packs": packs, "ready": sum(1 for p in packs if p["status"] == "ready"), "blocked": sum(1 for p in packs if p["status"] == "blocked")}

@@ -11,7 +11,6 @@ if _HARNESS_LIB not in sys.path:
 from research.cli import main
 from research.survey.auto_repair import run_auto_repair
 from research.survey.evidence_pack import build_evidence_packs
-from research.survey.paper_enrichment import enrich_papers
 from research.survey.planner import create_survey_plan, write_survey_plan
 from research.survey.writing_loop import run_section_revision_loop
 
@@ -22,10 +21,10 @@ def _append_jsonl(path, rows):
 
 def _strong_sources():
     return [
-        {"id": "src_0", "source_type": "paper", "title": "Agent Architecture and Context Memory Paper", "url": "https://arxiv.org/abs/2412.06769", "text": "agent architecture context memory tool workflow"},
-        {"id": "src_1", "source_type": "paper", "title": "Continuous Thought Evaluation Benchmark Paper", "url": "https://openreview.net/forum?id=latent-reasoning", "text": "evaluation benchmark metric cost robustness"},
-        {"id": "src_2", "source_type": "paper", "title": "Security and Privacy for Agent Systems Proceedings", "url": "https://doi.org/10.1145/latent-reasoning", "text": "security privacy risk governance adversarial agent"},
-        {"id": "src_3", "source_type": "paper", "title": "Optimization Efficiency for Agent Workflows Journal Article", "url": "https://ieeexplore.ieee.org/document/123456", "text": "optimization efficiency throughput workflow deployment"},
+        {"id": "src_0", "source_type": "paper", "title": "Latent Reasoning Paper", "url": "https://arxiv.org/abs/2412.06769"},
+        {"id": "src_1", "source_type": "paper", "title": "Continuous Thought Paper", "url": "https://openreview.net/forum?id=latent-reasoning"},
+        {"id": "src_2", "source_type": "paper", "title": "Reasoning Survey Proceedings", "url": "https://doi.org/10.1145/latent-reasoning"},
+        {"id": "src_3", "source_type": "paper", "title": "Neural Computation Journal Article", "url": "https://ieeexplore.ieee.org/document/123456"},
         {"id": "src_4", "source_type": "official_doc", "title": "Official Developer Docs", "url": "https://docs.example.edu/latent-reasoning"},
         {"id": "src_5", "source_type": "code", "title": "Latent Reasoning Repository", "url": "https://github.com/example/latent-reasoning"},
         {"id": "src_6", "source_type": "benchmark", "title": "Latent Reasoning Benchmark", "url": "https://paperswithcode.com/task/latent-reasoning"},
@@ -44,7 +43,6 @@ def _fixture(root):
     _append_jsonl(root / "evidence.jsonl", evidence)
     _append_jsonl(root / "claims.jsonl", claims)
     _append_jsonl(root / "claim_evidence.jsonl", links)
-    enrich_papers(root)
     build_evidence_packs(root, plan["report_ast"])
     return plan
 

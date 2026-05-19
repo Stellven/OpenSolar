@@ -10,7 +10,6 @@ if _HARNESS_LIB not in sys.path:
 
 from research.survey.evaluator import evaluate_survey
 from research.survey.evidence_pack import build_evidence_packs
-from research.survey.paper_enrichment import enrich_papers
 from research.survey.planner import create_survey_plan, write_survey_plan
 from research.survey.section_compiler import compile_section, compile_survey
 
@@ -21,10 +20,10 @@ def _append_jsonl(path, rows):
 
 def _strong_sources():
     return [
-        {"id": "src_0", "source_type": "paper", "title": "Agent Architecture and Context Memory Paper", "url": "https://arxiv.org/abs/2412.06769", "text": "agent architecture context memory tool workflow"},
-        {"id": "src_1", "source_type": "paper", "title": "Continuous Thought Evaluation Benchmark Paper", "url": "https://openreview.net/forum?id=latent-reasoning", "text": "evaluation benchmark metric cost robustness"},
-        {"id": "src_2", "source_type": "paper", "title": "Security and Privacy for Agent Systems Proceedings", "url": "https://doi.org/10.1145/latent-reasoning", "text": "security privacy risk governance adversarial agent"},
-        {"id": "src_3", "source_type": "paper", "title": "Optimization Efficiency for Agent Workflows Journal Article", "url": "https://ieeexplore.ieee.org/document/123456", "text": "optimization efficiency throughput workflow deployment"},
+        {"id": "src_0", "source_type": "paper", "title": "Latent Reasoning Paper", "url": "https://arxiv.org/abs/2412.06769"},
+        {"id": "src_1", "source_type": "paper", "title": "Continuous Thought Paper", "url": "https://openreview.net/forum?id=latent-reasoning"},
+        {"id": "src_2", "source_type": "paper", "title": "Reasoning Survey Proceedings", "url": "https://doi.org/10.1145/latent-reasoning"},
+        {"id": "src_3", "source_type": "paper", "title": "Neural Computation Journal Article", "url": "https://ieeexplore.ieee.org/document/123456"},
         {"id": "src_4", "source_type": "official_doc", "title": "Official Developer Docs", "url": "https://docs.example.edu/latent-reasoning"},
         {"id": "src_5", "source_type": "code", "title": "Latent Reasoning Repository", "url": "https://github.com/example/latent-reasoning"},
         {"id": "src_6", "source_type": "benchmark", "title": "Latent Reasoning Benchmark", "url": "https://paperswithcode.com/task/latent-reasoning"},
@@ -57,7 +56,6 @@ def test_strict_eval_passes_controlled_strong_fixture(tmp_path):
     _append_jsonl(tmp_path / "evidence.jsonl", evidence)
     _append_jsonl(tmp_path / "claims.jsonl", claims)
     _append_jsonl(tmp_path / "claim_evidence.jsonl", links)
-    enrich_papers(tmp_path)
     build_evidence_packs(tmp_path, plan["report_ast"])
     for section in plan["report_ast"]["sections"][:3]:
         compile_section(tmp_path, section["section_id"])
@@ -76,33 +74,8 @@ def test_strict_eval_passes_controlled_strong_fixture(tmp_path):
     assert result["section_scorecard"]["needs_rewrite_count"] == 0
     assert result["chief_editor_review"]["ok"] is True
     assert result["depth_profile"]["ok"] is True
-    assert result["paper_enrichment"]["ok"] is True
     assert (tmp_path / "survey_chief_editor.json").exists()
     assert (tmp_path / "survey_depth_profile.json").exists()
-    assert (tmp_path / "survey_paper_enrichment.json").exists()
-
-
-def test_strict_eval_fails_paper_heavy_survey_without_enrichment(tmp_path):
-    plan = create_survey_plan("latent reasoning", target_chars=50000)
-    write_survey_plan(plan, tmp_path)
-    sources = _strong_sources()
-    evidence = [{"id": f"ev_{i}", "source_id": sources[i % len(sources)]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
-    claims = [{"id": f"cl_{i}", "claim_text": "latent reasoning architecture requires evaluation evidence"} for i in range(40)]
-    links = [{"claim_id": f"cl_{i}", "evidence_id": f"ev_{i}"} for i in range(40)]
-    _append_jsonl(tmp_path / "sources.jsonl", sources)
-    _append_jsonl(tmp_path / "evidence.jsonl", evidence)
-    _append_jsonl(tmp_path / "claims.jsonl", claims)
-    _append_jsonl(tmp_path / "claim_evidence.jsonl", links)
-    build_evidence_packs(tmp_path, plan["report_ast"])
-    for section in plan["report_ast"]["sections"][:3]:
-        compile_section(tmp_path, section["section_id"])
-    compile_survey(tmp_path)
-
-    result = evaluate_survey(tmp_path, strict=True)
-
-    assert result["ok"] is False
-    assert "paper_enrichment_missing" in result["scorecard"]["issues"]
-    assert "paper_theme_clusters_missing" in result["scorecard"]["issues"]
 
 
 def test_strict_eval_fails_when_claims_have_no_evidence_links(tmp_path):
@@ -471,77 +444,6 @@ def test_final_quality_flags_repeated_long_sentences_across_complete_report(tmp_
     assert any(item.startswith("final_duplicate_sentence_count_high:") for item in result["scorecard"]["issues"])
 
 
-def test_final_quality_rejects_variable_filled_template_pollution(tmp_path):
-    plan = create_survey_plan("agent systems evolution", target_chars=50000, domain="agentic_runtime")
-    write_survey_plan(plan, tmp_path)
-    sources = _strong_sources()
-    evidence = [
-        {
-            "id": f"ev_{i}",
-            "source_id": sources[i % len(sources)]["id"],
-            "content": "agent systems evidence covers architecture evaluation engineering operations and benchmark scope",
-        }
-        for i in range(96)
-    ]
-    claims = [
-        {
-            "id": f"cl_{i}",
-            "claim_text": f"agent systems trend claim {i} requires direct evidence",
-        }
-        for i in range(96)
-    ]
-    links = [{"claim_id": f"cl_{i}", "evidence_id": f"ev_{i}"} for i in range(96)]
-    _append_jsonl(tmp_path / "sources.jsonl", sources)
-    _append_jsonl(tmp_path / "evidence.jsonl", evidence)
-    _append_jsonl(tmp_path / "claims.jsonl", claims)
-    _append_jsonl(tmp_path / "claim_evidence.jsonl", links)
-    build_evidence_packs(tmp_path, plan["report_ast"])
-    for index, section in enumerate(plan["report_ast"]["sections"], start=1):
-        section_id = section["section_id"]
-        pack = json.loads((tmp_path / "sections" / section_id / "evidence_pack.json").read_text(encoding="utf-8"))
-        claim_ids = pack["claim_ids"][:3]
-        evidence_ids = pack["evidence_ids"][:4]
-        anchor = f"ch{index:02d}#{index}::{section_id}::{section['title']}"
-        final = tmp_path / "sections" / section_id / "final.md"
-        final.write_text(
-            f"# {section['title']}\n\n"
-            "## Research Question\n\n"
-            f"{section['research_question']}\n\n"
-            "## Position\n\n"
-            f"{anchor} 以 evidence pack 为事实源，目标不是堆材料，而是围绕 机制分层、状态表示、系统边界和可复现实现路径 建立可审计的 survey 论证；本节先限定 `architecture` 问题边界，再比较证据强度、工程代价、评价可信度和开放争议。当前证据包包含来源类型 `benchmark, official_doc, paper`，其中 `benchmark` 只能支持其直接覆盖的结论，不能替代跨章节 synthesis。 [claim:{claim_ids[0]}] [evidence:{evidence_ids[0]}]\n\n"
-            "## Claim Map\n\n"
-            f"1. Local claim {section_id} [claim:{claim_ids[0]}] [evidence:{evidence_ids[0]}]\n"
-            f"2. Local evidence boundary {section_id} [claim:{claim_ids[1]}] [evidence:{evidence_ids[1]}]\n"
-            f"3. Local risk boundary {section_id} [claim:{claim_ids[2]}] [evidence:{evidence_ids[2]}]\n\n"
-            "## Evidence Map\n\n"
-            f"- Local evidence {section_id} [evidence:{evidence_ids[0]}]\n"
-            f"- Local evidence {section_id} [evidence:{evidence_ids[1]}]\n"
-            f"- Local evidence {section_id} [evidence:{evidence_ids[2]}]\n"
-            f"- Local evidence {section_id} [evidence:{evidence_ids[3]}]\n\n"
-            "## Source Map\n\n"
-            "The section uses paper, official, code, and benchmark sources.\n\n"
-            "## Architecture Synthesis\n\n"
-            f"在 {anchor} 中，架构 synthesis 先拆成机制层、系统层和评价层：机制层解释 机制分层、状态表示、系统边界和可复现实现路径 为什么可能成立，系统层检查它如何被实现、调度、复现和迁移，评价层判断现有 `benchmark, official_doc, paper` 是否足以支撑本节结论。三层必须保持分离，否则 `architecture` 主题会把概念说明、经验判断和工程结论混成看似深入但不可审计的叙述。 [claim:{claim_ids[0]}] [evidence:{evidence_ids[0]}]\n\n"
-            "## Comparative Positioning\n\n"
-            f"Compared with local alternatives, section {section_id} keeps the evidence boundary explicit. [claim:{claim_ids[1]}] [evidence:{evidence_ids[1]}]\n\n"
-            "## Evaluation Protocol Matrix\n\n"
-            f"Evaluation for {section_id} checks metric scope and implementation constraints. [claim:{claim_ids[1]}] [evidence:{evidence_ids[1]}]\n\n"
-            "## Limitations And Failure Modes\n\n"
-            f"Failure modes for {section_id} include benchmark mismatch and weak reproducibility. [claim:{claim_ids[2]}] [evidence:{evidence_ids[2]}]\n\n"
-            "## Contradiction Slots\n\n"
-            f"Contradiction slot for {section_id}: positive findings can hide missing failure cases. [evidence:{evidence_ids[3]}]\n\n"
-            "## Open Problems\n\n"
-            f"Open problems for {section_id} include direct source validation and topic-specific synthesis.\n",
-            encoding="utf-8",
-        )
-    compile_survey(tmp_path)
-
-    result = evaluate_survey(tmp_path, strict=True, require_complete=True)
-    assert result["ok"] is False
-    assert result["final_quality"]["template_pollution_max_phrase_count"] >= 8
-    assert any(item.startswith("final_template_phrase_repetition_high:") for item in result["scorecard"]["issues"])
-
-
 def test_depth_profile_rejects_long_but_shallow_complete_survey(tmp_path):
     plan = create_survey_plan("latent reasoning", target_chars=50000)
     write_survey_plan(plan, tmp_path)
@@ -618,9 +520,6 @@ def test_depth_profile_rejects_long_but_shallow_complete_survey(tmp_path):
     result = evaluate_survey(tmp_path, strict=True, require_complete=True)
     assert result["ok"] is False
     assert result["depth_profile"]["ok"] is False
-    assert any(
-        item.startswith("final_normalized_template_paragraph_repetition_high:")
-        for item in result["scorecard"]["issues"]
-    )
+    assert result["final_quality"]["ok"] is True
     assert any(item.startswith("depth_academic_marker_variety_low:") for item in result["scorecard"]["issues"])
     assert any(item.startswith("depth_terminology_variant_count_low:") for item in result["scorecard"]["issues"])

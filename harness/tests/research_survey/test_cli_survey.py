@@ -13,7 +13,7 @@ from research.cli import build_parser, main
 
 def test_survey_cli_commands_registered():
     subs = build_parser()._subparsers._group_actions[0].choices
-    for name in ["survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-watch-register", "survey-watch-tick", "survey-rewrite-queue", "survey-rewrite-run", "survey-auto-repair", "survey-finalize-run", "survey-enrich-papers", "survey-import-search-results", "survey-status-next-action", "survey-continue", "survey-review", "survey-compile", "survey-chief-editor", "survey-doctor", "survey-eval", "survey-diagnose"]:
+    for name in ["survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-watch-register", "survey-watch-tick", "survey-rewrite-queue", "survey-rewrite-run", "survey-auto-repair", "survey-finalize-run", "survey-import-search-results", "survey-status-next-action", "survey-continue", "survey-review", "survey-compile", "survey-chief-editor", "survey-doctor", "survey-eval", "survey-diagnose"]:
         assert name in subs
 
 

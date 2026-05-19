@@ -15,12 +15,6 @@ from research.survey.planner import create_survey_plan, write_survey_plan
 
 def _search_results(count: int = 16) -> str:
     source_types = ["paper", "repo", "official_doc", "benchmark"]
-    paper_topics = [
-        ("Agent Architecture and Context Memory Paper", "agent architecture context memory tool workflow composition"),
-        ("Continuous Thought Evaluation Benchmark Paper", "evaluation benchmark metric cost robustness"),
-        ("Security and Privacy for Agent Systems Proceedings", "security privacy risk governance adversarial agent"),
-        ("Optimization Efficiency for Agent Workflows Journal Article", "optimization efficiency throughput workflow deployment"),
-    ]
     url_templates = {
         "paper": ["https://arxiv.org/abs/2412.06769", "https://openreview.net/forum?id=latent-reasoning", "https://doi.org/10.1145/latent-reasoning", "https://ieeexplore.ieee.org/document/123456"],
         "repo": ["https://github.com/example/latent-reasoning", "https://github.com/facebookresearch/coconut"],
@@ -33,12 +27,9 @@ def _search_results(count: int = 16) -> str:
         source_type = source_types[(idx - 1) % len(source_types)]
         urls = url_templates[source_type]
         url = urls[type_seen[source_type] % len(urls)]
-        paper_title, paper_summary = paper_topics[type_seen[source_type] % len(paper_topics)]
         type_seen[source_type] += 1
-        title = paper_title if source_type == "paper" else f"Latent Reasoning {source_type} Source {idx}"
-        summary = paper_summary if source_type == "paper" else f"Latent reasoning source {idx} covers architecture evaluation deployment."
         blocks.append(f"""
-## Source {idx}: {title}
+## Source {idx}: Latent Reasoning Source {idx}
 URL: {url}
 Publisher: Example
 Published: 2025-01-{idx:02d}
@@ -46,7 +37,7 @@ Source Type: {source_type}
 Research Angles: {["literature_lineage", "method_taxonomy", "evaluation_protocol", "controversy", "engineering"][(idx - 1) % 5]}
 
 Summary:
-- {summary}
+- Latent reasoning source {idx} covers architecture evaluation deployment.
 
 Key Claims:
 - Latent reasoning claim {idx}A requires evidence for architecture evaluation.

@@ -102,21 +102,6 @@ def _source_url(source_type: str, idx: int) -> str:
     return values[occurrence % len(values)]
 
 
-def _source_title_summary(source_type: str, idx: int) -> tuple[str, str]:
-    paper_topics = [
-        ("Agent Architecture and Context Memory Paper", "agent architecture context memory tool workflow composition"),
-        ("Continuous Thought Evaluation Benchmark Paper", "evaluation benchmark metric cost robustness"),
-        ("Security and Privacy for Agent Systems Proceedings", "security privacy risk governance adversarial agent"),
-        ("Optimization Efficiency for Agent Workflows Journal Article", "optimization efficiency throughput workflow deployment"),
-    ]
-    if source_type == "paper":
-        return paper_topics[((idx - 1) // 4) % len(paper_topics)]
-    return (
-        f"Latent Reasoning {source_type} Source {idx}",
-        f"Latent reasoning source {idx} covers architecture evaluation deployment.",
-    )
-
-
 def test_parse_survey_search_markdown_normalizes_source_types():
     records = parse_survey_search_markdown(MARKDOWN)
     assert len(records) == 2
@@ -222,9 +207,8 @@ def test_import_survey_search_results_continue_finalize(tmp_path):
     blocks = ["# External Search Results: latent reasoning"]
     for idx in range(1, 33):
         source_type = source_types[(idx - 1) % len(source_types)]
-        title, summary = _source_title_summary(source_type, idx)
         blocks.append(f"""
-## Source {idx}: {title}
+## Source {idx}: Latent Reasoning Source {idx}
 URL: {_source_url(source_type, idx)}
 Publisher: Example
 Published: 2025-01-{idx:02d}
@@ -232,14 +216,14 @@ Source Type: {source_type}
 Research Angles: {["literature_lineage", "method_taxonomy", "evaluation_protocol", "controversy", "engineering"][(idx - 1) % 5]}
 
 Summary:
-- {summary}
+- Latent reasoning source {idx} covers architecture evaluation deployment.
 
 Key Claims:
-- Latent reasoning claim {idx}A requires evidence for {summary}.
+- Latent reasoning claim {idx}A requires evidence for architecture evaluation.
 - Latent reasoning claim {idx}B requires evidence for deployment constraints.
 
 Relevant Quotes:
-> {summary}
+> Latent reasoning source {idx} preserves evidence boundaries.
 """)
     md.write_text("\n".join(blocks), encoding="utf-8")
     payload = import_survey_search_results(
@@ -265,9 +249,8 @@ def test_import_survey_search_results_continue_finalize_require_complete(tmp_pat
     blocks = ["# External Search Results: latent reasoning"]
     for idx in range(1, 17):
         source_type = source_types[(idx - 1) % len(source_types)]
-        title, summary = _source_title_summary(source_type, idx)
         blocks.append(f"""
-## Source {idx}: {title}
+## Source {idx}: Latent Reasoning Source {idx}
 URL: {_source_url(source_type, idx)}
 Publisher: Example
 Published: 2025-01-{idx:02d}
@@ -275,14 +258,14 @@ Source Type: {source_type}
 Research Angles: {["literature_lineage", "method_taxonomy", "evaluation_protocol", "controversy", "engineering"][(idx - 1) % 5]}
 
 Summary:
-- {summary}
+- Latent reasoning source {idx} covers architecture evaluation deployment.
 
 Key Claims:
-- Latent reasoning claim {idx}A requires evidence for {summary}.
+- Latent reasoning claim {idx}A requires evidence for architecture evaluation.
 - Latent reasoning claim {idx}B requires evidence for deployment constraints.
 
 Relevant Quotes:
-> {summary}
+> Latent reasoning source {idx} preserves evidence boundaries.
 """)
     md.write_text("\n".join(blocks), encoding="utf-8")
     payload = import_survey_search_results(
@@ -320,9 +303,8 @@ def test_import_survey_search_results_cli_continue_finalize_preserves_target_cha
     blocks = ["# External Search Results: latent reasoning"]
     for idx in range(1, 33):
         source_type = source_types[(idx - 1) % len(source_types)]
-        title, summary = _source_title_summary(source_type, idx)
         blocks.append(f"""
-## Source {idx}: {title}
+## Source {idx}: Latent Reasoning Source {idx}
 URL: {_source_url(source_type, idx)}
 Publisher: Example
 Published: 2025-01-{idx:02d}
@@ -330,14 +312,14 @@ Source Type: {source_type}
 Research Angles: {["literature_lineage", "method_taxonomy", "evaluation_protocol", "controversy", "engineering"][(idx - 1) % 5]}
 
 Summary:
-- {summary}
+- Latent reasoning source {idx} covers architecture evaluation deployment.
 
 Key Claims:
-- Latent reasoning claim {idx}A requires evidence for {summary}.
+- Latent reasoning claim {idx}A requires evidence for architecture evaluation.
 - Latent reasoning claim {idx}B requires evidence for deployment constraints.
 
 Relevant Quotes:
-> {summary}
+> Latent reasoning source {idx} preserves evidence boundaries.
 """)
     md.write_text("\n".join(blocks), encoding="utf-8")
     rc = main([
