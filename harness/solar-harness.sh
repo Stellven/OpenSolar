@@ -2497,6 +2497,7 @@ print(json.dumps({
     _cert_suite="$HARNESS_DIR/lib/capability_certification_suite.py"
     _activation_proof="$HARNESS_DIR/lib/capability_activation_proof.py"
     _ruflo_adapter="$HARNESS_DIR/lib/ruflo_adapter.py"
+    _autoresearch_adapter="$HARNESS_DIR/lib/autoresearch_adapter.py"
     case "${2:-status}" in
       status|health)
         shift 2 || true
@@ -2599,8 +2600,31 @@ print(json.dumps({
         human_prefix "ruflo" "runtime-smoke $*"
         python3 "$_ruflo_adapter" runtime-smoke "$@"
         ;;
+      autoresearch-status|autoresearch)
+        shift 2 || true
+        [[ -f "$_autoresearch_adapter" ]] || { err "autoresearch_adapter not found: $_autoresearch_adapter"; exit 1; }
+        human_prefix "autoresearch" "status $*"
+        python3 "$_autoresearch_adapter" status "$@"
+        ;;
+      autoresearch-doctor)
+        shift 2 || true
+        [[ -f "$_autoresearch_adapter" ]] || { err "autoresearch_adapter not found: $_autoresearch_adapter"; exit 1; }
+        human_prefix "autoresearch" "doctor $*"
+        python3 "$_autoresearch_adapter" doctor "$@"
+        ;;
+      autoresearch-vendor)
+        shift 2 || true
+        [[ -f "$_autoresearch_adapter" ]] || { err "autoresearch_adapter not found: $_autoresearch_adapter"; exit 1; }
+        python3 "$_autoresearch_adapter" vendor "$@"
+        ;;
+      autoresearch-run-local)
+        shift 2 || true
+        [[ -f "$_autoresearch_adapter" ]] || { err "autoresearch_adapter not found: $_autoresearch_adapter"; exit 1; }
+        human_prefix "autoresearch" "run-local $*"
+        python3 "$_autoresearch_adapter" run-local "$@"
+        ;;
       *)
-        err "用法: $0 integrations [status|plugins|install|disable|list|validate|capabilities|sync-caps|benchmark|platform-benchmark|heavy-proof|agent-arena|certify|activation-proof|ruflo-status|ruflo-runtime-status|ruflo-runtime-bootstrap|ruflo-runtime-smoke] [--json]"
+        err "用法: $0 integrations [status|plugins|install|disable|list|validate|capabilities|sync-caps|benchmark|platform-benchmark|heavy-proof|agent-arena|certify|activation-proof|ruflo-status|ruflo-runtime-status|ruflo-runtime-bootstrap|ruflo-runtime-smoke|autoresearch-status|autoresearch-doctor|autoresearch-vendor|autoresearch-run-local] [--json]"
         exit 1
         ;;
     esac
