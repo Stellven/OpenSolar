@@ -41,6 +41,22 @@ TEMPLATE_RESIDUE_PATTERNS = (
     r"pending final section",
     r"smoke test",
 )
+AUDIENCE_HYGIENE_PATTERNS = (
+    ("internal_system_roadmap", r"Solar-Harness\s*改造路线|solar-harness\s+roadmap"),
+    ("internal_writer_process", r"Claim-ledger\s*写作|claim[- ]ledger\s+writing|deterministic writer|writer backend"),
+    ("internal_eval_process", r"模板污染硬门禁|strict eval|normalized paragraph|golden[_ -]?style|quality gate"),
+    ("internal_html_process", r"HTML\s*是审阅界面|Markdown\s*转码|human[- ]readable artifact"),
+    ("bad_mode_taxonomy_leak", r"不继续复用的坏模式|章节 ID 泄露|列表伪装洞察|引用率幻觉|HTML 装饰化"),
+    ("section_id_leak", r"\bch\d{1,3}(?:#\d+)?::|\bch\d{1,3}/sec\d{1,3}\b"),
+)
+REPORT_HTML_NAME_PATTERNS = (
+    "report",
+    "final",
+    "rewritten",
+    "clean",
+    "trend",
+    "insight",
+)
 
 
 class _HTMLStatsParser(HTMLParser):
@@ -70,6 +86,57 @@ class _HTMLStatsParser(HTMLParser):
 
 def _read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="ignore") if path.exists() else ""
+
+
+def _candidate_reader_artifacts(root: Path, final_path: Path) -> list[Path]:
+    candidates: list[Path] = []
+    for path in [root / "chief_editor_final.md", root / "human_final.md"]:
+        if path.exists() and path not in candidates:
+            candidates.append(path)
+    for path in sorted(root.glob("*.html")):
+        name = path.name.lower()
+        if name == "quality_golden.html":
+            continue
+        if any(marker in name for marker in REPORT_HTML_NAME_PATTERNS):
+            candidates.append(path)
+    if not candidates and final_path.exists():
+        candidates.append(final_path)
+    return candidates
+
+
+def assess_audience_hygiene(root: str | Path, *, final_md: str | Path | None = None) -> dict[str, Any]:
+    """Reject reader-facing reports that leak harness/editor internals."""
+    report_root = Path(root).expanduser()
+    final_path = Path(final_md).expanduser() if final_md else report_root / "final.md"
+    artifacts = _candidate_reader_artifacts(report_root, final_path)
+    matches: list[dict[str, Any]] = []
+    for artifact in artifacts:
+        text = _read_text(artifact)
+        if not text:
+            continue
+        for code, pattern in AUDIENCE_HYGIENE_PATTERNS:
+            found = list(re.finditer(pattern, text, flags=re.I))
+            if not found:
+                continue
+            matches.append({
+                "code": code,
+                "artifact": str(artifact),
+                "count": len(found),
+                "examples": [match.group(0)[:120] for match in found[:3]],
+            })
+    issues = [
+        f"audience_hygiene_leak:{item['code']}:{Path(str(item['artifact'])).name}:{item['count']}"
+        for item in matches
+    ]
+    payload = {
+        "ok": not issues,
+        "artifact_count": len(artifacts),
+        "artifacts": [str(path) for path in artifacts],
+        "matches": matches,
+        "issues": issues,
+    }
+    (report_root / "survey_audience_hygiene.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return payload
 
 
 def _word_count(text: str) -> int:
@@ -166,6 +233,7 @@ def assess_golden_style(
     commentary_density = round(commentary_count / chars_k, 4)
     template_residue = sum(len(re.findall(pattern, text, flags=re.I)) for pattern in TEMPLATE_RESIDUE_PATTERNS)
     duplicate_stats = _duplicate_long_sentence_stats(text)
+    audience_hygiene = assess_audience_hygiene(report_root, final_md=final_path)
     benchmark = benchmark_html_stats(benchmark_path) if benchmark_path else {}
 
     if benchmark.get("exists"):
@@ -214,6 +282,7 @@ def assess_golden_style(
         "commentary_term_count": commentary_count,
         "commentary_terms_per_10k_chars": commentary_density,
         "template_residue_count": template_residue,
+        "audience_hygiene": audience_hygiene,
         **duplicate_stats,
         "thresholds": {
             "min_chars": min_chars,
