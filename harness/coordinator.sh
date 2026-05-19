@@ -2252,6 +2252,7 @@ build_autoresearch_optimizer_context() {
     --status-file "$status_file" \
     --eval-json "$eval_json" \
     --eval-md "$eval_md" \
+    --record-status \
     --format markdown 2>/dev/null || true
 }
 

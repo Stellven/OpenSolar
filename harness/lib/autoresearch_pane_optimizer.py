@@ -8,7 +8,9 @@ markdown block that keeps execution gated behind dry-run / --execute rules.
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -238,6 +240,71 @@ def quality_metrics(role: str, trigger_level: str) -> dict[str, Any]:
     }
 
 
+def now_utc() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def artifact_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    telemetry = payload.get("telemetry") or {}
+    return {
+        "recorded_at": now_utc(),
+        "sid": payload.get("sid", ""),
+        "role": payload.get("role", ""),
+        "canonical_role": payload.get("canonical_role", ""),
+        "recommended": bool(payload.get("recommended")),
+        "trigger_level": payload.get("trigger_level", "advisory"),
+        "reasons": (payload.get("reasons") or [])[:12],
+        "telemetry": {
+            "status": telemetry.get("status", ""),
+            "phase": telemetry.get("phase", ""),
+            "round": telemetry.get("round", 0),
+            "eval_verdict": telemetry.get("eval_verdict", ""),
+            "failed_conditions": (telemetry.get("failed_conditions") or [])[:8],
+            "error_count": telemetry.get("error_count", 0),
+            "warning_count": telemetry.get("warning_count", 0),
+        },
+        "quality_metrics": payload.get("quality_metrics") or {},
+        "execution_policy": payload.get("execution_policy") or {},
+    }
+
+
+def record_status_artifact(status_file: str, payload: dict[str, Any]) -> dict[str, Any]:
+    if not status_file:
+        return {"ok": False, "reason": "status_file_missing"}
+    p = Path(status_file).expanduser()
+    if not p.exists():
+        return {"ok": False, "reason": "status_file_not_found", "status_file": str(p)}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {"ok": False, "reason": "status_file_parse_error", "error": str(exc), "status_file": str(p)}
+    if not isinstance(data, dict):
+        return {"ok": False, "reason": "status_file_not_object", "status_file": str(p)}
+    summary = artifact_summary(payload)
+    artifacts = data.get("artifacts")
+    if not isinstance(artifacts, dict):
+        artifacts = {}
+    artifacts["autoresearch_optimizer"] = summary
+    data["artifacts"] = artifacts
+    data.setdefault("history", []).append({
+        "ts": summary["recorded_at"],
+        "event": "autoresearch_optimizer_recorded",
+        "by": "coordinator",
+        "trigger_level": summary["trigger_level"],
+        "recommended": summary["recommended"],
+        "role": summary["canonical_role"],
+    })
+    data["updated_at"] = summary["recorded_at"]
+    tmp = p.with_name(f".{p.name}.autoresearch.tmp")
+    try:
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        os.replace(tmp, p)
+    finally:
+        if tmp.exists():
+            tmp.unlink(missing_ok=True)
+    return {"ok": True, "status_file": str(p), "artifact": "autoresearch_optimizer"}
+
+
 def advisory_payload(
     sid: str,
     role: str,
@@ -324,10 +391,13 @@ def main() -> int:
     ap.add_argument("--status-file", default="")
     ap.add_argument("--eval-json", default="")
     ap.add_argument("--eval-md", default="")
+    ap.add_argument("--record-status", action="store_true", help="Fail-open update status.json artifacts/history with optimizer telemetry")
     ap.add_argument("--format", choices=("markdown", "json"), default="markdown")
     args = ap.parse_args()
 
     payload = advisory_payload(args.sid, args.role, args.task, args.status_file, args.eval_json, args.eval_md)
+    if args.record_status:
+        payload["record_status"] = record_status_artifact(args.status_file, payload)
     if args.format == "json":
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
