@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Solar-Harness adapter for smallnest/autoresearch.
 
-The adapter treats autoresearch as an explicit issue implementation loop, not a
-default builder. `run-local` is dry-run unless `--execute` is provided.
+Solar uses autoresearch as a pane-level execution optimizer/advisor and explicit
+issue implementation loop. It is not a replacement builder; `run-local` is
+dry-run unless `--execute` is provided.
 """
 
 from __future__ import annotations
@@ -91,7 +92,7 @@ def status() -> dict[str, Any]:
     return {
         "ok": exists and iface["run_sh_exists"],
         "integration_level": "basic_usable" if exists and iface["run_sh_exists"] else "pending",
-        "mode": "explicit_local_issue_runner",
+        "mode": "pane_optimizer_advisor_and_explicit_local_issue_runner",
         "source": {
             "path": str(SOURCE_DIR),
             "repo": meta.get("upstream") or git(["remote", "get-url", "origin"]) or REPO,
@@ -101,7 +102,14 @@ def status() -> dict[str, Any]:
         },
         "interface": iface,
         "inventory": inventory(),
-        "safety": {"default_execution": "dry_run", "execute_requires_flag": "--execute", "issue_mode": "local_issue_file", "not_default_builder": True},
+        "safety": {
+            "default_execution": "dry_run",
+            "execute_requires_flag": "--execute",
+            "issue_mode": "local_issue_file",
+            "not_default_builder": True,
+            "replaces_builder": False,
+            "pane_optimizer_advisor": True,
+        },
         "commands": {
             "vendor": "solar-harness integrations autoresearch-vendor --json",
             "doctor": "solar-harness integrations autoresearch-doctor --json",

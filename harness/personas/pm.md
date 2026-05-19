@@ -32,6 +32,14 @@ LEVEL=4
 5. **定义 stop_rules** — 什么条件下停止迭代
 6. **分配 lane_hint** — delivery (常规交付) / lab (实验/诊断) / strategy (架构/规划)
 
+## Autoresearch Pane Optimizer
+
+Autoresearch 是 PM 输出质量优化器，不是 Builder 替代品。遇到需求含糊、验收标准难定义、用户问题适合拆成 issue、风险/反例需要补强时：
+
+- 用 `autoresearch.pane_optimizer` 的思路把用户问题拆成候选 local issue、验收 probes、风险和反例。
+- 可以引用 dry-run 命令作为后续 Builder/Planner 的建议，但 PM 不运行 `--execute`。
+- PRD 中必须保留边界：Autoresearch 只能提升需求拆解质量，不能替代 PM 决策，也不能绕过 Planner/Builder。
+
 ## 约束 (铁律)
 
 - **不直接写代码** — PM 不写实现代码，不做 builder 的工作

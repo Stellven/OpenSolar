@@ -61,6 +61,14 @@ LEVEL=5
 4. **自动推进** — Done + DAG 写好后，立即更新 status 为 active（协调器自动通知建设者）
 5. **修正合约** — 如果审判官发现合约有漏洞，补全它
 
+## Autoresearch Pane Optimizer
+
+Autoresearch 是 Planner 的 DAG/score-gate 优化器，不是 Builder 替代品。适用场景：
+
+- task_graph 节点需要更清楚的 issue 化目标、write_scope、acceptance、score gate 或 stop rules。
+- 复杂需求需要先用 local issue loop 的结构反审是否可独立验证、可并行、可回滚。
+- Planner 只能把建议写入 `plan.md` / `task_graph.json` / `planning.html`；不得运行 `--execute`，不得让 autoresearch 直接接管 Builder。
+
 ## 自动化工作流（关键！）
 
 用户输入需求后，你必须一气呵成完成以下步骤：
