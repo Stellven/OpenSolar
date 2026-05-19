@@ -2623,8 +2623,42 @@ print(json.dumps({
         human_prefix "autoresearch" "run-local $*"
         python3 "$_autoresearch_adapter" run-local "$@"
         ;;
+      meta-harness|meta-harness-status)
+        shift 2 || true
+        _meta_harness_adapter="$HARNESS_DIR/lib/meta_harness_adapter.py"
+        [[ -f "$_meta_harness_adapter" ]] || { err "meta_harness_adapter not found: $_meta_harness_adapter"; exit 1; }
+        human_prefix "meta-harness" "status $*"
+        python3 "$_meta_harness_adapter" status "$@"
+        ;;
+      meta-harness-doctor)
+        shift 2 || true
+        _meta_harness_adapter="$HARNESS_DIR/lib/meta_harness_adapter.py"
+        [[ -f "$_meta_harness_adapter" ]] || { err "meta_harness_adapter not found: $_meta_harness_adapter"; exit 1; }
+        human_prefix "meta-harness" "doctor $*"
+        python3 "$_meta_harness_adapter" doctor "$@"
+        ;;
       *)
-        err "用法: $0 integrations [status|plugins|install|disable|list|validate|capabilities|sync-caps|benchmark|platform-benchmark|heavy-proof|agent-arena|certify|activation-proof|ruflo-status|ruflo-runtime-status|ruflo-runtime-bootstrap|ruflo-runtime-smoke|autoresearch-status|autoresearch-doctor|autoresearch-vendor|autoresearch-run-local] [--json]"
+        err "用法: $0 integrations [status|plugins|install|disable|list|validate|capabilities|sync-caps|benchmark|platform-benchmark|heavy-proof|agent-arena|certify|activation-proof|ruflo-status|ruflo-runtime-status|ruflo-runtime-bootstrap|ruflo-runtime-smoke|autoresearch-status|autoresearch-doctor|autoresearch-vendor|autoresearch-run-local|meta-harness-status|meta-harness-doctor] [--json]"
+        exit 1
+        ;;
+    esac
+    ;;
+  meta-harness|metaharness)
+    shift
+    _meta_harness_adapter="$HARNESS_DIR/lib/meta_harness_adapter.py"
+    [[ -f "$_meta_harness_adapter" ]] || { err "meta_harness_adapter not found: $_meta_harness_adapter"; exit 1; }
+    case "${1:-status}" in
+      status|doctor|init|run|propose|evaluate|apply|history)
+        _mh_sub="${1:-status}"; shift || true
+        human_prefix "meta-harness" "${_mh_sub} $*"
+        python3 "$_meta_harness_adapter" "$_mh_sub" "$@"
+        ;;
+      help|--help|-h)
+        echo "用法: $0 meta-harness [status|doctor|init|run|propose|evaluate|apply|history] [--json]"
+        echo "安全: init/run/propose/evaluate/history 默认 dry-run；真实执行需 --execute。apply 默认 --dry-run，真实应用需 --execute。"
+        ;;
+      *)
+        err "用法: $0 meta-harness [status|doctor|init|run|propose|evaluate|apply|history] [--json] [--execute]"
         exit 1
         ;;
     esac
@@ -3258,6 +3292,7 @@ PY
     echo "  $0 integrations status [--json]  外部开源集成六态健康检查"
     echo "  $0 verify-integrations  端到端验证 Drive/OWL/MarkItDown/agency + 两个四分屏 dispatch 能力"
     echo "  $0 everything-claude-code [doctor|inventory|report|install --dry-run]  Everything Claude Code 候选集成审计"
+    echo "  $0 meta-harness [status|doctor|run|apply|history]  Meta-Harness 自优化外循环入口（默认 dry-run）"
     echo "  $0 context inject --query \"问题\" [--format hook|markdown|--json]  默认知识上下文注入"
     echo "  $0 ragflow [doctor|config|search|evidence-pack|export-manifest]  RAGFlow raw evidence / retrieval adapter"
     echo "  $0 autopilot [status|apply|dispatch|loop|start|stop|service-status|queue]  自动监控断头 sprint/pane 并安全推进"

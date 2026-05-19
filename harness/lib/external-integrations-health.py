@@ -363,6 +363,13 @@ def probe(deep: bool = False) -> dict:
             autoresearch_status = json.loads(autoresearch_out)
         except Exception:
             autoresearch_status = {"parse_error": autoresearch_out[:500]}
+    meta_harness_status: dict = {}
+    meta_harness_code, meta_harness_out = run(["python3", str(HARNESS / "lib" / "meta_harness_adapter.py"), "status", "--json"], timeout=8)
+    if meta_harness_code == 0:
+        try:
+            meta_harness_status = json.loads(meta_harness_out)
+        except Exception:
+            meta_harness_status = {"parse_error": meta_harness_out[:500]}
     arb_vendor = HARNESS / "vendor" / "agent-rules-books"
     arb_report = HARNESS / "reports" / "agent-rules-books-inventory.json"
     arb_status: dict = {}
@@ -803,6 +810,33 @@ def probe(deep: bool = False) -> dict:
                 "issue_loop_capability": "autoresearch.issue_loop",
                 "dry_run_cmd": "solar-harness integrations autoresearch-run-local --project <repo> --issue-title <title> --issue-body <body> --json",
                 "execute_requires": "--execute",
+            },
+        ),
+        result(
+            "Solar Meta-Harness",
+            "local ~/.claude/core/solar-farm/meta-harness.ts",
+            "Harness-level outer-loop optimizer for Solar rules, hooks, skills, config and personality knobs. Solar exposes it as a controlled dry-run-first capability provider; it is not coordinator autorun and real run/apply requires --execute.",
+            lifecycle="active",
+            installed=bool((meta_harness_status.get("tool", {}) or {}).get("exists")),
+            configured=(meta_harness_status.get("store", {}) or {}).get("evaluation_count", 0) > 0,
+            running=False,
+            indexed=bool((meta_harness_status.get("pareto", {}) or {}).get("exists")),
+            used_by_default=False,
+            complete=bool(meta_harness_status.get("ok")),
+            degraded_reason="" if meta_harness_status.get("ok") else "meta-harness tool/store incomplete; run solar-harness meta-harness doctor --json",
+            dead_ends=[],
+            evidence={
+                "tool": (meta_harness_status.get("tool", {}) or {}).get("path", ""),
+                "store": (meta_harness_status.get("store", {}) or {}).get("path", ""),
+                "evaluation_count": (meta_harness_status.get("store", {}) or {}).get("evaluation_count", 0),
+                "pareto_count": (meta_harness_status.get("pareto", {}) or {}).get("pareto_count", 0),
+                "all_runs_count": (meta_harness_status.get("pareto", {}) or {}).get("all_runs_count", 0),
+                "dispatch_capability": "meta_harness.outer_loop",
+                "self_optimization_capability": "meta_harness.self_optimization",
+                "dry_run_cmd": "solar-harness meta-harness run 3 hooks --json",
+                "apply_dry_run_cmd": "solar-harness meta-harness apply <run_id> --json",
+                "execute_requires": "--execute",
+                "coordinator_autorun": False,
             },
         ),
         result(

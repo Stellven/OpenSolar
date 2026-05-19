@@ -111,7 +111,7 @@ AGENT_RULES_BOOKS_RULES: tuple[IntentRule, ...] = (
     IntentRule("hint", "skill_hint", 0.86, (r"\bddd\b|domain[- ]driven design|领域驱动|bounded context|聚合|领域事件",), "建议使用 agent-rules-books: domain-driven-design.mini。", "agent-rules-books", "domain-driven-design"),
     IntentRule("hint", "skill_hint", 0.86, (r"\bddia\b|data[- ]intensive|数据密集|一致性|复制|分区|事务|schema evolution|event stream",), "建议使用 agent-rules-books: designing-data-intensive-applications.mini。", "agent-rules-books", "designing-data-intensive-applications"),
     IntentRule("hint", "skill_hint", 0.86, (r"release it|生产可靠性|熔断|限流|超时|重试|bulkhead|backpressure",), "建议使用 agent-rules-books: release-it.mini。", "agent-rules-books", "release-it"),
-    IntentRule("hint", "skill_hint", 0.82, (r"pragmatic programmer|程序员修炼|正交性|dry|自动化|快速反馈",), "建议使用 agent-rules-books: the-pragmatic-programmer.mini。", "agent-rules-books", "the-pragmatic-programmer"),
+    IntentRule("hint", "skill_hint", 0.82, (r"pragmatic programmer|程序员修炼|正交性|\bdry\b|自动化|快速反馈",), "建议使用 agent-rules-books: the-pragmatic-programmer.mini。", "agent-rules-books", "the-pragmatic-programmer"),
 )
 
 
@@ -127,6 +127,22 @@ AUTORESEARCH_RULES: tuple[IntentRule, ...] = (
         "建议使用 autoresearch.pane_optimizer / issue_loop 提升 pane 输出质量；默认只 advisor/dry-run，执行必须有 --execute 和明确授权。",
         "autoresearch",
         "pane-optimizer",
+    ),
+)
+
+
+META_HARNESS_RULES: tuple[IntentRule, ...] = (
+    IntentRule(
+        "hint",
+        "skill_hint",
+        0.89,
+        (
+            r"\b(meta[- ]?harness|outer[- ]loop|self[- ]optimization|self[- ]improvement|harness code|pareto frontier|trace[- ]based eval)\b",
+            r"自我优化|优化自己|自演化|外循环优化|元优化|能力演化|优化.*规则|优化.*技能|优化.*hook|优化.*config|帕累托|Pareto",
+        ),
+        "建议使用 meta_harness.outer_loop 做 harness-level 自优化评估；默认只 status/dry-run，真实 run/apply 必须显式 --execute 并审查风险。",
+        "meta-harness",
+        "outer-loop",
     ),
 )
 
@@ -177,13 +193,18 @@ def match_static(text: str) -> list[dict[str, Any]]:
             matches.append(as_match(rule, normalized))
             return matches
 
-    for rule in AGENT_RULES_BOOKS_RULES:
-        if any(re.search(p, lowered, re.IGNORECASE) for p in rule.patterns):
+    for rule in AUTORESEARCH_RULES:
+        if any(re.search(p, normalized, re.IGNORECASE) for p in rule.patterns):
             matches.append(as_match(rule, normalized))
             return matches
 
-    for rule in AUTORESEARCH_RULES:
+    for rule in META_HARNESS_RULES:
         if any(re.search(p, normalized, re.IGNORECASE) for p in rule.patterns):
+            matches.append(as_match(rule, normalized))
+            return matches
+
+    for rule in AGENT_RULES_BOOKS_RULES:
+        if any(re.search(p, lowered, re.IGNORECASE) for p in rule.patterns):
             matches.append(as_match(rule, normalized))
             return matches
 
