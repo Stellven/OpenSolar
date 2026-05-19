@@ -9,6 +9,7 @@ from typing import Any
 from .auto_repair import run_auto_repair
 from .evaluator import evaluate_survey
 from .evidence_pack import build_evidence_packs
+from .paper_enrichment import enrich_papers
 from .planner import create_survey_plan, write_survey_plan
 from .section_compiler import compile_survey
 from .source_gap import write_source_gap_handoff
@@ -54,6 +55,15 @@ def finalize_survey_run(
     min_claims: int = 8,
     golden_benchmark_html: str | Path = "",
     require_golden_style: bool = False,
+    paper_enrichment: bool = True,
+    paper_search: bool = False,
+    paper_search_provider: str = "auto",
+    paper_catalog_json: str | Path = "",
+    paper_input_titles: str | Path = "",
+    paper_max_papers: int = 40,
+    paper_max_results: int = 3,
+    paper_recursion_depth: int = 1,
+    paper_search_fn: Any = None,
 ) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
     root.mkdir(parents=True, exist_ok=True)
@@ -98,6 +108,28 @@ def finalize_survey_run(
         }
         (root / "survey_finalize_run.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         return payload
+
+    if paper_enrichment:
+        enrichment = enrich_papers(
+            root,
+            input_titles=paper_input_titles,
+            catalog_json=paper_catalog_json,
+            provider=paper_search_provider,
+            max_papers=paper_max_papers,
+            max_results=paper_max_results,
+            recursion_depth=paper_recursion_depth,
+            allow_search=paper_search,
+            search_fn=paper_search_fn,
+        )
+        steps.append({
+            "step": "paper_enrichment",
+            "ok": enrichment.get("ok"),
+            "seed_count": enrichment.get("seed_count"),
+            "paper_count": enrichment.get("paper_count"),
+            "trend_count": len(enrichment.get("trends") or []),
+            "allow_search": enrichment.get("allow_search"),
+            "files": enrichment.get("files"),
+        })
 
     packs = _read_json(root / "survey_evidence_packs.json")
     if not skip_pack or not packs:

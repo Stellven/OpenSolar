@@ -1046,6 +1046,62 @@ def _build_depth_profile(
     }
 
 
+def _build_paper_enrichment_quality(root: Path, sections: list[dict], pack_rows: list[dict]) -> dict[str, Any]:
+    sources = _read_jsonl(root / "sources.jsonl")
+    paper_like_sources = [
+        row for row in sources
+        if str(row.get("source_type") or "").lower() in {"paper", "preprint", "academic"}
+    ]
+    enrichment = _read_json(root / "paper_enrichment.json")
+    clusters_payload = _read_json(root / "paper_theme_clusters.json")
+    catalog_exists = (root / "cais2026_catalog.json").exists()
+    required = bool(catalog_exists or len(paper_like_sources) >= 3)
+    if not required:
+        payload = {
+            "ok": True,
+            "required": False,
+            "reason": "not_paper_heavy",
+            "paper_like_source_count": len(paper_like_sources),
+            "issues": [],
+        }
+        (root / "survey_paper_enrichment.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        return payload
+
+    papers = enrichment.get("papers") if isinstance(enrichment.get("papers"), list) else []
+    clusters = clusters_payload.get("clusters") if isinstance(clusters_payload.get("clusters"), list) else []
+    trends = clusters_payload.get("trends") if isinstance(clusters_payload.get("trends"), list) else []
+    pack_trend_count = sum(1 for row in pack_rows if row.get("paper_trends"))
+    pack_trend_coverage = round(pack_trend_count / max(len(sections), 1), 4)
+    required_paper_count = min(max(len(paper_like_sources), 3), 8)
+    required_cluster_count = 3
+    required_trend_count = 3
+    issues: list[str] = []
+    if not enrichment:
+        issues.append("paper_enrichment_missing")
+    if not clusters_payload:
+        issues.append("paper_theme_clusters_missing")
+    if len(papers) < required_paper_count:
+        issues.append(f"paper_enrichment_paper_count_low:{len(papers)}<{required_paper_count}")
+    if len(clusters) < required_cluster_count:
+        issues.append(f"paper_enrichment_cluster_count_low:{len(clusters)}<{required_cluster_count}")
+    if len(trends) < required_trend_count:
+        issues.append(f"paper_enrichment_trend_count_low:{len(trends)}<{required_trend_count}")
+    if sections and pack_trend_coverage < 0.50:
+        issues.append(f"paper_trend_pack_coverage_low:{pack_trend_coverage:.4f}<0.5000")
+    payload = {
+        "ok": not issues,
+        "required": True,
+        "paper_like_source_count": len(paper_like_sources),
+        "paper_count": len(papers),
+        "cluster_count": len(clusters),
+        "trend_count": len(trends),
+        "pack_trend_coverage": pack_trend_coverage,
+        "issues": issues,
+    }
+    (root / "survey_paper_enrichment.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return payload
+
+
 def assess_survey_quality(
     output_dir: str | Path,
     ast: dict | None = None,
@@ -1114,6 +1170,7 @@ def assess_survey_quality(
     chapter_review = _build_chapter_review(root, chapters, sections, pack_rows, section_scorecard)
     chief_editor_review = _build_chief_editor_review(root, chapters, sections, chapter_review, literature_map, controversy_review)
     depth_profile = _build_depth_profile(root, chapters, sections, final_quality, literature_map, controversy_review)
+    paper_enrichment = _build_paper_enrichment_quality(root, sections, pack_rows)
     golden_style = assess_golden_style(
         root,
         benchmark_html=golden_benchmark_html,
@@ -1121,7 +1178,7 @@ def assess_survey_quality(
     )
 
     payload = {
-        "ok": taxonomy["ok"] and contradiction_matrix["ok"] and section_factual_audit["ok"] and section_scorecard["ok"] and final_quality["ok"] and source_coverage["ok"] and literature_map["ok"] and controversy_review["ok"] and chapter_review["ok"] and chief_editor_review["ok"] and depth_profile["ok"] and (golden_style["ok"] or (not golden_style.get("enabled") and not golden_style.get("required"))),
+        "ok": taxonomy["ok"] and contradiction_matrix["ok"] and section_factual_audit["ok"] and section_scorecard["ok"] and final_quality["ok"] and source_coverage["ok"] and literature_map["ok"] and controversy_review["ok"] and chapter_review["ok"] and chief_editor_review["ok"] and depth_profile["ok"] and paper_enrichment["ok"] and (golden_style["ok"] or (not golden_style.get("enabled") and not golden_style.get("required"))),
         "taxonomy": taxonomy,
         "contradiction_matrix": contradiction_matrix,
         "section_factual_audit": section_factual_audit,
@@ -1133,6 +1190,7 @@ def assess_survey_quality(
         "chapter_review": chapter_review,
         "chief_editor_review": chief_editor_review,
         "depth_profile": depth_profile,
+        "paper_enrichment": paper_enrichment,
         "golden_style": golden_style,
     }
     (root / "survey_taxonomy.json").write_text(json.dumps(taxonomy, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -1146,4 +1204,5 @@ def assess_survey_quality(
     (root / "survey_chapter_review.json").write_text(json.dumps(chapter_review, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_chief_editor.json").write_text(json.dumps(chief_editor_review, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_depth_profile.json").write_text(json.dumps(depth_profile, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    (root / "survey_paper_enrichment.json").write_text(json.dumps(paper_enrichment, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return payload

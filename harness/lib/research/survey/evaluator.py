@@ -93,6 +93,7 @@ def evaluate_survey(
     chapter_review = quality.get("chapter_review", {})
     chief_editor_review = quality.get("chief_editor_review", {})
     depth_profile = quality.get("depth_profile", {})
+    paper_enrichment = quality.get("paper_enrichment", {})
     golden_style = quality.get("golden_style", {})
     issues: list[str] = []
     if len(chapters) < 8:
@@ -148,6 +149,8 @@ def evaluate_survey(
         for issue in chief_editor_review.get("issues", []):
             issues.append(str(issue))
         for issue in depth_profile.get("issues", []):
+            issues.append(str(issue))
+        for issue in paper_enrichment.get("issues", []):
             issues.append(str(issue))
         if golden_style.get("enabled") or golden_style.get("required"):
             for issue in golden_style.get("issues", []):
@@ -229,6 +232,7 @@ def evaluate_survey(
         "chapter_review": chapter_review,
         "chief_editor_review": chief_editor_review,
         "depth_profile": depth_profile,
+        "paper_enrichment": paper_enrichment,
         "golden_style": golden_style,
     }
     (root / "survey_eval.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
