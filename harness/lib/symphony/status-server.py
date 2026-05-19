@@ -1658,6 +1658,82 @@ def _research_status_summary(limit: int = 5) -> dict:
         return {"ok": False, "status": "error", "runs": [], "errors": [f"{type(exc).__name__}: {exc}"]}
 
 
+def _autoresearch_impact_summary(limit: int = 12) -> dict:
+    """Summarize pane-optimizer telemetry recorded in sprint status artifacts."""
+    if not SPRINTS_DIR.exists():
+        return {"ok": True, "status": "idle", "count": 0, "items": []}
+    items = []
+    try:
+        status_files = sorted(
+            SPRINTS_DIR.glob("sprint-*.status.json"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        for sf in status_files:
+            try:
+                data = json.loads(sf.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+            artifacts = data.get("artifacts")
+            if not isinstance(artifacts, dict):
+                continue
+            opt = artifacts.get("autoresearch_optimizer")
+            if not isinstance(opt, dict):
+                continue
+            telemetry = opt.get("telemetry") if isinstance(opt.get("telemetry"), dict) else {}
+            metrics = opt.get("quality_metrics") if isinstance(opt.get("quality_metrics"), dict) else {}
+            sid = str(data.get("id") or data.get("sprint_id") or opt.get("sid") or sf.name.removesuffix(".status.json"))
+            task_description = (
+                str(data.get("title") or "").strip()
+                or _sprint_description(sid)
+                or sid
+            )
+            item = {
+                "sid": sid,
+                "task_description": task_description,
+                "status": data.get("status", ""),
+                "phase": data.get("phase", ""),
+                "role": opt.get("canonical_role") or opt.get("role") or "",
+                "trigger_level": opt.get("trigger_level", "advisory"),
+                "recommended": bool(opt.get("recommended")),
+                "recorded_at": opt.get("recorded_at", ""),
+                "eval_verdict": telemetry.get("eval_verdict", ""),
+                "round": telemetry.get("round", 0),
+                "failed_conditions": telemetry.get("failed_conditions") if isinstance(telemetry.get("failed_conditions"), list) else [],
+                "error_count": telemetry.get("error_count", 0),
+                "warning_count": telemetry.get("warning_count", 0),
+                "expected_effect": metrics.get("expected_effect") if isinstance(metrics.get("expected_effect"), list) else [],
+                "must_measure": metrics.get("must_measure") if isinstance(metrics.get("must_measure"), list) else [],
+                "reasons": opt.get("reasons") if isinstance(opt.get("reasons"), list) else [],
+            }
+            items.append(item)
+            if len(items) >= limit:
+                break
+        strong_count = sum(1 for item in items if item.get("trigger_level") == "strong")
+        recommended_count = sum(1 for item in items if item.get("recommended"))
+        fail_verdict_count = sum(1 for item in items if str(item.get("eval_verdict", "")).upper() in {"FAIL", "FAILED", "ERROR", "NOT_READY", "NOT READY"})
+        roles: dict[str, int] = {}
+        for item in items:
+            role = str(item.get("role") or "unknown")
+            roles[role] = roles.get(role, 0) + 1
+        status = "idle"
+        if items:
+            status = "warn" if strong_count or fail_verdict_count else "ok"
+        return {
+            "ok": status in {"ok", "idle"},
+            "status": status,
+            "count": len(items),
+            "strong_count": strong_count,
+            "recommended_count": recommended_count,
+            "fail_verdict_count": fail_verdict_count,
+            "roles": roles,
+            "latest": items[0] if items else {},
+            "items": items,
+        }
+    except Exception as exc:
+        return {"ok": False, "status": "error", "count": 0, "items": [], "errors": [f"{type(exc).__name__}: {exc}"]}
+
+
 def _status_payload(limit: int = 50) -> dict:
     current = _current_sprint()
     runtime_interfaces = _runtime_interfaces_status(current.get("sprint_id", ""))
@@ -1679,6 +1755,7 @@ def _status_payload(limit: int = 50) -> dict:
         "runtime_interfaces": runtime_interfaces,
         "human_search": _human_search_waiting_status(),
         "research": _research_status_summary(),
+        "autoresearch_impact": _autoresearch_impact_summary(),
     }
 
 
@@ -2343,6 +2420,36 @@ td {
   text-transform: uppercase;
   letter-spacing: .08em;
 }
+.impact-list {
+  display: grid;
+  gap: 0.7rem;
+}
+.impact-card {
+  border: 1px solid rgba(56, 128, 93, 0.24);
+  border-radius: 20px;
+  padding: 0.85rem;
+  background: linear-gradient(135deg, rgba(237, 247, 241, 0.76), rgba(255, 248, 230, 0.58));
+}
+.impact-card.strong {
+  border-color: rgba(190, 112, 55, 0.42);
+  background: linear-gradient(135deg, rgba(255, 244, 220, 0.82), rgba(255, 235, 221, 0.62));
+}
+.impact-title {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: start;
+}
+.impact-title strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.impact-note {
+  margin-top: 0.55rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
 .copy-row {
   display: flex;
   flex-wrap: wrap;
@@ -2462,6 +2569,7 @@ td {
       <div class="card"><h3>知识库状态</h3><div id="overview-knowledge">Loading...</div></div>
       <div class="card"><h3>Runtime Interfaces</h3><div id="overview-runtime">Loading...</div></div>
       <div class="card"><h3>Capability Evidence</h3><div id="overview-capabilities">Loading...</div></div>
+      <div class="card"><h3>Autoresearch Impact</h3><div id="overview-autoresearch-impact">Loading...</div></div>
       <div class="card"><h3>DeepResearch Human Search</h3><div id="overview-human-search">Loading...</div></div>
       <div class="card"><h3>DeepResearch Quality</h3><div id="overview-research">Loading...</div></div>
       <div class="card"><h3>最近风险</h3><div id="overview-risk">Loading...</div></div>
@@ -2471,6 +2579,8 @@ td {
   <section class="panel" id="tab-sprint">
     <h2>Current Sprint</h2>
     <div class="card" id="sprint-card">Loading...</div>
+    <h2>Autoresearch Impact</h2>
+    <div class="card" id="autoresearch-impact-card">Loading...</div>
     <h2>DeepResearch Human Search</h2>
     <div class="card" id="human-search-card">Loading...</div>
     <h2>DeepResearch Quality</h2>
@@ -2959,6 +3069,58 @@ function renderResearchStatus(research, compact) {
     (gateCards ? '<div class="research-section-title">Quality Gates</div><div class="human-search-grid">' + gateCards + '</div>' : '') +
     '</div>';
 }
+function renderAutoresearchImpact(impact, compact) {
+  impact = impact || {};
+  const items = impact.items || [];
+  if (!items.length) {
+    return '<div class="research-shell">' +
+      '<div class="research-overview">' +
+        '<div class="research-stat"><div class="kv-label">Status</div><strong>idle</strong></div>' +
+        '<div class="research-stat"><div class="kv-label">Triggers</div><strong>0</strong></div>' +
+      '</div><div class="muted">还没有 autoresearch optimizer 触发记录；等待 dispatch 写入 status.json artifacts。</div></div>';
+  }
+  const latest = impact.latest || items[0] || {};
+  const visible = compact ? items.slice(0, 1) : items;
+  const cards = visible.map(item => {
+    const level = item.trigger_level || 'advisory';
+    const strong = level === 'strong';
+    const failed = (item.failed_conditions || []).slice(0, compact ? 2 : 5);
+    const effects = (item.expected_effect || []).slice(0, 3).join(', ') || 'N/A';
+    const measures = (item.must_measure || []).slice(0, 3).join(', ') || 'N/A';
+    const subtitle = (item.role || 'unknown') + ' · round ' + (item.round ?? 0) + ' · eval ' + (item.eval_verdict || 'N/A');
+    return '<div class="impact-card ' + (strong ? 'strong' : '') + '">' +
+      '<div class="impact-title">' +
+        '<div><strong>' + esc(item.task_description || item.sid || 'N/A') + '</strong>' +
+        '<div class="research-run-sub">' + esc(subtitle) + '</div></div>' +
+        '<div>' + statusBadge(strong ? 'warn' : 'ok') + '</div>' +
+      '</div>' +
+      '<div class="research-metric-row">' +
+        '<div class="research-metric"><div class="kv-label">Trigger</div><b>' + esc(level) + '</b></div>' +
+        '<div class="research-metric"><div class="kv-label">Status</div><b>' + esc(item.status || 'N/A') + '</b></div>' +
+        '<div class="research-metric"><div class="kv-label">Errors</div><b>' + esc(item.error_count ?? 0) + '</b></div>' +
+      '</div>' +
+      (failed.length ? '<div class="impact-note"><b>Failed conditions:</b> ' + esc(failed.join('; ')) + '</div>' : '') +
+      (compact ? '' : '<div class="research-detail-grid">' +
+        kv('Expected Effect', effects) +
+        kv('Must Measure', measures) +
+        kv('Recorded', item.recorded_at || 'N/A') +
+        kv('Sprint', item.sid || 'N/A') +
+      '</div>') +
+    '</div>';
+  }).join('');
+  return '<div class="research-shell">' +
+    '<div class="research-overview">' +
+      '<div class="research-stat"><div class="kv-label">Status</div><strong>' + esc(impact.status || 'unknown') + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Triggers</div><strong>' + esc(impact.count || items.length) + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Strong</div><strong>' + esc(impact.strong_count || 0) + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">FAIL Verdict</div><strong>' + esc(impact.fail_verdict_count || 0) + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Latest Role</div><strong>' + esc(latest.role || 'N/A') + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Latest Round</div><strong>' + esc(latest.round ?? 'N/A') + '</strong></div>' +
+    '</div>' +
+    '<div class="research-section-title">' + (compact ? 'Latest Optimizer Trigger' : 'Optimizer Triggers') + '</div>' +
+    '<div class="impact-list">' + cards + '</div>' +
+    '</div>';
+}
 function renderKnowledgeSummary(wiki, mirage) {
   const wikiReady = !!(wiki && wiki.ready);
   const mirageReady = !!(mirage && mirage.enabled);
@@ -3218,6 +3380,8 @@ function render(data) {
     'Mirage: ' + statusBadge(mirage.ready ? 'ok' : (mirage.status || 'warn'));
   document.getElementById('overview-runtime').innerHTML = renderRuntimeInterfaces(data.runtime_interfaces || {});
   document.getElementById('overview-capabilities').innerHTML = renderCapabilityHealthSummary(data.capability_health || {});
+  document.getElementById('overview-autoresearch-impact').innerHTML = renderAutoresearchImpact(data.autoresearch_impact || {}, true);
+  document.getElementById('autoresearch-impact-card').innerHTML = renderAutoresearchImpact(data.autoresearch_impact || {}, false);
   document.getElementById('overview-human-search').innerHTML = renderHumanSearch(data.human_search || {}, true);
   document.getElementById('human-search-card').innerHTML = renderHumanSearch(data.human_search || {}, false);
   document.getElementById('overview-research').innerHTML = renderResearchStatus(data.research || {}, true);
