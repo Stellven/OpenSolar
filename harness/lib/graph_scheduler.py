@@ -732,9 +732,32 @@ def mark_node_result(graph: dict[str, Any], node_id: str, status: str,
     ids[node_id]["updated_at"] = updated_at
 
     gate = ids[node_id].get("gate")
-    if gate and (gate_status or status) == "passed":
+    if gate and status in {"failed", "cancelled"}:
         graph.setdefault("gate_results", {})
-        graph["gate_results"][gate] = {"status": "passed", "node": node_id, "updated_at": updated_at}
+        graph["gate_results"][gate] = {
+            "status": "blocked",
+            "node": node_id,
+            "reason": f"node_{status}",
+            "updated_at": updated_at,
+        }
+    elif gate and (gate_status or status) == "passed":
+        gate_nodes = [node for node in ids.values() if node.get("gate") == gate]
+        open_gate_nodes = [
+            str(node.get("id") or "")
+            for node in gate_nodes
+            if str(node.get("id") or "") != node_id and node_status(graph, str(node.get("id") or "")) != "passed"
+        ]
+        graph.setdefault("gate_results", {})
+        if open_gate_nodes:
+            graph["gate_results"][gate] = {
+                "status": "blocked",
+                "node": node_id,
+                "reason": "waiting_for_shared_gate_nodes",
+                "open_nodes": open_gate_nodes,
+                "updated_at": updated_at,
+            }
+        else:
+            graph["gate_results"][gate] = {"status": "passed", "node": node_id, "updated_at": updated_at}
 
     return parent_ready_check(graph)
 

@@ -57,6 +57,47 @@
     }).join("");
   }
 
+  var FALLBACK_COLORS = {
+    L1: "color:#2e7d32",
+    L2: "color:#f9a825",
+    L3: "color:#ef6c00",
+    L4: "color:#c62828",
+    unknown: "color:#9e9e9e",
+  };
+
+  function formatFallbackLevel(level) {
+    var key = level || "unknown";
+    var style = FALLBACK_COLORS[key] || FALLBACK_COLORS.unknown;
+    return '<span class="badge badge-fallback-' + key + '" style="' + style + '">' + key + "</span>";
+  }
+
+  function formatStateTransition(data) {
+    var state = data && data.state ? data.state : "unknown";
+    var el = $("s04-state-badge");
+    if (el) {
+      el.style.transition = "opacity 0.4s ease, transform 0.4s ease";
+      el.style.opacity = "0.35";
+      el.style.transform = "translateY(-2px)";
+      requestAnimationFrame(function () {
+        el.textContent = state;
+        el.style.opacity = "1";
+        el.style.transform = "translateY(0)";
+      });
+    }
+    return '<span class="state-badge">' + state + "</span>";
+  }
+
+  function formatResearchMetrics(data) {
+    if (!data) return "unknown";
+    var rows = [
+      "usage_source: " + (data.usage_source || "unknown"),
+      "estimated: " + (data.estimated === true ? "true" : data.estimated === false ? "false" : "unknown"),
+      "fallback_reason: " + (data.fallback_reason || "none"),
+      "fallback_level: " + formatFallbackLevel(data.fallback_level),
+    ];
+    return rows.join("<br>");
+  }
+
   function fetchJSON(path, cb) {
     fetch(BASE + path)
       .then(function (r) { return r.json(); })

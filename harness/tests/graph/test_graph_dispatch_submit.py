@@ -104,6 +104,47 @@ class TestSendToPaneLiteral:
         literal_calls = [c for c in calls_log if "-l" in c]
         assert len(literal_calls) > 0, "Expected -l (literal) flag in tmux send-keys"
 
+    def test_sprint_level_handoff_only_reconciles_owner_node(self, tmp_harness):
+        """A sprint-level handoff must not make sibling same-gate nodes reviewing."""
+        tmp_path, sprints, sid, graph = tmp_harness
+        import graph_node_dispatcher as gnd
+
+        graph["required_gates"] = ["gate-shared"]
+        graph["nodes"] = [
+            {
+                "id": "N9",
+                "goal": "Render planning.html",
+                "depends_on": ["N8"],
+                "write_scope": [f"sprints/{sid}.planning.html"],
+                "acceptance": ["planning.html exists"],
+                "status": "pending",
+                "gate": "gate-shared",
+            },
+            {
+                "id": "N10",
+                "goal": "Write sprint handoff",
+                "depends_on": ["N8"],
+                "write_scope": [f"sprints/{sid}.handoff.md"],
+                "acceptance": ["handoff exists"],
+                "status": "pending",
+                "gate": "gate-shared",
+            },
+        ]
+        (sprints / f"{sid}.handoff.md").write_text("# Sprint handoff\n", encoding="utf-8")
+
+        repaired = gnd._reconcile_existing_dispatches(graph, sprints / f"{sid}.task_graph.json")
+
+        assert repaired == [
+            {
+                "node": "N10",
+                "status": "reviewing",
+                "reason": "handoff_file_exists",
+                "handoff": str(sprints / f"{sid}.handoff.md"),
+            }
+        ]
+        assert graph["nodes"][0]["status"] == "pending"
+        assert graph["nodes"][1]["status"] == "reviewing"
+
     def test_uses_confirmed_enter_submit(self, tmp_harness, monkeypatch):
         """_send_to_pane submits and verifies processing, avoiding prompt-stuck false positives."""
         calls_log = []
