@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 from .auto_repair import run_auto_repair
-from .chief_editor import run_chief_editor
 from .evaluator import evaluate_survey
 from .evidence_pack import build_evidence_packs
 from .planner import create_survey_plan, write_survey_plan
@@ -53,14 +52,6 @@ def finalize_survey_run(
     min_sources: int = 4,
     min_evidence: int = 8,
     min_claims: int = 8,
-    narrative_backend: str = "off",
-    narrative_model: str = "opus",
-    narrative_fallback_models: str = "sonnet",
-    narrative_command: str = "",
-    narrative_timeout: int = 240,
-    narrative_max_budget_usd: float = 3.0,
-    narrative_min_chars: int = 8000,
-    narrative_require_hitl: bool = False,
 ) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
     root.mkdir(parents=True, exist_ok=True)
@@ -151,65 +142,6 @@ def finalize_survey_run(
 
     compiled = compile_survey(root)
     steps.append({"step": "compile", **compiled})
-    narrative: dict[str, Any] = {"ok": True, "skipped": True, "backend": narrative_backend}
-    normalized_narrative = (narrative_backend or "off").strip().lower()
-    if normalized_narrative == "deterministic":
-        narrative = {
-            "ok": False,
-            "backend": narrative_backend,
-            "reason": "deterministic_narrative_forbidden_for_deepresearch",
-        }
-        steps.append({"step": "narrative", "ok": False, "reason": narrative["reason"], "backend": narrative_backend})
-        payload = {
-            "ok": False,
-            "reason": "narrative_rewrite_failed",
-            "steps": steps,
-            "initial_eval": initial_eval,
-            "repair": repair,
-            "compile": compiled,
-            "narrative": narrative,
-            "final_md": compiled.get("final_md", str(root / "final.md")),
-            "run_path": str(root / "survey_finalize_run.json"),
-        }
-        (root / "survey_finalize_run.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        return payload
-    if normalized_narrative not in {"", "off", "none", "skip"}:
-        try:
-            narrative = run_chief_editor(
-                root,
-                source_path=compiled.get("human_final_md") or root / "human_final.md",
-                output_path=root / "final.md",
-                backend=narrative_backend,
-                model=narrative_model,
-                command=narrative_command,
-                timeout=narrative_timeout,
-                max_budget_usd=narrative_max_budget_usd,
-                fallback_models=narrative_fallback_models,
-                min_chars=narrative_min_chars,
-                require_hitl=narrative_require_hitl,
-            )
-        except Exception as exc:
-            narrative = {
-                "ok": False,
-                "backend": narrative_backend,
-                "reason": "narrative_rewrite_failed",
-                "error": str(exc),
-            }
-        steps.append({"step": "narrative", "ok": narrative.get("ok"), "reason": narrative.get("reason") or "", "backend": narrative_backend})
-        if not narrative.get("ok"):
-            payload = {
-                "ok": False,
-                "reason": "narrative_rewrite_failed",
-                "steps": steps,
-                "initial_eval": initial_eval,
-                "repair": repair,
-                "compile": compiled,
-                "narrative": narrative,
-                "final_md": compiled.get("final_md", str(root / "final.md")),
-                "run_path": str(root / "survey_finalize_run.json"),
-            }
-            (root / "survey_finalize_run.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-            return payload
     final_eval = evaluate_survey(root, strict=True, min_finalized=min_finalized, require_complete=require_complete)
     steps.append({"step": "final_eval", "ok": final_eval.get("ok"), "issues": (final_eval.get("scorecard") or {}).get("issues", [])})
 
@@ -220,7 +152,6 @@ def finalize_survey_run(
         "initial_eval": initial_eval,
         "repair": repair,
         "compile": compiled,
-        "narrative": narrative,
         "final_eval": final_eval,
         "final_md": compiled.get("final_md", str(root / "final.md")),
         "run_path": str(root / "survey_finalize_run.json"),

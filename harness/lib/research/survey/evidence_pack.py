@@ -24,16 +24,6 @@ def _read_jsonl(path: Path) -> list[dict]:
     return rows
 
 
-def _read_json(path: Path) -> dict:
-    if not path.exists():
-        return {}
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-    return value if isinstance(value, dict) else {}
-
-
 def _tokens(text: str) -> set[str]:
     return {part.lower() for part in str(text or "").replace("/", " ").replace("_", " ").split() if len(part) >= 3}
 
@@ -49,44 +39,12 @@ def _ranked(rows: list[dict], section: dict, text_key: str) -> list[dict]:
     return [row for _score, _idx, row in scored]
 
 
-def _paper_trend_matches(section: dict, source_rows: list[dict], trends: list[dict]) -> tuple[list[str], list[str]]:
-    if not trends:
-        return [], []
-    section_text = " ".join(str(section.get(key, "")) for key in ("title", "research_question", "section_id"))
-    section_tokens = _tokens(section_text)
-    source_titles = {str(row.get("title") or "").strip().lower() for row in source_rows if row.get("title")}
-    matched: list[tuple[int, int, str, str]] = []
-    for idx, trend in enumerate(trends):
-        trend_id = str(trend.get("trend_id") or "")
-        theme_id = str(trend.get("theme_id") or "")
-        if not trend_id:
-            continue
-        representative_titles = [str(item).strip().lower() for item in trend.get("representative_titles", []) if str(item).strip()]
-        exact_title_match = bool(source_titles & set(representative_titles))
-        trend_text = " ".join([
-            str(trend.get("label") or ""),
-            str(trend.get("claim") or ""),
-            " ".join(str(item) for item in trend.get("representative_titles", [])),
-        ])
-        score = len(section_tokens & _tokens(trend_text))
-        if exact_title_match:
-            score += 8
-        if score > 0:
-            matched.append((-score, idx, trend_id, theme_id))
-    matched.sort(key=lambda item: (item[0], item[1]))
-    trend_ids = [trend_id for _score, _idx, trend_id, _theme_id in matched]
-    theme_ids = [theme_id for _score, _idx, _trend_id, theme_id in matched if theme_id]
-    return list(dict.fromkeys(trend_ids)), list(dict.fromkeys(theme_ids))
-
-
 def build_evidence_packs(output_dir: str | Path, ast: dict) -> dict:
     root = Path(output_dir).expanduser()
     sources = _read_jsonl(root / "sources.jsonl")
     evidence = _read_jsonl(root / "evidence.jsonl")
     claims = _read_jsonl(root / "claims.jsonl")
     links = _read_jsonl(root / "claim_evidence.jsonl")
-    trend_payload = _read_json(root / "paper_theme_clusters.json")
-    paper_trends = trend_payload.get("trends", []) if isinstance(trend_payload.get("trends"), list) else []
     source_by_id = {str(row.get("id") or row.get("source_id")): row for row in sources}
     evidence_by_id = {str(row.get("id") or row.get("evidence_id")): row for row in evidence}
     evidence_to_source = {
@@ -134,11 +92,6 @@ def build_evidence_packs(output_dir: str | Path, ast: dict) -> dict:
             if sid not in source_ids:
                 source_ids.append(sid)
         source_types = sorted({str(source_by_id.get(sid, {}).get("source_type") or "unknown") for sid in source_ids})
-        paper_trend_ids, paper_theme_ids = _paper_trend_matches(
-            section,
-            [source_by_id.get(sid, {}) for sid in source_ids],
-            paper_trends,
-        )
         blockers: list[str] = []
         if len(evidence_ids) < min_evidence:
             blockers.append(f"evidence_count_low:{len(evidence_ids)}<{min_evidence}")
@@ -159,8 +112,6 @@ def build_evidence_packs(output_dir: str | Path, ast: dict) -> dict:
             contradiction_slots=[f"contradiction:{section_id}:required"],
             status="blocked" if blockers else "ready",
             blockers=blockers,
-            paper_trend_ids=paper_trend_ids,
-            paper_theme_ids=paper_theme_ids,
         )
         packs.append(to_dict(pack))
         section_dir = root / "sections" / section_id

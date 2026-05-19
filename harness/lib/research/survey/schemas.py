@@ -95,8 +95,6 @@ class EvidencePack:
     contradiction_slots: list[str]
     status: str
     blockers: list[str] = field(default_factory=list)
-    paper_trend_ids: list[str] = field(default_factory=list)
-    paper_theme_ids: list[str] = field(default_factory=list)
     schema_version: str = SCHEMA_VERSION
 
 
