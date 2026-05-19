@@ -11,6 +11,7 @@ if _HARNESS_LIB not in sys.path:
 from research.cli import main
 from research.survey.finalize_run import finalize_survey_run
 from research.survey.evidence_pack import build_evidence_packs
+from research.survey.paper_enrichment import enrich_papers
 from research.survey.planner import create_survey_plan, write_survey_plan
 
 
@@ -20,10 +21,10 @@ def _append_jsonl(path, rows):
 
 def _strong_sources():
     return [
-        {"id": "src_0", "source_type": "paper", "title": "Latent Reasoning Paper", "url": "https://arxiv.org/abs/2412.06769"},
-        {"id": "src_1", "source_type": "paper", "title": "Continuous Thought Paper", "url": "https://openreview.net/forum?id=latent-reasoning"},
-        {"id": "src_2", "source_type": "paper", "title": "Reasoning Survey Proceedings", "url": "https://doi.org/10.1145/latent-reasoning"},
-        {"id": "src_3", "source_type": "paper", "title": "Neural Computation Journal Article", "url": "https://ieeexplore.ieee.org/document/123456"},
+        {"id": "src_0", "source_type": "paper", "title": "Agent Architecture and Context Memory Paper", "url": "https://arxiv.org/abs/2412.06769", "text": "agent architecture context memory tool workflow"},
+        {"id": "src_1", "source_type": "paper", "title": "Continuous Thought Evaluation Benchmark Paper", "url": "https://openreview.net/forum?id=latent-reasoning", "text": "evaluation benchmark metric cost robustness"},
+        {"id": "src_2", "source_type": "paper", "title": "Security and Privacy for Agent Systems Proceedings", "url": "https://doi.org/10.1145/latent-reasoning", "text": "security privacy risk governance adversarial agent"},
+        {"id": "src_3", "source_type": "paper", "title": "Optimization Efficiency for Agent Workflows Journal Article", "url": "https://ieeexplore.ieee.org/document/123456", "text": "optimization efficiency throughput workflow deployment"},
         {"id": "src_4", "source_type": "official_doc", "title": "Official Developer Docs", "url": "https://docs.example.edu/latent-reasoning"},
         {"id": "src_5", "source_type": "code", "title": "Latent Reasoning Repository", "url": "https://github.com/example/latent-reasoning"},
         {"id": "src_6", "source_type": "benchmark", "title": "Latent Reasoning Benchmark", "url": "https://paperswithcode.com/task/latent-reasoning"},
@@ -55,7 +56,8 @@ def test_finalize_run_builds_pipeline_and_compiles(tmp_path):
     )
     assert payload["ok"] is True
     assert payload["reason"] == "passed"
-    assert [step["step"] for step in payload["steps"]] == ["plan", "source_gap", "pack", "write", "eval", "auto_repair", "compile", "final_eval"]
+    assert [step["step"] for step in payload["steps"]] == ["plan", "source_gap", "paper_enrichment", "pack", "write", "eval", "auto_repair", "compile", "final_eval"]
+    assert payload["steps"][2]["paper_count"] >= 1
     assert payload["compile"]["finalized_sections"] >= 1
     assert (tmp_path / "final.md").exists()
     assert (tmp_path / "survey_finalize_run.json").exists()
@@ -65,6 +67,7 @@ def test_finalize_run_can_reuse_existing_plan_and_pack(tmp_path):
     plan = create_survey_plan("latent reasoning", target_chars=50000)
     write_survey_plan(plan, tmp_path)
     _ledgers(tmp_path)
+    enrich_papers(tmp_path)
     build_evidence_packs(tmp_path, plan["report_ast"])
     payload = finalize_survey_run(
         tmp_path,
@@ -76,7 +79,7 @@ def test_finalize_run_can_reuse_existing_plan_and_pack(tmp_path):
     )
     assert payload["ok"] is True
     assert payload["steps"][0]["skipped"] is True
-    assert payload["steps"][2]["skipped"] is True
+    assert payload["steps"][3]["skipped"] is True
 
 
 def test_finalize_run_requires_brief_when_planning(tmp_path):

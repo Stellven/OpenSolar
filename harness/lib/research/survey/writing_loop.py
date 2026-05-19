@@ -200,6 +200,7 @@ def build_section_prompt_packet(root: Path, section_id: str, round_index: int = 
         task=f"Write or revise section '{spec.get('title') or section_id}' from the provided evidence pack only.",
         constraints=[
             "Use the section evidence pack as the source of truth.",
+            "When paper_trends are present, use them as synthesis scaffolding and verify each trend against the cited evidence before claiming it.",
             "Bind important factual claims to [claim:<id>] and [evidence:<id>] tags.",
             "Separate architecture synthesis, evaluation limits, contradiction slots, and open problems.",
             "Do not invent sources, results, paper names, URLs, or benchmark numbers.",
@@ -236,11 +237,13 @@ def build_section_prompt_packet(root: Path, section_id: str, round_index: int = 
         "Map claims to evidence and source types.",
         "Synthesize architecture mechanisms before evaluation claims.",
         "Compare source families instead of flattening them into citations.",
+        "Use enriched paper trends to group multiple abstracts into themes before writing conclusions.",
         "State evaluation limits and failure modes.",
         "End with open problems that can feed chapter-level synthesis.",
     ]
     payload["required_claim_ids"] = list(pack.get("claim_ids", [])[:6])
     payload["required_evidence_ids"] = list(pack.get("evidence_ids", [])[:8])
+    payload["paper_trends"] = list(pack.get("paper_trends", [])[:3]) if isinstance(pack.get("paper_trends"), list) else []
     return payload
 
 

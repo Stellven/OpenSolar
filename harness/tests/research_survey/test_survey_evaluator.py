@@ -10,6 +10,7 @@ if _HARNESS_LIB not in sys.path:
 
 from research.survey.evaluator import evaluate_survey
 from research.survey.evidence_pack import build_evidence_packs
+from research.survey.paper_enrichment import enrich_papers
 from research.survey.planner import create_survey_plan, write_survey_plan
 from research.survey.section_compiler import compile_section, compile_survey
 
@@ -20,10 +21,10 @@ def _append_jsonl(path, rows):
 
 def _strong_sources():
     return [
-        {"id": "src_0", "source_type": "paper", "title": "Latent Reasoning Paper", "url": "https://arxiv.org/abs/2412.06769"},
-        {"id": "src_1", "source_type": "paper", "title": "Continuous Thought Paper", "url": "https://openreview.net/forum?id=latent-reasoning"},
-        {"id": "src_2", "source_type": "paper", "title": "Reasoning Survey Proceedings", "url": "https://doi.org/10.1145/latent-reasoning"},
-        {"id": "src_3", "source_type": "paper", "title": "Neural Computation Journal Article", "url": "https://ieeexplore.ieee.org/document/123456"},
+        {"id": "src_0", "source_type": "paper", "title": "Agent Architecture and Context Memory Paper", "url": "https://arxiv.org/abs/2412.06769", "text": "agent architecture context memory tool workflow"},
+        {"id": "src_1", "source_type": "paper", "title": "Continuous Thought Evaluation Benchmark Paper", "url": "https://openreview.net/forum?id=latent-reasoning", "text": "evaluation benchmark metric cost robustness"},
+        {"id": "src_2", "source_type": "paper", "title": "Security and Privacy for Agent Systems Proceedings", "url": "https://doi.org/10.1145/latent-reasoning", "text": "security privacy risk governance adversarial agent"},
+        {"id": "src_3", "source_type": "paper", "title": "Optimization Efficiency for Agent Workflows Journal Article", "url": "https://ieeexplore.ieee.org/document/123456", "text": "optimization efficiency throughput workflow deployment"},
         {"id": "src_4", "source_type": "official_doc", "title": "Official Developer Docs", "url": "https://docs.example.edu/latent-reasoning"},
         {"id": "src_5", "source_type": "code", "title": "Latent Reasoning Repository", "url": "https://github.com/example/latent-reasoning"},
         {"id": "src_6", "source_type": "benchmark", "title": "Latent Reasoning Benchmark", "url": "https://paperswithcode.com/task/latent-reasoning"},
@@ -56,6 +57,7 @@ def test_strict_eval_passes_controlled_strong_fixture(tmp_path):
     _append_jsonl(tmp_path / "evidence.jsonl", evidence)
     _append_jsonl(tmp_path / "claims.jsonl", claims)
     _append_jsonl(tmp_path / "claim_evidence.jsonl", links)
+    enrich_papers(tmp_path)
     build_evidence_packs(tmp_path, plan["report_ast"])
     for section in plan["report_ast"]["sections"][:3]:
         compile_section(tmp_path, section["section_id"])
@@ -74,8 +76,33 @@ def test_strict_eval_passes_controlled_strong_fixture(tmp_path):
     assert result["section_scorecard"]["needs_rewrite_count"] == 0
     assert result["chief_editor_review"]["ok"] is True
     assert result["depth_profile"]["ok"] is True
+    assert result["paper_enrichment"]["ok"] is True
     assert (tmp_path / "survey_chief_editor.json").exists()
     assert (tmp_path / "survey_depth_profile.json").exists()
+    assert (tmp_path / "survey_paper_enrichment.json").exists()
+
+
+def test_strict_eval_fails_paper_heavy_survey_without_enrichment(tmp_path):
+    plan = create_survey_plan("latent reasoning", target_chars=50000)
+    write_survey_plan(plan, tmp_path)
+    sources = _strong_sources()
+    evidence = [{"id": f"ev_{i}", "source_id": sources[i % len(sources)]["id"], "content": "latent reasoning architecture evaluation deployment"} for i in range(40)]
+    claims = [{"id": f"cl_{i}", "claim_text": "latent reasoning architecture requires evaluation evidence"} for i in range(40)]
+    links = [{"claim_id": f"cl_{i}", "evidence_id": f"ev_{i}"} for i in range(40)]
+    _append_jsonl(tmp_path / "sources.jsonl", sources)
+    _append_jsonl(tmp_path / "evidence.jsonl", evidence)
+    _append_jsonl(tmp_path / "claims.jsonl", claims)
+    _append_jsonl(tmp_path / "claim_evidence.jsonl", links)
+    build_evidence_packs(tmp_path, plan["report_ast"])
+    for section in plan["report_ast"]["sections"][:3]:
+        compile_section(tmp_path, section["section_id"])
+    compile_survey(tmp_path)
+
+    result = evaluate_survey(tmp_path, strict=True)
+
+    assert result["ok"] is False
+    assert "paper_enrichment_missing" in result["scorecard"]["issues"]
+    assert "paper_theme_clusters_missing" in result["scorecard"]["issues"]
 
 
 def test_strict_eval_fails_when_claims_have_no_evidence_links(tmp_path):
