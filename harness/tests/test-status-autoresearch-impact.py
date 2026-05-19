@@ -65,6 +65,11 @@ def test_autoresearch_impact_summary_uses_status_artifact(tmp_path):
     assert summary["count"] == 1
     assert summary["strong_count"] == 1
     assert summary["fail_verdict_count"] == 1
+    assert summary["trend"]["effect_status"] == "warn"
+    assert summary["trend"]["pass_after_trigger"] == 0
+    assert summary["trend"]["still_failing"] == 1
+    assert summary["trend"]["fail_recurrence"] == 1
+    assert summary["trend"]["avg_round"] == 2
     assert summary["roles"] == {"builder": 1}
     latest = summary["latest"]
     assert latest["sid"] == sid
@@ -117,3 +122,49 @@ def test_status_payload_includes_autoresearch_impact(monkeypatch, tmp_path):
     assert "autoresearch_impact" in payload
     assert payload["autoresearch_impact"]["latest"]["role"] == "planner"
     assert payload["autoresearch_impact"]["latest"]["must_measure"] == ["evidence_gap_count"]
+    assert payload["autoresearch_impact"]["trend"]["effect_status"] == "mixed"
+
+
+def test_autoresearch_impact_trend_counts_pass_after_trigger(tmp_path):
+    mod = load_status_server()
+    fixtures = [
+        ("sprint-20260519-ar-pass", "passed", "planning_complete", "planner", "recommended", "", 1),
+        ("sprint-20260519-ar-fail", "failed_review", "eval_failed", "builder", "strong", "FAIL", 3),
+        ("sprint-20260519-ar-active", "active", "implementation", "builder", "recommended", "", 2),
+    ]
+    for sid, status, phase, role, trigger, verdict, round_no in fixtures:
+        (tmp_path / f"{sid}.status.json").write_text(
+            json.dumps(
+                {
+                    "id": sid,
+                    "status": status,
+                    "phase": phase,
+                    "artifacts": {
+                        "autoresearch_optimizer": {
+                            "canonical_role": role,
+                            "recommended": True,
+                            "trigger_level": trigger,
+                            "telemetry": {
+                                "round": round_no,
+                                "eval_verdict": verdict,
+                                "failed_conditions": ["regression"] if verdict else [],
+                                "error_count": 1 if verdict else 0,
+                            },
+                            "quality_metrics": {"must_measure": ["repair_round_delta"]},
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+    mod.SPRINTS_DIR = tmp_path
+
+    summary = mod._autoresearch_impact_summary(limit=10)
+
+    assert summary["count"] == 3
+    assert summary["trend"]["effect_status"] == "mixed"
+    assert summary["trend"]["pass_after_trigger"] == 1
+    assert summary["trend"]["still_failing"] == 1
+    assert summary["trend"]["fail_recurrence"] == 1
+    assert summary["trend"]["avg_round"] == 2
+    assert summary["trend"]["max_round"] == 3
