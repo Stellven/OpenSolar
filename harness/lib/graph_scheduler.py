@@ -641,10 +641,12 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
         required_skills = [str(s) for s in node.get("required_skills", [])]
         required_capabilities = _capability_list(node)
         candidates: list[tuple[float, int, int, str, dict[str, Any]]] = []
+        blocked_by_capacity = False
+        blocked_by_runtime = False
 
         for worker in workers:
             pane = str(worker.get("pane", ""))
-            if not pane or pane in used_panes or _worker_busy(worker):
+            if not pane:
                 continue
             if not _skills_match(worker, required_skills):
                 continue
@@ -654,13 +656,25 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
                 continue
             if _model_requires_strict_match(preferred_model, strict_model) and not _model_match(worker, preferred_model):
                 continue
+            if str(worker.get("unavailable_reason") or "") == "worker_runtime_not_running":
+                blocked_by_runtime = True
+                continue
+            if pane in used_panes or _worker_busy(worker):
+                blocked_by_capacity = True
+                continue
             cap_score = _capability_score(worker, required_capabilities, capability_scores)
             model_penalty = 0 if _model_match(worker, preferred_model) else 10
             load = int(worker.get("load", 0) or 0)
             candidates.append((-cap_score, model_penalty, load, pane, worker))
 
         if not candidates:
-            queued.append({"node": node["id"], "reason": "no_matching_worker"})
+            if blocked_by_runtime:
+                reason = "worker_runtime_not_running"
+            elif blocked_by_capacity:
+                reason = "worker_capacity_exhausted"
+            else:
+                reason = "no_matching_worker"
+            queued.append({"node": node["id"], "reason": reason})
             continue
 
         candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3]))
@@ -718,9 +732,32 @@ def mark_node_result(graph: dict[str, Any], node_id: str, status: str,
     ids[node_id]["updated_at"] = updated_at
 
     gate = ids[node_id].get("gate")
-    if gate and (gate_status or status) == "passed":
+    if gate and status in {"failed", "cancelled"}:
         graph.setdefault("gate_results", {})
-        graph["gate_results"][gate] = {"status": "passed", "node": node_id, "updated_at": updated_at}
+        graph["gate_results"][gate] = {
+            "status": "blocked",
+            "node": node_id,
+            "reason": f"node_{status}",
+            "updated_at": updated_at,
+        }
+    elif gate and (gate_status or status) == "passed":
+        gate_nodes = [node for node in ids.values() if node.get("gate") == gate]
+        open_gate_nodes = [
+            str(node.get("id") or "")
+            for node in gate_nodes
+            if str(node.get("id") or "") != node_id and node_status(graph, str(node.get("id") or "")) != "passed"
+        ]
+        graph.setdefault("gate_results", {})
+        if open_gate_nodes:
+            graph["gate_results"][gate] = {
+                "status": "blocked",
+                "node": node_id,
+                "reason": "waiting_for_shared_gate_nodes",
+                "open_nodes": open_gate_nodes,
+                "updated_at": updated_at,
+            }
+        else:
+            graph["gate_results"][gate] = {"status": "passed", "node": node_id, "updated_at": updated_at}
 
     return parent_ready_check(graph)
 

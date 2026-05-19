@@ -66,6 +66,20 @@ class TestJSConstraints:
     def test_uses_fetch(self, js_content):
         assert "fetch(" in js_content, "JS must use native fetch"
 
+    def test_s04_research_metrics_helpers_present(self, js_content):
+        for marker in [
+            "function formatFallbackLevel",
+            "badge-fallback-",
+            "function formatStateTransition",
+            "requestAnimationFrame",
+            "transition = \"opacity 0.4s ease, transform 0.4s ease\"",
+            "function formatResearchMetrics",
+            "usage_source",
+            "fallback_reason",
+            "fallback_level",
+        ]:
+            assert marker in js_content, f"Missing S04 JS marker: {marker}"
+
 
 class TestEmptyState:
     def test_unknown_shown_not_blank(self, html_content):
