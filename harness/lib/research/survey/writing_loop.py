@@ -378,12 +378,36 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
         src = ledgers["sources"].get(sid, {})
         source_type = src.get("source_type") or "unknown"
         text = _inline_text(_evidence_text(row), limit=220) or f"{title} evidence span."
-        evidence_lines.append(f"- {anchor} evidence-slot-{idx}: {eid} / {source_type} supports {lens['focus']} with span summary '{text}'. [evidence:{eid}]")
+        evidence_lines.append(f"- {anchor} evidence-slot-{idx}: {eid} / {source_type} is read against the local question '{question}' with span summary '{text}'. [evidence:{eid}]")
 
     source_lines = []
     for idx, row in enumerate(sources[:8], start=1):
         sid = _row_id(row, "id", "source_id") or "source_unknown"
         source_lines.append(f"- {anchor} source-slot-{idx}: {sid}: {row.get('source_type', 'unknown')} / {_inline_text(row.get('title', 'untitled'), limit=120)}")
+    primary_claim_text = _inline_text(_claim_text(ledgers["claims"].get(claim_ids[0], {})) if claim_ids else "", limit=220)
+    secondary_claim_text = _inline_text(_claim_text(ledgers["claims"].get(claim_ids[1], {})) if len(claim_ids) > 1 else "", limit=220)
+    primary_evidence_text = _inline_text(_evidence_text(ledgers["evidence"].get(evidence_ids[0], {})) if evidence_ids else "", limit=260)
+    secondary_evidence_text = _inline_text(_evidence_text(ledgers["evidence"].get(evidence_ids[1], {})) if len(evidence_ids) > 1 else "", limit=260)
+    primary_source_title = _inline_text(sources[0].get("title", "") if sources else "", limit=180)
+    secondary_source_title = _inline_text(sources[1].get("title", "") if len(sources) > 1 else "", limit=180)
+    evidence_summary = primary_evidence_text or primary_source_title or question
+    evidence_summary_sentence = re.sub(r"[.!?。！？]+", ";", evidence_summary)
+    secondary_evidence_sentence = re.sub(r"[.!?。！？]+", ";", secondary_evidence_text or evidence_summary)
+    primary_claim_sentence = re.sub(r"[.!?。！？]+", ";", primary_claim_text or question)
+    secondary_claim_sentence = re.sub(r"[.!?。！？]+", ";", secondary_claim_text or primary_claim_text or question)
+    source_pair = " / ".join(item for item in [primary_source_title, secondary_source_title] if item) or source_types
+    topic_probe = " ".join([str(title), str(question), primary_claim_text, secondary_claim_text, evidence_summary]).lower()
+    if re.search(r"latent reasoning|隐空间|continuous thought|hidden-state|coconut|chain-of-thought", topic_probe):
+        terminology_note = (
+            f"For this latent-reasoning section about '{question}', terminology must separate chain-of-thought baselines, "
+            "continuous thought, hidden-state deliberation, benchmark protocol, reproducibility, "
+            "deployment, and observability/auditability only where the cited evidence supports that split."
+        )
+    else:
+        terminology_note = (
+            "For this section, terminology must come from the claim, source title, evidence span, "
+            "and local research question; imported labels stay provisional until another evidence item confirms them."
+        )
 
     if round_index == 0:
         compact_claim_lines = []
@@ -392,7 +416,7 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
             compact_claim_lines.append(f"{idx}. {anchor} maps claim {cid} to {lens['axis']} scope and source boundary. [claim:{cid}] [evidence:{eid}]")
         compact_evidence_lines = []
         for idx, eid in enumerate(evidence_ids[:3] or ["evidence_missing"], start=1):
-            compact_evidence_lines.append(f"- {anchor} evidence-slot-{idx}: {eid} checks {lens['focus']}. [evidence:{eid}]")
+            compact_evidence_lines.append(f"- {anchor} evidence-slot-{idx}: {eid} checks the local question '{question}'. [evidence:{eid}]")
         compact_source_lines = source_lines[:3] or [f"- {anchor} source-slot-1: source_unknown / N/A"]
         compact = f"""# {title}
 
@@ -402,7 +426,7 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
 
 ## Position
 
-{anchor} frames this section around {lens['focus']} with source types `{source_types}` and keeps `{lens['risk']}` as the downgrade condition. [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+{anchor} starts from the concrete claim "{primary_claim_sentence}" and tests it against "{evidence_summary_sentence}". The section's confidence is limited by source coverage `{source_types}` and by whether the cited work directly supports the local research question rather than a neighboring topic. [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
 
 ## Claim Map
 
@@ -418,23 +442,23 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
 
 ## Literature Lineage
 
-{anchor} maps the local literature lineage from explicit reasoning-chain baselines to continuous thought, hidden-state deliberation, and Coconut-style latent reasoning while keeping paper, code, benchmark, and official documentation evidence separate. [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+{anchor} reads the source pair "{source_pair}" as the local literature lineage. The important move is not chronology by publication date; it is whether the later evidence changes the system boundary, measurement target, or implementation assumption introduced by the earlier evidence. [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
 
 ## Method Taxonomy
 
-{anchor} classifies methods by representation, control policy, supervision signal, and observability boundary so latent-state architecture claims do not collapse into one generic mechanism bucket. [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+{anchor} classifies the section's methods by the actual evidence fields available here: source family, system boundary, evaluation target, and implementation constraint. If a field is absent from the evidence pack, the section treats that dimension as unknown instead of filling it with a generic taxonomy. [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
 
 ## Architecture Synthesis
 
-{anchor} separates mechanism, system, and evaluation layers for {lens['axis']} analysis so implementation and evidence claims stay auditable. [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+{anchor} ties architecture synthesis to the quoted evidence span "{evidence_summary_sentence}". The synthesis is valid only where that span says something about design, measurement, or operational behavior; otherwise the report must mark the claim as a hypothesis. [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
 
 ## Comparative Positioning
 
-{anchor} treats `{lens['primary_source']}` as the primary source family and `{lens['secondary_source']}` as calibration evidence; missing families lower confidence. [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+{anchor} compares "{primary_source_title or lens['primary_source']}" with "{secondary_source_title or lens['secondary_source']}". Agreement raises confidence only when both sources discuss the same task boundary; disagreement is kept as an explicit limitation. [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
 
 ## Terminology Evolution
 
-{anchor} tracks the terminology path from chain-of-thought and explicit reasoning chains toward continuous thought, hidden-state deliberation, Coconut-style latent reasoning, and auditable hybrid systems. [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+{anchor} uses terminology from the evidence pack rather than importing a fixed vocabulary. Terms that appear only in the analyst's framing are treated as interpretive labels and cannot carry evidence weight unless tied back to a claim and evidence id. [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
 
 ## Evaluation And Risk Boundary
 
@@ -458,7 +482,7 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
 
 ## Open Problems
 
-{anchor} needs later expansion on {lens['focus']}, source comparability, terminology consistency, and claim-to-evidence traceability.
+{anchor} needs later expansion on "{question}", source comparability, terminology consistency, and claim-to-evidence traceability.
 """
         return _dedupe_sentences(compact)
 
@@ -467,17 +491,17 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
         expansion = f"""
 ## Revision: Architecture And Evaluation Detail
 
-{anchor} 的本轮修订围绕 {lens['focus']} 展开，而不是复述通用写作模板；`{source_types}` 证据被拆成主来源 `{lens['primary_source']}` 与校验来源 `{lens['secondary_source']}`，前者限定论证入口，后者校准评价或工程边界。该节结论必须显式标注 `{lens['risk']}` 这一降级条件，避免把局部实验直接升级为通用规律。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+{anchor} 的本轮修订先记录本节问题“{question}”。对于 {section_id} / {title}，主论点是“{primary_claim_sentence}”，主证据“{evidence_summary_sentence}”必须直接覆盖该问题的系统边界、评价指标或工程假设；否则本节必须把结论降级为局部观察。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
 
 ## Revision: Terminology Evolution And Academic Survey Frame
 
-{anchor} 将术语演进显式写入正文：chain-of-thought 或显式推理链强调 token-level narration，continuous thought 强调连续隐变量计算，hidden-state deliberation 强调内部状态迁移，Coconut-style latent reasoning 则把这些机制放入可训练和可评估的架构 taxonomy。教授级 survey 必须同时记录 baseline、ablation、evaluation protocol、reproducibility、deployment 和 auditability，否则长文只是材料堆叠。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+{anchor} 的术语演进来自“{question}”里的问题表述、证据标题和 claim 文本，而不是固定套用某个领域模板。若“{secondary_claim_sentence}”与主证据没有同一评价对象，本节应保留术语冲突，并在章节 synthesis 中说明这种冲突如何影响趋势判断。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
 """
     if round_index >= 2:
         expansion += f"""
 ## Revision: Contradictions, Open Problems, And Survey Position
 
-{anchor} 的反证段落进入主论证而不是附录：当 `{lens['axis']}` 证据只覆盖窄任务、单模型或不可观测 hidden-state trajectory 时，本节必须区分“机制上可行”“工程上可控”“评估上可信”三个层级。该节保留的开放问题聚焦 {lens['focus']}，并把 `{lens['risk']}` 作为 chief-editor 后续重写时必须处理的风险项。 [claim:{claim_ids[-1] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[-1] if evidence_ids else 'evidence_missing'}]
+{anchor} 的反证段落进入主论证而不是附录：当主来源与校验来源只覆盖不同任务、不同系统边界或不同评价目标时，本节不能合成一个强趋势。该节保留的开放问题聚焦“哪些证据可以直接支撑趋势，哪些只能作为背景材料”。 [claim:{claim_ids[-1] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[-1] if evidence_ids else 'evidence_missing'}]
 """
 
     draft = f"""# {title}
@@ -488,7 +512,7 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
 
 ## Position
 
-{anchor} 以 evidence pack 为事实源，目标不是堆材料，而是围绕 {lens['focus']} 建立可审计的 survey 论证；本节先限定 `{lens['axis']}` 问题边界，再比较证据强度、工程代价、评价可信度和开放争议。当前证据包包含来源类型 `{source_types}`，其中 `{lens['primary_source']}` 只能支持其直接覆盖的结论，不能替代跨章节 synthesis。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+{anchor} 的核心判断来自“{primary_claim_sentence}”。可引用的事实是“{evidence_summary_sentence}”，可比较的来源是“{source_pair}”。因此，本节只在这些证据直接覆盖“{question}”的范围内讨论 `{lens['axis']}`，不把来源类型或章节编号当成结论本身。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
 
 ## Claim Map
 
@@ -504,47 +528,47 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
 
 ## Literature Lineage
 
-{anchor} 的 literature lineage 不按来源顺序机械拼接，而是把显式 chain-of-thought 基线、continuous thought 过渡、hidden-state deliberation、Coconut-style latent reasoning 和生产可审计混合系统放到一条可批判的演进线上。论文证据负责机制与实验假设，代码证据负责可复现路径，benchmark 证据负责评价协议，official_doc 负责部署边界。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+{anchor} 的 literature lineage 从来源标题和证据摘要开始："{source_pair}"。如果这些来源之间存在时间、任务或实现对象差异，本节把差异写成演进约束；如果没有直接关联，则只把它们作为并列证据，不强行串成单一路线。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
 
 ## Method Taxonomy
 
-{anchor} 的 method taxonomy 按四个轴拆分：representation 轴区分 token、continuous state 与 hidden state；control policy 轴区分固定步数、adaptive deliberation 与 verifier-coupled search；supervision 轴区分 imitation、RL、self-training 与 synthetic traces；observability 轴区分可审计 token trace、弱可解释 latent trajectory 与黑箱内部状态。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+{anchor} 的 method taxonomy 按本节证据可观察到的维度拆分：研究对象、系统边界、评价目标、实现/部署约束。没有被证据覆盖的维度标为 unknown，避免把其他报告主题的 taxonomy 套进当前 CAIS 议题。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
 
 ## Architecture Synthesis
 
-在 {anchor} 中，架构 synthesis 先拆成机制层、系统层和评价层：机制层解释 {lens['focus']} 为什么可能成立，系统层检查它如何被实现、调度、复现和迁移，评价层判断现有 `{source_types}` 是否足以支撑本节结论。三层必须保持分离，否则 `{lens['axis']}` 主题会把概念说明、经验判断和工程结论混成看似深入但不可审计的叙述。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+在 {anchor} 中，architecture synthesis 必须回答“{question}”这个窄问题。对于 {section_id} / {title}，证据“{evidence_summary_sentence}”到底改变了本节对系统设计、评价或运行边界的哪一项判断。若回答不出来，本节只保留为资料卡片，不能升级为趋势结论。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
 
 ## Comparative Positioning
 
-{anchor} 的 comparative positioning 不把所有引用压成同一权重：`{lens['primary_source']}` 提供本节主证据，`{lens['secondary_source']}` 用来检查外推边界，其余来源只补充实现、评价或部署侧信息。若某一来源类型缺失，本节结论必须降级为局部判断；只有多类来源围绕 {lens['focus']} 相互支撑时，才可以进入章节级 survey 判断。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+{anchor} 的 comparative positioning 比较“{primary_source_title or lens['primary_source']}”和“{secondary_source_title or lens['secondary_source']}”。二者只有在讨论同一类 agent 系统能力、同一类评价目标或同一类工程约束时才可以相互支撑；否则必须分开陈述。 [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
 
 ## Terminology Evolution
 
-{anchor} tracks the terminology path from chain-of-thought and explicit reasoning chains toward continuous thought, hidden-state deliberation, Coconut-style latent reasoning, and auditable hybrid systems. [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
+{anchor} tracks terminology only when it appears in the claim, source title, evidence span, or the local question "{question}". {terminology_note} [claim:{claim_ids[0] if claim_ids else 'claim_missing'}] [evidence:{evidence_ids[0] if evidence_ids else 'evidence_missing'}]
 
 ## Evaluation Protocol Matrix
 
-{anchor} 的 evaluation protocol matrix 至少比较五列：task family 是否覆盖长程推理，baseline/ablation 是否公平，metric 是否区分准确率、成本与可审计性，reproducibility 是否能由代码或数据卡复核，deployment transfer 是否会引入观测性和回滚成本。缺任一列时，本节结论必须降级。 [claim:{claim_ids[1] if len(claim_ids) > 1 else 'claim_missing'}] [evidence:{evidence_ids[1] if len(evidence_ids) > 1 else 'evidence_missing'}]
+{anchor} 的 evaluation protocol matrix 比较四列：评价对象、指标口径、可复核材料、外推边界。第二证据“{secondary_evidence_sentence}”若只覆盖其中一列，就不能支撑整节的强判断。 [claim:{claim_ids[1] if len(claim_ids) > 1 else 'claim_missing'}] [evidence:{evidence_ids[1] if len(evidence_ids) > 1 else 'evidence_missing'}]
 
 ## Evaluation And Risk Boundary
 
-{anchor} 的 evaluation boundary 必须说明数据集、任务形态、指标口径和外推边界，并把 `{lens['risk']}` 标为主要降级风险。若证据来自论文，应检查实验设置和 baseline；若证据来自代码，应检查可运行性、维护状态和实现约束；若证据来自 benchmark，应检查任务覆盖和指标是否与本节 `{lens['axis']}` 场景一致。 [claim:{claim_ids[1] if len(claim_ids) > 1 else 'claim_missing'}] [evidence:{evidence_ids[1] if len(evidence_ids) > 1 else 'evidence_missing'}]
+{anchor} 的 evaluation boundary 只声明证据中可见的边界：任务形态、指标口径、实现可复核性和部署外推。证据没有说明的部分必须留白，而不是用“工程代价”“评价可信度”等抽象词填满。 [claim:{claim_ids[1] if len(claim_ids) > 1 else 'claim_missing'}] [evidence:{evidence_ids[1] if len(evidence_ids) > 1 else 'evidence_missing'}]
 
 ## Limitations And Failure Modes
 
-{anchor} 必须把 failure modes 写在正文中：{lens['focus']} 可能只在短任务、单模型、单 benchmark 或不可复现实验中成立，代码证据可能缺少生产约束，官方文档也可能只描述支持路径而不覆盖失败路径。因此，本节结论需要标注适用条件、不可外推区域和后续 evidence miner 必须补齐的缺口。 [claim:{claim_ids[1] if len(claim_ids) > 1 else 'claim_missing'}] [evidence:{evidence_ids[1] if len(evidence_ids) > 1 else 'evidence_missing'}]
+{anchor} 的 failure modes 来自“{question}”对应的证据缺口：若没有负例、实现细节、复现实验或部署观测，本节只能提出有限趋势。需要补充的不是更多字数，而是能反驳或限定“{primary_claim_sentence}”的证据。 [claim:{claim_ids[1] if len(claim_ids) > 1 else 'claim_missing'}] [evidence:{evidence_ids[1] if len(evidence_ids) > 1 else 'evidence_missing'}]
 
 ## Controversy Matrix
 
-{anchor} 的 controversy matrix 分成支持证据、负面证据、baseline 争议、interpretability 争议和 deployment-risk 争议五栏。若 `{lens['primary_source']}` 与 `{lens['secondary_source']}` 在任务规模、实现假设或评价口径上冲突，本节必须把冲突保留为争议项，而不是在 narrative synthesis 中抹平。 [claim:{claim_ids[2] if len(claim_ids) > 2 else 'claim_missing'}] [evidence:{evidence_ids[2] if len(evidence_ids) > 2 else 'evidence_missing'}]
+{anchor} 的 controversy matrix 分成支持证据、negative evidence/负面证据、缺失证据和待验证假设。若主来源与校验来源在任务规模、实现假设或评价口径上冲突，本节把冲突保留为争议项，而不是在 narrative synthesis 中抹平。 [claim:{claim_ids[2] if len(claim_ids) > 2 else 'claim_missing'}] [evidence:{evidence_ids[2] if len(evidence_ids) > 2 else 'evidence_missing'}]
 
 ## Contradiction Slots
 
-{anchor} 保留三个反证槽位：第一，`{lens['primary_source']}` 证据可能只覆盖 {lens['focus']} 的局部任务；第二，`{lens['secondary_source']}` 与主来源之间可能存在时间差、实现差或评价口径差；第三，`{lens['risk']}` 可能没有被现有 benchmark 捕捉。后续 chapter synthesis 必须消费这些槽位，不能只保留支持性证据。 [claim:{claim_ids[2] if len(claim_ids) > 2 else 'claim_missing'}] [evidence:{evidence_ids[2] if len(evidence_ids) > 2 else 'evidence_missing'}]
+{anchor} 保留三个反证槽位：第一，主证据可能只覆盖局部任务；第二，校验来源与主来源可能不在同一评价口径；第三，报告可能缺少真实失败案例。后续 chapter synthesis 必须消费这些槽位，不能只保留支持性证据。 [claim:{claim_ids[2] if len(claim_ids) > 2 else 'claim_missing'}] [evidence:{evidence_ids[2] if len(evidence_ids) > 2 else 'evidence_missing'}]
 {expansion}
 ## Open Problems
 
-{anchor} 的开放问题不是通用 future-work 列表，而是要求下一轮围绕 {lens['focus']} 补充反证来源、统一 `{lens['axis']}` 术语、复核 `{lens['primary_source']}` 与 `{lens['secondary_source']}` 的可比性，并量化 `{lens['risk']}` 对章节结论的影响。该节最终版本应把这些问题映射回 claim_id 和 evidence_id，而不是依赖模型自由发挥。
+{anchor} 的开放问题不是通用 future-work 列表，而是要求下一轮围绕“{question}”补充反证来源、复核“{primary_source_title or lens['primary_source']}”与“{secondary_source_title or lens['secondary_source']}”的可比性，并明确哪些结论只是资料归纳、哪些才是趋势判断。该节最终版本应把这些问题映射回 claim_id 和 evidence_id，而不是依赖模型自由发挥。
 """
     return _dedupe_sentences(draft)
 
