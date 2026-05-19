@@ -13,7 +13,7 @@
 # ================================================================
 set -eu
 
-HARNESS_DIR="${HARNESS_DIR:-$HOME/.solar/harness}"
+HARNESS_DIR="$HOME/.solar/harness"
 SESSION_NAME="solar-harness"
 LAB_SESSION_NAME="solar-harness-lab"
 LEGACY_LAB_SESSION_NAME="solar-harness-strategy"
@@ -2497,7 +2497,6 @@ print(json.dumps({
     _cert_suite="$HARNESS_DIR/lib/capability_certification_suite.py"
     _activation_proof="$HARNESS_DIR/lib/capability_activation_proof.py"
     _ruflo_adapter="$HARNESS_DIR/lib/ruflo_adapter.py"
-    _autoresearch_adapter="$HARNESS_DIR/lib/autoresearch_adapter.py"
     case "${2:-status}" in
       status|health)
         shift 2 || true
@@ -2600,31 +2599,8 @@ print(json.dumps({
         human_prefix "ruflo" "runtime-smoke $*"
         python3 "$_ruflo_adapter" runtime-smoke "$@"
         ;;
-      autoresearch-status|autoresearch)
-        shift 2 || true
-        [[ -f "$_autoresearch_adapter" ]] || { err "autoresearch_adapter not found: $_autoresearch_adapter"; exit 1; }
-        human_prefix "autoresearch" "status $*"
-        python3 "$_autoresearch_adapter" status "$@"
-        ;;
-      autoresearch-doctor)
-        shift 2 || true
-        [[ -f "$_autoresearch_adapter" ]] || { err "autoresearch_adapter not found: $_autoresearch_adapter"; exit 1; }
-        human_prefix "autoresearch" "doctor $*"
-        python3 "$_autoresearch_adapter" doctor "$@"
-        ;;
-      autoresearch-vendor)
-        shift 2 || true
-        [[ -f "$_autoresearch_adapter" ]] || { err "autoresearch_adapter not found: $_autoresearch_adapter"; exit 1; }
-        python3 "$_autoresearch_adapter" vendor "$@"
-        ;;
-      autoresearch-run-local)
-        shift 2 || true
-        [[ -f "$_autoresearch_adapter" ]] || { err "autoresearch_adapter not found: $_autoresearch_adapter"; exit 1; }
-        human_prefix "autoresearch" "run-local $*"
-        python3 "$_autoresearch_adapter" run-local "$@"
-        ;;
       *)
-        err "用法: $0 integrations [status|plugins|install|disable|list|validate|capabilities|sync-caps|benchmark|platform-benchmark|heavy-proof|agent-arena|certify|activation-proof|ruflo-status|ruflo-runtime-status|ruflo-runtime-bootstrap|ruflo-runtime-smoke|autoresearch-status|autoresearch-doctor|autoresearch-vendor|autoresearch-run-local] [--json]"
+        err "用法: $0 integrations [status|plugins|install|disable|list|validate|capabilities|sync-caps|benchmark|platform-benchmark|heavy-proof|agent-arena|certify|activation-proof|ruflo-status|ruflo-runtime-status|ruflo-runtime-bootstrap|ruflo-runtime-smoke] [--json]"
         exit 1
         ;;
     esac
@@ -2774,13 +2750,14 @@ print(json.dumps({
       certify|certification|cert) shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "certify"; python3 "$_skills_py" certify "$@" ;;
       inject)        shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "inject"; python3 "$_skills_py" inject "$@" ;;
       effect-scan)   shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "effect-scan"; python3 "$_skills_py" effect-scan "$@" ;;
+      healthcheck|skill-healthcheck) shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "healthcheck"; python3 "$HARNESS_DIR/lib/skill_healthcheck.py" "$@" ;;
       native-extract) shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "native-extract"; python3 "$_skills_py" native-extract "$@" ;;
       registry)      shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "registry"; python3 "$_skills_py" registry "$@" ;;
       eval)          shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "eval"; python3 "$_skills_py" eval "$@" ;;
       promote)       shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "promote"; python3 "$_skills_py" promote "$@" ;;
       rollback)      shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "rollback"; python3 "$_skills_py" rollback "$@" ;;
       export)        shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "export"; python3 "$_skills_py" export "$@" ;;
-      *) err "用法: solar-harness skills <inventory|doctor|readiness|certify|inject|effect-scan|export|eval|promote|rollback|registry> [opts]"; exit 1 ;;
+      *) err "用法: solar-harness skills <inventory|doctor|readiness|certify|inject|effect-scan|healthcheck|export|eval|promote|rollback|registry> [opts]"; exit 1 ;;
     esac
     ;;
   intent)

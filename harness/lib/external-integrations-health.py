@@ -355,14 +355,6 @@ def probe(deep: bool = False) -> dict:
     ruflo_runtime = ruflo_status.get("runtime", {}) if isinstance(ruflo_status, dict) else {}
     ruflo_runtime_ok = bool(ruflo_runtime.get("ok"))
     ruflo_cli = Path(str((ruflo_runtime.get("paths") or {}).get("published_cli", "")))
-    autoresearch_vendor = HARNESS / "vendor" / "autoresearch"
-    autoresearch_status: dict = {}
-    autoresearch_code, autoresearch_out = run(["python3", str(HARNESS / "lib" / "autoresearch_adapter.py"), "status", "--json"], timeout=8)
-    if autoresearch_code == 0:
-        try:
-            autoresearch_status = json.loads(autoresearch_out)
-        except Exception:
-            autoresearch_status = {"parse_error": autoresearch_out[:500]}
     arb_vendor = HARNESS / "vendor" / "agent-rules-books"
     arb_report = HARNESS / "reports" / "agent-rules-books-inventory.json"
     arb_status: dict = {}
@@ -779,29 +771,6 @@ def probe(deep: bool = False) -> dict:
                 "mode": "safe_read_only_vendor_provider",
                 "default_version": "mini",
                 "dispatch_capability": "rules.book_catalog",
-            },
-        ),
-        result(
-            "smallnest/autoresearch",
-            "https://github.com/smallnest/autoresearch",
-            "External issue-to-implementation loop for local/GitHub issues, multi-agent iterations and score-gated fixes. Solar exposes it as an explicit local-issue runner; it is not a default builder and execution requires --execute.",
-            lifecycle="active",
-            installed=autoresearch_vendor.exists(),
-            configured=bool((autoresearch_status.get("interface", {}) or {}).get("run_sh_exists")),
-            running=False,
-            indexed=True,
-            used_by_default=False,
-            complete=bool(autoresearch_status.get("ok")),
-            degraded_reason="" if autoresearch_status.get("ok") else "autoresearch not vendored or run.sh missing; run solar-harness integrations autoresearch-vendor --json",
-            dead_ends=[],
-            evidence={
-                "vendor": str(autoresearch_vendor),
-                "source_commit": (autoresearch_status.get("source", {}) or {}).get("commit", ""),
-                "mode": autoresearch_status.get("mode", "explicit_local_issue_runner"),
-                "interface": autoresearch_status.get("interface", {}),
-                "dispatch_capability": "autoresearch.issue_loop",
-                "dry_run_cmd": "solar-harness integrations autoresearch-run-local --project <repo> --issue-title <title> --issue-body <body> --json",
-                "execute_requires": "--execute",
             },
         ),
         result(
