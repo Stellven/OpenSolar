@@ -99,6 +99,39 @@ def test_worker_discovery_supports_pandoc_render_nodes(monkeypatch) -> None:
     assert "pandoc" in workers[0]["skills"]
 
 
+def test_worker_discovery_supports_s05_release_skill_aliases(monkeypatch) -> None:
+    monkeypatch.setattr(
+        gnd.subprocess,
+        "check_output",
+        lambda *a, **kw: b"solar-harness-lab:0.0\tbuilder-glm\n",
+    )
+    monkeypatch.setattr(gnd, "read_lease", lambda pane: None)
+    monkeypatch.setattr(gnd, "_clear_stale_prompt_residue", lambda pane: False)
+    monkeypatch.setattr(gnd, "_pane_unavailable_reason", lambda pane: "")
+    monkeypatch.setattr(gnd, "_pane_tui_busy", lambda pane: False)
+    monkeypatch.setattr(gnd, "_pane_health", lambda pane: {})
+
+    workers = gnd._discover_workers(dry_run=False)
+
+    for skill in [
+        "ui",
+        "security",
+        "grep",
+        "http",
+        "curl",
+        "deepresearch",
+        "cli",
+        "claude-cli",
+        "survey",
+        "fixture",
+        "release",
+        "evidence",
+        "autopilot",
+        "epic",
+    ]:
+        assert skill in workers[0]["skills"]
+
+
 def test_worker_discovery_marks_shell_prompt_residue_as_runtime_not_running(monkeypatch) -> None:
     monkeypatch.setattr(
         gnd.subprocess,
