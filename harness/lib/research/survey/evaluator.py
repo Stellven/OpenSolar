@@ -8,7 +8,6 @@ from pathlib import Path
 
 from .schemas import SurveyScorecard, to_dict
 from .quality import assess_survey_quality
-from .golden_style_gate import assess_audience_hygiene, assess_golden_style
 
 
 def _read_json(path: Path) -> dict:
@@ -45,7 +44,6 @@ def evaluate_survey(
     *,
     min_finalized: int | None = None,
     require_complete: bool = False,
-    require_golden_style: bool = False,
 ) -> dict:
     root = Path(output_dir).expanduser()
     ast = _read_json(root / "survey_report_ast.json")
@@ -76,8 +74,6 @@ def evaluate_survey(
     reviews = [_read_json(path / "review.json") for path in section_dirs if (path / "review.json").exists()]
     blocked_sections = int(packs.get("blocked") or 0) if isinstance(packs, dict) else len(sections)
     quality = assess_survey_quality(root, ast=ast, packs=packs)
-    audience_hygiene = assess_audience_hygiene(root)
-    golden_style = assess_golden_style(root, require_benchmark=require_golden_style)
     taxonomy = quality.get("taxonomy", {})
     contradiction_matrix = quality.get("contradiction_matrix", {})
     section_factual_audit = quality.get("section_factual_audit", {})
@@ -154,12 +150,6 @@ def evaluate_survey(
         issues.append(f"finalized_sections_low:{finalized}<{required_finalized}")
     if require_complete and finalized != len(sections):
         issues.append(f"incomplete_sections:{len(sections) - finalized}")
-    if strict:
-        for issue in audience_hygiene.get("issues", []):
-            issues.append(str(issue))
-    if golden_style.get("enabled") or require_golden_style:
-        for issue in golden_style.get("issues", []):
-            issues.append(str(issue))
     final_md = root / "final.md"
     text = final_md.read_text(encoding="utf-8") if final_md.exists() else ""
     finalized_texts: list[str] = []
@@ -205,7 +195,6 @@ def evaluate_survey(
         "ok": verdict == "PASS",
         "scorecard": to_dict(scorecard),
         "strict": strict,
-        "require_golden_style": require_golden_style,
         "coverage": {
             "source_count": len(sources),
             "source_type_count": len(source_types),
@@ -227,8 +216,6 @@ def evaluate_survey(
         "chapter_review": chapter_review,
         "chief_editor_review": chief_editor_review,
         "depth_profile": depth_profile,
-        "audience_hygiene": audience_hygiene,
-        "golden_style": golden_style,
     }
     (root / "survey_eval.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return payload

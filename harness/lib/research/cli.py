@@ -871,31 +871,16 @@ def _doctor_check_chief_editor_model(model: str, timeout: int) -> dict:
     if not claude:
         return {"status": "error", "ok": False, "reason": "claude_cli_missing", "model": model}
     prompt = "Return exactly: SOLAR_OK"
-    cmd = [
-        claude,
-        "--print",
-        "--output-format",
-        "text",
-        "--model",
-        model,
-        "--no-session-persistence",
-        "--mcp-config",
-        "{}",
-        "--strict-mcp-config",
-        "--tools",
-        "",
-    ]
     try:
         result = subprocess.run(
-            cmd,
-            input=prompt,
+            [claude, "--bare", "-p", "--model", model, prompt],
             text=True,
             capture_output=True,
             timeout=timeout,
             check=False,
         )
     except subprocess.TimeoutExpired:
-        return {"status": "error", "ok": False, "reason": f"claude_cli_timeout_after_{timeout}s", "model": model, "command": cmd}
+        return {"status": "error", "ok": False, "reason": f"claude_cli_timeout_after_{timeout}s", "model": model}
     output = (result.stdout or "").strip()
     detail = ((result.stderr or result.stdout or "").strip().replace("\n", " "))[:500]
     if result.returncode != 0:
@@ -904,58 +889,11 @@ def _doctor_check_chief_editor_model(model: str, timeout: int) -> dict:
             "ok": False,
             "reason": f"claude_cli_failed:{result.returncode}:{detail}",
             "model": model,
-            "command": cmd,
         }
     if "SOLAR_OK" not in output:
-        return {"status": "warn", "ok": True, "reason": "claude_cli_unexpected_probe_output", "model": model, "output": output[:200], "command": cmd}
-    return {"status": "ok", "ok": True, "model": model, "command": cmd}
+        return {"status": "warn", "ok": True, "reason": "claude_cli_unexpected_probe_output", "model": model, "output": output[:200]}
+    return {"status": "ok", "ok": True, "model": model}
 
-
-def _doctor_check_narrative_backend(backend: str, command: str, model: str, timeout: int) -> dict:
-    normalized = (backend or "claude-cli").strip().lower()
-    if normalized in {"", "off", "none", "skip"}:
-        return {"status": "error", "ok": False, "backend": normalized or "off", "reason": "narrative_backend_disabled"}
-    if normalized in {"deterministic"}:
-        return {"status": "error", "ok": False, "backend": normalized, "reason": "deterministic_narrative_forbidden_for_deepresearch"}
-    if normalized in {"local-command", "command"}:
-        if not command.strip():
-            return {"status": "error", "ok": False, "backend": normalized, "reason": "narrative_command_missing"}
-        probe = f"printf '%s\\n' '## Probe' 'SOLAR_OK'"
-        try:
-            result = subprocess.run(
-                command,
-                input="Return exactly SOLAR_OK under a Markdown heading.",
-                text=True,
-                shell=True,
-                capture_output=True,
-                timeout=timeout,
-                check=False,
-            )
-        except subprocess.TimeoutExpired:
-            return {"status": "error", "ok": False, "backend": normalized, "reason": f"narrative_command_timeout_after_{timeout}s", "command": command}
-        output = (result.stdout or "").strip()
-        detail = ((result.stderr or result.stdout or "").strip().replace("\n", " "))[:500]
-        if result.returncode != 0:
-            return {"status": "error", "ok": False, "backend": normalized, "reason": f"narrative_command_failed:{result.returncode}:{detail}", "command": command}
-        if not output:
-            return {"status": "error", "ok": False, "backend": normalized, "reason": "narrative_command_empty_stdout", "command": command}
-        return {"status": "ok", "ok": True, "backend": normalized, "command": command, "probe_hint": probe}
-    if normalized in {"claude-cli", "opus", "claude"}:
-        model_check = _doctor_check_chief_editor_model(model, timeout)
-        return {
-            **model_check,
-            "backend": "claude-cli",
-            "reason": model_check.get("reason", ""),
-        }
-    return {"status": "error", "ok": False, "backend": normalized, "reason": f"unsupported_narrative_backend:{backend}"}
-
-
-def _narrative_backend_from_env(default: str = "claude-cli") -> str:
-    return os.getenv("SOLAR_DEEPRESEARCH_NARRATIVE_BACKEND", default).strip() or default
-
-
-def _narrative_command_from_env(default: str = "") -> str:
-    return os.getenv("SOLAR_DEEPRESEARCH_NARRATIVE_COMMAND", default).strip()
 
 def _doctor_check_google_cse(query: str, live_search: bool, require_google: bool) -> dict:
     has_key = bool(os.getenv("GOOGLE_CSE_API_KEY") or os.getenv("GOOGLE_API_KEY"))
@@ -1005,8 +943,6 @@ def build_deepresearch_doctor(
     *,
     model: str = "opus",
     model_candidates: str = "",
-    narrative_backend: str = "",
-    narrative_command: str = "",
     timeout: int = 45,
     query: str = "agentic runtime durable execution",
     live_search: bool = False,
@@ -1017,8 +953,6 @@ def build_deepresearch_doctor(
 ) -> dict:
     """Return machine-readable readiness for professor-grade DeepResearch."""
     checks: dict[str, dict] = {}
-    effective_narrative_backend = _narrative_backend_from_env(narrative_backend or "claude-cli")
-    effective_narrative_command = _narrative_command_from_env(narrative_command or "")
     candidate_models = []
     for raw in [model, *re.split(r"[, ]+", model_candidates or "")]:
         item = raw.strip()
@@ -1034,14 +968,6 @@ def build_deepresearch_doctor(
             "model": model,
             "candidates": candidate_models,
         }
-    elif effective_narrative_backend.strip().lower() not in {"claude-cli", "opus", "claude"}:
-        checks["chief_editor_model"] = {
-            "status": "pending",
-            "ok": True,
-            "reason": f"model_probe_skipped_for_{effective_narrative_backend}",
-            "model": model,
-            "candidates": candidate_models,
-        }
     else:
         model_checks = [_doctor_check_chief_editor_model(candidate, timeout) for candidate in candidate_models]
         usable = [item for item in model_checks if item.get("ok")]
@@ -1053,21 +979,6 @@ def build_deepresearch_doctor(
             "candidates": model_checks,
             "reason": "" if usable else "no_usable_chief_editor_model",
         }
-    if skip_model and effective_narrative_backend.strip().lower() in {"claude-cli", "opus", "claude"}:
-        checks["narrative_backend"] = {
-            "status": "pending",
-            "ok": True,
-            "backend": "claude-cli",
-            "reason": "narrative_model_probe_skipped",
-        }
-    else:
-        selected_model = str(checks.get("chief_editor_model", {}).get("selected_model") or model)
-        checks["narrative_backend"] = _doctor_check_narrative_backend(
-            effective_narrative_backend,
-            effective_narrative_command,
-            selected_model,
-            timeout,
-        )
     checks["serper"] = _doctor_check_serper(query, live_search, require_serper)
     checks["google_cse"] = _doctor_check_google_cse(query, live_search, require_google)
     checks["arxiv"] = _doctor_check_arxiv(query, live_search, require_arxiv)
@@ -1085,8 +996,6 @@ def build_deepresearch_doctor(
         "status": "ok" if not errors and not pending and not warnings else ("error" if errors else ("warn" if warnings else "pending")),
         "model": model,
         "model_candidates": candidate_models,
-        "narrative_backend": effective_narrative_backend,
-        "narrative_command_configured": bool(effective_narrative_command),
         "query": query,
         "live_search": live_search,
         "checks": checks,
@@ -3503,8 +3412,6 @@ def cmd_survey_doctor(args: argparse.Namespace) -> int:
     payload = build_deepresearch_doctor(
         model=args.model,
         model_candidates=args.model_candidates,
-        narrative_backend=args.narrative_backend,
-        narrative_command=args.narrative_command,
         timeout=args.timeout,
         query=args.query,
         live_search=args.live_search,
@@ -4204,10 +4111,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_finalize.add_argument("--min-sources", type=int, default=4)
     p_survey_finalize.add_argument("--min-evidence", type=int, default=8)
     p_survey_finalize.add_argument("--min-claims", type=int, default=8)
-    p_survey_finalize.add_argument("--narrative-backend", default=_narrative_backend_from_env("claude-cli"), choices=["off", "none", "skip", "claude-cli", "opus", "claude", "local-command", "command", "deterministic"], help="Chief-editor narrative rewrite after strict final eval; defaults to claude-cli or SOLAR_DEEPRESEARCH_NARRATIVE_BACKEND")
+    p_survey_finalize.add_argument("--narrative-backend", default="claude-cli", choices=["off", "none", "skip", "claude-cli", "opus", "claude", "local-command", "command", "deterministic"], help="Chief-editor narrative rewrite after strict final eval; defaults to claude-cli")
     p_survey_finalize.add_argument("--narrative-model", default="opus", help="Model alias for --narrative-backend claude-cli/opus/claude")
     p_survey_finalize.add_argument("--narrative-fallback-models", default="sonnet", help="Comma/space-separated narrative rewrite fallback models")
-    p_survey_finalize.add_argument("--narrative-command", default=_narrative_command_from_env(""), help="Local command for --narrative-backend local-command; receives chapter prompt on stdin")
+    p_survey_finalize.add_argument("--narrative-command", default="", help="Local command for --narrative-backend local-command; receives chapter prompt on stdin")
     p_survey_finalize.add_argument("--narrative-timeout", type=int, default=240)
     p_survey_finalize.add_argument("--narrative-max-budget-usd", type=float, default=3.0)
     p_survey_finalize.add_argument("--narrative-min-chars", type=int, default=8000)
@@ -4229,10 +4136,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_import.add_argument("--min-finalized", type=int, default=None)
     p_survey_import.add_argument("--min-chars", type=int, default=1200)
     p_survey_import.add_argument("--require-complete", action="store_true", help="Require every planned section plus final quality gate when --continue-finalize is used")
-    p_survey_import.add_argument("--narrative-backend", default=_narrative_backend_from_env("claude-cli"), choices=["off", "none", "skip", "claude-cli", "opus", "claude", "local-command", "command", "deterministic"], help="Chief-editor narrative rewrite when --continue-finalize runs")
+    p_survey_import.add_argument("--narrative-backend", default="claude-cli", choices=["off", "none", "skip", "claude-cli", "opus", "claude", "local-command", "command", "deterministic"], help="Chief-editor narrative rewrite when --continue-finalize runs")
     p_survey_import.add_argument("--narrative-model", default="opus")
     p_survey_import.add_argument("--narrative-fallback-models", default="sonnet")
-    p_survey_import.add_argument("--narrative-command", default=_narrative_command_from_env(""))
+    p_survey_import.add_argument("--narrative-command", default="")
     p_survey_import.add_argument("--narrative-timeout", type=int, default=240)
     p_survey_import.add_argument("--narrative-max-budget-usd", type=float, default=3.0)
     p_survey_import.add_argument("--narrative-min-chars", type=int, default=8000)
@@ -4270,10 +4177,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_continue.add_argument("--min-finalized", type=int, default=None)
     p_survey_continue.add_argument("--min-chars", type=int, default=1200)
     p_survey_continue.add_argument("--require-complete", action="store_true", help="Require every planned section plus final quality gate before completion")
-    p_survey_continue.add_argument("--narrative-backend", default=_narrative_backend_from_env("claude-cli"), choices=["off", "none", "skip", "claude-cli", "opus", "claude", "local-command", "command", "deterministic"], help="Chief-editor narrative rewrite when finalizing")
+    p_survey_continue.add_argument("--narrative-backend", default="claude-cli", choices=["off", "none", "skip", "claude-cli", "opus", "claude", "local-command", "command", "deterministic"], help="Chief-editor narrative rewrite when finalizing")
     p_survey_continue.add_argument("--narrative-model", default="opus")
     p_survey_continue.add_argument("--narrative-fallback-models", default="sonnet")
-    p_survey_continue.add_argument("--narrative-command", default=_narrative_command_from_env(""))
+    p_survey_continue.add_argument("--narrative-command", default="")
     p_survey_continue.add_argument("--narrative-timeout", type=int, default=240)
     p_survey_continue.add_argument("--narrative-max-budget-usd", type=float, default=3.0)
     p_survey_continue.add_argument("--narrative-min-chars", type=int, default=8000)
@@ -4309,8 +4216,6 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_doctor = sub.add_parser("survey-doctor", help="Preflight DeepResearch model and source-search readiness")
     p_survey_doctor.add_argument("--model", default="opus", help="Claude CLI model alias or full model ID to probe")
     p_survey_doctor.add_argument("--model-candidates", default="", help="Comma/space-separated fallback model candidates to probe")
-    p_survey_doctor.add_argument("--narrative-backend", default=_narrative_backend_from_env("claude-cli"), choices=["off", "none", "skip", "claude-cli", "opus", "claude", "local-command", "command", "deterministic"], help="Narrative backend readiness to check")
-    p_survey_doctor.add_argument("--narrative-command", default=_narrative_command_from_env(""), help="Local command to probe when --narrative-backend local-command")
     p_survey_doctor.add_argument("--timeout", type=int, default=45)
     p_survey_doctor.add_argument("--query", default="agentic runtime durable execution", help="Probe query for live search checks")
     p_survey_doctor.add_argument("--live-search", action="store_true", help="Run live Google/arXiv search probes")

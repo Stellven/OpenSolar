@@ -87,7 +87,6 @@ def test_continue_survey_cli_allow_pending(tmp_path, capsys):
         "--output-dir", str(tmp_path),
         "--brief", "latent reasoning",
         "--max-steps", "2",
-        "--narrative-backend", "skip",
         "--allow-pending",
         "--json",
     ])
@@ -103,7 +102,6 @@ def test_continue_survey_cli_requires_completion_without_allow_pending(tmp_path,
         "--output-dir", str(tmp_path),
         "--brief", "latent reasoning",
         "--max-steps", "2",
-        "--narrative-backend", "skip",
         "--json",
     ])
     assert rc == 1
