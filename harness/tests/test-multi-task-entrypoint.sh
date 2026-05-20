@@ -34,15 +34,18 @@ conn.execute("""CREATE TABLE intent_patterns (
     typical_actions TEXT,
     capability_mapping TEXT,
     frequency INTEGER DEFAULT 0,
+    success_count INTEGER DEFAULT 0,
     success_rate REAL DEFAULT 0.5,
-    avg_confidence REAL DEFAULT 0.5
+    avg_confidence REAL DEFAULT 0.5,
+    last_used DATETIME,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )""")
 conn.execute("""INSERT INTO intent_patterns
-    (pattern_id, name, category, triggers, typical_actions, capability_mapping, frequency, success_rate, avg_confidence)
+    (pattern_id, name, category, triggers, typical_actions, capability_mapping, frequency, success_count, success_rate, avg_confidence)
     VALUES
-    ('bench_perf', '性能基准', 'BUILD', '["跑基准", "benchmark"]', '["/benchmark"]', '', 10, 0.8, 0.83),
-    ('brain_deepseek', '切换DeepSeek模式', 'CONTROL', '["DS"]', '["switch_mode"]', '{"mcps":["brain-router"],"params":{"mode":"deepseek"}}', 2, 0.7, 0.7),
-    ('bad_json', '坏 JSON', 'QUERY', '{bad json', '[]', '', 1, 0.5, 0.5)
+    ('bench_perf', '性能基准', 'BUILD', '["跑基准", "benchmark"]', '["/benchmark"]', '', 10, 0, 0.8, 0.83),
+    ('brain_deepseek', '切换DeepSeek模式', 'CONTROL', '["DS"]', '["switch_mode"]', '{"mcps":["brain-router"],"params":{"mode":"deepseek"}}', 2, 0, 0.7, 0.7),
+    ('bad_json', '坏 JSON', 'QUERY', '{bad json', '[]', '', 1, 0, 0.5, 0.5)
 """)
 conn.commit()
 conn.close()
@@ -252,6 +255,22 @@ grep -q '"source": "solar-intent-patterns"' /tmp/solar-intent-configured.json \
   || { echo "FAIL: intent_patterns source did not match configured trigger"; exit 1; }
 grep -q '"type": "bench_perf"' /tmp/solar-intent-configured.json \
   || { echo "FAIL: configured trigger did not return pattern_id"; exit 1; }
+python3 - "$SOLAR_INTENT_DB" <<'PY'
+import sqlite3, sys
+conn = sqlite3.connect(sys.argv[1])
+row = conn.execute("SELECT frequency, success_count, last_used FROM intent_patterns WHERE pattern_id='bench_perf'").fetchone()
+conn.close()
+assert row == (10, 0, None), row
+PY
+PATH="$TMP/bin:$PATH" HARNESS_DIR="$TMP" python3 "$TMP/lib/intent_engine_adapter.py" match "帮我跑基准" --record --json >/tmp/solar-intent-configured-record.json
+python3 - "$SOLAR_INTENT_DB" <<'PY'
+import sqlite3, sys
+conn = sqlite3.connect(sys.argv[1])
+row = conn.execute("SELECT frequency, success_count, last_used FROM intent_patterns WHERE pattern_id='bench_perf'").fetchone()
+conn.close()
+if not (row[0] == 11 and row[1] == 1 and row[2]):
+    raise SystemExit(f"configured intent telemetry not updated: {row}")
+PY
 PATH="$TMP/bin:$PATH" HARNESS_DIR="$TMP" python3 "$TMP/lib/intent_engine_adapter.py" match "docs" --json >/tmp/solar-intent-short-token.json
 if grep -q '"type": "brain_deepseek"' /tmp/solar-intent-short-token.json; then
   echo "FAIL: short trigger DS matched inside unrelated text"

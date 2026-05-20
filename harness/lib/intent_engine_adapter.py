@@ -28,6 +28,7 @@ DISPATCH_LEDGER = HARNESS_DIR / "run" / "dispatch-ledger.jsonl"
 _TABLE_EXISTS_CACHE: dict[tuple[tuple[int, int] | None, str], bool] = {}
 _LEARNED_ROWS_CACHE: tuple[tuple[int, int] | None, list[dict[str, Any]]] | None = None
 _CONFIGURED_RULES_CACHE: tuple[tuple[int, int] | None, list[dict[str, Any]]] | None = None
+_TABLE_COLUMNS_CACHE: dict[tuple[tuple[int, int] | None, str], set[str]] = {}
 
 
 @dataclass(frozen=True)
@@ -360,6 +361,19 @@ def has_table(conn: sqlite3.Connection, table: str) -> bool:
     return exists
 
 
+def table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    sig = db_signature()
+    key = (sig, table)
+    if key in _TABLE_COLUMNS_CACHE:
+        return _TABLE_COLUMNS_CACHE[key]
+    try:
+        columns = {str(row["name"]) for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    except sqlite3.Error:
+        columns = set()
+    _TABLE_COLUMNS_CACHE[key] = columns
+    return columns
+
+
 def learned_rows() -> list[dict[str, Any]]:
     global _LEARNED_ROWS_CACHE
     sig = db_signature()
@@ -446,6 +460,45 @@ def record_feedback(text: str, matches: list[dict[str, Any]]) -> None:
         conn.close()
 
 
+def record_configured_usage(matches: list[dict[str, Any]]) -> None:
+    pattern_ids = sorted({
+        str(match.get("pattern_id") or "")
+        for match in matches
+        if match.get("source") == "solar-intent-patterns" and match.get("pattern_id")
+    })
+    if not pattern_ids:
+        return
+    conn = open_db()
+    if conn is None:
+        return
+    try:
+        if not has_table(conn, "intent_patterns"):
+            return
+        columns = table_columns(conn, "intent_patterns")
+        assignments: list[str] = []
+        if "frequency" in columns:
+            assignments.append("frequency = COALESCE(frequency, 0) + 1")
+        if "success_count" in columns:
+            # record=True means the parse was accepted for telemetry, not that downstream execution passed.
+            assignments.append("success_count = COALESCE(success_count, 0) + 1")
+        if "last_used" in columns:
+            assignments.append("last_used = datetime('now')")
+        if "updated_at" in columns:
+            assignments.append("updated_at = datetime('now')")
+        if not assignments:
+            return
+        for pattern_id in pattern_ids:
+            conn.execute(
+                f"UPDATE intent_patterns SET {', '.join(assignments)} WHERE pattern_id = ?",
+                (pattern_id,),
+            )
+        conn.commit()
+    except sqlite3.Error:
+        pass
+    finally:
+        conn.close()
+
+
 def learn(pattern: str, intent_type: str) -> dict[str, Any]:
     try:
         SOLAR_DB.parent.mkdir(parents=True, exist_ok=True)
@@ -508,6 +561,7 @@ def match(text: str, *, record: bool = False) -> dict[str, Any]:
         },
     }
     if record:
+        record_configured_usage(matches)
         record_feedback(text, matches)
         emit_event("intent_matched", {"matched": bool(matches), "match_count": len(matches)})
     return result
