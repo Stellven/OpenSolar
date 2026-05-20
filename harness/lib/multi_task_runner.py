@@ -676,6 +676,22 @@ def schedule_once(args: argparse.Namespace) -> dict[str, Any]:
     return {"guard": guard, "launched": launched, "skipped": skipped, "graphs": summaries}
 
 
+def status_snapshot(args: argparse.Namespace) -> dict[str, Any]:
+    """Read current worker and DAG state without dispatching new work."""
+    RUN_DIR.mkdir(parents=True, exist_ok=True)
+    max_workers = max(1, int(getattr(args, "max_workers", DEFAULT_MAX_WORKERS)))
+    memory_reserve_gb = float(getattr(args, "memory_reserve_gb", DEFAULT_MEMORY_RESERVE_GB))
+    cooldown_sec = int(getattr(args, "cooldown_sec", DEFAULT_COOLDOWN))
+    quota_backoff_sec = int(getattr(args, "quota_backoff_sec", DEFAULT_QUOTA_BACKOFF))
+    graph_arg = getattr(args, "graph", [])
+    return {
+        "guard": launch_guard(max_workers, memory_reserve_gb, cooldown_sec, quota_backoff_sec),
+        "launched": [],
+        "skipped": [],
+        "graphs": [status_summary_for_graph(p) for p in graph_files(graph_arg)],
+    }
+
+
 def print_table(headers: list[str], rows: list[list[str]]) -> None:
     widths = [len(h) for h in headers]
     for row in rows:
@@ -1076,7 +1092,7 @@ def screen_loop(args: argparse.Namespace) -> int:
     if args.command or not sys.stdin.isatty():
         commands = [args.command] if args.command else [line.strip() for line in sys.stdin if line.strip()]
         if not commands:
-            draw_screen(schedule_once(args), messages, args)
+            draw_screen(status_snapshot(args), messages, args)
             return 0
         for raw in commands:
             remember_screen_input(raw)
@@ -1101,10 +1117,10 @@ def screen_loop(args: argparse.Namespace) -> int:
                 messages.append("doctor gemini: " + " ".join((gemini.stdout or gemini.stderr).split())[:160])
             if action == "exit":
                 break
-        draw_screen(schedule_once(args), messages, args)
+        draw_screen(status_snapshot(args), messages, args)
         return 0
     while True:
-        result = schedule_once(args)
+        result = status_snapshot(args)
         draw_screen(result, messages, args)
         if args.once and not args.command:
             return 0
@@ -1119,7 +1135,7 @@ def screen_loop(args: argparse.Namespace) -> int:
             action, detail = handle_screen_input(raw, args)
             messages.append(f"{now_iso()} {raw} -> {detail}")
             if action == "exit":
-                draw_screen(schedule_once(args), messages, args)
+                draw_screen(status_snapshot(args), messages, args)
                 return 0
             if action == "foreground":
                 print()
@@ -1139,7 +1155,7 @@ def screen_loop(args: argparse.Namespace) -> int:
                 gemini = subprocess.run([sys.executable, str(adapter), "doctor"], text=True, capture_output=True)
                 messages.append("doctor gemini: " + " ".join((gemini.stdout or gemini.stderr).split())[:160])
         if args.command or not sys.stdin.isatty():
-            draw_screen(schedule_once(args), messages, args)
+            draw_screen(status_snapshot(args), messages, args)
             return 0
         time.sleep(max(1, int(args.interval)))
 
@@ -1298,7 +1314,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     if args.cmd == "status":
-        render({"guard": launch_guard(DEFAULT_MAX_WORKERS, DEFAULT_MEMORY_RESERVE_GB, DEFAULT_COOLDOWN, DEFAULT_QUOTA_BACKOFF), "graphs": [status_summary_for_graph(p) for p in graph_files(args.graph)]}, no_clear=args.no_clear)
+        render(status_snapshot(args), no_clear=args.no_clear)
         return 0
     if args.cmd == "screen":
         return screen_loop(args)

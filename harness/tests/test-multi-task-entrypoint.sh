@@ -188,4 +188,32 @@ grep -q "history: ↑/↓" /tmp/solar-multi-task-screen-short-task-query.out \
 grep -q "有哪些任务" "$TMP/run/multi-task/screen-history.txt" \
   || { echo "FAIL: screen history did not persist command"; exit 1; }
 
+graph3="$TMP/sprints/sprint-20260520-readonly-screen.task_graph.json"
+cat > "$graph3" <<'JSON'
+{
+  "sprint_id": "sprint-20260520-readonly-screen",
+  "nodes": [
+    {
+      "id": "R1",
+      "goal": "must not dispatch from status screen query",
+      "depends_on": [],
+      "write_scope": ["work/readonly.txt"],
+      "acceptance": ["No dispatch on status query"]
+    }
+  ]
+}
+JSON
+before_readonly=$(find "$TMP/run/multi-task" -name status.json | wc -l | tr -d ' ')
+COLUMNS=120 LINES=24 PATH="$TMP/bin:$PATH" HARNESS_DIR="$TMP" "$TMP/solar-harness.sh" multi-task screen --graph "$graph3" --command "有哪些任务" --max-workers 10 --cooldown-sec 0 --memory-reserve-gb 0 --no-clear >/tmp/solar-multi-task-screen-readonly-query.out
+after_readonly=$(find "$TMP/run/multi-task" -name status.json | wc -l | tr -d ' ')
+[[ "$before_readonly" -eq "$after_readonly" ]] \
+  || { echo "FAIL: screen status query dispatched work: before=$before_readonly after=$after_readonly"; exit 1; }
+python3 - "$graph3" <<'PY'
+import json, sys
+graph = json.load(open(sys.argv[1], encoding="utf-8"))
+node = graph["nodes"][0]
+if node.get("status") or node.get("assigned_to") or node.get("dispatch_id"):
+    raise SystemExit(f"screen status query mutated graph node: {node}")
+PY
+
 echo "PASS: multi-task entrypoint dispatches ready DAG nodes to tmux worker pool"
