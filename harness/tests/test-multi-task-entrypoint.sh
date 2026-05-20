@@ -178,4 +178,14 @@ if tail -1 "$TMP/run/multi-task/screen-commands.jsonl" | grep -q '"action": "sch
   exit 1
 fi
 
+COLUMNS=120 LINES=24 PATH="$TMP/bin:$PATH" HARNESS_DIR="$TMP" "$TMP/solar-harness.sh" multi-task screen --graph "$graph" --command "有哪些任务" --no-clear >/tmp/solar-multi-task-screen-short-task-query.out
+grep -q "intent=task_status_query" /tmp/solar-multi-task-screen-short-task-query.out \
+  || { echo "FAIL: short task query did not route to task status"; exit 1; }
+grep -q "DAG active" /tmp/solar-multi-task-screen-short-task-query.out \
+  || { echo "FAIL: short task query did not include DAG summary"; exit 1; }
+grep -q "history: ↑/↓" /tmp/solar-multi-task-screen-short-task-query.out \
+  || { echo "FAIL: screen did not advertise input history"; exit 1; }
+grep -q "有哪些任务" "$TMP/run/multi-task/screen-history.txt" \
+  || { echo "FAIL: screen history did not persist command"; exit 1; }
+
 echo "PASS: multi-task entrypoint dispatches ready DAG nodes to tmux worker pool"
