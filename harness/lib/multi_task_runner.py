@@ -839,6 +839,33 @@ def _selector_from_text(text: str) -> str:
     return "latest"
 
 
+def _looks_like_task_status_query(text: str) -> bool:
+    lower = text.lower()
+    query_markers = ("哪些", "哪个", "什么", "多少", "有没有", "是否", "吗", "?", "？", "list", "show", "what", "which", "running")
+    task_markers = ("任务", "worker", "pane", "后台", "dag", "task")
+    status_markers = ("执行", "运行", "正在", "状态", "进展", "active", "running", "status")
+    return (
+        any(marker in text or marker in lower for marker in query_markers)
+        and any(marker in text or marker in lower for marker in task_markers)
+        and any(marker in text or marker in lower for marker in status_markers)
+    )
+
+
+def _task_status_message() -> str:
+    tasks = list_task_rows()
+    active = [t for t in tasks if str(t.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
+    if not tasks:
+        return "当前后台任务: active=0 total=0"
+    if not active:
+        return f"当前后台任务: active=0 total={len(tasks)} latest={tasks[0].get('id', 'N/A')} status={tasks[0].get('status', 'N/A')}"
+    parts = []
+    for task in active[:5]:
+        parts.append(
+            f"{task.get('id', 'N/A')}[{task.get('role', 'N/A')}/{task.get('model', 'N/A')}/{task.get('status', 'N/A')}]"
+        )
+    return f"当前后台任务: active={len(active)} total={len(tasks)} " + "; ".join(parts)
+
+
 def handle_screen_input(text: str, args: argparse.Namespace) -> tuple[str, str]:
     raw = text.strip()
     if not raw:
@@ -854,9 +881,10 @@ def handle_screen_input(text: str, args: argparse.Namespace) -> tuple[str, str]:
         msg = "命令: status/profiles/doctor/start/foreground latest/logs latest/cancel latest；自然语言会先 intent match，再 intake。"
         append_screen_command(raw, intent, "help", "ok", matched)
         return "message", msg
-    if lower in {"status", "状态", "显示状态", "看状态"}:
-        append_screen_command(raw, intent, "status", "ok", matched)
-        return "message", f"intent={matched} action=status"
+    if lower in {"status", "状态", "显示状态", "看状态"} or _looks_like_task_status_query(raw):
+        label = "task_status_query" if _looks_like_task_status_query(raw) else matched
+        append_screen_command(raw, intent, "status", "ok", label)
+        return "message", f"intent={label} action=status {_task_status_message()}"
     if lower in {"profiles", "profile", "角色", "模型", "选项"}:
         append_screen_command(raw, intent, "profiles", "ok", matched)
         return "profiles", "显示 profiles"
