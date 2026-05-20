@@ -18,12 +18,18 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
+try:
+    import readline  # type: ignore
+except Exception:  # pragma: no cover - readline may be unavailable in minimal Python builds
+    readline = None  # type: ignore
+
 HOME = Path.home()
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
 SPRINTS_DIR = Path(os.environ.get("HARNESS_SPRINTS_DIR", HARNESS_DIR / "sprints"))
 RUN_DIR = HARNESS_DIR / "run" / "multi-task"
 SESSION = os.environ.get("SOLAR_HARNESS_MULTI_TASK_SESSION", "solar-harness-multi-task")
 PROFILE_PATH = Path(os.environ.get("SOLAR_MULTI_TASK_PROFILES", HARNESS_DIR / "config" / "multi-task-profiles.json"))
+SCREEN_HISTORY_PATH = Path(os.environ.get("SOLAR_MULTI_TASK_SCREEN_HISTORY", RUN_DIR / "screen-history.txt"))
 DEFAULT_MAX_WORKERS = int(os.environ.get("SOLAR_MULTI_TASK_MAX_WORKERS", "2") or "2")
 DEFAULT_INTERVAL = int(os.environ.get("SOLAR_MULTI_TASK_INTERVAL_SEC", "15") or "15")
 DEFAULT_COOLDOWN = int(os.environ.get("SOLAR_MULTI_TASK_LAUNCH_COOLDOWN_SEC", "30") or "30")
@@ -754,6 +760,52 @@ def command_log_path() -> Path:
     return RUN_DIR / "screen-commands.jsonl"
 
 
+def load_screen_history() -> None:
+    if readline is None:
+        return
+    try:
+        SCREEN_HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+        if SCREEN_HISTORY_PATH.exists():
+            readline.read_history_file(str(SCREEN_HISTORY_PATH))
+        readline.set_history_length(1000)
+    except Exception:
+        return
+
+
+def save_screen_history() -> None:
+    if readline is None:
+        return
+    try:
+        SCREEN_HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+        readline.set_history_length(1000)
+        readline.write_history_file(str(SCREEN_HISTORY_PATH))
+    except Exception:
+        return
+
+
+def remember_screen_input(text: str) -> None:
+    raw = text.strip()
+    if not raw:
+        return
+    if readline is not None:
+        try:
+            last = readline.get_history_item(readline.get_current_history_length()) or ""
+            if last != raw:
+                readline.add_history(raw)
+            save_screen_history()
+            return
+        except Exception:
+            pass
+    try:
+        SCREEN_HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+        old = SCREEN_HISTORY_PATH.read_text(encoding="utf-8").splitlines() if SCREEN_HISTORY_PATH.exists() else []
+        if not old or old[-1] != raw:
+            old.append(raw)
+        SCREEN_HISTORY_PATH.write_text("\n".join(old[-1000:]) + "\n", encoding="utf-8")
+    except Exception:
+        return
+
+
 def append_screen_command(text: str, intent: dict[str, Any], action: str, status: str, detail: str = "") -> None:
     RUN_DIR.mkdir(parents=True, exist_ok=True)
     record = {
@@ -844,11 +896,10 @@ def _looks_like_task_status_query(text: str) -> bool:
     query_markers = ("哪些", "哪个", "什么", "多少", "有没有", "是否", "吗", "?", "？", "list", "show", "what", "which", "running")
     task_markers = ("任务", "worker", "pane", "后台", "dag", "task")
     status_markers = ("执行", "运行", "正在", "状态", "进展", "active", "running", "status")
-    return (
-        any(marker in text or marker in lower for marker in query_markers)
-        and any(marker in text or marker in lower for marker in task_markers)
-        and any(marker in text or marker in lower for marker in status_markers)
-    )
+    has_query = any(marker in text or marker in lower for marker in query_markers)
+    has_task = any(marker in text or marker in lower for marker in task_markers)
+    has_status = any(marker in text or marker in lower for marker in status_markers)
+    return has_task and (has_query or has_status)
 
 
 def _task_status_message() -> str:
@@ -1004,12 +1055,16 @@ def draw_screen(result: dict[str, Any], messages: list[str], args: argparse.Name
     if not args.no_clear and sys.stdout.isatty():
         print("\033[H\033[2J", end="")
     status_lines = render_to_lines(result)
-    input_lines = [
+    fixed_input_lines = [
         f"profile={args.profile or 'auto'} backend={args.backend or 'auto'} model={args.model or 'auto'}",
         "输入: 自然语言需求 / status / profiles / doctor / foreground latest / logs latest / q",
+        f"history: ↑/↓ 回滚历史输入; {SCREEN_HISTORY_PATH.name}",
         "intent: 每条输入都会写入 run/multi-task/screen-commands.jsonl",
         "",
-    ] + messages[-max(1, bottom_h - 6):]
+    ]
+    input_body_height = max(0, bottom_h - 2)
+    message_slots = max(1, input_body_height - len(fixed_input_lines))
+    input_lines = fixed_input_lines + messages[-message_slots:]
     print("\n".join(_box_lines("后台 pane 状态 / DAG worker 池", status_lines, cols, top_h)))
     print("\n".join(_box_lines("自然语言指令 / Intent Engine 输入区", input_lines, cols, bottom_h)))
     print("solar> ", end="", flush=True)
@@ -1017,12 +1072,14 @@ def draw_screen(result: dict[str, Any], messages: list[str], args: argparse.Name
 
 def screen_loop(args: argparse.Namespace) -> int:
     messages: list[str] = ["screen started"]
+    load_screen_history()
     if args.command or not sys.stdin.isatty():
         commands = [args.command] if args.command else [line.strip() for line in sys.stdin if line.strip()]
         if not commands:
             draw_screen(schedule_once(args), messages, args)
             return 0
         for raw in commands:
+            remember_screen_input(raw)
             action, detail = handle_screen_input(raw, args)
             messages.append(f"{now_iso()} {raw} -> {detail}")
             if action == "foreground":
@@ -1058,6 +1115,7 @@ def screen_loop(args: argparse.Namespace) -> int:
             return 0
         commands = [raw]
         for raw in commands:
+            remember_screen_input(raw)
             action, detail = handle_screen_input(raw, args)
             messages.append(f"{now_iso()} {raw} -> {detail}")
             if action == "exit":
