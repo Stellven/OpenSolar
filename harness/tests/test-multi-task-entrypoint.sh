@@ -163,4 +163,16 @@ PY
 grep -q '"action": "status"' "$TMP/run/multi-task/screen-commands.jsonl" \
   || { echo "FAIL: screen command was not logged through intent path"; exit 1; }
 
+COLUMNS=120 LINES=24 PATH="$TMP/bin:$PATH" HARNESS_DIR="$TMP" "$TMP/solar-harness.sh" multi-task screen --graph "$graph" --command "有哪些任务在执行" --no-clear >/tmp/solar-multi-task-screen-status-query.out
+grep -q "action=status" /tmp/solar-multi-task-screen-status-query.out \
+  || { echo "FAIL: task status query did not route to status"; exit 1; }
+grep -q "intent=task_status_query" /tmp/solar-multi-task-screen-status-query.out \
+  || { echo "FAIL: task status query did not get readable intent label"; exit 1; }
+grep -q "当前后台任务" /tmp/solar-multi-task-screen-status-query.out \
+  || { echo "FAIL: task status query did not return task summary"; exit 1; }
+if tail -1 "$TMP/run/multi-task/screen-commands.jsonl" | grep -q '"action": "schedule_once"'; then
+  echo "FAIL: task status query was misrouted to schedule_once"
+  exit 1
+fi
+
 echo "PASS: multi-task entrypoint dispatches ready DAG nodes to tmux worker pool"
