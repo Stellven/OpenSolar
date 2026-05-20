@@ -2311,6 +2311,12 @@ print(json.dumps({
   clean-corrupted)
     do_clean_corrupted "${2:-}"
     ;;
+  queue-reap-stale)
+    # Archive old terminal queue files whose events are already consumed.
+    # This prevents consumed .jsonl/.lock residue from looking like live backlog.
+    . "$HARNESS_DIR/lib/queue.sh"
+    queue_archive_consumed_terminal "${2:-24}" "${3:-queue-reaper}"
+    ;;
   kill|stop) kill_harness ;;
   扩展|extend) start_extension "${2:-$(pwd)}" ;;
   models) shift; do_models_command "$@" ;;
