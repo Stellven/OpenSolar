@@ -17,7 +17,9 @@ HARNESS_DIR="${HARNESS_DIR:-$HOME/.solar/harness}"
 SESSION_NAME="solar-harness"
 LAB_SESSION_NAME="solar-harness-lab"
 LEGACY_LAB_SESSION_NAME="solar-harness-strategy"
+BG_SESSION_NAME="${SOLAR_HARNESS_BG_SESSION:-solar-harness-bg}"
 SPRINTS_DIR="$HARNESS_DIR/sprints"
+BG_TASKS_DIR="$HARNESS_DIR/run/bg-tasks"
 EXPECTED_PRODUCT_DELIVERY_PANES=4
 export HARNESS_DIR SPRINTS_DIR
 
@@ -51,6 +53,285 @@ human_prefix() {
 }
 
 ensure_dirs() { mkdir -p "$SPRINTS_DIR" "$HARNESS_DIR/personas" "$HARNESS_DIR/templates"; }
+
+bg_now_iso() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
+
+bg_write_status() {
+  local task_dir="$1" id="$2" status="$3" mode="$4" title="$5" window="$6" work_dir="$7" exit_code="${8:-}"
+  mkdir -p "$task_dir"
+  python3 - "$task_dir/status.json" "$id" "$status" "$mode" "$title" "$BG_SESSION_NAME" "$window" "$work_dir" "$exit_code" "$(bg_now_iso)" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+payload = {
+    "id": sys.argv[2],
+    "status": sys.argv[3],
+    "mode": sys.argv[4],
+    "title": sys.argv[5],
+    "session": sys.argv[6],
+    "window": sys.argv[7],
+    "work_dir": sys.argv[8],
+    "exit_code": None if sys.argv[9] == "" else int(sys.argv[9]),
+    "updated_at": sys.argv[10],
+}
+if path.exists():
+    try:
+        old = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        old = {}
+    old.update(payload)
+    payload = old
+else:
+    payload["created_at"] = sys.argv[10]
+path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
+bg_task_id() {
+  printf 'bg-%s-%04d\n' "$(date +%Y%m%d-%H%M%S)" "$((RANDOM % 10000))"
+}
+
+bg_short_title() {
+  python3 - "$1" <<'PY'
+import re
+import sys
+s = re.sub(r"\s+", "-", sys.argv[1].strip().lower())
+s = re.sub(r"[^a-z0-9._-]+", "", s)[:28].strip("-")
+print(s or "task")
+PY
+}
+
+bg_runner_script() {
+  local task_dir="$1" id="$2" mode="$3" title="$4" work_dir="$5"
+  local runner="$task_dir/runner.sh"
+  local harness_q task_dir_q work_dir_q id_q mode_q title_q
+  harness_q=$(printf '%q' "$HARNESS_DIR")
+  task_dir_q=$(printf '%q' "$task_dir")
+  work_dir_q=$(printf '%q' "$work_dir")
+  id_q=$(printf '%q' "$id")
+  mode_q=$(printf '%q' "$mode")
+  title_q=$(printf '%q' "$title")
+  cat > "$runner" <<EOF
+#!/usr/bin/env bash
+set -u
+HARNESS_DIR=${harness_q}
+TASK_DIR=${task_dir_q}
+WORK_DIR=${work_dir_q}
+ID=${id_q}
+MODE=${mode_q}
+TITLE=${title_q}
+LOG="\$TASK_DIR/output.log"
+STATUS="\$TASK_DIR/status.json"
+
+write_status() {
+  local status="\$1" exit_code="\${2:-}"
+  python3 - "\$STATUS" "\$ID" "\$status" "\$MODE" "\$TITLE" "$BG_SESSION_NAME" "\$(tmux display-message -p '#{window_name}' 2>/dev/null || echo "$id")" "\$WORK_DIR" "\$exit_code" "\$(date -u +%Y-%m-%dT%H:%M:%SZ)" <<'PY'
+import json
+import sys
+from pathlib import Path
+path = Path(sys.argv[1])
+old = {}
+if path.exists():
+    try:
+        old = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        old = {}
+old.update({
+    "id": sys.argv[2],
+    "status": sys.argv[3],
+    "mode": sys.argv[4],
+    "title": sys.argv[5],
+    "session": sys.argv[6],
+    "window": sys.argv[7],
+    "work_dir": sys.argv[8],
+    "exit_code": None if sys.argv[9] == "" else int(sys.argv[9]),
+    "updated_at": sys.argv[10],
+})
+old.setdefault("created_at", sys.argv[10])
+path.write_text(json.dumps(old, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+PY
+}
+
+mkdir -p "\$TASK_DIR"
+cd "\$WORK_DIR" || exit 78
+write_status running
+{
+  echo "[solar-harness bg] id=\$ID mode=\$MODE start=\$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if [[ "\$MODE" == "command" ]]; then
+    bash "\$TASK_DIR/command.sh"
+  else
+    "\$HARNESS_DIR/solar-harness.sh" intake --request "\$(cat "\$TASK_DIR/request.txt")"
+  fi
+} > >(tee -a "\$LOG") 2>&1
+rc=\$?
+if [[ "\$rc" -eq 0 ]]; then
+  write_status completed "\$rc"
+  [[ -x "\$HARNESS_DIR/osascript-notify.sh" ]] && bash "\$HARNESS_DIR/osascript-notify.sh" "Solar bg completed" "\$ID: \$TITLE" "Glass" >/dev/null 2>&1 || true
+else
+  write_status failed "\$rc"
+  [[ -x "\$HARNESS_DIR/osascript-notify.sh" ]] && bash "\$HARNESS_DIR/osascript-notify.sh" "Solar bg failed" "\$ID: \$TITLE" "Blow" >/dev/null 2>&1 || true
+fi
+echo "[solar-harness bg] id=\$ID exit=\$rc end=\$(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee -a "\$LOG"
+exit "\$rc"
+EOF
+  chmod +x "$runner"
+  printf '%s\n' "$runner"
+}
+
+do_bg_command() {
+  local subcmd="${1:-}"
+  case "$subcmd" in
+    help|--help|-h|"")
+      echo "Solar Harness BG"
+      echo ""
+      echo "Usage:"
+      echo "  $0 bg \"自然语言任务\""
+      echo "  $0 bg --cwd /path \"自然语言任务\""
+      echo "  $0 bg run [--cwd /path] -- <shell command>"
+      echo "  $0 bg status|list"
+      echo "  $0 bg logs <id>"
+      echo "  $0 bg attach <id>"
+      echo "  $0 bg cancel <id>"
+      return 0
+      ;;
+    status|list)
+      mkdir -p "$BG_TASKS_DIR"
+      python3 - "$BG_TASKS_DIR" <<'PY'
+import json
+import sys
+from pathlib import Path
+root = Path(sys.argv[1])
+rows = []
+for status in sorted(root.glob("*/status.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+    try:
+        data = json.loads(status.read_text(encoding="utf-8"))
+    except Exception:
+        continue
+    rows.append(data)
+print("┌────────────────────────────┬────────────┬──────────┬────────────────────────────┬────────────────────────────┐")
+print("│ id                         │ status     │ mode     │ updated_at                 │ title                      │")
+print("├────────────────────────────┼────────────┼──────────┼────────────────────────────┼────────────────────────────┤")
+for row in rows[:30]:
+    print("│ %-26s │ %-10s │ %-8s │ %-26s │ %-26s │" % (
+        str(row.get("id", "N/A"))[:26],
+        str(row.get("status", "N/A"))[:10],
+        str(row.get("mode", "N/A"))[:8],
+        str(row.get("updated_at", "N/A"))[:26],
+        str(row.get("title", "N/A"))[:26],
+    ))
+print("└────────────────────────────┴────────────┴──────────┴────────────────────────────┴────────────────────────────┘")
+PY
+      return 0
+      ;;
+    logs|log)
+      shift || true
+      local id="${1:-}"
+      [[ -n "$id" ]] || { err "Usage: $0 bg logs <id>"; return 1; }
+      local log_file="$BG_TASKS_DIR/$id/output.log"
+      [[ -f "$log_file" ]] || { err "log not found: $log_file"; return 1; }
+      tail -200 "$log_file"
+      return 0
+      ;;
+    attach)
+      shift || true
+      local id="${1:-}"
+      [[ -n "$id" ]] || { err "Usage: $0 bg attach <id>"; return 1; }
+      local status_file="$BG_TASKS_DIR/$id/status.json"
+      [[ -f "$status_file" ]] || { err "status not found: $status_file"; return 1; }
+      local window
+      window=$(python3 - "$status_file" <<'PY'
+import json, sys
+print(json.load(open(sys.argv[1], encoding="utf-8")).get("window", ""))
+PY
+)
+      if [[ -t 1 && -n "${TERM:-}" && "${TERM:-}" != "dumb" ]]; then
+        tmux select-window -t "${BG_SESSION_NAME}:${window}" 2>/dev/null || true
+        tmux attach -t "${BG_SESSION_NAME}"
+      else
+        ok "bg task 在后台运行: tmux attach -t ${BG_SESSION_NAME}:${window}"
+      fi
+      return 0
+      ;;
+    cancel)
+      shift || true
+      local id="${1:-}"
+      [[ -n "$id" ]] || { err "Usage: $0 bg cancel <id>"; return 1; }
+      local status_file="$BG_TASKS_DIR/$id/status.json"
+      [[ -f "$status_file" ]] || { err "status not found: $status_file"; return 1; }
+      local window task_dir
+      task_dir="$BG_TASKS_DIR/$id"
+      window=$(python3 - "$status_file" <<'PY'
+import json, sys
+print(json.load(open(sys.argv[1], encoding="utf-8")).get("window", ""))
+PY
+)
+      tmux kill-window -t "${BG_SESSION_NAME}:${window}" 2>/dev/null || true
+      bg_write_status "$task_dir" "$id" "cancelled" "$(python3 - "$status_file" <<'PY'
+import json, sys
+print(json.load(open(sys.argv[1], encoding="utf-8")).get("mode", "task"))
+PY
+)" "$(python3 - "$status_file" <<'PY'
+import json, sys
+print(json.load(open(sys.argv[1], encoding="utf-8")).get("title", "N/A"))
+PY
+)" "$window" "$(pwd)" ""
+      ok "cancelled: $id"
+      return 0
+      ;;
+  esac
+
+  local mode="task" work_dir="$(pwd)" task_text="" id title window task_dir runner
+  if [[ "$subcmd" == "run" ]]; then
+    mode="command"
+    shift || true
+  fi
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      --cwd)
+        shift || { err "bg --cwd needs path"; return 1; }
+        work_dir="$1"
+        ;;
+      --)
+        shift
+        task_text="$*"
+        break
+        ;;
+      *)
+        task_text+="${task_text:+ }$1"
+        ;;
+    esac
+    shift || true
+  done
+  [[ -d "$work_dir" ]] || { err "bg cwd not found: $work_dir"; return 1; }
+  [[ -n "$task_text" ]] || { err "Usage: $0 bg \"任务\" 或 $0 bg run -- <command>"; return 1; }
+
+  id="$(bg_task_id)"
+  title="$(bg_short_title "$task_text")"
+  window="${id#bg-}-${title}"
+  window="${window:0:48}"
+  task_dir="$BG_TASKS_DIR/$id"
+  mkdir -p "$task_dir"
+  if [[ "$mode" == "command" ]]; then
+    printf '%s\n' "$task_text" > "$task_dir/command.sh"
+    chmod +x "$task_dir/command.sh"
+  else
+    printf '%s\n' "$task_text" > "$task_dir/request.txt"
+  fi
+  runner="$(bg_runner_script "$task_dir" "$id" "$mode" "$title" "$work_dir")"
+  bg_write_status "$task_dir" "$id" "queued" "$mode" "$title" "$window" "$work_dir" ""
+
+  if tmux has-session -t "$BG_SESSION_NAME" 2>/dev/null; then
+    tmux new-window -d -t "$BG_SESSION_NAME" -n "$window" -c "$work_dir" "bash $(printf '%q' "$runner"); exec \${SHELL:-/bin/zsh}"
+  else
+    tmux new-session -d -s "$BG_SESSION_NAME" -n "$window" -c "$work_dir" "bash $(printf '%q' "$runner"); exec \${SHELL:-/bin/zsh}"
+  fi
+  ok "bg task queued: $id"
+  log "status: $0 bg status"
+  log "logs:   $0 bg logs $id"
+  log "attach: tmux attach -t ${BG_SESSION_NAME}:${window}"
+}
 
 cleanup_legacy_sessions() {
   if ! tmux has-session -t "$LEGACY_LAB_SESSION_NAME" 2>/dev/null; then
@@ -2328,6 +2609,10 @@ print(json.dumps({
     shift || true
     intake_request "$@"
     ;;
+  bg)
+    shift || true
+    do_bg_command "$@"
+    ;;
   sprint)
     shift || true
     [[ "$#" -eq 0 ]] && { err "用法: $0 sprint \"需求描述\""; exit 1; }
@@ -3278,6 +3563,7 @@ PY
     echo "  $0 kill                关闭"
     echo "  $0 扩展 | extend       启动独立第二四分屏 (solar-harness-lab)"
     echo "  $0 intake \"需求\"       默认需求入口：创建 sprint/epic + raw 记录 + 触发 autopilot"
+    echo "  $0 bg \"任务\"           在 tmux 后台窗口执行任务；支持 status/logs/attach/cancel"
     echo "  $0 sprint \"需求\"       创建 Sprint/Epic（不主动 dispatch，兼容旧命令）"
     echo "  $0 wake [sprint-id]  列出未完成 Sprint 或恢复指定 Sprint"
     echo "  $0 wake --help       显示 wake 帮助"
