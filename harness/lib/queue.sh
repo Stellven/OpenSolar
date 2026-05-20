@@ -241,7 +241,7 @@ queue_archive_consumed_terminal() {
     local archive_root="${QUEUE_ARCHIVE_DIR:-${HARNESS_DIR:-$HOME/.solar/harness}/run/queue-archive}"
 
     python3 -c "
-import datetime, json, os, pathlib, shutil, sys, time
+import datetime, json, pathlib, shutil, sys, time
 
 queue_dir = pathlib.Path(sys.argv[1])
 sprints_dir = pathlib.Path(sys.argv[2])
