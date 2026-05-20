@@ -917,6 +917,21 @@ def match_intent(text: str) -> dict[str, Any]:
         }
 
 
+def local_intent(text: str, intent_type: str) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "input": text,
+        "matched": True,
+        "matches": [{
+            "kind": "intent",
+            "type": intent_type,
+            "source": "solar-harness-screen",
+            "confidence": 1.0,
+        }],
+        "generated_at": now_iso(),
+    }
+
+
 def _intent_label(intent: dict[str, Any]) -> str:
     labels: list[str] = []
     for item in intent.get("matches") or []:
@@ -1018,39 +1033,53 @@ def handle_screen_input(text: str, args: argparse.Namespace) -> tuple[str, str]:
     raw = text.strip()
     if not raw:
         return "noop", "空输入"
-    intent = match_intent(raw)
-    matched = _intent_label(intent)
     lower = raw.lower()
 
     if lower in {"q", "quit", "exit", "退出", "关闭"}:
+        intent = local_intent(raw, "exit")
+        matched = _intent_label(intent)
         append_screen_command(raw, intent, "exit", "ok", matched)
         return "exit", f"intent={matched} action=exit"
     if lower in {"help", "?", "/help", "帮助"}:
+        intent = local_intent(raw, "help")
+        matched = _intent_label(intent)
         msg = "命令: status/profiles/doctor/start/foreground latest/logs latest/cancel latest；自然语言会先 intent match，再 intake。"
         append_screen_command(raw, intent, "help", "ok", matched)
         return "message", msg
     if lower in {"status", "状态", "显示状态", "看状态"} or _looks_like_task_status_query(raw):
+        label = "task_status_query" if _looks_like_task_status_query(raw) else "status"
+        intent = local_intent(raw, label)
+        matched = _intent_label(intent)
         label = "task_status_query" if _looks_like_task_status_query(raw) else matched
         append_screen_command(raw, intent, "status", "ok", label)
         return "message", f"intent={label} action=status {_task_status_message()}"
     if lower in {"profiles", "profile", "角色", "模型", "选项"}:
+        intent = local_intent(raw, "profiles")
+        matched = _intent_label(intent)
         append_screen_command(raw, intent, "profiles", "ok", matched)
         return "profiles", "显示 profiles"
     if lower in {"doctor", "检查", "自检"}:
+        intent = local_intent(raw, "doctor")
+        matched = _intent_label(intent)
         append_screen_command(raw, intent, "doctor", "ok", matched)
         return "doctor", "显示 doctor"
     if lower.startswith(("foreground", "focus", "fg", "前台", "看输出", "查看输出")):
+        intent = local_intent(raw, "foreground")
         selector = raw.split(maxsplit=1)[1] if " " in raw and not raw.startswith(("前台", "看输出", "查看输出")) else _selector_from_text(raw)
         append_screen_command(raw, intent, "foreground", "ok", selector)
         return "foreground", selector
     if lower.startswith(("logs", "log", "日志")):
+        intent = local_intent(raw, "logs")
         selector = raw.split(maxsplit=1)[1] if " " in raw else _selector_from_text(raw)
         append_screen_command(raw, intent, "logs", "ok", selector)
         return "logs", selector
     if lower.startswith(("cancel", "取消")):
+        intent = local_intent(raw, "cancel")
         selector = raw.split(maxsplit=1)[1] if " " in raw else _selector_from_text(raw)
         append_screen_command(raw, intent, "cancel", "ok", selector)
         return "cancel", selector
+    intent = match_intent(raw)
+    matched = _intent_label(intent)
     if lower.startswith(("start", "启动调度", "开始调度")) or any((m.get("type") == "execute") for m in intent.get("matches") or []):
         pref = _set_screen_model_preference(raw, args)
         result = schedule_once(args)
