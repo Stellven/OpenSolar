@@ -1037,12 +1037,14 @@ def graph_workers() -> list[dict]:
     skills = [
         "bash", "python", "dataclasses", "pytest", "pure-functions", "time-injection", "io", "fsm", "integration-testing", "json-patch", "typescript", "docs", "testing",
         "stub-llm", "e2e-test", "cli-view-assertion", "negative-control", "verifier", "registry-introspection",
+        "argparse",
         "technical-writing", "markdown", "evidence-aggregation", "handoff-authoring", "traceability-patch", "knowledge-raw-writeback",
         "frontend", "flask", "http-routing", "autopilot-hooks", "json-traversal", "html", "javascript", "vanilla-dom",
         "product", "planning",
         "architecture", "schema", "state-machine", "distributed-systems",
         "api-design", "data-modeling", "compatibility",
         "routing", "diagnostics", "evaluation", "debug.systematic",
+        "lazy-import",
     ]
     capabilities = [
         "bash", "python", "typescript", "docs", "testing",
@@ -1054,6 +1056,7 @@ def graph_workers() -> list[dict]:
         "context.inject", "wiki.status", "data_plane.audit",
         "dag.validate", "dag.ready_nodes", "dag.join_gate",
         "harness.testing", "harness.reporting", "harness.knowledge",
+        "lazy-import", "cli",
         "activation.proof", "negative_control", "runtime_artifacts",
         "autopilot.monitor", "autopilot.safe_apply", "pane.deadlock_detection",
         "documentation", "schema", "state-machine", "storage", "sources",
@@ -1479,10 +1482,15 @@ def instruction_for(status: dict, files: dict[str, bool]) -> str:
             f"请接手 {sid}：读取 .prd.md 和 .contract.md，产出 {sid}.plan.md 和 {sid}.task_graph.json。"
             "task_graph 必须通过 solar-harness graph-scheduler validate。不要问用户拍板；这是 P0 reliability 默认推进。"
         )
-    if handoff in ("builder", "builder_main", "builder_parallel", "builder-lab") and files["plan"] and not files["handoff"]:
+    if (
+        handoff in ("builder", "builder_main", "builder_parallel", "builder-lab")
+        and files["plan"]
+        and files["task_graph"]
+        and not files["handoff"]
+    ):
         return (
-            f"请接手 {sid}：按 plan/contract 实现并写 {sid}.handoff.md。"
-            "先跑验收命令，缺口写清楚。"
+            f"请接手 {sid}：读取 task_graph.json，并按 DAG/graph-dispatch 执行 ready nodes；"
+            "禁止在缺少 DAG 时直接写 parent handoff。"
         )
     if handoff in ("evaluator", "reviewer") and files["handoff"] and not files["eval"]:
         return f"请评审 {sid}：读取 handoff/contract，产出 eval.md/eval.json。"
@@ -1646,6 +1654,7 @@ def inspect_sprints() -> list[dict]:
                     ),
                 }
             )
+            continue
         if files["plan"] and files["task_graph"] and handoff in (GRAPH_READY_HANDOFFS | GRAPH_EVAL_HANDOFFS):
             gs = graph_status(sid)
             if gs.get("parent_ready"):
@@ -1684,7 +1693,7 @@ def inspect_sprints() -> list[dict]:
                         "graph": gs,
                     }
                 )
-        if files["plan"] and not files["task_graph"] and handoff in ("builder", "builder_main", "builder_parallel", "builder-lab") and not files["handoff"]:
+        if files["plan"] and files["task_graph"] and handoff in ("builder", "builder_main", "builder_parallel", "builder-lab") and not files["handoff"]:
             raw_findings.append(
                 {
                     "sid": sid,
