@@ -26,6 +26,24 @@ import sqlite3, sys
 conn = sqlite3.connect(sys.argv[1])
 conn.execute("CREATE TABLE sys_intent_patterns (pattern TEXT NOT NULL, intent_type TEXT NOT NULL, confidence REAL DEFAULT 0.8, success_count INTEGER DEFAULT 0, UNIQUE(pattern, intent_type))")
 conn.execute("CREATE TABLE sys_intent_unknown (id INTEGER PRIMARY KEY AUTOINCREMENT, input TEXT NOT NULL, resolved_intent TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
+conn.execute("""CREATE TABLE intent_patterns (
+    pattern_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    triggers TEXT,
+    typical_actions TEXT,
+    capability_mapping TEXT,
+    frequency INTEGER DEFAULT 0,
+    success_rate REAL DEFAULT 0.5,
+    avg_confidence REAL DEFAULT 0.5
+)""")
+conn.execute("""INSERT INTO intent_patterns
+    (pattern_id, name, category, triggers, typical_actions, capability_mapping, frequency, success_rate, avg_confidence)
+    VALUES
+    ('bench_perf', '性能基准', 'BUILD', '["跑基准", "benchmark"]', '["/benchmark"]', '', 10, 0.8, 0.83),
+    ('brain_deepseek', '切换DeepSeek模式', 'CONTROL', '["DS"]', '["switch_mode"]', '{"mcps":["brain-router"],"params":{"mode":"deepseek"}}', 2, 0.7, 0.7),
+    ('bad_json', '坏 JSON', 'QUERY', '{bad json', '[]', '', 1, 0.5, 0.5)
+""")
 conn.commit()
 conn.close()
 PY
@@ -229,6 +247,16 @@ PY
 )
 [[ "$unknown_dedupe_count" -eq 1 ]] \
   || { echo "FAIL: intent unknown dedupe failed: $unknown_dedupe_count"; exit 1; }
+PATH="$TMP/bin:$PATH" HARNESS_DIR="$TMP" python3 "$TMP/lib/intent_engine_adapter.py" match "帮我跑基准" --json >/tmp/solar-intent-configured.json
+grep -q '"source": "solar-intent-patterns"' /tmp/solar-intent-configured.json \
+  || { echo "FAIL: intent_patterns source did not match configured trigger"; exit 1; }
+grep -q '"type": "bench_perf"' /tmp/solar-intent-configured.json \
+  || { echo "FAIL: configured trigger did not return pattern_id"; exit 1; }
+PATH="$TMP/bin:$PATH" HARNESS_DIR="$TMP" python3 "$TMP/lib/intent_engine_adapter.py" match "docs" --json >/tmp/solar-intent-short-token.json
+if grep -q '"type": "brain_deepseek"' /tmp/solar-intent-short-token.json; then
+  echo "FAIL: short trigger DS matched inside unrelated text"
+  exit 1
+fi
 
 graph3="$TMP/sprints/sprint-20260520-readonly-screen.task_graph.json"
 cat > "$graph3" <<'JSON'

@@ -27,6 +27,7 @@ EVENTS_JSONL = STATE_DIR / "events.jsonl"
 DISPATCH_LEDGER = HARNESS_DIR / "run" / "dispatch-ledger.jsonl"
 _TABLE_EXISTS_CACHE: dict[tuple[tuple[int, int] | None, str], bool] = {}
 _LEARNED_ROWS_CACHE: tuple[tuple[int, int] | None, list[dict[str, Any]]] | None = None
+_CONFIGURED_RULES_CACHE: tuple[tuple[int, int] | None, list[dict[str, Any]]] | None = None
 
 
 @dataclass(frozen=True)
@@ -178,6 +179,77 @@ def as_match(rule: IntentRule, text: str) -> dict[str, Any]:
     return out
 
 
+def _loads_json_list(value: Any) -> list[Any]:
+    if value is None or value == "":
+        return []
+    if isinstance(value, list):
+        return value
+    try:
+        parsed = json.loads(str(value))
+    except Exception:
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def _loads_json_dict(value: Any) -> dict[str, Any]:
+    if value is None or value == "":
+        return {}
+    if isinstance(value, dict):
+        return value
+    try:
+        parsed = json.loads(str(value))
+    except Exception:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _has_regex_meta(trigger: str) -> bool:
+    return any(ch in trigger for ch in "^$.*+?[](){}|\\")
+
+
+def _trigger_matches(trigger: str, text: str, lowered: str) -> bool:
+    trigger = trigger.strip()
+    if not trigger:
+        return False
+    trigger_lower = trigger.lower()
+    if _has_regex_meta(trigger):
+        try:
+            return re.search(trigger, text, re.IGNORECASE) is not None
+        except re.error:
+            return trigger_lower in lowered
+    if len(trigger) <= 3 and trigger.isascii() and trigger.isalnum():
+        return re.search(rf"(?<![A-Za-z0-9_]){re.escape(trigger)}(?![A-Za-z0-9_])", text, re.IGNORECASE) is not None
+    return trigger_lower in lowered
+
+
+def configured_rows() -> list[dict[str, Any]]:
+    global _CONFIGURED_RULES_CACHE
+    sig = db_signature()
+    if _CONFIGURED_RULES_CACHE is not None and _CONFIGURED_RULES_CACHE[0] == sig:
+        return _CONFIGURED_RULES_CACHE[1]
+
+    conn = open_db()
+    if conn is None:
+        _CONFIGURED_RULES_CACHE = (sig, [])
+        return []
+    try:
+        if not has_table(conn, "intent_patterns"):
+            rows: list[dict[str, Any]] = []
+        else:
+            rows = [dict(row) for row in conn.execute(
+                """SELECT pattern_id, name, category, triggers, typical_actions,
+                          capability_mapping, success_rate, avg_confidence, frequency
+                   FROM intent_patterns
+                   ORDER BY frequency DESC, success_rate DESC, pattern_id"""
+            ).fetchall()]
+    except sqlite3.Error:
+        rows = []
+    finally:
+        conn.close()
+    _CONFIGURED_RULES_CACHE = (sig, rows)
+    return rows
+
+
 def match_static(text: str) -> list[dict[str, Any]]:
     normalized = normalize(text)
     lowered = normalized.lower()
@@ -218,6 +290,41 @@ def match_static(text: str) -> list[dict[str, Any]]:
             return matches
 
     return matches
+
+
+def match_configured(text: str) -> list[dict[str, Any]]:
+    normalized = normalize(text)
+    lowered = normalized.lower()
+    for row in configured_rows():
+        triggers = [str(item).strip() for item in _loads_json_list(row.get("triggers")) if str(item).strip()]
+        if not triggers:
+            continue
+        matched_trigger = next((trigger for trigger in triggers if _trigger_matches(trigger, normalized, lowered)), "")
+        if not matched_trigger:
+            continue
+        actions = [str(item) for item in _loads_json_list(row.get("typical_actions"))]
+        capability_mapping = _loads_json_dict(row.get("capability_mapping"))
+        confidence = max(0.75, float(row.get("avg_confidence") or 0.5), float(row.get("success_rate") or 0.5))
+        out: dict[str, Any] = {
+            "kind": "intent",
+            "type": str(row.get("pattern_id") or row.get("category") or "configured_pattern"),
+            "source": "solar-intent-patterns",
+            "confidence": min(0.99, confidence),
+            "instruction": f"命中 Solar intent_patterns: {row.get('name') or row.get('pattern_id')} / {matched_trigger}",
+            "pattern_id": str(row.get("pattern_id") or ""),
+            "name": str(row.get("name") or ""),
+            "category": str(row.get("category") or ""),
+            "trigger": matched_trigger,
+        }
+        if actions:
+            out["actions"] = actions
+        if capability_mapping:
+            out["capability_mapping"] = capability_mapping
+            params = capability_mapping.get("params")
+            if isinstance(params, dict) and params.get("mode"):
+                out["target"] = str(params["mode"])
+        return [out]
+    return []
 
 
 def open_db() -> sqlite3.Connection | None:
@@ -387,6 +494,8 @@ def emit_event(event: str, payload: dict[str, Any]) -> None:
 
 def match(text: str, *, record: bool = False) -> dict[str, Any]:
     matches = match_learned(text) + match_static(text)
+    if not matches:
+        matches = match_configured(text)
     result = {
         "ok": True,
         "input": text,
