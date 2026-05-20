@@ -25,6 +25,8 @@ SPRINTS_DIR = HARNESS_DIR / "sprints"
 STATE_DIR = HARNESS_DIR / "state"
 EVENTS_JSONL = STATE_DIR / "events.jsonl"
 DISPATCH_LEDGER = HARNESS_DIR / "run" / "dispatch-ledger.jsonl"
+_TABLE_EXISTS_CACHE: dict[tuple[tuple[int, int] | None, str], bool] = {}
+_LEARNED_ROWS_CACHE: tuple[tuple[int, int] | None, list[dict[str, Any]]] | None = None
 
 
 @dataclass(frozen=True)
@@ -48,13 +50,15 @@ DIRECT_RULES: tuple[IntentRule, ...] = (
     IntentRule("intent", "solar_max", 1.00, (r"^solar-max$",), "用户触发 Solar-MAX 项目模式；切换并装载项目状态。"),
     IntentRule("intent", "dev_mode", 0.95, (r"^我要开发",), "用户希望进入开发模式；识别项目路径、装载状态、恢复上下文。"),
     IntentRule("intent", "office_mode", 0.95, (r"^我要办公",), "用户希望进入办公模式。"),
+    IntentRule("intent", "status_query", 0.95, (r"^(status|状态|显示状态|看状态)$",), "用户请求查看当前状态；优先返回结构化状态摘要。"),
+    IntentRule("intent", "task_status_query", 0.95, (r"有哪些任务|哪些任务|任务.*(执行|运行|状态|进展)|后台.*任务|task.*(status|running)",), "用户请求查看任务或后台 worker 状态；优先返回任务池/DAG 摘要。"),
     IntentRule("intent", "display", 0.90, (r"^(我要看|我想看|给我看|展示|显示|呈现)",), "用户希望查看/展示内容；用可读仪表盘或结构化视图输出。"),
     IntentRule("intent", "insight_quick", 0.95, (r"^洞察分析[：:]",), "用户请求快速洞察分析。"),
     IntentRule("intent", "insight_deep", 0.95, (r"^(深入洞察|深度洞察)\s+",), "用户请求深度洞察分析。"),
     IntentRule("intent", "xiaoai", 0.95, (r"^(小爱|呼叫小爱)\s+",), "用户请求小爱远程调用。"),
     IntentRule("intent", "plan", 0.95, (r"^/plan( +preview| +metrics)? +",), "用户请求 Plan/Act 流程。"),
     IntentRule("intent", "agent", 0.95, (r"^@[A-Za-z][A-Za-z0-9_]*",), "用户显式触发 @Agent；映射到对应 specialist/subagent。"),
-    IntentRule("intent", "show_dashboard", 0.95, (r"dashboard|仪表盘|solar.*状况|看指标|solar.*dashboard",), "用户请求查看 Solar 运行状况。"),
+    IntentRule("intent", "show_dashboard", 0.95, (r"dashboard|仪表盘|solar.*状况|solar.*状态|查.*solar.*状态|看指标|solar.*dashboard",), "用户请求查看 Solar 运行状况。"),
     IntentRule("intent", "task_completed", 0.85, (r"完成了|搞定了|做好了|弄完了|搞好了|写完了|改完了|改好了|任务完成|已完成|执行完毕|\b(done|finished|complete)\b",), "用户标记任务完成；读取最近状态并推荐后续动作。"),
     IntentRule("intent", "mode_switch", 0.95, (r"^(省钱|经济|economy)$",), "用户请求切换到经济模式。", target="economy"),
     IntentRule("intent", "mode_switch", 0.95, (r"^(用glm|智谱|glm\.only)$",), "用户请求切换到 GLM 全量模式。", target="glm_only"),
@@ -227,35 +231,60 @@ def open_db() -> sqlite3.Connection | None:
         return None
 
 
+def db_signature() -> tuple[int, int] | None:
+    try:
+        st = SOLAR_DB.stat()
+        return (int(st.st_mtime_ns), int(st.st_size))
+    except OSError:
+        return None
+
+
 def has_table(conn: sqlite3.Connection, table: str) -> bool:
+    sig = db_signature()
+    key = (sig, table)
+    if key in _TABLE_EXISTS_CACHE:
+        return _TABLE_EXISTS_CACHE[key]
     try:
         row = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
-        return row is not None
+        exists = row is not None
     except sqlite3.Error:
-        return False
+        exists = False
+    _TABLE_EXISTS_CACHE[key] = exists
+    return exists
 
 
-def match_learned(text: str) -> list[dict[str, Any]]:
+def learned_rows() -> list[dict[str, Any]]:
+    global _LEARNED_ROWS_CACHE
+    sig = db_signature()
+    if _LEARNED_ROWS_CACHE is not None and _LEARNED_ROWS_CACHE[0] == sig:
+        return _LEARNED_ROWS_CACHE[1]
+
     conn = open_db()
     if conn is None:
+        _LEARNED_ROWS_CACHE = (sig, [])
         return []
     try:
         if not has_table(conn, "sys_intent_patterns"):
-            return []
-        rows = conn.execute(
-            """SELECT pattern, intent_type, confidence
-               FROM sys_intent_patterns
-               ORDER BY confidence DESC, success_count DESC
-               LIMIT 200"""
-        ).fetchall()
+            rows: list[dict[str, Any]] = []
+        else:
+            rows = [dict(row) for row in conn.execute(
+                """SELECT pattern, intent_type, confidence
+                   FROM sys_intent_patterns
+                   ORDER BY confidence DESC, success_count DESC
+                   LIMIT 200"""
+            ).fetchall()]
     except sqlite3.Error:
-        return []
+        rows = []
     finally:
         conn.close()
+    _LEARNED_ROWS_CACHE = (sig, rows)
+    return rows
 
+
+def match_learned(text: str) -> list[dict[str, Any]]:
     matches: list[dict[str, Any]] = []
     lowered = text.lower()
-    for row in rows:
+    for row in learned_rows():
         pattern = str(row["pattern"] or "").strip()
         intent_type = str(row["intent_type"] or "").strip()
         if not pattern or not intent_type:
@@ -294,8 +323,14 @@ def record_feedback(text: str, matches: list[dict[str, Any]]) -> None:
             )
         if not matches and has_table(conn, "sys_intent_unknown"):
             conn.execute(
-                "INSERT INTO sys_intent_unknown (input, created_at) VALUES (?, datetime('now'))",
-                (text[:1000],),
+                """INSERT INTO sys_intent_unknown (input, created_at)
+                   SELECT ?, datetime('now')
+                   WHERE NOT EXISTS (
+                       SELECT 1 FROM sys_intent_unknown
+                       WHERE input = ?
+                       LIMIT 1
+                   )""",
+                (text[:1000], text[:1000]),
             )
         conn.commit()
     except sqlite3.Error:
