@@ -142,9 +142,24 @@ grep -q '"backend": "gemini-cli"' "$(dirname "$gemini_runner")/status.json" || {
 PATH="$TMP/bin:$PATH" HARNESS_DIR="$TMP" "$TMP/solar-harness.sh" multi-task status --graph "$graph" --no-clear | grep -q "sprint-20260520-multi-task" \
   || { echo "FAIL: status did not include graph"; exit 1; }
 
-PATH="$TMP/bin:$PATH" HARNESS_DIR="$TMP" "$TMP/solar-harness.sh" multi-task screen --graph "$graph" --command "显示状态" --no-clear >/tmp/solar-multi-task-screen.out
+COLUMNS=80 LINES=20 PATH="$TMP/bin:$PATH" HARNESS_DIR="$TMP" "$TMP/solar-harness.sh" multi-task screen --graph "$graph" --command "显示状态" --no-clear >/tmp/solar-multi-task-screen.out
 grep -q "自然语言指令" /tmp/solar-multi-task-screen.out \
   || { echo "FAIL: screen did not render input pane"; exit 1; }
+screen_lines=$(wc -l < /tmp/solar-multi-task-screen.out | tr -d ' ')
+[[ "$screen_lines" -le 20 ]] || { echo "FAIL: screen exceeded terminal height: $screen_lines"; exit 1; }
+python3 - /tmp/solar-multi-task-screen.out <<'PY'
+import sys, unicodedata
+def width(s):
+    n = 0
+    for ch in s.rstrip("\n"):
+        if unicodedata.combining(ch):
+            continue
+        n += 2 if unicodedata.east_asian_width(ch) in {"F", "W"} else 1
+    return n
+bad = [(i, width(line)) for i, line in enumerate(open(sys.argv[1], encoding="utf-8"), 1) if width(line) > 80]
+if bad:
+    raise SystemExit(f"screen exceeded terminal width: {bad[:3]}")
+PY
 grep -q '"action": "status"' "$TMP/run/multi-task/screen-commands.jsonl" \
   || { echo "FAIL: screen command was not logged through intent path"; exit 1; }
 
