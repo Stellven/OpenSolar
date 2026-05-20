@@ -7,6 +7,7 @@
 #   queue_peek    <sid>           → peek first item; prints JSON or nothing
 #   queue_depth   <sid>           → prints integer count of pending items
 #   queue_consume_all <sid> [reason] → mark all pending items consumed; prints count
+#   queue_archive_consumed_terminal [min_age_hours] [archive_tag] → move old terminal consumed queue files aside; prints JSON
 #
 # Rules:
 #   - One JSONL file per sid: run/queue/<sid>.jsonl
@@ -230,4 +231,141 @@ with open(lock_path, 'a') as lf:
     finally:
         fcntl.flock(lf, fcntl.LOCK_UN)
 " "$qf" "$reason" 2>/dev/null || echo 0
+}
+
+# ── queue_archive_consumed_terminal ──────────────────────────────────────────
+queue_archive_consumed_terminal() {
+    local min_age_hours="${1:-24}"
+    local archive_tag="${2:-queue-reaper}"
+    local sprints_dir="${SPRINTS_DIR:-${HARNESS_DIR:-$HOME/.solar/harness}/sprints}"
+    local archive_root="${QUEUE_ARCHIVE_DIR:-${HARNESS_DIR:-$HOME/.solar/harness}/run/queue-archive}"
+
+    python3 -c "
+import datetime, json, pathlib, shutil, sys, time
+
+queue_dir = pathlib.Path(sys.argv[1])
+sprints_dir = pathlib.Path(sys.argv[2])
+archive_root = pathlib.Path(sys.argv[3])
+min_age_hours = float(sys.argv[4])
+archive_tag = sys.argv[5]
+terminal = {'passed','failed','cancelled','superseded','interrupted','done'}
+now = time.time()
+stamp = datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+archive_dir = archive_root / f'{archive_tag}-{stamp}'
+items = []
+archived_count = 0
+kept_count = 0
+
+queue_dir.mkdir(parents=True, exist_ok=True)
+for qf in sorted(queue_dir.glob('*.jsonl')):
+    sid = qf.name[:-6]
+    lock = qf.with_name(qf.name + '.lock')
+    status_path = sprints_dir / f'{sid}.status.json'
+    status = {}
+    if status_path.exists():
+        try:
+            status = json.loads(status_path.read_text())
+        except Exception as exc:
+            status = {'_error': str(exc)}
+
+    lines = qf.read_text(errors='replace').splitlines()
+    all_consumed = bool(lines)
+    for line in lines:
+        try:
+            item = json.loads(line)
+        except Exception:
+            all_consumed = False
+            break
+        if item.get('consumed') is not True:
+            all_consumed = False
+            break
+
+    age_h = (now - qf.stat().st_mtime) / 3600.0
+    orphan_test_queue = (
+        not status_path.exists()
+        and (sid.startswith('sprint-test') or sid.startswith('sprint-falsify'))
+    )
+    safe = (
+        all_consumed
+        and age_h >= min_age_hours
+        and (status.get('status') in terminal or orphan_test_queue)
+    )
+    rec = {
+        'sid': sid,
+        'status': status.get('status') or ('missing_test_status' if orphan_test_queue else None),
+        'phase': status.get('phase'),
+        'age_h': round(age_h, 1),
+        'line_count': len(lines),
+        'all_consumed': all_consumed,
+    }
+    if not safe:
+        rec['action'] = 'kept'
+        rec['reason'] = 'not_terminal_consumed_or_old_enough'
+        kept_count += 1
+        items.append(rec)
+        continue
+
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    moved = []
+    for src in (qf, lock):
+        if src.exists():
+            dst = archive_dir / src.name
+            shutil.move(str(src), str(dst))
+            moved.append(str(dst))
+    rec['action'] = 'archived'
+    rec['reason'] = 'terminal_and_all_events_consumed' if status.get('status') in terminal else 'orphan_test_queue_all_events_consumed'
+    rec['moved'] = moved
+    archived_count += 1
+    items.append(rec)
+
+for sidecar in sorted(queue_dir.glob('*.jsonl.lock')) + sorted(queue_dir.glob('*.jsonl.bak-*')):
+    json_name = sidecar.name[:-5] if sidecar.name.endswith('.lock') else sidecar.name.split('.bak-', 1)[0]
+    json_path = queue_dir / json_name
+    if json_path.exists():
+        continue
+    age_h = (now - sidecar.stat().st_mtime) / 3600.0
+    if age_h < min_age_hours:
+        kept_count += 1
+        items.append({
+            'sid': json_name[:-6] if json_name.endswith('.jsonl') else json_name,
+            'sidecar': str(sidecar),
+            'age_h': round(age_h, 1),
+            'action': 'kept',
+            'reason': 'orphan_sidecar_not_old_enough',
+        })
+        continue
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    dst = archive_dir / sidecar.name
+    shutil.move(str(sidecar), str(dst))
+    archived_count += 1
+    items.append({
+        'sid': json_name[:-6] if json_name.endswith('.jsonl') else json_name,
+        'sidecar': str(sidecar),
+        'age_h': round(age_h, 1),
+        'action': 'archived',
+        'reason': 'orphan_queue_sidecar',
+        'moved': [str(dst)],
+    })
+
+if archive_dir.exists():
+    (archive_dir / 'manifest.json').write_text(json.dumps({
+        'ts': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'queue_dir': str(queue_dir),
+        'sprints_dir': str(sprints_dir),
+        'min_age_hours': min_age_hours,
+        'archive': str(archive_dir),
+        'items': items,
+    }, ensure_ascii=False, indent=2))
+
+print(json.dumps({
+    'ok': True,
+    'archive': str(archive_dir) if archive_dir.exists() else '',
+    'archived': archived_count,
+    'kept': kept_count,
+    'remaining_queue_files': sum(1 for p in queue_dir.glob('*') if p.is_file()),
+}, ensure_ascii=False))
+" "$_QUEUE_DIR" "$sprints_dir" "$archive_root" "$min_age_hours" "$archive_tag" 2>/dev/null || {
+        echo '{"ok":false,"archived":0,"kept":0,"error":"queue_archive_consumed_terminal_failed"}'
+        return 1
+    }
 }
