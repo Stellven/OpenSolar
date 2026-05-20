@@ -590,10 +590,15 @@ def _load_capability_scores() -> dict[str, float]:
 
 def _worker_capabilities(worker: dict[str, Any]) -> list[str]:
     caps = _capability_list(worker)
-    if caps:
-        return caps
-    # Backward compatibility: older worker JSON used only "skills".
-    return [str(item) for item in worker.get("skills", []) if "." in str(item)]
+    # Worker topology has historically mixed skill-like labels (for example
+    # "cli" or "frontend") into required_capabilities. Match against both
+    # fields so enriched DAG nodes are not stranded as no_matching_worker when
+    # the worker advertises the ability under skills instead of capabilities.
+    for item in worker.get("skills", []) or []:
+        text = str(item)
+        if text and text not in caps:
+            caps.append(text)
+    return caps
 
 
 def _capabilities_match(worker: dict[str, Any], required_capabilities: list[str]) -> bool:

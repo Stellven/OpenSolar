@@ -4510,10 +4510,10 @@ with open('$patches_file','w') as f:
   fi
 
   # ── Startup actionable-state recovery ─────────────────────────────────────
-  # If coordinator restarts after a planner has already written
-  # status=planning_complete, the persisted last_state can equal the current
-  # state and the normal "state changed" branch will not fire. Replay only this
-  # narrow builder handoff state, guarded by .builder-flow-dispatched.
+  # If coordinator restarts after planner/DAG artifacts are already present,
+  # the persisted last_state can equal the current state and the normal
+  # "state changed" branch will not fire. Replay only DAG-ready builder
+  # handoff states.
   local planning_recovery_count=0
   for rsf in "$SPRINTS_DIR"/sprint-*.status.json; do
     [[ -f "$rsf" ]] || continue
@@ -4522,10 +4522,10 @@ with open('$patches_file','w') as f:
     rst=$(get_field "$rsf" "status")
     rphase=$(get_field "$rsf" "phase")
     [[ -n "$rsid" ]] || continue
-    if [[ "$rst" == "planning_complete" && "$rphase" == "planning_complete" && -f "$SPRINTS_DIR/${rsid}.plan.md" ]]; then
+    if [[ ( "$rst" == "planning_complete" || "$rst" == "active" ) && ( "$rphase" == "planning_complete" || "$rphase" == "graph_dispatch_active" ) && -f "$SPRINTS_DIR/${rsid}.plan.md" ]]; then
       if ! builder_flow_marked "$rsid" "builder_dispatch"; then
         ((planning_recovery_count+=1))
-        log "startup recovery: replaying planning_complete builder handoff for $rsid"
+        log "startup recovery: replaying DAG-ready builder handoff for $rsid (status=${rst}, phase=${rphase})"
         handle_active "$rsid" "$rsf"
       fi
     fi

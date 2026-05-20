@@ -79,3 +79,14 @@ def test_enriched_dag_capabilities_are_assignable() -> None:
     result = assign_workers([node], [worker])
     assert result["queued"] == []
     assert result["assigned"][0]["node"] == "N1"
+
+
+def test_skill_labels_can_satisfy_required_capabilities() -> None:
+    worker = _worker("pane-a")
+    worker["skills"] = ["python", "pytest", "stub-llm", "cli"]
+    worker["capabilities"] = ["harness.context_preflight", "harness.dag"]
+    node = _node("N1")
+    node["required_capabilities"] = ["harness.context_preflight", "cli"]
+    result = assign_workers([node], [worker])
+    assert result["queued"] == []
+    assert result["assigned"][0]["node"] == "N1"
