@@ -30,6 +30,7 @@ RUN_DIR = HARNESS_DIR / "run" / "multi-task"
 SESSION = os.environ.get("SOLAR_HARNESS_MULTI_TASK_SESSION", "solar-harness-multi-task")
 PROFILE_PATH = Path(os.environ.get("SOLAR_MULTI_TASK_PROFILES", HARNESS_DIR / "config" / "multi-task-profiles.json"))
 SCREEN_HISTORY_PATH = Path(os.environ.get("SOLAR_MULTI_TASK_SCREEN_HISTORY", RUN_DIR / "screen-history.txt"))
+GRAPH_SUMMARY_CACHE_PATH = Path(os.environ.get("SOLAR_MULTI_TASK_GRAPH_SUMMARY_CACHE", RUN_DIR / "graph-summary-cache.json"))
 DEFAULT_MAX_WORKERS = int(os.environ.get("SOLAR_MULTI_TASK_MAX_WORKERS", "2") or "2")
 DEFAULT_INTERVAL = int(os.environ.get("SOLAR_MULTI_TASK_INTERVAL_SEC", "15") or "15")
 DEFAULT_COOLDOWN = int(os.environ.get("SOLAR_MULTI_TASK_LAUNCH_COOLDOWN_SEC", "30") or "30")
@@ -346,6 +347,70 @@ def status_summary_for_graph(graph_path: Path) -> dict[str, Any]:
         return {"graph": str(graph_path), "sid": graph_path.stem, "ok": False, "error": str(exc), "counts": {}, "ready": []}
 
 
+def load_graph_summary_cache() -> dict[str, Any]:
+    try:
+        data = json.loads(GRAPH_SUMMARY_CACHE_PATH.read_text(encoding="utf-8"))
+        if isinstance(data.get("entries"), dict):
+            return data
+    except Exception:
+        pass
+    return {"version": 1, "entries": {}}
+
+
+def save_graph_summary_cache(cache: dict[str, Any]) -> None:
+    try:
+        RUN_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = GRAPH_SUMMARY_CACHE_PATH.with_name(f"{GRAPH_SUMMARY_CACHE_PATH.name}.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(cache, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        tmp.replace(GRAPH_SUMMARY_CACHE_PATH)
+    except Exception:
+        return
+
+
+def graph_cache_key(graph_path: Path) -> str:
+    try:
+        return str(graph_path.expanduser().resolve())
+    except Exception:
+        return str(graph_path)
+
+
+def graph_signature(graph_path: Path) -> dict[str, int]:
+    st = graph_path.stat()
+    return {"mtime_ns": int(st.st_mtime_ns), "size": int(st.st_size)}
+
+
+def cached_status_summaries_for_graphs(paths: list[Path]) -> list[dict[str, Any]]:
+    cache = load_graph_summary_cache()
+    entries = cache.setdefault("entries", {})
+    summaries: list[dict[str, Any]] = []
+    dirty = False
+
+    for graph_path in paths:
+        key = graph_cache_key(graph_path)
+        try:
+            sig = graph_signature(graph_path)
+        except Exception:
+            summaries.append(status_summary_for_graph(graph_path))
+            continue
+        cached = entries.get(key)
+        if (
+            isinstance(cached, dict)
+            and cached.get("mtime_ns") == sig["mtime_ns"]
+            and cached.get("size") == sig["size"]
+            and isinstance(cached.get("summary"), dict)
+        ):
+            summaries.append(cached["summary"])
+            continue
+        summary = status_summary_for_graph(graph_path)
+        entries[key] = {**sig, "summary": summary, "updated_at": now_iso()}
+        summaries.append(summary)
+        dirty = True
+
+    if dirty:
+        save_graph_summary_cache(cache)
+    return summaries
+
+
 def scope_conflicts_with_active(node: dict[str, Any]) -> bool:
     for task in active_tasks():
         scopes = task.get("write_scope")
@@ -649,7 +714,7 @@ def schedule_once(args: argparse.Namespace) -> dict[str, Any]:
     summaries: list[dict[str, Any]] = []
 
     if not guard.get("ok") and not args.dry_run:
-        return {"guard": guard, "launched": launched, "skipped": skipped, "graphs": [status_summary_for_graph(p) for p in graph_files(args.graph)]}
+        return {"guard": guard, "launched": launched, "skipped": skipped, "graphs": cached_status_summaries_for_graphs(graph_files(args.graph))}
 
     for graph_path in graph_files(args.graph):
         if slots <= 0 and not args.dry_run:
@@ -672,7 +737,7 @@ def schedule_once(args: argparse.Namespace) -> dict[str, Any]:
                 slots -= 1
 
     if not summaries:
-        summaries = [status_summary_for_graph(p) for p in graph_files(args.graph)]
+        summaries = cached_status_summaries_for_graphs(graph_files(args.graph))
     return {"guard": guard, "launched": launched, "skipped": skipped, "graphs": summaries}
 
 
@@ -688,7 +753,7 @@ def status_snapshot(args: argparse.Namespace) -> dict[str, Any]:
         "guard": launch_guard(max_workers, memory_reserve_gb, cooldown_sec, quota_backoff_sec),
         "launched": [],
         "skipped": [],
-        "graphs": [status_summary_for_graph(p) for p in graph_files(graph_arg)],
+        "graphs": cached_status_summaries_for_graphs(graph_files(graph_arg)),
     }
 
 
@@ -921,7 +986,7 @@ def _looks_like_task_status_query(text: str) -> bool:
 def _task_status_message() -> str:
     tasks = list_task_rows()
     active = [t for t in tasks if str(t.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
-    graph_summaries = [status_summary_for_graph(path) for path in graph_files([])[:12]]
+    graph_summaries = cached_status_summaries_for_graphs(graph_files([])[:12])
     dag_counts: dict[str, int] = {}
     ready_sprints: list[str] = []
     for summary in graph_summaries:

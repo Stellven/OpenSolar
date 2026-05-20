@@ -215,5 +215,22 @@ node = graph["nodes"][0]
 if node.get("status") or node.get("assigned_to") or node.get("dispatch_id"):
     raise SystemExit(f"screen status query mutated graph node: {node}")
 PY
+[[ -s "$TMP/run/multi-task/graph-summary-cache.json" ]] \
+  || { echo "FAIL: graph summary cache was not written"; exit 1; }
+python3 - "$graph3" <<'PY'
+import json, os, sys, time
+path = sys.argv[1]
+with open(path, encoding="utf-8") as fh:
+    graph = json.load(fh)
+graph["nodes"][0]["status"] = "passed"
+with open(path, "w", encoding="utf-8") as fh:
+    json.dump(graph, fh, ensure_ascii=False, indent=2)
+    fh.write("\n")
+future = time.time() + 5
+os.utime(path, (future, future))
+PY
+COLUMNS=120 LINES=24 PATH="$TMP/bin:$PATH" HARNESS_DIR="$TMP" "$TMP/solar-harness.sh" multi-task status --graph "$graph3" --no-clear >/tmp/solar-multi-task-cache-invalidation.out
+grep -q "passed:1" /tmp/solar-multi-task-cache-invalidation.out \
+  || { echo "FAIL: graph summary cache did not invalidate after graph mutation"; exit 1; }
 
 echo "PASS: multi-task entrypoint dispatches ready DAG nodes to tmux worker pool"
