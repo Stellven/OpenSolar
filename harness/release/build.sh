@@ -52,21 +52,35 @@ TARBALL_PATH="$OUT_DIR/$TARBALL_NAME"
 CHECKSUM_PATH="$OUT_DIR/solar-harness-${VERSION}.sha256"
 MANIFEST_PATH="$OUT_DIR/MANIFEST-${VERSION}.json"
 
+TAR_EXCLUDES=(
+  --exclude=".git"
+  --exclude="__pycache__"
+  --exclude="*.pyc"
+  --exclude="venvs"
+  --exclude="vendor"
+  --exclude="release/artifacts"
+  --exclude="run"
+  --exclude="backups"
+  --exclude="events"
+  --exclude="logs"
+  --exclude="sessions"
+  --exclude="reports"
+  --exclude="_extracted_knowledge_fallback"
+  --exclude=".pytest_cache"
+  --exclude="*.db"
+  --exclude="*.sqlite"
+  --exclude="*.sqlite3"
+  --exclude="*.pid"
+  --exclude="*.lock"
+  --exclude="*.tmp"
+)
+
 # ── dry-run ────────────────────────────────────────────────────────────────
 if [[ $DRY_RUN -eq 1 ]]; then
   info "DRY RUN — would create: $TARBALL_PATH"
-  info "Exclusions: .git/ __pycache__/ venvs/ vendor/ *.pyc release/artifacts/ run/ backups/"
+  info "Exclusions: .git/ __pycache__/ venvs/ vendor/ *.pyc release/artifacts/ run/ backups/ events/ logs/ sessions/ reports/ _extracted_knowledge_fallback/ .pytest_cache/ *.db *.sqlite *.pid *.lock *.tmp"
   cd "$HARNESS_DIR"
-  tar --list \
-    --exclude=".git" \
-    --exclude="__pycache__" \
-    --exclude="*.pyc" \
-    --exclude="venvs" \
-    --exclude="vendor" \
-    --exclude="release/artifacts" \
-    --exclude="run" \
-    --exclude="backups" \
-    -czf /dev/null . 2>/dev/null | head -40
+  tar --list "${TAR_EXCLUDES[@]}" -czf /dev/null . 2>/dev/null | head -40
   info "Dry run complete."
   exit 0
 fi
@@ -77,16 +91,7 @@ cd "$HARNESS_DIR"
 
 info "Building solar-harness v${VERSION} …"
 
-tar \
-  --exclude=".git" \
-  --exclude="__pycache__" \
-  --exclude="*.pyc" \
-  --exclude="venvs" \
-  --exclude="vendor" \
-  --exclude="release/artifacts" \
-  --exclude="run" \
-  --exclude="backups" \
-  -czf "$TARBALL_PATH" .
+tar "${TAR_EXCLUDES[@]}" -czf "$TARBALL_PATH" .
 
 info "Tarball: $TARBALL_PATH"
 

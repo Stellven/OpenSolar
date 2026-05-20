@@ -10,6 +10,22 @@ This guide covers upgrading an existing Solar Harness installation to a new vers
 - `bash` 4.0+ (`/opt/homebrew/bin/bash` on macOS)
 - `python3` 3.9+
 - `sqlite3`
+- `bun` for TVS rendering (`solar-harness tvs render`)
+- `SOLAR_TVS_ROOT` pointing to a TVS checkout that contains `index.ts`
+
+TVS is a release-level dependency, not a cosmetic optional feature. Installer
+doctor and release publish gates fail when Bun, `SOLAR_TVS_ROOT`, or the TVS
+smoke render is missing.
+
+Example:
+
+```bash
+export SOLAR_TVS_ROOT="$HOME/TVS"
+test -f "$SOLAR_TVS_ROOT/index.ts"
+solar-harness tvs render --width 52 <<'JSON'
+{"canvas":{"width":52},"style":"solar_default","root":{"type":"card","header":"TVS Ready","sections":[{"type":"kv","items":[{"key":"Status","value":"ok"}]}]}}
+JSON
+```
 
 ## Before You Upgrade
 
@@ -86,7 +102,7 @@ python3 lib/solar_state_db.py schema-version --json
 
 ```bash
 # Doctor
-installer/doctor.sh --json
+SOLAR_TVS_ROOT="$HOME/TVS" installer/doctor.sh --json
 
 # Capability registry
 python3 lib/capability_registry.py scorecard --json

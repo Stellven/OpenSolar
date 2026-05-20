@@ -44,6 +44,14 @@ The following are never included in the release tarball:
 | `release/artifacts/` | Prevent self-referential inclusion |
 | `run/` | Runtime state (pidfiles, state.db, events.jsonl) |
 | `backups/` | Snapshot backups — not part of code distribution |
+| `events/` | Runtime event streams such as `events/all.jsonl` |
+| `logs/` | Local logs, not source distribution |
+| `sessions/` | Runtime session transcripts and QMD search traces |
+| `reports/` | Generated local reports, not release source |
+| `_extracted_knowledge_fallback/` | Local generated knowledge fallback output |
+| `.pytest_cache/` | Local test cache |
+| `*.db`, `*.sqlite`, `*.sqlite3` | Runtime databases |
+| `*.pid`, `*.lock`, `*.tmp` | Local process/lock/temp files |
 
 ### Checksum Algorithm
 
@@ -85,8 +93,15 @@ The checksum file format follows `sha256sum` convention:
 | G5 | All plugin manifests pass schema validation |
 | G6 | All `lib/*.py` files compile cleanly |
 | G7 | CHANGELOG.md has an entry for the current version |
+| G8 | TVS renderer bridge, Bun runtime, `SOLAR_TVS_ROOT`, and smoke render pass |
 
 Any gate failure (`FAIL`) blocks publication. `WARN` (e.g. gitleaks not installed) is logged but does not block if the fallback passes.
+
+TVS is a release-level dependency because `solar-harness tvs render` is now the
+canonical deterministic terminal rendering path for agent-facing output. A
+release must fail publication if Bun is unavailable, `SOLAR_TVS_ROOT` does not
+point to a TVS checkout containing `index.ts`, the bridge file is missing, or
+the smoke render does not produce the expected TVS output.
 
 ### Container Validation (D7.2)
 

@@ -74,7 +74,7 @@ First productized release of Solar Harness. Eight slices, one sprint.
 ### S7 — Release Tooling & Final Audit
 
 - `release/build.sh`: tarball builder with SHA256 manifest
-- `release/publish.sh`: pre-publish audit gate (secret scan + schema validate)
+- `release/publish.sh`: pre-publish audit gate (secret scan + schema validate + TVS renderer G8)
 - `release/CHANGELOG.md`: this file
 - `docs/upgrade-guide.md`: upgrade procedure
 - `docs/rollback-guide.md`: rollback procedure
@@ -85,3 +85,4 @@ First productized release of Solar Harness. Eight slices, one sprint.
 ### Known Limitations
 
 - D7.2 (container round-trip) requires Docker daemon; smoke-test.sh is implemented but daemon was unavailable during this sprint. Resume: `bash docker/smoke-test.sh` once Docker Desktop is running.
+- TVS rendering is a required release dependency: Bun and `SOLAR_TVS_ROOT` must be configured before installer doctor or release publish can pass.
