@@ -2613,6 +2613,37 @@ print(json.dumps({
     shift || true
     do_bg_command "$@"
     ;;
+  tvs)
+    shift || true
+    _tvs_subcmd="${1:-render}"
+    shift || true
+    case "$_tvs_subcmd" in
+      render)
+        command -v bun >/dev/null 2>&1 || { err "bun not found; TVS renderer requires bun"; exit 1; }
+        if [[ -z "${SOLAR_ROOT:-}" && -f "$HARNESS_DIR/../package.json" ]]; then
+          export SOLAR_ROOT="$(cd "$HARNESS_DIR/.." && pwd)"
+        fi
+        if [[ -z "${SOLAR_TVS_ROOT:-}" ]]; then
+          for _tvs_candidate in "$HARNESS_DIR/../../TVS" "$HOME/TVS" "$HOME/Solar/../TVS"; do
+            if [[ -f "$_tvs_candidate/index.ts" ]]; then
+              export SOLAR_TVS_ROOT="$(cd "$_tvs_candidate" && pwd)"
+              break
+            fi
+          done
+        fi
+        bun run "$HARNESS_DIR/lib/tvs_render_cli.ts" render "$@"
+        ;;
+      help|--help|-h|"")
+        echo "Solar Harness TVS renderer"
+        echo ""
+        echo "Usage:"
+        echo "  $0 tvs render [--mode auto|v1|v2] [--style NAME] [--width N] < payload.json"
+        ;;
+      *)
+        err "Unknown tvs subcommand: $_tvs_subcmd"; exit 1
+        ;;
+    esac
+    ;;
   multi-task)
     shift || true
     python3 "$HARNESS_DIR/lib/multi_task_runner.py" "$@"
@@ -3568,6 +3599,7 @@ PY
     echo "  $0 扩展 | extend       启动独立第二四分屏 (solar-harness-lab)"
     echo "  $0 intake \"需求\"       默认需求入口：创建 sprint/epic + raw 记录 + 触发 autopilot"
     echo "  $0 bg \"任务\"           在 tmux 后台窗口执行任务；支持 status/logs/attach/cancel"
+    echo "  $0 tvs render < payload.json  使用 TVS 确定性渲染结构化输出"
     echo "  $0 multi-task [screen|start|status|profiles|doctor|logs|attach|foreground|cancel]  tmux 后台 DAG worker 池"
     echo "  $0 sprint \"需求\"       创建 Sprint/Epic（不主动 dispatch，兼容旧命令）"
     echo "  $0 wake [sprint-id]  列出未完成 Sprint 或恢复指定 Sprint"
