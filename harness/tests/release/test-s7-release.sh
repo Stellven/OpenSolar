@@ -109,6 +109,7 @@ echo "T10: publish.sh audit from artifacts dir"
 OUT=$(ARTIFACTS_DIR=/tmp/solar-release-test bash release/publish.sh --json --version "$V" 2>/dev/null || true)
 check_contains "publish audit returns ok" "$OUT" '"ok":true'
 check_contains "publish has gates array" "$OUT" '"gates"'
+check_contains "publish has TVS gate" "$OUT" '"gate":"G8"'
 
 echo "T11: secret grep audit (no plaintext secrets in lib/)"
 BAD=$(grep -r --include="*.py" --include="*.sh" \
