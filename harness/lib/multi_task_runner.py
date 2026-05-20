@@ -20,11 +20,68 @@ HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
 SPRINTS_DIR = Path(os.environ.get("HARNESS_SPRINTS_DIR", HARNESS_DIR / "sprints"))
 RUN_DIR = HARNESS_DIR / "run" / "multi-task"
 SESSION = os.environ.get("SOLAR_HARNESS_MULTI_TASK_SESSION", "solar-harness-multi-task")
+PROFILE_PATH = Path(os.environ.get("SOLAR_MULTI_TASK_PROFILES", HARNESS_DIR / "config" / "multi-task-profiles.json"))
 DEFAULT_MAX_WORKERS = int(os.environ.get("SOLAR_MULTI_TASK_MAX_WORKERS", "2") or "2")
 DEFAULT_INTERVAL = int(os.environ.get("SOLAR_MULTI_TASK_INTERVAL_SEC", "15") or "15")
 DEFAULT_COOLDOWN = int(os.environ.get("SOLAR_MULTI_TASK_LAUNCH_COOLDOWN_SEC", "30") or "30")
 DEFAULT_MEMORY_RESERVE_GB = float(os.environ.get("SOLAR_MULTI_TASK_MEMORY_RESERVE_GB", "4") or "4")
 DEFAULT_QUOTA_BACKOFF = int(os.environ.get("SOLAR_MULTI_TASK_QUOTA_BACKOFF_SEC", "900") or "900")
+
+DEFAULT_PROFILE_CONFIG: dict[str, Any] = {
+    "defaults": {"profile": "builder", "backend": "claude-cli", "max_workers": 2},
+    "profiles": {
+        "builder": {
+            "role": "builder",
+            "label": "构建者",
+            "persona": "builder",
+            "backend": "claude-cli",
+            "model": "sonnet",
+            "approval_mode": "yolo",
+            "best_for": ["implementation", "debugging", "tests"],
+            "max_parallel": 2,
+        },
+        "planner": {
+            "role": "planner",
+            "label": "规划者",
+            "persona": "planner",
+            "backend": "claude-cli",
+            "model": "sonnet",
+            "approval_mode": "auto_edit",
+            "best_for": ["planning", "architecture"],
+            "max_parallel": 1,
+        },
+        "evaluator": {
+            "role": "evaluator",
+            "label": "审判者",
+            "persona": "evaluator",
+            "backend": "claude-cli",
+            "model": "opus",
+            "approval_mode": "auto_edit",
+            "best_for": ["verification", "review"],
+            "max_parallel": 1,
+        },
+        "pm": {
+            "role": "pm",
+            "label": "PM",
+            "persona": "pm",
+            "backend": "claude-cli",
+            "model": "sonnet",
+            "approval_mode": "auto_edit",
+            "best_for": ["requirements", "acceptance"],
+            "max_parallel": 1,
+        },
+        "gemini-builder": {
+            "role": "builder",
+            "label": "Gemini 构建者",
+            "persona": "builder",
+            "backend": "gemini-cli",
+            "model": "gemini",
+            "approval_mode": "yolo",
+            "best_for": ["large-context", "implementation"],
+            "max_parallel": 1,
+        },
+    },
+}
 
 sys.path.insert(0, str(HARNESS_DIR / "lib"))
 from graph_scheduler import (  # noqa: E402
@@ -43,6 +100,88 @@ QUOTA_RE = re.compile(
     r"api usage billing|429|upgrade your plan",
     re.I,
 )
+
+
+def load_profiles() -> dict[str, Any]:
+    if PROFILE_PATH.exists():
+        try:
+            data = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
+            if isinstance(data.get("profiles"), dict):
+                return data
+        except Exception:
+            pass
+    return DEFAULT_PROFILE_CONFIG
+
+
+def profile_names() -> list[str]:
+    return sorted((load_profiles().get("profiles") or {}).keys())
+
+
+def role_from_node(node: dict[str, Any]) -> str:
+    raw = (
+        node.get("target_role")
+        or node.get("role")
+        or node.get("persona")
+        or node.get("worker_role")
+        or node.get("handoff_to")
+        or ""
+    )
+    value = str(raw).strip().lower().replace("_", "-")
+    aliases = {
+        "builder-main": "builder",
+        "build": "builder",
+        "implementation": "builder",
+        "implementer": "builder",
+        "judge": "evaluator",
+        "reviewer": "evaluator",
+        "verifier": "evaluator",
+        "product": "pm",
+        "product-manager": "pm",
+        "planning": "planner",
+        "architect": "planner",
+    }
+    return aliases.get(value, value or "builder")
+
+
+def select_profile(node: dict[str, Any], profile_override: str = "", model_override: str = "", backend_override: str = "") -> dict[str, Any]:
+    config = load_profiles()
+    profiles = config.get("profiles") or {}
+    profile_name = profile_override or ""
+    if not profile_name:
+        role = role_from_node(node)
+        for name, spec in profiles.items():
+            if str(spec.get("role", "")).lower() == role and not str(name).startswith(("gemini-", "deepseek-", "glm-", "thunder")):
+                profile_name = str(name)
+                break
+    profile_name = profile_name or str((config.get("defaults") or {}).get("profile") or "builder")
+    if profile_name not in profiles:
+        raise ValueError(f"unknown multi-task profile: {profile_name}")
+    selected = dict(profiles[profile_name])
+    selected["name"] = profile_name
+    selected["role"] = str(selected.get("role") or role_from_node(node))
+    selected["persona"] = str(selected.get("persona") or selected["role"])
+    selected["model"] = str(model_override or node.get("preferred_model") or selected.get("model") or "sonnet")
+    selected["backend"] = str(backend_override or selected.get("backend") or (config.get("defaults") or {}).get("backend") or "claude-cli")
+    selected["approval_mode"] = str(selected.get("approval_mode") or "auto_edit")
+    return selected
+
+
+def persona_text(persona: str) -> tuple[str, str]:
+    path = HARNESS_DIR / "personas" / f"{persona}.md"
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        return str(path), text[:12000]
+    except Exception:
+        return str(path), "N/A"
+
+
+def claude_model_arg(model: str) -> str:
+    value = str(model or "sonnet").lower()
+    if "opus" in value:
+        return "opus"
+    if "sonnet" in value or value in {"claude", "anthropic"}:
+        return "sonnet"
+    return value
 
 
 def now_iso() -> str:
@@ -212,11 +351,13 @@ def scope_conflicts_with_active(node: dict[str, Any]) -> bool:
     return False
 
 
-def build_dispatch_text(graph_path: Path, graph: dict[str, Any], node: dict[str, Any], dispatch_id: str, window: str) -> str:
+def build_dispatch_text(graph_path: Path, graph: dict[str, Any], node: dict[str, Any], dispatch_id: str, window: str,
+                        profile: dict[str, Any]) -> str:
     sid = sprint_id_for(graph, graph_path)
     node_id = str(node.get("id") or "")
     handoff = SPRINTS_DIR / f"{sid}.{node_id}-handoff.md"
     harness = HARNESS_DIR / "solar-harness.sh"
+    persona_path, persona_body = persona_text(str(profile.get("persona") or "builder"))
 
     def lines(value: Any) -> str:
         if value is None or value == "":
@@ -236,6 +377,8 @@ Sprint: `{sid}`
 Node: `{node_id}`
 Dispatch ID: `{dispatch_id}`
 Execution plane: `tmux:{SESSION}:{window}`
+Role/Profile: `{profile.get("role")}` / `{profile.get("name")}`
+Backend/Model: `{profile.get("backend")}` / `{profile.get("model")}`
 Graph: `{graph_path}`
 Handoff: `{handoff}`
 
@@ -250,6 +393,14 @@ Handoff: `{handoff}`
 5. Diff 自审：列出每个改动文件的目的。
 6. 禁用乐观词：存在未完成项时禁止报喜。
 7. 结构化收尾：已完成 / 已验证 / 未验证 / 风险 / 后续待办。
+
+## Worker Persona
+
+Persona file: `{persona_path}`
+
+```markdown
+{persona_body}
+```
 
 ## Goal
 
@@ -319,7 +470,19 @@ def runner_script(task_dir: Path, payload: dict[str, Any]) -> Path:
     handoff = Path(str(payload["handoff"]))
     node_id = str(payload["node_id"])
     sid = str(payload["sprint_id"])
+    backend = str(payload.get("backend") or "claude-cli")
+    model = str(payload.get("model") or "sonnet")
+    approval_mode = str(payload.get("approval_mode") or "auto_edit")
     agent_cmd = os.environ.get("SOLAR_MULTI_TASK_AGENT_CMD", "").strip()
+    adapter = HARNESS_DIR / "lib" / "gemini_adapter.py"
+    if backend == "gemini-cli":
+        agent_line = f"python3 {shlex.quote(str(adapter))} run --backend cli --model {shlex.quote(model)} --approval-mode {shlex.quote(approval_mode)} --prompt-file \"$DISPATCH_FILE\""
+    elif backend == "gemini-sdk":
+        agent_line = f"python3 {shlex.quote(str(adapter))} run --backend sdk --model {shlex.quote(model)} --prompt-file \"$DISPATCH_FILE\""
+    elif backend == "command":
+        agent_line = f"SOLAR_MULTI_TASK_DISPATCH_FILE=\"$DISPATCH_FILE\" bash -lc {shlex.quote(agent_cmd)}"
+    else:
+        agent_line = f"claude --permission-mode bypassPermissions --model {shlex.quote(claude_model_arg(model))} -p \"$(cat \"$DISPATCH_FILE\")\""
     script = f"""#!/usr/bin/env bash
 set -u
 TASK_DIR={shlex.quote(str(task_dir))}
@@ -331,6 +494,8 @@ SPRINTS_DIR={shlex.quote(str(SPRINTS_DIR))}
 GRAPH={shlex.quote(str(graph))}
 NODE_ID={shlex.quote(node_id)}
 SID={shlex.quote(sid)}
+BACKEND={shlex.quote(backend)}
+MODEL={shlex.quote(model)}
 HANDOFF={shlex.quote(str(handoff))}
 HARNESS={shlex.quote(str(harness))}
 
@@ -363,15 +528,18 @@ if [[ "${{SOLAR_MULTI_TASK_SANITIZE_ENV:-1}}" != "0" ]]; then
 fi
 
 {{
-  echo "[solar-harness multi-task] sid=$SID node=$NODE_ID start=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  if [[ -n {shlex.quote(agent_cmd)} ]]; then
+  echo "[solar-harness multi-task] sid=$SID node=$NODE_ID backend=$BACKEND model=$MODEL start=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if [[ "$BACKEND" == "command" && -z {shlex.quote(agent_cmd)} ]]; then
+    echo "ERROR: backend=command requires SOLAR_MULTI_TASK_AGENT_CMD"
+    exit 127
+  elif [[ -n {shlex.quote(agent_cmd)} && "$BACKEND" != "command" ]]; then
     SOLAR_MULTI_TASK_DISPATCH_FILE="$DISPATCH_FILE" bash -lc {shlex.quote(agent_cmd)}
   else
-    if ! command -v claude >/dev/null 2>&1; then
+    if [[ "$BACKEND" == "claude-cli" ]] && ! command -v claude >/dev/null 2>&1; then
       echo "ERROR: claude command not found; set SOLAR_MULTI_TASK_AGENT_CMD"
       exit 127
     fi
-    claude --permission-mode bypassPermissions -p "$(cat "$DISPATCH_FILE")"
+    {agent_line}
   fi
 }} > >(tee -a "$OUTPUT_LOG") 2>&1
 rc=$?
@@ -406,22 +574,30 @@ def tmux_start(window: str, runner: Path, cwd: Path, dry_run: bool = False) -> N
         subprocess.check_call(["tmux", "new-session", "-d", "-s", SESSION, "-n", window, "-c", str(cwd), cmd])
 
 
-def launch_node(graph_path: Path, graph: dict[str, Any], node: dict[str, Any], dry_run: bool = False) -> dict[str, Any]:
+def launch_node(graph_path: Path, graph: dict[str, Any], node: dict[str, Any], args: argparse.Namespace,
+                dry_run: bool = False) -> dict[str, Any]:
     sid = sprint_id_for(graph, graph_path)
     node_id = str(node.get("id") or "")
+    profile = select_profile(node, getattr(args, "profile", "") or "", getattr(args, "model", "") or "", getattr(args, "backend", "") or "")
     dispatch_id = task_id(sid, node_id)
-    window = short_window(f"{dispatch_id}-{node_id}")
+    window = short_window(f"{dispatch_id}-{profile.get('role')}-{node_id}")
     task_dir = RUN_DIR / dispatch_id
     handoff = SPRINTS_DIR / f"{sid}.{node_id}-handoff.md"
     task_dir.mkdir(parents=True, exist_ok=True)
 
-    dispatch = build_dispatch_text(graph_path, graph, node, dispatch_id, window)
+    dispatch = build_dispatch_text(graph_path, graph, node, dispatch_id, window, profile)
     (task_dir / "dispatch.md").write_text(dispatch, encoding="utf-8")
     payload = {
         "id": dispatch_id,
         "status": "dry_run" if dry_run else "dispatched",
         "session": SESSION,
         "window": window,
+        "profile": profile.get("name"),
+        "role": profile.get("role"),
+        "persona": profile.get("persona"),
+        "backend": profile.get("backend"),
+        "model": profile.get("model"),
+        "approval_mode": profile.get("approval_mode"),
         "graph": str(graph_path),
         "sprint_id": sid,
         "node_id": node_id,
@@ -482,7 +658,7 @@ def schedule_once(args: argparse.Namespace) -> dict[str, Any]:
             if scope_conflicts_with_active(node):
                 skipped.append({"graph": str(graph_path), "node": node.get("id"), "reason": "write_scope_conflict_with_active"})
                 continue
-            launched.append(launch_node(graph_path, graph, node, dry_run=args.dry_run))
+            launched.append(launch_node(graph_path, graph, node, args, dry_run=args.dry_run))
             if not args.dry_run:
                 slots -= 1
 
@@ -528,12 +704,18 @@ def render(result: dict[str, Any], no_clear: bool = False) -> None:
     task_rows = [[
         str(t.get("id", "N/A"))[:34],
         str(t.get("status", "N/A"))[:22],
+        str(t.get("role", "N/A"))[:10],
+        str(t.get("model", "N/A"))[:16],
+        str(t.get("backend", "N/A"))[:12],
         str(t.get("sprint_id", "N/A"))[:20],
         str(t.get("node_id", "N/A"))[:24],
         str(t.get("updated_at", "N/A"))[:20],
     ] for t in tasks]
     print()
-    print_table(["task", "status", "sprint", "node", "updated"], task_rows or [["N/A", "pending", "N/A", "N/A", "N/A"]])
+    print_table(
+        ["task", "status", "role", "model", "backend", "sprint", "node", "updated"],
+        task_rows or [["N/A", "pending", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A"]],
+    )
 
     graph_rows = []
     for graph in result.get("graphs", [])[:12]:
@@ -558,11 +740,33 @@ def render(result: dict[str, Any], no_clear: bool = False) -> None:
         ] for x in launched])
 
 
+def resolve_task(selector: str) -> dict[str, Any] | None:
+    rows = list_task_rows()
+    if not rows:
+        return None
+    value = str(selector or "latest").strip()
+    if value in {"latest", "last", ""}:
+        return rows[0]
+    for row in rows:
+        task = str(row.get("id") or "")
+        if task == value or task.startswith(value):
+            return row
+    for row in rows:
+        if value.lower() in {
+            str(row.get("role") or "").lower(),
+            str(row.get("profile") or "").lower(),
+            str(row.get("node_id") or "").lower(),
+        }:
+            return row
+    return None
+
+
 def attach_or_log(task_id_value: str, attach: bool) -> int:
-    status = read_task_status(RUN_DIR / task_id_value / "status.json")
+    status = resolve_task(task_id_value)
     if not status:
         print(f"status not found: {task_id_value}", file=sys.stderr)
         return 1
+    task_id_value = str(status.get("id") or task_id_value)
     if attach:
         window = str(status.get("window") or "")
         if sys.stdout.isatty():
@@ -578,10 +782,11 @@ def attach_or_log(task_id_value: str, attach: bool) -> int:
 
 
 def cancel(task_id_value: str) -> int:
-    status = read_task_status(RUN_DIR / task_id_value / "status.json")
+    status = resolve_task(task_id_value)
     if not status:
         print(f"status not found: {task_id_value}", file=sys.stderr)
         return 1
+    task_id_value = str(status.get("id") or task_id_value)
     window = str(status.get("window") or "")
     subprocess.run(["tmux", "kill-window", "-t", f"{SESSION}:{window}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     status["status"] = "cancelled"
@@ -608,6 +813,9 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--cooldown-sec", type=int, default=DEFAULT_COOLDOWN)
     start.add_argument("--memory-reserve-gb", type=float, default=DEFAULT_MEMORY_RESERVE_GB)
     start.add_argument("--quota-backoff-sec", type=int, default=DEFAULT_QUOTA_BACKOFF)
+    start.add_argument("--profile", default="", help=f"worker profile: {','.join(profile_names())}")
+    start.add_argument("--model", default="", help="override selected profile model")
+    start.add_argument("--backend", default="", choices=["", "claude-cli", "gemini-cli", "gemini-sdk", "command"], help="override selected profile backend")
     start.add_argument("--once", action="store_true")
     start.add_argument("--dry-run", action="store_true")
     start.add_argument("--no-clear", action="store_true")
@@ -617,11 +825,16 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("--no-clear", action="store_true")
 
     logs = sub.add_parser("logs", help="show task log")
-    logs.add_argument("task_id")
+    logs.add_argument("task_id", help="task id/prefix, latest, role, profile, or node id")
     attach = sub.add_parser("attach", help="attach tmux task window")
-    attach.add_argument("task_id")
+    attach.add_argument("task_id", help="task id/prefix, latest, role, profile, or node id")
+    for alias in ("foreground", "focus", "fg"):
+        fg = sub.add_parser(alias, help="bring a background tmux task to foreground")
+        fg.add_argument("task_id", nargs="?", default="latest", help="task id/prefix, latest, role, profile, or node id")
     cancel_p = sub.add_parser("cancel", help="cancel task and mark graph node failed")
     cancel_p.add_argument("task_id")
+    sub.add_parser("profiles", help="list worker profiles and model/task affinity")
+    sub.add_parser("doctor", help="check multi-task external backends")
     return p
 
 
@@ -636,8 +849,36 @@ def main(argv: list[str] | None = None) -> int:
         return attach_or_log(args.task_id, attach=False)
     if args.cmd == "attach":
         return attach_or_log(args.task_id, attach=True)
+    if args.cmd in {"foreground", "focus", "fg"}:
+        return attach_or_log(args.task_id, attach=True)
     if args.cmd == "cancel":
         return cancel(args.task_id)
+    if args.cmd == "profiles":
+        config = load_profiles()
+        rows = []
+        for name, spec in sorted((config.get("profiles") or {}).items()):
+            rows.append([
+                name,
+                str(spec.get("role", "N/A")),
+                str(spec.get("backend", "N/A")),
+                str(spec.get("model", "N/A")),
+                ",".join(spec.get("best_for") or [])[:44] or "N/A",
+            ])
+        print_table(["profile", "role", "backend", "model", "best_for"], rows)
+        return 0
+    if args.cmd == "doctor":
+        adapter = HARNESS_DIR / "lib" / "gemini_adapter.py"
+        gemini = subprocess.run([sys.executable, str(adapter), "doctor"], text=True, capture_output=True)
+        gemini_evidence = " ".join((gemini.stdout or gemini.stderr).strip().split())
+        print_table(
+            ["backend", "状态", "证据"],
+            [
+                ["claude-cli", "ok" if shutil.which("claude") else "warn", shutil.which("claude") or "missing"],
+                ["gemini", "ok" if gemini.returncode == 0 else "warn", gemini_evidence[:96] or "N/A"],
+                ["command", "ok" if os.environ.get("SOLAR_MULTI_TASK_AGENT_CMD") else "warn", "SOLAR_MULTI_TASK_AGENT_CMD set" if os.environ.get("SOLAR_MULTI_TASK_AGENT_CMD") else "env missing"],
+            ],
+        )
+        return 0
     if args.cmd == "status":
         render({"guard": launch_guard(DEFAULT_MAX_WORKERS, DEFAULT_MEMORY_RESERVE_GB, DEFAULT_COOLDOWN, DEFAULT_QUOTA_BACKOFF), "graphs": [status_summary_for_graph(p) for p in graph_files(args.graph)]}, no_clear=args.no_clear)
         return 0

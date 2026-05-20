@@ -6,13 +6,18 @@ cd "$(dirname "$0")/.."
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-mkdir -p "$TMP"/{bin,lib,sprints,personas,templates,run/multi-task,work}
+mkdir -p "$TMP"/{bin,config,lib,sprints,personas,templates,run/multi-task,work}
 
 cp solar-harness.sh "$TMP/solar-harness.sh"
 cp lib/run-state.sh "$TMP/lib/run-state.sh"
 cp lib/events.sh "$TMP/lib/events.sh"
 cp lib/graph_scheduler.py "$TMP/lib/graph_scheduler.py"
 cp lib/multi_task_runner.py "$TMP/lib/multi_task_runner.py"
+cp lib/gemini_adapter.py "$TMP/lib/gemini_adapter.py"
+cp config/multi-task-profiles.json "$TMP/config/multi-task-profiles.json"
+cp config/model-registry.json "$TMP/config/model-registry.json"
+cp personas/builder.md "$TMP/personas/builder.md"
+cp personas/planner.md "$TMP/personas/planner.md"
 
 python3 - "$TMP/solar-harness.sh" "$TMP" <<'PY'
 from pathlib import Path
@@ -42,6 +47,13 @@ esac
 EOF
 chmod +x "$TMP/bin/tmux"
 
+cat > "$TMP/bin/gemini" <<'EOF'
+#!/usr/bin/env bash
+echo "$@" >> "$HARNESS_DIR/gemini-calls.log"
+exit 0
+EOF
+chmod +x "$TMP/bin/gemini"
+
 graph="$TMP/sprints/sprint-20260520-multi-task.task_graph.json"
 cat > "$graph" <<'JSON'
 {
@@ -50,6 +62,7 @@ cat > "$graph" <<'JSON'
     {
       "id": "A",
       "goal": "touch A",
+      "target_role": "planner",
       "depends_on": [],
       "write_scope": ["work/a.txt"],
       "acceptance": ["A handoff exists"]
@@ -72,6 +85,7 @@ status_count=$(find "$TMP/run/multi-task" -name status.json | wc -l | tr -d ' ')
 
 grep -q "new-session" "$TMP/tmux-calls.log" || { echo "FAIL: tmux new-session not called"; exit 1; }
 grep -q "Solar Harness Multi-Task" /tmp/solar-multi-task-test.out || { echo "FAIL: summary not rendered"; exit 1; }
+find "$TMP/run/multi-task" -name runner.sh -print0 | xargs -0 -n1 bash -n
 
 python3 - "$graph" <<'PY'
 import json, sys
@@ -83,6 +97,46 @@ for node_id in ("A", "B"):
     assert str(n.get("assigned_to", "")).startswith("multi-task:"), (node_id, n)
     assert str(n.get("dispatch_id", "")).startswith("mt-"), (node_id, n)
 PY
+
+planner_status=$(python3 - "$TMP/run/multi-task" <<'PY'
+import json, sys
+from pathlib import Path
+for path in Path(sys.argv[1]).glob("*/status.json"):
+    data = json.loads(path.read_text())
+    if data.get("node_id") == "A":
+        print(data.get("role"), data.get("profile"), data.get("backend"), data.get("model"))
+PY
+)
+[[ "$planner_status" == "planner planner claude-cli sonnet" ]] || { echo "FAIL: planner profile routing wrong: $planner_status"; exit 1; }
+
+PATH="$TMP/bin:$PATH" HARNESS_DIR="$TMP" "$TMP/solar-harness.sh" multi-task profiles | grep -q "gemini-builder" \
+  || { echo "FAIL: profiles did not include gemini-builder"; exit 1; }
+PATH="$TMP/bin:$PATH" HARNESS_DIR="$TMP" "$TMP/solar-harness.sh" multi-task foreground planner | grep -q "tmux attach -t solar-harness-multi-task:" \
+  || { echo "FAIL: foreground selector did not resolve planner"; exit 1; }
+PATH="$TMP/bin:$PATH" HARNESS_DIR="$TMP" python3 "$TMP/lib/gemini_adapter.py" doctor | grep -q '"cli"' \
+  || { echo "FAIL: gemini adapter doctor missing cli section"; exit 1; }
+
+graph2="$TMP/sprints/sprint-20260520-gemini.task_graph.json"
+cat > "$graph2" <<'JSON'
+{
+  "sprint_id": "sprint-20260520-gemini",
+  "nodes": [
+    {
+      "id": "G1",
+      "goal": "gemini smoke",
+      "depends_on": [],
+      "write_scope": ["work/gemini.txt"],
+      "preferred_model": "gemini",
+      "acceptance": ["Gemini dispatch exists"]
+    }
+  ]
+}
+JSON
+PATH="$TMP/bin:$PATH" HARNESS_DIR="$TMP" "$TMP/solar-harness.sh" multi-task start --graph "$graph2" --profile gemini-builder --max-workers 3 --cooldown-sec 0 --memory-reserve-gb 0 --once --no-clear >/tmp/solar-multi-task-gemini.out
+gemini_runner=$(find "$TMP/run/multi-task" -path "*sprint-20260520-gemini*/runner.sh" -print | head -1)
+[[ -n "$gemini_runner" ]] || { echo "FAIL: gemini runner missing"; exit 1; }
+grep -q "gemini_adapter.py" "$gemini_runner" || { echo "FAIL: gemini runner does not use gemini adapter"; exit 1; }
+grep -q '"backend": "gemini-cli"' "$(dirname "$gemini_runner")/status.json" || { echo "FAIL: gemini status backend missing"; exit 1; }
 
 PATH="$TMP/bin:$PATH" HARNESS_DIR="$TMP" "$TMP/solar-harness.sh" multi-task status --graph "$graph" --no-clear | grep -q "sprint-20260520-multi-task" \
   || { echo "FAIL: status did not include graph"; exit 1; }

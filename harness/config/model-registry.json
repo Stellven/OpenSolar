@@ -84,6 +84,50 @@
         "ds",
         "ds-v4"
       ]
+    },
+    "gemini-2.5-pro": {
+      "label": "Gemini 2.5 Pro",
+      "short_label": "Gemini Pro",
+      "provider": "gemini",
+      "model_flag": "--model gemini-2.5-pro",
+      "model_key": "gemini",
+      "main_allowed": false,
+      "lab_allowed": true,
+      "aliases": [
+        "gemini",
+        "gemini-pro",
+        "gemini-2.5",
+        "gemini-2.5-pro",
+        "google-gemini"
+      ]
+    },
+    "gemini-2.5-flash": {
+      "label": "Gemini 2.5 Flash",
+      "short_label": "Gemini Flash",
+      "provider": "gemini",
+      "model_flag": "--model gemini-2.5-flash",
+      "model_key": "gemini-flash",
+      "main_allowed": false,
+      "lab_allowed": true,
+      "aliases": [
+        "gemini-flash",
+        "flash",
+        "gemini-2.5-flash"
+      ]
+    },
+    "thunderomlx": {
+      "label": "ThunderOMLX",
+      "short_label": "ThunderOMLX",
+      "provider": "local",
+      "model_flag": "",
+      "model_key": "thunderomlx",
+      "main_allowed": false,
+      "lab_allowed": true,
+      "aliases": [
+        "thunderomlx",
+        "thunder-omlx",
+        "omlx"
+      ]
     }
   },
   "matrix_options": [
