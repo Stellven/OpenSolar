@@ -145,6 +145,38 @@ else
   record G7 fail "CHANGELOG.md missing v${VERSION} entry"
 fi
 
+# G8: TVS renderer bridge and smoke
+if [[ ! -f "lib/tvs_render_cli.ts" ]]; then
+  record G8 fail "TVS renderer bridge missing: lib/tvs_render_cli.ts"
+elif [[ ! -f "solar-harness.sh" ]]; then
+  record G8 fail "solar-harness.sh missing; cannot validate TVS entrypoint"
+elif ! command -v bun &>/dev/null; then
+  record G8 warn "bun not installed; TVS entrypoint smoke skipped"
+else
+  TVS_ROOT_CANDIDATE="${SOLAR_TVS_ROOT:-}"
+  if [[ -z "$TVS_ROOT_CANDIDATE" ]]; then
+    for d in "$HARNESS_DIR/../../TVS" "$HOME/TVS" "$HOME/Solar/../TVS"; do
+      if [[ -f "$d/index.ts" ]]; then
+        TVS_ROOT_CANDIDATE="$(cd "$d" && pwd)"
+        break
+      fi
+    done
+  fi
+  if [[ -z "$TVS_ROOT_CANDIDATE" || ! -f "$TVS_ROOT_CANDIDATE/index.ts" ]]; then
+    record G8 warn "TVS root not found; set SOLAR_TVS_ROOT for renderer smoke"
+  else
+    TVS_OUT=$(SOLAR_TVS_ROOT="$TVS_ROOT_CANDIDATE" HARNESS_DIR="$HARNESS_DIR" bash "$HARNESS_DIR/solar-harness.sh" tvs render --width 44 --colors off <<'JSON' 2>/dev/null || true
+{"canvas":{"width":44},"style":"solar_default","root":{"type":"card","header":"TVS Publish","sections":[{"type":"kv","items":[{"key":"Status","value":"ok"}]}]}}
+JSON
+)
+    if [[ "$TVS_OUT" == *"TVS Publish"* && "$TVS_OUT" == *"Powered by TVS"* ]]; then
+      record G8 pass "TVS renderer entrypoint smoke passed"
+    else
+      record G8 warn "TVS renderer entrypoint smoke did not produce expected output"
+    fi
+  fi
+fi
+
 # ── output ──────────────────────────────────────────────────────────────────
 OK=$([[ $FAIL -eq 0 ]] && echo true || echo false)
 
