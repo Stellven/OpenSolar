@@ -2613,6 +2613,10 @@ print(json.dumps({
     shift || true
     do_bg_command "$@"
     ;;
+  multi-task)
+    shift || true
+    python3 "$HARNESS_DIR/lib/multi_task_runner.py" "$@"
+    ;;
   sprint)
     shift || true
     [[ "$#" -eq 0 ]] && { err "用法: $0 sprint \"需求描述\""; exit 1; }
@@ -3564,6 +3568,7 @@ PY
     echo "  $0 扩展 | extend       启动独立第二四分屏 (solar-harness-lab)"
     echo "  $0 intake \"需求\"       默认需求入口：创建 sprint/epic + raw 记录 + 触发 autopilot"
     echo "  $0 bg \"任务\"           在 tmux 后台窗口执行任务；支持 status/logs/attach/cancel"
+    echo "  $0 multi-task [start|status|logs|attach|cancel]  tmux 后台 DAG worker 池"
     echo "  $0 sprint \"需求\"       创建 Sprint/Epic（不主动 dispatch，兼容旧命令）"
     echo "  $0 wake [sprint-id]  列出未完成 Sprint 或恢复指定 Sprint"
     echo "  $0 wake --help       显示 wake 帮助"
