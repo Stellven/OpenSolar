@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import time
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -894,28 +895,68 @@ def handle_screen_input(text: str, args: argparse.Namespace) -> tuple[str, str]:
     return "message", f"intent={matched} action=intake rc={proc.returncode} {pref}".strip()
 
 
+def _strip_ansi(text: str) -> str:
+    return re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text)
+
+
+def _display_width(text: str) -> int:
+    width = 0
+    for ch in text:
+        if unicodedata.combining(ch):
+            continue
+        width += 2 if unicodedata.east_asian_width(ch) in {"F", "W"} else 1
+    return width
+
+
+def _clip_display(text: str, max_width: int) -> str:
+    if max_width <= 0:
+        return ""
+    out: list[str] = []
+    width = 0
+    for ch in text:
+        ch_width = 0 if unicodedata.combining(ch) else (2 if unicodedata.east_asian_width(ch) in {"F", "W"} else 1)
+        if width + ch_width > max_width:
+            break
+        out.append(ch)
+        width += ch_width
+    return "".join(out)
+
+
+def _pad_display(text: str, width: int, fill: str = " ") -> str:
+    clipped = _clip_display(text, width)
+    pad = max(0, width - _display_width(clipped))
+    return clipped + fill * pad
+
+
 def _box_lines(title: str, lines: list[str], width: int, height: int) -> list[str]:
-    inner = max(10, width - 4)
+    total_width = max(40, width)
+    hline_width = max(10, total_width - 2)
+    content_width = max(8, total_width - 4)
     title_text = f" {title} "
-    top = "┌" + title_text[:inner].ljust(inner, "─") + "┐"
-    bottom = "└" + "─" * inner + "┘"
+    top = "┌" + _pad_display(title_text, hline_width, "─") + "┐"
+    bottom = "└" + "─" * hline_width + "┘"
     body_height = max(0, height - 2)
     out = [top]
     for line in lines[:body_height]:
-        clean = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", line)
-        out.append("│ " + clean[:inner - 1].ljust(inner - 1) + "│")
+        clean = _strip_ansi(line)
+        out.append("│ " + _pad_display(clean, content_width) + " │")
     while len(out) < height - 1:
-        out.append("│ " + "".ljust(inner - 1) + "│")
+        out.append("│ " + " " * content_width + " │")
     out.append(bottom)
     return out[:height]
 
 
 def draw_screen(result: dict[str, Any], messages: list[str], args: argparse.Namespace) -> None:
     size = shutil.get_terminal_size((120, 40))
-    rows = max(24, size.lines)
-    cols = max(80, size.columns)
-    top_h = max(14, int(rows * 0.68))
-    bottom_h = max(8, rows - top_h)
+    rows = max(12, size.lines)
+    cols = max(60, size.columns)
+    available = max(10, rows - 1)
+    top_h = max(6, int(available * 0.68))
+    bottom_h = max(4, available - top_h)
+    if top_h + bottom_h > available:
+        top_h = max(6, available - bottom_h)
+    if top_h + bottom_h > available:
+        bottom_h = max(3, available - top_h)
     if not args.no_clear and sys.stdout.isatty():
         print("\033[H\033[2J", end="")
     status_lines = render_to_lines(result)
@@ -926,30 +967,52 @@ def draw_screen(result: dict[str, Any], messages: list[str], args: argparse.Name
         "",
     ] + messages[-max(1, bottom_h - 6):]
     print("\n".join(_box_lines("后台 pane 状态 / DAG worker 池", status_lines, cols, top_h)))
-    print("\n".join(_box_lines("自然语言指令 / Intent Engine 输入区", input_lines, cols, bottom_h - 1)))
+    print("\n".join(_box_lines("自然语言指令 / Intent Engine 输入区", input_lines, cols, bottom_h)))
     print("solar> ", end="", flush=True)
 
 
 def screen_loop(args: argparse.Namespace) -> int:
     messages: list[str] = ["screen started"]
+    if args.command or not sys.stdin.isatty():
+        commands = [args.command] if args.command else [line.strip() for line in sys.stdin if line.strip()]
+        if not commands:
+            draw_screen(schedule_once(args), messages, args)
+            return 0
+        for raw in commands:
+            action, detail = handle_screen_input(raw, args)
+            messages.append(f"{now_iso()} {raw} -> {detail}")
+            if action == "foreground":
+                print()
+                return attach_or_log(detail, attach=True)
+            if action == "logs":
+                print()
+                return attach_or_log(detail, attach=False)
+            if action == "cancel":
+                rc = cancel(detail)
+                messages.append(f"cancel rc={rc}")
+            if action == "profiles":
+                config = load_profiles()
+                for name, spec in sorted((config.get("profiles") or {}).items()):
+                    messages.append(f"{name}: role={spec.get('role')} backend={spec.get('backend')} model={spec.get('model')}")
+            if action == "doctor":
+                adapter = HARNESS_DIR / "lib" / "gemini_adapter.py"
+                gemini = subprocess.run([sys.executable, str(adapter), "doctor"], text=True, capture_output=True)
+                messages.append("doctor gemini: " + " ".join((gemini.stdout or gemini.stderr).split())[:160])
+            if action == "exit":
+                break
+        draw_screen(schedule_once(args), messages, args)
+        return 0
     while True:
         result = schedule_once(args)
         draw_screen(result, messages, args)
         if args.once and not args.command:
             return 0
-        if args.command:
-            commands = [args.command]
-        elif not sys.stdin.isatty():
-            commands = [line.strip() for line in sys.stdin if line.strip()]
-            if not commands:
-                return 0
-        else:
-            try:
-                raw = input()
-            except (EOFError, KeyboardInterrupt):
-                print()
-                return 0
-            commands = [raw]
+        try:
+            raw = input()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 0
+        commands = [raw]
         for raw in commands:
             action, detail = handle_screen_input(raw, args)
             messages.append(f"{now_iso()} {raw} -> {detail}")
