@@ -13,7 +13,7 @@
 # ================================================================
 set -eu
 
-HARNESS_DIR="$HOME/.solar/harness"
+HARNESS_DIR="${HARNESS_DIR:-$HOME/.solar/harness}"
 SESSION_NAME="solar-harness"
 LAB_SESSION_NAME="solar-harness-lab"
 LEGACY_LAB_SESSION_NAME="solar-harness-strategy"
@@ -2503,6 +2503,7 @@ print(json.dumps({
     _cert_suite="$HARNESS_DIR/lib/capability_certification_suite.py"
     _activation_proof="$HARNESS_DIR/lib/capability_activation_proof.py"
     _ruflo_adapter="$HARNESS_DIR/lib/ruflo_adapter.py"
+    _autoresearch_adapter="$HARNESS_DIR/lib/autoresearch_adapter.py"
     case "${2:-status}" in
       status|health)
         shift 2 || true
@@ -2605,8 +2606,65 @@ print(json.dumps({
         human_prefix "ruflo" "runtime-smoke $*"
         python3 "$_ruflo_adapter" runtime-smoke "$@"
         ;;
+      autoresearch-status|autoresearch)
+        shift 2 || true
+        [[ -f "$_autoresearch_adapter" ]] || { err "autoresearch_adapter not found: $_autoresearch_adapter"; exit 1; }
+        human_prefix "autoresearch" "status $*"
+        python3 "$_autoresearch_adapter" status "$@"
+        ;;
+      autoresearch-doctor)
+        shift 2 || true
+        [[ -f "$_autoresearch_adapter" ]] || { err "autoresearch_adapter not found: $_autoresearch_adapter"; exit 1; }
+        human_prefix "autoresearch" "doctor $*"
+        python3 "$_autoresearch_adapter" doctor "$@"
+        ;;
+      autoresearch-vendor)
+        shift 2 || true
+        [[ -f "$_autoresearch_adapter" ]] || { err "autoresearch_adapter not found: $_autoresearch_adapter"; exit 1; }
+        python3 "$_autoresearch_adapter" vendor "$@"
+        ;;
+      autoresearch-run-local)
+        shift 2 || true
+        [[ -f "$_autoresearch_adapter" ]] || { err "autoresearch_adapter not found: $_autoresearch_adapter"; exit 1; }
+        human_prefix "autoresearch" "run-local $*"
+        python3 "$_autoresearch_adapter" run-local "$@"
+        ;;
+      meta-harness|meta-harness-status)
+        shift 2 || true
+        _meta_harness_adapter="$HARNESS_DIR/lib/meta_harness_adapter.py"
+        [[ -f "$_meta_harness_adapter" ]] || { err "meta_harness_adapter not found: $_meta_harness_adapter"; exit 1; }
+        human_prefix "meta-harness" "status $*"
+        python3 "$_meta_harness_adapter" status "$@"
+        ;;
+      meta-harness-doctor)
+        shift 2 || true
+        _meta_harness_adapter="$HARNESS_DIR/lib/meta_harness_adapter.py"
+        [[ -f "$_meta_harness_adapter" ]] || { err "meta_harness_adapter not found: $_meta_harness_adapter"; exit 1; }
+        human_prefix "meta-harness" "doctor $*"
+        python3 "$_meta_harness_adapter" doctor "$@"
+        ;;
       *)
-        err "用法: $0 integrations [status|plugins|install|disable|list|validate|capabilities|sync-caps|benchmark|platform-benchmark|heavy-proof|agent-arena|certify|activation-proof|ruflo-status|ruflo-runtime-status|ruflo-runtime-bootstrap|ruflo-runtime-smoke] [--json]"
+        err "用法: $0 integrations [status|plugins|install|disable|list|validate|capabilities|sync-caps|benchmark|platform-benchmark|heavy-proof|agent-arena|certify|activation-proof|ruflo-status|ruflo-runtime-status|ruflo-runtime-bootstrap|ruflo-runtime-smoke|autoresearch-status|autoresearch-doctor|autoresearch-vendor|autoresearch-run-local|meta-harness-status|meta-harness-doctor] [--json]"
+        exit 1
+        ;;
+    esac
+    ;;
+  meta-harness|metaharness)
+    shift
+    _meta_harness_adapter="$HARNESS_DIR/lib/meta_harness_adapter.py"
+    [[ -f "$_meta_harness_adapter" ]] || { err "meta_harness_adapter not found: $_meta_harness_adapter"; exit 1; }
+    case "${1:-status}" in
+      status|doctor|init|run|propose|evaluate|apply|history)
+        _mh_sub="${1:-status}"; shift || true
+        human_prefix "meta-harness" "${_mh_sub} $*"
+        python3 "$_meta_harness_adapter" "$_mh_sub" "$@"
+        ;;
+      help|--help|-h)
+        echo "用法: $0 meta-harness [status|doctor|init|run|propose|evaluate|apply|history] [--json]"
+        echo "安全: init/run/propose/evaluate/history 默认 dry-run；真实执行需 --execute。apply 默认 --dry-run，真实应用需 --execute。"
+        ;;
+      *)
+        err "用法: $0 meta-harness [status|doctor|init|run|propose|evaluate|apply|history] [--json] [--execute]"
         exit 1
         ;;
     esac
@@ -2623,7 +2681,7 @@ print(json.dumps({
     _failure_py="$HARNESS_DIR/lib/failure_miner.py"
     _eval_py="$HARNESS_DIR/lib/eval_runner.py"
     case "${1:-status}" in
-      status|scorecard|recommend|run-loop|promote|demote-degraded|repair-deepresearch-gates|restore-nonrequired-deepresearch-repairs)
+      status|scorecard|recommend|run-loop|promote|demote-degraded)
         [[ -f "$_evolution_py" ]] || { err "evolution_engine not found: $_evolution_py"; exit 1; }
         python3 "$_evolution_py" "$@"
         ;;
@@ -2638,7 +2696,7 @@ print(json.dumps({
         python3 "$_eval_py" run "$@"
         ;;
       *)
-        err "用法: $0 evolution [status|scorecard|recommend|run-loop|promote|demote-degraded|mine-failures|eval-run|repair-deepresearch-gates|restore-nonrequired-deepresearch-repairs] [--json]"
+        err "用法: $0 evolution [status|scorecard|recommend|run-loop|promote|demote-degraded|mine-failures|eval-run] [--json]"
         exit 1
         ;;
     esac
@@ -2757,14 +2815,13 @@ print(json.dumps({
       inject)        shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "inject"; python3 "$_skills_py" inject "$@" ;;
       effect-scan)   shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "effect-scan"; python3 "$_skills_py" effect-scan "$@" ;;
       healthcheck|skill-healthcheck) shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "healthcheck"; python3 "$HARNESS_DIR/lib/skill_healthcheck.py" "$@" ;;
-      evolve|evolution) shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "evolution"; python3 "$HARNESS_DIR/lib/skill_evolution_runner.py" "$@" ;;
       native-extract) shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "native-extract"; python3 "$_skills_py" native-extract "$@" ;;
       registry)      shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "registry"; python3 "$_skills_py" registry "$@" ;;
       eval)          shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "eval"; python3 "$_skills_py" eval "$@" ;;
       promote)       shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "promote"; python3 "$_skills_py" promote "$@" ;;
       rollback)      shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "rollback"; python3 "$_skills_py" rollback "$@" ;;
       export)        shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "export"; python3 "$_skills_py" export "$@" ;;
-      *) err "用法: solar-harness skills <inventory|doctor|readiness|certify|inject|effect-scan|healthcheck|evolve|export|eval|promote|rollback|registry> [opts]"; exit 1 ;;
+      *) err "用法: solar-harness skills <inventory|doctor|readiness|certify|inject|effect-scan|healthcheck|export|eval|promote|rollback|registry> [opts]"; exit 1 ;;
     esac
     ;;
   intent)
@@ -3241,6 +3298,7 @@ PY
     echo "  $0 integrations status [--json]  外部开源集成六态健康检查"
     echo "  $0 verify-integrations  端到端验证 Drive/OWL/MarkItDown/agency + 两个四分屏 dispatch 能力"
     echo "  $0 everything-claude-code [doctor|inventory|report|install --dry-run]  Everything Claude Code 候选集成审计"
+    echo "  $0 meta-harness [status|doctor|run|apply|history]  Meta-Harness 自优化外循环入口（默认 dry-run）"
     echo "  $0 context inject --query \"问题\" [--format hook|markdown|--json]  默认知识上下文注入"
     echo "  $0 ragflow [doctor|config|search|evidence-pack|export-manifest]  RAGFlow raw evidence / retrieval adapter"
     echo "  $0 autopilot [status|apply|dispatch|loop|start|stop|service-status|queue]  自动监控断头 sprint/pane 并安全推进"
