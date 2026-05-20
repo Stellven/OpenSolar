@@ -18,6 +18,7 @@
 #   G5: plugin manifest schema validation passes
 #   G6: python3 lib/ compile check
 #   G7: CHANGELOG.md has current version entry
+#   G8: TVS renderer bridge + Bun + TVS root + smoke pass
 # ============================================================================
 set -euo pipefail
 
@@ -31,6 +32,29 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --json)    AS_JSON=1; shift ;;
     --version) VERSION="$2"; shift 2 ;;
+    --help|-h)
+      cat <<'EOF'
+Solar Harness Release Audit
+
+Usage:
+  release/publish.sh [--json] [--version VERSION]
+
+Required TVS environment:
+  bun              JavaScript runtime for TVS smoke checks
+  SOLAR_TVS_ROOT   TVS checkout path containing index.ts
+
+Gates:
+  G1 VERSION semver
+  G2 tarball + sha256 + manifest present
+  G3 SHA256 matches
+  G4 secret scan
+  G5 plugin manifests validate
+  G6 python compile
+  G7 CHANGELOG entry
+  G8 TVS renderer bridge + Bun + TVS root + smoke pass
+EOF
+      exit 0
+      ;;
     *) printf '[publish] unknown arg: %s\n' "$1" >&2; exit 1 ;;
   esac
 done
@@ -151,7 +175,7 @@ if [[ ! -f "lib/tvs_render_cli.ts" ]]; then
 elif [[ ! -f "solar-harness.sh" ]]; then
   record G8 fail "solar-harness.sh missing; cannot validate TVS entrypoint"
 elif ! command -v bun &>/dev/null; then
-  record G8 warn "bun not installed; TVS entrypoint smoke skipped"
+  record G8 fail "bun not installed; TVS renderer is a required release dependency"
 else
   TVS_ROOT_CANDIDATE="${SOLAR_TVS_ROOT:-}"
   if [[ -z "$TVS_ROOT_CANDIDATE" ]]; then
@@ -163,7 +187,7 @@ else
     done
   fi
   if [[ -z "$TVS_ROOT_CANDIDATE" || ! -f "$TVS_ROOT_CANDIDATE/index.ts" ]]; then
-    record G8 warn "TVS root not found; set SOLAR_TVS_ROOT for renderer smoke"
+    record G8 fail "TVS root not found; set SOLAR_TVS_ROOT to a checkout containing index.ts"
   else
     TVS_OUT=$(SOLAR_TVS_ROOT="$TVS_ROOT_CANDIDATE" HARNESS_DIR="$HARNESS_DIR" bash "$HARNESS_DIR/solar-harness.sh" tvs render --width 44 --colors off <<'JSON' 2>/dev/null || true
 {"canvas":{"width":44},"style":"solar_default","root":{"type":"card","header":"TVS Publish","sections":[{"type":"kv","items":[{"key":"Status","value":"ok"}]}]}}
@@ -172,7 +196,7 @@ JSON
     if [[ "$TVS_OUT" == *"TVS Publish"* && "$TVS_OUT" == *"Powered by TVS"* ]]; then
       record G8 pass "TVS renderer entrypoint smoke passed"
     else
-      record G8 warn "TVS renderer entrypoint smoke did not produce expected output"
+      record G8 fail "TVS renderer entrypoint smoke did not produce expected output"
     fi
   fi
 fi

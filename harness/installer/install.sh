@@ -13,6 +13,7 @@
 #   SOLAR_HOME         install root (default: /opt/solar or ~/.solar)
 #   HARNESS_DIR        harness directory (default: $SOLAR_HOME/harness)
 #   KNOWLEDGE_VAULT    Obsidian vault path (default: ~/Knowledge)
+#   SOLAR_TVS_ROOT     TVS package checkout path; must contain index.ts
 #   SKIP_LLM_CLI=1     skip Claude/Codex binary checks
 #   FAKE_KEYS=1        use test placeholder keys
 #
@@ -37,6 +38,7 @@ CUSTOM_VAULT=""
 SOLAR_HOME="${SOLAR_HOME:-}"
 HARNESS_DIR="${HARNESS_DIR:-}"
 KNOWLEDGE_VAULT="${KNOWLEDGE_VAULT:-}"
+SOLAR_TVS_ROOT="${SOLAR_TVS_ROOT:-}"
 
 # parse args
 while [[ $# -gt 0 ]]; do
@@ -48,6 +50,10 @@ while [[ $# -gt 0 ]]; do
     --help|-h)
       echo "Solar Product Platform Installer"
       echo "Usage: install.sh [--non-interactive] [--skip-llm-cli] [--fake-keys] [--vault PATH]"
+      echo ""
+      echo "Required for TVS rendering:"
+      echo "  bun              JavaScript runtime for tvs_render_cli.ts"
+      echo "  SOLAR_TVS_ROOT   TVS checkout path containing index.ts"
       exit 0 ;;
     *) red "Unknown option: $1"; exit 2 ;;
   esac
@@ -96,6 +102,21 @@ info "SOLAR_HOME=$SOLAR_HOME"
 info "HARNESS_DIR=$HARNESS_DIR"
 info "KNOWLEDGE_VAULT=$KNOWLEDGE_VAULT"
 
+resolve_tvs_root() {
+  if [[ -n "$SOLAR_TVS_ROOT" ]]; then
+    [[ -f "$SOLAR_TVS_ROOT/index.ts" ]] && printf '%s\n' "$SOLAR_TVS_ROOT"
+    return 0
+  fi
+
+  local candidate
+  for candidate in "$HARNESS_DIR/../../TVS" "$HOME/TVS" "$HOME/Solar/../TVS"; do
+    if [[ -f "$candidate/index.ts" ]]; then
+      (cd "$candidate" && pwd)
+      return 0
+    fi
+  done
+}
+
 # ── guard: refuse to run inside ~/.solar if it already exists ──────────────
 if [[ "$NON_INTERACTIVE" == "true" ]] && [[ -d "$HOME/.solar" ]]; then
   yellow "Existing ~/.solar detected. Non-interactive mode will NOT modify existing user data."
@@ -143,6 +164,20 @@ install_deps() {
       sudo apt-get install -y -qq tmux
     fi
   fi
+
+  if ! command -v bun &>/dev/null; then
+    red "Bun is required for TVS rendering. Install Bun first: https://bun.sh/docs/installation"
+    exit 1
+  fi
+
+  local tvs_root
+  tvs_root="$(resolve_tvs_root || true)"
+  if [[ -z "$tvs_root" ]]; then
+    red "TVS renderer dependency missing. Set SOLAR_TVS_ROOT to a TVS checkout containing index.ts."
+    exit 1
+  fi
+  export SOLAR_TVS_ROOT="$tvs_root"
+  info "TVS renderer root: $SOLAR_TVS_ROOT"
 
   # Check optional LLM CLIs
   if [[ "$SKIP_LLM_CLI" != "true" ]]; then
@@ -355,6 +390,7 @@ print_summary() {
   echo "│  SOLAR_HOME:     $SOLAR_HOME"
   echo "│  HARNESS_DIR:    $HARNESS_DIR"
   echo "│  KNOWLEDGE_VAULT: $KNOWLEDGE_VAULT"
+  echo "│  SOLAR_TVS_ROOT: ${SOLAR_TVS_ROOT:-N/A}"
   echo "│  OS:             $OS_KIND $OS_VERSION"
   echo "│  Config:         $HARNESS_DIR/config/defaults.yaml"
   echo "│  Env:            $HARNESS_DIR/.env"

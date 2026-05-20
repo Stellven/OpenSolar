@@ -29,4 +29,19 @@ SUMMARY_OUT="$(HARNESS_DIR="$HARNESS_DIR_REAL" SOLAR_TVS_ROOT="$TVS_ROOT" bash "
 grep -q "TVS:" <<<"$SUMMARY_OUT" || { echo "FAIL: summary missing TVS line"; exit 1; }
 grep -q "smoke=ok" <<<"$SUMMARY_OUT" || { echo "FAIL: summary missing TVS smoke ok"; exit 1; }
 
+BAD_ROOT="$(mktemp -d)"
+trap 'rm -rf "$BAD_ROOT"' EXIT
+BAD_JSON="$(HARNESS_DIR="$HARNESS_DIR_REAL" SOLAR_TVS_ROOT="$BAD_ROOT" bash "$HARNESS_DIR_REAL/installer/doctor.sh" --json)"
+BAD_JSON="$BAD_JSON" python3 - <<'PY'
+import json
+import os
+
+d = json.loads(os.environ["BAD_JSON"])
+tvs = d.get("services", {}).get("tvs_renderer", {})
+assert d.get("verdict") == "fail", d
+assert tvs.get("status") == "missing", tvs
+assert tvs.get("root") == "missing", tvs
+assert tvs.get("smoke") == "not_run", tvs
+PY
+
 echo "PASS: installer doctor exposes TVS renderer readiness"
