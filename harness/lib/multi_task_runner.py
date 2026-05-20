@@ -1157,7 +1157,6 @@ def screen_loop(args: argparse.Namespace) -> int:
         if args.command or not sys.stdin.isatty():
             draw_screen(status_snapshot(args), messages, args)
             return 0
-        time.sleep(max(1, int(args.interval)))
 
 
 def resolve_task(selector: str) -> dict[str, Any] | None:
