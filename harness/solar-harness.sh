@@ -2815,13 +2815,14 @@ print(json.dumps({
       inject)        shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "inject"; python3 "$_skills_py" inject "$@" ;;
       effect-scan)   shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "effect-scan"; python3 "$_skills_py" effect-scan "$@" ;;
       healthcheck|skill-healthcheck) shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "healthcheck"; python3 "$HARNESS_DIR/lib/skill_healthcheck.py" "$@" ;;
+      evolve|evolution) shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "evolve"; python3 "$HARNESS_DIR/lib/skill_evolution_runner.py" "$@" ;;
       native-extract) shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "native-extract"; python3 "$_skills_py" native-extract "$@" ;;
       registry)      shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "registry"; python3 "$_skills_py" registry "$@" ;;
       eval)          shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "eval"; python3 "$_skills_py" eval "$@" ;;
       promote)       shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "promote"; python3 "$_skills_py" promote "$@" ;;
       rollback)      shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "rollback"; python3 "$_skills_py" rollback "$@" ;;
       export)        shift; type solar_capability_prefix >/dev/null 2>&1 && solar_capability_prefix "skills" "export"; python3 "$_skills_py" export "$@" ;;
-      *) err "用法: solar-harness skills <inventory|doctor|readiness|certify|inject|effect-scan|healthcheck|export|eval|promote|rollback|registry> [opts]"; exit 1 ;;
+      *) err "用法: solar-harness skills <inventory|doctor|readiness|certify|inject|effect-scan|healthcheck|evolve|export|eval|promote|rollback|registry> [opts]"; exit 1 ;;
     esac
     ;;
   intent)
