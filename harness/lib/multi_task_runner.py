@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as _dt
+import io
 import json
 import os
 import re
@@ -740,6 +742,243 @@ def render(result: dict[str, Any], no_clear: bool = False) -> None:
         ] for x in launched])
 
 
+def render_to_lines(result: dict[str, Any]) -> list[str]:
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        render(result, no_clear=True)
+    return buf.getvalue().splitlines()
+
+
+def command_log_path() -> Path:
+    return RUN_DIR / "screen-commands.jsonl"
+
+
+def append_screen_command(text: str, intent: dict[str, Any], action: str, status: str, detail: str = "") -> None:
+    RUN_DIR.mkdir(parents=True, exist_ok=True)
+    record = {
+        "ts": now_iso(),
+        "input": text,
+        "intent": intent,
+        "action": action,
+        "status": status,
+        "detail": detail,
+    }
+    with command_log_path().open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def match_intent(text: str) -> dict[str, Any]:
+    try:
+        from intent_engine_adapter import match as intent_match  # noqa: WPS433
+
+        return intent_match(text, record=True)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "input": text,
+            "matched": False,
+            "matches": [],
+            "error": f"{type(exc).__name__}: {exc}",
+            "generated_at": now_iso(),
+        }
+
+
+def _intent_label(intent: dict[str, Any]) -> str:
+    labels: list[str] = []
+    for item in intent.get("matches") or []:
+        label = item.get("skill") or item.get("target") or item.get("type") or item.get("source")
+        if label:
+            labels.append(str(label))
+    return ",".join(labels[:3]) if labels else "N/A"
+
+
+def _set_screen_model_preference(text: str, args: argparse.Namespace) -> str:
+    lower = text.lower()
+    if "gemini" in lower:
+        args.profile = "gemini-builder"
+        args.backend = "gemini-cli"
+        args.model = "gemini"
+        return "profile=gemini-builder backend=gemini-cli model=gemini"
+    if "deepseek" in lower or "deepseek" in text:
+        args.profile = "deepseek-builder"
+        args.backend = ""
+        args.model = "deepseek"
+        return "profile=deepseek-builder model=deepseek"
+    if "glm" in lower or "智谱" in text or "gml" in lower:
+        args.profile = "glm-planner"
+        args.backend = ""
+        args.model = "glm-5.1"
+        return "profile=glm-planner model=glm-5.1"
+    if "opus" in lower:
+        args.profile = "evaluator"
+        args.backend = "claude-cli"
+        args.model = "opus"
+        return "profile=evaluator backend=claude-cli model=opus"
+    if "sonnet" in lower:
+        args.profile = "builder"
+        args.backend = "claude-cli"
+        args.model = "sonnet"
+        return "profile=builder backend=claude-cli model=sonnet"
+    if "thunderomlx" in lower or "thunder" in lower or "omlx" in lower:
+        args.profile = "thunderomlx-local"
+        args.backend = "command"
+        args.model = "thunderomlx"
+        return "profile=thunderomlx-local backend=command model=thunderomlx"
+    return ""
+
+
+def _selector_from_text(text: str) -> str:
+    lower = text.lower()
+    for selector in ("planner", "builder", "evaluator", "pm", "gemini-builder", "latest"):
+        if selector in lower:
+            return selector
+    for cn, selector in (("规划", "planner"), ("构建", "builder"), ("建设", "builder"), ("审判", "evaluator"), ("评审", "evaluator")):
+        if cn in text:
+            return selector
+    return "latest"
+
+
+def handle_screen_input(text: str, args: argparse.Namespace) -> tuple[str, str]:
+    raw = text.strip()
+    if not raw:
+        return "noop", "空输入"
+    intent = match_intent(raw)
+    matched = _intent_label(intent)
+    lower = raw.lower()
+
+    if lower in {"q", "quit", "exit", "退出", "关闭"}:
+        append_screen_command(raw, intent, "exit", "ok", matched)
+        return "exit", f"intent={matched} action=exit"
+    if lower in {"help", "?", "/help", "帮助"}:
+        msg = "命令: status/profiles/doctor/start/foreground latest/logs latest/cancel latest；自然语言会先 intent match，再 intake。"
+        append_screen_command(raw, intent, "help", "ok", matched)
+        return "message", msg
+    if lower in {"status", "状态", "显示状态", "看状态"}:
+        append_screen_command(raw, intent, "status", "ok", matched)
+        return "message", f"intent={matched} action=status"
+    if lower in {"profiles", "profile", "角色", "模型", "选项"}:
+        append_screen_command(raw, intent, "profiles", "ok", matched)
+        return "profiles", "显示 profiles"
+    if lower in {"doctor", "检查", "自检"}:
+        append_screen_command(raw, intent, "doctor", "ok", matched)
+        return "doctor", "显示 doctor"
+    if lower.startswith(("foreground", "focus", "fg", "前台", "看输出", "查看输出")):
+        selector = raw.split(maxsplit=1)[1] if " " in raw and not raw.startswith(("前台", "看输出", "查看输出")) else _selector_from_text(raw)
+        append_screen_command(raw, intent, "foreground", "ok", selector)
+        return "foreground", selector
+    if lower.startswith(("logs", "log", "日志")):
+        selector = raw.split(maxsplit=1)[1] if " " in raw else _selector_from_text(raw)
+        append_screen_command(raw, intent, "logs", "ok", selector)
+        return "logs", selector
+    if lower.startswith(("cancel", "取消")):
+        selector = raw.split(maxsplit=1)[1] if " " in raw else _selector_from_text(raw)
+        append_screen_command(raw, intent, "cancel", "ok", selector)
+        return "cancel", selector
+    if lower.startswith(("start", "启动调度", "开始调度")) or any((m.get("type") == "execute") for m in intent.get("matches") or []):
+        pref = _set_screen_model_preference(raw, args)
+        result = schedule_once(args)
+        append_screen_command(raw, intent, "schedule_once", "ok", pref)
+        return "message", f"intent={matched} action=schedule_once launched={len(result.get('launched') or [])} {pref}".strip()
+
+    pref = _set_screen_model_preference(raw, args)
+    harness = HARNESS_DIR / "solar-harness.sh"
+    proc = subprocess.run(
+        [str(harness), "intake", "--request", raw],
+        text=True,
+        capture_output=True,
+        timeout=120,
+    )
+    detail = (proc.stdout or proc.stderr or "").strip().splitlines()
+    summary = detail[-1] if detail else f"exit={proc.returncode}"
+    append_screen_command(raw, intent, "intake", "ok" if proc.returncode == 0 else "error", f"{pref} {summary}".strip())
+    return "message", f"intent={matched} action=intake rc={proc.returncode} {pref}".strip()
+
+
+def _box_lines(title: str, lines: list[str], width: int, height: int) -> list[str]:
+    inner = max(10, width - 4)
+    title_text = f" {title} "
+    top = "┌" + title_text[:inner].ljust(inner, "─") + "┐"
+    bottom = "└" + "─" * inner + "┘"
+    body_height = max(0, height - 2)
+    out = [top]
+    for line in lines[:body_height]:
+        clean = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", line)
+        out.append("│ " + clean[:inner - 1].ljust(inner - 1) + "│")
+    while len(out) < height - 1:
+        out.append("│ " + "".ljust(inner - 1) + "│")
+    out.append(bottom)
+    return out[:height]
+
+
+def draw_screen(result: dict[str, Any], messages: list[str], args: argparse.Namespace) -> None:
+    size = shutil.get_terminal_size((120, 40))
+    rows = max(24, size.lines)
+    cols = max(80, size.columns)
+    top_h = max(14, int(rows * 0.68))
+    bottom_h = max(8, rows - top_h)
+    if not args.no_clear and sys.stdout.isatty():
+        print("\033[H\033[2J", end="")
+    status_lines = render_to_lines(result)
+    input_lines = [
+        f"profile={args.profile or 'auto'} backend={args.backend or 'auto'} model={args.model or 'auto'}",
+        "输入: 自然语言需求 / status / profiles / doctor / foreground latest / logs latest / q",
+        "intent: 每条输入都会写入 run/multi-task/screen-commands.jsonl",
+        "",
+    ] + messages[-max(1, bottom_h - 6):]
+    print("\n".join(_box_lines("后台 pane 状态 / DAG worker 池", status_lines, cols, top_h)))
+    print("\n".join(_box_lines("自然语言指令 / Intent Engine 输入区", input_lines, cols, bottom_h - 1)))
+    print("solar> ", end="", flush=True)
+
+
+def screen_loop(args: argparse.Namespace) -> int:
+    messages: list[str] = ["screen started"]
+    while True:
+        result = schedule_once(args)
+        draw_screen(result, messages, args)
+        if args.once and not args.command:
+            return 0
+        if args.command:
+            commands = [args.command]
+        elif not sys.stdin.isatty():
+            commands = [line.strip() for line in sys.stdin if line.strip()]
+            if not commands:
+                return 0
+        else:
+            try:
+                raw = input()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                return 0
+            commands = [raw]
+        for raw in commands:
+            action, detail = handle_screen_input(raw, args)
+            messages.append(f"{now_iso()} {raw} -> {detail}")
+            if action == "exit":
+                draw_screen(schedule_once(args), messages, args)
+                return 0
+            if action == "foreground":
+                print()
+                return attach_or_log(detail, attach=True)
+            if action == "logs":
+                print()
+                return attach_or_log(detail, attach=False)
+            if action == "cancel":
+                rc = cancel(detail)
+                messages.append(f"cancel rc={rc}")
+            if action == "profiles":
+                config = load_profiles()
+                for name, spec in sorted((config.get("profiles") or {}).items()):
+                    messages.append(f"{name}: role={spec.get('role')} backend={spec.get('backend')} model={spec.get('model')}")
+            if action == "doctor":
+                adapter = HARNESS_DIR / "lib" / "gemini_adapter.py"
+                gemini = subprocess.run([sys.executable, str(adapter), "doctor"], text=True, capture_output=True)
+                messages.append("doctor gemini: " + " ".join((gemini.stdout or gemini.stderr).split())[:160])
+        if args.command or not sys.stdin.isatty():
+            draw_screen(schedule_once(args), messages, args)
+            return 0
+        time.sleep(max(1, int(args.interval)))
+
+
 def resolve_task(selector: str) -> dict[str, Any] | None:
     rows = list_task_rows()
     if not rows:
@@ -806,6 +1045,20 @@ def cancel(task_id_value: str) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="solar-harness multi-task")
     sub = p.add_subparsers(dest="cmd")
+    screen = sub.add_parser("screen", help="interactive split terminal screen with status and natural-language input")
+    screen.add_argument("--graph", action="append", default=[], help="task_graph.json path; can repeat")
+    screen.add_argument("--max-workers", type=int, default=DEFAULT_MAX_WORKERS)
+    screen.add_argument("--interval", type=int, default=DEFAULT_INTERVAL)
+    screen.add_argument("--cooldown-sec", type=int, default=DEFAULT_COOLDOWN)
+    screen.add_argument("--memory-reserve-gb", type=float, default=DEFAULT_MEMORY_RESERVE_GB)
+    screen.add_argument("--quota-backoff-sec", type=int, default=DEFAULT_QUOTA_BACKOFF)
+    screen.add_argument("--profile", default="", help=f"worker profile: {','.join(profile_names())}")
+    screen.add_argument("--model", default="", help="override selected profile model")
+    screen.add_argument("--backend", default="", choices=["", "claude-cli", "gemini-cli", "gemini-sdk", "command"], help="override selected profile backend")
+    screen.add_argument("--command", default="", help="process one input command, useful for tests/scripts")
+    screen.add_argument("--dry-run", action="store_true")
+    screen.add_argument("--once", action="store_true", help="render once and exit")
+    screen.add_argument("--no-clear", action="store_true")
     start = sub.add_parser("start", help="start tmux-backed DAG worker scheduler")
     start.add_argument("--graph", action="append", default=[], help="task_graph.json path; can repeat")
     start.add_argument("--max-workers", type=int, default=DEFAULT_MAX_WORKERS)
@@ -841,7 +1094,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv:
-        argv = ["start"]
+        argv = ["screen"]
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -882,6 +1135,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "status":
         render({"guard": launch_guard(DEFAULT_MAX_WORKERS, DEFAULT_MEMORY_RESERVE_GB, DEFAULT_COOLDOWN, DEFAULT_QUOTA_BACKOFF), "graphs": [status_summary_for_graph(p) for p in graph_files(args.graph)]}, no_clear=args.no_clear)
         return 0
+    if args.cmd == "screen":
+        return screen_loop(args)
 
     if args.cmd in {None, "start"}:
         while True:

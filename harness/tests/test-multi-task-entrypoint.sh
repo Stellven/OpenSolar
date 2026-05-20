@@ -12,6 +12,7 @@ cp solar-harness.sh "$TMP/solar-harness.sh"
 cp lib/run-state.sh "$TMP/lib/run-state.sh"
 cp lib/events.sh "$TMP/lib/events.sh"
 cp lib/graph_scheduler.py "$TMP/lib/graph_scheduler.py"
+cp lib/intent_engine_adapter.py "$TMP/lib/intent_engine_adapter.py"
 cp lib/multi_task_runner.py "$TMP/lib/multi_task_runner.py"
 cp lib/gemini_adapter.py "$TMP/lib/gemini_adapter.py"
 cp config/multi-task-profiles.json "$TMP/config/multi-task-profiles.json"
@@ -140,5 +141,11 @@ grep -q '"backend": "gemini-cli"' "$(dirname "$gemini_runner")/status.json" || {
 
 PATH="$TMP/bin:$PATH" HARNESS_DIR="$TMP" "$TMP/solar-harness.sh" multi-task status --graph "$graph" --no-clear | grep -q "sprint-20260520-multi-task" \
   || { echo "FAIL: status did not include graph"; exit 1; }
+
+PATH="$TMP/bin:$PATH" HARNESS_DIR="$TMP" "$TMP/solar-harness.sh" multi-task screen --graph "$graph" --command "显示状态" --no-clear >/tmp/solar-multi-task-screen.out
+grep -q "自然语言指令" /tmp/solar-multi-task-screen.out \
+  || { echo "FAIL: screen did not render input pane"; exit 1; }
+grep -q '"action": "status"' "$TMP/run/multi-task/screen-commands.jsonl" \
+  || { echo "FAIL: screen command was not logged through intent path"; exit 1; }
 
 echo "PASS: multi-task entrypoint dispatches ready DAG nodes to tmux worker pool"
