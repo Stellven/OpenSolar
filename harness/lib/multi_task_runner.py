@@ -854,16 +854,32 @@ def _looks_like_task_status_query(text: str) -> bool:
 def _task_status_message() -> str:
     tasks = list_task_rows()
     active = [t for t in tasks if str(t.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
-    if not tasks:
-        return "当前后台任务: active=0 total=0"
+    graph_summaries = [status_summary_for_graph(path) for path in graph_files([])[:12]]
+    dag_counts: dict[str, int] = {}
+    ready_sprints: list[str] = []
+    for summary in graph_summaries:
+        for status, count in (summary.get("counts") or {}).items():
+            dag_counts[str(status)] = dag_counts.get(str(status), 0) + int(count)
+        ready = summary.get("ready") or []
+        if ready:
+            ready_sprints.append(f"{summary.get('sid', 'N/A')}:{','.join(ready[:5])}")
+    dag_active = sum(dag_counts.get(status, 0) for status in ("active", "assigned", "dispatched", "in_progress", "running", "reviewing"))
+    dag_ready = sum(len(summary.get("ready") or []) for summary in graph_summaries)
+    bg_summary = f"BG active={len(active)}/{len(tasks)}"
+    dag_summary = f"DAG active={dag_active} ready={dag_ready}"
+    if not tasks and not dag_active and not dag_ready:
+        return f"当前任务: {bg_summary}; {dag_summary}"
     if not active:
-        return f"当前后台任务: active=0 total={len(tasks)} latest={tasks[0].get('id', 'N/A')} status={tasks[0].get('status', 'N/A')}"
+        latest = f" latest={tasks[0].get('id', 'N/A')} status={tasks[0].get('status', 'N/A')}" if tasks else ""
+        ready_text = f" ready_sprints={' | '.join(ready_sprints[:2])}" if ready_sprints else ""
+        return f"当前任务: {bg_summary}; {dag_summary}{ready_text}{latest}"
     parts = []
     for task in active[:5]:
         parts.append(
             f"{task.get('id', 'N/A')}[{task.get('role', 'N/A')}/{task.get('model', 'N/A')}/{task.get('status', 'N/A')}]"
         )
-    return f"当前后台任务: active={len(active)} total={len(tasks)} " + "; ".join(parts)
+    ready_text = f" ready_sprints={' | '.join(ready_sprints[:2])}" if ready_sprints else ""
+    return f"当前任务: {bg_summary}; {dag_summary}{ready_text}; workers=" + "; ".join(parts)
 
 
 def handle_screen_input(text: str, args: argparse.Namespace) -> tuple[str, str]:
