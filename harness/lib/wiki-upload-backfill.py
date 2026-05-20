@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import glob
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -127,17 +128,62 @@ def _run_extract_sandboxed(
 
 # ── PDF text extraction ──────────────────────────────────────────────────────
 
-def extract_pdf_text(pdf_path: Path, max_chars: int = 3000) -> str:
-    """Extract text from PDF using pdftotext, routed through SandboxHand.
+def _load_upload_extractor():
+    path = Path(__file__).resolve().with_name("wiki-upload-extract.py")
+    spec = importlib.util.spec_from_file_location("wiki_upload_extract", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load upload extractor: {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["wiki_upload_extract"] = module
+    spec.loader.exec_module(module)
+    return module
 
-    The pdftotext invocation is a short, read-only tool-plane CLI so we route
-    it through the disposable sandbox (argv mode + evidence file). When the
-    sandbox is unavailable we fall back to a direct subprocess call and
-    record the fallback reason in `LAST_EXTRACT_ROUTE`.
+
+def extract_upload_text(source_path: Path, max_chars: int = 12000) -> str:
+    """Extract complex uploads through the canonical upload extractor.
+
+    This is intentionally MinerU-first for PDFs. Backfill may create tracking
+    stubs, but it must not use short pdftotext snippets as if they were paper
+    understanding.
     """
     global LAST_EXTRACT_ROUTE
+    try:
+        module = _load_upload_extractor()
+        output_dir = source_path.parent / "_extracted"
+        result = module.extract_file(str(source_path), str(output_dir))
+        LAST_EXTRACT_ROUTE = dict(result)
+        if result.get("status") == "success" and result.get("artifact"):
+            artifact = Path(str(result["artifact"]))
+            if artifact.exists():
+                return artifact.read_text(encoding="utf-8", errors="replace")[:max_chars]
+    except Exception as exc:
+        LAST_EXTRACT_ROUTE = {
+            "status": "extract_failed",
+            "method": "upload_extractor_failed",
+            "quality": "blocked",
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    return ""
+
+
+def extract_pdf_text(pdf_path: Path, max_chars: int = 3000) -> str:
+    """Extract PDF text through MinerU-first upload extractor.
+
+    Legacy pdftotext is available only under
+    `SOLAR_HARNESS_ALLOW_LEGACY_PDF_BACKFILL=1` for emergency diagnostics. The
+    normal path must keep PDF knowledge extraction on the MinerU chain.
+    """
+    global LAST_EXTRACT_ROUTE
+    text = extract_upload_text(pdf_path, max_chars=max_chars)
+    if text.strip():
+        return text
+    if os.environ.get("SOLAR_HARNESS_ALLOW_LEGACY_PDF_BACKFILL") != "1":
+        return ""
+
     argv = ["pdftotext", "-l", "3", str(pdf_path), "-"]
     route = _run_extract_sandboxed("pdftotext", argv, timeout=30)
+    route["method"] = "legacy_pdftotext_diagnostic_only"
+    route["quality"] = "degraded_fallback_requires_reingest"
     LAST_EXTRACT_ROUTE = route
     if route.get("ok") and (route.get("stdout") or "").strip():
         return (route["stdout"] or "").strip()[:max_chars]
@@ -216,6 +262,8 @@ def extract_source_text(source_path: Path) -> str:
     ext = source_path.suffix.lower()
     if ext == ".pdf":
         return extract_pdf_text(source_path)
+    elif ext in (".docx", ".pptx"):
+        return extract_upload_text(source_path)
     elif ext == ".pages":
         return extract_pages_text(source_path)
     elif ext in (".html", ".htm"):
@@ -380,6 +428,8 @@ def create_stub_ref(source_path: Path, batch_id: str, vault_path: Path | None = 
 
     # Try to extract text for a summary
     extracted = extract_source_text(source_path)
+    extraction_method = str(LAST_EXTRACT_ROUTE.get("method") or "")
+    extraction_quality = str(LAST_EXTRACT_ROUTE.get("quality") or ("unknown" if extracted else "blocked"))
     summary = ""
     if extracted:
         # Take first meaningful paragraph
@@ -395,6 +445,8 @@ def create_stub_ref(source_path: Path, batch_id: str, vault_path: Path | None = 
     tags = ["uploaded", "batch-backfill"]
     if ext == ".pdf":
         tags.append("pdf")
+        if not extraction_method.startswith("mineru:"):
+            tags.append("needs-mineru-reingest")
     elif ext == ".pages":
         tags.append("pages")
 
@@ -408,7 +460,9 @@ tags: {json.dumps(tags, ensure_ascii=False)}
 visibility: internal
 backfill: true
 quality: stub
-needs_deep_ingest: {str(ext == ".pdf").lower()}
+extraction_method: "{extraction_method or "N/A"}"
+extraction_quality: "{extraction_quality}"
+needs_deep_ingest: {str(ext in {".pdf", ".docx", ".pptx"} and not extraction_method.startswith("mineru:")).lower()}
 ---
 
 # {title}
