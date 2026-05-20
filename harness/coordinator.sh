@@ -3125,6 +3125,14 @@ EOF
   if [[ "$phase" == "graph_dispatch_active" || "$phase" == "planning_complete" ]]; then
     if [[ -f "$SPRINTS_DIR/${sid}.task_graph.json" ]]; then
       log "${G}Sprint ${sid} ${phase} + task_graph → DAG graph_node 派发${N}"
+      if type queue_consume_intent_prefix &>/dev/null; then
+        local pm_fix_consumed
+        pm_fix_consumed=$(queue_consume_intent_prefix "$sid" "pm_prd_fix|" "superseded_by_graph_dispatch" 2>/dev/null || echo 0)
+        if [[ "${pm_fix_consumed:-0}" != "0" ]]; then
+          log "${Y}[graph-dispatch] consumed ${pm_fix_consumed} obsolete pm_prd_fix queue item(s) for ${sid}${N}"
+          emit_event "$sid" "obsolete_pm_prd_fix_queue_consumed" "coordinator" "{\"count\":${pm_fix_consumed}}"
+        fi
+      fi
       local graph_dispatcher="$HARNESS_DIR/lib/graph_node_dispatcher.py"
       if [[ ! -f "$graph_dispatcher" ]]; then
         log "${R}[graph-dispatch] missing dispatcher: ${graph_dispatcher}${N}"

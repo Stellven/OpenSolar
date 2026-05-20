@@ -1170,6 +1170,7 @@ def _pane_prompt_residue_is_stale_scrollback(pane: str, text: str) -> bool:
             "✻ Sautéed for",
             "✻ Thought for",
             "✻ Worked for",
+            "✻ Crunched for",
         )
     )
 
@@ -1931,7 +1932,7 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "frontend", "ui", "flask", "http", "curl", "http-routing", "autopilot-hooks", "json-traversal", "html", "jinja", "javascript", "vanilla-dom",
         "security", "grep", "secret-scan",
         "deepresearch", "cli", "claude-cli", "survey", "fixture", "release", "evidence", "autopilot", "epic",
-        "product", "planning", "governance",
+        "product", "planning", "governance", "risk", "risk-register",
         "architecture", "schema", "state-machine", "distributed-systems",
         "api-design", "data-modeling", "compatibility",
         "routing", "diagnostics", "evaluation",
@@ -1952,7 +1953,7 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "harness.activation_proof", "harness.reporting", "harness.knowledge", "harness.contracts",
         "activation.proof", "negative_control", "runtime_artifacts",
         "autopilot.monitor", "autopilot.safe_apply", "pane.deadlock_detection",
-        "documentation", "schema", "state-machine", "storage", "sources",
+        "documentation", "governance", "risk", "schema", "state-machine", "storage", "sources",
         "browser.browse", "browser.qa", "code.review",
         "browser.mcp", "browser.automation", "browser.screenshot",
         "browser.localhost_test",

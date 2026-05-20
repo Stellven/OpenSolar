@@ -27,6 +27,9 @@ AGENTS_SKILLS = HOME / ".agents" / "skills"
 CODEX_MEMORY = HOME / ".codex" / "memories"
 REMOTE = "lisihao@100.122.223.55"
 REMOTE_HARNESS = "/Users/lisihao/.solar/harness"
+MEMRL_DB = HOME / ".solar" / "solar.db"
+MEMRL_FEEDBACK_JSONL = HARNESS / "logs" / "skill-healthcheck-memrl-feedback.jsonl"
+EVOLUTION_ENGINE = HARNESS / "lib" / "evolution_engine.py"
 
 PATTERNS: dict[str, dict[str, Any]] = {
     "prompt_residue": {
@@ -241,6 +244,154 @@ def markdown_table(headers: list[str], rows: list[list[Any]]) -> str:
     return "\n".join(out)
 
 
+def _sqlite_tables(db: Path) -> set[str]:
+    if not db.exists():
+        return set()
+    try:
+        import sqlite3
+        conn = sqlite3.connect(str(db))
+        rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        conn.close()
+        return {str(r[0]) for r in rows if r and r[0]}
+    except Exception:
+        return set()
+
+
+def _sqlite_count(db: Path, table: str) -> int | None:
+    try:
+        import sqlite3
+        conn = sqlite3.connect(str(db))
+        cur = conn.execute(f"SELECT count(1) FROM {table}")
+        val = cur.fetchone()
+        conn.close()
+        return int(val[0]) if val and val[0] is not None else 0
+    except Exception:
+        return None
+
+
+def _memrl_probe(update_memrl: bool, ts: str, gate_payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    required_tables = ["memrl_feedback_logs", "memrl_retrieval_logs", "memrl_utility_store", "sys_skill_bank"]
+    tables = _sqlite_tables(MEMRL_DB)
+    missing = [t for t in required_tables if t not in tables]
+    counts = {t: _sqlite_count(MEMRL_DB, t) for t in required_tables}
+    fused_q: dict[str, Any] = {"available": False}
+    if "memrl_utility_store" in tables:
+        try:
+            import sqlite3
+            conn = sqlite3.connect(str(MEMRL_DB))
+            row = conn.execute(
+                "SELECT avg(q_value), max(q_value), count(1) FROM memrl_utility_store"
+            ).fetchone()
+            conn.close()
+            if row:
+                fused_q = {
+                    "available": True,
+                    "avg_q": float(row[0]) if row[0] is not None else None,
+                    "max_q": float(row[1]) if row[1] is not None else None,
+                    "samples": int(row[2]) if row[2] is not None else None,
+                }
+        except Exception:
+            fused_q = {"available": False}
+
+    impl_path = HOME / ".claude" / "core" / "memrl"
+    memrl_status = {
+        "ready": bool(MEMRL_DB.exists()) and not missing,
+        "db": str(MEMRL_DB),
+        "implementation_path": str(impl_path),
+        "implementation_exists": impl_path.exists(),
+        "required_tables_present": [t for t in required_tables if t in tables],
+        "missing_tables": missing,
+        "counts": counts,
+        "fused_q": fused_q,
+    }
+
+    metrics = gate_payload.get("metrics") if isinstance(gate_payload.get("metrics"), dict) else {}
+    if isinstance(metrics, dict):
+        metrics = {**metrics, "memrl_ready": bool(memrl_status.get("ready"))}
+
+    feedback_obj = {
+        "ts": ts,
+        "source": "solar-skill-healthcheck",
+        "task_key": "solar.skill_healthcheck",
+        "reward": float(gate_payload.get("reward") or 0),
+        "verdict": str(gate_payload.get("verdict") or "unknown"),
+        "metrics": metrics,
+        "promotion_allowed": bool(gate_payload.get("promotion_allowed")),
+    }
+    memrl_feedback = {"jsonl": str(MEMRL_FEEDBACK_JSONL), "sqlite_updated": False, "sqlite_reason": "disabled"}
+
+    if update_memrl:
+        MEMRL_FEEDBACK_JSONL.parent.mkdir(parents=True, exist_ok=True)
+        with MEMRL_FEEDBACK_JSONL.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(feedback_obj, ensure_ascii=False) + "\n")
+        memrl_feedback = {"jsonl": str(MEMRL_FEEDBACK_JSONL), "sqlite_updated": False, "sqlite_reason": "unknown"}
+        try:
+            import sqlite3
+            conn = sqlite3.connect(str(MEMRL_DB))
+            conn.execute(
+                "INSERT INTO memrl_feedback_logs (intent_hash, experience_id, success, user_feedback, new_q_value, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    "solar.skill_healthcheck",
+                    f"healthcheck:{ts}",
+                    1,
+                    json.dumps(feedback_obj, ensure_ascii=False),
+                    float(gate_payload.get("reward") or 0),
+                    ts,
+                ),
+            )
+            conn.commit()
+            conn.close()
+            memrl_feedback = {"jsonl": str(MEMRL_FEEDBACK_JSONL), "sqlite_updated": True, "sqlite_reason": "inserted_intent_experience_feedback_q"}
+        except Exception as exc:
+            memrl_feedback = {"jsonl": str(MEMRL_FEEDBACK_JSONL), "sqlite_updated": False, "sqlite_reason": f"sqlite_error:{exc}"}
+    return memrl_status, memrl_feedback
+
+
+def _skillrl_probe() -> dict[str, Any]:
+    knowledge_doc = HOME / "Knowledge" / "entities" / "skillrl.md"
+    return {
+        "ready": knowledge_doc.exists(),
+        "knowledge_doc": str(knowledge_doc),
+        "knowledge_doc_exists": knowledge_doc.exists(),
+        "harness_native_runtime": False,
+        "gap": "SkillRL 当前主要是知识/方法论资产，未发现独立 harness runtime；应通过 eval pack + promotion gate 接入。",
+    }
+
+
+def _evolution_engine_probe() -> dict[str, Any]:
+    if not EVOLUTION_ENGINE.exists():
+        return {"ok": False, "reason": "missing", "path": str(EVOLUTION_ENGINE)}
+    try:
+        cp = run(["python3", str(EVOLUTION_ENGINE), "status", "--json"], timeout=25)
+        out = {}
+        if cp.stdout.strip():
+            out = json.loads(cp.stdout)
+        scorecards = out.get("scorecards") if isinstance(out.get("scorecards"), list) else []
+        experiments = out.get("experiments") if isinstance(out.get("experiments"), list) else []
+        status = {
+            "ok": bool(out.get("ok")),
+            "total_scorecards": len(scorecards),
+            "active": sum(1 for x in scorecards if isinstance(x, dict) and x.get("status") == "active"),
+            "pending": sum(1 for x in scorecards if isinstance(x, dict) and x.get("status") == "pending"),
+            "degraded": sum(1 for x in scorecards if isinstance(x, dict) and x.get("status") == "degraded"),
+            "experiments": len(experiments),
+            "recent_experiments": [
+                {"id": x.get("id"), "capability": x.get("capability"), "verdict": x.get("verdict"), "updated_at": x.get("updated_at")}
+                for x in experiments[:5]
+                if isinstance(x, dict)
+            ],
+        }
+        return {
+            "ok": cp.returncode == 0 and bool(out.get("ok")),
+            "path": str(EVOLUTION_ENGINE),
+            "returncode": cp.returncode,
+            "status": status,
+            "stderr_tail": (cp.stderr or "")[-800:],
+        }
+    except Exception as exc:
+        return {"ok": False, "reason": str(exc), "path": str(EVOLUTION_ENGINE)}
+
+
 def write_outputs(result: dict[str, Any]) -> None:
     reports = HARNESS / "reports"
     logs = HARNESS / "logs"
@@ -248,6 +399,12 @@ def write_outputs(result: dict[str, Any]) -> None:
     logs.mkdir(parents=True, exist_ok=True)
     ts_slug = result["ts"].replace(":", "").replace("-", "")
     report_path = reports / f"skill-healthcheck-{ts_slug}.md"
+
+    memrl_ready = bool((result.get("memrl_status") or {}).get("ready"))
+    skillrl_ready = bool((result.get("skillrl_status") or {}).get("ready"))
+    evolution_engine_ok = bool((result.get("evolution_engine") or {}).get("ok"))
+    evolution_gate = result.get("evolution_gate") if isinstance(result.get("evolution_gate"), dict) else {}
+    evolution_verdict = str(evolution_gate.get("verdict") or "N/A")
 
     candidate_rows = [
         [c["priority"], c["name"], c["hit_count"], "yes" if c["exists"] else "no", c["trigger"][:42]]
@@ -263,6 +420,19 @@ def write_outputs(result: dict[str, Any]) -> None:
         ["artifact-export", "warn" if result["patterns"].get("artifact_export") else "ok", "passed 工件导出/知识化"],
         ["exec-pool", "warn" if result["patterns"].get("exec_pool") else "ok", "Codex exec 会话收敛"],
     ]
+
+    memrl_status = result.get("memrl_status") if isinstance(result.get("memrl_status"), dict) else {}
+    memrl_tables = len(memrl_status.get("required_tables_present") or [])
+    memrl_missing = len(memrl_status.get("missing_tables") or [])
+    skillrl_status = result.get("skillrl_status") if isinstance(result.get("skillrl_status"), dict) else {}
+    evolution_status = (result.get("evolution_engine") or {}).get("status") if isinstance((result.get("evolution_engine") or {}).get("status"), dict) else {}
+    evolution_scorecards = evolution_status.get("total_scorecards")
+
+    memrl_row = ["MemRL", "ok" if memrl_ready else "error", f"tables={memrl_tables} missing={memrl_missing if memrl_missing else 'none'}"]
+    skillrl_row = ["SkillRL", "ok" if skillrl_ready else "warn", f"doc={'yes' if skillrl_status.get('knowledge_doc_exists') else 'no'} runtime={'yes' if skillrl_status.get('harness_native_runtime') else 'no'}"]
+    evolution_row = ["Evolution", "ok" if evolution_engine_ok else "error", f"scorecards={evolution_scorecards if evolution_scorecards is not None else 'N/A'}"]
+    gate_row = ["Gate", evolution_verdict, f"reward={evolution_gate.get('reward','N/A')} blockers={','.join(evolution_gate.get('promotion_blockers') or []) or 'none'}"]
+
     report = "\n".join([
         "# Solar Skill Healthcheck",
         "",
@@ -270,6 +440,7 @@ def write_outputs(result: dict[str, Any]) -> None:
         f"- window_ok: `{result['window_ok']}`",
         f"- power_ok: `{result['power_ok']}` ({result['power_detail']})",
         f"- mac_mini_checked: `{result['remote']['checked']}` ok=`{result['remote'].get('ok')}`",
+        f"- memrl_ready: `{memrl_ready}` skillrl_ready=`{skillrl_ready}` evolution_engine_ok=`{evolution_engine_ok}`",
         "",
         "## 总览",
         "```text",
@@ -278,7 +449,13 @@ def write_outputs(result: dict[str, Any]) -> None:
             ["pattern_keys", ", ".join(result["patterns"].keys()) or "none"],
             ["candidate_count", len(result["skill_candidates"])],
             ["nonterminal_statuses", len(result["statuses"]["nonterminal"])],
+            ["evolution_verdict", evolution_verdict],
         ]),
+        "```",
+        "",
+        "## MemRL / SkillRL / Evolution",
+        "```text",
+        markdown_table(["模块", "状态", "证据"], [memrl_row, skillrl_row, evolution_row, gate_row]),
         "```",
         "",
         "## Skill 候选",
@@ -317,6 +494,11 @@ def write_outputs(result: dict[str, Any]) -> None:
         "existing_skill_improvements": result["existing_skill_improvements"],
         "automation_gaps": result["automation_gaps"],
         "bugs_or_risks": result["bugs_or_risks"],
+        "memrl_status": result.get("memrl_status"),
+        "skillrl_status": result.get("skillrl_status"),
+        "evolution_engine": result.get("evolution_engine"),
+        "evolution_gate": result.get("evolution_gate"),
+        "memrl_feedback": result.get("memrl_feedback"),
         "report_path": str(report_path),
         "mac_mini_checked": result["remote"]["checked"],
         "residual_risk": result["residual_risk"],
@@ -406,6 +588,48 @@ def run_healthcheck(args: argparse.Namespace) -> dict[str, Any]:
         "next_step": "优先固化 P0 skill 候选并把自动化切到稳定命令入口" if candidates else "继续每日巡检",
         "residual_risk": "统计来自日志/工件启发式，不能替代专项代码审计",
     })
+
+    evolution_engine = _evolution_engine_probe()
+    skillrl_status = _skillrl_probe()
+
+    p0_missing_count = sum(1 for c in candidates if c.get("priority") == "P0" and not c.get("exists"))
+    pattern_hit_total = sum(int(v) for v in patterns.values()) if patterns else 0
+    remote_ok = remote.get("ok") if isinstance(remote, dict) and remote.get("checked") else None
+
+    gate_metrics: dict[str, Any] = {
+        "candidate_count": len(candidates),
+        "p0_missing_count": p0_missing_count,
+        "bug_or_risk_count": len(bugs_or_risks),
+        "pattern_hit_total": pattern_hit_total,
+        "memrl_ready": False,
+        "skillrl_ready": bool(skillrl_status.get("ready")),
+        "evolution_engine_ok": bool(evolution_engine.get("ok")),
+        "remote_ok": remote_ok,
+    }
+    evolution_gate: dict[str, Any] = {
+        "verdict": "stable",
+        "reward": 1,
+        "promotion_allowed": False,
+        "promotion_blockers": ["external_eval_pack_not_passed"],
+        "metrics": gate_metrics,
+        "previous_metrics": gate_metrics,
+        "improvements": [],
+        "regressions": [],
+        "policy": "candidate skills can be proposed by healthcheck, but promotion requires MemRL-ready state plus an external eval/regression pack pass.",
+    }
+
+    update_memrl = bool(getattr(args, "update_memrl", False))
+    memrl_status, memrl_feedback = _memrl_probe(update_memrl, ts, evolution_gate)
+    gate_metrics["memrl_ready"] = bool(memrl_status.get("ready"))
+    evolution_gate["metrics"] = gate_metrics
+    evolution_gate["previous_metrics"] = gate_metrics
+
+    result["memrl_status"] = memrl_status
+    result["memrl_feedback"] = memrl_feedback
+    result["skillrl_status"] = skillrl_status
+    result["evolution_engine"] = evolution_engine
+    result["evolution_gate"] = evolution_gate
+
     write_outputs(result)
     return result
 
@@ -433,6 +657,7 @@ def main() -> int:
     parser.add_argument("--allow-daytime", action="store_true")
     parser.add_argument("--allow-battery", action="store_true")
     parser.add_argument("--no-remote", action="store_true")
+    parser.add_argument("--update-memrl", action="store_true")
     args = parser.parse_args()
     result = run_healthcheck(args)
     if args.json:

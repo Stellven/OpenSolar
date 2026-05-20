@@ -171,7 +171,17 @@ check "queue_consume_all leaves depth 0" "$terminal_depth" "0"
 terminal_line=$(grep -m1 'test_terminal_passed' "$_QUEUE_DIR/sprint-terminal.jsonl" || true)
 check_contains "queue_consume_all records reason" "$terminal_line" "test_terminal_passed"
 
-# T23: concurrent appends don't corrupt ledger (10 background writes)
+# T23: intent-prefix consume only marks matching pending items
+queue_enqueue "sprint-prefix" "pm_prd_fix|role=pm|file=x.dispatch.md" 80 >/dev/null
+queue_enqueue "sprint-prefix" "graph_node|node_id=N1|pane=lab:0.0" 80 >/dev/null
+prefix_consumed=$(queue_consume_intent_prefix "sprint-prefix" "pm_prd_fix|" "superseded_by_graph_dispatch")
+check "queue_consume_intent_prefix returns matching count" "$prefix_consumed" "1"
+prefix_depth=$(queue_depth "sprint-prefix")
+check "queue_consume_intent_prefix leaves non-matching pending" "$prefix_depth" "1"
+prefix_line=$(grep -m1 'superseded_by_graph_dispatch' "$_QUEUE_DIR/sprint-prefix.jsonl" || true)
+check_contains "queue_consume_intent_prefix records reason" "$prefix_line" "superseded_by_graph_dispatch"
+
+# T24: concurrent appends don't corrupt ledger (10 background writes)
 for i in $(seq 1 10); do
     dispatch_ledger_append "attempted" "sprint-concurrent" "pane:0.$i" "$(new_dispatch_id)" '{}' &
 done

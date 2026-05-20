@@ -20,12 +20,12 @@ if [[ $# -gt 0 ]]; then
     CASE="$2"
   else
     echo "Usage: $0 [--case <name>]" >&2
-    echo "  Cases: dispatch-unique, terminal-state, pages, audit-backfill" >&2
+    echo "  Cases: dispatch-unique, terminal-state, pages, audit-backfill, sandbox-extract, mineru-first" >&2
     exit 1
   fi
 fi
 
-VALID_CASES="dispatch-unique terminal-state pages audit-backfill sandbox-extract"
+VALID_CASES="dispatch-unique terminal-state pages audit-backfill sandbox-extract mineru-first"
 if [[ -n "$CASE" ]]; then
   found=0
   for c in $VALID_CASES; do
@@ -447,10 +447,10 @@ REF
 }
 
 # ── Case: sandbox-extract ────────────────────────────────────────────────
-# Verifies that wiki-upload-backfill.py routes pdftotext/qlmanage smoke
+# Verifies that wiki-upload-backfill.py routes document-extract smoke
 # invocations through SandboxHand (executor=sandbox, execution_mode=argv,
-# evidence_file written). This is the R2 acceptance for
-# sprint-20260513-tool-plane-sandbox-default-routing.
+# evidence_file written). Legacy pdftotext remains diagnostic-only and is no
+# longer the default PDF knowledge path.
 
 run_sandbox_extract() {
   reset_counts
@@ -483,14 +483,11 @@ out = {
     "cat_stdout_len": len(route.get("stdout","") or ""),
 }
 
-# pdftotext missing-PDF run — still must route through sandbox even when
-# the underlying CLI fails; this proves we never regress to host execution.
-from pathlib import Path
-m.extract_pdf_text(Path("/tmp/does-not-exist-sandbox-route.pdf"))
-ev = m.LAST_EXTRACT_ROUTE.get("evidence_file","")
+route2 = m._run_extract_sandboxed("pdftotext", ["pdftotext", "-l", "1", "/tmp/does-not-exist-sandbox-route.pdf", "-"], timeout=10)
+ev = route2.get("evidence_file","")
 out.update({
-    "pdf_executor": m.LAST_EXTRACT_ROUTE.get("executor"),
-    "pdf_mode": m.LAST_EXTRACT_ROUTE.get("execution_mode"),
+    "pdf_executor": route2.get("executor"),
+    "pdf_mode": route2.get("execution_mode"),
     "pdf_evidence_exists": bool(ev) and os.path.exists(ev),
 })
 print(json.dumps(out))
@@ -510,6 +507,75 @@ PY
   print_suite_summary "sandbox-extract"
 }
 
+# ── Case: mineru-first ───────────────────────────────────────────────────
+# Proves PDF upload/backfill/reingest paths require the MinerU chain and no
+# longer treat PyMuPDF/pdftotext snippets as the primary knowledge source.
+
+run_mineru_first() {
+  reset_counts
+  echo ""
+  echo "── Case: mineru-first ───────────────────────────────"
+
+  local TESTDIR
+  TESTDIR=$(mktemp -d /tmp/test-mineru-first.XXXXXX)
+  local VAULT="$TESTDIR/vault"
+  local UPLOADS="$VAULT/_raw/file-uploads"
+  mkdir -p "$UPLOADS" "$VAULT/references"
+
+  local FAKE="$TESTDIR/fake-mineru.py"
+  cat > "$FAKE" <<'PY'
+#!/usr/bin/env python3
+import json, sys
+from pathlib import Path
+pdf = Path(sys.argv[1])
+vault = Path(sys.argv[2])
+ref = vault / "references" / "fake-mineru-paper"
+ref.mkdir(parents=True, exist_ok=True)
+index = ref / "index.md"
+page = ref / "page-001.md"
+index.write_text("# Fake MinerU Index\n\nStructured sections from MinerU.\n", encoding="utf-8")
+page.write_text("## Page 1\n\nMinerU parsed table, formulas, and body text.\n", encoding="utf-8")
+print(json.dumps({
+    "ok": True,
+    "ref_dir": str(ref),
+    "generated_pages": [str(page)],
+    "method": "magic_pdf",
+    "extraction_status": "ok",
+    "source": str(pdf),
+}))
+PY
+  chmod +x "$FAKE"
+
+  local PDF="$UPLOADS/20260520T000000Z-01-fake-paper.pdf"
+  echo "not a real pdf; fake MinerU owns this test" > "$PDF"
+
+  local result method quality artifact_text
+  result=$(OBSIDIAN_VAULT_PATH="$VAULT" SOLAR_HARNESS_MINERU_EXTRACTOR="$FAKE" python3 "$EXTRACTOR" --source "$PDF" --json)
+  method=$(echo "$result" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("method",""))')
+  quality=$(echo "$result" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("quality",""))')
+  artifact_text=$(echo "$result" | python3 -c 'import json,sys,pathlib; p=json.load(sys.stdin).get("artifact",""); print(pathlib.Path(p).read_text() if p else "")')
+
+  assert_true "pdf extractor uses MinerU method" "[[ '$method' == mineru:* ]]"
+  assert_eq "pdf extractor quality=mineru_deep_extraction" "mineru_deep_extraction" "$quality"
+  assert_true "artifact contains MinerU structured markdown" "grep -q 'Fake MinerU Index' <<< \"\$artifact_text\""
+  assert_false "pdf extractor does not report bare pymupdf" "[[ '$method' == 'pymupdf' ]]"
+
+  local backfill_json stub_method stub_quality stub_count
+  backfill_json=$(OBSIDIAN_VAULT_PATH="$VAULT" SOLAR_HARNESS_MINERU_EXTRACTOR="$FAKE" python3 "$BACKFILL" --batch "20260520T000000Z" --vault "$VAULT" --db "$TESTDIR/solar.db" --repair --json)
+  stub_count=$(echo "$backfill_json" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("stubs_created", 0))')
+  stub_method=$(grep -h '^extraction_method:' "$VAULT"/references/*.md | head -1 | sed 's/^extraction_method: //; s/"//g')
+  stub_quality=$(grep -h '^extraction_quality:' "$VAULT"/references/*.md | head -1 | sed 's/^extraction_quality: //; s/"//g')
+  assert_eq "backfill created one ref" "1" "$stub_count"
+  assert_eq "backfill stub records MinerU method" "mineru:magic_pdf" "$stub_method"
+  assert_eq "backfill stub records MinerU quality" "mineru_deep_extraction" "$stub_quality"
+
+  assert_true "reingest dispatch template requires mineru extract" "grep -q 'solar-harness mineru extract' '$HARNESS_DIR/lib/wiki-reingest-quarantine.py'"
+  assert_true "reingest dispatch blocks direct pdftotext summary" "grep -q 'pdftotext' '$HARNESS_DIR/lib/wiki-reingest-quarantine.py'"
+
+  rm -rf "$TESTDIR"
+  print_suite_summary "mineru-first"
+}
+
 # ── Run selected cases ───────────────────────────────────────────────────
 
 echo "═══════════════════════════════════════════════════"
@@ -523,6 +589,7 @@ if [[ -n "$CASE" ]]; then
     pages)            run_pages ;;
     audit-backfill)   run_audit_backfill ;;
     sandbox-extract)  run_sandbox_extract ;;
+    mineru-first)     run_mineru_first ;;
   esac
 else
   run_dispatch_unique
@@ -530,6 +597,7 @@ else
   run_pages
   run_audit_backfill
   run_sandbox_extract
+  run_mineru_first
 fi
 
 echo ""

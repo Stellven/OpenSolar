@@ -7,6 +7,7 @@
 #   queue_peek    <sid>           → peek first item; prints JSON or nothing
 #   queue_depth   <sid>           → prints integer count of pending items
 #   queue_consume_all <sid> [reason] → mark all pending items consumed; prints count
+#   queue_consume_intent_prefix <sid> <prefix> [reason] → consume matching pending intents
 #   queue_archive_consumed_terminal [min_age_hours] [archive_tag] → move old terminal consumed queue files aside; prints JSON
 #
 # Rules:
@@ -231,6 +232,62 @@ with open(lock_path, 'a') as lf:
     finally:
         fcntl.flock(lf, fcntl.LOCK_UN)
 " "$qf" "$reason" 2>/dev/null || echo 0
+}
+
+# ── queue_consume_intent_prefix ───────────────────────────────────────────────
+queue_consume_intent_prefix() {
+    local sid="${1:?queue_consume_intent_prefix: sid required}"
+    local prefix="${2:?queue_consume_intent_prefix: prefix required}"
+    local reason="${3:-intent_prefix_superseded}"
+    local qf
+    qf=$(_queue_file "$sid")
+    [[ -f "$qf" ]] || { echo 0; return 0; }
+
+    python3 -c "
+import json, datetime, fcntl, os, sys
+
+qf = sys.argv[1]
+prefix = sys.argv[2]
+reason = sys.argv[3]
+lock_path = qf + '.lock'
+now = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+changed = 0
+
+with open(lock_path, 'a') as lf:
+    try:
+        fcntl.flock(lf, fcntl.LOCK_EX)
+        if not os.path.exists(qf):
+            print(0)
+            sys.exit(0)
+
+        items = []
+        with open(qf) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    item = json.loads(line)
+                except Exception:
+                    continue
+                intent = str(item.get('intent', ''))
+                if (not item.get('consumed', False)) and intent.startswith(prefix):
+                    item['consumed'] = True
+                    item['consumed_at'] = now
+                    item['consumed_by'] = 'queue_consume_intent_prefix'
+                    item['consume_reason'] = reason
+                    changed += 1
+                items.append(item)
+
+        tmp = qf + '.tmp'
+        with open(tmp, 'w') as f:
+            for item in items:
+                f.write(json.dumps(item, ensure_ascii=False) + '\n')
+        os.replace(tmp, qf)
+        print(changed)
+    finally:
+        fcntl.flock(lf, fcntl.LOCK_UN)
+" "$qf" "$prefix" "$reason" 2>/dev/null || echo 0
 }
 
 # ── queue_archive_consumed_terminal ──────────────────────────────────────────
