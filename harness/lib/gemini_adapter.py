@@ -33,31 +33,97 @@ def _sdk_available() -> tuple[bool, str]:
         return False, f"google.genai:{type(exc).__name__}"
 
 
+def _normalize_cli_auth(value: str) -> str:
+    raw = (value or "subscription").strip().lower().replace("_", "-")
+    aliases = {
+        "": "subscription",
+        "pro": "subscription",
+        "oauth": "subscription",
+        "oauth-personal": "subscription",
+        "login": "subscription",
+        "login-with-google": "subscription",
+        "google": "subscription",
+        "gca": "subscription",
+        "api": "api-key",
+        "api_key": "api-key",
+        "gemini-api-key": "api-key",
+    }
+    return aliases.get(raw, raw)
+
+
+def _oauth_creds_path() -> Path:
+    return Path.home() / ".gemini" / "oauth_creds.json"
+
+
+def _settings_path() -> Path:
+    return Path.home() / ".gemini" / "settings.json"
+
+
+def _subscription_env() -> dict[str, str]:
+    env = dict(os.environ)
+    env["GOOGLE_GENAI_USE_GCA"] = "true"
+    env.pop("GOOGLE_GENAI_USE_VERTEXAI", None)
+    # Solar Harness uses Gemini CLI subscriptions by default. API keys are
+    # intentionally removed for this child process so an expired or costly key
+    # cannot override the Pro/OAuth route.
+    env.pop("GEMINI_API_KEY", None)
+    env.pop("GOOGLE_API_KEY", None)
+    return env
+
+
+def _cli_env(auth: str) -> dict[str, str] | None:
+    mode = _normalize_cli_auth(auth)
+    if mode == "subscription":
+        return _subscription_env()
+    if mode in {"auto", "api-key"}:
+        return None
+    return None
+
+
 def doctor() -> dict[str, Any]:
     gemini = shutil.which("gemini")
     sdk_ok, sdk_detail = _sdk_available()
+    default_auth = _normalize_cli_auth(os.environ.get("SOLAR_GEMINI_CLI_AUTH", "subscription"))
+    oauth_creds = _oauth_creds_path().exists()
+    api_key_env = bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
+    if default_auth == "subscription":
+        cli_ready = bool(gemini) and oauth_creds
+        cli_warning = "" if cli_ready else "subscription OAuth cache missing; run interactive Gemini CLI login once"
+    elif default_auth == "api-key":
+        cli_ready = bool(gemini) and bool(os.environ.get("GEMINI_API_KEY"))
+        cli_warning = "" if cli_ready else "api-key mode requires GEMINI_API_KEY"
+    else:
+        cli_ready = bool(gemini)
+        cli_warning = ""
     return {
         "ok": bool(gemini) or sdk_ok,
         "cli": {
             "ok": bool(gemini),
+            "ready": cli_ready,
             "path": gemini or "",
+            "default_auth": default_auth,
+            "oauth_creds": oauth_creds,
+            "settings": _settings_path().exists(),
+            "api_key_env_present": api_key_env,
+            "warning": cli_warning,
         },
         "sdk": {
             "ok": sdk_ok,
             "detail": sdk_detail,
         },
         "auth_hints": {
-            "cli": "Gemini CLI subscription/session is used by `gemini` itself.",
+            "cli": "Default is subscription/OAuth. API-key mode requires --auth api-key or SOLAR_GEMINI_CLI_AUTH=api-key.",
             "sdk": "Set GOOGLE_API_KEY or use Application Default Credentials before selecting gemini-sdk.",
         },
     }
 
 
-def run_cli(prompt: str, model: str, approval_mode: str, output_format: str) -> int:
+def run_cli(prompt: str, model: str, approval_mode: str, output_format: str, auth: str) -> int:
     gemini = shutil.which("gemini")
     if not gemini:
         print("ERROR: gemini CLI not found", file=sys.stderr)
         return 127
+    auth_mode = _normalize_cli_auth(auth)
     cmd = [
         gemini,
         "--model",
@@ -69,7 +135,10 @@ def run_cli(prompt: str, model: str, approval_mode: str, output_format: str) -> 
         "--prompt",
         prompt,
     ]
-    return subprocess.call(cmd)
+    if auth_mode not in {"subscription", "api-key", "auto"}:
+        print(f"ERROR: unsupported Gemini CLI auth mode: {auth}", file=sys.stderr)
+        return 64
+    return subprocess.call(cmd, env=_cli_env(auth_mode))
 
 
 def run_sdk(prompt: str, model: str) -> int:
@@ -102,6 +171,9 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--prompt-file", required=True)
     run.add_argument("--approval-mode", default="auto_edit")
     run.add_argument("--output-format", default="text")
+    run.add_argument("--auth", default=os.environ.get("SOLAR_GEMINI_CLI_AUTH", "subscription"),
+                     choices=["subscription", "oauth", "oauth-personal", "api-key", "auto"],
+                     help="Gemini CLI auth route. Default subscription uses Google login/Pro, not API keys.")
     args = parser.parse_args(argv)
 
     if args.cmd == "doctor":
@@ -111,7 +183,7 @@ def main(argv: list[str] | None = None) -> int:
     prompt = Path(args.prompt_file).read_text(encoding="utf-8")
     if args.backend == "sdk":
         return run_sdk(prompt, args.model)
-    return run_cli(prompt, args.model, args.approval_mode, args.output_format)
+    return run_cli(prompt, args.model, args.approval_mode, args.output_format, args.auth)
 
 
 if __name__ == "__main__":

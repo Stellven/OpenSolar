@@ -44,7 +44,7 @@ except Exception as exc:  # pragma: no cover - import safety
     ResultStatus = None  # type: ignore[assignment]
     _SANDBOX_IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
 
-VAULT_ROOT = Path(os.environ.get("OBSIDIAN_VAULT_PATH", "/Users/sihaoli/Knowledge"))
+VAULT_ROOT = Path(os.environ.get("OBSIDIAN_VAULT_PATH", str(Path.home() / "Knowledge")))
 DB_PATH = Path(os.environ.get("SOLAR_DB", str(Path.home() / ".solar" / "solar.db")))
 UPLOAD_DIR: Path | None = None
 DISPATCH_DIR: Path | None = None

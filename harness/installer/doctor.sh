@@ -58,6 +58,7 @@ bins = {
     "bash": ["bash", "--version"],
     "python3": ["python3", "--version"],
     "git": ["git", "--version"],
+    "bun": ["bun", "--version"],
     "tmux": ["tmux", "-V"],
     "curl": ["curl", "--version"],
     "tar": ["tar", "--version"],
@@ -86,6 +87,7 @@ paths = {
     "~/.solar/harness/backups": os.path.join(HARNESS_DIR, "backups"),
     "~/.solar/harness/run": os.path.join(HARNESS_DIR, "run"),
     "~/.solar/harness/lib": os.path.join(HARNESS_DIR, "lib"),
+    "~/.solar/harness/lib/tvs_render_cli.ts": os.path.join(HARNESS_DIR, "lib", "tvs_render_cli.ts"),
     "~/.solar/harness/installer": os.path.join(HARNESS_DIR, "installer"),
 }
 
@@ -153,6 +155,86 @@ else:
     services["mineru"] = {"status": "not_applicable"}
 
 result["services"] = services
+
+# ── TVS renderer integration ─────────────────────────────────────────────
+def resolve_tvs_root():
+    explicit = os.environ.get("SOLAR_TVS_ROOT")
+    if explicit:
+        path = os.path.abspath(os.path.expanduser(explicit))
+        return path if os.path.isfile(os.path.join(path, "index.ts")) else ""
+
+    candidates = [
+        os.path.join(HARNESS_DIR, "..", "..", "TVS"),
+        os.path.expanduser("~/TVS"),
+        os.path.expanduser("~/Solar/../TVS"),
+    ]
+    seen = set()
+    for candidate in candidates:
+        if not candidate:
+            continue
+        path = os.path.abspath(os.path.expanduser(candidate))
+        if path in seen:
+            continue
+        seen.add(path)
+        if os.path.isfile(os.path.join(path, "index.ts")):
+            return path
+    return ""
+
+tvs_root = resolve_tvs_root()
+tvs_cli = os.path.join(HARNESS_DIR, "lib", "tvs_render_cli.ts")
+tvs_result = {
+    "status": "missing",
+    "bun": result["bins"].get("bun", "missing"),
+    "cli": "ok" if os.path.isfile(tvs_cli) else "missing",
+    "root": "ok" if tvs_root else "missing",
+    "root_path": tvs_root or "",
+    "smoke": "not_run",
+}
+
+if tvs_result["cli"] == "missing":
+    tvs_result["status"] = "missing"
+    result["warnings"].append("tvs renderer bridge missing: lib/tvs_render_cli.ts")
+elif tvs_result["bun"] == "missing":
+    tvs_result["status"] = "missing"
+    result["warnings"].append("tvs renderer missing required dependency: bun")
+elif tvs_result["root"] == "missing":
+    tvs_result["status"] = "missing"
+    result["warnings"].append("tvs renderer missing required dependency: TVS root; set SOLAR_TVS_ROOT")
+else:
+    payload = json.dumps({
+        "canvas": {"width": 40},
+        "style": "solar_default",
+        "root": {
+            "type": "card",
+            "header": "TVS Doctor",
+            "sections": [{"type": "kv", "items": [{"key": "Status", "value": "ok"}]}],
+        },
+    })
+    try:
+        env = dict(os.environ)
+        env["HARNESS_DIR"] = HARNESS_DIR
+        env["SOLAR_TVS_ROOT"] = tvs_root
+        r = subprocess.run(
+            ["bun", "run", tvs_cli, "render", "--width", "40", "--colors", "off"],
+            input=payload,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            env=env,
+        )
+        if r.returncode == 0 and "TVS Doctor" in r.stdout and "Powered by TVS" in r.stdout:
+            tvs_result["status"] = "ok"
+            tvs_result["smoke"] = "ok"
+        else:
+            tvs_result["status"] = "degraded"
+            tvs_result["smoke"] = "failed"
+            result["warnings"].append("tvs renderer smoke failed")
+    except Exception:
+        tvs_result["status"] = "degraded"
+        tvs_result["smoke"] = "failed"
+        result["warnings"].append("tvs renderer smoke failed")
+
+result["services"]["tvs_renderer"] = tvs_result
 
 # ── secrets (configured/missing — NEVER print values) ───────────────────
 env_keys = {
@@ -227,6 +309,8 @@ critical_bins = [
 
 if any(v == "missing" for v in critical_paths) or any(v == "missing" for v in critical_bins):
     result["verdict"] = "fail"
+elif result["services"].get("tvs_renderer", {}).get("status") != "ok":
+    result["verdict"] = "fail"
 elif len(result["warnings"]) > 3:
     result["verdict"] = "degraded"
 else:
@@ -269,6 +353,14 @@ paths = d.get('paths', {})
 ok = sum(1 for v in paths.values() if v == 'ok')
 total = len(paths)
 print(f'  │  Paths:     {ok}/{total} ok')
+" 2>/dev/null
+
+  # TVS renderer summary
+  echo "$json_output" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+tvs = d.get('services', {}).get('tvs_renderer', {})
+print(f\"  │  TVS:       {tvs.get('status', 'N/A')} bun={tvs.get('bun', 'N/A')} root={tvs.get('root', 'N/A')} smoke={tvs.get('smoke', 'N/A')}\")
 " 2>/dev/null
 
   # secrets summary

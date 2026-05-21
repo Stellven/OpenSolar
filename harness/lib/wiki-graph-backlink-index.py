@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 
-VAULT = Path("/Users/sihaoli/Knowledge")
+VAULT = Path.home() / "Knowledge"
 ROOTS = ("references", "concepts", "synthesis", "entities", "projects", "skills", "rules", "analysis")
 
 

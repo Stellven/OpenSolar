@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 
-VAULT = Path("/Users/sihaoli/Knowledge")
+VAULT = Path.home() / "Knowledge"
 
 
 PAGES: dict[str, dict[str, Any]] = {

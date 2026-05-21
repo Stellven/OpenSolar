@@ -52,7 +52,7 @@
       "persona": "builder",
       "backend": "gemini-cli",
       "model": "gemini",
-      "approval_mode": "yolo",
+      "approval_mode": "auto_edit",
       "best_for": ["large-context", "implementation", "code-search", "tests"],
       "max_parallel": 1
     },

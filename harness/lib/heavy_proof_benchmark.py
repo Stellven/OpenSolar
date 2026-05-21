@@ -119,9 +119,10 @@ def bench_mempalace_search(evidence_dir: Path) -> dict[str, Any]:
             import json
             import sys
             import warnings
+            from pathlib import Path
 
             warnings.filterwarnings("ignore")
-            sys.path.insert(0, "/Users/sihaoli/.solar/mempalace")
+            sys.path.insert(0, str(Path.home() / ".solar" / "mempalace"))
 
             from mempalace_mcp_server import mempalace_search, mempalace_stats
 

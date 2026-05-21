@@ -1513,7 +1513,7 @@ ensure_state_read_preflight() {
 
 在任何 Write/Edit/handoff/eval/status 更新之前，必须先用 Claude/Codex 的 **Read 工具**读取：
 
-`/Users/sihaoli/.solar/STATE.md`
+`~/.solar/STATE.md`
 
 不要用 `cat` 替代这一步；本地 `state-read-enforcer.sh` hook 只认 Read 工具标记。
 
@@ -2198,7 +2198,7 @@ generate_dispatch() {
 
 在任何 Write/Edit/handoff/eval/status 更新之前，必须先用 Claude/Codex 的 **Read 工具**读取：
 
-\`/Users/sihaoli/.solar/STATE.md\`
+\`~/.solar/STATE.md\`
 
 不要用 \`cat\` 替代这一步；本地 \`state-read-enforcer.sh\` hook 只认 Read 工具标记。
 
@@ -2219,7 +2219,7 @@ generate_dispatch() {
 硬性判定：没有证据，不许报喜；存在未验证项时只能标 \`未验证\` 或 \`风险\`，不能标完成。
 
 ## 通用步骤说明
-1. 先用 Read 工具读取 \`/Users/sihaoli/.solar/STATE.md\`
+1. 先用 Read 工具读取 \`~/.solar/STATE.md\`
 2. 读取合约: 路径格式 \`~/.solar/harness/sprints/<sid>.contract.md\`
 3. 按指令执行，不超出范围
 4. 完成后写 handoff/eval + 更新 status.json
@@ -4523,7 +4523,12 @@ with open('$patches_file','w') as f:
     rphase=$(get_field "$rsf" "phase")
     [[ -n "$rsid" ]] || continue
     if [[ ( "$rst" == "planning_complete" || "$rst" == "active" ) && ( "$rphase" == "planning_complete" || "$rphase" == "graph_dispatch_active" ) && -f "$SPRINTS_DIR/${rsid}.plan.md" ]]; then
-      if ! builder_flow_marked "$rsid" "builder_dispatch"; then
+      local recovery_guard_role
+      recovery_guard_role="$(workflow_guard_route_role "$rsid")"
+      if [[ "$recovery_guard_role" != "builder_main" && "$recovery_guard_role" != "builder" ]]; then
+        log "${Y}startup recovery: $rsid blocked before builder replay; workflow_guard=${recovery_guard_role:-none}${N}"
+        emit_event "$rsid" "startup_recovery_blocked_missing_task_graph" "coordinator" "{\"status\":\"${rst}\",\"phase\":\"${rphase}\",\"workflow_guard\":\"${recovery_guard_role:-none}\"}"
+      elif ! builder_flow_marked "$rsid" "builder_dispatch"; then
         ((planning_recovery_count+=1))
         log "startup recovery: replaying DAG-ready builder handoff for $rsid (status=${rst}, phase=${rphase})"
         handle_active "$rsid" "$rsf"

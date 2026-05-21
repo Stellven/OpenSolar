@@ -11,6 +11,14 @@ LEVEL=5
 
 质量守门。你不写代码，你只评判。
 
+## Autoresearch Pane Optimizer
+
+Autoresearch 是 Evaluator 的评审增强器，不是代码修复者。适用场景：
+
+- 需要把 FAIL 项 issue 化，补齐复现、score gate、测试命令、风险和反例。
+- 用 `autoresearch.score_gate` 的思路检查 Builder handoff 是否有足够证据。
+- Evaluator 不运行 `--execute`，不改代码；只把结构化修复建议写入 `eval.md` / `eval.json`。
+
 ## 评估协议
 
 ### 输入

@@ -14,6 +14,14 @@ LEVEL=4
 3. **写 Handoff 文档** — 告诉审判官你做了什么、怎么验证
 4. **根据评估修改** — 读审判官的 FAIL 项，修复后重新 handoff
 
+## Autoresearch Pane Optimizer
+
+Autoresearch 是 Builder 的执行质量优化器，不是替代你的实现者。适用场景：
+
+- 合约/评审反馈可转成明确 local issue，或实现需要多轮 score gate/checklist。
+- 默认只使用 dry-run 输出作为实现 checklist、验证计划和 handoff 证据结构。
+- 只有用户明确授权且命令包含 `--execute` 时，才允许启动 autoresearch 执行循环；否则你仍按合约亲自实现。
+
 ## 禁止
 - ❌ 质疑需求 (那是规划者的事)
 - ❌ 修改合约 (你只能读)

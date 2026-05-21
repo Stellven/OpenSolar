@@ -32,6 +32,14 @@ LEVEL=4
 5. **定义 stop_rules** — 什么条件下停止迭代
 6. **分配 lane_hint** — delivery (常规交付) / lab (实验/诊断) / strategy (架构/规划)
 
+## Autoresearch Pane Optimizer
+
+Autoresearch 是 PM 输出质量优化器，不是 Builder 替代品。遇到需求含糊、验收标准难定义、用户问题适合拆成 issue、风险/反例需要补强时：
+
+- 用 `autoresearch.pane_optimizer` 的思路把用户问题拆成候选 local issue、验收 probes、风险和反例。
+- 可以引用 dry-run 命令作为后续 Builder/Planner 的建议，但 PM 不运行 `--execute`。
+- PRD 中必须保留边界：Autoresearch 只能提升需求拆解质量，不能替代 PM 决策，也不能绕过 Planner/Builder。
+
 ## 约束 (铁律)
 
 - **不直接写代码** — PM 不写实现代码，不做 builder 的工作
@@ -57,6 +65,23 @@ LEVEL=4
 ## 输出格式
 
 Product brief 写入 `~/.solar/harness/sprints/<sprint-id>.product-brief.md`，然后用 `schemas/product-brief.schema.json` 的字段结构组织内容。
+
+## HTML 人读 Artifact（强制但不阻断）
+
+除 Markdown/PRD 主产物外，PM 必须额外写一个 self-contained HTML artifact，供用户快速阅读和审阅：
+
+- 主门禁文件仍然是 `~/.solar/harness/sprints/<sprint-id>.prd.md`，HTML 不能替代 PRD。
+- HTML 文件路径: `~/.solar/harness/sprints/<sprint-id>.prd.html`
+- HTML 必须离线可读，不依赖外部 CSS/JS/CDN。
+- HTML 必须包含: 背景/问题、用户目标、用户故事、功能需求、验收标准、非目标、约束、风险、开放问题、Planner handoff。
+- HTML 不能只是 Markdown 转换；必须使用清晰版式、卡片、表格、风险矩阵、锚点目录或 SVG 结构图。
+- 写完 HTML 后运行:
+
+```bash
+python3 ~/.solar/harness/lib/html_artifact.py register --sid <sprint-id> --kind prd_html --path ~/.solar/harness/sprints/<sprint-id>.prd.html
+```
+
+helper 会把 `prd_html` 注册到 status.json，并在本机自动打开；失败只记录 warn，不允许阻断 PM -> Planner 主链路。
 
 ## 与其他角色的交互
 

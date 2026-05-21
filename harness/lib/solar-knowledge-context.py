@@ -27,7 +27,7 @@ from pathlib import Path
 from qmd_resolver import resolve_qmd_bin
 
 DB_PATH = Path(os.environ.get("SOLAR_DB", str(Path.home() / ".solar" / "solar.db")))
-VAULT_PATH = Path(os.environ.get("OBSIDIAN_VAULT_PATH", "/Users/sihaoli/Knowledge"))
+VAULT_PATH = Path(os.environ.get("OBSIDIAN_VAULT_PATH", str(Path.home() / "Knowledge")))
 DEFAULT_MAX_CHARS = int(os.environ.get("SOLAR_KB_MAX_CHARS", "2000"))
 DEFAULT_TIMEOUT_MS = int(os.environ.get("SOLAR_KB_TIMEOUT_MS", "700"))
 DEFAULT_MAX_HITS = 8

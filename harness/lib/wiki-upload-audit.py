@@ -27,7 +27,7 @@ from typing import Any
 
 from qmd_resolver import resolve_qmd_bin
 
-VAULT_ROOT = Path(os.environ.get("OBSIDIAN_VAULT_PATH", "/Users/sihaoli/Knowledge"))
+VAULT_ROOT = Path(os.environ.get("OBSIDIAN_VAULT_PATH", str(Path.home() / "Knowledge")))
 DB_PATH = Path(os.environ.get("SOLAR_DB", str(Path.home() / ".solar" / "solar.db")))
 UPLOAD_DIR: Path | None = None   # lazy-computed in audit_batch
 DISPATCH_DIR: Path | None = None  # lazy-computed in audit_batch

@@ -1139,10 +1139,50 @@ new_epic_from_request() {
   local req="$1"
   ensure_dirs
   local title tmp out rc
-  title=$(printf "%s" "$req" | head -1 | cut -c1-60)
-  [[ -z "$title" ]] && title="Untitled Epic"
   tmp=$(mktemp "${TMPDIR:-/tmp}/solar-epic-request.XXXXXX")
   printf "%s\n" "$req" > "$tmp"
+  title=$(python3 - "$tmp" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8", errors="replace")
+lines = text.splitlines()
+title = ""
+
+if lines and lines[0].strip() == "---":
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        match = re.match(r"\s*title\s*:\s*(.+?)\s*$", line)
+        if match:
+            title = match.group(1).strip().strip('"').strip("'")
+            break
+
+if not title:
+    in_frontmatter = bool(lines and lines[0].strip() == "---")
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if in_frontmatter:
+            if index > 0 and stripped == "---":
+                in_frontmatter = False
+            continue
+        if stripped.startswith("#"):
+            title = stripped.lstrip("#").strip()
+            break
+        if stripped:
+            title = stripped
+            break
+
+title = title[:60].strip()
+if not title:
+    title = "Untitled Epic"
+if title.startswith("-"):
+    title = "Request " + title.lstrip("- ").strip()
+print(title or "Untitled Epic")
+PY
+)
   set +e
   out=$(python3 "$HARNESS_DIR/lib/epic_decomposer.py" create \
     --title "$title" \
@@ -1674,7 +1714,7 @@ else:
 
 在任何 Write/Edit/handoff/eval/status 更新之前，必须先用 Claude/Codex 的 **Read 工具**读取：
 
-\`/Users/sihaoli/.solar/STATE.md\`
+\`~/.solar/STATE.md\`
 
 不要用 \`cat\` 替代这一步；本地 \`state-read-enforcer.sh\` hook 只认 Read 工具标记。
 
@@ -2203,6 +2243,47 @@ print(f"未找到 sid={sid} 的 telemetry 记录")
 PY
 }
 
+# sprint-20260520-203709 N5: refresh CLI bridge.
+# Bash wrapper that exec's the orchestrator python module; passthrough exit
+# code so callers (and tests) see the real refresh.run.v1 exit_code.
+#
+# Help-only fast path: `refresh -h | --help | help` returns a static usage
+# block that names the deeper alternatives (reload / wiki rebuild / wiki
+# qmd-embed) so users picking the wrong tool can self-correct.
+do_refresh() {
+  case "${1:-}" in
+    -h|--help|help)
+      cat <<'REFRESH_HELP'
+solar-harness refresh — read-only multi-source status view
+
+Usage:
+  solar-harness refresh [--scope CSV] [--json] [--deep] [--timeout N]
+
+Flags:
+  --scope CSV    status,sprints,dashboards,autopilot,kb,all   (default: all)
+  --json         emit refresh.run.v1 JSON; suppresses table render
+  --deep         opt-in heavier probes; budget extends to 30s
+  --timeout N    override budget seconds (0..30; meaningful with --deep)
+  -h, --help     this help text
+
+Exit codes:
+  0  all sources ok
+  1  >=1 source error
+  2  >=1 source degraded (no error)
+  3  all sources skipped
+
+See also (heavier ops — NOT what refresh does):
+  solar-harness reload          coordinator hot-reload (re-source config)
+  solar-harness wiki rebuild    full knowledge-base rebuild
+  solar-harness wiki qmd-embed  process embedding backlog
+REFRESH_HELP
+      return 0
+      ;;
+  esac
+  human_prefix "refresh" "$@"
+  ( cd "${HARNESS_DIR%/harness}" && exec python3 -m harness.lib.refresh.orchestrator "$@" )
+}
+
 do_main_status() {
   printf '%s\n' "Solar Harness Main Status"
   printf '%s\n' "runtime != assignment != artifact: pane output alone is not proof of progress."
@@ -2220,6 +2301,11 @@ do_main_status() {
   [[ "$route_rc" -eq 1 ]] && route_status="error"
   [[ "$route_rc" -eq 2 ]] && route_status="warn"
   printf '%s\n' "route: ${route_status} $(printf '%s' "$route_out" | tail -1)"
+  printf '%s\n' ""
+  # AP-3: benchmark banner (one line before status table)
+  local _bench_banner
+  _bench_banner="$(python3 -c 'from harness.lib.benchmark.orchestration.status_banner import render_banner; print(render_banner())' 2>/dev/null)" || _bench_banner="Benchmark: no recent benchmark run"
+  printf '%s\n' "$_bench_banner"
   printf '%s\n' ""
   printf '┌────────────┬────────────┬──────────────┬────────────────────────────┬─────────────────────┬────────────────────────────┐\n'
   printf '│ Pane       │ Role       │ Runtime      │ Assignment                 │ Artifact            │ Title                      │\n'
@@ -2540,6 +2626,7 @@ case "${1:-start}" in
   status)    show_status ;;
   main-status) do_main_status ;;
   lab-status) do_lab_status "${2:-}" ;;
+  refresh)   shift || true; do_refresh "$@" ;;
   doctor)    bash "$HARNESS_DIR/doctor.sh" "${2:-}" ;;
   session)
     shift || true
@@ -2817,6 +2904,12 @@ print(json.dumps({
     if [[ "$_MMD_OPEN" == "1" ]]; then
       open "$_MMD_URL" >/dev/null 2>&1 || true
     fi
+    ;;
+  benchmark|bench)
+    shift || true
+    _benchmark_runner="$HARNESS_DIR/lib/benchmark/runner.py"
+    [[ -f "$_benchmark_runner" ]] || { err "benchmark runner not found: $_benchmark_runner"; exit 1; }
+    python3 -m harness.lib.benchmark.runner "$@"
     ;;
   integrations)
     _integrations_probe="$HARNESS_DIR/lib/external-integrations-health.py"

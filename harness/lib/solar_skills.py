@@ -947,6 +947,26 @@ CAPABILITY_RULES: list[dict[str, Any]] = [
         ],
     },
     {
+        "provider": "Autoresearch",
+        "capabilities": ["autoresearch.pane_optimizer", "autoresearch.issue_loop", "autoresearch.local_issue", "autoresearch.agent_iteration", "autoresearch.score_gate"],
+        "why": "任务适合用 issue 化拆解、score gate、反例/风险和验证增强来提升 PM/Planner/Builder/Evaluator pane 的输出质量。",
+        "use": "把 Autoresearch 当 pane-level optimizer/advisor：PM 用它审需求和验收，Planner 用它反审 DAG/write_scope/stop rules，Builder 用它 dry-run local issue checklist，Evaluator 用它强化 score gate 和 FAIL 修复提示。它不替代 Builder；真正执行必须显式加 --execute、确认 target repo 干净或隔离、限定 max-iterations，并记录证据。",
+        "patterns": [
+            r"\b(autoresearch|auto research|pane optimizer|execution optimizer|dispatch advisor|issue[- ]loop|local issue|implementation loop|score[- ]gate|passing score)\b",
+            r"自动实现.*issue|issue.*自动实现|本地.*issue|多代理.*迭代|评分门禁|分数门禁|执行优化器|质量优化|实现循环|修复循环",
+        ],
+    },
+    {
+        "provider": "Meta-Harness",
+        "capabilities": ["meta_harness.outer_loop", "meta_harness.self_optimization", "meta_harness.pareto", "meta_harness.trace_eval", "meta_harness.dry_run_apply"],
+        "why": "任务涉及 Solar/Solar-Harness 自优化、规则/技能/hook/config 改进、Pareto frontier、trace-based eval 或长期能力演化。",
+        "use": "把 Meta-Harness 当 harness-level outer-loop optimizer：先运行 solar-harness meta-harness status/doctor；run/propose/apply 默认 dry-run，真实执行必须显式 --execute，且 apply 前要审查目标文件、风险等级和回滚点。它不替代 Builder，也不应在普通业务 sprint 中自动改 hooks/rules/skills。",
+        "patterns": [
+            r"\b(meta[- ]?harness|outer[- ]loop|self[- ]optimization|self[- ]improvement|harness code|pareto frontier|trace[- ]based eval|optimize.*harness)\b",
+            r"自我优化|优化自己|自演化|外循环优化|元优化|能力演化|优化.*规则|优化.*技能|优化.*hook|优化.*config|Pareto|帕累托",
+        ],
+    },
+    {
         "provider": "DeepResearch Source Search",
         "capabilities": ["source.search", "research.source.web", "research.source.academic", "research.source.internal"],
         "why": "任务涉及多源检索、外部搜索、学术搜索、Mirage/QMD 内部源搜索、来源网格。",
@@ -1096,6 +1116,8 @@ def _rank_rule(rule: dict[str, Any], scores: dict[str, dict[str, Any]]) -> dict[
         "atlas": "atlas",
         "everything-claude-code": "everything-claude-code",
         "agent-rules-books": "agent-rules-books",
+        "autoresearch": "autoresearch",
+        "meta-harness": "meta-harness",
         "solar-harness-runtime": "solar-harness-runtime",
         "solar-data-plane": "solar-data-plane",
     }
@@ -1226,6 +1248,7 @@ def _build_capability_block(dispatch_text: str, selected: list[dict[str, Any]] |
         "## Dispatch Rules",
         "",
         "- 这些 capability 是自动选择的执行辅助，不替换 Solar coordinator / planner / evaluator。",
+        "- Autoresearch 只能作为 pane-level optimizer/advisor；没有用户授权、--execute、清洁/隔离工作树和 bounded max-iterations 时不得自动运行。",
         "- 若 capability 缺失或不可用，必须 fail-open：继续完成主任务，并在 handoff 写明降级证据。",
         "- 遇到失败、超时、hook/tool 异常时，优先触发 ATLAS structured repair，不要停在等待人工决策。",
         _CAP_CLOSE,

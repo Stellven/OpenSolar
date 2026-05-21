@@ -198,7 +198,6 @@ prepare_sanitized_claude_settings() {
   mkdir -p "$settings_dir"
   python3 - "$HOME/.claude/settings.json" "$out" "$HARNESS_DIR" <<'PY'
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -219,9 +218,6 @@ data.pop("env", None)
 # hooks can abort pane startup before Solar can accept the TUI prompt.
 hooks = {}
 data["hooks"] = hooks
-
-if os.environ.get("SOLAR_AUTH_SOURCE") == "thunderomlx" or "127.0.0.1:8002" in os.environ.get("ANTHROPIC_BASE_URL", ""):
-    data["thinking"] = {"type": "disabled"}
 
 def append_hook(event_name, phase):
     entries = hooks.setdefault(event_name, [])
