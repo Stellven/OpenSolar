@@ -60,7 +60,7 @@ DEFAULT_PROFILE_CONFIG: dict[str, Any] = {
             "label": "规划者",
             "persona": "planner",
             "backend": "claude-cli",
-            "model": "sonnet",
+            "model": "opus",
             "approval_mode": "auto_edit",
             "best_for": ["planning", "architecture"],
             "max_parallel": 1,

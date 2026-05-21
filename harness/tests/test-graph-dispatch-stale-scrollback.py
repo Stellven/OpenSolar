@@ -69,6 +69,12 @@ old lines 13
     assert mod._pane_unavailable_reason("solar-harness:0.3") == ""
     assert mod._pane_tui_busy("solar-harness:0.3") is False
 
+    cooked_marker_tail = distant_marker_tail.replace("✻ Sautéed for 4m 1s", "✻ Cooked for 4m 1s")
+    mod._pane_tail = lambda pane, lines=80: cooked_marker_tail
+    assert mod._pane_prompt_residue_is_stale_scrollback("solar-harness:0.3", cooked_marker_tail)
+    assert mod._pane_unavailable_reason("solar-harness:0.3") == ""
+    assert mod._pane_tui_busy("solar-harness:0.3") is False
+
     live_prompt = """
 ────────────────────────────────────────────────────────────────
 ❯ finalize sprint

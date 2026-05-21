@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import sys
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -246,6 +247,15 @@ def _run_dag_backend(
         dag_dir=dag_dir,
         instruction=instruction,
         model=model,
+        workspace=workspace,
+    )
+    graph_dispatch = _dag_graph_dispatch_stage(
+        dag_id=dag_id,
+        dag_dir=dag_dir,
+        task_graph_path=dag_dir / "task_graph.json",
+        timeout_sec=min(timeout_sec, 60),
+        workspace=workspace,
+        files_before=files_before,
     )
 
     leaf_backend = os.environ.get("SOLAR_HARNESS_DAG_LEAF_BACKEND", "").strip().lower()
@@ -254,21 +264,30 @@ def _run_dag_backend(
         if leaf_backend == "dag":
             leaf_backend = "codex"
 
-    builder = _dag_builder_stage(
-        dag_id=dag_id,
-        dag_dir=dag_dir,
-        leaf_backend=leaf_backend,
-        model=model,
-        workspace=workspace,
-        prompt=(
-            f"{prompt}\n\n"
-            "Solar-Harness DAG node N2/builder:\n"
-            "- Execute the planner's task contract, not just the original prompt.\n"
-            "- Leave auditable files in the workspace; final grading is by Terminal-Bench.\n"
-        ),
-        mcp_config_path=mcp_config_path,
-        timeout_sec=timeout_sec,
-    )
+    if graph_dispatch.get("enabled") and not graph_dispatch.get("ok"):
+        builder = _dag_graph_dispatch_failed_builder_stage(
+            dag_id=dag_id,
+            dag_dir=dag_dir,
+            graph_dispatch=graph_dispatch,
+        )
+    elif graph_dispatch.get("mode") == "graph-dispatch-live":
+        builder = _dag_live_builder_stage(dag_id=dag_id, dag_dir=dag_dir, graph_dispatch=graph_dispatch)
+    else:
+        builder = _dag_builder_stage(
+            dag_id=dag_id,
+            dag_dir=dag_dir,
+            leaf_backend=leaf_backend,
+            model=model,
+            workspace=workspace,
+            prompt=(
+                f"{prompt}\n\n"
+                "Solar-Harness DAG node N2/builder:\n"
+                "- Execute the planner's task contract, not just the original prompt.\n"
+                "- Leave auditable files in the workspace; final grading is by Terminal-Bench.\n"
+            ),
+            mcp_config_path=mcp_config_path,
+            timeout_sec=timeout_sec,
+        )
     repair = _dag_repair_stage(
         dag_id=dag_id,
         dag_dir=dag_dir,
@@ -288,6 +307,7 @@ def _run_dag_backend(
         "dag_id": dag_id,
         "dag_dir": str(dag_dir),
         "planner": planner,
+        "graph_dispatch": graph_dispatch,
         "builder": builder,
         "repair": repair,
         "evaluator": evaluator,
@@ -310,8 +330,11 @@ def _dag_planner_stage(
     dag_dir: Path,
     instruction: str,
     model: str,
+    workspace: Path,
 ) -> dict[str, Any]:
     task_graph = {
+        "schema_version": "solar.task_graph.v1",
+        "sprint_id": dag_id,
         "dag_id": dag_id,
         "title": "Terminal-Bench task through Solar-Harness agent",
         "nodes": [
@@ -319,6 +342,9 @@ def _dag_planner_stage(
                 "id": "N1",
                 "role": "planner",
                 "goal": "Convert Terminal-Bench instruction into an executable task contract.",
+                "write_scope": [str(dag_dir / "planner-plan.json")],
+                "read_scope": [],
+                "required_capabilities": ["workflow.planning"],
                 "status": "passed",
             },
             {
@@ -326,6 +352,9 @@ def _dag_planner_stage(
                 "role": "builder",
                 "depends_on": ["N1"],
                 "goal": "Modify /app workspace according to the task contract.",
+                "write_scope": [str(workspace)],
+                "read_scope": [str(workspace), str(dag_dir / "planner-plan.json")],
+                "required_capabilities": ["bash", "python", "testing"],
                 "status": "pending",
             },
             {
@@ -333,10 +362,20 @@ def _dag_planner_stage(
                 "role": "evaluator",
                 "depends_on": ["N2"],
                 "goal": "Check local execution evidence before Terminal-Bench verifier.",
+                "write_scope": [str(dag_dir / "evaluator-result.json")],
+                "read_scope": [str(workspace), str(dag_dir / "builder-result.json")],
+                "required_capabilities": ["testing", "evidence"],
                 "status": "pending",
             },
         ],
     }
+    for node in task_graph["nodes"]:
+        if node.get("id") == "N2":
+            node["acceptance"] = [
+                "Modify the Terminal-Bench workspace according to the instruction.",
+                "Write a handoff file summarizing changed files, checks run, and residual risks.",
+                "Do not mark the node complete unless the workspace contains the verifier-visible outputs.",
+            ]
     plan = {
         "stage": "planner",
         "verdict": "pass",
@@ -362,6 +401,267 @@ def _dag_planner_stage(
     )
     _emit_event("benchmark.solar_harness_agent.dag.planner_passed", {"dag_id": dag_id})
     return plan
+
+
+def _dag_graph_dispatch_stage(
+    *,
+    dag_id: str,
+    dag_dir: Path,
+    task_graph_path: Path,
+    timeout_sec: int,
+    workspace: Path,
+    files_before: dict[str, int | str],
+) -> dict[str, Any]:
+    """Optionally route the benchmark DAG through the real graph dispatcher.
+
+    Harbor custom agents must return synchronously, while graph-dispatch is a
+    tmux-oriented async handoff. The default therefore remains the blocking DAG
+    envelope. Dry-run captures dispatch artifacts before the synchronous builder
+    executes. Live mode never falls back to the leaf backend: if the pane does
+    not produce durable evidence before timeout, the benchmark fails explicitly.
+    """
+    mode = os.environ.get("SOLAR_HARNESS_DAG_EXECUTOR", "").strip().lower()
+    if not mode:
+        return {"enabled": False, "mode": "sync-envelope"}
+    if mode not in {"graph-dispatch-dry-run", "graph-dispatch-live"}:
+        return {
+            "enabled": True,
+            "mode": mode,
+            "ok": False,
+            "reason": "unsupported_dag_executor",
+            "supported": ["graph-dispatch-dry-run", "graph-dispatch-live"],
+        }
+
+    isolated_harness = _prepare_graph_dispatch_harness(dag_dir)
+    dispatcher = isolated_harness / "lib" / "graph_node_dispatcher.py"
+    env = os.environ.copy()
+    env.update(
+        {
+            "HARNESS_DIR": str(isolated_harness),
+            "SOLAR_GRAPH_DISPATCH_RESTRICT_SESSION": "1",
+            "SOLAR_HARNESS_SESSION": env.get("SOLAR_HARNESS_SESSION", "solar-harness"),
+        }
+    )
+    if mode == "graph-dispatch-dry-run":
+        env["SOLAR_GRAPH_DISPATCH_FAKE_WORKERS"] = "1"
+    if mode == "graph-dispatch-live":
+        env["SOLAR_GRAPH_DISPATCH_ASYNC_SUBMIT"] = "1"
+    env["PYTHONPATH"] = (
+        f"{isolated_harness / 'lib'}"
+        f"{os.pathsep}"
+        f"{_runtime_harness_dir() / 'lib'}"
+        f"{os.pathsep}"
+        f"{env.get('PYTHONPATH', '')}"
+    )
+    cmd = [
+        sys.executable,
+        str(dispatcher),
+        "dispatch-ready",
+        "--graph",
+        str(task_graph_path),
+        "--max-parallel",
+        "1",
+    ]
+    if mode == "graph-dispatch-dry-run":
+        cmd.append("--dry-run")
+    command_file = dag_dir / "graph-dispatch-command.txt"
+    command_file.write_text(
+        " ".join(shlex.quote(part) for part in cmd) + "\n",
+        encoding="utf-8",
+    )
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=str(dag_dir),
+            text=True,
+            capture_output=True,
+            timeout=timeout_sec,
+            env=env,
+        )
+        stdout = proc.stdout or ""
+        stderr = proc.stderr or ""
+        return_code = proc.returncode
+    except subprocess.TimeoutExpired as exc:
+        stdout = exc.stdout or ""
+        stderr = exc.stderr or f"Timed out after {timeout_sec}s"
+        return_code = 124
+
+    dispatch_file = isolated_harness / "sprints" / f"{dag_id}.N2-dispatch.md"
+    handoff_file = isolated_harness / "sprints" / f"{dag_id}.N2-handoff.md"
+    parsed: dict[str, Any] = {}
+    try:
+        parsed = json.loads(stdout.strip().splitlines()[-1]) if stdout.strip() else {}
+    except json.JSONDecodeError as exc:
+        parsed = {"ok": False, "reason": "invalid_dispatch_json", "error": str(exc)}
+
+    processed = int((parsed.get("drain") or {}).get("processed") or 0) if isinstance(parsed, dict) else 0
+    live_completion: dict[str, Any] = {}
+    if mode == "graph-dispatch-live":
+        live_completion = _poll_live_graph_completion(
+            workspace=workspace,
+            files_before=files_before,
+            handoff_file=handoff_file,
+            timeout_sec=_live_timeout_sec(timeout_sec),
+        )
+
+    live_completed = bool(live_completion.get("completed")) if mode == "graph-dispatch-live" else False
+    dispatcher_ok = return_code == 0 and bool(parsed.get("ok"))
+    route_ok = (
+        dispatcher_ok and processed > 0
+        if mode != "graph-dispatch-live"
+        else processed > 0 and live_completed
+    )
+    result = {
+        "enabled": True,
+        "mode": mode,
+        "ok": route_ok,
+        "dispatcher_ok": dispatcher_ok,
+        "return_code": return_code,
+        "stdout": stdout,
+        "stderr": stderr,
+        "parsed": parsed,
+        "processed": processed,
+        "isolated_harness": str(isolated_harness),
+        "dispatch_file": str(dispatch_file) if dispatch_file.exists() else "",
+        "handoff_file": str(handoff_file) if handoff_file.exists() else "",
+        "live_completion": live_completion,
+        "command_file": str(command_file),
+    }
+    (dag_dir / "graph-dispatch-result.json").write_text(
+        json.dumps(result, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    _emit_event("benchmark.solar_harness_agent.dag.graph_dispatch", {"dag_id": dag_id, **result})
+    return result
+
+
+def _live_timeout_sec(dispatch_timeout_sec: int) -> int:
+    raw = os.environ.get("SOLAR_HARNESS_BENCH_LIVE_TIMEOUT_SEC", "").strip()
+    if raw:
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            return max(1, dispatch_timeout_sec)
+    return max(1, min(600, dispatch_timeout_sec))
+
+
+def _poll_live_graph_completion(
+    *,
+    workspace: Path,
+    files_before: dict[str, int | str],
+    handoff_file: Path,
+    timeout_sec: int,
+) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout_sec
+    interval = float(os.environ.get("SOLAR_HARNESS_BENCH_LIVE_POLL_SEC", "5") or "5")
+    interval = max(0.25, min(interval, 30.0))
+    last_files_after: dict[str, int | str] = files_before
+    while time.monotonic() <= deadline:
+        last_files_after = _file_inventory(workspace)
+        workspace_changed = last_files_after != files_before
+        handoff_exists = handoff_file.exists()
+        if workspace_changed and handoff_exists:
+            return {
+                "completed": True,
+                "reason": "workspace_changed_and_handoff_exists",
+                "workspace_changed": True,
+                "handoff_file": str(handoff_file),
+                "file_count_after": len(last_files_after),
+            }
+        time.sleep(interval)
+    return {
+        "completed": False,
+        "reason": "live_dispatch_timeout",
+        "timeout_sec": timeout_sec,
+        "workspace_changed": last_files_after != files_before,
+        "handoff_file": str(handoff_file) if handoff_file.exists() else "",
+        "file_count_after": len(last_files_after),
+    }
+
+
+def _dag_live_builder_stage(
+    *,
+    dag_id: str,
+    dag_dir: Path,
+    graph_dispatch: dict[str, Any],
+) -> dict[str, Any]:
+    live = graph_dispatch.get("live_completion") if isinstance(graph_dispatch.get("live_completion"), dict) else {}
+    return_code = 0 if graph_dispatch.get("ok") and live.get("completed") else 2
+    result = {
+        "stage": "builder",
+        "leaf_backend": "graph-dispatch-live",
+        "return_code": return_code,
+        "stdout": "",
+        "stderr": "" if return_code == 0 else json.dumps(live, ensure_ascii=False),
+        "graph_dispatch": {
+            "ok": graph_dispatch.get("ok"),
+            "processed": graph_dispatch.get("processed"),
+            "dispatch_file": graph_dispatch.get("dispatch_file"),
+            "handoff_file": graph_dispatch.get("handoff_file"),
+            "live_completion": live,
+        },
+    }
+    (dag_dir / "builder-result.json").write_text(
+        json.dumps(result, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    _emit_event("benchmark.solar_harness_agent.dag.live_builder_result", {"dag_id": dag_id, **result})
+    return result
+
+
+def _dag_graph_dispatch_failed_builder_stage(
+    *,
+    dag_id: str,
+    dag_dir: Path,
+    graph_dispatch: dict[str, Any],
+) -> dict[str, Any]:
+    result = {
+        "stage": "builder",
+        "leaf_backend": "graph-dispatch",
+        "return_code": 2,
+        "stdout": "",
+        "stderr": json.dumps(
+            {
+                "reason": "graph_dispatch_failed",
+                "mode": graph_dispatch.get("mode"),
+                "ok": graph_dispatch.get("ok"),
+                "processed": graph_dispatch.get("processed"),
+                "return_code": graph_dispatch.get("return_code"),
+                "stderr": graph_dispatch.get("stderr"),
+                "live_completion": graph_dispatch.get("live_completion"),
+            },
+            ensure_ascii=False,
+        ),
+        "graph_dispatch": graph_dispatch,
+    }
+    (dag_dir / "builder-result.json").write_text(
+        json.dumps(result, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    _emit_event("benchmark.solar_harness_agent.dag.graph_dispatch_failed", {"dag_id": dag_id, **result})
+    return result
+
+
+def _prepare_graph_dispatch_harness(dag_dir: Path) -> Path:
+    root = dag_dir / "graph-dispatch-harness"
+    root.mkdir(parents=True, exist_ok=True)
+    for child in ("sprints", "run", "state"):
+        (root / child).mkdir(parents=True, exist_ok=True)
+    lib = root / "lib"
+    if not lib.exists():
+        try:
+            lib.symlink_to(_runtime_harness_dir() / "lib", target_is_directory=True)
+        except OSError:
+            lib.mkdir(parents=True, exist_ok=True)
+            for source in (_runtime_harness_dir() / "lib").glob("*.py"):
+                target = lib / source.name
+                if not target.exists():
+                    target.symlink_to(source)
+    return root
+
+
+def _runtime_harness_dir() -> Path:
+    return Path(os.environ.get("HARNESS_DIR", Path.home() / ".solar" / "harness")).expanduser().resolve()
 
 
 def _dag_builder_stage(

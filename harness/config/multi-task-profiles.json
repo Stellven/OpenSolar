@@ -13,7 +13,12 @@
       "backend": "claude-cli",
       "model": "sonnet",
       "approval_mode": "yolo",
-      "best_for": ["implementation", "debugging", "tests", "refactor"],
+      "best_for": [
+        "implementation",
+        "debugging",
+        "tests",
+        "refactor"
+      ],
       "max_parallel": 2
     },
     "planner": {
@@ -21,9 +26,14 @@
       "label": "规划者",
       "persona": "planner",
       "backend": "claude-cli",
-      "model": "sonnet",
+      "model": "opus",
       "approval_mode": "auto_edit",
-      "best_for": ["planning", "architecture", "decomposition", "risk"],
+      "best_for": [
+        "planning",
+        "architecture",
+        "decomposition",
+        "risk"
+      ],
       "max_parallel": 1
     },
     "evaluator": {
@@ -33,7 +43,12 @@
       "backend": "claude-cli",
       "model": "opus",
       "approval_mode": "auto_edit",
-      "best_for": ["verification", "review", "evidence", "regression"],
+      "best_for": [
+        "verification",
+        "review",
+        "evidence",
+        "regression"
+      ],
       "max_parallel": 1
     },
     "pm": {
@@ -43,7 +58,12 @@
       "backend": "claude-cli",
       "model": "sonnet",
       "approval_mode": "auto_edit",
-      "best_for": ["requirements", "acceptance", "prioritization", "handoff"],
+      "best_for": [
+        "requirements",
+        "acceptance",
+        "prioritization",
+        "handoff"
+      ],
       "max_parallel": 1
     },
     "gemini-builder": {
@@ -53,7 +73,12 @@
       "backend": "gemini-cli",
       "model": "gemini",
       "approval_mode": "auto_edit",
-      "best_for": ["large-context", "implementation", "code-search", "tests"],
+      "best_for": [
+        "large-context",
+        "implementation",
+        "code-search",
+        "tests"
+      ],
       "max_parallel": 1
     },
     "gemini-evaluator": {
@@ -63,7 +88,12 @@
       "backend": "gemini-cli",
       "model": "gemini",
       "approval_mode": "auto_edit",
-      "best_for": ["verification", "review", "evidence", "regression"],
+      "best_for": [
+        "verification",
+        "review",
+        "evidence",
+        "regression"
+      ],
       "max_parallel": 1
     },
     "knowledge-extractor": {
@@ -73,7 +103,11 @@
       "backend": "command",
       "model": "thunderomlx",
       "approval_mode": "default",
-      "best_for": ["knowledge-extraction", "wiki-ingest", "qmd-indexing"],
+      "best_for": [
+        "knowledge-extraction",
+        "wiki-ingest",
+        "qmd-indexing"
+      ],
       "command": "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/thunderomlx_knowledge_extract_agent.py\"",
       "max_parallel": 1
     },
@@ -84,7 +118,11 @@
       "backend": "command",
       "model": "thunderomlx",
       "approval_mode": "default",
-      "best_for": ["benchmark", "cache-metrics", "knowledge-extraction"],
+      "best_for": [
+        "benchmark",
+        "cache-metrics",
+        "knowledge-extraction"
+      ],
       "command": "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/thunderomlx_cache_benchmark_agent.py\"",
       "max_parallel": 1
     },
@@ -95,7 +133,11 @@
       "backend": "claude-cli",
       "model": "deepseek",
       "approval_mode": "yolo",
-      "best_for": ["implementation", "fast-patch", "code-edit"],
+      "best_for": [
+        "implementation",
+        "fast-patch",
+        "code-edit"
+      ],
       "max_parallel": 1
     },
     "glm-planner": {
@@ -105,7 +147,11 @@
       "backend": "claude-cli",
       "model": "glm-5.1",
       "approval_mode": "auto_edit",
-      "best_for": ["planning", "analysis", "chinese-reasoning"],
+      "best_for": [
+        "planning",
+        "analysis",
+        "chinese-reasoning"
+      ],
       "max_parallel": 1
     },
     "thunderomlx-local": {
@@ -115,7 +161,11 @@
       "backend": "claude-cli",
       "model": "thunderomlx",
       "approval_mode": "default",
-      "best_for": ["local", "offline", "low-cost"],
+      "best_for": [
+        "local",
+        "offline",
+        "low-cost"
+      ],
       "max_parallel": 1
     }
   }

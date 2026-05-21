@@ -9,7 +9,7 @@ TMPDIR=$(mktemp -d -t "vnext-nc1-XXXXXX")
 trap 'rm -rf "$TMPDIR"' EXIT
 SIDE_EFFECT="$TMPDIR/side_effect.txt"
 
-cd /Users/lisihao/.solar
+cd /Users/sihaoli/.solar
 
 python3 - "$TMPDIR" "$SIDE_EFFECT" <<'PY'
 import os, sys

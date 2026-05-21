@@ -2,24 +2,24 @@
 
 Status: installed
 Installed at: 2026-05-08
-Vault: `/Users/lisihao/Knowledge`
+Vault: `/Users/sihaoli/Knowledge`
 Collection: `solar-wiki`
 
 ## What Was Installed
 
 - `mineru-document-explorer@1.0.9` via npm.
-- CLI binary: `/Users/lisihao/.npm-global/bin/qmd`.
-- Source vendor copy: `/Users/lisihao/.solar/harness/vendor/MinerU-Document-Explorer`.
+- CLI binary: `/Users/sihaoli/.npm-global/bin/qmd`.
+- Source vendor copy: `/Users/sihaoli/.solar/harness/vendor/MinerU-Document-Explorer`.
 - Skill symlinks:
-  - `/Users/lisihao/.agents/skills/mineru-document-explorer`
-  - `/Users/lisihao/.claude/skills/mineru-document-explorer`
-  - `/Users/lisihao/.codex/skills/mineru-document-explorer`
+  - `/Users/sihaoli/.agents/skills/mineru-document-explorer`
+  - `/Users/sihaoli/.claude/skills/mineru-document-explorer`
+  - `/Users/sihaoli/.codex/skills/mineru-document-explorer`
 
 ## Python Document Readers
 
 Python document dependencies are installed in an isolated venv:
 
-`/Users/lisihao/.solar/harness/venvs/mineru-doc-explorer`
+`/Users/sihaoli/.solar/harness/venvs/mineru-doc-explorer`
 
 Installed packages:
 
@@ -32,7 +32,7 @@ Installed packages:
 The Obsidian vault is indexed as:
 
 ```bash
-qmd collection add /Users/lisihao/Knowledge --name solar-wiki --mask '**/*.{md,pdf,docx,pptx}'
+qmd collection add /Users/sihaoli/Knowledge --name solar-wiki --mask '**/*.{md,pdf,docx,pptx}'
 qmd wiki init solar-wiki
 qmd context add qmd://solar-wiki "Solar Obsidian knowledge vault..."
 ```
@@ -56,8 +56,8 @@ solar-harness wiki qmd-mcp status
 
 Both config files point wiki skills to QMD:
 
-- `/Users/lisihao/.obsidian-wiki/config`
-- `/Users/lisihao/Knowledge/.env`
+- `/Users/sihaoli/.obsidian-wiki/config`
+- `/Users/sihaoli/Knowledge/.env`
 
 Required values:
 
@@ -70,13 +70,13 @@ QMD_PAPERS_COLLECTION=solar-wiki
 
 MCP HTTP server:
 
-- LaunchAgent: `/Users/lisihao/Library/LaunchAgents/com.solar.qmd-mineru-document-explorer.plist`
+- LaunchAgent: `/Users/sihaoli/Library/LaunchAgents/com.solar.qmd-mineru-document-explorer.plist`
 - Endpoint: `http://localhost:8181/mcp`
 - Health: `solar-harness wiki qmd-mcp status`
 
 Index updater:
 
-- LaunchAgent: `/Users/lisihao/Library/LaunchAgents/com.solar.qmd-mineru-update.plist`
+- LaunchAgent: `/Users/sihaoli/Library/LaunchAgents/com.solar.qmd-mineru-update.plist`
 - Interval: 300 seconds
 - Action: `qmd update`
 

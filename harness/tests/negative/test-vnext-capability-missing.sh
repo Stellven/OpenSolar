@@ -18,7 +18,7 @@ SIDE_EFFECT="$TMPDIR/executed.txt"
 SCOPE_DIR="$TMPDIR/scope"
 mkdir -p "$SCOPE_DIR"
 
-cd /Users/lisihao/.solar
+cd /Users/sihaoli/.solar
 
 python3 - "$TMPDIR" "$SCOPE_DIR" "$SIDE_EFFECT" <<'PY'
 import os, sys

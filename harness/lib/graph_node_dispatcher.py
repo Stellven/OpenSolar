@@ -1178,6 +1178,7 @@ def _pane_prompt_residue_is_stale_scrollback(pane: str, text: str) -> bool:
             "✻ Cogitated for",
             "✻ Baked for",
             "✻ Brewed for",
+            "✻ Cooked for",
             "✻ Sautéed for",
             "✻ Thought for",
             "✻ Worked for",
@@ -1404,6 +1405,17 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
             subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=2)
             time.sleep(0.35)
             subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=2)
+            if os.environ.get("SOLAR_GRAPH_DISPATCH_ASYNC_SUBMIT") == "1":
+                _record_model_call(
+                    "succeeded",
+                    sid,
+                    pane,
+                    dispatch_id,
+                    instruction_file,
+                    tries=tries,
+                    status="async_submit_tmux_send_accepted",
+                )
+                return True
             time.sleep(4.0)
             tail = _pane_tail(pane)
             has_keyword = dispatch_keyword in tail or instruction_path in tail
@@ -2015,7 +2027,12 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "research.report.compile", "report.compile",
         "research.long_report_compiler", "research.report_ast",
     ]
+    restrict_to_session = os.environ.get("SOLAR_GRAPH_DISPATCH_RESTRICT_SESSION") == "1"
     if dry_run and os.environ.get("SOLAR_GRAPH_DISPATCH_FAKE_WORKERS") == "1":
+        if restrict_to_session:
+            return [
+                {"pane": f"{SESSION}:0.2", "models": _models_for_pane(f"{SESSION}:0.2"), "skills": worker_skills, "capabilities": worker_capabilities},
+            ]
         return [
             {"pane": f"{SESSION}:0.2", "models": _models_for_pane(f"{SESSION}:0.2"), "skills": worker_skills, "capabilities": worker_capabilities},
             {"pane": "solar-harness-lab:0.0", "models": _models_for_pane("solar-harness-lab:0.0"), "skills": worker_skills, "capabilities": worker_capabilities},
@@ -2038,6 +2055,8 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         title = row[1].strip() if len(row) > 1 else ""
         # Only builder panes can receive DAG build nodes. Main PM/planner/evaluator
         # panes share the session prefix but must not be treated as builders.
+        if restrict_to_session and pane != f"{SESSION}:0.2":
+            continue
         if pane != f"{SESSION}:0.2" and not pane.startswith("solar-harness-lab:"):
             continue
         if not _pane_title_matches_role(pane, title, "builder"):
