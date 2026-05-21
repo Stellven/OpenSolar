@@ -117,9 +117,11 @@ if [[ -n "$TMUX_PANE" ]]; then
 fi
 
 # 构建启动命令
-CLAUDE_BIN="${SOLAR_CLAUDE_BIN:-/Users/sihaoli/.npm-global/bin/claude}"
-if [[ ! -x "$CLAUDE_BIN" ]]; then
-  CLAUDE_BIN="$(command -v claude)"
+if [[ -n "${SOLAR_CLAUDE_BIN:-}" ]]; then
+  CLAUDE_BIN="$SOLAR_CLAUDE_BIN"
+else
+  CLAUDE_BIN="$(command -v claude || true)"
+  [[ -n "$CLAUDE_BIN" ]] || CLAUDE_BIN="$HOME/.npm-global/bin/claude"
 fi
 
 CLAUDE_CMD="$CLAUDE_BIN"
@@ -140,7 +142,6 @@ prepare_sanitized_claude_settings() {
   mkdir -p "$settings_dir"
   python3 - "$HOME/.claude/settings.json" "$out" "$HARNESS_DIR" <<'PY'
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -157,9 +158,6 @@ data.pop("env", None)
 # hooks can abort pane startup before Solar can accept the TUI prompt.
 hooks = {}
 data["hooks"] = hooks
-
-if os.environ.get("SOLAR_AUTH_SOURCE") == "thunderomlx" or "127.0.0.1:8002" in os.environ.get("ANTHROPIC_BASE_URL", ""):
-    data["thinking"] = {"type": "disabled"}
 
 def append_hook(event_name, phase):
     entries = hooks.setdefault(event_name, [])
@@ -184,51 +182,6 @@ CLAUDE_SETTINGS_FILE="$(prepare_sanitized_claude_settings "$PERSONA")"
 export SOLAR_CLAUDE_SETTINGS_FILE="$CLAUDE_SETTINGS_FILE"
 export SOLAR_CLAUDE_SETTING_SOURCES="local"
 CLAUDE_CMD="$CLAUDE_CMD --setting-sources ${SOLAR_CLAUDE_SETTING_SOURCES} --settings ${CLAUDE_SETTINGS_FILE}"
-
-export SOLAR_PERSONA="$PERSONA"
-export SOLAR_SELECTED_CLAUDE_BIN="$CLAUDE_BIN"
-export SOLAR_AUTH_SOURCE="${AUTH_SOURCE:-}"
-export SOLAR_MODEL_FLAG="${MODEL_FLAG:-}"
-export SOLAR_EXTRA_FLAGS="${EXTRA_FLAGS:-}"
-python3 - "$HARNESS_DIR/run/pane-env" <<'PY' 2>/dev/null || true
-import json
-import os
-import time
-import sys
-from pathlib import Path
-
-def present(name):
-    return bool(os.environ.get(name))
-
-def host(value):
-    if not value:
-        return ""
-    return value.split("//", 1)[-1].split("/", 1)[0]
-
-marker_dir = Path(sys.argv[1])
-marker_dir.mkdir(parents=True, exist_ok=True)
-pane = os.environ.get("TMUX_PANE", "unknown")
-pane_safe = "".join(c if c.isalnum() or c in "_.-" else "_" for c in pane)
-record = {
-    "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-    "pane": pane,
-    "persona": os.environ.get("SOLAR_PERSONA", ""),
-    "builder_slot": os.environ.get("SOLAR_BUILDER_SLOT", ""),
-    "claude_bin": os.environ.get("SOLAR_SELECTED_CLAUDE_BIN", ""),
-    "auth_source": os.environ.get("SOLAR_AUTH_SOURCE", ""),
-    "base_url_host": host(os.environ.get("ANTHROPIC_BASE_URL", "")),
-    "has_anthropic_auth_token": present("ANTHROPIC_AUTH_TOKEN"),
-    "has_anthropic_api_key": present("ANTHROPIC_API_KEY"),
-    "zhipu_token_source": os.environ.get("ZHIPU_TOKEN_SOURCE", ""),
-    "default_opus_model": os.environ.get("ANTHROPIC_DEFAULT_OPUS_MODEL", ""),
-    "default_sonnet_model": os.environ.get("ANTHROPIC_DEFAULT_SONNET_MODEL", ""),
-    "model_flag": os.environ.get("SOLAR_MODEL_FLAG", ""),
-    "extra_flags": os.environ.get("SOLAR_EXTRA_FLAGS", ""),
-    "settings_file": os.environ.get("SOLAR_CLAUDE_SETTINGS_FILE", ""),
-    "setting_sources": os.environ.get("SOLAR_CLAUDE_SETTING_SOURCES", ""),
-}
-(marker_dir / f"{pane_safe}.json").write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-PY
 
 # 退出信号捕获 → pane-exit.jsonl
 EXIT_LOG="$HARNESS_DIR/logs/pane-exit.jsonl"

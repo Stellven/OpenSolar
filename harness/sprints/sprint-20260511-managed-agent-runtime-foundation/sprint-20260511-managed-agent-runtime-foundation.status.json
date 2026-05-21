@@ -13,8 +13,8 @@
   "summary": "Make Solar-Harness event-sourced and async-capable: durable session log as truth, status/UI/panes as projections, tools/models/panes as activities.",
   "created_at": "2026-05-11T19:17:09Z",
   "updated_at": "2026-05-12T15:41:14Z",
-  "task_graph": "/Users/sihaoli/.solar/harness/sprints/sprint-20260511-managed-agent-runtime-foundation.task_graph.json",
-  "contract": "/Users/sihaoli/.solar/harness/sprints/sprint-20260511-managed-agent-runtime-foundation.contract.md",
+  "task_graph": "/Users/lisihao/.solar/harness/sprints/sprint-20260511-managed-agent-runtime-foundation.task_graph.json",
+  "contract": "/Users/lisihao/.solar/harness/sprints/sprint-20260511-managed-agent-runtime-foundation.contract.md",
   "history": [
     {
       "ts": "2026-05-11T19:17:09Z",

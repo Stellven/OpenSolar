@@ -43,6 +43,32 @@ except Exception:
 " "$json" "$field" 2>/dev/null
 }
 
+_sm_task_graph_valid() {
+    local sid="$1"
+    local graph="${SPRINTS_DIR}/${sid}.task_graph.json"
+    python3 - "$graph" <<'PY' 2>/dev/null
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+try:
+    graph = json.loads(path.read_text())
+except Exception:
+    print("0", end="")
+    raise SystemExit(0)
+nodes = graph.get("nodes")
+if not isinstance(nodes, list) or not nodes:
+    print("0", end="")
+    raise SystemExit(0)
+for node in nodes:
+    if not isinstance(node, dict) or not str(node.get("id") or "").strip() or "write_scope" not in node:
+        print("0", end="")
+        raise SystemExit(0)
+print("1", end="")
+PY
+}
+
 # ── map_canonical_state ───────────────────────────────────────────────────────
 #
 # Usage: map_canonical_state <sid>
@@ -93,10 +119,11 @@ print(json.dumps({
         return 0
     fi
 
-    local st phase handoff_to
+    local st phase handoff_to graph_valid
     st=$(_sm_get_field "$raw_json" "status")
     phase=$(_sm_get_field "$raw_json" "phase")
     handoff_to=$(_sm_get_field "$raw_json" "handoff_to")
+    graph_valid=$(_sm_task_graph_valid "$sid")
 
     python3 -c "
 import json, sys
@@ -106,6 +133,7 @@ st = sys.argv[2]
 phase = sys.argv[3]
 handoff_to = sys.argv[4]
 now = sys.argv[5]
+graph_valid = sys.argv[6] == '1'
 
 lc = 'unknown'
 role = 'none'
@@ -119,8 +147,13 @@ if st == 'drafting':
         role = 'planner'
         hint = 'legacy fix: drafting+prd_ready+planner was mis-routed to PM'
     elif phase in ('planning_complete',):
-        lc = 'planning_complete'
-        role = 'builder_main'
+        if graph_valid:
+            lc = 'planning_complete'
+            role = 'builder_main'
+        else:
+            lc = 'planner_blocked_missing_task_graph'
+            role = 'planner'
+            hint = 'planning_complete requires valid task_graph.json before builder route'
     elif phase in ('prd_ready',):
         lc = 'prd_ready'
         role = 'planner'
@@ -130,7 +163,12 @@ if st == 'drafting':
 
 elif st == 'active':
     if phase in ('planning_complete', 'planner_plan', 'plan_reviewed'):
-        lc = 'planning_complete'
+        if graph_valid:
+            lc = 'planning_complete'
+        else:
+            lc = 'planner_blocked_missing_task_graph'
+            role = 'planner'
+            hint = 'active/planning_complete requires valid task_graph.json before builder route'
     elif phase in ('g0_passed',):
         lc = 'building'
     elif phase in ('slices_dispatched', 's1_dispatched', 's2_dispatched', 's6_dispatched'):
@@ -146,7 +184,12 @@ elif st == 'active':
         lc = 'building'
     else:
         # default: active with plan expected
-        lc = 'planning_complete'
+        if graph_valid:
+            lc = 'planning_complete'
+        else:
+            lc = 'planner_blocked_missing_task_graph'
+            role = 'planner'
+            hint = 'active default route requires valid task_graph.json before builder route'
     if role == 'none':
         role = 'builder_main'
 
@@ -155,8 +198,13 @@ elif st == 'planning':
     role = 'evaluator'
 
 elif st == 'planning_complete':
-    lc = 'planning_complete'
-    role = 'builder_main'
+    if graph_valid:
+        lc = 'planning_complete'
+        role = 'builder_main'
+    else:
+        lc = 'planner_blocked_missing_task_graph'
+        role = 'planner'
+        hint = 'status=planning_complete requires valid task_graph.json before builder route'
 
 elif st == 'approved':
     lc = 'planning_complete'
@@ -216,7 +264,7 @@ if hint:
     out['error_hint'] = hint
 
 print(json.dumps(out))
-" "$raw_json" "$st" "$phase" "$handoff_to" "$now"
+" "$raw_json" "$st" "$phase" "$handoff_to" "$now" "$graph_valid"
     return 0
 }
 

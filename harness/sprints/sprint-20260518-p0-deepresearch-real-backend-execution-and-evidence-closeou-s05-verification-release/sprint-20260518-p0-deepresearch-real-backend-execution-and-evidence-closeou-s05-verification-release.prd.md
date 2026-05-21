@@ -15,7 +15,7 @@ P0: DeepResearch real-backend execution and evidence closeout
 必须完成：
 1. PM 输出 PRD，并生成 prd.html。
 2. Planner 输出 design.md、plan.md、task_graph.json，并生成 planning.html。
-3. Builder 基于当前 /Users/sihaoli/Solar 代码验证以下链路：
+3. Builder 基于当前 /Users/lisihao/Solar 代码验证以下链路：
    - Serper 搜索能被 DeepResearch 使用，并记录 usage meter。
    - survey writer/chief_editor backend 会写 model_usage.jsonl。
    - 如果 backend 返回真实 usage JSON/stream-json/stdout/stderr，final metrics 使用 provider_usage_ledger。

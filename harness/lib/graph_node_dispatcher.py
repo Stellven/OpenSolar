@@ -52,7 +52,7 @@ STATE_READ_PREFLIGHT = """<!-- SOLAR_STATE_READ_PREFLIGHT -->
 
 在任何 Write/Edit/handoff/eval/status 更新之前，必须先用 Claude/Codex 的 **Read 工具**读取：
 
-`/Users/sihaoli/.solar/STATE.md`
+`~/.solar/STATE.md`
 
 不要用 `cat` 替代这一步；本地 `state-read-enforcer.sh` hook 只认 Read 工具标记。
 
@@ -923,7 +923,7 @@ Graph: `{graph_path}`
 
 5. 将节点状态置为 reviewing，等待 evaluator：
    ```bash
-   /Users/sihaoli/.solar/harness/solar-harness.sh graph-scheduler mark --graph "{graph_path}" --node "{node_id}" --status reviewing --in-place
+   {HARNESS_DIR}/solar-harness.sh graph-scheduler mark --graph "{graph_path}" --node "{node_id}" --status reviewing --in-place
    ```
 """
 
@@ -1050,12 +1050,12 @@ solar-harness session evaluate "{sid}" --json
 
 3. 提交节点 verdict。通过时会自动释放下游 ready node；失败时只阻塞依赖它的下游：
    ```bash
-   /Users/sihaoli/.solar/harness/solar-harness.sh graph-dispatch node-verdict --graph "{graph_path}" --node "{node_id}" --verdict pass --eval-json "{eval_json}"
+   {HARNESS_DIR}/solar-harness.sh graph-dispatch node-verdict --graph "{graph_path}" --node "{node_id}" --verdict pass --eval-json "{eval_json}"
    ```
 
    如果失败，改用：
    ```bash
-   /Users/sihaoli/.solar/harness/solar-harness.sh graph-dispatch node-verdict --graph "{graph_path}" --node "{node_id}" --verdict fail --eval-json "{eval_json}" --reason "写清楚失败原因"
+   {HARNESS_DIR}/solar-harness.sh graph-dispatch node-verdict --graph "{graph_path}" --node "{node_id}" --verdict fail --eval-json "{eval_json}" --reason "写清楚失败原因"
    ```
 """
 

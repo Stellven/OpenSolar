@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 
-VAULT = Path("/Users/sihaoli/Knowledge")
+VAULT = Path.home() / "Knowledge"
 QUARANTINE_ROOT = Path.home() / ".solar" / "harness" / "quarantine" / "wiki-sync-conflicts"
 CONFLICT_RE = re.compile(r"\.conflict-(macbook|macmini)-\d{8}T\d{6}Z(?=\.md$)", re.I)
 

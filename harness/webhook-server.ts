@@ -18,7 +18,7 @@
  *   GitHub webhook (issue created) → 自动创建 Sprint
  */
 
-import { execSync } from "child_process";
+import { execFileSync, execSync } from "child_process";
 import { readFileSync, writeFileSync, existsSync, readdirSync } from "fs";
 
 const PORT = parseInt(process.env.HARNESS_PORT || "9876");
@@ -27,6 +27,46 @@ const SPRINTS_DIR = `${HARNESS_DIR}/sprints`;
 const SESSION_NAME = "solar-harness";
 
 // --- Helpers ---
+
+function resolvePmPane(): string | null {
+  if (process.env.SOLAR_WEBHOOK_PM_PANE) return process.env.SOLAR_WEBHOOK_PM_PANE;
+
+  try {
+    const panes = execFileSync(
+      "tmux",
+      ["list-panes", "-t", `${SESSION_NAME}:0`, "-F", "#{pane_index}\t#{pane_title}"],
+      { encoding: "utf-8", timeout: 2000 }
+    );
+    for (const line of panes.split("\n")) {
+      const [paneIndex, title = ""] = line.split("\t");
+      if (!paneIndex) continue;
+      if (/(PM|产品经理)/i.test(title) && !/(Planner|规划者|Builder|建设者|Evaluator|审判官)/i.test(title)) {
+        return `${SESSION_NAME}:0.${paneIndex}`;
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function notifyPmPane(sid: string): void {
+  const targetPane = resolvePmPane();
+  if (!targetPane) return;
+
+  execFileSync(
+    "tmux",
+    [
+      "send-keys",
+      "-t",
+      targetPane,
+      `收到外部需求，Sprint 已创建: ${sid}。请读取 ~/.solar/harness/sprints/${sid}.contract.md 展开 Done 定义，完成后更新 status 为 active。`,
+      "Enter",
+    ],
+    { timeout: 3000 }
+  );
+}
 
 function getLatestSprint(): { id: string; status: string; title: string; round: number } | null {
   const files = readdirSync(SPRINTS_DIR).filter(f => f.endsWith(".status.json")).sort();
@@ -91,12 +131,9 @@ ${description || title}
   };
   writeFileSync(`${SPRINTS_DIR}/${sid}.status.json`, JSON.stringify(status, null, 2));
 
-  // 通知 planner pane
+  // 通知 PM pane；目标按 pane title 解析，避免布局变化后错投 Planner/Builder。
   try {
-    execSync(
-      `tmux send-keys -t "${SESSION_NAME}:0.0" "收到外部需求，Sprint 已创建: ${sid}。请读取 ~/.solar/harness/sprints/${sid}.contract.md 展开 Done 定义，完成后更新 status 为 active。" Enter`,
-      { timeout: 3000 }
-    );
+    notifyPmPane(sid);
   } catch {
     // tmux 可能没运行，静默
   }

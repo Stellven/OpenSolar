@@ -32,12 +32,31 @@ notify_planner_codex_file() {
   printf '%s\n' "- [ ] [${ts}] [${type}] ${base} (~/.solar/codex-bridge/from-codex/)" >> "$PLANNER_INBOX"
 }
 
-# sprint-20260503-150911 — pane 0 (planner) 强制通知
+# sprint-20260503-150911 — Planner 强制通知
 # 解决问题: 规划者反复漏看 PLANNER-INBOX, Codex review 卡很久没人处理
-# 机制: tmux send-keys 直接写到 solar-harness:0.0 (planner pane) input box + C-m 提交
-PANE0_TARGET="solar-harness:0.0"
+# 机制: 运行时按 pane title 查找 Planner，避免新四分屏中 pane0=PM 时错投
+PANE_PLANNER_FALLBACK_TARGET="solar-harness:0.1"
 PANE0_THROTTLE_FILE="$HOME/.solar/harness/.chain-watcher-pane0-throttle"
 PANE0_THROTTLE_WINDOW=60   # 同 type 60s 内最多 1 条 send-keys (PLANNER-INBOX 不限频)
+
+resolve_planner_pane_target() {
+  if [ -n "${SOLAR_CHAIN_WATCHER_PLANNER_PANE:-}" ]; then
+    printf '%s\n' "$SOLAR_CHAIN_WATCHER_PLANNER_PANE"
+    return 0
+  fi
+
+  local idx title
+  while IFS= read -r idx; do
+    [ -n "$idx" ] || continue
+    title=$(tmux display-message -p -t "solar-harness:0.${idx}" '#{pane_title}' 2>/dev/null || true)
+    if printf '%s\n' "$title" | grep -Eq 'Planner|规划者'; then
+      printf 'solar-harness:0.%s\n' "$idx"
+      return 0
+    fi
+  done < <(tmux list-panes -t "solar-harness:0" -F '#{pane_index}' 2>/dev/null || true)
+
+  printf '%s\n' "$PANE_PLANNER_FALLBACK_TARGET"
+}
 
 notify_pane0_planner() {
   local type="$1" base="$2"
@@ -56,20 +75,21 @@ notify_pane0_planner() {
     fi
   fi
 
-  # D3: pane 0 idle 检测 (busy 时仍发 send-keys, claude TUI 自带 queue, 不打断思考)
-  local pane_tail busy=0
-  pane_tail=$(tmux capture-pane -t "$PANE0_TARGET" -p 2>/dev/null | tail -3)
+  # D3: Planner idle 检测 (busy 时仍发 send-keys, claude TUI 自带 queue, 不打断思考)
+  local target pane_tail busy=0
+  target=$(resolve_planner_pane_target)
+  pane_tail=$(tmux capture-pane -t "$target" -p 2>/dev/null | tail -3)
   if echo "$pane_tail" | grep -qE 'Cerebrating|Churning|Honking|Whatchamacalliting|Lollygagging|Skedaddling|Discombobulating|Embellishing|Razzmatazzing|Topsy-turvying|Infusing|Flowing'; then
     busy=1
   fi
 
   # 实际发送
   local msg="[CODEX-NOTIFY] 收到 ${type}: ${base}. 立刻读 ~/.solar/harness/PLANNER-INBOX.md 末尾处理 (不要等 watch)."
-  if tmux send-keys -t "$PANE0_TARGET" "$msg" C-m 2>/dev/null; then
+  if tmux send-keys -t "$target" "$msg" C-m 2>/dev/null; then
     if [ "$busy" = "1" ]; then
-      echo "[$(date '+%H:%M:%S')] pane 0 busy when notifying, queued: ${type} ${base}"
+      echo "[$(date '+%H:%M:%S')] planner pane busy when notifying, queued: ${type} ${base} (${target})"
     else
-      echo "[$(date '+%H:%M:%S')] pane 0 notified (idle): ${type} ${base}"
+      echo "[$(date '+%H:%M:%S')] planner pane notified (idle): ${type} ${base} (${target})"
     fi
     # 更新 throttle: 删旧行 + 写新 type:last_ts
     if [ -f "$PANE0_THROTTLE_FILE" ]; then
@@ -80,7 +100,7 @@ notify_pane0_planner() {
     echo "${type_key}:${now}" >> "${PANE0_THROTTLE_FILE}.tmp"
     mv "${PANE0_THROTTLE_FILE}.tmp" "$PANE0_THROTTLE_FILE"
   else
-    echo "[$(date '+%H:%M:%S')] pane 0 send-keys FAILED for ${type} ${base} (target ${PANE0_TARGET} not reachable?)"
+    echo "[$(date '+%H:%M:%S')] planner pane send-keys FAILED for ${type} ${base} (target ${target} not reachable?)"
   fi
 }
 
@@ -106,67 +126,71 @@ ingest_single_contract() {
 
   cp "$cf" "$HOME/.solar/harness/sprints/$SID.contract.md"
 
-  # Codex remote execution path: contracts with bypass_pm:true are already fully
-  # specified. Route them directly to builder by materializing a minimal plan and
-  # promoting status, instead of downgrading them into PM intake.
+  # Codex remote execution path: bypass_pm may skip PM authorship, but it must
+  # not skip Planner's machine DAG.  Materialize a PRD from the contract and
+  # route to Planner; Builder dispatch is allowed only after workflow_guard sees
+  # design.md + plan.md + task_graph.json.
   if grep -Eq '^bypass_pm:[[:space:]]*true[[:space:]]*$' "$cf"; then
-    python3 - "$SID" "$cf" "$HOME/.solar/harness/sprints/$SID.status.json" "$HOME/.solar/harness/sprints/$SID.plan.md" <<'PY_CHAIN_WATCHER_BYPASS'
+    python3 - "$SID" "$cf" "$HOME/.solar/harness/sprints/$SID.status.json" "$HOME/.solar/harness/sprints/$SID.prd.md" <<'PY_CHAIN_WATCHER_BYPASS'
 import json, sys, datetime
 from pathlib import Path
 
-sid, contract, status, plan = sys.argv[1:]
+sid, contract, status, prd = sys.argv[1:]
 now = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
 contract_p = Path(contract)
 status_p = Path(status)
-plan_p = Path(plan)
+prd_p = Path(prd)
 
 try:
     d = json.loads(status_p.read_text())
 except Exception:
     d = {"id": sid, "history": []}
 
-d["status"] = "active"
-d["phase"] = "planning_complete"
-d["handoff_to"] = "builder"
+d["status"] = "drafting"
+d["phase"] = "prd_ready"
+d["handoff_to"] = "planner"
+d["target_role"] = "planner"
 d["updated_at"] = now
 d.setdefault("history", []).append({
     "ts": now,
-    "event": "bypass_pm_contract_promoted_to_builder",
+    "event": "bypass_pm_contract_routed_to_planner",
     "by": "chain-watcher",
     "contract": str(contract_p),
 })
 status_p.write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n")
-plan_p.write_text(f"""# Plan — {sid}
+contract_text = contract_p.read_text(errors="ignore")
+prd_p.write_text(f"""# PRD — {sid}
 
-## Intent
+## Source Contract
 
-Execute the already bounded bypass_pm contract exactly as written.
+`{contract_p}`
 
-## Write Scope
+## User Goal
 
-- Only files explicitly allowed by the contract.
-- For this sprint, write handoff/evidence under `~/.solar/harness/sprints/`.
+Execute the contract, but preserve Solar's mandatory PM -> Planner -> task_graph -> Builder lifecycle.
 
-## Steps
+## Scope
 
-1. Read `{contract_p}`.
-2. Execute only the Required Work and Acceptance Criteria in the contract.
-3. Write `~/.solar/harness/sprints/{sid}.handoff.md` unless the contract explicitly requires a different handoff path.
-4. Run the contract verification commands.
-5. Submit with `bash ~/.solar/harness/solar-harness.sh handoff-submit {sid}`.
+The Planner must convert this PRD and the contract into design.md, plan.md, and task_graph.json before Builder dispatch.
+
+## Contract Body
+
+```text
+{contract_text}
+```
 
 ## Stop Rules
 
-- Stop on any action outside the contract boundary.
-- Do not repair unrelated Solar/Codex/harness state.
+- Do not dispatch Builder without a valid task_graph.json.
+- Do not use bypass_pm as a Builder shortcut.
 """)
 PY_CHAIN_WATCHER_BYPASS
     if [[ -f "$HARNESS_DIR/lib/events.sh" ]]; then
       # shellcheck source=/dev/null
       source "$HARNESS_DIR/lib/events.sh"
-      events_emit "chain-watcher" "bypass_pm_promoted" "info" "$SID" "{\"to\":\"builder\",\"plan\":\"$HARNESS_DIR/sprints/$SID.plan.md\"}" 2>/dev/null || true
+      events_emit "chain-watcher" "bypass_pm_routed_to_planner" "info" "$SID" "{\"to\":\"planner\",\"prd\":\"$HARNESS_DIR/sprints/$SID.prd.md\"}" 2>/dev/null || true
     fi
-    echo "  ✅ → $SID (bypass_pm:true → active/planning_complete, builder route)"
+    echo "  ✅ → $SID (bypass_pm:true → drafting/prd_ready, planner route)"
   else
     echo "  ✅ → $SID (drafting,等 chain 起)"
   fi
@@ -230,9 +254,11 @@ QUEUE_NEXT() {
   done
 }
 
-drafting_has_plan() {
+workflow_guard_builder_ready() {
   local sid="$1"
-  [ -f "$SPRINTS_DIR/$sid.plan.md" ]
+  local role
+  role=$(HARNESS_DIR="$HARNESS_DIR" SPRINTS_DIR="$SPRINTS_DIR" python3 "$HARNESS_DIR/lib/workflow_guard.py" route "$sid" --field route_role 2>/dev/null || true)
+  [[ "$role" == "builder_main" || "$role" == "builder" ]]
 }
 
 # D10: 启动恢复 — flock 后先扫一轮清积压
@@ -247,14 +273,19 @@ while true; do
   if [ -z "$ACTIVE" ]; then
     NEXT=$(QUEUE_NEXT)
     if [ -n "$NEXT" ]; then
-      if ! drafting_has_plan "$NEXT"; then
-        echo "[$(date '+%H:%M:%S')] auto-chain: skip $NEXT (drafting without plan.md; coordinator PM→planner flow owns it)"
+      if ! workflow_guard_builder_ready "$NEXT"; then
+        echo "[$(date '+%H:%M:%S')] auto-chain: skip $NEXT (blocked_missing_task_graph; workflow_guard has not approved builder)"
+        if [[ -f "$HARNESS_DIR/lib/events.sh" ]]; then
+          # shellcheck source=/dev/null
+          source "$HARNESS_DIR/lib/events.sh"
+          events_emit "chain-watcher" "blocked_missing_task_graph" "warn" "$NEXT" "{\"reason\":\"workflow_guard_not_builder_ready\"}" 2>/dev/null || true
+        fi
         sleep 60
         continue
       fi
 
-      echo "[$(date '+%H:%M:%S')] auto-chain: 起 $NEXT (plan.md ready)"
-      python3 "$HARNESS_DIR/lib/runtime_status.py" "$SPRINTS_DIR/$NEXT.status.json" "active" "auto_chain" "chain-watcher" '{"status_fields":{"phase":"planning_complete","handoff_to":"builder_main","target_role":"builder_main"},"note":"plan.md exists; promoted drafting sprint to active"}' >/dev/null 2>&1 || true
+      echo "[$(date '+%H:%M:%S')] auto-chain: 起 $NEXT (workflow_guard builder ready)"
+      python3 "$HARNESS_DIR/lib/runtime_status.py" "$SPRINTS_DIR/$NEXT.status.json" "active" "auto_chain" "chain-watcher" '{"status_fields":{"phase":"planning_complete","handoff_to":"builder_main","target_role":"builder_main"},"note":"workflow_guard confirmed planner artifacts and task_graph before auto-chain activation"}' >/dev/null 2>&1 || true
       sleep 60
     fi
   fi

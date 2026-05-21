@@ -38,7 +38,7 @@ S03 delivered the live-work core runtime package under `harness/lib/livework` wi
 ## Verification
 
 ```text
-PYTHONPATH=/Users/sihaoli/.solar/harness/lib python3 -m pytest tests/livework -q
+PYTHONPATH=/Users/lisihao/.solar/harness/lib python3 -m pytest tests/livework -q
 81 passed in 0.07s
 
 Assertion count across tests/livework/*.py: 198

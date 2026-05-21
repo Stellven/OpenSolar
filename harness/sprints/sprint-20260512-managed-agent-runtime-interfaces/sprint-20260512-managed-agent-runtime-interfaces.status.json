@@ -14,10 +14,10 @@
   "created_at": "2026-05-12T21:04:27-04:00",
   "source": "codex",
   "parent": "sprint-20260511-managed-agent-runtime-foundation",
-  "contract": "/Users/sihaoli/.solar/harness/sprints/sprint-20260512-managed-agent-runtime-interfaces.contract.md",
-  "design": "/Users/sihaoli/.solar/harness/sprints/sprint-20260512-managed-agent-runtime-interfaces.design.md",
-  "task_graph": "/Users/sihaoli/.solar/harness/sprints/sprint-20260512-managed-agent-runtime-interfaces.task_graph.json",
-  "knowledge_raw": "/Users/sihaoli/Knowledge/_raw/solar-harness/managed-agent-runtime-interfaces-20260512.md",
+  "contract": "/Users/lisihao/.solar/harness/sprints/sprint-20260512-managed-agent-runtime-interfaces.contract.md",
+  "design": "/Users/lisihao/.solar/harness/sprints/sprint-20260512-managed-agent-runtime-interfaces.design.md",
+  "task_graph": "/Users/lisihao/.solar/harness/sprints/sprint-20260512-managed-agent-runtime-interfaces.task_graph.json",
+  "knowledge_raw": "/Users/lisihao/Knowledge/_raw/solar-harness/managed-agent-runtime-interfaces-20260512.md",
   "acceptance_summary": [
     "定义 Session/Harness/Hand/Worker/ContextProjection 稳定接口",
     "统一 pane/shell/mock/remote hand adapters",
@@ -109,7 +109,7 @@
       "event": "eval_passed",
       "by": "codex",
       "verdict": "PASS_WITH_WARN",
-      "eval": "/Users/sihaoli/.solar/harness/sprints/sprint-20260512-managed-agent-runtime-interfaces.eval.md",
+      "eval": "/Users/lisihao/.solar/harness/sprints/sprint-20260512-managed-agent-runtime-interfaces.eval.md",
       "residual_warn": "event log seq gap at 34"
     },
     {
@@ -123,8 +123,8 @@
       "event": "eval_passed",
       "by": "codex",
       "verdict": "PASS_WITH_WARN",
-      "eval_json": "/Users/sihaoli/.solar/harness/sprints/sprint-20260512-managed-agent-runtime-interfaces.eval.json",
-      "eval_md": "/Users/sihaoli/.solar/harness/sprints/sprint-20260512-managed-agent-runtime-interfaces.eval.md",
+      "eval_json": "/Users/lisihao/.solar/harness/sprints/sprint-20260512-managed-agent-runtime-interfaces.eval.json",
+      "eval_md": "/Users/lisihao/.solar/harness/sprints/sprint-20260512-managed-agent-runtime-interfaces.eval.md",
       "residual_warn": "event log seq gap at 34"
     },
     {

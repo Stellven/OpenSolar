@@ -27,7 +27,7 @@ HARNESS = Path(os.environ.get("HARNESS_DIR", str(HOME / ".solar" / "harness")))
 CONFIG_PATH = Path(os.environ.get("SOLAR_RAGFLOW_CONFIG", str(HARNESS / "config" / "ragflow.solar.json")))
 RUN_DIR = HARNESS / "run" / "ragflow"
 UNIFIED_CONTEXT = HARNESS / "lib" / "solar-unified-context.py"
-DEFAULT_VAULT = Path(os.environ.get("OBSIDIAN_VAULT_PATH", "/Users/sihaoli/Knowledge"))
+DEFAULT_VAULT = Path(os.environ.get("OBSIDIAN_VAULT_PATH", str(Path.home() / "Knowledge")))
 DEFAULT_TIMEOUT = float(os.environ.get("SOLAR_RAGFLOW_TIMEOUT_SEC", "8"))
 
 

@@ -29,13 +29,16 @@ import sys
 import re
 import html
 import importlib.util
+import time
 import urllib.parse
+from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 # ── Paths ──
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", str(Path.home() / ".solar" / "harness")))
 SPRINTS_DIR = HARNESS_DIR / "sprints"
+REPORTS_DIR = HARNESS_DIR / "reports"
 SESSIONS_DIR = HARNESS_DIR / "sessions"
 EVENTS_DIR = HARNESS_DIR / "events"
 ALL_EVENTS = EVENTS_DIR / "all.jsonl"
@@ -49,7 +52,14 @@ MODEL_DOCTOR_HEALTH = HARNESS_DIR / "state" / "model-registry-doctor-health.json
 SKILLS_CERTIFICATION = HARNESS_DIR / "state" / "skills-certification.json"
 SKILLS_INVENTORY = HARNESS_DIR / "state" / "skills-inventory.json"
 CAPABILITY_ACTIVATION_PROOF = HARNESS_DIR / "reports" / "capability-activation-proof-latest.json"
+META_HARNESS_DIR = Path(os.environ.get("SOLAR_META_HARNESS_DIR", str(Path.home() / ".solar" / "meta-harness")))
+META_HARNESS_TOOL = Path(os.environ.get("SOLAR_META_HARNESS_TOOL", str(Path.home() / ".claude" / "core" / "solar-farm" / "meta-harness.ts")))
+META_HARNESS_SKILL = Path(os.environ.get("SOLAR_META_HARNESS_SKILL", str(Path.home() / ".claude" / "skills" / "meta-harness" / "SKILL.md")))
 MMD_ALLOWED_ROOTS = [
+    HARNESS_DIR,
+    Path.home() / "Knowledge",
+]
+OPEN_ALLOWED_ROOTS = [
     HARNESS_DIR,
     Path.home() / "Knowledge",
 ]
@@ -66,6 +76,14 @@ _MODEL_EVENT_TYPES = {
     "model_session_started",
     "model_session_ended",
 }
+_MODEL_CALL_CACHE = {}
+_MODEL_CALL_CACHE_TTL_SECONDS = 8.0
+_MODEL_CALL_SESSION_FILE_LIMIT = 8
+_MODEL_CALL_FILE_TAIL_LINES = 80
+_MODEL_CALL_SCAN_BUDGET_SECONDS = 0.025
+_RUNTIME_INTERFACES_CACHE = {}
+_RUNTIME_INTERFACES_CACHE_TTL_SECONDS = 20.0
+_RUNTIME_INTERFACES_TIMEOUT_SECONDS = 1.0
 _ACTIVE_SPRINT_STATUSES = {
     "drafting",
     "queued",
@@ -136,6 +154,26 @@ def _allowed_mmd_path(path: Path) -> bool:
     if path.suffix.lower() != ".mmd":
         return False
     return any(_is_within(path, root) for root in MMD_ALLOWED_ROOTS)
+
+
+def _allowed_open_path(path: Path) -> bool:
+    return any(_is_within(path, root) for root in OPEN_ALLOWED_ROOTS)
+
+
+def _resolve_open_file(raw: str):
+    raw = urllib.parse.unquote(raw or "").strip()
+    if not raw:
+        return None
+    candidate = Path(raw).expanduser()
+    if not candidate.is_absolute():
+        candidate = HARNESS_DIR / candidate
+    try:
+        candidate = candidate.resolve()
+    except OSError:
+        return None
+    if candidate.exists() and candidate.is_file() and _allowed_open_path(candidate):
+        return candidate
+    return None
 
 
 def _resolve_mmd_file(raw: str):
@@ -231,7 +269,7 @@ def _mermaid_index_html() -> str:
         )
     if not cards:
         cards.append('<div class="empty">没有找到 .mmd 文件。</div>')
-    default_file = "/Users/sihaoli/.solar/harness/reports/solar-system-architecture-20260508.mmd"
+    default_file = str(REPORTS_DIR / "solar-system-architecture-20260508.mmd")
     default_link = "/mermaid/view?file=" + urllib.parse.quote(default_file)
     return f"""<!doctype html>
 <html lang="zh-CN">
@@ -991,6 +1029,14 @@ def _model_label_from_payload(payload: dict) -> str:
     return " / ".join(parts)
 
 
+def _tail_jsonl_lines(path: Path, max_lines: int) -> list:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return list(deque(fh, maxlen=max_lines))
+    except OSError:
+        return []
+
+
 def _latest_model_call_for_pane(target: str, pane_id: str = "") -> dict:
     """Project the newest observable model-call boundary event for one pane.
 
@@ -999,6 +1045,12 @@ def _latest_model_call_for_pane(target: str, pane_id: str = "") -> dict:
     submission and pane process lifecycle. It does not claim private model
     reasoning visibility.
     """
+    cache_key = f"{target}|{pane_id}"
+    now = time.monotonic()
+    cached = _MODEL_CALL_CACHE.get(cache_key)
+    if cached and now - cached.get("ts", 0.0) <= _MODEL_CALL_CACHE_TTL_SECONDS:
+        return dict(cached.get("value") or {})
+
     aliases = {target}
     if pane_id:
         aliases.add(pane_id)
@@ -1009,40 +1061,43 @@ def _latest_model_call_for_pane(target: str, pane_id: str = "") -> dict:
             SESSIONS_DIR.glob("*/events.jsonl"),
             key=lambda p: p.stat().st_mtime if p.exists() else 0,
             reverse=True,
-        )[:240]
+        )[:_MODEL_CALL_SESSION_FILE_LIMIT]
     except Exception:
         candidate_files = []
 
     newest = None
     newest_key = ("", -1)
+    timed_out = False
     for path in candidate_files:
+        if time.monotonic() - now > _MODEL_CALL_SCAN_BUDGET_SECONDS:
+            timed_out = True
+            break
         try:
-            with open(path, encoding="utf-8") as fh:
-                for raw in fh:
-                    raw = raw.strip()
-                    if not raw:
-                        continue
-                    try:
-                        ev = json.loads(raw)
-                    except json.JSONDecodeError:
-                        continue
-                    ev_type = ev.get("type")
-                    if ev_type not in _MODEL_EVENT_TYPES:
-                        continue
-                    payload = ev.get("payload") if isinstance(ev.get("payload"), dict) else {}
-                    ev_pane = str(payload.get("pane") or "")
-                    session_id = str(ev.get("session_id") or "")
-                    if ev_pane not in aliases and session_id != f"pane-{safe_pane_id}":
-                        continue
-                    key = (str(ev.get("ts") or ""), int(ev.get("seq") or 0))
-                    if key >= newest_key:
-                        newest_key = key
-                        newest = ev
+            for raw in _tail_jsonl_lines(path, _MODEL_CALL_FILE_TAIL_LINES):
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    ev = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+                ev_type = ev.get("type")
+                if ev_type not in _MODEL_EVENT_TYPES:
+                    continue
+                payload = ev.get("payload") if isinstance(ev.get("payload"), dict) else {}
+                ev_pane = str(payload.get("pane") or "")
+                session_id = str(ev.get("session_id") or "")
+                if ev_pane not in aliases and session_id != f"pane-{safe_pane_id}":
+                    continue
+                key = (str(ev.get("ts") or ""), int(ev.get("seq") or 0))
+                if key >= newest_key:
+                    newest_key = key
+                    newest = ev
         except OSError:
             continue
 
     if not newest:
-        return {
+        value = {
             "status": "unknown",
             "event_type": "",
             "ts": "",
@@ -1052,10 +1107,13 @@ def _latest_model_call_for_pane(target: str, pane_id: str = "") -> dict:
             "error": "",
             "instruction_preview": "",
             "private_reasoning_visible": False,
+            "observability_boundary": "bounded_session_tail_scan_timeout" if timed_out else "bounded_session_tail_scan",
         }
+        _MODEL_CALL_CACHE[cache_key] = {"ts": now, "value": value}
+        return dict(value)
 
     payload = newest.get("payload") if isinstance(newest.get("payload"), dict) else {}
-    return {
+    value = {
         "status": _model_call_status(str(newest.get("type") or ""), payload),
         "event_type": newest.get("type") or "",
         "ts": newest.get("ts") or "",
@@ -1066,11 +1124,28 @@ def _latest_model_call_for_pane(target: str, pane_id: str = "") -> dict:
         "error": payload.get("error") or "",
         "instruction_preview": payload.get("instruction_preview") or "",
         "private_reasoning_visible": bool(payload.get("private_reasoning_visible", False)),
-        "observability_boundary": payload.get("observability_boundary") or "",
+        "observability_boundary": payload.get("observability_boundary") or ("bounded_session_tail_scan_timeout" if timed_out else "bounded_session_tail_scan"),
+    }
+    _MODEL_CALL_CACHE[cache_key] = {"ts": now, "value": value}
+    return dict(value)
+
+
+def _skipped_model_call_status() -> dict:
+    return {
+        "status": "unknown",
+        "event_type": "",
+        "ts": "",
+        "session_id": "",
+        "dispatch_id": "",
+        "model": "",
+        "error": "",
+        "instruction_preview": "",
+        "private_reasoning_visible": False,
+        "observability_boundary": "status_fast_path_model_call_skipped",
     }
 
 
-def _pane_snapshot(target: str, role: str, assignment: str = "", capability_health=None) -> dict:
+def _pane_snapshot(target: str, role: str, assignment: str = "", capability_health=None, include_model_call: bool = True) -> dict:
     assignment_meta = _sprint_meta(assignment) if assignment else {}
     pane_id = _run_tmux(["display-message", "-p", "-t", target, "#{pane_id}"])
     health = capability_health or _capability_health_summary()
@@ -1083,7 +1158,7 @@ def _pane_snapshot(target: str, role: str, assignment: str = "", capability_heal
             "assignment_meta": assignment_meta,
             "artifact": _artifact_for_assignment(role, assignment),
             "title": "",
-            "model_call": _latest_model_call_for_pane(target, pane_id),
+            "model_call": _latest_model_call_for_pane(target, pane_id) if include_model_call else _skipped_model_call_status(),
             "capability_health": health,
         }
     title = _run_tmux(["display-message", "-p", "-t", target, "#{pane_title}"])
@@ -1096,31 +1171,31 @@ def _pane_snapshot(target: str, role: str, assignment: str = "", capability_heal
         "assignment_meta": assignment_meta,
         "artifact": _artifact_for_assignment(role, assignment),
         "title": title,
-        "model_call": _latest_model_call_for_pane(target, pane_id),
+        "model_call": _latest_model_call_for_pane(target, pane_id) if include_model_call else _skipped_model_call_status(),
         "capability_health": health,
     }
 
 
-def _main_screen(capability_health=None) -> dict:
+def _main_screen(capability_health=None, include_model_call: bool = True) -> dict:
     assignments = _read_assignments()
     roles = ["PM", "Planner", "Builder", "Evaluator"]
     panes = []
     for idx, role in enumerate(roles):
         target = f"solar-harness:0.{idx}"
-        panes.append(_pane_snapshot(target, role, assignments.get(target, ""), capability_health=capability_health))
+        panes.append(_pane_snapshot(target, role, assignments.get(target, ""), capability_health=capability_health, include_model_call=include_model_call))
     return {
         "note": "runtime_state, assignment, and artifact are separate; pane output alone is not proof of progress.",
         "panes": panes,
     }
 
 
-def _lab_screen(capability_health=None) -> dict:
+def _lab_screen(capability_health=None, include_model_call: bool = True) -> dict:
     roles = ["lab-builder-1", "lab-builder-2", "lab-builder-3", "lab-builder-4"]
     lab_dir = SPRINTS_DIR / "obsidian-wiki-lab"
     panes = []
     for idx, role in enumerate(roles):
         target = f"solar-harness-lab:0.{idx}"
-        snap = _pane_snapshot(target, role, "", capability_health=capability_health)
+        snap = _pane_snapshot(target, role, "", capability_health=capability_health, include_model_call=include_model_call)
         latest = None
         if lab_dir.exists():
             matches = sorted(lab_dir.glob(f"{role}*handoff.md"), key=lambda p: p.stat().st_mtime if p.exists() else 0)
@@ -1356,7 +1431,7 @@ def _solar_kb_status() -> dict:
 
 def _obsidian_sync_status() -> dict:
     """Return Obsidian→Solar sync status: pending raw queue + last sync manifest. Never raises."""
-    vault_path = Path(os.environ.get("OBSIDIAN_VAULT_PATH", "/Users/sihaoli/Knowledge"))
+    vault_path = Path(os.environ.get("OBSIDIAN_VAULT_PATH", str(Path.home() / "Knowledge")))
     raw_dir = HARNESS_DIR / "vendor" / "obsidian-wiki" / "_raw" / "solar-db-export"
     manifest_path = HARNESS_DIR / "state" / "knowledge-manifest.json"
     try:
@@ -1458,27 +1533,120 @@ def _research_status_summary(limit: int = 5) -> dict:
     if not routes_path.exists():
         return {"ok": False, "status": "error", "runs": [], "errors": ["research_routes.py missing"]}
     try:
+        def load_json(path: Path) -> dict:
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                return data if isinstance(data, dict) else {}
+            except Exception:
+                return {}
+
+        def metric_int(metrics: dict, *keys: str):
+            for key in keys:
+                if key not in metrics:
+                    continue
+                try:
+                    return int(metrics.get(key) or 0)
+                except Exception:
+                    continue
+            return None
+
+        def fallback_level(metrics: dict):
+            usage = metrics.get("usage_source") or metrics.get("token_usage_source") or ""
+            estimated = metrics.get("estimated")
+            if estimated is None:
+                estimated = metrics.get("token_usage_is_estimated", False)
+            reason = metrics.get("fallback_reason") or ""
+            if usage == "provider_usage_ledger" and not estimated:
+                return "L1"
+            if usage == "hybrid":
+                return "L2"
+            if usage == "estimated" or str(usage).startswith("estimated_"):
+                return "L3" if reason in ("cli_no_usage", "cli_rate_limit") else "L4"
+            return None
+
+        def first_markdown_heading(path: Path) -> str:
+            try:
+                for line in path.read_text(encoding="utf-8", errors="ignore").splitlines()[:80]:
+                    stripped = line.strip()
+                    if stripped.startswith("#"):
+                        return stripped.lstrip("#").strip()
+            except Exception:
+                return ""
+            return ""
+
+        def title_from_dir(path: Path) -> str:
+            name = path.name
+            name = re.sub(r"^deepresearch[-_]*", "", name, flags=re.IGNORECASE)
+            name = re.sub(r"[-_]20\d{6}T\d{6}[-+]\d{4}$", "", name)
+            name = re.sub(r"[-_]20\d{6}$", "", name)
+            name = re.sub(r"[-_]20\d{4}$", "", name)
+            return " ".join(part for part in re.split(r"[-_]+", name) if part).strip()
+
+        def run_from_eval(ef: Path) -> dict:
+            data = load_json(ef)
+            output_dir = Path(str(data.get("output_dir") or ef.parent)).expanduser()
+            final_md = Path(str(data.get("final_md") or output_dir / "final.md")).expanduser()
+            metrics = data.get("execution_metrics") if isinstance(data.get("execution_metrics"), dict) else {}
+            if not metrics:
+                metrics_path = output_dir / "research_execution_metrics.json"
+                metrics = load_json(metrics_path) if metrics_path.exists() else {}
+            usage_source = metrics.get("usage_source") or metrics.get("token_usage_source")
+            estimated = metrics.get("estimated")
+            if estimated is None and metrics:
+                estimated = bool(metrics.get("token_usage_is_estimated", False))
+            run_id = str(data.get("run_id") or ef.name.split("-research_eval", 1)[0])
+            task_title = (
+                str(data.get("title") or data.get("task_title") or data.get("topic") or "").strip()
+                or first_markdown_heading(final_md)
+                or title_from_dir(output_dir)
+                or ef.name.split("-research_eval", 1)[0]
+            )
+            task_description = title_from_dir(output_dir) or str(output_dir.name)
+            return {
+                "run_id": run_id,
+                "short_run_id": run_id[:10],
+                "sid": ef.name.split("-research_eval", 1)[0],
+                "task_title": task_title,
+                "task_description": task_description,
+                "status": str(data.get("status") or "unknown"),
+                "source_count": data.get("source_count", 0),
+                "evidence_count": data.get("evidence_count", 0),
+                "claim_count": data.get("claim_count", 0),
+                "citation_accuracy": data.get("citation_accuracy", 0.0),
+                "report_ast_sections": data.get("section_count", 0),
+                "word_count": metric_int(metrics, "word_count", "document_word_count"),
+                "total_tokens": metric_int(metrics, "total_tokens", "total_token_consumption"),
+                "usage_source": usage_source,
+                "estimated": estimated,
+                "state": metrics.get("state", "unknown") if metrics else "unknown",
+                "fallback_level": fallback_level(metrics),
+                "artifacts": {
+                    "eval_json": str(ef),
+                    "output_dir": str(output_dir),
+                    "final_md": str(final_md),
+                    "report_ast": str(output_dir / "report_ast.json"),
+                    "bibliography": str(output_dir / "final.bibliography.json"),
+                },
+                "artifact_exists": {
+                    "eval_json": ef.exists(),
+                    "output_dir": output_dir.exists(),
+                    "final_md": final_md.exists(),
+                    "report_ast": (output_dir / "report_ast.json").exists(),
+                    "bibliography": (output_dir / "final.bibliography.json").exists(),
+                },
+            }
+
         spec = importlib.util.spec_from_file_location("solar_research_routes_summary", str(routes_path))
         if spec is None or spec.loader is None:
             raise RuntimeError("unable to load research_routes.py")
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
-        eval_files = sorted(SPRINTS_DIR.glob("*research_eval*.json"), key=lambda p: p.stat().st_mtime)
-        runs: list[dict] = []
-        gates: list[dict] = []
-        for ef in eval_files[-limit:]:
-            # build_research_payload expects a sid prefix; derive it from the
-            # eval filename while tolerating run-id-only eval files.
-            sid = ef.name.split("-research_eval", 1)[0]
-            payload = mod.build_research_payload(SPRINTS_DIR, sid)
-            for run in payload.get("runs") or []:
-                run = dict(run)
-                run["sid"] = sid
-                runs.append(run)
-            for gate in (payload.get("quality_gates") or {}).get("items") or []:
-                gate = dict(gate)
-                gate["sid"] = sid
-                gates.append(gate)
+        eval_files = sorted(
+            list(SPRINTS_DIR.glob("*research_eval*.json")) + list(REPORTS_DIR.glob("*/*research_eval*.json")),
+            key=lambda p: p.stat().st_mtime,
+        )
+        runs = [run_from_eval(ef) for ef in eval_files[-limit:]]
+        gates = (mod.discover_quality_gates(SPRINTS_DIR, "", limit=limit).get("items") or [])[-limit:]
         status = "idle"
         if runs or gates:
             status = "ok" if all(r.get("status") == "passed" for r in runs[-limit:]) and all(g.get("ok") for g in gates[-limit:]) else "warn"
@@ -1493,6 +1661,189 @@ def _research_status_summary(limit: int = 5) -> dict:
         return {"ok": False, "status": "error", "runs": [], "errors": [f"{type(exc).__name__}: {exc}"]}
 
 
+def _autoresearch_impact_summary(limit: int = 12) -> dict:
+    """Summarize pane-optimizer telemetry recorded in sprint status artifacts."""
+    if not SPRINTS_DIR.exists():
+        return {"ok": True, "status": "idle", "count": 0, "items": []}
+    items = []
+    try:
+        status_files = sorted(
+            SPRINTS_DIR.glob("sprint-*.status.json"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        for sf in status_files:
+            try:
+                data = json.loads(sf.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+            artifacts = data.get("artifacts")
+            if not isinstance(artifacts, dict):
+                continue
+            opt = artifacts.get("autoresearch_optimizer")
+            if not isinstance(opt, dict):
+                continue
+            telemetry = opt.get("telemetry") if isinstance(opt.get("telemetry"), dict) else {}
+            metrics = opt.get("quality_metrics") if isinstance(opt.get("quality_metrics"), dict) else {}
+            sid = str(data.get("id") or data.get("sprint_id") or opt.get("sid") or sf.name.removesuffix(".status.json"))
+            task_description = (
+                str(data.get("title") or "").strip()
+                or _sprint_description(sid)
+                or sid
+            )
+            item = {
+                "sid": sid,
+                "task_description": task_description,
+                "status": data.get("status", ""),
+                "phase": data.get("phase", ""),
+                "role": opt.get("canonical_role") or opt.get("role") or "",
+                "trigger_level": opt.get("trigger_level", "advisory"),
+                "recommended": bool(opt.get("recommended")),
+                "recorded_at": opt.get("recorded_at", ""),
+                "eval_verdict": telemetry.get("eval_verdict", ""),
+                "round": telemetry.get("round", 0),
+                "failed_conditions": telemetry.get("failed_conditions") if isinstance(telemetry.get("failed_conditions"), list) else [],
+                "error_count": telemetry.get("error_count", 0),
+                "warning_count": telemetry.get("warning_count", 0),
+                "expected_effect": metrics.get("expected_effect") if isinstance(metrics.get("expected_effect"), list) else [],
+                "must_measure": metrics.get("must_measure") if isinstance(metrics.get("must_measure"), list) else [],
+                "reasons": opt.get("reasons") if isinstance(opt.get("reasons"), list) else [],
+            }
+            items.append(item)
+            if len(items) >= limit:
+                break
+        terminal_pass = {"passed", "done", "eval_pass", "finalized", "eval_passed"}
+        failing_statuses = {"failed", "failed_review", "needs_human_review", "blocked"}
+        strong_count = sum(1 for item in items if item.get("trigger_level") == "strong")
+        recommended_count = sum(1 for item in items if item.get("recommended"))
+        fail_verdict_count = sum(1 for item in items if str(item.get("eval_verdict", "")).upper() in {"FAIL", "FAILED", "ERROR", "NOT_READY", "NOT READY"})
+        pass_after_trigger = sum(1 for item in items if str(item.get("status", "")).lower() in terminal_pass)
+        still_failing = sum(1 for item in items if str(item.get("status", "")).lower() in failing_statuses or str(item.get("eval_verdict", "")).upper() in {"FAIL", "FAILED", "ERROR", "NOT_READY", "NOT READY"})
+        fail_recurrence = sum(1 for item in items if item.get("trigger_level") == "strong" and str(item.get("eval_verdict", "")).upper() in {"FAIL", "FAILED", "ERROR", "NOT_READY", "NOT READY"} and str(item.get("status", "")).lower() not in terminal_pass)
+        rounds = []
+        for item in items:
+            try:
+                rounds.append(int(item.get("round") or 0))
+            except Exception:
+                continue
+        avg_round = round(sum(rounds) / len(rounds), 2) if rounds else 0
+        max_round = max(rounds) if rounds else 0
+        if not items:
+            effect_status = "insufficient"
+        elif pass_after_trigger and not still_failing:
+            effect_status = "promising"
+        elif still_failing and not pass_after_trigger:
+            effect_status = "warn"
+        else:
+            effect_status = "mixed"
+        roles: dict[str, int] = {}
+        for item in items:
+            role = str(item.get("role") or "unknown")
+            roles[role] = roles.get(role, 0) + 1
+        status = "idle"
+        if items:
+            status = "warn" if strong_count or fail_verdict_count else "ok"
+        return {
+            "ok": status in {"ok", "idle"},
+            "status": status,
+            "count": len(items),
+            "strong_count": strong_count,
+            "recommended_count": recommended_count,
+            "fail_verdict_count": fail_verdict_count,
+            "trend": {
+                "effect_status": effect_status,
+                "pass_after_trigger": pass_after_trigger,
+                "still_failing": still_failing,
+                "fail_recurrence": fail_recurrence,
+                "avg_round": avg_round,
+                "max_round": max_round,
+                "window_size": len(items),
+            },
+            "roles": roles,
+            "latest": items[0] if items else {},
+            "items": items,
+        }
+    except Exception as exc:
+        return {"ok": False, "status": "error", "count": 0, "items": [], "errors": [f"{type(exc).__name__}: {exc}"]}
+
+
+def _meta_harness_summary() -> dict:
+    """Summarize Meta-Harness outer-loop optimizer state without running it."""
+    def _load_json(path: Path, default):
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return default
+
+    try:
+        config = _load_json(META_HARNESS_DIR / "config.json", {})
+        if not isinstance(config, dict):
+            config = {}
+        eval_set = _load_json(META_HARNESS_DIR / "evaluation_set.json", [])
+        eval_count = len(eval_set) if isinstance(eval_set, list) else 0
+        pareto_data = _load_json(META_HARNESS_DIR / "pareto.json", {})
+        if not isinstance(pareto_data, dict):
+            pareto_data = {}
+        pareto = pareto_data.get("pareto") if isinstance(pareto_data.get("pareto"), list) else []
+        all_runs = pareto_data.get("all_runs") if isinstance(pareto_data.get("all_runs"), list) else []
+        runs_dir = META_HARNESS_DIR / "runs"
+        run_dirs = sorted([p for p in runs_dir.iterdir() if p.is_dir()], key=lambda p: p.stat().st_mtime, reverse=True) if runs_dir.exists() else []
+        latest_command = _read_json_file(REPORTS_DIR / "meta-harness" / "latest-command.json")
+        ok = META_HARNESS_TOOL.exists() and META_HARNESS_DIR.exists() and META_HARNESS_SKILL.exists() and eval_count > 0
+        if not META_HARNESS_TOOL.exists():
+            status = "error"
+        elif not META_HARNESS_DIR.exists() or eval_count <= 0:
+            status = "pending"
+        elif not pareto and not run_dirs:
+            status = "ready"
+        else:
+            status = "ok"
+        best = pareto[0] if pareto and isinstance(pareto[0], dict) else {}
+        return {
+            "ok": ok,
+            "status": status,
+            "integration_level": "solar_harness_cli_adapter" if ok else "external_tool_detected" if META_HARNESS_TOOL.exists() else "missing",
+            "tool": {"path": str(META_HARNESS_TOOL), "exists": META_HARNESS_TOOL.exists()},
+            "skill": {"path": str(META_HARNESS_SKILL), "exists": META_HARNESS_SKILL.exists()},
+            "store": {
+                "path": str(META_HARNESS_DIR),
+                "exists": META_HARNESS_DIR.exists(),
+                "evaluation_count": eval_count,
+                "proposer_model": config.get("proposer_model", ""),
+                "evaluator_model": config.get("evaluator_model", ""),
+                "max_iterations": config.get("max_iterations", ""),
+            },
+            "pareto": {
+                "path": str(META_HARNESS_DIR / "pareto.json"),
+                "exists": (META_HARNESS_DIR / "pareto.json").exists(),
+                "pareto_count": len(pareto),
+                "all_runs_count": len(all_runs),
+                "best_run_id": str(best.get("run_id") or best.get("id") or ""),
+            },
+            "runs": {
+                "runs_dir": str(runs_dir),
+                "exists": runs_dir.exists(),
+                "count": len(run_dirs),
+                "latest": run_dirs[0].name if run_dirs else "",
+            },
+            "latest_command": latest_command if isinstance(latest_command, dict) else {},
+            "safety": {
+                "default_execution": "dry_run",
+                "real_run_requires_execute": True,
+                "real_apply_requires_execute": True,
+                "coordinator_autorun": False,
+            },
+            "commands": {
+                "status": "solar-harness meta-harness status --json",
+                "doctor": "solar-harness meta-harness doctor --json",
+                "run_dry": "solar-harness meta-harness run 3 hooks --json",
+                "apply_dry": "solar-harness meta-harness apply <run_id> --json",
+            },
+        }
+    except Exception as exc:
+        return {"ok": False, "status": "error", "errors": [f"{type(exc).__name__}: {exc}"]}
+
+
 def _status_payload(limit: int = 50) -> dict:
     current = _current_sprint()
     runtime_interfaces = _runtime_interfaces_status(current.get("sprint_id", ""))
@@ -1500,8 +1851,8 @@ def _status_payload(limit: int = 50) -> dict:
     return {
         "current_sprint": current,
         "panes": _pane_info(),
-        "main_screen": _main_screen(capability_health),
-        "lab_screen": _lab_screen(capability_health),
+        "main_screen": _main_screen(capability_health, include_model_call=False),
+        "lab_screen": _lab_screen(capability_health, include_model_call=False),
         "recent_events": _read_jsonl(ALL_EVENTS, limit=limit, filter_synthetic=True),
         "kpi": _kpi(),
         "obsidian_wiki": _obsidian_wiki_readiness(),
@@ -1514,6 +1865,8 @@ def _status_payload(limit: int = 50) -> dict:
         "runtime_interfaces": runtime_interfaces,
         "human_search": _human_search_waiting_status(),
         "research": _research_status_summary(),
+        "autoresearch_impact": _autoresearch_impact_summary(),
+        "meta_harness": _meta_harness_summary(),
     }
 
 
@@ -1521,6 +1874,12 @@ def _runtime_interfaces_status(sprint_id: str) -> dict:
     """Return lightweight runtime interface health for /status."""
     if not sprint_id:
         return {"ok": False, "status": "unknown", "message": "no current sprint"}
+    now = time.monotonic()
+    cached = _RUNTIME_INTERFACES_CACHE.get(sprint_id)
+    if cached and now - cached.get("ts", 0.0) <= _RUNTIME_INTERFACES_CACHE_TTL_SECONDS:
+        value = dict(cached.get("value") or {})
+        value["cache"] = "hit"
+        return value
     doctor = HARNESS_DIR / "lib" / "runtime_doctor.py"
     if not doctor.exists():
         return {"ok": False, "status": "error", "message": "runtime_doctor.py missing"}
@@ -1529,7 +1888,7 @@ def _runtime_interfaces_status(sprint_id: str) -> dict:
             ["python3", str(doctor), sprint_id, "--json"],
             text=True,
             capture_output=True,
-            timeout=5,
+            timeout=_RUNTIME_INTERFACES_TIMEOUT_SECONDS,
         )
         if proc.returncode not in (0, 1):
             return {"ok": False, "status": "error", "message": (proc.stderr or proc.stdout)[-500:]}
@@ -1538,18 +1897,25 @@ def _runtime_interfaces_status(sprint_id: str) -> dict:
         dims = ih.get("dimensions", {})
         total = len(dims)
         healthy = sum(1 for d in dims.values() if d.get("ok"))
-        return {
+        value = {
             "ok": bool(ih.get("ok")),
             "status": "ok" if ih.get("ok") else "warn",
             "message": ih.get("message", f"{healthy}/{total} interfaces healthy"),
             "healthy": healthy,
             "total": total,
             "dimensions": dims,
+            "cache": "miss",
         }
+        _RUNTIME_INTERFACES_CACHE[sprint_id] = {"ts": now, "value": value}
+        return dict(value)
     except subprocess.TimeoutExpired:
-        return {"ok": False, "status": "warn", "message": "runtime doctor timeout"}
+        value = {"ok": False, "status": "warn", "message": "runtime doctor timeout", "cache": "miss"}
+        _RUNTIME_INTERFACES_CACHE[sprint_id] = {"ts": now, "value": value}
+        return dict(value)
     except Exception as exc:
-        return {"ok": False, "status": "error", "message": f"{type(exc).__name__}: {exc}"}
+        value = {"ok": False, "status": "error", "message": f"{type(exc).__name__}: {exc}", "cache": "miss"}
+        _RUNTIME_INTERFACES_CACHE[sprint_id] = {"ts": now, "value": value}
+        return dict(value)
 
 
 # ── HTML Dashboard ──
@@ -2049,6 +2415,152 @@ td {
   align-items: flex-start;
   margin-bottom: 0.65rem;
 }
+.research-shell {
+  display: grid;
+  gap: 0.9rem;
+}
+.research-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
+  gap: 0.6rem;
+}
+.research-stat {
+  border: 1px solid rgba(62, 107, 179, 0.18);
+  border-radius: 18px;
+  padding: 0.75rem 0.85rem;
+  background: linear-gradient(135deg, rgba(255,255,255,0.72), rgba(233,241,255,0.54));
+}
+.research-stat strong {
+  display: block;
+  margin-top: 0.18rem;
+  color: var(--accent-2);
+  font: 950 1.1rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+.research-run-list {
+  display: grid;
+  gap: 0.75rem;
+}
+.research-run-card {
+  border: 1px solid rgba(62, 107, 179, 0.20);
+  border-radius: 22px;
+  padding: 0.95rem;
+  background: rgba(255, 252, 244, 0.68);
+}
+.research-run-card.ok {
+  border-color: rgba(56, 128, 93, 0.30);
+  background: rgba(236, 247, 242, 0.72);
+}
+.research-run-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.8rem;
+  align-items: start;
+}
+.research-run-title {
+  font: 950 0.96rem "Avenir Next", "Trebuchet MS", sans-serif;
+  line-height: 1.26;
+  overflow-wrap: anywhere;
+}
+.research-run-sub {
+  margin-top: 0.18rem;
+  color: var(--muted);
+  font: 760 0.76rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+.research-metric-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+  gap: 0.48rem;
+  margin-top: 0.8rem;
+}
+.research-metric {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0.55rem 0.62rem;
+  background: rgba(255, 255, 255, 0.48);
+}
+.research-metric b {
+  display: block;
+  margin-top: 0.12rem;
+  color: var(--ink);
+  font: 900 0.94rem ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.research-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.55rem;
+  margin-top: 0.8rem;
+}
+.research-paths {
+  margin-top: 0.75rem;
+  display: grid;
+  gap: 0.38rem;
+}
+.research-path {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.45rem 0.55rem;
+  background: rgba(255, 255, 255, 0.36);
+  color: var(--muted);
+  font: 800 0.72rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+.research-path-actions {
+  display: inline-flex;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+.research-path-actions a {
+  color: var(--accent-2);
+  font: 950 0.74rem "Avenir Next", "Gill Sans", sans-serif;
+  text-decoration: none;
+}
+.research-path-actions a:hover {
+  text-decoration: underline;
+}
+.research-section-title {
+  margin: 0.35rem 0 0.55rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.impact-list {
+  display: grid;
+  gap: 0.7rem;
+}
+.impact-card {
+  border: 1px solid rgba(56, 128, 93, 0.24);
+  border-radius: 20px;
+  padding: 0.85rem;
+  background: linear-gradient(135deg, rgba(237, 247, 241, 0.76), rgba(255, 248, 230, 0.58));
+}
+.impact-card.strong {
+  border-color: rgba(190, 112, 55, 0.42);
+  background: linear-gradient(135deg, rgba(255, 244, 220, 0.82), rgba(255, 235, 221, 0.62));
+}
+.impact-title {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: start;
+}
+.impact-title strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.impact-note {
+  margin-top: 0.55rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
 .copy-row {
   display: flex;
   flex-wrap: wrap;
@@ -2168,6 +2680,8 @@ td {
       <div class="card"><h3>知识库状态</h3><div id="overview-knowledge">Loading...</div></div>
       <div class="card"><h3>Runtime Interfaces</h3><div id="overview-runtime">Loading...</div></div>
       <div class="card"><h3>Capability Evidence</h3><div id="overview-capabilities">Loading...</div></div>
+      <div class="card"><h3>Autoresearch Impact</h3><div id="overview-autoresearch-impact">Loading...</div></div>
+      <div class="card"><h3>Meta-Harness</h3><div id="overview-meta-harness">Loading...</div></div>
       <div class="card"><h3>DeepResearch Human Search</h3><div id="overview-human-search">Loading...</div></div>
       <div class="card"><h3>DeepResearch Quality</h3><div id="overview-research">Loading...</div></div>
       <div class="card"><h3>最近风险</h3><div id="overview-risk">Loading...</div></div>
@@ -2177,6 +2691,10 @@ td {
   <section class="panel" id="tab-sprint">
     <h2>Current Sprint</h2>
     <div class="card" id="sprint-card">Loading...</div>
+    <h2>Autoresearch Impact</h2>
+    <div class="card" id="autoresearch-impact-card">Loading...</div>
+    <h2>Meta-Harness</h2>
+    <div class="card" id="meta-harness-card">Loading...</div>
     <h2>DeepResearch Human Search</h2>
     <div class="card" id="human-search-card">Loading...</div>
     <h2>DeepResearch Quality</h2>
@@ -2211,8 +2729,8 @@ td {
         </div>
         <div class="card">
           <h3>当前路径</h3>
-          <div class="codebox">Vault  /Users/sihaoli/Knowledge
-Raw    /Users/sihaoli/Knowledge/_raw
+          <div class="codebox">Vault  ~/Knowledge
+Raw    ~/Knowledge/_raw
 Upload http://127.0.0.1:8788
 Config http://127.0.0.1:8789/setup</div>
         </div>
@@ -2231,7 +2749,7 @@ Config http://127.0.0.1:8789/setup</div>
           </div>
           <div class="action-card">
             <div><h3>手动提取</h3><div class="muted">立即让 wiki ingest 处理 raw 目录。</div></div>
-            <button class="btn" onclick="copyText('solar-harness wiki ingest --vault /Users/sihaoli/Knowledge')">复制命令</button>
+            <button class="btn" onclick="copyText('solar-harness wiki ingest --vault ~/Knowledge')">复制命令</button>
           </div>
           <div class="action-card">
             <div><h3>语义索引</h3><div class="muted">更新 QMD semantic index，用于更好的检索。</div></div>
@@ -2254,7 +2772,7 @@ Config http://127.0.0.1:8789/setup</div>
       <div class="actions">
         <a class="btn primary" href="http://127.0.0.1:8788" target="_blank" rel="noreferrer">新窗口打开上传页</a>
         <button class="btn" onclick="copyText('solar-harness wiki capture-server start --open')">复制启动命令</button>
-        <button class="btn" onclick="copyText('/Users/sihaoli/Knowledge/_raw')">复制 Raw 目录</button>
+        <button class="btn" onclick="copyText('~/Knowledge/_raw')">复制 Raw 目录</button>
       </div>
       <iframe class="embed" src="http://127.0.0.1:8788" title="Solar Wiki Upload"></iframe>
     </div>
@@ -2293,7 +2811,7 @@ Config http://127.0.0.1:8789/setup</div>
       <p class="muted">直接浏览 Solar 里的 .mmd 文件，并用本地 vendored Mermaid 渲染。默认入口会打开刚才生成的 Solar 完整架构图。</p>
       <div class="actions">
         <a class="btn primary" href="/mermaid" target="_blank" rel="noreferrer">打开 Mermaid Viewer</a>
-        <a class="btn" href="/mermaid/view?file=/Users/sihaoli/.solar/harness/reports/solar-system-architecture-20260508.mmd" target="_blank" rel="noreferrer">打开 Solar 完整架构图</a>
+        <a class="btn" href="/mermaid/view?file={urllib.parse.quote(str(REPORTS_DIR / "solar-system-architecture-20260508.mmd"))}" target="_blank" rel="noreferrer">打开 Solar 完整架构图</a>
         <button class="btn" onclick="copyText('http://127.0.0.1:8765/mermaid')">复制访问地址</button>
       </div>
       <iframe class="embed" src="/mermaid" title="Solar Mermaid Viewer"></iframe>
@@ -2315,6 +2833,11 @@ function esc(v) {
 function statusBadge(st) {
   const s = st || 'unknown';
   const cls = s === 'failed' || s === 'error' ? 'error-badge' : s === 'warn' ? 'warn-badge' : s;
+  return '<span class="badge ' + esc(cls) + '">' + esc(s) + '</span>';
+}
+function fallbackBadge(level) {
+  const s = level || 'N/A';
+  const cls = s === 'L1' ? 'ok' : s === 'L2' ? 'warn' : s === 'L3' || s === 'L4' ? 'error-badge' : 'default';
   return '<span class="badge ' + esc(cls) + '">' + esc(s) + '</span>';
 }
 function levelBadge(level) {
@@ -2435,6 +2958,22 @@ function taskCell(meta, sid) {
 }
 function copyText(text) {
   navigator.clipboard.writeText(text).catch(() => {});
+}
+function fileOpenUrl(path) {
+  return '/file/open?path=' + encodeURIComponent(path || '');
+}
+function fileViewUrl(path) {
+  return '/file/view?path=' + encodeURIComponent(path || '');
+}
+function researchPathLink(label, path, exists) {
+  if (!path) {
+    return '<div class="research-path"><span>' + esc(label) + '</span><span class="muted">missing</span></div>';
+  }
+  const state = exists ? '打开' : 'missing';
+  const link = exists
+    ? '<a href="' + fileOpenUrl(path) + '" target="_blank" rel="noopener">打开</a><a href="' + fileViewUrl(path) + '" target="_blank" rel="noopener">查看</a>'
+    : '<span class="muted">missing</span>';
+  return '<div class="research-path"><span>' + esc(label) + ': ' + esc(path) + '</span><span class="research-path-actions">' + link + '</span></div>';
 }
 function renderPaneMatrix(cardId, screen) {
   const panes = (screen && screen.panes) || [];
@@ -2562,40 +3101,55 @@ function renderResearchStatus(research, compact) {
   const runs = research.runs || [];
   const gates = research.quality_gates || [];
   if (!runs.length && !gates.length) {
-    return '<div class="health-metrics">' +
-      '<div class="mini-metric"><div class="kv-label">Status</div><span class="num">idle</span></div>' +
-      '<div class="mini-metric"><div class="kv-label">Runs</div><span class="num">0</span></div>' +
-      '</div><div class="muted">还没有可展示的 DeepResearch research_eval 产物。</div>';
+    return '<div class="research-shell">' +
+      '<div class="research-overview">' +
+        '<div class="research-stat"><div class="kv-label">Status</div><strong>idle</strong></div>' +
+        '<div class="research-stat"><div class="kv-label">Runs</div><strong>0</strong></div>' +
+      '</div><div class="muted">还没有可展示的 DeepResearch research_eval 产物。</div></div>';
   }
-  const visible = compact ? runs.slice(-2) : runs;
+  const latest = runs[runs.length - 1] || {};
+  const latestCitation = latest.citation_accuracy == null ? 'N/A' : Math.round((latest.citation_accuracy || 0) * 100) + '%';
+  const visible = compact ? runs.slice(-1) : runs;
   const cards = visible.map(run => {
     const artifacts = run.artifacts || {};
     const exists = run.artifact_exists || {};
     const status = run.status || 'unknown';
     const ok = status === 'passed';
-    return '<div class="human-search-item ' + (ok ? 'ready' : '') + '">' +
-      '<div class="human-search-title"><div><strong>' + esc(run.run_id || run.sid || '-') + '</strong>' +
-      '<div class="muted">' + esc(run.sid || '-') + '</div></div><div>' + statusBadge(ok ? 'ok' : 'warn') + '</div></div>' +
-      '<div class="health-metrics">' +
-        '<div class="mini-metric"><div class="kv-label">Sources</div><span class="num">' + esc(run.source_count || 0) + '</span></div>' +
-        '<div class="mini-metric"><div class="kv-label">Evidence</div><span class="num">' + esc(run.evidence_count || 0) + '</span></div>' +
-        '<div class="mini-metric"><div class="kv-label">Claims</div><span class="num">' + esc(run.claim_count || 0) + '</span></div>' +
-        '<div class="mini-metric"><div class="kv-label">Citation</div><span class="num">' + esc(Math.round((run.citation_accuracy || 0) * 100)) + '%</span></div>' +
+    const citation = run.citation_accuracy == null ? 'N/A' : Math.round((run.citation_accuracy || 0) * 100) + '%';
+    const runId = run.run_id || run.sid || '-';
+    const shortRunId = run.short_run_id || String(runId).slice(0, 10);
+    const taskTitle = run.task_title || run.task_description || run.sid || runId;
+    const taskSub = (run.task_description && run.task_description !== taskTitle ? run.task_description + ' · ' : '') + 'run ' + shortRunId;
+    return '<div class="research-run-card ' + (ok ? 'ok' : '') + '">' +
+      '<div class="research-run-head">' +
+        '<div><div class="research-run-title">' + esc(taskTitle) + '</div>' +
+        '<div class="research-run-sub" title="' + esc(runId) + '">' + esc(taskSub) + '</div></div>' +
+        '<div>' + statusBadge(ok ? 'ok' : 'warn') + '</div>' +
       '</div>' +
-      (compact ? '' : '<div class="kv-grid">' +
-        kv('Final MD', exists.final_md ? 'exists' : 'missing') +
-        kv('ReportAST', exists.report_ast ? 'exists' : 'missing') +
-        kv('Eval JSON', exists.eval_json ? 'exists' : 'missing') +
+      '<div class="research-metric-row">' +
+        '<div class="research-metric"><div class="kv-label">Words</div><b>' + esc(run.word_count ?? 'N/A') + '</b></div>' +
+        '<div class="research-metric"><div class="kv-label">Tokens</div><b>' + esc(run.total_tokens ?? 'N/A') + '</b></div>' +
+        '<div class="research-metric"><div class="kv-label">Citation</div><b>' + esc(citation) + '</b></div>' +
+        '<div class="research-metric"><div class="kv-label">Sources</div><b>' + esc(run.source_count || 0) + '</b></div>' +
+      '</div>' +
+      (compact ? '' : '<div class="research-detail-grid">' +
+        kv('Evidence', run.evidence_count || 0) +
+        kv('Claims', run.claim_count || 0) +
         kv('AST Sections', run.report_ast_sections || 0) +
-      '</div><pre class="codebox" style="margin-top:.7rem">' +
-        'final.md: ' + esc(artifacts.final_md || '-') + '\\n' +
-        'report_ast: ' + esc(artifacts.report_ast || '-') + '\\n' +
-        'eval: ' + esc(artifacts.eval_json || '-') + '</pre>') +
-      '<div class="copy-row">' +
+        kv('Usage Source', run.usage_source || 'N/A') +
+        kv('Estimated', run.estimated === null || run.estimated === undefined ? 'N/A' : String(run.estimated)) +
+        kv('State', run.state || 'unknown') +
+        '<div><div class="kv-label">Fallback</div>' + fallbackBadge(run.fallback_level) + '</div>' +
+        kv('Final MD', exists.final_md ? 'exists' : 'missing') +
+      '</div><div class="research-paths">' +
+        researchPathLink('final.md', artifacts.final_md, exists.final_md) +
+        researchPathLink('report_ast', artifacts.report_ast, exists.report_ast) +
+        researchPathLink('eval', artifacts.eval_json, exists.eval_json) +
+      '</div><div class="copy-row">' +
         '<button class="btn" data-copy="' + esc(artifacts.final_md || '') + '" onclick="copyText(this.dataset.copy)">复制 final.md</button>' +
         '<button class="btn" data-copy="' + esc(artifacts.report_ast || '') + '" onclick="copyText(this.dataset.copy)">复制 ReportAST</button>' +
         '<button class="btn primary" data-copy="' + esc(artifacts.eval_json || '') + '" onclick="copyText(this.dataset.copy)">复制 Eval JSON</button>' +
-      '</div>' +
+      '</div>') +
     '</div>';
   }).join('');
   const visibleGates = compact ? gates.slice(-3) : gates;
@@ -2615,17 +3169,124 @@ function renderResearchStatus(research, compact) {
         (errors ? '<pre class="codebox" style="margin-top:.7rem">' + esc(errors) + '</pre>' : '')) +
     '</div>';
   }).join('');
-  return '<div class="health-metrics">' +
-    '<div class="mini-metric"><div class="kv-label">Status</div><span class="num">' + esc(research.status || 'unknown') + '</span></div>' +
-    '<div class="mini-metric"><div class="kv-label">Runs</div><span class="num">' + esc(research.count || runs.length) + '</span></div>' +
-    '<div class="mini-metric"><div class="kv-label">Gates</div><span class="num">' + esc(gates.length) + '</span></div>' +
-    '</div><div class="human-search-grid">' + cards + gateCards + '</div>';
+  return '<div class="research-shell">' +
+    '<div class="research-overview">' +
+      '<div class="research-stat"><div class="kv-label">Status</div><strong>' + esc(research.status || 'unknown') + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Runs</div><strong>' + esc(research.count || runs.length) + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Latest Words</div><strong>' + esc(latest.word_count ?? 'N/A') + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Latest Tokens</div><strong>' + esc(latest.total_tokens ?? 'N/A') + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Citation</div><strong>' + esc(latestCitation) + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Fallback</div><strong>' + esc(latest.fallback_level || 'N/A') + '</strong></div>' +
+    '</div>' +
+    '<div class="research-section-title">' + (compact ? 'Latest Run' : 'Research Runs') + '</div>' +
+    '<div class="research-run-list">' + cards + '</div>' +
+    (gateCards ? '<div class="research-section-title">Quality Gates</div><div class="human-search-grid">' + gateCards + '</div>' : '') +
+    '</div>';
+}
+function renderAutoresearchImpact(impact, compact) {
+  impact = impact || {};
+  const items = impact.items || [];
+  const trend = impact.trend || {};
+  if (!items.length) {
+    return '<div class="research-shell">' +
+      '<div class="research-overview">' +
+        '<div class="research-stat"><div class="kv-label">Status</div><strong>idle</strong></div>' +
+        '<div class="research-stat"><div class="kv-label">Triggers</div><strong>0</strong></div>' +
+      '</div><div class="muted">还没有 autoresearch optimizer 触发记录；等待 dispatch 写入 status.json artifacts。</div></div>';
+  }
+  const latest = impact.latest || items[0] || {};
+  const visible = compact ? items.slice(0, 1) : items;
+  const cards = visible.map(item => {
+    const level = item.trigger_level || 'advisory';
+    const strong = level === 'strong';
+    const failed = (item.failed_conditions || []).slice(0, compact ? 2 : 5);
+    const effects = (item.expected_effect || []).slice(0, 3).join(', ') || 'N/A';
+    const measures = (item.must_measure || []).slice(0, 3).join(', ') || 'N/A';
+    const subtitle = (item.role || 'unknown') + ' · round ' + (item.round ?? 0) + ' · eval ' + (item.eval_verdict || 'N/A');
+    return '<div class="impact-card ' + (strong ? 'strong' : '') + '">' +
+      '<div class="impact-title">' +
+        '<div><strong>' + esc(item.task_description || item.sid || 'N/A') + '</strong>' +
+        '<div class="research-run-sub">' + esc(subtitle) + '</div></div>' +
+        '<div>' + statusBadge(strong ? 'warn' : 'ok') + '</div>' +
+      '</div>' +
+      '<div class="research-metric-row">' +
+        '<div class="research-metric"><div class="kv-label">Trigger</div><b>' + esc(level) + '</b></div>' +
+        '<div class="research-metric"><div class="kv-label">Status</div><b>' + esc(item.status || 'N/A') + '</b></div>' +
+        '<div class="research-metric"><div class="kv-label">Errors</div><b>' + esc(item.error_count ?? 0) + '</b></div>' +
+      '</div>' +
+      (failed.length ? '<div class="impact-note"><b>Failed conditions:</b> ' + esc(failed.join('; ')) + '</div>' : '') +
+      (compact ? '' : '<div class="research-detail-grid">' +
+        kv('Expected Effect', effects) +
+        kv('Must Measure', measures) +
+        kv('Recorded', item.recorded_at || 'N/A') +
+        kv('Sprint', item.sid || 'N/A') +
+      '</div>') +
+    '</div>';
+  }).join('');
+  return '<div class="research-shell">' +
+    '<div class="research-overview">' +
+      '<div class="research-stat"><div class="kv-label">Status</div><strong>' + esc(impact.status || 'unknown') + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Triggers</div><strong>' + esc(impact.count || items.length) + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Strong</div><strong>' + esc(impact.strong_count || 0) + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">FAIL Verdict</div><strong>' + esc(impact.fail_verdict_count || 0) + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Latest Role</div><strong>' + esc(latest.role || 'N/A') + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Latest Round</div><strong>' + esc(latest.round ?? 'N/A') + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Effect</div><strong>' + esc(trend.effect_status || 'insufficient') + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Pass After</div><strong>' + esc(trend.pass_after_trigger || 0) + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Still Failing</div><strong>' + esc(trend.still_failing || 0) + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Avg Round</div><strong>' + esc(trend.avg_round ?? 0) + '</strong></div>' +
+    '</div>' +
+    '<div class="impact-note">Trend is observational: it counts outcomes after optimizer triggers, not causal proof.</div>' +
+    '<div class="research-section-title">' + (compact ? 'Latest Optimizer Trigger' : 'Optimizer Triggers') + '</div>' +
+    '<div class="impact-list">' + cards + '</div>' +
+	    '</div>';
+}
+function renderMetaHarness(meta, compact) {
+  meta = meta || {};
+  const store = meta.store || {};
+  const pareto = meta.pareto || {};
+  const runs = meta.runs || {};
+  const safety = meta.safety || {};
+  const latest = meta.latest_command || {};
+  const commandRows = meta.commands || {};
+  const status = meta.status || 'unknown';
+  const note = safety.coordinator_autorun === false
+    ? 'Controlled provider: coordinator does not autorun it; run/apply stay dry-run unless --execute is explicit.'
+    : 'Check coordinator autorun policy before using.';
+  const actions = compact ? '' :
+    '<div class="copy-row">' +
+      '<button class="btn" data-copy="' + esc(commandRows.status || 'solar-harness meta-harness status --json') + '" onclick="copyText(this.dataset.copy)">复制 status</button>' +
+      '<button class="btn" data-copy="' + esc(commandRows.run_dry || 'solar-harness meta-harness run 3 hooks --json') + '" onclick="copyText(this.dataset.copy)">复制 dry-run</button>' +
+      '<button class="btn" data-copy="' + esc(commandRows.apply_dry || 'solar-harness meta-harness apply <run_id> --json') + '" onclick="copyText(this.dataset.copy)">复制 apply dry-run</button>' +
+    '</div>';
+  const latestLine = latest && latest.subcommand
+    ? '<div class="impact-note"><b>Latest command:</b> ' + esc(latest.subcommand) + ' · ' + esc(latest.mode || 'N/A') + ' · executed=' + esc(latest.executed === true ? 'true' : 'false') + '</div>'
+    : '';
+  return '<div class="research-shell">' +
+    '<div class="research-overview">' +
+      '<div class="research-stat"><div class="kv-label">Status</div><strong>' + esc(status) + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Eval Set</div><strong>' + esc(store.evaluation_count ?? 0) + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Pareto</div><strong>' + esc(pareto.pareto_count ?? 0) + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Runs</div><strong>' + esc(runs.count ?? 0) + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Best</div><strong>' + esc(pareto.best_run_id || 'N/A') + '</strong></div>' +
+      '<div class="research-stat"><div class="kv-label">Dry Run</div><strong>' + esc(safety.default_execution || 'N/A') + '</strong></div>' +
+    '</div>' +
+    '<div class="research-detail-grid">' +
+      kv('Tool', (meta.tool || {}).path || 'N/A') +
+      kv('Store', store.path || 'N/A') +
+      kv('Proposer', store.proposer_model || 'N/A') +
+      kv('Evaluator', store.evaluator_model || 'N/A') +
+    '</div>' +
+    '<div class="impact-note">' + esc(note) + '</div>' +
+    latestLine +
+    actions +
+    '</div>';
 }
 function renderKnowledgeSummary(wiki, mirage) {
   const wikiReady = !!(wiki && wiki.ready);
   const mirageReady = !!(mirage && mirage.enabled);
   const qmdStatus = mirage && mirage.qmd && mirage.qmd.status ? mirage.qmd.status : 'unknown';
-  const vault = (wiki && wiki.vault_path) || '/Users/sihaoli/Knowledge';
+  const vault = (wiki && wiki.vault_path) || '~/Knowledge';
   return [
     '<div class="status-tile"><div class="kv-label">Wiki</div><strong>' + statusBadge(wikiReady ? 'ok' : 'warn') + '</strong></div>',
     '<div class="status-tile"><div class="kv-label">Mirage</div><strong>' + statusBadge(mirageReady ? 'ok' : 'warn') + '</strong></div>',
@@ -2880,6 +3541,10 @@ function render(data) {
     'Mirage: ' + statusBadge(mirage.ready ? 'ok' : (mirage.status || 'warn'));
   document.getElementById('overview-runtime').innerHTML = renderRuntimeInterfaces(data.runtime_interfaces || {});
   document.getElementById('overview-capabilities').innerHTML = renderCapabilityHealthSummary(data.capability_health || {});
+  document.getElementById('overview-autoresearch-impact').innerHTML = renderAutoresearchImpact(data.autoresearch_impact || {}, true);
+  document.getElementById('autoresearch-impact-card').innerHTML = renderAutoresearchImpact(data.autoresearch_impact || {}, false);
+  document.getElementById('overview-meta-harness').innerHTML = renderMetaHarness(data.meta_harness || {}, true);
+  document.getElementById('meta-harness-card').innerHTML = renderMetaHarness(data.meta_harness || {}, false);
   document.getElementById('overview-human-search').innerHTML = renderHumanSearch(data.human_search || {}, true);
   document.getElementById('human-search-card').innerHTML = renderHumanSearch(data.human_search || {}, false);
   document.getElementById('overview-research').innerHTML = renderResearchStatus(data.research || {}, true);
@@ -2956,7 +3621,10 @@ class StatusHandler(BaseHTTPRequestHandler):
                     raise RuntimeError("unable to load research_routes.py")
                 mod = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(mod)
-                self._send_json(mod.build_research_payload(SPRINTS_DIR, sid))
+                if params.get("format", [""])[0].lower() == "html":
+                    self._send_text(mod.render_html_report(SPRINTS_DIR, sid), content_type="text/html; charset=utf-8")
+                else:
+                    self._send_json(mod.build_research_payload(SPRINTS_DIR, sid))
             except Exception as exc:
                 self._send_json({"error": f"{type(exc).__name__}: {exc}", "sid": sid}, status=500)
 
@@ -3001,6 +3669,35 @@ class StatusHandler(BaseHTTPRequestHandler):
             else:
                 self._send_text(mmd.read_text(errors="ignore"), content_type="text/plain; charset=utf-8")
 
+        elif path == "/file/open":
+            target = _resolve_open_file(params.get("path", [""])[0])
+            if not target:
+                self._send_json({"ok": False, "status": "error", "error": "file not found or not allowed"}, status=404)
+            elif sys.platform != "darwin":
+                self._send_json({"ok": False, "status": "warn", "error": "open is only supported on macOS", "path": str(target)}, status=501)
+            else:
+                try:
+                    subprocess.run(["open", str(target)], check=False, timeout=2)
+                    self._send_text(
+                        f"Opened {html.escape(str(target))}. You may close this tab.",
+                        content_type="text/html; charset=utf-8",
+                    )
+                except Exception as exc:
+                    self._send_json({"ok": False, "status": "warn", "error": f"{type(exc).__name__}: {exc}", "path": str(target)}, status=500)
+
+        elif path == "/file/view":
+            target = _resolve_open_file(params.get("path", [""])[0])
+            if not target:
+                self._send_json({"ok": False, "status": "error", "error": "file not found or not allowed"}, status=404)
+            else:
+                suffix = target.suffix.lower()
+                content_type = "text/plain; charset=utf-8"
+                if suffix == ".json":
+                    content_type = "application/json; charset=utf-8"
+                elif suffix in (".md", ".markdown"):
+                    content_type = "text/markdown; charset=utf-8"
+                self._send_text(target.read_text(encoding="utf-8", errors="ignore"), content_type=content_type)
+
         elif path.startswith("/mermaid/assets/"):
             asset = _asset_path(path.removeprefix("/mermaid/assets/"))
             if not asset:
@@ -3019,6 +3716,21 @@ class StatusHandler(BaseHTTPRequestHandler):
 
         elif path == "/api/evolution":
             self._send_json(_evolution_status())
+
+        elif path == "/benchmark/latest":
+            # AP-4: benchmark latest run summary
+            import json as _json
+            from pathlib import Path as _Path
+            _bench_reports = _Path.home() / ".solar" / "harness" / "reports" / "benchmark"
+            _latest = _bench_reports / "latest-terminal-bench-2.json"
+            if _latest.is_file():
+                try:
+                    with _latest.open(encoding="utf-8") as _f:
+                        self._send_json(_json.load(_f))
+                except (OSError, _json.JSONDecodeError):
+                    self._send_json({"status": "no_runs", "benchmark": "terminal-bench@2.0"})
+            else:
+                self._send_json({"status": "no_runs", "benchmark": "terminal-bench@2.0"})
 
         elif path == "/":
             # _HTML_TEMPLATE is not formatted with str.format(), so collapse the

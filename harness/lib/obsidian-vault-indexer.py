@@ -25,7 +25,7 @@ import time
 from pathlib import Path
 
 DB_PATH = Path(os.environ.get("SOLAR_DB", str(Path.home() / ".solar" / "solar.db")))
-VAULT_PATH = Path(os.environ.get("OBSIDIAN_VAULT_PATH", "/Users/sihaoli/Knowledge"))
+VAULT_PATH = Path(os.environ.get("OBSIDIAN_VAULT_PATH", str(Path.home() / "Knowledge")))
 EXCLUDE_DIRS = {".obsidian", ".trash", ".git", ".dispatch", "_raw"}
 RAW_INDEX_ALLOW_PREFIXES = {
     Path("_raw") / "solar-harness" / "accepted",

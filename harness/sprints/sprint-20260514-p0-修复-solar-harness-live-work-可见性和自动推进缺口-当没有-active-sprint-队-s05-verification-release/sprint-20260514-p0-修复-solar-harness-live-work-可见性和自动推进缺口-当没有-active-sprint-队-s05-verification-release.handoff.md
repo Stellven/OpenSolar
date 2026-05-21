@@ -23,7 +23,7 @@ evaluator_can_review: true
 ## Verification Evidence
 
 ```bash
-cd /Users/sihaoli/.solar
+cd /Users/lisihao/.solar
 
 # Full test suite
 python3 -m pytest harness/tests/livework/ -v

@@ -612,6 +612,34 @@ _bridge_pane_exists() {
   tmux display-message -p -t "$target" '#{pane_id}' >/dev/null 2>&1
 }
 
+_bridge_pane_builder_guard() {
+  local target="$1"
+  [[ "${SOLAR_ALLOW_WIKI_DISPATCH_ANY_PANE:-0}" == "1" ]] && return 0
+
+  local meta session title main_session lab_session
+  main_session="${SOLAR_SESSION_NAME:-solar-harness}"
+  lab_session="${SOLAR_LAB_SESSION_NAME:-solar-harness-lab}"
+  meta="$(tmux display-message -p -t "$target" '#{session_name}	#{pane_title}' 2>/dev/null)" || {
+    _bridge_err "target pane not found: $target"
+    return 1
+  }
+  session="${meta%%$'\t'*}"
+  title="${meta#*$'\t'}"
+
+  if [[ "$session" == "$lab_session" ]] && printf '%s\n' "$title" | grep -qiE 'Builder|建设者|lab-builder'; then
+    return 0
+  fi
+
+  if [[ "$session" == "$main_session" ]] && \
+     printf '%s\n' "$title" | grep -qiE 'Builder|建设者' && \
+     ! printf '%s\n' "$title" | grep -qiE 'PM|产品经理|Planner|规划者|Evaluator|审判官'; then
+    return 0
+  fi
+
+  _bridge_err "target pane is not a builder pane: ${target} (${session:-N/A} ${title:-N/A}); set SOLAR_ALLOW_WIKI_DISPATCH_ANY_PANE=1 only for explicit manual override"
+  return 3
+}
+
 _bridge_pane_idle() {
   local target="$1" view tail_view
   _bridge_pane_exists "$target" || return 1
@@ -741,6 +769,7 @@ cmd_wiki_run_dispatch() {
   fi
 
   _bridge_pane_exists "$target_pane" || { _bridge_err "target pane not found: $target_pane"; return 1; }
+  _bridge_pane_builder_guard "$target_pane" || return $?
   _bridge_pane_idle "$target_pane" || { _bridge_err "target pane is busy; not dispatching into queued input: $target_pane"; return 2; }
 
   local prompt

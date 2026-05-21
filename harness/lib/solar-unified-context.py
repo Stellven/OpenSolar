@@ -303,7 +303,7 @@ def retrieve(query: str, max_hits: int, max_chars: int, timeout_ms: int) -> dict
             {
                 "source": "default",
                 "mount": "/knowledge",
-                "path": "/Users/sihaoli/Knowledge",
+                "path": str(HOME / "Knowledge"),
                 "title": "Solar Obsidian Vault",
                 "snippet": "本机默认知识库。优先用 `solar-harness wiki qmd-search \"<query>\" --json` 或 `solar-harness mirage search \"<query>\" --json` 检索。",
                 "provenance": "static:solar-unified-context",

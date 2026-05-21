@@ -27,7 +27,9 @@ STATUS_FIELDS: Dict[str, Dict[str, str]] = {
     "passed": {"phase": "eval_passed", "handoff_to": "", "target_role": ""},
     "failed_review": {"phase": "eval_failed", "handoff_to": "builder", "target_role": "builder"},
     "drafting": {"phase": "spec", "handoff_to": "pm", "target_role": "pm"},
-    "active": {"handoff_to": "builder", "target_role": "builder"},
+    # Bare active transitions must not imply a Builder route. Callers that pass
+    # the Planner artifact gate must provide explicit builder status_fields.
+    "active": {},
     "failed": {"phase": "failed", "handoff_to": "", "target_role": ""},
     "needs_human_review": {"phase": "needs_human", "handoff_to": "planner", "target_role": "planner"},
 }
