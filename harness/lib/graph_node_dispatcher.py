@@ -762,6 +762,14 @@ def _pop_graph_queue_item(sprint_id: str) -> dict[str, Any] | None:
             return target
         finally:
             fcntl.flock(lf, fcntl.LOCK_UN)
+            # The lock is advisory and fd-scoped. Leaving an empty sidecar
+            # behind makes patrols treat a healthy queue read as a stale lock.
+            try:
+                os.unlink(lock_path)
+            except FileNotFoundError:
+                pass
+            except OSError:
+                pass
 
 
 def _node_by_id(graph: dict[str, Any], node_id: str) -> dict[str, Any] | None:

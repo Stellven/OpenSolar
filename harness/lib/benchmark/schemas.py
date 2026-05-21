@@ -16,9 +16,17 @@ from typing import Any, Protocol, runtime_checkable
 
 SCHEMA_VERSION: str = "benchmark.run.v1"
 
-AGENT_ALLOWLIST: tuple[str, ...] = ("claude-code", "deepagents-cli", "openai-cli")
+AGENT_ALLOWLIST: tuple[str, ...] = (
+    "oracle",
+    "solar-harness-agent",
+    "host-claude-code",
+    "claude-code",
+    "codex",
+    "deepagents-cli",
+    "openai-cli",
+)
 
-SAFE_TASKS: tuple[str, ...] = ("chess-best-move", "hello-world-cli", "wc-frequency")
+SAFE_TASKS: tuple[str, ...] = ("chess-best-move", "build-pmars", "cancel-async-tasks")
 
 DEFAULT_DATASET: str = "terminal-bench@2.0"
 
