@@ -60,7 +60,7 @@ DEFAULT_PROFILE_CONFIG: dict[str, Any] = {
             "label": "规划者",
             "persona": "planner",
             "backend": "claude-cli",
-            "model": "opus",
+            "model": "sonnet",
             "approval_mode": "auto_edit",
             "best_for": ["planning", "architecture"],
             "max_parallel": 1,
@@ -116,17 +116,6 @@ DEFAULT_PROFILE_CONFIG: dict[str, Any] = {
             "command": "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/thunderomlx_knowledge_extract_agent.py\"",
             "max_parallel": 1,
         },
-        "thunderomlx-benchmark": {
-            "role": "builder",
-            "label": "ThunderOMLX 缓存基准",
-            "persona": "builder",
-            "backend": "command",
-            "model": "thunderomlx",
-            "approval_mode": "default",
-            "best_for": ["benchmark", "cache-metrics", "knowledge-extraction"],
-            "command": "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/thunderomlx_cache_benchmark_agent.py\"",
-            "max_parallel": 1,
-        },
     },
 }
 
@@ -142,6 +131,7 @@ from graph_scheduler import (  # noqa: E402
 
 ACTIVE_TASK_STATUSES = {"queued", "dispatched", "running"}
 TERMINAL_TASK_STATUSES = {"completed", "failed", "failed_missing_handoff", "cancelled"}
+EFFECTIVE_TERMINAL_TASK_STATUSES = TERMINAL_TASK_STATUSES | {"completed_aligned", "failed_aligned"}
 TASK_STALE_WARN_SEC = int(os.environ.get("SOLAR_MULTI_TASK_STALE_WARN_SEC", "1800") or "1800")
 QUOTA_RE = re.compile(
     r"rate[- ]?limit|quota|you(?:'|’)ve hit your limit|resets\s+\d|"
@@ -622,6 +612,39 @@ def task_age_s(row: dict[str, Any], now_ts: float | None = None) -> int | None:
     return max(0, int((time.time() if now_ts is None else now_ts) - updated_ts))
 
 
+def graph_node_status_for_task(row: dict[str, Any]) -> str:
+    graph_path = str(row.get("graph") or "").strip()
+    node_id = str(row.get("node_id") or "").strip()
+    if not graph_path or not node_id:
+        return "N/A"
+    try:
+        graph = load_graph(Path(graph_path).expanduser())
+        return str(node_status(graph, node_id) or "N/A")
+    except Exception:
+        return "N/A"
+
+
+def effective_task_status(row: dict[str, Any]) -> str:
+    """Classify worker occupancy using graph truth when task status drifted.
+
+    A tmux pane can outlive the runner status write. If the DAG node is already
+    passed/failed, or is reviewing with a handoff present, it should not keep
+    consuming a worker slot in the scheduler/status view.
+    """
+    current = str(row.get("status") or "").lower()
+    graph_status = str(row.get("graph_status") or "N/A").lower()
+    if current in ACTIVE_TASK_STATUSES:
+        if graph_status in {"passed", "done", "completed"}:
+            return "completed_aligned"
+        if graph_status in {"failed", "cancelled", "canceled", "skipped"}:
+            return "failed_aligned"
+        if graph_status == "reviewing":
+            handoff = str(row.get("handoff") or "").strip()
+            if handoff and Path(handoff).expanduser().exists():
+                return "completed_aligned"
+    return current
+
+
 def format_age_s(age_s: int | None) -> str:
     if age_s is None:
         return "N/A"
@@ -638,7 +661,7 @@ def format_age_s(age_s: int | None) -> str:
 
 
 def task_data_class(row: dict[str, Any], now_ts: float | None = None) -> str:
-    status = str(row.get("status") or "").lower()
+    status = str(row.get("effective_status") or row.get("status") or "").lower()
     tmux_status = str(row.get("tmux_status") or "").lower()
     age_s = task_age_s(row, now_ts)
     stale = age_s is not None and age_s >= TASK_STALE_WARN_SEC
@@ -648,7 +671,7 @@ def task_data_class(row: dict[str, Any], now_ts: float | None = None) -> str:
         return "stale_active" if stale else "pending"
     if status == "dry_run":
         return "stale" if stale else "dry_run"
-    if status in TERMINAL_TASK_STATUSES or status.startswith("reaped"):
+    if status in EFFECTIVE_TERMINAL_TASK_STATUSES or status.startswith("reaped"):
         return "historical"
     return "stale" if stale else "observed"
 
@@ -869,6 +892,8 @@ def enrich_task_row(row: dict[str, Any], windows: dict[str, dict[str, str]]) -> 
     enriched["tmux_status"] = tmux_status
     enriched["pane_command"] = (info or {}).get("command", "N/A")
     enriched["pane_pid"] = (info or {}).get("pane_pid", "N/A")
+    enriched["graph_status"] = graph_node_status_for_task(enriched)
+    enriched["effective_status"] = effective_task_status(enriched)
     age_s = task_age_s(enriched)
     enriched["age_s"] = age_s
     enriched["age"] = format_age_s(age_s)
@@ -889,7 +914,7 @@ def list_task_rows() -> list[dict[str, Any]]:
 
 
 def active_tasks() -> list[dict[str, Any]]:
-    return [row for row in list_task_rows() if str(row.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
+    return [row for row in list_task_rows() if str(row.get("effective_status") or row.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
 
 
 def task_inventory(tasks: list[dict[str, Any]]) -> dict[str, Any]:
@@ -899,7 +924,7 @@ def task_inventory(tasks: list[dict[str, Any]]) -> dict[str, Any]:
     latest_ts = -1.0
     for task in tasks:
         data_class = str(task.get("data_class") or "observed")
-        status = str(task.get("status") or "N/A").lower()
+        status = str(task.get("effective_status") or task.get("status") or "N/A").lower()
         counts[data_class] = counts.get(data_class, 0) + 1
         status_counts[status] = status_counts.get(status, 0) + 1
         updated_ts = parse_iso(str(task.get("updated_at") or task.get("created_at") or ""))
@@ -907,7 +932,7 @@ def task_inventory(tasks: list[dict[str, Any]]) -> dict[str, Any]:
             latest = task
             latest_ts = updated_ts
     live = counts.get("live", 0)
-    active = sum(1 for task in tasks if str(task.get("status", "")).lower() in ACTIVE_TASK_STATUSES)
+    active = sum(1 for task in tasks if str(task.get("effective_status") or task.get("status", "")).lower() in ACTIVE_TASK_STATUSES)
     stale = counts.get("stale", 0) + counts.get("stale_active", 0)
     historical = counts.get("historical", 0) + counts.get("dry_run", 0) + counts.get("stale", 0)
     return {
@@ -1362,18 +1387,34 @@ fi
 
 {{
   echo "[solar-harness multi-task] sid=$SID node=$NODE_ID backend=$BACKEND model=$MODEL start=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  if [[ "$BACKEND" == "command" && -z {shlex.quote(agent_cmd)} ]]; then
-    echo "ERROR: backend=command requires SOLAR_MULTI_TASK_AGENT_CMD"
-    exit 127
-  elif [[ -n {shlex.quote(agent_cmd)} && "$BACKEND" != "command" ]]; then
-    SOLAR_MULTI_TASK_DISPATCH_FILE="$DISPATCH_FILE" bash -lc {shlex.quote(agent_cmd)}
-  else
-    if [[ "$BACKEND" == "claude-cli" ]] && ! command -v claude >/dev/null 2>&1; then
-      echo "ERROR: claude command not found; set SOLAR_MULTI_TASK_AGENT_CMD"
+  echo "[solar-harness multi-task] sid=$SID node=$NODE_ID agent_launch backend=$BACKEND profile=$PROFILE dispatch=$DISPATCH_FILE"
+  (
+    if [[ "$BACKEND" == "command" && -z {shlex.quote(agent_cmd)} ]]; then
+      echo "ERROR: backend=command requires SOLAR_MULTI_TASK_AGENT_CMD"
       exit 127
+    elif [[ -n {shlex.quote(agent_cmd)} && "$BACKEND" != "command" ]]; then
+      SOLAR_MULTI_TASK_DISPATCH_FILE="$DISPATCH_FILE" bash -lc {shlex.quote(agent_cmd)}
+    else
+      if [[ "$BACKEND" == "claude-cli" ]] && ! command -v claude >/dev/null 2>&1; then
+        echo "ERROR: claude command not found; set SOLAR_MULTI_TASK_AGENT_CMD"
+        exit 127
+      fi
+      {agent_line}
     fi
-    {agent_line}
+  ) &
+  agent_pid=$!
+  echo "$agent_pid" > "$TASK_DIR/agent.pid"
+  echo "[solar-harness multi-task] sid=$SID node=$NODE_ID agent_pid=$agent_pid"
+  sleep "${{SOLAR_MULTI_TASK_AGENT_START_GRACE_SEC:-2}}"
+  if kill -0 "$agent_pid" >/dev/null 2>&1; then
+    echo "[solar-harness multi-task] sid=$SID node=$NODE_ID agent_alive_after_grace=true"
+  else
+    echo "[solar-harness multi-task] sid=$SID node=$NODE_ID agent_alive_after_grace=false"
   fi
+  wait "$agent_pid"
+  agent_rc=$?
+  echo "[solar-harness multi-task] sid=$SID node=$NODE_ID agent_exit=$agent_rc at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  exit "$agent_rc"
 }} > >(tee -a "$OUTPUT_LOG") 2>&1
 rc=$?
 
@@ -1592,7 +1633,7 @@ def render_plain(result: dict[str, Any], no_clear: bool = False) -> None:
     guard = result.get("guard") or {}
     mem = free_memory_gb()
     tasks = list_task_rows()[:20]
-    active = [t for t in tasks if str(t.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
+    active = [t for t in tasks if str(t.get("effective_status") or t.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
     inventory = task_inventory(tasks)
     cap_summary = result.get("capability") or capability_summary()
     mt_live = tmux_session_exists()
@@ -1632,7 +1673,7 @@ def render_plain(result: dict[str, Any], no_clear: bool = False) -> None:
 
     task_rows = [[
         _clip_display(str(t.get("id", "N/A")), 24),
-        _clip_display(str(t.get("status", "N/A")), 12),
+        _clip_display(str(t.get("effective_status") or t.get("status", "N/A")), 18),
         _clip_display(str(t.get("data_class", "N/A")), 12),
         _clip_display(str(t.get("pane_type", "N/A")), 22),
         _clip_display(str(t.get("tmux_status", "N/A")), 10),
@@ -2619,10 +2660,10 @@ def reap_tasks(ttl_min: int, stale_active_min: int, dry_run: bool) -> dict[str, 
     kept: list[dict[str, Any]] = []
     for status in list_task_rows():
         task = str(status.get("id") or "")
-        current = str(status.get("status") or "").lower()
+        current = str(status.get("effective_status") or status.get("status") or "").lower()
         updated_ts = parse_iso(str(status.get("updated_at") or status.get("created_at") or ""))
         age = None if updated_ts is None else now - updated_ts
-        terminal_old = current in TERMINAL_TASK_STATUSES and age is not None and age >= ttl
+        terminal_old = current in EFFECTIVE_TERMINAL_TASK_STATUSES and age is not None and age >= ttl
         stale_active = stale_ttl > 0 and current in ACTIVE_TASK_STATUSES and age is not None and age >= stale_ttl
         if not terminal_old and not stale_active:
             kept.append({"id": task, "status": current or "N/A", "age_s": None if age is None else int(age)})
