@@ -79,7 +79,7 @@ send_ready_token() {
     local content
     content=$(tmux capture-pane -t "$pane" -p 2>/dev/null | tail -8)
     if (( bypass_accepted == 0 )) && echo "$content" | grep -qiE 'Bypass Permissions mode|1\. No, exit|2\. Yes, I accept'; then
-      tmux send-keys -t "$pane" Down Enter
+      tmux send-keys -t "$pane" "2" Enter
       bypass_accepted=1
       sleep 1
       attempt=$((attempt + 1))
@@ -99,7 +99,7 @@ send_ready_token() {
       continue
     fi
     if echo "$content" | grep -qiE 'Files with errors are skipped|Continue without these settings|Exit and fix manually'; then
-      tmux send-keys -t "$pane" Down Enter
+      tmux send-keys -t "$pane" "2" Enter
       sleep 1
       attempt=$((attempt + 1))
       continue
@@ -198,6 +198,7 @@ prepare_sanitized_claude_settings() {
   mkdir -p "$settings_dir"
   python3 - "$HOME/.claude/settings.json" "$out" "$HARNESS_DIR" <<'PY'
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -214,7 +215,13 @@ if src.exists():
 # Claude panes silently turns "Opus" into a gateway request and breaks routing.
 data.pop("env", None)
 
-hooks = data.setdefault("hooks", {})
+# Do not inherit host-level hook entries: malformed global UserPromptSubmit
+# hooks can abort pane startup before Solar can accept the TUI prompt.
+hooks = {}
+data["hooks"] = hooks
+
+if os.environ.get("SOLAR_AUTH_SOURCE") == "thunderomlx" or "127.0.0.1:8002" in os.environ.get("ANTHROPIC_BASE_URL", ""):
+    data["thinking"] = {"type": "disabled"}
 
 def append_hook(event_name, phase):
     entries = hooks.setdefault(event_name, [])

@@ -53,6 +53,19 @@ _deepseek_available() {
   [[ -n "$(_deepseek_auth_token 2>/dev/null || true)" ]]
 }
 
+_thunderomlx_auth_token() {
+  python3 - <<'PY' 2>/dev/null
+import json, pathlib
+p = pathlib.Path.home() / ".omlx/settings.json"
+data = json.loads(p.read_text(encoding="utf-8"))
+print((data.get("auth") or {}).get("api_key") or "", end="")
+PY
+}
+
+_thunderomlx_available() {
+  [[ -n "$(_thunderomlx_auth_token 2>/dev/null || true)" ]]
+}
+
 _gateway_compat_flags() {
   printf '%s' "--bare --tools default --strict-mcp-config --mcp-config $HARNESS_DIR/config/empty-mcp.json"
 }
@@ -241,6 +254,21 @@ get_persona_config() {
         auth_source="zhipu"
         extra_flags="$(_zhipu_coding_plan_flags)"
         display_model="GLM-4.7 (智谱, ${SOLAR_BUILDER_SLOT:-lab-builder})"
+      elif [[ "$lab_model" == "thunderomlx-qwen36-35b" ]] && _thunderomlx_available; then
+        model_id="$lab_model"
+        model_flag="$(solar_model_flag "$lab_model")"
+        base_url="http://127.0.0.1:8002"
+        auth_source="thunderomlx"
+        extra_flags="$(_gateway_compat_flags)"
+        display_model="ThunderOMLX Qwen3.6 35B (${SOLAR_BUILDER_SLOT:-lab-builder})"
+        auth_token="$(_thunderomlx_auth_token 2>/dev/null || true)"
+      elif [[ "$lab_model" == "thunderomlx-qwen36-35b" ]]; then
+        model_id="$lab_model"
+        model_flag=""
+        base_url=""
+        auth_token=""
+        display_model="UNAVAILABLE: ThunderOMLX key missing (${SOLAR_BUILDER_SLOT:-lab-builder})"
+        launch_error="ThunderOMLX requested for ${SOLAR_BUILDER_SLOT:-lab-builder}, but ~/.omlx/settings.json auth.api_key is unavailable; refusing Claude fallback"
       elif [[ "$lab_model" == "deepseek-v4-pro" ]] && _deepseek_available; then
         model_id="$lab_model"
         model_flag="$(solar_model_flag "$lab_model")"
@@ -350,7 +378,13 @@ get_persona_config() {
   # 旧 bug 2: AUTH_TOKEN=明文 → --print-config 直接打印到屏幕 → 泄漏隐患
   # 修复: 单引号包裹 + AUTH_TOKEN 输出 mask (真值仍由 apply_persona_env 从 env 设置)
   local masked_token=""
-  [[ -n "$auth_token" ]] && masked_token="<from-env:ZHIPU_AUTH_TOKEN>"
+  if [[ -n "$auth_token" ]]; then
+    case "$auth_source" in
+      thunderomlx) masked_token="<from-omlx-settings:auth.api_key>" ;;
+      deepseek) masked_token="<from-env:DEEPSEEK_API_KEY>" ;;
+      *) masked_token="<from-env:ZHIPU_AUTH_TOKEN>" ;;
+    esac
+  fi
   echo "CN='$cn'"
   echo "MODEL_ID='$model_id'"
   echo "MODEL_FLAG='$model_flag'"
@@ -384,6 +418,24 @@ apply_persona_env() {
   if [[ -n "$base_url" ]]; then
     export ANTHROPIC_BASE_URL="$base_url"
     case "$auth_source" in
+      thunderomlx)
+        local thunderomlx_token=""
+        thunderomlx_token="$(_thunderomlx_auth_token 2>/dev/null || true)"
+        if [[ -z "$thunderomlx_token" ]]; then
+          echo "FATAL: persona '$persona' needs ~/.omlx/settings.json auth.api_key" >&2
+          return 1
+        fi
+        export ANTHROPIC_AUTH_TOKEN="$thunderomlx_token"
+        export ANTHROPIC_API_KEY="$thunderomlx_token"
+        # Send Claude-like names to ThunderOMLX so its Anthropic proxy can map
+        # the model tier to the local Qwen3.6 model configured in ~/.omlx.
+        export ANTHROPIC_DEFAULT_OPUS_MODEL="${THUNDEROMLX_OPUS_MODEL:-claude-opus-4-5}"
+        export ANTHROPIC_DEFAULT_SONNET_MODEL="${THUNDEROMLX_SONNET_MODEL:-claude-3-5-sonnet-latest}"
+        export ANTHROPIC_DEFAULT_HAIKU_MODEL="${THUNDEROMLX_HAIKU_MODEL:-claude-3-haiku}"
+        # Keep Claude Code from amplifying a bad local-model turn into an 8k+ token
+        # polluted context. Operators can raise this for controlled tests.
+        export CLAUDE_CODE_MAX_OUTPUT_TOKENS="${THUNDEROMLX_MAX_OUTPUT_TOKENS:-1024}"
+        ;;
       deepseek)
         local deepseek_token=""
         deepseek_token="$(_deepseek_auth_token 2>/dev/null || true)"

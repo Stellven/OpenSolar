@@ -2184,8 +2184,9 @@ EOF
 
 generate_dispatch() {
   local sid="$1" role="$2" task="$3"
-  local kb_context
+  local kb_context autoresearch_optimizer_context
   kb_context="$(build_dispatch_kb_context "$sid" "$role" "$task")"
+  autoresearch_optimizer_context="$(build_autoresearch_optimizer_context "$sid" "$role" "$task")"
   cat > "$SPRINTS_DIR/${sid}.dispatch.md" << EOF
 <!-- === STABLE PREFIX (cached) === -->
 # 协调器指令模板 v1
@@ -2231,9 +2232,28 @@ generate_dispatch() {
 - 角色: ${role}
 - 具体任务: ${task}
 ${kb_context}
+${autoresearch_optimizer_context}
 EOF
   # D3: bridge ledger — reviewed event
   type ledger_emit &>/dev/null && ledger_emit "reviewed" "$sid" "{\"role\":\"$role\",\"task\":\"$task\",\"by\":\"coordinator\"}" 2>/dev/null || true
+}
+
+build_autoresearch_optimizer_context() {
+  local sid="$1" role="$2" task="$3"
+  local optimizer_py="$HARNESS_DIR/lib/autoresearch_pane_optimizer.py"
+  local status_file="$SPRINTS_DIR/${sid}.status.json"
+  local eval_json="$SPRINTS_DIR/${sid}.eval.json"
+  local eval_md="$SPRINTS_DIR/${sid}.eval.md"
+  [[ -f "$optimizer_py" ]] || return 0
+  python3 "$optimizer_py" \
+    --sid "$sid" \
+    --role "$role" \
+    --task "$task" \
+    --status-file "$status_file" \
+    --eval-json "$eval_json" \
+    --eval-md "$eval_md" \
+    --record-status \
+    --format markdown 2>/dev/null || true
 }
 
 # 追加内容到已有 dispatch.md
@@ -3105,6 +3125,14 @@ EOF
   if [[ "$phase" == "graph_dispatch_active" || "$phase" == "planning_complete" ]]; then
     if [[ -f "$SPRINTS_DIR/${sid}.task_graph.json" ]]; then
       log "${G}Sprint ${sid} ${phase} + task_graph → DAG graph_node 派发${N}"
+      if type queue_consume_intent_prefix &>/dev/null; then
+        local pm_fix_consumed
+        pm_fix_consumed=$(queue_consume_intent_prefix "$sid" "pm_prd_fix|" "superseded_by_graph_dispatch" 2>/dev/null || echo 0)
+        if [[ "${pm_fix_consumed:-0}" != "0" ]]; then
+          log "${Y}[graph-dispatch] consumed ${pm_fix_consumed} obsolete pm_prd_fix queue item(s) for ${sid}${N}"
+          emit_event "$sid" "obsolete_pm_prd_fix_queue_consumed" "coordinator" "{\"count\":${pm_fix_consumed}}"
+        fi
+      fi
       local graph_dispatcher="$HARNESS_DIR/lib/graph_node_dispatcher.py"
       if [[ ! -f "$graph_dispatcher" ]]; then
         log "${R}[graph-dispatch] missing dispatcher: ${graph_dispatcher}${N}"
@@ -4482,10 +4510,10 @@ with open('$patches_file','w') as f:
   fi
 
   # ── Startup actionable-state recovery ─────────────────────────────────────
-  # If coordinator restarts after a planner has already written
-  # status=planning_complete, the persisted last_state can equal the current
-  # state and the normal "state changed" branch will not fire. Replay only this
-  # narrow builder handoff state, guarded by .builder-flow-dispatched.
+  # If coordinator restarts after planner/DAG artifacts are already present,
+  # the persisted last_state can equal the current state and the normal
+  # "state changed" branch will not fire. Replay only DAG-ready builder
+  # handoff states.
   local planning_recovery_count=0
   for rsf in "$SPRINTS_DIR"/sprint-*.status.json; do
     [[ -f "$rsf" ]] || continue
@@ -4494,10 +4522,10 @@ with open('$patches_file','w') as f:
     rst=$(get_field "$rsf" "status")
     rphase=$(get_field "$rsf" "phase")
     [[ -n "$rsid" ]] || continue
-    if [[ "$rst" == "planning_complete" && "$rphase" == "planning_complete" && -f "$SPRINTS_DIR/${rsid}.plan.md" ]]; then
+    if [[ ( "$rst" == "planning_complete" || "$rst" == "active" ) && ( "$rphase" == "planning_complete" || "$rphase" == "graph_dispatch_active" ) && -f "$SPRINTS_DIR/${rsid}.plan.md" ]]; then
       if ! builder_flow_marked "$rsid" "builder_dispatch"; then
         ((planning_recovery_count+=1))
-        log "startup recovery: replaying planning_complete builder handoff for $rsid"
+        log "startup recovery: replaying DAG-ready builder handoff for $rsid (status=${rst}, phase=${rphase})"
         handle_active "$rsid" "$rsf"
       fi
     fi

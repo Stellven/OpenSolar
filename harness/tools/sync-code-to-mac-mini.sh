@@ -117,6 +117,7 @@ HARNESS_EXCLUDES=(
   --exclude='events.jsonl'
   --exclude='logs/'
   --exclude='run/'
+  --exclude='sprints/'
   --exclude='cache/'
   --exclude='backups/'
   --exclude='workspace/'

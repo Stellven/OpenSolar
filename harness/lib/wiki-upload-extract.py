@@ -4,7 +4,8 @@ wiki-upload-extract.py — Extract text from uploaded documents.
 
 Supports:
   - .pages (Apple Pages) via IWA/snappy protobuf parsing
-  - .pdf  via PyMuPDF (fitz)
+  - .pdf  via MinerU-first deep extraction, with explicit degraded fallback
+  - .docx/.pptx via document-explorer dependencies when available
   - .html/.htm via HTMLParser
   - .md/.txt pass-through
 
@@ -19,8 +20,76 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import zipfile
+from pathlib import Path
+
+
+VAULT_ROOT = Path(os.environ.get("OBSIDIAN_VAULT_PATH", str(Path.home() / "Knowledge"))).expanduser()
+MINERU_EXTRACTOR = os.environ.get("SOLAR_HARNESS_MINERU_EXTRACTOR", "")
+REQUIRE_MINERU = os.environ.get("SOLAR_HARNESS_REQUIRE_MINERU", "0") == "1"
+MAX_MINERU_ARTIFACT_CHARS = int(os.environ.get("SOLAR_HARNESS_MINERU_ARTIFACT_CHARS", "240000"))
+
+
+def _base_result() -> dict:
+    return {
+        "status": "pending",
+        "text": "",
+        "error": None,
+        "method": None,
+        "quality": "unknown",
+        "provenance": {},
+    }
+
+
+def _read_limited(path: Path, max_chars: int) -> str:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")[:max_chars]
+    except OSError:
+        return ""
+
+
+def _mineru_command(pdf_path: str) -> list[str]:
+    if MINERU_EXTRACTOR:
+        return [MINERU_EXTRACTOR, pdf_path, str(VAULT_ROOT)]
+    return [
+        sys.executable,
+        str(Path(__file__).resolve().with_name("mineru_extract.py")),
+        "extract",
+        pdf_path,
+        "--vault",
+        str(VAULT_ROOT),
+        "--json",
+    ]
+
+
+def _collect_mineru_markdown(payload: dict) -> str:
+    ref_dir = Path(str(payload.get("ref_dir", ""))).expanduser()
+    pages = payload.get("generated_pages") or []
+    candidates: list[Path] = []
+    if ref_dir:
+        candidates.append(ref_dir / "index.md")
+    for item in pages:
+        p = Path(str(item)).expanduser()
+        if not p.is_absolute() and ref_dir:
+            p = ref_dir / p
+        candidates.append(p)
+
+    seen: set[str] = set()
+    parts: list[str] = []
+    remaining = MAX_MINERU_ARTIFACT_CHARS
+    for path in candidates:
+        key = str(path)
+        if key in seen or remaining <= 0:
+            continue
+        seen.add(key)
+        text = _read_limited(path, remaining)
+        if not text.strip():
+            continue
+        parts.append(f"\n\n<!-- mineru_source: {path} -->\n\n{text}")
+        remaining -= len(text)
+    return "\n".join(parts).strip()
 
 # ---------------------------------------------------------------------------
 # Pages extraction (IWA + snappy)
@@ -28,7 +97,7 @@ import zipfile
 
 def extract_pages_text(pages_path: str) -> dict:
     """Extract text from an Apple .pages file by parsing IWA archives."""
-    result = {"status": "pending", "text": "", "error": None, "method": None}
+    result = _base_result()
 
     if not os.path.isfile(pages_path):
         result["status"] = "extract_failed"
@@ -66,6 +135,7 @@ def extract_pages_text(pages_path: str) -> dict:
             result["text"] = '\n'.join(text_parts)
             result["status"] = "success"
             result["method"] = "iwa_snappy"
+            result["quality"] = "structured_text"
             return result
     except ImportError:
         pass
@@ -112,6 +182,7 @@ def extract_pages_text(pages_path: str) -> dict:
                             result["text"] = '\n'.join(te.parts)
                             result["status"] = "success"
                             result["method"] = "qlmanage_html"
+                            result["quality"] = "fallback_preview"
                             return result
     except Exception:
         pass
@@ -126,7 +197,47 @@ def extract_pages_text(pages_path: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def extract_pdf_text(pdf_path: str) -> dict:
-    result = {"status": "pending", "text": "", "error": None, "method": None}
+    """Extract PDF through MinerU first.
+
+    PyMuPDF is retained only as an explicit degraded fallback so upload/backfill
+    paths cannot silently create low-quality paper notes from raw PDF text.
+    """
+    result = _base_result()
+    mineru_error = ""
+    try:
+        proc = subprocess.run(
+            _mineru_command(pdf_path),
+            capture_output=True,
+            text=True,
+            timeout=int(os.environ.get("SOLAR_HARNESS_MINERU_TIMEOUT", "900")),
+        )
+        if proc.returncode == 0:
+            payload = json.loads(proc.stdout or "{}")
+            text = _collect_mineru_markdown(payload)
+            if payload.get("ok") and text.strip():
+                result["text"] = text
+                result["status"] = "success"
+                result["method"] = f"mineru:{payload.get('method') or 'unknown'}"
+                result["quality"] = "mineru_deep_extraction"
+                result["provenance"] = {
+                    "mineru_ref_dir": payload.get("ref_dir", ""),
+                    "mineru_generated_pages": payload.get("generated_pages", []),
+                    "mineru_extraction_status": payload.get("extraction_status", ""),
+                }
+                return result
+            mineru_error = payload.get("error") or payload.get("extraction_status") or "mineru_empty_artifact"
+        else:
+            mineru_error = (proc.stderr or proc.stdout or f"mineru_exit_{proc.returncode}").strip()[:1000]
+    except Exception as e:
+        mineru_error = f"{type(e).__name__}: {e}"
+
+    if REQUIRE_MINERU:
+        result["status"] = "extract_failed"
+        result["error"] = f"mineru_required:{mineru_error or 'unavailable'}"
+        result["method"] = "mineru_required"
+        result["quality"] = "blocked"
+        return result
+
     try:
         import fitz
         doc = fitz.open(pdf_path)
@@ -138,16 +249,85 @@ def extract_pdf_text(pdf_path: str) -> dict:
         if text.strip():
             result["text"] = text
             result["status"] = "success"
-            result["method"] = "pymupdf"
+            result["method"] = "mineru_unavailable:pymupdf_fallback"
+            result["quality"] = "degraded_fallback_requires_reingest"
+            result["provenance"] = {"mineru_error": mineru_error}
+        else:
+            result["status"] = "extract_failed"
+            result["error"] = f"mineru_failed_then_pymupdf_empty:{mineru_error}"
+    except ImportError:
+        result["status"] = "extract_failed"
+        result["error"] = f"mineru_failed_and_pymupdf_not_installed:{mineru_error}"
+    except Exception as e:
+        result["status"] = "extract_failed"
+        result["error"] = f"mineru_failed_then_pymupdf_error:{mineru_error}; {e}"
+    return result
+
+
+def extract_docx_text(docx_path: str) -> dict:
+    result = _base_result()
+    try:
+        import docx  # type: ignore
+        document = docx.Document(docx_path)
+        parts = [p.text.strip() for p in document.paragraphs if p.text.strip()]
+        for table in document.tables:
+            for row in table.rows:
+                cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                if cells:
+                    parts.append(" | ".join(cells))
+        text = "\n".join(parts)
+        if text.strip():
+            result["text"] = text
+            result["status"] = "success"
+            result["method"] = "document_explorer:python_docx"
+            result["quality"] = "structured_text"
         else:
             result["status"] = "extract_failed"
             result["error"] = "empty_text"
+            result["quality"] = "blocked"
     except ImportError:
         result["status"] = "extract_failed"
-        result["error"] = "pymupdf_not_installed"
+        result["error"] = "document_explorer_dependency_missing:python-docx"
+        result["quality"] = "blocked"
     except Exception as e:
         result["status"] = "extract_failed"
         result["error"] = str(e)
+        result["quality"] = "blocked"
+    return result
+
+
+def extract_pptx_text(pptx_path: str) -> dict:
+    result = _base_result()
+    try:
+        from pptx import Presentation  # type: ignore
+        presentation = Presentation(pptx_path)
+        parts: list[str] = []
+        for idx, slide in enumerate(presentation.slides, start=1):
+            slide_parts: list[str] = []
+            for shape in slide.shapes:
+                text = getattr(shape, "text", "")
+                if text and text.strip():
+                    slide_parts.append(text.strip())
+            if slide_parts:
+                parts.append(f"## Slide {idx}\n" + "\n".join(slide_parts))
+        text = "\n\n".join(parts)
+        if text.strip():
+            result["text"] = text
+            result["status"] = "success"
+            result["method"] = "document_explorer:python_pptx"
+            result["quality"] = "structured_text"
+        else:
+            result["status"] = "extract_failed"
+            result["error"] = "empty_text"
+            result["quality"] = "blocked"
+    except ImportError:
+        result["status"] = "extract_failed"
+        result["error"] = "document_explorer_dependency_missing:python-pptx"
+        result["quality"] = "blocked"
+    except Exception as e:
+        result["status"] = "extract_failed"
+        result["error"] = str(e)
+        result["quality"] = "blocked"
     return result
 
 
@@ -157,7 +337,7 @@ def extract_pdf_text(pdf_path: str) -> dict:
 
 def extract_html_text(html_path: str) -> dict:
     from html.parser import HTMLParser
-    result = {"status": "pending", "text": "", "error": None, "method": None}
+    result = _base_result()
     try:
         with open(html_path, encoding='utf-8', errors='replace') as f:
             html = f.read()
@@ -184,6 +364,7 @@ def extract_html_text(html_path: str) -> dict:
             result["text"] = text
             result["status"] = "success"
             result["method"] = "html_parser"
+            result["quality"] = "structured_text"
         else:
             result["status"] = "extract_failed"
             result["error"] = "empty_text"
@@ -200,6 +381,8 @@ def extract_html_text(html_path: str) -> dict:
 EXTRACTORS = {
     '.pages': extract_pages_text,
     '.pdf': extract_pdf_text,
+    '.docx': extract_docx_text,
+    '.pptx': extract_pptx_text,
     '.html': extract_html_text,
     '.htm': extract_html_text,
 }
@@ -218,6 +401,7 @@ def extract_file(source_path: str, output_dir: str = None) -> dict:
             "source": os.path.basename(source_path),
             "status": "success",
             "method": "passthrough",
+            "quality": "source_text",
             "error": None,
             "text_length": len(text),
             "text_preview": text[:500],
@@ -230,6 +414,7 @@ def extract_file(source_path: str, output_dir: str = None) -> dict:
             "source": os.path.basename(source_path),
             "status": "extract_failed",
             "method": None,
+            "quality": "blocked",
             "error": f"unsupported_extension:{ext}",
             "text_length": 0,
             "text_preview": None,

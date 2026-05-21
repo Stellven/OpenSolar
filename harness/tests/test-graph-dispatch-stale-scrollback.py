@@ -80,6 +80,39 @@ old lines 13
     assert mod._pane_unavailable_reason("solar-harness:0.3") == "unsubmitted_prompt_residue"
     assert mod._pane_tui_busy("solar-harness:0.3") is True
 
+    confirmation_prompt = """
+────────────────────────────────────────────────────────────────
+ Bash command
+
+   for file in *.json; do jq -r 'paths | join(".")' "$file"; done
+
+ Unhandled node type: string
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. No
+
+ Esc to cancel · Tab to amend · ctrl+e to explain
+"""
+    mod._pane_tail = lambda pane, lines=80: confirmation_prompt
+    assert mod._pane_tui_busy("solar-harness-lab:0.1") is True
+
+    stale_busy_marker_with_empty_prompt = """
+  ⎿  ~/.solar/harness/lib/benchmark/schemas.py
+
+· Pondering… (29s · ↓ 430 tokens · thought for 4s)
+
+● How is Claude doing this session? (optional)
+  1: Bad    2: Fine   3: Good   0: Dismiss
+
+────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · esc to interrupt
+"""
+    mod._pane_tail = lambda pane, lines=80: stale_busy_marker_with_empty_prompt
+    assert mod._pane_tui_busy("solar-harness:0.3") is False
+
     print("PASS graph dispatcher ignores stale completed prompt scrollback")
     return 0
 

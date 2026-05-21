@@ -67,12 +67,16 @@ COMPACTING_RE = re.compile(r"Compacting conversation|压缩上下文|Compacting"
 PROMPT_IDLE_RE = re.compile(r"Press up to edit queued messages|❯\s*$|Try \"", re.M)
 PANE_BUSY_RE = re.compile(
     r"Compacting conversation|Compacting|✳|✶|✽|✢|⏺ Bash|Running|Effecting|Swooping|thinking|Cogitating|Churning|Ruminating|"
-    r"Working|Mustering|Herding|Baking|Reticulating|Scurrying|Roosting|Whirring|Smooshing|[·✳✶✽✢]\s+[A-Za-z][A-Za-z-]*…",
+    r"Working|Mustering|Herding|Baking|Reticulating|Scurrying|Roosting|Whirring|Smooshing|"
+    r"Unhandled node type|Do you want to proceed\?|Enter to confirm|Esc to cancel|Bash command|"
+    r"[·✳✶✽✢]\s+[A-Za-z][A-Za-z-]*…",
     re.I,
 )
 PANE_BOTTOM_BUSY_RE = re.compile(
     r"Compacting conversation|Compacting|Press up to edit queued messages|✳|✶|✽|✢|Mustering|Herding|Baking|Cogitating|Churning|Ruminating|Thinking|"
-    r"Reticulating|Scurrying|Roosting|Whirring|Smooshing|[·✳✶✽✢]\s+[A-Za-z][A-Za-z-]*…",
+    r"Reticulating|Scurrying|Roosting|Whirring|Smooshing|"
+    r"Unhandled node type|Do you want to proceed\?|Enter to confirm|Esc to cancel|Bash command|"
+    r"[·✳✶✽✢]\s+[A-Za-z][A-Za-z-]*…",
     re.I,
 )
 PANE_UNAVAILABLE_RE = re.compile(
@@ -541,6 +545,40 @@ def tmux_title(target: str) -> str:
         return ""
 
 
+def pane_title_matches_role(target: str, role: str, title: str | None = None) -> bool:
+    if os.environ.get("SOLAR_AUTOPILOT_ALLOW_ANY_ROLE_PANE") == "1":
+        return True
+    title = tmux_title(target) if title is None else title
+    if role in ("builder", "lab-builder"):
+        if target == f"{SESSION}:0.2" or target.startswith("solar-harness-lab:"):
+            return bool(re.search(r"Builder|建设者|lab-builder", title, re.I)) and not bool(
+                re.search(r"PM|产品经理|Planner|规划者|Evaluator|审判官", title, re.I)
+            )
+        return False
+    if role == "evaluator":
+        if target != f"{SESSION}:0.3":
+            return False
+        non_role_title = re.sub(r"Evaluator|审判官", "", title, flags=re.I)
+        return bool(re.search(r"Evaluator|审判官", title, re.I)) and not bool(
+            re.search(r"PM|产品经理|Planner|规划者|Builder|建设者", non_role_title, re.I)
+        )
+    if role == "planner":
+        if target != f"{SESSION}:0.1":
+            return False
+        non_role_title = re.sub(r"Planner|规划者", "", title, flags=re.I)
+        return bool(re.search(r"Planner|规划者", title, re.I)) and not bool(
+            re.search(r"PM|产品经理|Builder|建设者|Evaluator|审判官", non_role_title, re.I)
+        )
+    if role == "pm":
+        if target != f"{SESSION}:0.0":
+            return False
+        non_role_title = re.sub(r"PM|产品经理", "", title, flags=re.I)
+        return bool(re.search(r"PM|产品经理", title, re.I)) and not bool(
+            re.search(r"Planner|规划者|Builder|建设者|Evaluator|审判官", non_role_title, re.I)
+        )
+    return False
+
+
 def tmux_set_title(target: str, title: str) -> bool:
     try:
         r = subprocess.run(["tmux", "select-pane", "-t", target, "-T", title], timeout=1.5)
@@ -834,7 +872,7 @@ def retry_queue(state: dict, dispatch: bool, cooldown: int) -> list[dict]:
             actions.append({"sid": sid, "action": item.get("type"), "queued": True, "reason": "pane_busy", "target": target})
             continue
         sent = False
-        if dispatch and target:
+        if dispatch and target and item.get("type") != "pane_safe_continue_prompt":
             clear_current_prompt(target)
         if dispatch and sid:
             sent = wake_sid(sid)
@@ -886,6 +924,8 @@ def pane_is_busy(target: str) -> bool:
     if PANE_UNAVAILABLE_RE.search(bottom):
         return True
     if PANE_BOTTOM_BUSY_RE.search(bottom):
+        if pane_at_prompt(tail) and not PANE_PROMPT_RESIDUE_RE.search(bottom):
+            return False
         return True
     if PANE_PROMPT_RESIDUE_RE.search(bottom) and not pane_safe_continue_prompt(tail):
         return True
@@ -966,15 +1006,21 @@ def pane_target_for_handoff(handoff: str) -> str:
 def discover_worker_panes() -> list[str]:
     try:
         r = subprocess.run(
-            ["tmux", "list-panes", "-a", "-F", "#{session_name}:#{window_index}.#{pane_index}"],
+            ["tmux", "list-panes", "-a", "-F", "#{session_name}:#{window_index}.#{pane_index}\t#{pane_title}"],
             capture_output=True,
             text=True,
             timeout=2,
         )
         if r.returncode == 0:
-            panes = [p.strip() for p in r.stdout.splitlines() if p.strip()]
-            builders = [p for p in panes if p.startswith(f"{SESSION}:") or p.startswith("solar-harness-lab:")]
-            return builders or panes
+            rows = [p.rstrip("\n").split("\t", 1) for p in r.stdout.splitlines() if p.strip()]
+            builders = [
+                row[0].strip()
+                for row in rows
+                if row
+                and (row[0].strip().startswith(f"{SESSION}:") or row[0].strip().startswith("solar-harness-lab:"))
+                and pane_title_matches_role(row[0].strip(), "builder", row[1].strip() if len(row) > 1 else "")
+            ]
+            return builders
     except Exception:
         pass
     return [f"{SESSION}:0.2"]
@@ -995,22 +1041,41 @@ def infer_worker_models(pane: str) -> list[str]:
 def graph_workers() -> list[dict]:
     workers = []
     skills = [
-        "bash", "python", "dataclasses", "pytest", "pure-functions", "time-injection", "io", "fsm", "integration-testing", "json-patch", "typescript", "docs", "testing",
-        "frontend", "flask", "http-routing", "autopilot-hooks", "json-traversal", "html", "javascript", "vanilla-dom",
+        "bash", "shell", "python", "python-read", "dataclasses", "pytest", "subprocess", "sqlite3", "pure-functions", "time-injection", "timeouts", "concurrency", "io", "fsm", "integration", "integration-testing", "integration-tests", "regression", "regression-tests", "bash-tests", "jq", "json", "json-patch", "jsonl-tail", "typescript", "docs", "testing",
+        "stub-llm", "e2e-test", "cli-view-assertion", "negative-control", "verifier", "registry-introspection",
+        "cli-audit", "cli-design", "argparse", "argparse-bridge", "json-schema", "json-shape-inspect", "validation",
+        "technical-writing", "markdown", "regex", "markdown-parse", "evidence-aggregation", "handoff-authoring", "traceability-patch", "knowledge-raw-writeback",
+        "frontend", "terminal-ui", "tvs", "vdl", "snapshot", "snapshot-testing", "flask", "http-routing", "http-endpoint", "autopilot-hooks", "json-traversal", "html", "javascript", "vanilla-dom",
         "product", "planning",
-        "architecture", "schema", "state-machine", "distributed-systems",
+        "architecture", "schema", "state-machine", "state-schema-design", "distributed-systems",
+        "code-audit", "docs-audit", "type-hints", "type-protocols", "refactor", "tmux-inspect", "data-aggregation", "shutil", "urllib", "atomic-writes", "hashing", "unittest-mock", "evidence-collection", "evaluator-summary",
         "api-design", "data-modeling", "compatibility",
-        "routing", "diagnostics", "evaluation", "debug.systematic",
+        "routing", "diagnostics", "evaluation", "capability-graph", "event-sourcing", "debug.systematic",
+        "lazy-import",
     ]
     capabilities = [
         "bash", "python", "typescript", "docs", "testing",
-        "frontend", "observability",
+        "frontend", "observability", "evidence",
+        "env-passthrough", "metrics",
+        "harness.context_preflight", "harness.intent", "harness.dispatch_visibility", "harness.contracts",
+        "harness.dag", "harness.status", "harness.model_routing",
+        "intent.match", "intent.audit", "dispatch.intent_telemetry",
+        "models.show", "models.lab_matrix", "models.footer_labels",
+        "context.inject", "wiki.status", "data_plane.audit",
+        "dag.validate", "dag.ready_nodes", "dag.join_gate",
+        "harness.testing", "harness.reporting", "harness.knowledge",
+        "lazy-import", "cli",
+        "activation.proof", "negative_control", "runtime_artifacts",
+        "autopilot.monitor", "autopilot.safe_apply", "pane.deadlock_detection",
         "documentation", "schema", "state-machine", "storage", "sources",
         "code.review", "debug.systematic", "skill.methodology",
         "workflow.planning", "product.requirements", "test.tdd", "browser.browse", "browser.qa",
+        "research.empirical_pipeline", "research.literature_review",
+        "analysis.causal_inference",
         "architecture", "distributed-systems", "evaluation",
         "research.scope_rewrite", "research.source_matrix", "research.evidence.extract",
         "research.claim.mine", "research.citation.verify", "research.report.compile",
+        "report.compile", "research.long_report_compiler", "research.report_ast",
         "document.convert", "document.markdown_extract",
         "ruflo.swarm", "ruflo.plugins", "ruflo.agent_catalog",
         "ruflo.memory", "ruflo.mcp", "ruflo.workflow_templates",
@@ -1425,10 +1490,15 @@ def instruction_for(status: dict, files: dict[str, bool]) -> str:
             f"请接手 {sid}：读取 .prd.md 和 .contract.md，产出 {sid}.plan.md 和 {sid}.task_graph.json。"
             "task_graph 必须通过 solar-harness graph-scheduler validate。不要问用户拍板；这是 P0 reliability 默认推进。"
         )
-    if handoff in ("builder", "builder_main", "builder_parallel", "builder-lab") and files["plan"] and not files["handoff"]:
+    if (
+        handoff in ("builder", "builder_main", "builder_parallel", "builder-lab")
+        and files["plan"]
+        and files["task_graph"]
+        and not files["handoff"]
+    ):
         return (
-            f"请接手 {sid}：按 plan/contract 实现并写 {sid}.handoff.md。"
-            "先跑验收命令，缺口写清楚。"
+            f"请接手 {sid}：读取 task_graph.json，并按 DAG/graph-dispatch 执行 ready nodes；"
+            "禁止在缺少 DAG 时直接写 parent handoff。"
         )
     if handoff in ("evaluator", "reviewer") and files["handoff"] and not files["eval"]:
         return f"请评审 {sid}：读取 handoff/contract，产出 eval.md/eval.json。"
@@ -1592,6 +1662,7 @@ def inspect_sprints() -> list[dict]:
                     ),
                 }
             )
+            continue
         if files["plan"] and files["task_graph"] and handoff in (GRAPH_READY_HANDOFFS | GRAPH_EVAL_HANDOFFS):
             gs = graph_status(sid)
             if gs.get("parent_ready"):
@@ -1630,7 +1701,7 @@ def inspect_sprints() -> list[dict]:
                         "graph": gs,
                     }
                 )
-        if files["plan"] and not files["task_graph"] and handoff in ("builder", "builder_main", "builder_parallel", "builder-lab") and not files["handoff"]:
+        if files["plan"] and files["task_graph"] and handoff in ("builder", "builder_main", "builder_parallel", "builder-lab") and not files["handoff"]:
             raw_findings.append(
                 {
                     "sid": sid,
@@ -1971,7 +2042,7 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
             mark_action(state, f, result)
             actions.append(result)
             continue
-        if dispatch and target:
+        if dispatch and target and ftype != "pane_safe_continue_prompt":
             clear_current_prompt(target)
         if ftype in ("graph_ready_nodes",):
             result = dispatch_ready_graph_nodes(sid, lease=dispatch)
@@ -2157,13 +2228,16 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
             actions.append(result)
         elif ftype == "pane_safe_continue_prompt":
             sent = False
-            if dispatch and f.get("target"):
+            role_ok = pane_title_matches_role(f.get("target", ""), f.get("role", ""))
+            if dispatch and f.get("target") and role_ok:
                 try:
                     sent = subprocess.run(["tmux", "send-keys", "-t", f["target"], "Enter"], timeout=2).returncode == 0
                 except Exception:
                     sent = False
             append_event(f.get("sid", ""), "autopilot_submitted_safe_continue_prompt", "info" if sent else "warn", f)
             result = {"sid": sid, "action": ftype, "target": f.get("target", ""), "dispatched": sent}
+            if not role_ok:
+                result["skipped"] = "role_mismatch"
             if sent and target:
                 used_targets.add(target)
             mark_action(state, f, result)
@@ -2235,6 +2309,68 @@ def scan_once(args: argparse.Namespace, state: dict) -> dict:
     return payload
 
 
+def epic_status_matrix(epic_id: str = "", output_json: bool = False) -> int:
+    """Print epic child sprint state matrix for operator-visible progress checks."""
+    rows: list[dict] = []
+    for status_path in sorted(SPRINTS.glob("sprint-*.status.json")):
+        try:
+            data = json.loads(status_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+
+        sid = str(data.get("sprint_id") or data.get("id") or status_path.name.removesuffix(".status.json"))
+        sprint_epic = str(data.get("epic_id") or "")
+        if epic_id and sprint_epic != epic_id:
+            continue
+
+        blocked_by = ""
+        for entry in reversed(data.get("history") or []):
+            if isinstance(entry, dict) and entry.get("blocked_by"):
+                blockers = entry["blocked_by"]
+                blocked_by = ", ".join(str(b) for b in blockers) if isinstance(blockers, list) else str(blockers)
+                break
+
+        capability = ""
+        task_graph_path = status_path.parent / status_path.name.replace(".status.json", ".task_graph.json")
+        if task_graph_path.exists():
+            try:
+                graph = json.loads(task_graph_path.read_text(encoding="utf-8"))
+                caps: list[str] = []
+                for node in (graph.get("nodes") or [])[:3]:
+                    if not isinstance(node, dict):
+                        continue
+                    for cap in (node.get("required_capabilities") or [])[:2]:
+                        if cap and cap not in caps:
+                            caps.append(str(cap))
+                capability = "; ".join(caps[:3])
+            except Exception:
+                pass
+
+        rows.append({
+            "sprint_id": sid,
+            "status": str(data.get("status") or ""),
+            "phase": str(data.get("phase") or ""),
+            "handoff_to": str(data.get("handoff_to") or ""),
+            "blocked_by": blocked_by,
+            "capability": capability,
+            "epic_id": sprint_epic,
+        })
+
+    if output_json:
+        print(json.dumps({"ok": True, "count": len(rows), "rows": rows}, ensure_ascii=False, indent=2))
+        return 0
+
+    print("| sprint_id | status | phase | handoff_to | blocked_by | capability |")
+    print("|-----------|--------|-------|------------|------------|------------|")
+    for row in rows:
+        sid_short = row["sprint_id"][-40:] if len(row["sprint_id"]) > 40 else row["sprint_id"]
+        print(
+            f"| {sid_short} | {row['status']} | {row['phase']} | {row['handoff_to']}"
+            f" | {row['blocked_by'] or '—'} | {row['capability'] or '—'} |"
+        )
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true")
@@ -2246,7 +2382,12 @@ def main() -> int:
     parser.add_argument("--cooldown", type=int, default=300, help="seconds between repeated actions for same finding")
     parser.add_argument("--stall-seconds", type=int, default=180, help="pane unchanged seconds before compact/stall recovery")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--epic-status-matrix", action="store_true", dest="epic_status_matrix",
+                        help="Print epic child sprint state matrix and exit")
+    parser.add_argument("--epic", default="", help="Filter --epic-status-matrix by epic_id")
     args = parser.parse_args()
+    if args.epic_status_matrix:
+        return epic_status_matrix(epic_id=args.epic, output_json=args.json)
     if args.once:
         args.loop = False
 
