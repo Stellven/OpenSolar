@@ -155,7 +155,7 @@ verify_remote() {
     grep -q 'graph-scheduler' /tmp/solar-harness-help.verify
     grep -q 'verify-integrations' /tmp/solar-harness-help.verify
     grep -q 'context inject' /tmp/solar-harness-help.verify
-    if grep -R --exclude-dir='__pycache__' --exclude='*.pyc' --exclude='sync-code-to-mac-mini.sh' --exclude='model-config.sh' '/Users/lisihao' '$REMOTE_PATH/.solar/harness/lib' '$REMOTE_PATH/.solar/harness/tools' '$REMOTE_PATH/.solar/harness/'*.sh '$REMOTE_PATH/.solar/bin' '$REMOTE_PATH/.solar/codex-bridge' >/tmp/solar-path-leaks.verify 2>/dev/null; then
+    if grep -R --exclude-dir='__pycache__' --exclude='*.pyc' --exclude='sync-code-to-mac-mini.sh' --exclude='model-config.sh' '/Users/sihaoli' '$REMOTE_PATH/.solar/harness/lib' '$REMOTE_PATH/.solar/harness/tools' '$REMOTE_PATH/.solar/harness/'*.sh '$REMOTE_PATH/.solar/bin' '$REMOTE_PATH/.solar/codex-bridge' >/tmp/solar-path-leaks.verify 2>/dev/null; then
       echo 'path_leaks_found'
       head -20 /tmp/solar-path-leaks.verify
       exit 42

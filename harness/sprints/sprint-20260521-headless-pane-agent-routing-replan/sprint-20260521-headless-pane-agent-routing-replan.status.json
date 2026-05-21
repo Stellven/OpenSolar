@@ -1,0 +1,9 @@
+{
+  "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan",
+  "status": "queued",
+  "phase": "task_graph_ready",
+  "handoff_to": "multi-task",
+  "target_role": "multi-task",
+  "updated_at": "2026-05-21T20:20:00Z",
+  "summary": "Ready for Mac mini solar-harness multi-task headless execution."
+}
