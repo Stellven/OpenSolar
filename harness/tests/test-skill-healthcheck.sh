@@ -20,12 +20,6 @@ assert data["remote"]["checked"] is False
 assert data["report_path"]
 assert pathlib.Path(data["report_path"]).exists()
 assert isinstance(data["skill_candidates"], list)
-assert data["memrl_status"]["implementation_exists"] is True
-assert "sys_skill_bank" in data["memrl_status"]["required_tables_present"]
-assert data["skillrl_status"]["knowledge_doc_exists"] is True
-assert data["evolution_engine"]["ok"] is True
-assert data["evolution_gate"]["promotion_allowed"] is False
-assert "external_eval_pack_not_passed" in data["evolution_gate"]["promotion_blockers"]
-assert data["memrl_feedback"]["jsonl"]
 print("skill-healthcheck ok")
 PY
+

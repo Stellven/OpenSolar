@@ -96,6 +96,14 @@ try:
     if d.get('verdict') not in ('ok','degraded','fail'):
         print(f'INVALID_VERDICT: {d.get(\"verdict\")}')
         sys.exit(1)
+    tvs = d.get('services', {}).get('tvs_renderer')
+    if not isinstance(tvs, dict):
+        print('MISSING: services.tvs_renderer')
+        sys.exit(1)
+    for key in ['status', 'bun', 'cli', 'root', 'smoke']:
+        if key not in tvs:
+            print(f'MISSING: services.tvs_renderer.{key}')
+            sys.exit(1)
     # Verify NO secret values in output
     out_str = json.dumps(d)
     import re

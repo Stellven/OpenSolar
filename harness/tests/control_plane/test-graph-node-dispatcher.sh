@@ -225,6 +225,11 @@ g._pane_exists = lambda pane: pane in {
     "solar-harness-test:0.3",
     "solar-harness-lab:0.3",
 }
+g._pane_title = lambda pane: {
+    "solar-harness-test:0.1": "Planner",
+    "solar-harness-test:0.3": "Evaluator",
+    "solar-harness-lab:0.3": "Lab Builder",
+}.get(pane, "")
 g.read_lease = lambda pane: {}
 panes = [item["pane"] for item in g._discover_evaluators(False)]
 print(",".join(panes))

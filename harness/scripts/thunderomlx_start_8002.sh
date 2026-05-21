@@ -23,7 +23,9 @@ fi
 
 for _ in $(seq 1 90); do
   if lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
-    python3 "$HARNESS_DIR/scripts/thunderomlx_auto_prewarm.py" --force
+    if ! python3 "$HARNESS_DIR/scripts/thunderomlx_auto_prewarm.py" --force; then
+      echo "WARN: ThunderOMLX is listening on $HOST:$PORT but auto prewarm failed; continuing." >&2
+    fi
     exit 0
   fi
   sleep 2

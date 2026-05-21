@@ -257,15 +257,15 @@ grep -q "sprint-20260520-multi-task#B" /tmp/solar-multi-task-status.out \
 COLUMNS=80 LINES=20 PATH="$TMP/bin:$PATH" HARNESS_DIR="$TMP" "$TMP/solar-harness.sh" multi-task screen --graph "$graph" --command "显示状态" --no-clear >/tmp/solar-multi-task-screen.out
 grep -q "自然语言指令" /tmp/solar-multi-task-screen.out \
   || { echo "FAIL: screen did not render input pane"; exit 1; }
-grep -q "模型组合:" /tmp/solar-multi-task-screen.out \
+grep -q "models 可派=" /tmp/solar-multi-task-screen.out \
   || { echo "FAIL: screen did not show model matrix summary"; exit 1; }
 grep -q "可派=" /tmp/solar-multi-task-screen.out \
   || { echo "FAIL: screen model matrix summary did not show dispatchable combos"; exit 1; }
-grep -q "四分屏 / Builder Lab" /tmp/solar-multi-task-screen.out \
+grep -q "PANE MAP" /tmp/solar-multi-task-screen.out \
   || { echo "FAIL: screen did not show compact harness pane section"; exit 1; }
-grep -q "solar-harness:0.2" /tmp/solar-multi-task-screen.out \
+grep -q "main:2" /tmp/solar-multi-task-screen.out \
   || { echo "FAIL: screen did not show four-pane builder pane"; exit 1; }
-grep -q "multi-task workers" /tmp/solar-multi-task-screen.out \
+grep -q "WORKERS" /tmp/solar-multi-task-screen.out \
   || { echo "FAIL: screen did not show worker summary section"; exit 1; }
 grep -q "用 status 查看完整视图" /tmp/solar-multi-task-screen.out \
   || { echo "FAIL: screen did not expose compact truncation hint"; exit 1; }

@@ -5,7 +5,7 @@ description: Use this skill when Solar or solar-harness needs Mac mini sync audi
 
 # Solar Mac Mini Sync Auditor
 
-Use this skill to audit whether `/Users/sihaoli/.solar/harness` and
+Use this skill to audit whether `/Users/lisihao/.solar/harness` and
 `lisihao@100.122.223.55:/Users/lisihao/.solar/harness` are consistent enough
 for Solar/Solar-Harness work.
 
