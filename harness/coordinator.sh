@@ -1833,8 +1833,10 @@ dispatch_to_pane() {
     verify_output=$(tmux capture-pane -t "$pane" -p 2>/dev/null | tail -30)
     local has_keyword=0 has_processing=0
     printf '%s\n' "$verify_output" | grep -q "$dispatch_keyword" && has_keyword=1
-    # Claude 真在处理的特征: Crafting/Cogitating/Read(/⎿/✻/✻/Wandering/Sock-hopping
-    printf '%s\n' "$verify_output" | grep -qE 'Crafting|Cogitating|Wandering|Sock-hopping|Crunched|Puzzling|Read\(|Bash\(|Edit\(|Write\(|⎿|✻|✶|✳' && has_processing=1
+    # Claude 真在处理的特征。Claude Code 2.x frequently uses
+    # Ideating/Musing/Orbiting/Reticulating before a tool call; treating those
+    # as idle causes false dispatch failures while the pane is actually working.
+    printf '%s\n' "$verify_output" | grep -qE 'Crafting|Cogitating|Wandering|Sock-hopping|Crunched|Puzzling|Ideating|Musing|Orbiting|Reticulating|Read\(|Bash\(|Edit\(|Write\(|⎿|✻|✶|✳|✢' && has_processing=1
     if (( has_keyword && has_processing )); then
       PANE_CURRENT_SPRINT[$pane]="$sid"
       PANE_ASSIGN_TS[$pane]=$(date +%s)
