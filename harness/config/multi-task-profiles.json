@@ -56,6 +56,27 @@
       "best_for": ["large-context", "implementation", "code-search", "tests"],
       "max_parallel": 1
     },
+    "gemini-evaluator": {
+      "role": "evaluator",
+      "label": "Gemini 评审者",
+      "persona": "evaluator",
+      "backend": "gemini-cli",
+      "model": "gemini",
+      "approval_mode": "auto_edit",
+      "best_for": ["verification", "review", "evidence", "regression"],
+      "max_parallel": 1
+    },
+    "knowledge-extractor": {
+      "role": "builder",
+      "label": "知识库抽取器",
+      "persona": "builder",
+      "backend": "command",
+      "model": "thunderomlx",
+      "approval_mode": "default",
+      "best_for": ["knowledge-extraction", "backfill", "qmd-indexing"],
+      "command": "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/knowledge_extraction_multitask_agent.py\"",
+      "max_parallel": 1
+    },
     "deepseek-builder": {
       "role": "builder",
       "label": "DeepSeek 构建者",
