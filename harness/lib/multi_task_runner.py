@@ -95,6 +95,27 @@ DEFAULT_PROFILE_CONFIG: dict[str, Any] = {
             "best_for": ["large-context", "implementation"],
             "max_parallel": 1,
         },
+        "gemini-evaluator": {
+            "role": "evaluator",
+            "label": "Gemini 评审者",
+            "persona": "evaluator",
+            "backend": "gemini-cli",
+            "model": "gemini",
+            "approval_mode": "auto_edit",
+            "best_for": ["verification", "review", "evidence"],
+            "max_parallel": 1,
+        },
+        "knowledge-extractor": {
+            "role": "builder",
+            "label": "知识库抽取器",
+            "persona": "builder",
+            "backend": "command",
+            "model": "thunderomlx",
+            "approval_mode": "default",
+            "best_for": ["knowledge-extraction", "backfill", "qmd-indexing"],
+            "command": "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/knowledge_extraction_multitask_agent.py\"",
+            "max_parallel": 1,
+        },
     },
 }
 
@@ -262,11 +283,11 @@ def capability_for_profile(profile: dict[str, Any], include_probe: bool = True) 
             status = "error"
             evidence = f"gemini doctor failed:{type(exc).__name__}"
     elif backend == "command":
-        if os.environ.get("SOLAR_MULTI_TASK_AGENT_CMD") or env.get("solar_agent_cmd"):
-            evidence = "SOLAR_MULTI_TASK_AGENT_CMD set"
+        if profile.get("command") or os.environ.get("SOLAR_MULTI_TASK_AGENT_CMD") or env.get("solar_agent_cmd"):
+            evidence = "command configured"
         else:
             status = "error"
-            evidence = "SOLAR_MULTI_TASK_AGENT_CMD missing"
+            evidence = "command missing"
     else:
         status = "error"
         evidence = f"unknown backend={backend}"
@@ -451,7 +472,7 @@ def role_from_node(node: dict[str, Any]) -> str:
 def select_profile(node: dict[str, Any], profile_override: str = "", model_override: str = "", backend_override: str = "") -> dict[str, Any]:
     config = load_profiles()
     profiles = config.get("profiles") or {}
-    profile_name = profile_override or ""
+    profile_name = profile_override or str(node.get("preferred_profile") or node.get("profile") or "")
     if not profile_name:
         role = role_from_node(node)
         for name, spec in profiles.items():
@@ -1231,7 +1252,7 @@ def runner_script(task_dir: Path, payload: dict[str, Any]) -> Path:
     provider = str(payload.get("provider") or model_provider(model, backend))
     capability_status = str(payload.get("capability_status") or "N/A")
     approval_mode = str(payload.get("approval_mode") or "auto_edit")
-    agent_cmd = os.environ.get("SOLAR_MULTI_TASK_AGENT_CMD", "").strip()
+    agent_cmd = str(payload.get("command") or os.environ.get("SOLAR_MULTI_TASK_AGENT_CMD", "")).strip()
     adapter = HARNESS_DIR / "lib" / "gemini_adapter.py"
     if backend == "gemini-cli":
         agent_line = f"python3 {shlex.quote(str(adapter))} run --backend cli --model {shlex.quote(model)} --approval-mode {shlex.quote(approval_mode)} --auth subscription --prompt-file \"$DISPATCH_FILE\""
@@ -1260,6 +1281,7 @@ PROVIDER={shlex.quote(provider)}
 CAPABILITY_STATUS={shlex.quote(capability_status)}
 HANDOFF={shlex.quote(str(handoff))}
 HARNESS={shlex.quote(str(harness))}
+export TASK_DIR STATUS_FILE DISPATCH_FILE OUTPUT_LOG HARNESS_DIR SPRINTS_DIR GRAPH NODE_ID SID ROLE PROFILE BACKEND MODEL PROVIDER CAPABILITY_STATUS HANDOFF HARNESS
 
 pane_title() {{
   local title="$1"
@@ -1378,6 +1400,7 @@ def launch_node(graph_path: Path, graph: dict[str, Any], node: dict[str, Any], a
         "persona": profile.get("persona"),
         "backend": profile.get("backend"),
         "model": profile.get("model"),
+        "command": profile.get("command"),
         "provider": capability.get("provider"),
         "capability_status": capability.get("status"),
         "approval_mode": profile.get("approval_mode"),
