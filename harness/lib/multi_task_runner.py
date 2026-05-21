@@ -1207,10 +1207,12 @@ cat > "{handoff}" <<'EOF'
 EOF
 ```
 
-2. 将节点标记为 reviewing：
+2. 只需写 handoff 并让 runner 退出 0；后台 runner 会校验 handoff 并推进节点。
+   默认成功状态为 passed；若节点声明 review_required/requires_review/manual_review_required，
+   runner 才会推进到 reviewing。
 
 ```bash
-"{harness}" graph-scheduler mark --graph "{graph_path}" --node "{node_id}" --status reviewing --in-place
+exit 0
 ```
 """
 
@@ -1231,6 +1233,7 @@ def runner_script(task_dir: Path, payload: dict[str, Any]) -> Path:
     provider = str(payload.get("provider") or model_provider(model, backend))
     capability_status = str(payload.get("capability_status") or "N/A")
     approval_mode = str(payload.get("approval_mode") or "auto_edit")
+    review_required = bool(payload.get("review_required"))
     agent_cmd = os.environ.get("SOLAR_MULTI_TASK_AGENT_CMD", "").strip()
     adapter = HARNESS_DIR / "lib" / "gemini_adapter.py"
     if backend == "gemini-cli":
@@ -1260,6 +1263,7 @@ PROVIDER={shlex.quote(provider)}
 CAPABILITY_STATUS={shlex.quote(capability_status)}
 HANDOFF={shlex.quote(str(handoff))}
 HARNESS={shlex.quote(str(harness))}
+REVIEW_REQUIRED={shlex.quote("1" if review_required else "0")}
 
 pane_title() {{
   local title="$1"
@@ -1315,9 +1319,17 @@ fi
 rc=$?
 
 if [[ "$rc" -eq 0 && -s "$HANDOFF" ]]; then
-  "$HARNESS" graph-scheduler mark --graph "$GRAPH" --node "$NODE_ID" --status reviewing --in-place >> "$OUTPUT_LOG" 2>&1 || true
+  success_status="${{SOLAR_MULTI_TASK_SUCCESS_STATUS:-passed}}"
+  if [[ "$REVIEW_REQUIRED" == "1" ]]; then
+    success_status="reviewing"
+  fi
+  case "$success_status" in
+    passed|reviewing) ;;
+    *) success_status="passed" ;;
+  esac
+  "$HARNESS" graph-scheduler mark --graph "$GRAPH" --node "$NODE_ID" --status "$success_status" --note "multi_task_success_handoff" --in-place >> "$OUTPUT_LOG" 2>&1 || true
   write_status completed "$rc"
-  pane_title "MT $ROLE/$PROFILE | 模型:$MODEL | provider:$PROVIDER | 状态:completed"
+  pane_title "MT $ROLE/$PROFILE | 模型:$MODEL | provider:$PROVIDER | 状态:completed/$success_status"
 elif [[ "$rc" -eq 0 ]]; then
   echo "ERROR: missing handoff: $HANDOFF" | tee -a "$OUTPUT_LOG"
   "$HARNESS" graph-scheduler mark --graph "$GRAPH" --node "$NODE_ID" --status failed --in-place >> "$OUTPUT_LOG" 2>&1 || true
@@ -1387,6 +1399,11 @@ def launch_node(graph_path: Path, graph: dict[str, Any], node: dict[str, Any], a
         "title": str(node.get("goal") or node.get("title") or node_id)[:120],
         "write_scope": node.get("write_scope") or [],
         "handoff": str(handoff),
+        "review_required": bool(
+            node.get("review_required")
+            or node.get("requires_review")
+            or node.get("manual_review_required")
+        ),
         "dispatch_file": str(task_dir / "dispatch.md"),
         "work_dir": str(Path.cwd()),
         "created_at": now_iso(),

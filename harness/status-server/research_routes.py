@@ -238,6 +238,93 @@ def discover_human_search_waiting(sprints_dir: Path | str, sid: str = "", limit:
     }
 
 
+def _derive_fallback_level(metrics: dict[str, Any]) -> str:
+    """Map usage_source + estimated + fallback_reason to S02-FALLBACK levels L1-L4."""
+    usage_source = metrics.get("usage_source") or metrics.get("token_usage_source") or ""
+    estimated = metrics.get("estimated")
+    if estimated is None:
+        estimated = metrics.get("token_usage_is_estimated", False)
+    fallback_reason = metrics.get("fallback_reason") or ""
+
+    if usage_source == "provider_usage_ledger" and not estimated:
+        return "L1"
+    if usage_source == "hybrid":
+        return "L2"
+    if usage_source == "estimated" or usage_source.startswith("estimated_"):
+        if fallback_reason in ("cli_no_usage", "cli_rate_limit"):
+            return "L3"
+        return "L4"
+    return "unknown"
+
+
+def _metric_bool(metrics: dict[str, Any], primary: str, legacy: str, default: bool | None = None) -> bool | None:
+    if primary in metrics:
+        return bool(metrics.get(primary))
+    if legacy in metrics:
+        return bool(metrics.get(legacy))
+    return default
+
+
+def _metric_int(metrics: dict[str, Any], *keys: str) -> int | None:
+    for key in keys:
+        if key not in metrics:
+            continue
+        try:
+            return int(metrics.get(key) or 0)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _normalize_execution_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
+    if not metrics:
+        return {
+            "usage_source": None,
+            "estimated": None,
+            "fallback_reason": None,
+            "state": "unknown",
+            "fallback_level": None,
+            "word_count": None,
+            "total_tokens": None,
+        }
+    usage_source = metrics.get("usage_source") or metrics.get("token_usage_source")
+    estimated = _metric_bool(metrics, "estimated", "token_usage_is_estimated", False)
+    return {
+        "usage_source": usage_source,
+        "estimated": estimated,
+        "fallback_reason": metrics.get("fallback_reason"),
+        "state": metrics.get("state", "unknown"),
+        "fallback_level": _derive_fallback_level(metrics),
+        "word_count": _metric_int(metrics, "word_count", "document_word_count"),
+        "total_tokens": _metric_int(metrics, "total_tokens", "total_token_consumption"),
+    }
+
+
+def _load_execution_metrics(sprints_dir: Path, sid: str, runs: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Load *execution_metrics*.json for sid; supports embedded, sprint-root, and report-dir outputs."""
+    for run in reversed(runs or []):
+        embedded = run.get("execution_metrics") if isinstance(run, dict) else None
+        if isinstance(embedded, dict) and embedded:
+            return embedded
+
+    candidates = sorted(Path(p) for p in glob.glob(str(sprints_dir / f"{sid}*execution_metrics*.json")))
+    for run in runs or []:
+        artifacts = run.get("artifacts") if isinstance(run, dict) else {}
+        if not isinstance(artifacts, dict):
+            continue
+        output_dir = artifacts.get("output_dir")
+        if output_dir:
+            candidates.append(Path(str(output_dir)).expanduser() / "research_execution_metrics.json")
+    for candidate in candidates:
+        try:
+            data = json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(data, dict):
+            return data
+    return {}
+
+
 def build_research_payload(sprints_dir: Path | str | None, sid: str) -> dict[str, Any]:
     """Build JSON payload for GET /research/<sid>.
 
@@ -277,6 +364,8 @@ def build_research_payload(sprints_dir: Path | str | None, sid: str) -> dict[str
         elif status == "partial" and overall_status not in ("failed", "running", "passed"):
             overall_status = "partial"
         discovered = _discover_artifacts_for_eval(ef, data)
+        embedded_metrics = data.get("execution_metrics") if isinstance(data.get("execution_metrics"), dict) else {}
+        run_metrics = _normalize_execution_metrics(embedded_metrics)
         runs.append({
             "run_id": discovered["run_id"],
             "status": status or "unknown",
@@ -290,6 +379,8 @@ def build_research_payload(sprints_dir: Path | str | None, sid: str) -> dict[str
             "artifacts": discovered["artifacts"],
             "artifact_exists": discovered["exists"],
             "report_ast_sections": discovered["report_ast_sections"],
+            "execution_metrics": embedded_metrics,
+            **run_metrics,
         })
 
     if eval_count > 0 and overall_status == "no_data":
@@ -297,6 +388,7 @@ def build_research_payload(sprints_dir: Path | str | None, sid: str) -> dict[str
 
     unsupported_rate = round(total_unsupported / total_key_claims, 4) if total_key_claims > 0 else 0.0
     citation_accuracy = round(total_span_matches / total_spans, 4) if total_spans > 0 else 0.0
+    metrics_summary = _normalize_execution_metrics(_load_execution_metrics(sprints_dir, sid, runs))
 
     return {
         "sid": sid,
@@ -311,7 +403,23 @@ def build_research_payload(sprints_dir: Path | str | None, sid: str) -> dict[str
         "latest": runs[-1] if runs else {},
         "human_search": discover_human_search_waiting(sprints_dir, sid),
         "quality_gates": discover_quality_gates(sprints_dir, sid),
+        **metrics_summary,
     }
+
+
+def render_html_report(sprints_dir: Path | str | None, sid: str) -> str:
+    """Render human-readable HTML for /research/<sid>?format=html."""
+    data = build_research_payload(sprints_dir, sid)
+    template = (Path(__file__).parent / "templates" / "research.html").read_text(encoding="utf-8")
+    values = dict(data)
+    values["unsupported_rate_pct"] = f"{data.get('unsupported_rate', 0.0) * 100:.1f}"
+    values["citation_accuracy_pct"] = f"{data.get('citation_accuracy', 0.0) * 100:.1f}"
+    for key in ("word_count", "total_tokens", "usage_source", "estimated", "state", "fallback_level"):
+        if values.get(key) is None:
+            values[key] = "N/A"
+    for key, value in values.items():
+        template = template.replace("{" + str(key) + "}", str(value))
+    return template
 
 
 def generate_markdown_report(sprints_dir: Path | str | None, sid: str) -> str:

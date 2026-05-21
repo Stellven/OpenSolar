@@ -158,7 +158,15 @@ class TestWebResearch:
         )
         monkeypatch.setattr(research_cli, "browser_use_fetch_url", lambda url: ("A browser-use fetched article says orbital data centers need evidence ledgers and citations.", None))
 
-        assert main(["search", db_path, "--run-id", run_id, "--query", "orbital data centers", "--fetch", "--require-online", "--json"]) == 0
+        assert main([
+            "search", db_path,
+            "--run-id", run_id,
+            "--query", "orbital data centers",
+            "--provider", "browser-use",
+            "--fetch",
+            "--require-online",
+            "--json",
+        ]) == 0
 
         conn = sqlite3.connect(db_path)
         row = conn.execute("SELECT title, url, content_span FROM research_sources WHERE run_id = ?", (run_id,)).fetchone()
@@ -209,6 +217,9 @@ class TestWebResearch:
         final = (out / "final.md").read_text()
         assert "Orbital data centers" in final or "orbital data centers" in final
         assert "[cite:" in final
+        assert "## Execution Metrics" in final
+        assert "Total token consumption" in final
+        assert "Document word count" in final
         assert (out / "sources.jsonl").exists()
         assert (out / "evidence.jsonl").exists()
         assert (out / "claims.jsonl").exists()
@@ -217,6 +228,7 @@ class TestWebResearch:
         assert (out / "section_checks.jsonl").exists()
         assert (out / "report_ast.json").exists()
         assert (out / "final.bibliography.json").exists()
+        assert (out / "research_execution_metrics.json").exists()
         eval_files = list(out.glob("*-research_eval.json"))
         assert eval_files
         eval_payload = json.loads(eval_files[0].read_text())
@@ -224,9 +236,12 @@ class TestWebResearch:
         assert eval_payload["source_count"] == 1
         assert eval_payload["evidence_count"] >= 1
         assert eval_payload["claim_count"] >= 1
+        assert eval_payload["execution_metrics"]["document_word_count"] > 0
+        assert eval_payload["execution_metrics"]["total_token_consumption"] > 0
         ast = json.loads((out / "report_ast.json").read_text())
         assert ast["target_sections"] >= 1
         assert ast["chapters"][0]["sections"]
+        assert ast["execution_metrics"]["document_word_count"] > 0
 
     def test_auto_provider_prefers_browser_use_over_http(self, db_path, monkeypatch):
         """Auto provider must use browser-use first and avoid HTTP if it succeeds."""

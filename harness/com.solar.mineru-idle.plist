@@ -53,7 +53,7 @@
     <key>EnvironmentVariables</key>
     <dict>
         <key>HARNESS_DIR</key>
-        <string>/Users/sihaoli/.solar/harness</string>
+        <string>/Users/lisihao/.solar/harness</string>
         <key>MINERU_RATE_LIMIT_RPM</key>
         <string>3</string>
         <key>MINERU_MEMORY_CAP_MB</key>
@@ -62,9 +62,9 @@
 
     <!-- Stdout/Stderr to log file -->
     <key>StandardOutPath</key>
-    <string>/Users/sihaoli/.solar/logs/mineru-idle-stdout.log</string>
+    <string>/Users/lisihao/.solar/logs/mineru-idle-stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/sihaoli/.solar/logs/mineru-idle-stderr.log</string>
+    <string>/Users/lisihao/.solar/logs/mineru-idle-stderr.log</string>
 
     <!-- Run on load -->
     <key>RunAtLoad</key>

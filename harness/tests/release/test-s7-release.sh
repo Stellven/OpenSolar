@@ -109,6 +109,7 @@ echo "T10: publish.sh audit from artifacts dir"
 OUT=$(ARTIFACTS_DIR=/tmp/solar-release-test bash release/publish.sh --json --version "$V" 2>/dev/null || true)
 check_contains "publish audit returns ok" "$OUT" '"ok":true'
 check_contains "publish has gates array" "$OUT" '"gates"'
+check_contains "publish has TVS gate" "$OUT" '"gate":"G8"'
 
 echo "T11: secret grep audit (no plaintext secrets in lib/)"
 BAD=$(grep -r --include="*.py" --include="*.sh" \
@@ -129,8 +130,20 @@ echo "T14: tarball excludes run/ and backups/"
 if [[ -f "/tmp/solar-release-test/solar-harness-${V}.tar.gz" ]]; then
   HAS_RUN=$(tar -tzf "/tmp/solar-release-test/solar-harness-${V}.tar.gz" 2>/dev/null | grep '^./run/' | head -1 || true)
   HAS_BACKUPS=$(tar -tzf "/tmp/solar-release-test/solar-harness-${V}.tar.gz" 2>/dev/null | grep '^./backups/' | head -1 || true)
+  HAS_EVENTS=$(tar -tzf "/tmp/solar-release-test/solar-harness-${V}.tar.gz" 2>/dev/null | grep '^./events/' | head -1 || true)
+  HAS_LOGS=$(tar -tzf "/tmp/solar-release-test/solar-harness-${V}.tar.gz" 2>/dev/null | grep '^./logs/' | head -1 || true)
+  HAS_SESSIONS=$(tar -tzf "/tmp/solar-release-test/solar-harness-${V}.tar.gz" 2>/dev/null | grep '^./sessions/' | head -1 || true)
+  HAS_REPORTS=$(tar -tzf "/tmp/solar-release-test/solar-harness-${V}.tar.gz" 2>/dev/null | grep '^./reports/' | head -1 || true)
+  HAS_FALLBACK=$(tar -tzf "/tmp/solar-release-test/solar-harness-${V}.tar.gz" 2>/dev/null | grep '^./_extracted_knowledge_fallback/' | head -1 || true)
+  HAS_PYTEST_CACHE=$(tar -tzf "/tmp/solar-release-test/solar-harness-${V}.tar.gz" 2>/dev/null | grep '^./.pytest_cache/' | head -1 || true)
   [[ -z "$HAS_RUN" ]]     && ok "tarball excludes run/"     || fail "tarball includes run/ (runtime state should not be distributed)"
   [[ -z "$HAS_BACKUPS" ]] && ok "tarball excludes backups/" || fail "tarball includes backups/"
+  [[ -z "$HAS_EVENTS" ]]  && ok "tarball excludes events/"  || fail "tarball includes events/ (runtime event stream should not be distributed)"
+  [[ -z "$HAS_LOGS" ]]    && ok "tarball excludes logs/"    || fail "tarball includes logs/"
+  [[ -z "$HAS_SESSIONS" ]] && ok "tarball excludes sessions/" || fail "tarball includes sessions/"
+  [[ -z "$HAS_REPORTS" ]]  && ok "tarball excludes reports/"  || fail "tarball includes reports/"
+  [[ -z "$HAS_FALLBACK" ]] && ok "tarball excludes _extracted_knowledge_fallback/" || fail "tarball includes _extracted_knowledge_fallback/"
+  [[ -z "$HAS_PYTEST_CACHE" ]] && ok "tarball excludes .pytest_cache/" || fail "tarball includes .pytest_cache/"
 fi
 
 echo "T15: capability plane E2E suite passes"

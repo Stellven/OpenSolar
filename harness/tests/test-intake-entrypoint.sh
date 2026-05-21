@@ -22,6 +22,7 @@ import sys
 p = Path(sys.argv[1])
 tmp = sys.argv[2]
 s = p.read_text()
+s = s.replace('HARNESS_DIR="${HARNESS_DIR:-$HOME/.solar/harness}"', f'HARNESS_DIR="${{HARNESS_DIR:-{tmp}}}"', 1)
 s = s.replace('HARNESS_DIR="$HOME/.solar/harness"', f'HARNESS_DIR="{tmp}"', 1)
 p.write_text(s)
 PY
