@@ -29,7 +29,9 @@ DISPATCH_LEDGER = HARNESS_DIR / "run" / "dispatch-ledger.jsonl"
 PANE_TUI_BUSY_RE = re.compile(
     r"Compacting conversation|压缩上下文|Reticulating|Scurrying|Roosting|"
     r"Mustering|Herding|Baking|Cogitating|Churning|Ruminating|Thinking|"
-    r"Whirring|Smooshing|[·✳✶✽✢]\s+[A-Za-z][A-Za-z-]*…|✳|✶|✽|✢",
+    r"Whirring|Smooshing|Unhandled node type|Do you want to proceed\?|"
+    r"Enter to confirm|Esc to cancel|Bash command|"
+    r"[·✳✶✽✢]\s+[A-Za-z][A-Za-z-]*…|✳|✶|✽|✢",
     re.I,
 )
 PANE_TUI_UNAVAILABLE_RE = re.compile(
@@ -43,6 +45,7 @@ PANE_DISPATCH_FAILED_IDLE_RE = re.compile(
     re.I,
 )
 PANE_QUEUED_PROMPT_RE = re.compile(r"Press up to edit queued messages", re.I)
+PANE_CONFIRMATION_PROMPT_RE = re.compile(r"Unhandled node type|Do you want to proceed\?|Enter to confirm|Esc to cancel|Bash command", re.I)
 PANE_PROMPT_RESIDUE_RE = re.compile(r"^\s*❯(?![\s\u00a0]+Try\s+\")[\s\u00a0]+[^\s\u00a0─]", re.M)
 STATE_READ_PREFLIGHT = """<!-- SOLAR_STATE_READ_PREFLIGHT -->
 ## 必须先读状态 (防写入 hook 卡死)
@@ -1170,6 +1173,7 @@ def _pane_prompt_residue_is_stale_scrollback(pane: str, text: str) -> bool:
             "✻ Sautéed for",
             "✻ Thought for",
             "✻ Worked for",
+            "✻ Crunched for",
         )
     )
 
@@ -1179,7 +1183,12 @@ def _pane_tui_busy(pane: str) -> bool:
     bottom = "\n".join(tail.splitlines()[-12:])
     if PANE_TUI_UNAVAILABLE_RE.search(bottom):
         return True
+    if PANE_CONFIRMATION_PROMPT_RE.search(bottom):
+        return True
+    prompt_is_empty = "❯" in bottom and not _pane_current_prompt_has_residue(bottom)
     if PANE_TUI_BUSY_RE.search(bottom):
+        if prompt_is_empty:
+            return False
         return True
     # Queued prompt residue means this pane needs to drain or be cleared before
     # another graph dispatch. Treat it as unavailable instead of piling more
@@ -1282,6 +1291,22 @@ def _write_submit_ack(sid: str, node_id: str, pane: str, dispatch_id: str) -> No
         pass  # fail-open: ack write failure must not block dispatch
 
 
+def _broker_env(sprint_id: str | None = None) -> dict[str, str]:
+    """Return os.environ copy with broker control vars forwarded to child subprocesses.
+
+    SOLAR_BROKER_ENABLED is forwarded as-is (defaulting to "0" when absent) so
+    child tools honour the same gate the dispatcher sees.
+    SOLAR_BROKER_SPRINT_ID is set from sprint_id when not already in the env.
+    When SOLAR_BROKER_ENABLED="0" the returned dict is os.environ with "0" set,
+    preserving the unchanged-dispatch-path guarantee (LR-04).
+    """
+    env = os.environ.copy()
+    env.setdefault("SOLAR_BROKER_ENABLED", "0")
+    if sprint_id:
+        env.setdefault("SOLAR_BROKER_SPRINT_ID", sprint_id)
+    return env
+
+
 def _record_model_call(event: str, sid: str, pane: str, dispatch_id: str,
                        instruction_file: Path, *, tries: int = 0,
                        status: str = "", error: str = "") -> None:
@@ -1304,7 +1329,8 @@ def _record_model_call(event: str, sid: str, pane: str, dispatch_id: str,
     if error:
         cmd += ["--error", error]
     try:
-        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8)
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8,
+                       env=_broker_env(sid))
     except Exception:
         pass
 
@@ -1588,6 +1614,7 @@ def _inject_dispatch_context(instruction_file: Path, sid: str = "", pane: str = 
                 stderr=subprocess.DEVNULL,
                 timeout=15,
                 check=False,
+                env=_broker_env(sid),
             )
         except Exception:
             pass
@@ -1612,6 +1639,7 @@ def _inject_dispatch_context(instruction_file: Path, sid: str = "", pane: str = 
                 stderr=subprocess.DEVNULL,
                 timeout=20,
                 check=False,
+                env=_broker_env(sid),
             )
         except Exception:
             pass
@@ -1924,24 +1952,27 @@ def drain_queue(sprint_id: str, dry_run: bool = False, max_items: int = 0, ttl: 
 
 def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
     worker_skills = [
-        "bash", "python", "dataclasses", "pytest", "pure-functions", "time-injection", "io", "fsm", "integration-testing", "json-patch", "typescript", "docs", "testing",
+        "bash", "shell", "python", "python-read", "dataclasses", "pytest", "subprocess", "sqlite3", "pure-functions", "time-injection", "timeouts", "concurrency", "io", "fsm", "integration", "integration-testing", "integration-tests", "regression", "regression-tests", "bash-tests", "jq", "json", "json-patch", "jsonl-tail", "typescript", "docs", "testing",
         "http-testing", "negative-testing", "activation-proof", "knowledge-ingest", "release-gate", "documentation",
         "stub-llm", "e2e-test", "cli-view-assertion", "negative-control", "verifier", "registry-introspection",
-        "technical-writing", "markdown", "pandoc", "evidence-aggregation", "handoff-authoring", "traceability-patch", "knowledge-raw-writeback",
-        "frontend", "ui", "flask", "http", "curl", "http-routing", "autopilot-hooks", "json-traversal", "html", "jinja", "javascript", "vanilla-dom",
-        "security", "grep", "secret-scan",
-        "deepresearch", "cli", "claude-cli", "survey", "fixture", "release", "evidence", "autopilot", "epic",
-        "product", "planning", "governance",
-        "architecture", "schema", "state-machine", "distributed-systems",
+        "technical-writing", "markdown", "regex", "markdown-parse", "pandoc", "evidence-aggregation", "handoff-authoring", "traceability-patch", "knowledge-raw-writeback",
+        "frontend", "ui", "terminal-ui", "tvs", "vdl", "snapshot", "snapshot-testing", "flask", "http", "curl", "http-routing", "http-endpoint", "autopilot-hooks", "json-traversal", "html", "jinja", "javascript", "vanilla-dom",
+        "security", "grep", "secret-scan", "code-audit",
+        "deepresearch", "cli", "cli-audit", "cli-design", "argparse", "argparse-bridge", "json-schema", "json-shape-inspect", "validation", "claude-cli", "survey", "fixture", "release", "evidence", "evidence-collection", "evaluator-summary", "autopilot", "epic",
+        "product", "planning", "workflow.planning", "governance", "risk", "risk-register",
+        "architecture", "schema", "state-machine", "state-schema-design", "distributed-systems",
+        "code-audit", "docs-audit", "type-hints", "type-protocols", "refactor", "tmux-inspect", "data-aggregation", "shutil", "urllib", "atomic-writes", "hashing", "unittest-mock",
         "api-design", "data-modeling", "compatibility",
-        "routing", "diagnostics", "evaluation",
+        "routing", "diagnostics", "evaluation", "capability-graph", "event-sourcing",
+        "lazy-import",
         "browser.browse", "browser.qa", "code.review", "document.convert",
         "persona.agent", "multi_agent.research", "debug.systematic",
         "repair.pr-cot",
     ]
     worker_capabilities = [
         "bash", "python", "typescript", "docs", "testing",
-        "frontend", "observability",
+        "frontend", "observability", "evidence",
+        "env-passthrough", "metrics",
         "harness.context_preflight", "harness.intent", "harness.dispatch_visibility", "harness.contracts",
         "harness.dag", "harness.status", "harness.model_routing",
         "intent.match", "intent.audit", "dispatch.intent_telemetry",
@@ -1950,10 +1981,11 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "dag.validate", "dag.ready_nodes", "dag.join_gate",
         "harness.testing", "harness.failure_recovery", "harness.autopilot",
         "harness.activation_proof", "harness.reporting", "harness.knowledge", "harness.contracts",
+        "lazy-import", "cli",
         "activation.proof", "negative_control", "runtime_artifacts",
         "autopilot.monitor", "autopilot.safe_apply", "pane.deadlock_detection",
-        "documentation", "schema", "state-machine", "storage", "sources",
-        "browser.browse", "browser.qa", "code.review",
+        "documentation", "governance", "risk", "schema", "state-machine", "storage", "sources",
+        "browser.browse", "browser.qa", "code.review", "code-audit",
         "browser.mcp", "browser.automation", "browser.screenshot",
         "browser.localhost_test",
         "document.convert", "document.markdown_extract", "mcp.markitdown",

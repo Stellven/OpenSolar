@@ -40,21 +40,41 @@ workers = dispatcher._discover_workers(dry_run=True)
 assert workers, "dispatcher has no dry-run workers"
 assert any("frontend" in w.get("skills", []) for w in workers), workers
 assert any("python" in w.get("skills", []) for w in workers), workers
+assert any("shell" in w.get("skills", []) for w in workers), workers
+assert any("python-read" in w.get("skills", []) for w in workers), workers
 assert any("dataclasses" in w.get("skills", []) for w in workers), workers
 assert any("pytest" in w.get("skills", []) for w in workers), workers
+assert any("subprocess" in w.get("skills", []) for w in workers), workers
+assert any("sqlite3" in w.get("skills", []) for w in workers), workers
 assert any("pure-functions" in w.get("skills", []) for w in workers), workers
 assert any("time-injection" in w.get("skills", []) for w in workers), workers
 assert any("io" in w.get("skills", []) for w in workers), workers
 assert any("fsm" in w.get("skills", []) for w in workers), workers
+assert any("integration" in w.get("skills", []) for w in workers), workers
 assert any("integration-testing" in w.get("skills", []) for w in workers), workers
+assert any("integration-tests" in w.get("skills", []) for w in workers), workers
+assert any("regression" in w.get("skills", []) for w in workers), workers
+assert any("regression-tests" in w.get("skills", []) for w in workers), workers
+for skill in ["bash-tests", "jq", "json", "jsonl-tail", "timeouts", "concurrency"]:
+    assert any(skill in w.get("skills", []) for w in workers), (skill, workers)
 assert any("json-patch" in w.get("skills", []) for w in workers), workers
 assert any("api-design" in w.get("skills", []) for w in workers), workers
 assert any("data-modeling" in w.get("skills", []) for w in workers), workers
 assert any("compatibility" in w.get("skills", []) for w in workers), workers
-for skill in ["flask", "http-routing", "autopilot-hooks", "json-traversal", "html", "javascript", "vanilla-dom"]:
+for skill in ["terminal-ui", "tvs", "vdl", "snapshot", "snapshot-testing", "flask", "http-routing", "http-endpoint", "autopilot-hooks", "json-traversal", "html", "javascript", "vanilla-dom"]:
     assert any(skill in w.get("skills", []) for w in workers), (skill, workers)
+for skill in ["stub-llm", "e2e-test", "cli-view-assertion", "negative-control", "verifier", "registry-introspection", "cli-audit", "cli-design", "argparse", "argparse-bridge", "json-schema", "json-shape-inspect", "validation", "technical-writing", "markdown", "regex", "markdown-parse", "evidence-aggregation", "evidence-collection", "evaluator-summary", "handoff-authoring", "traceability-patch", "knowledge-raw-writeback"]:
+    assert any(skill in w.get("skills", []) for w in workers), (skill, workers)
+for skill in ["code-audit", "docs-audit", "type-hints", "type-protocols", "state-schema-design", "refactor", "tmux-inspect", "data-aggregation", "shutil", "urllib", "atomic-writes", "hashing", "unittest-mock", "capability-graph", "event-sourcing"]:
+    assert any(skill in w.get("skills", []) for w in workers), (skill, workers)
+assert any("lazy-import" in w.get("skills", []) for w in workers), workers
 assert any("observability" in w.get("capabilities", []) for w in workers), workers
+assert any("evidence" in w.get("capabilities", []) for w in workers), workers
+assert any("env-passthrough" in w.get("capabilities", []) for w in workers), workers
+assert any("metrics" in w.get("capabilities", []) for w in workers), workers
 assert any("documentation" in w.get("capabilities", []) for w in workers), workers
+for cap in ["harness.context_preflight", "harness.intent", "harness.dispatch_visibility", "harness.contracts", "harness.dag", "harness.status", "harness.model_routing", "dag.validate", "dag.ready_nodes", "dag.join_gate", "activation.proof", "negative_control", "runtime_artifacts", "autopilot.monitor", "autopilot.safe_apply", "pane.deadlock_detection", "lazy-import", "cli"]:
+    assert any(cap in w.get("capabilities", []) for w in workers), (cap, workers)
 
 spec = importlib.util.spec_from_file_location("solar_autopilot_monitor", root / "solar-autopilot-monitor.py")
 monitor = importlib.util.module_from_spec(spec)
@@ -64,21 +84,41 @@ monitor_workers = monitor.graph_workers()
 assert monitor_workers, "autopilot has no workers"
 assert any("frontend" in w.get("skills", []) for w in monitor_workers), monitor_workers
 assert any("python" in w.get("skills", []) for w in monitor_workers), monitor_workers
+assert any("shell" in w.get("skills", []) for w in monitor_workers), monitor_workers
+assert any("python-read" in w.get("skills", []) for w in monitor_workers), monitor_workers
 assert any("dataclasses" in w.get("skills", []) for w in monitor_workers), monitor_workers
 assert any("pytest" in w.get("skills", []) for w in monitor_workers), monitor_workers
+assert any("subprocess" in w.get("skills", []) for w in monitor_workers), monitor_workers
+assert any("sqlite3" in w.get("skills", []) for w in monitor_workers), monitor_workers
 assert any("pure-functions" in w.get("skills", []) for w in monitor_workers), monitor_workers
 assert any("time-injection" in w.get("skills", []) for w in monitor_workers), monitor_workers
 assert any("io" in w.get("skills", []) for w in monitor_workers), monitor_workers
 assert any("fsm" in w.get("skills", []) for w in monitor_workers), monitor_workers
+assert any("integration" in w.get("skills", []) for w in monitor_workers), monitor_workers
 assert any("integration-testing" in w.get("skills", []) for w in monitor_workers), monitor_workers
+assert any("integration-tests" in w.get("skills", []) for w in monitor_workers), monitor_workers
+assert any("regression" in w.get("skills", []) for w in monitor_workers), monitor_workers
+assert any("regression-tests" in w.get("skills", []) for w in monitor_workers), monitor_workers
+for skill in ["bash-tests", "jq", "json", "jsonl-tail", "timeouts", "concurrency"]:
+    assert any(skill in w.get("skills", []) for w in monitor_workers), (skill, monitor_workers)
 assert any("json-patch" in w.get("skills", []) for w in monitor_workers), monitor_workers
 assert any("api-design" in w.get("skills", []) for w in monitor_workers), monitor_workers
 assert any("data-modeling" in w.get("skills", []) for w in monitor_workers), monitor_workers
 assert any("compatibility" in w.get("skills", []) for w in monitor_workers), monitor_workers
-for skill in ["flask", "http-routing", "autopilot-hooks", "json-traversal", "html", "javascript", "vanilla-dom"]:
+for skill in ["terminal-ui", "tvs", "vdl", "snapshot", "snapshot-testing", "flask", "http-routing", "http-endpoint", "autopilot-hooks", "json-traversal", "html", "javascript", "vanilla-dom"]:
     assert any(skill in w.get("skills", []) for w in monitor_workers), (skill, monitor_workers)
+for skill in ["stub-llm", "e2e-test", "cli-view-assertion", "negative-control", "verifier", "registry-introspection", "cli-audit", "cli-design", "argparse", "argparse-bridge", "json-schema", "json-shape-inspect", "validation", "technical-writing", "markdown", "regex", "markdown-parse", "evidence-aggregation", "evidence-collection", "evaluator-summary", "handoff-authoring", "traceability-patch", "knowledge-raw-writeback"]:
+    assert any(skill in w.get("skills", []) for w in monitor_workers), (skill, monitor_workers)
+for skill in ["code-audit", "docs-audit", "type-hints", "type-protocols", "state-schema-design", "refactor", "tmux-inspect", "data-aggregation", "shutil", "urllib", "atomic-writes", "hashing", "unittest-mock", "capability-graph", "event-sourcing"]:
+    assert any(skill in w.get("skills", []) for w in monitor_workers), (skill, monitor_workers)
+assert any("lazy-import" in w.get("skills", []) for w in monitor_workers), monitor_workers
 assert any("observability" in w.get("capabilities", []) for w in monitor_workers), monitor_workers
+assert any("evidence" in w.get("capabilities", []) for w in monitor_workers), monitor_workers
+assert any("env-passthrough" in w.get("capabilities", []) for w in monitor_workers), monitor_workers
+assert any("metrics" in w.get("capabilities", []) for w in monitor_workers), monitor_workers
 assert any("documentation" in w.get("capabilities", []) for w in monitor_workers), monitor_workers
+for cap in ["harness.context_preflight", "harness.intent", "harness.dispatch_visibility", "harness.contracts", "harness.dag", "harness.status", "harness.model_routing", "dag.validate", "dag.ready_nodes", "dag.join_gate", "activation.proof", "negative_control", "runtime_artifacts", "autopilot.monitor", "autopilot.safe_apply", "pane.deadlock_detection", "lazy-import", "cli"]:
+    assert any(cap in w.get("capabilities", []) for w in monitor_workers), (cap, monitor_workers)
 PY
 
 echo "PASS worker capability catalog covers frontend/observability/architecture-specialists"

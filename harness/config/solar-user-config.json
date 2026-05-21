@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-05-13T17:18:22Z",
+  "updated_at": "2026-05-20T08:50:49Z",
   "setup_complete": true,
   "user": {
     "display_name": "Solar-Harness",
@@ -15,7 +15,7 @@
     "planner": "opus",
     "builder": "opus",
     "evaluator": "opus",
-    "lab_builder_matrix": "glm,glm,glm,anthropic-sonnet",
+    "lab_builder_matrix": "glm,glm,glm,thunderomlx",
     "pm": "opus"
   },
   "providers": {

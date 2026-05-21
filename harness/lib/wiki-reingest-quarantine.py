@@ -147,6 +147,19 @@ Create or update the destination note as a real deep paper note, not a stub.
 Use frontmatter with `quality: deep_paper_note`, `source_file: "{source_name}"`,
 and enough provenance to trace the PDF.
 
+## Mandatory Extraction Chain
+
+Use MinerU-first extraction before LLM synthesis:
+
+1. Run or reuse: `solar-harness mineru extract "{source_path}" --vault "{vault}" --json`
+2. Read the generated MinerU `index.md` and page markdown artifacts.
+3. Use those structured artifacts as the input to the deep note.
+4. Record `mineru_ref_dir`, `mineru_generated_pages`, and extraction method in the destination note or result file.
+
+Do not summarize the PDF directly with PyMuPDF, pdftotext, OCR snippets, or an
+abstract-only page unless MinerU is blocked. If MinerU is blocked, mark this
+dispatch `failed` and write the blocker instead of producing a fake deep note.
+
 The note must cover:
 
 - One-sentence claim

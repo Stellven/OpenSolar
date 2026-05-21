@@ -73,7 +73,7 @@ send_ready_token() {
     local content
     content=$(tmux capture-pane -t "$pane" -p 2>/dev/null | tail -8)
     if (( bypass_accepted == 0 )) && echo "$content" | grep -qiE 'Bypass Permissions mode|1\. No, exit|2\. Yes, I accept'; then
-      tmux send-keys -t "$pane" Down Enter
+      tmux send-keys -t "$pane" "2" Enter
       bypass_accepted=1
       sleep 1
       attempt=$((attempt + 1))
@@ -93,7 +93,7 @@ send_ready_token() {
       continue
     fi
     if echo "$content" | grep -qiE 'Files with errors are skipped|Continue without these settings|Exit and fix manually'; then
-      tmux send-keys -t "$pane" Down Enter
+      tmux send-keys -t "$pane" "2" Enter
       sleep 1
       attempt=$((attempt + 1))
       continue
@@ -130,6 +130,105 @@ fi
 [[ -n "$MODEL_FLAG" ]] && CLAUDE_CMD="$CLAUDE_CMD $MODEL_FLAG"
 [[ -n "$TOOL_FLAG" ]] && CLAUDE_CMD="$CLAUDE_CMD $TOOL_FLAG"
 [[ -n "${EXTRA_FLAGS:-}" ]] && CLAUDE_CMD="$CLAUDE_CMD $EXTRA_FLAGS"
+
+prepare_sanitized_claude_settings() {
+  local persona="$1"
+  local settings_dir="$HARNESS_DIR/run/claude-settings"
+  local pane_safe="${TMUX_PANE:-unknown}"
+  pane_safe="${pane_safe//[^A-Za-z0-9_.-]/_}"
+  local out="$settings_dir/${pane_safe}-${persona}.json"
+  mkdir -p "$settings_dir"
+  python3 - "$HOME/.claude/settings.json" "$out" "$HARNESS_DIR" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+src = Path(sys.argv[1])
+out = Path(sys.argv[2])
+harness_dir = Path(sys.argv[3])
+
+data = {}
+if src.exists():
+    data = json.loads(src.read_text(encoding="utf-8"))
+
+data.pop("env", None)
+# Do not inherit host-level hook entries: malformed global UserPromptSubmit
+# hooks can abort pane startup before Solar can accept the TUI prompt.
+hooks = {}
+data["hooks"] = hooks
+
+if os.environ.get("SOLAR_AUTH_SOURCE") == "thunderomlx" or "127.0.0.1:8002" in os.environ.get("ANTHROPIC_BASE_URL", ""):
+    data["thinking"] = {"type": "disabled"}
+
+def append_hook(event_name, phase):
+    entries = hooks.setdefault(event_name, [])
+    command = f"python3 {harness_dir}/lib/claude_hook_event_bridge.py {phase}"
+    for entry in entries:
+        for hook in entry.get("hooks") or []:
+            if hook.get("command") == command:
+                return
+    entries.append({
+        "matcher": "",
+        "hooks": [{"type": "command", "command": command}],
+    })
+
+append_hook("PreToolUse", "pre-tool")
+append_hook("PostToolUse", "post-tool")
+out.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+  printf '%s\n' "$out"
+}
+
+CLAUDE_SETTINGS_FILE="$(prepare_sanitized_claude_settings "$PERSONA")"
+export SOLAR_CLAUDE_SETTINGS_FILE="$CLAUDE_SETTINGS_FILE"
+export SOLAR_CLAUDE_SETTING_SOURCES="local"
+CLAUDE_CMD="$CLAUDE_CMD --setting-sources ${SOLAR_CLAUDE_SETTING_SOURCES} --settings ${CLAUDE_SETTINGS_FILE}"
+
+export SOLAR_PERSONA="$PERSONA"
+export SOLAR_SELECTED_CLAUDE_BIN="$CLAUDE_BIN"
+export SOLAR_AUTH_SOURCE="${AUTH_SOURCE:-}"
+export SOLAR_MODEL_FLAG="${MODEL_FLAG:-}"
+export SOLAR_EXTRA_FLAGS="${EXTRA_FLAGS:-}"
+python3 - "$HARNESS_DIR/run/pane-env" <<'PY' 2>/dev/null || true
+import json
+import os
+import time
+import sys
+from pathlib import Path
+
+def present(name):
+    return bool(os.environ.get(name))
+
+def host(value):
+    if not value:
+        return ""
+    return value.split("//", 1)[-1].split("/", 1)[0]
+
+marker_dir = Path(sys.argv[1])
+marker_dir.mkdir(parents=True, exist_ok=True)
+pane = os.environ.get("TMUX_PANE", "unknown")
+pane_safe = "".join(c if c.isalnum() or c in "_.-" else "_" for c in pane)
+record = {
+    "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    "pane": pane,
+    "persona": os.environ.get("SOLAR_PERSONA", ""),
+    "builder_slot": os.environ.get("SOLAR_BUILDER_SLOT", ""),
+    "claude_bin": os.environ.get("SOLAR_SELECTED_CLAUDE_BIN", ""),
+    "auth_source": os.environ.get("SOLAR_AUTH_SOURCE", ""),
+    "base_url_host": host(os.environ.get("ANTHROPIC_BASE_URL", "")),
+    "has_anthropic_auth_token": present("ANTHROPIC_AUTH_TOKEN"),
+    "has_anthropic_api_key": present("ANTHROPIC_API_KEY"),
+    "zhipu_token_source": os.environ.get("ZHIPU_TOKEN_SOURCE", ""),
+    "default_opus_model": os.environ.get("ANTHROPIC_DEFAULT_OPUS_MODEL", ""),
+    "default_sonnet_model": os.environ.get("ANTHROPIC_DEFAULT_SONNET_MODEL", ""),
+    "model_flag": os.environ.get("SOLAR_MODEL_FLAG", ""),
+    "extra_flags": os.environ.get("SOLAR_EXTRA_FLAGS", ""),
+    "settings_file": os.environ.get("SOLAR_CLAUDE_SETTINGS_FILE", ""),
+    "setting_sources": os.environ.get("SOLAR_CLAUDE_SETTING_SOURCES", ""),
+}
+(marker_dir / f"{pane_safe}.json").write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
 
 # 退出信号捕获 → pane-exit.jsonl
 EXIT_LOG="$HARNESS_DIR/logs/pane-exit.jsonl"

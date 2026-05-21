@@ -440,12 +440,25 @@ check_panes() {
     done
     local _pane_id
     _pane_id=$(tmux display-message -p -t "$target" '#{pane_id}' 2>/dev/null || true)
+    local _lab_slot_env=""
+    if [[ "$persona" == "lab-builder" && "$target" == "$LAB_SESSION_NAME:"* ]]; then
+      local _pane_index
+      _pane_index=$(tmux display-message -p -t "$target" '#{pane_index}' 2>/dev/null || true)
+      if [[ "$_pane_index" =~ ^[0-9]+$ ]]; then
+        _lab_slot_env=" SOLAR_BUILDER_SLOT=lab-builder-$((_pane_index + 1))"
+        local _lab_matrix
+        _lab_matrix=$(HARNESS_DIR="$HARNESS_DIR" bash -lc 'source "$HARNESS_DIR/lib/harness-config.sh"; solar_lab_builder_matrix' 2>/dev/null || true)
+        if [[ -n "$_lab_matrix" ]]; then
+          _lab_slot_env="${_lab_slot_env} SOLAR_LAB_BUILDER_MODEL_MATRIX=$(printf '%q' "$_lab_matrix")"
+        fi
+      fi
+    fi
     # respawn start-incarnation: keep watchdog pane recovery on the non-interactive launcher.
     tmux respawn-pane -k -t "$target" \
-      "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH HOME='${HOME}' PATH='${_user_path}' TMUX_PANE='${_pane_id}' ${_restart_bash} ${_esc_h}/start-incarnation.sh $persona ${_esc_w}" 2>/dev/null || {
+      "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH HOME='${HOME}' PATH='${_user_path}' TMUX_PANE='${_pane_id}'${_lab_slot_env} ${_restart_bash} ${_esc_h}/start-incarnation.sh $persona ${_esc_w}" 2>/dev/null || {
       warn "respawn-pane 失败, 尝试 send-keys..."
       tmux send-keys -t "$target" \
-        "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH PATH='${_user_path}' TMUX_PANE='${_pane_id}' ${_restart_bash} ${_esc_h}/start-incarnation.sh $persona ${_esc_w}" Enter
+        "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH PATH='${_user_path}' TMUX_PANE='${_pane_id}'${_lab_slot_env} ${_restart_bash} ${_esc_h}/start-incarnation.sh $persona ${_esc_w}" Enter
     }
     # sprint-20260502-200424 D2: respawn 后 5 秒验证 pane 活性 (诊断, 不是重试)
     sleep 5

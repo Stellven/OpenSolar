@@ -84,9 +84,31 @@
         "ds",
         "ds-v4"
       ]
+    },
+    "thunderomlx-qwen36-35b": {
+      "label": "ThunderOMLX Qwen3.6 35B",
+      "short_label": "ThunderOMLX",
+      "provider": "thunderomlx",
+      "model_flag": "--model sonnet",
+      "model_key": "thunderomlx-qwen36-35b",
+      "main_allowed": false,
+      "lab_allowed": true,
+      "aliases": [
+        "thunderomlx",
+        "thunderomlx-qwen36",
+        "qwen36-35b",
+        "qwen3.6-35b",
+        "qwen3.6-35b-a3b",
+        "qwen3.6",
+        "qwen36"
+      ]
     }
   },
   "matrix_options": [
+    {
+      "value": "glm,glm,glm,thunderomlx",
+      "label": "3× GLM 5.1 + ThunderOMLX Qwen3.6 35B"
+    },
     {
       "value": "glm,glm,glm,deepseek",
       "label": "3× GLM 5.1 + DeepSeek V4 Pro（当前推荐）"
