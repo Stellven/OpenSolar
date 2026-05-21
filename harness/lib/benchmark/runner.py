@@ -86,6 +86,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # doctor
     p_doctor = sub.add_parser("doctor", help="Check prerequisites")
+    p_doctor.add_argument("adapter", nargs="?", default=DEFAULT_DATASET)
     _add_json_flag(p_doctor)
 
     # list
@@ -121,6 +122,20 @@ def _build_parser() -> argparse.ArgumentParser:
     p_report = sub.add_parser("report", help="Read a previous run report")
     p_report.add_argument("run_id", help="Run ID to look up")
     _add_json_flag(p_report)
+
+    # Internal host-side entrypoint used by Harbor custom agents.
+    p_solve = sub.add_parser("solve-terminal-task", help=argparse.SUPPRESS)
+    p_solve.add_argument("--workspace", required=True)
+    p_solve.add_argument("--instruction-file", required=True)
+    p_solve.add_argument("--backend", default="auto")
+    p_solve.add_argument("--model", default="gpt-5.4")
+    p_solve.add_argument("--logs-dir", required=True)
+    p_solve.add_argument(
+        "--timeout-sec",
+        type=int,
+        default=int(os.environ.get("SOLAR_HARNESS_AGENT_TIMEOUT_SEC", "900")),
+    )
+    _add_json_flag(p_solve)
 
     return parser
 
@@ -175,9 +190,15 @@ def _cmd_list(args: argparse.Namespace) -> int:
 def _cmd_plan(args: argparse.Namespace) -> int:
     from .schemas import BenchmarkRunRequest
 
+    try:
+        adapter = get_adapter(args.adapter)
+    except KeyError:
+        print(f"Error: unknown adapter {args.adapter!r}", file=sys.stderr)
+        return _EXIT_ERROR
+
     tasks = tuple(t for t in args.tasks.split(",") if t) if args.tasks else ()
     req = BenchmarkRunRequest(
-        adapter_id=args.adapter,
+        adapter_id=adapter.id,
         agent=args.agent,
         model=args.model,
         env=args.env,
@@ -185,16 +206,10 @@ def _cmd_plan(args: argparse.Namespace) -> int:
         n_concurrent=args.n_concurrent,
     )
 
-    try:
-        adapter = get_adapter(args.adapter)
-    except KeyError:
-        print(f"Error: unknown adapter {args.adapter!r}", file=sys.stderr)
-        return _EXIT_ERROR
-
     plan = adapter.plan(req)
 
     _emit_event("benchmark.plan", {
-        "adapter_id": args.adapter,
+        "adapter_id": adapter.id,
         "command_argv": list(plan.command),
         "dry_run": True,
     })
@@ -220,9 +235,15 @@ def _cmd_run(args: argparse.Namespace) -> int:
     from .schemas import BenchmarkRunRequest
     from .reports import _reports_base
 
+    try:
+        adapter = get_adapter(args.adapter)
+    except KeyError:
+        print(f"Error: unknown adapter {args.adapter!r}", file=sys.stderr)
+        return _EXIT_ERROR
+
     tasks = tuple(t for t in args.tasks.split(",") if t) if args.tasks else ()
     req = BenchmarkRunRequest(
-        adapter_id=args.adapter,
+        adapter_id=adapter.id,
         agent=args.agent,
         model=args.model,
         env=args.env,
@@ -233,14 +254,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
         dry_run=args.dry_run,
     )
 
-    try:
-        adapter = get_adapter(args.adapter)
-    except KeyError:
-        print(f"Error: unknown adapter {args.adapter!r}", file=sys.stderr)
-        return _EXIT_ERROR
-
     _emit_event("benchmark.run.started", {
-        "adapter_id": args.adapter,
+        "adapter_id": adapter.id,
         "agent": args.agent,
         "model": args.model,
         "env": args.env,
@@ -304,6 +319,33 @@ def _cmd_report(args: argparse.Namespace) -> int:
     return _EXIT_OK
 
 
+def _cmd_solve_terminal_task(args: argparse.Namespace) -> int:
+    from .solar_solver import solve_terminal_task
+
+    try:
+        result = solve_terminal_task(
+            workspace=Path(args.workspace),
+            instruction_file=Path(args.instruction_file),
+            backend=args.backend,
+            model=args.model,
+            logs_dir=Path(args.logs_dir),
+            timeout_sec=args.timeout_sec,
+        )
+    except Exception as exc:
+        result = {
+            "return_code": 1,
+            "error": str(exc),
+            "workspace": args.workspace,
+            "logs_dir": args.logs_dir,
+        }
+
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+    else:
+        print(json.dumps(result, ensure_ascii=False, default=str))
+    return _EXIT_OK if result.get("return_code") == 0 else _EXIT_ERROR
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Parse args and dispatch to subcommand handler."""
     parser = _build_parser()
@@ -319,6 +361,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "plan": _cmd_plan,
         "run": _cmd_run,
         "report": _cmd_report,
+        "solve-terminal-task": _cmd_solve_terminal_task,
     }
 
     handler = handlers.get(args.command)

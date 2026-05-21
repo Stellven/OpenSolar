@@ -7,7 +7,7 @@ S03 N1 ships the schema + registry foundation. Adapter seeding (importing
 from __future__ import annotations
 
 from . import registry
-from .registry import ADAPTER_REGISTRY, get_adapter, list_adapters, register
+from .registry import ADAPTER_REGISTRY, get_adapter, list_adapters, normalize_adapter_id, register
 from .schemas import (
     AGENT_ALLOWLIST,
     DEFAULT_DATASET,
@@ -41,6 +41,7 @@ __all__ = [
     "get_adapter",
     "list_adapters",
     "new_run_id",
+    "normalize_adapter_id",
     "register",
     "registry",
 ]

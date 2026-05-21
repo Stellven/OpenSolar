@@ -13,6 +13,12 @@ if TYPE_CHECKING:
 
 
 ADAPTER_REGISTRY: dict[str, type] = {}
+ADAPTER_ALIASES: dict[str, str] = {
+    "terminal-bench": "terminal-bench@2.0",
+    "terminal-bench-2": "terminal-bench@2.0",
+    "terminal-bench-2.0": "terminal-bench@2.0",
+    "terminal-bench@2": "terminal-bench@2.0",
+}
 
 
 def register(adapter_cls: type) -> type:
@@ -30,12 +36,18 @@ def register(adapter_cls: type) -> type:
     return adapter_cls
 
 
+def normalize_adapter_id(adapter_id: str) -> str:
+    """Return the canonical adapter id for user-facing aliases."""
+    return ADAPTER_ALIASES.get(adapter_id, adapter_id)
+
+
 def get_adapter(adapter_id: str) -> "BenchmarkAdapter":
     """Instantiate the adapter class registered under `adapter_id`.
 
     Raises KeyError listing all known ids if `adapter_id` is unknown.
     """
-    cls = ADAPTER_REGISTRY.get(adapter_id)
+    canonical_id = normalize_adapter_id(adapter_id)
+    cls = ADAPTER_REGISTRY.get(canonical_id)
     if cls is None:
         known = sorted(ADAPTER_REGISTRY)
         raise KeyError(

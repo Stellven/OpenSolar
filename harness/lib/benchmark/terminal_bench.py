@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import time
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -40,7 +43,7 @@ class TerminalBench20Adapter:
     id: str = f"{_BENCHMARK_NAME}@{_BENCHMARK_VERSION}"
     version: str = _BENCHMARK_VERSION
 
-    def doctor(self) -> BenchmarkDoctor:
+    def _doctor_for_agent(self, agent: str | None = None) -> BenchmarkDoctor:
         """Check prerequisites: Harbor, Docker, dataset, agent API keys.
 
         Never raises — returns BenchmarkDoctor with missing_prereqs populated
@@ -62,11 +65,15 @@ class TerminalBench20Adapter:
             missing.append("dataset_registry")
 
         agents_known: list[str] = []
-        for agent in AGENT_ALLOWLIST:
-            if harbor_adapter.probe_api_key(agent):
-                agents_known.append(agent)
+        agents_to_check = (agent,) if agent else AGENT_ALLOWLIST
+        auth_notes: list[str] = []
+        for candidate in agents_to_check:
+            status, evidence = harbor_adapter.agent_auth_status(candidate)
+            auth_notes.append(f"{candidate}:{status}:{evidence}")
+            if status != "missing":
+                agents_known.append(candidate)
             else:
-                missing.append(f"api_key:{agent}")
+                missing.append(f"agent_auth:{candidate}")
 
         notes_parts: list[str] = []
         if harbor_available:
@@ -75,6 +82,7 @@ class TerminalBench20Adapter:
             notes_parts.append("harbor=missing")
         notes_parts.append(f"docker={'ok' if docker_ok else 'missing'}")
         notes_parts.append(f"dataset={'ok' if dataset_ok else 'unknown'}")
+        notes_parts.append(f"auth={','.join(auth_notes) or 'N/A'}")
         notes = "; ".join(notes_parts)
 
         return BenchmarkDoctor(
@@ -88,18 +96,28 @@ class TerminalBench20Adapter:
             notes=notes,
         )
 
-    def list_tasks(self) -> list[BenchmarkTask]:
-        """Return static list of safe benchmark tasks.
+    def doctor(self) -> BenchmarkDoctor:
+        """Check global prerequisites without requiring API-key-only auth."""
+        return self._doctor_for_agent()
 
-        P0 keeps this static; P1 may query Harbor registry.
-        """
+    def list_tasks(self) -> list[BenchmarkTask]:
+        """Return known benchmark tasks from Harbor registry, with safe smoke tasks first."""
+        registry_tasks = harbor_adapter.list_dataset_tasks(self.id)
+        if registry_tasks:
+            ordered = [
+                task for task in SAFE_TASKS if task in registry_tasks
+            ] + [
+                task for task in registry_tasks if task not in SAFE_TASKS
+            ]
+        else:
+            ordered = list(SAFE_TASKS)
         return [
             BenchmarkTask(
                 id=t,
                 title=t.replace("-", " ").title(),
-                tags=["safe", "smoke"],
+                tags=["safe", "smoke"] if t in SAFE_TASKS else ["registry"],
             )
-            for t in SAFE_TASKS
+            for t in ordered
         ]
 
     def plan(self, req: BenchmarkRunRequest) -> BenchmarkRunPlan:
@@ -112,6 +130,10 @@ class TerminalBench20Adapter:
         key_name = harbor_adapter.api_key_env_for(req.agent)
         if key_name and harbor_adapter.probe_api_key(req.agent):
             env_overrides[key_name] = "present"
+        auth_status, auth_evidence = harbor_adapter.agent_auth_status(req.agent)
+        if auth_status != "missing":
+            env_overrides[f"auth:{req.agent}"] = auth_status
+            env_overrides[f"auth_evidence:{req.agent}"] = auth_evidence
         return BenchmarkRunPlan(
             command=tuple(argv),
             env_overrides=env_overrides,
@@ -157,8 +179,19 @@ class TerminalBench20Adapter:
                 f"Env {req.env!r} not in {list(VALID_ENVS)}",
             )
 
+        # INIT: validate requested tasks against local Harbor registry when available.
+        registry_tasks = set(harbor_adapter.list_dataset_tasks(self.id))
+        if registry_tasks and req.tasks:
+            unknown_tasks = tuple(task for task in req.tasks if task not in registry_tasks)
+            if unknown_tasks:
+                return self._error_result(
+                    base_result,
+                    ("unknown_task",),
+                    f"Unknown task(s) for {self.id}: {', '.join(unknown_tasks)}",
+                )
+
         # DOCTOR: check prerequisites
-        doc = self.doctor()
+        doc = self._doctor_for_agent(req.agent)
         if doc.missing_prereqs:
             return self._pending_result(
                 base_result,
@@ -176,8 +209,31 @@ class TerminalBench20Adapter:
                     f"Cloud env {req.env!r} selected but API key for {req.agent} missing",
                 )
 
+        if req.agent in {"host-claude-code", "solar-harness-agent"} and not req.dry_run:
+            installer = (
+                harbor_adapter.ensure_solar_harness_agent_installed
+                if req.agent == "solar-harness-agent"
+                else harbor_adapter.ensure_host_claude_agent_installed
+            )
+            installed, evidence = installer()
+            if not installed:
+                return self._error_result(
+                    base_result,
+                    (f"{req.agent.replace('-', '_')}_install_failed",),
+                    evidence,
+                )
+
+        run_dir = None
+        plan_req = req
+        if not req.dry_run:
+            from .reports import _reports_base
+
+            run_dir = _reports_base() / run_id
+            harbor_jobs_dir = run_dir / "harbor-jobs"
+            plan_req = replace(req, run_dir=str(harbor_jobs_dir))
+
         # PLAN
-        plan = self.plan(req)
+        plan = self.plan(plan_req)
 
         # DRY RUN → return ok with command visible, no execution
         if req.dry_run:
@@ -210,12 +266,116 @@ class TerminalBench20Adapter:
                 limitations=("dry_run: no actual execution",),
             )
 
-        # EXEC: real execution not yet wired — return pending
-        return self._pending_result(
-            base_result,
-            ("exec_not_wired",),
-            "Real execution requires subprocess runner (N5 scope); currently dry-run only",
+        # EXEC: delegate to Harbor and capture raw artifacts. Harbor owns scoring.
+        assert run_dir is not None
+        run_dir.mkdir(parents=True, exist_ok=True)
+        stdout_path = run_dir / "stdout.log"
+        stderr_path = run_dir / "stderr.log"
+        started = time.monotonic()
+        try:
+            proc = subprocess.run(
+                list(plan.command),
+                cwd=str(run_dir),
+                text=True,
+                capture_output=True,
+                timeout=int(os.environ.get("SOLAR_BENCH_TIMEOUT_SEC", "7200")),
+            )
+            stdout = proc.stdout
+            stderr = proc.stderr
+            return_code = proc.returncode
+        except subprocess.TimeoutExpired as exc:
+            stdout = exc.stdout or ""
+            stderr = exc.stderr or f"Timed out after {exc.timeout}s"
+            return_code = 124
+        duration = time.monotonic() - started
+        stdout_path.write_text(stdout, encoding="utf-8")
+        stderr_path.write_text(stderr, encoding="utf-8")
+
+        verdict = "ok" if return_code == 0 else "error"
+        harbor_score, completed_count, error_count, harbor_result_path = (
+            self._parse_harbor_job_summary(run_dir / "harbor-jobs")
         )
+        completed_tasks = req.tasks if verdict == "ok" else ()
+        if harbor_score is not None and completed_count is not None:
+            pass_count = round(harbor_score * completed_count)
+            fail_count = max(completed_count - pass_count, 0)
+            if error_count:
+                fail_count += error_count
+        else:
+            pass_count = completed_count if completed_count is not None else len(completed_tasks)
+            fail_count = error_count if error_count is not None else (0 if verdict == "ok" else len(req.tasks))
+        failure_modes = () if verdict == "ok" else (f"harbor_exit:{return_code}",)
+        limitations = (
+            "Harbor raw execution captured; score parsing is delegated to Harbor artifacts",
+        )
+        return BenchmarkRunResult(
+            schema_version=SCHEMA_VERSION,
+            run_id=run_id,
+            benchmark=_BENCHMARK_NAME,
+            benchmark_version=_BENCHMARK_VERSION,
+            dataset=self.id,
+            adapter=_ADAPTER_NAME,
+            agent=req.agent,
+            model=req.model,
+            env=req.env,
+            tasks_requested=req.tasks,
+            tasks_completed=completed_tasks,
+            score=harbor_score,
+            pass_count=pass_count,
+            fail_count=fail_count,
+            pending_count=0,
+            started_at=now,
+            completed_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            duration_sec=duration,
+            command=plan.command,
+            exit_code=return_code,
+            stdout_path=str(stdout_path),
+            stderr_path=str(stderr_path),
+            artifacts=tuple(
+                p for p in (
+                    str(stdout_path),
+                    str(stderr_path),
+                    str(run_dir / "harbor-jobs"),
+                    str(harbor_result_path) if harbor_result_path else "",
+                )
+                if p
+            ),
+            verdict=verdict,
+            failure_modes=failure_modes,
+            limitations=limitations,
+        )
+
+    def _parse_harbor_job_summary(
+        self, jobs_dir: Path
+    ) -> tuple[float | None, int | None, int | None, Path | None]:
+        """Parse Harbor's top-level job result.json without assuming schema stability."""
+        for result_path in sorted(jobs_dir.glob("*/result.json"), reverse=True):
+            try:
+                data = json.loads(result_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            stats = data.get("stats") if isinstance(data, dict) else None
+            if not isinstance(stats, dict):
+                continue
+            score = None
+            evals = stats.get("evals")
+            if isinstance(evals, dict):
+                for eval_payload in evals.values():
+                    metrics = eval_payload.get("metrics") if isinstance(eval_payload, dict) else None
+                    if isinstance(metrics, list) and metrics:
+                        first = metrics[0]
+                        if isinstance(first, dict) and isinstance(first.get("mean"), (int, float)):
+                            score = float(first["mean"])
+                            break
+            completed = stats.get("n_completed_trials")
+            errors = stats.get("n_errored_trials")
+            return (
+                score,
+                completed if isinstance(completed, int) else None,
+                errors if isinstance(errors, int) else None,
+                result_path,
+            )
+        return None, None, None, None
 
     def parse_result(self, run_dir: Path) -> BenchmarkRunResult:
         """Parse run.json from a previous benchmark run directory.
