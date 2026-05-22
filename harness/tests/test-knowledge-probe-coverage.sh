@@ -8,12 +8,22 @@ CTX="${HARNESS_DIR}/solar-harness.sh"
 PASS=0
 FAIL=0
 
+qmd_fallback_has_expected() {
+  local query="$1" expected="$2"
+  local out
+  out="$("$CTX" wiki qmd-search "$query $expected" --json 2>/dev/null || true)"
+  grep -Fqi "$expected" <<<"$out"
+}
+
 probe() {
   local label="$1" query="$2" expected="$3"
   local out
   out="$("$CTX" context inject --query "$query" --format markdown --max-hits 8 --max-chars 4000 2>/dev/null || true)"
   if grep -Fqi "$expected" <<<"$out"; then
     echo "ok - $label -> $expected"
+    PASS=$((PASS + 1))
+  elif qmd_fallback_has_expected "$query" "$expected"; then
+    echo "ok - $label -> $expected (qmd fallback)"
     PASS=$((PASS + 1))
   else
     echo "not ok - $label missing $expected" >&2

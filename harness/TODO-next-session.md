@@ -2,16 +2,15 @@
 
 > 下次会话启动后，规划者按优先级派发 Sprint
 
+## 当前状态修订 (2026-05-21)
+
+- `coordinator.sh → TypeScript/Bun 重写` 已从 P0 降级为 P1 架构债。
+- 降级原因：当前没有新的 `.coordinator-state` 写坏为 `:` 的复现证据；已有 `sprint-20260521-coordinator-ts-rewrite/` 也只有 PRD / dispatch 草案，没有当前 gate 要求的 `task_graph.json`。
+- 硬门槛：除非重新复现 `:` 状态损坏，并补齐正式 Planner 产物 `design.md + plan.md + task_graph.json`，否则扫描器不得把该事项标为当前 P0 或直接派发 Builder。
+
 ## P0 — 必须修 (影响稳定性)
 
-### 1. 协调器 save_state `:` bug 根治
-- **现象**: .coordinator-state 文件偶尔被写为 `:`，导致每轮误触发派发
-- **已做**: save_state 防空值 + PID 互斥 + log >&2 + 初始化替代 rm -f
-- **未做**: 根因仍未完全定位。可能需要 TypeScript 重写 coordinator.sh
-- **最小修复**: 在主循环里加 `if [[ "$(cat $COORD_STATE)" == ":" ]]; then save_state "$current_state"; fi`
-- **Sprint 合约模板**: 重写 coordinator.sh 为 TypeScript (bun)，彻底解决 bash 的状态管理问题
-
-### 2. Whisper 实际注入验证
+### 1. Whisper 实际注入验证
 - **现象**: 手动测试 whisper hook 有输出 (33ms, 3 条教训)，但实际对话中没看到 [Subconscious] 标签
 - **可能原因**: Claude Code 的 UserPromptSubmit hook stdout 注入方式跟预期不同，或需要新会话加载 settings.json
 - **验证方法**: 新会话启动后，看第一个 prompt 有没有 `<system-reminder>[Subconscious]`
@@ -19,14 +18,22 @@
 
 ## P1 — 应该修 (影响体验)
 
+### 2. 协调器 save_state `:` 复现监控与最小修复
+- **现象**: .coordinator-state 文件偶尔被写为 `:`，导致每轮误触发派发
+- **已做**: save_state 防空值 + PID 互斥 + log >&2 + 初始化替代 rm -f
+- **降级状态**: 已从 P0 降级到 P1；先做复现监控和最小修复，不直接重写 coordinator
+- **未做**: 根因仍未完全定位；只有重新复现后才允许升级为 P0
+- **最小修复**: 在主循环里加 `if [[ "$(cat $COORD_STATE)" == ":" ]]; then save_state "$current_state"; fi`
+
 ### 3. CACHE_BOUNDARY 真实注入
 - **现象**: coordinator.sh 的 generate_dispatch 有 CACHE_BOUNDARY 但旧 handle_* 没全切过去
 - **验收**: `grep -l CACHE_BOUNDARY sprints/*.dispatch.md | wc -l` >= 1
 
-### 4. 协调器 TypeScript 重写
+### 4. 协调器 TypeScript 重写（已降级为架构债）
 - **理由**: bash 脚本 patch 7 层修不动 (save_state/多进程/log 污染/竞态)
 - **范围**: coordinator.sh → coordinator.ts (bun)，进程内状态，事件驱动
 - **保留**: session.sh / archive.sh / token-tracker.sh (这些 bash 脚本工作正常)
+- **不得直接执行**: 需要先证明当前仍有状态损坏复现，并补齐 `task_graph.json`
 
 ### 5. 审判官 /verify-all 集成
 - **Sprint 191955 做了 D1-D6** (evaluator.md + dispatch 推荐)，但实际审判官还是手写 bash

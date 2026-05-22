@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-EXT_DIR="${EXT_DIR:-$HOME/.solar/harness/extensions/chatgpt-knowledge-capture}"
+if [[ -z "${EXT_DIR:-}" ]]; then
+  if [[ -f "$HOME/Solar/harness/extensions/chatgpt-knowledge-capture/manifest.json" ]]; then
+    EXT_DIR="$HOME/Solar/harness/extensions/chatgpt-knowledge-capture"
+  else
+    EXT_DIR="$HOME/.solar/harness/extensions/chatgpt-knowledge-capture"
+  fi
+fi
 CHROME_APP="${CHROME_APP:-Google Chrome}"
 
 if [[ ! -f "$EXT_DIR/manifest.json" ]]; then

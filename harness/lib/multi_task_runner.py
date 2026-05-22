@@ -680,54 +680,10 @@ def role_from_node(node: dict[str, Any]) -> str:
     return aliases.get(value, value or "builder")
 
 
-MULTIMODAL_TASK_MARKERS = {
-    "image", "vision", "multimodal", "screenshot", "ocr", "diagram", "mockup", "ui",
-    "pdf-page-image", "scanned", "scan", "figure", "chart", "table-image",
-    "多模态", "图像", "图片", "截图", "视觉", "图表", "扫描", "版面",
-}
-
-LOCAL_KNOWLEDGE_TASK_MARKERS = {
-    "knowledge", "knowledge-extraction", "wiki-ingest", "wiki", "qmd", "mineru",
-    "pdf", "paper", "bulk-extraction", "runtime-artifact", "知识", "知识库",
-    "知识抽取", "论文", "文档抽取",
-}
-
-
-def _node_policy_values(node: dict[str, Any]) -> set[str]:
-    values = {value.lower() for value in _selector_values(node.get("operator_selector"))}
-    for key in ("required_capabilities", "capabilities", "required_skills", "best_for", "preferred_for"):
-        raw = node.get(key) or []
-        if isinstance(raw, str):
-            values.add(raw.lower())
-        else:
-            values.update(str(v).lower() for v in raw if str(v).strip())
-    text = " ".join(str(node.get(key) or "") for key in ("id", "title", "goal", "description", "task_type"))
-    lower = text.lower()
-    for marker in MULTIMODAL_TASK_MARKERS | LOCAL_KNOWLEDGE_TASK_MARKERS:
-        if marker.lower() in lower or marker in text:
-            values.add(marker.lower())
-    return values
-
-
-def node_requires_multimodal(node: dict[str, Any]) -> bool:
-    values = _node_policy_values(node)
-    return bool(values & {marker.lower() for marker in MULTIMODAL_TASK_MARKERS})
-
-
-def node_requires_local_knowledge(node: dict[str, Any]) -> bool:
-    values = _node_policy_values(node)
-    return bool(values & {marker.lower() for marker in LOCAL_KNOWLEDGE_TASK_MARKERS})
-
-
 def select_profile(node: dict[str, Any], profile_override: str = "", model_override: str = "", backend_override: str = "") -> dict[str, Any]:
     config = load_profiles()
     profiles = config.get("profiles") or {}
     profile_name = profile_override or str(node.get("preferred_profile") or node.get("profile") or "")
-    if not profile_name:
-        if node_requires_multimodal(node) and "antigravity-multimodal" in profiles:
-            profile_name = "antigravity-multimodal"
-        elif node_requires_local_knowledge(node) and "knowledge-extractor" in profiles:
-            profile_name = "knowledge-extractor"
     if not profile_name:
         role = role_from_node(node)
         for name, spec in profiles.items():
