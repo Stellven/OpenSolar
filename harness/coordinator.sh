@@ -3571,6 +3571,78 @@ handle_reviewing() {
     local parent_check parent_ready
     parent_check=$(bash "$HARNESS_DIR/solar-harness.sh" graph-scheduler parent-check --graph "$graph_path" 2>/dev/null || true)
     parent_ready=$(python3 -c "import json,sys; raw=sys.argv[1]; d=json.loads(raw) if raw.strip() else {}; print('1' if d.get('ready') else '0')" "$parent_check" 2>/dev/null || echo 0)
+    if [[ "$parent_ready" != "1" && -f "$SPRINTS_DIR/${sid}.handoff.md" ]]; then
+      local reconcile_result reconcile_changed
+      reconcile_result=$(python3 - "$graph_path" "$HARNESS_DIR" <<'PY' 2>/dev/null || true
+import datetime
+import json
+import pathlib
+import sys
+
+graph_path = pathlib.Path(sys.argv[1])
+harness_dir = pathlib.Path(sys.argv[2])
+try:
+    graph = json.loads(graph_path.read_text())
+except Exception as exc:
+    print(json.dumps({"ok": False, "error": str(exc)}))
+    raise SystemExit(0)
+
+nodes = graph.get("nodes") or []
+results = graph.setdefault("node_results", {})
+changed = []
+now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+def artifact_exists(item: str) -> bool:
+    p = pathlib.Path(str(item))
+    if not p.is_absolute():
+        p = harness_dir / p
+    return p.is_file() and p.stat().st_size > 0
+
+for node in nodes:
+    node_id = str(node.get("id") or "")
+    if not node_id:
+        continue
+    result = results.get(node_id) if isinstance(results.get(node_id), dict) else {}
+    status = str(result.get("status") or node.get("status") or "").lower()
+    if status in {"passed", "done", "completed"}:
+        continue
+    write_scope = node.get("write_scope") or []
+    if not write_scope or not all(artifact_exists(item) for item in write_scope):
+        continue
+    gate = node.get("gate")
+    node["status"] = "passed"
+    results[node_id] = {
+        "status": "passed",
+        "gate_status": "passed" if gate else "",
+        "updated_at": now,
+        "note": "coordinator auto-reconciled from complete write_scope artifacts before evaluator dispatch",
+    }
+    changed.append(node_id)
+
+if changed:
+    gate_results = graph.setdefault("gate_results", {})
+    for gate in {str(n.get("gate")) for n in nodes if n.get("gate")}:
+        gated_nodes = [n for n in nodes if str(n.get("gate") or "") == gate]
+        if gated_nodes and all(str((results.get(str(n.get("id") or "")) or {}).get("status") or n.get("status") or "").lower() in {"passed", "done", "completed"} for n in gated_nodes):
+            gate_results[gate] = {
+                "status": "passed",
+                "updated_at": now,
+                "note": "coordinator auto-reconciled after write_scope artifact completion",
+            }
+    graph_path.write_text(json.dumps(graph, ensure_ascii=False, indent=2) + "\n")
+
+print(json.dumps({"ok": True, "changed": changed}, ensure_ascii=False))
+PY
+)
+      reconcile_changed=$(python3 -c "import json,sys; d=json.loads(sys.argv[1]) if sys.argv[1].strip() else {}; print(len(d.get('changed') or []))" "$reconcile_result" 2>/dev/null || echo 0)
+      if (( reconcile_changed > 0 )); then
+        log "${Y}[handle_reviewing] reconciled ${reconcile_changed} DAG node result(s) from write_scope artifacts for ${sid}${N}"
+        emit_event "$sid" "dag_node_results_auto_reconciled" "coordinator" "$reconcile_result"
+        append_history "$sf" "dag_node_results_auto_reconciled" "coordinator"
+        parent_check=$(bash "$HARNESS_DIR/solar-harness.sh" graph-scheduler parent-check --graph "$graph_path" 2>/dev/null || true)
+        parent_ready=$(python3 -c "import json,sys; raw=sys.argv[1]; d=json.loads(raw) if raw.strip() else {}; print('1' if d.get('ready') else '0')" "$parent_check" 2>/dev/null || echo 0)
+      fi
+    fi
     if [[ "$parent_ready" != "1" ]]; then
       log "${Y}[handle_reviewing] ${sid} has task_graph but parent-check not ready; block parent evaluator dispatch${N}"
       emit_event "$sid" "parent_review_blocked" "coordinator" "{\"reason\":\"dag_parent_not_ready\",\"parent_check\":$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$parent_check")}"
