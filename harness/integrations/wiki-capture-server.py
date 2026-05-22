@@ -22,7 +22,10 @@ import sys
 import threading
 import time
 import urllib.parse
-import cgi
+try:
+    import cgi
+except ModuleNotFoundError:
+    cgi = None
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -914,6 +917,9 @@ class Handler(BaseHTTPRequestHandler):
             result = import_chatgpt_capture(payload)
             self._json(200 if result.get("ok") else 400, result)
         elif self.path == "/upload":
+            if cgi is None:
+                self._json(501, {"ok": False, "error": "multipart upload requires Python cgi module; use /capture or /chatgpt-import"})
+                return
             form = cgi.FieldStorage(
                 fp=self.rfile,
                 headers=self.headers,

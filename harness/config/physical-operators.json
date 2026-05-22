@@ -1,0 +1,353 @@
+{
+  "version": 1,
+  "updated_at": "2026-05-22T01:10:00Z",
+  "operators": {
+    "mini-claude-opus-planner": {
+      "display_name": "Mac mini Claude Opus planner",
+      "plane": "headless",
+      "owner_host": "lisihao@100.122.223.55",
+      "pane": "solar-harness-multi-task:*",
+      "profile": "planner",
+      "role": "planner",
+      "persona": "planner",
+      "provider": "anthropic",
+      "vendor": "Anthropic",
+      "backend": "claude-cli",
+      "model": "opus",
+      "model_config": "auto_edit",
+      "base_url": "native",
+      "auth_mode": "subscription",
+      "key_ref": "claude_subscription",
+      "quota_cycle": "monthly",
+      "quota_refresh_at": "unknown",
+      "quota_guard_state": "ok",
+      "enabled": true,
+      "enabled_at": "2026-05-22T00:12:00Z",
+      "available": true,
+      "health_status": "ok",
+      "roles": [
+        "planner"
+      ],
+      "task_classes": [
+        "planning",
+        "architecture",
+        "requirements",
+        "schema-design"
+      ],
+      "strengths": [
+        "architecture",
+        "debugging",
+        "complex-reasoning"
+      ],
+      "preferred_for": [
+        "planner",
+        "architecture",
+        "schema-design"
+      ],
+      "avoid_for": [
+        "bulk-extraction",
+        "cheap-background"
+      ],
+      "cost_tier": "high",
+      "latency_tier": "medium",
+      "context_tier": "high",
+      "max_concurrency": 1,
+      "fallback_profile": "planner"
+    },
+    "mini-claude-sonnet-builder": {
+      "display_name": "Mac mini Claude Sonnet builder",
+      "plane": "headless",
+      "owner_host": "lisihao@100.122.223.55",
+      "pane": "solar-harness-multi-task:*",
+      "profile": "builder",
+      "role": "builder",
+      "persona": "builder",
+      "provider": "anthropic",
+      "vendor": "Anthropic",
+      "backend": "claude-cli",
+      "model": "sonnet",
+      "model_config": "yolo",
+      "base_url": "native",
+      "auth_mode": "subscription",
+      "key_ref": "claude_subscription",
+      "quota_cycle": "monthly",
+      "quota_refresh_at": "unknown",
+      "quota_guard_state": "ok",
+      "enabled": true,
+      "enabled_at": "2026-05-22T00:12:00Z",
+      "available": true,
+      "health_status": "ok",
+      "roles": [
+        "builder"
+      ],
+      "task_classes": [
+        "implementation",
+        "debugging",
+        "tests",
+        "refactor"
+      ],
+      "strengths": [
+        "code-edit",
+        "tests",
+        "repo-modification"
+      ],
+      "preferred_for": [
+        "builder",
+        "implementation",
+        "debugging"
+      ],
+      "avoid_for": [
+        "bulk-extraction"
+      ],
+      "cost_tier": "medium",
+      "latency_tier": "medium",
+      "context_tier": "high",
+      "max_concurrency": 2,
+      "fallback_profile": "builder"
+    },
+    "mini-claude-opus-evaluator": {
+      "display_name": "Mac mini Claude Opus evaluator",
+      "plane": "headless",
+      "owner_host": "lisihao@100.122.223.55",
+      "pane": "solar-harness-multi-task:*",
+      "profile": "evaluator",
+      "role": "evaluator",
+      "persona": "evaluator",
+      "provider": "anthropic",
+      "vendor": "Anthropic",
+      "backend": "claude-cli",
+      "model": "opus",
+      "model_config": "auto_edit",
+      "base_url": "native",
+      "auth_mode": "subscription",
+      "key_ref": "claude_subscription",
+      "quota_cycle": "monthly",
+      "quota_refresh_at": "unknown",
+      "quota_guard_state": "ok",
+      "enabled": true,
+      "enabled_at": "2026-05-22T00:12:00Z",
+      "available": true,
+      "health_status": "ok",
+      "roles": [
+        "evaluator"
+      ],
+      "task_classes": [
+        "verification",
+        "review",
+        "evidence",
+        "regression"
+      ],
+      "strengths": [
+        "review",
+        "risk",
+        "quality-gate"
+      ],
+      "preferred_for": [
+        "evaluator",
+        "review",
+        "verification"
+      ],
+      "avoid_for": [
+        "bulk-extraction"
+      ],
+      "cost_tier": "high",
+      "latency_tier": "medium",
+      "context_tier": "high",
+      "max_concurrency": 1,
+      "fallback_profile": "evaluator"
+    },
+    "mini-thunderomlx-qwen36-knowledge": {
+      "display_name": "Mac mini ThunderOMLX Qwen3.6 knowledge",
+      "plane": "headless",
+      "owner_host": "lisihao@100.122.223.55",
+      "pane": "solar-harness-multi-task:*",
+      "profile": "knowledge-extractor",
+      "role": "builder",
+      "persona": "builder",
+      "provider": "local",
+      "vendor": "ThunderOMLX",
+      "backend": "command",
+      "model": "thunderomlx",
+      "model_config": "Qwen3.6-35b-a3b;hot-cache=8GB;thinking=disabled",
+      "base_url": "http://127.0.0.1:8002",
+      "auth_mode": "local",
+      "key_ref": "local-thunderomlx",
+      "quota_cycle": "none",
+      "quota_refresh_at": "N/A",
+      "quota_guard_state": "ok",
+      "enabled": true,
+      "enabled_at": "2026-05-22T00:12:00Z",
+      "available": true,
+      "health_status": "ok",
+      "roles": [
+        "builder"
+      ],
+      "task_classes": [
+        "knowledge-extraction",
+        "wiki-ingest",
+        "qmd-indexing",
+        "bulk-extraction"
+      ],
+      "strengths": [
+        "cheap-background",
+        "local",
+        "knowledge-extraction"
+      ],
+      "preferred_for": [
+        "knowledge",
+        "wiki",
+        "extraction",
+        "thunderomlx"
+      ],
+      "avoid_for": [
+        "critical-review",
+        "complex-refactor"
+      ],
+      "cost_tier": "low",
+      "latency_tier": "medium",
+      "context_tier": "medium",
+      "max_concurrency": 1,
+      "fallback_profile": "knowledge-extractor"
+    },
+    "mini-antigravity-gemini35-flash-high": {
+      "display_name": "Mac mini Antigravity Gemini 3.5 Flash High",
+      "plane": "headless",
+      "owner_host": "lisihao@100.122.223.55",
+      "pane": "solar-harness-multi-task:*",
+      "profile": "gemini-builder",
+      "role": "builder",
+      "persona": "builder",
+      "provider": "google",
+      "vendor": "Google",
+      "backend": "command",
+      "model": "gemini-3.5-flash-high",
+      "model_config": "Antigravity CLI agy",
+      "base_url": "agy-cli",
+      "auth_mode": "oauth",
+      "key_ref": "antigravity_oauth",
+      "quota_cycle": "google-account",
+      "quota_refresh_at": "unknown",
+      "quota_guard_state": "ok",
+      "enabled": false,
+      "disabled_reason": "needs dispatch adapter and ToS-safe smoke before scheduler use",
+      "enabled_at": "N/A",
+      "available": false,
+      "health_status": "smoke_pending",
+      "roles": [
+        "builder"
+      ],
+      "task_classes": [
+        "parallel-experiment",
+        "google-ecosystem",
+        "fast-prototype"
+      ],
+      "strengths": [
+        "speed",
+        "multi-agent",
+        "google-stack"
+      ],
+      "preferred_for": [
+        "parallel",
+        "prototype",
+        "google",
+        "android",
+        "firebase"
+      ],
+      "avoid_for": [
+        "root-debug",
+        "critical-code-review"
+      ],
+      "cost_tier": "low",
+      "latency_tier": "low",
+      "context_tier": "high",
+      "max_concurrency": 1,
+      "fallback_profile": "builder"
+    },
+    "mini-antigravity-gemini35-flash-image": {
+      "display_name": "Mac mini Antigravity Gemini 3.5 Flash multimodal image",
+      "plane": "headless",
+      "owner_host": "lisihao@100.122.223.55",
+      "pane": "solar-harness-multi-task:*",
+      "profile": "antigravity-multimodal",
+      "role": "builder",
+      "persona": "builder",
+      "provider": "google",
+      "vendor": "Google",
+      "backend": "command",
+      "model": "gemini-3.5-flash-high",
+      "model_config": "Antigravity CLI agy;multimodal=image-input",
+      "base_url": "agy-cli",
+      "command_path": "/Users/lisihao/.local/bin/agy",
+      "auth_mode": "oauth",
+      "key_ref": "antigravity_oauth",
+      "quota_cycle": "google-account",
+      "quota_refresh_at": "unknown",
+      "quota_guard_state": "ok",
+      "enabled": true,
+      "disabled_reason": "",
+      "enabled_at": "2026-05-22T00:34:00Z",
+      "available": true,
+      "health_status": "ok",
+      "input_modalities": [
+        "text",
+        "image",
+        "screenshot"
+      ],
+      "output_modalities": [
+        "text",
+        "structured-json"
+      ],
+      "artifact_types": [
+        "png",
+        "jpg",
+        "jpeg",
+        "webp",
+        "pdf-page-image",
+        "screenshot"
+      ],
+      "roles": [
+        "builder",
+        "evaluator"
+      ],
+      "task_classes": [
+        "multimodal",
+        "image-processing",
+        "vision",
+        "screenshot-analysis",
+        "ui-check",
+        "ocr",
+        "diagram-analysis"
+      ],
+      "strengths": [
+        "image-understanding",
+        "ui-check",
+        "screenshot-analysis",
+        "google-stack"
+      ],
+      "preferred_for": [
+        "image",
+        "vision",
+        "multimodal",
+        "screenshot",
+        "ui",
+        "mockup",
+        "diagram",
+        "ocr",
+        "visual-gap",
+        "pdf-page-image"
+      ],
+      "avoid_for": [
+        "bulk-text-extraction",
+        "critical-code-review"
+      ],
+      "cost_tier": "low",
+      "latency_tier": "low",
+      "context_tier": "high",
+      "max_concurrency": 1,
+      "fallback_profile": "antigravity-multimodal",
+      "last_smoke_at": "2026-05-22T00:34:00Z",
+      "last_smoke_evidence": "agy --add-dir real Photos Library JPEG described beach/ocean scene",
+      "command": "AGY_BIN=/Users/lisihao/.local/bin/agy PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/antigravity_multimodal_agent.py\""
+    }
+  }
+}

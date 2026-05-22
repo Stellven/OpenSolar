@@ -1829,14 +1829,19 @@ dispatch_to_pane() {
     sleep 4
 
     local verify_output
-    # tail 10 → 30: keyword 在 chat history 里, idle 后会被滚到 tail 后面
-    verify_output=$(tmux capture-pane -t "$pane" -p 2>/dev/null | tail -30)
+    # tail 10 → 30 → 120: Claude Code TUI wraps long dispatch paths across
+    # multiple rows and may push the filename out of a narrow tail while the
+    # pane is already executing Read/Bash calls.  Use a wider window and accept
+    # either the dispatch basename, sprint id, or generic dispatch.md reference.
+    verify_output=$(tmux capture-pane -t "$pane" -p 2>/dev/null | tail -120)
     local has_keyword=0 has_processing=0
-    printf '%s\n' "$verify_output" | grep -q "$dispatch_keyword" && has_keyword=1
+    printf '%s\n' "$verify_output" | grep -qF "$dispatch_keyword" && has_keyword=1
+    (( has_keyword == 0 )) && printf '%s\n' "$verify_output" | grep -qF "$sid" && has_keyword=1
+    (( has_keyword == 0 )) && printf '%s\n' "$verify_output" | grep -qF "dispatch.md" && has_keyword=1
     # Claude 真在处理的特征。Claude Code 2.x frequently uses
     # Ideating/Musing/Orbiting/Reticulating before a tool call; treating those
     # as idle causes false dispatch failures while the pane is actually working.
-    printf '%s\n' "$verify_output" | grep -qE 'Crafting|Cogitating|Wandering|Sock-hopping|Crunched|Puzzling|Ideating|Musing|Orbiting|Reticulating|Read\(|Bash\(|Edit\(|Write\(|⎿|✻|✶|✳|✢' && has_processing=1
+    printf '%s\n' "$verify_output" | grep -qE 'Crafting|Cogitating|Wandering|Sock-hopping|Crunched|Puzzling|Gusting|Ideating|Musing|Orbiting|Reticulating|Read\(|Bash\(|Edit\(|Write\(|按 dispatch|合约、PRD 读毕|What should Claude do|⎿|✻|✶|✳|✢' && has_processing=1
     if (( has_keyword && has_processing )); then
       PANE_CURRENT_SPRINT[$pane]="$sid"
       PANE_ASSIGN_TS[$pane]=$(date +%s)

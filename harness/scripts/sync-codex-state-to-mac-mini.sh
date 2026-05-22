@@ -13,12 +13,13 @@ set -euo pipefail
 #   - auth.json, logs_2.sqlite, worktrees, plugins/cache, automation state/runs/logs
 #   - active solar-harness sprint artifacts
 
-LOCAL_CODEX="${LOCAL_CODEX:-/Users/sihaoli/.codex}"
+LOCAL_HOME="${LOCAL_HOME:-$HOME}"
+LOCAL_CODEX="${LOCAL_CODEX:-$LOCAL_HOME/.codex}"
 REMOTE_HOST="${REMOTE_HOST:-lisihao@100.122.223.55}"
 REMOTE_CODEX="${REMOTE_CODEX:-/Users/lisihao/.codex}"
-HARNESS_DIR="${HARNESS_DIR:-/Users/sihaoli/.solar/harness}"
+HARNESS_DIR="${HARNESS_DIR:-$LOCAL_HOME/.solar/harness}"
 REMOTE_HARNESS="${REMOTE_HARNESS:-/Users/lisihao/.solar/harness}"
-FROM_PREFIX="${FROM_PREFIX:-/Users/sihaoli}"
+FROM_PREFIX="${FROM_PREFIX:-$LOCAL_HOME}"
 TO_PREFIX="${TO_PREFIX:-/Users/lisihao}"
 
 UTC="$(date -u +%Y%m%dT%H%M%SZ)"

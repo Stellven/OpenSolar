@@ -127,7 +127,19 @@ fi
 CLAUDE_CMD="$CLAUDE_BIN"
 SOLAR_CLAUDE_BYPASS="${SOLAR_CLAUDE_BYPASS:-1}"
 if [[ "$SOLAR_CLAUDE_BYPASS" == "1" ]]; then
-  CLAUDE_CMD="$CLAUDE_BIN --permission-mode ${SOLAR_CLAUDE_PERMISSION_MODE:-auto}"
+  SOLAR_CLAUDE_PERMISSION_MODE="${SOLAR_CLAUDE_PERMISSION_MODE:-bypassPermissions}"
+  case "$SOLAR_CLAUDE_PERMISSION_MODE" in
+    acceptEdits|bypassPermissions|default|delegate|dontAsk|plan) ;;
+    auto)
+      # Claude Code 2.x removed "auto"; keep legacy env/config usable.
+      SOLAR_CLAUDE_PERMISSION_MODE="bypassPermissions"
+      ;;
+    *)
+      echo "WARN: invalid SOLAR_CLAUDE_PERMISSION_MODE=$SOLAR_CLAUDE_PERMISSION_MODE; using bypassPermissions" >&2
+      SOLAR_CLAUDE_PERMISSION_MODE="bypassPermissions"
+      ;;
+  esac
+  CLAUDE_CMD="$CLAUDE_BIN --permission-mode ${SOLAR_CLAUDE_PERMISSION_MODE}"
 fi
 [[ -n "$MODEL_FLAG" ]] && CLAUDE_CMD="$CLAUDE_CMD $MODEL_FLAG"
 [[ -n "$TOOL_FLAG" ]] && CLAUDE_CMD="$CLAUDE_CMD $TOOL_FLAG"

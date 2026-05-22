@@ -2125,7 +2125,10 @@ def _node_eval_needed(graph: dict[str, Any], sid: str, node: dict[str, Any], for
     repair_mode = bool(node.get("quality_gate_repair_requested_at")) and _node_requires_deepresearch_quality_gate(node)
     results = graph.get("node_results") or {}
     result = results.get(node_id) if isinstance(results, dict) else None
-    if isinstance(result, dict) and str(result.get("status", "")).lower() in {"passed", "failed", "skipped"}:
+    result_status = str(result.get("status", "")).lower() if isinstance(result, dict) else ""
+    if result_status == "passed":
+        return False
+    if result_status in {"failed", "skipped"} and not force:
         return False
     if _eval_json_file(sid, node_id).exists() and not force and not repair_mode:
         return False
@@ -2171,8 +2174,12 @@ def _node_eval_needed(graph: dict[str, Any], sid: str, node: dict[str, Any], for
     # in node_results while its static node entry still says pending; relying
     # on node.status alone makes evaluator dispatch skip real handoffs forever.
     status = node_status(graph, node_id)
-    if status in {"passed", "failed", "skipped"}:
+    if status == "passed":
         return False
+    if status in {"failed", "skipped"}:
+        if not force:
+            return False
+        return bool(_existing_node_handoff(sid, node, graph))
     if repair_mode and status in {"reviewing", "dispatched", "in_progress", "running", ""}:
         return True
     return bool(_existing_node_handoff(sid, node, graph)) and status in {"reviewing", "dispatched", "in_progress", "running", ""}
