@@ -1,0 +1,947 @@
+{
+  "id": "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release",
+  "sprint_id": "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release",
+  "epic_id": "epic-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026",
+  "title": "验证、回归与发布证据",
+  "status": "passed",
+  "phase": "finalized",
+  "handoff_to": "done",
+  "target_role": "done",
+  "priority": "P0",
+  "created_at": "2026-05-22T02:19:55Z",
+  "updated_at": "2026-05-22T10:42:42Z",
+  "dependency_policy": "activated_by_epic_dag",
+  "history": [
+    {
+      "ts": "2026-05-22T02:20:22Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T02:20:41Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T02:25:45Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T02:30:49Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T02:37:01Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T02:43:12Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T02:49:35Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T02:55:51Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T03:02:01Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T03:08:12Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T03:14:22Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T03:20:38Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T03:26:51Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T03:33:02Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T03:39:12Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T03:45:22Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T03:51:36Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T03:57:47Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T04:04:01Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T04:10:11Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T04:16:20Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T04:22:32Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T04:28:42Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T04:34:53Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T04:41:15Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T04:47:46Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T04:54:12Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T05:00:19Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T05:06:28Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T05:12:33Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T05:18:39Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T05:24:48Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T05:30:55Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T05:37:00Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T05:43:05Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T05:49:10Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T05:55:17Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T06:01:22Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T06:07:30Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T06:13:34Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T06:19:39Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T06:25:45Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T06:31:49Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T06:37:56Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T06:44:14Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T06:50:52Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T06:57:06Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T07:03:16Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T07:09:26Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T07:15:38Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T07:21:46Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T07:27:56Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T07:34:03Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T07:40:10Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T07:46:20Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T07:52:28Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T07:58:36Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T08:04:43Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T08:10:49Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T08:16:55Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T08:23:01Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T08:29:10Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T08:35:19Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T08:41:36Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T08:48:11Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T08:54:36Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T09:01:03Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime",
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T09:07:49Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T09:14:30Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T09:20:45Z",
+      "event": "autopilot_epic_child_dependency_blocked",
+      "by": "solar-autopilot",
+      "note": "Dependency not satisfied; dispatch suppressed.",
+      "blocked_by": [
+        "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui"
+      ]
+    },
+    {
+      "ts": "2026-05-22T09:21:45Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "planner",
+      "stage": "prd_ready",
+      "reason": "pm_prd_ready"
+    },
+    {
+      "ts": "2026-05-22T09:22:52Z",
+      "event": "autopilot_ready_for_planner",
+      "by": "solar-autopilot",
+      "note": "请接手 sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release：读取 .prd.md 和 .contract.md，产出 sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release.plan.md 和 sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release.task_graph.json。task_graph 必须通过 solar-harness graph-scheduler validate。不要问用户拍板；这是 P0 reliability 默认推进。"
+    },
+    {
+      "ts": "2026-05-22T09:22:54Z",
+      "event": "wake_workflow_guard_to_planner",
+      "by": "wake",
+      "note": "Workflow guard: planner must produce design.md, plan.md, and task_graph.json before builder dispatch."
+    },
+    {
+      "ts": "2026-05-22T09:25:02Z",
+      "event": "epic_activate_ready_child",
+      "by": "epic_decomposer",
+      "epic_id": "epic-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026"
+    },
+    {
+      "ts": "2026-05-22T09:26:02Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "planner",
+      "stage": "prd_ready",
+      "reason": "pm_prd_ready"
+    },
+    {
+      "ts": "2026-05-22T09:30:14Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "builder_main",
+      "stage": "planning_complete",
+      "reason": "planner_artifacts_and_task_graph_ready"
+    },
+    {
+      "ts": "2026-05-22T09:30:41Z",
+      "event": "planner_plan_completed",
+      "by": "planner",
+      "note": "S05 verification-release planner (EPIC TAIL SLICE): design.md, plan.md, task_graph.json, planning.html all written; graph-scheduler validate ok (7 nodes, 5 layers, 0 errors, 0 warnings); html_artifact.register ok. After S05 passes, coordinator runs epic parent-check for close.",
+      "artifacts": [
+        "design",
+        "plan",
+        "task_graph",
+        "planning_html"
+      ],
+      "dag_summary": {
+        "node_count": 7,
+        "ready": 1,
+        "layers": 5,
+        "join_node": "D6_handoff_traceability_epic_close_prep"
+      }
+    },
+    {
+      "ts": "2026-05-22T09:31:49Z",
+      "event": "autopilot_ready_for_builder",
+      "by": "solar-autopilot",
+      "note": "请接手 sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release：读取 task_graph.json，并按 DAG/graph-dispatch 执行 ready nodes；禁止在缺少 DAG 时直接写 parent handoff。"
+    },
+    {
+      "ts": "2026-05-22T09:31:50Z",
+      "event": "wake_workflow_guard_to_builder",
+      "by": "wake",
+      "note": "Workflow guard: PM PRD + planner design/plan/task_graph are ready; builder DAG dispatch is allowed."
+    },
+    {
+      "ts": "2026-05-22T09:38:03Z",
+      "event": "autopilot_ready_for_builder",
+      "by": "solar-autopilot",
+      "note": "请接手 sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release：读取 task_graph.json，并按 DAG/graph-dispatch 执行 ready nodes；禁止在缺少 DAG 时直接写 parent handoff。"
+    },
+    {
+      "ts": "2026-05-22T09:38:04Z",
+      "event": "wake_workflow_guard_to_builder",
+      "by": "wake",
+      "note": "Workflow guard: PM PRD + planner design/plan/task_graph are ready; builder DAG dispatch is allowed."
+    },
+    {
+      "ts": "2026-05-22T09:44:16Z",
+      "event": "autopilot_ready_for_builder",
+      "by": "solar-autopilot",
+      "note": "请接手 sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release：读取 task_graph.json，并按 DAG/graph-dispatch 执行 ready nodes；禁止在缺少 DAG 时直接写 parent handoff。"
+    },
+    {
+      "ts": "2026-05-22T09:44:18Z",
+      "event": "wake_workflow_guard_to_builder",
+      "by": "wake",
+      "note": "Workflow guard: PM PRD + planner design/plan/task_graph are ready; builder DAG dispatch is allowed."
+    },
+    {
+      "ts": "2026-05-22T09:47:36Z",
+      "event": "builder_handoff_written",
+      "by": "builder_main",
+      "note": "S05 verification-release complete. 7 nodes D0..D6 implemented. 49 combined pytests PASS (S03 22 + S04 19 + S05 8). D4 real smoke run exit 0 with mismatches=[] hard_violations=0 observed p95=0.011970 min_cos=0.999076 named_prompt_cache_status=disabled_skip. Epic gates: S01..S04 passed; S05 reviewing pending evaluator. parent_check_ready=true after evaluator passes.",
+      "artifacts": [
+        "scripts/kvtc_ab_correctness.py (modified, CI-gate mode)",
+        "scripts/fetch_kvtc_fixtures.sh (new)",
+        "tests/fixtures/kvtc/manifest.json + 15 .npz fixtures (new)",
+        "tests/regression/__init__.py (new)",
+        "tests/regression/test_kvtc_e2e.py (8 cases new)",
+        ".github/workflows/kvtc-regression.yml (new, pre-merge + nightly)",
+        "docs/KVTC_RELEASE.md (new)",
+        "reports/kvtc-ab/20260522T094040Z/ (D4 evidence: summary.json + recon_gate.jsonl + 14 per_fixture)",
+        "reports/kvtc-ab/latest (symlink)",
+        "sprints/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release.handoff.md (new)",
+        "sprints/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release.traceability.json (new)"
+      ],
+      "pytest_summary": "49 passed (S03 22 + S04 19 + S05 8), 0 failed, 4.33s",
+      "d4_smoke_run": {
+        "command": "./venv/bin/python scripts/kvtc_ab_correctness.py --fixture-set stable-ci --report-dir reports/kvtc-ab/20260522T094040Z/ --fail-on-gate-violation --emit-recon-gate-jsonl",
+        "exit_code": 0,
+        "mismatches": 0,
+        "hard_violations": 0,
+        "soft_violations": 1,
+        "observed_p95_rel_rmse": 0.01197,
+        "observed_min_cos": 0.999076
+      }
+    },
+    {
+      "ts": "2026-05-22T09:49:06Z",
+      "event": "dag_node_results_auto_reconciled",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-22T09:49:28Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "evaluator",
+      "stage": "build_complete",
+      "reason": "handoff_ready_for_eval"
+    },
+    {
+      "ts": "2026-05-22T09:49:29Z",
+      "event": "parent_review_blocked_dag_not_ready",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-22T09:51:03Z",
+      "event": "parent_review_blocked_dag_not_ready",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-22T10:38:47Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "none",
+      "stage": "done",
+      "reason": "terminal_status"
+    },
+    {
+      "ts": "2026-05-22T10:41:54Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-05-22T10:41:54Z",
+      "event": "autoresearch_optimizer_recorded",
+      "by": "coordinator",
+      "trigger_level": "recommended",
+      "recommended": true,
+      "role": "planner"
+    },
+    {
+      "ts": "2026-05-22T10:42:41Z",
+      "event": "finalized",
+      "by": "coordinator"
+    }
+  ],
+  "round": 2,
+  "event_count": 137,
+  "last_event_ts": "2026-05-22T09:47:36Z",
+  "projected_at": "2026-05-22T09:44:17Z",
+  "sid": "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release",
+  "auto_held": false,
+  "runtime_state_source": "activity_runtime",
+  "artifacts": {
+    "planning_html": "sprints/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release.planning.html",
+    "design": "sprints/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release.design.md",
+    "plan": "sprints/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release.plan.md",
+    "task_graph": "sprints/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release.task_graph.json",
+    "autoresearch_optimizer": {
+      "recorded_at": "2026-05-22T10:41:54Z",
+      "sid": "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release",
+      "role": "规划者",
+      "canonical_role": "planner",
+      "recommended": true,
+      "trigger_level": "recommended",
+      "reasons": [
+        "role:planner",
+        "telemetry:round:2",
+        "telemetry:eval_json:missing"
+      ],
+      "telemetry": {
+        "status": "passed",
+        "phase": "completed",
+        "round": 2,
+        "eval_verdict": "",
+        "failed_conditions": [],
+        "error_count": 0,
+        "warning_count": 0
+      },
+      "quality_metrics": {
+        "trigger_level": "recommended",
+        "expected_effect": [
+          "reduce_dag_rework",
+          "harden_write_scope_and_stop_rules"
+        ],
+        "must_measure": [
+          "repair_round_delta",
+          "eval_failure_recurrence",
+          "evidence_gap_count"
+        ]
+      },
+      "execution_policy": {
+        "mode": "advisor_only_by_default",
+        "default_command": "dry_run",
+        "execute_requires": "--execute",
+        "replaces_builder": false
+      }
+    }
+  },
+  "knowledge_export_status": "exported",
+  "knowledge_export_path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release.accepted.md",
+  "knowledge_ingest_dispatch": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release.dispatch.md",
+  "knowledge_exported_at": "2026-05-22T10:42:42Z",
+  "knowledge_ingested_at": null,
+  "knowledge_export_error": null
+}

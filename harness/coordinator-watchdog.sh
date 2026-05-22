@@ -445,7 +445,10 @@ check_panes() {
       "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH HOME='${HOME}' PATH='${_user_path}' TMUX_PANE='${_pane_id}' ${_restart_bash} ${_esc_h}/start-incarnation.sh $persona ${_esc_w}" 2>/dev/null || {
       warn "respawn-pane 失败, 尝试 send-keys..."
       tmux send-keys -t "$target" \
-        "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH PATH='${_user_path}' TMUX_PANE='${_pane_id}' ${_restart_bash} ${_esc_h}/start-incarnation.sh $persona ${_esc_w}" Enter
+        "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH PATH='${_user_path}' TMUX_PANE='${_pane_id}' ${_restart_bash} ${_esc_h}/start-incarnation.sh $persona ${_esc_w}" Enter 2>/dev/null || {
+        warn "send-keys 失败, pane 不存在或不可写: $target; 跳过本 pane 恢复"
+        continue
+      }
     }
     # sprint-20260502-200424 D2: respawn 后 5 秒验证 pane 活性 (诊断, 不是重试)
     sleep 5
