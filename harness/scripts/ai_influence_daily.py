@@ -14,7 +14,9 @@ import html
 import json
 import os
 import re
+import shutil
 import sqlite3
+import subprocess
 import sys
 import time
 import urllib.parse
@@ -748,17 +750,93 @@ def _h(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Gmail send / preview (PRD FR6)
+# Mail send / preview (PRD FR6)
 # ---------------------------------------------------------------------------
 
+def _mail_text_from_html(html_content: str) -> str:
+    text = re.sub(r"(?is)<(script|style).*?</\1>", " ", html_content or "")
+    text = re.sub(r"(?i)<br\s*/?>", "\n", text)
+    text = re.sub(r"(?i)</(p|tr|h[1-6]|li)>", "\n", text)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = html.unescape(text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n\s+", "\n", text)
+    return text.strip()[:20000]
+
+
+def send_macos_mail(html_content: str, date_str: str, recipient: str = "") -> dict:
+    """Send via macOS Mail.app using AppleScript; falls back cleanly."""
+    if os.environ.get("AI_INFLUENCE_MAIL_BACKEND", "").lower() in {"preview", "none", "off"}:
+        return {"status": "warn", "backend": "macos_mail", "reason": "macos mail backend disabled"}
+    if sys.platform != "darwin":
+        return {"status": "warn", "backend": "macos_mail", "reason": "not macOS"}
+    if not recipient and os.environ.get("AI_INFLUENCE_MAIL_INFER_RECIPIENT", "").lower() not in {"1", "true", "yes"}:
+        return {"status": "warn", "backend": "macos_mail", "reason": "MAIL_TO/GMAIL_TO not set"}
+    osascript = os.environ.get("OSASCRIPT_BIN") or shutil.which("osascript")
+    if not osascript:
+        return {"status": "warn", "backend": "macos_mail", "reason": "osascript not found"}
+
+    subject = f"AI Influence Digest — {date_str}"
+    body = _mail_text_from_html(html_content)
+    script = r'''
+on run argv
+  set theSubject to item 1 of argv
+  set theBody to item 2 of argv
+  set theRecipient to item 3 of argv
+  tell application "Mail"
+    if theRecipient is "" then
+      try
+        set theRecipient to item 1 of (email addresses of account 1)
+      end try
+    end if
+    if theRecipient is "" then error "MAIL_TO/GMAIL_TO not set and Mail account email unavailable"
+    set theMessage to make new outgoing message with properties {subject:theSubject, content:theBody, visible:false}
+    tell theMessage
+      make new to recipient at end of to recipients with properties {address:theRecipient}
+      send
+    end tell
+  end tell
+  return theRecipient
+end run
+'''
+    try:
+        proc = subprocess.run(
+            [osascript, "-e", script, subject, body, recipient],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=int(os.environ.get("AI_INFLUENCE_MAIL_TIMEOUT_SEC", "45")),
+            check=False,
+        )
+    except Exception as exc:
+        return {"status": "warn", "backend": "macos_mail", "reason": str(exc)}
+    if proc.returncode != 0:
+        return {
+            "status": "warn",
+            "backend": "macos_mail",
+            "reason": (proc.stderr or proc.stdout or "osascript failed").strip()[:500],
+        }
+    return {"status": "sent", "backend": "macos_mail", "to": (proc.stdout.strip() or recipient or "Mail account")}
+
+
 def send_gmail(html_content: str, date_str: str) -> dict:
-    """Send HTML email via Gmail SMTP. Returns {"status": "sent"} or {"status": "warn", ...}."""
+    """Send digest email via Gmail SMTP, then macOS Mail.app, then preview."""
     gmail_user = os.environ.get("GMAIL_USER", "")
     gmail_app_password = os.environ.get("GMAIL_APP_PASSWORD", "")
-    gmail_to = os.environ.get("GMAIL_TO", gmail_user)
+    gmail_to = os.environ.get("GMAIL_TO") or os.environ.get("MAIL_TO") or os.environ.get("AI_INFLUENCE_MAIL_TO") or gmail_user
 
     if not gmail_user or not gmail_app_password:
-        return {"status": "warn", "reason": "GMAIL_USER or GMAIL_APP_PASSWORD not set", "preview_generated": True}
+        mail_result = send_macos_mail(html_content, date_str, gmail_to)
+        if mail_result.get("status") == "sent":
+            mail_result["gmail_fallback_reason"] = "GMAIL_USER or GMAIL_APP_PASSWORD not set"
+            return mail_result
+        return {
+            "status": "warn",
+            "backend": "preview",
+            "reason": f"GMAIL_USER or GMAIL_APP_PASSWORD not set; macos_mail={mail_result.get('reason', 'unavailable')}",
+            "macos_mail": mail_result,
+            "preview_generated": True,
+        }
 
     subject = f"AI Influence Digest — {date_str}"
     try:
@@ -776,9 +854,19 @@ def send_gmail(html_content: str, date_str: str) -> dict:
             server.starttls()
             server.login(gmail_user, gmail_app_password)
             server.sendmail(gmail_user, [gmail_to], msg.as_string())
-        return {"status": "sent", "to": gmail_to}
+        return {"status": "sent", "backend": "gmail_smtp", "to": gmail_to}
     except Exception as exc:
-        return {"status": "warn", "reason": str(exc), "preview_generated": True}
+        mail_result = send_macos_mail(html_content, date_str, gmail_to)
+        if mail_result.get("status") == "sent":
+            mail_result["gmail_fallback_reason"] = str(exc)
+            return mail_result
+        return {
+            "status": "warn",
+            "backend": "preview",
+            "reason": f"{exc}; macos_mail={mail_result.get('reason', 'unavailable')}",
+            "macos_mail": mail_result,
+            "preview_generated": True,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -913,17 +1001,17 @@ def cmd_run(args: argparse.Namespace) -> int:
     print(f"Digest written to {digest_path}", file=sys.stderr)
     result["digest_dir"] = str(digest_path)
 
-    # --- Gmail send / preview (FR6) ---
+    # --- Mail send / preview (FR6) ---
     gmail_result = send_gmail(digest_html, effective_date)
     result["gmail"] = gmail_result
     if gmail_result["status"] == "warn":
         preview_path = digest_path / "digest.preview.html"
         preview_path.write_text(digest_html, encoding="utf-8")
         result["gmail"]["preview_path"] = str(preview_path)
-        print(f"Gmail: warn — {gmail_result['reason']}", file=sys.stderr)
+        print(f"Mail: warn — {gmail_result['reason']}", file=sys.stderr)
         print(f"Preview: {preview_path}", file=sys.stderr)
     else:
-        print(f"Gmail: sent to {gmail_result.get('to', '?')}", file=sys.stderr)
+        print(f"Mail: sent via {gmail_result.get('backend', 'unknown')} to {gmail_result.get('to', '?')}", file=sys.stderr)
 
     # --- Wiki ingest dispatch (FR7) ---
     dispatch_path = create_wiki_ingest_dispatch(digest_path, effective_date)

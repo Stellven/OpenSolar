@@ -9,6 +9,7 @@ Tests verify:
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -321,6 +322,100 @@ class TestParentReadyCheckIntegration:
         assert graph["node_results"]["N1"]["status"] == "passed"
         assert node_status(graph, "N1") == "passed"
         assert parent_ready_check(graph)["ready"] is True
+
+
+class TestGraphStatusProjection:
+    """Regression tests for task_graph -> status.json closeout drift."""
+
+    def test_graph_scheduler_mark_syncs_legacy_status_when_parent_ready(self, tmp_path):
+        sid = "projection-closeout"
+        sprints = tmp_path / "sprints"
+        sprints.mkdir()
+        graph_path = sprints / f"{sid}.task_graph.json"
+        status_path = sprints / f"{sid}.status.json"
+        graph = {
+            "sprint_id": sid,
+            "required_gates": [],
+            "nodes": [
+                {"id": "N1", "depends_on": [], "status": "passed", "updated_at": "2026-05-22T00:00:00Z"},
+                {"id": "N2", "depends_on": ["N1"], "status": "reviewing"},
+            ],
+            "node_results": {"N1": {"status": "passed", "updated_at": "2026-05-22T00:00:00Z"}},
+            "gate_results": {},
+        }
+        graph_path.write_text(json.dumps(graph) + "\n", encoding="utf-8")
+        status_path.write_text(json.dumps({
+            "id": sid,
+            "sprint_id": sid,
+            "status": "dispatched",
+            "stage": "N1",
+            "active_node": "N1",
+            "round": 0,
+            "history": [],
+        }) + "\n", encoding="utf-8")
+
+        script = Path(__file__).resolve().parent.parent.parent / "lib" / "graph_scheduler.py"
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "mark",
+                "--graph",
+                str(graph_path),
+                "--node",
+                "N2",
+                "--status",
+                "passed",
+                "--in-place",
+            ],
+            cwd=str(tmp_path),
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+
+        payload = json.loads(proc.stdout)
+        assert payload["ready"] is True
+        assert payload["status_sync"]["updated"] is True
+        status = json.loads(status_path.read_text(encoding="utf-8"))
+        assert status["status"] == "passed"
+        assert status["phase"] == "completed"
+        assert status["stage"] == "completed"
+        assert status["active_node"] is None
+        assert status["graph_parent_ready"]["ready"] is True
+
+    def test_epic_child_status_falls_back_to_passed_child_graph(self, tmp_path, monkeypatch):
+        import epic_decomposer as epic
+
+        sid = "child-graph-passed-status-stale"
+        sprints = tmp_path / "sprints"
+        sprints.mkdir()
+        monkeypatch.setattr(epic, "SPRINTS_DIR", sprints)
+
+        (sprints / f"{sid}.status.json").write_text(json.dumps({
+            "id": sid,
+            "sprint_id": sid,
+            "status": "dispatched",
+            "active_node": "N1",
+            "round": 0,
+            "history": [],
+        }) + "\n", encoding="utf-8")
+        (sprints / f"{sid}.task_graph.json").write_text(json.dumps({
+            "sprint_id": sid,
+            "required_gates": [],
+            "nodes": [
+                {"id": "N1", "depends_on": [], "status": "passed"},
+            ],
+            "node_results": {"N1": {"status": "passed"}},
+            "gate_results": {},
+        }) + "\n", encoding="utf-8")
+
+        status = epic.child_status(sid)
+
+        assert status["status"] == "passed"
+        assert status["graph_parent_ready"]["ready"] is True
+        assert epic.child_passed(sid) is True
 
 
 # ---------------------------------------------------------------------------
