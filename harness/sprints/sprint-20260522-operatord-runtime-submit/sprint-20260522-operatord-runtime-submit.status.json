@@ -1,0 +1,112 @@
+{
+  "sprint_id": "sprint-20260522-operatord-runtime-submit",
+  "status": "passed",
+  "phase": "finalized",
+  "task_graph": "/Users/lisihao/.solar/harness/sprints/sprint-20260522-operatord-runtime-submit.task_graph.json",
+  "updated_at": "2026-05-22T21:01:28Z",
+  "id": "sprint-20260522-operatord-runtime-submit",
+  "history": [
+    {
+      "ts": "2026-05-22T18:55:59Z",
+      "event": "status_identity_repaired",
+      "by": "coordinator",
+      "note": "Recovered missing id/sprint_id from status filename so scanner can route the sprint."
+    },
+    {
+      "ts": "2026-05-22T20:59:17Z",
+      "event": "graph_mark_N5_passed",
+      "by": "graph_scheduler",
+      "graph_sync": true,
+      "graph_path": "sprints/sprint-20260522-operatord-runtime-submit.task_graph.json"
+    },
+    {
+      "ts": "2026-05-22T21:00:25Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-05-22T21:00:25Z",
+      "event": "autoresearch_optimizer_recorded",
+      "by": "coordinator",
+      "trigger_level": "recommended",
+      "recommended": true,
+      "role": "planner"
+    },
+    {
+      "ts": "2026-05-22T21:01:28Z",
+      "event": "finalized",
+      "by": "coordinator"
+    }
+  ],
+  "handoff_to": "",
+  "target_role": "",
+  "stage": "completed",
+  "active_node": null,
+  "graph_parent_ready": {
+    "ok": true,
+    "sprint_id": "sprint-20260522-operatord-runtime-submit",
+    "ready": true,
+    "node_count": 5,
+    "open_nodes": [],
+    "failed_nodes": [],
+    "required_gates": [
+      "G_DESIGN",
+      "G_SUBMIT",
+      "G_OPERATORD",
+      "G_LINT",
+      "G_REPORT"
+    ],
+    "missing_gates": []
+  },
+  "task_graph_status": "passed",
+  "round": 0,
+  "runtime_state_source": "activity_runtime",
+  "artifacts": {
+    "autoresearch_optimizer": {
+      "recorded_at": "2026-05-22T21:00:25Z",
+      "sid": "sprint-20260522-operatord-runtime-submit",
+      "role": "规划者",
+      "canonical_role": "planner",
+      "recommended": true,
+      "trigger_level": "recommended",
+      "reasons": [
+        "role:planner",
+        "telemetry:eval_json:missing"
+      ],
+      "telemetry": {
+        "status": "passed",
+        "phase": "completed",
+        "round": 0,
+        "eval_verdict": "",
+        "failed_conditions": [],
+        "error_count": 0,
+        "warning_count": 0
+      },
+      "quality_metrics": {
+        "trigger_level": "recommended",
+        "expected_effect": [
+          "reduce_dag_rework",
+          "harden_write_scope_and_stop_rules"
+        ],
+        "must_measure": [
+          "repair_round_delta",
+          "eval_failure_recurrence",
+          "evidence_gap_count"
+        ]
+      },
+      "execution_policy": {
+        "mode": "advisor_only_by_default",
+        "default_command": "dry_run",
+        "execute_requires": "--execute",
+        "replaces_builder": false
+      }
+    }
+  },
+  "knowledge_export_status": "exported",
+  "knowledge_export_path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260522-operatord-runtime-submit.accepted.md",
+  "knowledge_ingest_dispatch": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260522-operatord-runtime-submit.dispatch.md",
+  "knowledge_exported_at": "2026-05-22T21:01:28Z",
+  "knowledge_ingested_at": null,
+  "knowledge_export_error": null
+}
