@@ -48,6 +48,9 @@ PANE_ASSIGNMENTS_JSON = HARNESS_DIR / ".pane-assignments.json"
 MERMAID_DIST = HARNESS_DIR / "vendor" / "mermaid-viewer" / "node_modules" / "mermaid" / "dist"
 INTEGRATIONS_HEALTH = HARNESS_DIR / "lib" / "external-integrations-health.py"
 KNOWLEDGE_PROBE_HEALTH = HARNESS_DIR / "state" / "knowledge-probe-health.json"
+KNOWLEDGE_DIR = Path(os.environ.get("OBSIDIAN_VAULT_PATH", str(Path.home() / "Knowledge")))
+ACCEPTED_ASSETS_DIR = KNOWLEDGE_DIR / "_raw" / "solar-harness" / "accepted"
+ACCEPTED_ASSETS_MANIFEST = KNOWLEDGE_DIR / "_raw" / "solar-harness" / ".manifest" / "accepted-artifacts.json"
 MODEL_DOCTOR_HEALTH = HARNESS_DIR / "state" / "model-registry-doctor-health.json"
 SKILLS_CERTIFICATION = HARNESS_DIR / "state" / "skills-certification.json"
 SKILLS_INVENTORY = HARNESS_DIR / "state" / "skills-inventory.json"
@@ -242,6 +245,159 @@ def _asset_path(raw: str):
     if path.exists() and path.is_file():
         return path
     return None
+
+
+def _read_text_prefix(path: Path, limit_bytes: int = 8192) -> str:
+    try:
+        with path.open("rb") as fh:
+            return fh.read(limit_bytes).decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def _frontmatter_value(text: str, key: str) -> str:
+    pattern = re.compile(rf"^{re.escape(key)}:\s*(.+?)\s*$", re.MULTILINE)
+    match = pattern.search(text or "")
+    if not match:
+        return ""
+    return match.group(1).strip().strip('"')
+
+
+def _first_heading(text: str) -> str:
+    for line in (text or "").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            return stripped.lstrip("#").strip()
+    return ""
+
+
+def _status_for_asset_sid(sid: str) -> dict:
+    direct = SPRINTS_DIR / f"{sid}.status.json"
+    candidates = [direct] if direct.exists() else sorted(SPRINTS_DIR.glob(f"**/{sid}.status.json"))
+    for path in candidates:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                data["_status_path"] = str(path)
+                return data
+        except Exception:
+            continue
+    return {}
+
+
+def _artifact_asset_link(label: str, path: Path | None) -> dict:
+    exists = bool(path and path.exists() and path.is_file() and _allowed_open_path(path))
+    return {
+        "label": label,
+        "path": str(path) if path else "",
+        "exists": exists,
+        "open_url": ("/file/open?path=" + urllib.parse.quote(str(path))) if exists else "",
+        "view_url": ("/file/view?path=" + urllib.parse.quote(str(path))) if exists else "",
+        "size": path.stat().st_size if exists else 0,
+        "mtime": path.stat().st_mtime if exists else 0,
+    }
+
+
+def _asset_package_from_accepted(path: Path, manifest_entry: dict | None = None) -> dict:
+    sid = path.name.removesuffix(".accepted.md")
+    prefix = _read_text_prefix(path)
+    status_data = _status_for_asset_sid(sid)
+    artifacts = status_data.get("artifacts") if isinstance(status_data.get("artifacts"), dict) else {}
+    title = (
+        _frontmatter_value(prefix, "title")
+        or status_data.get("title")
+        or _first_heading(prefix).removeprefix("Accepted Sprint Knowledge:").strip()
+        or sid
+    )
+    accepted_at = _frontmatter_value(prefix, "accepted_at") or status_data.get("updated_at") or ""
+    exported_at = _frontmatter_value(prefix, "exported_at") or (manifest_entry or {}).get("exported_at") or status_data.get("knowledge_exported_at") or ""
+    dispatch_rel = (manifest_entry or {}).get("ingest_dispatch") or ""
+    dispatch_path = KNOWLEDGE_DIR / dispatch_rel if dispatch_rel else Path(str(status_data.get("knowledge_ingest_dispatch") or ""))
+    if not dispatch_path.is_absolute():
+        dispatch_path = KNOWLEDGE_DIR / dispatch_path
+
+    sprint_artifacts = []
+    for label, rel_or_suffix in [
+        ("contract", ".contract.md"),
+        ("prd", ".prd.md"),
+        ("prd_html", artifacts.get("prd_html") or ".prd.html"),
+        ("design", ".design.md"),
+        ("plan", ".plan.md"),
+        ("planning_html", artifacts.get("planning_html") or ".planning.html"),
+        ("task_graph", ".task_graph.json"),
+        ("handoff", ".handoff.md"),
+        ("eval", ".eval.md"),
+    ]:
+        if isinstance(rel_or_suffix, str) and rel_or_suffix.startswith("sprints/"):
+            art_path = HARNESS_DIR / rel_or_suffix
+        else:
+            art_path = SPRINTS_DIR / f"{sid}{rel_or_suffix}"
+        sprint_artifacts.append(_artifact_asset_link(label, art_path))
+
+    st = path.stat()
+    present_artifacts = [item["label"] for item in sprint_artifacts if item["exists"]]
+    return {
+        "sid": sid,
+        "title": title,
+        "status": status_data.get("status") or _frontmatter_value(prefix, "status") or "accepted",
+        "phase": status_data.get("phase") or "",
+        "accepted_at": accepted_at,
+        "exported_at": exported_at,
+        "size": st.st_size,
+        "mtime": st.st_mtime,
+        "accepted_md": _artifact_asset_link("accepted_md", path),
+        "dispatch": _artifact_asset_link("ingest_dispatch", dispatch_path),
+        "sprint_artifacts": sprint_artifacts,
+        "artifact_count": len(present_artifacts),
+        "artifact_labels": present_artifacts,
+        "has_html": any(label in present_artifacts for label in ("prd_html", "planning_html")),
+        "knowledge_path": str(path),
+        "source_hash": (manifest_entry or {}).get("source_hash", ""),
+    }
+
+
+def _asset_packages_payload(limit: int = 80) -> dict:
+    manifest = {}
+    if ACCEPTED_ASSETS_MANIFEST.exists():
+        try:
+            manifest = json.loads(ACCEPTED_ASSETS_MANIFEST.read_text(encoding="utf-8"))
+        except Exception:
+            manifest = {}
+    items = []
+    try:
+        paths = sorted(ACCEPTED_ASSETS_DIR.glob("*.accepted.md"), key=lambda p: p.stat().st_mtime, reverse=True)
+    except OSError:
+        paths = []
+    for path in paths[:limit]:
+        sid = path.name.removesuffix(".accepted.md")
+        items.append(_asset_package_from_accepted(path, manifest.get(sid) if isinstance(manifest.get(sid), dict) else {}))
+    html_count = sum(1 for item in items if item.get("has_html"))
+    return {
+        "ok": ACCEPTED_ASSETS_DIR.exists(),
+        "status": "ok" if ACCEPTED_ASSETS_DIR.exists() else "warn",
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "vault": str(KNOWLEDGE_DIR),
+        "accepted_dir": str(ACCEPTED_ASSETS_DIR),
+        "manifest": str(ACCEPTED_ASSETS_MANIFEST),
+        "count": len(items),
+        "html_asset_packages": html_count,
+        "items": items,
+    }
+
+
+def _assets_view_html() -> str:
+    return """<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Solar Asset Packages</title>
+</head>
+<body>
+<script>location.replace('/#assets');</script>
+<p>Open <a href="/#assets">Solar asset packages</a>.</p>
+</body>
+</html>"""
 
 
 def _mermaid_index_html() -> str:
@@ -2660,6 +2816,7 @@ td {
   <button class="tab" data-tab="lab">Builder Lab</button>
   <button class="tab" data-tab="events">事件</button>
   <button class="tab" data-tab="knowledge">知识库</button>
+  <button class="tab" data-tab="assets">资产包</button>
   <button class="tab" data-tab="upload">上传文档</button>
   <button class="tab" data-tab="config">配置</button>
   <button class="tab" data-tab="integrations">集成</button>
@@ -2763,6 +2920,20 @@ Config http://127.0.0.1:8789/setup</div>
         <div class="card"><h2>Mirage / QMD 健康</h2><div id="mirage-card">Loading...</div></div>
       </div>
     </div>
+  </section>
+
+  <section class="panel" id="tab-assets">
+    <h2>知识资产包</h2>
+    <div class="card">
+      <p class="muted">展示已经导出到知识库的 accepted sprint package，并把 accepted.md、dispatch、planning.html、prd.html、plan/handoff/eval 等源产物作为可点击资产暴露出来。</p>
+      <div class="actions">
+        <button class="btn primary" onclick="refreshAssets(true)">刷新资产包</button>
+        <a class="btn" href="/assets" target="_blank" rel="noreferrer">打开 JSON</a>
+        <button class="btn" onclick="copyText('~/Knowledge/_raw/solar-harness/accepted')">复制 accepted 目录</button>
+      </div>
+    </div>
+    <div class="card"><div id="assets-summary">Loading...</div></div>
+    <div id="assets-card">Loading...</div>
   </section>
 
   <section class="panel" id="tab-upload">
@@ -2909,11 +3080,11 @@ function renderCapabilityHealthSummary(h) {
     }).join('') + '</div>';
 }
 function clip(v, limit) {
-  const s = String(v || '').replace(/\s+/g, ' ').trim();
+  const s = String(v || '').replace(/\\s+/g, ' ').trim();
   return s.length > limit ? s.slice(0, limit - 1).trim() + '…' : s;
 }
 function summaryList(text) {
-  const s = String(text || '').replace(/\s+/g, ' ').trim();
+  const s = String(text || '').replace(/\\s+/g, ' ').trim();
   if (!s) return '';
   let parts = s
     .split(new RegExp('[。；;\\\\n]+'))
@@ -3429,15 +3600,96 @@ function refreshIntegrations(force) {
     renderIntegrations({error: String(err)});
   });
 }
+function assetButtons(pkg) {
+  const buttons = [];
+  const primary = pkg.accepted_md || {};
+  if (primary.exists) {
+    buttons.push('<a class="btn primary" href="' + esc(primary.view_url || primary.open_url) + '" target="_blank" rel="noreferrer">accepted.md</a>');
+  }
+  const dispatch = pkg.dispatch || {};
+  if (dispatch.exists) {
+    buttons.push('<a class="btn" href="' + esc(dispatch.view_url || dispatch.open_url) + '" target="_blank" rel="noreferrer">dispatch</a>');
+  }
+  (pkg.sprint_artifacts || []).forEach(link => {
+    if (!link || !link.exists) return;
+    const cls = (link.label === 'planning_html' || link.label === 'prd_html') ? ' primary' : '';
+    buttons.push('<a class="btn' + cls + '" href="' + esc(link.view_url || link.open_url) + '" target="_blank" rel="noreferrer">' + esc(link.label) + '</a>');
+  });
+  return buttons.join('');
+}
+function renderAssetPackages(data) {
+  const summaryEl = document.getElementById('assets-summary');
+  const cardEl = document.getElementById('assets-card');
+  if (!summaryEl || !cardEl) return;
+  if (!data || data.error) {
+    summaryEl.innerHTML = statusBadge('error') + ' ' + esc((data && data.error) || 'asset package probe failed');
+    cardEl.innerHTML = '<div class="card"><pre class="codebox">' + esc(JSON.stringify(data || {}, null, 2)) + '</pre></div>';
+    return;
+  }
+  const items = data.items || [];
+  summaryEl.innerHTML =
+    '<div class="integration-summary">' +
+      '<div class="status-tile"><div class="kv-label">Status</div><strong>' + statusBadge(data.status || 'unknown') + '</strong></div>' +
+      '<div class="status-tile"><div class="kv-label">Packages</div><strong>' + esc(data.count || items.length || 0) + '</strong></div>' +
+      '<div class="status-tile"><div class="kv-label">HTML</div><strong>' + esc(data.html_asset_packages || 0) + '</strong></div>' +
+      '<div class="status-tile"><div class="kv-label">Accepted Dir</div><strong class="path-text">' + esc(data.accepted_dir || 'N/A') + '</strong></div>' +
+    '</div>' +
+    '<div class="muted">资产包生成自 Knowledge accepted 目录；点击 planning_html / prd_html 可直接查看人类可读页面。</div>';
+  if (!items.length) {
+    cardEl.innerHTML = '<div class="card muted">没有 accepted knowledge package。先运行 accepted artifact export。</div>';
+    return;
+  }
+  cardEl.innerHTML = '<div class="integration-grid">' + items.map(pkg => {
+    const labels = (pkg.artifact_labels || []).slice(0, 9).join(', ') || 'N/A';
+    const mtime = pkg.mtime ? new Date(pkg.mtime * 1000).toLocaleString() : 'N/A';
+    return '<article class="integration-card">' +
+      '<div class="integration-head"><div><div class="integration-name">' + esc(pkg.title || pkg.sid || 'N/A') + '</div>' +
+      '<div class="tech-id">' + esc(pkg.sid || 'N/A') + '</div></div>' +
+      '<div class="badge-stack">' + statusBadge(pkg.status || 'accepted') + (pkg.has_html ? '<span class="level-badge ok">HTML</span>' : '<span class="level-badge warn">no HTML</span>') + '</div></div>' +
+      '<div class="research-metric-row">' +
+        '<div class="research-metric"><div class="kv-label">Artifacts</div><b>' + esc(pkg.artifact_count || 0) + '</b></div>' +
+        '<div class="research-metric"><div class="kv-label">Size</div><b>' + esc(pkg.size || 0) + '</b></div>' +
+        '<div class="research-metric"><div class="kv-label">Updated</div><b>' + esc(mtime) + '</b></div>' +
+      '</div>' +
+      '<div class="impact-note"><b>Included:</b> ' + esc(labels) + '</div>' +
+      '<div class="copy-row">' + assetButtons(pkg) + '</div>' +
+      '<details style="margin-top:.8rem"><summary class="muted">路径</summary><pre class="codebox">' + esc(JSON.stringify({
+        knowledge_path: pkg.knowledge_path,
+        accepted_at: pkg.accepted_at,
+        exported_at: pkg.exported_at,
+        source_hash: pkg.source_hash
+      }, null, 2)) + '</pre></details>' +
+    '</article>';
+  }).join('') + '</div>';
+}
+function refreshAssets(force) {
+  const summaryEl = document.getElementById('assets-summary');
+  const cardEl = document.getElementById('assets-card');
+  if (summaryEl) summaryEl.textContent = force ? 'Refreshing...' : 'Loading...';
+  if (cardEl) cardEl.textContent = 'Loading...';
+  const url = '/assets?limit=120' + (force ? '&refresh=1' : '');
+  fetch(url).then(r => r.json()).then(renderAssetPackages).catch(err => {
+    renderAssetPackages({error: String(err)});
+  });
+}
 
+function activateTab(tab) {
+  const btn = document.querySelector('.tab[data-tab="' + tab + '"]') || document.querySelector('.tab[data-tab="overview"]');
+  if (!btn) return;
+  const activeTab = btn.dataset.tab || 'overview';
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === btn));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + activeTab));
+  if (activeTab === 'integrations') refreshIntegrations(false);
+  if (activeTab === 'assets') refreshAssets(false);
+}
 document.querySelectorAll('.tab').forEach(btn => {
   btn.addEventListener('click', () => {
-    const tab = btn.dataset.tab;
-    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === btn));
-    document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + tab));
-    if (tab === 'integrations') refreshIntegrations(false);
+    const tab = btn.dataset.tab || 'overview';
+    if (location.hash !== '#' + tab) history.replaceState(null, '', '#' + tab);
+    activateTab(tab);
   });
 });
+window.addEventListener('hashchange', () => activateTab((location.hash || '#overview').slice(1)));
 
 function render(data) {
   const now = new Date().toISOString();
@@ -3559,6 +3811,7 @@ function refresh() {
     .then(render)
     .catch(e => console.warn('refresh error', e));
 }
+activateTab((location.hash || '#overview').slice(1));
 refresh();
 setInterval(refresh, 5000);
 </script>
@@ -3649,6 +3902,17 @@ class StatusHandler(BaseHTTPRequestHandler):
         elif path == "/integrations-view":
             self._send_text(_integrations_view_html(), content_type="text/html; charset=utf-8")
 
+        elif path == "/assets":
+            try:
+                limit = int(params.get("limit", ["80"])[0])
+                limit = max(1, min(limit, 300))
+            except ValueError:
+                limit = 80
+            self._send_json(_asset_packages_payload(limit=limit))
+
+        elif path == "/assets-view":
+            self._send_text(_assets_view_html(), content_type="text/html; charset=utf-8")
+
         elif path == "/mermaid":
             self._send_text(_mermaid_index_html(), content_type="text/html; charset=utf-8")
 
@@ -3696,6 +3960,8 @@ class StatusHandler(BaseHTTPRequestHandler):
                     content_type = "application/json; charset=utf-8"
                 elif suffix in (".md", ".markdown"):
                     content_type = "text/markdown; charset=utf-8"
+                elif suffix in (".html", ".htm"):
+                    content_type = "text/html; charset=utf-8"
                 self._send_text(target.read_text(encoding="utf-8", errors="ignore"), content_type=content_type)
 
         elif path.startswith("/mermaid/assets/"):

@@ -1,0 +1,25 @@
+{"ts": "2026-05-22T17:38:32Z", "sprint_id": "sprint-20260522-model-fleet-operator-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_workflow_route_normalized", "severity": "info", "data": {"route_role": "planner", "stage": "prd_ready", "reason": "pm_prd_ready"}}
+{"ts": "2026-05-22T17:39:43Z", "sprint_id": "sprint-20260522-model-fleet-operator-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_dispatch_deferred_pane_busy", "severity": "warn", "data": {"target": "solar-harness:0.1", "type": "ready_for_planner"}}
+{"ts": "2026-05-22T17:40:12Z", "sid": "sprint-20260522-model-fleet-operator-runtime-foundation", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-22T17:40:40Z", "sid": "sprint-20260522-model-fleet-operator-runtime-foundation", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-22T17:41:57Z", "sid": "sprint-20260522-model-fleet-operator-runtime-foundation", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-22T17:42:25Z", "sid": "sprint-20260522-model-fleet-operator-runtime-foundation", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-22T17:42:52Z", "sid": "sprint-20260522-model-fleet-operator-runtime-foundation", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-22T17:42:53Z", "sprint_id": "sprint-20260522-model-fleet-operator-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_workflow_route_normalized", "severity": "info", "data": {"route_role": "planner", "stage": "prd_ready", "reason": "pm_prd_ready"}}
+{"ts": "2026-05-22T17:46:13Z", "sprint_id": "sprint-20260522-model-fleet-operator-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_dispatch_deferred_pane_busy", "severity": "warn", "data": {"target": "solar-harness:0.1", "type": "ready_for_planner"}}
+{"ts": "2026-05-22T17:48:17Z", "sid": "sprint-20260522-model-fleet-operator-runtime-foundation", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-22T17:49:35Z", "sid": "sprint-20260522-model-fleet-operator-runtime-foundation", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-22T17:50:10Z", "sid": "sprint-20260522-model-fleet-operator-runtime-foundation", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-22T17:50:41Z", "sid": "sprint-20260522-model-fleet-operator-runtime-foundation", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-22T17:52:44Z", "sprint_id": "sprint-20260522-model-fleet-operator-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_dispatch_deferred_pane_busy", "severity": "warn", "data": {"target": "solar-harness:0.1", "type": "ready_for_planner"}}
+{"ts": "2026-05-22T17:55:09Z", "sid": "sprint-20260522-model-fleet-operator-runtime-foundation", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-22T17:56:29Z", "sid": "sprint-20260522-model-fleet-operator-runtime-foundation", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-22T17:57:02Z", "sid": "sprint-20260522-model-fleet-operator-runtime-foundation", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-22T17:57:33Z", "sid": "sprint-20260522-model-fleet-operator-runtime-foundation", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-22T17:58:10Z", "sprint_id": "sprint-20260522-model-fleet-operator-runtime-foundation", "actor": "solar-autopilot", "event": "autopilot_queue_drop_terminal_sprint", "severity": "info", "data": {"target": "solar-harness:0.1", "type": "ready_for_planner", "status": "passed", "phase": "completed"}}
+{"ts": "2026-05-22T17:59:53Z", "sid": "sprint-20260522-model-fleet-operator-runtime-foundation", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-22T18:00:24Z", "sid": "sprint-20260522-model-fleet-operator-runtime-foundation", "event": "dispatch_suppressed", "by": "coordinator"}
+{"ts": "2026-05-22T18:00:57Z", "sid": "sprint-20260522-model-fleet-operator-runtime-foundation", "event": "terminal_queue_consumed", "by": "coordinator"}
+{"ts": "2026-05-22T18:01:29Z", "sid": "sprint-20260522-model-fleet-operator-runtime-foundation", "event": "handle_passed_completed", "by": "coordinator"}
+{"ts": "2026-05-22T18:01:29Z", "event": "accepted_artifact_exported", "source": "accepted-artifact-export", "path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260522-model-fleet-operator-runtime-foundation.accepted.md", "bytes": 9223, "source_hash": "68fab9857a6df7c5ff39b1d287cb6b1132b317bb3a285566674de07543ac4c8d"}
+{"ts": "2026-05-22T18:01:29Z", "event": "accepted_artifact_ingest_dispatched", "source": "accepted-artifact-export", "dispatch_file": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260522-model-fleet-operator-runtime-foundation.dispatch.md"}

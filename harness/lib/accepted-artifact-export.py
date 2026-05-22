@@ -9,6 +9,8 @@ Usage:
 from __future__ import annotations
 
 import hashlib
+import html
+from html.parser import HTMLParser
 import json
 import os
 import re
@@ -44,6 +46,45 @@ MAX_EVENTS_LINES = 50
 MAX_TOTAL_BYTES = 40 * 1024       # 40KB total target
 
 
+class _HTMLTextExtractor(HTMLParser):
+    """Small stdlib HTML-to-text extractor for KB-safe artifact summaries."""
+
+    _BLOCK_TAGS = {"address", "article", "aside", "br", "div", "footer", "h1", "h2", "h3", "h4", "h5", "h6", "header", "li", "main", "p", "section", "table", "tr"}
+    _SKIP_TAGS = {"script", "style", "svg"}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._parts: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in self._SKIP_TAGS:
+            self._skip_depth += 1
+            return
+        if tag in self._BLOCK_TAGS:
+            self._parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self._SKIP_TAGS and self._skip_depth:
+            self._skip_depth -= 1
+            return
+        if tag in self._BLOCK_TAGS:
+            self._parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth:
+            return
+        text = html.unescape(data).strip()
+        if text:
+            self._parts.append(text)
+            self._parts.append(" ")
+
+    def text(self) -> str:
+        raw = "".join(self._parts)
+        lines = [re.sub(r"[ \t]+", " ", line).strip() for line in raw.splitlines()]
+        return "\n".join(line for line in lines if line)
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -73,6 +114,24 @@ def _read_file(path: Path, max_bytes: int = MAX_SECTION_BYTES, redact: bool = Tr
         return _truncate(text, max_bytes, path.name)
     except Exception as e:
         return f"[error reading {path.name}: {e}]"
+
+
+def _read_html_artifact(path: Path | None, max_bytes: int = MAX_SECTION_BYTES, redact: bool = True) -> str:
+    if not path or not path.exists():
+        return ""
+    try:
+        source = path.read_text(encoding="utf-8", errors="replace")
+        parser = _HTMLTextExtractor()
+        parser.feed(source)
+        text = parser.text()
+        if not text:
+            text = re.sub(r"<[^>]+>", " ", source)
+            text = html.unescape(re.sub(r"\s+", " ", text)).strip()
+        if redact:
+            text = _redact(text)
+        return _truncate(text, max_bytes, path.name)
+    except Exception as e:
+        return f"[error extracting {path.name}: {e}]"
 
 
 def _read_events(path: Path, max_lines: int = MAX_EVENTS_LINES, redact: bool = True) -> str:
@@ -158,28 +217,45 @@ def _collect_artifacts(sid: str, sprints_dir: Path, redact: bool = True) -> dict
     eval_json = _first(f"{sid}.eval.json")
     events   = _first(f"{sid}.events.jsonl")
     status_f = _first(f"{sid}.status.json")
+    prd_html = _first(f"{sid}.prd.html")
+    planning_html = _first(f"{sid}.planning.html")
     # Test evidence files
     test_files = list(sprints_dir.glob(f"{sid}.*test*.md")) + list(sprints_dir.glob(f"{sid}.*evidence*.md"))
 
     source_files = {
         "prd": prd is not None,
+        "prd_html": prd_html is not None,
         "contract": contract is not None,
         "design": design is not None,
         "plan": plan is not None,
+        "planning_html": planning_html is not None,
         "handoff": handoff is not None,
         "eval": (eval_md or eval_json) is not None,
         "events": events is not None,
     }
+    source_paths = {
+        "prd": prd,
+        "prd_html": prd_html,
+        "contract": contract,
+        "design": design,
+        "plan": plan,
+        "planning_html": planning_html,
+        "handoff": handoff,
+        "eval": eval_md or eval_json,
+        "events": events,
+    }
 
-    all_paths: list[Path] = [p for p in [prd, contract, design, plan, handoff, eval_md, eval_json, events, status_f] if p]
+    all_paths: list[Path] = [p for p in [prd, prd_html, contract, design, plan, planning_html, handoff, eval_md, eval_json, events, status_f] if p]
     all_paths.extend(test_files)
 
     # Read content
     content: dict[str, str] = {
         "prd":      _read_file(prd, redact=redact) if prd else "",
+        "prd_html": _read_html_artifact(prd_html, redact=redact),
         "contract": _read_file(contract, redact=redact) if contract else "",
         "design":   _read_file(design, redact=redact) if design else "",
         "plan":     _read_file(plan, redact=redact) if plan else "",
+        "planning_html": _read_html_artifact(planning_html, redact=redact),
         "handoff":  _read_file(handoff, redact=redact) if handoff else "",
         "eval_md":  _read_file(eval_md, redact=redact) if eval_md else "",
         "eval_json": _read_file(eval_json, redact=redact) if eval_json else "",
@@ -202,6 +278,7 @@ def _collect_artifacts(sid: str, sprints_dir: Path, redact: bool = True) -> dict
         "content": content,
         "status_data": status_data,
         "all_paths": all_paths,
+        "source_paths": source_paths,
         "sid": sid,
     }
 
@@ -215,6 +292,7 @@ def _build_accepted_markdown(
     exported_at: str,
 ) -> str:
     sf = artifacts["source_files"]
+    sp = artifacts.get("source_paths", {})
     ct = artifacts["content"]
     sd = artifacts["status_data"]
     title = sd.get("title", sid)
@@ -237,13 +315,15 @@ redacted: true
 visibility: internal
 provenance: accepted-by-evaluator
 source_files:
-  prd: {str(sf.get('prd', False)).lower()}
-  contract: {str(sf.get('contract', False)).lower()}
-  design: {str(sf.get('design', False)).lower()}
-  plan: {str(sf.get('plan', False)).lower()}
-  handoff: {str(sf.get('handoff', False)).lower()}
-  eval: {str(sf.get('eval', False)).lower()}
-  events: {str(sf.get('events', False)).lower()}
+	  prd: {str(sf.get('prd', False)).lower()}
+	  prd_html: {str(sf.get('prd_html', False)).lower()}
+	  contract: {str(sf.get('contract', False)).lower()}
+	  design: {str(sf.get('design', False)).lower()}
+	  plan: {str(sf.get('plan', False)).lower()}
+	  planning_html: {str(sf.get('planning_html', False)).lower()}
+	  handoff: {str(sf.get('handoff', False)).lower()}
+	  eval: {str(sf.get('eval', False)).lower()}
+	  events: {str(sf.get('events', False)).lower()}
 ---"""
 
     # Executive summary from status.json
@@ -276,13 +356,30 @@ source_files:
     # Source index
     index_lines = [f"| Artifact | Present | Path |", "|---|---|---|"]
     for label, present in sf.items():
-        index_lines.append(f"| {label} | {'✅' if present else '❌'} | `{sid}.{label}.md` |")
+        path = sp.get(label)
+        path_label = path.name if isinstance(path, Path) else "N/A"
+        index_lines.append(f"| {label} | {'✅' if present else '❌'} | `{path_label}` |")
     source_index = "\n".join(index_lines)
+
+    html_artifacts_text = "\n\n---\n\n".join(
+        filter(
+            None,
+            [
+                f"### PRD HTML\n\nSource: `{sp.get('prd_html').name}`\n\n{ct.get('prd_html', '')}"
+                if ct.get("prd_html") and isinstance(sp.get("prd_html"), Path)
+                else "",
+                f"### Planning HTML\n\nSource: `{sp.get('planning_html').name}`\n\n{ct.get('planning_html', '')}"
+                if ct.get("planning_html") and isinstance(sp.get("planning_html"), Path)
+                else "",
+            ],
+        )
+    )
 
     parts = [
         front,
         f"# Accepted Sprint Knowledge: {sid}",
         section("Executive Summary", exec_summary),
+        section("Human-readable HTML Artifacts", html_artifacts_text),
         section("User Need / PRD", ct.get("prd", "")),
         section("Architecture / Design", "\n\n---\n\n".join(filter(None, [ct.get("contract", ""), ct.get("design", "")]))),
         section("Plan / Solution", ct.get("plan", "")),
