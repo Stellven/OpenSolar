@@ -1,0 +1,148 @@
+{
+  "sprint_id": "sprint-20260522-operator-fallback-ladder-gemini31",
+  "status": "passed",
+  "phase": "finalized",
+  "task_graph": "/Users/lisihao/.solar/harness/sprints/sprint-20260522-operator-fallback-ladder-gemini31.task_graph.json",
+  "updated_at": "2026-05-22T18:49:35Z",
+  "id": "sprint-20260522-operator-fallback-ladder-gemini31",
+  "history": [
+    {
+      "ts": "2026-05-22T18:31:07Z",
+      "event": "status_identity_repaired",
+      "by": "coordinator",
+      "note": "Recovered missing id/sprint_id from status filename so scanner can route the sprint."
+    },
+    {
+      "ts": "2026-05-22T18:32:17Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "evaluator",
+      "stage": "build_complete",
+      "reason": "handoff_ready_for_eval"
+    },
+    {
+      "ts": "2026-05-22T18:34:11Z",
+      "event": "reviewing_blocked_missing_handoff",
+      "by": "coordinator",
+      "raw_extra": "{}}"
+    },
+    {
+      "ts": "2026-05-22T18:36:49Z",
+      "event": "reviewing_blocked_missing_handoff",
+      "by": "coordinator",
+      "raw_extra": "{}}"
+    },
+    {
+      "ts": "2026-05-22T18:39:21Z",
+      "event": "approved_graph_ready",
+      "by": "coordinator",
+      "raw_extra": "{\"status_fields\":{\"phase\":\"planning_complete\",\"handoff_to\":\"builder_main\",\"target_role\":\"builder_main\"},\"note\":\"Approved legacy state normalized to DAG dispatch.\"}}"
+    },
+    {
+      "ts": "2026-05-22T18:42:47Z",
+      "event": "active_blocked_invalid_prd",
+      "by": "coordinator",
+      "raw_extra": "{\"status_fields\":{\"phase\":\"spec\",\"handoff_to\":\"pm\",\"target_role\":\"pm\"}}}"
+    },
+    {
+      "ts": "2026-05-22T18:43:04Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "planner",
+      "stage": "prd_ready",
+      "reason": "pm_prd_ready"
+    },
+    {
+      "ts": "2026-05-22T18:45:13Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "evaluator",
+      "stage": "build_complete",
+      "reason": "handoff_ready_for_eval"
+    },
+    {
+      "ts": "2026-05-22T18:47:23Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "none",
+      "stage": "done",
+      "reason": "terminal_status"
+    },
+    {
+      "ts": "2026-05-22T18:48:02Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-05-22T18:48:02Z",
+      "event": "autoresearch_optimizer_recorded",
+      "by": "coordinator",
+      "trigger_level": "recommended",
+      "recommended": true,
+      "role": "planner"
+    },
+    {
+      "ts": "2026-05-22T18:49:35Z",
+      "event": "finalized",
+      "by": "coordinator"
+    }
+  ],
+  "round": 3,
+  "handoff_to": "done",
+  "target_role": "done",
+  "runtime_state_source": "activity_runtime",
+  "event_count": 22,
+  "last_event_ts": "2026-05-22T18:36:37Z",
+  "projected_at": "2026-05-22T18:36:37Z",
+  "sid": "sprint-20260522-operator-fallback-ladder-gemini31",
+  "task_graph_status": "passed",
+  "artifacts": {
+    "autoresearch_optimizer": {
+      "recorded_at": "2026-05-22T18:48:02Z",
+      "sid": "sprint-20260522-operator-fallback-ladder-gemini31",
+      "role": "规划者",
+      "canonical_role": "planner",
+      "recommended": true,
+      "trigger_level": "recommended",
+      "reasons": [
+        "role:planner",
+        "telemetry:round:3",
+        "telemetry:eval_json:missing"
+      ],
+      "telemetry": {
+        "status": "passed",
+        "phase": "completed",
+        "round": 3,
+        "eval_verdict": "",
+        "failed_conditions": [],
+        "error_count": 0,
+        "warning_count": 0
+      },
+      "quality_metrics": {
+        "trigger_level": "recommended",
+        "expected_effect": [
+          "reduce_dag_rework",
+          "harden_write_scope_and_stop_rules"
+        ],
+        "must_measure": [
+          "repair_round_delta",
+          "eval_failure_recurrence",
+          "evidence_gap_count"
+        ]
+      },
+      "execution_policy": {
+        "mode": "advisor_only_by_default",
+        "default_command": "dry_run",
+        "execute_requires": "--execute",
+        "replaces_builder": false
+      }
+    }
+  },
+  "knowledge_export_status": "exported",
+  "knowledge_export_path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260522-operator-fallback-ladder-gemini31.accepted.md",
+  "knowledge_ingest_dispatch": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260522-operator-fallback-ladder-gemini31.dispatch.md",
+  "knowledge_exported_at": "2026-05-22T18:49:35Z",
+  "knowledge_ingested_at": null,
+  "knowledge_export_error": null
+}
