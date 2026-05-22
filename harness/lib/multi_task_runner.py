@@ -431,12 +431,28 @@ def operator_dispatchable(operator: dict[str, Any]) -> tuple[bool, str]:
         return False, str(operator.get("disabled_reason") or "disabled")
     if not operator.get("available", True):
         return False, str(operator.get("health_status") or "unavailable")
+    health = str(operator.get("health_status") or "").lower()
+    if health not in {"", "ok", "ready"}:
+        return False, f"unhealthy:{health}"
     if str(operator.get("quota_guard_state") or "ok").lower() not in {"", "ok", "ready"}:
         return False, f"quota_guard_state={operator.get('quota_guard_state')}"
     key_ref = str(operator.get("key_ref") or "").strip()
     if str(operator.get("auth_mode") or "").lower() not in {"none", "local", "subscription"} and not key_ref:
         return False, "key_ref_missing"
+    
+    # Check dynamic status override from operator_runtime if available
+    op_id = operator.get("operator_id")
+    if op_id:
+        try:
+            import operator_runtime
+            dyn_state = operator_runtime.get_operator_runtime_state(op_id)
+            if dyn_state in {"disabled", "quota_exhausted", "auth_expired", "leased", "running", "draining", "cooldown"}:
+                return False, f"dynamic_state_{dyn_state}"
+        except Exception:
+            pass
+            
     return True, "ready"
+
 
 
 def _selector_values(selector: Any) -> list[str]:
@@ -560,39 +576,414 @@ def apply_operator_to_profile(profile: dict[str, Any], operator: dict[str, Any],
     return selected
 
 
+def _is_true(val: Any) -> bool:
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, str):
+        return val.lower() in {"true", "yes", "1"}
+    if isinstance(val, int):
+        return val != 0
+    return False
+
+
+def _expand_str(val: str) -> set[str]:
+    text = str(val or "").lower()
+    parts = [p for p in re.split(r"[^a-z0-9]+", text) if p]
+    return {text}.union(parts)
+
+
+def operator_supports_task_type(operator: dict[str, Any], task_type: str) -> bool:
+    if not task_type:
+        return True
+    task_type_lower = task_type.lower()
+    
+    # Check avoid lists first
+    avoid_list = []
+    if "avoid_for" in operator:
+        avoid_list.extend([str(x).lower() for x in operator["avoid_for"]])
+    if "routing" in operator and isinstance(operator["routing"], dict):
+        avoid_list.extend([str(x).lower() for x in operator["routing"].get("avoid_task_types", [])])
+    
+    task_type_parts = _expand_str(task_type)
+    for avoid_item in avoid_list:
+        avoid_parts = _expand_str(avoid_item)
+        if task_type_parts & avoid_parts:
+            return False
+            
+    # Check allowed lists
+    allowed_list = []
+    if "task_classes" in operator:
+        allowed_list.extend([str(x).lower() for x in operator["task_classes"]])
+    if "preferred_for" in operator:
+        allowed_list.extend([str(x).lower() for x in operator["preferred_for"]])
+    if "routing" in operator and isinstance(operator["routing"], dict):
+        allowed_list.extend([str(x).lower() for x in operator["routing"].get("primary_task_types", [])])
+    
+    if not allowed_list:
+        return True
+        
+    for allowed_item in allowed_list:
+        allowed_parts = _expand_str(allowed_item)
+        if task_type_parts & allowed_parts:
+            return True
+            
+    for allowed_item in allowed_list:
+        if task_type_lower in allowed_item or allowed_item in task_type_lower:
+            return True
+            
+    return False
+
+
+def get_operator_capability_score(operator: dict[str, Any], capability_name: str) -> float:
+    capability_name_lower = capability_name.lower().replace("_", "-")
+    
+    # Check capability or capabilities dict
+    caps = operator.get("capability") or operator.get("capabilities")
+    if isinstance(caps, dict):
+        for k, v in caps.items():
+            kl = str(k).lower().replace("_", "-")
+            if kl == capability_name_lower:
+                try:
+                    return float(v)
+                except (ValueError, TypeError):
+                    pass
+    
+    # Fallback to strengths presence
+    strengths = [str(x).lower().replace("_", "-") for x in operator.get("strengths") or []]
+    if capability_name_lower in strengths:
+        return 5.0
+        
+    preferred = [str(x).lower().replace("_", "-") for x in operator.get("preferred_for") or []]
+    if capability_name_lower in preferred:
+        return 4.0
+        
+    task_classes = [str(x).lower().replace("_", "-") for x in operator.get("task_classes") or []]
+    if capability_name_lower in task_classes:
+        return 4.0
+
+    return 1.0
+
+
+def check_capability_score(operator_score: float | int, constraint_str_or_val: Any) -> bool:
+    if constraint_str_or_val is None:
+        return True
+    if isinstance(constraint_str_or_val, (int, float)):
+        return operator_score >= constraint_str_or_val
+    
+    val_str = str(constraint_str_or_val).strip()
+    if not val_str:
+        return True
+        
+    match = re.match(r"^([><=]=?)\s*([0-9.]+)$", val_str)
+    if match:
+        op, val_num_str = match.groups()
+        val_num = float(val_num_str)
+        if op == ">=":
+            return operator_score >= val_num
+        elif op == ">":
+            return operator_score > val_num
+        elif op == "<=":
+            return operator_score <= val_num
+        elif op == "<":
+            return operator_score < val_num
+        elif op == "==":
+            return operator_score == val_num
+        elif op == "!=":
+            return operator_score != val_num
+    else:
+        try:
+            return operator_score >= float(val_str)
+        except ValueError:
+            pass
+    return True
+
+
+def operator_satisfies_constraints(operator: dict[str, Any], constraints: dict[str, Any]) -> bool:
+    if not constraints or not isinstance(constraints, dict):
+        return True
+        
+    tier_map = {"low": 1, "medium": 2, "high": 3}
+    
+    for key, val in constraints.items():
+        if key == "max_cost_tier":
+            op_cost = str(operator.get("cost_tier") or "medium").lower()
+            max_cost = str(val).lower()
+            if tier_map.get(op_cost, 2) > tier_map.get(max_cost, 2):
+                return False
+        elif key == "max_latency_tier":
+            op_latency = str(operator.get("latency_tier") or "medium").lower()
+            max_latency = str(val).lower()
+            if tier_map.get(op_latency, 2) > tier_map.get(max_latency, 2):
+                return False
+        elif key == "min_context_tier":
+            context_map = {"low": 1, "medium": 2, "high": 3}
+            op_context = str(operator.get("context_tier") or "medium").lower()
+            min_context = str(val).lower()
+            if context_map.get(op_context, 2) < context_map.get(min_context, 2):
+                return False
+        else:
+            op_val = operator.get(key)
+            if op_val is None and "policy" in operator and isinstance(operator["policy"], dict):
+                op_val = operator["policy"].get(key)
+            if op_val is None and "routing" in operator and isinstance(operator["routing"], dict):
+                op_val = operator["routing"].get(key)
+                
+            if op_val is not None:
+                if str(op_val).lower() != str(val).lower():
+                    return False
+    return True
+
+
+def check_quota_reserve(operator: dict[str, Any], task_type: str) -> bool:
+    quota = operator.get("quota")
+    if not quota or not isinstance(quota, dict):
+        return True
+        
+    reserve_for = quota.get("reserve_for")
+    if not reserve_for:
+        return True
+        
+    if not isinstance(reserve_for, list):
+        reserve_for = [reserve_for]
+        
+    reserve_for_lower = [str(x).lower() for x in reserve_for]
+    if not task_type or task_type.lower() not in reserve_for_lower:
+        return False
+        
+    return True
+
+
+def operator_matches_class(operator: dict[str, Any], class_name: str) -> bool:
+    op_class = operator.get("operator_class")
+    if not op_class and "routing" in operator and isinstance(operator["routing"], dict):
+        op_class = operator["routing"].get("operator_class")
+    
+    if not op_class:
+        return False
+        
+    if isinstance(op_class, list):
+        return any(str(c).lower() == class_name.lower() for c in op_class)
+    return str(op_class).lower() == class_name.lower()
+
+
+NORM_FALLBACK_LADDERS: dict[str, list[str]] = {
+    "ARCH_DESIGN": [
+        "mini-claude-opus-planner",
+        "mini-antigravity-gemini31-pro",
+        "mini-claude-sonnet-builder",
+        "mini-antigravity-gemini35-flash-high"
+    ],
+    "ROOT_CAUSE_DEBUG": [
+        "mini-claude-opus-planner",
+        "mini-antigravity-gemini31-pro",
+        "mini-claude-sonnet-builder",
+        "mini-antigravity-gemini35-flash-high"
+    ],
+    "CODE_IMPL": [
+        "mini-antigravity-gemini35-flash-high",
+        "mini-claude-sonnet-builder",
+        "mini-glm51-knowledge",
+        "mini-thunderomlx-qwen36-knowledge",
+        "mini-local-scan"
+    ],
+    "TEST_GEN/TEST_RUN": [
+        "mini-antigravity-gemini35-flash-high",
+        "mini-claude-sonnet-builder",
+        "mini-local-scan"
+    ],
+    "RESEARCH_SYNTHESIS": [
+        "mini-antigravity-gemini31-pro",
+        "mini-claude-sonnet-builder",
+        "mini-antigravity-gemini35-flash-high",
+        "mini-local-scan"
+    ],
+    "KNOWLEDGE_EXTRACTION": [
+        "mini-thunderomlx-qwen36-knowledge",
+        "mini-glm51-knowledge",
+        "mini-antigravity-gemini35-flash-high"
+    ],
+    "MULTIMODAL_UI_CHECK": [
+        "mini-antigravity-gemini35-flash-image",
+        "mini-antigravity-gemini31-pro"
+    ],
+    "FINAL_REVIEW": [
+        "mini-claude-opus-evaluator",
+        "mini-antigravity-gemini31-pro",
+        "mini-claude-sonnet-builder"
+    ]
+}
+
+
+def get_ladder_for_task_type(task_type: str) -> list[str]:
+    if not task_type:
+        return []
+    t = task_type.upper().replace("-", "_").replace(" ", "_")
+    if t in {"TEST_GEN", "TEST_RUN", "TEST_GEN_TEST_RUN", "TEST_GEN/TEST_RUN"}:
+        return NORM_FALLBACK_LADDERS["TEST_GEN/TEST_RUN"]
+    return NORM_FALLBACK_LADDERS.get(t, [])
+
+
 def select_operator(node: dict[str, Any], base_profile: dict[str, Any]) -> tuple[dict[str, Any] | None, str]:
     preferred = str(node.get("preferred_operator") or "").strip()
+    selector = node.get("operator_selector") or {}
+    task_type = node.get("task_type") or selector.get("task_type")
+    
+    verifier_required = _is_true(node.get("verifier_required")) or _is_true(selector.get("verifier_required"))
+    prior = node.get("prior_operator") or node.get("writer_operator") or node.get("writer")
+    
+    preferred_error = None
     if preferred:
-        operator = resolve_operator(preferred)
-        ok, reason = operator_dispatchable(operator)
-        if ok:
-            return operator, ""
-        fallback = str(operator.get("fallback_profile") or base_profile.get("name") or "")
-        return None, f"preferred_operator_unavailable:{preferred}:{reason};fallback_profile={fallback or 'N/A'}"
+        try:
+            operator = resolve_operator(preferred)
+            ok, reason = operator_dispatchable(operator)
+            if ok:
+                if verifier_required and prior:
+                    prior_clean = str(prior).strip().lower()
+                    op_id_clean = str(operator.get("operator_id")).strip().lower()
+                    op_prof_clean = str(operator.get("profile") or "").strip().lower()
+                    if prior_clean in {op_id_clean, op_prof_clean}:
+                        preferred_error = f"verifier_conflict:preferred_operator_is_writer:{prior}"
+                    else:
+                        return operator, ""
+                else:
+                    return operator, ""
+            else:
+                fallback = str(operator.get("fallback_profile") or base_profile.get("name") or "")
+                preferred_error = f"preferred_operator_unavailable:{preferred}:{reason};fallback_profile={fallback or 'N/A'}"
+        except Exception as exc:
+            preferred_error = f"preferred_operator_error:{exc}"
 
-    selector = node.get("operator_selector")
-    if not selector:
+    # Try fallback ladder candidates if task_type matches
+    ladder = get_ladder_for_task_type(task_type)
+    if ladder:
+        req_caps = node.get("required_capabilities") or selector.get("required_capabilities") or node.get("required_capability_scores") or selector.get("required_capability_scores")
+        constraints = node.get("constraints") or selector.get("constraints")
+        
+        for candidate_id in ladder:
+            if candidate_id == preferred:
+                continue
+            try:
+                operator = resolve_operator(candidate_id)
+            except Exception:
+                continue
+                
+            # 1. Check dispatchability
+            ok, reason = operator_dispatchable(operator)
+            if not ok:
+                continue
+                
+            # 2. Check verifier conflict
+            if verifier_required and prior:
+                prior_clean = str(prior).strip().lower()
+                op_id_clean = str(operator.get("operator_id")).strip().lower()
+                op_prof_clean = str(operator.get("profile") or "").strip().lower()
+                if prior_clean in {op_id_clean, op_prof_clean}:
+                    continue
+                    
+            # 3. Check constraints
+            if constraints and not operator_satisfies_constraints(operator, constraints):
+                continue
+                
+            # 4. Check capabilities
+            if req_caps and isinstance(req_caps, dict):
+                cap_ok = True
+                for cap_name, cap_constraint in req_caps.items():
+                    op_score = get_operator_capability_score(operator, cap_name)
+                    if not check_capability_score(op_score, cap_constraint):
+                        cap_ok = False
+                        break
+                if not cap_ok:
+                    continue
+                    
+            # 5. Check quota reserves
+            if not check_quota_reserve(operator, task_type):
+                continue
+                
+            return operator, ""
+
+    # If preferred operator was requested but failed, and we did not find a valid fallback, return the preferred error
+    if preferred and preferred_error:
+        return None, preferred_error
+
+    req_caps = node.get("required_capabilities") or selector.get("required_capabilities") or node.get("required_capability_scores") or selector.get("required_capability_scores")
+    pref_classes = node.get("preferred_operator_classes") or selector.get("preferred_operator_classes")
+    constraints = node.get("constraints") or selector.get("constraints")
+    
+    has_logical = any([
+        "operator_selector" in node,
+        task_type,
+        req_caps,
+        pref_classes,
+        constraints,
+        verifier_required
+    ])
+    
+    if not has_logical:
         return None, ""
+        
     operators = [
         _operator_ref(operator_id, dict(spec))
         for operator_id, spec in (load_physical_operators().get("operators") or {}).items()
         if isinstance(spec, dict)
     ]
+    
     scored: list[tuple[int, dict[str, Any]]] = []
     selector_values = set(_selector_values(selector))
+    if task_type:
+        selector_values.update(_expand_str(task_type))
+        
     modality_values = {"image", "vision", "multimodal", "screenshot", "ocr", "diagram", "mockup", "ui"}
     modality_required = bool(selector_values & modality_values)
+    
     for operator in operators:
         ok, _reason = operator_dispatchable(operator)
         if not ok:
             continue
+            
+        if verifier_required:
+            prior = node.get("prior_operator") or node.get("writer_operator") or node.get("writer")
+            if prior:
+                prior_clean = str(prior).strip().lower()
+                op_id_clean = str(operator.get("operator_id")).strip().lower()
+                op_prof_clean = str(operator.get("profile") or "").strip().lower()
+                if prior_clean in {op_id_clean, op_prof_clean}:
+                    continue
+                    
+        if task_type and not operator_supports_task_type(operator, task_type):
+            continue
+            
+        if req_caps and isinstance(req_caps, dict):
+            cap_ok = True
+            for cap_name, cap_constraint in req_caps.items():
+                op_score = get_operator_capability_score(operator, cap_name)
+                if not check_capability_score(op_score, cap_constraint):
+                    cap_ok = False
+                    break
+            if not cap_ok:
+                continue
+                
+        if constraints and not operator_satisfies_constraints(operator, constraints):
+            continue
+            
+        if not check_quota_reserve(operator, task_type):
+            continue
+            
         if modality_required and not operator_has_any(operator, selector_values & modality_values):
             continue
+            
         score = operator_score(operator, node, selector)
-        if score > 0:
-            scored.append((score, operator))
+        
+        if pref_classes:
+            classes_list = [pref_classes] if isinstance(pref_classes, str) else list(pref_classes)
+            for c in classes_list:
+                if operator_matches_class(operator, str(c)):
+                    score += 100
+                    
+        scored.append((score, operator))
+        
     if not scored:
         return None, "operator_selector_no_match"
+        
     scored.sort(key=lambda item: (item[0], str(item[1].get("operator_id") or "")), reverse=True)
     return scored[0][1], ""
 

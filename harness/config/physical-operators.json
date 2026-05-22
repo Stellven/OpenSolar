@@ -346,6 +346,525 @@
       "last_smoke_at": "2026-05-22T00:34:00Z",
       "last_smoke_evidence": "agy --add-dir real Photos Library JPEG described beach/ocean scene",
       "command": "AGY_BIN=/Users/lisihao/.local/bin/agy PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/antigravity_multimodal_agent.py\""
+    },
+    "mini-antigravity-gemini31-pro": {
+      "display_name": "Mac mini Antigravity Gemini 3.1 Pro",
+      "plane": "headless",
+      "owner_host": "lisihao@100.122.223.55",
+      "pane": "solar-harness-multi-task:*",
+      "profile": "gemini-planner",
+      "role": "planner",
+      "persona": "planner",
+      "provider": "google",
+      "vendor": "Google",
+      "backend": "command",
+      "model": "gemini-3.1-pro",
+      "model_config": "Antigravity CLI agy;reasoning=high",
+      "base_url": "agy-cli",
+      "auth_mode": "oauth",
+      "key_ref": "antigravity_oauth",
+      "quota_cycle": "google-account",
+      "quota_refresh_at": "unknown",
+      "quota_guard_state": "ok",
+      "enabled": true,
+      "disabled_reason": "",
+      "enabled_at": "2026-05-22T14:36:00Z",
+      "available": true,
+      "health_status": "ok",
+      "last_smoke_at": "2026-05-22T14:36:00Z",
+      "last_smoke_evidence": "agy --dangerously-skip-permissions --print \"Reply exactly: SOLAR_PROBE_OK\" succeeded",
+      "roles": [
+        "planner",
+        "evaluator"
+      ],
+      "task_classes": [
+        "planning",
+        "architecture",
+        "requirements",
+        "research"
+      ],
+      "strengths": [
+        "architecture",
+        "complex-reasoning",
+        "long-context"
+      ],
+      "preferred_for": [
+        "planner",
+        "architecture",
+        "research",
+        "google"
+      ],
+      "avoid_for": [
+        "bulk-extraction"
+      ],
+      "cost_tier": "medium",
+      "latency_tier": "medium",
+      "context_tier": "high",
+      "max_concurrency": 1,
+      "fallback_profile": "planner",
+      "operator_class": "GoogleStack",
+      "auth": {
+        "mode": "oauth",
+        "account_label": "antigravity_gemini31_pro",
+        "secret_ref": "secret://antigravity_oauth"
+      },
+      "quota": {
+        "quota_type": "google-account",
+        "period": "daily",
+        "reserve_for": [
+          "ARCH_DESIGN",
+          "ROOT_CAUSE_DEBUG",
+          "RESEARCH_SYNTHESIS",
+          "FINAL_REVIEW"
+        ],
+        "on_exhausted": "disable_and_fallback"
+      },
+      "capability": {
+        "planning": 5,
+        "coding": 4,
+        "debugging": 4,
+        "testing": 4,
+        "research": 5,
+        "long_context": 5,
+        "reliability": 4
+      },
+      "routing": {
+        "operator_class": "GoogleStack",
+        "primary_task_types": [
+          "ARCH_DESIGN",
+          "ROOT_CAUSE_DEBUG",
+          "RESEARCH_SYNTHESIS",
+          "FINAL_REVIEW"
+        ],
+        "avoid_task_types": [
+          "bulk-extraction"
+        ],
+        "fallback_operator_classes": [
+          "DeepArchitect",
+          "Verifier"
+        ]
+      }
+    },
+    "mini-antigravity-gemini31-pro-image": {
+      "display_name": "Mac mini Antigravity Gemini 3.1 Pro multimodal image",
+      "plane": "headless",
+      "owner_host": "lisihao@100.122.223.55",
+      "pane": "solar-harness-multi-task:*",
+      "profile": "gemini-planner",
+      "role": "planner",
+      "persona": "planner",
+      "provider": "google",
+      "vendor": "Google",
+      "backend": "command",
+      "model": "gemini-3.1-pro",
+      "model_config": "Antigravity CLI agy;multimodal=image-input;reasoning=high",
+      "base_url": "agy-cli",
+      "command_path": "/Users/lisihao/.local/bin/agy",
+      "auth_mode": "oauth",
+      "key_ref": "antigravity_oauth",
+      "quota_cycle": "google-account",
+      "quota_refresh_at": "unknown",
+      "quota_guard_state": "ok",
+      "enabled": false,
+      "disabled_reason": "needs sandbox adapter activation and ToS-safe smoke before scheduler use",
+      "enabled_at": "N/A",
+      "available": false,
+      "health_status": "pending",
+      "input_modalities": [
+        "text",
+        "image",
+        "screenshot"
+      ],
+      "output_modalities": [
+        "text",
+        "structured-json"
+      ],
+      "artifact_types": [
+        "png",
+        "jpg",
+        "jpeg",
+        "webp",
+        "pdf-page-image",
+        "screenshot"
+      ],
+      "roles": [
+        "planner",
+        "evaluator"
+      ],
+      "task_classes": [
+        "multimodal",
+        "image-processing",
+        "vision",
+        "screenshot-analysis",
+        "ui-check",
+        "ocr",
+        "diagram-analysis"
+      ],
+      "strengths": [
+        "image-understanding",
+        "ui-check",
+        "screenshot-analysis",
+        "google-stack"
+      ],
+      "preferred_for": [
+        "image",
+        "vision",
+        "multimodal",
+        "screenshot",
+        "ui",
+        "mockup",
+        "diagram",
+        "ocr"
+      ],
+      "avoid_for": [
+        "bulk-text-extraction",
+        "critical-code-review"
+      ],
+      "cost_tier": "medium",
+      "latency_tier": "medium",
+      "context_tier": "high",
+      "max_concurrency": 1,
+      "fallback_profile": "planner",
+      "operator_class": "GoogleStack",
+      "auth": {
+        "mode": "oauth",
+        "account_label": "antigravity_gemini31_pro",
+        "secret_ref": "secret://antigravity_oauth"
+      },
+      "quota": {
+        "quota_type": "google-account",
+        "period": "daily",
+        "reserve_for": [
+          "ARCH_DESIGN",
+          "ROOT_CAUSE_DEBUG",
+          "RESEARCH_SYNTHESIS",
+          "FINAL_REVIEW"
+        ],
+        "on_exhausted": "disable_and_fallback"
+      },
+      "capability": {
+        "planning": 5,
+        "coding": 4,
+        "debugging": 4,
+        "testing": 4,
+        "research": 5,
+        "long_context": 5,
+        "reliability": 4
+      },
+      "routing": {
+        "operator_class": "GoogleStack",
+        "primary_task_types": [
+          "ARCH_DESIGN",
+          "ROOT_CAUSE_DEBUG",
+          "RESEARCH_SYNTHESIS",
+          "FINAL_REVIEW"
+        ],
+        "avoid_task_types": [
+          "bulk-extraction"
+        ],
+        "fallback_operator_classes": [
+          "DeepArchitect",
+          "Verifier"
+        ]
+      },
+      "command": "AGY_BIN=/Users/lisihao/.local/bin/agy PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/antigravity_multimodal_agent.py\""
+    },
+    "mini-glm51-knowledge": {
+      "display_name": "Mac mini GLM-5.1 knowledge",
+      "plane": "headless",
+      "owner_host": "lisihao@100.122.223.55",
+      "pane": "solar-harness-multi-task:*",
+      "profile": "glm-knowledge",
+      "role": "builder",
+      "persona": "builder",
+      "provider": "glm",
+      "vendor": "ZhipuAI",
+      "backend": "command",
+      "model": "glm-5.1",
+      "model_config": "GLM local-cache=8GB;thinking=enabled",
+      "base_url": "http://127.0.0.1:8003",
+      "auth_mode": "local",
+      "key_ref": "local-glm",
+      "quota_cycle": "none",
+      "quota_refresh_at": "N/A",
+      "quota_guard_state": "ok",
+      "enabled": false,
+      "disabled_reason": "model checkpoint download pending local hardware allocation",
+      "enabled_at": "N/A",
+      "available": false,
+      "health_status": "missing",
+      "roles": [
+        "builder"
+      ],
+      "task_classes": [
+        "knowledge-extraction",
+        "wiki-ingest",
+        "bulk-extraction"
+      ],
+      "strengths": [
+        "local",
+        "knowledge-extraction"
+      ],
+      "preferred_for": [
+        "knowledge",
+        "wiki",
+        "extraction"
+      ],
+      "avoid_for": [
+        "critical-review",
+        "complex-refactor"
+      ],
+      "cost_tier": "low",
+      "latency_tier": "medium",
+      "context_tier": "medium",
+      "max_concurrency": 1,
+      "fallback_profile": "knowledge-extractor",
+      "operator_class": "LocalPrivacy",
+      "auth": {
+        "mode": "local",
+        "account_label": "local_glm",
+        "secret_ref": "none"
+      },
+      "quota": {
+        "quota_type": "none",
+        "period": "none",
+        "on_exhausted": "ignore"
+      },
+      "capability": {
+        "coding": 3,
+        "research": 4,
+        "long_context": 4,
+        "local_privacy": 5
+      },
+      "routing": {
+        "operator_class": "LocalPrivacy",
+        "primary_task_types": [
+          "KNOWLEDGE_EXTRACTION",
+          "CODE_IMPL"
+        ],
+        "fallback_operator_classes": [
+          "LocalPrivacy"
+        ]
+      }
+    },
+    "mini-local-scan": {
+      "display_name": "Mac mini local scan",
+      "plane": "headless",
+      "owner_host": "lisihao@100.122.223.55",
+      "pane": "solar-harness-multi-task:*",
+      "profile": "local-scanner",
+      "role": "builder",
+      "persona": "builder",
+      "provider": "local",
+      "vendor": "Solar",
+      "backend": "local",
+      "model": "ripgrep",
+      "model_config": "ripgrep-v14.1.0",
+      "base_url": "local",
+      "auth_mode": "local",
+      "key_ref": "local-scan",
+      "quota_cycle": "none",
+      "quota_refresh_at": "N/A",
+      "quota_guard_state": "ok",
+      "enabled": false,
+      "disabled_reason": "local system security policy authorization pending",
+      "enabled_at": "N/A",
+      "available": false,
+      "health_status": "missing",
+      "roles": [
+        "builder"
+      ],
+      "task_classes": [
+        "local-scan",
+        "regex-search",
+        "code-indexing"
+      ],
+      "strengths": [
+        "speed",
+        "local-privacy"
+      ],
+      "preferred_for": [
+        "local-scan",
+        "search"
+      ],
+      "avoid_for": [
+        "reasoning"
+      ],
+      "cost_tier": "low",
+      "latency_tier": "low",
+      "context_tier": "low",
+      "max_concurrency": 4,
+      "fallback_profile": "builder",
+      "operator_class": "LocalPrivacy",
+      "auth": {
+        "mode": "local",
+        "account_label": "system_root",
+        "secret_ref": "none"
+      },
+      "quota": {
+        "quota_type": "none",
+        "period": "none",
+        "on_exhausted": "ignore"
+      },
+      "capability": {
+        "shell": 5,
+        "local_privacy": 5
+      },
+      "routing": {
+        "operator_class": "LocalPrivacy",
+        "primary_task_types": [
+          "CODE_IMPL",
+          "TEST_GEN/TEST_RUN"
+        ],
+        "fallback_operator_classes": [
+          "LocalPrivacy"
+        ]
+      }
+    },
+    "mini-router": {
+      "display_name": "Mac mini Router",
+      "plane": "headless",
+      "owner_host": "lisihao@100.122.223.55",
+      "pane": "solar-harness-multi-task:*",
+      "profile": "meta-router",
+      "role": "planner",
+      "persona": "planner",
+      "provider": "local",
+      "vendor": "Solar",
+      "backend": "local",
+      "model": "meta-router-v1",
+      "model_config": "SolarRouterV1",
+      "base_url": "local",
+      "auth_mode": "local",
+      "key_ref": "local-router",
+      "quota_cycle": "none",
+      "quota_refresh_at": "N/A",
+      "quota_guard_state": "ok",
+      "enabled": false,
+      "disabled_reason": "meta-routing policy network initialization pending",
+      "enabled_at": "N/A",
+      "available": false,
+      "health_status": "missing",
+      "roles": [
+        "planner"
+      ],
+      "task_classes": [
+        "routing",
+        "dispatch"
+      ],
+      "strengths": [
+        "routing",
+        "resilience"
+      ],
+      "preferred_for": [
+        "routing",
+        "fallback"
+      ],
+      "avoid_for": [
+        "coding"
+      ],
+      "cost_tier": "low",
+      "latency_tier": "low",
+      "context_tier": "low",
+      "max_concurrency": 2,
+      "fallback_profile": "planner",
+      "operator_class": "RouterMeta",
+      "auth": {
+        "mode": "local",
+        "account_label": "router_agent",
+        "secret_ref": "none"
+      },
+      "quota": {
+        "quota_type": "none",
+        "period": "none",
+        "on_exhausted": "ignore"
+      },
+      "capability": {
+        "planning": 5,
+        "reliability": 5
+      },
+      "routing": {
+        "operator_class": "RouterMeta",
+        "primary_task_types": [
+          "ARCH_DESIGN",
+          "ROOT_CAUSE_DEBUG"
+        ],
+        "fallback_operator_classes": [
+          "RouterMeta"
+        ]
+      }
+    },
+    "mini-audit": {
+      "display_name": "Mac mini Audit Ledger",
+      "plane": "headless",
+      "owner_host": "lisihao@100.122.223.55",
+      "pane": "solar-harness-multi-task:*",
+      "profile": "audit-ledger",
+      "role": "evaluator",
+      "persona": "evaluator",
+      "provider": "local",
+      "vendor": "Solar",
+      "backend": "local",
+      "model": "ledger-audit-v1",
+      "model_config": "SolarAuditLedgerV1",
+      "base_url": "local",
+      "auth_mode": "local",
+      "key_ref": "local-audit",
+      "quota_cycle": "none",
+      "quota_refresh_at": "N/A",
+      "quota_guard_state": "ok",
+      "enabled": false,
+      "disabled_reason": "audit trail signature keys not provisioned",
+      "enabled_at": "N/A",
+      "available": false,
+      "health_status": "missing",
+      "roles": [
+        "evaluator"
+      ],
+      "task_classes": [
+        "auditing",
+        "ledger-log",
+        "compliance"
+      ],
+      "strengths": [
+        "verification",
+        "compliance"
+      ],
+      "preferred_for": [
+        "audit",
+        "review"
+      ],
+      "avoid_for": [
+        "planning"
+      ],
+      "cost_tier": "low",
+      "latency_tier": "low",
+      "context_tier": "low",
+      "max_concurrency": 2,
+      "fallback_profile": "evaluator",
+      "operator_class": "AuditLedger",
+      "auth": {
+        "mode": "local",
+        "account_label": "audit_compliance",
+        "secret_ref": "none"
+      },
+      "quota": {
+        "quota_type": "none",
+        "period": "none",
+        "on_exhausted": "ignore"
+      },
+      "capability": {
+        "reliability": 5
+      },
+      "routing": {
+        "operator_class": "AuditLedger",
+        "primary_task_types": [
+          "FINAL_REVIEW"
+        ],
+        "fallback_operator_classes": [
+          "AuditLedger"
+        ]
+      }
     }
   }
 }
