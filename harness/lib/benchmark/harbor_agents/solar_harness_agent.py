@@ -86,13 +86,18 @@ class SolarHarnessAgent(BaseAgent):
             stdout_path.write_text(result.stdout or "", encoding="utf-8")
             stderr_path.write_text(result.stderr or "", encoding="utf-8")
 
-            await environment.upload_dir(workspace, "/app")
-            await self._run_container_postrun(environment, postrun_path)
-            await self._write_sync_check(environment, sync_check_path)
-
-            if result.returncode != 0 and not _workspace_has_files(workspace):
+            if result.returncode != 0:
                 raise RuntimeError(
                     f"solar-harness solver failed with exit {result.returncode}"
+                )
+
+            await environment.upload_dir(workspace, "/app")
+            postrun_code = await self._run_container_postrun(environment, postrun_path)
+            await self._write_sync_check(environment, sync_check_path)
+
+            if postrun_code != 0:
+                raise RuntimeError(
+                    f"solar-harness container postrun failed with exit {postrun_code}"
                 )
 
     async def _run_container_postrun(
@@ -176,7 +181,3 @@ def _solar_harness_env() -> dict[str, str]:
     )
     env["HARNESS_DIR"] = str(harness_dir)
     return env
-
-
-def _workspace_has_files(workspace: Path) -> bool:
-    return any(path.is_file() for path in workspace.rglob("*"))

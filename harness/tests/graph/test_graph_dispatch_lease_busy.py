@@ -169,6 +169,23 @@ def test_evaluator_discovery_ignores_expired_lease(monkeypatch) -> None:
     assert evaluators[0]["busy"] is False
 
 
+def test_force_eval_retry_allows_failed_node_after_repair_artifact(monkeypatch, tmp_path) -> None:
+    graph = {
+        "sprint_id": "sid-force-retry",
+        "nodes": [{"id": "N6", "status": "reviewing"}],
+        "node_results": {"N6": {"status": "failed"}},
+    }
+    node = graph["nodes"][0]
+    handoff = tmp_path / "sid-force-retry.N6-handoff.md"
+    handoff.write_text("handoff", encoding="utf-8")
+
+    monkeypatch.setattr(gnd, "_eval_json_file", lambda sid, node_id: tmp_path / "missing-eval.json")
+    monkeypatch.setattr(gnd, "_existing_node_handoff", lambda sid, node, graph: handoff)
+
+    assert gnd._node_eval_needed(graph, "sid-force-retry", node, force=False) is False
+    assert gnd._node_eval_needed(graph, "sid-force-retry", node, force=True) is True
+
+
 def test_clear_stale_prompt_residue_uses_ctrl_c_fallback(monkeypatch) -> None:
     prompt_residue = "✻ Baked for 4m 16s\n────────────────\n❯\u00a0继续执行下一个 dispatch 文件\n────────────────\n"
     idle_prompt = "────────────────\n❯\u00a0\n────────────────\n"

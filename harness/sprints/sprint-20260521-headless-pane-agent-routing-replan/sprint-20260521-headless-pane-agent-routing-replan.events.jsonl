@@ -1,0 +1,120 @@
+{"ts": "2026-05-21T20:23:24Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-21T20:23:33Z", "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan", "actor": "solar-autopilot", "event": "autopilot_workflow_route_normalized", "severity": "info", "data": {"route_role": "planner", "stage": "prd_ready", "reason": "pm_prd_ready"}}
+{"ts": "2026-05-21T20:24:26Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-21T20:24:47Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T20:25:50Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T20:26:12Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-21T20:26:33Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-21T20:28:47Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T20:29:48Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T20:30:10Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-21T20:30:32Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-21T20:34:42Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T20:35:45Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T20:36:07Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-21T20:36:29Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-21T20:40:23Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T20:41:25Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T20:41:47Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-21T20:42:08Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-21T20:46:04Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T20:47:07Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T20:47:29Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-21T20:47:54Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-21T20:52:02Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T20:53:06Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T20:53:27Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-21T20:53:49Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-21T20:57:44Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T20:58:48Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T20:59:09Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-21T20:59:32Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-21T21:03:26Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T21:04:32Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T21:04:54Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-21T21:05:15Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-21T21:09:21Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T21:10:26Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T21:10:47Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-21T21:11:10Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-21T21:15:05Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T21:16:10Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T21:16:33Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-21T21:16:54Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-21T21:20:48Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T21:21:53Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T21:22:15Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-21T21:22:36Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-21T21:26:44Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T21:27:50Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T21:28:13Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-21T21:28:35Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-21T21:32:28Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T21:33:35Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T21:33:56Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-21T21:34:17Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-21T21:38:13Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T21:39:20Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T21:39:42Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-21T21:40:05Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-21T21:44:10Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T21:45:17Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T21:45:38Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-21T21:46:00Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-21T21:49:56Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T21:51:05Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T21:51:26Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-21T21:51:49Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-21T21:55:43Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T21:56:52Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T21:57:14Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-21T21:57:35Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-21T22:01:40Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T22:02:49Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T22:03:10Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-21T22:03:33Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-21T22:07:27Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T22:08:37Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T22:08:58Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-21T22:09:19Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-21T22:13:12Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T22:14:22Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T22:14:42Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-21T22:15:04Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-21T22:19:11Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T22:20:21Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T22:20:43Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-21T22:21:04Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-21T22:24:57Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T22:26:07Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T22:26:28Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-21T22:26:49Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-21T22:30:45Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T22:31:55Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T22:32:18Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-21T22:32:40Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "gate_blocked", "by": "coordinator"}
+{"ts": "2026-05-21T22:37:00Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T22:48:26Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T22:49:40Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T22:50:45Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-21T22:52:14Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-21T22:52:39Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-21T22:53:36Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatched", "by": "coordinator"}
+{"ts": "2026-05-21T22:55:02Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-21T22:58:00Z", "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan", "actor": "solar-autopilot", "event": "autopilot_workflow_route_normalized", "severity": "info", "data": {"route_role": "builder_main", "stage": "planning_complete", "reason": "planner_artifacts_and_task_graph_ready"}}
+{"ts": "2026-05-21T22:59:00Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-21T22:59:02Z", "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan", "actor": "solar-autopilot", "event": "autopilot_graph_enqueue_ready", "severity": "info", "data": {"ok": true, "evals": {"ok": true, "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan", "dispatched": [{"node": "N4", "pane": "solar-harness:0.3", "dispatch_id": "graph-eval-sprint-20260521-headless-pane-agent-routing-replan-N4-20260521T225841Z", "instruction_file": "/Users/lisihao/.solar/harness/sprints/sprint-20260521-headless-pane-agent-routing-replan.N4-eval-dispatch.md"}], "skipped": []}, "ready": {"ok": true, "reconciled": [], "enqueue": {"ok": true, "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan", "batch": [], "blocked_prerequisites": [], "capability_enrichment": {}, "enqueued": [], "queued": [], "dry_run": false}, "drain": {"ok": true, "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan", "processed": 0, "results": []}}}}
+{"ts": "2026-05-21T22:59:03Z", "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan", "actor": "solar-autopilot", "event": "autopilot_dispatch_deferred_pane_busy", "severity": "warn", "data": {"target": "solar-harness:0.2", "type": "ready_for_builder"}}
+{"ts": "2026-05-21T22:59:23Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-21T23:01:43Z", "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan", "actor": "solar-autopilot", "event": "autopilot_workflow_route_normalized", "severity": "info", "data": {"route_role": "builder_main", "stage": "planning_complete", "reason": "planner_artifacts_and_task_graph_ready"}}
+{"ts": "2026-05-21T23:04:06Z", "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan", "actor": "solar-autopilot", "event": "autopilot_graph_enqueue_ready", "severity": "info", "data": {"ok": true, "evals": {"ok": true, "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan", "dispatched": [], "skipped": []}, "ready": {"ok": true, "reconciled": [], "enqueue": {"ok": true, "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan", "batch": [], "blocked_prerequisites": [], "capability_enrichment": {}, "enqueued": [], "queued": [], "dry_run": false}, "drain": {"ok": true, "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan", "processed": 0, "results": []}}}}
+{"ts": "2026-05-21T23:04:06Z", "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan", "actor": "solar-autopilot", "event": "autopilot_dispatch_deferred_pane_busy", "severity": "warn", "data": {"target": "solar-harness:0.2", "type": "ready_for_builder"}}
+{"ts": "2026-05-21T23:09:31Z", "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan", "actor": "solar-autopilot", "event": "autopilot_graph_enqueue_ready", "severity": "info", "data": {"ok": true, "evals": {"ok": true, "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan", "dispatched": [{"node": "N5", "pane": "solar-harness:0.3", "dispatch_id": "graph-eval-sprint-20260521-headless-pane-agent-routing-replan-N5-20260521T230909Z", "instruction_file": "/Users/lisihao/.solar/harness/sprints/sprint-20260521-headless-pane-agent-routing-replan.N5-eval-dispatch.md"}], "skipped": []}, "ready": {"ok": true, "reconciled": [], "enqueue": {"ok": true, "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan", "batch": [], "blocked_prerequisites": [], "capability_enrichment": {}, "enqueued": [], "queued": [], "dry_run": false}, "drain": {"ok": true, "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan", "processed": 0, "results": []}}}}
+{"ts": "2026-05-21T23:09:31Z", "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan", "actor": "solar-autopilot", "event": "autopilot_dispatch_deferred_pane_busy", "severity": "warn", "data": {"target": "solar-harness:0.2", "type": "ready_for_builder"}}
+{"ts": "2026-05-21T23:12:12Z", "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan", "actor": "solar-autopilot", "event": "autopilot_workflow_route_normalized", "severity": "info", "data": {"route_role": "none", "stage": "done", "reason": "terminal_status"}}
+{"ts": "2026-05-21T23:13:03Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-21T23:13:24Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "dispatch_suppressed", "by": "coordinator"}
+{"ts": "2026-05-21T23:13:46Z", "sid": "sprint-20260521-headless-pane-agent-routing-replan", "event": "handle_passed_completed", "by": "coordinator"}
+{"ts": "2026-05-21T23:13:46Z", "event": "accepted_artifact_exported", "source": "accepted-artifact-export", "path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260521-headless-pane-agent-routing-replan.accepted.md", "bytes": 29138, "source_hash": "391df2a11be711cfbf43b481971ef06c87333d58d27aef86af0e7663cc6f3a86"}
+{"ts": "2026-05-21T23:13:46Z", "event": "accepted_artifact_ingest_dispatched", "source": "accepted-artifact-export", "dispatch_file": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260521-headless-pane-agent-routing-replan.dispatch.md"}
+{"ts": "2026-05-21T23:13:55Z", "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan", "actor": "solar-autopilot", "event": "autopilot_queue_drop_terminal_sprint", "severity": "info", "data": {"target": "solar-harness:0.2", "type": "ready_for_builder", "status": "passed", "phase": "finalized"}}

@@ -1,9 +1,188 @@
 {
   "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan",
-  "status": "queued",
-  "phase": "task_graph_ready",
-  "handoff_to": "multi-task",
-  "target_role": "multi-task",
-  "updated_at": "2026-05-21T20:20:00Z",
-  "summary": "Ready for Mac mini solar-harness multi-task headless execution."
+  "status": "passed",
+  "phase": "finalized",
+  "handoff_to": "done",
+  "target_role": "done",
+  "updated_at": "2026-05-21T23:13:46Z",
+  "summary": "Planner replan complete: design.md, plan.md, task_graph.json (validated), planning.html registered. N4 reviewing, N5 pending.",
+  "id": "sprint-20260521-headless-pane-agent-routing-replan",
+  "history": [
+    {
+      "ts": "2026-05-21T20:23:03Z",
+      "event": "status_identity_repaired",
+      "by": "coordinator",
+      "note": "Recovered missing id/sprint_id from status filename so scanner can route the sprint."
+    },
+    {
+      "ts": "2026-05-21T20:23:25Z",
+      "event": "queued_unblocked",
+      "by": "coordinator",
+      "raw_extra": "{\"status_fields\":{\"phase\":\"spec\",\"handoff_to\":\"pm\",\"target_role\":\"pm\"},\"note\":\"Auto-promoted queued sprint after blocker reached terminal state.\"}}"
+    },
+    {
+      "ts": "2026-05-21T20:23:33Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "planner",
+      "stage": "prd_ready",
+      "reason": "pm_prd_ready"
+    },
+    {
+      "ts": "2026-05-21T22:35:56Z",
+      "event": "prd_schema_sections_repaired",
+      "by": "contract-patrol",
+      "note": "Added User Stories, Constraints, Open Questions, Planner Handoff sections after repeated schema gate failure and dispatch validation loop."
+    },
+    {
+      "ts": "2026-05-21T22:36:39Z",
+      "event": "autoresearch_optimizer_recorded",
+      "by": "coordinator",
+      "trigger_level": "recommended",
+      "recommended": true,
+      "role": "planner"
+    },
+    {
+      "ts": "2026-05-21T22:48:02Z",
+      "event": "autoresearch_optimizer_recorded",
+      "by": "coordinator",
+      "trigger_level": "recommended",
+      "recommended": true,
+      "role": "planner"
+    },
+    {
+      "ts": "2026-05-21T22:48:55Z",
+      "event": "checkpoint_rollback_for_retry",
+      "by": "contract-patrol",
+      "note": "Cleared stale coordinator checkpoint plus planner prompt/lease residual after dispatch false-negative; touched status to trigger coordinator retry."
+    },
+    {
+      "ts": "2026-05-21T22:50:49Z",
+      "event": "dispatch_verify_bugfix_loaded_retry",
+      "by": "contract-patrol",
+      "note": "Reloaded coordinator verifier fix for wrapped dispatch paths and Claude Code 2.x markers; cleared planner lease/prompt residual for retry."
+    },
+    {
+      "ts": "2026-05-21T22:52:14Z",
+      "event": "autoresearch_optimizer_recorded",
+      "by": "coordinator",
+      "trigger_level": "recommended",
+      "recommended": true,
+      "role": "planner"
+    },
+    {
+      "ts": "2026-05-21T22:52:43Z",
+      "event": "planner_pane_restarted_after_permission_mode_fix",
+      "by": "contract-patrol",
+      "note": "Fixed start-incarnation legacy permission-mode auto default, restarted planner pane, cleared lease/checkpoint, and requested dispatch retry."
+    },
+    {
+      "ts": "2026-05-21T22:57:58Z",
+      "event": "planner_graph_completed",
+      "by": "coordinator",
+      "raw_extra": "{\"status_fields\":{\"phase\":\"planning_complete\",\"handoff_to\":\"builder_main\",\"target_role\":\"builder_main\"},\"note\":\"Auto-promoted drafting sprint because planner artifacts and task_graph are complete.\"}}"
+    },
+    {
+      "ts": "2026-05-21T22:58:00Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "builder_main",
+      "stage": "planning_complete",
+      "reason": "planner_artifacts_and_task_graph_ready"
+    },
+    {
+      "ts": "2026-05-21T23:00:53Z",
+      "event": "planner_plan_completed",
+      "by": "planner",
+      "note": "Replan: produced design.md / expanded plan.md / enriched task_graph.json (sprint_id+gates+required_skills+estimated_cost) / planning.html registered. task_graph validates ok=true, node_count=5, errors=[]."
+    },
+    {
+      "ts": "2026-05-21T23:01:43Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "builder_main",
+      "stage": "planning_complete",
+      "reason": "planner_artifacts_and_task_graph_ready"
+    },
+    {
+      "ts": "2026-05-21T23:12:12Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "none",
+      "stage": "done",
+      "reason": "terminal_status"
+    },
+    {
+      "ts": "2026-05-21T23:13:03Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-05-21T23:13:03Z",
+      "event": "autoresearch_optimizer_recorded",
+      "by": "coordinator",
+      "trigger_level": "recommended",
+      "recommended": true,
+      "role": "planner"
+    },
+    {
+      "ts": "2026-05-21T23:13:46Z",
+      "event": "finalized",
+      "by": "coordinator"
+    }
+  ],
+  "round": 0,
+  "runtime_state_source": "activity_runtime",
+  "artifacts": {
+    "autoresearch_optimizer": {
+      "recorded_at": "2026-05-21T23:13:03Z",
+      "sid": "sprint-20260521-headless-pane-agent-routing-replan",
+      "role": "规划者",
+      "canonical_role": "planner",
+      "recommended": true,
+      "trigger_level": "recommended",
+      "reasons": [
+        "role:planner",
+        "telemetry:eval_json:missing"
+      ],
+      "telemetry": {
+        "status": "passed",
+        "phase": "completed",
+        "round": 0,
+        "eval_verdict": "",
+        "failed_conditions": [],
+        "error_count": 0,
+        "warning_count": 0
+      },
+      "quality_metrics": {
+        "trigger_level": "recommended",
+        "expected_effect": [
+          "reduce_dag_rework",
+          "harden_write_scope_and_stop_rules"
+        ],
+        "must_measure": [
+          "repair_round_delta",
+          "eval_failure_recurrence",
+          "evidence_gap_count"
+        ]
+      },
+      "execution_policy": {
+        "mode": "advisor_only_by_default",
+        "default_command": "dry_run",
+        "execute_requires": "--execute",
+        "replaces_builder": false
+      }
+    },
+    "planning_html": "sprints/sprint-20260521-headless-pane-agent-routing-replan.planning.html",
+    "plan": "sprints/sprint-20260521-headless-pane-agent-routing-replan.plan.md",
+    "design": "sprints/sprint-20260521-headless-pane-agent-routing-replan.design.md",
+    "task_graph": "sprints/sprint-20260521-headless-pane-agent-routing-replan.task_graph.json"
+  },
+  "knowledge_export_status": "exported",
+  "knowledge_export_path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260521-headless-pane-agent-routing-replan.accepted.md",
+  "knowledge_ingest_dispatch": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260521-headless-pane-agent-routing-replan.dispatch.md",
+  "knowledge_exported_at": "2026-05-21T23:13:46Z",
+  "knowledge_ingested_at": null,
+  "knowledge_export_error": null
 }

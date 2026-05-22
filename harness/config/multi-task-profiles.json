@@ -96,6 +96,24 @@
       ],
       "max_parallel": 1
     },
+    "antigravity-multimodal": {
+      "role": "builder",
+      "label": "Antigravity 多模态兜底",
+      "persona": "builder",
+      "backend": "command",
+      "model": "gemini-3.5-flash-high",
+      "approval_mode": "default",
+      "best_for": [
+        "multimodal",
+        "image-processing",
+        "vision",
+        "ocr",
+        "diagram-analysis",
+        "pdf-page-image"
+      ],
+      "command": "AGY_BIN=/Users/lisihao/.local/bin/agy PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/antigravity_multimodal_agent.py\"",
+      "max_parallel": 1
+    },
     "knowledge-extractor": {
       "role": "builder",
       "label": "知识库抽取器",

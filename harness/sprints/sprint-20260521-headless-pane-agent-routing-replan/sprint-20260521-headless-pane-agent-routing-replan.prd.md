@@ -142,3 +142,41 @@ Antigravity profile 必须具备：
 - Claude 成本过高，误路由会烧 token。
 - ThunderOMLX 局部缓存/乱码历史问题要求保守使用，不承担最终评审。
 - 多后端并行会增加安全面，必须限制 secret 输出和 write_scope。
+
+## 9. 用户故事 / User Stories
+
+- 作为 Solar-Harness 维护者，我希望每个 headless pane 能按任务类型选择合适后端，这样复杂工程、低成本批处理和并行实验不会全部挤到同一种 worker。
+- 作为 coordinator，我希望 profile 里显式记录 backend、model、cost、risk、parallelism 和 fallback，这样派单失败时可以安全换路由，而不是重复轰炸同一个 pane。
+- 作为 evaluator，我希望最终评审和高风险 gate 默认使用高质量 reviewer，这样 ThunderOMLX 或未完成 OAuth 的 Antigravity 不会误通过关键变更。
+- 作为 operator，我希望 status/monitor 展示 node、role、profile、backend、blocker 和 next action，这样能快速判断是队列未消费、pane 卡住、OAuth 未完成还是 schema 未通过。
+- 作为成本控制者，我希望知识抽取、批量总结、缓存 benchmark 默认走 ThunderOMLX 或低成本后端，这样 Claude token 不会被粗活消耗。
+
+## 10. 约束 / Constraints
+
+- 不打印、缓存或转发 API key、OAuth token、refresh token、authorization code。
+- Antigravity 在 `installed/auth_ok/model_list_available/smoke_ok` 全部通过之前只能显示为 `pending`，不得进入 production dispatch。
+- ThunderOMLX 只能承担低风险批处理、知识抽取、缓存/benchmark 粗活；不能作为唯一 evaluator 或架构 gate。
+- Claude Opus/Claude Code 需要限流，默认用于复杂架构、root cause、review gate 和高风险工程修复。
+- Codex 负责 PRD、DAG、执行协调、状态收口和跨工具 glue，不替代所有专用 worker。
+- 并行 DAG 必须带 write_scope 冲突保护；同一模块或同一 runtime 文件不能被多个节点同时写。
+- Mac mini 远端不可达或 SSH/OAuth 未完成时，必须把后端状态标为 `warn/pending`，不能假装通过。
+
+## 11. 开放问题 / Open Questions
+
+- OQ1: Antigravity CLI 在 Mac mini 上的 OAuth、model list 和 smoke 是否能稳定通过？如果不能，何时允许进入 dispatch 候选？
+- OQ2: Gemini CLI 迁移到 Antigravity 后，保留哪些 Gemini profile 作为 fallback，哪些应标 deprecated？
+- OQ3: ThunderOMLX 的并行度上限应按模型、SSD cache、内存压力还是任务类型计算？
+- OQ4: headless pane pool 是否需要按 backend 独立 lease namespace，避免 Claude pane、Codex job 和本地 worker 互相误占？
+- OQ5: dispatch validation 当前多次误报失败但 pane 实际收到任务，后续实现是否应改成 ACK 文件、pane output marker 或 activity log event？
+- OQ6: status renderer 是否需要区分 “worker 已接单但未写 artifact” 与 “dispatch 未送达” 两种状态？
+
+## 12. 架构交接 / Planner Handoff
+
+Planner 需要把本 PRD 转成可执行 plan 和 task_graph，至少覆盖：
+
+- N1: 读取现有 `multi-task-profiles.json`、runner、dispatcher、monitor/status renderer，画出现状路由图。
+- N2: 设计角色路由矩阵，包含 pm/planner/architect/builder/debugger/evaluator/knowledge-extractor/experimenter/google-ecosystem-builder。
+- N3: 设计 backend gate schema：Claude/Codex/Antigravity/Gemini/ThunderOMLX 的 readiness、cost、risk、fallback、parallelism。
+- N4: 设计 pane/headless pool lease 与 queue ACK 机制，特别处理 dispatch validation 误报、队列重复和 stale lease。
+- N5: 产出 `headless-agent-routing-replan.md`，包含已验证事实、用户输入假设、待验证项和后续 implementation DAG。
+- N6: 所有节点必须写 handoff，最终 evaluator 检查不得泄露 token，且不得把未验证 Antigravity 标为 production-ready。
