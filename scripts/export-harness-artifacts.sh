@@ -345,8 +345,10 @@ harness = Path(os.environ["REPO_HARNESS"])
 
 allowed_dirs = {
     "ADR",
+    "ai-influence-digest",
     "autopilot",
     "brain",
+    "chrome-extension-update",
     "config",
     "docker",
     "docs",
