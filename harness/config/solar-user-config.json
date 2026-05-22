@@ -1,21 +1,21 @@
 {
   "version": 1,
-  "updated_at": "2026-05-20T08:50:49Z",
+  "updated_at": "2026-05-22T00:59:37Z",
   "setup_complete": true,
   "user": {
     "display_name": "Solar-Harness",
     "timezone": "America/Toronto"
   },
   "paths": {
-    "knowledge_vault": "/Users/sihaoli/Knowledge",
-    "raw_dir": "/Users/sihaoli/Knowledge/_raw",
-    "harness_dir": "/Users/sihaoli/.solar/harness"
+    "knowledge_vault": "/Users/lisihao/Knowledge",
+    "raw_dir": "/Users/lisihao/Knowledge/_raw",
+    "harness_dir": "/Users/lisihao/.solar/harness"
   },
   "models": {
     "planner": "opus",
     "builder": "opus",
     "evaluator": "opus",
-    "lab_builder_matrix": "glm,glm,glm,thunderomlx",
+    "lab_builder_matrix": "glm,glm,glm,anthropic-sonnet",
     "pm": "opus"
   },
   "providers": {
@@ -31,7 +31,7 @@
   "mirage": {
     "enabled": true,
     "workspace_id": "solar-default",
-    "config_path": "/Users/sihaoli/.solar/harness/config/mirage.solar.yaml"
+    "config_path": "/Users/lisihao/.solar/harness/config/mirage.solar.yaml"
   },
   "apple_notes": {
     "enabled": true,

@@ -122,6 +122,15 @@ def clean_content(text: str) -> str:
     return text.strip() + "\n"
 
 
+def stable_digest(value: object) -> str:
+    data = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(data.encode("utf-8")).hexdigest()
+
+
+def normalize_capture_text(value: str) -> str:
+    return re.sub(r"\s+", " ", html.unescape(value or "")).strip()
+
+
 def yaml_scalar(value: str) -> str:
     value = value.replace("\\", "\\\\").replace('"', '\\"')
     return f'"{value}"'
@@ -271,24 +280,58 @@ def dispatch_pending_chatgpt(state: dict, limit: int = 4) -> list[dict]:
     return results
 
 
-def create_capture(title: str, source_url: str, content: str) -> Path:
+def create_capture(
+    title: str,
+    source_url: str,
+    content: str,
+    *,
+    metadata: dict | None = None,
+    capture_method: str = "",
+    content_hash: str = "",
+    selected_text: str = "",
+    canonical_url: str = "",
+    capture_schema_version: int = 1,
+) -> dict:
     WEB_CAPTURE_DIR.mkdir(parents=True, exist_ok=True)
+    state = load_state()
+    capture_hashes = state.setdefault("capture_hashes", {})
     title = title.strip() or "Untitled Capture"
     source_url = source_url.strip()
+    canonical_url = canonical_url.strip() or source_url
     body = clean_content(content)
+    digest = content_hash.strip() or stable_digest({
+        "kind": "web-capture",
+        "url": canonical_url or source_url,
+        "content": normalize_capture_text(body),
+    })
+    existing = capture_hashes.get(digest, {})
+    existing_path_raw = str(existing.get("path", "")) if isinstance(existing, dict) else str(existing or "")
+    existing_path = Path(existing_path_raw) if existing_path_raw else None
+    if existing_path and existing_path.exists():
+        existing["last_duplicate_at"] = utc_now()
+        existing["duplicate_count"] = int(existing.get("duplicate_count", 0) or 0) + 1
+        capture_hashes[digest] = existing
+        save_state(state)
+        return {"ok": True, "path": existing_path, "duplicate": True, "content_hash": digest}
     ts = utc_now()
     name = f"{safe_ts()}-{slugify(title)}.md"
     path = WEB_CAPTURE_DIR / name
     md = [
         "---",
         "source: web-capture",
+        f"capture_schema_version: {int(capture_schema_version or 1)}",
         f"title: {yaml_scalar(title)}",
         f"captured_at: {ts}",
         "visibility: internal",
         "tags: [web-capture, raw-ingest]",
+        f"content_hash: {yaml_scalar(digest)}",
     ]
     if source_url:
         md.append(f"source_url: {yaml_scalar(source_url)}")
+    if canonical_url and canonical_url != source_url:
+        md.append(f"canonical_url: {yaml_scalar(canonical_url)}")
+    if capture_method:
+        md.append(f"capture_method: {yaml_scalar(capture_method)}")
     md.extend(
         [
             "---",
@@ -299,9 +342,39 @@ def create_capture(title: str, source_url: str, content: str) -> Path:
     )
     if source_url:
         md.extend([f"Source: {source_url}", ""])
+    if selected_text.strip():
+        md.extend(["## Selected Text", "", clean_content(selected_text)])
+    if metadata:
+        md.extend(["## Capture Metadata", "", "```json", json.dumps(metadata, ensure_ascii=False, indent=2), "```", ""])
     md.extend(["## Captured Content", "", body])
     path.write_text("\n".join(md), encoding="utf-8")
-    return path
+    capture_hashes[digest] = {
+        "path": str(path),
+        "source_url": source_url,
+        "canonical_url": canonical_url,
+        "title": title,
+        "created_at": ts,
+        "duplicate_count": 0,
+    }
+    save_state(state)
+    return {"ok": True, "path": path, "duplicate": False, "content_hash": digest}
+
+
+def chatgpt_payload_digest(payload: dict) -> str:
+    messages = []
+    for item in payload.get("messages") or []:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "").strip().lower()
+        text = normalize_capture_text(str(item.get("text") or item.get("content") or ""))
+        if role and text:
+            messages.append({"role": role, "text": text})
+    return str(payload.get("content_hash") or "").strip() or stable_digest({
+        "kind": "chatgpt-capture",
+        "conversation_id": str(payload.get("conversation_id") or ""),
+        "url": str(payload.get("canonical_url") or payload.get("url") or ""),
+        "messages": messages,
+    })
 
 
 def import_chatgpt_capture(payload: dict) -> dict:
@@ -310,6 +383,27 @@ def import_chatgpt_capture(payload: dict) -> dict:
     messages = payload.get("messages")
     if not isinstance(messages, list) or not messages:
         return {"ok": False, "error": "messages is required"}
+    state = load_state()
+    chatgpt_hashes = state.setdefault("chatgpt_hashes", {})
+    digest = chatgpt_payload_digest(payload)
+    existing = chatgpt_hashes.get(digest, {})
+    existing_out_raw = str(existing.get("out_dir", "")) if isinstance(existing, dict) else ""
+    existing_out = Path(existing_out_raw) if existing_out_raw else None
+    if existing_out and existing_out.exists():
+        existing["last_duplicate_at"] = utc_now()
+        existing["duplicate_count"] = int(existing.get("duplicate_count", 0) or 0) + 1
+        chatgpt_hashes[digest] = existing
+        save_state(state)
+        return {
+            "ok": True,
+            "duplicate": True,
+            "content_hash": digest,
+            "out_dir": str(existing_out),
+            "manifest": existing.get("manifest", ""),
+            "dispatch_output": existing.get("dispatch_output", ""),
+            "source_inbox": existing.get("source_inbox", ""),
+        }
+    payload = {**payload, "content_hash": digest}
     CHATGPT_INBOX_DIR.mkdir(parents=True, exist_ok=True)
     title = str(payload.get("title") or "ChatGPT Browser Capture")
     source_path = CHATGPT_INBOX_DIR / f"{safe_ts()}-{slugify(title)}.json"
@@ -342,6 +436,20 @@ def import_chatgpt_capture(payload: dict) -> dict:
     if dispatch_file:
         data["run_dispatch"] = run_wiki_dispatch(dispatch_file, lab_builder=1)
     data["source_inbox"] = str(source_path)
+    data["content_hash"] = digest
+    data["duplicate"] = False
+    chatgpt_hashes[digest] = {
+        "source_inbox": str(source_path),
+        "out_dir": str(data.get("out_dir", "")),
+        "manifest": str(data.get("manifest", "")),
+        "dispatch_output": str(data.get("dispatch_output", "")),
+        "title": title,
+        "url": str(payload.get("url") or ""),
+        "conversation_id": str(payload.get("conversation_id") or ""),
+        "created_at": utc_now(),
+        "duplicate_count": 0,
+    }
+    save_state(state)
     return data
 
 
@@ -875,6 +983,10 @@ class Handler(BaseHTTPRequestHandler):
                 "last_dispatch_at": state.get("last_dispatch_at", ""),
                 "last_upload_backfill_at": state.get("last_upload_backfill_at", ""),
                 "last_error": state.get("last_error", ""),
+                "dedup": {
+                    "web_hashes": len(state.get("capture_hashes", {})),
+                    "chatgpt_hashes": len(state.get("chatgpt_hashes", {})),
+                },
                 "upload_backfills": state.get("upload_backfills", {}),
                 "solar_kb": _solar_kb_status(),
                 "obsidian_sync": _obsidian_sync_status(),
@@ -904,8 +1016,44 @@ class Handler(BaseHTTPRequestHandler):
             if not content.strip():
                 self._json(400, {"ok": False, "error": "content is required"})
                 return
-            path = create_capture(title, source_url, content)
-            self._json(200, {"ok": True, "path": str(path), "message": "saved; auto-ingest scheduler will pick it up"})
+            result = create_capture(title, source_url, content)
+            self._json(200, {
+                "ok": True,
+                "path": str(result.get("path", "")),
+                "duplicate": bool(result.get("duplicate")),
+                "content_hash": result.get("content_hash", ""),
+                "message": "saved; auto-ingest scheduler will pick it up" if not result.get("duplicate") else "duplicate capture; existing file reused",
+            })
+        elif self.path == "/capture-json":
+            length = int(self.headers.get("Content-Length", "0") or "0")
+            raw = self.rfile.read(length).decode("utf-8", errors="replace")
+            try:
+                payload = json.loads(raw)
+            except Exception as exc:
+                self._json(400, {"ok": False, "error": f"invalid json: {exc}"})
+                return
+            content = str(payload.get("content") or "")
+            if not content.strip():
+                self._json(400, {"ok": False, "error": "content is required"})
+                return
+            result = create_capture(
+                str(payload.get("title") or ""),
+                str(payload.get("url") or payload.get("source_url") or ""),
+                content,
+                metadata=payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {},
+                capture_method=str(payload.get("capture_method") or ""),
+                content_hash=str(payload.get("content_hash") or ""),
+                selected_text=str(payload.get("selected_text") or ""),
+                canonical_url=str(payload.get("canonical_url") or ""),
+                capture_schema_version=int(payload.get("capture_schema_version") or 2),
+            )
+            self._json(200, {
+                "ok": True,
+                "path": str(result.get("path", "")),
+                "duplicate": bool(result.get("duplicate")),
+                "content_hash": result.get("content_hash", ""),
+                "message": "saved; auto-ingest scheduler will pick it up" if not result.get("duplicate") else "duplicate capture; existing file reused",
+            })
         elif self.path == "/chatgpt-import":
             length = int(self.headers.get("Content-Length", "0") or "0")
             raw = self.rfile.read(length).decode("utf-8", errors="replace")

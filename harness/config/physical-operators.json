@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-05-22T01:10:00Z",
+  "updated_at": "2026-05-22T00:34:00Z",
   "operators": {
     "mini-claude-opus-planner": {
       "display_name": "Mac mini Claude Opus planner",
@@ -268,7 +268,7 @@
       "plane": "headless",
       "owner_host": "lisihao@100.122.223.55",
       "pane": "solar-harness-multi-task:*",
-      "profile": "antigravity-multimodal",
+      "profile": "gemini-builder",
       "role": "builder",
       "persona": "builder",
       "provider": "google",
@@ -332,9 +332,7 @@
         "ui",
         "mockup",
         "diagram",
-        "ocr",
-        "visual-gap",
-        "pdf-page-image"
+        "ocr"
       ],
       "avoid_for": [
         "bulk-text-extraction",
@@ -344,7 +342,7 @@
       "latency_tier": "low",
       "context_tier": "high",
       "max_concurrency": 1,
-      "fallback_profile": "antigravity-multimodal",
+      "fallback_profile": "builder",
       "last_smoke_at": "2026-05-22T00:34:00Z",
       "last_smoke_evidence": "agy --add-dir real Photos Library JPEG described beach/ocean scene",
       "command": "AGY_BIN=/Users/lisihao/.local/bin/agy PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/antigravity_multimodal_agent.py\""

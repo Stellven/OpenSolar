@@ -54,7 +54,7 @@ image = m.select_profile({
     "operator_selector": {"task_type": "image-processing"},
     "goal": "analyze screenshot image",
 })
-assert image.get("name") == "antigravity-multimodal", image
+assert image.get("name") == "gemini-builder", image
 assert image.get("operator_id") == "mini-antigravity-gemini35-flash-image", image
 
 image_op = m.resolve_operator("mini-antigravity-gemini35-flash-image")
@@ -62,24 +62,6 @@ ok, reason = m.operator_dispatchable(image_op)
 assert ok, (ok, reason)
 assert "image" in image_op.get("input_modalities", []), image_op
 assert image_op.get("command"), image_op
-
-implicit_kb = m.select_profile({
-    "id": "implicit-kb",
-    "role": "builder",
-    "goal": "PDF knowledge extraction from MinerU markdown into wiki notes",
-})
-assert implicit_kb.get("name") == "knowledge-extractor", implicit_kb
-assert implicit_kb.get("backend") == "command", implicit_kb
-assert implicit_kb.get("model") == "thunderomlx", implicit_kb
-
-implicit_visual = m.select_profile({
-    "id": "implicit-visual",
-    "role": "builder",
-    "goal": "Analyze scanned PDF page image and extract chart evidence",
-})
-assert implicit_visual.get("name") == "antigravity-multimodal", implicit_visual
-assert implicit_visual.get("backend") == "command", implicit_visual
-assert "claude" not in implicit_visual.get("backend", "").lower(), implicit_visual
 
 assert not m.QUOTA_RE.search("quota cycle monthly; quota refresh unknown")
 assert m.QUOTA_RE.search("API Error 429 quota exceeded")

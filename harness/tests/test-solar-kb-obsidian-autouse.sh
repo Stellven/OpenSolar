@@ -175,18 +175,55 @@ t7_capture_server_status() {
     python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:${TEST_PORT}/healthz', timeout=0.5)" >/dev/null 2>&1 && break
     sleep 0.15
   done
-  local health_ok=false status_ok=false
+  local health_ok=false status_ok=false capture_ok=false duplicate_ok=false
   python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:${TEST_PORT}/healthz', timeout=1)" >/dev/null 2>&1 && health_ok=true
+  local capture_json duplicate_json
+  capture_json=$(python3 - <<PY 2>/dev/null || echo "{}"
+import json, urllib.request
+payload = {
+  "title": "Solar Web Capture Dedup",
+  "url": "https://example.test/solar",
+  "canonical_url": "https://example.test/solar",
+  "capture_schema_version": 2,
+  "capture_method": "readable-dom",
+  "content_hash": "test-web-capture-hash",
+  "metadata": {"site_name": "Example"},
+  "content": "Solar capture server should preserve metadata and deduplicate web captures."
+}
+req = urllib.request.Request("http://127.0.0.1:${TEST_PORT}/capture-json", data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"}, method="POST")
+print(urllib.request.urlopen(req, timeout=2).read().decode())
+PY
+)
+  duplicate_json=$(python3 - <<PY 2>/dev/null || echo "{}"
+import json, urllib.request
+payload = {
+  "title": "Solar Web Capture Dedup",
+  "url": "https://example.test/solar",
+  "canonical_url": "https://example.test/solar",
+  "capture_schema_version": 2,
+  "capture_method": "readable-dom",
+  "content_hash": "test-web-capture-hash",
+  "metadata": {"site_name": "Example"},
+  "content": "Solar capture server should preserve metadata and deduplicate web captures."
+}
+req = urllib.request.Request("http://127.0.0.1:${TEST_PORT}/capture-json", data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"}, method="POST")
+print(urllib.request.urlopen(req, timeout=2).read().decode())
+PY
+)
+  python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d['ok'] and not d.get('duplicate')" "$capture_json" 2>/dev/null && capture_ok=true
+  python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d['ok'] and d.get('duplicate')" "$duplicate_json" 2>/dev/null && duplicate_ok=true
   local status_json
   status_json=$(python3 -c "
 import json,urllib.request
 with urllib.request.urlopen('http://127.0.0.1:${TEST_PORT}/status', timeout=2) as r:
     print(r.read().decode())
 " 2>/dev/null || echo "{}")
-  python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert 'solar_kb' in d and 'obsidian_sync' in d" "$status_json" 2>/dev/null && status_ok=true
+  python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert 'solar_kb' in d and 'obsidian_sync' in d and 'dedup' in d" "$status_json" 2>/dev/null && status_ok=true
   kill "$CAPTURE_PID" 2>/dev/null; CAPTURE_PID=""
   $health_ok && ok "T7 A5 capture server /healthz: ok" || fail "T7 A5 capture server /healthz: failed"
-  $status_ok && ok "T7 A5 capture server /status: solar_kb+obsidian_sync present" || fail "T7 A5 /status missing solar_kb/obsidian_sync: $status_json"
+  $capture_ok && ok "T7 A5 /capture-json: structured web capture saved" || fail "T7 A5 /capture-json failed: $capture_json"
+  $duplicate_ok && ok "T7 A5 /capture-json: duplicate content reused" || fail "T7 A5 /capture-json dedup failed: $duplicate_json"
+  $status_ok && ok "T7 A5 capture server /status: solar_kb+obsidian_sync+dedup present" || fail "T7 A5 /status missing fields: $status_json"
 }
 
 # ── T8 — A6 hook killswitch ───────────────────────────────────────────────────

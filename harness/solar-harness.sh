@@ -3733,7 +3733,7 @@ PY
     echo "  $0 workflow-guard route <sid> [--json]  PM→Planner→DAG Builder 门禁判定"
     echo "  $0 graph-dispatch [dispatch-ready|drain-queue]  DAG 节点级 pane 派发"
     echo "  $0 mirage [search|doctor|workspace|mounts|exec|provision]  Mirage 统一虚拟文件系统"
-    echo "  $0 wiki [install|status|export-sprint|update|query|ingest|chatgpt-import|vault-status|lint|rebuild|export-graph|colorize|history|run-dispatch|dispatch-watch|dispatch-maintenance|import-solar-db|capture-server|audit-uploads|backfill-uploads|quality-gate|reingest-quarantine|reingest-scheduler|qmd-status|qmd-repair|qmd-search|qmd-update|qmd-mcp|qmd-embed|help]  Obsidian Wiki 集成"
+    echo "  $0 wiki [install|status|export-sprint|update|query|ingest|chatgpt-import|vault-status|lint|rebuild|export-graph|colorize|history|run-dispatch|dispatch-watch|dispatch-maintenance|import-solar-db|capture-server|audit-uploads|backfill-uploads|quality-gate|reingest-quarantine|reingest-scheduler|qmd-status|qmd-repair|qmd-search|qmd-update|qmd-mcp|qmd-embed|ai-influence-digest|help]  Obsidian Wiki 集成"
     ;;
   mirage)
     # Mirage unified virtual filesystem — sprint-20260508-mirage-unified-vfs
@@ -4365,6 +4365,140 @@ EOF
         echo "  $0 wiki quality-gate --apply --json"
         echo "  $0 wiki reingest-quarantine --limit 8 --json"
         echo "  $0 wiki reingest-scheduler start 60"
+        ;;
+      ai-influence-digest)
+        # sprint-20260522-ai-influence-digest-scan N5: AI Influence Digest CLI
+        _ai_digest_script="$HARNESS_DIR/scripts/ai_influence_daily.py"
+        _ai_digest_accounts="${HARNESS_DIR}/ai-influence-digest/references/accounts_extended.txt"
+        _ai_digest_state_dir="$HARNESS_DIR/state/ai-influence-digest"
+        _ai_digest_raw_dir="$HOME/Knowledge/_raw/ai-influence-daily-digest"
+        _ai_digest_plist="$HOME/Library/LaunchAgents/com.solar.ai-influence-digest.plist"
+        _ai_digest_label="com.solar.ai-influence-digest"
+        _ai_digest_action="${1:-help}"; shift || true
+        case "$_ai_digest_action" in
+          run)
+            mkdir -p "$_ai_digest_state_dir" "$_ai_digest_raw_dir"
+            python3 "$_ai_digest_script" \
+              --accounts "$_ai_digest_accounts" \
+              --state-dir "$_ai_digest_state_dir" \
+              --raw-dir "$_ai_digest_raw_dir" \
+              "$@"
+            ;;
+          status)
+            python3 "$_ai_digest_script" \
+              --accounts "$_ai_digest_accounts" \
+              --state-dir "$_ai_digest_state_dir" \
+              status
+            ;;
+          doctor)
+            python3 "$_ai_digest_script" \
+              --accounts "$_ai_digest_accounts" \
+              --state-dir "$_ai_digest_state_dir" \
+              doctor
+            ;;
+          send-test)
+            # Run with dry-run in ISOLATED temp dirs — never writes production raw/state
+            # unless user explicitly passes --raw-dir / --state-dir.
+            _send_test_tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/ai-digest-send-test.XXXXXX")"
+            _send_test_raw_dir="$_send_test_tmpdir/raw"
+            _send_test_state_dir="$_send_test_tmpdir/state"
+            mkdir -p "$_send_test_raw_dir" "$_send_test_state_dir"
+            _send_test_args=()
+            # If user did not pass --raw-dir, inject isolated one
+            if ! printf ' %s ' "$*" | grep -q -- '--raw-dir'; then
+              _send_test_args+=(--raw-dir "$_send_test_raw_dir")
+            fi
+            # If user did not pass --state-dir, inject isolated one
+            if ! printf ' %s ' "$*" | grep -q -- '--state-dir'; then
+              _send_test_args+=(--state-dir "$_send_test_state_dir")
+            fi
+            python3 "$_ai_digest_script" \
+              --accounts "$_ai_digest_accounts" \
+              --dry-run \
+              "${_send_test_args[@]}" \
+              "$@" \
+              run
+            _st_rc=$?
+            echo "send-test isolated raw: $_send_test_raw_dir" >&2
+            echo "send-test isolated state: $_send_test_state_dir" >&2
+            exit $_st_rc
+            ;;
+          schedule)
+            _sched_act="${1:-status}"; shift || true
+            case "$_sched_act" in
+              start)
+                if [[ ! -f "$_ai_digest_plist" ]]; then
+                  mkdir -p "$(dirname "$_ai_digest_plist")"
+                  cat > "$_ai_digest_plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>${_ai_digest_label}</string>
+  <key>ProgramArguments</key><array>
+    <string>/opt/homebrew/bin/bash</string>
+    <string>${HARNESS_DIR}/solar-harness.sh</string>
+    <string>wiki</string>
+    <string>ai-influence-digest</string>
+    <string>run</string>
+  </array>
+  <key>StartCalendarInterval</key><dict>
+    <key>Hour</key><integer>7</integer>
+    <key>Minute</key><integer>17</integer>
+  </dict>
+  <key>StandardOutPath</key><string>${HARNESS_DIR}/run/ai-influence-digest.log</string>
+  <key>StandardErrorPath</key><string>${HARNESS_DIR}/run/ai-influence-digest.log</string>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+</dict>
+</plist>
+PLIST
+                fi
+                launchctl bootout "gui/$(id -u)" "$_ai_digest_plist" >/dev/null 2>&1 || true
+                launchctl bootstrap "gui/$(id -u)" "$_ai_digest_plist"
+                ok "AI Influence Digest scheduler loaded ($_ai_digest_label, daily 07:17)"
+                ;;
+              stop)
+                launchctl bootout "gui/$(id -u)" "$_ai_digest_plist" >/dev/null 2>&1 || true
+                ok "AI Influence Digest scheduler stopped ($_ai_digest_label)"
+                ;;
+              status)
+                if launchctl print "gui/$(id -u)/$_ai_digest_label" >/dev/null 2>&1; then
+                  ok "AI Influence Digest scheduler loaded ($_ai_digest_label, daily 07:17)"
+                else
+                  warn "AI Influence Digest scheduler not loaded"
+                fi
+                if [[ -f "$_ai_digest_plist" ]]; then
+                  echo "  plist: $_ai_digest_plist"
+                else
+                  echo "  plist: not created yet (run 'schedule start')"
+                fi
+                ;;
+              *)
+                err "Usage: $0 wiki ai-influence-digest schedule [start|stop|status]"
+                exit 1
+                ;;
+            esac
+            ;;
+          help|--help|-h|"")
+            echo "Solar Harness Wiki — AI Influence Daily Digest"
+            echo ""
+            echo "Usage:"
+            echo "  $0 wiki ai-influence-digest run [--date YYYY-MM-DD] [--dry-run]"
+            echo "  $0 wiki ai-influence-digest status"
+            echo "  $0 wiki ai-influence-digest doctor"
+            echo "  $0 wiki ai-influence-digest send-test [--date YYYY-MM-DD]"
+            echo "  $0 wiki ai-influence-digest schedule [start|stop|status]"
+            echo ""
+            echo "Schedule: daily at 07:17 local time. Disabled by default; use 'schedule start' to enable."
+            ;;
+          *)
+            err "Unknown ai-influence-digest action: $_ai_digest_action"
+            echo "Run '$0 wiki ai-influence-digest help' for usage." >&2
+            exit 1
+            ;;
+        esac
         ;;
       *)
         err "Unknown wiki subcommand: $_wiki_subcmd"
