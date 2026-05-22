@@ -225,3 +225,6 @@
 {"ts": "2026-05-21T23:13:24Z", "sprint_id": "sprint-20260511-managed-agent-runtime-foundation", "lesson": "Sprint PASS (11 Done 一次过)", "source": "eval_pass", "confidence": 0.5, "tags": ["PASS"]}
 {"ts": "2026-05-22T06:40:05Z", "sprint_id": "sprint-20260511-managed-agent-runtime-foundation", "lesson": "Sprint PASS (11 Done 一次过)", "source": "eval_pass", "confidence": 0.5, "tags": ["PASS"]}
 {"ts": "2026-05-22T08:40:02Z", "sprint_id": "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s01-requirements", "lesson": "Sprint PASS (10 Done 一次过)", "source": "eval_pass", "confidence": 0.5, "tags": ["PASS"]}
+{"ts": "2026-05-22T09:08:12Z", "sprint_id": "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s02-architecture", "lesson": "Sprint PASS (10 Done 一次过)", "source": "eval_pass", "confidence": 0.5, "tags": ["PASS"]}
+{"ts": "2026-05-22T09:22:45Z", "sprint_id": "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s02-architecture", "lesson": "Sprint PASS (10 Done 一次过)", "source": "eval_pass", "confidence": 0.5, "tags": ["PASS"]}
+{"ts": "2026-05-22T10:42:17Z", "sprint_id": "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui", "lesson": "Sprint PASS (15 Done 一次过)", "source": "eval_pass", "confidence": 0.5, "tags": ["PASS"]}

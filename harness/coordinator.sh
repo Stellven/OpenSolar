@@ -3596,7 +3596,14 @@ def artifact_exists(item: str) -> bool:
     p = pathlib.Path(str(item))
     if not p.is_absolute():
         p = harness_dir / p
-    return p.is_file() and p.stat().st_size > 0
+    if p.is_file():
+        return p.stat().st_size > 0
+    if p.is_dir():
+        try:
+            return any(child.is_file() and child.stat().st_size > 0 for child in p.rglob("*"))
+        except OSError:
+            return False
+    return False
 
 for node in nodes:
     node_id = str(node.get("id") or "")
