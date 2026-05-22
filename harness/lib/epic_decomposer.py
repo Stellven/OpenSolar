@@ -370,24 +370,55 @@ status: `{epic_meta['status']}`
 
 
 def child_passed(sid: str) -> bool:
-    status = {}
-    path = SPRINTS_DIR / f"{sid}.status.json"
-    if path.exists():
-        try:
-            status = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            status = {}
+    status = child_status(sid)
     return str(status.get("status", "")).lower() in {"passed", "completed", "eval_passed"}
 
 
 def child_status(sid: str) -> dict[str, Any]:
     path = SPRINTS_DIR / f"{sid}.status.json"
+    status: dict[str, Any] = {}
     if not path.exists():
-        return {}
+        return _child_status_from_graph(sid, status)
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        status = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
-        return {}
+        status = {}
+    if str(status.get("status") or "").lower() not in {"passed", "completed", "eval_passed"}:
+        status = _child_status_from_graph(sid, status)
+    return status
+
+
+def _child_status_from_graph(sid: str, fallback: dict[str, Any]) -> dict[str, Any]:
+    """Use child task_graph as source of truth when legacy status drifted."""
+    graph_path = SPRINTS_DIR / f"{sid}.task_graph.json"
+    if not graph_path.exists():
+        return fallback
+    try:
+        from graph_scheduler import parent_ready_check, sync_status_cache_from_graph  # noqa: WPS433
+
+        graph = json.loads(graph_path.read_text(encoding="utf-8"))
+        parent = parent_ready_check(graph)
+        if not parent.get("ready"):
+            return fallback
+        sync = sync_status_cache_from_graph(
+            graph,
+            graph_path,
+            actor="epic_decomposer",
+            event="child_graph_parent_ready_status_sync",
+        )
+        if isinstance(sync.get("status"), dict):
+            return sync["status"]
+        return {
+            **fallback,
+            "id": sid,
+            "sprint_id": sid,
+            "status": "passed",
+            "phase": "completed",
+            "graph_parent_ready": parent,
+            "status_sync": sync,
+        }
+    except Exception:
+        return fallback
 
 
 def sync_graph_from_children(graph: dict[str, Any]) -> bool:

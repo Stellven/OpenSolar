@@ -52,6 +52,97 @@ def save_graph(path: str | Path, graph: dict[str, Any]) -> None:
     os.replace(tmp, p)
 
 
+def _sprint_id_for_graph(graph: dict[str, Any], graph_path: str | Path | None = None) -> str:
+    sid = str(graph.get("sprint_id") or "").strip()
+    if sid:
+        return sid
+    if graph_path:
+        return Path(graph_path).name.removesuffix(".task_graph.json")
+    return ""
+
+
+def _status_path_for_graph(graph: dict[str, Any], graph_path: str | Path | None = None) -> Path:
+    sid = _sprint_id_for_graph(graph, graph_path)
+    if graph_path:
+        return Path(graph_path).expanduser().parent / f"{sid}.status.json"
+    return SPRINTS_DIR / f"{sid}.status.json"
+
+
+def sync_status_cache_from_graph(
+    graph: dict[str, Any],
+    graph_path: str | Path | None = None,
+    *,
+    actor: str = "graph_scheduler",
+    event: str = "graph_parent_ready_passed",
+) -> dict[str, Any]:
+    """Project a completed task_graph into the legacy sprint status cache.
+
+    `task_graph.json` is the scheduler source of truth, while
+    `status.json` is a compatibility projection used by epic activation,
+    status UI, exports, and old monitors. Keeping this projection in the same
+    write path as graph closeout prevents a passed DAG from looking active.
+    """
+    parent = parent_ready_check(graph)
+    sid = _sprint_id_for_graph(graph, graph_path)
+    status_path = _status_path_for_graph(graph, graph_path)
+    result: dict[str, Any] = {
+        "ok": True,
+        "updated": False,
+        "sprint_id": sid,
+        "status_path": str(status_path),
+        "parent": parent,
+    }
+    if not parent.get("ready"):
+        result["reason"] = "parent_not_ready"
+        return result
+    if not sid:
+        result.update({"ok": False, "reason": "missing_sprint_id"})
+        return result
+    if not status_path.exists():
+        result["reason"] = "status_missing"
+        return result
+    try:
+        current = json.loads(status_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        result.update({"ok": False, "reason": "status_corrupt", "error": str(exc)})
+        return result
+
+    already_passed = str(current.get("status") or "").lower() == "passed"
+    already_closed = not current.get("active_node") and str(current.get("stage") or "").lower() in {
+        "completed",
+        "done",
+        "",
+    }
+    if already_passed and already_closed and (current.get("graph_parent_ready") or {}).get("ready") is True:
+        result["reason"] = "already_synced"
+        return result
+
+    try:
+        from runtime_status import transition_status  # noqa: WPS433
+
+        updated, message = transition_status(
+            status_path,
+            "passed",
+            event,
+            actor,
+            extra={
+                "graph_sync": True,
+                "graph_path": str(graph_path or ""),
+                "status_fields": {
+                    "phase": "completed",
+                    "stage": "completed",
+                    "active_node": None,
+                    "graph_parent_ready": parent,
+                    "task_graph_status": "passed",
+                },
+            },
+        )
+        result.update({"updated": True, "message": message, "status": updated})
+    except Exception as exc:
+        result.update({"ok": False, "reason": "transition_failed", "error": str(exc)})
+    return result
+
+
 def _source_text_for_graph(graph_path: str | Path | None, explicit_source: str | Path | None = None) -> str:
     paths: list[Path] = []
     if explicit_source:
@@ -1150,6 +1241,11 @@ def main() -> int:
             result = mark_node_result(graph, args.node, args.status, note=args.note)
             if args.in_place:
                 save_graph(args.graph, graph)
+                result["status_sync"] = sync_status_cache_from_graph(
+                    graph,
+                    args.graph,
+                    event=f"graph_mark_{args.node}_{args.status}",
+                )
             print(json.dumps(result, ensure_ascii=False))
 
         elif args.cmd == "parent-check":
@@ -1160,6 +1256,12 @@ def main() -> int:
             result = doctor_graph(graph, repair=args.repair)
             if args.in_place and result.get("repaired"):
                 save_graph(args.graph, graph)
+            if args.in_place and args.repair:
+                result["status_sync"] = sync_status_cache_from_graph(
+                    graph,
+                    args.graph,
+                    event="graph_doctor_repair_sync",
+                )
             print(json.dumps(result, ensure_ascii=False))
 
         elif args.cmd == "enqueue-ready":

@@ -21,6 +21,16 @@ _QUEUE_DIR="${HARNESS_DIR:-$HOME/.solar/harness}/run/queue"
 
 _queue_file() { echo "${_QUEUE_DIR}/${1}.jsonl"; }
 
+_queue_cleanup_lock_if_empty() {
+    local sid="${1:?_queue_cleanup_lock_if_empty: sid required}"
+    local qf depth
+    qf=$(_queue_file "$sid")
+    [[ -f "${qf}.lock" ]] || return 0
+    depth=$(queue_depth "$sid" 2>/dev/null || echo 1)
+    [[ "$depth" == "0" ]] || return 0
+    rm -f "${qf}.lock" 2>/dev/null || true
+}
+
 # ── queue_enqueue ─────────────────────────────────────────────────────────────
 queue_enqueue() {
     local sid="${1:?queue_enqueue: sid required}"
@@ -231,7 +241,8 @@ with open(lock_path, 'a') as lf:
         print(changed)
     finally:
         fcntl.flock(lf, fcntl.LOCK_UN)
-" "$qf" "$reason" 2>/dev/null || echo 0
+	" "$qf" "$reason" 2>/dev/null || echo 0
+    _queue_cleanup_lock_if_empty "$sid"
 }
 
 # ── queue_consume_intent_prefix ───────────────────────────────────────────────
@@ -287,7 +298,8 @@ with open(lock_path, 'a') as lf:
         print(changed)
     finally:
         fcntl.flock(lf, fcntl.LOCK_UN)
-" "$qf" "$prefix" "$reason" 2>/dev/null || echo 0
+	" "$qf" "$prefix" "$reason" 2>/dev/null || echo 0
+    _queue_cleanup_lock_if_empty "$sid"
 }
 
 # ── queue_archive_consumed_terminal ──────────────────────────────────────────
