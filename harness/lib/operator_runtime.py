@@ -19,6 +19,8 @@ HOME = Path.home()
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
 OPERATOR_LEASE_DIR = HARNESS_DIR / "run" / "operator-leases"
 OPERATOR_STATUS_DIR = HARNESS_DIR / "run" / "operator-status"
+OPERATOR_INBOX_DIR = HARNESS_DIR / "run" / "operator-inbox"
+OPERATOR_PERSONAS_DIR = HARNESS_DIR / "personas"
 PHYSICAL_OPERATORS_PATH = Path(os.environ.get("SOLAR_MULTI_TASK_OPERATORS", HARNESS_DIR / "config" / "physical-operators.json"))
 
 # Valid runtime states
@@ -41,6 +43,12 @@ def _now() -> str:
 def _ensure_dirs() -> None:
     OPERATOR_LEASE_DIR.mkdir(parents=True, exist_ok=True)
     OPERATOR_STATUS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _ensure_inbox_dir(operator_id: str) -> Path:
+    inbox = OPERATOR_INBOX_DIR / operator_id
+    inbox.mkdir(parents=True, exist_ok=True)
+    return inbox
 
 
 # ── Registry Access ───────────────────────────────────────────────────────────
@@ -299,6 +307,103 @@ def get_operator_runtime_state(operator_id: str) -> str:
     return "idle"
 
 
+# ── Submit ───────────────────────────────────────────────────────────────────
+
+# States that prevent task submission
+_NON_DISPATCHABLE_STATES = {"disabled", "leased", "running", "quota_exhausted", "auth_expired"}
+
+# Required keys in a task envelope
+_REQUIRED_ENVELOPE_KEYS = {"task_id", "sprint_id", "node_id", "operator_id", "task_type", "objective"}
+
+_DEFAULT_LEASE_TTL = 3600
+
+
+def submit(task_envelope: Dict[str, Any]) -> Dict[str, Any]:
+    """Validates a task, checks operator dispatchability, acquires a lease,
+    and writes the task envelope to the operator's inbox.
+
+    Args:
+        task_envelope: Must contain task_id, sprint_id, node_id, operator_id,
+            task_type, and objective. Optional: lease_ttl_seconds.
+
+    Returns:
+        dict with task_id, operator_id, lease_id, inbox_path, status, submitted_at.
+
+    Raises:
+        ValueError: Malformed envelope or unknown operator.
+        RuntimeError: Operator not dispatchable (disabled/leased/running/
+            quota_exhausted/auth_expired) or missing persona binding.
+    """
+    # ── 1. Envelope validation ─────────────────────────────────────────────
+    missing = _REQUIRED_ENVELOPE_KEYS - set(task_envelope.keys())
+    if missing:
+        raise ValueError(f"Task envelope missing required keys: {sorted(missing)}")
+
+    operator_id = task_envelope["operator_id"]
+    task_id = task_envelope["task_id"]
+    sprint_id = task_envelope["sprint_id"]
+    node_id = task_envelope["node_id"]
+    ttl = int(task_envelope.get("lease_ttl_seconds", _DEFAULT_LEASE_TTL))
+
+    # ── 2. Operator existence check ────────────────────────────────────────
+    config = get_operator_config(operator_id)
+    if config is None:
+        raise ValueError(f"Unknown operator: '{operator_id}' not found in registry")
+
+    # ── 3. Dispatchability check ───────────────────────────────────────────
+    current_state = get_operator_runtime_state(operator_id)
+    if current_state in _NON_DISPATCHABLE_STATES:
+        raise RuntimeError(
+            f"Operator '{operator_id}' is not dispatchable: state={current_state}"
+        )
+
+    # ── 4. Persona binding check ───────────────────────────────────────────
+    persona = config.get("persona")
+    if not persona:
+        raise RuntimeError(
+            f"Operator '{operator_id}' has no persona binding in registry"
+        )
+    persona_file = OPERATOR_PERSONAS_DIR / f"{persona}.md"
+    if not persona_file.exists():
+        raise RuntimeError(
+            f"Operator '{operator_id}' persona file missing: {persona_file}"
+        )
+
+    # ── 5. Acquire lease ──────────────────────────────────────────────────
+    lease = acquire_operator_lease(
+        operator_id=operator_id,
+        task_id=task_id,
+        sprint_id=sprint_id,
+        node_id=node_id,
+        ttl_seconds=ttl,
+        initial_state="leased",
+    )
+
+    # ── 6. Write envelope to inbox (atomic) ───────────────────────────────
+    inbox_dir = _ensure_inbox_dir(operator_id)
+    inbox_path = inbox_dir / f"{task_id}.json"
+    tmp_path = str(inbox_path) + ".tmp"
+    submitted_at = _now()
+    payload = dict(task_envelope)
+    payload["submitted_at"] = submitted_at
+    payload["lease_expires_at"] = lease["expires_at"]
+
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+    os.replace(tmp_path, str(inbox_path))
+
+    lease_id = f"{operator_id}:{task_id}:{lease['leased_at']}"
+
+    return {
+        "task_id": task_id,
+        "operator_id": operator_id,
+        "lease_id": lease_id,
+        "inbox_path": str(inbox_path),
+        "status": "submitted",
+        "submitted_at": submitted_at,
+    }
+
+
 # ── CLI Interface ─────────────────────────────────────────────────────────────
 
 def main() -> int:
@@ -337,6 +442,10 @@ def main() -> int:
     # clear-override
     clear_parser = subparsers.add_parser("clear-override", help="Clear dynamic status override")
     clear_parser.add_argument("--operator", required=True, help="Operator ID")
+
+    # submit
+    submit_parser = subparsers.add_parser("submit", help="Submit a task envelope to an operator inbox")
+    submit_parser.add_argument("--envelope", required=True, help="Path to task envelope JSON file")
     
     args = parser.parse_args()
     
@@ -393,7 +502,17 @@ def main() -> int:
             clear_operator_status(args.operator)
             print(json.dumps({"override_cleared": True}, indent=2))
             return 0
-            
+
+        elif args.cmd == "submit":
+            envelope_path = Path(args.envelope)
+            if not envelope_path.exists():
+                print(json.dumps({"error": f"Envelope file not found: {args.envelope}"}), file=sys.stderr)
+                return 1
+            envelope = json.loads(envelope_path.read_text(encoding="utf-8"))
+            result = submit(envelope)
+            print(json.dumps(result, indent=2))
+            return 0
+
         else:
             parser.print_help()
             return 1

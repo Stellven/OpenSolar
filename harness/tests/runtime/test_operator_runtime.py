@@ -23,10 +23,12 @@ def setup_teardown_env(monkeypatch):
         tmp_path = Path(tmpdir)
         monkeypatch.setattr(optime, "OPERATOR_LEASE_DIR", tmp_path / "run" / "operator-leases")
         monkeypatch.setattr(optime, "OPERATOR_STATUS_DIR", tmp_path / "run" / "operator-status")
-        
+        monkeypatch.setattr(optime, "OPERATOR_INBOX_DIR", tmp_path / "run" / "operator-inbox")
+        monkeypatch.setattr(optime, "OPERATOR_PERSONAS_DIR", ROOT / "personas")
+
         # Point the registry to the real config in the harness dir
         monkeypatch.setattr(optime, "PHYSICAL_OPERATORS_PATH", ROOT / "config" / "physical-operators.json")
-        
+
         yield
 
 
@@ -156,3 +158,140 @@ def test_registry_disabled_state():
             node_id="N2",
             ttl_seconds=60
         )
+
+
+# ── submit() tests ─────────────────────────────────────────────────────────────
+
+def _make_envelope(operator_id="mini-claude-sonnet-builder", task_id="T-submit-001"):
+    return {
+        "task_id": task_id,
+        "sprint_id": "sprint-test",
+        "node_id": "N2",
+        "operator_id": operator_id,
+        "task_type": "CODE_IMPL",
+        "objective": "Implement the submit function.",
+    }
+
+
+def test_submit_success_writes_inbox():
+    """Happy path: idle operator with valid persona → envelope written to inbox."""
+    envelope = _make_envelope()
+    result = optime.submit(envelope)
+
+    assert result["status"] == "submitted"
+    assert result["operator_id"] == "mini-claude-sonnet-builder"
+    assert result["task_id"] == "T-submit-001"
+    assert result["lease_id"].startswith("mini-claude-sonnet-builder:T-submit-001:")
+
+    inbox_file = Path(result["inbox_path"])
+    assert inbox_file.exists(), "Inbox file was not written"
+
+    written = json.loads(inbox_file.read_text(encoding="utf-8"))
+    assert written["task_id"] == "T-submit-001"
+    assert written["operator_id"] == "mini-claude-sonnet-builder"
+    assert "submitted_at" in written
+    assert "lease_expires_at" in written
+
+    # Lease should be active after submit
+    assert optime.get_operator_runtime_state("mini-claude-sonnet-builder") == "leased"
+
+
+def test_submit_rejects_unknown_operator():
+    """Unknown operator_id raises ValueError."""
+    envelope = _make_envelope(operator_id="no-such-operator")
+    with pytest.raises(ValueError, match="Unknown operator"):
+        optime.submit(envelope)
+
+
+def test_submit_rejects_disabled_operator():
+    """Disabled operator raises RuntimeError."""
+    envelope = _make_envelope(operator_id="mini-antigravity-gemini35-flash-high")
+    with pytest.raises(RuntimeError, match="not dispatchable.*disabled"):
+        optime.submit(envelope)
+
+
+def test_submit_rejects_leased_operator():
+    """Operator already leased raises RuntimeError."""
+    operator_id = "mini-claude-sonnet-builder"
+    optime.acquire_operator_lease(
+        operator_id=operator_id,
+        task_id="T-pre-lease",
+        sprint_id="sprint-test",
+        node_id="N1",
+        ttl_seconds=60,
+    )
+    envelope = _make_envelope(operator_id=operator_id)
+    with pytest.raises(RuntimeError, match="not dispatchable.*leased"):
+        optime.submit(envelope)
+
+
+def test_submit_rejects_running_operator():
+    """Operator in running state raises RuntimeError."""
+    operator_id = "mini-claude-sonnet-builder"
+    optime.acquire_operator_lease(
+        operator_id=operator_id,
+        task_id="T-pre-run",
+        sprint_id="sprint-test",
+        node_id="N1",
+        ttl_seconds=60,
+    )
+    optime.update_operator_lease_state(operator_id, "running")
+    envelope = _make_envelope(operator_id=operator_id)
+    with pytest.raises(RuntimeError, match="not dispatchable.*running"):
+        optime.submit(envelope)
+
+
+def test_submit_rejects_quota_exhausted_operator():
+    """Operator with quota_exhausted status override raises RuntimeError."""
+    operator_id = "mini-claude-sonnet-builder"
+    optime.set_operator_status(operator_id, "quota_exhausted")
+    envelope = _make_envelope(operator_id=operator_id)
+    with pytest.raises(RuntimeError, match="not dispatchable.*quota_exhausted"):
+        optime.submit(envelope)
+
+
+def test_submit_rejects_auth_expired_operator():
+    """Operator with auth_expired status override raises RuntimeError."""
+    operator_id = "mini-claude-sonnet-builder"
+    optime.set_operator_status(operator_id, "auth_expired")
+    envelope = _make_envelope(operator_id=operator_id)
+    with pytest.raises(RuntimeError, match="not dispatchable.*auth_expired"):
+        optime.submit(envelope)
+
+
+def test_submit_rejects_missing_required_keys():
+    """Envelope missing required keys raises ValueError."""
+    bad_envelope = {"task_id": "T001", "operator_id": "mini-claude-sonnet-builder"}
+    with pytest.raises(ValueError, match="missing required keys"):
+        optime.submit(bad_envelope)
+
+
+def test_submit_rejects_missing_persona_binding(tmp_path, monkeypatch):
+    """Operator with non-existent persona file raises RuntimeError."""
+    # Point personas dir to empty directory so no persona files exist
+    empty_personas = tmp_path / "personas"
+    empty_personas.mkdir()
+    monkeypatch.setattr(optime, "OPERATOR_PERSONAS_DIR", empty_personas)
+
+    envelope = _make_envelope(operator_id="mini-claude-sonnet-builder")
+    with pytest.raises(RuntimeError, match="persona file missing"):
+        optime.submit(envelope)
+
+
+def test_submit_uses_custom_lease_ttl():
+    """Envelope lease_ttl_seconds is respected."""
+    envelope = _make_envelope()
+    envelope["lease_ttl_seconds"] = 7200
+    result = optime.submit(envelope)
+
+    assert result["status"] == "submitted"
+    lease = optime.get_operator_lease("mini-claude-sonnet-builder")
+    assert lease is not None
+    # Verify lease expiry is ~2h from now (within a 5-second window)
+    import datetime
+    expires = datetime.datetime.strptime(lease["expires_at"], "%Y-%m-%dT%H:%M:%SZ").replace(
+        tzinfo=datetime.timezone.utc
+    )
+    now = datetime.datetime.now(datetime.timezone.utc)
+    delta = (expires - now).total_seconds()
+    assert 7190 <= delta <= 7210

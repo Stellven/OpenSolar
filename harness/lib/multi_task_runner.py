@@ -431,9 +431,6 @@ def operator_dispatchable(operator: dict[str, Any]) -> tuple[bool, str]:
         return False, str(operator.get("disabled_reason") or "disabled")
     if not operator.get("available", True):
         return False, str(operator.get("health_status") or "unavailable")
-    health = str(operator.get("health_status") or "").lower()
-    if health not in {"", "ok", "ready"}:
-        return False, f"unhealthy:{health}"
     if str(operator.get("quota_guard_state") or "ok").lower() not in {"", "ok", "ready"}:
         return False, f"quota_guard_state={operator.get('quota_guard_state')}"
     key_ref = str(operator.get("key_ref") or "").strip()
@@ -446,13 +443,12 @@ def operator_dispatchable(operator: dict[str, Any]) -> tuple[bool, str]:
         try:
             import operator_runtime
             dyn_state = operator_runtime.get_operator_runtime_state(op_id)
-            if dyn_state in {"disabled", "quota_exhausted", "auth_expired", "leased", "running", "draining", "cooldown"}:
+            if dyn_state in {"disabled", "quota_exhausted", "auth_expired"}:
                 return False, f"dynamic_state_{dyn_state}"
         except Exception:
             pass
             
     return True, "ready"
-
 
 
 def _selector_values(selector: Any) -> list[str]:
@@ -766,148 +762,32 @@ def operator_matches_class(operator: dict[str, Any], class_name: str) -> bool:
     return str(op_class).lower() == class_name.lower()
 
 
-NORM_FALLBACK_LADDERS: dict[str, list[str]] = {
-    "ARCH_DESIGN": [
-        "mini-claude-opus-planner",
-        "mini-antigravity-gemini31-pro",
-        "mini-claude-sonnet-builder",
-        "mini-antigravity-gemini35-flash-high"
-    ],
-    "ROOT_CAUSE_DEBUG": [
-        "mini-claude-opus-planner",
-        "mini-antigravity-gemini31-pro",
-        "mini-claude-sonnet-builder",
-        "mini-antigravity-gemini35-flash-high"
-    ],
-    "CODE_IMPL": [
-        "mini-antigravity-gemini35-flash-high",
-        "mini-claude-sonnet-builder",
-        "mini-glm51-knowledge",
-        "mini-thunderomlx-qwen36-knowledge",
-        "mini-local-scan"
-    ],
-    "TEST_GEN/TEST_RUN": [
-        "mini-antigravity-gemini35-flash-high",
-        "mini-claude-sonnet-builder",
-        "mini-local-scan"
-    ],
-    "RESEARCH_SYNTHESIS": [
-        "mini-antigravity-gemini31-pro",
-        "mini-claude-sonnet-builder",
-        "mini-antigravity-gemini35-flash-high",
-        "mini-local-scan"
-    ],
-    "KNOWLEDGE_EXTRACTION": [
-        "mini-thunderomlx-qwen36-knowledge",
-        "mini-glm51-knowledge",
-        "mini-antigravity-gemini35-flash-high"
-    ],
-    "MULTIMODAL_UI_CHECK": [
-        "mini-antigravity-gemini35-flash-image",
-        "mini-antigravity-gemini31-pro"
-    ],
-    "FINAL_REVIEW": [
-        "mini-claude-opus-evaluator",
-        "mini-antigravity-gemini31-pro",
-        "mini-claude-sonnet-builder"
-    ]
-}
-
-
-def get_ladder_for_task_type(task_type: str) -> list[str]:
-    if not task_type:
-        return []
-    t = task_type.upper().replace("-", "_").replace(" ", "_")
-    if t in {"TEST_GEN", "TEST_RUN", "TEST_GEN_TEST_RUN", "TEST_GEN/TEST_RUN"}:
-        return NORM_FALLBACK_LADDERS["TEST_GEN/TEST_RUN"]
-    return NORM_FALLBACK_LADDERS.get(t, [])
-
-
 def select_operator(node: dict[str, Any], base_profile: dict[str, Any]) -> tuple[dict[str, Any] | None, str]:
     preferred = str(node.get("preferred_operator") or "").strip()
-    selector = node.get("operator_selector") or {}
-    task_type = node.get("task_type") or selector.get("task_type")
-    
-    verifier_required = _is_true(node.get("verifier_required")) or _is_true(selector.get("verifier_required"))
-    prior = node.get("prior_operator") or node.get("writer_operator") or node.get("writer")
-    
-    preferred_error = None
     if preferred:
-        try:
-            operator = resolve_operator(preferred)
-            ok, reason = operator_dispatchable(operator)
-            if ok:
-                if verifier_required and prior:
+        operator = resolve_operator(preferred)
+        ok, reason = operator_dispatchable(operator)
+        if ok:
+            verifier_required = _is_true(node.get("verifier_required")) or _is_true((node.get("operator_selector") or {}).get("verifier_required"))
+            if verifier_required:
+                prior = node.get("prior_operator") or node.get("writer_operator") or node.get("writer")
+                if prior:
                     prior_clean = str(prior).strip().lower()
                     op_id_clean = str(operator.get("operator_id")).strip().lower()
                     op_prof_clean = str(operator.get("profile") or "").strip().lower()
                     if prior_clean in {op_id_clean, op_prof_clean}:
-                        preferred_error = f"verifier_conflict:preferred_operator_is_writer:{prior}"
-                    else:
-                        return operator, ""
-                else:
-                    return operator, ""
-            else:
-                fallback = str(operator.get("fallback_profile") or base_profile.get("name") or "")
-                preferred_error = f"preferred_operator_unavailable:{preferred}:{reason};fallback_profile={fallback or 'N/A'}"
-        except Exception as exc:
-            preferred_error = f"preferred_operator_error:{exc}"
-
-    # Try fallback ladder candidates if task_type matches
-    ladder = get_ladder_for_task_type(task_type)
-    if ladder:
-        req_caps = node.get("required_capabilities") or selector.get("required_capabilities") or node.get("required_capability_scores") or selector.get("required_capability_scores")
-        constraints = node.get("constraints") or selector.get("constraints")
-        
-        for candidate_id in ladder:
-            if candidate_id == preferred:
-                continue
-            try:
-                operator = resolve_operator(candidate_id)
-            except Exception:
-                continue
-                
-            # 1. Check dispatchability
-            ok, reason = operator_dispatchable(operator)
-            if not ok:
-                continue
-                
-            # 2. Check verifier conflict
-            if verifier_required and prior:
-                prior_clean = str(prior).strip().lower()
-                op_id_clean = str(operator.get("operator_id")).strip().lower()
-                op_prof_clean = str(operator.get("profile") or "").strip().lower()
-                if prior_clean in {op_id_clean, op_prof_clean}:
-                    continue
-                    
-            # 3. Check constraints
-            if constraints and not operator_satisfies_constraints(operator, constraints):
-                continue
-                
-            # 4. Check capabilities
-            if req_caps and isinstance(req_caps, dict):
-                cap_ok = True
-                for cap_name, cap_constraint in req_caps.items():
-                    op_score = get_operator_capability_score(operator, cap_name)
-                    if not check_capability_score(op_score, cap_constraint):
-                        cap_ok = False
-                        break
-                if not cap_ok:
-                    continue
-                    
-            # 5. Check quota reserves
-            if not check_quota_reserve(operator, task_type):
-                continue
-                
+                        return None, f"verifier_conflict:preferred_operator_is_writer:{prior}"
             return operator, ""
+        fallback = str(operator.get("fallback_profile") or base_profile.get("name") or "")
+        return None, f"preferred_operator_unavailable:{preferred}:{reason};fallback_profile={fallback or 'N/A'}"
 
-    # If preferred operator was requested but failed, and we did not find a valid fallback, return the preferred error
-    if preferred and preferred_error:
-        return None, preferred_error
-
+    selector = node.get("operator_selector") or {}
+    
+    task_type = node.get("task_type") or selector.get("task_type")
     req_caps = node.get("required_capabilities") or selector.get("required_capabilities") or node.get("required_capability_scores") or selector.get("required_capability_scores")
     pref_classes = node.get("preferred_operator_classes") or selector.get("preferred_operator_classes")
     constraints = node.get("constraints") or selector.get("constraints")
+    verifier_required = _is_true(node.get("verifier_required")) or _is_true(selector.get("verifier_required"))
     
     has_logical = any([
         "operator_selector" in node,
@@ -2017,9 +1897,8 @@ fi
   wait "$agent_pid"
   agent_rc=$?
   echo "[solar-harness multi-task] sid=$SID node=$NODE_ID agent_exit=$agent_rc at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  exit "$agent_rc"
 }} > >(tee -a "$OUTPUT_LOG") 2>&1
-rc=$?
+rc=${{agent_rc:-$?}}
 
 if [[ "$rc" -eq 0 && -s "$HANDOFF" ]]; then
   "$HARNESS" graph-scheduler mark --graph "$GRAPH" --node "$NODE_ID" --status reviewing --in-place >> "$OUTPUT_LOG" 2>&1 || true
