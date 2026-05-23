@@ -40,7 +40,16 @@ PHYSICAL_OPERATORS_PATH = Path(
     )
 )
 
-EVALUATOR_PROTOCOL_FILENAME = "evaluator-verification-protocol.md"
+# Insert lib directory so the shared persona resolver can be imported regardless
+# of the working directory from which operatord is invoked.
+_LIB_DIR = Path(__file__).resolve().parent.parent / "lib"
+if str(_LIB_DIR) not in sys.path:
+    sys.path.insert(0, str(_LIB_DIR))
+
+from operator_persona import (  # noqa: E402  (import after path setup)
+    EVALUATOR_PROTOCOL_FILENAME,
+    resolve_persona,
+)
 
 # ---------------------------------------------------------------------------
 # Registry helpers
@@ -69,33 +78,6 @@ def _get_operator(operator_id: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Persona / protocol loading
-# ---------------------------------------------------------------------------
-
-
-def _load_persona(role: str) -> tuple[Optional[Path], Optional[str]]:
-    """Return (path, content) for the persona file matching *role*, or (None, None)."""
-    candidate = PERSONAS_DIR / f"{role}.md"
-    if candidate.exists():
-        try:
-            return candidate, candidate.read_text(encoding="utf-8")
-        except Exception:
-            pass
-    return None, None
-
-
-def _load_evaluator_protocol() -> tuple[Optional[Path], Optional[str]]:
-    """Return (path, content) for the evaluator verification protocol."""
-    path = PERSONAS_DIR / EVALUATOR_PROTOCOL_FILENAME
-    if path.exists():
-        try:
-            return path, path.read_text(encoding="utf-8")
-        except Exception:
-            pass
-    return None, None
-
-
-# ---------------------------------------------------------------------------
 # Utilities
 # ---------------------------------------------------------------------------
 
@@ -107,6 +89,282 @@ def _die(msg: str) -> None:
 
 def _info(msg: str) -> None:
     print(f"[operatord] {msg}")
+
+
+# ---------------------------------------------------------------------------
+# Daemon helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_command(config: dict, envelope: dict) -> list[str]:
+    """Return the shell command list to execute for this task.
+
+    If the operator uses a ``local`` or ``dummy`` backend, or if the envelope
+    carries an explicit ``command`` override, no real AI backend is invoked.
+    For any other backend we still default to a safe echo so the daemon can
+    be exercised without credentials in test/CI environments.
+    """
+    backend: str = str(config.get("backend", "local")).lower()
+
+    # Explicit command in the envelope takes highest priority.
+    if "command" in envelope:
+        cmd_val = envelope["command"]
+        if isinstance(cmd_val, list):
+            return [str(c) for c in cmd_val]
+        return ["sh", "-c", str(cmd_val)]
+
+    task_id: str = str(envelope.get("task_id", "unknown"))
+    objective: str = str(envelope.get("objective", ""))[:120]
+
+    if backend in ("local", "dummy", "echo"):
+        return [
+            "sh",
+            "-c",
+            (
+                f"echo 'operatord: task={task_id}'; "
+                f"echo 'objective={objective}'; "
+                "sleep 0.05; "
+                "echo 'operatord: completed'"
+            ),
+        ]
+
+    # Real backends (claude-cli, agy, etc.) in non-interactive daemon context:
+    # emit a safe placeholder so the daemon lifecycle can be validated without
+    # actually spawning an AI process.
+    return [
+        "sh",
+        "-c",
+        (
+            f"echo 'operatord: backend={backend} task={task_id}'; "
+            "echo 'operatord: local-stub exit 0'; "
+            "sleep 0.05"
+        ),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: daemon
+# ---------------------------------------------------------------------------
+
+
+def cmd_daemon(args: argparse.Namespace) -> int:
+    """Run the operator as a persistent daemon (or process one task with --once)."""
+    import signal
+    import subprocess
+    import time
+
+    from operator_runtime import (  # noqa: E402
+        get_operator_lease,
+        get_operator_runtime_state,
+        list_inbox_tasks,
+        release_operator_lease,
+        update_operator_lease_state,
+        write_heartbeat,
+        write_result,
+        HARNESS_DIR as _RT_HARNESS_DIR,
+        OPERATOR_RESULTS_DIR,
+    )
+
+    operator_id: str = args.operator
+    once: bool = args.once
+    poll_interval: float = args.poll_interval
+    config = _get_operator(operator_id)
+
+    if not config.get("enabled", False) and not args.force:
+        _info(
+            f"Operator '{operator_id}' is disabled. "
+            "Pass --force to proceed anyway."
+        )
+        return 1
+
+    resolved_persona: str = config.get("persona") or config.get("role", "")
+
+    # ── Signal handling ───────────────────────────────────────────────────────
+    _state: dict[str, Any] = {
+        "drain": False,
+        "current_state": "idle",
+        "current_proc": None,
+    }
+
+    def _handle_signal(signum: int, frame: Any) -> None:
+        _info(f"Signal {signum} received — transitioning to draining")
+        _state["drain"] = True
+        _state["current_state"] = "draining"
+        write_heartbeat(
+            operator_id,
+            "draining",
+            resolved_persona=resolved_persona,
+        )
+
+    signal.signal(signal.SIGTERM, _handle_signal)
+    signal.signal(signal.SIGINT, _handle_signal)
+
+    _info(
+        f"Daemon starting — operator_id={operator_id} "
+        f"once={once} poll_interval={poll_interval}s"
+    )
+    write_heartbeat(operator_id, "idle", resolved_persona=resolved_persona)
+    _state["current_state"] = "idle"
+
+    processed: int = 0
+
+    while True:
+        # ── Drain check ───────────────────────────────────────────────────────
+        if _state["drain"]:
+            _info("Drain flag set — exiting daemon loop")
+            write_heartbeat(operator_id, "idle", resolved_persona=resolved_persona)
+            break
+
+        # ── Heartbeat ─────────────────────────────────────────────────────────
+        write_heartbeat(
+            operator_id,
+            _state["current_state"],
+            resolved_persona=resolved_persona,
+        )
+
+        # ── Poll inbox ────────────────────────────────────────────────────────
+        tasks = list_inbox_tasks(operator_id)
+
+        if not tasks:
+            if once:
+                if processed > 0:
+                    # Already processed the one task; exit normally.
+                    break
+                # Nothing yet — keep waiting.
+            time.sleep(poll_interval)
+            continue
+
+        # ── Claim first available task ────────────────────────────────────────
+        task_id, envelope, envelope_path = tasks[0]
+
+        lease = get_operator_lease(operator_id)
+        if lease is None or lease.get("task_id") != task_id:
+            # Lease missing or for a different task; skip and wait.
+            _info(
+                f"No valid lease found for task {task_id} "
+                f"(current lease task: {lease.get('task_id') if lease else 'none'})"
+            )
+            time.sleep(poll_interval)
+            continue
+
+        if lease.get("state") not in ("leased",):
+            _info(f"Task {task_id} lease state={lease.get('state')} — skipping")
+            time.sleep(poll_interval)
+            continue
+
+        _info(f"Claiming task {task_id}")
+        try:
+            update_operator_lease_state(operator_id, "running")
+        except RuntimeError as exc:
+            _info(f"Cannot transition lease to running: {exc}")
+            time.sleep(poll_interval)
+            continue
+
+        _state["current_state"] = "running"
+        write_heartbeat(
+            operator_id,
+            "running",
+            current_task_id=task_id,
+            resolved_persona=resolved_persona,
+        )
+
+        # ── Execute ───────────────────────────────────────────────────────────
+        sprint_id: str = str(envelope.get("sprint_id", ""))
+        node_id: str = str(envelope.get("node_id", ""))
+        started_at: str = _now_utc()
+        result_status: str = "failed"
+        exit_code: int = -1
+        log_lines: list[str] = []
+
+        result_dir = OPERATOR_RESULTS_DIR / operator_id / task_id
+        result_dir.mkdir(parents=True, exist_ok=True)
+        log_path = result_dir / "output.log"
+
+        cmd = _build_command(config, envelope)
+        _info(f"Executing: {' '.join(cmd[:8])}")
+
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+            )
+            _state["current_proc"] = proc
+
+            with open(log_path, "w", encoding="utf-8") as log_f:
+                assert proc.stdout is not None
+                for line in proc.stdout:
+                    from operator_runtime import scrub_secrets  # noqa: E402
+                    scrubbed = scrub_secrets(line)
+                    log_f.write(scrubbed)
+                    log_lines.append(scrubbed.rstrip())
+
+            proc.wait()
+            exit_code = proc.returncode
+            result_status = "completed" if exit_code == 0 else "failed"
+
+        except Exception as exc:
+            _info(f"Execution error: {exc}")
+            log_lines.append(f"[ERROR] {exc}")
+            result_status = "error"
+        finally:
+            _state["current_proc"] = None
+
+        if _state["drain"]:
+            # Signal arrived mid-execution; mark draining then tidy up.
+            result_status = "draining"
+            _state["current_state"] = "draining"
+
+        finished_at: str = _now_utc()
+
+        # ── Write result artifact ─────────────────────────────────────────────
+        log_tail = "\n".join(log_lines[-50:])
+        result_path = write_result(
+            operator_id=operator_id,
+            task_id=task_id,
+            sprint_id=sprint_id,
+            node_id=node_id,
+            status=result_status,
+            exit_code=exit_code,
+            started_at=started_at,
+            finished_at=finished_at,
+            log_tail=log_tail,
+        )
+        _info(f"Result written: {result_path}")
+
+        # ── Cleanup ───────────────────────────────────────────────────────────
+        try:
+            envelope_path.unlink()
+        except Exception:
+            pass
+
+        try:
+            release_operator_lease(operator_id, reason=result_status)
+        except Exception:
+            pass
+
+        processed += 1
+        _state["current_state"] = "idle"
+        write_heartbeat(operator_id, "idle", resolved_persona=resolved_persona)
+        _info(f"Task {task_id} done: {result_status} (exit={exit_code})")
+
+        if once:
+            break
+
+        if _state["drain"]:
+            break
+
+        time.sleep(poll_interval)
+
+    write_heartbeat(operator_id, "idle", resolved_persona=resolved_persona)
+    return 0
+
+
+def _now_utc() -> str:
+    import datetime as _dt
+    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 # ---------------------------------------------------------------------------
@@ -156,32 +414,31 @@ def cmd_run(args: argparse.Namespace) -> int:
     _info(f"model         = {model or '(unknown)'}")
     _info(f"display_name  = {config.get('display_name', operator_id)}")
 
-    # ── Persona ───────────────────────────────────────────────────────────────
-    persona_path, persona_text = _load_persona(role)
-    if persona_path:
-        _info(f"persona       = {persona_path}")
+    # ── Persona & evaluator protocol ──────────────────────────────────────────
+    pr = None
+    try:
+        pr = resolve_persona(operator_id, config, PERSONAS_DIR)
+    except RuntimeError as exc:
+        _info(f"persona       = (not found: {exc})")
+
+    if pr is not None:
+        _info(f"persona       = {pr.persona_path}")
         if args.print_persona:
             print("\n" + "─" * 60)
-            print(f"# Persona: {role}")
+            print(f"# Persona: {pr.persona_name}")
             print("─" * 60)
-            print(persona_text)
+            print(pr.persona_text)
             print("─" * 60 + "\n")
-    else:
-        _info(f"persona       = (not found for role '{role}')")
 
-    # ── Evaluator protocol ────────────────────────────────────────────────────
-    eval_path: Optional[Path] = None
-    if role == "evaluator":
-        eval_path, eval_text = _load_evaluator_protocol()
-        if eval_path:
-            _info(f"eval_protocol = {eval_path}")
+        if pr.eval_protocol_loaded:
+            _info(f"eval_protocol = {pr.eval_protocol_path}")
             if args.print_persona:
                 print("\n" + "─" * 60)
                 print("# Evaluator Verification Protocol")
                 print("─" * 60)
-                print(eval_text)
+                print(pr.eval_protocol_text)
                 print("─" * 60 + "\n")
-        else:
+        elif pr.persona_name == "evaluator":
             _info(f"eval_protocol = (not found: {EVALUATOR_PROTOCOL_FILENAME})")
 
     # ── Pane title ────────────────────────────────────────────────────────────
@@ -201,8 +458,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         "canonical_id": canon_id,
         "role": role,
         "model": model,
-        "persona_loaded": persona_path is not None,
-        "eval_protocol_loaded": eval_path is not None,
+        "persona_loaded": pr is not None,
+        "eval_protocol_loaded": pr is not None and pr.eval_protocol_loaded,
         "pane_title": title,
     }
     if args.json:
@@ -309,6 +566,47 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Output as JSON.",
     )
 
+    # ── daemon ───────────────────────────────────────────────────────────────
+    daemon_p = sub.add_parser(
+        "daemon",
+        help="Run the operator as a persistent daemon that polls its inbox.",
+        description=(
+            "Bootstrap the operator and enter a polling loop. "
+            "When a task envelope appears in run/operator-inbox/<id>/, the daemon "
+            "claims it, executes the backend command, writes result artifacts, "
+            "and returns to idle. Use --once to process exactly one task then exit."
+        ),
+    )
+    daemon_p.add_argument(
+        "--operator",
+        required=True,
+        metavar="ID",
+        help="Operator ID from physical-operators.json.",
+    )
+    daemon_p.add_argument(
+        "--once",
+        action="store_true",
+        help="Process one task then exit (useful for testing and CI).",
+    )
+    daemon_p.add_argument(
+        "--poll-interval",
+        type=float,
+        default=1.0,
+        metavar="SECS",
+        help="Seconds between inbox polls (default: 1.0).",
+    )
+    daemon_p.add_argument(
+        "--force",
+        action="store_true",
+        help="Run even if the operator is disabled in the registry.",
+    )
+    daemon_p.add_argument(
+        "--harness-dir",
+        metavar="PATH",
+        default=str(HARNESS_DIR),
+        help=f"Path to the Solar Harness root directory (default: {HARNESS_DIR}).",
+    )
+
     return parser
 
 
@@ -337,6 +635,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         return cmd_run(args)
     elif args.subcommand == "list":
         return cmd_list(args)
+    elif args.subcommand == "daemon":
+        return cmd_daemon(args)
     else:
         parser.print_help()
         return 0

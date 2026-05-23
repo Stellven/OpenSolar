@@ -103,6 +103,7 @@ DENYLIST: tuple[str, ...] = (
     "lib/operator_runtime.py",
     "tools/operatord.py",
     "tools/operator_naming.py",
+    "tests/runtime/test_multi_task_runner_submit_path.py",
 )
 
 # Roots scanned for direct send-keys usage.

@@ -42,6 +42,9 @@ DEFAULT_MEMORY_RESERVE_GB = float(os.environ.get("SOLAR_MULTI_TASK_MEMORY_RESERV
 DEFAULT_QUOTA_BACKOFF = int(os.environ.get("SOLAR_MULTI_TASK_QUOTA_BACKOFF_SEC", "900") or "900")
 GRAPH_SUMMARY_CACHE_TTL_SEC = int(os.environ.get("SOLAR_MULTI_TASK_GRAPH_SUMMARY_CACHE_TTL_SEC", "5") or "5")
 PROBE_CACHE_PATH = Path(os.environ.get("SOLAR_MULTI_TASK_PROBE_CACHE", RUN_DIR / "capability-probes.json"))
+OPERATORD_SUBMIT_ENABLED: bool = os.environ.get("SOLAR_OPERATORD_SUBMIT_ENABLED", "0") == "1"
+OPERATORD_RESULT_TIMEOUT_SEC: int = int(os.environ.get("SOLAR_OPERATORD_RESULT_TIMEOUT_SEC", "0") or "0")
+OPERATORD_RESULT_POLL_INTERVAL_SEC: float = float(os.environ.get("SOLAR_OPERATORD_RESULT_POLL_INTERVAL_SEC", "2.0") or "2.0")
 
 DEFAULT_PROFILE_CONFIG: dict[str, Any] = {
     "defaults": {"profile": "builder", "backend": "claude-cli", "max_workers": 2},
@@ -1940,6 +1943,55 @@ def tmux_start(window: str, runner: Path, cwd: Path, dry_run: bool = False) -> N
     )
 
 
+def build_task_envelope(
+    dispatch_id: str,
+    sprint_id: str,
+    node_id: str,
+    operator_id: str,
+    node: dict[str, Any],
+    dispatch_text: str,
+    graph_path: Path,
+    handoff_path: Path,
+    lease_ttl_seconds: int = 3600,
+) -> dict[str, Any]:
+    """Build a task envelope suitable for operator_runtime.submit."""
+    return {
+        "task_id": dispatch_id,
+        "sprint_id": sprint_id,
+        "node_id": node_id,
+        "operator_id": operator_id,
+        "task_type": str(node.get("task_type") or "dag_node"),
+        "objective": str(node.get("goal") or node.get("title") or node_id)[:2000],
+        "dispatch_text": dispatch_text,
+        "graph_path": str(graph_path),
+        "handoff_path": str(handoff_path),
+        "write_scope": node.get("write_scope") or [],
+        "read_scope": node.get("read_scope") or [],
+        "acceptance": node.get("acceptance") or [],
+        "lease_ttl_seconds": lease_ttl_seconds,
+    }
+
+
+def wait_for_operator_result(
+    operator_id: str,
+    task_id: str,
+    timeout_sec: int,
+    poll_interval_sec: float = 2.0,
+) -> dict[str, Any] | None:
+    """Poll for operator result artifact; return result dict or None on timeout."""
+    result_path = HARNESS_DIR / "run" / "operator-results" / operator_id / task_id / "result.json"
+    deadline = time.monotonic() + timeout_sec
+    while time.monotonic() < deadline:
+        if result_path.exists():
+            try:
+                return json.loads(result_path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        remaining = deadline - time.monotonic()
+        time.sleep(min(poll_interval_sec, max(0.05, remaining)))
+    return None
+
+
 def launch_node(graph_path: Path, graph: dict[str, Any], node: dict[str, Any], args: argparse.Namespace,
                 dry_run: bool = False) -> dict[str, Any]:
     sid = sprint_id_for(graph, graph_path)
@@ -1986,6 +2038,65 @@ def launch_node(graph_path: Path, graph: dict[str, Any], node: dict[str, Any], a
         "updated_at": now_iso(),
         "exit_code": None,
     }
+    operator_id = str(profile.get("operator_id") or "")
+
+    # ── Submit path: operator_runtime.submit (guarded by feature flag) ─────────
+    if (
+        not dry_run
+        and OPERATORD_SUBMIT_ENABLED
+        and operator_id
+        and operator_id != "N/A"
+    ):
+        try:
+            import operator_runtime as _opr  # local import to keep legacy path independent
+            envelope = build_task_envelope(
+                dispatch_id=dispatch_id,
+                sprint_id=sid,
+                node_id=node_id,
+                operator_id=operator_id,
+                node=node,
+                dispatch_text=dispatch,
+                graph_path=graph_path,
+                handoff_path=handoff,
+            )
+            submit_result = _opr.submit(envelope)
+            result_path_str = str(
+                HARNESS_DIR / "run" / "operator-results" / operator_id / dispatch_id / "result.json"
+            )
+            payload.update({
+                "status": "submitted",
+                "submit_mode": "operatord",
+                "operator_id": operator_id,
+                "lease_id": submit_result["lease_id"],
+                "inbox_path": submit_result["inbox_path"],
+                "result_path": result_path_str,
+                "submitted_at": submit_result["submitted_at"],
+                "updated_at": now_iso(),
+            })
+            json_write(status_path(task_dir), payload)
+            set_node_status(graph, node_id, "dispatched", pane=f"operatord:{operator_id}", dispatch_id=dispatch_id)
+            save_graph(graph_path, graph)
+            set_last_launch()
+            if OPERATORD_RESULT_TIMEOUT_SEC > 0:
+                result = wait_for_operator_result(
+                    operator_id, dispatch_id,
+                    OPERATORD_RESULT_TIMEOUT_SEC,
+                    OPERATORD_RESULT_POLL_INTERVAL_SEC,
+                )
+                if result is not None:
+                    exit_code = result.get("exit_code")
+                    payload["status"] = "completed" if exit_code == 0 else "failed"
+                    payload["exit_code"] = exit_code
+                else:
+                    payload["status"] = "result_timeout"
+                payload["updated_at"] = now_iso()
+                json_write(status_path(task_dir), payload)
+            return payload
+        except Exception as exc:
+            payload["operator_submit_error"] = str(exc)
+            payload["operator_submit_fallback"] = "legacy"
+
+    # ── Legacy dispatch path (tmux window runner) ────────────────────────────────
     json_write(status_path(task_dir), payload)
     runner = runner_script(task_dir, payload)
 

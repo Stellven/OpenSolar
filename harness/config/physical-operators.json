@@ -443,7 +443,10 @@
           "DeepArchitect",
           "Verifier"
         ]
-      }
+      },
+      "command": "AGY_BIN=/Users/lisihao/.local/bin/agy PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/antigravity_multimodal_agent.py\"",
+      "command_path": "/Users/lisihao/.local/bin/agy",
+      "registry_fix_note": "2026-05-23T00:14Z: add command adapter so enabled Gemini 3.1 Pro command backend is actually dispatchable"
     },
     "mini-antigravity-gemini31-pro-image": {
       "display_name": "Mac mini Antigravity Gemini 3.1 Pro multimodal image",
