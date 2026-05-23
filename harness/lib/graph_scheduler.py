@@ -648,11 +648,43 @@ def _model_requires_strict_match(preferred_model: str | None, strict_model: bool
     return normalized in {"glm", "glm-5", "glm-5.1", "zhipu"}
 
 
-def _skills_match(worker: dict[str, Any], required_skills: list[str]) -> bool:
+def _skill_aliases(value: Any) -> set[str]:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return set()
+    aliases = {raw}
+    parts = [part.strip() for part in raw.split(".") if part.strip()]
+    if len(parts) > 1:
+        for end in range(1, len(parts)):
+            aliases.add(".".join(parts[:end]))
+    return aliases
+
+
+def _skill_match_count(worker: dict[str, Any], required_skills: list[str]) -> int:
+    if not required_skills:
+        return 0
+    worker_aliases: set[str] = set()
+    for skill in worker.get("skills", []) or []:
+        worker_aliases.update(_skill_aliases(skill))
+
+    matches = 0
+    for required in required_skills:
+        if _skill_aliases(required) & worker_aliases:
+            matches += 1
+    return matches
+
+
+def _skills_match(worker: dict[str, Any], required_skills: list[str],
+                  required_capabilities: list[str] | None = None) -> bool:
     if not required_skills:
         return True
-    skills = set(str(s) for s in worker.get("skills", []))
-    return set(required_skills).issubset(skills)
+    matched = _skill_match_count(worker, required_skills)
+    if matched >= len(required_skills):
+        return True
+    if required_capabilities:
+        threshold = max(1, (len(required_skills) + 1) // 2)
+        return matched >= threshold
+    return False
 
 
 def _capability_list(obj: dict[str, Any]) -> list[str]:
@@ -751,7 +783,7 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
             pane = str(worker.get("pane", ""))
             if not pane:
                 continue
-            if not _skills_match(worker, required_skills):
+            if not _skills_match(worker, required_skills, required_capabilities):
                 continue
             if not _capabilities_match(worker, required_capabilities):
                 continue
@@ -766,9 +798,10 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
                 blocked_by_capacity = True
                 continue
             cap_score = _capability_score(worker, required_capabilities, capability_scores)
+            skill_score = _skill_match_count(worker, required_skills)
             model_penalty = 0 if _model_match(worker, preferred_model) else 10
             load = int(worker.get("load", 0) or 0)
-            candidates.append((-cap_score, model_penalty, load, pane, worker))
+            candidates.append((-cap_score, -skill_score, model_penalty, load, pane, worker))
 
         if not candidates:
             if blocked_by_runtime:
@@ -780,8 +813,8 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
             queued.append({"node": node["id"], "reason": reason})
             continue
 
-        candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3]))
-        cap_rank, _model_penalty, _load, _pane, worker = candidates[0]
+        candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3], item[4]))
+        cap_rank, skill_rank, _model_penalty, _load, _pane, worker = candidates[0]
         used_panes.add(str(worker.get("pane")))
         assigned.append({
             "node": node["id"],
@@ -791,6 +824,7 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
             "fallback_model": not _model_match(worker, preferred_model),
             "required_capabilities": required_capabilities,
             "capability_score": round(-cap_rank, 3),
+            "skill_match_count": int(-skill_rank),
         })
 
     return {"ok": True, "assigned": assigned, "queued": queued}

@@ -672,9 +672,29 @@ def _handoff_file(sid: str, node_id: str) -> Path:
     return SPRINTS_DIR / f"{sid}.{_safe_node_id(node_id)}-handoff.md"
 
 
+def _legacy_handoff_aliases(node_id: str) -> list[str]:
+    aliases: list[str] = []
+    raw = str(node_id or "").strip()
+    if not raw:
+        return aliases
+
+    short = raw.split("_", 1)[0].strip()
+    if short and short != raw and re.fullmatch(r"[A-Za-z]+\d+", short):
+        aliases.append(short)
+
+    match = re.match(r"^([A-Za-z]+\d+)\b", raw)
+    if match:
+        alias = match.group(1).strip()
+        if alias and alias != raw and alias not in aliases:
+            aliases.append(alias)
+    return aliases
+
+
 def _node_handoff_candidates(sid: str, node: dict[str, Any], graph: dict[str, Any]) -> list[Path]:
     node_id = str(node.get("id") or "")
     candidates = [_handoff_file(sid, node_id)]
+    for alias in _legacy_handoff_aliases(node_id):
+        candidates.append(_handoff_file(sid, alias))
     parent_handoff = f"sprints/{sid}.handoff.md"
     for scope in node.get("write_scope") or []:
         if str(scope).endswith(parent_handoff) or str(scope).endswith(f"{sid}.handoff.md"):
@@ -2028,10 +2048,13 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "architecture", "schema", "state-machine", "state-schema-design", "distributed-systems",
         "code-audit", "docs-audit", "type-hints", "type-protocols", "refactor", "tmux-inspect", "data-aggregation", "shutil", "urllib", "atomic-writes", "hashing", "unittest-mock",
         "api-design", "data-modeling", "compatibility",
+        "scheduler.design", "algorithm", "state-machine.design",
         "routing", "diagnostics", "evaluation", "capability-graph", "event-sourcing",
         "lazy-import",
         "browser.browse", "browser.qa", "code.review", "document.convert",
         "persona.agent", "multi_agent.research", "debug.systematic",
+        "autoresearch.pane_optimizer", "autoresearch.issue_loop", "autoresearch.local_issue",
+        "autoresearch.agent_iteration", "autoresearch.score_gate",
         "repair.pr-cot",
     ]
     worker_capabilities = [
@@ -2071,6 +2094,9 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "research.claim.mine", "research.citation.verify",
         "research.report.compile", "report.compile",
         "research.long_report_compiler", "research.report_ast",
+        "scheduler.design", "algorithm", "state-machine.design",
+        "autoresearch.pane_optimizer", "autoresearch.issue_loop", "autoresearch.local_issue",
+        "autoresearch.agent_iteration", "autoresearch.score_gate",
     ]
     restrict_to_session = os.environ.get("SOLAR_GRAPH_DISPATCH_RESTRICT_SESSION") == "1"
     if dry_run and os.environ.get("SOLAR_GRAPH_DISPATCH_FAKE_WORKERS") == "1":

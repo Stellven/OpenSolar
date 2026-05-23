@@ -481,7 +481,12 @@ def write_digest(config: dict[str, Any], analysis: dict[str, Any], date_str: str
     md = render_md(analysis, config, date_str)
     html_text = render_html(analysis, config, date_str)
     dispatch = create_wiki_dispatch(run_dir, date_str, config)
-    mail_result = send_email(html_text, date_str)
+    mail_enabled = os.environ.get("GITHUB_TRENDS_SEND_MAIL", "true").strip().lower() not in {"0", "false", "no", "off"}
+    mail_result = (
+        send_email(html_text, date_str)
+        if mail_enabled else
+        {"status": "skipped", "backend": "disabled", "reason": "GITHUB_TRENDS_SEND_MAIL=false"}
+    )
     payload = {"date": date_str, "analysis": analysis, "wiki_dispatch": dispatch, "mail": mail_result}
     (run_dir / "digest.md").write_text(md, encoding="utf-8")
     (run_dir / "digest.html").write_text(html_text, encoding="utf-8")

@@ -1531,6 +1531,55 @@ EOF
   mv "$tmp" "$dispatch_file"
 }
 
+# ensure_ack_contract — make coordinator ack-watcher observable by workers.
+# The watcher waits for sprints/<sid>.ack-<dispatch_id>.json, so every real
+# dispatch must carry the exact write contract with the current dispatch id.
+ensure_ack_contract() {
+  local dispatch_file="${1:-}"
+  local sid="${2:-}"
+  local dispatch_id="${3:-}"
+  local pane="${4:-unknown}"
+  [[ -z "$dispatch_file" || ! -f "$dispatch_file" ]] && return 0
+  [[ -z "$sid" || -z "$dispatch_id" ]] && return 0
+  grep -q "SOLAR_ACK_CONTRACT" "$dispatch_file" 2>/dev/null && return 0
+
+  cat >> "$dispatch_file" <<EOF
+
+<!-- SOLAR_ACK_CONTRACT -->
+## Dispatch ACK Contract
+
+确认已读取本 dispatch 并开始处理后，必须立即写 ACK 文件：
+
+\`~/.solar/harness/sprints/${sid}.ack-${dispatch_id}.json\`
+
+可直接执行：
+
+\`\`\`bash
+python3 - <<'PY'
+import datetime
+import json
+from pathlib import Path
+
+ack_path = Path.home() / ".solar" / "harness" / "sprints" / "${sid}.ack-${dispatch_id}.json"
+ack_path.parent.mkdir(parents=True, exist_ok=True)
+ack = {
+    "dispatch_id": "${dispatch_id}",
+    "sid": "${sid}",
+    "role": "${pane}",
+    "status": "in_progress",
+    "exit_code": 0,
+    "message": "dispatch read and accepted",
+    "artifacts": [],
+    "wrote_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+}
+ack_path.write_text(json.dumps(ack, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+\`\`\`
+
+后续状态更新仍按 sprint 的 status / handoff / evidence 要求执行；ACK 只证明本 dispatch 已被真实读取并接收。
+EOF
+}
+
 # experience_pre_dispatch — advisory hook (fail-open, 50ms timeout)
 # EXPERIENCE_HOOK=0 to bypass; calls lib/coordinator_hooks.py pre_dispatch_json
 experience_pre_dispatch() {
@@ -1797,6 +1846,7 @@ dispatch_to_pane() {
 
   # sprint-20260509-solar-capability-plane-unification D4: inject skills+KB context before dispatch
   inject_dispatch_context "$instruction_file" "$sid" "$pane" "${_dispatch_id:-}" || true
+  ensure_ack_contract "$instruction_file" "$sid" "${_dispatch_id:-}" "$pane" || true
   set_pane_capability_title "$pane" "$instruction_file"
 
   local visibility_text

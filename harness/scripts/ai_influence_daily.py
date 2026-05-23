@@ -20,6 +20,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+import tempfile
 import urllib.parse
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -37,6 +38,8 @@ DEFAULT_ACCOUNTS_PATH = SCRIPT_DIR / ".." / "ai-influence-digest" / "references"
 DEFAULT_STATE_DIR = Path.home() / ".solar" / "harness" / "state" / "ai-influence-digest"
 USER_AGENT = "Solar-AI-Influence-Daily/2.0"
 DEFAULT_MAIL_TO = "sean.lisihao@huawei.com"
+DEFAULT_GMAIL_USER = "lisihao@gmail.com"
+DEFAULT_GMAIL_KEYCHAIN_SERVICE = "solar-ai-influence-gmail"
 
 
 # ---------------------------------------------------------------------------
@@ -1043,27 +1046,28 @@ def render_digest_html(analysis: dict, date_str: str) -> str:
     for trend in (trends.get("core_trends") or [])[:5]:
         evidence_rows = ""
         for ev in (trend.get("evidence") or [])[:3]:
-            evidence_rows += f"""<li>{_h(ev.get('handle',''))}: <a href="{_h(ev.get('url',''))}">{_h(ev.get('title',''))}</a></li>"""
-        trend_cards += f"""<section class="trend">
-<div class="trend-top"><span>{_h(trend.get('theme',''))}</span><b>{_h(trend.get('impact',''))}</b></div>
+            evidence_rows += f"""<li>{_h(ev.get('handle',''))}: <a style="color:#0f766e;text-decoration:none" href="{_h(ev.get('url',''))}">{_h(ev.get('title',''))}</a></li>"""
+        trend_cards += f"""<section class="trend" style="background:#fffdf8;border:1px solid #eadfcd;border-radius:18px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:16px;margin:12px 0">
+<div class="trend-top" style="display:flex;justify-content:space-between;gap:12px;align-items:center"><span style="font-size:17px;font-weight:700;color:#123b35">{_h(trend.get('theme',''))}</span><b style="background:#e8f3ef;color:#0f513f;border-radius:999px;padding:3px 9px;font-size:12px">{_h(trend.get('impact',''))}</b></div>
 <p>{_h(trend.get('thesis',''))}</p>
-<p class="meta">成熟度: {_h(trend.get('maturity',''))} · 置信度: {_h(trend.get('confidence',''))} · 证据数: {_h(trend.get('evidence_count',''))}</p>
-<p class="watch">观察指标: {_h(trend.get('watch_metric',''))}</p>
+<p class="meta" style="font-size:13px;color:#66736d">成熟度: {_h(trend.get('maturity',''))} · 置信度: {_h(trend.get('confidence',''))} · 证据数: {_h(trend.get('evidence_count',''))}</p>
+<p class="watch" style="font-size:13px;color:#66736d">观察指标: {_h(trend.get('watch_metric',''))}</p>
 <ul>{evidence_rows}</ul>
 </section>"""
     weak_rows = "".join(
         f"<li><b>{_h(signal.get('theme',''))}</b>: {_h(signal.get('why_watch',''))}</li>"
         for signal in (trends.get("weak_signals") or [])[:5]
     )
-    tag_rows = " ".join(f"<span class=\"tag\">{_h(tag)}</span>" for tag in (trends.get("knowledge_tags") or []))
+    tag_rows = " ".join(f"<span class=\"tag\" style=\"display:inline-block;background:#f1e4cd;color:#704719;border-radius:999px;padding:4px 9px;margin:3px;font-size:12px\">{_h(tag)}</span>" for tag in (trends.get("knowledge_tags") or []))
     rows = ""
-    for item in items:
+    for idx, item in enumerate(items):
+        row_bg = "background:#fbf7ef;" if idx % 2 else ""
         rows += f"""<tr>
-<td>{_h(item.get('handle',''))}</td>
-<td>{_h(item.get('type',''))}</td>
-<td><a href="{_h(item.get('tweet_url',''))}">{_h(item.get('title',''))}</a></td>
-<td>{_h(item.get('summary','')[:100])}</td>
-<td>{_h(item.get('hotness',''))}</td>
+<td style="border-bottom:1px solid #eee3d3;padding:9px;text-align:left;vertical-align:top;{row_bg}">{_h(item.get('handle',''))}</td>
+<td style="border-bottom:1px solid #eee3d3;padding:9px;text-align:left;vertical-align:top;{row_bg}">{_h(item.get('type',''))}</td>
+<td style="border-bottom:1px solid #eee3d3;padding:9px;text-align:left;vertical-align:top;{row_bg}"><a style="color:#0f766e;text-decoration:none" href="{_h(item.get('tweet_url',''))}">{_h(item.get('title',''))}</a></td>
+<td style="border-bottom:1px solid #eee3d3;padding:9px;text-align:left;vertical-align:top;{row_bg}">{_h(item.get('summary','')[:100])}</td>
+<td style="border-bottom:1px solid #eee3d3;padding:9px;text-align:left;vertical-align:top;{row_bg}">{_h(item.get('hotness',''))}</td>
 </tr>\n"""
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>AI Influence Digest — {date_str}</title>
@@ -1080,14 +1084,14 @@ body{{margin:0;background:#f4efe4;color:#17231f;font-family:-apple-system,BlinkM
 table{{border-collapse:collapse;width:100%;font-size:13px}}td,th{{border-bottom:1px solid #eee3d3;padding:9px;text-align:left;vertical-align:top}}th{{background:#123b35;color:#fff}}tr:nth-child(even) td{{background:#fbf7ef}}a{{color:#0f766e;text-decoration:none}}
 @media(max-width:760px){{.grid{{grid-template-columns:1fr}}.hero h1{{font-size:24px}}table{{font-size:12px}}}}
 </style></head>
-<body><div class="wrap"><div class="hero"><div class="kicker">AI Influence Digest</div><h1>{date_str} 趋势雷达</h1>
+<body style="margin:0;background:#f4efe4;color:#17231f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif;line-height:1.65"><div class="wrap" style="max-width:980px;margin:0 auto;padding:28px 18px 44px"><div class="hero" style="background:linear-gradient(135deg,#123b35,#315f4f 58%,#c9863d);color:#fff;border-radius:24px;padding:28px;margin-bottom:18px"><div class="kicker" style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.82">AI Influence Digest</div><h1 style="margin:8px 0 8px;font-size:30px;line-height:1.2">{date_str} 趋势雷达</h1>
 <p>从账号信号升级为趋势视图：先看方向，再看证据，最后沉淀到 Solar 知识库。</p></div>
-<div class="grid"><div class="metric"><b>{len(items)}</b><span>精选条目</span></div><div class="metric"><b>{len(trends.get('core_trends') or [])}</b><span>核心趋势</span></div><div class="metric"><b>{_h(analysis.get('analysis_status',''))}</b><span>分析状态</span></div></div>
-<div class="card"><h2>核心趋势</h2>{trend_cards or '<p>N/A</p>'}</div>
-<div class="card"><h2>弱信号</h2><ul>{weak_rows or '<li>N/A</li>'}</ul></div>
-<div class="card"><h2>知识库标签</h2>{tag_rows or 'N/A'}</div>
-<div class="card"><h2>精选内容</h2>
-<table><tr><th>账号</th><th>类型</th><th>标题</th><th>摘要</th><th>热度</th></tr>
+<div class="grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0"><div class="metric" style="background:#fffdf8;border:1px solid #eadfcd;border-radius:18px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:14px"><b style="display:block;font-size:24px;color:#123b35">{len(items)}</b><span style="font-size:12px;color:#66736d">精选条目</span></div><div class="metric" style="background:#fffdf8;border:1px solid #eadfcd;border-radius:18px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:14px"><b style="display:block;font-size:24px;color:#123b35">{len(trends.get('core_trends') or [])}</b><span style="font-size:12px;color:#66736d">核心趋势</span></div><div class="metric" style="background:#fffdf8;border:1px solid #eadfcd;border-radius:18px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:14px"><b style="display:block;font-size:24px;color:#123b35">{_h(analysis.get('analysis_status',''))}</b><span style="font-size:12px;color:#66736d">分析状态</span></div></div>
+<div class="card" style="background:#fffdf8;border:1px solid #eadfcd;border-radius:18px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:20px;margin:14px 0"><h2 style="font-size:20px;color:#123b35;margin:0 0 12px">核心趋势</h2>{trend_cards or '<p>N/A</p>'}</div>
+<div class="card" style="background:#fffdf8;border:1px solid #eadfcd;border-radius:18px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:20px;margin:14px 0"><h2 style="font-size:20px;color:#123b35;margin:0 0 12px">弱信号</h2><ul>{weak_rows or '<li>N/A</li>'}</ul></div>
+<div class="card" style="background:#fffdf8;border:1px solid #eadfcd;border-radius:18px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:20px;margin:14px 0"><h2 style="font-size:20px;color:#123b35;margin:0 0 12px">知识库标签</h2>{tag_rows or 'N/A'}</div>
+<div class="card" style="background:#fffdf8;border:1px solid #eadfcd;border-radius:18px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:20px;margin:14px 0"><h2 style="font-size:20px;color:#123b35;margin:0 0 12px">精选内容</h2>
+<table style="border-collapse:collapse;width:100%;font-size:13px"><tr><th style="background:#123b35;color:#fff;border-bottom:1px solid #eee3d3;padding:9px;text-align:left;vertical-align:top">账号</th><th style="background:#123b35;color:#fff;border-bottom:1px solid #eee3d3;padding:9px;text-align:left;vertical-align:top">类型</th><th style="background:#123b35;color:#fff;border-bottom:1px solid #eee3d3;padding:9px;text-align:left;vertical-align:top">标题</th><th style="background:#123b35;color:#fff;border-bottom:1px solid #eee3d3;padding:9px;text-align:left;vertical-align:top">摘要</th><th style="background:#123b35;color:#fff;border-bottom:1px solid #eee3d3;padding:9px;text-align:left;vertical-align:top">热度</th></tr>
 {rows}</table></div></div></body></html>"""
 
 
@@ -1111,10 +1115,33 @@ def _mail_text_from_html(html_content: str) -> str:
     return text.strip()[:20000]
 
 
+def _keychain_password(service: str, account: str) -> str:
+    if not service or not account or sys.platform != "darwin":
+        return ""
+    proc = subprocess.run(
+        ["security", "find-generic-password", "-w", "-s", service, "-a", account],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=10,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return ""
+    return proc.stdout.strip()
+
+
 def send_macos_mail(html_content: str, date_str: str, recipient: str = "") -> dict:
-    """Send via macOS Mail.app using AppleScript; falls back cleanly."""
+    """Send via macOS Mail.app using AppleScript; falls back cleanly.
+
+    Mail.app AppleScript only exposes a plain-text `content` field. Sending the
+    digest through this path silently destroys the designed HTML report, so keep
+    it disabled unless an operator explicitly accepts plain-text mail.
+    """
     if os.environ.get("AI_INFLUENCE_MAIL_BACKEND", "").lower() in {"preview", "none", "off"}:
         return {"status": "warn", "backend": "macos_mail", "reason": "macos mail backend disabled"}
+    if os.environ.get("AI_INFLUENCE_ALLOW_PLAIN_MAIL", "").lower() not in {"1", "true", "yes"}:
+        return {"status": "warn", "backend": "macos_mail", "reason": "macOS Mail fallback is plain-text only; refusing to send ugly report"}
     if sys.platform != "darwin":
         return {"status": "warn", "backend": "macos_mail", "reason": "not macOS"}
     if not recipient and os.environ.get("AI_INFLUENCE_MAIL_INFER_RECIPIENT", "").lower() not in {"1", "true", "yes"}:
@@ -1166,11 +1193,136 @@ end run
     return {"status": "sent", "backend": "macos_mail", "to": (proc.stdout.strip() or recipient or "Mail account")}
 
 
-def send_gmail(html_content: str, date_str: str) -> dict:
-    """Send digest email via Gmail SMTP, then macOS Mail.app, then preview."""
-    gmail_user = os.environ.get("GMAIL_USER", "")
+def mailapp_rich_compose(html_content: str, date_str: str, recipient: str) -> dict:
+    """Open a Mail.app rich-text draft by pasting RTF converted from HTML.
+
+    This is intentionally draft-only. Mail.app has no reliable AppleScript API
+    for setting HTML MIME content directly, so the only useful local path is GUI
+    composition with the rich text on the clipboard.
+    """
+    if sys.platform != "darwin":
+        return {"status": "warn", "backend": "mailapp_rich_compose", "reason": "not macOS"}
+    osascript = os.environ.get("OSASCRIPT_BIN") or shutil.which("osascript")
+    textutil = shutil.which("textutil")
+    pbcopy = shutil.which("pbcopy")
+    if not osascript or not textutil or not pbcopy:
+        return {"status": "warn", "backend": "mailapp_rich_compose", "reason": "missing osascript/textutil/pbcopy"}
+    ui_check = subprocess.run(
+        [osascript, "-e", 'tell application "System Events" to get UI elements enabled'],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=10,
+        check=False,
+    )
+    if ui_check.returncode != 0 or ui_check.stdout.strip().lower() != "true":
+        return {
+            "status": "warn",
+            "backend": "mailapp_rich_compose",
+            "reason": "Accessibility permission is disabled for GUI paste automation",
+        }
+
+    subject = f"AI Influence Digest — {date_str}"
+    with tempfile.TemporaryDirectory(prefix="ai-influence-mail-") as tmp:
+        html_path = Path(tmp) / "digest.html"
+        rtf_path = Path(tmp) / "digest.rtf"
+        html_path.write_text(html_content, encoding="utf-8")
+        convert = subprocess.run(
+            [textutil, "-convert", "rtf", "-output", str(rtf_path), str(html_path)],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+            check=False,
+        )
+        if convert.returncode != 0 or not rtf_path.exists():
+            return {
+                "status": "warn",
+                "backend": "mailapp_rich_compose",
+                "reason": (convert.stderr or convert.stdout or "textutil failed").strip()[:500],
+            }
+        copy = subprocess.run(
+            [pbcopy, "-Prefer", "rtf"],
+            input=rtf_path.read_text(encoding="utf-8", errors="replace"),
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=10,
+            check=False,
+        )
+        if copy.returncode != 0:
+            return {
+                "status": "warn",
+                "backend": "mailapp_rich_compose",
+                "reason": (copy.stderr or copy.stdout or "pbcopy failed").strip()[:500],
+            }
+
+    script = r'''
+on run argv
+  set theSubject to item 1 of argv
+  set theRecipient to item 2 of argv
+  tell application "Mail"
+    activate
+    set theMessage to make new outgoing message with properties {subject:theSubject, visible:true}
+    tell theMessage
+      make new to recipient at end of to recipients with properties {address:theRecipient}
+    end tell
+  end tell
+  delay 1.0
+  tell application "System Events"
+    tell process "Mail"
+      set frontmost to true
+      keystroke tab
+      delay 0.2
+      keystroke "v" using command down
+    end tell
+  end tell
+  return theRecipient
+end run
+'''
+    try:
+        proc = subprocess.run(
+            [osascript, "-e", script, subject, recipient],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=int(os.environ.get("AI_INFLUENCE_MAIL_TIMEOUT_SEC", "45")),
+            check=False,
+        )
+    except Exception as exc:
+        return {"status": "warn", "backend": "mailapp_rich_compose", "reason": str(exc)}
+    if proc.returncode != 0:
+        return {
+            "status": "warn",
+            "backend": "mailapp_rich_compose",
+            "reason": (proc.stderr or proc.stdout or "osascript failed").strip()[:500],
+        }
+    return {"status": "draft", "backend": "mailapp_rich_compose", "to": proc.stdout.strip() or recipient}
+
+
+def send_html_email(html_content: str, date_str: str) -> dict:
+    """Send the digest as real text/html email.
+
+    Known non-solutions:
+    - Codex Gmail connector currently normalizes body content to text/Markdown.
+      It can deliver a message, but it cannot preserve this report's HTML/CSS.
+    - macOS Mail AppleScript exposes only plain-text `content`.
+
+    Therefore automated rich reports require SMTP credentials or another raw
+    MIME-capable backend. Otherwise we emit a preview artifact instead of
+    sending a degraded report.
+    """
+    gmail_user = os.environ.get("GMAIL_USER") or os.environ.get("AI_INFLUENCE_GMAIL_USER") or DEFAULT_GMAIL_USER
     gmail_app_password = os.environ.get("GMAIL_APP_PASSWORD", "")
+    if not gmail_app_password:
+        keychain_service = os.environ.get("GMAIL_APP_PASSWORD_KEYCHAIN_SERVICE") or DEFAULT_GMAIL_KEYCHAIN_SERVICE
+        keychain_account = os.environ.get("GMAIL_APP_PASSWORD_KEYCHAIN_ACCOUNT") or gmail_user
+        gmail_app_password = _keychain_password(keychain_service, keychain_account)
     gmail_to = os.environ.get("GMAIL_TO") or os.environ.get("MAIL_TO") or os.environ.get("AI_INFLUENCE_MAIL_TO") or DEFAULT_MAIL_TO or gmail_user
+    backend = os.environ.get("AI_INFLUENCE_MAIL_BACKEND", "").lower()
+
+    if backend in {"mailapp-rich", "mailapp-rich-compose", "mailapp_rich_compose"}:
+        return mailapp_rich_compose(html_content, date_str, gmail_to)
 
     if not gmail_user or not gmail_app_password:
         mail_result = send_macos_mail(html_content, date_str, gmail_to)
@@ -1183,6 +1335,7 @@ def send_gmail(html_content: str, date_str: str) -> dict:
             "reason": f"GMAIL_USER or GMAIL_APP_PASSWORD not set; macos_mail={mail_result.get('reason', 'unavailable')}",
             "macos_mail": mail_result,
             "preview_generated": True,
+            "html_mail_required": True,
         }
 
     subject = f"AI Influence Digest — {date_str}"
@@ -1213,7 +1366,13 @@ def send_gmail(html_content: str, date_str: str) -> dict:
             "reason": f"{exc}; macos_mail={mail_result.get('reason', 'unavailable')}",
             "macos_mail": mail_result,
             "preview_generated": True,
+            "html_mail_required": True,
         }
+
+
+def send_gmail(html_content: str, date_str: str) -> dict:
+    """Backward-compatible wrapper for older callers."""
+    return send_html_email(html_content, date_str)
 
 
 # ---------------------------------------------------------------------------
@@ -1390,7 +1549,14 @@ def cmd_run(args: argparse.Namespace) -> int:
     result["digest_dir"] = str(digest_path)
 
     # --- Mail send / preview (FR6) ---
-    gmail_result = {"status": "skipped", "backend": "dry_run"} if dry_run else send_gmail(digest_html, effective_date)
+    mail_enabled = os.environ.get("AI_INFLUENCE_SEND_MAIL", "true").strip().lower() not in {"0", "false", "no", "off"}
+    gmail_result = (
+        {"status": "skipped", "backend": "dry_run"}
+        if dry_run else
+        {"status": "skipped", "backend": "disabled", "reason": "AI_INFLUENCE_SEND_MAIL=false"}
+        if not mail_enabled else
+        send_html_email(digest_html, effective_date)
+    )
     result["gmail"] = gmail_result
     if gmail_result["status"] == "skipped":
         print("Mail: skipped for dry-run", file=sys.stderr)

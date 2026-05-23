@@ -1540,10 +1540,18 @@ def monitor_summary(result: dict[str, Any], tasks: list[dict[str, Any]] | None =
             "type": "launch_guard_blocked",
             "detail": str(guard.get("reason") or "N/A"),
         })
-    if int(cap_summary.get("error", 0) or 0) > 0:
+    cap_error_count = int(cap_summary.get("error", 0) or 0)
+    cap_ok_count = int(cap_summary.get("ok", 0) or 0)
+    if cap_error_count > 0 and cap_ok_count <= 0:
         findings.append({
             "severity": "error",
             "type": "model_capability_error",
+            "detail": format_capability_summary_compact(cap_summary),
+        })
+    elif cap_error_count > 0:
+        findings.append({
+            "severity": "warn",
+            "type": "model_capability_warn",
             "detail": format_capability_summary_compact(cap_summary),
         })
     elif int(cap_summary.get("warn", 0) or 0) > 0:
