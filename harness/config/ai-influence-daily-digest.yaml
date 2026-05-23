@@ -1,5 +1,6 @@
 version: 1
 name: AI Influence Daily Digest
+accounts_path: /Users/lisihao/Solar/harness/ai-influence-digest/references/accounts_extended.txt
 
 mac_mini_only: true
 allowed_hostnames:

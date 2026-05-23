@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 Solar Harness HTTP Status Server — port 8765
 Sprint: sprint-20260507-symphony3 S4-S5
@@ -30,6 +31,7 @@ import re
 import html
 import importlib.util
 import time
+import datetime
 import urllib.parse
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -639,6 +641,233 @@ def _knowledge_subscriptions_payload() -> dict:
     }
 
 
+def _file_mtime_iso(path: Path) -> str:
+    try:
+        return datetime.datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec="seconds")
+    except Exception:
+        return ""
+
+
+def _count_files(path: Path, pattern: str = "*", limit: int = 100000) -> int:
+    if not path.exists():
+        return 0
+    count = 0
+    try:
+        for _ in path.rglob(pattern):
+            count += 1
+            if count >= limit:
+                return count
+    except Exception:
+        return count
+    return count
+
+
+def _dir_size_bytes(path: Path, limit: int = 100000) -> int:
+    if not path.exists():
+        return 0
+    total = 0
+    scanned = 0
+    try:
+        for root, _, files in os.walk(path):
+            for name in files:
+                scanned += 1
+                try:
+                    total += (Path(root) / name).stat().st_size
+                except Exception:
+                    pass
+                if scanned >= limit:
+                    return total
+    except Exception:
+        return total
+    return total
+
+
+def _latest_file(path: Path, pattern: str = "*") -> dict:
+    latest: Path | None = None
+    if not path.exists():
+        return {"path": "", "mtime": ""}
+    try:
+        for item in path.rglob(pattern):
+            if not item.is_file():
+                continue
+            if latest is None or item.stat().st_mtime > latest.stat().st_mtime:
+                latest = item
+    except Exception:
+        pass
+    return {"path": str(latest) if latest else "", "mtime": _file_mtime_iso(latest) if latest else ""}
+
+
+def _dispatch_status_counts(dispatch_dir: Path) -> dict:
+    counts: dict[str, int] = {}
+    latest: Path | None = None
+    if not dispatch_dir.exists():
+        return {"dir": str(dispatch_dir), "total": 0, "counts": counts, "latest": {}}
+    try:
+        for path in dispatch_dir.glob("*.md"):
+            text = path.read_text(encoding="utf-8", errors="replace")[:2000]
+            match = re.search(r"(?m)^status:\s*['\"]?([^'\"\n]+)", text)
+            status = (match.group(1).strip() if match else "unknown") or "unknown"
+            counts[status] = counts.get(status, 0) + 1
+            if latest is None or path.stat().st_mtime > latest.stat().st_mtime:
+                latest = path
+    except Exception as exc:
+        counts["error"] = counts.get("error", 0) + 1
+        return {"dir": str(dispatch_dir), "total": sum(counts.values()), "counts": counts, "error": f"{type(exc).__name__}: {exc}"}
+    return {
+        "dir": str(dispatch_dir),
+        "total": sum(counts.values()),
+        "counts": counts,
+        "latest": {"path": str(latest) if latest else "", "mtime": _file_mtime_iso(latest) if latest else ""},
+    }
+
+
+def _recent_vault_markdown(vault: Path, hours: int = 24, limit: int = 10000) -> dict:
+    cutoff = time.time() - hours * 3600
+    count = 0
+    latest: Path | None = None
+    scanned = 0
+    skip_names = {"_raw", ".git", ".obsidian", ".trash"}
+    try:
+        for root, dirs, files in os.walk(vault):
+            dirs[:] = [d for d in dirs if d not in skip_names]
+            for name in files:
+                if not name.endswith(".md"):
+                    continue
+                scanned += 1
+                path = Path(root) / name
+                try:
+                    mtime = path.stat().st_mtime
+                except Exception:
+                    continue
+                if mtime >= cutoff:
+                    count += 1
+                if latest is None or mtime > latest.stat().st_mtime:
+                    latest = path
+                if scanned >= limit:
+                    return {"recent_24h": count, "scanned": scanned, "truncated": True, "latest": {"path": str(latest) if latest else "", "mtime": _file_mtime_iso(latest) if latest else ""}}
+    except Exception as exc:
+        return {"recent_24h": count, "scanned": scanned, "error": f"{type(exc).__name__}: {exc}"}
+    return {"recent_24h": count, "scanned": scanned, "truncated": False, "latest": {"path": str(latest) if latest else "", "mtime": _file_mtime_iso(latest) if latest else ""}}
+
+
+def _knowledge_ingest_progress_payload() -> dict:
+    raw_dir = KNOWLEDGE_DIR / "_raw"
+    dispatch_dir = raw_dir / "solar-harness" / ".dispatch"
+    state_root = Path.home() / ".solar" / "harness" / "state"
+    sources = {
+        "chatgpt": raw_dir / "chatgpt-import",
+        "web_captures": raw_dir / "web-captures",
+        "youtube": raw_dir / "youtube-influence-digest",
+        "ai_influence": raw_dir / "ai-influence-daily-digest",
+        "github_trends": raw_dir / "github-trends-digest",
+        "solar_harness": raw_dir / "solar-harness",
+    }
+    source_rows = []
+    for name, path in sources.items():
+        source_rows.append({
+            "name": name,
+            "path": str(path),
+            "files": _count_files(path),
+            "latest": _latest_file(path),
+        })
+    asr_queue = state_root / "youtube-influence-digest" / "asr-queue"
+    asr_done = state_root / "youtube-influence-digest" / "asr-done"
+    asr_audio = state_root / "youtube-influence-digest" / "asr-audio"
+    dispatch = _dispatch_status_counts(dispatch_dir)
+    counts = dispatch.get("counts", {})
+    completed = sum(v for k, v in counts.items() if str(k) in {"completed", "success", "skipped", "skipped-duplicate"})
+    pending = sum(v for k, v in counts.items() if str(k) in {"pending", "running", "queued"})
+    failed = sum(v for k, v in counts.items() if str(k) in {"failed", "error"})
+    blocked = sum(v for k, v in counts.items() if str(k).startswith("blocked"))
+    unknown = int(counts.get("unknown", 0) or 0)
+    total = int(dispatch.get("total", 0) or 0)
+    asr_queue_count = _count_files(asr_queue, "*.json")
+    asr_done_count = _count_files(asr_done, "*.json")
+    asr_audio_bytes = _dir_size_bytes(asr_audio)
+    status = "ok"
+    if pending or blocked or asr_queue_count:
+        status = "pending"
+    if failed:
+        status = "warn"
+    mirage = _mirage_status()
+    qmd = mirage.get("qmd") if isinstance(mirage.get("qmd"), dict) else {}
+    vault_md = _recent_vault_markdown(KNOWLEDGE_DIR)
+    source_rows.sort(key=lambda item: ((item.get("latest") or {}).get("mtime") or ""), reverse=True)
+    latest_source = source_rows[0] if source_rows else {}
+    blockers = []
+    if failed:
+        blockers.append({"level": "warn", "title": "有失败 dispatch", "detail": f"{failed} 个 dispatch 失败，需要人工看失败原因或重派。"})
+    if blocked:
+        blockers.append({"level": "pending", "title": "有阻塞项", "detail": f"{blocked} 个 dispatch 被标记为 blocked，通常是缺 transcript 或等待人工确认。"})
+    if asr_queue_count:
+        blockers.append({"level": "pending", "title": "YouTube ASR 队列积压", "detail": f"{asr_queue_count} 个视频等音频转文字；完成后才能产出高质量知识。"})
+    if pending:
+        blockers.append({"level": "pending", "title": "有待处理 dispatch", "detail": f"{pending} 个 dispatch 还没完成。"})
+    if unknown:
+        blockers.append({"level": "warn", "title": "历史状态不规范", "detail": f"{unknown} 个旧 dispatch 没有标准 status，建议后续维护清理。"})
+    if not blockers:
+        blockers.append({"level": "ok", "title": "没有明显卡点", "detail": "当前没有 failed/blocked/pending/ASR 积压。"})
+    next_actions = []
+    if failed:
+        next_actions.append("先查看 failed dispatch，决定重派还是标记 skipped。")
+    if asr_queue_count:
+        next_actions.append("让 YouTube ASR queue 低速处理，先不要继续批量抓字幕以免 429。")
+    if pending:
+        next_actions.append("确认 wiki dispatch tail/调度器是否在消费 pending。")
+    if qmd.get("status") not in {"ok", None}:
+        next_actions.append("修复 QMD/embedding，否则新知识不能稳定检索。")
+    if not next_actions:
+        next_actions.append("观察最近产出即可；无需人工介入。")
+    return {
+        "ok": status in {"ok", "pending"},
+        "status": status,
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "vault": str(KNOWLEDGE_DIR),
+        "raw_dir": str(raw_dir),
+        "headline": (
+            f"还有 {pending} 个待处理、{failed} 个失败、{blocked} 个阻塞、{asr_queue_count} 个视频等 ASR；"
+            f"近 24 小时新增/更新 {vault_md.get('recent_24h', 0)} 个知识页。"
+        ),
+        "funnel": {
+            "total_dispatch": total,
+            "completed": completed,
+            "pending": pending,
+            "failed": failed,
+            "blocked": blocked,
+            "unknown": unknown,
+            "asr_waiting": asr_queue_count,
+            "asr_done": asr_done_count,
+            "recent_knowledge_24h": vault_md.get("recent_24h", 0),
+        },
+        "activity": {
+            "latest_raw_source": latest_source,
+            "latest_dispatch": dispatch.get("latest", {}),
+            "latest_knowledge_page": vault_md.get("latest", {}),
+        },
+        "blockers": blockers[:6],
+        "next_actions": next_actions[:5],
+        "dispatch": dispatch,
+        "qmd": {
+            "status": qmd.get("status", mirage.get("qmd_status", "unknown")) if isinstance(qmd, dict) else "unknown",
+            "indexed": qmd.get("indexed", 0) if isinstance(qmd, dict) else 0,
+            "pending": qmd.get("pending", "N/A") if isinstance(qmd, dict) else "N/A",
+            "last_probe_at": mirage.get("last_probe_at", ""),
+            "stale": mirage.get("stale", False),
+        },
+        "asr": {
+            "queue": asr_queue_count,
+            "done": asr_done_count,
+            "queue_dir": str(asr_queue),
+            "audio_dir": str(asr_audio),
+            "audio_cache_bytes": asr_audio_bytes,
+            "audio_cache_mb": round(asr_audio_bytes / 1024 / 1024, 1),
+            "latest_queue": _latest_file(asr_queue, "*.json"),
+        },
+        "sources": source_rows,
+        "vault_markdown": vault_md,
+    }
+
+
 def _append_youtube_subscription(data: dict) -> dict:
     cfg = _read_yaml_file(YOUTUBE_DIGEST_CONFIG)
     channels = cfg.get("channels") if isinstance(cfg.get("channels"), list) else []
@@ -715,7 +944,7 @@ def _append_github_repo(data: dict) -> dict:
 def _knowledge_subscriptions_html() -> str:
     payload = _knowledge_subscriptions_payload()
     yt_rows = "".join(f"<li><b>{h(x.get('name') or x.get('url'))}</b> <span>{h(x.get('category',''))}</span><code>{h(x.get('url') or x.get('channel_id') or x.get('handle'))}</code></li>" for x in payload["youtube"]["channels"][:80] if isinstance(x, dict))
-    social_rows = "".join(f"<li><b>@{h(x.get('handle'))}</b> <span>{h(x.get('category'))}</span><em>tier {h(x.get('tier'))}</em></li>" for x in payload["social"]["items"][:120])
+    social_rows = "".join(f"<li><b>@{h(x.get('handle'))}</b> <span>{h(x.get('category'))}</span><em>tier {h(x.get('tier'))}</em></li>" for x in payload["social"]["items"][:300])
     topic_rows = "".join(f"<li><b>{h(x.get('name'))}</b> <span>{h(x.get('category'))}</span><code>{h(x.get('query'))}</code></li>" for x in payload["github"]["tracked_topics"][:80] if isinstance(x, dict))
     repo_rows = "".join(f"<li><code>{h(repo)}</code></li>" for repo in payload["github"]["tracked_repos"][:80])
     return f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Knowledge Subscriptions</title>
@@ -2416,6 +2645,7 @@ def _physical_operator_summary(limit: int = 8) -> dict:
     registry_path = HARNESS_DIR / "config" / "physical-operators.json"
     lease_dir = HARNESS_DIR / "run" / "operator-leases"
     status_dir = HARNESS_DIR / "run" / "operator-status"
+    results_dir = HARNESS_DIR / "run" / "operator-results"
     empty = {
         "ok": False,
         "status": "missing",
@@ -2426,10 +2656,13 @@ def _physical_operator_summary(limit: int = 8) -> dict:
         "busy": 0,
         "roles": {},
         "items": [],
+        "alerts": [],
+        "recent_results": [],
         "sources": {
             "registry": str(registry_path),
             "leases": str(lease_dir),
             "status": str(status_dir),
+            "results": str(results_dir),
         },
     }
     if not registry_path.exists():
@@ -2440,7 +2673,7 @@ def _physical_operator_summary(limit: int = 8) -> dict:
         if not isinstance(operators, dict):
             return {**empty, "status": "error", "errors": ["invalid operators registry shape"]}
 
-        now = _now()
+        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         leases = {}
         if lease_dir.exists():
             for path in lease_dir.glob("*.json"):
@@ -2463,6 +2696,7 @@ def _physical_operator_summary(limit: int = 8) -> dict:
                 overrides[path.stem] = data
 
         items = []
+        alerts = []
         roles = {}
         enabled_count = 0
         available_count = 0
@@ -2496,6 +2730,13 @@ def _physical_operator_summary(limit: int = 8) -> dict:
                 busy_count += 1
             if enabled and available and runtime_state == "idle":
                 dispatchable_count += 1
+            if runtime_state in {"quota_exhausted", "auth_expired", "error", "disabled"}:
+                alerts.append({
+                    "operator_id": operator_id,
+                    "runtime_state": runtime_state,
+                    "role": role,
+                    "backend": str(cfg.get("backend") or "unknown"),
+                })
 
             lease = leases.get(operator_id) or {}
             items.append({
@@ -2511,6 +2752,29 @@ def _physical_operator_summary(limit: int = 8) -> dict:
                 "task_id": str(lease.get("task_id") or ""),
                 "expires_at": str(lease.get("expires_at") or ""),
             })
+
+        recent_results = []
+        if results_dir.exists():
+            result_paths = sorted(
+                results_dir.glob("*/*/result.json"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )[: max(1, limit)]
+            for path in result_paths:
+                try:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+                recent_results.append({
+                    "operator_id": str(data.get("operator_id") or path.parents[1].name),
+                    "task_id": str(data.get("task_id") or path.parent.name),
+                    "status": str(data.get("status") or "unknown"),
+                    "started_at": str(data.get("started_at") or ""),
+                    "finished_at": str(data.get("finished_at") or ""),
+                    "exit_code": data.get("exit_code"),
+                    "sprint_id": str(data.get("sprint_id") or ""),
+                    "node_id": str(data.get("node_id") or ""),
+                })
 
         state_rank = {
             "running": 0,
@@ -2543,10 +2807,13 @@ def _physical_operator_summary(limit: int = 8) -> dict:
             "busy": busy_count,
             "roles": roles,
             "items": visible,
+            "alerts": alerts[:limit],
+            "recent_results": recent_results,
             "sources": {
                 "registry": str(registry_path),
                 "leases": str(lease_dir),
                 "status": str(status_dir),
+                "results": str(results_dir),
             },
         }
     except Exception as exc:
@@ -2570,6 +2837,7 @@ def _status_payload(limit: int = 50) -> dict:
         "kpi": _kpi(),
         "obsidian_wiki": _obsidian_wiki_readiness(),
         "mirage": _mirage_status(),
+        "knowledge_progress": _knowledge_ingest_progress_payload(),
         "capability_health": capability_health,
         "solar_kb": _solar_kb_status(),
         "obsidian_sync": _obsidian_sync_status(),
@@ -3491,6 +3759,7 @@ Config http://127.0.0.1:8789/setup</div>
       </div>
 
       <div class="health-grid">
+        <div class="card"><h2>采集 / 提取进展</h2><div id="knowledge-progress-card">Loading...</div></div>
         <div class="card"><h2>Obsidian Wiki 健康</h2><div id="wiki-card">Loading...</div></div>
         <div class="card"><h2>Mirage / QMD 健康</h2><div id="mirage-card">Loading...</div></div>
       </div>
@@ -3591,6 +3860,13 @@ function levelBadge(level) {
   const cls = s === 'closed_loop' ? 'ok' : s === 'default_usable' ? 'default' : s === 'basic_usable' ? 'warn' : 'missing';
   return '<span class="level-badge ' + esc(cls) + '">' + esc(s) + '</span>';
 }
+function formatBytes(n) {
+  const v = Number(n || 0);
+  if (v >= 1024 * 1024 * 1024) return (v / 1024 / 1024 / 1024).toFixed(1) + ' GB';
+  if (v >= 1024 * 1024) return (v / 1024 / 1024).toFixed(1) + ' MB';
+  if (v >= 1024) return (v / 1024).toFixed(1) + ' KB';
+  return String(v) + ' B';
+}
 function sevClass(s) { return s === 'error' ? 'error' : s === 'warn' ? 'warn' : 'info'; }
 function runtimeClass(s) { return s === 'active' ? 'info' : s === 'missing' ? 'error' : s === 'unknown' ? 'warn' : ''; }
 function artifactLabel(a) {
@@ -3688,6 +3964,55 @@ function renderPmDispatches(data, compact) {
         '<td>' + esc(submitted) + '</td>' +
       '</tr>';
     }).join('') + '</table>';
+}
+function renderPhysicalOperators(data, compact) {
+  data = data || {};
+  const items = data.items || [];
+  const alerts = data.alerts || [];
+  const recentResults = data.recent_results || [];
+  if (data.status === 'missing') {
+    return '<div class="muted">physical-operators.json 缺失。</div>';
+  }
+  if (!items.length && !data.count) {
+    return '<div class="muted">暂无物理算子记录。</div>';
+  }
+  const roles = Object.entries(data.roles || {}).map(([role, count]) => role + ':' + count).join(' · ') || 'N/A';
+  if (compact) {
+    return '<div class="health-metrics">' +
+      '<div class="mini-metric"><div class="kv-label">Status</div><span class="num">' + esc(data.status || 'unknown') + '</span></div>' +
+      '<div class="mini-metric"><div class="kv-label">Dispatchable</div><span class="num">' + esc((data.dispatchable ?? 0) + '/' + (data.count ?? 0)) + '</span></div>' +
+      '<div class="mini-metric"><div class="kv-label">Busy</div><span class="num">' + esc(data.busy ?? 0) + '</span></div>' +
+      '<div class="mini-metric"><div class="kv-label">Available</div><span class="num">' + esc((data.available ?? 0) + '/' + (data.enabled ?? 0)) + '</span></div>' +
+      '</div>' +
+      '<div class="muted">roles: ' + esc(roles) + '</div>' +
+      (alerts.length ? '<div class="warn">alerts: ' + esc(alerts.map(a => a.operator_id + ':' + a.runtime_state).join(' · ')) + '</div>' : '') +
+      (recentResults.length ? '<div class="muted">latest result: ' + esc((recentResults[0].operator_id || '-') + ' · ' + (recentResults[0].status || '-')) + '</div>' : '');
+  }
+  return '<div class="health-metrics">' +
+    '<div class="mini-metric"><div class="kv-label">Status</div><span class="num">' + esc(data.status || 'unknown') + '</span></div>' +
+    '<div class="mini-metric"><div class="kv-label">Total</div><span class="num">' + esc(data.count ?? 0) + '</span></div>' +
+    '<div class="mini-metric"><div class="kv-label">Dispatchable</div><span class="num">' + esc(data.dispatchable ?? 0) + '</span></div>' +
+    '<div class="mini-metric"><div class="kv-label">Busy</div><span class="num">' + esc(data.busy ?? 0) + '</span></div>' +
+    '<div class="mini-metric"><div class="kv-label">Enabled</div><span class="num">' + esc(data.enabled ?? 0) + '</span></div>' +
+    '<div class="mini-metric"><div class="kv-label">Available</div><span class="num">' + esc(data.available ?? 0) + '</span></div>' +
+    '</div>' +
+    '<div class="muted">roles: ' + esc(roles) + '</div>' +
+    (alerts.length ? '<div class="warn" style="margin:.6rem 0">Alerts: ' + esc(alerts.map(a => a.operator_id + ':' + a.runtime_state).join(' · ')) + '</div>' : '<div class="muted" style="margin:.6rem 0">Alerts: none</div>') +
+    '<table><tr><th>Operator</th><th>Role</th><th>Backend</th><th>State</th><th>Sprint</th></tr>' +
+    items.map(item => '<tr>' +
+      '<td>' + esc(item.operator_id || '-') + '</td>' +
+      '<td>' + esc(item.role || '-') + '</td>' +
+      '<td>' + esc(item.backend || '-') + '</td>' +
+      '<td>' + statusBadge(item.runtime_state || 'unknown') + '</td>' +
+      '<td>' + esc(item.sprint_id || '-') + '</td>' +
+      '</tr>').join('') + '</table>' +
+    (recentResults.length ? '<h3 style="margin-top:.9rem">Recent Results</h3><table><tr><th>Operator</th><th>Task</th><th>Status</th><th>Finished</th></tr>' +
+      recentResults.map(item => '<tr>' +
+        '<td>' + esc(item.operator_id || '-') + '</td>' +
+        '<td>' + esc(item.task_id || '-') + '</td>' +
+        '<td>' + statusBadge(item.status || 'unknown') + '</td>' +
+        '<td>' + esc(item.finished_at || item.started_at || '-') + '</td>' +
+      '</tr>').join('') + '</table>' : '<div class="muted" style="margin-top:.8rem">Recent Results: none</div>');
 }
 function clip(v, limit) {
   const s = String(v || '').replace(/\\s+/g, ' ').trim();
@@ -4075,6 +4400,57 @@ function renderKnowledgeSummary(wiki, mirage) {
     '<div class="status-tile"><div class="kv-label">Vault</div><strong class="path-text">' + esc(vault) + '</strong></div>'
   ].join('');
 }
+function renderKnowledgeProgress(progress) {
+  progress = progress || {};
+  const funnel = progress.funnel || {};
+  const activity = progress.activity || {};
+  const qmd = progress.qmd || {};
+  const asr = progress.asr || {};
+  const src = progress.sources || [];
+  const blockers = progress.blockers || [];
+  const actions = progress.next_actions || [];
+  const latestRaw = activity.latest_raw_source || {};
+  const latestRawStamp = ((latestRaw.latest || {}).mtime || 'N/A');
+  const latestDispatch = activity.latest_dispatch || {};
+  const latestKnowledge = activity.latest_knowledge_page || {};
+  const blockerRows = blockers.map(b => {
+    const level = b.level || 'pending';
+    return '<li>' + statusBadge(level) + ' <b>' + esc(b.title || 'N/A') + '</b><br><span class="muted">' + esc(b.detail || '') + '</span></li>';
+  }).join('');
+  const actionRows = actions.map(a => '<li>' + esc(a) + '</li>').join('');
+  const sourceRows = src.slice(0, 6).map(s => {
+    const latest = (s.latest || {}).mtime || 'N/A';
+    return '<tr><td>' + esc(s.name) + '</td><td>' + esc(s.files || 0) + '</td><td class="path-text">' + esc(latest) + '</td></tr>';
+  }).join('');
+  return '' +
+    '<div class="impact-note"><b>一句话：</b>' + esc(progress.headline || 'N/A') + '</div>' +
+    '<div class="status-strip">' +
+      '<div class="status-tile"><div class="kv-label">状态</div><strong>' + statusBadge(progress.status || 'unknown') + '</strong></div>' +
+      '<div class="status-tile"><div class="kv-label">待处理</div><strong>' + esc(funnel.pending || 0) + '</strong></div>' +
+      '<div class="status-tile"><div class="kv-label">失败</div><strong>' + esc(funnel.failed || 0) + '</strong></div>' +
+      '<div class="status-tile"><div class="kv-label">阻塞</div><strong>' + esc(funnel.blocked || 0) + '</strong></div>' +
+      '<div class="status-tile"><div class="kv-label">等视频ASR</div><strong>' + esc(funnel.asr_waiting || 0) + '</strong></div>' +
+      '<div class="status-tile"><div class="kv-label">ASR缓存</div><strong>' + esc(formatBytes(asr.audio_cache_bytes || 0)) + '</strong></div>' +
+      '<div class="status-tile"><div class="kv-label">近24h知识页</div><strong>' + esc(funnel.recent_knowledge_24h || 0) + '</strong></div>' +
+      '<div class="status-tile"><div class="kv-label">QMD</div><strong>' + esc(qmd.status || 'unknown') + '</strong></div>' +
+    '</div>' +
+    '<div class="kv-grid">' +
+      kv('处理漏斗', '总任务 ' + (funnel.total_dispatch || 0) + ' · 已完成 ' + (funnel.completed || 0) + ' · 未知历史状态 ' + (funnel.unknown || 0)) +
+      kv('最近原始输入', (latestRaw.name ? latestRaw.name + ' · ' + latestRawStamp : 'N/A')) +
+      kv('最新派单', ((latestDispatch || {}).path || 'N/A')) +
+      kv('最新知识页', ((latestKnowledge || {}).path || 'N/A')) +
+      kv('QMD 语义索引', 'indexed ' + (qmd.indexed || 0) + ' · pending ' + (qmd.pending === undefined ? 'N/A' : qmd.pending)) +
+      kv('ASR 进度', '等待 ' + (funnel.asr_waiting || 0) + ' · 已完成 ' + (funnel.asr_done || 0)) +
+      kv('ASR 缓存目录', formatBytes(asr.audio_cache_bytes || 0) + ' · ' + (asr.audio_dir || 'N/A')) +
+    '</div>' +
+    '<h3>当前卡点</h3>' +
+    '<ul class="impact-list">' + (blockerRows || '<li>' + statusBadge('ok') + ' <b>没有明显卡点</b><br><span class="muted">采集、派单、抽取和索引没有发现硬阻塞。</span></li>') + '</ul>' +
+    '<h3>建议动作</h3>' +
+    '<ul>' + (actionRows || '<li>继续观察即可。</li>') + '</ul>' +
+    '<h3>最近更新来源</h3>' +
+    '<table><thead><tr><th>来源</th><th>文件数</th><th>最近更新时间</th></tr></thead><tbody>' + (sourceRows || '<tr><td colspan="3">N/A</td></tr>') + '</tbody></table>' +
+    '<div class="muted">Generated: ' + esc(progress.generated_at || 'N/A') + '</div>';
+}
 function statePill(label, ok) {
   return '<div class="state-pill ' + (ok ? 'ok' : 'warn') + '">' + esc(label) + '<br>' + (ok ? '✓' : '×') + '</div>';
 }
@@ -4394,8 +4770,10 @@ function render(data) {
 
   const wiki = data.obsidian_wiki || {};
   const mirage = data.mirage || {};
+  const knowledgeProgress = data.knowledge_progress || {};
   renderEvolution(data.evolution || {});
   document.getElementById('knowledge-summary').innerHTML = renderKnowledgeSummary(wiki, mirage);
+  document.getElementById('knowledge-progress-card').innerHTML = renderKnowledgeProgress(knowledgeProgress);
   document.getElementById('wiki-card').innerHTML = renderList(wiki);
   document.getElementById('mirage-card').innerHTML = renderMirageHealth(mirage);
   document.getElementById('overview-knowledge').innerHTML =
@@ -4409,6 +4787,8 @@ function render(data) {
   document.getElementById('meta-harness-card').innerHTML = renderMetaHarness(data.meta_harness || {}, false);
   document.getElementById('overview-pm-dispatch').innerHTML = renderPmDispatches(data.pm_dispatches || {}, true);
   document.getElementById('pm-dispatch-card').innerHTML = renderPmDispatches(data.pm_dispatches || {}, false);
+  document.getElementById('overview-physical-operators').innerHTML = renderPhysicalOperators(data.physical_operators || {}, true);
+  document.getElementById('physical-operators-card').innerHTML = renderPhysicalOperators(data.physical_operators || {}, false);
   document.getElementById('overview-human-search').innerHTML = renderHumanSearch(data.human_search || {}, true);
   document.getElementById('human-search-card').innerHTML = renderHumanSearch(data.human_search || {}, false);
   document.getElementById('overview-research').innerHTML = renderResearchStatus(data.research || {}, true);
@@ -4555,6 +4935,9 @@ class StatusHandler(BaseHTTPRequestHandler):
 
         elif path == "/knowledge/subscriptions":
             self._send_json(_knowledge_subscriptions_payload())
+
+        elif path == "/knowledge/progress":
+            self._send_json(_knowledge_ingest_progress_payload())
 
         elif path == "/knowledge/subscriptions-view":
             self._send_text(_knowledge_subscriptions_html(), content_type="text/html; charset=utf-8")
