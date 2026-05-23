@@ -126,6 +126,13 @@ def main():
             "tmux_window_exists": bool(window and window in windows),
         })
     graphs = [graph_summary(path) for path in sorted(SPRINTS_DIR.glob("*.task_graph.json"))]
+    mt_json = run([str(HARNESS / "solar-harness.sh"), "multi-task", "status", "--json"], timeout=30)
+    mt_snapshot = {}
+    if mt_json["rc"] == 0:
+        try:
+            mt_snapshot = json.loads(mt_json["stdout"] or "{}")
+        except Exception:
+            mt_snapshot = {}
     mt = run([str(HARNESS / "solar-harness.sh"), "multi-task", "status", "--no-clear"], timeout=20)
     print(json.dumps({
         "ok": True,
@@ -136,6 +143,8 @@ def main():
         "tmux_windows": windows,
         "tasks": tasks,
         "graphs": graphs,
+        "multi_task_snapshot": mt_snapshot,
+        "multi_task_status_json": mt_json,
         "multi_task_status": mt,
     }, ensure_ascii=False))
 
@@ -337,6 +346,16 @@ def analyze(snapshot: dict[str, Any], args: argparse.Namespace, checked_at: dt.d
             findings.append({"severity": "warn", "type": "stale_output_log", "task_id": task_id, "sprint_id": status.get("sprint_id"), "node_id": node_id, "graph": graph, "age_seconds": log_age, "output_size": task.get("output_size")})
 
     active_workers = len(active_tasks)
+    integrated_monitor = ((snapshot.get("multi_task_snapshot") or {}).get("monitor") or {})
+    for item in integrated_monitor.get("findings") or []:
+        severity = str(item.get("severity") or "warn")
+        ftype = str(item.get("type") or "multi_task_monitor")
+        findings.append({
+            **item,
+            "severity": severity if severity in {"ok", "warn", "error"} else "warn",
+            "type": f"multi_task_{ftype}" if not ftype.startswith("multi_task_") else ftype,
+            "source": "multi-task status --json",
+        })
     for graph in snapshot.get("graphs") or []:
         ready = graph.get("ready_nodes") or []
         if ready and active_workers == 0:
@@ -367,6 +386,11 @@ def analyze(snapshot: dict[str, Any], args: argparse.Namespace, checked_at: dt.d
         "task_count": len(snapshot.get("tasks") or []),
         "graph_count": len(snapshot.get("graphs") or []),
         "terminal_tasks": len(terminal_tasks),
+        "integrated_monitor": {
+            "status": integrated_monitor.get("status", "N/A"),
+            "data_source": integrated_monitor.get("data_source", "N/A"),
+            "finding_count": len(integrated_monitor.get("findings") or []),
+        },
         "findings": findings,
     }
 

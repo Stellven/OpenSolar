@@ -33,10 +33,21 @@ if str(_LIB_DIR) not in sys.path:
 
 from multi_task_status import (  # noqa: E402
     load_operator_fleet,
+    load_actor_fleet,
+    load_host_fleet,
+    get_logical_operator_binding_summary,
+    get_actor_status_entry,
+    load_actors,
+    load_hosts,
     PHYSICAL_OPERATORS_PATH,
     OPERATOR_PERSONAS_DIR,
     OPERATOR_STATUS_DIR,
     OPERATOR_LEASE_DIR,
+    ACTORS_PATH,
+    HOSTS_PATH,
+    LOGICAL_OPS_PATH,
+    ACTOR_LEASE_DIR,
+    _redact_secrets,
 )
 
 
@@ -74,12 +85,16 @@ def build_snapshot(
     personas_dir: Path = OPERATOR_PERSONAS_DIR,
     status_dir: Path = OPERATOR_STATUS_DIR,
     lease_dir: Path = OPERATOR_LEASE_DIR,
+    actors_path: Path = ACTORS_PATH,
+    hosts_path: Path = HOSTS_PATH,
+    logical_ops_path: Path = LOGICAL_OPS_PATH,
+    actor_lease_dir: Path = ACTOR_LEASE_DIR,
 ) -> dict[str, Any]:
     """Build and return the operator fleet snapshot dict.
 
     Fields
     ------
-    schema                   ``"solar.monitor_bridge.operator_fleet.v1"``
+    schema                   ``"solar.monitor_bridge.operator_fleet.v2"``
     observed_at              ISO-8601 UTC timestamp.
     operator_count           Total number of registered operators.
     submit_count             Operators with an active (non-expired) lease / submit_state.
@@ -88,10 +103,9 @@ def build_snapshot(
     claude_print_process_count  Observed count of live ``claude --print`` OS processes
                              (from ``pgrep``).  -1 if pgrep is unavailable.
     operator_fleet           ``{operator_id: enriched_entry}`` for all operators.
-                             Each entry includes operator_id, role, resolved_persona,
-                             lifecycle_state, heartbeat_at, daemon_state,
-                             current_task_id, submit_state, surface,
-                             billing_surface, and billing_pool.
+    actor_fleet              ``{actor_id: enriched_actor_entry}`` for all actors.
+    host_fleet               ``{host_id: enriched_host_entry}`` for all hosts.
+    logical_operator_bindings  Summary of all 16 P0 operator bindings.
     """
     fleet = load_operator_fleet(
         operators_path,
@@ -114,8 +128,21 @@ def build_snapshot(
         state = str(entry.get("lifecycle_state") or "N/A")
         lifecycle_counts[state] = lifecycle_counts.get(state, 0) + 1
 
+    # Actor fleet (N4)
+    actor_fleet = load_actor_fleet(actors_path, hosts_path, lease_dir=actor_lease_dir)
+    actor_lease_counts: dict[str, int] = {}
+    for aentry in actor_fleet.values():
+        ls = str(aentry.get("lease_state") or "unknown")
+        actor_lease_counts[ls] = actor_lease_counts.get(ls, 0) + 1
+
+    # Host fleet (N4)
+    host_fleet = load_host_fleet(hosts_path)
+
+    # Logical operator binding summary (N4)
+    lo_bindings = get_logical_operator_binding_summary(logical_ops_path)
+
     return {
-        "schema": "solar.monitor_bridge.operator_fleet.v1",
+        "schema": "solar.monitor_bridge.operator_fleet.v2",
         "observed_at": _now_iso(),
         "operator_count": len(fleet),
         "submit_count": submit_count,
@@ -123,6 +150,10 @@ def build_snapshot(
         "lifecycle_counts": dict(sorted(lifecycle_counts.items())),
         "claude_print_process_count": _count_claude_print_processes(),
         "operator_fleet": dict(sorted(fleet.items())),
+        "actor_fleet": dict(sorted(actor_fleet.items())),
+        "actor_lease_counts": dict(sorted(actor_lease_counts.items())),
+        "host_fleet": dict(sorted(host_fleet.items())),
+        "logical_operator_bindings": dict(sorted(lo_bindings.items())),
     }
 
 

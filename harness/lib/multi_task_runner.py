@@ -1098,6 +1098,27 @@ def read_task_status(path: Path) -> dict[str, Any] | None:
         return None
 
 
+def resolve_graph_path(value: str) -> Path:
+    """Resolve graph paths persisted by older multi-task status files.
+
+    Some legacy rows stored paths like ``sprints/<sid>.task_graph.json``.
+    Status commands may run from outside the harness root, so plain
+    ``Path(value)`` can miss an existing graph and leave finished tasks looking
+    active forever.
+    """
+    raw = str(value or "").strip()
+    path = Path(raw).expanduser()
+    if path.is_absolute():
+        return path
+    candidates = [Path.cwd() / path, HARNESS_DIR / path]
+    if path.name.endswith(".task_graph.json"):
+        candidates.append(SPRINTS_DIR / path.name)
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return HARNESS_DIR / path
+
+
 def task_age_s(row: dict[str, Any], now_ts: float | None = None) -> int | None:
     updated_ts = parse_iso(str(row.get("updated_at") or row.get("created_at") or ""))
     if updated_ts is None:
@@ -1111,7 +1132,7 @@ def graph_node_status_for_task(row: dict[str, Any]) -> str:
     if not graph_path or not node_id:
         return "N/A"
     try:
-        graph = load_graph(Path(graph_path).expanduser())
+        graph = load_graph(resolve_graph_path(graph_path))
         return str(node_status(graph, node_id) or "N/A")
     except Exception:
         return "N/A"
@@ -1438,6 +1459,143 @@ def task_inventory(tasks: list[dict[str, Any]]) -> dict[str, Any]:
         "statuses": status_counts,
         "latest": latest,
         "latest_age": format_age_s(None if latest is None else task_age_s(latest)),
+    }
+
+
+def worker_activity_projection(tmux_live: bool, inventory: dict[str, Any], active_count: int,
+                               has_tasks: bool) -> dict[str, Any]:
+    """Return display status for worker activity without treating idle as failure."""
+    live_count = int(inventory.get("live", 0) or 0)
+    if tmux_live and live_count:
+        data_source = "live"
+        ok = True
+    elif tmux_live and active_count == 0:
+        data_source = "idle:no_active_workers"
+        ok = True
+    elif has_tasks and not tmux_live:
+        data_source = "history:no_multi_task_session"
+        ok = False
+    else:
+        data_source = "no_live_workers"
+        ok = False
+    return {
+        "ok": ok,
+        "data_source": data_source,
+        "active_workers": f"{live_count} live / {active_count} active",
+    }
+
+
+def monitor_summary(result: dict[str, Any], tasks: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Build monitor findings for the existing multi-task status surface."""
+    rows = tasks if tasks is not None else list_task_rows()
+    guard = result.get("guard") or {}
+    panes = result.get("panes") or []
+    dispatches = result.get("dispatches") or []
+    graphs = result.get("graphs") or []
+    cap_summary = result.get("capability") or {}
+    inventory = task_inventory(rows)
+    active = [
+        task for task in rows
+        if str(task.get("effective_status") or task.get("status", "")).lower() in ACTIVE_TASK_STATUSES
+    ]
+    mt_live = tmux_session_exists()
+    activity = worker_activity_projection(mt_live, inventory, len(active), bool(rows))
+
+    findings: list[dict[str, Any]] = []
+    if not mt_live and active:
+        findings.append({
+            "severity": "error",
+            "type": "active_without_multi_task_session",
+            "detail": f"{len(active)} active task(s), tmux session missing",
+        })
+    for task in active:
+        tmux_status = str(task.get("tmux_status") or "N/A")
+        if tmux_status in {"missing", "dead", "no-window"}:
+            findings.append({
+                "severity": "error",
+                "type": "active_task_without_live_window",
+                "task_id": task.get("id"),
+                "sprint_id": task.get("sprint_id"),
+                "node_id": task.get("node_id"),
+                "detail": f"tmux_status={tmux_status}",
+            })
+    stale_active = [task for task in rows if str(task.get("data_class") or "") == "stale_active"]
+    if stale_active:
+        findings.append({
+            "severity": "warn",
+            "type": "stale_active_task",
+            "detail": f"{len(stale_active)} active task(s) older than stale threshold",
+            "task_id": stale_active[0].get("id"),
+        })
+    stale_history = int(inventory.get("stale", 0) or 0) - len(stale_active)
+    if stale_history > 0:
+        findings.append({
+            "severity": "warn",
+            "type": "stale_history",
+            "detail": f"{stale_history} stale historical row(s)",
+        })
+    if not guard.get("ok"):
+        findings.append({
+            "severity": "warn",
+            "type": "launch_guard_blocked",
+            "detail": str(guard.get("reason") or "N/A"),
+        })
+    if int(cap_summary.get("error", 0) or 0) > 0:
+        findings.append({
+            "severity": "error",
+            "type": "model_capability_error",
+            "detail": format_capability_summary_compact(cap_summary),
+        })
+    elif int(cap_summary.get("warn", 0) or 0) > 0:
+        findings.append({
+            "severity": "warn",
+            "type": "model_capability_warn",
+            "detail": format_capability_summary_compact(cap_summary),
+        })
+
+    dead_panes = [pane for pane in panes if str(pane.get("state") or "").lower() == "dead"]
+    if dead_panes:
+        findings.append({
+            "severity": "error",
+            "type": "dead_pane",
+            "detail": f"{len(dead_panes)} dead pane(s)",
+            "pane": dead_panes[0].get("pane"),
+        })
+
+    ready_idle = []
+    if activity.get("ok") and str(activity.get("data_source")) == "idle:no_active_workers":
+        for graph in graphs:
+            ready = graph.get("ready") or []
+            if ready:
+                ready_idle.append({"sprint_id": graph.get("sid"), "ready": ready[:5]})
+    if ready_idle:
+        findings.append({
+            "severity": "warn",
+            "type": "ready_graph_idle",
+            "detail": f"{len(ready_idle)} graph(s) have ready nodes but no active worker",
+            "graphs": ready_idle[:5],
+        })
+
+    latest_dispatch = dispatches[0] if dispatches else {}
+    worst = "ok"
+    if any(item.get("severity") == "error" for item in findings):
+        worst = "error"
+    elif any(item.get("severity") == "warn" for item in findings):
+        worst = "warn"
+    return {
+        "status": worst,
+        "data_source": activity.get("data_source"),
+        "active_workers": activity.get("active_workers"),
+        "task_count": inventory.get("total", 0),
+        "active_task_count": len(active),
+        "historical_task_count": inventory.get("historical", 0),
+        "stale_task_count": inventory.get("stale", 0),
+        "pane_count": len(panes),
+        "dead_pane_count": len(dead_panes),
+        "graph_count": len(graphs),
+        "dispatch_count": len(dispatches),
+        "latest_dispatch": latest_dispatch,
+        "findings": findings,
     }
 
 
@@ -2272,7 +2430,8 @@ def status_snapshot(args: argparse.Namespace) -> dict[str, Any]:
     cooldown_sec = int(getattr(args, "cooldown_sec", DEFAULT_COOLDOWN))
     quota_backoff_sec = int(getattr(args, "quota_backoff_sec", DEFAULT_QUOTA_BACKOFF))
     graph_arg = getattr(args, "graph", [])
-    return {
+    tasks = list_task_rows()
+    result = {
         "guard": launch_guard(max_workers, memory_reserve_gb, cooldown_sec, quota_backoff_sec),
         "launched": [],
         "skipped": [],
@@ -2280,9 +2439,12 @@ def status_snapshot(args: argparse.Namespace) -> dict[str, Any]:
         "panes": list_harness_panes(),
         "dispatches": recent_dispatch_rows(),
         "capability": capability_summary(),
+        "tasks": tasks,
         "observed_at": now_iso(),
         "refresh_mode": "fresh",
     }
+    result["monitor"] = monitor_summary(result, tasks)
+    return result
 
 
 def print_table(headers: list[str], rows: list[list[str]]) -> None:
@@ -2306,12 +2468,13 @@ def render_plain(result: dict[str, Any], no_clear: bool = False) -> None:
         print("\033[H\033[2J", end="")
     guard = result.get("guard") or {}
     mem = free_memory_gb()
-    tasks = list_task_rows()[:20]
-    active = [t for t in tasks if str(t.get("effective_status") or t.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
-    inventory = task_inventory(tasks)
+    all_tasks = result.get("tasks") or list_task_rows()
+    tasks = all_tasks[:20]
+    active = [t for t in all_tasks if str(t.get("effective_status") or t.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
+    inventory = task_inventory(all_tasks)
     cap_summary = result.get("capability") or capability_summary()
     mt_live = tmux_session_exists()
-    data_source = "live" if mt_live and inventory["live"] else ("history:no_multi_task_session" if tasks and not mt_live else "no_live_workers")
+    activity = worker_activity_projection(mt_live, inventory, len(active), bool(all_tasks))
     print("Solar Harness Multi-Task · tmux DAG worker pool")
     print("模型组合: " + format_capability_summary_compact(cap_summary))
     print_table(
@@ -2320,15 +2483,28 @@ def render_plain(result: dict[str, Any], no_clear: bool = False) -> None:
             ["session", "ok", SESSION],
             ["harness_panes", "ok" if result.get("panes") else "warn", str(len([p for p in result.get("panes", []) if p.get("plane") != "multi-task"]))],
             ["multi_task_session", "ok" if mt_live else "warn", "live" if mt_live else "missing"],
-            ["active_workers", "ok" if inventory["live"] else "warn", f"{inventory['live']} live / {len(active)} active"],
+            ["active_workers", "ok" if activity["ok"] else "warn", str(activity["active_workers"])],
             ["tracked_tasks", "ok" if tasks and not inventory["stale"] else "warn", f"{inventory['total']} total · history={inventory['historical']} stale={inventory['stale']}"],
-            ["data_source", "ok" if data_source == "live" else "warn", data_source],
+            ["data_source", "ok" if activity["ok"] else "warn", str(activity["data_source"])],
             ["latest_task_age", "ok" if inventory["latest_age"] not in ("N/A",) and not inventory["stale"] else "warn", str(inventory["latest_age"])],
             ["launch_guard", "ok" if guard.get("ok") else "warn", str(guard.get("reason", "N/A"))],
             ["free_memory_gb", "ok" if mem is None or mem >= DEFAULT_MEMORY_RESERVE_GB else "warn", "N/A" if mem is None else f"{mem:.2f}"],
             ["refresh_mode", "ok", str(result.get("refresh_mode") or "cached")],
             ["checked_at", "ok", str(result.get("observed_at") or now_iso())],
         ],
+    )
+
+    monitor = result.get("monitor") or monitor_summary(result, all_tasks)
+    finding_rows = [[
+        _clip_display(str(item.get("severity", "warn")), 8),
+        _clip_display(str(item.get("type", "N/A")), 32),
+        _clip_display(str(item.get("task_id") or item.get("pane") or item.get("sprint_id") or "N/A"), 34),
+        _clip_display(str(item.get("detail") or "N/A"), 52),
+    ] for item in (monitor.get("findings") or [])[:10]]
+    print()
+    print_table(
+        ["级别", "类型", "证据", "detail"],
+        finding_rows or [["ok", "无异常", "N/A", f"data_source={monitor.get('data_source', 'N/A')}"]],
     )
 
     pane_rows = [[
@@ -2480,9 +2656,10 @@ def render_screen_status_lines(view_model: dict[str, Any], width: int, height: i
     mt_v = _cap_verdict("tmux")
     guard_v = _cap_verdict("guard")
     models_v = _cap_verdict("models")
+    monitor_v = _cap_verdict("monitor")
     overall_v = str(health.get("verdict", "N/A"))
     lines.append(_clip_display(
-        f"[{mt_v}] tmux  [{guard_v}] guard  [{models_v}] models  verdict={overall_v}",
+        f"[{mt_v}] tmux  [{guard_v}] guard  [{models_v}] models  [{monitor_v}] monitor  verdict={overall_v}",
         content_width,
     ))
 
@@ -2638,16 +2815,19 @@ def screen_view_model(result: dict[str, Any], args: argparse.Namespace, width: i
     cap_summary = result.get("capability") or {}
     dispatches = result.get("dispatches") or []
     graphs = result.get("graphs") or []
+    monitor = result.get("monitor") or {}
 
     cap_err = int(cap_summary.get("error", 0) or 0)
     cap_warn = int(cap_summary.get("warn", 0) or 0)
     guard_ok = bool(guard.get("ok"))
-    overall_verdict = "error" if cap_err else ("warn" if (cap_warn or not guard_ok) else "ok")
+    monitor_status = str(monitor.get("status") or "ok")
+    overall_verdict = "error" if cap_err or monitor_status == "error" else ("warn" if (cap_warn or not guard_ok or monitor_status == "warn") else "ok")
     tmux_live = tmux_session_exists()
     capsules = [
         {"label": "models", "verdict": "ok" if cap_err == 0 else ("warn" if cap_warn else "error")},
         {"label": "guard", "verdict": "ok" if guard_ok else "warn"},
         {"label": "tmux", "verdict": "ok" if tmux_live else "warn"},
+        {"label": "monitor", "verdict": monitor_status},
     ]
 
     main_src = [p for p in panes_src if p.get("plane") == "four-pane"][:4]
@@ -2658,7 +2838,7 @@ def screen_view_model(result: dict[str, Any], args: argparse.Namespace, width: i
     for i in range(4):
         panes_out.append(_screen_build_pane(lab_src[i] if i < len(lab_src) else None, "lab", i))
 
-    tasks = list_task_rows()
+    tasks = result.get("tasks") or list_task_rows()
     inventory = task_inventory(tasks)
     statuses = inventory.get("statuses") or {}
     active_tasks = [t for t in tasks if str(t.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
@@ -2705,6 +2885,11 @@ def screen_view_model(result: dict[str, Any], args: argparse.Namespace, width: i
         degraded.append({"source": "multi_task_session", "reason": "tmux_not_live"})
     if not panes_src:
         degraded.append({"source": "panes", "reason": "empty"})
+    for finding in (monitor.get("findings") or [])[:5]:
+        degraded.append({
+            "source": str(finding.get("type") or "monitor"),
+            "reason": str(finding.get("detail") or finding.get("severity") or "N/A"),
+        })
 
     return {
         "schema_version": SCREEN_VIEW_MODEL_SCHEMA,
@@ -2767,12 +2952,13 @@ def _tvs_render(payload: dict[str, Any], height: int) -> None:
 def tvs_payload(result: dict[str, Any], width: int = 100) -> dict[str, Any]:
     guard = result.get("guard") or {}
     mem = free_memory_gb()
-    tasks = list_task_rows()[:20]
-    active = [t for t in tasks if str(t.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
-    inventory = task_inventory(tasks)
+    all_tasks = result.get("tasks") or list_task_rows()
+    tasks = all_tasks[:20]
+    active = [t for t in all_tasks if str(t.get("effective_status") or t.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
+    inventory = task_inventory(all_tasks)
     tmux_live = tmux_session_exists()
     cap_summary = result.get("capability") or capability_summary()
-    data_source = "live" if tmux_live and inventory["live"] else ("history:no_multi_task_session" if tasks and not tmux_live else "no_live_workers")
+    activity = worker_activity_projection(tmux_live, inventory, len(active), bool(all_tasks))
     task_rows = [{
         "task": _clip_display(str(t.get("id", "N/A")).replace("mt-", ""), 18),
         "state": _clip_display(f"{t.get('status', 'N/A')}/{t.get('tmux_status', 'N/A')}", 16),
@@ -2820,6 +3006,19 @@ def tvs_payload(result: dict[str, Any], width: int = 100) -> dict[str, Any]:
     if not graph_rows:
         graph_rows = [{"sprint": "N/A", "desc": "N/A", "status": "pending", "node_counts": "N/A", "ready": "N/A", "graph_updated": "N/A"}]
 
+    monitor = result.get("monitor") or monitor_summary(result, all_tasks)
+    monitor_rows = [{
+        "severity": _clip_display(str(item.get("severity", "warn")), 8),
+        "type": _clip_display(str(item.get("type", "N/A")), 30),
+        "evidence": _clip_display(str(item.get("task_id") or item.get("pane") or item.get("sprint_id") or "N/A"), 28),
+        "detail": _clip_display(str(item.get("detail") or "N/A"), 42),
+    } for item in (monitor.get("findings") or [])[:10]] or [{
+        "severity": "ok",
+        "type": "无异常",
+        "evidence": "N/A",
+        "detail": f"data_source={monitor.get('data_source', 'N/A')}",
+    }]
+
     sections: list[dict[str, Any]] = [
         {
             "type": "kv",
@@ -2827,16 +3026,28 @@ def tvs_payload(result: dict[str, Any], width: int = 100) -> dict[str, Any]:
                 {"key": "session", "value": SESSION},
                 {"key": "harness_panes", "value": str(len([p for p in result.get("panes", []) if p.get("plane") != "multi-task"])), "status": "success" if result.get("panes") else "warning"},
                 {"key": "multi_task_session", "value": "live" if tmux_live else "missing", "status": "success" if tmux_live else "warning"},
-                {"key": "active_workers", "value": f"{inventory['live']} live / {len(active)} active", "status": "success" if inventory["live"] else "warning"},
+                {"key": "active_workers", "value": str(activity["active_workers"]), "status": "success" if activity["ok"] else "warning"},
                 {"key": "tracked_tasks", "value": f"{inventory['total']} total · history={inventory['historical']} stale={inventory['stale']}", "status": "warning" if inventory["stale"] or not tasks else "success"},
-                {"key": "data_source", "value": data_source, "status": "success" if data_source == "live" else "warning"},
+                {"key": "data_source", "value": str(activity["data_source"]), "status": "success" if activity["ok"] else "warning"},
                 {"key": "latest_task_age", "value": str(inventory["latest_age"]), "status": "warning" if inventory["stale"] or inventory["latest_age"] == "N/A" else "success"},
                 {"key": "launch_guard", "value": str(guard.get("reason", "N/A")), "status": "success" if guard.get("ok") else "warning"},
                 {"key": "model_matrix", "value": format_capability_summary_compact(cap_summary), "status": "success" if cap_summary.get("error", 0) == 0 else "warning"},
                 {"key": "free_memory_gb", "value": "N/A" if mem is None else f"{mem:.2f}", "status": "success" if mem is None or mem >= DEFAULT_MEMORY_RESERVE_GB else "warning"},
+                {"key": "monitor_status", "value": str(monitor.get("status", "N/A")), "status": "success" if monitor.get("status") == "ok" else ("error" if monitor.get("status") == "error" else "warning")},
                 {"key": "refresh_mode", "value": str(result.get("refresh_mode") or "cached")},
                 {"key": "checked_at", "value": str(result.get("observed_at") or now_iso())},
             ],
+        },
+        {
+            "type": "table",
+            "columns": [
+                {"key": "severity", "label": "级别", "width": 8},
+                {"key": "type", "label": "类型", "width": 28},
+                {"key": "evidence", "label": "证据", "width": 24},
+                {"key": "detail", "label": "detail", "width": 34},
+            ],
+            "rows": monitor_rows,
+            "border": "minimal",
         },
         {
             "type": "table",
@@ -3585,6 +3796,7 @@ def build_parser() -> argparse.ArgumentParser:
     status = sub.add_parser("status", help="show current scheduler summary")
     status.add_argument("--graph", action="append", default=[])
     status.add_argument("--no-clear", action="store_true")
+    status.add_argument("--json", action="store_true", help="emit machine-readable status snapshot")
     status.add_argument("--renderer", choices=["tvs", "plain"], default=os.environ.get("SOLAR_MULTI_TASK_RENDERER", "tvs"))
 
     logs = sub.add_parser("logs", help="show task log")
@@ -3708,7 +3920,11 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     if args.cmd == "status":
-        render_result(status_snapshot(args), args)
+        result = status_snapshot(args)
+        if getattr(args, "json", False):
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        render_result(result, args)
         return 0
     if args.cmd == "screen":
         return screen_loop(args)

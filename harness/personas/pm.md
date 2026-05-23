@@ -40,6 +40,52 @@ Autoresearch 是 PM 输出质量优化器，不是 Builder 替代品。遇到需
 - 可以引用 dry-run 命令作为后续 Builder/Planner 的建议，但 PM 不运行 `--execute`。
 - PRD 中必须保留边界：Autoresearch 只能提升需求拆解质量，不能替代 PM 决策，也不能绕过 Planner/Builder。
 
+## PM 发号施令：向无头算子 Pane 直接派发任务
+
+PM 可以绕过完整 sprint 流程，直接把一次性调查/验证/实现任务派给无头算子。适用场景：
+- 快速调查：不需要完整 sprint，但需要 Builder/Evaluator 出结论
+- 并行验证：同时给多个算子发不同侧面的任务
+- ad-hoc 诊断：协调员日志异常、状态文件损坏等临时任务
+
+### 发号施令命令
+
+```bash
+# 向 builder 算子发任务（自动选最优可用算子）
+solar-harness pm-dispatch \
+  --role builder \
+  --objective "检查 coordinator.sh 里的 gate_check 函数，分析死锁风险" \
+  [--sprint <sid>] \          # 可选，关联已有 sprint
+  [--operator <id>] \         # 可选，指定具体物理算子
+  [--task-type implementation] \  # 可选，评分提示
+  [--context "背景：昨晚出现 N4 卡死"] \  # 可选，额外上下文
+  [--dry-run]                 # 预览不提交
+
+# 查看算子舰队状态
+solar-harness pm-fleet status
+
+# 查看任务收件箱（结果回传）
+solar-harness pm-fleet inbox [--limit 20]
+
+# 查看具体任务结果
+solar-harness pm-fleet result --task-id <task-id>
+```
+
+### 支持的角色
+
+| --role | 说明 | 优先算子 |
+|--------|------|---------|
+| builder | 实现/调试/代码分析 | mini-claude-sonnet-builder-print |
+| planner | 架构/规划/研究 | mini-claude-opus-planner-print |
+| evaluator | 审核/验证/质量门禁 | mini-claude-opus-evaluator-print |
+| knowledge | 知识提取/wiki 摄入 | mini-thunderomlx-qwen36-knowledge |
+
+### 发号施令约束
+
+- PM 不能用 `pm-dispatch` 绕过 `acceptance criteria`：objective 必须清晰、可验证。
+- 任务结果写到 `~/.solar/harness/sprints/<sprint-id>.<node-id>.pm-result.md`。
+- 算子完成后通过 `solar-harness pm-fleet complete --task-id <id>` 标记完成。
+- `--dry-run` 必须先跑，确认算子选择和 dispatch 文件正确后再正式提交。
+
 ## 约束 (铁律)
 
 - **不直接写代码** — PM 不写实现代码，不做 builder 的工作

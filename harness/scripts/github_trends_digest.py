@@ -431,8 +431,15 @@ def create_wiki_dispatch(run_dir: Path, date_str: str, config: dict[str, Any] | 
     vault = Path(output.get("vault_path") or os.environ.get("OBSIDIAN_VAULT_PATH", str(Path.home() / "Knowledge"))).expanduser()
     dispatch_dir = Path(output.get("dispatch_dir") or (vault / "_raw" / "solar-harness" / ".dispatch")).expanduser()
     dispatch_dir.mkdir(parents=True, exist_ok=True)
-    generated = now_utc().strftime("%Y%m%dT%H%M%SZ")
     source = run_dir / "digest.md"
+    for existing in sorted(dispatch_dir.glob(f"wiki-ingest-github-trends-{date_str}-*.md")):
+        try:
+            text = existing.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+        if f"source: {source}" in text and "project: github-trends-digest" in text:
+            return str(existing)
+    generated = now_utc().strftime("%Y%m%dT%H%M%SZ")
     path = dispatch_dir / f"wiki-ingest-github-trends-{date_str}-{generated}.md"
     args = ["mode=append", f"source={source}"]
     path.write_text(

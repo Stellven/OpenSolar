@@ -1,17 +1,16 @@
 version: 1
 name: YouTube Influence Transcript Digest
-
 mac_mini_only: true
 allowed_hostnames:
-  - lisihaodeMac-mini-3.local
-  - lisihaodeMac-mini-3
-
+- lisihaodeMac-mini-3.local
+- lisihaodeMac-mini-3
 timezone: America/Toronto
 schedule:
-  # launchd uses local machine time.
-  hours: [8, 13, 18]
+  hours:
+  - 8
+  - 13
+  - 18
   minute: 17
-
 output:
   raw_dir: /Users/lisihao/Knowledge/_raw/youtube-influence-digest
   state_dir: /Users/lisihao/.solar/harness/state/youtube-influence-digest
@@ -20,20 +19,105 @@ output:
   lookback_hours: 72
   keep_seen_days: 45
   transcript_max_chars: 60000
-
 fetch:
   timeout_seconds: 15
-  sleep_between_channels_seconds: 0.4
-  sleep_between_videos_seconds: 0.5
-  user_agent: "Solar-YouTube-Influence-Digest/1.0 (+local transcript capture)"
-
-channels: []
-
+  sleep_between_channels_seconds: 8
+  sleep_between_videos_seconds: 2.5
+  user_agent: Solar-YouTube-Influence-Digest/1.0 (+local transcript capture)
+asr:
+  enabled: true
+  max_per_run: 1
+  queue_dir: /Users/lisihao/.solar/harness/state/youtube-influence-digest/asr-queue
+  done_dir: /Users/lisihao/.solar/harness/state/youtube-influence-digest/asr-done
+  audio_dir: /Users/lisihao/.solar/harness/state/youtube-influence-digest/asr-audio
+  raw_dir: /Users/lisihao/Knowledge/_raw/youtube-influence-digest/asr
+  yt_dlp_bin: /Users/lisihao/Solar/harness/.venv-youtube-digest/bin/yt-dlp
+  whisper_bin: /opt/homebrew/bin/whisper
+  whisper_model: small
+  language: zh
+  timeout_seconds: 7200
+  sleep_between_jobs_seconds: 30
+  cookies_from_browser: ''
+  keep_audio: false
+  postprocess:
+    enabled: true
+    backend: thunderomlx
+    base_url: http://127.0.0.1:8002
+    model: claude-3-5-sonnet-latest
+    api_key_env: THUNDEROMLX_AUTH_TOKEN
+    default_api_key: local-thunderomlx
+    max_tokens: 1800
+    max_input_chars: 12000
+    timeout_seconds: 900
+    enable_thinking: false
+channels:
+- url: https://www.youtube.com/@valley101podcast
+  name: 硅谷101播客
+  category: AI / Tech / China
+  priority: tier1
 analysis_keywords:
-  model_release: [model, launch, released, api, benchmark, gpt, claude, gemini, llama, qwen, deepseek]
-  research: [paper, arxiv, reasoning, training, alignment, interpretability, eval, dataset]
-  agent: [agent, automation, workflow, tool, browser, computer use, coding, autonomous]
-  compute: [gpu, tpu, hbm, datacenter, inference, cuda, rocm, chip, semiconductor]
-  product: [product, app, feature, pricing, enterprise, startup, users, release]
-  tutorial: [tutorial, walkthrough, demo, build, guide, explain, course]
-  market: [funding, revenue, earnings, capex, valuation, market, investment]
+  model_release:
+  - model
+  - launch
+  - released
+  - api
+  - benchmark
+  - gpt
+  - claude
+  - gemini
+  - llama
+  - qwen
+  - deepseek
+  research:
+  - paper
+  - arxiv
+  - reasoning
+  - training
+  - alignment
+  - interpretability
+  - eval
+  - dataset
+  agent:
+  - agent
+  - automation
+  - workflow
+  - tool
+  - browser
+  - computer use
+  - coding
+  - autonomous
+  compute:
+  - gpu
+  - tpu
+  - hbm
+  - datacenter
+  - inference
+  - cuda
+  - rocm
+  - chip
+  - semiconductor
+  product:
+  - product
+  - app
+  - feature
+  - pricing
+  - enterprise
+  - startup
+  - users
+  - release
+  tutorial:
+  - tutorial
+  - walkthrough
+  - demo
+  - build
+  - guide
+  - explain
+  - course
+  market:
+  - funding
+  - revenue
+  - earnings
+  - capex
+  - valuation
+  - market
+  - investment

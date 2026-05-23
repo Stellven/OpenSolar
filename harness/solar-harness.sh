@@ -3733,6 +3733,8 @@ PY
     echo "  $0 architecture-guard validate --graph sprint.task_graph.json [--strict]  package-first 架构门禁"
     echo "  $0 workflow-guard route <sid> [--json]  PM→Planner→DAG Builder 门禁判定"
     echo "  $0 graph-dispatch [dispatch-ready|drain-queue]  DAG 节点级 pane 派发"
+    echo "  $0 pm-dispatch --role ROLE --objective TEXT [--operator ID] [--sprint SID] [--dry-run]  PM 发号施令 → 无头算子"
+    echo "  $0 pm-fleet [status|inbox|result]  PM 算子舰队状态 & 任务收件箱"
     echo "  $0 mirage [search|doctor|workspace|mounts|exec|provision]  Mirage 统一虚拟文件系统"
     echo "  $0 wiki [install|status|export-sprint|update|query|ingest|chatgpt-import|vault-status|lint|rebuild|export-graph|colorize|history|run-dispatch|dispatch-watch|dispatch-maintenance|import-solar-db|capture-server|audit-uploads|backfill-uploads|quality-gate|reingest-quarantine|reingest-scheduler|qmd-status|qmd-repair|qmd-search|qmd-update|qmd-mcp|qmd-embed|ai-influence-digest|help]  Obsidian Wiki 集成"
     ;;
@@ -4841,6 +4843,52 @@ PLIST
         ;;
       *)
         err "Unknown leases subcommand: $_lease_subcmd"; exit 1
+        ;;
+    esac
+    ;;
+
+  pm-dispatch)
+    # PM 发号施令：从主四分屏 PM pane 向无头算子 pane 派发任务
+    shift
+    _pm_dispatch_py="$HARNESS_DIR/tools/pm_dispatch.py"
+    if [[ ! -f "$_pm_dispatch_py" ]]; then
+      err "pm_dispatch.py not found: $_pm_dispatch_py"; exit 1
+    fi
+    python3 "$_pm_dispatch_py" submit "$@"
+    ;;
+
+  pm-fleet)
+    # PM 算子舰队状态 & 任务收件箱
+    shift
+    _pm_dispatch_py="$HARNESS_DIR/tools/pm_dispatch.py"
+    if [[ ! -f "$_pm_dispatch_py" ]]; then
+      err "pm_dispatch.py not found: $_pm_dispatch_py"; exit 1
+    fi
+    _pm_fleet_subcmd="${1:-status}"; shift || true
+    case "$_pm_fleet_subcmd" in
+      status|fleet-status)
+        python3 "$_pm_dispatch_py" fleet-status "$@"
+        ;;
+      inbox)
+        python3 "$_pm_dispatch_py" inbox "$@"
+        ;;
+      result)
+        python3 "$_pm_dispatch_py" result "$@"
+        ;;
+      complete)
+        python3 "$_pm_dispatch_py" complete "$@"
+        ;;
+      help|--help|-h|"")
+        echo "PM Fleet — 算子舰队管理"
+        echo ""
+        echo "Usage:"
+        echo "  $0 pm-fleet status          查看所有物理算子运行状态"
+        echo "  $0 pm-fleet inbox [--limit N]  查看 PM 任务收件箱"
+        echo "  $0 pm-fleet result --task-id ID  查看任务结果"
+        echo "  $0 pm-fleet complete --task-id ID  标记任务完成"
+        ;;
+      *)
+        err "Unknown pm-fleet subcommand: $_pm_fleet_subcmd"; exit 1
         ;;
     esac
     ;;
