@@ -2812,7 +2812,14 @@ print(json.dumps({
         elif [[ -f "$_SS_PID" ]] && kill -0 "$(cat "$_SS_PID")" 2>/dev/null; then
           ok "Status server 已在运行 (PID: $(cat "$_SS_PID"), port: $(cat "$_SS_PORT_FILE" 2>/dev/null || echo '?'))"
         elif curl -fsS "http://127.0.0.1:$(cat "$_SS_PORT_FILE" 2>/dev/null || echo 8765)/healthz" >/dev/null 2>&1; then
-          ok "Status server 已在运行 (port: $(cat "$_SS_PORT_FILE" 2>/dev/null || echo 8765), pidfile stale)"
+          _port=$(cat "$_SS_PORT_FILE" 2>/dev/null || echo 8765)
+          _listen_pid=$(lsof -tiTCP:"$_port" -sTCP:LISTEN 2>/dev/null | head -1 || true)
+          if [[ -n "$_listen_pid" ]]; then
+            echo "$_listen_pid" > "$_SS_PID"
+            ok "Status server 已在运行 (PID: $_listen_pid, port: $_port)"
+          else
+            ok "Status server 已在运行 (port: $_port, pidfile stale)"
+          fi
         else
           rm -f "$_SS_PID" "$_SS_PORT_FILE"
           if command -v tmux >/dev/null 2>&1; then
@@ -2873,7 +2880,13 @@ print(json.dumps({
           curl -s "http://127.0.0.1:$_port/healthz" 2>/dev/null && echo || true
         elif curl -fsS "http://127.0.0.1:$(cat "$_SS_PORT_FILE" 2>/dev/null || echo 8765)/healthz" >/dev/null 2>&1; then
           _port=$(cat "$_SS_PORT_FILE" 2>/dev/null || echo "8765")
-          ok "运行中 (port: $_port, pidfile stale)"
+          _listen_pid=$(lsof -tiTCP:"$_port" -sTCP:LISTEN 2>/dev/null | head -1 || true)
+          if [[ -n "$_listen_pid" ]]; then
+            echo "$_listen_pid" > "$_SS_PID"
+            ok "运行中 (PID: $_listen_pid, port: $_port)"
+          else
+            ok "运行中 (port: $_port, pidfile stale)"
+          fi
           curl -s "http://127.0.0.1:$_port/healthz" 2>/dev/null && echo || true
         else
           warn "Status server 未运行"
