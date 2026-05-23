@@ -71,7 +71,7 @@ send_ready_token() {
   local bypass_accepted=0
   while (( attempt < max_attempts )); do
     local content
-    content=$(tmux capture-pane -t "$pane" -p 2>/dev/null | tail -8)
+    content=$(tmux capture-pane -t "$pane" -p 2>/dev/null | tail -30)
     if (( bypass_accepted == 0 )) && echo "$content" | grep -qiE 'Bypass Permissions mode|1\. No, exit|2\. Yes, I accept'; then
       tmux send-keys -t "$pane" "2" Enter
       bypass_accepted=1
@@ -98,7 +98,13 @@ send_ready_token() {
       attempt=$((attempt + 1))
       continue
     fi
-    if echo "$content" | grep -qE '(╭──|trust.*folder|Allow.*permission)'; then
+    if echo "$content" | grep -qiE '(quick safety check|yes, i trust this folder|trust.*folder|enter to confirm)'; then
+      tmux send-keys -t "$pane" "1" Enter
+      sleep 1
+      attempt=$((attempt + 1))
+      continue
+    fi
+    if echo "$content" | grep -qiE '(╭──|allow.*permission|bypass permissions)'; then
       sleep 1
       if [[ -n "$token" ]]; then
         tmux send-keys -t "$pane" "$token" Enter

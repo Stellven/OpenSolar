@@ -1,0 +1,6 @@
+{"ts": "2026-05-23T02:39:20Z", "sprint_id": "sprint-20260523-claude-operator-billing-split", "actor": "solar-autopilot", "event": "autopilot_dispatch_deferred_pane_busy", "severity": "warn", "data": {"target": "solar-harness:0.2", "type": "active_without_handoff"}}
+{"ts": "2026-05-23T02:40:56Z", "sid": "sprint-20260523-claude-operator-billing-split", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-23T02:41:31Z", "sid": "sprint-20260523-claude-operator-billing-split", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-23T02:42:48Z", "sid": "sprint-20260523-claude-operator-billing-split", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-23T02:43:23Z", "sid": "sprint-20260523-claude-operator-billing-split", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-23T02:44:42Z", "sprint_id": "sprint-20260523-claude-operator-billing-split", "actor": "solar-autopilot", "event": "autopilot_workflow_route_normalized", "severity": "info", "data": {"route_role": "none", "stage": "done", "reason": "terminal_status"}}

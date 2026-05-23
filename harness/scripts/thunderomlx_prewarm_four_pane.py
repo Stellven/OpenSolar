@@ -17,6 +17,7 @@ SESSION = "solar-harness-lab:0"
 ENDPOINT = "http://127.0.0.1:8002/v1/chat/completions"
 MODEL = "qwen3.6-35b-a3b"
 REPORT_DIR = Path.home() / ".solar" / "harness" / "monitor-reports"
+OMLX_SETTINGS = Path.home() / ".omlx" / "settings.json"
 
 
 def run(cmd: list[str]) -> str:
@@ -77,6 +78,15 @@ def extract_token(env_text: str) -> str:
         return ""
     tail = env_text.split(key, 1)[1]
     return tail.split(None, 1)[0].strip()
+
+
+def settings_api_key() -> str:
+    try:
+        data = json.loads(OMLX_SETTINGS.read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    key = data.get("auth", {}).get("api_key")
+    return key if isinstance(key, str) and key else ""
 
 
 def is_thunderomlx_env(env_text: str) -> bool:
@@ -174,7 +184,7 @@ def main() -> int:
             "prompt": prompt,
         })
 
-    token = thunderomlx_token or fallback_token
+    token = thunderomlx_token or settings_api_key() or fallback_token
     if not token:
         raise SystemExit("missing ANTHROPIC_AUTH_TOKEN from pane process environment")
 

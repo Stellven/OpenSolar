@@ -132,6 +132,7 @@ from graph_scheduler import (  # noqa: E402
     set_node_status,
     write_scope_conflict,
 )
+import claude_surface as _claude_surface  # noqa: E402
 
 ACTIVE_TASK_STATUSES = {"queued", "dispatched", "running"}
 TERMINAL_TASK_STATUSES = {"completed", "failed", "failed_missing_handoff", "cancelled"}
@@ -850,7 +851,13 @@ def select_operator(node: dict[str, Any], base_profile: dict[str, Any]) -> tuple
             
         if not check_quota_reserve(operator, task_type):
             continue
-            
+
+        # Enforce claude_print reserve routing: a claude_print operator must
+        # not be consumed by bulk/fanout/low-value tasks; it is reserved for
+        # high-value task types listed in quota.reserve_for.
+        if not _claude_surface.claude_print_reserve_allows(operator, task_type):
+            continue
+
         if modality_required and not operator_has_any(operator, selector_values & modality_values):
             continue
             
@@ -1558,9 +1565,77 @@ def graph_description(graph: dict[str, Any], graph_path: Path) -> str:
     return "N/A"
 
 
+def canonical_status_path_for_graph(graph: dict[str, Any], graph_path: Path) -> Path:
+    sid = sprint_id_for(graph, graph_path)
+    return graph_path.with_name(f"{sid}.status.json")
+
+
+def canonical_artifacts_for_graph(graph: dict[str, Any], graph_path: Path) -> dict[str, str]:
+    sid = sprint_id_for(graph, graph_path)
+    parent = graph_path.parent
+    candidates = {
+        "contract": parent / f"{sid}.contract.md",
+        "prd": parent / f"{sid}.prd.md",
+        "design": parent / f"{sid}.design.md",
+        "plan": parent / f"{sid}.plan.md",
+        "task_graph": graph_path,
+        "handoff": parent / f"{sid}.handoff.md",
+        "eval": parent / f"{sid}.eval.md",
+    }
+    return {key: str(path) for key, path in candidates.items() if path.exists()}
+
+
+def canonical_state_for_graph(graph: dict[str, Any], graph_path: Path) -> tuple[str, str, str]:
+    statuses = []
+    for node in graph_nodes(graph):
+        nid = str(node.get("id") or "")
+        statuses.append(node_status(graph, nid) if nid else str(node.get("status") or "invalid"))
+    if statuses and all(st in {"passed", "completed", "completed_aligned"} for st in statuses):
+        return ("reviewing", "implementation_complete", "evaluator")
+    return ("active", "planning_complete", "builder_main")
+
+
+def ensure_canonical_sprint_status_for_graph(graph: dict[str, Any], graph_path: Path) -> bool:
+    """Create the coordinator-facing status file for task_graph-only sprints."""
+    status_path = canonical_status_path_for_graph(graph, graph_path)
+    if status_path.exists():
+        return False
+    sid = sprint_id_for(graph, graph_path)
+    if not (sid.startswith("sprint-") or sid.startswith("epic-")):
+        return False
+    status, phase, handoff_to = canonical_state_for_graph(graph, graph_path)
+    try:
+        created_at = iso_from_timestamp(min(
+            path.stat().st_mtime
+            for path in [graph_path, *[Path(p) for p in canonical_artifacts_for_graph(graph, graph_path).values()]]
+            if path.exists()
+        ))
+    except Exception:
+        created_at = now_iso()
+    json_write(status_path, {
+        "sprint_id": sid,
+        "title": graph_description(graph, graph_path),
+        "status": status,
+        "phase": phase,
+        "handoff_to": handoff_to,
+        "round": 0,
+        "created_at": created_at,
+        "updated_at": now_iso(),
+        "artifacts": canonical_artifacts_for_graph(graph, graph_path),
+        "history": [{
+            "event": "status_auto_created_from_task_graph",
+            "by": "multi_task_runner",
+            "at": now_iso(),
+            "note": "task_graph existed without canonical sprint status; created coordinator-visible status",
+        }],
+    })
+    return True
+
+
 def status_summary_for_graph(graph_path: Path) -> dict[str, Any]:
     try:
         graph = load_graph(graph_path)
+        ensure_canonical_sprint_status_for_graph(graph, graph_path)
         nodes = graph_nodes(graph)
         counts: dict[str, int] = {}
         for node in nodes:

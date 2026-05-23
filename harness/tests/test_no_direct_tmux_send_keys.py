@@ -100,7 +100,9 @@ ALLOWLIST: dict[str, str] = {
 # These are the new control-plane modules — they dispatch via the file
 # inbox, never by injecting keystrokes into tmux.
 DENYLIST: tuple[str, ...] = (
+    "lib/multi_task_status.py",
     "lib/operator_runtime.py",
+    "tools/monitor_bridge.py",
     "tools/operatord.py",
     "tools/operator_naming.py",
     "tests/runtime/test_multi_task_runner_submit_path.py",

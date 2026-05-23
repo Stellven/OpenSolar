@@ -1,0 +1,46 @@
+{
+  "sprint_id": "sprint-20260522-operatord-daemon-submit-production",
+  "title": "Operatord Daemon + Submit Production Cutover",
+  "status": "passed",
+  "phase": "completed",
+  "handoff_to": "done",
+  "round": 0,
+  "created_at": "2026-05-23T00:11:25Z",
+  "updated_at": "2026-05-23T02:42:32Z",
+  "artifacts": {
+    "contract": "sprints/sprint-20260522-operatord-daemon-submit-production.contract.md",
+    "prd": "sprints/sprint-20260522-operatord-daemon-submit-production.prd.md",
+    "task_graph": "sprints/sprint-20260522-operatord-daemon-submit-production.task_graph.json"
+  },
+  "history": [
+    {
+      "ts": "2026-05-23T02:37:01Z",
+      "event": "status_repaired_from_existing_artifacts",
+      "by": "contract-patrol",
+      "note": "Recovered missing status.json from contract/prd/task_graph artifacts; node_status_counts={'passed': 6}"
+    },
+    {
+      "ts": "2026-05-23T02:37:34Z",
+      "event": "status_identity_repaired",
+      "by": "coordinator",
+      "note": "Recovered missing id/sprint_id from status filename so scanner can route the sprint."
+    },
+    {
+      "ts": "2026-05-23T02:40:24Z",
+      "event": "active_blocked_invalid_prd",
+      "by": "coordinator",
+      "raw_extra": "{\"status_fields\":{\"phase\":\"spec\",\"handoff_to\":\"pm\",\"target_role\":\"pm\"}}}"
+    },
+    {
+      "ts": "2026-05-23T02:42:32Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "none",
+      "stage": "done",
+      "reason": "terminal_status"
+    }
+  ],
+  "id": "sprint-20260522-operatord-daemon-submit-production",
+  "target_role": "done",
+  "runtime_state_source": "activity_runtime"
+}

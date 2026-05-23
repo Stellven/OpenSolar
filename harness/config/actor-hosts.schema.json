@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://solar.local/schemas/actor-hosts.schema.json",
+  "title": "Solar Actor Host Registry",
+  "description": "Registry of physical and logical hosts that run agent actors.",
+  "type": "object",
+  "required": ["version", "hosts"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"type": "integer", "minimum": 1},
+    "updated_at": {"type": "string"},
+    "hosts": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/actor_host"}
+    }
+  },
+  "$defs": {
+    "actor_host": {
+      "type": "object",
+      "required": ["host_id", "host_type"],
+      "additionalProperties": true,
+      "properties": {
+        "host_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable, durable host identity key."
+        },
+        "host_type": {
+          "type": "string",
+          "enum": [
+            "mac_mini",
+            "remote_vm",
+            "local_workstation",
+            "cloud_container",
+            "localhost"
+          ]
+        },
+        "display_name": {"type": "string"},
+        "lifecycle": {"$ref": "#/$defs/host_lifecycle"},
+        "address": {"$ref": "#/$defs/host_address"},
+        "heartbeat": {"$ref": "#/$defs/heartbeat_config"},
+        "probe": {"$ref": "#/$defs/probe_metadata"}
+      }
+    },
+    "host_lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": ["online", "offline", "degraded", "maintenance", "unknown"]
+        },
+        "started_at": {"type": ["string", "null"]},
+        "last_seen_at": {"type": ["string", "null"]},
+        "shutdown_policy": {
+          "type": "string",
+          "enum": ["auto", "manual", "never"]
+        }
+      }
+    },
+    "host_address": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ssh": {
+          "type": ["string", "null"],
+          "description": "SSH connection string, e.g. user@host or user@ip."
+        },
+        "tailscale_ip": {
+          "type": ["string", "null"],
+          "description": "Tailscale IP address."
+        },
+        "hostname": {"type": ["string", "null"]},
+        "harness_dir": {
+          "type": ["string", "null"],
+          "description": "Absolute path to harness root on this host."
+        }
+      }
+    },
+    "heartbeat_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "interval_sec": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "How often the host writes its heartbeat file."
+        },
+        "timeout_sec": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Seconds without heartbeat before host is considered offline."
+        },
+        "path": {
+          "type": "string",
+          "description": "Path to host-level heartbeat.json, relative to harness_dir."
+        }
+      }
+    },
+    "probe_metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "last_probe_at": {"type": ["string", "null"]},
+        "last_probe_result": {"type": ["string", "null"]},
+        "probe_cmd": {
+          "type": ["string", "null"],
+          "description": "Command used to probe the host."
+        },
+        "probe_expected": {
+          "type": ["string", "null"],
+          "description": "Expected output from probe_cmd on success."
+        }
+      }
+    }
+  }
+}

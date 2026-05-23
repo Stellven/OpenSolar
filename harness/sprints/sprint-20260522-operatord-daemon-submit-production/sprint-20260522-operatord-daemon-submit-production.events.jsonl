@@ -1,0 +1,7 @@
+{"ts": "2026-05-23T02:38:03Z", "sid": "sprint-20260522-operatord-daemon-submit-production", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-23T02:38:36Z", "sid": "sprint-20260522-operatord-daemon-submit-production", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-23T02:39:20Z", "sprint_id": "sprint-20260522-operatord-daemon-submit-production", "actor": "solar-autopilot", "event": "autopilot_dispatch_deferred_pane_busy", "severity": "warn", "data": {"target": "solar-harness:0.2", "type": "active_without_handoff"}}
+{"ts": "2026-05-23T02:39:52Z", "sid": "sprint-20260522-operatord-daemon-submit-production", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-23T02:40:24Z", "sid": "sprint-20260522-operatord-daemon-submit-production", "event": "dispatch_queued", "by": "coordinator"}
+{"ts": "2026-05-23T02:42:32Z", "sprint_id": "sprint-20260522-operatord-daemon-submit-production", "actor": "solar-autopilot", "event": "autopilot_workflow_route_normalized", "severity": "info", "data": {"route_role": "none", "stage": "done", "reason": "terminal_status"}}
+{"ts": "2026-05-23T02:44:42Z", "sprint_id": "sprint-20260522-operatord-daemon-submit-production", "actor": "solar-autopilot", "event": "autopilot_queue_drop_terminal_sprint", "severity": "info", "data": {"target": "solar-harness:0.2", "type": "active_without_handoff", "status": "passed", "phase": "completed"}}

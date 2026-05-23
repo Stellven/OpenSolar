@@ -45,3 +45,64 @@ def test_opus_preferred_matches_claude_opus_alias():
 
     assert result["assigned"][0]["pane"] == "builder"
     assert result["assigned"][0]["fallback_model"] is False
+
+
+def test_anthropic_quota_exhausted_worker_is_skipped_without_preferred_model():
+    result = assign_workers(
+        [
+            {
+                "id": "N1",
+                "required_skills": ["bash"],
+                "required_capabilities": ["bash"],
+            }
+        ],
+        [
+            {
+                "pane": "anthropic-pane",
+                "models": ["claude-opus"],
+                "skills": ["bash"],
+                "capabilities": ["bash"],
+                "quota_exhausted": ["anthropic"],
+            },
+            {
+                "pane": "glm-pane",
+                "models": ["glm-5.1"],
+                "skills": ["bash"],
+                "capabilities": ["bash"],
+            },
+        ],
+    )
+
+    assert result["assigned"][0]["pane"] == "glm-pane"
+    assert result["queued"] == []
+
+
+def test_anthropic_quota_exhausted_alias_blocks_preferred_sonnet():
+    result = assign_workers(
+        [
+            {
+                "id": "N2",
+                "preferred_model": "sonnet",
+                "required_skills": ["bash"],
+                "required_capabilities": ["bash"],
+            }
+        ],
+        [
+            {
+                "pane": "anthropic-pane",
+                "models": ["claude-sonnet"],
+                "skills": ["bash"],
+                "capabilities": ["bash"],
+                "quota_exhausted": ["anthropic"],
+            },
+            {
+                "pane": "deepseek-pane",
+                "models": ["deepseek-v4-pro"],
+                "skills": ["bash"],
+                "capabilities": ["bash"],
+            },
+        ],
+    )
+
+    assert result["assigned"][0]["pane"] == "deepseek-pane"
+    assert result["assigned"][0]["fallback_model"] is True
