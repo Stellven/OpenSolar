@@ -278,6 +278,55 @@ def test_submit_rejects_missing_persona_binding(tmp_path, monkeypatch):
         optime.submit(envelope)
 
 
+def test_submit_persona_field_wins_over_role(monkeypatch, tmp_path):
+    """submit() uses the ``persona`` field, not ``role``, when they differ.
+
+    Only evaluator.md is present; if the runtime fell back to role='builder'
+    it would fail.  Success proves persona='evaluator' was used.
+    """
+    personas_dir = tmp_path / "personas"
+    personas_dir.mkdir()
+    (personas_dir / "evaluator.md").write_text("# Evaluator\n", encoding="utf-8")
+    monkeypatch.setattr(optime, "OPERATOR_PERSONAS_DIR", personas_dir)
+
+    def _mock_config(op_id):
+        if op_id == "mini-claude-sonnet-builder":
+            cfg = {
+                "enabled": True,
+                "persona": "evaluator",
+                "role": "builder",
+                "display_name": "test",
+            }
+            return cfg
+        return None
+
+    monkeypatch.setattr(optime, "get_operator_config", _mock_config)
+
+    envelope = _make_envelope(operator_id="mini-claude-sonnet-builder")
+    result = optime.submit(envelope)
+    assert result["status"] == "submitted"
+
+
+def test_submit_falls_back_to_role_when_persona_absent(monkeypatch, tmp_path):
+    """submit() falls back to ``role`` when ``persona`` field is not in config."""
+    personas_dir = tmp_path / "personas"
+    personas_dir.mkdir()
+    (personas_dir / "builder.md").write_text("# Builder\n", encoding="utf-8")
+    monkeypatch.setattr(optime, "OPERATOR_PERSONAS_DIR", personas_dir)
+
+    def _mock_config(op_id):
+        if op_id == "mini-claude-sonnet-builder":
+            # Explicitly omit the persona field
+            return {"enabled": True, "role": "builder", "display_name": "test"}
+        return None
+
+    monkeypatch.setattr(optime, "get_operator_config", _mock_config)
+
+    envelope = _make_envelope(operator_id="mini-claude-sonnet-builder")
+    result = optime.submit(envelope)
+    assert result["status"] == "submitted"
+
+
 def test_submit_uses_custom_lease_ttl():
     """Envelope lease_ttl_seconds is respected."""
     envelope = _make_envelope()

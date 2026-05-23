@@ -96,6 +96,8 @@ def call_thunderomlx(prompt: str) -> dict[str, Any]:
     payload = {
         "model": PROXY_MODEL,
         "max_tokens": MAX_TOKENS,
+        "thinking": {"type": "enabled"},
+        "chat_template_kwargs": {"enable_thinking": True},
         "messages": [{"role": "user", "content": prompt}],
     }
     req = urllib.request.Request(
@@ -119,7 +121,25 @@ def content_text(response: dict[str, Any]) -> str:
             parts.append(str(item.get("text") or ""))
         elif isinstance(item, dict) and "text" in item:
             parts.append(str(item.get("text") or ""))
-    return "\n".join(parts).strip()
+    return strip_thinking_text("\n".join(parts))
+
+
+def strip_thinking_text(text: str) -> str:
+    text = (text or "").strip()
+    text = re.sub(r"(?is)<think>.*?</think>\s*", "", text).strip()
+    for pattern in (
+        r"(?is)\bFinal Answer\s*:\s*",
+        r"(?is)\bFinal\s*:\s*",
+        r"(?is)最终答案\s*[:：]\s*",
+        r"(?is)正式输出\s*[:：]\s*",
+        r"(?is)答案\s*[:：]\s*",
+    ):
+        matches = list(re.finditer(pattern, text))
+        if matches:
+            return text[matches[-1].end():].strip()
+    if re.match(r"(?is)^\s*(Thinking Process:|1\.\s+\*\*Analyze)", text):
+        return ""
+    return text
 
 
 def build_prompt(node: dict[str, Any], sources: list[dict[str, Any]]) -> str:

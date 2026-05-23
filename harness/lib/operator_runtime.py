@@ -11,15 +11,19 @@ import datetime
 import fcntl
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from operator_persona import resolve_persona
 
 HOME = Path.home()
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
 OPERATOR_LEASE_DIR = HARNESS_DIR / "run" / "operator-leases"
 OPERATOR_STATUS_DIR = HARNESS_DIR / "run" / "operator-status"
 OPERATOR_INBOX_DIR = HARNESS_DIR / "run" / "operator-inbox"
+OPERATOR_RESULTS_DIR = HARNESS_DIR / "run" / "operator-results"
 OPERATOR_PERSONAS_DIR = HARNESS_DIR / "personas"
 PHYSICAL_OPERATORS_PATH = Path(os.environ.get("SOLAR_MULTI_TASK_OPERATORS", HARNESS_DIR / "config" / "physical-operators.json"))
 
@@ -358,16 +362,7 @@ def submit(task_envelope: Dict[str, Any]) -> Dict[str, Any]:
         )
 
     # ── 4. Persona binding check ───────────────────────────────────────────
-    persona = config.get("persona")
-    if not persona:
-        raise RuntimeError(
-            f"Operator '{operator_id}' has no persona binding in registry"
-        )
-    persona_file = OPERATOR_PERSONAS_DIR / f"{persona}.md"
-    if not persona_file.exists():
-        raise RuntimeError(
-            f"Operator '{operator_id}' persona file missing: {persona_file}"
-        )
+    resolve_persona(operator_id, config, OPERATOR_PERSONAS_DIR, load_content=False)
 
     # ── 5. Acquire lease ──────────────────────────────────────────────────
     lease = acquire_operator_lease(
@@ -402,6 +397,134 @@ def submit(task_envelope: Dict[str, Any]) -> Dict[str, Any]:
         "status": "submitted",
         "submitted_at": submitted_at,
     }
+
+
+# ── Secret Scrubbing ─────────────────────────────────────────────────────────
+
+# Compiled once at module load for performance.
+_SECRET_PATTERNS: list = [
+    (re.compile(r'sk-[a-zA-Z0-9]{32,}'), '[SCRUBBED]'),
+    (re.compile(r'ghp_[a-zA-Z0-9]{36}'), '[SCRUBBED]'),
+    (re.compile(r'github_pat_[a-zA-Z0-9_]{82}'), '[SCRUBBED]'),
+    (re.compile(r'AKIA[0-9A-Z]{16}'), '[SCRUBBED]'),
+    (re.compile(r'Bearer [a-zA-Z0-9\-._~+/=]{20,}'), 'Bearer [SCRUBBED]'),
+    (re.compile(r'(?i)(api[_-]?key|apikey|api_secret)\s*[=:]\s*[^\s"\']{8,}'), r'\1=[SCRUBBED]'),
+    (re.compile(r'(?i)(password|passwd)\s*[=:]\s*[^\s"\']{4,}'), r'\1=[SCRUBBED]'),
+    (re.compile(r'(?i)(token|secret)\s*[=:]\s*[^\s"\']{8,}'), r'\1=[SCRUBBED]'),
+]
+
+
+def scrub_secrets(text: str) -> str:
+    """Replace known credential patterns with [SCRUBBED]."""
+    for pattern, replacement in _SECRET_PATTERNS:
+        text = pattern.sub(replacement, text)
+    return text
+
+
+# ── Inbox Helpers ─────────────────────────────────────────────────────────────
+
+def list_inbox_tasks(operator_id: str) -> List[tuple]:
+    """Return pending task envelopes from the operator inbox.
+
+    Returns a list of ``(task_id, envelope_dict, envelope_path)`` tuples
+    sorted by file name (oldest first, assuming task_id timestamps sort
+    lexicographically).
+    """
+    inbox = OPERATOR_INBOX_DIR / operator_id
+    if not inbox.exists():
+        return []
+    results = []
+    for p in sorted(inbox.glob("*.json")):
+        try:
+            envelope = json.loads(p.read_text(encoding="utf-8"))
+            results.append((p.stem, envelope, p))
+        except Exception:
+            pass
+    return results
+
+
+# ── Heartbeat ─────────────────────────────────────────────────────────────────
+
+def write_heartbeat(
+    operator_id: str,
+    state: str,
+    *,
+    current_task_id: Optional[str] = None,
+    resolved_persona: Optional[str] = None,
+) -> None:
+    """Write a daemon heartbeat to the operator status file.
+
+    Uses ``runtime_state`` as the primary key so that
+    ``get_operator_runtime_state`` picks it up correctly, and also writes
+    ``state`` for daemon-readable convenience.
+    """
+    _ensure_dirs()
+    path = OPERATOR_STATUS_DIR / f"{operator_id}.json"
+    lock_path = OPERATOR_STATUS_DIR / f"{operator_id}.lock"
+
+    data: Dict[str, Any] = {
+        "operator_id": operator_id,
+        "runtime_state": state,
+        "state": state,
+        "heartbeat_at": _now(),
+    }
+    if current_task_id is not None:
+        data["current_task_id"] = current_task_id
+    if resolved_persona is not None:
+        data["resolved_persona"] = resolved_persona
+
+    with open(lock_path, "a") as lf:
+        fcntl.flock(lf, fcntl.LOCK_EX)
+        try:
+            tmp = str(path) + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+            os.replace(tmp, str(path))
+        finally:
+            fcntl.flock(lf, fcntl.LOCK_UN)
+
+
+# ── Result Artifacts ──────────────────────────────────────────────────────────
+
+def write_result(
+    operator_id: str,
+    task_id: str,
+    sprint_id: str,
+    node_id: str,
+    status: str,
+    exit_code: int,
+    started_at: str,
+    finished_at: str,
+    log_tail: str,
+) -> Path:
+    """Write the result.json artifact for a completed task.
+
+    ``log_tail`` is scrubbed for secrets before writing.  The artifact is
+    written atomically via a .tmp rename.
+
+    Returns the path to the written result.json.
+    """
+    result_dir = OPERATOR_RESULTS_DIR / operator_id / task_id
+    result_dir.mkdir(parents=True, exist_ok=True)
+
+    result: Dict[str, Any] = {
+        "task_id": task_id,
+        "operator_id": operator_id,
+        "sprint_id": sprint_id,
+        "node_id": node_id,
+        "status": status,
+        "exit_code": exit_code,
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "log_tail": scrub_secrets(log_tail),
+    }
+
+    result_path = result_dir / "result.json"
+    tmp_path = str(result_path) + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(result, f, indent=2)
+    os.replace(tmp_path, str(result_path))
+    return result_path
 
 
 # ── CLI Interface ─────────────────────────────────────────────────────────────

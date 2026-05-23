@@ -232,3 +232,4 @@
 {"ts": "2026-05-22T18:00:24Z", "sprint_id": "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui", "lesson": "Sprint PASS (15 Done 一次过)", "source": "eval_pass", "confidence": 0.5, "tags": ["PASS"]}
 {"ts": "2026-05-22T18:48:33Z", "sprint_id": "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui", "lesson": "Sprint PASS (15 Done 一次过)", "source": "eval_pass", "confidence": 0.5, "tags": ["PASS"]}
 {"ts": "2026-05-22T21:00:56Z", "sprint_id": "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui", "lesson": "Sprint PASS (15 Done 一次过)", "source": "eval_pass", "confidence": 0.5, "tags": ["PASS"]}
+{"ts": "2026-05-23T00:08:39Z", "sprint_id": "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s04-orchestration-ui", "lesson": "Sprint PASS (15 Done 一次过)", "source": "eval_pass", "confidence": 0.5, "tags": ["PASS"]}
