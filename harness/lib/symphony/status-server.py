@@ -35,6 +35,11 @@ from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+try:
+    import yaml
+except Exception:  # pragma: no cover
+    yaml = None
+
 # ── Paths ──
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", str(Path.home() / ".solar" / "harness")))
 SPRINTS_DIR = HARNESS_DIR / "sprints"
@@ -49,6 +54,11 @@ MERMAID_DIST = HARNESS_DIR / "vendor" / "mermaid-viewer" / "node_modules" / "mer
 INTEGRATIONS_HEALTH = HARNESS_DIR / "lib" / "external-integrations-health.py"
 KNOWLEDGE_PROBE_HEALTH = HARNESS_DIR / "state" / "knowledge-probe-health.json"
 KNOWLEDGE_DIR = Path(os.environ.get("OBSIDIAN_VAULT_PATH", str(Path.home() / "Knowledge")))
+AI_INFLUENCE_RAW_DIR = Path(os.environ.get("AI_INFLUENCE_RAW_DIR", str(KNOWLEDGE_DIR / "_raw" / "ai-influence-daily-digest")))
+YOUTUBE_DIGEST_CONFIG = HARNESS_DIR / "config" / "youtube-influence-digest.yaml"
+AI_INFLUENCE_ACCOUNTS = HARNESS_DIR / "ai-influence-digest" / "references" / "accounts_extended.txt"
+GITHUB_TRENDS_CONFIG = HARNESS_DIR / "config" / "github-trends.yaml"
+GITHUB_TRENDS_DB = Path(os.environ.get("GITHUB_TRENDS_DB", str(HARNESS_DIR / "state" / "github-trends" / "github-trends.sqlite")))
 ACCEPTED_ASSETS_DIR = KNOWLEDGE_DIR / "_raw" / "solar-harness" / "accepted"
 ACCEPTED_ASSETS_MANIFEST = KNOWLEDGE_DIR / "_raw" / "solar-harness" / ".manifest" / "accepted-artifacts.json"
 MODEL_DOCTOR_HEALTH = HARNESS_DIR / "state" / "model-registry-doctor-health.json"
@@ -398,6 +408,327 @@ def _assets_view_html() -> str:
 <p>Open <a href="/#assets">Solar asset packages</a>.</p>
 </body>
 </html>"""
+
+
+def _ai_influence_artifact_link(label: str, path: Path | None) -> dict:
+    exists = bool(path and path.exists() and path.is_file() and _allowed_open_path(path))
+    return {
+        "label": label,
+        "path": str(path) if path else "",
+        "exists": exists,
+        "view_url": ("/ai-influence/report?path=" + urllib.parse.quote(str(path))) if exists else "",
+        "file_view_url": ("/file/view?path=" + urllib.parse.quote(str(path))) if exists else "",
+        "size": path.stat().st_size if exists else 0,
+        "mtime": path.stat().st_mtime if exists else 0,
+    }
+
+
+def _ai_influence_date_from_path(path: Path) -> str:
+    for part in reversed(path.parts):
+        if re.match(r"^\d{4}-\d{2}-\d{2}$", part):
+            return part
+    return ""
+
+
+def _ai_influence_report_item(run_dir: Path) -> dict:
+    digest_json_path = run_dir / "digest.json"
+    digest_html_path = run_dir / "digest.html"
+    digest_md_path = run_dir / "digest.md"
+    preview_path = run_dir / "digest.preview.html"
+    data = _read_json_file(digest_json_path)
+    analysis = data.get("analysis") if isinstance(data.get("analysis"), dict) else data
+    stats = data.get("stats") if isinstance(data.get("stats"), dict) else {}
+    trends = analysis.get("trend_analysis") if isinstance(analysis, dict) else {}
+    core_trends = trends.get("core_trends") if isinstance(trends, dict) else []
+    items = analysis.get("items") if isinstance(analysis, dict) else []
+    date_str = str(data.get("date") or _ai_influence_date_from_path(run_dir) or run_dir.name)
+    html_link = _ai_influence_artifact_link("digest_html", digest_html_path)
+    preview_link = _ai_influence_artifact_link("digest_preview_html", preview_path)
+    primary = html_link if html_link["exists"] else preview_link
+    return {
+        "date": date_str,
+        "run_dir": str(run_dir),
+        "title": f"AI Influence Digest — {date_str}",
+        "analysis_status": analysis.get("analysis_status", "N/A") if isinstance(analysis, dict) else "N/A",
+        "model": analysis.get("model", "N/A") if isinstance(analysis, dict) else "N/A",
+        "items": len(items) if isinstance(items, list) else 0,
+        "core_trends": len(core_trends) if isinstance(core_trends, list) else 0,
+        "top_scored": stats.get("top_scored", 0),
+        "mail": data.get("gmail", {}),
+        "wiki_dispatch": data.get("wiki_dispatch", ""),
+        "primary": primary,
+        "artifacts": [
+            html_link,
+            preview_link,
+            _ai_influence_artifact_link("digest_md", digest_md_path),
+            _ai_influence_artifact_link("digest_json", digest_json_path),
+        ],
+        "mtime": max((p.stat().st_mtime for p in [digest_json_path, digest_html_path, digest_md_path, preview_path] if p.exists()), default=run_dir.stat().st_mtime if run_dir.exists() else 0),
+    }
+
+
+def _ai_influence_payload(limit: int = 80) -> dict:
+    run_dirs: list[Path] = []
+    if AI_INFLUENCE_RAW_DIR.exists():
+        for child in AI_INFLUENCE_RAW_DIR.iterdir():
+            if child.is_dir() and (child / "digest.md").exists():
+                run_dirs.append(child)
+    run_dirs.sort(key=lambda p: _ai_influence_report_item(p).get("mtime", 0), reverse=True)
+    items = [_ai_influence_report_item(path) for path in run_dirs[:limit]]
+    return {
+        "ok": AI_INFLUENCE_RAW_DIR.exists(),
+        "status": "ok" if AI_INFLUENCE_RAW_DIR.exists() else "warn",
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "raw_dir": str(AI_INFLUENCE_RAW_DIR),
+        "count": len(items),
+        "items": items,
+    }
+
+
+def _ai_influence_html() -> str:
+    payload = _ai_influence_payload(limit=160)
+    rows = []
+    for item in payload["items"]:
+        primary = item.get("primary") or {}
+        open_url = primary.get("view_url") or ""
+        mail = item.get("mail") if isinstance(item.get("mail"), dict) else {}
+        dispatch = item.get("wiki_dispatch") or "N/A"
+        run_dir = Path(item["run_dir"])
+        rows.append(f"""
+        <article class="report-card">
+          <div>
+            <div class="date">{html.escape(item.get("date", "N/A"))}</div>
+            <h2>{html.escape(item.get("title", "AI Influence Digest"))}</h2>
+            <p class="meta">模型 {html.escape(str(item.get("model", "N/A")))} · 状态 {html.escape(str(item.get("analysis_status", "N/A")))} · 邮件 {html.escape(str(mail.get("status", "N/A")))}</p>
+            <p class="dispatch">知识库派单：{html.escape(str(dispatch))}</p>
+          </div>
+          <div class="metrics">
+            <span><b>{int(item.get("items", 0))}</b>条目</span>
+            <span><b>{int(item.get("core_trends", 0))}</b>趋势</span>
+            <span><b>{int(item.get("top_scored", 0) or 0)}</b>候选</span>
+          </div>
+          <div class="actions">
+            <a class="btn primary" href="{html.escape(open_url)}" target="_blank" rel="noreferrer">打开报告</a>
+            <a class="btn" href="/file/view?path={urllib.parse.quote(str(run_dir / 'digest.md'))}" target="_blank" rel="noreferrer">Markdown</a>
+            <a class="btn" href="/file/view?path={urllib.parse.quote(str(run_dir / 'digest.json'))}" target="_blank" rel="noreferrer">JSON</a>
+          </div>
+        </article>
+        """)
+    body = "\n".join(rows) if rows else "<div class='empty'>还没有 AI Influence 报告。先跑一次 daily digest。</div>"
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Influence Reports · Solar Harness</title>
+  <style>
+    :root {{ --ink:#17231f; --muted:#61706a; --line:#e8dcc8; --paper:#fffdf8; --bg:#f4efe4; --green:#123b35; --gold:#c9863d; }}
+    body {{ margin:0; background:radial-gradient(circle at 12% 8%, #fff7df 0, transparent 28%), linear-gradient(135deg,#f4efe4,#edf2ea); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif; }}
+    .wrap {{ max-width:1120px; margin:0 auto; padding:30px 18px 50px; }}
+    .hero {{ border-radius:28px; padding:30px; color:#fff; background:linear-gradient(135deg,#123b35,#315f4f 58%,#c9863d); box-shadow:0 22px 60px rgba(30,45,37,.18); }}
+    .kicker {{ font-size:12px; letter-spacing:.16em; text-transform:uppercase; opacity:.82; }}
+    h1 {{ margin:9px 0 8px; font-size:34px; line-height:1.15; }}
+    .hero p {{ margin:0; max-width:760px; opacity:.9; }}
+    .toolbar {{ display:flex; justify-content:space-between; gap:12px; align-items:center; margin:18px 0; flex-wrap:wrap; }}
+    .pill {{ border:1px solid var(--line); background:rgba(255,253,248,.74); border-radius:999px; padding:7px 12px; color:var(--muted); font-size:13px; }}
+    .report-card {{ display:grid; grid-template-columns:minmax(0,1.45fr) minmax(190px,.4fr) auto; gap:18px; align-items:center; padding:20px; margin:13px 0; border:1px solid var(--line); background:rgba(255,253,248,.88); border-radius:24px; box-shadow:0 10px 26px rgba(49,42,31,.07); }}
+    .date {{ color:var(--gold); font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }}
+    h2 {{ margin:4px 0 6px; font-size:21px; color:var(--green); }}
+    .meta,.dispatch {{ margin:4px 0; color:var(--muted); font-size:13px; }}
+    .dispatch {{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:620px; }}
+    .metrics {{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }}
+    .metrics span {{ border:1px solid #eadfcd; border-radius:16px; background:#fbf7ef; padding:10px; text-align:center; font-size:12px; color:var(--muted); }}
+    .metrics b {{ display:block; color:var(--green); font-size:22px; }}
+    .actions {{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }}
+    .btn {{ border:1px solid var(--line); background:#fff; color:var(--green); text-decoration:none; border-radius:999px; padding:9px 13px; font-size:13px; font-weight:700; }}
+    .btn.primary {{ background:var(--green); color:#fff; border-color:var(--green); }}
+    .empty {{ margin-top:18px; padding:22px; border:1px dashed var(--line); border-radius:20px; background:#fffdf8; color:var(--muted); }}
+    @media(max-width:860px) {{ .report-card {{ grid-template-columns:1fr; }} .actions {{ justify-content:flex-start; }} .metrics {{ grid-template-columns:repeat(3,minmax(0,1fr)); }} h1 {{ font-size:27px; }} }}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="kicker">Solar Harness · AI Influence</div>
+      <h1>AI Influence 报告中心</h1>
+      <p>这里列出每日 AI Influence 产出。打开 HTML 报告看趋势，打开 Markdown/JSON 给知识库与复盘使用。</p>
+    </section>
+    <div class="toolbar">
+      <span class="pill">状态：{html.escape(payload.get("status", "N/A"))}</span>
+      <span class="pill">报告数：{payload.get("count", 0)}</span>
+      <span class="pill">Raw：{html.escape(payload.get("raw_dir", ""))}</span>
+      <a class="btn" href="/">回到 Solar Status</a>
+    </div>
+    {body}
+  </div>
+</body>
+</html>"""
+
+
+def _resolve_ai_influence_report(raw: str):
+    target = _resolve_open_file(raw)
+    if not target:
+        return None
+    if target.suffix.lower() not in (".html", ".htm", ".md", ".json"):
+        return None
+    if not (_is_within(target, AI_INFLUENCE_RAW_DIR) or _is_within(target, REPORTS_DIR)):
+        return None
+    return target
+
+
+def _read_social_accounts(limit: int = 300) -> list[dict]:
+    if not AI_INFLUENCE_ACCOUNTS.exists():
+        return []
+    accounts = []
+    for line in AI_INFLUENCE_ACCOUNTS.read_text(encoding="utf-8").splitlines():
+        if not line.strip() or line.startswith("#") or line.startswith("tier\t"):
+            continue
+        parts = line.split("\t")
+        if len(parts) < 7:
+            continue
+        tier, category, handle, display_name, notes, enabled, rotation_group = parts[:7]
+        accounts.append({
+            "tier": int(tier) if str(tier).isdigit() else 2,
+            "category": category,
+            "handle": handle,
+            "display_name": display_name,
+            "notes": notes,
+            "enabled": str(enabled).lower() == "true",
+            "rotation_group": rotation_group,
+        })
+        if len(accounts) >= limit:
+            break
+    return accounts
+
+
+def _github_trends_status() -> dict:
+    cfg = _read_yaml_file(GITHUB_TRENDS_CONFIG)
+    db_path = Path(((cfg.get("output") or {}).get("database") or GITHUB_TRENDS_DB)).expanduser()
+    status = {"database": str(db_path), "snapshots": 0, "latest": "", "ok": db_path.exists()}
+    if not db_path.exists():
+        return status
+    try:
+        conn = sqlite3.connect(db_path)
+        status["snapshots"] = conn.execute("SELECT COUNT(*) FROM repo_snapshots").fetchone()[0]
+        status["latest"] = conn.execute("SELECT MAX(collected_at) FROM repo_snapshots").fetchone()[0] or ""
+    except Exception as exc:
+        status["ok"] = False
+        status["error"] = f"{type(exc).__name__}: {exc}"
+    return status
+
+
+def _knowledge_subscriptions_payload() -> dict:
+    youtube_cfg = _read_yaml_file(YOUTUBE_DIGEST_CONFIG)
+    github_cfg = _read_yaml_file(GITHUB_TRENDS_CONFIG)
+    channels = youtube_cfg.get("channels") if isinstance(youtube_cfg.get("channels"), list) else []
+    topics = github_cfg.get("tracked_topics") if isinstance(github_cfg.get("tracked_topics"), list) else []
+    repos = github_cfg.get("tracked_repos") if isinstance(github_cfg.get("tracked_repos"), list) else []
+    accounts = _read_social_accounts()
+    return {
+        "ok": True,
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "youtube": {"config": str(YOUTUBE_DIGEST_CONFIG), "count": len(channels), "channels": channels},
+        "social": {"accounts": str(AI_INFLUENCE_ACCOUNTS), "count": len(accounts), "items": accounts},
+        "github": {
+            "config": str(GITHUB_TRENDS_CONFIG),
+            "topic_count": len(topics),
+            "tracked_topics": topics,
+            "tracked_repos": repos,
+            "db": _github_trends_status(),
+        },
+    }
+
+
+def _append_youtube_subscription(data: dict) -> dict:
+    cfg = _read_yaml_file(YOUTUBE_DIGEST_CONFIG)
+    channels = cfg.get("channels") if isinstance(cfg.get("channels"), list) else []
+    source = str(data.get("channel_id") or data.get("url") or data.get("handle") or "").strip()
+    if not source:
+        raise ValueError("channel_id/url/handle required")
+    entry = {
+        "url": source,
+        "name": str(data.get("name") or data.get("handle") or source).strip(),
+        "category": str(data.get("category") or "AI / Tech").strip(),
+        "priority": str(data.get("priority") or "rotation").strip(),
+    }
+    key = entry["url"].lower()
+    if any(str((x or {}).get("url") or (x or {}).get("channel_id") or "").lower() == key for x in channels if isinstance(x, dict)):
+        return {"ok": True, "status": "exists", "entry": entry}
+    channels.append(entry)
+    cfg["channels"] = channels
+    _write_yaml_file(YOUTUBE_DIGEST_CONFIG, cfg)
+    return {"ok": True, "status": "added", "entry": entry}
+
+
+def _append_social_subscription(data: dict) -> dict:
+    handle = str(data.get("handle") or "").strip().lstrip("@")
+    if not handle:
+        raise ValueError("handle required")
+    existing = {item["handle"].lower() for item in _read_social_accounts(limit=1000)}
+    if handle.lower() in existing:
+        return {"ok": True, "status": "exists", "handle": handle}
+    tier = str(data.get("tier") or "2")
+    category = str(data.get("category") or "custom").strip()
+    display_name = str(data.get("display_name") or handle).strip()
+    notes = str(data.get("notes") or "added from Solar WebUI").strip()
+    enabled = "true" if data.get("enabled", True) is not False else "false"
+    rotation_group = str(data.get("rotation_group") or "G").strip() if tier != "1" else ""
+    with AI_INFLUENCE_ACCOUNTS.open("a", encoding="utf-8") as f:
+        f.write("\t".join([tier, category, handle, display_name, notes, enabled, rotation_group]) + "\n")
+    return {"ok": True, "status": "added", "handle": handle}
+
+
+def _append_github_topic(data: dict) -> dict:
+    cfg = _read_yaml_file(GITHUB_TRENDS_CONFIG)
+    topics = cfg.get("tracked_topics") if isinstance(cfg.get("tracked_topics"), list) else []
+    name = str(data.get("name") or "").strip()
+    if not name:
+        raise ValueError("name required")
+    if any(str((x or {}).get("name") or "").lower() == name.lower() for x in topics if isinstance(x, dict)):
+        return {"ok": True, "status": "exists", "name": name}
+    entry = {
+        "name": name,
+        "category": str(data.get("category") or "ai").strip(),
+        "query": str(data.get("query") or name).strip(),
+        "enabled": data.get("enabled", True) is not False,
+    }
+    topics.append(entry)
+    cfg["tracked_topics"] = topics
+    _write_yaml_file(GITHUB_TRENDS_CONFIG, cfg)
+    return {"ok": True, "status": "added", "entry": entry}
+
+
+def _append_github_repo(data: dict) -> dict:
+    cfg = _read_yaml_file(GITHUB_TRENDS_CONFIG)
+    repos = cfg.get("tracked_repos") if isinstance(cfg.get("tracked_repos"), list) else []
+    repo = str(data.get("repo") or "").strip().removeprefix("https://github.com/")
+    if repo.count("/") != 1:
+        raise ValueError("repo must be owner/name")
+    if repo.lower() in {str(x).lower() for x in repos}:
+        return {"ok": True, "status": "exists", "repo": repo}
+    repos.append(repo)
+    cfg["tracked_repos"] = repos
+    _write_yaml_file(GITHUB_TRENDS_CONFIG, cfg)
+    return {"ok": True, "status": "added", "repo": repo}
+
+
+def _knowledge_subscriptions_html() -> str:
+    payload = _knowledge_subscriptions_payload()
+    yt_rows = "".join(f"<li><b>{h(x.get('name') or x.get('url'))}</b> <span>{h(x.get('category',''))}</span><code>{h(x.get('url') or x.get('channel_id') or x.get('handle'))}</code></li>" for x in payload["youtube"]["channels"][:80] if isinstance(x, dict))
+    social_rows = "".join(f"<li><b>@{h(x.get('handle'))}</b> <span>{h(x.get('category'))}</span><em>tier {h(x.get('tier'))}</em></li>" for x in payload["social"]["items"][:120])
+    topic_rows = "".join(f"<li><b>{h(x.get('name'))}</b> <span>{h(x.get('category'))}</span><code>{h(x.get('query'))}</code></li>" for x in payload["github"]["tracked_topics"][:80] if isinstance(x, dict))
+    repo_rows = "".join(f"<li><code>{h(repo)}</code></li>" for repo in payload["github"]["tracked_repos"][:80])
+    return f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Knowledge Subscriptions</title>
+<style>body{{margin:0;background:#f4efe4;color:#17231f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif}}.wrap{{max-width:1180px;margin:0 auto;padding:24px 18px 44px}}.hero{{background:linear-gradient(135deg,#123b35,#315f4f 60%,#c9863d);color:#fff;border-radius:26px;padding:26px}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-top:16px}}.card{{background:#fffdf8;border:1px solid #eadfcd;border-radius:20px;padding:18px;box-shadow:0 8px 24px rgba(49,42,31,.06)}}input,select{{width:100%;box-sizing:border-box;border:1px solid #dbcdb7;border-radius:12px;padding:9px;margin:5px 0 9px;background:#fff}}button,.btn{{border:0;background:#123b35;color:#fff;border-radius:999px;padding:9px 14px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block}}li{{margin:8px 0}}code{{display:block;color:#66736d;font-size:12px;margin-top:3px}}span,em{{color:#66736d;margin-left:6px}}.status{{color:#0f766e;font-weight:700}}</style></head>
+<body><div class="wrap"><section class="hero"><h1>知识订阅中心</h1><p>YouTube 跟踪列表、热点社交媒体账号、GitHub 开源趋势分类都在这里维护。</p></section>
+<div class="grid">
+<section class="card"><h2>YouTube 跟踪</h2><p class="status">{payload['youtube']['count']} 个频道</p><form onsubmit="addSub(event,'/knowledge/subscriptions/youtube')"><input name="url" placeholder="@handle / channel URL / UC..." required><input name="name" placeholder="名称"><input name="category" placeholder="分类"><select name="priority"><option>tier1</option><option selected>rotation</option></select><button>增加 YouTube</button></form><ul>{yt_rows or '<li>N/A</li>'}</ul></section>
+<section class="card"><h2>热点社交媒体</h2><p class="status">{payload['social']['count']} 个账号</p><form onsubmit="addSub(event,'/knowledge/subscriptions/social')"><input name="handle" placeholder="X handle，不带 @" required><input name="display_name" placeholder="显示名"><input name="category" placeholder="分类"><select name="tier"><option value="1">tier1</option><option value="2" selected>tier2</option></select><button>增加账号</button></form><ul>{social_rows or '<li>N/A</li>'}</ul></section>
+<section class="card"><h2>GitHub 分类趋势</h2><p class="status">topic {payload['github']['topic_count']} · snapshot {payload['github']['db'].get('snapshots',0)}</p><form onsubmit="addSub(event,'/knowledge/subscriptions/github-topic')"><input name="name" placeholder="topic 名称" required><input name="query" placeholder="关键词/查询"><input name="category" placeholder="ai / agent / compute_framework"><button>增加 Topic</button></form><form onsubmit="addSub(event,'/knowledge/subscriptions/github-repo')"><input name="repo" placeholder="owner/repo，用于星标快照"><button>增加 Repo</button></form><h3>Topics</h3><ul>{topic_rows or '<li>N/A</li>'}</ul><h3>Tracked Repos</h3><ul>{repo_rows or '<li>N/A</li>'}</ul></section>
+</div><p><a class="btn" href="/">回 Solar Status</a></p></div>
+<script>
+async function addSub(ev,url){{ev.preventDefault();const obj={{}};new FormData(ev.target).forEach((v,k)=>obj[k]=v);const res=await fetch(url,{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(obj)}});const data=await res.json();if(!data.ok){{alert('失败: '+(data.error||JSON.stringify(data)));return}} location.reload();}}
+</script></body></html>"""
 
 
 def _mermaid_index_html() -> str:
@@ -941,6 +1272,26 @@ def _read_json_file(path: Path) -> dict:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {}
+
+
+def _read_yaml_file(path: Path) -> dict:
+    if not yaml or not path.exists():
+        return {}
+    try:
+        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
+
+
+def _write_yaml_file(path: Path, data: dict) -> None:
+    if not yaml:
+        raise RuntimeError("PyYAML unavailable")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+
+def h(value) -> str:
+    return html.escape(str(value or ""))
 
 
 def _health_file_summary(path: Path) -> dict:
@@ -2183,7 +2534,7 @@ main {
   backdrop-filter: blur(18px);
   box-shadow: 0 14px 48px rgba(33, 27, 18, 0.10);
 }
-.tab {
+.tab, .tab-link {
   border: 0;
   background: transparent;
   color: #59635f;
@@ -2192,6 +2543,7 @@ main {
   font: 800 0.86rem "Avenir Next", "Gill Sans", sans-serif;
   cursor: pointer;
   white-space: nowrap;
+  text-decoration: none;
   transition: transform 120ms ease, background 120ms ease, color 120ms ease;
 }
 .tab.active {
@@ -2199,7 +2551,7 @@ main {
   color: #fff9ea;
   box-shadow: 0 10px 24px rgba(24, 33, 31, 0.20);
 }
-.tab:hover { transform: translateY(-1px); }
+.tab:hover, .tab-link:hover { transform: translateY(-1px); }
 .panel { display: none; }
 .panel.active { display: block; animation: rise 180ms ease-out; }
 @keyframes rise {
@@ -2817,6 +3169,7 @@ td {
   <button class="tab" data-tab="events">事件</button>
   <button class="tab" data-tab="knowledge">知识库</button>
   <button class="tab" data-tab="assets">资产包</button>
+  <a class="tab-link" href="/ai-influence" target="_blank" rel="noreferrer">AI Influence</a>
   <button class="tab" data-tab="upload">上传文档</button>
   <button class="tab" data-tab="config">配置</button>
   <button class="tab" data-tab="integrations">集成</button>
@@ -2911,6 +3264,14 @@ Config http://127.0.0.1:8789/setup</div>
           <div class="action-card">
             <div><h3>语义索引</h3><div class="muted">更新 QMD semantic index，用于更好的检索。</div></div>
             <button class="btn" onclick="copyText('qmd embed -c solar-wiki')">复制命令</button>
+          </div>
+          <div class="action-card">
+            <div><h3>订阅中心</h3><div class="muted">维护 YouTube、热点社交媒体和 GitHub 趋势分类。</div></div>
+            <a class="btn primary" href="/knowledge/subscriptions-view" target="_blank" rel="noreferrer">打开订阅中心</a>
+          </div>
+          <div class="action-card">
+            <div><h3>GitHub 趋势日报</h3><div class="muted">采集 GitHub Trending / Trendshift，并写入 SQLite + Raw。</div></div>
+            <button class="btn" onclick="copyText('python3 ~/Solar/harness/scripts/github_trends_digest.py run')">复制命令</button>
           </div>
         </div>
       </div>
@@ -3854,6 +4215,34 @@ class StatusHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _read_json_body(self) -> dict:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = 0
+        if length <= 0 or length > 65536:
+            return {}
+        raw = self.rfile.read(length).decode("utf-8", errors="replace")
+        return json.loads(raw or "{}")
+
+    def do_POST(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path.rstrip("/") or "/"
+        try:
+            data = self._read_json_body()
+            if path == "/knowledge/subscriptions/youtube":
+                self._send_json(_append_youtube_subscription(data))
+            elif path == "/knowledge/subscriptions/social":
+                self._send_json(_append_social_subscription(data))
+            elif path == "/knowledge/subscriptions/github-topic":
+                self._send_json(_append_github_topic(data))
+            elif path == "/knowledge/subscriptions/github-repo":
+                self._send_json(_append_github_repo(data))
+            else:
+                self._send_json({"ok": False, "error": "not found"}, status=404)
+        except Exception as exc:
+            self._send_json({"ok": False, "status": "error", "error": f"{type(exc).__name__}: {exc}"}, status=400)
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         params = urllib.parse.parse_qs(parsed.query)
@@ -3912,6 +4301,38 @@ class StatusHandler(BaseHTTPRequestHandler):
 
         elif path == "/assets-view":
             self._send_text(_assets_view_html(), content_type="text/html; charset=utf-8")
+
+        elif path == "/knowledge/subscriptions":
+            self._send_json(_knowledge_subscriptions_payload())
+
+        elif path == "/knowledge/subscriptions-view":
+            self._send_text(_knowledge_subscriptions_html(), content_type="text/html; charset=utf-8")
+
+        elif path == "/ai-influence":
+            self._send_text(_ai_influence_html(), content_type="text/html; charset=utf-8")
+
+        elif path == "/ai-influence/list":
+            try:
+                limit = int(params.get("limit", ["80"])[0])
+                limit = max(1, min(limit, 300))
+            except ValueError:
+                limit = 80
+            self._send_json(_ai_influence_payload(limit=limit))
+
+        elif path == "/ai-influence/report":
+            target = _resolve_ai_influence_report(params.get("path", [""])[0])
+            if not target:
+                self._send_json({"ok": False, "status": "error", "error": "AI Influence report not found or not allowed"}, status=404)
+            else:
+                suffix = target.suffix.lower()
+                content_type = "text/plain; charset=utf-8"
+                if suffix == ".json":
+                    content_type = "application/json; charset=utf-8"
+                elif suffix in (".html", ".htm"):
+                    content_type = "text/html; charset=utf-8"
+                elif suffix in (".md", ".markdown"):
+                    content_type = "text/markdown; charset=utf-8"
+                self._send_text(target.read_text(encoding="utf-8", errors="ignore"), content_type=content_type)
 
         elif path == "/mermaid":
             self._send_text(_mermaid_index_html(), content_type="text/html; charset=utf-8")

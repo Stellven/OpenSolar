@@ -40,6 +40,12 @@ PANE_TUI_UNAVAILABLE_RE = re.compile(
     r"API Error:\s*400|Invalid API parameter|error\"\s*:\s*\{",
     re.I,
 )
+PANE_QUOTA_EXHAUSTED_RE = re.compile(
+    r"You(?:'|’)ve hit (?:your|the org(?:anization)?(?:'s)?) .*limit|"
+    r"monthly usage limit|quota exhausted|quota:exhausted|"
+    r"rate[- ]limit|rate limit|RESOURCE_EXHAUSTED|429",
+    re.I,
+)
 PANE_DISPATCH_FAILED_IDLE_RE = re.compile(
     r"API Error:\s*Request timed out|Check your internet connection and proxy settings",
     re.I,
@@ -546,6 +552,45 @@ def _models_for_pane(pane: str, title: str = "") -> list[str]:
     if "sonnet" in title_lower:
         return _model_alias_set("anthropic-sonnet")
     return _model_alias_set("anthropic-sonnet")
+
+
+def _quota_models_for_provider(provider: str) -> list[str]:
+    provider = str(provider or "").strip().lower()
+    if provider in {"anthropic", "claude", "claude-code"}:
+        values = set(_model_alias_set("anthropic-sonnet"))
+        values.update(_model_alias_set("claude-opus"))
+        values.update({"anthropic", "claude", "sonnet", "opus"})
+        return sorted(values)
+    if provider in {"zhipu", "glm", "bigmodel"}:
+        return _model_alias_set("glm")
+    if provider == "deepseek":
+        return _model_alias_set("deepseek")
+    return []
+
+
+def _quota_exhausted_models(title: str, tail: str, health: dict[str, Any], models: list[str]) -> list[str]:
+    values: set[str] = set()
+    combined = f"{title}\n{tail}".lower()
+    health_reason = str(health.get("reason") or health.get("status") or "").lower()
+    health_provider = str(health.get("provider") or health.get("vendor") or "").lower()
+
+    if PANE_QUOTA_EXHAUSTED_RE.search(combined) or "quota" in health_reason or "rate_limit" in health_reason:
+        values.update(str(model).lower() for model in models if str(model).strip())
+
+    if ("anthropic" in combined or "claude" in combined or "monthly usage limit" in combined
+            or health_provider in {"anthropic", "claude", "claude-code"}):
+        if PANE_QUOTA_EXHAUSTED_RE.search(combined) or "quota" in health_reason or "rate_limit" in health_reason:
+            values.update(_quota_models_for_provider("anthropic"))
+
+    if "glm" in combined or health_provider in {"zhipu", "glm", "bigmodel"}:
+        if PANE_QUOTA_EXHAUSTED_RE.search(combined) or "quota" in health_reason or "rate_limit" in health_reason:
+            values.update(_quota_models_for_provider("zhipu"))
+
+    if "deepseek" in combined or health_provider == "deepseek":
+        if PANE_QUOTA_EXHAUSTED_RE.search(combined) or "quota" in health_reason or "rate_limit" in health_reason:
+            values.update(_quota_models_for_provider("deepseek"))
+
+    return sorted(v for v in values if v)
 
 
 def _node_id_from_intent(intent: str) -> str:
@@ -2062,15 +2107,17 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         if not _pane_title_matches_role(pane, title, "builder"):
             continue
         models = _models_for_pane(pane, title)
-        quota_exhausted: list[str] = []
-        title_lower = title.lower()
-        if "glm" in title_lower:
-            if "quota:exhausted" in title_lower or "quota exhausted" in title_lower:
-                quota_exhausted.extend(_model_alias_set("glm"))
+        tail = _pane_tail(pane)
+        health = _pane_health(pane)
+        quota_exhausted = _quota_exhausted_models(title, tail, health, models)
         if pane.startswith("solar-harness-lab:") or pane == f"{SESSION}:0.2":
             _clear_stale_prompt_residue(pane)
         runtime_unavailable_reason = _pane_runtime_unavailable_reason(pane, title)
-        unavailable_reason = runtime_unavailable_reason or _pane_unavailable_reason(pane)
+        unavailable_reason = (
+            runtime_unavailable_reason
+            or _pane_unavailable_reason(pane)
+            or ("rate_limit_or_api_error" if quota_exhausted else "")
+        )
         workers.append({
             "pane": pane,
             "models": models,
@@ -2079,7 +2126,7 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
             "busy": _pane_has_active_lease(pane) or _pane_tui_busy(pane) or bool(unavailable_reason),
             "title": title,
             "quota_exhausted": quota_exhausted,
-            "health": _pane_health(pane),
+            "health": health,
             "unavailable_reason": unavailable_reason,
             "current_command": _pane_current_command(pane),
         })

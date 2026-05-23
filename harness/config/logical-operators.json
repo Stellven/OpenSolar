@@ -1,0 +1,346 @@
+{
+  "version": 1,
+  "updated_at": "2026-05-23T01:30:00Z",
+  "logical_operators": {
+    "DeepArchitect": {
+      "operator_type": "DeepArchitect",
+      "description": "System architecture design, schema design, high-level technical planning. Requires strong architecture_reasoning and long_context.",
+      "primary_role": "planner",
+      "required_capabilities": {
+        "architecture_reasoning": 4,
+        "long_context": 3,
+        "multi_agent_coordination": 3
+      },
+      "cost_hint": "high",
+      "concurrency": {"max_parallel": 2, "singleton": false}
+    },
+    "RootCauseDebugger": {
+      "operator_type": "RootCauseDebugger",
+      "description": "Deep root cause analysis of failures, crashes, and regressions. Requires strong root_cause_debug and code_impl.",
+      "primary_role": "evaluator",
+      "required_capabilities": {
+        "root_cause_debug": 4,
+        "code_impl": 3,
+        "long_context": 2
+      },
+      "cost_hint": "high",
+      "concurrency": {"max_parallel": 3, "singleton": false}
+    },
+    "ImplementationWorker": {
+      "operator_type": "ImplementationWorker",
+      "description": "General-purpose code implementation: new features, modules, integrations. Requires strong code_impl.",
+      "primary_role": "builder",
+      "required_capabilities": {
+        "code_impl": 4,
+        "test_generation": 2
+      },
+      "cost_hint": "medium",
+      "concurrency": {"max_parallel": 5, "singleton": false}
+    },
+    "PatchWorker": {
+      "operator_type": "PatchWorker",
+      "description": "Targeted surgical patches: one-line fixes, config corrections, minor refactors. Optimized for speed and low cost.",
+      "primary_role": "builder",
+      "required_capabilities": {
+        "code_impl": 3,
+        "root_cause_debug": 2
+      },
+      "cost_hint": "low",
+      "concurrency": {"max_parallel": 8, "singleton": false}
+    },
+    "TestDesigner": {
+      "operator_type": "TestDesigner",
+      "description": "Designs test suites, edge-case matrices, property-based tests, and test plans. Requires strong test_generation.",
+      "primary_role": "builder",
+      "required_capabilities": {
+        "test_generation": 4,
+        "architecture_reasoning": 2
+      },
+      "cost_hint": "medium",
+      "concurrency": {"max_parallel": 4, "singleton": false}
+    },
+    "TestRunner": {
+      "operator_type": "TestRunner",
+      "description": "Executes test suites, interprets results, reports failures. Requires test_execution capability.",
+      "primary_role": "evaluator",
+      "required_capabilities": {
+        "test_execution": 4,
+        "root_cause_debug": 2
+      },
+      "cost_hint": "low",
+      "concurrency": {"max_parallel": 6, "singleton": false}
+    },
+    "BenchmarkRunner": {
+      "operator_type": "BenchmarkRunner",
+      "description": "Runs performance benchmarks, collects latency/throughput metrics, compares before/after. Shell access required.",
+      "primary_role": "evaluator",
+      "required_capabilities": {
+        "test_execution": 3,
+        "code_impl": 2
+      },
+      "risk_constraints": {
+        "allowed_shell_scope": "allowed"
+      },
+      "cost_hint": "medium",
+      "concurrency": {"max_parallel": 2, "singleton": false}
+    },
+    "ParallelExplorer": {
+      "operator_type": "ParallelExplorer",
+      "description": "Spawns parallel research or exploration threads, aggregates results. Requires multi_agent_coordination.",
+      "primary_role": "planner",
+      "required_capabilities": {
+        "multi_agent_coordination": 4,
+        "research_synthesis": 3
+      },
+      "cost_hint": "high",
+      "concurrency": {"max_parallel": 2, "singleton": false}
+    },
+    "ResearchScout": {
+      "operator_type": "ResearchScout",
+      "description": "Rapid information gathering: web search, documentation triage, codebase exploration. Optimized for speed.",
+      "primary_role": "knowledge-extractor",
+      "required_capabilities": {
+        "research_synthesis": 3,
+        "speed": 4
+      },
+      "cost_hint": "low",
+      "concurrency": {"max_parallel": 6, "singleton": false}
+    },
+    "ResearchSynthesizer": {
+      "operator_type": "ResearchSynthesizer",
+      "description": "Deep research synthesis: cross-source analysis, literature review, technical comparisons. Requires strong research_synthesis and long_context.",
+      "primary_role": "knowledge-extractor",
+      "required_capabilities": {
+        "research_synthesis": 4,
+        "long_context": 4,
+        "academic_critique": 3
+      },
+      "cost_hint": "high",
+      "concurrency": {"max_parallel": 2, "singleton": false}
+    },
+    "Critic": {
+      "operator_type": "Critic",
+      "description": "Critical review of designs, proposals, and plans. Applies academic_critique and adversarial questioning.",
+      "primary_role": "evaluator",
+      "required_capabilities": {
+        "academic_critique": 4,
+        "architecture_reasoning": 3
+      },
+      "cost_hint": "medium",
+      "concurrency": {"max_parallel": 3, "singleton": false}
+    },
+    "Verifier": {
+      "operator_type": "Verifier",
+      "description": "End-to-end verification: confirms implementations match specs, evidence collection, acceptance sign-off.",
+      "primary_role": "evaluator",
+      "required_capabilities": {
+        "test_execution": 3,
+        "root_cause_debug": 3
+      },
+      "cost_hint": "medium",
+      "concurrency": {"max_parallel": 3, "singleton": false}
+    },
+    "SecurityGate": {
+      "operator_type": "SecurityGate",
+      "description": "Security review gate: checks for vulnerabilities, validates risk profiles, enforces security policies before promotion.",
+      "primary_role": "auditor",
+      "required_capabilities": {
+        "root_cause_debug": 3,
+        "academic_critique": 3
+      },
+      "risk_constraints": {
+        "allowed_write_scope": "harness_readonly",
+        "destructive_actions": "denied"
+      },
+      "cost_hint": "medium",
+      "concurrency": {"max_parallel": 2, "singleton": false}
+    },
+    "QuotaBroker": {
+      "operator_type": "QuotaBroker",
+      "description": "Manages token/cost quotas across actors, enforces budget limits, routes overflow to fallbacks.",
+      "primary_role": "router",
+      "required_capabilities": {
+        "multi_agent_coordination": 3,
+        "speed": 4
+      },
+      "cost_hint": "low",
+      "concurrency": {"max_parallel": 1, "singleton": true}
+    },
+    "ContextCompressor": {
+      "operator_type": "ContextCompressor",
+      "description": "Compresses long context windows into context packets, generates memory summaries, trims stale state.",
+      "primary_role": "knowledge-extractor",
+      "required_capabilities": {
+        "long_context": 4,
+        "research_synthesis": 3
+      },
+      "cost_hint": "medium",
+      "concurrency": {"max_parallel": 4, "singleton": false}
+    },
+    "ArtifactCurator": {
+      "operator_type": "ArtifactCurator",
+      "description": "Manages build artifacts, evidence ledgers, handoff documents, and sprint closeout artifacts.",
+      "primary_role": "auditor",
+      "required_capabilities": {
+        "code_impl": 2,
+        "research_synthesis": 2
+      },
+      "cost_hint": "low",
+      "concurrency": {"max_parallel": 3, "singleton": false}
+    }
+  },
+  "bindings": {
+    "DeepArchitect": {
+      "operator_type": "DeepArchitect",
+      "candidates": [
+        {"actor_id": "mini-claude-opus-planner", "priority": 1, "condition": "always"},
+        {"actor_id": "mini-claude-opus-planner-print", "priority": 2, "condition": "quota_ok"},
+        {"actor_id": "mini-antigravity-gemini31-pro", "priority": 3, "condition": "quota_ok"}
+      ],
+      "selection_policy": "priority_first",
+      "fallback_policy": "queue"
+    },
+    "RootCauseDebugger": {
+      "operator_type": "RootCauseDebugger",
+      "candidates": [
+        {"actor_id": "mini-claude-opus-evaluator", "priority": 1, "condition": "always"},
+        {"actor_id": "mini-claude-opus-planner", "priority": 2, "condition": "quota_ok"},
+        {"actor_id": "mini-claude-opus-evaluator-print", "priority": 3, "condition": "quota_ok"}
+      ],
+      "selection_policy": "priority_first",
+      "fallback_policy": "queue"
+    },
+    "ImplementationWorker": {
+      "operator_type": "ImplementationWorker",
+      "candidates": [
+        {"actor_id": "mini-claude-sonnet-builder", "priority": 1, "condition": "always"},
+        {"actor_id": "mini-claude-sonnet-builder-print", "priority": 2, "condition": "quota_ok"},
+        {"actor_id": "mini-antigravity-gemini31-pro", "priority": 3, "condition": "quota_ok"}
+      ],
+      "selection_policy": "priority_first",
+      "fallback_policy": "queue"
+    },
+    "PatchWorker": {
+      "operator_type": "PatchWorker",
+      "candidates": [
+        {"actor_id": "mini-claude-sonnet-builder", "priority": 1, "condition": "always"},
+        {"actor_id": "mini-antigravity-gemini35-flash-high", "priority": 2, "condition": "always"},
+        {"actor_id": "mini-claude-sonnet-builder-print", "priority": 3, "condition": "quota_ok"}
+      ],
+      "selection_policy": "cost_optimal",
+      "fallback_policy": "queue"
+    },
+    "TestDesigner": {
+      "operator_type": "TestDesigner",
+      "candidates": [
+        {"actor_id": "mini-claude-sonnet-builder", "priority": 1, "condition": "always"},
+        {"actor_id": "mini-claude-opus-evaluator", "priority": 2, "condition": "quota_ok"}
+      ],
+      "selection_policy": "priority_first",
+      "fallback_policy": "queue"
+    },
+    "TestRunner": {
+      "operator_type": "TestRunner",
+      "candidates": [
+        {"actor_id": "mini-claude-opus-evaluator", "priority": 1, "condition": "always"},
+        {"actor_id": "mini-claude-opus-evaluator-print", "priority": 2, "condition": "quota_ok"},
+        {"actor_id": "mini-claude-sonnet-builder", "priority": 3, "condition": "always"}
+      ],
+      "selection_policy": "priority_first",
+      "fallback_policy": "queue"
+    },
+    "BenchmarkRunner": {
+      "operator_type": "BenchmarkRunner",
+      "candidates": [
+        {"actor_id": "mini-claude-opus-evaluator", "priority": 1, "condition": "always"},
+        {"actor_id": "mini-claude-sonnet-builder", "priority": 2, "condition": "always"}
+      ],
+      "selection_policy": "priority_first",
+      "fallback_policy": "queue"
+    },
+    "ParallelExplorer": {
+      "operator_type": "ParallelExplorer",
+      "candidates": [
+        {"actor_id": "mini-claude-opus-planner", "priority": 1, "condition": "always"},
+        {"actor_id": "mini-antigravity-gemini31-pro", "priority": 2, "condition": "quota_ok"}
+      ],
+      "selection_policy": "priority_first",
+      "fallback_policy": "queue"
+    },
+    "ResearchScout": {
+      "operator_type": "ResearchScout",
+      "candidates": [
+        {"actor_id": "mini-antigravity-gemini35-flash-high", "priority": 1, "condition": "always"},
+        {"actor_id": "mini-antigravity-gemini35-flash-image", "priority": 2, "condition": "always"},
+        {"actor_id": "mini-local-scan", "priority": 3, "condition": "always"}
+      ],
+      "selection_policy": "cost_optimal",
+      "fallback_policy": "queue"
+    },
+    "ResearchSynthesizer": {
+      "operator_type": "ResearchSynthesizer",
+      "candidates": [
+        {"actor_id": "mini-thunderomlx-qwen36-knowledge", "priority": 1, "condition": "always"},
+        {"actor_id": "mini-glm51-knowledge", "priority": 2, "condition": "always"},
+        {"actor_id": "mini-claude-opus-planner", "priority": 3, "condition": "quota_ok"}
+      ],
+      "selection_policy": "priority_first",
+      "fallback_policy": "queue"
+    },
+    "Critic": {
+      "operator_type": "Critic",
+      "candidates": [
+        {"actor_id": "mini-claude-opus-evaluator", "priority": 1, "condition": "always"},
+        {"actor_id": "mini-claude-opus-planner", "priority": 2, "condition": "quota_ok"},
+        {"actor_id": "mini-antigravity-gemini31-pro", "priority": 3, "condition": "quota_ok"}
+      ],
+      "selection_policy": "priority_first",
+      "fallback_policy": "queue"
+    },
+    "Verifier": {
+      "operator_type": "Verifier",
+      "candidates": [
+        {"actor_id": "mini-claude-opus-evaluator", "priority": 1, "condition": "always"},
+        {"actor_id": "mini-claude-opus-evaluator-print", "priority": 2, "condition": "quota_ok"}
+      ],
+      "selection_policy": "priority_first",
+      "fallback_policy": "queue"
+    },
+    "SecurityGate": {
+      "operator_type": "SecurityGate",
+      "candidates": [
+        {"actor_id": "mini-audit", "priority": 1, "condition": "always"},
+        {"actor_id": "mini-claude-opus-evaluator", "priority": 2, "condition": "quota_ok"}
+      ],
+      "selection_policy": "priority_first",
+      "fallback_policy": "error"
+    },
+    "QuotaBroker": {
+      "operator_type": "QuotaBroker",
+      "candidates": [
+        {"actor_id": "mini-router", "priority": 1, "condition": "always"}
+      ],
+      "selection_policy": "priority_first",
+      "fallback_policy": "error"
+    },
+    "ContextCompressor": {
+      "operator_type": "ContextCompressor",
+      "candidates": [
+        {"actor_id": "mini-thunderomlx-qwen36-knowledge", "priority": 1, "condition": "always"},
+        {"actor_id": "mini-glm51-knowledge", "priority": 2, "condition": "always"},
+        {"actor_id": "mini-antigravity-gemini31-pro", "priority": 3, "condition": "quota_ok"}
+      ],
+      "selection_policy": "cost_optimal",
+      "fallback_policy": "queue"
+    },
+    "ArtifactCurator": {
+      "operator_type": "ArtifactCurator",
+      "candidates": [
+        {"actor_id": "mini-claude-sonnet-builder", "priority": 1, "condition": "always"},
+        {"actor_id": "mini-antigravity-gemini35-flash-high", "priority": 2, "condition": "always"}
+      ],
+      "selection_policy": "cost_optimal",
+      "fallback_policy": "queue"
+    }
+  }
+}

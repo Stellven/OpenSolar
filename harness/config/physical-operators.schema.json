@@ -53,10 +53,37 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "type": {"type": "string", "enum": ["cli", "api", "managed_agent", "desktop_bridge", "local"]},
+            "type": {"type": "string", "enum": [
+              "cli", "api", "managed_agent", "desktop_bridge", "local",
+              "claude_code_interactive", "claude_print", "claude_sdk", "claude_github_action"
+            ]},
             "tool": {"type": "string"},
             "launch_cmd": {"type": "string"}
           }
+        },
+        "billing_surface": {
+          "type": "string",
+          "enum": [
+            "subscription_interactive",
+            "anthropic_agent_sdk_credit",
+            "usage_credit",
+            "local_compute",
+            "unknown"
+          ]
+        },
+        "billing_pool": {
+          "type": "string"
+        },
+        "launch_cmd_kind": {
+          "type": "string",
+          "enum": ["interactive_repl", "print_once", "sdk_call", "local"]
+        },
+        "aliases": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "compat_alias_for": {
+          "type": "string"
         },
         "model_binding": {
           "type": "object",
@@ -185,6 +212,22 @@
         "model": {"type": "string"},
         "preferred_for": {"type": "array", "items": {"type": "string"}},
         "avoid_for": {"type": "array", "items": {"type": "string"}}
+      },
+      "if": {
+        "properties": {
+          "backend": {"const": "claude-cli"}
+        },
+        "required": ["backend"]
+      },
+      "then": {
+        "required": ["surface", "billing_surface"],
+        "properties": {
+          "surface": {
+            "properties": {
+              "type": {"enum": ["claude_code_interactive", "claude_print", "claude_sdk", "claude_github_action"]}
+            }
+          }
+        }
       }
     }
   }

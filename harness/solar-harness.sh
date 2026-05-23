@@ -4369,8 +4369,14 @@ EOF
         ;;
       ai-influence-digest)
         # sprint-20260522-ai-influence-digest-scan N5: AI Influence Digest CLI
-        _ai_digest_script="$HARNESS_DIR/scripts/ai_influence_daily.py"
-        _ai_digest_accounts="${HARNESS_DIR}/ai-influence-digest/references/accounts_extended.txt"
+        _ai_digest_source_dir="${SOLAR_HARNESS_SOURCE_DIR:-$HOME/Solar/harness}"
+        if [[ -f "$_ai_digest_source_dir/scripts/ai_influence_daily.py" ]]; then
+          _ai_digest_script="$_ai_digest_source_dir/scripts/ai_influence_daily.py"
+          _ai_digest_accounts="${_ai_digest_source_dir}/ai-influence-digest/references/accounts_extended.txt"
+        else
+          _ai_digest_script="$HARNESS_DIR/scripts/ai_influence_daily.py"
+          _ai_digest_accounts="${HARNESS_DIR}/ai-influence-digest/references/accounts_extended.txt"
+        fi
         _ai_digest_state_dir="$HARNESS_DIR/state/ai-influence-digest"
         _ai_digest_raw_dir="$HOME/Knowledge/_raw/ai-influence-daily-digest"
         _ai_digest_plist="$HOME/Library/LaunchAgents/com.solar.ai-influence-digest.plist"
@@ -4383,7 +4389,8 @@ EOF
               --accounts "$_ai_digest_accounts" \
               --state-dir "$_ai_digest_state_dir" \
               --raw-dir "$_ai_digest_raw_dir" \
-              "$@"
+              "$@" \
+              run
             ;;
           status)
             python3 "$_ai_digest_script" \

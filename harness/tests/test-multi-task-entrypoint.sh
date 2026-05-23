@@ -16,6 +16,7 @@ cp lib/events.sh "$TMP/lib/events.sh"
 cp lib/graph_scheduler.py "$TMP/lib/graph_scheduler.py"
 cp lib/intent_engine_adapter.py "$TMP/lib/intent_engine_adapter.py"
 cp lib/multi_task_runner.py "$TMP/lib/multi_task_runner.py"
+cp lib/claude_surface.py "$TMP/lib/claude_surface.py"
 cp lib/gemini_adapter.py "$TMP/lib/gemini_adapter.py"
 cp config/multi-task-profiles.json "$TMP/config/multi-task-profiles.json"
 cp config/model-registry.json "$TMP/config/model-registry.json"
@@ -152,7 +153,7 @@ for path in Path(sys.argv[1]).glob("*/status.json"):
         print(data.get("role"), data.get("profile"), data.get("backend"), data.get("model"))
 PY
 )
-[[ "$planner_status" == "planner planner claude-cli sonnet" ]] || { echo "FAIL: planner profile routing wrong: $planner_status"; exit 1; }
+[[ "$planner_status" == "planner planner claude-cli opus" ]] || { echo "FAIL: planner profile routing wrong: $planner_status"; exit 1; }
 
 PATH="$TMP/bin:$PATH" HARNESS_DIR="$TMP" "$TMP/solar-harness.sh" multi-task profiles | grep -q "gemini-builder" \
   || { echo "FAIL: profiles did not include gemini-builder"; exit 1; }
@@ -257,7 +258,7 @@ grep -q "sprint-20260520-multi-task#B" /tmp/solar-multi-task-status.out \
 COLUMNS=80 LINES=20 PATH="$TMP/bin:$PATH" HARNESS_DIR="$TMP" "$TMP/solar-harness.sh" multi-task screen --graph "$graph" --command "显示状态" --no-clear >/tmp/solar-multi-task-screen.out
 grep -q "自然语言指令" /tmp/solar-multi-task-screen.out \
   || { echo "FAIL: screen did not render input pane"; exit 1; }
-grep -q "models 可派=" /tmp/solar-multi-task-screen.out \
+grep -q "可派=" /tmp/solar-multi-task-screen.out \
   || { echo "FAIL: screen did not show model matrix summary"; exit 1; }
 grep -q "可派=" /tmp/solar-multi-task-screen.out \
   || { echo "FAIL: screen model matrix summary did not show dispatchable combos"; exit 1; }

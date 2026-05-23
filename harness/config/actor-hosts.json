@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "updated_at": "2026-05-23T01:06:55Z",
+  "hosts": {
+    "mini": {
+      "host_id": "mini",
+      "host_type": "mac_mini",
+      "display_name": "Mac mini (Tailscale 100.122.223.55)",
+      "lifecycle": {
+        "state": "online",
+        "started_at": "2026-05-22T00:00:00Z",
+        "last_seen_at": "2026-05-23T01:06:55Z",
+        "shutdown_policy": "never"
+      },
+      "address": {
+        "ssh": "lisihao@100.122.223.55",
+        "tailscale_ip": "100.122.223.55",
+        "hostname": "mac-mini.local",
+        "harness_dir": "/Users/lisihao/.solar/harness"
+      },
+      "heartbeat": {
+        "interval_sec": 30,
+        "timeout_sec": 90,
+        "path": "actors/_host/mini/heartbeat.json"
+      },
+      "probe": {
+        "last_probe_at": "2026-05-23T00:53:00Z",
+        "last_probe_result": "ok",
+        "probe_cmd": "ssh lisihao@100.122.223.55 echo SOLAR_HOST_OK",
+        "probe_expected": "SOLAR_HOST_OK"
+      }
+    }
+  }
+}

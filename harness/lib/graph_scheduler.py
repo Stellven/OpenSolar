@@ -600,8 +600,15 @@ def _worker_quota_exhausted(worker: dict[str, Any], preferred_model: str | None 
     exhausted = worker.get("quota_exhausted", False)
     if isinstance(exhausted, bool):
         return exhausted
-    if isinstance(exhausted, list) and preferred_model:
-        return preferred_model in exhausted
+    if isinstance(exhausted, list):
+        exhausted_aliases: set[str] = set()
+        for item in exhausted:
+            exhausted_aliases.update(_model_aliases(str(item)))
+        if preferred_model:
+            return bool(_model_aliases(preferred_model) & exhausted_aliases)
+        model_aliases = [_model_aliases(str(model)) for model in worker.get("models", []) or []]
+        model_aliases = [aliases for aliases in model_aliases if aliases]
+        return bool(model_aliases) and all(aliases & exhausted_aliases for aliases in model_aliases)
     return False
 
 
