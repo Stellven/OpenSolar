@@ -1,6 +1,6 @@
 # accounts_extended.txt — AI Influence Digest Account Configuration
 # Sprint: sprint-20260522-ai-influence-digest-scan
-# Total accounts: 151
+# Total accounts: 200
 #
 # Format: TSV (tab-separated)
 # Columns: tier  category  handle  display_name  notes  enabled  rotation_group
@@ -18,8 +18,8 @@
 #   Plus random补充 from other groups to fill daily quota.
 #   Goal: every enabled Tier 2 account scanned at least once per 7 days.
 #
-# Tier 1 (42 accounts): mandatory every run, no rotation.
-# Tier 2 (109 accounts): 7 rotation groups, ~15-16 per group.
+# Tier 1 (57 accounts): mandatory every run, no rotation.
+# Tier 2 (143 accounts): 7 rotation groups, rate-limited by daily rotation.
 #
 # Parser contract:
 #   - Lines starting with # are comments, skip.
@@ -31,9 +31,9 @@
 #   - Tier 1 accounts have rotation_group="" (empty).
 #
 # Coverage summary:
-#   Tier 1: 42 accounts (4 categories: core_leader, paper_research, ai_lab, open_source)
-#   Tier 2: 109 accounts (6 categories: chip_semiconductor, agent_coding, multimodal, investment_trend, chinese_circle, deepseek_supplement)
-#   Total: 151 accounts
+#   Tier 1: 57 accounts (core leaders, research, labs, open-source, safety, agent coding)
+#   Tier 2: 143 accounts (rotated across chip, agent, multimodal, investment, Chinese circle, safety, infra)
+#   Total: 200 accounts
 
 tier	category	handle	display_name	notes	enabled	rotation_group
 1	core_leader	sama	Sam Altman	CEO OpenAI	true	
@@ -187,3 +187,52 @@ tier	category	handle	display_name	notes	enabled	rotation_group
 2	deepseek_supplement	robotics_today	Robotics Today	Robotics news	true	G
 2	deepseek_supplement	AISafetyForum	AI Safety Forum	Safety & alignment	true	G
 2	deepseek_supplement	deepseek_research	DeepSeek Research	Research publications	true	G
+1	core_leader	lexfridman	Lex Fridman	AI/robotics long-form interviews and field signal amplifier	true	
+1	core_leader	ID_AA_Carmack	John Carmack	Keen Technologies, systems and AGI engineering	true	
+1	core_leader	goodfellow_ian	Ian Goodfellow	Deep learning researcher, GANs, frontier ML	true	
+1	paper_research	rasbt	Sebastian Raschka	LLM implementation, Ahead of AI, build-from-scratch education	true	
+1	paper_research	lilianweng	Lilian Weng	OpenAI research notes, Lil'Log, agents and LLM systems	true	
+1	paper_research	chipro	Chip Huyen	ML systems, evaluation, production AI	true	
+1	paper_research	JayAlammar	Jay Alammar	Visual explanations for LLMs and transformers	true	
+1	open_source	simonw	Simon Willison	LLM tooling, local AI, data journalism engineering	true	
+1	agent_coding	mattshumer_	Matt Shumer	AI product builder and agent workflow signal	true	
+1	ai_lab	xai	xAI Official	Grok and frontier AI lab official account	true	
+1	ai_lab	grok	Grok Official	xAI product account and release signal	true	
+1	safety_governance	ch402	Chris Olah	Anthropic interpretability and mechanistic transparency	true	
+1	safety_governance	janleike	Jan Leike	AI alignment and frontier safety researcher	true	
+1	open_source	ClementDelangue	Clement Delangue	Hugging Face CEO and open AI ecosystem	true	
+1	agent_coding	jerryjliu0	Jerry Liu	LlamaIndex founder, RAG and agent data infra	true	
+2	paper_research	dair_ai	DAIR.AI	ML paper and prompt engineering curation	true	F
+2	paper_research	askalphaxiv	alphaXiv	Social layer for arXiv paper discovery	true	F
+2	paper_research	lmarena_ai	LM Arena	Model evaluation and arena benchmark signal	true	F
+2	safety_governance	EpochAIResearch	Epoch AI	AI trends, compute, timelines, and forecasting	true	F
+2	safety_governance	METR_Evals	METR	Evals for frontier model autonomy and safety	true	F
+2	open_source	EleutherAI	EleutherAI	Open-source ML research collective	true	F
+2	open_source	NousResearch	Nous Research	Open model lab and community research	true	F
+2	open_source	togethercompute	Together AI	Open model serving and AI infrastructure	true	F
+2	ai_lab	perplexity_ai	Perplexity AI	AI search and answer engine official account	true	F
+2	chip_semiconductor	groqinc	Groq	LLM inference chips and serving	true	A
+2	chip_semiconductor	CerebrasSystems	Cerebras Systems	Wafer-scale AI hardware and models	true	A
+2	open_source	Modal_Labs	Modal Labs	Serverless compute for AI workloads	true	F
+2	open_source	replicate	Replicate	Model hosting and open model deployment	true	F
+2	open_source	FireworksAI_HQ	Fireworks AI	Fast inference and model serving	true	F
+2	open_source	vllm_project	vLLM	Open-source LLM serving framework	true	F
+2	open_source	PyTorch	PyTorch	Deep learning framework official account	true	F
+2	agent_coding	yoheinakajima	Yohei Nakajima	BabyAGI and autonomous agent experiments	true	B
+2	agent_coding	jxnlco	Jason Liu	Instructor, structured extraction, AI engineering	true	B
+2	agent_coding	hwchase17	Harrison Chase	LangChain founder and agent tooling	true	B
+2	agent_coding	mervenoyann	Merve Noyan	Hugging Face developer advocacy and AI demos	true	B
+2	agent_coding	HamelHusain	Hamel Husain	LLM evals, AI engineering, product quality	true	B
+2	agent_coding	eugeneyan	Eugene Yan	Applied ML systems and recommender infrastructure	true	B
+2	agent_coding	alexalbert__	Alex Albert	Prompting, Claude and AI product workflows	true	B
+2	agent_coding	antonosika	Anton Osika	Lovable founder, AI app generation workflows	true	B
+2	safety_governance	miles_brundage	Miles Brundage	AI policy, safety, and deployment governance	true	G
+2	safety_governance	robertskmiles	Robert Miles	AI safety education and alignment explanations	true	G
+2	safety_governance	DanHendrycks	Dan Hendrycks	Center for AI Safety and evals	true	G
+2	safety_governance	beth_barnes	Beth Barnes	Model evaluations and alignment research	true	G
+2	paper_research	srush_nlp	Sasha Rush	NLP systems, sequence modeling, open education	true	G
+2	paper_research	colinraffel	Colin Raffel	LLM research, T5, datasets and evaluation	true	G
+2	paper_research	shakir_za	Shakir Mohamed	DeepMind, ML research and ethics	true	G
+2	paper_research	petergyang	Peter Yang	AI product strategy and agent workflows	true	G
+2	paper_research	YiTayML	Yi Tay	LLM architecture and efficient modeling research	true	G
+2	paper_research	OfirPress	Ofir Press	LLM research, long context, evaluation	true	G

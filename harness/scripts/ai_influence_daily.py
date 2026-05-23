@@ -1297,6 +1297,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     state_dir = Path(args.state_dir)
     dry_run = args.dry_run
     date_str = args.date
+    sleep_between_accounts = max(0.0, float(args.sleep_between_accounts))
 
     accounts = parse_accounts(accounts_path)
     print(f"Parsed {len(accounts)} accounts ({sum(1 for a in accounts if a.enabled)} enabled)", file=sys.stderr)
@@ -1325,6 +1326,8 @@ def cmd_run(args: argparse.Namespace) -> int:
             all_candidates.extend(candidates)
         except Exception as exc:
             failures.append(f"{handle}: {exc}")
+        if sleep_between_accounts > 0 and not dry_run:
+            time.sleep(sleep_between_accounts)
 
     unique = dedupe_candidates(all_candidates, db_path, date_str and date_str[:10])
     print(
@@ -1387,9 +1390,11 @@ def cmd_run(args: argparse.Namespace) -> int:
     result["digest_dir"] = str(digest_path)
 
     # --- Mail send / preview (FR6) ---
-    gmail_result = send_gmail(digest_html, effective_date)
+    gmail_result = {"status": "skipped", "backend": "dry_run"} if dry_run else send_gmail(digest_html, effective_date)
     result["gmail"] = gmail_result
-    if gmail_result["status"] == "warn":
+    if gmail_result["status"] == "skipped":
+        print("Mail: skipped for dry-run", file=sys.stderr)
+    elif gmail_result["status"] == "warn":
         preview_path = digest_path / "digest.preview.html"
         preview_path.write_text(digest_html, encoding="utf-8")
         result["gmail"]["preview_path"] = str(preview_path)
@@ -1399,10 +1404,13 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(f"Mail: sent via {gmail_result.get('backend', 'unknown')} to {gmail_result.get('to', '?')}", file=sys.stderr)
 
     # --- Wiki ingest dispatch (FR7) ---
-    dispatch_path = create_wiki_ingest_dispatch(digest_path, effective_date)
+    dispatch_path = None if dry_run else create_wiki_ingest_dispatch(digest_path, effective_date)
     if dispatch_path:
         result["wiki_dispatch"] = dispatch_path
         print(f"Wiki ingest dispatch: {dispatch_path}", file=sys.stderr)
+    elif dry_run:
+        result["wiki_dispatch"] = None
+        print("Wiki ingest dispatch: skipped for dry-run", file=sys.stderr)
     else:
         result["wiki_dispatch"] = None
         print("Wiki ingest dispatch: failed to create", file=sys.stderr)
@@ -1502,8 +1510,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             enabled = [a for a in accounts if a.enabled]
             if len(enabled) == 0:
                 issues.append("No enabled accounts found")
-            if len(accounts) != 151:
-                issues.append(f"Expected 151 accounts, got {len(accounts)}")
+            if len(accounts) < 200:
+                issues.append(f"Expected at least 200 accounts, got {len(accounts)}")
         except Exception as exc:
             issues.append(f"Account parse error: {exc}")
 
@@ -1544,6 +1552,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--date", default=None, help="Override date (YYYY-MM-DD)")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--raw-dir", default=None, help="Override raw output directory")
+    parser.add_argument(
+        "--sleep-between-accounts",
+        type=float,
+        default=float(os.environ.get("AI_INFLUENCE_SLEEP_SECONDS", "1.0")),
+        help="Polite delay between account fetches in seconds",
+    )
 
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("run", help="Execute daily scan")
