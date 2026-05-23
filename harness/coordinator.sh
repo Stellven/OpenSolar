@@ -1050,7 +1050,12 @@ is_pane_present() {
 
 capture_pane_tail() {
   local pane="$1" lines="${2:-3}"
-  tmux capture-pane -t "$pane" -p 2>/dev/null | tail -n "$lines"
+  tmux capture-pane -t "$pane" -p 2>/dev/null | python3 -c "
+import sys
+lines = sys.stdin.read().rstrip().splitlines()
+n = int(sys.argv[1])
+print('\n'.join(lines[-n:]))
+" "$lines"
 }
 
 pane_is_thinking_snapshot() {
@@ -1607,7 +1612,7 @@ dispatch_to_pane() {
   local lock_dir="$HARNESS_DIR/.dispatch-pane-${pane_idx}.lock"
   clear_stale_dispatch_lock "$lock_dir" "$pane" || true
   if ! mkdir "$lock_dir" 2>/dev/null; then
-    log "${Y}[dispatch] pane ${pane} lock 忙, 拒派 ${sid}${N}"
+    log "${Y}[dispatch] pane ${pane} lock 忙 (dir=${lock_dir}), 拒派 ${sid}${N}"
     emit_event "$sid" "dispatch_blocked" "coordinator" \
       "{\"pane\":\"${pane}\",\"reason\":\"lock_busy\"}"
     return 2
@@ -4796,12 +4801,10 @@ with open('$patches_file','w') as f:
               ;;
           esac
         else
-          # Recovery path: a previous coordinator version may have saved the
-          # eval_passed fingerprint before it knew how to dispatch the next
-          # dependency-ready slice. Keep this idempotent and only fire when the
-          # next slice is not already queued/in progress.
-          if [[ "$st" == "active" ]] && eval_passed_needs_progress "$sf"; then
-            log "${Y}[state-recovery] ${sid} eval_passed has dependency-ready next slice; driving handle_active despite unchanged fingerprint${N}"
+          # Recovery path: drive handle_active for active sprints with task_graph
+          # to ensure node evaluations/dispatches are processed without fingerprint changes
+          if [[ "$st" == "active" ]] && { eval_passed_needs_progress "$sf" || [[ -f "$SPRINTS_DIR/${sid}.task_graph.json" ]]; }; then
+            log "${Y}[state-recovery] ${sid} has task_graph or eval_passed; driving handle_active to ensure progress${N}"
             handle_active "$sid" "$sf"
           fi
         fi

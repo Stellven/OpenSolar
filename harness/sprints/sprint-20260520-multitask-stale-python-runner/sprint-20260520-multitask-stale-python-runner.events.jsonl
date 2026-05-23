@@ -1,0 +1,6 @@
+{"ts": "2026-05-23T14:23:58Z", "sprint_id": "sprint-20260520-multitask-stale-python-runner", "actor": "solar-autopilot", "event": "autopilot_workflow_route_normalized", "severity": "info", "data": {"route_role": "none", "stage": "done", "reason": "terminal_status"}}
+{"ts": "2026-05-23T14:27:19Z", "sid": "sprint-20260520-multitask-stale-python-runner", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-23T14:27:55Z", "sid": "sprint-20260520-multitask-stale-python-runner", "event": "dispatch_suppressed", "by": "coordinator"}
+{"ts": "2026-05-23T14:28:32Z", "sid": "sprint-20260520-multitask-stale-python-runner", "event": "handle_passed_completed", "by": "coordinator"}
+{"ts": "2026-05-23T14:28:32Z", "event": "accepted_artifact_exported", "source": "accepted-artifact-export", "path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260520-multitask-stale-python-runner.accepted.md", "bytes": 7269, "source_hash": "6f0301bf741cda55d304dd11c0e6ed020a755be0244e24a23243800fae1beddb"}
+{"ts": "2026-05-23T14:28:32Z", "event": "accepted_artifact_ingest_dispatched", "source": "accepted-artifact-export", "dispatch_file": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260520-multitask-stale-python-runner.dispatch.md"}

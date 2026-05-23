@@ -1,0 +1,2 @@
+{"ts": "2026-05-23T14:23:58Z", "sprint_id": "sprint-20260521-thunderomlx-cache-mechanism-audit", "actor": "solar-autopilot", "event": "autopilot_workflow_route_normalized", "severity": "info", "data": {"route_role": "none", "stage": "done", "reason": "terminal_status"}}
+{"ts": "2026-05-23T14:42:47Z", "sid": "sprint-20260521-thunderomlx-cache-mechanism-audit", "event": "dispatch_suppressed", "by": "coordinator"}

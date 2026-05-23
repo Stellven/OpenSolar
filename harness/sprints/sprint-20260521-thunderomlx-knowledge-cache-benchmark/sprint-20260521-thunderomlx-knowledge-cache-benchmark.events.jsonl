@@ -1,0 +1,5 @@
+{"ts": "2026-05-23T14:23:58Z", "sprint_id": "sprint-20260521-thunderomlx-knowledge-cache-benchmark", "actor": "solar-autopilot", "event": "autopilot_workflow_route_normalized", "severity": "info", "data": {"route_role": "none", "stage": "done", "reason": "terminal_status"}}
+{"ts": "2026-05-23T14:44:02Z", "sid": "sprint-20260521-thunderomlx-knowledge-cache-benchmark", "event": "dispatch_suppressed", "by": "coordinator"}
+{"ts": "2026-05-23T14:44:49Z", "sid": "sprint-20260521-thunderomlx-knowledge-cache-benchmark", "event": "handle_passed_completed", "by": "coordinator"}
+{"ts": "2026-05-23T14:44:49Z", "event": "accepted_artifact_exported", "source": "accepted-artifact-export", "path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260521-thunderomlx-knowledge-cache-benchmark.accepted.md", "bytes": 4858, "source_hash": "f328fd8333c38cf0ac036c386e9aba2578ebd90a64e0245478b3c9eadf0db2c0"}
+{"ts": "2026-05-23T14:44:49Z", "event": "accepted_artifact_ingest_dispatched", "source": "accepted-artifact-export", "dispatch_file": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260521-thunderomlx-knowledge-cache-benchmark.dispatch.md"}

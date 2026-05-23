@@ -2351,6 +2351,212 @@ def _meta_harness_summary() -> dict:
         return {"ok": False, "status": "error", "errors": [f"{type(exc).__name__}: {exc}"]}
 
 
+def _pm_dispatch_summary(limit: int = 8) -> dict:
+    """Summarize recent PM dispatch records for the main status dashboard."""
+    inbox_dir = HARNESS_DIR / "run" / "pm-inbox"
+    if not inbox_dir.exists():
+        return {"ok": True, "status": "idle", "count": 0, "items": [], "source": str(inbox_dir)}
+    items = []
+    try:
+        records = sorted(
+            inbox_dir.glob("pm-*.json"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )[: max(1, limit)]
+        for path in records:
+            try:
+                record = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            mode = str(record.get("mode") or "planner_order")
+            target = (
+                str(record.get("operator_id") or "operator")
+                if mode == "adhoc_probe"
+                else str(record.get("dispatch_target") or "solar-harness")
+            )
+            items.append({
+                "task_id": str(record.get("task_id") or path.stem),
+                "mode": mode,
+                "target": target,
+                "status": str(record.get("status") or "unknown"),
+                "sprint_id": str(record.get("sprint_id") or ""),
+                "submitted_at": str(record.get("submitted_at") or ""),
+                "objective": str(record.get("objective") or ""),
+            })
+        statuses = {str(item.get("status") or "").lower() for item in items}
+        summary_status = "idle"
+        if items:
+            if any(st in {"failed", "error", "rejected"} for st in statuses):
+                summary_status = "warn"
+            elif any(st in {"queued", "submitted", "planner_dispatch_ready", "requirements_ready"} for st in statuses):
+                summary_status = "ok"
+            else:
+                summary_status = "ok"
+        return {
+            "ok": summary_status in {"ok", "idle"},
+            "status": summary_status,
+            "count": len(items),
+            "items": items,
+            "latest": items[0] if items else {},
+            "source": str(inbox_dir),
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "status": "error",
+            "count": 0,
+            "items": [],
+            "errors": [f"{type(exc).__name__}: {exc}"],
+            "source": str(inbox_dir),
+        }
+
+
+def _physical_operator_summary(limit: int = 8) -> dict:
+    """Summarize physical operator fleet state for the main status dashboard."""
+    registry_path = HARNESS_DIR / "config" / "physical-operators.json"
+    lease_dir = HARNESS_DIR / "run" / "operator-leases"
+    status_dir = HARNESS_DIR / "run" / "operator-status"
+    empty = {
+        "ok": False,
+        "status": "missing",
+        "count": 0,
+        "enabled": 0,
+        "available": 0,
+        "dispatchable": 0,
+        "busy": 0,
+        "roles": {},
+        "items": [],
+        "sources": {
+            "registry": str(registry_path),
+            "leases": str(lease_dir),
+            "status": str(status_dir),
+        },
+    }
+    if not registry_path.exists():
+        return empty
+    try:
+        raw = json.loads(registry_path.read_text(encoding="utf-8"))
+        operators = raw.get("operators", {}) if isinstance(raw, dict) else {}
+        if not isinstance(operators, dict):
+            return {**empty, "status": "error", "errors": ["invalid operators registry shape"]}
+
+        now = _now()
+        leases = {}
+        if lease_dir.exists():
+            for path in lease_dir.glob("*.json"):
+                try:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+                if str(data.get("expires_at") or "") > now:
+                    leases[path.stem] = data
+        overrides = {}
+        if status_dir.exists():
+            for path in status_dir.glob("*.json"):
+                try:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+                expires_at = str(data.get("expires_at") or "")
+                if expires_at and expires_at <= now:
+                    continue
+                overrides[path.stem] = data
+
+        items = []
+        roles = {}
+        enabled_count = 0
+        available_count = 0
+        dispatchable_count = 0
+        busy_count = 0
+        for operator_id, cfg in operators.items():
+            cfg = cfg if isinstance(cfg, dict) else {}
+            role = str(cfg.get("role") or "unknown")
+            roles[role] = roles.get(role, 0) + 1
+            enabled = bool(cfg.get("enabled", True))
+            available = bool(cfg.get("available", True))
+            if enabled:
+                enabled_count += 1
+            if available:
+                available_count += 1
+            reg_state = cfg.get("state") if isinstance(cfg.get("state"), dict) else {}
+            runtime_state = "idle"
+            if not enabled:
+                runtime_state = "disabled"
+            elif reg_state.get("availability") == "disabled" or reg_state.get("runtime_state") == "disabled":
+                runtime_state = "disabled"
+            elif operator_id in leases:
+                runtime_state = str(leases[operator_id].get("state") or "leased")
+            elif operator_id in overrides:
+                runtime_state = str(overrides[operator_id].get("runtime_state") or "idle")
+            elif str(reg_state.get("runtime_state") or ""):
+                runtime_state = str(reg_state.get("runtime_state"))
+
+            is_busy = runtime_state in {"leased", "running", "draining", "cooldown", "quota_exhausted", "auth_expired"}
+            if is_busy:
+                busy_count += 1
+            if enabled and available and runtime_state == "idle":
+                dispatchable_count += 1
+
+            lease = leases.get(operator_id) or {}
+            items.append({
+                "operator_id": operator_id,
+                "role": role,
+                "backend": str(cfg.get("backend") or "unknown"),
+                "enabled": enabled,
+                "available": available,
+                "runtime_state": runtime_state,
+                "persona": str(cfg.get("persona") or ""),
+                "model": str(cfg.get("model") or cfg.get("provider") or ""),
+                "sprint_id": str(lease.get("sprint_id") or ""),
+                "task_id": str(lease.get("task_id") or ""),
+                "expires_at": str(lease.get("expires_at") or ""),
+            })
+
+        state_rank = {
+            "running": 0,
+            "leased": 1,
+            "draining": 2,
+            "cooldown": 3,
+            "quota_exhausted": 4,
+            "auth_expired": 5,
+            "error": 6,
+            "disabled": 7,
+            "idle": 8,
+        }
+        items.sort(key=lambda item: (state_rank.get(str(item.get("runtime_state") or ""), 99), item["operator_id"]))
+        non_idle = [item for item in items if str(item.get("runtime_state")) != "idle"]
+        visible = non_idle[:limit] if non_idle else items[: min(limit, len(items))]
+        summary_status = "ok"
+        if any(str(item.get("runtime_state")) in {"quota_exhausted", "auth_expired", "error"} for item in items):
+            summary_status = "warn"
+        elif dispatchable_count == 0 and items:
+            summary_status = "warn"
+        elif not items:
+            summary_status = "idle"
+        return {
+            "ok": summary_status in {"ok", "idle"},
+            "status": summary_status,
+            "count": len(items),
+            "enabled": enabled_count,
+            "available": available_count,
+            "dispatchable": dispatchable_count,
+            "busy": busy_count,
+            "roles": roles,
+            "items": visible,
+            "sources": {
+                "registry": str(registry_path),
+                "leases": str(lease_dir),
+                "status": str(status_dir),
+            },
+        }
+    except Exception as exc:
+        return {
+            **empty,
+            "status": "error",
+            "errors": [f"{type(exc).__name__}: {exc}"],
+        }
+
+
 def _status_payload(limit: int = 50) -> dict:
     current = _current_sprint()
     runtime_interfaces = _runtime_interfaces_status(current.get("sprint_id", ""))
@@ -2374,6 +2580,8 @@ def _status_payload(limit: int = 50) -> dict:
         "research": _research_status_summary(),
         "autoresearch_impact": _autoresearch_impact_summary(),
         "meta_harness": _meta_harness_summary(),
+        "pm_dispatches": _pm_dispatch_summary(),
+        "physical_operators": _physical_operator_summary(),
     }
 
 
@@ -3192,6 +3400,8 @@ td {
       <div class="card"><h3>Capability Evidence</h3><div id="overview-capabilities">Loading...</div></div>
       <div class="card"><h3>Autoresearch Impact</h3><div id="overview-autoresearch-impact">Loading...</div></div>
       <div class="card"><h3>Meta-Harness</h3><div id="overview-meta-harness">Loading...</div></div>
+      <div class="card"><h3>PM Dispatch</h3><div id="overview-pm-dispatch">Loading...</div></div>
+      <div class="card"><h3>Physical Operators</h3><div id="overview-physical-operators">Loading...</div></div>
       <div class="card"><h3>DeepResearch Human Search</h3><div id="overview-human-search">Loading...</div></div>
       <div class="card"><h3>DeepResearch Quality</h3><div id="overview-research">Loading...</div></div>
       <div class="card"><h3>最近风险</h3><div id="overview-risk">Loading...</div></div>
@@ -3205,6 +3415,10 @@ td {
     <div class="card" id="autoresearch-impact-card">Loading...</div>
     <h2>Meta-Harness</h2>
     <div class="card" id="meta-harness-card">Loading...</div>
+    <h2>PM Dispatch</h2>
+    <div class="card" id="pm-dispatch-card">Loading...</div>
+    <h2>Physical Operators</h2>
+    <div class="card" id="physical-operators-card">Loading...</div>
     <h2>DeepResearch Human Search</h2>
     <div class="card" id="human-search-card">Loading...</div>
     <h2>DeepResearch Quality</h2>
@@ -3439,6 +3653,41 @@ function renderCapabilityHealthSummary(h) {
         '<span class="detail">' + esc(c.detail || '-') + '</span>' +
         '</div>';
     }).join('') + '</div>';
+}
+function renderPmDispatches(data, compact) {
+  data = data || {};
+  const items = data.items || [];
+  const latest = data.latest || {};
+  if (!items.length) {
+    return '<div class="muted">暂无 PM 正式派单记录。</div>';
+  }
+  if (compact) {
+    const submittedAt = latest.submitted_at ? new Date(latest.submitted_at).toLocaleTimeString() : 'N/A';
+    return '<div class="health-metrics">' +
+      '<div class="mini-metric"><div class="kv-label">Status</div><span class="num">' + esc(data.status || 'unknown') + '</span></div>' +
+      '<div class="mini-metric"><div class="kv-label">Count</div><span class="num">' + esc(data.count || items.length || 0) + '</span></div>' +
+      '<div class="mini-metric"><div class="kv-label">Mode</div><span class="num">' + esc(latest.mode || 'N/A') + '</span></div>' +
+      '<div class="mini-metric"><div class="kv-label">Target</div><span class="num">' + esc(latest.target || 'N/A') + '</span></div>' +
+      '</div>' +
+      '<div class="muted">最新：' + esc(latest.sprint_id || latest.task_id || 'N/A') +
+      ' · ' + esc(latest.status || 'unknown') + ' · ' + esc(submittedAt) + '</div>';
+  }
+  return '<div class="health-metrics">' +
+    '<div class="mini-metric"><div class="kv-label">Status</div><span class="num">' + esc(data.status || 'unknown') + '</span></div>' +
+    '<div class="mini-metric"><div class="kv-label">Count</div><span class="num">' + esc(data.count || items.length || 0) + '</span></div>' +
+    '<div class="mini-metric"><div class="kv-label">Source</div><span class="num">' + esc((data.source || '').split('/').slice(-2).join('/') || 'N/A') + '</span></div>' +
+    '</div>' +
+    '<table><tr><th>Sprint</th><th>Mode</th><th>Target</th><th>Status</th><th>Submitted</th></tr>' +
+    items.map(item => {
+      const submitted = item.submitted_at ? new Date(item.submitted_at).toLocaleString() : 'N/A';
+      return '<tr>' +
+        '<td>' + esc(item.sprint_id || item.task_id || '-') + '</td>' +
+        '<td>' + esc(item.mode || '-') + '</td>' +
+        '<td>' + esc(item.target || '-') + '</td>' +
+        '<td>' + statusBadge(item.status || 'unknown') + '</td>' +
+        '<td>' + esc(submitted) + '</td>' +
+      '</tr>';
+    }).join('') + '</table>';
 }
 function clip(v, limit) {
   const s = String(v || '').replace(/\\s+/g, ' ').trim();
@@ -4158,6 +4407,8 @@ function render(data) {
   document.getElementById('autoresearch-impact-card').innerHTML = renderAutoresearchImpact(data.autoresearch_impact || {}, false);
   document.getElementById('overview-meta-harness').innerHTML = renderMetaHarness(data.meta_harness || {}, true);
   document.getElementById('meta-harness-card').innerHTML = renderMetaHarness(data.meta_harness || {}, false);
+  document.getElementById('overview-pm-dispatch').innerHTML = renderPmDispatches(data.pm_dispatches || {}, true);
+  document.getElementById('pm-dispatch-card').innerHTML = renderPmDispatches(data.pm_dispatches || {}, false);
   document.getElementById('overview-human-search').innerHTML = renderHumanSearch(data.human_search || {}, true);
   document.getElementById('human-search-card').innerHTML = renderHumanSearch(data.human_search || {}, false);
   document.getElementById('overview-research').innerHTML = renderResearchStatus(data.research || {}, true);

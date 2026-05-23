@@ -218,6 +218,238 @@ def get_operator_status_entry(
 
 
 # ---------------------------------------------------------------------------
+# Actor-based status (N4 lease-fleet observability)
+# ---------------------------------------------------------------------------
+
+ACTORS_PATH = HARNESS_DIR / "config" / "agent-actors.json"
+HOSTS_PATH = HARNESS_DIR / "config" / "actor-hosts.json"
+LOGICAL_OPS_PATH = HARNESS_DIR / "config" / "logical-operators.json"
+ACTOR_LEASE_DIR = HARNESS_DIR / "run" / "actor-leases"
+
+# Fields that must never be emitted in observability output.
+# Uses substring containment check; whitelist safe compound keys separately.
+_SECRET_PATTERNS = frozenset({
+    "api_key", "secret", "password", "cookie", "credential",
+    "raw_key", "prompt_body", "context_body", "session_key",
+    "private_key", "access_token", "refresh_token", "auth_token",
+    "bearer", "sk-", "session_token",
+})
+# Keys that contain a secret pattern substring but are safe summaries.
+_SAFE_KEY_SUFFIXES = frozenset({
+    "capability_token_summary",
+    "token_budget_class",
+})
+
+
+def _redact_secrets(d: Dict[str, Any]) -> Dict[str, Any]:
+    """Remove any key whose name suggests secret content."""
+    if not isinstance(d, dict):
+        return d
+    out: Dict[str, Any] = {}
+    for k, v in d.items():
+        kl = k.lower()
+        if kl in _SAFE_KEY_SUFFIXES:
+            pass  # explicitly safe
+        elif any(sf in kl for sf in _SECRET_PATTERNS):
+            continue
+        if isinstance(v, dict):
+            out[k] = _redact_secrets(v)
+        elif isinstance(v, list):
+            out[k] = [_redact_secrets(i) if isinstance(i, dict) else i for i in v]
+        else:
+            out[k] = v
+    return out
+
+
+def _load_json(path: Path) -> Dict[str, Any]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def load_actors(path: Path = ACTORS_PATH) -> Dict[str, Any]:
+    return _load_json(path).get("actors", {})
+
+
+def load_hosts(path: Path = HOSTS_PATH) -> Dict[str, Any]:
+    return _load_json(path).get("hosts", {})
+
+
+def load_logical_operator_bindings(path: Path = LOGICAL_OPS_PATH) -> Dict[str, Any]:
+    data = _load_json(path)
+    return data.get("bindings", {})
+
+
+def get_actor_status_entry(
+    actor_id: str,
+    actor_cfg: Dict[str, Any],
+    *,
+    hosts: Optional[Dict[str, Any]] = None,
+    lease_dir: Path = ACTOR_LEASE_DIR,
+) -> Dict[str, Any]:
+    """Return enriched status dict for one agent actor.
+
+    Includes actor_id, host_id, host_type, lease_state, billing_pool,
+    operator_score summary, verification_gate status, capability/risk/cost
+    summary, evidence path, context_packet info, capability-token summary,
+    failure-fingerprint penalties, and antigravity denials.
+    """
+    hosts = hosts or {}
+    host_id = str(actor_cfg.get("host_id") or "unknown")
+    host_cfg = hosts.get(host_id, {})
+    host_type = str(host_cfg.get("host_type") or "unknown")
+    host_lifecycle = host_cfg.get("lifecycle", {})
+    host_state = str(host_lifecycle.get("state") or "unknown")
+    host_last_seen = str(host_lifecycle.get("last_seen_at") or "N/A")
+
+    # Lease state from actor-leases dir
+    lease_data = _read_json(lease_dir / f"{actor_id}.json")
+    lease_state = "idle"
+    if lease_data:
+        now_str = datetime.datetime.now(datetime.timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        if lease_data.get("expires_at", "") > now_str:
+            lease_state = str(lease_data.get("state") or "leased")
+        else:
+            lease_state = "stale"
+
+    # Profiles (summaries only, no raw secrets)
+    cap_profile = actor_cfg.get("capability_profile", {})
+    risk_profile = actor_cfg.get("risk_profile", {})
+    cost_profile = actor_cfg.get("cost_profile", {})
+
+    cap_summary = {
+        k: v for k, v in cap_profile.items()
+        if isinstance(v, (int, float))
+    }
+    risk_summary = {
+        k: str(v) for k, v in risk_profile.items()
+        if not k.startswith("requires_human")
+    }
+    cost_summary = {
+        k: str(v) if isinstance(v, list) else v
+        for k, v in cost_profile.items()
+        if k in ("cost_tier", "token_budget_class", "effort", "reserve_ratio")
+    }
+
+    # Evidence and context
+    ev_ref = actor_cfg.get("evidence_ledger_ref", {})
+    ctx_ref = actor_cfg.get("context_packet_ref", {})
+    evidence_path = str(ev_ref.get("path") or "N/A") if isinstance(ev_ref, dict) else "N/A"
+    context_packet_id = str(ctx_ref.get("packet_id") or "N/A") if isinstance(ctx_ref, dict) else "N/A"
+    context_packet_path = str(ctx_ref.get("path") or "N/A") if isinstance(ctx_ref, dict) else "N/A"
+
+    # Billing
+    billing_pool = str(cost_profile.get("cost_tier") or "N/A")
+
+    return _redact_secrets({
+        "actor_id": actor_id,
+        "host_id": host_id,
+        "host_type": host_type,
+        "host_state": host_state,
+        "host_last_seen": host_last_seen,
+        "lease_state": lease_state,
+        "role": str(actor_cfg.get("role") or "N/A"),
+        "enabled": bool(actor_cfg.get("enabled", True)),
+        "billing_pool": billing_pool,
+        "capability_summary": cap_summary,
+        "risk_summary": risk_summary,
+        "cost_summary": cost_summary,
+        "evidence_path": evidence_path,
+        "context_packet_id": context_packet_id,
+        "context_packet_path": context_packet_path,
+        "operator_score_summary": None,
+        "verification_gate_status": None,
+        "capability_token_summary": None,
+        "failure_fingerprint_penalties": None,
+        "antigravity_denials": None,
+    })
+
+
+def get_host_status_entry(
+    host_id: str,
+    host_cfg: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Return enriched status dict for one host."""
+    lifecycle = host_cfg.get("lifecycle", {})
+    address = host_cfg.get("address", {})
+    heartbeat = host_cfg.get("heartbeat", {})
+    probe = host_cfg.get("probe", {})
+
+    return {
+        "host_id": host_id,
+        "host_type": str(host_cfg.get("host_type") or "unknown"),
+        "display_name": str(host_cfg.get("display_name") or host_id),
+        "state": str(lifecycle.get("state") or "unknown"),
+        "started_at": str(lifecycle.get("started_at") or "N/A"),
+        "last_seen_at": str(lifecycle.get("last_seen_at") or "N/A"),
+        "shutdown_policy": str(lifecycle.get("shutdown_policy") or "N/A"),
+        "hostname": str(address.get("hostname") or "N/A"),
+        "heartbeat_interval_sec": heartbeat.get("interval_sec", "N/A"),
+        "last_probe_result": str(probe.get("last_probe_result") or "N/A"),
+    }
+
+
+def load_actor_fleet(
+    actors_path: Path = ACTORS_PATH,
+    hosts_path: Path = HOSTS_PATH,
+    *,
+    lease_dir: Path = ACTOR_LEASE_DIR,
+) -> Dict[str, Any]:
+    """Load all actors and return enriched fleet dict."""
+    actors = load_actors(actors_path)
+    hosts = load_hosts(hosts_path)
+    fleet: Dict[str, Any] = {}
+    for aid, acfg in actors.items():
+        if not isinstance(acfg, dict):
+            continue
+        fleet[aid] = get_actor_status_entry(aid, acfg, hosts=hosts, lease_dir=lease_dir)
+    return fleet
+
+
+def load_host_fleet(
+    hosts_path: Path = HOSTS_PATH,
+) -> Dict[str, Any]:
+    """Load all hosts and return enriched fleet dict."""
+    hosts = load_hosts(hosts_path)
+    fleet: Dict[str, Any] = {}
+    for hid, hcfg in hosts.items():
+        if not isinstance(hcfg, dict):
+            continue
+        fleet[hid] = get_host_status_entry(hid, hcfg)
+    return fleet
+
+
+def get_logical_operator_binding_summary(
+    bindings_path: Path = LOGICAL_OPS_PATH,
+) -> Dict[str, Any]:
+    """Return logical operator bindings summary for observability.
+
+    Each operator gets: candidates (actor_ids), selection_policy, fallback_policy.
+    No raw context or config details leaked.
+    """
+    bindings = load_logical_operator_bindings(bindings_path)
+    summary: Dict[str, Any] = {}
+    for op, entry in bindings.items():
+        if not isinstance(entry, dict):
+            continue
+        candidates = entry.get("candidates", [])
+        if candidates and isinstance(candidates[0], dict):
+            cids = [c.get("actor_id", "") for c in candidates]
+        else:
+            cids = list(candidates)
+        summary[op] = {
+            "candidates": cids,
+            "selection_policy": str(entry.get("selection_policy", "N/A")),
+            "fallback_policy": str(entry.get("fallback_policy", "N/A")),
+        }
+    return summary
+
+
+# ---------------------------------------------------------------------------
 # Fleet loader
 # ---------------------------------------------------------------------------
 

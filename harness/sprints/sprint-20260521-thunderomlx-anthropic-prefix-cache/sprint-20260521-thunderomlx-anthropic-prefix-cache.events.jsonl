@@ -1,0 +1,5 @@
+{"ts": "2026-05-23T14:23:58Z", "sprint_id": "sprint-20260521-thunderomlx-anthropic-prefix-cache", "actor": "solar-autopilot", "event": "autopilot_workflow_route_normalized", "severity": "info", "data": {"route_role": "none", "stage": "done", "reason": "terminal_status"}}
+{"ts": "2026-05-23T14:41:24Z", "sid": "sprint-20260521-thunderomlx-anthropic-prefix-cache", "event": "dispatch_suppressed", "by": "coordinator"}
+{"ts": "2026-05-23T14:42:07Z", "sid": "sprint-20260521-thunderomlx-anthropic-prefix-cache", "event": "handle_passed_completed", "by": "coordinator"}
+{"ts": "2026-05-23T14:42:07Z", "event": "accepted_artifact_exported", "source": "accepted-artifact-export", "path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260521-thunderomlx-anthropic-prefix-cache.accepted.md", "bytes": 5073, "source_hash": "8dcd41cd35af7608a3a3e7e474d3f7f49129f20725f571b4e28b0a54ca02c297"}
+{"ts": "2026-05-23T14:42:07Z", "event": "accepted_artifact_ingest_dispatched", "source": "accepted-artifact-export", "dispatch_file": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260521-thunderomlx-anthropic-prefix-cache.dispatch.md"}

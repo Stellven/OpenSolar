@@ -1,0 +1,5 @@
+{"ts": "2026-05-23T14:23:58Z", "sprint_id": "sprint-20260521-physical-operator-registry", "actor": "solar-autopilot", "event": "autopilot_workflow_route_normalized", "severity": "info", "data": {"route_role": "none", "stage": "done", "reason": "terminal_status"}}
+{"ts": "2026-05-23T14:37:29Z", "sid": "sprint-20260521-physical-operator-registry", "event": "dispatch_suppressed", "by": "coordinator"}
+{"ts": "2026-05-23T14:38:07Z", "sid": "sprint-20260521-physical-operator-registry", "event": "handle_passed_completed", "by": "coordinator"}
+{"ts": "2026-05-23T14:38:07Z", "event": "accepted_artifact_exported", "source": "accepted-artifact-export", "path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260521-physical-operator-registry.accepted.md", "bytes": 12700, "source_hash": "0943c07f3871f9cd70534746e6e3712e5c2a43236961d83620c6dbfcc6b8102c"}
+{"ts": "2026-05-23T14:38:07Z", "event": "accepted_artifact_ingest_dispatched", "source": "accepted-artifact-export", "dispatch_file": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260521-physical-operator-registry.dispatch.md"}
