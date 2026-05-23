@@ -657,6 +657,9 @@ def _skill_aliases(value: Any) -> set[str]:
     if len(parts) > 1:
         for end in range(1, len(parts)):
             aliases.add(".".join(parts[:end]))
+        aliases.add(parts[-1])
+        if parts[-1] == "design":
+            aliases.add("architecture")
     return aliases
 
 
