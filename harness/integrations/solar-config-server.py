@@ -462,7 +462,7 @@ HTML = r"""<!doctype html>
   <script>
     let current = {};
     const secretKeys = ["ANTHROPIC_API_KEY","OPENAI_API_KEY","ZHIPU_AUTH_TOKEN","DEEPSEEK_API_KEY","GOOGLE_APPLICATION_CREDENTIALS"];
-    let modelOptions = [["opus", "Claude Opus 4.7"], ["anthropic-sonnet", "Claude Sonnet"]];
+    let modelOptions = [["opus", "Claude Opus 4.7"], ["anthropic-sonnet", "Claude Sonnet"], ["glm", "GLM-5.1"]];
     let matrixOptions = [["glm,glm,glm,anthropic-sonnet", "3× GLM 5.1 + Claude Sonnet"]];
     function get(obj, path) { return path.split('.').reduce((o,k)=>o&&o[k], obj); }
     function set(obj, path, value) { const parts=path.split('.'); let o=obj; parts.slice(0,-1).forEach(k=>o=o[k]||(o[k]={})); o[parts.at(-1)]=value; }

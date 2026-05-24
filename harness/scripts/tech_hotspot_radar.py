@@ -43,6 +43,33 @@ except ImportError as exc:
     print(f"ERROR: PyYAML required: {exc}", file=sys.stderr)
     raise SystemExit(2)
 
+
+DEFAULT_THUNDEROMLX_PAUSE_FILE = Path.home() / ".omlx" / "run" / "maintenance.json"
+
+
+def thunderomlx_ingest_paused() -> dict[str, Any] | None:
+    path = Path(os.environ.get("THUNDEROMLX_MAINTENANCE_FILE", str(DEFAULT_THUNDEROMLX_PAUSE_FILE))).expanduser()
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {"enabled": True, "mode": "ingest_pause", "reason": f"unreadable pause file: {exc}", "path": str(path)}
+    if not isinstance(data, dict) or not data.get("enabled", True):
+        return None
+    mode = str(data.get("mode") or "ingest_pause")
+    if mode not in {"ingest_pause", "all"}:
+        return None
+    until = data.get("until")
+    if until:
+        try:
+            if float(until) <= time.time():
+                return None
+        except (TypeError, ValueError):
+            pass
+    data["path"] = str(path)
+    return data
+
 UTC = dt.timezone.utc
 VERSION = "1.0.0"
 
@@ -855,6 +882,10 @@ transcript:
 
 def call_thunderomlx_youtube_semantic(video: sqlite3.Row | tuple, transcript_clean: str,
                                       config: dict[str, Any]) -> dict[str, Any]:
+    pause = thunderomlx_ingest_paused()
+    if pause:
+        reason = pause.get("reason") or pause.get("path") or "maintenance pause active"
+        raise RuntimeError(f"ThunderOMLX ingest pause active: {reason}")
     cfg = ((config.get("youtube") or {}).get("semantic_postprocess") or {})
     base_url = str(cfg.get("base_url") or os.environ.get("THUNDEROMLX_BASE_URL") or "http://127.0.0.1:8002").rstrip("/")
     endpoint = str(cfg.get("endpoint") or "/v1/chat/completions")
@@ -1545,6 +1576,12 @@ def cmd_process_semantics(args: argparse.Namespace) -> int:
     rows = conn.execute(sql).fetchall()
     if dry_run:
         print(f"[process-semantics] dry-run due={len(rows)} limit={limit} force={force}")
+        conn.close()
+        return 0
+    pause = thunderomlx_ingest_paused()
+    if pause:
+        reason = pause.get("reason") or pause.get("path") or "maintenance pause active"
+        print(f"[process-semantics] paused reason={reason}")
         conn.close()
         return 0
     run_id = begin_run(conn, "youtube", "process-semantics")

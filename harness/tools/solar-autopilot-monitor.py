@@ -118,6 +118,10 @@ try:
     from graph_node_dispatcher import dispatch_node_evals as graph_dispatch_node_evals
 except Exception:  # pragma: no cover - graph dispatcher may be absent in scheduler-only tests
     graph_dispatch_ready = graph_dispatch_node_evals = None
+try:
+    from pane_lease import read_lease as read_runtime_lease
+except Exception:  # pragma: no cover - fallback for partially installed harnesses
+    read_runtime_lease = None  # type: ignore
 
 
 def node_requires_deepresearch_quality_gate(node: dict) -> bool:
@@ -605,13 +609,19 @@ def pane_title_matches_role(target: str, role: str, title: str | None = None) ->
     # accidentally trip role-conflict checks (`pm-pane` contains `PM`).
     title = re.split(r"\s+\|\s+状态:", title or "", maxsplit=1)[0].strip()
     if role in ("builder", "lab-builder"):
-        if target == f"{SESSION}:0.2" or target.startswith("solar-harness-lab:"):
+        if (
+            target.startswith("solar-harness-lab:")
+            or target.startswith("solar-harness-multi-task:")
+        ):
             return bool(re.search(r"Builder|建设者|lab-builder", title, re.I)) and not bool(
                 re.search(r"PM|产品经理|Planner|规划者|Evaluator|审判官", title, re.I)
             )
         return False
     if role == "evaluator":
-        if target != f"{SESSION}:0.3":
+        if not (
+            target == f"{SESSION}:0.3"
+            or target.startswith("solar-harness-multi-task:")
+        ):
             return False
         non_role_title = re.sub(r"Evaluator|审判官", "", title, flags=re.I)
         return bool(re.search(r"Evaluator|审判官", title, re.I)) and not bool(
@@ -632,6 +642,16 @@ def pane_title_matches_role(target: str, role: str, title: str | None = None) ->
             re.search(r"Planner|规划者|Builder|建设者|Evaluator|审判官", non_role_title, re.I)
         )
     return False
+
+
+def pane_execution_priority(target: str) -> tuple[int, str]:
+    if target.startswith("solar-harness-multi-task:"):
+        return (0, target)
+    if target.startswith("solar-harness-lab:"):
+        return (1, target)
+    if target.startswith(f"{SESSION}:"):
+        return (2, target)
+    return (9, target)
 
 
 def tmux_set_title(target: str, title: str) -> bool:
@@ -1167,16 +1187,28 @@ def discover_worker_panes() -> list[str]:
                 row[0].strip()
                 for row in rows
                 if row
-                and (row[0].strip().startswith(f"{SESSION}:") or row[0].strip().startswith("solar-harness-lab:"))
+                and (
+                    row[0].strip().startswith("solar-harness-lab:")
+                    or row[0].strip().startswith("solar-harness-multi-task:")
+                )
                 and pane_title_matches_role(row[0].strip(), "builder", row[1].strip() if len(row) > 1 else "")
             ]
-            return builders
+            return sorted(builders, key=pane_execution_priority)
     except Exception:
         pass
-    return [f"{SESSION}:0.2"]
+    return []
 
 
 def infer_worker_models(pane: str) -> list[str]:
+    title_lower = tmux_title(pane).lower()
+    if "deepseek" in title_lower:
+        return ["deepseek", "deepseek-v4-pro"]
+    if "glm-5.1" in title_lower or "glm" in title_lower or "zhipu" in title_lower:
+        return ["glm", "glm-5.1", "zhipu"]
+    if "opus" in title_lower:
+        return ["opus", "anthropic-opus", "claude-opus"]
+    if "sonnet" in title_lower:
+        return ["sonnet", "anthropic-sonnet", "claude-sonnet"]
     if pane.startswith("solar-harness-lab:"):
         if pane.endswith(".3"):
             return ["sonnet", "anthropic-sonnet", "claude-sonnet"]
@@ -1279,7 +1311,7 @@ def graph_workers() -> list[dict]:
         pane_skills = list(skills)
         pane_caps = list(capabilities)
         
-        if not pane.startswith("solar-harness-lab:"):
+        if not (pane.startswith("solar-harness-lab:") or pane.startswith("solar-harness-multi-task:")):
             pane_caps = [c for c in pane_caps if c not in schema_caps]
             pane_skills = [s for s in pane_skills if s not in schema_skills]
 
@@ -1597,6 +1629,135 @@ def assigned_graph_node_for_pane(target: str) -> dict:
     return {}
 
 
+def assigned_eval_graph_node_for_pane(target: str) -> dict:
+    if load_graph is None:
+        return {}
+    active_node_statuses = {"reviewing", "ready_for_review", "needs_human_review", "failed_review"}
+    for status in active_statuses():
+        sid = status.get("_sid") or status.get("sprint_id") or status.get("id")
+        if not sid:
+            continue
+        path = graph_path_for(str(sid))
+        if not path.exists():
+            continue
+        try:
+            graph = load_graph(path)
+        except Exception:
+            continue
+        for node in graph.get("nodes", []):
+            node_id = str(node.get("id") or "")
+            if node_status is not None:
+                node_state = str(node_status(graph, node_id)).lower()
+            else:
+                node_state = str(node.get("status") or "").lower()
+            if node_state not in active_node_statuses:
+                continue
+            assignments = node.get("eval_assignments") if isinstance(node.get("eval_assignments"), list) else []
+            matched = next((item for item in assignments if isinstance(item, dict) and str(item.get("pane") or "") == target), None)
+            if not matched and str(node.get("eval_assigned_to") or "") != target:
+                continue
+            return {
+                "sid": str(sid),
+                "node_id": node_id,
+                "status": node_state,
+                "graph": str(path),
+                "dispatch_id": str((matched or {}).get("dispatch_id") or node.get("eval_dispatch_id") or ""),
+                "eval_dispatch_group_id": str(node.get("eval_dispatch_group_id") or ""),
+            }
+    return {}
+
+
+def available_evaluator_targets(exclude: str = "") -> list[str]:
+    if graph_dispatch_node_evals is None:
+        return []
+    try:
+        import graph_node_dispatcher as gnd  # type: ignore
+        evaluators = gnd._discover_evaluators(False)
+    except Exception:
+        return []
+    out: list[str] = []
+    for item in evaluators:
+        pane = str(item.get("pane") or "")
+        if not pane or pane == exclude or item.get("busy"):
+            continue
+        out.append(pane)
+    return out
+
+
+def reroute_survey_blocked_evaluator(finding: dict, dispatch: bool) -> dict:
+    target = str(finding.get("target") or "")
+    graph_node = finding.get("graph_node") if isinstance(finding.get("graph_node"), dict) else {}
+    sid = str(finding.get("sid") or graph_node.get("sid") or "")
+    node_id = str(graph_node.get("node_id") or "")
+    graph_path = Path(str(graph_node.get("graph") or graph_path_for(sid)))
+    lease = finding.get("lease") if isinstance(finding.get("lease"), dict) else {}
+    if not sid or not node_id or not graph_path.exists() or load_graph is None or save_graph is None:
+        return {"ok": False, "reason": "missing_graph_or_node", "sid": sid, "node_id": node_id, "target": target}
+    alternates = available_evaluator_targets(exclude=target)
+    if not alternates:
+        return {"ok": False, "reason": "no_alternate_evaluator", "sid": sid, "node_id": node_id, "target": target}
+    graph = load_graph(graph_path)
+    node = next((n for n in graph.get("nodes", []) if isinstance(n, dict) and str(n.get("id") or "") == node_id), None)
+    if not node:
+        return {"ok": False, "reason": "node_not_found", "sid": sid, "node_id": node_id, "target": target}
+    dispatch_id = str(lease.get("dispatch_id") or graph_node.get("dispatch_id") or node.get("eval_dispatch_id") or "")
+    clear_pane_lease(target, "survey_prompt_blocked_reroute")
+    node.pop("eval_dispatch_group_id", None)
+    node.pop("eval_recovered_from_lease", None)
+    node.pop("eval_retry_reason", None)
+    node.pop("eval_md_path", None)
+    node.pop("eval_json", None)
+    node.pop("eval_json_path", None)
+    node.pop("eval_dispatched_at", None)
+    node.pop("eval_assigned_to", None)
+    node.pop("eval_dispatch_id", None)
+    node.pop("eval_assignments", None)
+    save_graph(graph_path, graph)
+    dispatch_result = graph_dispatch_node_evals(str(graph_path), dry_run=not dispatch, ttl=900, force=True, max_items=1) if graph_dispatch_node_evals is not None else {"ok": False, "reason": "graph_dispatcher_unavailable"}
+    return {
+        "ok": bool(dispatch_result.get("ok")),
+        "sid": sid,
+        "node_id": node_id,
+        "target": target,
+        "released_dispatch_id": dispatch_id,
+        "alternate_candidates": alternates,
+        "dispatch_result": dispatch_result,
+    }
+
+
+def recover_unavailable_graph_node(finding: dict, dispatch: bool) -> dict:
+    target = str(finding.get("target") or "")
+    graph_node = finding.get("graph_node") if isinstance(finding.get("graph_node"), dict) else {}
+    sid = str(finding.get("sid") or graph_node.get("sid") or "")
+    node_id = str(graph_node.get("node_id") or "")
+    graph_path = Path(str(graph_node.get("graph") or graph_path_for(sid)))
+    if not sid or not node_id or not graph_path.exists() or load_graph is None or save_graph is None:
+        return {"ok": False, "reason": "missing_graph_or_node", "sid": sid, "node_id": node_id, "target": target}
+    graph = load_graph(graph_path)
+    node = next((n for n in graph.get("nodes", []) if isinstance(n, dict) and str(n.get("id") or "") == node_id), None)
+    if not node:
+        return {"ok": False, "reason": "node_not_found", "sid": sid, "node_id": node_id, "target": target}
+    dispatch_id = str(graph_node.get("dispatch_id") or node.get("dispatch_id") or "")
+    reason = str(finding.get("unavailable_reason") or "pane_unavailable")
+    clear_pane_lease(target, f"pane_unavailable_reroute:{reason}")
+    clear_pane_assignment(target, f"pane_unavailable_reroute:{reason}")
+    node.pop("assigned_to", None)
+    node.pop("dispatch_id", None)
+    node["dispatch_retry_reason"] = reason
+    node["status"] = "worker_blocked"
+    node["updated_at"] = utc_now()
+    save_graph(graph_path, graph)
+    dispatch_result = dispatch_ready_graph_nodes(sid, lease=dispatch) if dispatch else {"ok": True, "dispatch": "dry_apply_disabled"}
+    return {
+        "ok": bool(dispatch_result.get("ok")),
+        "sid": sid,
+        "node_id": node_id,
+        "target": target,
+        "released_dispatch_id": dispatch_id,
+        "dispatch_result": dispatch_result,
+    }
+
+
 def dispatch_ready_graph_nodes(sid: str, lease: bool = True) -> dict:
     if no_dispatch_enabled():
         return {"ok": False, "reason": "no_dispatch_flag", "sprint_id": sid, "dispatched": [], "skipped": []}
@@ -1897,7 +2058,7 @@ def inspect_panes(state: dict, stall_seconds: int) -> list[dict]:
         if changed:
             state["pane"][target] = {"hash": h, "seen_at": now_epoch, "role": role}
         if role == "evaluator" and pane_survey_blocked(tail):
-            graph_node = assigned_graph_node_for_pane(target)
+            graph_node = assigned_eval_graph_node_for_pane(target)
             lease = pane_lease(target)
             if graph_node or lease:
                 findings.append(
@@ -2013,9 +2174,23 @@ def inspect_panes(state: dict, stall_seconds: int) -> list[dict]:
         if not target.startswith("solar-harness-lab:"):
             continue
         tail = tmux_capture(target)
+        graph_node = assigned_graph_node_for_pane(target)
+        if graph_node and PANE_UNAVAILABLE_RE.search("\n".join(tail.splitlines()[-40:])):
+            findings.append(
+                {
+                    "sid": graph_node["sid"],
+                    "type": "graph_node_unavailable_assigned",
+                    "severity": "warn",
+                    "target": target,
+                    "role": "lab-builder",
+                    "graph_node": graph_node,
+                    "unavailable_reason": "rate_limit_or_api_error",
+                    "message": "Assigned builder pane is alive but blocked by provider usage limit/API error; release the stale dispatch and requeue the graph node.",
+                }
+            )
+            continue
         if not pane_at_prompt(tail) or pane_is_busy(target):
             continue
-        graph_node = assigned_graph_node_for_pane(target)
         if not graph_node:
             continue
         findings.append(
@@ -2237,7 +2412,7 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
             mark_action(state, f, result)
             actions.append(result)
             continue
-        if dispatch and target and ftype != "pane_safe_continue_prompt":
+        if dispatch and target and ftype not in {"pane_safe_continue_prompt", "evaluator_survey_blocked"}:
             clear_current_prompt(target)
         if ftype in ("graph_ready_nodes",):
             result = dispatch_ready_graph_nodes(sid, lease=dispatch)
@@ -2271,8 +2446,14 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
         elif ftype == "evaluator_survey_blocked":
             append_event(sid, "autopilot_evaluator_survey_blocked", "warn", {"target": target, "lease": f.get("lease", {}), "graph_node": f.get("graph_node", {})})
             sent = False
-            if dispatch and target:
+            reroute = {"ok": False, "reason": "dispatch_disabled_or_missing_graph"}
+            if dispatch:
+                reroute = reroute_survey_blocked_evaluator(f, dispatch)
+                sent = bool(reroute.get("ok"))
+            if not sent and dispatch and target:
                 sent = dismiss_survey_prompt(target)
+            if dispatch and target:
+                pass
             result = {
                 "sid": sid,
                 "action": ftype,
@@ -2280,8 +2461,35 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
                 "dispatched": sent,
                 "lease": f.get("lease", {}),
                 "graph_node": f.get("graph_node", {}),
+                "reroute": reroute,
             }
             if sent and target:
+                used_targets.add(target)
+            mark_action(state, f, result)
+            actions.append(result)
+        elif ftype == "graph_node_unavailable_assigned":
+            append_event(
+                sid,
+                "autopilot_graph_node_unavailable_assigned",
+                "warn",
+                {
+                    "target": target,
+                    "graph_node": f.get("graph_node", {}),
+                    "unavailable_reason": f.get("unavailable_reason", ""),
+                },
+            )
+            recovered = {"ok": False, "reason": "dispatch_disabled_or_missing_graph"}
+            if dispatch:
+                recovered = recover_unavailable_graph_node(f, dispatch)
+            result = {
+                "sid": sid,
+                "action": ftype,
+                "target": target,
+                "dispatched": bool(recovered.get("ok")),
+                "graph_node": f.get("graph_node", {}),
+                "recovered": recovered,
+            }
+            if result["dispatched"] and target:
                 used_targets.add(target)
             mark_action(state, f, result)
             actions.append(result)

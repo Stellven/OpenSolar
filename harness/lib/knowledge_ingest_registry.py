@@ -204,35 +204,69 @@ def upsert_document(
     doc_id = stable_doc_id(source_kind, source_path)
     ts = now_iso()
     with connect(db_path) as conn:
-        conn.execute(
-            """
-            INSERT INTO documents(
-              doc_id, source_kind, source_path, source_adapter, content_kind,
-              declared_doc_type, source_sha256, current_state, ingest_policy,
-              extract_policy, created_at, updated_at, provenance_quality
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(doc_id) DO UPDATE SET
-              source_sha256=excluded.source_sha256,
-              current_state=excluded.current_state,
-              updated_at=excluded.updated_at,
-              provenance_quality=excluded.provenance_quality
-            """,
-            (
-                doc_id,
-                source_kind,
-                source_path,
-                source_adapter,
-                content_kind,
-                declared_doc_type,
-                source_sha256,
-                current_state,
-                ingest_policy,
-                extract_policy,
-                ts,
-                ts,
-                provenance_quality,
-            ),
-        )
+        existing = conn.execute(
+            "SELECT doc_id FROM documents WHERE source_kind=? AND source_path=?",
+            (source_kind, source_path),
+        ).fetchone()
+        if existing:
+            doc_id = existing["doc_id"]
+            conn.execute(
+                """
+                UPDATE documents
+                SET source_adapter=?,
+                    content_kind=?,
+                    declared_doc_type=?,
+                    source_sha256=?,
+                    current_state=?,
+                    ingest_policy=?,
+                    extract_policy=?,
+                    updated_at=?,
+                    provenance_quality=?
+                WHERE doc_id=?
+                """,
+                (
+                    source_adapter,
+                    content_kind,
+                    declared_doc_type,
+                    source_sha256,
+                    current_state,
+                    ingest_policy,
+                    extract_policy,
+                    ts,
+                    provenance_quality,
+                    doc_id,
+                ),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO documents(
+                  doc_id, source_kind, source_path, source_adapter, content_kind,
+                  declared_doc_type, source_sha256, current_state, ingest_policy,
+                  extract_policy, created_at, updated_at, provenance_quality
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(doc_id) DO UPDATE SET
+                  source_sha256=excluded.source_sha256,
+                  current_state=excluded.current_state,
+                  updated_at=excluded.updated_at,
+                  provenance_quality=excluded.provenance_quality
+                """,
+                (
+                    doc_id,
+                    source_kind,
+                    source_path,
+                    source_adapter,
+                    content_kind,
+                    declared_doc_type,
+                    source_sha256,
+                    current_state,
+                    ingest_policy,
+                    extract_policy,
+                    ts,
+                    ts,
+                    provenance_quality,
+                ),
+            )
         event_id = "evt_" + sha256_text(f"{doc_id}:upsert:{source_sha256}:{ts}")[:24]
         conn.execute(
             """

@@ -51,6 +51,10 @@ PANE_DISPATCH_FAILED_IDLE_RE = re.compile(
     re.I,
 )
 PANE_QUEUED_PROMPT_RE = re.compile(r"Press up to edit queued messages", re.I)
+PANE_SURVEY_PROMPT_RE = re.compile(
+    r"How is Claude doing this session\?|1:\s*Bad\s+2:\s*Fine\s+3:\s*Good\s+0:\s*Dismiss",
+    re.I,
+)
 PANE_CONFIRMATION_PROMPT_RE = re.compile(r"Unhandled node type|Do you want to proceed\?|Enter to confirm|Esc to cancel|Bash command", re.I)
 PANE_PROMPT_RESIDUE_RE = re.compile(r"^\s*❯(?![\s\u00a0]+Try\s+\")[\s\u00a0]+[^\s\u00a0─]", re.M)
 STATE_READ_PREFLIGHT = """<!-- SOLAR_STATE_READ_PREFLIGHT -->
@@ -995,6 +999,69 @@ def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path
             node["updated_at"] = _utc_now()
             repaired.append({"node": node_id, "status": "reviewing", "reason": "handoff_file_exists", "handoff": str(handoff_file)})
             continue
+        if status in {"assigned", "dispatched", "in_progress", "running"}:
+            pane = str(node.get("assigned_to") or "").strip()
+            dispatch_id = str(node.get("dispatch_id") or "").strip()
+            if pane and dispatch_id:
+                unavailable_reason = _pane_runtime_unavailable_reason(pane, _pane_title(pane)) or _pane_unavailable_reason(pane)
+                if unavailable_reason:
+                    release_lease(pane, dispatch_id, f"graph_dispatch_reconcile_unavailable:{unavailable_reason}")
+                    node.pop("assigned_to", None)
+                    node.pop("dispatch_id", None)
+                    node["dispatch_retry_reason"] = unavailable_reason
+                    node["updated_at"] = _utc_now()
+                    graph.setdefault("node_results", {})
+                    graph["node_results"][node_id] = {
+                        "status": "worker_blocked",
+                        "updated_at": node["updated_at"],
+                        "blocking_reason": unavailable_reason,
+                    }
+                    node["status"] = "worker_blocked"
+                    repaired.append(
+                        {
+                            "node": node_id,
+                            "pane": pane,
+                            "dispatch_id": dispatch_id,
+                            "status": "worker_blocked",
+                            "reason": unavailable_reason,
+                        }
+                    )
+                    continue
+        if status in {"reviewing", "ready_for_review", "needs_human_review", "failed_review"}:
+            assignments = _node_eval_assignments(node)
+            blocked_assignment = None
+            for assignment in assignments:
+                pane = str(assignment.get("pane") or "").strip()
+                if not pane:
+                    continue
+                unavailable_reason = _pane_runtime_unavailable_reason(pane, _pane_title(pane)) or _pane_unavailable_reason(pane)
+                if unavailable_reason:
+                    blocked_assignment = {
+                        "pane": pane,
+                        "dispatch_id": str(assignment.get("dispatch_id") or "").strip(),
+                        "reason": unavailable_reason,
+                    }
+                    break
+            if blocked_assignment:
+                if blocked_assignment["dispatch_id"]:
+                    release_lease(
+                        blocked_assignment["pane"],
+                        blocked_assignment["dispatch_id"],
+                        f"graph_eval_reconcile_unavailable:{blocked_assignment['reason']}",
+                    )
+                _clear_eval_assignments(node)
+                node["eval_retry_reason"] = blocked_assignment["reason"]
+                node["updated_at"] = _utc_now()
+                repaired.append(
+                    {
+                        "node": node_id,
+                        "pane": blocked_assignment["pane"],
+                        "dispatch_id": blocked_assignment["dispatch_id"],
+                        "status": status,
+                        "reason": blocked_assignment["reason"],
+                    }
+                )
+                continue
         if status not in {"pending", "queued", "blocked", ""}:
             continue
         instruction_file = _dispatch_file(sid, node_id)
@@ -1533,7 +1600,10 @@ def _pane_title_matches_role(pane: str, title: str, role: str) -> bool:
     title = re.split(r"\s+\|\s+状态:", title or "", maxsplit=1)[0].strip()
     negative = re.compile(r"PM|产品经理|Planner|规划者|Builder|建设者|Evaluator|审判官", re.I)
     if role == "builder":
-        if pane == f"{SESSION}:0.2" or pane.startswith("solar-harness-lab:"):
+        if (
+            pane.startswith("solar-harness-lab:")
+            or pane.startswith("solar-harness-multi-task:")
+        ):
             return bool(re.search(r"Builder|建设者|lab-builder", title, re.I)) and not bool(
                 re.search(r"PM|产品经理|Planner|规划者|Evaluator|审判官", title, re.I)
             )
@@ -1551,6 +1621,16 @@ def _pane_title_matches_role(pane: str, title: str, role: str) -> bool:
             negative.search(non_role_title)
         )
     return False
+
+
+def _pane_execution_priority(pane: str) -> tuple[int, str]:
+    if pane.startswith("solar-harness-multi-task:"):
+        return (0, pane)
+    if pane.startswith("solar-harness-lab:"):
+        return (1, pane)
+    if pane.startswith(f"{SESSION}:"):
+        return (2, pane)
+    return (9, pane)
 
 
 def _pane_tail(pane: str, lines: int = 80) -> str:
@@ -1629,8 +1709,10 @@ def _pane_prompt_residue_is_stale_scrollback(pane: str, text: str) -> bool:
 
 def _pane_tui_busy(pane: str) -> bool:
     tail = _pane_tail(pane)
-    bottom = "\n".join(tail.splitlines()[-12:])
+    bottom = "\n".join(tail.splitlines()[-40:])
     if PANE_TUI_UNAVAILABLE_RE.search(bottom):
+        return True
+    if PANE_SURVEY_PROMPT_RE.search(bottom):
         return True
     if PANE_CONFIRMATION_PROMPT_RE.search(bottom):
         return True
@@ -1704,9 +1786,11 @@ def _pane_unavailable_reason(pane: str) -> str:
     if health.get("unavailable"):
         return str(health.get("reason") or "provider_health_unavailable")
     tail = _pane_tail(pane)
-    bottom = "\n".join(tail.splitlines()[-12:])
+    bottom = "\n".join(tail.splitlines()[-40:])
     if PANE_TUI_UNAVAILABLE_RE.search(bottom):
         return "rate_limit_or_api_error"
+    if PANE_SURVEY_PROMPT_RE.search(bottom):
+        return "survey_prompt_blocked"
     if PANE_QUEUED_PROMPT_RE.search(bottom):
         return "queued_prompt_residue"
     if _pane_current_prompt_has_residue(bottom) and not _pane_prompt_residue_is_stale_scrollback(pane, tail):
@@ -2488,11 +2572,8 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
     restrict_to_session = os.environ.get("SOLAR_GRAPH_DISPATCH_RESTRICT_SESSION") == "1"
     if dry_run and os.environ.get("SOLAR_GRAPH_DISPATCH_FAKE_WORKERS") == "1":
         if restrict_to_session:
-            return [
-                {"pane": f"{SESSION}:0.2", "models": _models_for_pane(f"{SESSION}:0.2"), "skills": worker_skills, "capabilities": worker_capabilities},
-            ]
+            return []
         return [
-            {"pane": f"{SESSION}:0.2", "models": _models_for_pane(f"{SESSION}:0.2"), "skills": worker_skills, "capabilities": worker_capabilities},
             {"pane": "solar-harness-lab:0.0", "models": _models_for_pane("solar-harness-lab:0.0"), "skills": worker_skills, "capabilities": worker_capabilities},
             {"pane": "solar-harness-lab:0.1", "models": _models_for_pane("solar-harness-lab:0.1"), "skills": worker_skills, "capabilities": worker_capabilities},
             {"pane": "solar-harness-lab:0.2", "models": _models_for_pane("solar-harness-lab:0.2"), "skills": worker_skills, "capabilities": worker_capabilities},
@@ -2508,14 +2589,18 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
     except Exception:
         pane_rows = []
     workers = []
+    pane_rows.sort(key=lambda row: _pane_execution_priority((row[0].strip() if row else "")))
     for row in pane_rows:
         pane = row[0].strip()
         title = row[1].strip() if len(row) > 1 else ""
         # Only builder panes can receive DAG build nodes. Main PM/planner/evaluator
         # panes share the session prefix but must not be treated as builders.
-        if restrict_to_session and pane != f"{SESSION}:0.2":
+        if restrict_to_session:
             continue
-        if pane != f"{SESSION}:0.2" and not pane.startswith("solar-harness-lab:"):
+        if not (
+            pane.startswith("solar-harness-lab:")
+            or pane.startswith("solar-harness-multi-task:")
+        ):
             continue
         if not _pane_title_matches_role(pane, title, "builder"):
             continue
@@ -2523,7 +2608,7 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         tail = _pane_tail(pane)
         health = _pane_health(pane)
         quota_exhausted = _quota_exhausted_models(title, tail, health, models)
-        if pane.startswith("solar-harness-lab:") or pane == f"{SESSION}:0.2":
+        if pane.startswith("solar-harness-lab:") or pane.startswith("solar-harness-multi-task:"):
             _clear_stale_prompt_residue(pane)
         runtime_unavailable_reason = _pane_runtime_unavailable_reason(pane, title)
         unavailable_reason = (
@@ -2543,6 +2628,7 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
             "unavailable_reason": unavailable_reason,
             "current_command": _pane_current_command(pane),
         })
+    workers.sort(key=lambda item: _pane_execution_priority(str(item.get("pane") or "")))
     return workers
 
 
@@ -2600,6 +2686,7 @@ def _discover_evaluators(dry_run: bool = False) -> list[dict[str, Any]]:
                 "unavailable_reason": unavailable_reason,
                 "current_command": _pane_current_command(pane),
             })
+    evaluators.sort(key=lambda item: _pane_execution_priority(str(item.get("pane") or "")))
     return evaluators
 
 

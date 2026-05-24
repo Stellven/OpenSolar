@@ -116,6 +116,76 @@ _configure_anthropic_persona_model() {
   esac
 }
 
+_configure_persona_model() {
+  local alias="$(_normalize_main_model_alias "${1:-anthropic-sonnet}")"
+  local display_suffix="${2:-}"
+  case "$alias" in
+    zhipu-glm-5.1)
+      if _zhipu_credentials_available; then
+        model_id="$alias"
+        model_flag="$(solar_model_flag "$alias")"
+        base_url="${ZHIPU_BASE_URL:-}"
+        auth_token="${ZHIPU_AUTH_TOKEN:-}"
+        auth_source="zhipu"
+        extra_flags="$(_zhipu_coding_plan_flags)"
+        display_model="GLM-5.1 (智谱${display_suffix})"
+      else
+        model_id="$alias"
+        model_flag=""
+        base_url=""
+        auth_token=""
+        auth_source=""
+        extra_flags=""
+        display_model="UNAVAILABLE: GLM-5.1 credentials missing${display_suffix}"
+        launch_error="GLM-5.1 requested for persona, but ZHIPU credentials are unavailable; refusing Claude fallback"
+      fi
+      ;;
+    zhipu-glm-4.7)
+      if _zhipu_credentials_available; then
+        model_id="$alias"
+        model_flag="$(solar_model_flag "$alias")"
+        base_url="${ZHIPU_BASE_URL:-}"
+        auth_token="${ZHIPU_AUTH_TOKEN:-}"
+        auth_source="zhipu"
+        extra_flags="$(_zhipu_coding_plan_flags)"
+        display_model="GLM-4.7 (智谱${display_suffix})"
+      else
+        model_id="$alias"
+        model_flag=""
+        base_url=""
+        auth_token=""
+        auth_source=""
+        extra_flags=""
+        display_model="UNAVAILABLE: GLM-4.7 credentials missing${display_suffix}"
+        launch_error="GLM-4.7 requested for persona, but ZHIPU credentials are unavailable; refusing Claude fallback"
+      fi
+      ;;
+    deepseek-v4-pro)
+      if _deepseek_available; then
+        model_id="$alias"
+        model_flag="$(solar_model_flag "$alias")"
+        base_url="https://api.deepseek.com/anthropic"
+        auth_source="deepseek"
+        extra_flags="$(_gateway_compat_flags)"
+        display_model="DeepSeek V4 Pro${display_suffix}"
+        auth_token="$(_deepseek_auth_token 2>/dev/null || true)"
+      else
+        model_id="$alias"
+        model_flag=""
+        base_url=""
+        auth_token=""
+        auth_source=""
+        extra_flags=""
+        display_model="UNAVAILABLE: DeepSeek credentials missing${display_suffix}"
+        launch_error="DeepSeek requested for persona, but DEEPSEEK_API_KEY is unavailable; refusing Claude fallback"
+      fi
+      ;;
+    *)
+      _configure_anthropic_persona_model "$alias"
+      ;;
+  esac
+}
+
 _lab_builder_model_for_slot() {
   local slot="${SOLAR_BUILDER_SLOT:-lab-builder-1}"
   local slot_num="${slot##*-}"
@@ -157,10 +227,7 @@ get_persona_config() {
   case "$persona" in
     planner)
       cn="规划者"
-      _configure_anthropic_persona_model "$(_persona_model_alias planner)"
-      # planner 直连 Anthropic, 清掉 Zhipu env
-      base_url=""
-      auth_token=""
+      _configure_persona_model "$(_persona_model_alias planner)"
       tool_flag="--allowedTools Read Bash Grep Glob"
       startup_token="solar"
       proxy_check="1"
@@ -169,9 +236,7 @@ get_persona_config() {
       cn="建设者"
       # Main builder keeps full Claude Code interactive/MCP behavior, but its
       # model is config-owned like the other main-screen personas.
-      _configure_anthropic_persona_model "$(_persona_model_alias builder)"
-      base_url=""
-      auth_token=""
+      _configure_persona_model "$(_persona_model_alias builder)"
       display_model="${display_model}, full tools"
       tool_flag=""
       startup_token=""
@@ -180,36 +245,28 @@ get_persona_config() {
     evaluator)
       cn="审判官"
       # Product Delivery 的 pane3 是主评审通道，优先稳定性。
-      _configure_anthropic_persona_model "$(_persona_model_alias evaluator)"
-      base_url=""
-      auth_token=""
+      _configure_persona_model "$(_persona_model_alias evaluator)"
       tool_flag="--allowedTools Read Bash Grep Glob Write"
       startup_token=""
       proxy_check="0"
       ;;
     pm)
       cn="产品经理"
-      _configure_anthropic_persona_model "$(_persona_model_alias pm)"
-      base_url=""
-      auth_token=""
+      _configure_persona_model "$(_persona_model_alias pm)"
       tool_flag="--allowedTools Read Bash Grep Glob Write"
       startup_token=""
       proxy_check="1"
       ;;
     architect)
       cn="架构师"
-      _configure_anthropic_persona_model "$(_persona_model_alias architect)"
-      base_url=""
-      auth_token=""
+      _configure_persona_model "$(_persona_model_alias architect)"
       tool_flag="--allowedTools Read Bash Grep Glob Write Edit"
       startup_token=""
       proxy_check="1"
       ;;
     second-builder)
       cn="架构师(sonnet)"
-      _configure_anthropic_persona_model "$(_persona_model_alias second-builder)"
-      base_url=""
-      auth_token=""
+      _configure_persona_model "$(_persona_model_alias second-builder)"
       tool_flag="--allowedTools Read Bash Grep Glob Write Edit"
       startup_token=""
       proxy_check="1"
