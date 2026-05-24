@@ -1373,6 +1373,9 @@ def _pane_title_matches_role(pane: str, title: str, role: str) -> bool:
     if os.environ.get("SOLAR_GRAPH_ALLOW_ANY_ROLE_PANE") == "1":
         return True
     title = title or _pane_title(pane)
+    # Ignore trailing `| 状态:working/...:sprint-...pm-pane-...` metadata so a
+    # sprint id containing `pm-pane` does not look like a PM role conflict.
+    title = re.split(r"\s+\|\s+状态:", title or "", maxsplit=1)[0].strip()
     negative = re.compile(r"PM|产品经理|Planner|规划者|Builder|建设者|Evaluator|审判官", re.I)
     if role == "builder":
         if pane == f"{SESSION}:0.2" or pane.startswith("solar-harness-lab:"):
@@ -2273,6 +2276,7 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "autoresearch.pane_optimizer", "autoresearch.issue_loop", "autoresearch.local_issue",
         "autoresearch.agent_iteration", "autoresearch.score_gate",
         "repair.pr-cot",
+        "DeepArchitect", "ImplementationWorker", "Critic", "Verifier",
     ]
     worker_capabilities = [
         "bash", "python", "typescript", "docs", "testing",
@@ -2314,6 +2318,10 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "scheduler.design", "algorithm", "state-machine.design",
         "autoresearch.pane_optimizer", "autoresearch.issue_loop", "autoresearch.local_issue",
         "autoresearch.agent_iteration", "autoresearch.score_gate",
+        "schema_design", "fixture_design", "mapping_design",
+        "compatibility_design", "feedback_design", "gate_design",
+        "metric_design", "replay_design", "shell_design", "synthesis",
+        "security_review",
     ]
     restrict_to_session = os.environ.get("SOLAR_GRAPH_DISPATCH_RESTRICT_SESSION") == "1"
     if dry_run and os.environ.get("SOLAR_GRAPH_DISPATCH_FAKE_WORKERS") == "1":

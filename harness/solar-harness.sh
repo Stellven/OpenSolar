@@ -4889,7 +4889,23 @@ PLIST
     if [[ ! -f "$_pm_dispatch_py" ]]; then
       err "pm_dispatch.py not found: $_pm_dispatch_py"; exit 1
     fi
-    python3 "$_pm_dispatch_py" submit "$@"
+    _pm_subcmd="${1:-submit}"
+    case "$_pm_subcmd" in
+      submit|compile-request)
+        shift || true
+        python3 "$_pm_dispatch_py" "$_pm_subcmd" "$@"
+        ;;
+      help|--help|-h)
+        echo "PM Dispatch"
+        echo ""
+        echo "Usage:"
+        echo "  $0 pm-dispatch submit --role builder --objective \"...\""
+        echo "  $0 pm-dispatch compile-request --text \"...\" [--dispatch-planner]"
+        ;;
+      *)
+        python3 "$_pm_dispatch_py" submit "$_pm_subcmd" "$@"
+        ;;
+    esac
     ;;
 
   pm-fleet)

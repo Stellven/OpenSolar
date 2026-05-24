@@ -549,6 +549,10 @@ def pane_title_matches_role(target: str, role: str, title: str | None = None) ->
     if os.environ.get("SOLAR_AUTOPILOT_ALLOW_ANY_ROLE_PANE") == "1":
         return True
     title = tmux_title(target) if title is None else title
+    # Ignore transient status suffixes like
+    # `| 状态:working/...:sprint-...pm-pane-...` so sprint ids do not
+    # accidentally trip role-conflict checks (`pm-pane` contains `PM`).
+    title = re.split(r"\s+\|\s+状态:", title or "", maxsplit=1)[0].strip()
     if role in ("builder", "lab-builder"):
         if target == f"{SESSION}:0.2" or target.startswith("solar-harness-lab:"):
             return bool(re.search(r"Builder|建设者|lab-builder", title, re.I)) and not bool(
@@ -1052,6 +1056,9 @@ def graph_workers() -> list[dict]:
         "api-design", "data-modeling", "compatibility",
         "routing", "diagnostics", "evaluation", "capability-graph", "event-sourcing", "debug.systematic",
         "lazy-import",
+        # Logical operator aliases so graph nodes expressed in logical classes
+        # can still match the conservative builder worker catalog.
+        "DeepArchitect", "ImplementationWorker", "Critic", "Verifier",
     ]
     capabilities = [
         "bash", "python", "typescript", "docs", "testing",
@@ -1079,6 +1086,15 @@ def graph_workers() -> list[dict]:
         "document.convert", "document.markdown_extract",
         "ruflo.swarm", "ruflo.plugins", "ruflo.agent_catalog",
         "ruflo.memory", "ruflo.mcp", "ruflo.workflow_templates",
+        # Requirement Compiler / quality-loop DAGs use these richer capability
+        # labels. Keep them in the autopilot worker catalog so ready nodes are
+        # not stranded as `no_matching_worker` while still routing through the
+        # existing builder_main path.
+        "schema_design", "fixture_design", "mapping_design",
+        "compatibility_design", "feedback_design", "gate_design",
+        "metric_design", "replay_design", "shell_design", "synthesis",
+        "repair.pr-cot", "failure.structured_repair",
+        "routing.complexity_budget", "security_review",
     ]
     for pane in discover_worker_panes():
         lease = pane_lease(pane)

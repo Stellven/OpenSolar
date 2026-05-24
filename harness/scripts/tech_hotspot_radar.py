@@ -667,7 +667,7 @@ def youtube_enqueue_retry(conn: sqlite3.Connection, source_id: str,
     """Enqueue a failed transcript operation to retry_queue (AC7)."""
     existing = conn.execute(
         "SELECT rowid FROM retry_queue WHERE source='youtube' AND source_id=? "
-        "AND operation=? AND status IN ('pending','in_progress') LIMIT 1",
+        "AND operation=? AND status IN ('pending','in_progress','done','abandoned') LIMIT 1",
         (source_id, operation),
     ).fetchone()
     if existing:
@@ -1045,6 +1045,24 @@ def save_transcript_success(conn: sqlite3.Connection, video_id: str, text: str, 
         pass
 
 
+def archive_asr_audio(video_id: str, config: dict[str, Any]) -> str:
+    """Copy downloaded ASR audio to the configured long-term archive."""
+    asr_cfg = ((config.get("youtube") or {}).get("asr") or {})
+    archive_dir_raw = str(asr_cfg.get("archive_audio_dir") or "").strip()
+    if not archive_dir_raw:
+        return ""
+    audio_dir, _transcript_dir = transcript_state_dirs(config)
+    audio_file = find_asr_audio_file(audio_dir, video_id)
+    if not audio_file:
+        return ""
+    archive_dir = Path(archive_dir_raw).expanduser()
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    target = archive_dir / audio_file.name
+    if not target.exists() or target.stat().st_size != audio_file.stat().st_size:
+        shutil.copy2(audio_file, target)
+    return str(target)
+
+
 def cleanup_transcript_cache(config: dict[str, Any]) -> int:
     retention_days = int((config.get("output") or {}).get("retention_days", 120))
     if retention_days <= 0:
@@ -1116,7 +1134,11 @@ def cmd_process_transcripts(args: argparse.Namespace) -> int:
                 text, status, source = run_youtube_asr(video_id, config, dry_run=dry_run, duration_seconds=duration_seconds)
             if text:
                 save_transcript_success(conn, video_id, text, status, source, config)
-                mark_retry_done(conn, row["retry_id"], f"{status}:{source}")
+                archived = archive_asr_audio(video_id, config) if status.startswith("asr") else ""
+                detail = f"{status}:{source}"
+                if archived:
+                    detail = f"{detail}; archived_audio={archived}"
+                mark_retry_done(conn, row["retry_id"], detail)
                 successes += 1
             else:
                 # Restore from in_progress before applying retry backoff.
@@ -1177,6 +1199,166 @@ def parse_youtube_feed(channel: sqlite3.Row, xml_text: str, fetched_at: str) -> 
             "fetched_at": fetched_at,
         })
     return rows
+
+
+def parse_datetime_value(value: str | None) -> dt.datetime | None:
+    if not value:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        parsed = dt.datetime.fromisoformat(text)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)
+    except Exception:
+        return None
+
+
+def youtube_item_published_at(item: dict[str, Any], fallback: str) -> str:
+    timestamp = item.get("timestamp") or item.get("release_timestamp")
+    if timestamp:
+        try:
+            return dt.datetime.fromtimestamp(int(timestamp), UTC).replace(microsecond=0).isoformat()
+        except Exception:
+            pass
+    upload_date = str(item.get("upload_date") or "").strip()
+    if re.fullmatch(r"\d{8}", upload_date):
+        return f"{upload_date[0:4]}-{upload_date[4:6]}-{upload_date[6:8]}T00:00:00+00:00"
+    release_date = str(item.get("release_date") or "").strip()
+    if re.fullmatch(r"\d{8}", release_date):
+        return f"{release_date[0:4]}-{release_date[4:6]}-{release_date[6:8]}T00:00:00+00:00"
+    return fallback
+
+
+def yt_dlp_json_lines(cmd: list[str], timeout: int = 180) -> list[dict[str, Any]]:
+    proc = subprocess.run(
+        cmd,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=timeout,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stdout[-1000:])
+    rows: list[dict[str, Any]] = []
+    for line in proc.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            payload = json.loads(line)
+            if isinstance(payload, dict):
+                rows.append(payload)
+        except json.JSONDecodeError:
+            continue
+    return rows
+
+
+def yt_dlp_video_detail(video_id: str, timeout: int = 90) -> dict[str, Any]:
+    yt_dlp = shutil.which("yt-dlp")
+    if not yt_dlp:
+        raise RuntimeError("yt-dlp not found")
+    proc = subprocess.run(
+        [yt_dlp, "--dump-single-json", "--skip-download", "--no-playlist",
+         f"https://www.youtube.com/watch?v={video_id}"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=timeout,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stdout[-1000:])
+    return json.loads(proc.stdout)
+
+
+def normalize_youtube_video_from_ytdlp(channel: sqlite3.Row, item: dict[str, Any],
+                                       fetched_at: str) -> dict[str, Any] | None:
+    video_id = str(item.get("id") or item.get("display_id") or "").strip()
+    if not video_id:
+        url = str(item.get("url") or "").strip()
+        match = re.search(r"(?:v=|/)([A-Za-z0-9_-]{8,})", url)
+        video_id = match.group(1) if match else ""
+    if not video_id:
+        return None
+    tags = item.get("tags") or []
+    if not isinstance(tags, list):
+        tags = []
+    return {
+        "video_id": video_id,
+        "channel_id": channel["channel_id"],
+        "channel_name": channel["channel_name"],
+        "video_url": item.get("webpage_url") or f"https://www.youtube.com/watch?v={video_id}",
+        "title": str(item.get("title") or ""),
+        "description": str(item.get("description") or ""),
+        "published_at": youtube_item_published_at(item, fetched_at),
+        "duration_seconds": int(float(item["duration"])) if item.get("duration") else None,
+        "thumbnail_url": str(item.get("thumbnail") or ""),
+        "view_count": int(item.get("view_count") or 0),
+        "like_count": int(item.get("like_count") or 0),
+        "comment_count": int(item.get("comment_count") or 0),
+        "tags": ",".join(str(tag) for tag in tags[:50]),
+        "fetched_at": fetched_at,
+    }
+
+
+def upsert_youtube_video(conn: sqlite3.Connection, video: dict[str, Any]) -> bool:
+    existed = conn.execute(
+        "SELECT 1 FROM youtube_videos WHERE video_id=?",
+        (video["video_id"],),
+    ).fetchone() is not None
+    conn.execute(
+        "INSERT INTO youtube_videos "
+        "(video_id, channel_id, channel_name, video_url, title, description, "
+        "published_at, duration_seconds, thumbnail_url, view_count, like_count, "
+        "comment_count, tags, fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+        "ON CONFLICT(video_id) DO UPDATE SET "
+        "channel_id=excluded.channel_id, channel_name=excluded.channel_name, "
+        "video_url=excluded.video_url, "
+        "title=CASE WHEN excluded.title!='' THEN excluded.title ELSE youtube_videos.title END, "
+        "description=CASE WHEN excluded.description!='' THEN excluded.description ELSE youtube_videos.description END, "
+        "published_at=COALESCE(excluded.published_at, youtube_videos.published_at), "
+        "duration_seconds=COALESCE(excluded.duration_seconds, youtube_videos.duration_seconds), "
+        "thumbnail_url=CASE WHEN excluded.thumbnail_url!='' THEN excluded.thumbnail_url ELSE youtube_videos.thumbnail_url END, "
+        "view_count=excluded.view_count, like_count=excluded.like_count, "
+        "comment_count=excluded.comment_count, tags=excluded.tags, fetched_at=excluded.fetched_at",
+        (video["video_id"], video["channel_id"], video["channel_name"],
+         video["video_url"], video["title"], video["description"],
+         video["published_at"], video["duration_seconds"], video["thumbnail_url"],
+         video["view_count"], video["like_count"], video["comment_count"],
+         video["tags"], video["fetched_at"]),
+    )
+    return not existed
+
+
+def ensure_youtube_transcript_queue(conn: sqlite3.Connection, video_id: str,
+                                    duration_seconds: int | None,
+                                    fetched_at: str,
+                                    config: dict[str, Any],
+                                    reason: str) -> str:
+    min_duration = youtube_min_transcript_duration(config)
+    if duration_seconds is None or duration_seconds < min_duration:
+        mark_transcript_skipped_short_video(conn, video_id, duration_seconds, min_duration, config)
+        return "skipped_short"
+    row = conn.execute(
+        "SELECT transcript_status FROM youtube_transcripts WHERE video_id=?",
+        (video_id,),
+    ).fetchone()
+    if row and row[0] in {"fetched", "auto_generated"}:
+        return "already_done"
+    conn.execute(
+        "INSERT INTO youtube_transcripts "
+        "(video_id, transcript_raw, transcript_clean, transcript_status, language, fetched_at, char_count) "
+        "VALUES (?, '', '', 'missing', '', ?, 0) "
+        "ON CONFLICT(video_id) DO NOTHING",
+        (video_id, fetched_at),
+    )
+    before = conn.total_changes
+    youtube_enqueue_retry(conn, video_id, "fetch_transcript", reason)
+    return "queued" if conn.total_changes > before else "already_queued"
 
 
 def cmd_collect_youtube(args: argparse.Namespace) -> int:
@@ -1254,6 +1436,151 @@ def cmd_collect_youtube(args: argparse.Namespace) -> int:
             sleep_between_requests(config)
     finish_run(conn, run_id, "partial" if failures else "ok", fetched, new_items, "; ".join(failures[:5]))
     print(f"[collect-youtube] channels={len(channels)} fetched={fetched} new={new_items} failures={len(failures)}")
+    for failure in failures[:10]:
+        print(f"  WARN {failure}")
+    conn.close()
+    return 0 if not failures else 1
+
+
+def cmd_backfill_youtube(args: argparse.Namespace) -> int:
+    """Backfill YouTube channel history via yt-dlp with idempotent transcript queuing."""
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.executescript(SCHEMA_SQL)
+    conn.row_factory = sqlite3.Row
+    yt_dlp = shutil.which("yt-dlp")
+    if not yt_dlp:
+        print("[backfill-youtube] ERROR yt-dlp not found")
+        conn.close()
+        return 1
+
+    youtube_cfg = config.get("youtube") or {}
+    initial_done = conn.execute(
+        "SELECT value FROM _meta WHERE key='youtube_initial_history_backfilled_at'"
+    ).fetchone()
+    requested_days = int(getattr(args, "days", 0) or 0)
+    if requested_days > 0:
+        days = requested_days
+    elif initial_done:
+        days = int(youtube_cfg.get("incremental_backfill_days", 7) or 7)
+    else:
+        days = int(youtube_cfg.get("history_backfill_days", 90) or 90)
+    per_channel_limit = int(
+        getattr(args, "per_channel_limit", 0)
+        or youtube_cfg.get("backfill_per_channel_limit", 100)
+        or 100
+    )
+    limit_channels = int(getattr(args, "limit_channels", 0) or 0)
+    min_hours = float((config.get("fetch") or {}).get("min_source_interval_hours", 6))
+    command = "backfill-youtube"
+    if not getattr(args, "force", False) and recent_success_within(conn, "youtube", command, min_hours):
+        print(f"[backfill-youtube] skipped: last successful run within {min_hours:g}h")
+        conn.close()
+        return 0
+
+    run_now = now_utc()
+    cutoff = run_now - dt.timedelta(days=days)
+    window_start = iso_z(cutoff)
+    window_end = iso_z(run_now)
+    fetched_at = window_end
+    run_id = begin_run(conn, "youtube", command)
+    channels = conn.execute(
+        "SELECT * FROM youtube_channels WHERE enabled=1 ORDER BY scan_rotation_group, priority DESC, channel_name"
+    ).fetchall()
+    if limit_channels > 0:
+        channels = channels[:limit_channels]
+
+    fetched = 0
+    new_items = 0
+    queued = 0
+    skipped_short = 0
+    already_seen = 0
+    failures: list[str] = []
+
+    for idx, channel in enumerate(channels, 1):
+        playlist_url = f"https://www.youtube.com/channel/{channel['channel_id']}/videos"
+        try:
+            flat_rows = yt_dlp_json_lines(
+                [yt_dlp, "--flat-playlist", "--dump-json", "--playlist-end",
+                 str(per_channel_limit), playlist_url],
+                timeout=max(120, per_channel_limit * 4),
+            )
+            for item in flat_rows:
+                video_id = str(item.get("id") or item.get("url") or "").strip()
+                if not video_id:
+                    continue
+                published = youtube_item_published_at(item, fetched_at)
+                published_dt = parse_datetime_value(published)
+                if published_dt and published_dt < cutoff:
+                    continue
+                detail = item
+                if not item.get("duration") or not item.get("timestamp"):
+                    try:
+                        detail = {**item, **yt_dlp_video_detail(video_id)}
+                    except Exception as exc:
+                        failures.append(f"{channel['channel_id']}/{video_id}: detail {type(exc).__name__}: {exc}")
+                        continue
+                video = normalize_youtube_video_from_ytdlp(channel, detail, fetched_at)
+                if not video:
+                    continue
+                published_dt = parse_datetime_value(video.get("published_at"))
+                if published_dt and published_dt < cutoff:
+                    continue
+                fetched += 1
+                inserted = upsert_youtube_video(conn, video)
+                if inserted:
+                    new_items += 1
+                else:
+                    already_seen += 1
+                conn.execute(
+                    "INSERT OR IGNORE INTO youtube_video_snapshots "
+                    "(video_id, view_count, like_count, comment_count, snapshot_at) VALUES (?, ?, ?, ?, ?)",
+                    (video["video_id"], video["view_count"], video["like_count"],
+                     video["comment_count"], fetched_at),
+                )
+                queue_status = ensure_youtube_transcript_queue(
+                    conn, video["video_id"], video["duration_seconds"], fetched_at,
+                    config, f"backfill-youtube:{days}d",
+                )
+                if queue_status == "queued":
+                    queued += 1
+                elif queue_status == "skipped_short":
+                    skipped_short += 1
+                hot = youtube_compute_hot_score(
+                    channel_weight=1.0 if channel["priority"] == "tier1" else 0.6,
+                    semantic_importance=semantic_score(video["title"] + " " + video["description"]),
+                    novelty=1.0 if inserted else 0.2,
+                )
+                conn.execute(
+                    "INSERT OR REPLACE INTO hotspot_events(source, source_id, event_type, hot_score, scored_at) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    ("youtube", video["video_id"], "video_hot_score", hot, fetched_at),
+                )
+            conn.execute("UPDATE youtube_channels SET last_scanned_at=? WHERE channel_id=?", (fetched_at, channel["channel_id"]))
+            conn.commit()
+        except Exception as exc:
+            failures.append(f"{channel['channel_id']}: {type(exc).__name__}: {exc}")
+        if idx < len(channels):
+            sleep_between_requests(config)
+
+    conn.execute("INSERT OR REPLACE INTO _meta(key, value) VALUES (?, ?)", ("youtube_last_backfill_at", fetched_at))
+    conn.execute("INSERT OR REPLACE INTO _meta(key, value) VALUES (?, ?)", ("youtube_last_backfill_days", str(days)))
+    conn.execute("INSERT OR REPLACE INTO _meta(key, value) VALUES (?, ?)", ("youtube_last_backfill_window_start", window_start))
+    conn.execute("INSERT OR REPLACE INTO _meta(key, value) VALUES (?, ?)", ("youtube_last_backfill_window_end", window_end))
+    if days >= int(youtube_cfg.get("history_backfill_days", 90) or 90):
+        conn.execute("INSERT OR IGNORE INTO _meta(key, value) VALUES (?, ?)", ("youtube_initial_history_backfilled_at", fetched_at))
+        conn.execute("INSERT OR IGNORE INTO _meta(key, value) VALUES (?, ?)", ("youtube_initial_history_window_start", window_start))
+        conn.execute("INSERT OR IGNORE INTO _meta(key, value) VALUES (?, ?)", ("youtube_initial_history_window_end", window_end))
+    conn.commit()
+    status = "partial" if failures else "ok"
+    finish_run(conn, run_id, status, fetched, new_items, "; ".join(failures[:5]))
+    print(
+        f"[backfill-youtube] days={days} window={window_start}..{window_end} "
+        f"channels={len(channels)} fetched={fetched} "
+        f"new={new_items} existing={already_seen} queued={queued} "
+        f"skipped_short={skipped_short} failures={len(failures)}"
+    )
     for failure in failures[:10]:
         print(f"  WARN {failure}")
     conn.close()
@@ -3669,9 +3996,10 @@ def cmd_collect_all(args: argparse.Namespace) -> int:
     rc = 0
     if not getattr(args, "skip_youtube", False):
         yt_args = argparse.Namespace(**vars(args))
+        yt_args.days = getattr(args, "youtube_days", 0)
         yt_args.limit_channels = getattr(args, "limit_channels", 0)
         yt_args.per_channel_limit = getattr(args, "per_channel_limit", 0)
-        rc = max(rc, cmd_collect_youtube(yt_args))
+        rc = max(rc, cmd_backfill_youtube(yt_args))
     if not getattr(args, "skip_github", False):
         gh_args = argparse.Namespace(**vars(args))
         gh_args.limit_repos = getattr(args, "limit_repos", 0)
@@ -3959,6 +4287,11 @@ def build_parser() -> argparse.ArgumentParser:
     yt_collect.add_argument("--limit-channels", type=int, default=0)
     yt_collect.add_argument("--per-channel-limit", type=int, default=0)
     yt_collect.add_argument("--force", action="store_true")
+    yt_backfill = sub.add_parser("backfill-youtube", help="Backfill YouTube channel history via yt-dlp")
+    yt_backfill.add_argument("--days", type=int, default=0, help="Override backfill window days")
+    yt_backfill.add_argument("--limit-channels", type=int, default=0)
+    yt_backfill.add_argument("--per-channel-limit", type=int, default=0)
+    yt_backfill.add_argument("--force", action="store_true")
     gh_collect = sub.add_parser("collect-github", help="Collect live GitHub tracked repo metadata with rate limits")
     gh_collect.add_argument("--limit-repos", type=int, default=0)
     gh_collect.add_argument("--force", action="store_true")
@@ -3967,6 +4300,7 @@ def build_parser() -> argparse.ArgumentParser:
     social_collect.add_argument("--per-account-limit", type=int, default=3)
     social_collect.add_argument("--force", action="store_true")
     all_collect = sub.add_parser("collect-all", help="Run live collectors and write reports")
+    all_collect.add_argument("--youtube-days", type=int, default=0, help="Override YouTube backfill window")
     all_collect.add_argument("--limit-channels", type=int, default=0)
     all_collect.add_argument("--per-channel-limit", type=int, default=0)
     all_collect.add_argument("--limit-repos", type=int, default=0)
@@ -4003,6 +4337,7 @@ def main() -> int:
         "process-transcripts": cmd_process_transcripts,
         "send-report": cmd_send_report,
         "collect-youtube": cmd_collect_youtube,
+        "backfill-youtube": cmd_backfill_youtube,
         "collect-github": cmd_collect_github,
         "collect-social": cmd_collect_social,
         "collect-all": cmd_collect_all,
