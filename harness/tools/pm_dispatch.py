@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import importlib.util
 import json
 import os
 import sys
@@ -293,6 +294,169 @@ def list_pm_tasks(limit: int = 20) -> list[dict[str, Any]]:
     return tasks
 
 
+def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = str(path) + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, str(path))
+
+
+def _append_event(path: Path, event: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+
+def _new_sprint_id() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).strftime("sprint-%Y%m%d-%H%M%S")
+
+
+def ensure_compiled_sprint_status(sprint_id: str, title: str, summary: str) -> Path:
+    status_path = SPRINTS_DIR / f"{sprint_id}.status.json"
+    now = _now()
+    if status_path.exists():
+        try:
+            status = json.loads(status_path.read_text(encoding="utf-8"))
+        except Exception:
+            status = {}
+    else:
+        status = {
+            "id": sprint_id,
+            "title": title,
+            "summary": summary,
+            "created_at": now,
+            "round": 0,
+            "history": [],
+        }
+
+    status.update(
+        {
+            "id": sprint_id,
+            "title": title,
+            "summary": summary,
+            "status": "drafting",
+            "phase": "prd_ready",
+            "handoff_to": "planner",
+            "target_role": "planner",
+            "updated_at": now,
+        }
+    )
+    history = list(status.get("history") or [])
+    history.append({"ts": now, "event": "compiled_requirement_package_created", "by": "codex-pm-router"})
+    status["history"] = history[-20:]
+    _write_json_atomic(status_path, status)
+    _append_event(
+        SPRINTS_DIR / f"{sprint_id}.events.jsonl",
+        {
+            "ts": now,
+            "actor": "pm_dispatch",
+            "event": "compiled_requirement_package_created",
+            "sid": sprint_id,
+            "status": "info",
+            "detail": {
+                "phase": "prd_ready",
+                "handoff_to": "planner",
+                "target_role": "planner",
+            },
+        },
+    )
+    return status_path
+
+
+def _planner_objective_for_compiled_sprint(sprint_id: str) -> str:
+    base = str(SPRINTS_DIR / sprint_id)
+    return textwrap.dedent(
+        f"""\
+        请接手 {sprint_id}：Requirement Compiler 已生成首版需求编译包。
+
+        先读取：
+        - {base}.product-brief.md
+        - {base}.prd.md
+        - {base}.contract.md
+        - {base}.task_graph.json
+        - {base}.requirement_ir.json
+        - {base}.handoff.md
+
+        你的任务：
+        1. 基于 compiled requirement package 产出 design.md 和 plan.md。
+        2. 如有必要，细化或修正 task_graph.json，但不得绕过 compiled contracts。
+        3. 不要直接跳 Builder；保持 PM -> Planner -> task_graph -> Builder 主链。
+        4. 如果 compiled package 缺失关键字段，先写明 blocker 和修正建议。
+        """
+    ).strip()
+
+
+def cmd_compile_request(args: argparse.Namespace) -> int:
+    request_text = str(args.text or "").strip()
+    if not request_text and args.input_file:
+        request_text = Path(args.input_file).read_text(encoding="utf-8")
+    if not request_text:
+        request_text = sys.stdin.read().strip()
+    if not request_text:
+        print("ERROR: request text is required via --text, --input-file, or stdin", file=sys.stderr)
+        return 1
+
+    sprint_id = str(args.sprint or _new_sprint_id())
+    workspace_root = Path(args.workspace_root or os.getcwd())
+
+    router_path = Path(__file__).resolve().parent / "codex_pm_router.py"
+    spec = importlib.util.spec_from_file_location("codex_pm_router", router_path)
+    if spec is None or spec.loader is None:
+        print(f"ERROR: unable to load {router_path}", file=sys.stderr)
+        return 1
+    router = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(router)
+
+    payload = router.build_pm_intake(
+        request_text,
+        papers=list(getattr(args, "paper", []) or []),
+        logs=list(getattr(args, "log", []) or []),
+        repo_context=list(getattr(args, "repo_context", []) or []),
+        sprint_id=sprint_id,
+        target_system=str(getattr(args, "target_system", "solar-harness") or "solar-harness"),
+    )
+    emitted = router.emit_requirement_package(
+        payload,
+        workspace_root=workspace_root,
+        sprint_root=SPRINTS_DIR,
+        sprint_id=sprint_id,
+    )
+    status_path = ensure_compiled_sprint_status(
+        sprint_id,
+        title=payload["compiled_artifacts"]["product_brief"]["title"],
+        summary=payload["compiled_artifacts"]["product_brief"]["problem"][:180],
+    )
+    emitted["status"] = str(status_path)
+
+    if bool(getattr(args, "dispatch_planner", False)):
+        submit_args = argparse.Namespace(
+            role="planner",
+            objective=_planner_objective_for_compiled_sprint(sprint_id),
+            operator="",
+            sprint=sprint_id,
+            node="N0",
+            task_type="planning",
+            context=f"compiled_requirement_ir={emitted['requirement_ir']}",
+            dry_run=bool(getattr(args, "dry_run", False)),
+        )
+        rc = cmd_submit(submit_args)
+        if rc != 0:
+            return rc
+
+    print("✅ Requirement Compiler package ready")
+    print(f"   sprint_id   = {sprint_id}")
+    print(f"   workspace   = {workspace_root}")
+    print(f"   pm_dir      = {emitted['pm_dir']}")
+    print(f"   requirement = {emitted['requirement_ir']}")
+    print(f"   product_brief = {emitted['sprint_product_brief']}")
+    print(f"   prd         = {emitted['sprint_prd']}")
+    print(f"   contract    = {emitted['sprint_contract']}")
+    print(f"   task_graph  = {emitted['sprint_task_graph']}")
+    print(f"   status      = {emitted['status']}")
+    return 0
+
+
 # ── 核心 submit 逻辑 ──────────────────────────────────────────────────────────
 
 def cmd_submit(args: argparse.Namespace) -> int:
@@ -514,6 +678,18 @@ def main() -> int:
     s.add_argument("--context", default="", help="额外上下文（注入 dispatch 文件）")
     s.add_argument("--dry-run", action="store_true", help="预览，不实际提交")
 
+    cr = sub.add_parser("compile-request", help="先编译 Requirement IR/.pm/sprint package，再可选派给 planner")
+    cr.add_argument("--text", default="", help="原始需求文本")
+    cr.add_argument("--input-file", default="", help="从文件读取原始需求")
+    cr.add_argument("--paper", action="append", default=[], help="论文标题、链接或标识")
+    cr.add_argument("--log", action="append", default=[], help="相关日志路径")
+    cr.add_argument("--repo-context", action="append", default=[], help="repo/模块上下文")
+    cr.add_argument("--sprint", default="", help="目标 sprint id；默认自动生成")
+    cr.add_argument("--workspace-root", default="", help="写入 .pm/ 的工作区根目录；默认当前目录")
+    cr.add_argument("--target-system", default="solar-harness", choices=["solar-harness", "codex"], help="下游目标系统")
+    cr.add_argument("--dispatch-planner", action="store_true", help="编译后自动 handoff 给 planner")
+    cr.add_argument("--dry-run", action="store_true", help="和 --dispatch-planner 配合时预览 planner 派单")
+
     # fleet-status
     sub.add_parser("fleet-status", help="查看所有物理算子的状态")
 
@@ -532,6 +708,7 @@ def main() -> int:
     args = p.parse_args()
     dispatch = {
         "submit": cmd_submit,
+        "compile-request": cmd_compile_request,
         "fleet-status": cmd_fleet_status,
         "inbox": cmd_inbox,
         "result": cmd_result,

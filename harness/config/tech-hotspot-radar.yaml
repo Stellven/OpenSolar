@@ -42,6 +42,9 @@ youtube:
   hot_track_hours: 720      # 30 days for hot videos
   max_videos_per_run: 30
   per_channel_limit: 3
+  history_backfill_days: 90       # first historical import window
+  incremental_backfill_days: 7    # default window after initial backfill
+  backfill_per_channel_limit: 100 # yt-dlp playlist cap per channel
   keep_seen_days: 45
   transcript_max_chars: 60000
   min_transcript_duration_seconds: 600  # do not spend transcript/ASR budget on videos under 10 minutes
@@ -52,6 +55,7 @@ youtube:
     whisper_model: mlx-community/whisper-small-mlx
     openai_whisper_model: small
     language: zh
+    archive_audio_dir: /Volumes/RAID0-Main/SolarArchive/tech-hotspot-radar/asr-audio
   languages_priority: [en, zh, auto]
   channels:
     - name: "硅谷101"

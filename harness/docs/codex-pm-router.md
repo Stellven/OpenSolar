@@ -4,7 +4,7 @@
 
 ## 目的
 
-`codex-pm-router` 是 Codex 侧的 PM intake compiler。
+`codex-pm-router` 是 Codex 侧的 PM intake compiler，也是首批 `Requirement Compiler` 入口。
 
 它的职责不是替代 `solar-harness` planner，而是在进入 `solar-harness` 之前，先把用户需求规范化成三类之一：
 
@@ -18,6 +18,8 @@
 - contract 变体
 - task graph 变体
 - lane / priority / acceptance profile
+- Requirement IR
+- compiled handoff package
 
 ## 组成
 
@@ -34,7 +36,7 @@
 其中：
 
 - skill 负责 Codex 侧可安装入口和模板组织
-- `codex_pm_router.py` 负责可测试的编译逻辑
+- `codex_pm_router.py` 负责可测试的分类、IR 组装、contract/DAG/handoff 编译和文件落盘
 
 ## 使用方式
 
@@ -54,12 +56,33 @@ python3 /Users/lisihao/Solar/harness/tools/codex_pm_router.py \
   --format json
 ```
 
+直接把 `.pm/` 和 sprint package 落盘：
+
+```bash
+python3 /Users/lisihao/Solar/harness/tools/codex_pm_router.py \
+  --text "Upgrade PM pane into a requirement compiler" \
+  --sprint-id sprint-20260523-requirement-compiler \
+  --emit-dir /Users/lisihao/Solar \
+  --emit-sprint-root /Users/lisihao/.solar/harness/sprints \
+  --format json
+```
+
+或者通过 `pm-dispatch` 走“编译后派单”：
+
+```bash
+solar-harness pm-dispatch compile-request \
+  --text "Upgrade PM pane into a requirement compiler" \
+  --workspace-root /Users/lisihao/Solar \
+  --dispatch-planner
+```
+
 ## 输出契约
 
 编译器输出：
 
 - `pm_intake`
 - `classification`
+- `canonical_request_type`
 - `prd_variant`
 - `contract_variant`
 - `dag_variant`
@@ -67,6 +90,41 @@ python3 /Users/lisihao/Solar/harness/tools/codex_pm_router.py \
 - `priority`
 - `acceptance_profile`
 - `task_graph_skeleton`
+- `requirement_ir`
+- `compiled_artifacts`
+
+## 首批 Requirement Compiler 产物
+
+编译器可以直接输出：
+
+```text
+.pm/
+  intake.json
+  requirement_ir.json
+  prd.md
+  Contracts.yaml
+  contracts/
+    product.yaml
+    interface.yaml
+    agent_execution.yaml
+    research.yaml
+  task_dag.json
+  handoff/
+    codex_handoff.md
+    solar_harness_handoff.md
+  evals/
+    golden_cases.jsonl
+```
+
+如果指定 sprint root，还会编译兼容视图：
+
+- `<sid>.prd.md`
+- `<sid>.contract.md`
+- `<sid>.task_graph.json`
+- `<sid>.product-brief.md`
+- `<sid>.handoff.md`
+- `<sid>.requirement_ir.json`
+- `<sid>.Contracts.yaml`
 
 ## Solar 接口
 
@@ -76,6 +134,7 @@ python3 /Users/lisihao/Solar/harness/tools/codex_pm_router.py \
   - `request_type`
   - `template_variant`
   - `pm_intake`
+  - `requirement_ir_ref`
 - `schemas/task-graph.schema.json`
   - `dag_variant`
   - `research_mode`
@@ -83,9 +142,13 @@ python3 /Users/lisihao/Solar/harness/tools/codex_pm_router.py \
   - `logical_operator`
   - `verifier_required`
   - `research_stage`
+  - `type / owner / inputs / outputs / validation / risk / uncertainty / parallelizable / approval_gate`
+- `schemas/requirement-ir.schema.json`
+  - canonical Requirement IR source-of-truth schema
 
 ## 边界
 
 - 这是 Codex 外层 intake compiler。
 - `solar-harness` planner 仍然是内层 execution compiler。
+- `Requirement IR` 是新的 canonical source；Markdown PRD / contract 是 compiled views。
 - research 请求默认必须走 evidence-ledger 风格 DAG，不应降级成普通 implementation-first 流程。
