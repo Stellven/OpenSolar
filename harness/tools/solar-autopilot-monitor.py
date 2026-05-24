@@ -106,9 +106,9 @@ try:
 except Exception:  # pragma: no cover - fallback for partially installed harnesses
     load_graph = save_graph = enqueue_ready = parent_ready_check = validate_graph = blocked_external_prerequisites = doctor_graph = node_status = None
 try:
-    from prerequisite_resolver import iter_blocked, normalize_prerequisite
+    from prerequisite_resolver import iter_blocked
 except Exception:  # pragma: no cover - fallback for partially installed harnesses
-    iter_blocked = normalize_prerequisite = None
+    iter_blocked = None
 try:
     from graph_node_dispatcher import dispatch_ready as graph_dispatch_ready
     from graph_node_dispatcher import dispatch_node_evals as graph_dispatch_node_evals
@@ -1325,17 +1325,6 @@ def epic_child_dependency_ready(sid: str) -> tuple[bool, list[str]]:
         if dep_sid and not epic_dep_passed(dep_node):
             blocked_by.append(dep_sid)
     return not blocked_by, blocked_by
-
-
-def normalize_external_prerequisite(raw) -> tuple[str, str, str] | None:
-    if normalize_prerequisite is None:
-        return None
-    norm = normalize_prerequisite(raw)
-    if norm is None:
-        return None
-    label = json.dumps(raw, ensure_ascii=False, sort_keys=True) if isinstance(raw, dict) else str(raw).strip()
-    required = norm.get("required_status") or norm.get("required_phase") or "passed"
-    return (label, norm["sprint_id"], required)
 
 
 def child_graph_external_prerequisite_blocks(sid: str) -> list[dict]:

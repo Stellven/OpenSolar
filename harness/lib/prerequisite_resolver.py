@@ -38,10 +38,36 @@ MILESTONE_REQUIREMENTS = {
     "reviewing",
     "eval_passed",
 }
+PHASE_ORDER = [
+    "queued",
+    "drafting",
+    "planning",
+    "planner_plan",
+    "plan_reviewed",
+    "planning_complete",
+    "graph_dispatch_active",
+    "build_complete",
+    "ready_for_review",
+    "reviewing",
+    "eval_passed",
+    "completed",
+    "finalized",
+    "done",
+    "passed",
+]
+PHASE_RANK = {value: idx for idx, value in enumerate(PHASE_ORDER)}
 
 
 def _is_success_terminal(current_status: str, current_phase: str) -> bool:
     return current_status in SUCCESS_STATUSES or current_phase in SUCCESS_PHASES
+
+
+def _phase_progress_satisfies(required: str, current_phase: str) -> bool:
+    required_rank = PHASE_RANK.get(required)
+    current_rank = PHASE_RANK.get(current_phase)
+    if required_rank is None or current_rank is None:
+        return False
+    return current_rank >= required_rank
 
 
 def _status_or_phase_satisfies(
@@ -52,7 +78,9 @@ def _status_or_phase_satisfies(
     if required == "passed":
         return _is_success_terminal(current_status, current_phase)
     if required in MILESTONE_REQUIREMENTS:
-        return _is_success_terminal(current_status, current_phase)
+        return _is_success_terminal(current_status, current_phase) or _phase_progress_satisfies(
+            required, current_phase
+        )
     return False
 
 

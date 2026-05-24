@@ -25,7 +25,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from prerequisite_resolver import iter_blocked, normalize_prerequisite
+from prerequisite_resolver import iter_blocked
 
 HOME = Path.home()
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
@@ -492,37 +492,6 @@ def critical_path(graph: dict[str, Any]) -> dict[str, Any]:
 
 def _is_passed(graph: dict[str, Any], node_id: str) -> bool:
     return node_status(graph, node_id) in PASS_STATUSES
-
-
-def _external_prerequisites(graph: dict[str, Any]) -> list[Any]:
-    entries: list[Any] = []
-    for raw in graph.get("prerequisites") or []:
-        if str(raw).strip():
-            entries.append(raw)
-
-    policy = graph.get("dependency_policy") or {}
-    if isinstance(policy, dict):
-        for raw in policy.get("blocks_until") or []:
-            if str(raw).strip():
-                entries.append(raw)
-
-    deduped: list[Any] = []
-    seen: set[tuple] = set()
-    for item in entries:
-        norm = normalize_prerequisite(item)
-        if norm is None:
-            continue
-        dedupe_key = (
-            norm["sprint_id"],
-            norm.get("required_status"),
-            norm.get("required_phase"),
-            norm.get("required_node_id"),
-            norm.get("required_node_status"),
-        )
-        if dedupe_key not in seen:
-            deduped.append(item)
-            seen.add(dedupe_key)
-    return deduped
 
 
 def blocked_external_prerequisites(graph: dict[str, Any]) -> list[dict[str, Any]]:
