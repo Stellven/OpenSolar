@@ -7,7 +7,7 @@
   "priority": "P0",
   "handoff_to": "",
   "created_at": "2026-05-09T20:00:30Z",
-  "updated_at": "2026-05-09T20:31:52Z",
+  "updated_at": "2026-05-24T01:51:13Z",
   "round": 1,
   "summary": "让真实 Solar builder pane 执行重型集成 proof：MemPalace 语义检索、Apple Notes mock 到 wiki dispatch、accepted artifact 到 wiki dispatch、Browser-use MCP 导航/截图。",
   "acceptance": [
@@ -81,5 +81,15 @@
       "note": "Sprint already PASS; normalized phase/handoff_to and consumed stale PM gate queue."
     }
   ],
-  "id": "sprint-20260509-solar-heavy-proof-run"
+  "id": "sprint-20260509-solar-heavy-proof-run",
+  "knowledge_export_status": "exported",
+  "knowledge_export_path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260509-solar-heavy-proof-run.accepted.md",
+  "knowledge_source_artifact_index": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260509-solar-heavy-proof-run.source_artifact_index.md",
+  "knowledge_summary_count": 2,
+  "knowledge_ingest_dispatch": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260509-solar-heavy-proof-run.dispatch.md",
+  "knowledge_exported_at": "2026-05-24T01:51:13Z",
+  "knowledge_ingested_at": null,
+  "knowledge_closure_required": true,
+  "knowledge_closure_status": "exported",
+  "knowledge_export_error": null
 }

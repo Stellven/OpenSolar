@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -96,13 +97,51 @@ def _info(msg: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _configured_launch_command(config: dict) -> str:
+    surface = config.get("surface")
+    if isinstance(surface, dict):
+        launch_cmd = str(surface.get("launch_cmd") or "").strip()
+        if launch_cmd:
+            return launch_cmd
+    return str(config.get("launch_cmd") or "").strip()
+
+
+def _materialize_envelope_context(result_dir: Path, envelope: dict) -> dict[str, str]:
+    env: dict[str, str] = {}
+    dispatch_text = str(envelope.get("dispatch_text") or "").strip()
+    if dispatch_text:
+        dispatch_file = result_dir / "dispatch.md"
+        dispatch_file.write_text(dispatch_text, encoding="utf-8")
+        env["SOLAR_MULTI_TASK_DISPATCH_FILE"] = str(dispatch_file)
+        env["DISPATCH_FILE"] = str(dispatch_file)
+    envelope_file = result_dir / "envelope.json"
+    envelope_file.write_text(json.dumps(envelope, ensure_ascii=False, indent=2), encoding="utf-8")
+    env["SOLAR_OPERATOR_ENVELOPE_JSON"] = str(envelope_file)
+    handoff_path = str(envelope.get("handoff_path") or "").strip()
+    if handoff_path:
+        env["HANDOFF"] = handoff_path
+    graph_path = str(envelope.get("graph_path") or "").strip()
+    if graph_path:
+        env["GRAPH"] = graph_path
+    if str(envelope.get("node_id") or "").strip():
+        env["NODE_ID"] = str(envelope["node_id"])
+    if str(envelope.get("sprint_id") or "").strip():
+        env["SID"] = str(envelope["sprint_id"])
+    env["TASK_DIR"] = str(result_dir)
+    env["OUTPUT_LOG"] = str(result_dir / "output.log")
+    env["HARNESS_DIR"] = str(HARNESS_DIR)
+    env["SPRINTS_DIR"] = str(HARNESS_DIR / "sprints")
+    return env
+
+
 def _build_command(config: dict, envelope: dict) -> list[str]:
     """Return the shell command list to execute for this task.
 
-    If the operator uses a ``local`` or ``dummy`` backend, or if the envelope
-    carries an explicit ``command`` override, no real AI backend is invoked.
-    For any other backend we still default to a safe echo so the daemon can
-    be exercised without credentials in test/CI environments.
+    If the envelope carries an explicit ``command`` override, or if a command
+    backend provides a configured launch command, operatord executes that
+    command through a shell adapter. For any unsupported backend we still
+    default to a safe echo so the daemon can be exercised without credentials
+    in test/CI environments.
     """
     backend: str = str(config.get("backend", "local")).lower()
 
@@ -111,7 +150,11 @@ def _build_command(config: dict, envelope: dict) -> list[str]:
         cmd_val = envelope["command"]
         if isinstance(cmd_val, list):
             return [str(c) for c in cmd_val]
-        return ["sh", "-c", str(cmd_val)]
+        return ["bash", "-lc", str(cmd_val)]
+
+    launch_cmd = _configured_launch_command(config)
+    if backend == "command" and launch_cmd:
+        return ["bash", "-lc", launch_cmd]
 
     task_id: str = str(envelope.get("task_id", "unknown"))
     objective: str = str(envelope.get("objective", ""))[:120]
@@ -279,9 +322,11 @@ def cmd_daemon(args: argparse.Namespace) -> int:
         result_dir = OPERATOR_RESULTS_DIR / operator_id / task_id
         result_dir.mkdir(parents=True, exist_ok=True)
         log_path = result_dir / "output.log"
+        exec_env = os.environ.copy()
+        exec_env.update(_materialize_envelope_context(result_dir, envelope))
 
         cmd = _build_command(config, envelope)
-        _info(f"Executing: {' '.join(cmd[:8])}")
+        _info(f"Executing: {' '.join(shlex.quote(part) for part in cmd[:8])}")
 
         try:
             proc = subprocess.Popen(
@@ -290,6 +335,7 @@ def cmd_daemon(args: argparse.Namespace) -> int:
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
+                env=exec_env,
             )
             _state["current_proc"] = proc
 

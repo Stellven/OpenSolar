@@ -1,14 +1,2 @@
-{"ts":"2026-05-07T14:42:08Z","event":"sprint_drafting","sprint_id":"sprint-20260507-symphony2","source":"pm","note":"Symphony Sprint 2 product brief authored, awaiting planner contract"}
-{"ts":"2026-05-07T14:59:37Z","event":"contract_written","sprint_id":"sprint-20260507-symphony2","by":"planner"}
-{"ts":"2026-05-07T14:59:37Z","event":"status_active","sprint_id":"sprint-20260507-symphony2","by":"planner"}
-{"ts": "2026-05-07T18:58:58Z", "event": "handoff_submitted", "by": "builder", "sid": "sprint-20260507-symphony2"}
-{"ts": "2026-05-07T19:18:31Z", "event": "eval_passed", "by": "evaluator", "verdict": "pass", "sid": "sprint-20260507-symphony2"}
-{"ts":"2026-05-07T19:18:39Z","event":"planner_notified","by":"coordinator","data":{"status":"passed"}}
-{"event": "watchdog_circuit_break", "by": "watchdog", "data": {"failures": 3}, "ts": "2026-05-07T19:21:56Z", "sid": "sprint-20260507-symphony2"}
-{"event": "watchdog_circuit_break", "by": "watchdog", "data": {"failures": 3}, "ts": "2026-05-07T19:24:55Z", "sid": "sprint-20260507-symphony2"}
-{"ts":"2026-05-07T20:33:38Z","sprint_id":"sprint-20260507-symphony2","actor":"runner","event":"runner_started","severity":"info","payload":{"mode":"dry-run","ws_dir":"/Users/sihaoli/.solar/workspaces/sprint-20260507-symphony2"}}
-{"ts":"2026-05-07T20:33:38Z","sprint_id":"sprint-20260507-symphony2","actor":"runner","event":"runner_exited","severity":"info","payload":{"mode":"dry-run","exit_code":0}}
-{"ts":"2026-05-09T00:40:20Z","sprint_id":"sprint-20260507-symphony2","actor":"runner","event":"runner_started","severity":"info","payload":{"mode":"dry-run","ws_dir":"/Users/sihaoli/.solar/workspaces/sprint-20260507-symphony2"}}
-{"ts":"2026-05-09T00:40:20Z","sprint_id":"sprint-20260507-symphony2","actor":"runner","event":"runner_exited","severity":"info","payload":{"mode":"dry-run","exit_code":0}}
-{"ts": "2026-05-12T19:43:23Z", "event": "accepted_artifact_exported", "source": "accepted-artifact-export", "path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260507-symphony2.accepted.md", "bytes": 31235, "source_hash": "3cbfbde9b67a4cfe31d02cbfd512bd802cd3443d836b5af0d4da8931e1ec9fbd"}
-{"ts": "2026-05-12T19:43:23Z", "event": "accepted_artifact_ingest_dispatched", "source": "accepted-artifact-export", "dispatch_file": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260507-symphony2.dispatch.md"}
+{"ts": "2026-05-24T01:51:12Z", "event": "accepted_artifact_exported", "source": "accepted-artifact-export", "path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260507-symphony2.accepted.md", "bytes": 19510, "source_hash": "eb279b603bc9a33bd203c1f595b811c278804b12f83c823597aad1f3bd3c7f4c", "sidecars": {"source_artifact_index": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260507-symphony2.source_artifact_index.md", "summary:eval": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260507-symphony2.eval.summary.md", "summary:status": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260507-symphony2.status.summary.md"}}
+{"ts": "2026-05-24T01:51:12Z", "event": "accepted_artifact_ingest_dispatched", "source": "accepted-artifact-export", "dispatch_file": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260507-symphony2.dispatch.md"}

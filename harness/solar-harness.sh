@@ -3749,7 +3749,7 @@ PY
     echo "  $0 pm-dispatch --role ROLE --objective TEXT [--operator ID] [--sprint SID] [--dry-run]  PM 发号施令 → 无头算子"
     echo "  $0 pm-fleet [status|inbox|result]  PM 算子舰队状态 & 任务收件箱"
     echo "  $0 mirage [search|doctor|workspace|mounts|exec|provision]  Mirage 统一虚拟文件系统"
-    echo "  $0 wiki [install|status|export-sprint|update|query|ingest|chatgpt-import|vault-status|lint|rebuild|export-graph|colorize|history|run-dispatch|dispatch-watch|dispatch-maintenance|import-solar-db|capture-server|audit-uploads|backfill-uploads|quality-gate|reingest-quarantine|reingest-scheduler|qmd-status|qmd-repair|qmd-search|qmd-update|qmd-mcp|qmd-embed|ai-influence-digest|help]  Obsidian Wiki 集成"
+    echo "  $0 wiki [install|status|export-sprint|update|query|ingest|chatgpt-import|vault-status|lint|rebuild|export-graph|colorize|history|run-dispatch|dispatch-watch|dispatch-maintenance|import-solar-db|capture-server|audit-uploads|backfill-uploads|quality-gate|reingest-quarantine|reingest-scheduler|qmd-status|qmd-repair|qmd-search|qmd-update|qmd-mcp|qmd-embed|ai-influence-digest|tech-hotspot-radar|help]  Obsidian Wiki 集成"
     ;;
   mirage)
     # Mirage unified virtual filesystem — sprint-20260508-mirage-unified-vfs
@@ -4520,6 +4520,28 @@ PLIST
             err "Unknown ai-influence-digest action: $_ai_digest_action"
             echo "Run '$0 wiki ai-influence-digest help' for usage." >&2
             exit 1
+            ;;
+        esac
+        ;;
+      tech-hotspot-radar)
+        # sprint-20260523-tech-hotspot-radar-productization follow-up:
+        # expose the accepted standalone Tech Hotspot Radar CLI under wiki.
+        _thr_source_dir="${SOLAR_HARNESS_SOURCE_DIR:-$HOME/Solar/harness}"
+        if [[ -f "$_thr_source_dir/scripts/tech_hotspot_radar.py" ]]; then
+          _thr_script="$_thr_source_dir/scripts/tech_hotspot_radar.py"
+        else
+          _thr_script="$HARNESS_DIR/scripts/tech_hotspot_radar.py"
+        fi
+        if [[ ! -f "$_thr_script" ]]; then
+          err "Tech Hotspot Radar CLI not found: $_thr_script"
+          exit 1
+        fi
+        case "${1:-help}" in
+          help|--help|-h|"")
+            python3 "$_thr_script" --help
+            ;;
+          *)
+            python3 "$_thr_script" "$@"
             ;;
         esac
         ;;

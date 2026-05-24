@@ -139,6 +139,8 @@ HUMAN_SEARCH_CAPABILITIES = {
     "research.contradiction.search",
 }
 
+EVALUATION_REVIEW_MODES = {"single", "staged", "dual", "committee"}
+
 
 def _node_capabilities(node: dict[str, Any]) -> set[str]:
     caps: set[str] = set()
@@ -186,6 +188,210 @@ def _node_requires_deepresearch_quality_gate(node: dict[str, Any]) -> bool:
         artifact_values.extend(str(item) for item in raw_scope)
     artifact_text = " ".join(artifact_values).lower()
     return bool(re.search(r"research_eval|report_ast|final\\.md|final_report|evidence\\.jsonl|claims\\.jsonl", artifact_text))
+
+
+def _evaluation_selector(node: dict[str, Any]) -> dict[str, Any]:
+    selector = node.get("operator_selector")
+    return selector if isinstance(selector, dict) else {}
+
+
+def _node_task_type(node: dict[str, Any]) -> str:
+    selector = _evaluation_selector(node)
+    return str(node.get("task_type") or selector.get("task_type") or "").strip().upper()
+
+
+def _node_constraints(node: dict[str, Any]) -> dict[str, Any]:
+    selector = _evaluation_selector(node)
+    constraints = node.get("constraints") or selector.get("constraints") or {}
+    return constraints if isinstance(constraints, dict) else {}
+
+
+def _node_write_scope(node: dict[str, Any]) -> list[str]:
+    raw = node.get("write_scope") or []
+    if isinstance(raw, str):
+        return [raw] if raw else []
+    if isinstance(raw, list):
+        return [str(item) for item in raw if str(item)]
+    return []
+
+
+def _node_required_capability_names(node: dict[str, Any]) -> set[str]:
+    raw = node.get("required_capabilities") or _evaluation_selector(node).get("required_capabilities") or {}
+    if isinstance(raw, dict):
+        return {str(name).strip().lower() for name in raw.keys() if str(name).strip()}
+    if isinstance(raw, list):
+        return {str(item).strip().lower() for item in raw if str(item).strip()}
+    if isinstance(raw, str) and raw.strip():
+        return {raw.strip().lower()}
+    return set()
+
+
+def _risk_tier_for_node(node: dict[str, Any]) -> str:
+    task_type = _node_task_type(node)
+    constraints = _node_constraints(node)
+    explicit = str(
+        constraints.get("risk_tier")
+        or node.get("risk_tier")
+        or ""
+    ).strip().lower()
+    if explicit in {"low", "medium", "high", "critical"}:
+        return explicit
+    capability_names = _node_required_capability_names(node)
+    write_scope = _node_write_scope(node)
+    if task_type in {"SECURITY_SENSITIVE"}:
+        return "critical"
+    if task_type in {"ARCH_DESIGN", "ACADEMIC_CRITIQUE", "ROOT_CAUSE_DEBUG", "SOFT_HW_OPT"}:
+        return "high"
+    if capability_names & {"security.review", "security", "benchmark.analysis", "benchmark", "root-cause.debug"}:
+        return "high"
+    if len(write_scope) > 1 or bool(write_scope):
+        return "medium"
+    return "low"
+
+
+def _evaluation_mode_required_evaluators(mode: str) -> int:
+    return {
+        "single": 1,
+        "staged": 1,
+        "dual": 2,
+        "committee": 3,
+    }.get(mode, 1)
+
+
+def _default_evaluation_mode(node: dict[str, Any]) -> str:
+    task_type = _node_task_type(node)
+    risk_tier = _risk_tier_for_node(node)
+    verifier_required = bool(node.get("verifier_required")) or bool(_evaluation_selector(node).get("verifier_required"))
+    if task_type == "SECURITY_SENSITIVE" or risk_tier == "critical":
+        return "committee"
+    if task_type in {"ARCH_DESIGN", "ACADEMIC_CRITIQUE"}:
+        return "dual"
+    if verifier_required or task_type in {"CODE_IMPL", "MULTI_FILE_REFACTOR", "TEST_GEN", "TEST_RUN", "DOC_REPORT", "ROOT_CAUSE_DEBUG", "SOFT_HW_OPT"}:
+        return "staged"
+    return "single"
+
+
+def _evaluation_evidence_requirements(node: dict[str, Any], mode: str) -> list[str]:
+    task_type = _node_task_type(node)
+    requirements = ["handoff_md", "session_log"]
+    if _node_write_scope(node):
+        requirements.append("scope_compliance")
+    if task_type in {"CODE_IMPL", "MULTI_FILE_REFACTOR", "TEST_GEN", "TEST_RUN", "ROOT_CAUSE_DEBUG", "SOFT_HW_OPT"}:
+        requirements.extend(["patch_diff", "test_report"])
+    if task_type in {"ARCH_DESIGN", "RESEARCH_SYNTHESIS", "ACADEMIC_CRITIQUE", "DOC_REPORT"}:
+        requirements.append("design_or_report_artifact")
+    if mode in {"dual", "committee"}:
+        requirements.append("cross_evaluator_consistency")
+    deduped: list[str] = []
+    for item in requirements:
+        if item not in deduped:
+            deduped.append(item)
+    return deduped
+
+
+def _normalized_evaluation_plan(plan: dict[str, Any], node: dict[str, Any], source: str) -> dict[str, Any]:
+    raw_mode = str(plan.get("review_mode") or "").strip().lower()
+    mode = raw_mode if raw_mode in EVALUATION_REVIEW_MODES else _default_evaluation_mode(node)
+    raw_required = plan.get("required_evaluators")
+    try:
+        required_evaluators = max(1, int(raw_required)) if raw_required is not None else _evaluation_mode_required_evaluators(mode)
+    except Exception:
+        required_evaluators = _evaluation_mode_required_evaluators(mode)
+    evaluator_classes = plan.get("evaluator_classes")
+    if isinstance(evaluator_classes, str):
+        evaluator_classes_list = [evaluator_classes] if evaluator_classes else []
+    elif isinstance(evaluator_classes, list):
+        evaluator_classes_list = [str(item) for item in evaluator_classes if str(item)]
+    else:
+        evaluator_classes_list = []
+    if not evaluator_classes_list:
+        evaluator_classes_list = ["Verifier"]
+    independence_policy = plan.get("independence_policy")
+    if not isinstance(independence_policy, dict):
+        independence_policy = {}
+    independence_policy = {
+        "writer_same_operator": str(independence_policy.get("writer_same_operator") or "denied"),
+        "writer_same_provider": str(
+            independence_policy.get("writer_same_provider")
+            or ("avoid" if mode in {"dual", "committee"} else "allowed")
+        ),
+    }
+    evidence_requirements = plan.get("evidence_requirements")
+    if isinstance(evidence_requirements, str):
+        evidence_requirements_list = [evidence_requirements] if evidence_requirements else []
+    elif isinstance(evidence_requirements, list):
+        evidence_requirements_list = [str(item) for item in evidence_requirements if str(item)]
+    else:
+        evidence_requirements_list = []
+    if not evidence_requirements_list:
+        evidence_requirements_list = _evaluation_evidence_requirements(node, mode)
+    escalation_on_fail = plan.get("escalation_on_fail")
+    if isinstance(escalation_on_fail, str):
+        escalation = [escalation_on_fail] if escalation_on_fail else []
+    elif isinstance(escalation_on_fail, list):
+        escalation = [str(item) for item in escalation_on_fail if str(item)]
+    else:
+        escalation = []
+    if not escalation:
+        escalation = ["HumanReview"] if mode == "committee" else ["Verifier"]
+    parallelizable = bool(plan.get("parallelizable", mode in {"dual", "committee"}))
+    cross_provider_required = bool(plan.get("cross_provider_required", mode in {"dual", "committee"}))
+    return {
+        "planning_source": source,
+        "task_type": _node_task_type(node) or "N/A",
+        "risk_tier": _risk_tier_for_node(node),
+        "review_mode": mode,
+        "required_evaluators": required_evaluators,
+        "evaluator_classes": evaluator_classes_list,
+        "parallelizable": parallelizable,
+        "cross_provider_required": cross_provider_required,
+        "independence_policy": independence_policy,
+        "evidence_requirements": evidence_requirements_list,
+        "escalation_on_fail": escalation,
+    }
+
+
+def _plan_node_evaluation(graph: dict[str, Any], node: dict[str, Any]) -> dict[str, Any]:
+    explicit = node.get("evaluation_plan")
+    if isinstance(explicit, dict) and explicit:
+        return _normalized_evaluation_plan(explicit, node, "explicit")
+    return _normalized_evaluation_plan({}, node, "derived")
+
+
+def _evaluation_capacity_snapshot(plan: dict[str, Any], evaluators: list[dict[str, Any]]) -> dict[str, Any]:
+    available = [item for item in evaluators if not item.get("busy")]
+    available_panes = [str(item.get("pane") or "") for item in available if str(item.get("pane") or "")]
+    required = max(1, int(plan.get("required_evaluators") or 1))
+    mode = str(plan.get("review_mode") or "single")
+    selected = available[:required]
+    selected_panes = [str(item.get("pane") or "") for item in selected if str(item.get("pane") or "")]
+    capacity_satisfied = len(selected) >= required
+    quorum_dispatch_supported = required <= 1
+    dispatchable_now = capacity_satisfied and quorum_dispatch_supported
+    return {
+        "available_evaluators": len(available),
+        "available_panes": available_panes,
+        "required_evaluators": required,
+        "selected_panes": selected_panes,
+        "capacity_satisfied": capacity_satisfied,
+        "quorum_dispatch_supported": quorum_dispatch_supported,
+        "review_mode": mode,
+        "dispatchable_now": dispatchable_now,
+    }
+
+
+def _evaluation_plan_block(plan: dict[str, Any]) -> str:
+    return "\n".join([
+        f"- Review Mode: `{plan.get('review_mode', 'single')}`",
+        f"- Required Evaluators: `{plan.get('required_evaluators', 1)}`",
+        f"- Risk Tier: `{plan.get('risk_tier', 'low')}`",
+        f"- Evaluator Classes: {', '.join(f'`{item}`' for item in plan.get('evaluator_classes', []) or ['Verifier'])}",
+        f"- Cross Provider Required: `{str(bool(plan.get('cross_provider_required'))).lower()}`",
+        f"- Parallelizable: `{str(bool(plan.get('parallelizable'))).lower()}`",
+        f"- Evidence Requirements: {', '.join(f'`{item}`' for item in plan.get('evidence_requirements', []) or ['handoff_md'])}",
+        f"- Independence: writer_same_operator=`{((plan.get('independence_policy') or {}).get('writer_same_operator', 'denied'))}`, writer_same_provider=`{((plan.get('independence_policy') or {}).get('writer_same_provider', 'allowed'))}`",
+        f"- Escalation On Fail: {', '.join(f'`{item}`' for item in plan.get('escalation_on_fail', []) or ['Verifier'])}",
+    ])
 
 
 def _read_json_file(path: str | Path) -> dict[str, Any]:
@@ -1005,6 +1211,7 @@ def build_eval_dispatch_text(graph: dict[str, Any], graph_path: str, node: dict[
                              dispatch_id: str) -> str:
     sid = str(graph.get("sprint_id") or Path(graph_path).stem.replace(".task_graph", ""))
     node_id = str(node.get("id") or "")
+    evaluation_plan = _plan_node_evaluation(graph, node)
     handoff = _existing_node_handoff(sid, node, graph) or _handoff_file(sid, node_id)
     handoff_candidates = "\n".join(f"- `{candidate}`" for candidate in _node_handoff_candidates(sid, node, graph))
     eval_md = _eval_md_file(sid, node_id)
@@ -1047,6 +1254,10 @@ Handoff: `{handoff}`
 ## Required Capabilities
 
 {_scope_lines(node.get("required_capabilities"))}
+
+## Evaluation Plan
+
+{_evaluation_plan_block(evaluation_plan)}
 
 ## Write Scope
 
@@ -1114,6 +1325,7 @@ solar-harness session evaluate "{sid}" --json
      "node_id": "{node_id}",
      "verdict": "PASS",
      "summary": "",
+     "evaluation_plan": {json.dumps(evaluation_plan, ensure_ascii=False, indent=2)},
      "research_quality_gate": {{}},
      "checked_at": "{_utc_now()}",
      "eval_md_path": "{eval_md}"
@@ -1169,7 +1381,12 @@ def _pane_title_matches_role(pane: str, title: str, role: str) -> bool:
             )
         return False
     if role == "evaluator":
-        if pane != f"{SESSION}:0.3":
+        if not (
+            pane == f"{SESSION}:0.3"
+            or pane.startswith("solar-harness-lab:")
+            or pane.startswith("solar-harness-multi-task:")
+            or pane.startswith(f"{SESSION}:")
+        ):
             return False
         non_role_title = re.sub(r"Evaluator|审判官", "", title, flags=re.I)
         return bool(re.search(r"Evaluator|审判官", title, re.I)) and not bool(
@@ -2162,12 +2379,36 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
 def _discover_evaluators(dry_run: bool = False) -> list[dict[str, Any]]:
     if dry_run:
         return [{"pane": f"{SESSION}:0.3", "models": _models_for_pane(f"{SESSION}:0.3"), "skills": ["review", "testing", "bash"]}]
-    # Graph node evaluation mutates graph verdict state. Keep it on the
-    # evaluator persona; falling back to planner/builder panes causes wrong-role
-    # dispatch and leaves the real review queue blocked.
-    candidates = [
-        f"{SESSION}:0.3",
-    ]
+    # Graph node evaluation mutates graph verdict state. Keep it on evaluator
+    # personas only, but allow a pool of evaluator hosts instead of pinning the
+    # runtime to one pane. Planning still decides whether a node may use a
+    # single evaluator or require quorum semantics.
+    restrict_to_session = os.environ.get("SOLAR_GRAPH_DISPATCH_RESTRICT_SESSION") == "1"
+    candidates = [f"{SESSION}:0.3"]
+    try:
+        out = subprocess.check_output(
+            ["tmux", "list-panes", "-a", "-F", "#{session_name}:#{window_index}.#{pane_index}\t#{pane_title}"],
+            stderr=subprocess.DEVNULL,
+            timeout=3,
+        ).decode()
+        pane_rows = [p.rstrip("\n").split("\t", 1) for p in out.splitlines() if p.strip()]
+    except Exception:
+        pane_rows = []
+    for row in pane_rows:
+        pane = row[0].strip()
+        if not pane or pane in candidates:
+            continue
+        if restrict_to_session:
+            if not pane.startswith(f"{SESSION}:"):
+                continue
+        else:
+            if not (
+                pane.startswith(f"{SESSION}:")
+                or pane.startswith("solar-harness-lab:")
+                or pane.startswith("solar-harness-multi-task:")
+            ):
+                continue
+        candidates.append(pane)
     evaluators: list[dict[str, Any]] = []
     seen: set[str] = set()
     for pane in candidates:
@@ -2185,6 +2426,7 @@ def _discover_evaluators(dry_run: bool = False) -> list[dict[str, Any]]:
                 "models": _models_for_pane(pane),
                 "skills": ["review", "testing", "bash"],
                 "busy": _pane_has_active_lease(pane) or _pane_tui_busy(pane) or bool(unavailable_reason),
+                "title": title,
                 "unavailable_reason": unavailable_reason,
                 "current_command": _pane_current_command(pane),
             })
@@ -2273,6 +2515,7 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
     dispatched: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     dry_run_used_panes: set[str] = set()
+    evaluators = _discover_evaluators(dry_run)
 
     for node in graph.get("nodes", []):
         if max_items and len(dispatched) >= max_items:
@@ -2280,13 +2523,67 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
         node_id = str(node.get("id") or "")
         if not _node_eval_needed(graph, sid, node, force=force):
             continue
-        evaluator = _first_available_evaluator(dry_run)
+        evaluation_plan = _plan_node_evaluation(graph, node)
+        capacity = _evaluation_capacity_snapshot(evaluation_plan, evaluators)
+        evaluation_plan["capacity"] = capacity
+        node["evaluation_plan"] = evaluation_plan
+        node["evaluation_plan_updated_at"] = _utc_now()
+        if not capacity.get("available_evaluators"):
+            skipped.append({
+                "node": node_id,
+                "reason": "no_available_evaluator",
+                "evaluation_plan": evaluation_plan,
+            })
+            break
+        if not capacity.get("capacity_satisfied", False):
+            skipped.append({
+                "node": node_id,
+                "reason": "insufficient_evaluator_capacity",
+                "evaluation_plan": evaluation_plan,
+            })
+            break
+        if not capacity.get("quorum_dispatch_supported", True):
+            skipped.append({
+                "node": node_id,
+                "reason": "multi_evaluator_quorum_not_implemented",
+                "evaluation_plan": evaluation_plan,
+            })
+            break
+        if not capacity.get("dispatchable_now"):
+            skipped.append({
+                "node": node_id,
+                "reason": "insufficient_evaluator_capacity",
+                "evaluation_plan": evaluation_plan,
+            })
+            break
+        selected_panes = {
+            str(pane)
+            for pane in capacity.get("selected_panes", [])
+            if str(pane)
+        }
+        evaluator = next(
+            (
+                item
+                for item in evaluators
+                if not item.get("busy") and str(item.get("pane") or "") in selected_panes
+            ),
+            None,
+        )
         if not evaluator:
-            skipped.append({"node": node_id, "reason": "no_available_evaluator"})
+            skipped.append({
+                "node": node_id,
+                "reason": "no_available_evaluator",
+                "evaluation_plan": evaluation_plan,
+            })
             break
         pane = str(evaluator["pane"])
         if dry_run and pane in dry_run_used_panes:
-            skipped.append({"node": node_id, "reason": "dry_run_evaluator_capacity", "pane": pane})
+            skipped.append({
+                "node": node_id,
+                "reason": "dry_run_evaluator_capacity",
+                "pane": pane,
+                "evaluation_plan": evaluation_plan,
+            })
             break
         dispatch_id = f"graph-eval-{sid}-{node_id}-{_utc_now().replace(':', '').replace('-', '')}"
         lease_result = _ensure_lease(pane, sid, dispatch_id, ttl, dry_run)
@@ -2296,6 +2593,7 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
                 "pane": pane,
                 "reason": lease_result.get("reason", "lease_failed"),
                 "lease": lease_result,
+                "evaluation_plan": evaluation_plan,
             })
             continue
 
@@ -2313,6 +2611,7 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
                 "pane": pane,
                 "dispatch_id": dispatch_id,
                 "instruction_file": str(instruction_file),
+                "evaluation_plan": evaluation_plan,
                 "dry_run": True,
             })
             continue
@@ -2324,7 +2623,12 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
             node.pop("eval_assigned_to", None)
             node.pop("eval_dispatch_id", None)
             node.pop("eval_dispatched_at", None)
-            skipped.append({"node": node_id, "pane": pane, "reason": "send_failed"})
+            skipped.append({
+                "node": node_id,
+                "pane": pane,
+                "reason": "send_failed",
+                "evaluation_plan": evaluation_plan,
+            })
             continue
 
         if not dry_run:
@@ -2338,6 +2642,7 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
             "pane": pane,
             "dispatch_id": dispatch_id,
             "instruction_file": str(instruction_file),
+            "evaluation_plan": evaluation_plan,
         })
 
     if not dry_run:

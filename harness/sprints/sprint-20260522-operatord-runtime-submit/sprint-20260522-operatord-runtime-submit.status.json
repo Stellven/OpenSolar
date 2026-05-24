@@ -3,7 +3,7 @@
   "status": "passed",
   "phase": "finalized",
   "task_graph": "/Users/lisihao/.solar/harness/sprints/sprint-20260522-operatord-runtime-submit.task_graph.json",
-  "updated_at": "2026-05-22T21:01:28Z",
+  "updated_at": "2026-05-24T01:51:14Z",
   "id": "sprint-20260522-operatord-runtime-submit",
   "history": [
     {
@@ -106,7 +106,11 @@
   "knowledge_export_status": "exported",
   "knowledge_export_path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260522-operatord-runtime-submit.accepted.md",
   "knowledge_ingest_dispatch": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260522-operatord-runtime-submit.dispatch.md",
-  "knowledge_exported_at": "2026-05-22T21:01:28Z",
+  "knowledge_exported_at": "2026-05-24T01:51:14Z",
   "knowledge_ingested_at": null,
-  "knowledge_export_error": null
+  "knowledge_export_error": null,
+  "knowledge_source_artifact_index": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260522-operatord-runtime-submit.source_artifact_index.md",
+  "knowledge_summary_count": 3,
+  "knowledge_closure_required": true,
+  "knowledge_closure_status": "exported"
 }

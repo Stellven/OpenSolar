@@ -112,7 +112,7 @@ DEFAULT_PROFILE_CONFIG: dict[str, Any] = {
             "backend": "command",
             "model": "thunderomlx",
             "approval_mode": "default",
-            "best_for": ["knowledge-extraction", "wiki-ingest", "qmd-indexing"],
+            "best_for": ["knowledge-extraction", "knowledge-preprocess", "evidence-atom", "wiki-ingest", "qmd-indexing"],
             "command": "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/thunderomlx_knowledge_extract_agent.py\"",
             "max_parallel": 1,
         },

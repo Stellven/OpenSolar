@@ -152,7 +152,7 @@
       "by": "coordinator"
     }
   ],
-  "updated_at": "2026-05-13T11:18:32Z",
+  "updated_at": "2026-05-24T01:51:13Z",
   "event_count": 46,
   "last_event_ts": "2026-05-13T01:43:54Z",
   "projected_at": "2026-05-13T01:43:54Z",
@@ -163,7 +163,11 @@
   "knowledge_export_status": "exported",
   "knowledge_export_path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260512-managed-agent-runtime-interfaces.accepted.md",
   "knowledge_ingest_dispatch": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260512-managed-agent-runtime-interfaces.dispatch.md",
-  "knowledge_exported_at": "2026-05-13T11:18:32Z",
+  "knowledge_exported_at": "2026-05-24T01:51:13Z",
   "knowledge_ingested_at": null,
-  "knowledge_export_error": null
+  "knowledge_export_error": null,
+  "knowledge_source_artifact_index": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260512-managed-agent-runtime-interfaces.source_artifact_index.md",
+  "knowledge_summary_count": 3,
+  "knowledge_closure_required": true,
+  "knowledge_closure_status": "exported"
 }

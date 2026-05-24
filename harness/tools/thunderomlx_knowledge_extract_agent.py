@@ -27,6 +27,7 @@ LOCAL_MODEL = os.environ.get("THUNDEROMLX_LOCAL_MODEL", "Qwen3.6-35b-a3b")
 API_KEY = os.environ.get("THUNDEROMLX_AUTH_TOKEN", "local-thunderomlx")
 MAX_SOURCE_CHARS = int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_MAX_SOURCE_CHARS", "42000") or "42000")
 MAX_TOKENS = int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_MAX_TOKENS", "2200") or "2200")
+MODEL_POLICY = "local_thunderomlx_default_for_knowledge_extraction_preprocess"
 
 
 def now() -> str:
@@ -154,6 +155,11 @@ def build_prompt(node: dict[str, Any], sources: list[dict[str, Any]]) -> str:
         )
     return f"""你是 Solar Harness 的知识库抽取 worker。请只基于下面的源文档做中文知识抽取，不要编造。
 
+模型策略：
+- 当前任务属于知识库抽取/清洗/预处理，默认使用 ThunderOMLX 本地模型。
+- 不做趋势研判、战略总结或最终高级报告；这些任务必须由 reasoning_packet 之后的 premium reasoner 处理。
+- 不改变 embedding 路线；本 worker 不执行向量化。
+
 输出必须是 Markdown，并包含这些固定章节：
 
 1. 功能模块
@@ -206,6 +212,8 @@ def main() -> int:
         "base_url": BASE_URL,
         "proxy_model": PROXY_MODEL,
         "local_model": LOCAL_MODEL,
+        "model_policy": MODEL_POLICY,
+        "embedding_route": "unchanged",
         "source_count": len(sources),
         "source_chars": sum(int(item.get("chars") or 0) for item in sources),
         "prompt_chars": len(prompt),
@@ -220,6 +228,8 @@ def main() -> int:
         f"backend: {meta['backend']}\n"
         f"proxy_model: {PROXY_MODEL}\n"
         f"local_model: {LOCAL_MODEL}\n"
+        f"model_policy: {MODEL_POLICY}\n"
+        "embedding_route: unchanged\n"
         "---\n\n"
         + text.strip()
         + "\n\n## 运行证据\n\n"
@@ -243,6 +253,8 @@ def main() -> int:
 - base_url={BASE_URL}
 - proxy_model={PROXY_MODEL}
 - local_model={LOCAL_MODEL}
+- model_policy={MODEL_POLICY}
+- embedding_route=unchanged
 - bad_chars={str(meta['bad_chars']).lower()}
 - usage={json.dumps(usage, ensure_ascii=False)}
 

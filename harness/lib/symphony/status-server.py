@@ -61,6 +61,7 @@ YOUTUBE_DIGEST_CONFIG = HARNESS_DIR / "config" / "youtube-influence-digest.yaml"
 AI_INFLUENCE_ACCOUNTS = HARNESS_DIR / "ai-influence-digest" / "references" / "accounts_extended.txt"
 GITHUB_TRENDS_CONFIG = HARNESS_DIR / "config" / "github-trends.yaml"
 GITHUB_TRENDS_DB = Path(os.environ.get("GITHUB_TRENDS_DB", str(HARNESS_DIR / "state" / "github-trends" / "github-trends.sqlite")))
+TECH_HOTSPOT_CONFIG = HARNESS_DIR / "config" / "tech-hotspot-radar.yaml"
 ACCEPTED_ASSETS_DIR = KNOWLEDGE_DIR / "_raw" / "solar-harness" / "accepted"
 ACCEPTED_ASSETS_MANIFEST = KNOWLEDGE_DIR / "_raw" / "solar-harness" / ".manifest" / "accepted-artifacts.json"
 MODEL_DOCTOR_HEALTH = HARNESS_DIR / "state" / "model-registry-doctor-health.json"
@@ -1767,6 +1768,22 @@ def _model_label_from_payload(payload: dict) -> str:
     return " / ".join(parts)
 
 
+def _model_runtime_detail_from_payload(payload: dict) -> dict:
+    model = payload.get("model") if isinstance(payload.get("model"), dict) else {}
+    usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else {}
+    token_usage = payload.get("token_usage") if isinstance(payload.get("token_usage"), dict) else {}
+    tokens = {**usage, **token_usage}
+    return {
+        "provider": str(model.get("auth_source") or payload.get("provider") or ""),
+        "model_flag": str(model.get("model_flag") or ""),
+        "base_url_host": str(model.get("base_url_host") or ""),
+        "persona": str(model.get("persona") or ""),
+        "claude_bin": str(model.get("claude_bin") or ""),
+        "tokens": tokens,
+        "operator_kernel": str(payload.get("operator_kernel") or payload.get("kernel") or ""),
+    }
+
+
 def _tail_jsonl_lines(path: Path, max_lines: int) -> list:
     try:
         with open(path, encoding="utf-8") as fh:
@@ -1863,6 +1880,7 @@ def _latest_model_call_for_pane(target: str, pane_id: str = "") -> dict:
         "instruction_preview": payload.get("instruction_preview") or "",
         "private_reasoning_visible": bool(payload.get("private_reasoning_visible", False)),
         "observability_boundary": payload.get("observability_boundary") or ("bounded_session_tail_scan_timeout" if timed_out else "bounded_session_tail_scan"),
+        **_model_runtime_detail_from_payload(payload),
     }
     _MODEL_CALL_CACHE[cache_key] = {"ts": now, "value": value}
     return dict(value)
@@ -1880,6 +1898,42 @@ def _skipped_model_call_status() -> dict:
         "instruction_preview": "",
         "private_reasoning_visible": False,
         "observability_boundary": "status_fast_path_model_call_skipped",
+    }
+
+
+def _pane_model_call_detail(target: str, pane_id: str = "") -> dict:
+    """Lazy, heavier model-call projection for a pane. Not used by /status."""
+    target = str(target or "").strip()
+    pane_id = str(pane_id or "").strip()
+    if not target:
+        return {"ok": False, "status": "error", "error": "target is required"}
+    if not pane_id:
+        pane_id = _run_tmux(["display-message", "-p", "-t", target, "#{pane_id}"], timeout=0.8).strip()
+    call = _latest_model_call_for_pane(target, pane_id)
+    pane_meta = {}
+    try:
+        for pane in _multi_task_panes_info():
+            if pane.get("pane") == target or (pane_id and str(pane.get("pane_id") or "") == pane_id):
+                pane_meta = {
+                    "model": pane.get("model") or "",
+                    "backend": pane.get("backend") or "",
+                    "operator_type": pane.get("operator_type") or "",
+                    "profile": pane.get("profile") or "",
+                    "role": pane.get("role") or "",
+                    "status": pane.get("status") or "",
+                    "task": pane.get("task") or {},
+                    "lease": pane.get("lease") or {},
+                }
+                break
+    except Exception:
+        pane_meta = {}
+    return {
+        "ok": True,
+        "target": target,
+        "pane_id": pane_id,
+        "model_call": call,
+        "pane": pane_meta,
+        "note": "lazy endpoint: bounded session-log scan; private model reasoning is not visible",
     }
 
 
@@ -2165,6 +2219,114 @@ def _solar_kb_status() -> dict:
         return {**empty, "error": "obsidian_vault_index table not found"}
     except Exception as exc:
         return {**empty, "error": str(exc)}
+
+
+def _tech_hotspot_db_path() -> Path:
+    env_path = os.environ.get("TECH_HOTSPOT_RADAR_DB") or os.environ.get("SOLAR_TECH_HOTSPOT_RADAR_DB")
+    if env_path:
+        return Path(env_path).expanduser()
+    if TECH_HOTSPOT_CONFIG.exists() and yaml is not None:
+        try:
+            data = yaml.safe_load(TECH_HOTSPOT_CONFIG.read_text(encoding="utf-8")) or {}
+            db_path = ((data.get("output") or {}).get("database") or "").strip()
+            if db_path:
+                return Path(db_path).expanduser()
+        except Exception:
+            pass
+    return HARNESS_DIR / "state" / "tech-hotspot-radar" / "tech-hotspot-radar.sqlite"
+
+
+def _safe_json_obj(value: object) -> dict:
+    if isinstance(value, dict):
+        return value
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(str(value))
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        return {}
+
+
+def _tech_hotspot_reasoning_policy_summary(limit: int = 8) -> dict:
+    """Return recent reasoning packet policy routes for the dashboard. Never raises."""
+    db_path = _tech_hotspot_db_path()
+    empty = {
+        "status": "missing",
+        "ok": False,
+        "db_path": str(db_path),
+        "total_packets": 0,
+        "items": [],
+        "route_counts": {},
+        "premium_allowed": 0,
+        "embedding_unchanged": 0,
+    }
+    if not db_path.exists():
+        return {**empty, "error": "tech-hotspot-radar database not found"}
+    try:
+        with sqlite3.connect(str(db_path), timeout=0.3) as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA query_only=1")
+            exists = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='reasoning_packets'"
+            ).fetchone()
+            if not exists:
+                return {**empty, "status": "warn", "error": "reasoning_packets table not found"}
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(reasoning_packets)").fetchall()}
+            required = {"model_policy_json", "premium_escalation_json", "embedding_policy_json"}
+            missing_columns = sorted(required - columns)
+            total = conn.execute("SELECT COUNT(*) FROM reasoning_packets").fetchone()[0] or 0
+            select_policy = "model_policy_json" if "model_policy_json" in columns else "'{}' AS model_policy_json"
+            select_premium = "premium_escalation_json" if "premium_escalation_json" in columns else "'{}' AS premium_escalation_json"
+            select_embedding = "embedding_policy_json" if "embedding_policy_json" in columns else "'{}' AS embedding_policy_json"
+            rows = conn.execute(
+                "SELECT packet_id, packet_type, evidence_atom_count, token_budget, created_at, "
+                f"{select_policy}, {select_premium}, {select_embedding} "
+                "FROM reasoning_packets ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            items = []
+            route_counts: dict[str, int] = {}
+            premium_allowed = 0
+            embedding_unchanged = 0
+            for row in rows:
+                model_policy = _safe_json_obj(row["model_policy_json"])
+                premium = _safe_json_obj(row["premium_escalation_json"])
+                embedding = _safe_json_obj(row["embedding_policy_json"])
+                route = str(model_policy.get("route") or "unknown")
+                route_counts[route] = route_counts.get(route, 0) + 1
+                if premium.get("allowed") is True:
+                    premium_allowed += 1
+                if embedding.get("route") == "embedding_unchanged":
+                    embedding_unchanged += 1
+                items.append({
+                    "packet_id": row["packet_id"],
+                    "packet_type": row["packet_type"],
+                    "created_at": row["created_at"],
+                    "evidence_atom_count": row["evidence_atom_count"],
+                    "token_budget": row["token_budget"],
+                    "route": route,
+                    "default_model_family": model_policy.get("default_model_family") or "N/A",
+                    "premium_allowed": bool(premium.get("allowed")),
+                    "premium_reason": premium.get("reason") or "N/A",
+                    "embedding_route": embedding.get("route") or "N/A",
+                })
+            status = "warn" if missing_columns else "ok"
+            return {
+                **empty,
+                "status": status,
+                "ok": not missing_columns,
+                "total_packets": total,
+                "items": items,
+                "route_counts": route_counts,
+                "premium_allowed": premium_allowed,
+                "embedding_unchanged": embedding_unchanged,
+                "missing_columns": missing_columns,
+            }
+    except sqlite3.OperationalError as exc:
+        return {**empty, "status": "warn", "error": str(exc)}
+    except Exception as exc:
+        return {**empty, "status": "error", "error": str(exc)}
 
 
 def _obsidian_sync_status() -> dict:
@@ -2642,12 +2804,83 @@ def _pm_dispatch_summary(limit: int = 8) -> dict:
         }
 
 
+def _recent_operator_results(results_dir: Path, multi_task_dir: Path, limit: int = 8) -> list[dict]:
+    """Return recent physical operator executions from canonical results plus legacy task status."""
+    rows: list[tuple[float, dict]] = []
+    seen: set[tuple[str, str]] = set()
+    max_items = max(1, limit)
+    if results_dir.exists():
+        result_paths = sorted(
+            results_dir.glob("*/*/result.json"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )[: max_items]
+        for path in result_paths:
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            operator_id = str(data.get("operator_id") or path.parents[1].name)
+            task_id = str(data.get("task_id") or path.parent.name)
+            seen.add((operator_id, task_id))
+            rows.append((path.stat().st_mtime, {
+                "operator_id": operator_id,
+                "task_id": task_id,
+                "status": str(data.get("status") or "unknown"),
+                "started_at": str(data.get("started_at") or ""),
+                "finished_at": str(data.get("finished_at") or ""),
+                "exit_code": data.get("exit_code"),
+                "sprint_id": str(data.get("sprint_id") or ""),
+                "node_id": str(data.get("node_id") or ""),
+                "model": str(data.get("model") or data.get("operator_model") or ""),
+                "backend": str(data.get("backend") or ""),
+                "source": "operator-results",
+            }))
+
+    if multi_task_dir.exists():
+        status_paths = sorted(
+            multi_task_dir.glob("*/status.json"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        for path in status_paths:
+            if len(rows) >= max_items:
+                break
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            operator_id = str(data.get("operator_id") or "")
+            task_id = str(data.get("id") or data.get("task_id") or path.parent.name)
+            if not operator_id or operator_id == "N/A" or (operator_id, task_id) in seen:
+                continue
+            status = str(data.get("status") or "unknown")
+            rows.append((path.stat().st_mtime, {
+                "operator_id": operator_id,
+                "task_id": task_id,
+                "status": status,
+                "started_at": str(data.get("created_at") or ""),
+                "finished_at": str(data.get("updated_at") or "") if status not in {"running", "submitted", "dispatched"} else "",
+                "exit_code": data.get("exit_code"),
+                "sprint_id": str(data.get("sprint_id") or ""),
+                "node_id": str(data.get("node_id") or ""),
+                "model": str(data.get("operator_model") or data.get("model") or ""),
+                "backend": str(data.get("backend") or ""),
+                "source": "multi-task-status",
+            }))
+            seen.add((operator_id, task_id))
+
+    rows.sort(key=lambda row: row[0], reverse=True)
+    return [row for _, row in rows[:max_items]]
+
+
 def _physical_operator_summary(limit: int = 8) -> dict:
     """Summarize physical operator fleet state for the main status dashboard."""
     registry_path = HARNESS_DIR / "config" / "physical-operators.json"
     lease_dir = HARNESS_DIR / "run" / "operator-leases"
     status_dir = HARNESS_DIR / "run" / "operator-status"
     results_dir = HARNESS_DIR / "run" / "operator-results"
+    multi_task_dir = HARNESS_DIR / "run" / "multi-task"
     empty = {
         "ok": False,
         "status": "missing",
@@ -2665,6 +2898,7 @@ def _physical_operator_summary(limit: int = 8) -> dict:
             "leases": str(lease_dir),
             "status": str(status_dir),
             "results": str(results_dir),
+            "multi_task": str(multi_task_dir),
         },
     }
     if not registry_path.exists():
@@ -2755,43 +2989,23 @@ def _physical_operator_summary(limit: int = 8) -> dict:
                 "expires_at": str(lease.get("expires_at") or ""),
             })
 
-        recent_results = []
-        if results_dir.exists():
-            result_paths = sorted(
-                results_dir.glob("*/*/result.json"),
-                key=lambda p: p.stat().st_mtime,
-                reverse=True,
-            )[: max(1, limit)]
-            for path in result_paths:
-                try:
-                    data = json.loads(path.read_text(encoding="utf-8"))
-                except Exception:
-                    continue
-                recent_results.append({
-                    "operator_id": str(data.get("operator_id") or path.parents[1].name),
-                    "task_id": str(data.get("task_id") or path.parent.name),
-                    "status": str(data.get("status") or "unknown"),
-                    "started_at": str(data.get("started_at") or ""),
-                    "finished_at": str(data.get("finished_at") or ""),
-                    "exit_code": data.get("exit_code"),
-                    "sprint_id": str(data.get("sprint_id") or ""),
-                    "node_id": str(data.get("node_id") or ""),
-                })
+        recent_results = _recent_operator_results(results_dir, multi_task_dir, limit=limit)
 
-        state_rank = {
-            "running": 0,
-            "leased": 1,
-            "draining": 2,
-            "cooldown": 3,
-            "quota_exhausted": 4,
-            "auth_expired": 5,
-            "error": 6,
-            "disabled": 7,
-            "idle": 8,
-        }
-        items.sort(key=lambda item: (state_rank.get(str(item.get("runtime_state") or ""), 99), item["operator_id"]))
-        non_idle = [item for item in items if str(item.get("runtime_state")) != "idle"]
-        visible = non_idle[:limit] if non_idle else items[: min(limit, len(items))]
+        def _display_rank(item: dict[str, Any]) -> tuple[int, int, str]:
+            runtime_state = str(item.get("runtime_state") or "")
+            enabled = bool(item.get("enabled"))
+            available = bool(item.get("available"))
+            if enabled and available and runtime_state == "idle":
+                return (0, 0, str(item.get("operator_id") or ""))
+            if runtime_state in {"leased", "running", "draining"}:
+                return (1, 0, str(item.get("operator_id") or ""))
+            if runtime_state in {"cooldown", "quota_exhausted", "auth_expired", "error"}:
+                return (2, 0, str(item.get("operator_id") or ""))
+            if runtime_state == "disabled" or not enabled:
+                return (3, 0, str(item.get("operator_id") or ""))
+            return (4, 0, str(item.get("operator_id") or ""))
+
+        items.sort(key=_display_rank)
         summary_status = "ok"
         if any(str(item.get("runtime_state")) in {"quota_exhausted", "auth_expired", "error"} for item in items):
             summary_status = "warn"
@@ -2808,7 +3022,7 @@ def _physical_operator_summary(limit: int = 8) -> dict:
             "dispatchable": dispatchable_count,
             "busy": busy_count,
             "roles": roles,
-            "items": visible,
+            "items": items,
             "alerts": alerts[:limit],
             "recent_results": recent_results,
             "sources": {
@@ -2816,6 +3030,7 @@ def _physical_operator_summary(limit: int = 8) -> dict:
                 "leases": str(lease_dir),
                 "status": str(status_dir),
                 "results": str(results_dir),
+                "multi_task": str(multi_task_dir),
             },
         }
     except Exception as exc:
@@ -2902,20 +3117,195 @@ def _final_contract_summary_html() -> str:
     )
 
 
+def _pane_title_model(title: str) -> str:
+    match = re.search(r"模型:([^|]+)", title or "")
+    if match:
+        return match.group(1).strip()
+    return ""
+
+
+def _pane_operator_type(pool: str, command: str) -> str:
+    if pool == "builder-lab":
+        return "builder_lab_pane"
+    if command in {"zsh", "bash", "sh", "fish"}:
+        return "shell_worker"
+    return "command_worker"
+
+
+def _multi_task_shell_panes_info() -> list:
+    """Return legacy multi-task shell panes with task/lease context."""
+    session = "solar-harness-multi-task"
+    cmd = ["list-panes", "-s", "-t", session, "-F", "#{window_index}\t#{window_name}\t#{window_active}\t#{pane_index}\t#{pane_current_command}\t#{pane_title}\t#{pane_active}\t#{pane_id}"]
+    raw_panes = _run_tmux(cmd)
+    if not raw_panes:
+        return []
+    
+    leases = {}
+    lease_dir = HARNESS_DIR / "run" / "operator-leases"
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    if lease_dir.exists():
+        for path in lease_dir.glob("*.json"):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if str(data.get("expires_at") or "") > now:
+                pane_target = data.get("pane")
+                if pane_target:
+                    leases[pane_target] = data
+                    
+    run_dir = HARNESS_DIR / "run" / "multi-task"
+    latest_by_window = {}
+    if run_dir.exists():
+        status_paths = sorted(run_dir.glob("*/status.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        for path in status_paths:
+            try:
+                row = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            window_name = str(row.get("window") or "").strip()
+            if not window_name or window_name in latest_by_window:
+                continue
+            latest_by_window[window_name] = {
+                "task_id": str(row.get("id") or ""),
+                "status": str(row.get("status") or ""),
+                "updated_at": str(row.get("updated_at") or row.get("created_at") or ""),
+                "sprint_id": str(row.get("sprint_id") or ""),
+                "node_id": str(row.get("node_id") or ""),
+                "profile": str(row.get("profile") or ""),
+                "role": str(row.get("role") or ""),
+            }
+
+    panes_list = []
+    for line in raw_panes.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 8:
+            continue
+        w_idx, w_name, w_active, p_idx, p_cmd, p_title, p_active, p_id = parts[:8]
+        pane_target = f"{session}:{w_idx}"
+        lease = leases.get(pane_target) or leases.get(f"{session}:{w_idx}.{p_idx}") or {}
+        task_meta = latest_by_window.get(w_name) or {}
+        task_status = str(task_meta.get("status") or "").lower()
+        
+        status = "idle"
+        if lease:
+            status = "leased"
+        elif p_cmd not in {"zsh", "bash", "sh", "fish"}:
+            status = "running"
+        elif task_status in {"completed", "completed_aligned", "failed", "failed_missing_handoff", "cancelled", "reaped", "reaped_stale_active"} or task_status.startswith("reaped"):
+            status = "historical_active" if w_active == "1" else "reusable_idle"
+            
+        panes_list.append({
+            "pane": pane_target,
+            "session": session,
+            "pool": "multi-task",
+            "operator_type": _pane_operator_type("multi-task", p_cmd),
+            "backend": str(lease.get("backend") or task_meta.get("backend") or "tmux-pane"),
+            "model": str(lease.get("model") or task_meta.get("model") or _pane_title_model(p_title) or ""),
+            "profile": str(lease.get("profile") or task_meta.get("profile") or ""),
+            "role": str(lease.get("role") or task_meta.get("role") or ""),
+            "window_index": int(w_idx),
+            "window_name": w_name,
+            "pane_index": int(p_idx),
+            "current_command": p_cmd,
+            "title": p_title,
+            "status": status,
+            "active": w_active == "1",
+            "lease": lease,
+            "task": task_meta,
+        })
+    return panes_list
+
+
+def _builder_lab_panes_info() -> list:
+    """Return builder-lab panes as part of the broader headless pool."""
+    session = "solar-harness-lab"
+    cmd = ["list-panes", "-s", "-t", session, "-F", "#{window_index}\t#{window_name}\t#{window_active}\t#{pane_index}\t#{pane_current_command}\t#{pane_title}\t#{pane_active}\t#{pane_id}"]
+    raw_panes = _run_tmux(cmd)
+    if not raw_panes:
+        return []
+
+    panes_list = []
+    for line in raw_panes.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 8:
+            continue
+        w_idx, w_name, w_active, p_idx, p_cmd, p_title, p_active, p_id = parts[:8]
+        status = "idle"
+        title_l = (p_title or "").lower()
+        if p_cmd not in {"zsh", "bash", "sh", "fish"}:
+            status = "running"
+        elif "leased" in title_l or "running" in title_l:
+            status = "running"
+        elif "idle" in title_l or "no active sprint" in title_l:
+            status = "idle"
+        panes_list.append({
+            "pane": f"{session}:0.{p_idx}",
+            "session": session,
+            "pool": "builder-lab",
+            "operator_type": _pane_operator_type("builder-lab", p_cmd),
+            "backend": "tmux-pane",
+            "model": _pane_title_model(p_title),
+            "profile": "builder-lab",
+            "role": "builder",
+            "window_index": int(w_idx),
+            "window_name": w_name,
+            "pane_index": int(p_idx),
+            "current_command": p_cmd,
+            "title": p_title,
+            "status": status,
+            "active": w_active == "1",
+            "lease": {},
+            "task": {},
+        })
+    return panes_list
+
+
+def _multi_task_panes_info() -> list:
+    """Return the full headless pane pool shown under 8765 #lab."""
+    return _builder_lab_panes_info() + _multi_task_shell_panes_info()
+
+
+def _multi_task_pane_pool_summary(panes: list[dict]) -> dict:
+    counts = {
+        "total": len(panes),
+        "idle": 0,
+        "reusable_idle": 0,
+        "historical_active": 0,
+        "leased": 0,
+        "running": 0,
+    }
+    for pane in panes:
+        status = str(pane.get("status") or "idle")
+        if status in counts:
+            counts[status] += 1
+        else:
+            counts["idle"] += 1
+    counts["target_keep"] = max(0, int(os.environ.get("SOLAR_MULTI_TASK_IDLE_WINDOW_POOL_TARGET", "1") or "1"))
+    counts["reuse_enabled"] = str(os.environ.get("SOLAR_MULTI_TASK_REUSE_TERMINAL_WINDOWS", "1") or "1").lower() not in {"0", "false", "no", "off"}
+    counts["auto_close_enabled"] = str(os.environ.get("SOLAR_MULTI_TASK_AUTO_CLOSE_TERMINAL_WINDOWS", "1") or "1").lower() not in {"0", "false", "no", "off"}
+    counts["compact_recommended"] = counts["historical_active"] > 0 or counts["reusable_idle"] > counts["target_keep"]
+    return counts
+
+
 def _status_payload(limit: int = 50) -> dict:
     current = _current_sprint()
     runtime_interfaces = _runtime_interfaces_status(current.get("sprint_id", ""))
     capability_health = _capability_health_summary(runtime_interfaces)
+    multi_task_panes = _multi_task_panes_info()
     return {
         "current_sprint": current,
         "panes": _pane_info(),
         "main_screen": _main_screen(capability_health, include_model_call=False),
         "lab_screen": _lab_screen(capability_health, include_model_call=False),
+        "multi_task_panes": multi_task_panes,
+        "multi_task_pane_pool": _multi_task_pane_pool_summary(multi_task_panes),
         "recent_events": _read_jsonl(ALL_EVENTS, limit=limit, filter_synthetic=True),
         "kpi": _kpi(),
         "obsidian_wiki": _obsidian_wiki_readiness(),
         "mirage": _mirage_status(),
         "knowledge_progress": _knowledge_ingest_progress_payload(),
+        "knowledge_routing": _tech_hotspot_reasoning_policy_summary(),
         "capability_health": capability_health,
         "solar_kb": _solar_kb_status(),
         "obsidian_sync": _obsidian_sync_status(),
@@ -2989,268 +3379,363 @@ _HTML_TEMPLATE = """\
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Solar Harness Status</title>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
 :root {
-  --bg: #f3efe4;
-  --ink: #18211f;
-  --muted: #68726d;
-  --panel: rgba(255, 252, 244, 0.86);
-  --panel-solid: #fffaf0;
-  --line: rgba(30, 43, 39, 0.14);
-  --shadow: 0 24px 80px rgba(33, 27, 18, 0.12);
-  --accent: #e4572e;
-  --accent-2: #0f6b68;
-  --accent-3: #f0b429;
-  --warn: #b7791f;
-  --error: #bf2f2f;
-  --ok: #197a50;
-  --code: #17211f;
-  --page-max: 1380px;
-  --page-pad: clamp(20px, 4vw, 56px);
+  --bg: #070a13;
+  --ink: #ffffff;
+  --muted: #cbd5e1;
+  --panel: rgba(15, 23, 42, 0.45);
+  --panel-solid: #0f172a;
+  --line: rgba(255, 255, 255, 0.08);
+  --shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  --accent: #f43f5e;
+  --accent-2: #06b6d4;
+  --accent-3: #f59e0b;
+  --warn: #fbbf24;
+  --error: #ef4444;
+  --ok: #10b981;
+  --code: #030712;
+  --page-max: 1400px;
+  --page-pad: clamp(16px, 4vw, 48px);
 }
 * { box-sizing: border-box; }
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: "Avenir Next", "Gill Sans", "Trebuchet MS", sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background:
-    radial-gradient(circle at 8% 8%, rgba(228, 87, 46, 0.18), transparent 23rem),
-    radial-gradient(circle at 92% 4%, rgba(15, 107, 104, 0.16), transparent 24rem),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.42), transparent 36%),
-    var(--bg);
+    radial-gradient(circle at 10% 10%, rgba(244, 63, 94, 0.06), transparent 45rem),
+    radial-gradient(circle at 90% 10%, rgba(6, 182, 212, 0.10), transparent 45rem),
+    radial-gradient(circle at 50% 85%, rgba(16, 185, 129, 0.04), transparent 50rem),
+    #070a13;
   color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+/* Custom modern scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #070a13;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 99px;
+  border: 2px solid #070a13;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
 }
 header {
-  padding: 1.35rem var(--page-pad) 0.75rem;
+  padding: 2rem var(--page-pad) 1rem;
 }
 .hero {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
   max-width: var(--page-max);
   margin: 0 auto;
-  padding: 1.35rem;
+  padding: 1.5rem 2rem;
   border: 1px solid var(--line);
-  border-radius: 28px;
-  background: linear-gradient(135deg, rgba(255, 250, 240, 0.92), rgba(255, 247, 226, 0.62));
+  border-radius: 24px;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   box-shadow: var(--shadow);
 }
 .eyebrow {
-  color: var(--accent);
-  font: 800 0.72rem ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing: 0.18em;
+  color: var(--accent-2);
+  font: 800 0.72rem ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
+  text-shadow: 0 0 12px rgba(6, 182, 212, 0.3);
 }
 h1 {
-  margin: 0.25rem 0 0;
-  color: var(--ink);
-  font-family: "Iowan Old Style", "Palatino", Georgia, serif;
-  font-size: clamp(2rem, 4vw, 4rem);
-  line-height: 0.95;
-  letter-spacing: -0.055em;
+  margin: 0.35rem 0 0;
+  color: #ffffff;
+  font-weight: 900;
+  font-size: clamp(1.8rem, 3.5vw, 2.6rem);
+  letter-spacing: -0.04em;
+  background: linear-gradient(135deg, #ffffff 40%, #94a3b8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 h2 {
-  margin: 0 0 0.85rem;
-  color: var(--ink);
-  font-size: 1.1rem;
+  margin: 0 0 1rem;
+  color: #ffffff;
+  font-size: 1.25rem;
+  font-weight: 800;
   letter-spacing: -0.02em;
 }
 h3 {
-  margin: 0 0 0.55rem;
-  color: var(--ink);
-  font-size: 0.93rem;
-  letter-spacing: 0.01em;
+  margin: 0 0 0.65rem;
+  color: #e2e8f0;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
-a { color: var(--accent-2); }
+a { color: var(--accent-2); text-decoration: none; transition: color 0.2s; }
+a:hover { color: #22d3ee; }
 main {
   max-width: var(--page-max);
   margin: 0 auto;
-  padding: 1.1rem var(--page-pad) 2.5rem;
+  padding: 1.2rem var(--page-pad) 3rem;
 }
 .subhead {
   color: var(--muted);
-  font: 600 0.84rem ui-monospace, SFMono-Regular, Menlo, monospace;
-  margin-top: 0.45rem;
+  font: 600 0.8rem ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
 }
 .tabbar {
   display: flex;
-  gap: 0.45rem;
+  gap: 0.25rem;
   overflow-x: auto;
-  width: calc(100% - clamp(40px, 8vw, 112px));
+  width: calc(100% - clamp(32px, 8vw, 96px));
   max-width: var(--page-max);
-  margin: 0.95rem auto 0;
-  padding: 0.45rem;
+  margin: 1.2rem auto 0;
+  padding: 0.35rem;
   position: sticky;
-  top: 0.5rem;
-  z-index: 6;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: rgba(255, 250, 240, 0.78);
-  backdrop-filter: blur(18px);
-  box-shadow: 0 14px 48px rgba(33, 27, 18, 0.10);
+  top: 0.75rem;
+  z-index: 99;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 99px;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 20px 50px rgba(0,0,0,0.4);
 }
 .tab, .tab-link {
   border: 0;
   background: transparent;
-  color: #59635f;
-  border-radius: 999px;
-  padding: 0.68rem 0.95rem;
-  font: 800 0.86rem "Avenir Next", "Gill Sans", sans-serif;
+  color: #94a3b8;
+  border-radius: 99px;
+  padding: 0.6rem 1.1rem;
+  font: 700 0.84rem 'Inter', sans-serif;
   cursor: pointer;
   white-space: nowrap;
   text-decoration: none;
-  transition: transform 120ms ease, background 120ms ease, color 120ms ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .tab.active {
-  background: var(--ink);
-  color: #fff9ea;
-  box-shadow: 0 10px 24px rgba(24, 33, 31, 0.20);
+  background: linear-gradient(135deg, var(--accent-2) 0%, #0891b2 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 15px rgba(6, 182, 212, 0.35);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
-.tab:hover, .tab-link:hover { transform: translateY(-1px); }
+.tab:hover, .tab-link:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.05);
+}
+.tab.active:hover {
+  background: linear-gradient(135deg, var(--accent-2) 0%, #0891b2 100%);
+  transform: scale(1.02);
+}
 .panel { display: none; }
-.panel.active { display: block; animation: rise 180ms ease-out; }
+.panel.active { display: block; animation: rise 220ms cubic-bezier(0.34, 1.56, 0.64, 1); }
 @keyframes rise {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 1rem; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.2rem; }
 .card {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 24px;
-  padding: 1.05rem;
-  margin-bottom: 1rem;
+  border-radius: 20px;
+  padding: 1.5rem;
+  margin-bottom: 1.2rem;
   box-shadow: var(--shadow);
-  overflow: hidden;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s, border-color 0.25s;
 }
-.card:nth-child(4n + 1) { background: linear-gradient(145deg, rgba(255, 252, 244, 0.92), rgba(255, 239, 205, 0.72)); }
-.card:nth-child(4n + 2) { background: linear-gradient(145deg, rgba(255, 252, 244, 0.92), rgba(221, 240, 234, 0.72)); }
-.card:nth-child(4n + 3) { background: linear-gradient(145deg, rgba(255, 252, 244, 0.92), rgba(249, 225, 213, 0.72)); }
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7), 0 0 1px rgba(255, 255, 255, 0.12) inset;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+.card:nth-child(4n + 1), .card:nth-child(4n + 2), .card:nth-child(4n + 3) {
+  background: rgba(15, 23, 42, 0.45);
+}
 .metric {
-  font-family: "Iowan Old Style", "Palatino", Georgia, serif;
-  font-size: 2.6rem;
+  font-weight: 800;
+  font-size: 2.8rem;
   line-height: 1;
-  color: var(--accent);
+  color: var(--accent-2);
   margin-top: 0.35rem;
+  text-shadow: 0 0 20px rgba(6, 182, 212, 0.15);
 }
 .muted { color: var(--muted); }
 .task-block {
   display: grid;
-  gap: 0.72rem;
+  gap: 0.8rem;
 }
 .task-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
-  padding-bottom: 0.7rem;
+  padding-bottom: 0.8rem;
   border-bottom: 1px solid var(--line);
 }
 .task-title {
-  font: 800 1rem "Avenir Next", "Gill Sans", sans-serif;
+  font: 800 1.05rem 'Inter', sans-serif;
   letter-spacing: -0.02em;
+  color: #ffffff;
 }
 .kv-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 0.55rem;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 0.6rem;
 }
 .kv {
   border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 0.62rem 0.72rem;
-  background: rgba(255, 255, 255, 0.38);
+  border-radius: 12px;
+  padding: 0.65rem 0.75rem;
+  background: rgba(255, 255, 255, 0.015);
+  transition: background 0.2s;
+}
+.kv:hover {
+  background: rgba(255, 255, 255, 0.03);
 }
 .kv-label {
   color: var(--muted);
-  font: 800 0.68rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 800 0.65rem ui-monospace, monospace;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 .kv-value {
-  margin-top: 0.18rem;
-  font-weight: 800;
+  margin-top: 0.2rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  font-size: 0.85rem;
 }
 .summary-list {
   display: grid;
-  gap: 0.45rem;
+  gap: 0.5rem;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 .summary-list li {
   position: relative;
-  padding: 0.58rem 0.7rem 0.58rem 1.9rem;
+  padding: 0.65rem 0.8rem 0.65rem 2rem;
   border: 1px solid var(--line);
-  border-radius: 14px;
-  background: rgba(255, 252, 244, 0.52);
-  line-height: 1.45;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.01);
+  line-height: 1.5;
+  font-size: 0.88rem;
+  color: #f1f5f9;
+  transition: all 0.2s;
+}
+.summary-list li:hover {
+  background: rgba(255, 255, 255, 0.025);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 .summary-list li::before {
   content: "";
   position: absolute;
-  left: 0.78rem;
-  top: 1.05rem;
-  width: 0.44rem;
-  height: 0.44rem;
+  left: 0.85rem;
+  top: 1.15rem;
+  width: 0.35rem;
+  height: 0.35rem;
   border-radius: 999px;
-  background: var(--accent);
+  background: var(--accent-2);
+  box-shadow: 0 0 8px var(--accent-2);
 }
 .tech-id {
   color: var(--muted);
-  font: 700 0.72rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 700 0.74rem ui-monospace, monospace;
   word-break: break-all;
 }
 .path-text {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.86rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.84rem;
   overflow-wrap: anywhere;
-  word-break: break-word;
+  word-break: break-all;
+  color: #cbd5e1;
 }
-.badge {
-  display:inline-block;
-  padding: 3px 9px;
+.badge, .level-badge {
+  display: inline-block;
+  padding: 4px 10px;
   border-radius: 999px;
-  font: 800 0.74rem ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: #fffaf0;
-  background: var(--muted);
+  font: 700 0.7rem ui-monospace, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  border: 1px solid rgba(255,255,255,0.06);
 }
-.badge.active, .badge.passed, .badge.ok { background: var(--ok); }
-.badge.reviewing { background: var(--accent-2); }
-.badge.failed, .badge.error-badge { background: var(--error); }
-.badge.warn-badge { background: var(--warn); }
-.warn { color: var(--warn); }
-.error { color: var(--error); }
+.badge.active, .badge.passed, .badge.ok, .level-badge.ok {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.25);
+}
+.badge.reviewing {
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+  border-color: rgba(59, 130, 246, 0.25);
+}
+.badge.failed, .badge.error-badge, .level-badge.error-badge {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.25);
+}
+.badge.warn-badge, .level-badge.warn {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.25);
+}
+.badge.default, .level-badge.default {
+  background: rgba(255, 255, 255, 0.05);
+  color: #cbd5e1;
+}
+.badge.missing, .level-badge.missing {
+  background: rgba(255, 255, 255, 0.02);
+  color: #94a3b8;
+}
+.warn { color: var(--warn); font-weight: 600; }
+.error { color: var(--error); font-weight: 600; }
 .info { color: var(--accent-2); }
-.ok-text { color: var(--ok); }
+.ok-text { color: #34d399; }
 table {
   border-collapse: separate;
   border-spacing: 0;
   width: 100%;
   overflow: hidden;
-  border-radius: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(10, 15, 26, 0.4);
 }
 th {
   text-align: left;
-  color: #55615c;
+  color: #cbd5e1;
   border-bottom: 1px solid var(--line);
-  padding: 9px 10px;
-  font: 800 0.76rem ui-monospace, SFMono-Regular, Menlo, monospace;
-  background: rgba(255, 255, 255, 0.34);
+  padding: 12px 14px;
+  font: 800 0.74rem ui-monospace, monospace;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.02);
 }
 td {
-  padding: 9px 10px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--line);
-  font-size: 0.9rem;
-  vertical-align: top;
-  background: rgba(255, 252, 244, 0.34);
+  font-size: 0.88rem;
+  color: #f1f5f9;
+  background: transparent;
+  vertical-align: middle;
+}
+tr:last-child td {
+  border-bottom: none;
+}
+tr:hover td {
+  background: rgba(255, 255, 255, 0.015);
 }
 .refresh {
   color: var(--muted);
-  font: 600 0.78rem ui-monospace, SFMono-Regular, Menlo, monospace;
-  margin-bottom: 0.5rem;
+  font: 600 0.76rem ui-monospace, monospace;
+  margin-bottom: 0.6rem;
 }
-.actions { display: flex; flex-wrap: wrap; gap: 0.65rem; margin: 0.8rem 0; }
+.actions { display: flex; flex-wrap: wrap; gap: 0.65rem; margin: 1rem 0; }
 .knowledge-shell {
   display: grid;
   gap: 1rem;
@@ -3262,11 +3747,12 @@ td {
   align-items: stretch;
 }
 .knowledge-title {
-  font-family: "Iowan Old Style", "Palatino", Georgia, serif;
-  font-size: clamp(1.9rem, 3vw, 3.2rem);
-  line-height: 0.98;
-  letter-spacing: -0.055em;
-  margin: 0 0 0.75rem;
+  font-weight: 900;
+  font-size: clamp(1.8rem, 3vw, 2.5rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  margin: 0 0 0.8rem;
+  color: #ffffff;
 }
 .status-strip {
   display: grid;
@@ -3277,13 +3763,17 @@ td {
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 0.85rem;
-  background: rgba(255,255,255,0.42);
+  background: rgba(255,255,255,0.02);
   min-width: 0;
+  transition: border-color 0.2s;
+}
+.status-tile:hover {
+  border-color: rgba(255, 255, 255, 0.12);
 }
 .status-tile strong {
   display: block;
   margin-top: 0.4rem;
-  font-size: 1.02rem;
+  font-size: 1.05rem;
   overflow-wrap: anywhere;
   word-break: break-word;
   line-height: 1.25;
@@ -3300,10 +3790,15 @@ td {
   justify-content: space-between;
   border: 1px solid var(--line);
   border-radius: 22px;
-  padding: 1rem;
-  background: rgba(255, 252, 244, 0.58);
+  padding: 1.2rem;
+  background: rgba(255, 255, 255, 0.015);
+  transition: all 0.2s;
 }
-.action-card h3 { margin-bottom: 0.35rem; }
+.action-card:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+}
+.action-card h3 { margin-bottom: 0.35rem; color: #ffffff; }
 .health-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -3312,38 +3807,42 @@ td {
 .overview-shell {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(290px, 0.55fr);
-  gap: 1rem;
+  gap: 1.2rem;
   align-items: stretch;
 }
 .overview-stack {
   display: grid;
-  gap: 1rem;
+  gap: 1.2rem;
 }
 .overview-bottom {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
+  gap: 1.2rem;
 }
 .overview-side-card {
   min-height: 0;
 }
 .health-metrics {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 0.65rem;
   margin-bottom: 0.8rem;
 }
 .mini-metric {
   border: 1px solid var(--line);
   border-radius: 16px;
-  padding: 0.75rem;
-  background: rgba(255, 255, 255, 0.42);
+  padding: 0.8rem;
+  background: rgba(255, 255, 255, 0.015);
+  transition: border-color 0.2s;
+}
+.mini-metric:hover {
+  border-color: rgba(255, 255, 255, 0.12);
 }
 .mini-metric .num {
   display: block;
   margin-top: 0.25rem;
   color: var(--accent-2);
-  font: 900 1.18rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 900 1.25rem ui-monospace, monospace;
   overflow-wrap: anywhere;
 }
 .mount-list {
@@ -3357,11 +3856,12 @@ td {
   align-items: center;
   border: 1px solid var(--line);
   border-radius: 14px;
-  padding: 0.62rem 0.72rem;
-  background: rgba(255, 252, 244, 0.50);
+  padding: 0.65rem 0.85rem;
+  background: rgba(255, 255, 255, 0.015);
 }
 .mount-path {
-  font: 900 0.86rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 900 0.86rem ui-monospace, monospace;
+  color: #e2e8f0;
 }
 .mount-reason {
   color: var(--muted);
@@ -3371,14 +3871,19 @@ td {
 .integration-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-  gap: 1rem;
+  gap: 1.2rem;
 }
 .integration-card {
   border: 1px solid var(--line);
   border-radius: 24px;
-  padding: 1rem;
-  background: rgba(255, 252, 244, 0.66);
-  box-shadow: 0 12px 32px rgba(33, 27, 18, 0.06);
+  padding: 1.25rem;
+  background: rgba(255, 255, 255, 0.015);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  transition: all 0.2s;
+}
+.integration-card:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.035);
 }
 .integration-head {
   display: flex;
@@ -3392,38 +3897,11 @@ td {
   gap: 0.35rem;
   align-items: flex-end;
 }
-.level-badge {
-  display: inline-block;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 0.22rem 0.55rem;
-  background: rgba(255, 255, 255, 0.50);
-  color: var(--ink);
-  font: 900 0.68rem ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-.level-badge.ok {
-  background: rgba(56, 128, 93, 0.14);
-  border-color: rgba(56, 128, 93, 0.28);
-  color: #1f6f5b;
-}
-.level-badge.default {
-  background: rgba(62, 107, 179, 0.14);
-  border-color: rgba(62, 107, 179, 0.26);
-  color: #254f91;
-}
-.level-badge.warn {
-  background: rgba(190, 112, 55, 0.16);
-  border-color: rgba(190, 112, 55, 0.30);
-  color: #8b4a1d;
-}
-.level-badge.missing {
-  background: rgba(117, 104, 88, 0.12);
-  color: var(--muted);
-}
 .integration-name {
-  font-size: 1.08rem;
-  font-weight: 900;
+  font-size: 1.15rem;
+  font-weight: 800;
   line-height: 1.2;
+  color: #ffffff;
 }
 .state-row {
   display: grid;
@@ -3436,12 +3914,12 @@ td {
   border-radius: 13px;
   padding: 0.5rem 0.35rem;
   text-align: center;
-  background: rgba(255, 255, 255, 0.42);
-  font-size: 0.76rem;
-  font-weight: 900;
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 0.74rem;
+  font-weight: 800;
 }
-.state-pill.ok { background: rgba(56, 128, 93, 0.14); color: #1f6f5b; }
-.state-pill.warn { background: rgba(190, 112, 55, 0.16); color: #8b4a1d; }
+.state-pill.ok { background: rgba(16, 185, 129, 0.12); color: #34d399; }
+.state-pill.warn { background: rgba(245, 158, 11, 0.12); color: #fbbf24; }
 .integration-reason {
   min-height: 2.2rem;
   color: var(--muted);
@@ -3449,27 +3927,27 @@ td {
 }
 .runtime-line {
   margin-top: 0.65rem;
-  border: 1px solid rgba(31, 111, 91, 0.18);
+  border: 1px solid rgba(6, 182, 212, 0.25);
   border-radius: 14px;
-  padding: 0.58rem 0.72rem;
-  background: rgba(31, 111, 91, 0.08);
-  color: var(--accent);
+  padding: 0.6rem 0.8rem;
+  background: rgba(6, 182, 212, 0.06);
+  color: var(--accent-2);
   overflow-wrap: anywhere;
-  font: 900 0.78rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 900 0.76rem ui-monospace, monospace;
 }
 .human-search-grid {
   display: grid;
   gap: 0.85rem;
 }
 .human-search-item {
-  border: 1px solid rgba(190, 112, 55, 0.24);
+  border: 1px solid rgba(245, 158, 11, 0.25);
   border-radius: 18px;
-  padding: 0.85rem;
-  background: rgba(255, 247, 226, 0.62);
+  padding: 1rem;
+  background: rgba(245, 158, 11, 0.05);
 }
 .human-search-item.ready {
-  border-color: rgba(56, 128, 93, 0.30);
-  background: rgba(221, 240, 234, 0.66);
+  border-color: rgba(16, 185, 129, 0.30);
+  background: rgba(16, 185, 129, 0.06);
 }
 .human-search-title {
   display: flex;
@@ -3490,14 +3968,14 @@ td {
 .research-stat {
   border: 1px solid rgba(62, 107, 179, 0.18);
   border-radius: 18px;
-  padding: 0.75rem 0.85rem;
-  background: linear-gradient(135deg, rgba(255,255,255,0.72), rgba(233,241,255,0.54));
+  padding: 0.85rem;
+  background: linear-gradient(135deg, rgba(30,41,59,0.45), rgba(15,23,42,0.65));
 }
 .research-stat strong {
   display: block;
-  margin-top: 0.18rem;
+  margin-top: 0.2rem;
   color: var(--accent-2);
-  font: 950 1.1rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 950 1.2rem ui-monospace, monospace;
   overflow-wrap: anywhere;
 }
 .research-run-list {
@@ -3507,12 +3985,12 @@ td {
 .research-run-card {
   border: 1px solid rgba(62, 107, 179, 0.20);
   border-radius: 22px;
-  padding: 0.95rem;
-  background: rgba(255, 252, 244, 0.68);
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.01);
 }
 .research-run-card.ok {
-  border-color: rgba(56, 128, 93, 0.30);
-  background: rgba(236, 247, 242, 0.72);
+  border-color: rgba(16, 185, 129, 0.30);
+  background: rgba(16, 185, 129, 0.04);
 }
 .research-run-head {
   display: grid;
@@ -3521,14 +3999,15 @@ td {
   align-items: start;
 }
 .research-run-title {
-  font: 950 0.96rem "Avenir Next", "Trebuchet MS", sans-serif;
-  line-height: 1.26;
+  font: 900 1rem 'Inter', sans-serif;
+  line-height: 1.3;
   overflow-wrap: anywhere;
+  color: #ffffff;
 }
 .research-run-sub {
-  margin-top: 0.18rem;
+  margin-top: 0.2rem;
   color: var(--muted);
-  font: 760 0.76rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 760 0.74rem ui-monospace, monospace;
   overflow-wrap: anywhere;
 }
 .research-metric-row {
@@ -3540,14 +4019,14 @@ td {
 .research-metric {
   border: 1px solid var(--line);
   border-radius: 14px;
-  padding: 0.55rem 0.62rem;
-  background: rgba(255, 255, 255, 0.48);
+  padding: 0.6rem;
+  background: rgba(255, 255, 255, 0.015);
 }
 .research-metric b {
   display: block;
-  margin-top: 0.12rem;
-  color: var(--ink);
-  font: 900 0.94rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  margin-top: 0.15rem;
+  color: #ffffff;
+  font: 900 0.94rem ui-monospace, monospace;
 }
 .research-detail-grid {
   display: grid;
@@ -3567,10 +4046,10 @@ td {
   align-items: center;
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 0.45rem 0.55rem;
-  background: rgba(255, 255, 255, 0.36);
+  padding: 0.5rem 0.65rem;
+  background: rgba(255, 255, 255, 0.015);
   color: var(--muted);
-  font: 800 0.72rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 800 0.72rem ui-monospace, monospace;
   overflow-wrap: anywhere;
 }
 .research-path-actions {
@@ -3580,7 +4059,7 @@ td {
 }
 .research-path-actions a {
   color: var(--accent-2);
-  font: 950 0.74rem "Avenir Next", "Gill Sans", sans-serif;
+  font: 950 0.74rem 'Inter', sans-serif;
   text-decoration: none;
 }
 .research-path-actions a:hover {
@@ -3590,7 +4069,7 @@ td {
   margin: 0.35rem 0 0.55rem;
   color: var(--muted);
   font-size: 0.78rem;
-  font-weight: 900;
+  font-weight: 800;
   text-transform: uppercase;
   letter-spacing: .08em;
 }
@@ -3599,14 +4078,14 @@ td {
   gap: 0.7rem;
 }
 .impact-card {
-  border: 1px solid rgba(56, 128, 93, 0.24);
+  border: 1px solid rgba(16, 185, 129, 0.24);
   border-radius: 20px;
-  padding: 0.85rem;
-  background: linear-gradient(135deg, rgba(237, 247, 241, 0.76), rgba(255, 248, 230, 0.58));
+  padding: 1rem;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.06), rgba(6, 182, 212, 0.02));
 }
 .impact-card.strong {
-  border-color: rgba(190, 112, 55, 0.42);
-  background: linear-gradient(135deg, rgba(255, 244, 220, 0.82), rgba(255, 235, 221, 0.62));
+  border-color: rgba(245, 158, 11, 0.35);
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(244, 63, 94, 0.04));
 }
 .impact-title {
   display: grid;
@@ -3617,11 +4096,12 @@ td {
 .impact-title strong {
   display: block;
   overflow-wrap: anywhere;
+  color: #ffffff;
 }
 .impact-note {
   margin-top: 0.55rem;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   overflow-wrap: anywhere;
 }
 .copy-row {
@@ -3642,8 +4122,8 @@ td {
   align-items: center;
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 0.38rem 0.48rem;
-  background: rgba(255, 255, 255, 0.36);
+  padding: 0.45rem 0.55rem;
+  background: rgba(255, 255, 255, 0.015);
   font-size: 0.78rem;
 }
 .capability-chip b {
@@ -3662,30 +4142,40 @@ td {
 }
 .btn {
   display: inline-block;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 0.72rem 0.95rem;
-  background: rgba(255, 255, 255, 0.48);
-  color: var(--ink);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 0.6rem 1.1rem;
+  background: rgba(255, 255, 255, 0.03);
+  color: #f1f5f9;
   text-decoration: none;
   cursor: pointer;
-  font: 800 0.88rem "Avenir Next", "Gill Sans", sans-serif;
-  box-shadow: 0 8px 22px rgba(33, 27, 18, 0.08);
+  font: 700 0.82rem 'Inter', sans-serif;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  transition: all 0.2s;
+}
+.btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+  transform: translateY(-1px);
 }
 .btn.primary {
-  background: var(--ink);
-  color: #fff9ea;
-  border-color: var(--ink);
+  background: linear-gradient(135deg, var(--accent-2) 0%, #0891b2 100%);
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.3);
+}
+.btn.primary:hover {
+  box-shadow: 0 6px 18px rgba(6, 182, 212, 0.45);
 }
 .codebox {
   background: var(--code);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 18px;
-  color: #f7efe0;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 14px;
+  color: #cbd5e1;
   overflow: auto;
-  padding: 1rem;
+  padding: 1.1rem;
   white-space: pre-wrap;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: ui-monospace, monospace;
 }
 .embed {
   width: 100%;
@@ -3693,7 +4183,7 @@ td {
   border: 1px solid var(--line);
   border-radius: 22px;
   background: var(--panel-solid);
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
 }
 @media (max-width: 720px) {
   .hero { align-items: flex-start; flex-direction: column; border-radius: 22px; }
@@ -3702,6 +4192,54 @@ td {
   .tabbar { width: calc(100% - 32px); border-radius: 20px; }
   .tab { padding: 0.62rem 0.78rem; }
   main { padding-top: 0.9rem; }
+}
+@keyframes opPulse {
+  0% { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); border-color: rgba(6, 182, 212, 0.35); }
+  100% { box-shadow: 0 12px 32px rgba(6, 182, 212, 0.22); border-color: rgba(6, 182, 212, 0.75); }
+}
+.op-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-top: 1rem;
+}
+.op-row {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr 1.5fr 0.6fr 0.8fr 1.8fr 100px;
+  align-items: center;
+  padding: 1.1rem 1.4rem;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  gap: 1rem;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.op-row:hover {
+  background: rgba(15, 23, 42, 0.65);
+  border-color: rgba(255, 255, 255, 0.12);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
+}
+.op-row-details {
+  display: none;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 1.2rem;
+  margin-top: -0.4rem;
+  margin-bottom: 0.4rem;
+  animation: opSlideDown 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes opSlideDown {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (max-width: 1024px) {
+  .op-row {
+    grid-template-columns: 1fr;
+    gap: 0.8rem;
+    padding: 1.2rem;
+  }
 }
 </style>
 </head>
@@ -3719,8 +4257,8 @@ td {
 <nav class="tabbar" role="tablist">
   <button class="tab active" data-tab="overview">总览</button>
   <button class="tab" data-tab="sprint">Sprint</button>
-  <button class="tab" data-tab="main">主屏</button>
-  <button class="tab" data-tab="lab">Builder Lab</button>
+  <button class="tab" data-tab="main">物理算子</button>
+  <button class="tab" data-tab="lab">Pane监控/无头池</button>
   <button class="tab" data-tab="events">事件</button>
   <button class="tab" data-tab="knowledge">知识库</button>
   <button class="tab" data-tab="assets">资产包</button>
@@ -3746,11 +4284,13 @@ td {
       <div class="card"><h3>Runtime Interfaces</h3><div id="overview-runtime">Loading...</div></div>
       <div class="card"><h3>Capability Evidence</h3><div id="overview-capabilities">Loading...</div></div>
       <div class="card"><h3>Autoresearch Impact</h3><div id="overview-autoresearch-impact">Loading...</div></div>
+      <div class="card"><h3>Knowledge Routing</h3><div id="overview-knowledge-routing">Loading...</div></div>
       <div class="card"><h3>Meta-Harness</h3><div id="overview-meta-harness">Loading...</div></div>
       <div class="card"><h3>PM Dispatch</h3><div id="overview-pm-dispatch">Loading...</div></div>
       <div class="card"><h3>Physical Operators</h3><div id="overview-physical-operators">Loading...</div></div>
       <div class="card"><h3>DeepResearch Human Search</h3><div id="overview-human-search">Loading...</div></div>
       <div class="card"><h3>DeepResearch Quality</h3><div id="overview-research">Loading...</div></div>
+      <div class="card"><h3>Contract Summary</h3><div id="overview-contract-summary">Loading...</div></div>
       <div class="card"><h3>最近风险</h3><div id="overview-risk">Loading...</div></div>
     </div>
   </section>
@@ -3758,6 +4298,8 @@ td {
   <section class="panel" id="tab-sprint">
     <h2>Current Sprint</h2>
     <div class="card" id="sprint-card">Loading...</div>
+    <h2>Contract Summary</h2>
+    <div class="card" id="contract-summary-card">Loading...</div>
     <h2>Autoresearch Impact</h2>
     <div class="card" id="autoresearch-impact-card">Loading...</div>
     <h2>Meta-Harness</h2>
@@ -3775,13 +4317,58 @@ td {
   </section>
 
   <section class="panel" id="tab-main">
-    <h2>Main Screen</h2>
-    <div class="card" id="main-screen-card">Loading...</div>
+    <h2>物理算子状态监控 (Physical Operators)</h2>
+    <div class="card" id="operator-metrics-container">Loading...</div>
+    <div class="card" style="margin-top: 1rem; padding: 0.85rem; background: rgba(255, 252, 244, 0.48); display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; border-radius: 18px; border: 1px solid var(--line);">
+      <div>
+        <label style="font-weight:900; font-size:0.85rem; margin-right:0.4rem;">角色过滤:</label>
+        <select id="op-filter-role" onchange="window.opFilterRole=this.value; renderOperatorsPage();" style="padding:0.4rem; border-radius:8px; border:1px solid var(--line); font-weight:800; background: rgba(255, 255, 255, 0.76); color: var(--ink);">
+          <option value="all">全部角色</option>
+          <option value="planner">Planner</option>
+          <option value="builder">Builder</option>
+          <option value="evaluator">Evaluator</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-weight:900; font-size:0.85rem; margin-right:0.4rem;">状态过滤:</label>
+        <select id="op-filter-state" onchange="window.opFilterState=this.value; renderOperatorsPage();" style="padding:0.4rem; border-radius:8px; border:1px solid var(--line); font-weight:800; background: rgba(255, 255, 255, 0.76); color: var(--ink);">
+          <option value="all">全部状态</option>
+          <option value="idle">Idle (空闲)</option>
+          <option value="leased">Leased (已租用)</option>
+          <option value="busy">Busy/Running (忙碌)</option>
+          <option value="disabled">Disabled (已禁用)</option>
+        </select>
+      </div>
+      <div style="flex-grow: 1;">
+        <input type="text" id="op-search" placeholder="搜索算子 ID、模型、Sprint..." oninput="window.opSearch=this.value; renderOperatorsPage();" style="width: 100%; max-width: 320px; padding:0.45rem 0.8rem; border-radius:8px; border:1px solid var(--line); font-weight:800; background: rgba(255, 255, 255, 0.76); color: var(--ink);" />
+      </div>
+    </div>
+    <div id="operator-cards-container" style="margin-top: 1rem;">Loading...</div>
+    <h2 style="margin-top: 2rem;">最近执行结果 (Operator Results)</h2>
+    <div class="card" id="operator-results-detailed">Loading...</div>
   </section>
 
   <section class="panel" id="tab-lab">
-    <h2>Builder Lab</h2>
-    <div class="card" id="lab-screen-card">Loading...</div>
+    <h2>Headless Pool 执行监控 (builder-lab + multi-task)</h2>
+    <div class="card" id="pane-metrics-container">Loading...</div>
+    <div class="card" id="pane-pool-contract-card" style="margin-top: 1rem;">Loading...</div>
+    <div class="card" style="margin-top: 1rem; padding: 0.85rem; background: rgba(255, 252, 244, 0.48); display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; border-radius: 18px; border: 1px solid var(--line);">
+      <div>
+        <label style="font-weight:900; font-size:0.85rem; margin-right:0.4rem;">状态过滤:</label>
+        <select id="pane-filter-state" onchange="window.paneFilterState=this.value; renderPanesPage();" style="padding:0.4rem; border-radius:8px; border:1px solid var(--line); font-weight:800; background: rgba(255, 255, 255, 0.76); color: var(--ink);">
+          <option value="all">全部状态</option>
+          <option value="idle">Idle (空闲)</option>
+          <option value="reusable_idle">Reusable Idle (可复用历史壳)</option>
+          <option value="historical_active">Historical Active (当前选中的历史壳)</option>
+          <option value="leased">Leased (已租用)</option>
+          <option value="running">Running command (执行中)</option>
+        </select>
+      </div>
+      <div style="flex-grow: 1;">
+        <input type="text" id="pane-search" placeholder="搜索 Pane ID、当前命令、标题、Lease 任务..." oninput="window.paneSearch=this.value; renderPanesPage();" style="width: 100%; max-width: 320px; padding:0.45rem 0.8rem; border-radius:8px; border:1px solid var(--line); font-weight:800; background: rgba(255, 255, 255, 0.76); color: var(--ink);" />
+      </div>
+    </div>
+    <div id="pane-grid-container" style="margin-top: 1rem;">Loading...</div>
   </section>
 
   <section class="panel" id="tab-events">
@@ -3839,6 +4426,7 @@ Config http://127.0.0.1:8789/setup</div>
 
       <div class="health-grid">
         <div class="card"><h2>采集 / 提取进展</h2><div id="knowledge-progress-card">Loading...</div></div>
+        <div class="card"><h2>Reasoning Packet 路由</h2><div id="knowledge-routing-card">Loading...</div></div>
         <div class="card"><h2>Obsidian Wiki 健康</h2><div id="wiki-card">Loading...</div></div>
         <div class="card"><h2>Mirage / QMD 健康</h2><div id="mirage-card">Loading...</div></div>
       </div>
@@ -4077,14 +4665,37 @@ function renderPhysicalOperators(data, compact) {
     '</div>' +
     '<div class="muted">roles: ' + esc(roles) + '</div>' +
     (alerts.length ? '<div class="warn" style="margin:.6rem 0">Alerts: ' + esc(alerts.map(a => a.operator_id + ':' + a.runtime_state).join(' · ')) + '</div>' : '<div class="muted" style="margin:.6rem 0">Alerts: none</div>') +
-    '<table><tr><th>Operator</th><th>Role</th><th>Backend</th><th>State</th><th>Sprint</th></tr>' +
-    items.map(item => '<tr>' +
-      '<td>' + esc(item.operator_id || '-') + '</td>' +
-      '<td>' + esc(item.role || '-') + '</td>' +
-      '<td>' + esc(item.backend || '-') + '</td>' +
-      '<td>' + statusBadge(item.runtime_state || 'unknown') + '</td>' +
-      '<td>' + esc(item.sprint_id || '-') + '</td>' +
-      '</tr>').join('') + '</table>' +
+    '<div class="op-list">' +
+    '  <div class="op-row" style="grid-template-columns: 1.5fr 1fr 1.5fr 1fr 1fr; background: transparent; border: none; padding: 0.2rem 1.2rem; box-shadow: none; transform: none; pointer-events: none; margin-bottom: -0.4rem;">' +
+    '    <div style="font-size: 0.75rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;">Operator</div>' +
+    '    <div style="font-size: 0.75rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;">Role</div>' +
+    '    <div style="font-size: 0.75rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;">Backend</div>' +
+    '    <div style="font-size: 0.75rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;">State</div>' +
+    '    <div style="font-size: 0.75rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;">Sprint</div>' +
+    '  </div>' +
+    items.map(item => {
+      let statusClass = "missing";
+      let statusLabel = item.runtime_state || "unknown";
+      if (!item.enabled) {
+        statusClass = "missing";
+        statusLabel = "disabled";
+      } else if (item.runtime_state === 'idle') {
+        statusClass = "ok";
+      } else if (item.runtime_state === 'leased' || item.runtime_state === 'running') {
+        statusClass = "default";
+      } else if (item.runtime_state === 'disabled') {
+        statusClass = "missing";
+      } else {
+        statusClass = "warn";
+      }
+      return '<div class="op-row" style="grid-template-columns: 1.5fr 1fr 1.5fr 1fr 1fr; padding: 0.8rem 1.2rem; margin-top: 0.5rem; gap: 0.5rem;">' +
+        '<div><b style="font-size:0.95rem; color:#ffffff;">' + esc(item.operator_id || '-') + '</b></div>' +
+        '<div><span class="badge default" style="background: rgba(255,255,255,0.04); font-size:0.78rem;">' + esc(item.role || '-') + '</span></div>' +
+        '<div style="font-size:0.82rem;">' + esc(item.backend || '-') + '</div>' +
+        '<div><span class="level-badge ' + statusClass + '" style="font-size:0.78rem;">' + statusLabel + '</span></div>' +
+        '<div class="tech-id" style="font-size:0.78rem;">' + esc(item.sprint_id || '-') + '</div>' +
+        '</div>';
+    }).join('') + '</div>' +
     (recentResults.length ? '<h3 style="margin-top:.9rem">Recent Results</h3><table><tr><th>Operator</th><th>Task</th><th>Status</th><th>Finished</th></tr>' +
       recentResults.map(item => '<tr>' +
         '<td>' + esc(item.operator_id || '-') + '</td>' +
@@ -4173,7 +4784,7 @@ function renderPaneMatrix(cardId, screen) {
          '<td>' + esc(p.role || '-') + '</td>' +
          '<td class="' + runtimeClass(p.runtime_state) + '">' + esc(p.runtime_state || '-') + '</td>' +
          '<td>' + capabilityHealthCell(p.capability_health || {}) + '</td>' +
-         '<td>' + modelCallCell(p.model_call) + '</td>' +
+         '<td>' + modelCallCell(p.model_call) + '<div style="margin-top:0.25rem;"><button class="btn" style="padding:3px 7px;font-size:0.7rem;" onclick="loadPaneModelCall(\\'' + esc(p.target || '') + '\\')">查调用</button></div><div class="muted" id="pane-call-' + esc((p.target || '').replace(/[^A-Za-z0-9_.-]/g, '_')) + '" style="font-size:0.72rem;margin-top:0.2rem;"></div></td>' +
          '<td>' + taskCell(p.assignment_meta, p.assignment) + '</td>' +
          '<td>' + artifactLabel(p.artifact) + '</td>' +
          '<td>' + esc(p.title || '-') + '</td></tr>';
@@ -4181,6 +4792,30 @@ function renderPaneMatrix(cardId, screen) {
   t += '</table>';
   document.getElementById(cardId).innerHTML = t;
 }
+
+window.loadPaneModelCall = function(target) {
+  const safeId = String(target || '').replace(/[^A-Za-z0-9_.-]/g, '_');
+  const el = document.getElementById('pane-call-' + safeId);
+  if (el) el.textContent = 'loading...';
+  fetch('/api/pane-model-call?target=' + encodeURIComponent(target || '') + '&ts=' + Date.now(), {cache: 'no-store'})
+    .then(r => r.json())
+    .then(data => {
+      const call = (data && data.model_call) || {};
+      const pane = (data && data.pane) || {};
+      const tokens = call.tokens && Object.keys(call.tokens).length ? JSON.stringify(call.tokens) : 'N/A';
+      const text = [
+        'status=' + (call.status || 'unknown'),
+        'provider=' + (call.provider || pane.backend || 'N/A'),
+        'model=' + (call.model || pane.model || call.model_flag || 'N/A'),
+        'kernel=' + (call.operator_kernel || pane.operator_type || 'N/A'),
+        'tokens=' + tokens
+      ].join(' · ');
+      if (el) el.textContent = text;
+    })
+    .catch(err => {
+      if (el) el.textContent = 'error: ' + String(err);
+    });
+};
 function renderList(obj) {
   if (!obj || typeof obj !== 'object') return '<div class="muted">N/A</div>';
   return '<table>' + Object.entries(obj).map(([k, v]) =>
@@ -4367,6 +5002,47 @@ function renderResearchStatus(research, compact) {
     '<div class="research-run-list">' + cards + '</div>' +
     (gateCards ? '<div class="research-section-title">Quality Gates</div><div class="human-search-grid">' + gateCards + '</div>' : '') +
     '</div>';
+}
+function renderKnowledgeRouting(routing, compact) {
+  routing = routing || {};
+  const items = routing.items || [];
+  if (routing.status === 'missing') {
+    return '<div>' + statusBadge('warn') + ' <span class="muted">Tech Hotspot Radar DB 未初始化。</span></div>' +
+      '<div class="tech-id">' + esc(routing.db_path || 'N/A') + '</div>';
+  }
+  const routeCounts = routing.route_counts || {};
+  const routeText = Object.entries(routeCounts).map(([k, v]) => k + ':' + v).join(' · ') || 'N/A';
+  const head = '<div class="health-metrics">' +
+    '<div class="mini-metric"><div class="kv-label">Status</div><span class="num">' + esc(routing.status || 'unknown') + '</span></div>' +
+    '<div class="mini-metric"><div class="kv-label">Packets</div><span class="num">' + esc(routing.total_packets || 0) + '</span></div>' +
+    '<div class="mini-metric"><div class="kv-label">Premium</div><span class="num">' + esc(routing.premium_allowed || 0) + '</span></div>' +
+    '<div class="mini-metric"><div class="kv-label">Embedding OK</div><span class="num">' + esc(routing.embedding_unchanged || 0) + '</span></div>' +
+    '</div>';
+  if (compact) {
+    const latest = items[0] || {};
+    return head +
+      '<div class="muted">routes: ' + esc(routeText) + '</div>' +
+      '<div class="muted">latest: ' + esc(latest.packet_id || 'N/A') + ' · ' + esc(latest.route || 'N/A') + ' · ' + esc(latest.default_model_family || 'N/A') + '</div>';
+  }
+  const missing = (routing.missing_columns || []).length
+    ? '<div class="warn">missing columns: ' + esc((routing.missing_columns || []).join(', ')) + '</div>'
+    : '';
+  if (!items.length) {
+    return head + missing + '<div class="muted">暂无 reasoning packet。先运行 Tech Hotspot Radar reasoning pipeline。</div>' +
+      '<div class="tech-id">' + esc(routing.db_path || 'N/A') + '</div>';
+  }
+  return head + missing +
+    '<div class="muted">routes: ' + esc(routeText) + '</div>' +
+    '<table><tr><th>Packet</th><th>Type</th><th>Route</th><th>Model</th><th>Premium</th><th>Embedding</th></tr>' +
+    items.map(item => '<tr>' +
+      '<td><span class="tech-id">' + esc(item.packet_id || '-') + '</span></td>' +
+      '<td>' + esc(item.packet_type || '-') + '</td>' +
+      '<td>' + statusBadge(item.route === 'premium_reasoner' ? 'warn' : 'ok') + ' ' + esc(item.route || '-') + '</td>' +
+      '<td>' + esc(item.default_model_family || 'N/A') + '</td>' +
+      '<td>' + esc(item.premium_allowed ? 'yes' : 'no') + '<div class="muted">' + esc(clip(item.premium_reason || '', 72)) + '</div></td>' +
+      '<td>' + esc(item.embedding_route || 'N/A') + '</td>' +
+    '</tr>').join('') + '</table>' +
+    '<div class="tech-id">' + esc(routing.db_path || 'N/A') + '</div>';
 }
 function renderAutoresearchImpact(impact, compact) {
   impact = impact || {};
@@ -4630,6 +5306,37 @@ function renderIntegrations(data) {
     '</article>';
   }).join('') + '</div>';
 }
+function renderContractSummary(data, compact) {
+  data = data || {};
+  if (data.status === 'missing') {
+    return '<div class="muted">Contract summary not found.</div>';
+  }
+  const title = data.title || 'Contract Summary';
+  const summary = data.summary || '';
+  const link = data.route ? `<a href="${data.route}" target="_blank" rel="noopener" style="color: var(--accent-2); font-weight:800;">查看详情</a>` : '';
+  
+  if (compact) {
+    return `
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div style="font-weight:800; font-size:0.9rem; color:#ffffff;">${esc(title)}</div>
+          <div class="muted" style="font-size:0.75rem; margin-top:0.25rem;">${esc(summary)}</div>
+        </div>
+        <div>${link}</div>
+      </div>
+    `;
+  }
+  return `
+    <div style="padding: 0.5rem 0;">
+      <h3 style="margin-top:0; color:#ffffff;">${esc(title)}</h3>
+      <p class="muted" style="font-size:0.85rem;">${esc(summary)}</p>
+      <div style="margin-top:0.8rem;">
+        ${link}
+        <span class="muted" style="font-size:0.75rem; margin-left:1rem;">Source: ${esc(data.source || 'docs')} (${esc(data.path || '-')})</span>
+      </div>
+    </div>
+  `;
+}
 function renderEvolution(evolution) {
   const el = document.getElementById('evolution-card');
   if (!el) return;
@@ -4756,6 +5463,325 @@ document.querySelectorAll('.tab').forEach(btn => {
 });
 window.addEventListener('hashchange', () => activateTab((location.hash || '#overview').slice(1)));
 
+window.opFilterRole = 'all';
+window.opFilterState = 'all';
+window.opSearch = '';
+window.paneFilterState = 'all';
+window.paneSearch = '';
+
+function renderOperatorsPage() {
+  const data = window.globalStatusData;
+  if (!data || !data.physical_operators) return;
+  const po = data.physical_operators;
+  const items = po.items || [];
+  
+  // Calculate metrics dynamically
+  const total = items.length;
+  let enabled = 0, available = 0, busy = 0, idle = 0, disabled = 0;
+  
+  items.forEach(item => {
+    if (item.enabled) enabled++;
+    if (item.available) available++;
+    if (item.runtime_state === 'disabled' || !item.enabled) {
+      disabled++;
+    } else if (item.runtime_state === 'leased' || item.runtime_state === 'running') {
+      busy++;
+    } else {
+      idle++;
+    }
+  });
+  
+  // Render metrics container
+  document.getElementById('operator-metrics-container').innerHTML = `
+    <div class="health-metrics">
+      <div class="mini-metric"><div class="kv-label">Total Fleet</div><span class="num">${total}</span></div>
+      <div class="mini-metric"><div class="kv-label">Idle (空闲)</div><span class="num" style="color:#10b981;">${idle}</span></div>
+      <div class="mini-metric"><div class="kv-label">Busy (忙碌/已租)</div><span class="num" style="color:#06b6d4;">${busy}</span></div>
+      <div class="mini-metric"><div class="kv-label">Enabled</div><span class="num">${enabled}</span></div>
+      <div class="mini-metric"><div class="kv-label">Available</div><span class="num">${available}</span></div>
+      <div class="mini-metric"><div class="kv-label">Disabled</div><span class="num" style="color:#fbbf24;">${disabled}</span></div>
+    </div>
+  `;
+  
+  // Filter items
+  const filtered = items.filter(item => {
+    // Role filter
+    if (window.opFilterRole !== 'all') {
+      if ((item.role || '').toLowerCase() !== window.opFilterRole) return false;
+    }
+    // State filter
+    if (window.opFilterState !== 'all') {
+      if (window.opFilterState === 'disabled' && (item.runtime_state === 'disabled' || !item.enabled)) {
+        // match
+      } else if (window.opFilterState === 'leased' && item.runtime_state === 'leased') {
+        // match
+      } else if (window.opFilterState === 'busy' && (item.runtime_state === 'leased' || item.runtime_state === 'running')) {
+        // match
+      } else if (window.opFilterState === 'idle' && item.runtime_state === 'idle' && item.enabled) {
+        // match
+      } else {
+        return false;
+      }
+    }
+    // Search query
+    if (window.opSearch) {
+      const q = window.opSearch.toLowerCase();
+      const match = (item.operator_id || '').toLowerCase().includes(q) ||
+                    (item.model || '').toLowerCase().includes(q) ||
+                    (item.backend || '').toLowerCase().includes(q) ||
+                    (item.persona || '').toLowerCase().includes(q) ||
+                    (item.runtime_state || '').toLowerCase().includes(q) ||
+                    (item.sprint_id || '').toLowerCase().includes(q) ||
+                    (item.task_id || '').toLowerCase().includes(q) ||
+                    (item.role || '').toLowerCase().includes(q);
+      if (!match) return false;
+    }
+    return true;
+  });
+  
+  // Render list/table
+  if (!filtered.length) {
+    document.getElementById('operator-cards-container').innerHTML = '<div class="muted" style="padding:2rem; text-align:center;">没有找到符合过滤条件的物理算子。</div>';
+  } else {
+    let listHtml = '<div class="op-list">';
+    listHtml += `
+      <div class="op-row" style="background: transparent; border: none; padding: 0.2rem 1.4rem; box-shadow: none; transform: none; pointer-events: none; margin-bottom: -0.4rem;">
+        <div style="font-size: 0.75rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;">算子 ID (名称)</div>
+        <div style="font-size: 0.75rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;">角色 / 类型</div>
+        <div style="font-size: 0.75rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;">模型 / 后端</div>
+        <div style="font-size: 0.75rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;">并发度</div>
+        <div style="font-size: 0.75rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;">当前状态</div>
+        <div style="font-size: 0.75rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;">活跃租约 / 任务</div>
+        <div style="font-size: 0.75rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; text-align: center;">操作</div>
+      </div>
+    `;
+    
+    filtered.forEach((item, idx) => {
+      let statusClass = "missing";
+      let statusLabel = item.runtime_state || "unknown";
+      let rowStyle = "";
+      
+      if (!item.enabled) {
+        statusClass = "missing";
+        statusLabel = "disabled";
+        rowStyle = "opacity: 0.65;";
+      } else if (item.runtime_state === 'idle') {
+        statusClass = "ok";
+      } else if (item.runtime_state === 'leased' || item.runtime_state === 'running') {
+        statusClass = "default";
+        rowStyle = "background: rgba(6, 182, 212, 0.04);";
+      } else if (item.runtime_state === 'disabled') {
+        statusClass = "missing";
+        rowStyle = "opacity: 0.65;";
+      } else {
+        statusClass = "warn";
+      }
+      
+      let leaseText = '<span class="muted">-</span>';
+      if (item.sprint_id || item.task_id) {
+        const expires = item.expires_at ? new Date(item.expires_at).toLocaleTimeString() : 'N/A';
+        leaseText = `
+          <div>
+            <span class="tech-id" style="color: var(--accent-2); font-weight:800;">${esc(item.sprint_id || '')}</span> / 
+            <span class="tech-id">${esc(item.task_id || '')}</span>
+            <span class="muted" style="font-size:0.75rem; margin-left:0.4rem;">(Expires: ${esc(expires)})</span>
+          </div>
+        `;
+      }
+      
+      listHtml += `
+        <div class="op-row" style="${rowStyle}">
+          <div>
+            <div style="font-weight: 800; font-size: 0.95rem; color:#ffffff;">${esc(item.operator_id)}</div>
+            ${item.display_name && item.display_name !== item.operator_id ? `<div class="muted" style="font-size: 0.75rem; margin-top:0.15rem;">${esc(item.display_name)}</div>` : ''}
+          </div>
+          <div>
+            <span class="badge default" style="background: rgba(255,255,255,0.04); padding: 0.3rem 0.6rem; border-radius: 8px;">${esc(item.role)}</span>
+            <div class="muted" style="font-size: 0.72rem; margin-top:0.2rem;">${esc(item.persona || 'N/A')}</div>
+          </div>
+          <div>
+            <div style="font-weight:700; font-size:0.85rem;">${esc(item.model || 'N/A')}</div>
+            <div class="tech-id" style="font-size: 0.74rem; margin-top: 0.15rem;">${esc(item.backend)}</div>
+          </div>
+          <div>
+            <div class="muted" style="font-size:0.7rem; margin-bottom:0.15rem;">Concurrency</div>
+            <span class="tech-id">${esc(item.max_concurrency || '1')}</span>
+          </div>
+          <div><span class="level-badge ${statusClass}">${statusLabel}</span></div>
+          <div>${leaseText}</div>
+          <div>
+            <button class="btn" onclick="toggleOpDetails(${idx})" style="padding: 4px 8px; font-size: 0.72rem; border-radius: 8px; width: 100%;">展开 JSON</button>
+          </div>
+        </div>
+        <div id="op-details-row-${idx}" class="op-row-details">
+          <div style="font-weight: 900; font-size: 0.8rem; color: var(--accent-2); margin-bottom: 0.4rem;">配置详情 (JSON)</div>
+          <pre class="codebox" style="margin: 0; padding: 0.8rem; font-size: 0.74rem; line-height: 1.4; border-radius: 10px;">${esc(JSON.stringify(item, null, 2))}</pre>
+        </div>
+      `;
+    });
+    
+    listHtml += '</div>';
+    document.getElementById('operator-cards-container').innerHTML = listHtml;
+  }
+
+  // Render recent results table
+  const recentResults = po.recent_results || [];
+  if (!recentResults.length) {
+    document.getElementById('operator-results-detailed').innerHTML = '<div class="muted">暂无最近执行结果记录。</div>';
+  } else {
+    let t = '<table><tr><th>Operator</th><th>模型 / 后端</th><th>Task</th><th>Sprint</th><th>Verdict / Status</th><th>Started</th><th>Finished</th></tr>';
+    recentResults.forEach(item => {
+      const finished = item.finished_at ? new Date(item.finished_at).toLocaleString() : (item.started_at ? 'running' : 'N/A');
+      const started = item.started_at ? new Date(item.started_at).toLocaleString() : 'N/A';
+      t += '<tr>' +
+        '<td><b class="tech-id" style="display:inline;">' + esc(item.operator_id || '-') + '</b><div class="muted" style="font-size:0.72rem; margin-top:0.15rem;">' + esc(item.source || 'operator-results') + '</div></td>' +
+        '<td><div style="font-weight:800; font-size:0.78rem;">' + esc(item.model || 'N/A') + '</div><div class="tech-id" style="font-size:0.72rem; margin-top:0.12rem;">' + esc(item.backend || 'N/A') + '</div></td>' +
+        '<td><span class="tech-id">' + esc(item.task_id || '-') + '</span></td>' +
+        '<td><span class="tech-id">' + esc(item.sprint_id || '-') + '</span></td>' +
+        '<td>' + statusBadge(item.status || 'unknown') + '</td>' +
+        '<td>' + esc(started) + '</td>' +
+        '<td>' + esc(finished) + '</td>' +
+      '</tr>';
+    });
+    t += '</table>';
+    document.getElementById('operator-results-detailed').innerHTML = t;
+  }
+}
+
+window.toggleOpDetails = function(idx) {
+  const row = document.getElementById('op-details-row-' + idx);
+  if (row) {
+    if (row.style.display === 'none') {
+      row.style.display = 'block';
+    } else {
+      row.style.display = 'none';
+    }
+  }
+};
+
+function renderPanesPage() {
+  const data = window.globalStatusData;
+  if (!data || !data.multi_task_panes) return;
+  const panes = data.multi_task_panes;
+  const pool = data.multi_task_pane_pool || {};
+  const modelCounts = {};
+  const operatorTypeCounts = {};
+  panes.forEach(p => {
+    const model = p.model || 'N/A';
+    const operatorType = p.operator_type || p.pool || 'unknown';
+    modelCounts[model] = (modelCounts[model] || 0) + 1;
+    operatorTypeCounts[operatorType] = (operatorTypeCounts[operatorType] || 0) + 1;
+  });
+  const compactCounts = (counts) => Object.entries(counts)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 6)
+    .map(([name, count]) => `${esc(name)}:${count}`)
+    .join(' · ') || 'N/A';
+  const modelSummary = compactCounts(modelCounts);
+  const operatorTypeSummary = compactCounts(operatorTypeCounts);
+  
+  // Calculate metrics
+  const total = pool.total ?? panes.length;
+  const idle = pool.idle ?? panes.filter(p => p.status === 'idle').length;
+  const reusableIdle = pool.reusable_idle ?? panes.filter(p => p.status === 'reusable_idle').length;
+  const historicalActive = pool.historical_active ?? panes.filter(p => p.status === 'historical_active').length;
+  const leased = pool.leased ?? panes.filter(p => p.status === 'leased').length;
+  const running = pool.running ?? panes.filter(p => p.status === 'running').length;
+  
+  // Render metrics container
+  document.getElementById('pane-metrics-container').innerHTML = `
+    <div class="health-metrics">
+      <div class="mini-metric"><div class="kv-label">Total Panes</div><span class="num">${total}</span></div>
+      <div class="mini-metric"><div class="kv-label">Idle (未使用)</div><span class="num" style="color:#1f6f5b;">${idle}</span></div>
+      <div class="mini-metric"><div class="kv-label">Reusable Idle</div><span class="num" style="color:#254f91;">${reusableIdle}</span></div>
+      <div class="mini-metric"><div class="kv-label">Historical Active</div><span class="num" style="color:#8b4a1d;">${historicalActive}</span></div>
+      <div class="mini-metric"><div class="kv-label">Leased (已租用)</div><span class="num" style="color:#254f91;">${leased}</span></div>
+      <div class="mini-metric"><div class="kv-label">Running Command (执行中)</div><span class="num" style="color:#8b4a1d;">${running}</span></div>
+    </div>
+    <div class="muted" style="margin-top:0.5rem;">模型分布：${modelSummary}</div>
+    <div class="muted" style="margin-top:0.35rem;">算子类型：${operatorTypeSummary}</div>
+    <div class="muted" style="margin-top:0.5rem;">说明：'reusable_idle' 是可安全复用的历史 shell 窗口；'historical_active' 是当前 tmux 选中的历史壳，出于安全默认不自动杀。</div>
+  `;
+  document.getElementById('pane-pool-contract-card').innerHTML = `
+    <div class="health-metrics">
+      <div class="mini-metric"><div class="kv-label">Target Keep</div><span class="num">${pool.target_keep ?? 1}</span></div>
+      <div class="mini-metric"><div class="kv-label">Reuse</div><span class="num">${pool.reuse_enabled ? 'on' : 'off'}</span></div>
+      <div class="mini-metric"><div class="kv-label">Auto Close</div><span class="num">${pool.auto_close_enabled ? 'on' : 'off'}</span></div>
+      <div class="mini-metric"><div class="kv-label">Compact</div><span class="num" style="color:${pool.compact_recommended ? '#8b4a1d' : '#1f6f5b'};">${pool.compact_recommended ? 'recommended' : 'not-needed'}</span></div>
+    </div>
+    <div class="muted" style="margin-top:0.5rem;">contract: shrink 到目标池大小；保留可复用历史壳，不自动杀当前选中的历史壳。</div>
+    <div class="muted" style="margin-top:0.35rem;">ops: 'compact-session' 会安全切走并收掉历史 current window；'detach-and-anchor' 只把 session current window 切到 anchor。</div>
+  `;
+  
+  // Filter panes
+  const filtered = panes.filter(p => {
+    // State filter
+    if (window.paneFilterState !== 'all') {
+      if (p.status !== window.paneFilterState) return false;
+    }
+    // Search filter
+    if (window.paneSearch) {
+      const q = window.paneSearch.toLowerCase();
+      const match = (p.pane || '').toLowerCase().includes(q) ||
+                    (p.window_name || '').toLowerCase().includes(q) ||
+                    (p.current_command || '').toLowerCase().includes(q) ||
+                    (p.title || '').toLowerCase().includes(q) ||
+                    (p.model || '').toLowerCase().includes(q) ||
+                    (p.backend || '').toLowerCase().includes(q) ||
+                    (p.operator_type || '').toLowerCase().includes(q) ||
+                    (p.profile || '').toLowerCase().includes(q) ||
+                    (p.role || '').toLowerCase().includes(q) ||
+                    ((p.lease && p.lease.sprint_id) || '').toLowerCase().includes(q) ||
+                    ((p.lease && p.lease.task_id) || '').toLowerCase().includes(q);
+      if (!match) return false;
+    }
+    return true;
+  });
+  
+  // Render panes list (as a beautiful detailed table)
+  if (!filtered.length) {
+    document.getElementById('pane-grid-container').innerHTML = '<div class="muted" style="padding:2rem; text-align:center;">没有找到符合过滤条件的 Headless Pane。</div>';
+  } else {
+    let t = '<table><tr><th>Pane</th><th>模型 / 后端 / 类型</th><th>Window Name</th><th>Cmd (进程)</th><th>Pane Title (TUI 标题)</th><th>Status</th><th>Lease Task (租约任务)</th></tr>';
+    filtered.forEach(p => {
+      let statusClass = "missing";
+      if (p.status === 'idle') statusClass = "ok";
+      else if (p.status === 'reusable_idle') statusClass = "default";
+      else if (p.status === 'historical_active') statusClass = "warn";
+      else if (p.status === 'leased') statusClass = "default";
+      else statusClass = "warn";
+      
+      let leaseText = "-";
+      if (p.lease && p.lease.task_id) {
+        leaseText = `<div style="font-weight: 800; font-size: 0.8rem;"><span class="tech-id">${esc(p.lease.sprint_id || '')}</span> / <span class="tech-id">${esc(p.lease.task_id)}</span></div>`;
+      } else if (p.task && p.task.task_id) {
+        leaseText = `<div style="font-weight: 800; font-size: 0.8rem;"><span class="tech-id">${esc(p.task.sprint_id || '')}</span> / <span class="tech-id">${esc(p.task.task_id)}</span></div>`;
+      }
+      
+      let cmdHighlight = p.current_command;
+      if (p.status === 'running') {
+        cmdHighlight = `<span class="badge warn" style="font-family:ui-monospace,monospace;">${esc(p.current_command)}</span>`;
+      }
+      
+      const taskStatus = ((p.task && p.task.status) || '-');
+      const modelLabel = p.model || 'N/A';
+      const backendLabel = p.backend || p.pool || 'N/A';
+      const operatorLabel = (p.operator_type || 'unknown') + ' · ' + (p.profile || p.role || '-');
+      t += '<tr>' +
+        '<td><b class="tech-id" style="display:inline; font-size:0.85rem;">' + esc(p.pane) + '</b></td>' +
+        '<td><div style="font-weight:900; font-size:0.82rem;">' + esc(modelLabel) + '</div><div class="tech-id" style="font-size:0.72rem; margin-top:0.12rem;">' + esc(backendLabel) + '</div><div class="muted" style="font-size:0.72rem; margin-top:0.12rem;">' + esc(operatorLabel) + '</div></td>' +
+        '<td><span style="font-size:0.8rem; font-weight:800;">' + esc(p.window_name) + '</span></td>' +
+        '<td>' + cmdHighlight + '</td>' +
+        '<td style="font-size:0.8rem; font-weight:900;">' + esc(p.title || '-') + '</td>' +
+        '<td><span class="level-badge ' + statusClass + '">' + esc(p.status) + '</span><div class="muted" style="font-size:0.72rem; margin-top:0.18rem;">task=' + esc(taskStatus) + '</div></td>' +
+        '<td>' + leaseText + '</td>' +
+      '</tr>';
+    });
+    t += '</table>';
+    document.getElementById('pane-grid-container').innerHTML = t;
+  }
+}
+
 function render(data) {
   const now = new Date().toISOString();
   document.getElementById('refresh-ts').textContent = 'Last updated: ' + now;
@@ -4812,8 +5838,9 @@ function render(data) {
     document.getElementById('overview-panes').innerHTML = '<div class="metric">0</div><div class="muted">assigned panes</div>';
   }
 
-  renderPaneMatrix('main-screen-card', data.main_screen);
-  renderPaneMatrix('lab-screen-card', data.lab_screen);
+  window.globalStatusData = data;
+  renderOperatorsPage();
+  renderPanesPage();
 
   const evts = data.recent_events || [];
   if (evts.length) {
@@ -4860,6 +5887,8 @@ function render(data) {
     'Mirage: ' + statusBadge(mirage.ready ? 'ok' : (mirage.status || 'warn'));
   document.getElementById('overview-runtime').innerHTML = renderRuntimeInterfaces(data.runtime_interfaces || {});
   document.getElementById('overview-capabilities').innerHTML = renderCapabilityHealthSummary(data.capability_health || {});
+  document.getElementById('overview-knowledge-routing').innerHTML = renderKnowledgeRouting(data.knowledge_routing || {}, true);
+  document.getElementById('knowledge-routing-card').innerHTML = renderKnowledgeRouting(data.knowledge_routing || {}, false);
   document.getElementById('overview-autoresearch-impact').innerHTML = renderAutoresearchImpact(data.autoresearch_impact || {}, true);
   document.getElementById('autoresearch-impact-card').innerHTML = renderAutoresearchImpact(data.autoresearch_impact || {}, false);
   document.getElementById('overview-meta-harness').innerHTML = renderMetaHarness(data.meta_harness || {}, true);
@@ -4879,14 +5908,28 @@ function render(data) {
 }
 
 function refresh() {
-  fetch('/status')
+  if (window.__solarStatusRefreshInFlight) return;
+  window.__solarStatusRefreshInFlight = true;
+  fetch('/status?ts=' + Date.now(), {cache: 'no-store'})
     .then(r => r.json())
     .then(render)
-    .catch(e => console.warn('refresh error', e));
+    .catch(e => {
+      console.warn('refresh error', e);
+      const msg = 'Status refresh failed: ' + (e && e.message ? e.message : String(e));
+      const ts = document.getElementById('refresh-ts');
+      if (ts) ts.textContent = msg;
+      ['overview-sprint', 'overview-knowledge', 'raw-card'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el && /Loading/.test(el.textContent || el.innerHTML || '')) {
+          el.innerHTML = '<div class="warn">' + esc(msg) + '</div>';
+        }
+      });
+    })
+    .finally(() => { window.__solarStatusRefreshInFlight = false; });
 }
 activateTab((location.hash || '#overview').slice(1));
 refresh();
-setInterval(refresh, 5000);
+setInterval(refresh, 15000);
 </script>
 </body>
 </html>
@@ -4903,6 +5946,7 @@ class StatusHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
@@ -4911,6 +5955,7 @@ class StatusHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
@@ -4965,6 +6010,11 @@ class StatusHandler(BaseHTTPRequestHandler):
 
         elif path == "/status":
             self._send_json(_status_payload(limit=50))
+
+        elif path == "/api/pane-model-call":
+            target = params.get("target", [""])[0]
+            pane_id = params.get("pane_id", [""])[0]
+            self._send_json(_pane_model_call_detail(target, pane_id))
 
         elif path == "/contract-summary":
             self._send_text(_final_contract_summary_html(), content_type="text/html; charset=utf-8")
