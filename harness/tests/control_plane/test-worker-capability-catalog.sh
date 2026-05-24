@@ -63,7 +63,7 @@ assert any("data-modeling" in w.get("skills", []) for w in workers), workers
 assert any("compatibility" in w.get("skills", []) for w in workers), workers
 for skill in ["terminal-ui", "tvs", "vdl", "snapshot", "snapshot-testing", "flask", "http-routing", "http-endpoint", "autopilot-hooks", "json-traversal", "html", "javascript", "vanilla-dom"]:
     assert any(skill in w.get("skills", []) for w in workers), (skill, workers)
-for skill in ["stub-llm", "e2e-test", "cli-view-assertion", "negative-control", "verifier", "registry-introspection", "cli-audit", "cli-design", "argparse", "argparse-bridge", "json-schema", "json-shape-inspect", "validation", "technical-writing", "markdown", "regex", "markdown-parse", "evidence-aggregation", "evidence-collection", "evaluator-summary", "handoff-authoring", "traceability-patch", "knowledge-raw-writeback", "architecture-writing", "solar-harness-control-plane", "algorithm_design"]:
+for skill in ["stub-llm", "e2e-test", "cli-view-assertion", "negative-control", "verifier", "registry-introspection", "cli-audit", "cli-design", "argparse", "argparse-bridge", "json-schema", "json-shape-inspect", "validation", "technical-writing", "markdown", "regex", "markdown-parse", "evidence-aggregation", "evidence-collection", "evaluator-summary", "handoff-authoring", "traceability-patch", "knowledge-raw-writeback", "architecture-writing", "solar-harness-control-plane", "algorithm_design", "code_impl", "test_generation", "test_execution"]:
     assert any(skill in w.get("skills", []) for w in workers), (skill, workers)
 for skill in ["code-audit", "docs-audit", "type-hints", "type-protocols", "state-schema-design", "refactor", "tmux-inspect", "data-aggregation", "shutil", "urllib", "atomic-writes", "hashing", "unittest-mock", "capability-graph", "event-sourcing"]:
     assert any(skill in w.get("skills", []) for w in workers), (skill, workers)
@@ -73,7 +73,7 @@ assert any("evidence" in w.get("capabilities", []) for w in workers), workers
 assert any("env-passthrough" in w.get("capabilities", []) for w in workers), workers
 assert any("metrics" in w.get("capabilities", []) for w in workers), workers
 assert any("documentation" in w.get("capabilities", []) for w in workers), workers
-for cap in ["harness.context_preflight", "harness.intent", "harness.dispatch_visibility", "harness.contracts", "harness.dag", "harness.status", "harness.model_routing", "dag.validate", "dag.ready_nodes", "dag.join_gate", "activation.proof", "negative_control", "runtime_artifacts", "autopilot.monitor", "autopilot.safe_apply", "pane.deadlock_detection", "lazy-import", "cli", "algorithm_design", "solar-harness-control-plane", "architecture-writing"]:
+for cap in ["harness.context_preflight", "harness.intent", "harness.dispatch_visibility", "harness.contracts", "harness.dag", "harness.status", "harness.model_routing", "dag.validate", "dag.ready_nodes", "dag.join_gate", "activation.proof", "negative_control", "runtime_artifacts", "autopilot.monitor", "autopilot.safe_apply", "pane.deadlock_detection", "lazy-import", "cli", "algorithm_design", "solar-harness-control-plane", "architecture-writing", "code_impl", "test_generation", "test_execution"]:
     assert any(cap in w.get("capabilities", []) for w in workers), (cap, workers)
 
 spec = importlib.util.spec_from_file_location("solar_autopilot_monitor", root / "solar-autopilot-monitor.py")
@@ -107,7 +107,7 @@ assert any("data-modeling" in w.get("skills", []) for w in monitor_workers), mon
 assert any("compatibility" in w.get("skills", []) for w in monitor_workers), monitor_workers
 for skill in ["terminal-ui", "tvs", "vdl", "snapshot", "snapshot-testing", "flask", "http-routing", "http-endpoint", "autopilot-hooks", "json-traversal", "html", "javascript", "vanilla-dom"]:
     assert any(skill in w.get("skills", []) for w in monitor_workers), (skill, monitor_workers)
-for skill in ["stub-llm", "e2e-test", "cli-view-assertion", "negative-control", "verifier", "registry-introspection", "cli-audit", "cli-design", "argparse", "argparse-bridge", "json-schema", "json-shape-inspect", "validation", "technical-writing", "markdown", "regex", "markdown-parse", "evidence-aggregation", "evidence-collection", "evaluator-summary", "handoff-authoring", "traceability-patch", "knowledge-raw-writeback", "architecture-writing", "solar-harness-control-plane", "algorithm_design"]:
+for skill in ["stub-llm", "e2e-test", "cli-view-assertion", "negative-control", "verifier", "registry-introspection", "cli-audit", "cli-design", "argparse", "argparse-bridge", "json-schema", "json-shape-inspect", "validation", "technical-writing", "markdown", "regex", "markdown-parse", "evidence-aggregation", "evidence-collection", "evaluator-summary", "handoff-authoring", "traceability-patch", "knowledge-raw-writeback", "architecture-writing", "solar-harness-control-plane", "algorithm_design", "code_impl", "test_generation", "test_execution"]:
     assert any(skill in w.get("skills", []) for w in monitor_workers), (skill, monitor_workers)
 for skill in ["code-audit", "docs-audit", "type-hints", "type-protocols", "state-schema-design", "refactor", "tmux-inspect", "data-aggregation", "shutil", "urllib", "atomic-writes", "hashing", "unittest-mock", "capability-graph", "event-sourcing"]:
     assert any(skill in w.get("skills", []) for w in monitor_workers), (skill, monitor_workers)
@@ -117,7 +117,7 @@ assert any("evidence" in w.get("capabilities", []) for w in monitor_workers), mo
 assert any("env-passthrough" in w.get("capabilities", []) for w in monitor_workers), monitor_workers
 assert any("metrics" in w.get("capabilities", []) for w in monitor_workers), monitor_workers
 assert any("documentation" in w.get("capabilities", []) for w in monitor_workers), monitor_workers
-for cap in ["harness.context_preflight", "harness.intent", "harness.dispatch_visibility", "harness.contracts", "harness.dag", "harness.status", "harness.model_routing", "dag.validate", "dag.ready_nodes", "dag.join_gate", "activation.proof", "negative_control", "runtime_artifacts", "autopilot.monitor", "autopilot.safe_apply", "pane.deadlock_detection", "lazy-import", "cli", "algorithm_design", "solar-harness-control-plane", "architecture-writing"]:
+for cap in ["harness.context_preflight", "harness.intent", "harness.dispatch_visibility", "harness.contracts", "harness.dag", "harness.status", "harness.model_routing", "dag.validate", "dag.ready_nodes", "dag.join_gate", "activation.proof", "negative_control", "runtime_artifacts", "autopilot.monitor", "autopilot.safe_apply", "pane.deadlock_detection", "lazy-import", "cli", "algorithm_design", "solar-harness-control-plane", "architecture-writing", "code_impl", "test_generation", "test_execution"]:
     assert any(cap in w.get("capabilities", []) for w in monitor_workers), (cap, monitor_workers)
 PY
 

@@ -276,6 +276,18 @@ mkdir -p "$TMPDIR_TEST/sprints"
 printf '{"status":"passed","phase":"eval_passed"}\n' > "$TMPDIR_TEST/sprints/sprint-upstream.status.json"
 OUT=$(HARNESS_DIR="$TMPDIR_TEST" python3 "$LIB/graph_scheduler.py" ready --graph "$PREREQ_GRAPH" 2>/dev/null)
 check "external prerequisite pass releases ready node" "$OUT" '"P1"'
+python3 - <<PY
+import json
+from pathlib import Path
+p = Path("$PREREQ_GRAPH")
+g = json.loads(p.read_text())
+g["prerequisites"] = [{"sprint_id": "sprint-upstream", "required_status": "planning_complete"}]
+g["dependency_policy"] = {"blocks_until": [{"sprint_id": "sprint-upstream", "required_status": "planning_complete"}]}
+p.write_text(json.dumps(g))
+PY
+printf '{"status":"passed","phase":"finalized"}\n' > "$TMPDIR_TEST/sprints/sprint-upstream.status.json"
+OUT=$(HARNESS_DIR="$TMPDIR_TEST" python3 "$LIB/graph_scheduler.py" ready --graph "$PREREQ_GRAPH" 2>/dev/null)
+check "terminal upstream satisfies earlier planning_complete prerequisite" "$OUT" '"P1"'
 
 echo "T5: write_scope conflict split"
 OUT=$(python3 "$LIB/graph_scheduler.py" batches --graph "$CONFLICT" --max-parallel 8 2>/dev/null)

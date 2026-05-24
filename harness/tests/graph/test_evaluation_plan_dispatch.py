@@ -29,7 +29,7 @@ def test_plan_node_evaluation_derives_staged_mode_for_code_impl() -> None:
     assert "test_report" in plan["evidence_requirements"]
 
 
-def test_dispatch_node_evals_blocks_explicit_dual_plan_without_capacity(monkeypatch) -> None:
+def test_dispatch_node_evals_falls_back_dual_plan_to_staged_with_single_evaluator(monkeypatch) -> None:
     graph = {
         "sprint_id": "sid-eval-plan",
         "nodes": [
@@ -50,6 +50,16 @@ def test_dispatch_node_evals_blocks_explicit_dual_plan_without_capacity(monkeypa
     monkeypatch.setattr(gnd, "load_graph", lambda path: graph)
     monkeypatch.setattr(gnd, "save_graph", lambda path, data: saved.setdefault("graph", data))
     monkeypatch.setattr(gnd, "_node_eval_needed", lambda *args, **kwargs: True)
+    monkeypatch.setattr(gnd, "_existing_node_handoff", lambda sid, node, graph: Path("/tmp/handoff.md"))
+    monkeypatch.setattr(gnd, "_node_handoff_candidates", lambda sid, node, graph: [Path("/tmp/handoff.md")])
+    monkeypatch.setattr(gnd, "_eval_md_file", lambda sid, node_id: Path("/tmp/eval.md"))
+    monkeypatch.setattr(gnd, "_eval_json_file", lambda sid, node_id: Path("/tmp/eval.json"))
+    monkeypatch.setattr(gnd, "_dispatch_file", lambda sid, node_id: Path("/tmp/dispatch.md"))
+    monkeypatch.setattr(gnd, "_eval_dispatch_file", lambda sid, node_id: Path("/tmp/eval-dispatch.md"))
+    monkeypatch.setattr(gnd, "_inject_dispatch_context", lambda *args, **kwargs: None)
+    monkeypatch.setattr(gnd, "_write_submit_ack", lambda *args, **kwargs: None)
+    monkeypatch.setattr(gnd, "_send_to_pane", lambda *args, **kwargs: True)
+    monkeypatch.setattr(gnd, "_ensure_lease", lambda *args, **kwargs: {"acquired": True, "reason": "ok"})
     monkeypatch.setattr(
         gnd,
         "_discover_evaluators",
@@ -60,16 +70,21 @@ def test_dispatch_node_evals_blocks_explicit_dual_plan_without_capacity(monkeypa
 
     result = gnd.dispatch_node_evals("/tmp/sid-eval-plan.task_graph.json", dry_run=False)
 
-    assert result["dispatched"] == []
-    assert result["skipped"][0]["reason"] == "insufficient_evaluator_capacity"
+    assert result["skipped"] == []
+    assert result["dispatched"][0]["node"] == "N2"
     plan = graph["nodes"][0]["evaluation_plan"]
-    assert plan["review_mode"] == "dual"
+    requested = graph["nodes"][0]["evaluation_plan_requested"]
+    assert requested["review_mode"] == "dual"
+    assert requested["required_evaluators"] == 2
+    assert plan["review_mode"] == "staged"
+    assert plan["required_evaluators"] == 1
+    assert plan["fallback_applied"] is True
+    assert plan["requested_review_mode"] == "dual"
     assert plan["capacity"]["available_evaluators"] == 1
-    assert plan["capacity"]["required_evaluators"] == 2
-    assert plan["capacity"]["dispatchable_now"] is False
+    assert plan["capacity"]["dispatchable_now"] is True
 
 
-def test_dispatch_node_evals_reports_quorum_gap_even_with_pool_capacity(monkeypatch) -> None:
+def test_dispatch_node_evals_falls_back_when_quorum_not_implemented_even_with_pool_capacity(monkeypatch) -> None:
     graph = {
         "sprint_id": "sid-eval-plan-quorum",
         "nodes": [
@@ -89,6 +104,16 @@ def test_dispatch_node_evals_reports_quorum_gap_even_with_pool_capacity(monkeypa
     monkeypatch.setattr(gnd, "load_graph", lambda path: graph)
     monkeypatch.setattr(gnd, "save_graph", lambda path, data: None)
     monkeypatch.setattr(gnd, "_node_eval_needed", lambda *args, **kwargs: True)
+    monkeypatch.setattr(gnd, "_existing_node_handoff", lambda sid, node, graph: Path("/tmp/handoff.md"))
+    monkeypatch.setattr(gnd, "_node_handoff_candidates", lambda sid, node, graph: [Path("/tmp/handoff.md")])
+    monkeypatch.setattr(gnd, "_eval_md_file", lambda sid, node_id: Path("/tmp/eval.md"))
+    monkeypatch.setattr(gnd, "_eval_json_file", lambda sid, node_id: Path("/tmp/eval.json"))
+    monkeypatch.setattr(gnd, "_dispatch_file", lambda sid, node_id: Path("/tmp/dispatch.md"))
+    monkeypatch.setattr(gnd, "_eval_dispatch_file", lambda sid, node_id: Path("/tmp/eval-dispatch.md"))
+    monkeypatch.setattr(gnd, "_inject_dispatch_context", lambda *args, **kwargs: None)
+    monkeypatch.setattr(gnd, "_write_submit_ack", lambda *args, **kwargs: None)
+    monkeypatch.setattr(gnd, "_send_to_pane", lambda *args, **kwargs: True)
+    monkeypatch.setattr(gnd, "_ensure_lease", lambda *args, **kwargs: {"acquired": True, "reason": "ok"})
     monkeypatch.setattr(
         gnd,
         "_discover_evaluators",
@@ -100,12 +125,15 @@ def test_dispatch_node_evals_reports_quorum_gap_even_with_pool_capacity(monkeypa
 
     result = gnd.dispatch_node_evals("/tmp/sid-eval-plan-quorum.task_graph.json", dry_run=False)
 
-    assert result["dispatched"] == []
-    assert result["skipped"][0]["reason"] == "multi_evaluator_quorum_not_implemented"
+    assert result["skipped"] == []
+    assert result["dispatched"][0]["node"] == "N4"
     plan = graph["nodes"][0]["evaluation_plan"]
-    assert plan["capacity"]["available_evaluators"] == 2
-    assert plan["capacity"]["capacity_satisfied"] is True
-    assert plan["capacity"]["quorum_dispatch_supported"] is False
+    requested = graph["nodes"][0]["evaluation_plan_requested"]
+    assert requested["review_mode"] == "dual"
+    assert requested["capacity"]["quorum_dispatch_supported"] is False
+    assert plan["review_mode"] == "staged"
+    assert plan["fallback_reason"] == "multi_evaluator_quorum_not_implemented"
+    assert plan["capacity"]["dispatchable_now"] is True
 
 
 def test_build_eval_dispatch_text_includes_evaluation_plan(monkeypatch, tmp_path) -> None:

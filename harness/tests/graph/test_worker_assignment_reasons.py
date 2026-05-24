@@ -48,11 +48,11 @@ def test_queue_reason_remains_no_matching_worker_when_skills_are_missing() -> No
     assert "pytest" in result["queued"][0]["details"]["missing_skills"]
 
 
-def test_queue_reason_capacity_when_matching_worker_is_busy() -> None:
+def test_busy_matching_worker_is_assigned_instead_of_queued() -> None:
     result = assign_workers([_node("N1")], [_worker("pane-a", busy=True)])
-    assert result["assigned"] == []
-    assert result["queued"][0]["node"] == "N1"
-    assert result["queued"][0]["reason"] == "worker_capacity_exhausted"
+    assert result["assigned"][0]["node"] == "N1"
+    assert result["assigned"][0]["pane"] == "pane-a"
+    assert result["queued"] == []
 
 
 def test_queue_reason_runtime_not_running_when_matching_worker_is_shell_residue() -> None:
@@ -113,6 +113,21 @@ def test_control_plane_aliases_can_bind_specialized_builder_nodes() -> None:
     assert result["assigned"][0]["node"] == "N1"
 
 
+def test_code_impl_and_test_generation_aliases_bind_general_builder_workers() -> None:
+    worker = _worker("pane-a")
+    worker["skills"] = ["python", "pytest", "refactor", "ImplementationWorker"]
+    worker["capabilities"] = ["testing"]
+    node = {
+        "id": "N1",
+        "preferred_model": "glm-5.1",
+        "required_skills": [],
+        "required_capabilities": ["code_impl", "test_generation"],
+    }
+    result = assign_workers([node], [worker])
+    assert result["queued"] == []
+    assert result["assigned"][0]["node"] == "N1"
+
+
 def test_enqueue_ready_marks_no_matching_worker_nodes_as_worker_blocked(tmp_path: Path, monkeypatch) -> None:
     graph = {
         "sprint_id": "sid",
@@ -139,3 +154,38 @@ def test_enqueue_ready_marks_no_matching_worker_nodes_as_worker_blocked(tmp_path
     assert result["worker_blocked"][0]["node"] == "N1"
     assert graph["nodes"][0]["status"] == "worker_blocked"
     assert graph["node_results"]["N1"]["blocking_reason"] == "no_matching_worker"
+
+
+def test_worker_blocked_nodes_are_retryable_after_capability_fix(tmp_path: Path, monkeypatch) -> None:
+    graph = {
+        "sprint_id": "sid",
+        "nodes": [
+            {
+                "id": "N1",
+                "depends_on": [],
+                "status": "worker_blocked",
+                "required_skills": [],
+                "required_capabilities": ["code_impl", "test_generation"],
+                "preferred_model": "glm-5.1",
+            }
+        ],
+    }
+    graph_path = tmp_path / "sid.task_graph.json"
+    graph_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr("task_queue.enqueue", lambda *a, **kw: {"ok": True, "id": "q-2"})
+    result = enqueue_ready(
+        graph,
+        str(graph_path),
+        [{
+            "pane": "pane-a",
+            "models": ["glm-5.1"],
+            "skills": ["python", "pytest", "ImplementationWorker"],
+            "capabilities": ["testing"],
+            "busy": False,
+        }],
+        lease=False,
+        dry_run=False,
+    )
+    assert result["enqueued"][0]["node"] == "N1"
+    assert result["queued"] == []
+    assert graph["nodes"][0]["status"] == "assigned"

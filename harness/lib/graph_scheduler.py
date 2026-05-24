@@ -25,13 +25,15 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from prerequisite_resolver import iter_blocked, normalize_prerequisite
+
 HOME = Path.home()
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
 STATE_DB = Path(os.environ.get("HARNESS_STATE_DB", HARNESS_DIR / "run" / "state.db"))
 
 TERMINAL_STATUSES = {"passed", "failed", "skipped"}
 ACTIVE_STATUSES = {"assigned", "dispatched", "in_progress", "running", "reviewing"}
-READY_STATUSES = {"pending", "queued", "blocked", ""}
+READY_STATUSES = {"pending", "queued", "blocked", "worker_blocked", ""}
 PASS_STATUSES = {"passed"}
 SPRINTS_DIR = Path(os.environ.get("HARNESS_SPRINTS_DIR", HARNESS_DIR / "sprints"))
 
@@ -59,11 +61,48 @@ LABEL_ALIAS_GROUPS = [
     {
         "algorithm_design",
         "algorithm",
+        "optimization",
+        "runtime_design",
         "scheduler.design",
         "state-machine.design",
         "architecture",
         "data-modeling",
         "api-design",
+    },
+    {
+        "code_impl",
+        "ImplementationWorker",
+        "python",
+        "typescript",
+        "refactor",
+        "integration",
+        "subprocess",
+        "sqlite3",
+    },
+    {
+        "test_generation",
+        "test_execution",
+        "testing",
+        "pytest",
+        "regression",
+        "regression-tests",
+        "integration-testing",
+        "integration-tests",
+        "bash-tests",
+        "test.tdd",
+    },
+    {
+        "solar-harness-verification",
+        "solar-harness-compat-review",
+        "compat-review",
+        "compatibility",
+        "harness.verification",
+        "verification",
+        "verifier",
+        "review",
+        "testing",
+        "test_execution",
+        "code.review",
     },
 ]
 
@@ -468,73 +507,26 @@ def _external_prerequisites(graph: dict[str, Any]) -> list[Any]:
                 entries.append(raw)
 
     deduped: list[Any] = []
-    seen: set[str] = set()
+    seen: set[tuple] = set()
     for item in entries:
-        requirement, sprint_id, required = _parse_external_prerequisite(item)
-        dedupe_key = f"{sprint_id}:{required}"
+        norm = normalize_prerequisite(item)
+        if norm is None:
+            continue
+        dedupe_key = (
+            norm["sprint_id"],
+            norm.get("required_status"),
+            norm.get("required_phase"),
+            norm.get("required_node_id"),
+            norm.get("required_node_status"),
+        )
         if dedupe_key not in seen:
             deduped.append(item)
             seen.add(dedupe_key)
     return deduped
 
 
-def _parse_external_prerequisite(entry: Any) -> tuple[str, str, str]:
-    if isinstance(entry, dict):
-        sprint_id = str(entry.get("sprint_id") or entry.get("sid") or entry.get("child_sprint_id") or "").strip()
-        required = str(entry.get("required_status") or entry.get("status") or entry.get("required") or "passed").strip().lower() or "passed"
-        requirement = json.dumps(entry, ensure_ascii=False, sort_keys=True)
-        return requirement, sprint_id, required
-    entry = str(entry).strip()
-    if ":" not in entry:
-        return entry, entry, "passed"
-    sprint_id, required = entry.rsplit(":", 1)
-    sprint_id = sprint_id.strip()
-    required = required.strip().lower() or "passed"
-    return entry, sprint_id, required
-
-
-def _external_prerequisite_satisfied(entry: Any) -> tuple[bool, dict[str, Any]]:
-    requirement, sprint_id, required = _parse_external_prerequisite(entry)
-    status_path = SPRINTS_DIR / f"{sprint_id}.status.json"
-    detail: dict[str, Any] = {
-        "requirement": requirement,
-        "sprint_id": sprint_id,
-        "required": required,
-        "status_path": str(status_path),
-    }
-    if not sprint_id:
-        detail["reason"] = "empty_sprint_id"
-        return False, detail
-    if not status_path.exists():
-        detail["reason"] = "missing_status"
-        return False, detail
-    try:
-        status = json.loads(status_path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        detail["reason"] = "status_corrupt"
-        detail["error"] = str(exc)
-        return False, detail
-
-    current_status = str(status.get("status", "") or "").lower()
-    current_phase = str(status.get("phase", "") or "").lower()
-    detail["current_status"] = current_status
-    detail["current_phase"] = current_phase
-    if required == "passed":
-        ok = current_status == "passed"
-    else:
-        ok = current_status == required or current_phase == required
-    if not ok:
-        detail["reason"] = "status_not_satisfied"
-    return ok, detail
-
-
 def blocked_external_prerequisites(graph: dict[str, Any]) -> list[dict[str, Any]]:
-    blocked: list[dict[str, Any]] = []
-    for entry in _external_prerequisites(graph):
-        ok, detail = _external_prerequisite_satisfied(entry)
-        if not ok:
-            blocked.append(detail)
-    return blocked
+    return iter_blocked(graph, SPRINTS_DIR)
 
 
 def ready_nodes(graph: dict[str, Any]) -> list[dict[str, Any]]:
@@ -874,14 +866,16 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
             if str(worker.get("unavailable_reason") or "") == "worker_runtime_not_running":
                 blocked_by_runtime = True
                 continue
-            if pane in used_panes or _worker_busy(worker):
+            if pane in used_panes:
                 blocked_by_capacity = True
                 continue
+            is_busy = _worker_busy(worker)
+            busy_penalty = 1000 if is_busy else 0
             cap_score = _capability_score(worker, required_capabilities, capability_scores)
             skill_score = _skill_match_count(worker, required_skills)
             model_penalty = 0 if _model_match(worker, preferred_model) else 10
             load = int(worker.get("load", 0) or 0)
-            candidates.append((-cap_score, -skill_score, model_penalty, load, pane, worker))
+            candidates.append((-cap_score, -skill_score, busy_penalty, model_penalty, load, pane, worker))
 
         if not candidates:
             if blocked_by_runtime:
@@ -901,8 +895,8 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
             queued.append({"node": node["id"], "reason": reason, "details": details})
             continue
 
-        candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3], item[4]))
-        cap_rank, skill_rank, _model_penalty, _load, _pane, worker = candidates[0]
+        candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3], item[4], item[5]))
+        cap_rank, skill_rank, _busy_penalty, _model_penalty, _load, _pane, worker = candidates[0]
         used_panes.add(str(worker.get("pane")))
         assigned.append({
             "node": node["id"],
@@ -1252,10 +1246,70 @@ def _workers_from_file(path: str | None) -> list[dict[str, Any]]:
         return []
     data = json.loads(Path(path).read_text())
     if isinstance(data, dict):
-        return data.get("workers", [])
+        workers = data.get("workers", [])
+        if not isinstance(workers, list):
+            return []
+        return [_normalize_worker_entry(worker) for worker in workers if isinstance(worker, dict)]
     if isinstance(data, list):
-        return data
+        return [_normalize_worker_entry(worker) for worker in data if isinstance(worker, dict)]
     raise ValueError("workers file must be a list or {workers: [...]}")
+
+
+def _normalize_worker_entry(worker: dict[str, Any]) -> dict[str, Any]:
+    """Accept both scheduler workers and multi_task_screen.workers.v1 rows."""
+    normalized = dict(worker)
+    pane = str(normalized.get("pane") or normalized.get("id") or "").strip()
+    if pane and not normalized.get("pane"):
+        normalized["pane"] = pane
+    role = str(normalized.get("role") or "").lower()
+    if (role in {"builder", "lab", "lab-builder", "evaluator"} or "harness-lab" in pane) and not normalized.get("skills"):
+        normalized["skills"] = [
+            "bash",
+            "shell",
+            "python",
+            "testing",
+            "test_execution",
+            "code_impl",
+            "test_generation",
+            "planning",
+            "optimization",
+            "runtime_design",
+            "solar-harness-verification",
+            "solar-harness-compat-review",
+            "compat-review",
+            "compatibility",
+            "harness.verification",
+            "verification",
+            "verifier",
+            "review",
+        ]
+    if (role in {"builder", "lab", "lab-builder", "evaluator"} or "harness-lab" in pane) and not normalized.get("capabilities"):
+        normalized["capabilities"] = [
+            "bash",
+            "python",
+            "testing",
+            "test_execution",
+            "code_impl",
+            "test_generation",
+            "repair.pr-cot",
+            "failure.structured_repair",
+            "routing.complexity_budget",
+            "optimization",
+            "runtime_design",
+            "solar-harness-verification",
+            "solar-harness-compat-review",
+            "compat-review",
+            "compatibility",
+            "harness.verification",
+            "verification",
+            "code.review",
+        ]
+    if not normalized.get("models"):
+        if "lab" in pane or role in {"lab", "lab-builder"}:
+            normalized["models"] = ["glm", "glm-5", "glm-5.1", "zhipu"]
+        elif pane.endswith(".2") or pane.endswith(".3"):
+            normalized["models"] = ["opus", "claude-opus", "anthropic-opus"]
+    return normalized
 
 
 def main() -> int:
