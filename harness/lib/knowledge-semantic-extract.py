@@ -858,6 +858,75 @@ source_sha256: {content_sha}
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
+def build_map_messages(source: Path, content_sha: str, spans: list[dict[str, Any]], *, doc_profile: str) -> list[dict[str, str]]:
+    span_payload = [
+        {
+            "span_id": span["span_id"],
+            "heading_path": span.get("heading_path") or [],
+            "start_line": span.get("start_line"),
+            "end_line": span.get("end_line"),
+            "role": span.get("role", "body"),
+            "text": span.get("text", ""),
+        }
+        for span in spans
+    ]
+    system = """你是 Solar Knowledge 的 map 阶段证据抽取器。
+只基于输入 spans，输出紧凑 Markdown，不要 JSON、不要代码围栏、不要外部事实。
+目标是抽取 evidence atoms，供 reduce 阶段合成最终 extracted.md。
+每条 evidence atom 必须引用 raw:Sxxx。
+YAML/frontmatter 只可作为 metadata，不得作为摘要主体。
+"""
+    user = json.dumps(
+        {
+            "source": str(source),
+            "source_sha256": content_sha,
+            "doc_profile": doc_profile,
+            "task": "extract compact evidence atoms from this section",
+            "output_contract": [
+                "## Section Summary: 1-2 sentences",
+                "## Evidence Atoms: 3-8 bullets, each with raw:Sxxx",
+                "## Entities: compact comma-separated list",
+                "## Claims: 1-4 bullets with raw:Sxxx",
+                "## Risks or Limits: only if directly supported",
+            ],
+            "spans": span_payload,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+def build_reduce_messages(source: Path, content_sha: str, spans: list[dict[str, Any]], map_outputs: list[str], *, doc_profile: str) -> list[dict[str, str]]:
+    system = """你是 Solar Knowledge 的 reduce 阶段语义合成器。
+你会收到多个 section-level evidence atom 摘要。请合成为最终 `# Semantic Extraction` Markdown。
+硬规则：
+1. 只能基于 map outputs 和给定 span ids。
+2. 必须完整保留 10 个章节标题，标题文字必须匹配模板。
+3. 每个关键事实、论点、风险、验证项必须有 raw:Sxxx。
+4. 不要 N/A，不要“需要重新抽取”，不要模板套话。
+5. 输出紧凑但完整，优先覆盖所有章节。
+"""
+    allowed = [span["span_id"] for span in spans]
+    user = f"""源文件: {source}
+source_sha256: {content_sha}
+doc_profile: {doc_profile}
+allowed_span_ids: {allowed}
+
+固定模板：
+```markdown
+{STRICT_MARKDOWN_TEMPLATE}
+```
+
+section map outputs:
+
+{chr(10).join(f"<!-- map:{i+1} -->\n{item}" for i, item in enumerate(map_outputs))}
+
+最终答案只能输出填好的 Markdown，从 `# Semantic Extraction` 开始。
+"""
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
 def call_thunderomlx(messages: list[dict[str, str]], args: argparse.Namespace) -> tuple[str, dict[str, Any], int]:
     pause = thunderomlx_pause_state(args)
     if pause:
