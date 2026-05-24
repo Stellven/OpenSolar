@@ -3749,7 +3749,7 @@ PY
     echo "  $0 pm-dispatch --role ROLE --objective TEXT [--operator ID] [--sprint SID] [--dry-run]  PM 发号施令 → 无头算子"
     echo "  $0 pm-fleet [status|inbox|result]  PM 算子舰队状态 & 任务收件箱"
     echo "  $0 mirage [search|doctor|workspace|mounts|exec|provision]  Mirage 统一虚拟文件系统"
-    echo "  $0 wiki [install|status|export-sprint|update|query|ingest|chatgpt-import|vault-status|lint|rebuild|export-graph|colorize|history|run-dispatch|dispatch-watch|dispatch-maintenance|import-solar-db|capture-server|audit-uploads|backfill-uploads|quality-gate|reingest-quarantine|reingest-scheduler|qmd-status|qmd-repair|qmd-search|qmd-update|qmd-mcp|qmd-embed|ai-influence-digest|tech-hotspot-radar|help]  Obsidian Wiki 集成"
+    echo "  $0 wiki [install|status|export-sprint|update|query|ingest|chatgpt-import|vault-status|lint|rebuild|export-graph|colorize|history|run-dispatch|dispatch-watch|dispatch-maintenance|import-solar-db|capture-server|audit-uploads|backfill-uploads|quality-gate|reingest-quarantine|reingest-scheduler|qmd-status|qmd-repair|qmd-search|qmd-update|qmd-mcp|qmd-embed|semantic-extract|ai-influence-digest|tech-hotspot-radar|help]  Obsidian Wiki 集成"
     ;;
   mirage)
     # Mirage unified virtual filesystem — sprint-20260508-mirage-unified-vfs
@@ -4323,6 +4323,14 @@ EOF
         fi
         python3 "$_aae" backfill "$@"
         ;;
+      semantic-extract)
+        _kse="$HARNESS_DIR/lib/knowledge-semantic-extract.py"
+        if [[ ! -f "$_kse" ]]; then
+          err "knowledge-semantic-extract.py not found: $_kse"
+          exit 1
+        fi
+        python3 "$_kse" "$@"
+        ;;
       help|--help|-h|"")
         echo "Solar Harness Wiki — Obsidian LLM Wiki integration"
         echo ""
@@ -4357,6 +4365,8 @@ EOF
         echo "  $0 wiki qmd-update"
         echo "  $0 wiki qmd-mcp [status|start|stop-proxy]"
         echo "  $0 wiki qmd-embed [start|status|stop|run-once|run-idle|run-gentle|run-now]"
+        echo "  $0 wiki semantic-extract backfill [--source-dir PATH] [--limit N] [--since-hours H] [--qmd-after]"
+        echo "  $0 wiki semantic-extract backfill-vault [--limit N] [--since-hours H] [--qmd-after]  # Obsidian 正文层"
         echo ""
         echo "Examples:"
         echo "  $0 wiki install --vault ~/Documents/SolarWiki"

@@ -119,31 +119,7 @@ JSON_EOF
 ~/.solar/bin/solar-harness graph-scheduler validate --graph ~/.solar/harness/sprints/<sprint-id>.task_graph.json
 
 # Step 4b: 生成人读 HTML artifact（强制但不替代 plan/task_graph）
-cat > ~/.solar/harness/sprints/<sprint-id>.planning.html <<'HTML_EOF'
-<!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Planning — <sprint-id></title>
-  <style>
-    body { font-family: ui-sans-serif, system-ui, sans-serif; margin: 32px; line-height: 1.55; color: #172026; background: #f7f3ea; }
-    section { background: white; border: 1px solid #dfd5c2; border-radius: 16px; padding: 20px; margin: 18px 0; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #d8cdbb; padding: 8px; vertical-align: top; }
-  </style>
-</head>
-<body>
-  <h1>Planning — <sprint-id></h1>
-  <section><h2>架构方案</h2><p>...</p></section>
-  <section><h2>DAG / 并发边界</h2><p>...</p></section>
-  <section><h2>文件写范围</h2><p>...</p></section>
-  <section><h2>验证命令与 Stop Rules</h2><p>...</p></section>
-</body>
-</html>
-HTML_EOF
-
-python3 ~/.solar/harness/lib/html_artifact.py register --sid <sprint-id> --kind planning_html --path ~/.solar/harness/sprints/<sprint-id>.planning.html
+python3 ~/.solar/harness/lib/render_sprint_html.py render --sid <sprint-id> --kind planning --register
 
 # Step 5: 更新状态为 active（触发协调器按 DAG 自动派发给建设者）
 python3 -c "
@@ -189,6 +165,21 @@ json.dump(d,open(sf,'w'),indent=2)
 - 每条 Done 条件必须是**可量化的** (不是"代码写好"而是"测试覆盖率>80%")
 - 至少 3 条，不超过 7 条
 - 覆盖: 功能 + 性能 + 兼容性 + 安全
+
+## planning.html 视觉铁律
+
+- 先读取 `~/.solar/harness/templates/html-artifact.visual-template.html`，按该模板的视觉语言出图。
+- 优先使用统一渲染器：`python3 ~/.solar/harness/lib/render_sprint_html.py render --sid <sprint-id> --kind planning --register`
+- `planning.html` 和 PM 侧 `prd.html` 必须是同一套视觉系统，不允许 planner 自己发明第二套旧式样。
+- 默认视觉语言必须包含深色 hero、锚点目录 TOC、卡片分区与流程图。
+- 必须包含：
+  - hero 摘要头图
+  - 锚点目录 TOC
+  - 架构设计卡片区
+  - DAG / 并发边界流程图
+  - 技术栈 / 物理算子绑定区
+  - 风险矩阵 / 验证命令 / stop rules
+- 不允许只给纯文本章节；至少要有一个架构图或流程图，以及一个技术栈/执行拓扑区块。
 
 ## task_graph.json 契约（强制）
 

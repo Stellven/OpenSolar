@@ -2771,7 +2771,10 @@ PY
 
 4. 额外写人读 HTML artifact 到:
    ~/.solar/harness/sprints/${sid}.prd.html
-   HTML 是给用户阅读和审阅的可视化 artifact，不能替代 prd.md。必须 self-contained，不依赖外部 CSS/JS/CDN；必须用清晰版式、卡片、表格、风险矩阵、锚点目录或 SVG 结构图组织信息，不能只是 Markdown 转 HTML。
+   HTML 是给用户阅读和审阅的可视化 artifact，不能替代 prd.md。必须 self-contained，不依赖外部 CSS/JS/CDN。
+   优先使用统一渲染器生成:
+   python3 ~/.solar/harness/lib/render_sprint_html.py render --sid ${sid} --kind prd --register
+   `prd.html` 和后续 `planning.html` 必须统一为同一套 richer 视觉系统：深色 hero、锚点目录 TOC、卡片分区、流程/架构图、技术栈/算子绑定区、风险矩阵；不能只是 Markdown 转 HTML，也不能退化成朴素米色文档页。
 
 5. 写完 HTML 后注册并自动打开:
    python3 ~/.solar/harness/lib/html_artifact.py register --sid ${sid} --kind prd_html --path ~/.solar/harness/sprints/${sid}.prd.html
@@ -2853,7 +2856,10 @@ PY
 
 6. 额外写人读 HTML artifact 到:
    ~/.solar/harness/sprints/${sid}.planning.html
-   HTML 是给用户阅读和审阅的可视化 artifact，不能替代 design.md、plan.md 或 task_graph.json。必须 self-contained，不依赖外部 CSS/JS/CDN；必须展示架构方案、DAG/并发边界、文件级写范围、验证命令、风险矩阵和 stop rules。
+   HTML 是给用户阅读和审阅的可视化 artifact，不能替代 design.md、plan.md 或 task_graph.json。必须 self-contained，不依赖外部 CSS/JS/CDN。
+   优先使用统一渲染器生成:
+   python3 ~/.solar/harness/lib/render_sprint_html.py render --sid ${sid} --kind planning --register
+   `planning.html` 必须和 PM 侧 `prd.html` 保持同一套 richer 视觉系统：深色 hero、锚点目录 TOC、卡片分区、流程/架构图、技术栈/算子绑定区、风险矩阵；禁止回退成旧的朴素米色 planning 页。必须展示架构方案、DAG/并发边界、文件级写范围、验证命令、风险矩阵和 stop rules。
 
 7. 写完 HTML 后注册并自动打开:
    python3 ~/.solar/harness/lib/html_artifact.py register --sid ${sid} --kind planning_html --path ~/.solar/harness/sprints/${sid}.planning.html

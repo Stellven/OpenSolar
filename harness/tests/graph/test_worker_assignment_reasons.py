@@ -8,7 +8,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "lib"))
 
-from graph_scheduler import assign_workers  # noqa: E402
+from graph_scheduler import assign_workers, enqueue_ready  # noqa: E402
 
 
 def _worker(pane: str, *, busy: bool = False) -> dict:
@@ -33,7 +33,9 @@ def _node(node_id: str) -> dict:
 def test_queue_reason_distinguishes_capacity_from_no_matching_worker() -> None:
     result = assign_workers([_node("N1"), _node("N2")], [_worker("pane-a")])
     assert [item["node"] for item in result["assigned"]] == ["N1"]
-    assert result["queued"] == [{"node": "N2", "reason": "worker_capacity_exhausted"}]
+    assert result["queued"][0]["node"] == "N2"
+    assert result["queued"][0]["reason"] == "worker_capacity_exhausted"
+    assert "details" in result["queued"][0]
 
 
 def test_queue_reason_remains_no_matching_worker_when_skills_are_missing() -> None:
@@ -41,13 +43,16 @@ def test_queue_reason_remains_no_matching_worker_when_skills_are_missing() -> No
     worker["skills"] = ["python"]
     result = assign_workers([_node("N1")], [worker])
     assert result["assigned"] == []
-    assert result["queued"] == [{"node": "N1", "reason": "no_matching_worker"}]
+    assert result["queued"][0]["node"] == "N1"
+    assert result["queued"][0]["reason"] == "no_matching_worker"
+    assert "pytest" in result["queued"][0]["details"]["missing_skills"]
 
 
 def test_queue_reason_capacity_when_matching_worker_is_busy() -> None:
     result = assign_workers([_node("N1")], [_worker("pane-a", busy=True)])
     assert result["assigned"] == []
-    assert result["queued"] == [{"node": "N1", "reason": "worker_capacity_exhausted"}]
+    assert result["queued"][0]["node"] == "N1"
+    assert result["queued"][0]["reason"] == "worker_capacity_exhausted"
 
 
 def test_queue_reason_runtime_not_running_when_matching_worker_is_shell_residue() -> None:
@@ -56,7 +61,8 @@ def test_queue_reason_runtime_not_running_when_matching_worker_is_shell_residue(
     worker["unavailable_reason"] = "worker_runtime_not_running"
     result = assign_workers([_node("N1")], [worker])
     assert result["assigned"] == []
-    assert result["queued"] == [{"node": "N1", "reason": "worker_runtime_not_running"}]
+    assert result["queued"][0]["node"] == "N1"
+    assert result["queued"][0]["reason"] == "worker_runtime_not_running"
 
 
 def test_enriched_dag_capabilities_are_assignable() -> None:
@@ -90,3 +96,46 @@ def test_skill_labels_can_satisfy_required_capabilities() -> None:
     result = assign_workers([node], [worker])
     assert result["queued"] == []
     assert result["assigned"][0]["node"] == "N1"
+
+
+def test_control_plane_aliases_can_bind_specialized_builder_nodes() -> None:
+    worker = _worker("pane-a")
+    worker["skills"] = ["python", "workflow.planning", "technical-writing", "algorithm"]
+    worker["capabilities"] = ["documentation", "governance"]
+    node = {
+        "id": "N1",
+        "preferred_model": "sonnet",
+        "required_skills": ["python", "solar-harness-control-plane", "architecture-writing"],
+        "required_capabilities": ["algorithm_design", "documentation"],
+    }
+    result = assign_workers([node], [worker])
+    assert result["queued"] == []
+    assert result["assigned"][0]["node"] == "N1"
+
+
+def test_enqueue_ready_marks_no_matching_worker_nodes_as_worker_blocked(tmp_path: Path, monkeypatch) -> None:
+    graph = {
+        "sprint_id": "sid",
+        "nodes": [
+            {
+                "id": "N1",
+                "depends_on": [],
+                "required_skills": ["python", "solar-harness-control-plane"],
+                "required_capabilities": ["algorithm_design"],
+            }
+        ],
+    }
+    graph_path = tmp_path / "sid.task_graph.json"
+    graph_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr("task_queue.enqueue", lambda *a, **kw: {"ok": True, "id": "q-1"})
+    result = enqueue_ready(
+        graph,
+        str(graph_path),
+        [{"pane": "pane-a", "models": ["sonnet"], "skills": ["python"], "capabilities": ["python"]}],
+        lease=False,
+        dry_run=False,
+    )
+    assert result["queued"][0]["reason"] == "no_matching_worker"
+    assert result["worker_blocked"][0]["node"] == "N1"
+    assert graph["nodes"][0]["status"] == "worker_blocked"
+    assert graph["node_results"]["N1"]["blocking_reason"] == "no_matching_worker"
