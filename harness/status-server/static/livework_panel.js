@@ -48,6 +48,17 @@
     }).join("<br>");
   }
 
+  function formatRequirementCoverage(data) {
+    if (!data || data.status === "missing") return "No requirement coverage yet";
+    return [
+      "Sprint: " + (data.sprint_id || "unknown"),
+      "Verdict: " + (data.acceptance_verdict || "N/A"),
+      "done/total: " + (data.done || 0) + "/" + (data.total || 0),
+      "partial: " + (data.partial || 0) + " | missing: " + (data.missing || 0),
+      "graph_complete: " + (data.graph_complete ? "true" : "false"),
+    ].join("<br>");
+  }
+
   function formatEventsTail(data) {
     if (!data || !data.length) return "No recent events";
     return data.slice(-10).map(function (e) {
@@ -118,6 +129,10 @@
     fetchJSON("/deadlock-alerts", function (d) {
       setContent("deadlock-alerts-card", d ? formatDeadlocks(d) : "unknown");
       if (d && d.checked_at) setSourceTs("deadlock-alerts-card", d.checked_at);
+    });
+
+    fetchJSON("/requirement-coverage", function (d) {
+      setContent("requirement-coverage-card", d ? formatRequirementCoverage(d) : "unknown");
     });
 
     fetchJSON("/events/tail", function (d) {

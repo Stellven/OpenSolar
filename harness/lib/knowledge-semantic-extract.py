@@ -38,7 +38,18 @@ PROMPT_VERSION = "knowledge-extract-v2"
 SCHEMA_VERSION = "extracted-md-v1"
 DEFAULT_REGISTRY_DB = Path.home() / "Knowledge" / "_registry" / "knowledge_ingest.sqlite"
 DEFAULT_THUNDEROMLX_PAUSE_FILE = Path.home() / ".omlx" / "run" / "maintenance.json"
+DEFAULT_THUNDEROMLX_START_SCRIPT = Path.home() / ".solar" / "harness" / "scripts" / "thunderomlx_start_8002.sh"
 LOCK_EXIT_CODE = 75
+
+OBSIDIAN_TOP_LEVEL_DIRS = {
+    "concepts",
+    "references",
+    "synthesis",
+    "projects",
+    "theses",
+    "timelines",
+    "contradictions",
+}
 
 
 def now_iso() -> str:
@@ -64,6 +75,34 @@ def resolve_vault(raw: str | None) -> Path:
     if raw:
         return Path(raw).expanduser()
     return Path(os.environ.get("OBSIDIAN_VAULT_PATH", str(Path.home() / "Knowledge"))).expanduser()
+
+
+def is_obsidian_note(source: Path, vault: Path) -> bool:
+    try:
+        rel = source.resolve().relative_to(vault.resolve())
+    except Exception:
+        return False
+    if not rel.parts:
+        return False
+    return rel.parts[0] in OBSIDIAN_TOP_LEVEL_DIRS
+
+
+def infer_doc_profile(source: Path, vault: Path) -> str:
+    if not is_obsidian_note(source, vault):
+        return "artifact"
+    try:
+        head = source.resolve().relative_to(vault.resolve()).parts[0]
+    except Exception:
+        head = ""
+    return {
+        "concepts": "obsidian_concept",
+        "references": "obsidian_reference",
+        "synthesis": "obsidian_synthesis",
+        "projects": "obsidian_project",
+        "theses": "obsidian_thesis",
+        "timelines": "obsidian_timeline",
+        "contradictions": "obsidian_contradiction",
+    }.get(head, "obsidian_note")
 
 
 def thunderomlx_pause_state(args: argparse.Namespace) -> dict[str, Any] | None:
@@ -110,6 +149,67 @@ def maybe_exit_for_thunderomlx_pause(args: argparse.Namespace) -> bool:
     else:
         print(f"[semantic-extract] paused: {summary['reason']} ({summary['pause_file']})")
     return True
+
+
+def _health_url(endpoint: str) -> str:
+    return endpoint.rstrip("/") + "/health"
+
+
+def _request_json(url: str, args: argparse.Namespace, timeout_s: float = 5.0) -> dict[str, Any]:
+    req = urllib.request.Request(
+        url,
+        headers={"x-api-key": args.api_key, "Authorization": f"Bearer {args.api_key}"},
+        method="GET",
+    )
+    with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+        return json.loads(resp.read().decode("utf-8", errors="replace"))
+
+
+def thunderomlx_healthy(args: argparse.Namespace, timeout_s: float = 5.0) -> bool:
+    try:
+        body = _request_json(_health_url(args.endpoint), args, timeout_s)
+        if str(body.get("status") or "").lower() != "healthy":
+            return False
+        models = _request_json(args.endpoint.rstrip("/") + "/v1/models", args, timeout_s)
+        model_ids = {str(item.get("id") or "") for item in models.get("data") or [] if isinstance(item, dict)}
+        target_model = str(getattr(args, "proxy_model", "") or DEFAULT_PROXY_MODEL)
+        if target_model not in model_ids:
+            return False
+        engine_pool = body.get("engine_pool") if isinstance(body.get("engine_pool"), dict) else {}
+        loaded = [
+            str(item.get("id") or "")
+            for item in engine_pool.get("models") or []
+            if isinstance(item, dict) and item.get("loaded")
+        ]
+        allowed_loaded = {target_model, "Qwen3.6-35B-A3B-DFlash"}
+        if any(item and item not in allowed_loaded for item in loaded):
+            return False
+        return True
+    except Exception:
+        return False
+
+
+def ensure_thunderomlx_ready(args: argparse.Namespace) -> None:
+    """Best-effort health gate before expensive extraction calls.
+
+    ThunderOMLX can be momentarily unavailable while a local model server is
+    restarting or swapping models. Without this gate, a transient connection
+    refusal becomes a failed extraction job and pollutes the registry.
+    """
+    if thunderomlx_healthy(args):
+        return
+
+    start_cmd = str(getattr(args, "start_command", "") or "")
+    if start_cmd and start_cmd.lower() not in {"none", "off", "false", "0"}:
+        subprocess.run(start_cmd, shell=True, timeout=int(getattr(args, "start_timeout_sec", 180)))
+
+    deadline = time.monotonic() + max(1.0, float(getattr(args, "health_wait_sec", 30)))
+    while time.monotonic() < deadline:
+        if thunderomlx_healthy(args):
+            return
+        time.sleep(2)
+
+    raise urllib.error.URLError(f"ThunderOMLX not healthy at {_health_url(args.endpoint)}")
 
 
 def rel_to_vault(path: Path, vault: Path) -> Path:
@@ -285,6 +385,7 @@ def registry_finish_job(
     detail: dict[str, Any],
     repair_count: int,
     outputs: list[tuple[str, Path, str]],
+    max_doc_failures: int,
 ) -> None:
     if conn is None:
         return
@@ -318,14 +419,32 @@ def registry_finish_job(
             """,
             (stable_id("extract_output", job_id, kind, str(path)), job_id, kind, str(path), digest, now),
         )
+    final_state = state
     doc_state = {
         "extract_indexed": "EXTRACTED_QMD_INDEX_PENDING",
         "validation_failed": "VALIDATION_FAILED",
         "extract_failed_warn": "EXTRACT_FAILED_RETRYABLE",
         "extract_failed_circuit_open": "EXTRACT_FAILED_RETRYABLE",
     }.get(state, state.upper())
+    if not passed and max_doc_failures > 0:
+        failure_count = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM extract_jobs j
+            JOIN validation_results v ON v.job_id = j.job_id
+            WHERE j.doc_id = ? AND v.passed = 0
+            """,
+            (doc_id,),
+        ).fetchone()[0]
+        if int(failure_count) >= max_doc_failures:
+            final_state = "extract_quarantined"
+            doc_state = "EXTRACT_QUARANTINED"
+            conn.execute(
+                "UPDATE extract_jobs SET state = ?, updated_at = ? WHERE job_id = ?",
+                (final_state, now, job_id),
+            )
     conn.commit()
-    registry_transition(conn, doc_id, doc_state, {"job_id": job_id, "status": state, "error_code": error_code})
+    registry_transition(conn, doc_id, doc_state, {"job_id": job_id, "status": final_state, "error_code": error_code})
 
 
 def registry_mark_stale_jobs(args: argparse.Namespace, *, stale_minutes: int, limit: int) -> dict[str, Any]:
@@ -400,7 +519,9 @@ def primary_error_code(errors: list[str]) -> str | None:
     if not errors:
         return None
     first = errors[0]
-    if first.startswith("http_"):
+    if first.startswith("http_") or "http_" in first:
+        if "exclusive load window" in first or "busy" in first.lower():
+            return "E_THUNDEROMLX_BUSY"
         return "E_THUNDEROMLX_HTTP"
     if first.startswith("URLError") or "Connection refused" in first or "RemoteDisconnected" in first:
         return "E_THUNDEROMLX_UNAVAILABLE"
@@ -522,78 +643,173 @@ def source_spans(text: str, max_chars: int) -> list[dict[str, Any]]:
     return spans
 
 
+def _frontmatter_line_count(lines: list[str]) -> int:
+    if not lines or lines[0].strip() != "---":
+        return 0
+    for idx, line in enumerate(lines[1:], 2):
+        if line.strip() == "---":
+            return idx
+    return 0
+
+
+def source_spans_for_profile(text: str, max_chars: int, profile: str) -> list[dict[str, Any]]:
+    """Build higher signal spans for vault notes without letting YAML dominate."""
+    if not profile.startswith("obsidian_"):
+        return source_spans(text, max_chars)
+    lines = text.splitlines()
+    fm_end = _frontmatter_line_count(lines)
+    spans: list[dict[str, Any]] = []
+    span_index = 1
+    if fm_end:
+        fm_text = "\n".join(lines[:fm_end])
+        spans.append({
+            "span_id": f"S{span_index:03d}",
+            "start_line": 1,
+            "end_line": fm_end,
+            "heading_path": ["frontmatter"],
+            "text": fm_text[: min(len(fm_text), 1200)],
+            "role": "metadata_only",
+        })
+        span_index += 1
+
+    body_lines = lines[fm_end:]
+    current: list[str] = []
+    start_line = fm_end + 1
+    heading_path: list[str] = []
+    char_count = 0
+    used = len(spans[0]["text"]) + 1 if spans else 0
+
+    def flush(end_line: int) -> None:
+        nonlocal current, start_line, char_count, span_index, used
+        if not current:
+            return
+        text_chunk = "\n".join(current).strip()
+        if text_chunk:
+            spans.append({
+                "span_id": f"S{span_index:03d}",
+                "start_line": start_line,
+                "end_line": end_line,
+                "heading_path": heading_path[:],
+                "text": text_chunk,
+                "role": "body",
+            })
+            span_index += 1
+            used += len(text_chunk) + 1
+        current = []
+        char_count = 0
+
+    in_code = False
+    for offset, line in enumerate(body_lines, fm_end + 1):
+        if line.startswith("```"):
+            in_code = not in_code
+        heading = re.match(r"^(#{1,6})\s+(.+?)\s*$", line)
+        if heading and not in_code:
+            flush(offset - 1)
+            level = len(heading.group(1))
+            title = heading.group(2).strip()
+            heading_path = heading_path[: level - 1] + [title]
+            start_line = offset
+        add = len(line) + 1
+        if current and char_count + add > 2400 and not in_code:
+            flush(offset - 1)
+            start_line = offset
+        if used + char_count + add > max_chars:
+            break
+        current.append(line)
+        char_count += add
+    flush(fm_end + len(body_lines))
+    return spans or source_spans(text, max_chars)
+
+
 STRICT_MARKDOWN_TEMPLATE = """# Semantic Extraction
 
 ## 1. 一句话摘要
-<1-3 句，只基于输入；证据: raw:S001>
+<1-3 句，直接概括正文知识贡献；不要复述 YAML/frontmatter；证据: raw:S002>
 
 ## 2. 核心事实
 | 事实 | 证据位置 | 置信度 |
 |---|---|---|
-| <事实；没有则写 N/A> | raw:S001 | high |
+| <正文中的可验证事实/结论，最多 5 条；不要写 N/A 行> | raw:S002 | high |
 
-## 3. 功能模块
-### <模块名或 N/A>
-- 作用: <... 或 N/A>
-- 输入: <... 或 N/A>
-- 输出: <... 或 N/A>
-- 依赖: <... 或 N/A>
-- 证据: raw:S001
+## 3. 概念 / 实体 / 关系
+| 名称 | 类型 | 关系/含义 | 证据 |
+|---|---|---|---|
+| <概念、论文、项目、人物、模型、机制，最多 8 个> | concept/entity/paper/project/mechanism | <和本文主题的关系，20 字内> | raw:S002 |
 
-## 4. 用户价值
-- <价值或 N/A> 证据: raw:S001
+## 4. 论点与证据链
+- 论点: <核心论点>
+  - 证据: raw:S002
+  - 推导: <原文如何支持该论点，50 字内，不要引入外部事实；最多 4 个论点>
 
-## 5. 架构结构
+## 5. 应用 / 架构启发
 ```text
-<结构图；信息不足时写 N/A>
+<如果原文包含系统映射、流程、架构关系，画简洁结构；否则写“原文未提供明确架构结构”>
 ```
-证据: raw:S001
+证据: raw:S002
 
 ## 6. 命令 / API / 配置
 | 类型 | 名称 | 用途 | 证据 |
 |---|---|---|---|
-| N/A | N/A | 原文未提供 | raw:S001 |
+| <仅当原文明确出现命令/API/路径/配置时填写；否则写“原文未提供明确命令/API/配置”一行> | <名称> | <用途> | raw:S002 |
 
 ## 7. 验证证据
 | 验证项 | 结果 | 证据 |
 |---|---|---|
-| N/A | 原文未提供 | raw:S001 |
+| <论文结果、实验指标、验收结果、运行证据> | <数值/结论> | raw:S002 |
 
 ## 8. 风险边界
 | 风险 | 影响 | 缓解 | 证据 |
 |---|---|---|---|
-| <风险或 N/A> | <影响或 N/A> | <缓解或 N/A> | raw:S001 |
+| <原文明确或由原文限制直接导出的风险；不要泛泛而谈> | <影响> | <缓解/边界> | raw:S002 |
 
 ## 9. Open Questions
-- <问题或 N/A> 证据: raw:S001
+- <原文没有回答但对后续使用重要的问题；没有则写“原文未留下明确开放问题”> 证据: raw:S002
 
 ## 10. 检索关键词
-- <keyword 或 N/A>
+- <具体关键词，包含中英文术语、论文名、项目名、机制名；不要写 N/A>
+- <最多 12 个关键词>
 """
 
 
-def build_messages(source: Path, content_sha: str, spans: list[dict[str, Any]]) -> list[dict[str, str]]:
+def build_messages(source: Path, content_sha: str, spans: list[dict[str, Any]], *, doc_profile: str = "artifact") -> list[dict[str, str]]:
     span_blocks = []
     for span in spans:
         span_blocks.append(
-            f"### {span['span_id']} lines {span['start_line']}-{span['end_line']}\n"
+            f"### {span['span_id']} lines {span['start_line']}-{span['end_line']} role={span.get('role', 'body')} heading={span.get('heading_path', [])}\n"
             f"```markdown\n{span['text']}\n```"
         )
-    system = """你是 Solar Knowledge 的 ThunderOMLX 语义抽取器。
+    if doc_profile.startswith("obsidian_"):
+        focus = """文档类型是 Obsidian vault 知识页。你要抽取“知识图谱可用”的内容：
+- concepts: 定义、边界、反例、相关概念、应用场景
+- references: 来源、论文/人物/项目、关键观点、证据指标、局限
+- synthesis: 论点、论据链、冲突观点、架构启发、开放问题
+- projects: 目标、架构决策、技术路线、风险、验证证据
+YAML/frontmatter 只能作为 metadata/关键词辅助，禁止把 frontmatter 原样当摘要或核心事实。
+不要输出模板废话，例如“Extracted semantic unit for retrieval routing”。"""
+    else:
+        focus = """文档类型是工程/运行 artifact。重点抽取功能、接口、命令、验证证据、风险边界、后续动作。"""
+    system = f"""你是 Solar Knowledge 的 ThunderOMLX 语义抽取器。
 
 硬规则：
 1. 只基于用户提供的 spans，不补充外部事实。
 2. 输出必须是 Markdown，第一行必须是 `# Semantic Extraction`。
 3. 必须完整保留 10 个章节标题，标题文字必须逐字匹配模板。
 4. 每个关键事实、风险、命令/API、验证项都必须包含 `raw:S001` 这种证据锚点。
-5. 如果原文没有某类信息，不要省略章节，写 `N/A`，并仍然给最相关证据锚点。
+5. 不要为了填表制造 N/A 垃圾；没有对应信息时用一句“原文未提供明确...”说明，并给最相关证据锚点。
 6. 不要输出 `<think>`、解释、前言、道歉、JSON、HTML。
 7. 不要泄露 secrets/token/API key；疑似 secret 写 `[REDACTED]`。
 8. 不确定内容放入 `## 9. Open Questions`，不要猜测。
+9. 摘要必须来自正文主题，不得复制 YAML/frontmatter、tags、aliases。
+10. 核心事实必须尽量抽取具体实体、数值、论文名、项目名、机制名、决策名；不要输出空泛套话。
+11. 输出要紧凑，优先覆盖所有章节；不要在前几个章节写长篇，避免后面章节被截断。
+12. 每个表格优先 3-5 行，实体关系最多 8 行，论点最多 4 个，关键词最多 12 个。
+
+{focus}
 """
     user = f"""源文件: {source}
 source_sha256: {content_sha}
 schema_version: {SCHEMA_VERSION}
+doc_profile: {doc_profile}
 
 你要把输入 spans 填入下面的固定模板。不要改标题，不要删空章节。
 
@@ -634,7 +850,9 @@ source_sha256: {content_sha}
 请根据上一版输出和可用 span 修复为合格 Markdown：
 - 不要解释错误。
 - 不要输出代码围栏。
-- 缺少信息的章节写 N/A，但必须保留标题和证据锚点。
+- 不要用 N/A 填垃圾内容；缺少信息时写“原文未提供明确...”，但必须保留标题和证据锚点。
+- 如果摘要复制了 YAML/frontmatter，必须改成正文主题摘要。
+- 如果出现模板套话，必须删除并替换成原文中的具体事实、概念、论文、机制、指标或关系。
 - 每个表格至少一行。
 """
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
@@ -647,6 +865,7 @@ def call_thunderomlx(messages: list[dict[str, str]], args: argparse.Namespace) -
             "ThunderOMLX maintenance pause active: "
             + str(pause.get("reason") or pause.get("path") or "paused")
         )
+    ensure_thunderomlx_ready(args)
     payload = {
         "model": args.proxy_model,
         "max_tokens": args.max_tokens,
@@ -688,14 +907,29 @@ def call_thunderomlx_with_retries(messages: list[dict[str, str]], args: argparse
         try:
             text, response, latency = call_thunderomlx(messages, args)
             return text, response, total_latency + latency
-        except urllib.error.HTTPError:
-            # HTTP errors include a response body; keep them precise and do not
-            # hide them behind a generic retry wrapper.
-            raise
+        except urllib.error.HTTPError as exc:
+            err_body = exc.read().decode("utf-8", errors="replace")[:1000]
+            if exc.code not in {409, 423, 429, 503}:
+                # Non-transient HTTP errors include a response body; keep them
+                # precise and do not hide them behind a retry wrapper.
+                raise RuntimeError(f"http_{exc.code}: {err_body}") from exc
+            last_exc = RuntimeError(f"http_{exc.code}: {err_body}")
+            if attempt >= attempts:
+                break
+            try:
+                ensure_thunderomlx_ready(args)
+            except Exception:
+                pass
+            if delay:
+                time.sleep(delay * (2 ** (attempt - 1)))
         except Exception as exc:
             last_exc = exc
             if attempt >= attempts:
                 break
+            try:
+                ensure_thunderomlx_ready(args)
+            except Exception:
+                pass
             if delay:
                 time.sleep(delay * (2 ** (attempt - 1)))
     assert last_exc is not None
@@ -722,6 +956,23 @@ def validate_extracted(text: str, content_sha: str) -> list[str]:
         errors.append("output too short")
     if "\ufffd" in text:
         errors.append("replacement character detected")
+    na_count = len(re.findall(r"\bN/A\b", text))
+    if na_count >= 6:
+        errors.append(f"too many N/A placeholders: {na_count}")
+    if re.search(r"(?is)## 1\. 一句话摘要\s+---\s*title:", text):
+        errors.append("summary copied YAML frontmatter")
+    if "Extracted semantic unit for retrieval routing" in text:
+        errors.append("template boilerplate leaked")
+    bad_fillers = [
+        "本次抽取质量不足",
+        "需要重新抽取",
+        "原文未生成合格",
+        "本次抽取未能形成完整结构",
+    ]
+    for filler in bad_fillers:
+        if filler in text:
+            errors.append(f"low quality filler leaked: {filler}")
+            break
     if content_sha not in text:
         # The wrapper frontmatter adds this before write; validator can warn
         # but does not require model body to repeat it.
@@ -741,16 +992,16 @@ def normalize_extracted(text: str, spans: list[dict[str, Any]]) -> str:
 
     fallback_span = f"raw:{spans[0]['span_id']}" if spans else "raw:S001"
     required_blocks = [
-        ("## 1. 一句话摘要", f"N/A。证据: {fallback_span}"),
-        ("## 2. 核心事实", f"| 事实 | 证据位置 | 置信度 |\n|---|---|---|\n| N/A | {fallback_span} | low |"),
-        ("## 3. 功能模块", f"### N/A\n- 作用: N/A\n- 输入: N/A\n- 输出: N/A\n- 依赖: N/A\n- 证据: {fallback_span}"),
-        ("## 4. 用户价值", f"- N/A 证据: {fallback_span}"),
-        ("## 5. 架构结构", f"```text\nN/A\n```\n证据: {fallback_span}"),
-        ("## 6. 命令 / API / 配置", f"| 类型 | 名称 | 用途 | 证据 |\n|---|---|---|---|\n| N/A | N/A | 原文未提供 | {fallback_span} |"),
-        ("## 7. 验证证据", f"| 验证项 | 结果 | 证据 |\n|---|---|---|\n| N/A | 原文未提供 | {fallback_span} |"),
-        ("## 8. 风险边界", f"| 风险 | 影响 | 缓解 | 证据 |\n|---|---|---|---|\n| N/A | N/A | N/A | {fallback_span} |"),
-        ("## 9. Open Questions", f"- N/A 证据: {fallback_span}"),
-        ("## 10. 检索关键词", "- N/A"),
+        ("## 1. 一句话摘要", f"原文未生成合格摘要，需要重新抽取。证据: {fallback_span}"),
+        ("## 2. 核心事实", f"| 事实 | 证据位置 | 置信度 |\n|---|---|---|\n| 原文未生成合格核心事实，需要重新抽取 | {fallback_span} | low |"),
+        ("## 3. 概念 / 实体 / 关系", f"| 名称 | 类型 | 关系/含义 | 证据 |\n|---|---|---|---|\n| 未抽取 | unknown | 需要重新抽取 | {fallback_span} |"),
+        ("## 4. 论点与证据链", f"- 论点: 原文未生成合格论点链，需要重新抽取\n  - 证据: {fallback_span}\n  - 推导: 未抽取"),
+        ("## 5. 应用 / 架构启发", f"```text\n原文未提供明确架构结构，或本次抽取未合格\n```\n证据: {fallback_span}"),
+        ("## 6. 命令 / API / 配置", f"| 类型 | 名称 | 用途 | 证据 |\n|---|---|---|---|\n| 未提供 | 原文未提供明确命令/API/配置 | 不适用 | {fallback_span} |"),
+        ("## 7. 验证证据", f"| 验证项 | 结果 | 证据 |\n|---|---|---|\n| 原文未生成合格验证证据 | 需要重新抽取 | {fallback_span} |"),
+        ("## 8. 风险边界", f"| 风险 | 影响 | 缓解 | 证据 |\n|---|---|---|---|\n| 本次抽取质量不足 | 可能污染检索结果 | 重新抽取或人工复核 | {fallback_span} |"),
+        ("## 9. Open Questions", f"- 本次抽取未能形成完整结构，是否需要更大上下文或人工复核？ 证据: {fallback_span}"),
+        ("## 10. 检索关键词", "- 需要重新抽取"),
     ]
     for heading, filler in required_blocks:
         if heading not in body:
@@ -782,10 +1033,11 @@ def extract_one(source: Path, vault: Path, args: argparse.Namespace) -> dict[str
         return {"ok": True, "dry_run": True, "source": str(source), "manifest": str(manifest_path), "output": str(output_path), "doc_id": doc_id}
 
     text = raw_bytes.decode("utf-8", errors="replace")
-    spans = source_spans(text, args.max_chars)
+    doc_profile = infer_doc_profile(source, vault)
+    spans = source_spans_for_profile(text, args.max_chars, doc_profile)
     span_ids = registry_span_ids(conn, doc_id, spans)
     job_id = registry_start_job(conn, doc_id=doc_id, content_sha=content_sha, span_ids=span_ids, args=args)
-    messages = build_messages(source, content_sha, spans)
+    messages = build_messages(source, content_sha, spans, doc_profile=doc_profile)
     started_at = now_iso()
     repair_attempted = False
     repair_errors: list[str] = []
@@ -837,6 +1089,7 @@ def extract_one(source: Path, vault: Path, args: argparse.Namespace) -> dict[str
         "prompt_version": PROMPT_VERSION,
         "schema_version": SCHEMA_VERSION,
         "span_count": len(spans),
+        "doc_profile": doc_profile,
         "prompt_chars": sum(len(message.get("content", "")) for message in messages),
         "latency_ms": latency_ms,
         "usage": usage or {},
@@ -859,6 +1112,7 @@ def extract_one(source: Path, vault: Path, args: argparse.Namespace) -> dict[str
             f"endpoint: {args.endpoint}\n"
             f"prompt_version: {PROMPT_VERSION}\n"
             f"schema_version: {SCHEMA_VERSION}\n"
+            f"doc_profile: {doc_profile}\n"
             f"generated_at: {generated_at}\n"
             "---\n\n"
         )
@@ -907,6 +1161,7 @@ def extract_one(source: Path, vault: Path, args: argparse.Namespace) -> dict[str
         detail=report,
         repair_count=1 if repair_attempted else 0,
         outputs=output_records,
+        max_doc_failures=int(getattr(args, "max_doc_failures", 0)),
     )
     if conn is not None:
         conn.close()
@@ -1011,6 +1266,44 @@ def _registry_retryable_sources(args: argparse.Namespace, limit: int) -> list[Pa
     conn = registry_connect(args)
     if conn is None:
         return []
+    max_doc_failures = int(getattr(args, "max_doc_failures", 0))
+    if max_doc_failures > 0:
+        now = now_iso()
+        rows_to_quarantine = conn.execute(
+            """
+            SELECT d.doc_id
+            FROM documents d
+            WHERE d.current_state='EXTRACT_FAILED_RETRYABLE'
+              AND (
+                SELECT COUNT(*)
+                FROM extract_jobs j
+                JOIN validation_results v ON v.job_id = j.job_id
+                WHERE j.doc_id = d.doc_id AND v.passed = 0
+              ) >= ?
+            """,
+            (max_doc_failures,),
+        ).fetchall()
+        for row in rows_to_quarantine:
+            doc_id = str(row["doc_id"])
+            conn.execute("UPDATE documents SET current_state=?, updated_at=? WHERE doc_id=?", ("EXTRACT_QUARANTINED", now, doc_id))
+            conn.execute(
+                """
+                INSERT INTO ingest_events(event_id, doc_id, event_kind, from_state, to_state, source_adapter, payload_json, ts)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    stable_id("evt", doc_id, "extract_quarantined", now),
+                    doc_id,
+                    "semantic_extract_quarantined",
+                    "EXTRACT_FAILED_RETRYABLE",
+                    "EXTRACT_QUARANTINED",
+                    "knowledge-semantic-extract",
+                    json.dumps({"max_doc_failures": max_doc_failures}, ensure_ascii=False, sort_keys=True),
+                    now,
+                ),
+            )
+        if rows_to_quarantine:
+            conn.commit()
     rows = conn.execute(
         """
         SELECT source_path
@@ -1024,6 +1317,49 @@ def _registry_retryable_sources(args: argparse.Namespace, limit: int) -> list[Pa
     ).fetchall()
     conn.close()
     return [Path(str(row["source_path"])).expanduser() for row in rows if Path(str(row["source_path"])).expanduser().exists()]
+
+
+def _registry_pending_sources(args: argparse.Namespace, root: Path, limit: int) -> list[Path]:
+    """Return registered docs that have not completed semantic extraction.
+
+    This makes supervised backfill registry-driven instead of repeatedly
+    walking the filesystem and hoping changed-only cache picks useful files.
+    """
+    conn = registry_connect(args)
+    if conn is None:
+        return []
+    root_s = str(root.expanduser())
+    rows = conn.execute(
+        """
+        SELECT d.source_path
+        FROM documents d
+        WHERE d.current_state IN ('RAW_MATERIALIZED', 'VAULT_DISCOVERED')
+          AND d.extract_policy != 'off'
+          AND NOT EXISTS (
+            SELECT 1
+            FROM extract_jobs j
+            WHERE j.doc_id = d.doc_id
+              AND j.state IN ('extract_indexed', 'legacy_imported')
+          )
+        ORDER BY d.updated_at ASC
+        LIMIT ?
+        """,
+        (max(limit * 10, limit),),
+    ).fetchall()
+    conn.close()
+    out: list[Path] = []
+    for row in rows:
+        path = Path(str(row["source_path"])).expanduser()
+        if not path.exists():
+            continue
+        try:
+            path.relative_to(root_s)
+        except ValueError:
+            continue
+        out.append(path)
+        if len(out) >= limit:
+            break
+    return out
 
 
 def cmd_reap_stale(args: argparse.Namespace) -> int:
@@ -1047,10 +1383,15 @@ def cmd_supervised_backfill(args: argparse.Namespace) -> int:
             sources = retry_sources
             source_mode = "retryable"
         else:
-            sources = iter_sources(root, args.since_hours, include_raw=True)
-            if args.batch_size:
-                sources = sources[: args.batch_size]
-            source_mode = "scan"
+            pending_sources = _registry_pending_sources(args, root, args.batch_size)
+            if pending_sources:
+                sources = pending_sources
+                source_mode = "registry_pending"
+            else:
+                sources = iter_sources(root, args.since_hours, include_raw=True)
+                if args.batch_size:
+                    sources = sources[: args.batch_size]
+                source_mode = "scan"
         if not sources:
             overall.append({"batch": batch_index, "mode": source_mode, "reap": reap, "summary": {"ok": True, "total": 0, "extracted": 0}})
             break
@@ -1160,7 +1501,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--local-model", default=os.environ.get("THUNDEROMLX_LOCAL_MODEL", DEFAULT_LOCAL_MODEL))
     parser.add_argument("--profile", default=DEFAULT_PROFILE)
     parser.add_argument("--max-chars", type=int, default=int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_MAX_SOURCE_CHARS", "32000")))
-    parser.add_argument("--max-tokens", type=int, default=int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_MAX_TOKENS", "2400")))
+    parser.add_argument("--max-tokens", type=int, default=int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_MAX_TOKENS", "5200")))
     parser.add_argument("--timeout-sec", type=int, default=int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_TIMEOUT_SEC", "900")))
     parser.add_argument("--repair-attempts", type=int, default=int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_REPAIR_ATTEMPTS", "1")))
     parser.add_argument("--max-retries", type=int, default=int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_MAX_RETRIES", "2")))
@@ -1168,10 +1509,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--registry-db", default=os.environ.get("SOLAR_KNOWLEDGE_REGISTRY_DB", str(DEFAULT_REGISTRY_DB)))
     parser.add_argument("--lock-path", default=os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_LOCK", ""))
     parser.add_argument("--pause-file", default=os.environ.get("THUNDEROMLX_MAINTENANCE_FILE", str(DEFAULT_THUNDEROMLX_PAUSE_FILE)))
+    parser.add_argument("--start-command", default=os.environ.get("THUNDEROMLX_START_COMMAND", str(DEFAULT_THUNDEROMLX_START_SCRIPT)))
+    parser.add_argument("--start-timeout-sec", type=int, default=int(os.environ.get("THUNDEROMLX_START_TIMEOUT_SEC", "180")))
+    parser.add_argument("--health-wait-sec", type=int, default=int(os.environ.get("THUNDEROMLX_HEALTH_WAIT_SEC", "45")))
     parser.add_argument("--lock-wait", action="store_true", default=os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_LOCK_WAIT", "0") == "1")
     parser.add_argument("--max-consecutive-failures", type=int, default=int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_MAX_CONSECUTIVE_FAILURES", "5")))
     parser.add_argument("--max-fail-rate", type=float, default=float(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_MAX_FAIL_RATE", "0.25")))
     parser.add_argument("--min-circuit-attempts", type=int, default=int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_MIN_CIRCUIT_ATTEMPTS", "5")))
+    parser.add_argument("--max-doc-failures", type=int, default=int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_MAX_DOC_FAILURES", "2")))
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--qmd-after", action="store_true")

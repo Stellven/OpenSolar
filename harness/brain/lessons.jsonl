@@ -262,3 +262,5 @@
 {"ts": "2026-05-24T17:57:07Z", "sprint_id": "sprint-20260524-133807", "lesson": "Pre-existing failure (NOT caused by S2/S3)", "source": "auto_eval", "confidence": 0.8, "tags": ["FAIL", "eval", "sprint-20260524-133807"]}
 {"ts": "2026-05-24T17:58:25Z", "sprint_id": "sprint-20260523-lease-based-model-fleet-runtime", "lesson": "Sprint PASS (12 Done 一次过)", "source": "eval_pass", "confidence": 0.5, "tags": ["PASS"]}
 {"ts": "2026-05-24T18:02:41Z", "sprint_id": "sprint-20260523-lease-based-model-fleet-runtime", "lesson": "Sprint PASS (12 Done 一次过)", "source": "eval_pass", "confidence": 0.5, "tags": ["PASS"]}
+{"ts": "2026-05-24T19:12:27Z", "sprint_id": "sprint-20260523-lease-based-model-fleet-runtime", "lesson": "Sprint PASS (12 Done 一次过)", "source": "eval_pass", "confidence": 0.5, "tags": ["PASS"]}
+{"ts": "2026-05-24T20:29:18Z", "sprint_id": "sprint-20260523-lease-based-model-fleet-runtime", "lesson": "Sprint PASS (12 Done 一次过)", "source": "eval_pass", "confidence": 0.5, "tags": ["PASS"]}

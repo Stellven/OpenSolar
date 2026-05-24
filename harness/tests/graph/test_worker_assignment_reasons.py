@@ -128,6 +128,65 @@ def test_product_analytics_nodes_bind_general_builder_workers() -> None:
     assert result["assigned"][0]["node"] == "N1"
 
 
+def test_rag_reporting_nodes_bind_general_builder_workers() -> None:
+    worker = _worker("pane-a")
+    worker["skills"] = ["python", "docs", "harness.knowledge", "technical-writing"]
+    worker["capabilities"] = ["harness.model_routing", "harness.reporting"]
+    node = {
+        "id": "N1",
+        "preferred_model": None,
+        "required_skills": ["ai-rag-pipeline", "reporting"],
+        "required_capabilities": ["model.routing", "reporting"],
+    }
+    result = assign_workers([node], [worker])
+    assert result["queued"] == []
+    assert result["assigned"][0]["node"] == "N1"
+
+
+def test_sqlite_alias_nodes_bind_sqlite3_workers() -> None:
+    worker = _worker("pane-a")
+    worker["skills"] = ["python", "sqlite3"]
+    worker["capabilities"] = ["python"]
+    node = {
+        "id": "N1",
+        "preferred_model": "sonnet",
+        "required_skills": ["python", "sqlite"],
+        "required_capabilities": [],
+    }
+    result = assign_workers([node], [worker])
+    assert result["queued"] == []
+    assert result["assigned"][0]["node"] == "N1"
+
+
+def test_observability_skill_nodes_bind_observability_builders() -> None:
+    worker = _worker("pane-a")
+    worker["skills"] = ["python", "observability"]
+    worker["capabilities"] = ["observability"]
+    node = {
+        "id": "N1",
+        "preferred_model": None,
+        "required_skills": ["python", "observability"],
+        "required_capabilities": [],
+    }
+    result = assign_workers([node], [worker])
+    assert result["queued"] == []
+    assert result["assigned"][0]["node"] == "N1"
+
+
+def test_capability_match_accepts_any_alias_per_required_label() -> None:
+    worker = _worker("pane-a")
+    worker["capabilities"] = ["harness.model_routing"]
+    node = {
+        "id": "N1",
+        "preferred_model": None,
+        "required_skills": [],
+        "required_capabilities": ["model.routing"],
+    }
+    result = assign_workers([node], [worker])
+    assert result["queued"] == []
+    assert result["assigned"][0]["node"] == "N1"
+
+
 def test_code_impl_and_test_generation_aliases_bind_general_builder_workers() -> None:
     worker = _worker("pane-a")
     worker["skills"] = ["python", "pytest", "refactor", "ImplementationWorker"]
@@ -204,3 +263,42 @@ def test_worker_blocked_nodes_are_retryable_after_capability_fix(tmp_path: Path,
     assert result["enqueued"][0]["node"] == "N1"
     assert result["queued"] == []
     assert graph["nodes"][0]["status"] == "assigned"
+
+
+def test_worker_blocked_node_becomes_queued_when_matching_worker_is_pane_busy(tmp_path: Path, monkeypatch) -> None:
+    graph = {
+        "sprint_id": "sid",
+        "nodes": [
+            {
+                "id": "N1",
+                "depends_on": [],
+                "status": "worker_blocked",
+                "required_skills": ["python", "sqlite"],
+                "required_capabilities": [],
+            }
+        ],
+    }
+    graph_path = tmp_path / "sid.task_graph.json"
+    graph_path.write_text("{}", encoding="utf-8")
+
+    def fake_acquire(*_args, **_kwargs):
+        return {"acquired": False, "reason": "pane_busy"}
+
+    monkeypatch.setattr("pane_lease.acquire", fake_acquire)
+    result = enqueue_ready(
+        graph,
+        str(graph_path),
+        [{
+            "pane": "pane-a",
+            "models": ["sonnet"],
+            "skills": ["python", "sqlite3"],
+            "capabilities": ["python"],
+            "busy": False,
+        }],
+        lease=True,
+        dry_run=False,
+    )
+    assert result["queued"][0]["reason"] == "pane_busy"
+    assert result["worker_blocked"] == []
+    assert graph["nodes"][0]["status"] == "queued"
+    assert graph["node_results"]["N1"]["blocking_reason"] == "pane_busy"

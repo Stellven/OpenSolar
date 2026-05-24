@@ -264,6 +264,7 @@ def _toc() -> str:
         '<li><a href="#summary">摘要</a></li>'
         '<li><a href="#architecture">架构设计</a></li>'
         '<li><a href="#flow">流程 / DAG</a></li>'
+        '<li><a href="#requirements">Requirement Trace Matrix</a></li>'
         '<li><a href="#contracts">合约 / 约束</a></li>'
         '<li><a href="#stack">技术栈 / 算子绑定</a></li>'
         '<li><a href="#validation">验证 / 风险</a></li>'
@@ -275,12 +276,42 @@ def _section(section_id: str, title: str, inner: str) -> str:
     return f'<section id="{section_id}"><h2>{html.escape(title)}</h2>{inner}</section>'
 
 
+def _coverage_block(requirement_trace: dict[str, Any], coverage_report: dict[str, Any], acceptance_verdict: dict[str, Any]) -> str:
+    requirement_rows = []
+    for item in requirement_trace.get("items", [])[:12]:
+        requirement_rows.append([
+            html.escape(str(item.get("requirement_id", "N/A"))),
+            html.escape(str(item.get("final_status", "N/A"))),
+            html.escape(", ".join(str(x) for x in item.get("mapped_nodes", [])[:4]) or "N/A"),
+        ])
+    if not requirement_rows:
+        requirement_rows = [["N/A", "N/A", "N/A"]]
+    coverage_summary = coverage_report.get("summary", {})
+    return (
+        _table(["Requirement", "状态", "映射节点"], requirement_rows)
+        + _render_markdown_block(
+            "\n".join(
+                [
+                    f"- total: {coverage_summary.get('total', 'N/A')}",
+                    f"- done: {coverage_summary.get('done', 'N/A')}",
+                    f"- partial: {coverage_summary.get('partial', 'N/A')}",
+                    f"- missing: {coverage_summary.get('missing', 'N/A')}",
+                    f"- acceptance_verdict: {acceptance_verdict.get('verdict', 'N/A')}",
+                ]
+            )
+        )
+    )
+
+
 def _render_prd(sid: str) -> str:
     base = SPRINTS_DIR
     status = _read_json(base / f"{sid}.status.json")
     prd = _read_text(base / f"{sid}.prd.md")
     contract = _read_text(base / f"{sid}.contract.md")
     graph = _read_json(base / f"{sid}.task_graph.json")
+    requirement_trace = _read_json(base / f"{sid}.requirement_trace.json")
+    coverage_report = _read_json(base / f"{sid}.coverage_report.json")
+    acceptance_verdict = _read_json(base / f"{sid}.acceptance_verdict.json")
     sections = _split_sections(prd)
     title = str(status.get("title") or sid)
     hero = _hero(
@@ -307,6 +338,7 @@ def _render_prd(sid: str) -> str:
     )
     stack = _table(["项", "次数", "类别"], _stack_rows(graph))
     validation = _table(["节点/来源", "验收 / 验证", "计数"], _acceptance_rows(graph, [prd, contract]))
+    requirements = _coverage_block(requirement_trace, coverage_report, acceptance_verdict)
     flow = (
         f'<div class="diagram">{html.escape(_diagram_from_graph(graph) if graph else "PM -> Planner -> Builder -> Evaluator")}</div>'
         + (_table(["节点", "模型", "技能", "Gate", "依赖"], _node_rows(graph)) if graph else "")
@@ -317,6 +349,7 @@ def _render_prd(sid: str) -> str:
         _section("summary", "摘要", summary_html),
         _section("architecture", "架构设计", '<div class="grid-2">' + "".join(arch_cards) + "</div>"),
         _section("flow", "流程 / DAG", flow),
+        _section("requirements", "Requirement Trace Matrix", requirements),
         _section("contracts", "合约 / 约束", contracts_table + _render_markdown_block(contract)),
         _section("stack", "技术栈 / 算子绑定", stack),
         _section("validation", "验证 / 风险", validation),
@@ -331,6 +364,9 @@ def _render_planning(sid: str) -> str:
     plan = _read_text(base / f"{sid}.plan.md")
     contract = _read_text(base / f"{sid}.contract.md")
     graph = _read_json(base / f"{sid}.task_graph.json")
+    requirement_trace = _read_json(base / f"{sid}.requirement_trace.json")
+    coverage_report = _read_json(base / f"{sid}.coverage_report.json")
+    acceptance_verdict = _read_json(base / f"{sid}.acceptance_verdict.json")
     title = str(status.get("title") or sid)
     hero = _hero(
         f"Planning — {title}",
@@ -355,12 +391,14 @@ def _render_planning(sid: str) -> str:
     contracts = _table(["节点", "write_scope", "risk"], _write_scope_rows(graph))
     stack = _table(["项", "次数", "类别"], _stack_rows(graph))
     validation = _table(["节点/来源", "验收 / 验证", "计数"], _acceptance_rows(graph, [design, plan, contract]))
+    coverage_block = _coverage_block(requirement_trace, coverage_report, acceptance_verdict)
     body = "\n".join([
         hero,
         _toc(),
         _section("summary", "摘要", summary),
         _section("architecture", "架构设计", '<div class="grid-2">' + "".join(arch_cards) + "</div>"),
         _section("flow", "流程 / DAG", flow),
+        _section("requirements", "Requirement Trace Matrix", coverage_block),
         _section("contracts", "合约 / 约束", contracts + _render_markdown_block(contract)),
         _section("stack", "技术栈 / 算子绑定", stack),
         _section("validation", "验证 / 风险", validation + _render_markdown_block(plan)),

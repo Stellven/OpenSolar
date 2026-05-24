@@ -16,6 +16,18 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+HARNESS_ROOT = Path(__file__).resolve().parents[1]
+LIB_DIR = HARNESS_ROOT / "lib"
+if str(LIB_DIR) not in sys.path:
+    sys.path.insert(0, str(LIB_DIR))
+
+from requirement_coverage import (
+    build_acceptance_verdict,
+    build_coverage_report,
+    build_requirement_trace,
+    enrich_task_graph_defaults,
+)
+
 try:
     import yaml  # type: ignore
 except Exception:  # pragma: no cover
@@ -224,6 +236,66 @@ def _node_enrichment(request_type: str, node: dict[str, Any]) -> dict[str, Any]:
     enriched.setdefault("parallelizable", request_type != SHORT_IMPL and node["logical_operator"] not in {"Verifier", "Critic"})
     enriched.setdefault("approval_gate", node["logical_operator"] in {"Verifier", "Critic"})
     return enriched
+
+
+def _build_requirement_items(
+    normalized_goal: str,
+    acceptance: list[str],
+    priority: str,
+) -> list[dict[str, Any]]:
+    items = [
+        {
+            "id": "REQ-000",
+            "source_text": normalized_goal,
+            "success_criteria": [normalized_goal],
+            "verification_method": "task_graph_closeout",
+            "priority": priority,
+        }
+    ]
+    for index, item in enumerate(acceptance, start=1):
+        items.append(
+            {
+                "id": f"REQ-{index:03d}",
+                "source_text": item,
+                "success_criteria": [item],
+                "verification_method": "acceptance_evidence",
+                "priority": priority,
+            }
+        )
+    return items
+
+
+def _apply_requirement_mapping(
+    graph: dict[str, Any],
+    requirements: list[dict[str, Any]],
+    request_type: str,
+) -> dict[str, Any]:
+    mapped = dict(graph)
+    nodes = [dict(node) for node in mapped.get("nodes") or []]
+    goal_req = requirements[:1]
+    acceptance_reqs = requirements[1:] or requirements[:1]
+    all_req_ids = [item["id"] for item in requirements]
+    goal_req_ids = [item["id"] for item in goal_req]
+    acceptance_req_ids = [item["id"] for item in acceptance_reqs]
+
+    root_ops = {"DeepArchitect", "ResearchScout"}
+    terminal_ops = {"Verifier", "Critic", "ArtifactCurator"}
+    execution_ops = {"ImplementationWorker", "TestRunner", "ResearchSynthesizer"}
+
+    for node in nodes:
+        op = str(node.get("logical_operator") or "")
+        if op in root_ops:
+            node["requirement_ids"] = all_req_ids
+        elif op in execution_ops:
+            node["requirement_ids"] = acceptance_req_ids
+        elif op in terminal_ops:
+            node["requirement_ids"] = all_req_ids
+        else:
+            node["requirement_ids"] = goal_req_ids
+        if request_type == RESEARCH and op == "ResearchScout" and not node.get("depends_on"):
+            node["requirement_ids"] = goal_req_ids
+    mapped["nodes"] = nodes
+    return mapped
 
 
 def _make_prd_view(
@@ -517,6 +589,9 @@ def emit_requirement_package(
     requirement_ir = payload["requirement_ir"]
     _write_json(pm_dir / "intake.json", payload["pm_intake"])
     _write_json(pm_dir / "requirement_ir.json", requirement_ir)
+    _write_json(pm_dir / "requirement_trace.json", artifacts["requirement_trace"])
+    _write_json(pm_dir / "coverage_report.json", artifacts["coverage_report"])
+    _write_json(pm_dir / "acceptance_verdict.json", artifacts["acceptance_verdict"])
     _write_text(pm_dir / "prd.md", artifacts["prd_markdown"])
     _write_yaml(pm_dir / "Contracts.yaml", artifacts["contracts_bundle"])
     _write_yaml(contracts_dir / "product.yaml", artifacts["contract_files"]["product"])
@@ -531,6 +606,9 @@ def emit_requirement_package(
     emitted = {
         "pm_dir": str(pm_dir),
         "requirement_ir": str(pm_dir / "requirement_ir.json"),
+        "requirement_trace": str(pm_dir / "requirement_trace.json"),
+        "coverage_report": str(pm_dir / "coverage_report.json"),
+        "acceptance_verdict": str(pm_dir / "acceptance_verdict.json"),
         "prd": str(pm_dir / "prd.md"),
         "contracts_bundle": str(pm_dir / "Contracts.yaml"),
         "task_dag": str(pm_dir / "task_dag.json"),
@@ -545,12 +623,18 @@ def emit_requirement_package(
         _write_text(sprint_root / f"{sprint_id}.product-brief.md", artifacts["product_brief_markdown"])
         _write_text(sprint_root / f"{sprint_id}.handoff.md", artifacts["handoff_markdown"]["solar_harness"])
         _write_json(sprint_root / f"{sprint_id}.requirement_ir.json", requirement_ir)
+        _write_json(sprint_root / f"{sprint_id}.requirement_trace.json", artifacts["requirement_trace"])
+        _write_json(sprint_root / f"{sprint_id}.coverage_report.json", artifacts["coverage_report"])
+        _write_json(sprint_root / f"{sprint_id}.acceptance_verdict.json", artifacts["acceptance_verdict"])
         _write_yaml(sprint_root / f"{sprint_id}.Contracts.yaml", artifacts["contracts_bundle"])
         emitted.update(
             {
                 "sprint_prd": str(sprint_root / f"{sprint_id}.prd.md"),
                 "sprint_contract": str(sprint_root / f"{sprint_id}.contract.md"),
                 "sprint_task_graph": str(sprint_root / f"{sprint_id}.task_graph.json"),
+                "sprint_requirement_trace": str(sprint_root / f"{sprint_id}.requirement_trace.json"),
+                "sprint_coverage_report": str(sprint_root / f"{sprint_id}.coverage_report.json"),
+                "sprint_acceptance_verdict": str(sprint_root / f"{sprint_id}.acceptance_verdict.json"),
                 "sprint_product_brief": str(sprint_root / f"{sprint_id}.product-brief.md"),
                 "sprint_handoff": str(sprint_root / f"{sprint_id}.handoff.md"),
             }
@@ -811,12 +895,14 @@ def build_pm_intake(
     priority = choose_priority(text, request_type)
     task_graph = build_task_graph_skeleton(request_type, lane_hint)
     task_graph["nodes"] = [_node_enrichment(request_type, node) for node in task_graph["nodes"]]
+    normalized_goal = _normalized_text(text)[:400]
     title = _safe_title(text)
     acceptance = _default_acceptance(request_type)
     non_goals = _default_non_goals(request_type)
     stop_rules = _default_stop_rules(request_type)
     open_questions = _derive_open_questions(request_type, text, papers)
     risk_register = _derive_risk_register(request_type)
+    requirements = _build_requirement_items(normalized_goal, acceptance, priority)
     source_inputs = {
         "raw_request": text,
         "papers": papers,
@@ -825,7 +911,7 @@ def build_pm_intake(
     }
     prd_view = _make_prd_view(
         canonical_request_type,
-        _normalized_text(text)[:400],
+        normalized_goal,
         source_inputs,
         acceptance,
         non_goals,
@@ -834,7 +920,7 @@ def build_pm_intake(
     )
     contracts = _build_contracts(
         request_type,
-        _normalized_text(text)[:400],
+        normalized_goal,
         acceptance,
         non_goals,
         stop_rules,
@@ -845,12 +931,20 @@ def build_pm_intake(
         "schema_version": "solar.requirement_ir.v1",
         "id": f"req-{uuid.uuid4().hex[:12]}",
         "request_type": canonical_request_type,
+        "priority": priority,
+        "lane_hint": lane_hint,
         "source_inputs": source_inputs,
-        "user_intent": _normalized_text(text)[:400],
-        "normalized_goal": _normalized_text(text)[:400],
+        "user_intent": normalized_goal,
+        "normalized_goal": normalized_goal,
         "assumptions": _derive_assumptions(request_type, lane_hint),
         "open_questions": open_questions,
         "risk_register": risk_register,
+        "requirements": requirements,
+        "scheduling": {
+            "queue_class": "requirements_compile",
+            "global_priority_boost": 1000,
+            "lane_hint": lane_hint,
+        },
         "confidence": _derive_confidence(request_type, text, papers),
         "prd_view": prd_view,
         "contracts": {
@@ -883,11 +977,14 @@ def build_pm_intake(
         },
         "evidence_policy": task_graph.get("evidence_policy", {}),
     }
+    task_graph = _apply_requirement_mapping(task_graph, requirements, request_type)
+    task_graph = enrich_task_graph_defaults(task_graph, requirement_ir, sprint_id=sprint_id or "N/A")
+    requirement_ir["dag_view"] = task_graph
     product_brief = {
         "title": title,
         "source": "codex-pm-router",
-        "intent": _normalized_text(text)[:400],
-        "problem": _normalized_text(text)[:400],
+        "intent": normalized_goal,
+        "problem": normalized_goal,
         "priority": priority,
         "lane_hint": lane_hint,
         "acceptance": acceptance,
@@ -919,6 +1016,7 @@ def build_pm_intake(
         acceptance,
         [
             "Treat requirement_ir.json and contracts/*.yaml as canonical sources.",
+            "Use requirement_trace/coverage_report as completion evidence, not intuition.",
             "Do not bypass planner before builder dispatch.",
         ],
     )
@@ -929,7 +1027,7 @@ def build_pm_intake(
         [".pm/requirement_ir.json", ".pm/prd.md", ".pm/Contracts.yaml", ".pm/task_dag.json", ".pm/handoff/solar_harness_handoff.md"],
         [
             "Planner produces design.md and plan.md.",
-            "Planner may refine task_graph.json but must preserve compiled governance constraints.",
+            "Planner may refine task_graph.json but must preserve compiled governance constraints and explicit requirement_ids mapping.",
             "No direct builder dispatch from raw request.",
         ],
         [
@@ -938,6 +1036,14 @@ def build_pm_intake(
         ],
     )
     product_brief_markdown = _render_product_brief_markdown(product_brief)
+    requirement_trace = build_requirement_trace(requirement_ir, task_graph)
+    coverage_report = build_coverage_report(requirement_trace, task_graph)
+    acceptance_verdict = build_acceptance_verdict(
+        requirement_ir,
+        task_graph,
+        coverage_report,
+        requested_verdict="pass",
+    )
     return {
         "pm_intake": {
             "request_type": request_type,
@@ -982,6 +1088,9 @@ def build_pm_intake(
             "contracts_bundle": contracts["bundle"],
             "contract_markdown": contract_markdown,
             "task_dag": task_graph,
+            "requirement_trace": requirement_trace,
+            "coverage_report": coverage_report,
+            "acceptance_verdict": acceptance_verdict,
             "product_brief": product_brief,
             "product_brief_markdown": product_brief_markdown,
             "handoff_markdown": {

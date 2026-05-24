@@ -77,6 +77,7 @@ LABEL_ALIAS_GROUPS = [
         "refactor",
         "integration",
         "subprocess",
+        "sqlite",
         "sqlite3",
     },
     {
@@ -103,6 +104,30 @@ LABEL_ALIAS_GROUPS = [
         "testing",
         "test_execution",
         "code.review",
+    },
+    {
+        "ai-rag-pipeline",
+        "rag",
+        "retrieval",
+        "knowledge",
+        "harness.knowledge",
+        "context.inject",
+    },
+    {
+        "reporting",
+        "report",
+        "report.compile",
+        "research.report.compile",
+        "harness.reporting",
+        "documentation",
+        "technical-writing",
+    },
+    {
+        "model.routing",
+        "harness.model_routing",
+        "model_routing",
+        "models.lab_matrix",
+        "models.show",
     },
 ]
 
@@ -745,10 +770,10 @@ def _capabilities_match(worker: dict[str, Any], required_capabilities: list[str]
     if not required_capabilities:
         return True
     caps = set(_worker_capabilities(worker))
-    required: set[str] = set()
     for item in required_capabilities:
-        required.update(_label_aliases(item))
-    return required.issubset(caps)
+        if not (_label_aliases(item) & caps):
+            return False
+    return True
 
 
 def _missing_skills(worker: dict[str, Any], required_skills: list[str]) -> list[str]:
@@ -1008,6 +1033,11 @@ def enqueue_ready(graph: dict[str, Any], graph_path: str, workers: list[dict[str
         if acquire is not None and not dry_run:
             lease_result = acquire(pane, sid, dispatch_id, ttl)
             if not lease_result.get("acquired"):
+                set_node_status(graph, node_id, "queued")
+                graph.setdefault("node_results", {}).setdefault(node_id, {})
+                graph["node_results"][node_id]["blocking_reason"] = lease_result.get("reason", "lease_failed")
+                graph["node_results"][node_id]["queued_pane"] = pane
+                graph["node_results"][node_id]["updated_at"] = _now()
                 queued.append({
                     "node": node_id,
                     "pane": pane,
@@ -1236,11 +1266,14 @@ def _normalize_worker_entry(worker: dict[str, Any]) -> dict[str, Any]:
             "bash",
             "shell",
             "python",
+            "sqlite",
+            "sqlite3",
             "testing",
             "test_execution",
             "code_impl",
             "test_generation",
             "planning",
+            "observability",
             "optimization",
             "runtime_design",
             "solar-harness-verification",
@@ -1251,11 +1284,15 @@ def _normalize_worker_entry(worker: dict[str, Any]) -> dict[str, Any]:
             "verification",
             "verifier",
             "review",
+            "ai-rag-pipeline",
+            "reporting",
         ]
     if (role in {"builder", "lab", "lab-builder", "evaluator"} or "harness-lab" in pane) and not normalized.get("capabilities"):
         normalized["capabilities"] = [
             "bash",
             "python",
+            "sqlite",
+            "sqlite3",
             "testing",
             "test_execution",
             "code_impl",
@@ -1272,6 +1309,10 @@ def _normalize_worker_entry(worker: dict[str, Any]) -> dict[str, Any]:
             "harness.verification",
             "verification",
             "code.review",
+            "ai-rag-pipeline",
+            "reporting",
+            "model.routing",
+            "harness.model_routing",
         ]
     if not normalized.get("models"):
         if "lab" in pane or role in {"lab", "lab-builder"}:

@@ -410,6 +410,10 @@ def _collect_artifacts(sid: str, sprints_dir: Path, redact: bool = True) -> dict
     handoff  = _first(f"{sid}.handoff.md", f"{sid}.handoff-builder*.md")
     eval_md  = _first(f"{sid}.eval.md")
     eval_json = _first(f"{sid}.eval.json")
+    requirement_ir = _first(f"{sid}.requirement_ir.json")
+    requirement_trace = _first(f"{sid}.requirement_trace.json")
+    coverage_report = _first(f"{sid}.coverage_report.json")
+    acceptance_verdict = _first(f"{sid}.acceptance_verdict.json")
     events   = _first(f"{sid}.events.jsonl")
     status_f = _first(f"{sid}.status.json")
     prd_html = _first(f"{sid}.prd.html")
@@ -424,6 +428,10 @@ def _collect_artifacts(sid: str, sprints_dir: Path, redact: bool = True) -> dict
         "design": design is not None,
         "plan": plan is not None,
         "planning_html": planning_html is not None,
+        "requirement_ir": requirement_ir is not None,
+        "requirement_trace": requirement_trace is not None,
+        "coverage_report": coverage_report is not None,
+        "acceptance_verdict": acceptance_verdict is not None,
         "handoff": handoff is not None,
         "eval": (eval_md or eval_json) is not None,
         "events": events is not None,
@@ -435,12 +443,16 @@ def _collect_artifacts(sid: str, sprints_dir: Path, redact: bool = True) -> dict
         "design": design,
         "plan": plan,
         "planning_html": planning_html,
+        "requirement_ir": requirement_ir,
+        "requirement_trace": requirement_trace,
+        "coverage_report": coverage_report,
+        "acceptance_verdict": acceptance_verdict,
         "handoff": handoff,
         "eval": eval_md or eval_json,
         "events": events,
     }
 
-    all_paths: list[Path] = [p for p in [prd, prd_html, contract, design, plan, planning_html, handoff, eval_md, eval_json, events, status_f] if p]
+    all_paths: list[Path] = [p for p in [prd, prd_html, contract, design, plan, planning_html, requirement_ir, requirement_trace, coverage_report, acceptance_verdict, handoff, eval_md, eval_json, events, status_f] if p]
     all_paths.extend(test_files)
 
     # Read content
@@ -451,6 +463,10 @@ def _collect_artifacts(sid: str, sprints_dir: Path, redact: bool = True) -> dict
         "design":   _read_file(design, redact=redact) if design else "",
         "plan":     _read_file(plan, redact=redact) if plan else "",
         "planning_html": _read_html_artifact(planning_html, redact=redact),
+        "requirement_ir": _read_file(requirement_ir, redact=redact) if requirement_ir else "",
+        "requirement_trace": _read_file(requirement_trace, redact=redact) if requirement_trace else "",
+        "coverage_report": _read_file(coverage_report, redact=redact) if coverage_report else "",
+        "acceptance_verdict": _read_file(acceptance_verdict, redact=redact) if acceptance_verdict else "",
         "handoff":  _read_file(handoff, redact=redact) if handoff else "",
         "eval_md":  _read_file(eval_md, redact=redact) if eval_md else "",
         "eval_json": _read_file(eval_json, redact=redact) if eval_json else "",
@@ -516,6 +532,10 @@ source_files:
 	  design: {str(sf.get('design', False)).lower()}
 	  plan: {str(sf.get('plan', False)).lower()}
 	  planning_html: {str(sf.get('planning_html', False)).lower()}
+	  requirement_ir: {str(sf.get('requirement_ir', False)).lower()}
+	  requirement_trace: {str(sf.get('requirement_trace', False)).lower()}
+	  coverage_report: {str(sf.get('coverage_report', False)).lower()}
+	  acceptance_verdict: {str(sf.get('acceptance_verdict', False)).lower()}
 	  handoff: {str(sf.get('handoff', False)).lower()}
 	  eval: {str(sf.get('eval', False)).lower()}
 	  events: {str(sf.get('events', False)).lower()}
@@ -537,6 +557,17 @@ source_files:
         f"- [{h.get('ts', '')}] {h.get('note', h.get('event', ''))}"
         for h in decisions[:10]
     ) or "N/A"
+
+    requirement_coverage_text = "\n\n".join(
+        filter(
+            None,
+            [
+                f"### Requirement Trace\n\n{ct.get('requirement_trace', '')}" if ct.get("requirement_trace") else "",
+                f"### Coverage Report\n\n{ct.get('coverage_report', '')}" if ct.get("coverage_report") else "",
+                f"### Acceptance Verdict\n\n{ct.get('acceptance_verdict', '')}" if ct.get("acceptance_verdict") else "",
+            ],
+        )
+    )
 
     # Reusable patterns (extracted from plan if present)
     patterns_text = "See Plan / Solution section above for implementation patterns."
@@ -578,6 +609,7 @@ source_files:
         section("User Need / PRD", ct.get("prd", "")),
         section("Architecture / Design", "\n\n---\n\n".join(filter(None, [ct.get("contract", ""), ct.get("design", "")]))),
         section("Plan / Solution", ct.get("plan", "")),
+        section("Requirement Coverage", requirement_coverage_text),
         section("Implementation Handoff", ct.get("handoff", "")),
         section("Test & Verification Evidence", ct.get("test_evidence", "")),
         section("Evaluation Verdict", "\n\n".join(filter(None, [ct.get("eval_md", ""), ct.get("eval_json", "")]))),
