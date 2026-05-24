@@ -4789,6 +4789,8 @@ function render(data) {
   document.getElementById('pm-dispatch-card').innerHTML = renderPmDispatches(data.pm_dispatches || {}, false);
   document.getElementById('overview-physical-operators').innerHTML = renderPhysicalOperators(data.physical_operators || {}, true);
   document.getElementById('physical-operators-card').innerHTML = renderPhysicalOperators(data.physical_operators || {}, false);
+  document.getElementById('overview-contract-summary').innerHTML = renderContractSummary(data.contract_summary || {}, true);
+  document.getElementById('contract-summary-card').innerHTML = renderContractSummary(data.contract_summary || {}, false);
   document.getElementById('overview-human-search').innerHTML = renderHumanSearch(data.human_search || {}, true);
   document.getElementById('human-search-card').innerHTML = renderHumanSearch(data.human_search || {}, false);
   document.getElementById('overview-research').innerHTML = renderResearchStatus(data.research || {}, true);
@@ -4884,6 +4886,9 @@ class StatusHandler(BaseHTTPRequestHandler):
 
         elif path == "/status":
             self._send_json(_status_payload(limit=50))
+
+        elif path == "/contract-summary":
+            self._send_text(_final_contract_summary_html(), content_type="text/html; charset=utf-8")
 
         elif path.startswith("/research/"):
             sid = path.split("/research/", 1)[1].strip("/")
