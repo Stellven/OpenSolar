@@ -84,7 +84,7 @@ def test_dispatch_node_evals_falls_back_dual_plan_to_staged_with_single_evaluato
     assert plan["capacity"]["dispatchable_now"] is True
 
 
-def test_dispatch_node_evals_falls_back_when_quorum_not_implemented_even_with_pool_capacity(monkeypatch) -> None:
+def test_dispatch_node_evals_keeps_dual_plan_when_quorum_capacity_exists(monkeypatch) -> None:
     graph = {
         "sprint_id": "sid-eval-plan-quorum",
         "nodes": [
@@ -126,14 +126,17 @@ def test_dispatch_node_evals_falls_back_when_quorum_not_implemented_even_with_po
     result = gnd.dispatch_node_evals("/tmp/sid-eval-plan-quorum.task_graph.json", dry_run=False)
 
     assert result["skipped"] == []
-    assert result["dispatched"][0]["node"] == "N4"
+    assert len(result["dispatched"]) == 2
+    assert {item["pane"] for item in result["dispatched"]} == {"solar-harness:0.3", "solar-harness-lab:0.3"}
     plan = graph["nodes"][0]["evaluation_plan"]
     requested = graph["nodes"][0]["evaluation_plan_requested"]
     assert requested["review_mode"] == "dual"
-    assert requested["capacity"]["quorum_dispatch_supported"] is False
-    assert plan["review_mode"] == "staged"
-    assert plan["fallback_reason"] == "multi_evaluator_quorum_not_implemented"
+    assert requested["capacity"]["quorum_dispatch_supported"] is True
+    assert plan["review_mode"] == "dual"
+    assert plan["required_evaluators"] == 2
     assert plan["capacity"]["dispatchable_now"] is True
+    assert graph["nodes"][0]["eval_assignments"][0]["role"] == "primary"
+    assert graph["nodes"][0]["eval_assignments"][1]["role"] == "secondary"
 
 
 def test_build_eval_dispatch_text_includes_evaluation_plan(monkeypatch, tmp_path) -> None:

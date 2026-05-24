@@ -767,11 +767,337 @@ def youtube_local_brief(conn: sqlite3.Connection, video_id: str) -> str:
     return "\n".join(parts)
 
 
+def anthropic_content_text(payload: dict[str, Any]) -> str:
+    choices = payload.get("choices")
+    if isinstance(choices, list) and choices:
+        first = choices[0]
+        if isinstance(first, dict):
+            msg = first.get("message")
+            if isinstance(msg, dict) and isinstance(msg.get("content"), str):
+                return msg["content"]
+            if isinstance(first.get("text"), str):
+                return first["text"]
+    content = payload.get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+            elif isinstance(item, str):
+                parts.append(item)
+        return "\n".join(parts)
+    return ""
+
+
+def extract_json_payload(text: str) -> Any:
+    text = (text or "").strip()
+    if not text:
+        raise ValueError("empty model output")
+    fenced = re.search(r"```(?:json)?\s*(.*?)```", text, flags=re.S | re.I)
+    if fenced:
+        text = fenced.group(1).strip()
+    start = min([idx for idx in [text.find("{"), text.find("[")] if idx >= 0], default=-1)
+    if start > 0:
+        text = text[start:]
+    return json.loads(text)
+
+
+def build_youtube_semantic_prompt(video: sqlite3.Row | tuple, transcript_clean: str,
+                                  max_input_chars: int = 12000,
+                                  strict_retry: bool = False) -> str:
+    clipped = transcript_clean[:max_input_chars]
+    retry_note = "\n重要：上一次输出不是合法 JSON。这次禁止 Markdown 代码块、禁止解释、禁止未转义引号，只输出一个 JSON object。\n" if strict_retry else ""
+    return f"""你是 Tech Hotspot Radar 的本地语义预处理器，运行在 ThunderOMLX + Qwen3.6。
+只基于给定 YouTube transcript 做结构化抽取，不要引入外部事实，不要编造。
+{retry_note}
+
+输出必须是 JSON object，字段：
+{{
+  "summary_zh": "800-2000字中文摘要，覆盖技术观点、架构含义、产业含义。避免使用英文双引号，必要时用中文书名号。",
+  "key_points": ["要点1", "要点2", "要点3"],
+  "entities": {{
+    "people": [],
+    "companies": [],
+    "products": [],
+    "models": [],
+    "papers": [],
+    "technologies": [],
+    "repos": []
+  }},
+  "topic_tags": ["agent", "llm"],
+  "technical_claims": [
+    {{"claim": "可验证技术判断", "evidence": "transcript", "confidence": "high|medium|low"}}
+  ],
+  "why_it_matters": "为什么值得跟踪",
+  "actionable_insight": "对研究/产品/工程路线的启发",
+  "quotable_segments": [
+    {{"timestamp": "N/A", "text": "压缩后的可引用观点", "reason": "为什么重要"}}
+  ],
+  "risk_or_noise": ["不确定性或噪声"]
+}}
+
+视频元信息：
+- video_id: {video[0]}
+- title: {video[1]}
+- channel: {video[2]}
+- url: {video[3]}
+- published_at: {video[4]}
+- duration_seconds: {video[5]}
+
+transcript:
+{clipped}
+"""
+
+
+def call_thunderomlx_youtube_semantic(video: sqlite3.Row | tuple, transcript_clean: str,
+                                      config: dict[str, Any]) -> dict[str, Any]:
+    cfg = ((config.get("youtube") or {}).get("semantic_postprocess") or {})
+    base_url = str(cfg.get("base_url") or os.environ.get("THUNDEROMLX_BASE_URL") or "http://127.0.0.1:8002").rstrip("/")
+    endpoint = str(cfg.get("endpoint") or "/v1/chat/completions")
+    model = str(cfg.get("model") or "Qwen3.6-35b-a3b")
+    api_key = os.environ.get(str(cfg.get("api_key_env") or "THUNDEROMLX_AUTH_TOKEN")) or str(cfg.get("default_api_key") or "local-thunderomlx")
+    timeout = int(cfg.get("timeout_seconds") or 180)
+    max_tokens = int(cfg.get("max_tokens") or 3000)
+    # Keep single calls conservative. Long-video quality should come from
+    # map/reduce, not by pushing full transcripts through the local server and
+    # risking a ThunderOMLX crash.
+    max_input_chars = int(cfg.get("max_input_chars") or 2500)
+    started = time.time()
+    last_error = ""
+    parsed = None
+    for attempt in range(2):
+        prompt = build_youtube_semantic_prompt(
+            video,
+            transcript_clean,
+            max_input_chars=max_input_chars if attempt == 0 else min(max_input_chars, 1800),
+            strict_retry=attempt > 0,
+        )
+        payload = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        req = urllib.request.Request(
+            f"{base_url}{endpoint}",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json", "x-api-key": api_key},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+        data = json.loads(body)
+        try:
+            parsed = extract_json_payload(anthropic_content_text(data))
+            break
+        except Exception as exc:
+            last_error = f"{type(exc).__name__}: {exc}"
+    if parsed is None:
+        raise ValueError(f"semantic postprocess JSON parse failed: {last_error}")
+    if not isinstance(parsed, dict):
+        raise ValueError("semantic postprocess output must be JSON object")
+    parsed["backend"] = "thunderomlx"
+    parsed["model"] = model
+    parsed["latency_ms"] = int((time.time() - started) * 1000)
+    return parsed
+
+
+def fallback_youtube_semantic(video: sqlite3.Row | tuple, transcript_clean: str, error: str = "") -> dict[str, Any]:
+    transcript_clean = re.sub(r"([\u4e00-\u9fffA-Za-z])\1{8,}", r"\1", transcript_clean.strip())
+    sentences = re.split(r"(?<=[。！？.!?])\s+", transcript_clean)
+    sentences = [s for s in sentences if len(set(s.strip())) > 3]
+    summary = " ".join(sentences[:12]).strip()
+    if len(summary) > 2000:
+        summary = summary[:2000]
+    keywords = [
+        "agent", "MCP", "context", "memory", "LLM", "inference", "training",
+        "robot", "multimodal", "GPU", "CUDA", "Triton", "MLX", "open source",
+        "benchmark", "model", "workflow",
+    ]
+    tags = sorted({kw.lower().replace(" ", "-") for kw in keywords if kw.lower() in transcript_clean.lower()})[:12]
+    return {
+        "summary_zh": summary or transcript_clean[:1200],
+        "key_points": [s[:180] for s in sentences[:5] if s.strip()],
+        "entities": {"people": [], "companies": [], "products": [], "models": [], "papers": [], "technologies": tags, "repos": []},
+        "topic_tags": tags or ["youtube", "transcript"],
+        "technical_claims": [{"claim": s[:240], "evidence": "transcript", "confidence": "low"} for s in sentences[:3] if s.strip()],
+        "why_it_matters": "ThunderOMLX semantic postprocess unavailable; this fallback preserves a searchable local brief and flags the item for later reprocessing.",
+        "actionable_insight": "Re-run semantic postprocess when ThunderOMLX is available.",
+        "quotable_segments": [],
+        "risk_or_noise": [error[:300]] if error else [],
+        "backend": "fallback",
+        "model": "deterministic_fallback",
+        "latency_ms": 0,
+    }
+
+
+def insert_youtube_semantic_atoms(conn: sqlite3.Connection, video_id: str,
+                                  semantic: dict[str, Any]) -> int:
+    ts = iso_z()
+    inserted = 0
+    atoms: list[tuple[str, str, str, float, float, float]] = []
+    summary = str(semantic.get("summary_zh") or "").strip()
+    if summary:
+        atoms.append(("claim", "summary", summary[:2000], 0.75, 0.55, 0.65))
+    for idx, claim in enumerate(semantic.get("technical_claims") or [], 1):
+        if isinstance(claim, dict):
+            text = str(claim.get("claim") or "").strip()
+        else:
+            text = str(claim).strip()
+        if text:
+            atoms.append(("claim", f"technical_claim_{idx}", text[:1000], 0.8, 0.6, 0.75))
+    for idx, tag in enumerate(semantic.get("topic_tags") or [], 1):
+        text = str(tag).strip()
+        if text:
+            atoms.append(("topic_tag", f"topic_{idx}", text[:200], 0.5, 0.5, 0.4))
+    for atom_type, suffix, content, importance, novelty, depth in atoms:
+        evidence_id = f"yt_{video_id}_{suffix}"
+        conn.execute(
+            "INSERT OR REPLACE INTO evidence_atoms "
+            "(evidence_id, source, source_id, source_table, atom_type, content, "
+            "metadata_json, importance_score, novelty_score, technical_depth, "
+            "source_weight, created_at, model_used) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) "
+            ,
+            (
+                evidence_id,
+                "youtube",
+                video_id,
+                "youtube_transcripts",
+                atom_type,
+                content,
+                json.dumps({"semantic_backend": semantic.get("backend"), "semantic_model": semantic.get("model")}, ensure_ascii=False),
+                importance,
+                novelty,
+                depth,
+                1.0,
+                ts,
+                LOCAL_KNOWLEDGE_MODEL if semantic.get("backend") == "thunderomlx" else "deterministic_fallback",
+            ),
+        )
+        inserted += 1
+    return inserted
+
+
+def materialize_youtube_semantic_outputs(conn: sqlite3.Connection, video_id: str,
+                                         transcript_clean: str, config: dict[str, Any]) -> dict[str, Any]:
+    video = conn.execute(
+        "SELECT video_id, title, channel_name, video_url, published_at, duration_seconds "
+        "FROM youtube_videos WHERE video_id=?",
+        (video_id,),
+    ).fetchone()
+    if not video or not transcript_clean.strip():
+        return {"status": "skipped", "reason": "missing video or transcript"}
+
+    cfg = ((config.get("youtube") or {}).get("semantic_postprocess") or {})
+    enabled = bool(cfg.get("enabled", True))
+    error = ""
+    if enabled:
+        try:
+            semantic = call_thunderomlx_youtube_semantic(video, transcript_clean, config)
+        except Exception as exc:
+            error = f"{type(exc).__name__}: {exc}"
+            if not bool(cfg.get("materialize_fallback", False)):
+                return {"status": "warn", "backend": "none", "atoms": 0, "packet_id": "", "path": "", "error": error}
+            semantic = fallback_youtube_semantic(video, transcript_clean, error)
+    else:
+        if not bool(cfg.get("materialize_fallback", False)):
+            return {"status": "skipped", "backend": "none", "atoms": 0, "packet_id": "", "path": "", "error": "semantic_postprocess disabled"}
+        semantic = fallback_youtube_semantic(video, transcript_clean, "semantic_postprocess disabled")
+
+    atoms = insert_youtube_semantic_atoms(conn, video_id, semantic)
+    packet_id = f"yt-rp-{video_id}"
+    packet = {
+        "video_id": video_id,
+        "title": video[1],
+        "channel": video[2],
+        "url": video[3],
+        "summary_zh": semantic.get("summary_zh", ""),
+        "key_points": semantic.get("key_points", []),
+        "topic_tags": semantic.get("topic_tags", []),
+        "technical_claims": semantic.get("technical_claims", []),
+        "why_it_matters": semantic.get("why_it_matters", ""),
+        "backend": semantic.get("backend"),
+        "model": semantic.get("model"),
+    }
+    compressed = json.dumps(packet, ensure_ascii=False, sort_keys=True)
+    insert_reasoning_packet(
+        conn,
+        packet_id=packet_id,
+        packet_type="trend_synthesis",
+        compressed_evidence=compressed,
+        evidence_atom_count=atoms + 1,
+        token_budget=4000,
+        input_hash=hashlib.sha256((video_id + transcript_clean).encode("utf-8")).hexdigest(),
+        created_at=iso_z(),
+        prompt_version="youtube-semantic-v1",
+        schema_version="youtube-semantic-json-v1",
+        premium_reason="youtube transcript semantic brief ready for later cross-source synthesis",
+    )
+
+    raw_root = Path((config.get("output") or {}).get("raw_dir", "/Users/lisihao/Knowledge/_raw/tech-hotspot-radar")).expanduser()
+    date_str = (str(video[4] or iso_z()).split("T", 1)[0] or iso_z().split("T", 1)[0])
+    out_dir = raw_root / "youtube-semantic" / date_str
+    out_dir.mkdir(parents=True, exist_ok=True)
+    md_path = out_dir / f"{video_id}.semantic.md"
+    md = [
+        "---",
+        "artifact_type: youtube_transcript_semantic_extract",
+        f"video_id: {video_id}",
+        f"source: {video[3]}",
+        f"channel: {video[2]}",
+        f"backend: {semantic.get('backend')}",
+        f"model: {semantic.get('model')}",
+        f"generated_at: {iso_z()}",
+        "---",
+        "",
+        f"# YouTube Semantic Extract: {video[1]}",
+        "",
+        "## Summary",
+        str(semantic.get("summary_zh") or "").strip(),
+        "",
+        "## Key Points",
+    ]
+    for item in semantic.get("key_points") or []:
+        md.append(f"- {item}")
+    md.extend(["", "## Topic Tags"])
+    for tag in semantic.get("topic_tags") or []:
+        md.append(f"- {tag}")
+    md.extend(["", "## Technical Claims"])
+    for claim in semantic.get("technical_claims") or []:
+        if isinstance(claim, dict):
+            md.append(f"- {claim.get('claim', '')} (confidence: {claim.get('confidence', 'N/A')})")
+        else:
+            md.append(f"- {claim}")
+    md.extend([
+        "",
+        "## Why It Matters",
+        str(semantic.get("why_it_matters") or ""),
+        "",
+        "## Actionable Insight",
+        str(semantic.get("actionable_insight") or ""),
+        "",
+        "## Provenance",
+        f"- source_table: youtube_transcripts",
+        f"- evidence_atoms_added: {atoms}",
+        f"- reasoning_packet: {packet_id}",
+    ])
+    if error:
+        md.extend(["", "## Processing Warning", error])
+    md_path.write_text("\n".join(md).rstrip() + "\n", encoding="utf-8")
+    return {"status": "ok", "backend": semantic.get("backend"), "atoms": atoms, "packet_id": packet_id, "path": str(md_path), "error": error}
+
+
 def clean_transcript_text(text: str) -> str:
     """Normalize transcript text without changing the core meaning."""
     text = html.unescape(text or "")
     text = re.sub(r"\[(?:music|applause|laughter|音乐|掌声|笑声)\]", " ", text, flags=re.I)
     text = re.sub(r"https?://\S+", " ", text)
+    # Whisper can occasionally hallucinate a single token hundreds of times.
+    # Collapse that before storage so fallback summaries do not pollute QMD.
+    text = re.sub(r"([\u4e00-\u9fffA-Za-z])\1{8,}", r"\1", text)
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
@@ -1063,6 +1389,23 @@ def save_transcript_success(conn: sqlite3.Connection, video_id: str, text: str, 
         (transcript_dir / f"{video_id}.txt").write_text(clean + "\n", encoding="utf-8")
     except Exception:
         pass
+    # Semantic materialization is part of the transcript success path: the raw
+    # transcript stays in youtube_transcripts, while derived knowledge becomes
+    # evidence atoms + a reasoning packet + raw markdown for wiki extraction.
+    try:
+        result = materialize_youtube_semantic_outputs(conn, video_id, clean, config)
+        if result.get("error"):
+            conn.execute(
+                "INSERT INTO pipeline_runs(source, command, started_at, finished_at, status, error_message) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                ("youtube", "semantic-postprocess", fetched_at, iso_z(), "partial", json.dumps(result, ensure_ascii=False)[:1000]),
+            )
+    except Exception as exc:
+        conn.execute(
+            "INSERT INTO pipeline_runs(source, command, started_at, finished_at, status, error_message) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            ("youtube", "semantic-postprocess", fetched_at, iso_z(), "partial", f"{type(exc).__name__}: {exc}"[:1000]),
+        )
 
 
 def archive_asr_audio(video_id: str, config: dict[str, Any]) -> str:
@@ -1179,6 +1522,52 @@ def cmd_process_transcripts(args: argparse.Namespace) -> int:
         print(f"  WARN {failure}")
     conn.close()
     return 0 if status in {"ok", "partial"} else 1
+
+
+def cmd_process_semantics(args: argparse.Namespace) -> int:
+    """Materialize ThunderOMLX semantic outputs for completed YouTube transcripts."""
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.executescript(SCHEMA_SQL)
+    limit = int(getattr(args, "limit", 0) or 0)
+    force = bool(getattr(args, "force", False))
+    dry_run = bool(getattr(args, "dry_run", False))
+    where = "t.transcript_status IN ('fetched','auto_generated') AND length(t.transcript_clean) > 0"
+    if not force:
+        where += " AND NOT EXISTS (SELECT 1 FROM reasoning_packets rp WHERE rp.packet_id = 'yt-rp-' || t.video_id)"
+    sql = (
+        "SELECT t.video_id, t.transcript_clean FROM youtube_transcripts t "
+        f"WHERE {where} ORDER BY t.fetched_at DESC"
+    )
+    if limit > 0:
+        sql += f" LIMIT {limit}"
+    rows = conn.execute(sql).fetchall()
+    if dry_run:
+        print(f"[process-semantics] dry-run due={len(rows)} limit={limit} force={force}")
+        conn.close()
+        return 0
+    run_id = begin_run(conn, "youtube", "process-semantics")
+    ok = warn = failed = 0
+    for video_id, clean in rows:
+        try:
+            result = materialize_youtube_semantic_outputs(conn, video_id, clean, config)
+            if result.get("status") == "ok":
+                ok += 1
+                print(f"  OK {video_id}: backend={result.get('backend')} atoms={result.get('atoms')} packet={result.get('packet_id')}")
+            else:
+                warn += 1
+                print(f"  WARN {video_id}: {result.get('error') or result.get('reason') or result}")
+            conn.commit()
+        except Exception as exc:
+            failed += 1
+            conn.rollback()
+            print(f"  ERROR {video_id}: {type(exc).__name__}: {exc}", file=sys.stderr)
+    status = "ok" if failed == 0 else "partial"
+    finish_run(conn, run_id, status, len(rows), ok, f"ok={ok} warn={warn} failed={failed}")
+    print(f"[process-semantics] processed={len(rows)} ok={ok} warn={warn} failed={failed}")
+    conn.close()
+    return 0 if failed == 0 else 1
 
 
 def parse_youtube_feed(channel: sqlite3.Row, xml_text: str, fetched_at: str) -> list[dict[str, Any]]:
@@ -1642,6 +2031,7 @@ def ensure_db(db_path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(str(db_path))
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=30000")
     ensure_reasoning_packet_policy_columns(conn)
     return conn
 
@@ -3950,6 +4340,53 @@ def report_top_events(conn: sqlite3.Connection, source: str, limit: int = 8) -> 
     ).fetchall()
 
 
+def youtube_semantic_brief(conn: sqlite3.Connection, video_id: str) -> dict[str, Any] | None:
+    """Return the ThunderOMLX semantic brief for a YouTube video when available."""
+    semantic_md_path = ""
+    semantic_root = Path("/Users/lisihao/Knowledge/_raw/tech-hotspot-radar/youtube-semantic")
+    try:
+        semantic_md_path = str(next(semantic_root.glob(f"*/{video_id}.semantic.md")))
+    except StopIteration:
+        semantic_md_path = ""
+    try:
+        row = conn.execute(
+            "SELECT compressed_evidence FROM reasoning_packets WHERE packet_id=?",
+            (f"yt-rp-{video_id}",),
+        ).fetchone()
+    except sqlite3.Error:
+        if not semantic_md_path:
+            return None
+        return {
+            "backend": "thunderomlx",
+            "model": "",
+            "summary": Path(semantic_md_path).read_text(encoding="utf-8", errors="replace")[:600],
+            "key_points": [],
+            "claim_count": 0,
+            "semantic_md_path": semantic_md_path,
+        }
+    if not row:
+        return None
+    try:
+        payload = json.loads(row[0] or "{}")
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    summary = str(payload.get("summary_zh") or "").strip()
+    key_points = payload.get("key_points") if isinstance(payload.get("key_points"), list) else []
+    claims = payload.get("technical_claims") if isinstance(payload.get("technical_claims"), list) else []
+    if not summary and not key_points and not claims:
+        return None
+    return {
+        "backend": str(payload.get("backend") or "semantic").strip(),
+        "model": str(payload.get("model") or "").strip(),
+        "summary": summary,
+        "key_points": [str(item).strip() for item in key_points if str(item).strip()][:3],
+        "claim_count": len(claims),
+        "semantic_md_path": semantic_md_path,
+    }
+
+
 def render_event_table(conn: sqlite3.Connection, source: str) -> str:
     rows = report_top_events(conn, source)
     if not rows:
@@ -3969,10 +4406,28 @@ def render_event_table(conn: sqlite3.Connection, source: str) -> str:
                 (source_id,),
             ).fetchone()
             if v:
-                detail = f"{v[1]} · {v[0]}"
+                detail = html_escape(f"{v[1]} · {v[0]}")
                 link = v[2]
             if t:
-                detail += f" · transcript={t[0]}({t[1]} chars)"
+                detail += html_escape(f" · transcript={t[0]}({t[1]} chars)")
+            semantic = youtube_semantic_brief(conn, str(source_id))
+            if semantic:
+                backend = semantic.get("backend") or "semantic"
+                model = semantic.get("model") or ""
+                summary = str(semantic.get("summary") or "")
+                points = semantic.get("key_points") or []
+                semantic_text = summary[:260]
+                if not semantic_text and points:
+                    semantic_text = "；".join(points)[:260]
+                detail += (
+                    "<div style=\"margin-top:8px;padding:10px;border-radius:12px;"
+                    "background:#eef7f3;border:1px solid #c9ded6\">"
+                    f"<b>ThunderOMLX semantic</b>: {html_escape(backend)}"
+                    f"{' / ' + html_escape(model) if model else ''}"
+                    f"{' · semantic_md=yes' if semantic.get('semantic_md_path') else ''}"
+                    f"<br>{html_escape(semantic_text)}"
+                    "</div>"
+                )
         elif source == "social":
             p = conn.execute(
                 "SELECT author_handle, post_url, substr(text,1,180) FROM social_posts WHERE post_id=?",
@@ -3998,7 +4453,7 @@ def render_event_table(conn: sqlite3.Connection, source: str) -> str:
             f"<td style=\"padding:10px;border-bottom:1px solid #eee3d3;{bg}\">{title}</td>"
             f"<td style=\"padding:10px;border-bottom:1px solid #eee3d3;{bg}\">{html_escape(event_type)}</td>"
             f"<td style=\"padding:10px;border-bottom:1px solid #eee3d3;{bg}\">{float(score or 0):.4f}</td>"
-            f"<td style=\"padding:10px;border-bottom:1px solid #eee3d3;{bg}\">{html_escape(detail)}</td>"
+            f"<td style=\"padding:10px;border-bottom:1px solid #eee3d3;{bg}\">{detail if source == 'youtube' else html_escape(detail)}</td>"
             f"<td style=\"padding:10px;border-bottom:1px solid #eee3d3;{bg}\">{html_escape(scored_at)}</td></tr>"
         )
     return (
@@ -4682,6 +5137,10 @@ def build_parser() -> argparse.ArgumentParser:
     process_transcripts.add_argument("--limit", type=int, default=0)
     process_transcripts.add_argument("--force", action="store_true")
     process_transcripts.add_argument("--dry-run", action="store_true")
+    process_semantics = sub.add_parser("process-semantics", help="Materialize ThunderOMLX semantic outputs for completed YouTube transcripts")
+    process_semantics.add_argument("--limit", type=int, default=0)
+    process_semantics.add_argument("--force", action="store_true")
+    process_semantics.add_argument("--dry-run", action="store_true")
     send_report = sub.add_parser("send-report", help="Write and send the Tech Hotspot Radar HTML report")
     send_report.add_argument("--date", default=None, help="Report date YYYY-MM-DD (default: UTC today)")
     send_report.add_argument("--output-base", default=None, help="Override report output directory")
@@ -4746,6 +5205,7 @@ def main() -> int:
         "report-fixture": cmd_report_fixture,
         "write-report": cmd_write_report,
         "process-transcripts": cmd_process_transcripts,
+        "process-semantics": cmd_process_semantics,
         "send-report": cmd_send_report,
         "collect-youtube": cmd_collect_youtube,
         "backfill-youtube": cmd_backfill_youtube,
