@@ -68,6 +68,10 @@ TELEMETRY_ONLY_FINDINGS = {
 ASK_BOSS_RE = re.compile(r"拍板|要走哪条|你决定|老板.*决定|昊哥拍板|等.*确认|是否.*继续")
 COMPACTING_RE = re.compile(r"Compacting conversation|压缩上下文|Compacting", re.I)
 PROMPT_IDLE_RE = re.compile(r"Press up to edit queued messages|❯\s*$|Try \"", re.M)
+SURVEY_PROMPT_RE = re.compile(
+    r"How is Claude doing this session\?|1:\s*Bad\s+2:\s*Fine\s+3:\s*Good\s+0:\s*Dismiss",
+    re.I,
+)
 PANE_BUSY_RE = re.compile(
     r"Compacting conversation|Compacting|✳|✶|✽|✢|⏺ Bash|Running|Effecting|Swooping|thinking|Cogitating|Churning|Ruminating|"
     r"Working|Mustering|Herding|Baking|Reticulating|Scurrying|Roosting|Whirring|Smooshing|"
@@ -544,6 +548,11 @@ def pane_safe_continue_prompt(tail: str) -> bool:
     return bool(SAFE_CONTINUE_PROMPT_RE.search(bottom))
 
 
+def pane_survey_blocked(tail: str) -> bool:
+    bottom = "\n".join(tail.splitlines()[-40:])
+    return bool(SURVEY_PROMPT_RE.search(bottom))
+
+
 def clear_current_prompt(target: str) -> bool:
     tail = tmux_capture(target)
     if not pane_at_prompt(tail):
@@ -561,6 +570,14 @@ def tmux_send(target: str, text: str) -> bool:
     try:
         clear_current_prompt(target)
         r = subprocess.run(["tmux", "send-keys", "-t", target, text, "Enter"], timeout=2)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def dismiss_survey_prompt(target: str) -> bool:
+    try:
+        r = subprocess.run(["tmux", "send-keys", "-t", target, "0", "Enter"], timeout=2)
         return r.returncode == 0
     except Exception:
         return False
@@ -1879,6 +1896,23 @@ def inspect_panes(state: dict, stall_seconds: int) -> list[dict]:
         unchanged_for = 0 if changed else int(now_epoch - float(prev.get("seen_at", now_epoch)))
         if changed:
             state["pane"][target] = {"hash": h, "seen_at": now_epoch, "role": role}
+        if role == "evaluator" and pane_survey_blocked(tail):
+            graph_node = assigned_graph_node_for_pane(target)
+            lease = pane_lease(target)
+            if graph_node or lease:
+                findings.append(
+                    {
+                        "sid": (graph_node or {}).get("sid") or str(lease.get("sid") or ""),
+                        "type": "evaluator_survey_blocked",
+                        "severity": "warn",
+                        "target": target,
+                        "role": role,
+                        "graph_node": graph_node,
+                        "lease": lease,
+                        "message": "Evaluator pane is blocked by Claude survey prompt while an active eval lease/assignment exists; dismiss the survey before resuming eval.",
+                    }
+                )
+                continue
         if ASK_BOSS_RE.search(tail):
             # PM pane is the user's intake surface. If it is stuck in Claude
             # Rewind/interrupt UI or contains old prompt residue, do not send
@@ -2230,6 +2264,23 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
             if dispatch and target and f.get("message"):
                 sent = tmux_send(target, f["message"])
             result = {"sid": sid, "action": ftype, "target": target, "dispatched": sent, "graph_node": f.get("graph_node", {})}
+            if sent and target:
+                used_targets.add(target)
+            mark_action(state, f, result)
+            actions.append(result)
+        elif ftype == "evaluator_survey_blocked":
+            append_event(sid, "autopilot_evaluator_survey_blocked", "warn", {"target": target, "lease": f.get("lease", {}), "graph_node": f.get("graph_node", {})})
+            sent = False
+            if dispatch and target:
+                sent = dismiss_survey_prompt(target)
+            result = {
+                "sid": sid,
+                "action": ftype,
+                "target": target,
+                "dispatched": sent,
+                "lease": f.get("lease", {}),
+                "graph_node": f.get("graph_node", {}),
+            }
             if sent and target:
                 used_targets.add(target)
             mark_action(state, f, result)
