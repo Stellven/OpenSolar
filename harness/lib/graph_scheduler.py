@@ -35,6 +35,38 @@ READY_STATUSES = {"pending", "queued", "blocked", ""}
 PASS_STATUSES = {"passed"}
 SPRINTS_DIR = Path(os.environ.get("HARNESS_SPRINTS_DIR", HARNESS_DIR / "sprints"))
 
+LABEL_ALIAS_GROUPS = [
+    {
+        "solar-harness-control-plane",
+        "control-plane",
+        "workflow.planning",
+        "governance",
+        "autopilot",
+        "routing",
+        "diagnostics",
+        "harness.contracts",
+        "harness.dag",
+        "harness.status",
+    },
+    {
+        "architecture-writing",
+        "technical-writing",
+        "architecture",
+        "markdown",
+        "docs",
+        "documentation",
+    },
+    {
+        "algorithm_design",
+        "algorithm",
+        "scheduler.design",
+        "state-machine.design",
+        "architecture",
+        "data-modeling",
+        "api-design",
+    },
+]
+
 
 def _now() -> str:
     return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -648,7 +680,7 @@ def _model_requires_strict_match(preferred_model: str | None, strict_model: bool
     return normalized in {"glm", "glm-5", "glm-5.1", "zhipu"}
 
 
-def _skill_aliases(value: Any) -> set[str]:
+def _label_aliases(value: Any) -> set[str]:
     raw = str(value or "").strip().lower()
     if not raw:
         return set()
@@ -660,7 +692,14 @@ def _skill_aliases(value: Any) -> set[str]:
         aliases.add(parts[-1])
         if parts[-1] == "design":
             aliases.add("architecture")
+    for group in LABEL_ALIAS_GROUPS:
+        if raw in group:
+            aliases.update(group)
     return aliases
+
+
+def _skill_aliases(value: Any) -> set[str]:
+    return _label_aliases(value)
 
 
 def _skill_match_count(worker: dict[str, Any], required_skills: list[str]) -> int:
@@ -731,14 +770,44 @@ def _worker_capabilities(worker: dict[str, Any]) -> list[str]:
         text = str(item)
         if text and text not in caps:
             caps.append(text)
-    return caps
+    expanded: list[str] = []
+    seen: set[str] = set()
+    for item in caps:
+        for alias in _label_aliases(item):
+            if alias not in seen:
+                seen.add(alias)
+                expanded.append(alias)
+    return expanded
 
 
 def _capabilities_match(worker: dict[str, Any], required_capabilities: list[str]) -> bool:
     if not required_capabilities:
         return True
     caps = set(_worker_capabilities(worker))
-    return set(required_capabilities).issubset(caps)
+    required: set[str] = set()
+    for item in required_capabilities:
+        required.update(_label_aliases(item))
+    return required.issubset(caps)
+
+
+def _missing_skills(worker: dict[str, Any], required_skills: list[str]) -> list[str]:
+    worker_aliases: set[str] = set()
+    for skill in worker.get("skills", []) or []:
+        worker_aliases.update(_skill_aliases(skill))
+    missing: list[str] = []
+    for required in required_skills:
+        if not (_skill_aliases(required) & worker_aliases):
+            missing.append(str(required))
+    return missing
+
+
+def _missing_capabilities(worker: dict[str, Any], required_capabilities: list[str]) -> list[str]:
+    worker_aliases = set(_worker_capabilities(worker))
+    missing: list[str] = []
+    for required in required_capabilities:
+        if not (_label_aliases(required) & worker_aliases):
+            missing.append(str(required))
+    return missing
 
 
 def _capability_score(worker: dict[str, Any], required_capabilities: list[str],
@@ -781,11 +850,19 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
         candidates: list[tuple[float, int, int, str, dict[str, Any]]] = []
         blocked_by_capacity = False
         blocked_by_runtime = False
+        any_worker_seen = False
+        missing_skill_union: set[str] = set()
+        missing_cap_union: set[str] = set()
 
         for worker in workers:
             pane = str(worker.get("pane", ""))
             if not pane:
                 continue
+            any_worker_seen = True
+            for item in _missing_skills(worker, required_skills):
+                missing_skill_union.add(item)
+            for item in _missing_capabilities(worker, required_capabilities):
+                missing_cap_union.add(item)
             if not _skills_match(worker, required_skills, required_capabilities):
                 continue
             if not _capabilities_match(worker, required_capabilities):
@@ -813,7 +890,15 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
                 reason = "worker_capacity_exhausted"
             else:
                 reason = "no_matching_worker"
-            queued.append({"node": node["id"], "reason": reason})
+            details: dict[str, Any] = {
+                "required_skills": required_skills,
+                "required_capabilities": required_capabilities,
+            }
+            if reason == "no_matching_worker":
+                details["any_worker_seen"] = any_worker_seen
+                details["missing_skills"] = sorted(missing_skill_union)
+                details["missing_capabilities"] = sorted(missing_cap_union)
+            queued.append({"node": node["id"], "reason": reason, "details": details})
             continue
 
         candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3], item[4]))
@@ -993,6 +1078,20 @@ def enqueue_ready(graph: dict[str, Any], graph_path: str, workers: list[dict[str
             enqueued_item["payload"] = payload
         enqueued.append(enqueued_item)
 
+    blocked_workers: list[dict[str, Any]] = []
+    for item in queued:
+        if item.get("reason") != "no_matching_worker":
+            continue
+        node_id = str(item.get("node") or "")
+        if not node_id or node_id not in nodes_by_id:
+            continue
+        set_node_status(graph, node_id, "worker_blocked")
+        graph.setdefault("node_results", {}).setdefault(node_id, {})
+        graph["node_results"][node_id]["blocking_reason"] = "no_matching_worker"
+        graph["node_results"][node_id]["worker_match_details"] = item.get("details", {})
+        graph["node_results"][node_id]["updated_at"] = _now()
+        blocked_workers.append({"node": node_id, "reason": "no_matching_worker", "details": item.get("details", {})})
+
     return {
         "ok": True,
         "sprint_id": sid,
@@ -1001,6 +1100,7 @@ def enqueue_ready(graph: dict[str, Any], graph_path: str, workers: list[dict[str
         "capability_enrichment": assignment.get("capability_enrichment", {}),
         "enqueued": enqueued,
         "queued": queued,
+        "worker_blocked": blocked_workers,
         "dry_run": dry_run,
     }
 
