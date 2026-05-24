@@ -10,6 +10,17 @@
       "type": "string",
       "minLength": 1
     },
+    "dag_variant": {
+      "type": "string",
+      "enum": ["short", "standard", "research"]
+    },
+    "research_mode": {
+      "type": "boolean"
+    },
+    "evidence_policy": {
+      "type": "object",
+      "additionalProperties": true
+    },
     "required_gates": {
       "type": "array",
       "items": {
@@ -89,6 +100,19 @@
             "type": "string"
           },
           "uniqueItems": true
+        },
+        "logical_operator": {
+          "type": "string"
+        },
+        "verifier_required": {
+          "type": "boolean"
+        },
+        "research_stage": {
+          "type": "string"
+        },
+        "evidence_policy": {
+          "type": "object",
+          "additionalProperties": true
         },
         "capability_inference": {
           "type": "object",

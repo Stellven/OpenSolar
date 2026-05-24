@@ -32,10 +32,14 @@ g._pane_health = lambda pane: {}
 workers = [item["pane"] for item in g._discover_workers(False)]
 assert workers == ["solar-harness-lab:0.1"], workers
 
+subprocess.check_output = lambda *args, **kwargs: (
+    b"solar-harness-test:0.3\tEvaluator \xe5\xae\xa1\xe5\x88\xa4\xe5\xae\x98\n"
+    b"solar-harness-lab:0.3\tBuilder 4 | \xe6\xa8\xa1\xe5\x9e\x8b:Sonnet\n"
+)
 g._pane_exists = lambda pane: True
-g._pane_title = lambda pane: "PM 产品经理"
+g._pane_title = lambda pane: "PM 产品经理" if pane == "solar-harness-test:0.3" else "Builder 4 | 模型:Sonnet"
 assert g._discover_evaluators(False) == []
-g._pane_title = lambda pane: "Evaluator 审判官 | 模型:Opus"
+g._pane_title = lambda pane: "Evaluator 审判官 | 模型:Opus" if pane == "solar-harness-test:0.3" else "Builder 4 | 模型:Sonnet"
 evaluators = [item["pane"] for item in g._discover_evaluators(False)]
 assert evaluators == ["solar-harness-test:0.3"], evaluators
 PY

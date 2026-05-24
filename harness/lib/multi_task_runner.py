@@ -40,6 +40,11 @@ DEFAULT_INTERVAL = int(os.environ.get("SOLAR_MULTI_TASK_INTERVAL_SEC", "15") or 
 DEFAULT_COOLDOWN = int(os.environ.get("SOLAR_MULTI_TASK_LAUNCH_COOLDOWN_SEC", "30") or "30")
 DEFAULT_MEMORY_RESERVE_GB = float(os.environ.get("SOLAR_MULTI_TASK_MEMORY_RESERVE_GB", "4") or "4")
 DEFAULT_QUOTA_BACKOFF = int(os.environ.get("SOLAR_MULTI_TASK_QUOTA_BACKOFF_SEC", "900") or "900")
+AUTO_CLOSE_TERMINAL_WINDOWS = str(os.environ.get("SOLAR_MULTI_TASK_AUTO_CLOSE_TERMINAL_WINDOWS", "1") or "1").lower() not in {"0", "false", "no", "off"}
+AUTO_CLOSE_DELAY_SEC = max(0, int(os.environ.get("SOLAR_MULTI_TASK_AUTO_CLOSE_DELAY_SEC", "3") or "3"))
+REUSE_TERMINAL_WINDOWS = str(os.environ.get("SOLAR_MULTI_TASK_REUSE_TERMINAL_WINDOWS", "1") or "1").lower() not in {"0", "false", "no", "off"}
+REUSABLE_WINDOW_COMMANDS = {"bash", "zsh", "sh", "fish"}
+IDLE_WINDOW_POOL_TARGET = max(0, int(os.environ.get("SOLAR_MULTI_TASK_IDLE_WINDOW_POOL_TARGET", "1") or "1"))
 GRAPH_SUMMARY_CACHE_TTL_SEC = int(os.environ.get("SOLAR_MULTI_TASK_GRAPH_SUMMARY_CACHE_TTL_SEC", "5") or "5")
 PROBE_CACHE_PATH = Path(os.environ.get("SOLAR_MULTI_TASK_PROBE_CACHE", RUN_DIR / "capability-probes.json"))
 OPERATORD_SUBMIT_ENABLED: bool = os.environ.get("SOLAR_OPERATORD_SUBMIT_ENABLED", "0") == "1"
@@ -1202,7 +1207,7 @@ def tmux_session_exists() -> bool:
         return False
 
 
-def tmux_window_map() -> dict[str, dict[str, str]]:
+def tmux_window_records() -> list[dict[str, str]]:
     try:
         out = subprocess.check_output(
             [
@@ -1211,29 +1216,39 @@ def tmux_window_map() -> dict[str, dict[str, str]]:
                 "-t",
                 SESSION,
                 "-F",
-                "#{window_name}\t#{window_active}\t#{pane_current_command}\t#{pane_dead}\t#{pane_pid}",
+                "#{window_id}\t#{window_name}\t#{window_active}\t#{pane_current_command}\t#{pane_dead}\t#{pane_pid}",
             ],
             text=True,
             stderr=subprocess.DEVNULL,
             timeout=3,
         )
     except Exception:
-        return {}
-    windows: dict[str, dict[str, str]] = {}
+        return []
+    windows: list[dict[str, str]] = []
     for line in out.splitlines():
         if not line.strip():
             continue
         parts = line.split("\t")
-        name = parts[0].strip() if parts else ""
+        window_id = parts[0].strip() if parts else ""
+        name = parts[1].strip() if len(parts) > 1 else ""
         if not name:
             continue
-        windows[name] = {
+        windows.append({
+            "window_id": window_id,
             "window": name,
-            "active": parts[1].strip() if len(parts) > 1 else "",
-            "command": parts[2].strip() if len(parts) > 2 else "",
-            "dead": parts[3].strip() if len(parts) > 3 else "",
-            "pane_pid": parts[4].strip() if len(parts) > 4 else "",
-        }
+            "target": f"{SESSION}:{window_id}" if window_id else f"{SESSION}:{name}",
+            "active": parts[2].strip() if len(parts) > 2 else "",
+            "command": parts[3].strip() if len(parts) > 3 else "",
+            "dead": parts[4].strip() if len(parts) > 4 else "",
+            "pane_pid": parts[5].strip() if len(parts) > 5 else "",
+        })
+    return windows
+
+
+def tmux_window_map() -> dict[str, dict[str, str]]:
+    windows: dict[str, dict[str, str]] = {}
+    for record in tmux_window_records():
+        windows.setdefault(str(record.get("window") or ""), record)
     return windows
 
 
@@ -1429,6 +1444,336 @@ def list_task_rows() -> list[dict[str, Any]]:
 
 def active_tasks() -> list[dict[str, Any]]:
     return [row for row in list_task_rows() if str(row.get("effective_status") or row.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
+
+
+def idle_tmux_window_candidates(
+    tasks: list[dict[str, Any]] | None = None,
+    windows: list[dict[str, str]] | None = None,
+) -> list[dict[str, Any]]:
+    rows = tasks if tasks is not None else list_task_rows()
+    window_records = windows if windows is not None else tmux_window_records()
+    candidates: list[dict[str, Any]] = []
+    tracked_targets: set[str] = set()
+    seen_targets: set[str] = set()
+
+    for row in rows:
+        effective_status = str(row.get("effective_status") or row.get("status") or "").lower()
+        if effective_status not in EFFECTIVE_TERMINAL_TASK_STATUSES and not effective_status.startswith("reaped"):
+            continue
+        window = str(row.get("window") or "").strip()
+        if not window:
+            continue
+        updated_at = str(row.get("updated_at") or row.get("created_at") or "")
+        updated_ts = parse_iso(updated_at)
+        for info in window_records:
+            if str(info.get("window") or "") != window:
+                continue
+            if str(info.get("dead") or "") == "1":
+                continue
+            if str(info.get("active") or "") == "1":
+                continue
+            command = str(info.get("command") or "").strip().lower()
+            if command not in REUSABLE_WINDOW_COMMANDS:
+                continue
+            target = str(info.get("target") or f"{SESSION}:{window}")
+            if target in seen_targets:
+                continue
+            tracked_targets.add(target)
+            seen_targets.add(target)
+            candidates.append({
+                "window": window,
+                "window_target": target,
+                "window_id": str(info.get("window_id") or ""),
+                "task_id": str(row.get("id") or ""),
+                "kind": "tracked",
+                "effective_status": effective_status,
+                "updated_at": updated_at or "N/A",
+                "updated_ts": updated_ts if updated_ts is not None else -1.0,
+                "command": command,
+            })
+
+    for info in window_records:
+        target = str(info.get("target") or "")
+        if target in tracked_targets:
+            continue
+        if str(info.get("dead") or "") == "1":
+            continue
+        if str(info.get("active") or "") == "1":
+            continue
+        command = str(info.get("command") or "").strip().lower()
+        if command not in REUSABLE_WINDOW_COMMANDS:
+            continue
+        if target in seen_targets:
+            continue
+        seen_targets.add(target)
+        candidates.append({
+            "window": str(info.get("window") or ""),
+            "window_target": target or f"{SESSION}:{str(info.get('window') or '')}",
+            "window_id": str(info.get("window_id") or ""),
+            "task_id": "N/A",
+            "kind": "orphan",
+            "effective_status": "orphan_shell",
+            "updated_at": "N/A",
+            "updated_ts": -1.0,
+            "command": command,
+        })
+
+    return candidates
+
+
+def historical_active_tmux_windows(
+    tasks: list[dict[str, Any]] | None = None,
+    windows: list[dict[str, str]] | None = None,
+) -> list[dict[str, Any]]:
+    rows = tasks if tasks is not None else list_task_rows()
+    window_records = windows if windows is not None else tmux_window_records()
+    records_by_name: dict[str, list[dict[str, str]]] = {}
+    for info in window_records:
+        records_by_name.setdefault(str(info.get("window") or ""), []).append(info)
+
+    seen_targets: set[str] = set()
+    results: list[dict[str, Any]] = []
+    for row in rows:
+        effective_status = str(row.get("effective_status") or row.get("status") or "").lower()
+        if effective_status not in EFFECTIVE_TERMINAL_TASK_STATUSES and not effective_status.startswith("reaped"):
+            continue
+        window = str(row.get("window") or "").strip()
+        if not window:
+            continue
+        for info in records_by_name.get(window, []):
+            if str(info.get("active") or "") != "1":
+                continue
+            if str(info.get("dead") or "") == "1":
+                continue
+            command = str(info.get("command") or "").strip().lower()
+            if command not in REUSABLE_WINDOW_COMMANDS:
+                continue
+            target = str(info.get("target") or f"{SESSION}:{window}")
+            if target in seen_targets:
+                continue
+            seen_targets.add(target)
+            results.append({
+                "window": window,
+                "window_target": target,
+                "window_id": str(info.get("window_id") or ""),
+                "task_id": str(row.get("id") or ""),
+                "effective_status": effective_status,
+                "command": command,
+            })
+    return results
+
+
+def tmux_client_records() -> list[dict[str, str]]:
+    try:
+        out = subprocess.check_output(
+            [
+                "tmux",
+                "list-clients",
+                "-t",
+                SESSION,
+                "-F",
+                "#{client_tty}\t#{window_id}\t#{session_name}",
+            ],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=3,
+        )
+    except Exception:
+        return []
+    rows: list[dict[str, str]] = []
+    for line in out.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split("\t")
+        tty = parts[0].strip() if parts else ""
+        window_id = parts[1].strip() if len(parts) > 1 else ""
+        session_name = parts[2].strip() if len(parts) > 2 else ""
+        if not tty:
+            continue
+        rows.append({
+            "tty": tty,
+            "window_id": window_id,
+            "session": session_name,
+        })
+    return rows
+
+
+def _anchor_window_name() -> str:
+    return short_window("mt-idle-anchor")
+
+
+def ensure_tmux_anchor_window(cwd: Path | None = None) -> tuple[str, bool]:
+    records = tmux_window_records()
+    for info in records:
+        if str(info.get("window") or "") == _anchor_window_name():
+            return str(info.get("target") or f"{SESSION}:{_anchor_window_name()}"), False
+    workdir = str(cwd or Path.cwd())
+    cmd = "exec ${SHELL:-/bin/zsh}"
+    if subprocess.run(["tmux", "has-session", "-t", SESSION], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+        subprocess.check_call(["tmux", "new-window", "-d", "-t", SESSION, "-n", _anchor_window_name(), "-c", workdir, cmd])
+    else:
+        subprocess.check_call(["tmux", "new-session", "-d", "-s", SESSION, "-n", _anchor_window_name(), "-c", workdir, cmd])
+    for info in tmux_window_records():
+        if str(info.get("window") or "") == _anchor_window_name():
+            return str(info.get("target") or f"{SESSION}:{_anchor_window_name()}"), True
+    return f"{SESSION}:{_anchor_window_name()}", True
+
+
+def detach_and_anchor(cwd: Path | None = None, dry_run: bool = False) -> dict[str, Any]:
+    target = f"{SESSION}:{_anchor_window_name()}"
+    created = False
+    if not dry_run:
+        target, created = ensure_tmux_anchor_window(cwd=cwd)
+        subprocess.run(["tmux", "select-window", "-t", target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return {
+        "target": target,
+        "created_anchor": created,
+        "action": "dry-run" if dry_run else "selected",
+    }
+
+
+def select_reusable_tmux_window(
+    preferred_window: str,
+    tasks: list[dict[str, Any]] | None = None,
+    windows: list[dict[str, str]] | None = None,
+) -> tuple[str, bool, str, str]:
+    """Pick a safe reusable terminal window for legacy multi-task launches.
+
+    Only reuse windows that belong to tracked historical tasks, are still live in
+    the current multi-task session, are not the active tmux window, and are
+    currently sitting in an interactive shell instead of a running agent.
+    """
+    if not REUSE_TERMINAL_WINDOWS:
+        return preferred_window, False, "", ""
+    candidates = idle_tmux_window_candidates(tasks=tasks, windows=windows)
+    candidates.sort(key=lambda item: (0 if item.get("kind") == "tracked" else 1, -float(item.get("updated_ts") or -1.0), str(item.get("window") or "")))
+    for candidate in candidates:
+        return (
+            str(candidate.get("window") or preferred_window),
+            True,
+            str(candidate.get("task_id") or ""),
+            str(candidate.get("window_target") or ""),
+        )
+    return preferred_window, False, "", ""
+
+
+def prune_idle_tmux_windows(
+    target_keep: int = IDLE_WINDOW_POOL_TARGET,
+    dry_run: bool = False,
+    keep_windows: set[str] | None = None,
+    tasks: list[dict[str, Any]] | None = None,
+    windows: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    keep = set(keep_windows or set())
+    candidates = idle_tmux_window_candidates(tasks=tasks, windows=windows)
+    protected = [c for c in candidates if str(c.get("window_target") or "") in keep]
+    prunable = [c for c in candidates if str(c.get("window_target") or "") not in keep]
+    retain_budget = max(0, int(target_keep)) - len(protected)
+    retain_budget = max(0, retain_budget)
+    prunable.sort(key=lambda item: (0 if item.get("kind") == "orphan" else 1, float(item.get("updated_ts") or -1.0), str(item.get("window") or "")))
+    keepers = prunable[-retain_budget:] if retain_budget > 0 else []
+    keeper_names = {str(item.get("window_target") or "") for item in keepers}
+    killed: list[dict[str, Any]] = []
+    kept: list[dict[str, Any]] = []
+
+    for candidate in prunable:
+        window_target = str(candidate.get("window_target") or "")
+        if window_target in keeper_names:
+            kept.append(candidate)
+            continue
+        action = "dry-run"
+        if not dry_run and window_target:
+            rc = subprocess.run(["tmux", "kill-window", "-t", window_target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
+            action = "killed-window" if rc == 0 else "missing-window"
+        elif not dry_run:
+            action = "no-window"
+        candidate = dict(candidate)
+        candidate["action"] = action
+        killed.append(candidate)
+
+    return {
+        "target_keep": max(0, int(target_keep)),
+        "candidate_count": len(candidates),
+        "protected": protected,
+        "kept": kept + protected,
+        "killed": killed,
+    }
+
+
+def compact_tmux_session(
+    target_keep: int = IDLE_WINDOW_POOL_TARGET,
+    dry_run: bool = False,
+    cwd: Path | None = None,
+) -> dict[str, Any]:
+    tasks = list_task_rows()
+    windows = tmux_window_records()
+    historical = historical_active_tmux_windows(tasks=tasks, windows=windows)
+    reusable = idle_tmux_window_candidates(tasks=tasks, windows=windows)
+
+    destination_target = ""
+    created_anchor = False
+    orphan_targets = [
+        str(item.get("window_target") or "")
+        for item in reusable
+        if str(item.get("kind") or "") == "orphan"
+        and str(item.get("window_target") or "") not in {str(item.get("window_target") or "") for item in historical}
+    ]
+    if orphan_targets:
+        destination_target = orphan_targets[0]
+    elif historical and not dry_run:
+        destination_target, created_anchor = ensure_tmux_anchor_window(cwd=cwd)
+
+    switches: list[dict[str, str]] = []
+    if historical and destination_target:
+        active_window_ids = {str(item.get("window_id") or "") for item in historical}
+        for client in tmux_client_records():
+            if str(client.get("window_id") or "") not in active_window_ids:
+                continue
+            tty = str(client.get("tty") or "")
+            action = "dry-run"
+            if not dry_run and tty:
+                subprocess.run(["tmux", "switch-client", "-c", tty, "-t", destination_target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                action = "switched"
+            switches.append({
+                "tty": tty or "N/A",
+                "from_window_id": str(client.get("window_id") or ""),
+                "to_target": destination_target,
+                "action": action,
+            })
+        if not dry_run:
+            subprocess.run(["tmux", "select-window", "-t", destination_target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    closed: list[dict[str, str]] = []
+    for item in historical:
+        target = str(item.get("window_target") or "")
+        action = "dry-run"
+        if not dry_run and target:
+            rc = subprocess.run(["tmux", "kill-window", "-t", target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
+            action = "killed-window" if rc == 0 else "missing-window"
+        closed.append({
+            "window": str(item.get("window") or ""),
+            "window_target": target or "N/A",
+            "task_id": str(item.get("task_id") or "N/A"),
+            "action": action,
+        })
+
+    shrink = prune_idle_tmux_windows(
+        target_keep=target_keep,
+        dry_run=dry_run,
+        keep_windows={destination_target} if destination_target else set(),
+        tasks=list_task_rows() if not dry_run else tasks,
+        windows=tmux_window_records() if not dry_run else windows,
+    )
+    return {
+        "historical_active": historical,
+        "destination_target": destination_target or "N/A",
+        "created_anchor": created_anchor,
+        "switches": switches,
+        "closed": closed,
+        "shrink": shrink,
+        "dry_run": dry_run,
+        "target_keep": target_keep,
+    }
 
 
 def task_inventory(tasks: list[dict[str, Any]]) -> dict[str, Any]:
@@ -2045,6 +2390,11 @@ def runner_script(task_dir: Path, payload: dict[str, Any]) -> Path:
     provider = str(payload.get("provider") or model_provider(model, backend))
     capability_status = str(payload.get("capability_status") or "N/A")
     approval_mode = str(payload.get("approval_mode") or "auto_edit")
+    task_id_value = str(payload.get("id") or task_dir.name)
+    operator_id = str(payload.get("operator_id") or "")
+    operator_model = str(payload.get("operator_model") or model)
+    window_name = str(payload.get("window") or "")
+    window_target = str(payload.get("window_target") or "")
     agent_cmd = str(payload.get("command") or os.environ.get("SOLAR_MULTI_TASK_AGENT_CMD", "")).strip()
     adapter = HARNESS_DIR / "lib" / "gemini_adapter.py"
     if backend == "gemini-cli":
@@ -2061,6 +2411,7 @@ TASK_DIR={shlex.quote(str(task_dir))}
 STATUS_FILE={shlex.quote(str(status_file))}
 DISPATCH_FILE={shlex.quote(str(dispatch_file))}
 OUTPUT_LOG="$TASK_DIR/output.log"
+RESULT_ROOT="$HARNESS_DIR/run/operator-results"
 HARNESS_DIR={shlex.quote(str(HARNESS_DIR))}
 SPRINTS_DIR={shlex.quote(str(SPRINTS_DIR))}
 GRAPH={shlex.quote(str(graph))}
@@ -2070,17 +2421,40 @@ ROLE={shlex.quote(role)}
 PROFILE={shlex.quote(profile)}
 BACKEND={shlex.quote(backend)}
 MODEL={shlex.quote(model)}
+TASK_ID={shlex.quote(task_id_value)}
+OPERATOR_ID={shlex.quote(operator_id)}
+OPERATOR_MODEL={shlex.quote(operator_model)}
 PROVIDER={shlex.quote(provider)}
 CAPABILITY_STATUS={shlex.quote(capability_status)}
 HANDOFF={shlex.quote(str(handoff))}
 HARNESS={shlex.quote(str(harness))}
-export TASK_DIR STATUS_FILE DISPATCH_FILE OUTPUT_LOG HARNESS_DIR SPRINTS_DIR GRAPH NODE_ID SID ROLE PROFILE BACKEND MODEL PROVIDER CAPABILITY_STATUS HANDOFF HARNESS
+MT_SESSION={shlex.quote(SESSION)}
+WINDOW_NAME={shlex.quote(window_name)}
+WINDOW_TARGET={shlex.quote(window_target)}
+AUTO_CLOSE_TERMINAL_WINDOWS={"1" if AUTO_CLOSE_TERMINAL_WINDOWS else "0"}
+AUTO_CLOSE_DELAY_SEC={shlex.quote(str(AUTO_CLOSE_DELAY_SEC))}
+export TASK_DIR STATUS_FILE DISPATCH_FILE OUTPUT_LOG RESULT_ROOT HARNESS_DIR SPRINTS_DIR GRAPH NODE_ID SID ROLE PROFILE BACKEND MODEL TASK_ID OPERATOR_ID OPERATOR_MODEL PROVIDER CAPABILITY_STATUS HANDOFF HARNESS MT_SESSION WINDOW_NAME WINDOW_TARGET AUTO_CLOSE_TERMINAL_WINDOWS AUTO_CLOSE_DELAY_SEC
 
 pane_title() {{
   local title="$1"
   if [[ -n "${{TMUX:-}}" ]]; then
     tmux select-pane -T "$title" >/dev/null 2>&1 || true
   fi
+}}
+
+auto_close_window() {{
+  local reason="${{1:-terminal}}"
+  [[ "$AUTO_CLOSE_TERMINAL_WINDOWS" == "1" ]] || return 0
+  [[ -n "$WINDOW_NAME" || -n "$WINDOW_TARGET" ]] || return 0
+  [[ -n "${{TMUX:-}}" ]] || return 0
+  (
+    sleep "$AUTO_CLOSE_DELAY_SEC"
+    if [[ -n "$WINDOW_TARGET" ]]; then
+      tmux kill-window -t "$WINDOW_TARGET" >/dev/null 2>&1 || true
+    else
+      tmux kill-window -t "${{MT_SESSION}}:${{WINDOW_NAME}}" >/dev/null 2>&1 || true
+    fi
+  ) >/dev/null 2>&1 &
 }}
 
 write_status() {{
@@ -2100,6 +2474,57 @@ data["exit_code"] = None if sys.argv[3] == "" else int(sys.argv[3])
 data["updated_at"] = sys.argv[4]
 data.setdefault("created_at", sys.argv[4])
 p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+PY
+}}
+
+write_operator_result() {{
+  [[ -n "$OPERATOR_ID" && "$OPERATOR_ID" != "N/A" ]] || return 0
+  python3 - <<'PY'
+import json, os
+from pathlib import Path
+
+status_path = Path(os.environ["STATUS_FILE"])
+output_path = Path(os.environ["OUTPUT_LOG"])
+result_dir = Path(os.environ["RESULT_ROOT"]) / os.environ["OPERATOR_ID"] / os.environ["TASK_ID"]
+result_dir.mkdir(parents=True, exist_ok=True)
+
+status = {{}}
+if status_path.exists():
+    try:
+        status = json.loads(status_path.read_text(encoding="utf-8"))
+    except Exception:
+        status = {{}}
+
+tail = ""
+if output_path.exists():
+    try:
+        lines = output_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        tail = "\\n".join(lines[-50:])
+    except Exception:
+        tail = ""
+
+result = {{
+    "task_id": os.environ["TASK_ID"],
+    "operator_id": os.environ["OPERATOR_ID"],
+    "sprint_id": os.environ["SID"],
+    "node_id": os.environ["NODE_ID"],
+    "status": status.get("status") or "unknown",
+    "exit_code": status.get("exit_code"),
+    "started_at": status.get("created_at") or "",
+    "finished_at": status.get("updated_at") or "",
+    "model": os.environ["OPERATOR_MODEL"] or os.environ["MODEL"],
+    "backend": os.environ["BACKEND"],
+    "profile": os.environ["PROFILE"],
+    "role": os.environ["ROLE"],
+    "provider": os.environ["PROVIDER"],
+    "source": "multi-task-runner",
+    "log_tail": tail,
+}}
+
+result_path = result_dir / "result.json"
+tmp = result_path.with_suffix(".json.tmp")
+tmp.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+tmp.replace(result_path)
 PY
 }}
 
@@ -2160,6 +2585,8 @@ else
   pane_title "MT $ROLE/$PROFILE | 模型:$MODEL | provider:$PROVIDER | 状态:failed"
 fi
 echo "[solar-harness multi-task] sid=$SID node=$NODE_ID exit=$rc end=$(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee -a "$OUTPUT_LOG"
+write_operator_result
+auto_close_window "terminal"
 exit "$rc"
 """
     runner.write_text(script, encoding="utf-8")
@@ -2167,12 +2594,15 @@ exit "$rc"
     return runner
 
 
-def tmux_start(window: str, runner: Path, cwd: Path, dry_run: bool = False) -> None:
+def tmux_start(window: str, runner: Path, cwd: Path, dry_run: bool = False, reuse: bool = False, reuse_target: str = "") -> None:
     if dry_run:
         return
     cmd = f"bash {shlex.quote(str(runner))}; exec ${{SHELL:-/bin/zsh}}"
     if subprocess.run(["tmux", "has-session", "-t", SESSION], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
-        subprocess.check_call(["tmux", "new-window", "-d", "-t", SESSION, "-n", window, "-c", str(cwd), cmd])
+        if reuse:
+            subprocess.check_call(["tmux", "respawn-window", "-k", "-t", reuse_target or f"{SESSION}:{window}", "-c", str(cwd), cmd])
+        else:
+            subprocess.check_call(["tmux", "new-window", "-d", "-t", SESSION, "-n", window, "-c", str(cwd), cmd])
     else:
         subprocess.check_call(["tmux", "new-session", "-d", "-s", SESSION, "-n", window, "-c", str(cwd), cmd])
     target = f"{SESSION}:{window}"
@@ -2184,6 +2614,23 @@ def tmux_start(window: str, runner: Path, cwd: Path, dry_run: bool = False) -> N
     )
 
 
+def prepare_tmux_window(preferred_window: str, dry_run: bool = False) -> tuple[str, bool, str, str]:
+    if dry_run:
+        return preferred_window, False, "", ""
+    tasks = list_task_rows()
+    windows = tmux_window_records()
+    actual_window, reused, reused_task_id, reused_window_target = select_reusable_tmux_window(preferred_window, tasks=tasks, windows=windows)
+    keep_windows = {reused_window_target} if reused and reused_window_target else set()
+    prune_idle_tmux_windows(
+        target_keep=IDLE_WINDOW_POOL_TARGET,
+        dry_run=False,
+        keep_windows=keep_windows,
+        tasks=tasks,
+        windows=windows,
+    )
+    return actual_window, reused, reused_task_id, reused_window_target
+
+
 def build_task_envelope(
     dispatch_id: str,
     sprint_id: str,
@@ -2193,10 +2640,11 @@ def build_task_envelope(
     dispatch_text: str,
     graph_path: Path,
     handoff_path: Path,
+    command: str = "",
     lease_ttl_seconds: int = 3600,
 ) -> dict[str, Any]:
     """Build a task envelope suitable for operator_runtime.submit."""
-    return {
+    envelope = {
         "task_id": dispatch_id,
         "sprint_id": sprint_id,
         "node_id": node_id,
@@ -2211,7 +2659,9 @@ def build_task_envelope(
         "acceptance": node.get("acceptance") or [],
         "lease_ttl_seconds": lease_ttl_seconds,
     }
-
+    if command.strip():
+        envelope["command"] = command.strip()
+    return envelope
 
 def wait_for_operator_result(
     operator_id: str,
@@ -2240,7 +2690,8 @@ def launch_node(graph_path: Path, graph: dict[str, Any], node: dict[str, Any], a
     profile = select_profile(node, getattr(args, "profile", "") or "", getattr(args, "model", "") or "", getattr(args, "backend", "") or "")
     capability = capability_for_profile(profile)
     dispatch_id = task_id(sid, node_id)
-    window = short_window(f"{dispatch_id}-{profile.get('role')}-{node_id}")
+    requested_window = short_window(f"{dispatch_id}-{profile.get('role')}-{node_id}")
+    window, reused_window, reused_task_id, reused_window_target = prepare_tmux_window(requested_window, dry_run=dry_run)
     task_dir = RUN_DIR / dispatch_id
     handoff = SPRINTS_DIR / f"{sid}.{node_id}-handoff.md"
     task_dir.mkdir(parents=True, exist_ok=True)
@@ -2252,6 +2703,10 @@ def launch_node(graph_path: Path, graph: dict[str, Any], node: dict[str, Any], a
         "status": "dry_run" if dry_run else "dispatched",
         "session": SESSION,
         "window": window,
+        "window_target": reused_window_target or f"{SESSION}:{window}",
+        "requested_window": requested_window,
+        "window_reused": reused_window,
+        "window_reused_from_task": reused_task_id or "N/A",
         "profile": profile.get("name"),
         "role": profile.get("role"),
         "persona": profile.get("persona"),
@@ -2299,6 +2754,7 @@ def launch_node(graph_path: Path, graph: dict[str, Any], node: dict[str, Any], a
                 dispatch_text=dispatch,
                 graph_path=graph_path,
                 handoff_path=handoff,
+                command=str(profile.get("command") or ""),
             )
             submit_result = _opr.submit(envelope)
             result_path_str = str(
@@ -2343,7 +2799,7 @@ def launch_node(graph_path: Path, graph: dict[str, Any], node: dict[str, Any], a
 
     if not dry_run:
         try:
-            tmux_start(window, runner, Path.cwd())
+            tmux_start(window, runner, Path.cwd(), reuse=reused_window, reuse_target=reused_window_target)
         except Exception as exc:
             payload["status"] = "failed_launch"
             payload["updated_at"] = now_iso()
@@ -3696,10 +4152,10 @@ def attach_or_log(task_id_value: str, attach: bool) -> int:
         return 1
     task_id_value = str(status.get("id") or task_id_value)
     if attach:
-        window = str(status.get("window") or "")
+        window = str(status.get("window_target") or f"{SESSION}:{str(status.get('window') or '')}")
         if sys.stdout.isatty():
-            return subprocess.call(["tmux", "attach", "-t", f"{SESSION}:{window}"])
-        print(f"tmux attach -t {SESSION}:{window}")
+            return subprocess.call(["tmux", "attach", "-t", window])
+        print(f"tmux attach -t {window}")
         return 0
     log = RUN_DIR / task_id_value / "output.log"
     if not log.exists():
@@ -3716,7 +4172,8 @@ def cancel(task_id_value: str) -> int:
         return 1
     task_id_value = str(status.get("id") or task_id_value)
     window = str(status.get("window") or "")
-    subprocess.run(["tmux", "kill-window", "-t", f"{SESSION}:{window}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    window_target = str(status.get("window_target") or f"{SESSION}:{window}")
+    subprocess.run(["tmux", "kill-window", "-t", window_target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     status["status"] = "cancelled"
     status["updated_at"] = now_iso()
     json_write(RUN_DIR / task_id_value / "status.json", status)
@@ -3750,8 +4207,9 @@ def reap_tasks(ttl_min: int, stale_active_min: int, dry_run: bool) -> dict[str, 
         window = str(status.get("window") or "")
         action = "dry-run"
         if not dry_run and window:
-            subprocess.run(["tmux", "kill-window", "-t", f"{SESSION}:{window}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            action = "killed-window"
+            window_target = str(status.get("window_target") or f"{SESSION}:{window}")
+            rc = subprocess.run(["tmux", "kill-window", "-t", window_target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
+            action = "killed-window" if rc == 0 else "missing-window"
         elif not dry_run:
             action = "no-window"
         if not dry_run:
@@ -3820,6 +4278,14 @@ def build_parser() -> argparse.ArgumentParser:
     reap_p.add_argument("--ttl-min", type=int, default=int(os.environ.get("SOLAR_MULTI_TASK_REAP_TTL_MIN", "120") or "120"))
     reap_p.add_argument("--stale-active-min", type=int, default=int(os.environ.get("SOLAR_MULTI_TASK_STALE_ACTIVE_MIN", "0") or "0"))
     reap_p.add_argument("--dry-run", action="store_true")
+    shrink_p = sub.add_parser("shrink-idle", help="prune reusable idle/orphan multi-task shell windows")
+    shrink_p.add_argument("--target-keep", type=int, default=IDLE_WINDOW_POOL_TARGET)
+    shrink_p.add_argument("--dry-run", action="store_true")
+    compact_p = sub.add_parser("compact-session", help="safely close historical active shells and compact the multi-task session")
+    compact_p.add_argument("--target-keep", type=int, default=IDLE_WINDOW_POOL_TARGET)
+    compact_p.add_argument("--dry-run", action="store_true")
+    anchor_p = sub.add_parser("detach-and-anchor", help="select the neutral anchor window for the multi-task session")
+    anchor_p.add_argument("--dry-run", action="store_true")
     probe_p = sub.add_parser("probe", help="run a minimal real model call for one worker profile")
     probe_p.add_argument("profile", help=f"worker profile: {','.join(profile_names())}")
     probe_p.add_argument("--timeout-sec", type=int, default=90)
@@ -3856,6 +4322,45 @@ def main(argv: list[str] | None = None) -> int:
         if not rows:
             rows = [["N/A", "N/A", "N/A", "N/A", "none"]]
         print_table(["task", "old_status", "age_s", "window", "action"], rows)
+        return 0
+    if args.cmd == "shrink-idle":
+        result = prune_idle_tmux_windows(args.target_keep, args.dry_run)
+        rows = [[
+            str(row.get("window", "N/A"))[:48],
+            str(row.get("kind", "N/A")),
+            str(row.get("effective_status", "N/A")),
+            str(row.get("task_id", "N/A"))[:36],
+            str(row.get("action", "N/A")),
+        ] for row in result.get("killed", [])]
+        if not rows:
+            rows = [["N/A", "N/A", "N/A", "N/A", "none"]]
+        print_table(["window", "kind", "status", "task", "action"], rows)
+        return 0
+    if args.cmd == "compact-session":
+        result = compact_tmux_session(args.target_keep, args.dry_run, cwd=Path.cwd())
+        rows = [[
+            str(row.get("window", "N/A"))[:48],
+            str(row.get("task_id", "N/A"))[:36],
+            str(row.get("action", "N/A")),
+        ] for row in result.get("closed", [])]
+        if not rows:
+            rows = [["N/A", "N/A", "none"]]
+        print_table(["window", "task", "close"], rows)
+        switch_rows = [[
+            str(row.get("tty", "N/A"))[:18],
+            str(row.get("from_window_id", "N/A")),
+            str(row.get("to_target", "N/A"))[:28],
+            str(row.get("action", "N/A")),
+        ] for row in result.get("switches", [])]
+        print()
+        print_table(["tty", "from", "to", "action"], switch_rows or [["N/A", "N/A", "N/A", "none"]])
+        return 0
+    if args.cmd == "detach-and-anchor":
+        result = detach_and_anchor(cwd=Path.cwd(), dry_run=args.dry_run)
+        print_table(
+            ["target", "created_anchor", "action"],
+            [[str(result.get("target", "N/A")), str(result.get("created_anchor", False)), str(result.get("action", "N/A"))]],
+        )
         return 0
     if args.cmd == "probe":
         try:

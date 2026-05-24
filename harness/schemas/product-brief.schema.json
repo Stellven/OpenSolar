@@ -8,6 +8,66 @@
     "lane_hint", "acceptance", "non_goals", "stop_rules", "handoff_to"
   ],
   "properties": {
+    "request_type": {
+      "type": "string",
+      "enum": ["short_impl", "full_spec", "research"],
+      "description": "Codex PM router classification for the incoming request."
+    },
+    "template_variant": {
+      "type": "string",
+      "enum": ["short", "standard", "research"],
+      "description": "Which PRD/contract template family was used."
+    },
+    "pm_intake": {
+      "type": "object",
+      "description": "Structured intake package emitted by the Codex PM router.",
+      "additionalProperties": true,
+      "properties": {
+        "request_type": {
+          "type": "string",
+          "enum": ["short_impl", "full_spec", "research"]
+        },
+        "intent_summary": {
+          "type": "string"
+        },
+        "source_inputs": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "papers": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "logs": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "repo_context": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "output_mode": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "prd": {
+              "type": "string",
+              "enum": ["short", "standard", "research"]
+            },
+            "contract": {
+              "type": "string",
+              "enum": ["short", "standard", "research"]
+            },
+            "dag": {
+              "type": "string",
+              "enum": ["short", "standard", "research"]
+            }
+          }
+        }
+      }
+    },
     "title": {
       "type": "string",
       "minLength": 1,

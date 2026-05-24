@@ -198,6 +198,201 @@ def _source_hash(artifact_paths: list[Path]) -> str:
     return h.hexdigest()
 
 
+def _file_sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _artifact_slug(path: Path, sid: str) -> str:
+    name = path.name
+    if name.startswith(f"{sid}."):
+        name = name[len(sid) + 1:]
+    suffixes = [".jsonl", ".json", ".md", ".html"]
+    for suffix in suffixes:
+        if name.endswith(suffix):
+            name = name[: -len(suffix)]
+            break
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-") or "artifact"
+
+
+def _summarize_json_value(value: Any, depth: int = 0) -> str:
+    if depth > 2:
+        return "..."
+    if isinstance(value, dict):
+        parts = []
+        for key in sorted(value.keys())[:20]:
+            v = value[key]
+            if isinstance(v, (dict, list)):
+                desc = _summarize_json_value(v, depth + 1)
+            else:
+                desc = repr(v)
+                if len(desc) > 160:
+                    desc = desc[:157] + "..."
+            parts.append(f"- `{key}`: {desc}")
+        if len(value) > 20:
+            parts.append(f"- ... {len(value) - 20} more keys")
+        return "\n".join(parts)
+    if isinstance(value, list):
+        return f"list[{len(value)}]" + ("\n" + _summarize_json_value(value[0], depth + 1) if value else "")
+    return repr(value)
+
+
+def _read_json_summary(path: Path) -> tuple[str, dict[str, Any]]:
+    payload = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    meta = {"kind": type(payload).__name__}
+    if isinstance(payload, dict):
+        meta["keys"] = sorted(payload.keys())[:50]
+        for key in ("status", "phase", "title", "sprint_id", "id", "updated_at", "created_at"):
+            if key in payload:
+                meta[key] = payload.get(key)
+        body = _summarize_json_value(payload)
+    elif isinstance(payload, list):
+        meta["items"] = len(payload)
+        body = _summarize_json_value(payload)
+    else:
+        body = repr(payload)
+    return body, meta
+
+
+def _read_jsonl_summary(path: Path, max_lines: int = MAX_EVENTS_LINES) -> tuple[str, dict[str, Any]]:
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    events: list[dict[str, Any]] = []
+    event_counts: dict[str, int] = {}
+    for line in lines:
+        try:
+            item = json.loads(line)
+        except Exception:
+            continue
+        if isinstance(item, dict):
+            events.append(item)
+            event = str(item.get("event") or item.get("type") or "unknown")
+            event_counts[event] = event_counts.get(event, 0) + 1
+    sample = events[-max_lines:]
+    body_lines = [
+        f"- total_lines: {len(lines)}",
+        f"- parsed_json_objects: {len(events)}",
+        f"- event_counts: {json.dumps(event_counts, ensure_ascii=False, sort_keys=True)}",
+        "",
+        "## Recent Records",
+    ]
+    for item in sample:
+        ts = item.get("ts") or item.get("time") or item.get("created_at") or ""
+        event = item.get("event") or item.get("type") or "record"
+        body_lines.append(f"- `{ts}` `{event}` {json.dumps(item, ensure_ascii=False)[:500]}")
+    return "\n".join(body_lines), {"total_lines": len(lines), "parsed_json_objects": len(events), "event_counts": event_counts}
+
+
+def _build_structured_summary_markdown(sid: str, path: Path, summary_body: str, meta: dict[str, Any]) -> str:
+    stat = path.stat()
+    exported_at = _now_iso()
+    return f"""---
+source: solar-harness
+artifact_type: structured_artifact_summary
+sprint_id: {sid}
+source_path: {path}
+source_sha256: {_file_sha256(path)}
+source_mtime: {datetime.fromtimestamp(stat.st_mtime, timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}
+source_size_bytes: {stat.st_size}
+exported_at: {exported_at}
+visibility: internal
+---
+
+# Structured Artifact Summary: {sid} / {path.name}
+
+## Source
+
+- Path: `{path}`
+- SHA256: `{_file_sha256(path)}`
+- Size: {stat.st_size} bytes
+- Modified: {datetime.fromtimestamp(stat.st_mtime, timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}
+
+## Machine Summary
+
+```json
+{json.dumps(meta, ensure_ascii=False, indent=2)}
+```
+
+## Content Summary
+
+{summary_body}
+"""
+
+
+def _build_source_artifact_index_markdown(sid: str, artifacts: dict[str, Any], exported_at: str) -> str:
+    paths: list[Path] = artifacts.get("all_paths", [])
+    lines = [
+        "---",
+        "source: solar-harness",
+        "artifact_type: source_artifact_index",
+        f"sprint_id: {sid}",
+        f"exported_at: {exported_at}",
+        "visibility: internal",
+        "---",
+        "",
+        f"# Source Artifact Index: {sid}",
+        "",
+        "| Artifact | Size | Modified | SHA256 |",
+        "|---|---:|---|---|",
+    ]
+    for path in sorted(paths, key=lambda p: p.name):
+        if not path.exists():
+            continue
+        stat = path.stat()
+        mtime = datetime.fromtimestamp(stat.st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        lines.append(f"| `{path.name}` | {stat.st_size} | {mtime} | `{_file_sha256(path)}` |")
+    return "\n".join(lines) + "\n"
+
+
+def _structured_summary_paths(sid: str, artifacts: dict[str, Any]) -> list[Path]:
+    paths: list[Path] = []
+    for path in artifacts.get("all_paths", []):
+        if not path.exists():
+            continue
+        name = path.name
+        if name.endswith((".json", ".jsonl")):
+            paths.append(path)
+    # Pick up common graph/handoff sidecars that may not be in all_paths.
+    sprints_dir = paths[0].parent if paths else SPRINTS_DIR
+    for pattern in (f"{sid}*task_graph*.json", f"{sid}*handoff*.json", f"{sid}*graph*.json"):
+        for path in sprints_dir.glob(pattern):
+            if path not in paths:
+                paths.append(path)
+    return sorted(paths, key=lambda p: p.name)
+
+
+def _write_knowledge_sidecars(vault: Path, sid: str, artifacts: dict[str, Any],
+                             exported_at: str, dry_run: bool = False,
+                             force_missing: bool = False) -> dict[str, str]:
+    out_dir = vault / "_raw" / "solar-harness" / "accepted"
+    sidecars: dict[str, str] = {}
+    index_file = out_dir / f"{sid}.source_artifact_index.md"
+    index_text = _build_source_artifact_index_markdown(sid, artifacts, exported_at)
+    if not dry_run and (force_missing or not index_file.exists()):
+        out_dir.mkdir(parents=True, exist_ok=True)
+        index_file.write_text(index_text, encoding="utf-8")
+    sidecars["source_artifact_index"] = str(index_file)
+
+    for path in _structured_summary_paths(sid, artifacts):
+        slug = _artifact_slug(path, sid)
+        summary_file = out_dir / f"{sid}.{slug}.summary.md"
+        try:
+            if path.name.endswith(".jsonl"):
+                body, meta = _read_jsonl_summary(path)
+            else:
+                body, meta = _read_json_summary(path)
+        except Exception as exc:
+            body = f"[error summarizing {path.name}: {exc}]"
+            meta = {"error": f"{type(exc).__name__}: {exc}"}
+        if not dry_run and (force_missing or not summary_file.exists()):
+            out_dir.mkdir(parents=True, exist_ok=True)
+            summary_file.write_text(_build_structured_summary_markdown(sid, path, body, meta), encoding="utf-8")
+        sidecars[f"summary:{slug}"] = str(summary_file)
+    return sidecars
+
+
 # ── artifact collection ─────────────────────────────────────────────────────
 
 def _collect_artifacts(sid: str, sprints_dir: Path, redact: bool = True) -> dict[str, Any]:
@@ -498,6 +693,8 @@ def cmd_export(args: list[str]) -> int:
     sprints_dir_arg = None
     dry_run = False
     force = False
+    with_summaries = True
+    force_missing = False
     full_mode = False  # disable redaction
     as_json = False
 
@@ -514,6 +711,12 @@ def cmd_export(args: list[str]) -> int:
             dry_run = True
         elif a == "--force":
             force = True
+        elif a == "--with-summaries":
+            with_summaries = True
+        elif a == "--no-summaries":
+            with_summaries = False
+        elif a == "--force-missing":
+            force_missing = True
         elif a == "--full":
             full_mode = True
         elif a == "--json":
@@ -550,11 +753,15 @@ def cmd_export(args: list[str]) -> int:
 
     existing = manifest.get(sid, {})
     if existing.get("source_hash") == source_hash and not force:
+        exported_at = _now_iso()
+        sidecars = _write_knowledge_sidecars(vault, sid, artifacts, exported_at, dry_run=dry_run, force_missing=force_missing) if with_summaries else {}
         msg = f"skipping {sid!r} — manifest unchanged (hash={source_hash[:12]}...). Use --force to regenerate."
         if as_json:
-            print(json.dumps({"ok": True, "skipped": True, "reason": msg}))
+            print(json.dumps({"ok": True, "skipped": True, "reason": msg, "sidecars": sidecars}))
         else:
             print(f"[accepted-export] {msg}")
+            if sidecars:
+                print(f"[accepted-export] sidecars checked: {len(sidecars)}")
         return 0
 
     accepted_at = _get_accepted_at(sid, sprints_dir_env)
@@ -569,6 +776,7 @@ def cmd_export(args: list[str]) -> int:
     artifact_rel = f"_raw/solar-harness/accepted/{sid}.accepted.md"
 
     if dry_run:
+        sidecars = _write_knowledge_sidecars(vault, sid, artifacts, exported_at, dry_run=True, force_missing=force_missing) if with_summaries else {}
         result = {
             "ok": True,
             "dry_run": True,
@@ -578,6 +786,7 @@ def cmd_export(args: list[str]) -> int:
             "source_hash": source_hash,
             "source_files": artifacts["source_files"],
             "markdown_bytes": len(markdown.encode()),
+            "sidecars": sidecars,
         }
         if as_json:
             print(json.dumps(result, indent=2))
@@ -591,6 +800,9 @@ def cmd_export(args: list[str]) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     out_file.write_text(markdown, encoding="utf-8")
 
+    # Write source index and structured JSON/events summaries for QMD.
+    sidecars = _write_knowledge_sidecars(vault, sid, artifacts, exported_at, dry_run=False, force_missing=True) if with_summaries else {}
+
     # Write ingest dispatch
     dispatch_file = _write_ingest_dispatch(vault, sid, artifact_rel, dry_run=False)
 
@@ -600,6 +812,7 @@ def cmd_export(args: list[str]) -> int:
         "source_hash": source_hash,
         "vault_path": artifact_rel,
         "ingest_dispatch": f"_raw/solar-harness/.dispatch/{sid}.dispatch.md",
+        "sidecars": sidecars,
     }
     _save_manifest(vault, manifest)
 
@@ -607,9 +820,13 @@ def cmd_export(args: list[str]) -> int:
     _update_status(sid, sprints_dir_env, {
         "knowledge_export_status": "exported",
         "knowledge_export_path": str(out_file),
+        "knowledge_source_artifact_index": sidecars.get("source_artifact_index"),
+        "knowledge_summary_count": len([k for k in sidecars if k.startswith("summary:")]),
         "knowledge_ingest_dispatch": str(dispatch_file),
         "knowledge_exported_at": exported_at,
         "knowledge_ingested_at": None,
+        "knowledge_closure_required": True,
+        "knowledge_closure_status": "exported",
         "knowledge_export_error": None,
     })
 
@@ -618,6 +835,7 @@ def cmd_export(args: list[str]) -> int:
         "path": str(out_file),
         "bytes": len(markdown.encode()),
         "source_hash": source_hash,
+        "sidecars": sidecars,
     })
     _emit_event(sid, sprints_dir_env, "accepted_artifact_ingest_dispatched", {
         "dispatch_file": str(dispatch_file),
@@ -631,6 +849,7 @@ def cmd_export(args: list[str]) -> int:
         "bytes": len(markdown.encode()),
         "source_hash": source_hash,
         "source_files": artifacts["source_files"],
+        "sidecars": sidecars,
     }
     if as_json:
         print(json.dumps(result, indent=2))
@@ -646,6 +865,8 @@ def cmd_backfill(args: list[str]) -> int:
     limit = 5
     since: str | None = None
     dry_run = False
+    with_summaries = False
+    force_missing = False
     vault_arg: str | None = None
     sprints_dir_arg: str | None = None
     as_json = False
@@ -659,6 +880,10 @@ def cmd_backfill(args: list[str]) -> int:
             i += 1; since = args[i] if i < len(args) else None
         elif a == "--dry-run":
             dry_run = True
+        elif a == "--with-summaries":
+            with_summaries = True
+        elif a == "--force-missing":
+            force_missing = True
         elif a == "--vault":
             i += 1; vault_arg = args[i] if i < len(args) else None
         elif a == "--sprints-dir":
@@ -688,7 +913,7 @@ def cmd_backfill(args: list[str]) -> int:
                 created = d.get("created_at", "")
                 if created and created < since:
                     continue
-            if sid in manifest:
+            if sid in manifest and not force_missing:
                 continue
             candidates.append(sid)
         except Exception:
@@ -711,6 +936,10 @@ def cmd_backfill(args: list[str]) -> int:
 
     for sid in candidates:
         export_args = ["--sid", sid, "--vault", str(vault), "--sprints-dir", str(sprints_dir_env)]
+        if with_summaries:
+            export_args.append("--with-summaries")
+        if force_missing:
+            export_args.append("--force-missing")
         rc = cmd_export(export_args)
         if rc != 0:
             print(f"[accepted-export] warn: export failed for {sid}", file=sys.stderr)

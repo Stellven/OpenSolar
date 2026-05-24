@@ -224,6 +224,49 @@ class TestSubmitPathSuccess:
 
         mock_tmux.assert_not_called()
 
+    def test_command_profile_propagates_command_into_envelope(
+        self,
+        tmp_harness,
+        sample_node,
+        sample_graph,
+        fake_submit_result,
+        monkeypatch,
+    ):
+        profile = {
+            "name": "knowledge-extractor",
+            "role": "builder",
+            "persona": "builder",
+            "backend": "command",
+            "model": "thunderomlx",
+            "approval_mode": "default",
+            "operator_id": "test-operator-1",
+            "operator_vendor": "local",
+            "operator_model": "thunderomlx",
+            "operator_pane": "N/A",
+            "operator_quota_refresh_at": "N/A",
+            "operator_fallback_reason": "",
+            "command": "python3 \"$HARNESS_DIR/tools/thunderomlx_knowledge_extract_agent.py\"",
+        }
+        monkeypatch.setattr(mtr, "OPERATORD_SUBMIT_ENABLED", True)
+        monkeypatch.setattr(mtr, "OPERATORD_RESULT_TIMEOUT_SEC", 0)
+
+        graph_path = tmp_harness / "sprints" / "sprint-test-submit-001.task_graph.json"
+        captured: dict = {}
+
+        def fake_submit(envelope):
+            captured["envelope"] = envelope
+            return fake_submit_result
+
+        patches = _base_patches(profile)
+        with patches["select_profile"], patches["capability_for_profile"], \
+             patches["build_dispatch_text"], patches["set_node_status"], \
+             patches["save_graph"], patches["set_last_launch"], \
+             mock.patch("operator_runtime.submit", side_effect=fake_submit):
+
+            mtr.launch_node(graph_path, sample_graph, sample_node, _make_args())
+
+        assert captured["envelope"]["command"] == profile["command"]
+
 
 # ---------------------------------------------------------------------------
 # Test: submit rejection → legacy fallback

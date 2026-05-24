@@ -184,16 +184,62 @@ def test_worker_discovery_marks_claude_monthly_limit_as_anthropic_quota(monkeypa
 
 def test_evaluator_discovery_ignores_expired_lease(monkeypatch) -> None:
     monkeypatch.setattr(gnd, "SESSION", "solar-harness")
+    monkeypatch.setattr(
+        gnd.subprocess,
+        "check_output",
+        lambda *a, **kw: b"solar-harness:0.3\tEvaluator \xe5\xae\xa1\xe5\x88\xa4\xe5\xae\x98 | \xe6\xa8\xa1\xe5\x9e\x8b:Opus\n",
+    )
     monkeypatch.setattr(gnd, "_pane_exists", lambda pane: True)
+    monkeypatch.setattr(gnd, "_pane_title", lambda pane: "Evaluator 审判官 | 模型:Opus")
     monkeypatch.setattr(gnd, "read_lease", lambda pane: {"expires_at": _ts(-60)})
     monkeypatch.setattr(gnd, "_pane_unavailable_reason", lambda pane: "")
     monkeypatch.setattr(gnd, "_pane_tui_busy", lambda pane: False)
+    monkeypatch.setattr(gnd, "_pane_runtime_unavailable_reason", lambda pane, title="": "")
+    monkeypatch.setattr(gnd, "_pane_current_command", lambda pane: "bash")
 
     evaluators = gnd._discover_evaluators(dry_run=False)
 
     assert len(evaluators) == 1
     assert evaluators[0]["pane"] == "solar-harness:0.3"
     assert evaluators[0]["busy"] is False
+
+
+def test_evaluator_discovery_finds_pool_candidates_by_role(monkeypatch) -> None:
+    monkeypatch.setattr(gnd, "SESSION", "solar-harness-test")
+    monkeypatch.setattr(
+        gnd.subprocess,
+        "check_output",
+        lambda *a, **kw: (
+            b"solar-harness-test:0.3\tEvaluator \xe5\xae\xa1\xe5\x88\xa4\xe5\xae\x98 | \xe6\xa8\xa1\xe5\x9e\x8b:Opus\n"
+            b"solar-harness-lab:0.3\tEvaluator Print \xe5\xae\xa1\xe5\x88\xa4\xe5\xae\x98 | \xe6\xa8\xa1\xe5\x9e\x8b:Opus\n"
+            b"solar-harness-lab:0.1\tBuilder 2 | \xe6\xa8\xa1\xe5\x9e\x8b:Sonnet\n"
+            b"solar-harness-multi-task:7\tEvaluator Detached \xe5\xae\xa1\xe5\x88\xa4\xe5\xae\x98 | \xe6\xa8\xa1\xe5\x9e\x8b:Gemini\n"
+        ),
+    )
+    monkeypatch.setattr(gnd, "_pane_exists", lambda pane: True)
+    monkeypatch.setattr(
+        gnd,
+        "_pane_title",
+        lambda pane: {
+            "solar-harness-test:0.3": "Evaluator 审判官 | 模型:Opus",
+            "solar-harness-lab:0.3": "Evaluator Print 审判官 | 模型:Opus",
+            "solar-harness-lab:0.1": "Builder 2 | 模型:Sonnet",
+            "solar-harness-multi-task:7": "Evaluator Detached 审判官 | 模型:Gemini",
+        }.get(pane, ""),
+    )
+    monkeypatch.setattr(gnd, "read_lease", lambda pane: {})
+    monkeypatch.setattr(gnd, "_pane_unavailable_reason", lambda pane: "")
+    monkeypatch.setattr(gnd, "_pane_tui_busy", lambda pane: False)
+    monkeypatch.setattr(gnd, "_pane_runtime_unavailable_reason", lambda pane, title="": "")
+    monkeypatch.setattr(gnd, "_pane_current_command", lambda pane: "bash")
+
+    panes = [item["pane"] for item in gnd._discover_evaluators(dry_run=False)]
+
+    assert panes == [
+        "solar-harness-test:0.3",
+        "solar-harness-lab:0.3",
+        "solar-harness-multi-task:7",
+    ]
 
 
 def test_force_eval_retry_allows_failed_node_after_repair_artifact(monkeypatch, tmp_path) -> None:

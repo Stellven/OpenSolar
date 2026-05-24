@@ -4331,6 +4331,58 @@ generate_architect_dispatch() {
   log "architect dispatch written: $out"
 }
 
+ensure_knowledge_closure_or_block() {
+  local sid="$1" sf="$2"
+  local aae="$HARNESS_DIR/lib/accepted-artifact-export.py"
+  if [[ ! -f "$aae" ]]; then
+    python3 - "$sf" "accepted-artifact-export.py not found: $aae" <<'PY'
+import json, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+err = sys.argv[2]
+data = json.loads(path.read_text())
+data["knowledge_closure_required"] = True
+data["knowledge_closure_status"] = "failed"
+data["knowledge_closure_error"] = err
+path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+PY
+    log "${R}[knowledge-closure] BLOCK finalize: $sid — missing accepted-artifact-export.py${N}"
+    return 1
+  fi
+  local out rc
+  out=$(python3 "$aae" export --sid "$sid" --with-summaries --force-missing --json 2>&1)
+  rc=$?
+  mkdir -p "$HARNESS_DIR/logs"
+  printf '%s\n' "$out" >> "$HARNESS_DIR/logs/accepted-artifact-export.log"
+  if [[ "$rc" != "0" ]]; then
+    python3 - "$sf" "$out" <<'PY'
+import json, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+err = sys.argv[2][-2000:]
+data = json.loads(path.read_text())
+data["knowledge_closure_required"] = True
+data["knowledge_closure_status"] = "failed"
+data["knowledge_closure_error"] = err
+path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+PY
+    log "${R}[knowledge-closure] BLOCK finalize: $sid — accepted export failed${N}"
+    return 1
+  fi
+  python3 - "$sf" <<'PY'
+import json, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+data = json.loads(path.read_text())
+data["knowledge_closure_required"] = True
+data["knowledge_closure_status"] = "exported"
+data["knowledge_closure_error"] = None
+path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+PY
+  log "${G}[knowledge-closure] accepted artifact + summaries ready: $sid${N}"
+  return 0
+}
+
 # 审判官判定 PASS → 通知完成
 handle_passed() {
   local sid="$1" sf="$2"
@@ -4439,6 +4491,12 @@ else:
     fi
   fi
 
+  # P0 knowledge closure gate: finalized sprint must have accepted.md,
+  # source_artifact_index.md, and structured JSON/events summaries.
+  if ! ensure_knowledge_closure_or_block "$sid" "$sf"; then
+    return 1
+  fi
+
   touch "$finalized"
   # sprint-20260503-195627 D2: telemetry emit
   type telemetry_emit_run &>/dev/null && telemetry_emit_run "$sid" "passed" 2>> "$COORD_LOG" || true
@@ -4448,15 +4506,6 @@ else:
   append_history "$sf" "finalized" "coordinator"
   log "finalized: $sid"
 
-  # sprint-20260508-accepted-artifact-knowledge D4: async accepted artifact export (fail-open)
-  (
-    _aae="$HARNESS_DIR/lib/accepted-artifact-export.py"
-    if [[ -f "$_aae" ]]; then
-      mkdir -p "$HARNESS_DIR/logs"
-      python3 "$_aae" export --sid "$sid" 2>&1 | \
-        head -40 >> "$HARNESS_DIR/logs/accepted-artifact-export.log" || true
-    fi
-  ) &
 }
 
 # D5: needs_human_review 处理

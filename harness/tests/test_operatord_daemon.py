@@ -50,6 +50,20 @@ _MINIMAL_REGISTRY = {
     },
 }
 
+_COMMAND_REGISTRY = {
+    "version": 1,
+    "operators": {
+        "test-command-builder": {
+            "display_name": "Test Command Builder",
+            "role": "builder",
+            "persona": "builder",
+            "backend": "command",
+            "model": "local-command",
+            "enabled": True,
+        }
+    },
+}
+
 _TASK_ENVELOPE = {
     "task_id": "T-n3-test-001",
     "sprint_id": "sprint-test-n3",
@@ -79,6 +93,44 @@ def _setup_harness(tmp_path: Path) -> dict:
         dest_persona.write_text("# Builder\nYou are a builder.")
 
     env = {**os.environ, "HARNESS_DIR": str(tmp_path)}
+    return env
+
+
+def _setup_command_harness(tmp_path: Path) -> dict:
+    (tmp_path / "config").mkdir(parents=True)
+    (tmp_path / "personas").mkdir(parents=True)
+    (tmp_path / "tools").mkdir(parents=True)
+
+    (tmp_path / "config" / "physical-operators.json").write_text(
+        json.dumps(_COMMAND_REGISTRY, indent=2)
+    )
+
+    real_persona = REAL_PERSONAS_DIR / "builder.md"
+    dest_persona = tmp_path / "personas" / "builder.md"
+    if real_persona.exists():
+        shutil.copy(real_persona, dest_persona)
+    else:
+        dest_persona.write_text("# Builder\nYou are a builder.")
+
+    writer = tmp_path / "tools" / "write_handoff_from_dispatch.py"
+    writer.write_text(
+        """#!/usr/bin/env python3
+import os
+from pathlib import Path
+
+dispatch = Path(os.environ["SOLAR_MULTI_TASK_DISPATCH_FILE"]).read_text(encoding="utf-8")
+handoff = Path(os.environ["HANDOFF"])
+handoff.parent.mkdir(parents=True, exist_ok=True)
+handoff.write_text("# Handoff\\n\\n" + dispatch, encoding="utf-8")
+print("dispatch_seen=" + str(Path(os.environ["SOLAR_MULTI_TASK_DISPATCH_FILE"]).exists()))
+print("handoff_written=" + str(handoff))
+""",
+        encoding="utf-8",
+    )
+    writer.chmod(0o755)
+
+    env = {**os.environ, "HARNESS_DIR": str(tmp_path)}
+    env["COMMAND_AGENT"] = f"python3 {writer}"
     return env
 
 
@@ -385,6 +437,62 @@ class TestDaemonOnce:
         assert output_log.exists(), "output.log should be written alongside result.json"
         log_content = output_log.read_text()
         assert "T-n3-test-002" in log_content or "operatord" in log_content
+
+    def test_command_backend_uses_materialized_dispatch_file(self, tmp_path):
+        env = _setup_command_harness(tmp_path)
+        envelope = {
+            "task_id": "T-command-001",
+            "sprint_id": "sprint-command",
+            "node_id": "N1",
+            "operator_id": "test-command-builder",
+            "task_type": "dummy",
+            "objective": "Verify command backend",
+            "dispatch_text": "# dispatch\\n\\nhello command backend\\n",
+            "handoff_path": str(tmp_path / "sprints" / "sprint-command.N1-handoff.md"),
+            "command": "$COMMAND_AGENT",
+        }
+        envelope_path = tmp_path / "command-envelope.json"
+        envelope_path.write_text(json.dumps(envelope), encoding="utf-8")
+
+        submit_out = self._run_submit(env, envelope_path)
+        assert submit_out["status"] == "submitted"
+
+        daemon_proc = subprocess.run(
+            [
+                sys.executable,
+                str(TOOLS_DIR / "operatord.py"),
+                "daemon",
+                "--operator",
+                "test-command-builder",
+                "--once",
+                "--poll-interval",
+                "0.2",
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert daemon_proc.returncode == 0, daemon_proc.stderr
+
+        result_json = (
+            tmp_path
+            / "run"
+            / "operator-results"
+            / "test-command-builder"
+            / "T-command-001"
+            / "result.json"
+        )
+        assert result_json.exists()
+        result = json.loads(result_json.read_text())
+        assert result["status"] == "completed"
+        dispatch_md = result_json.parent / "dispatch.md"
+        envelope_json = result_json.parent / "envelope.json"
+        assert dispatch_md.exists()
+        assert envelope_json.exists()
+        assert "hello command backend" in dispatch_md.read_text(encoding="utf-8")
+        handoff = tmp_path / "sprints" / "sprint-command.N1-handoff.md"
+        assert handoff.exists()
 
     def test_signal_leaves_final_status(self, tmp_path):
         """SIGTERM while idle should leave a final idle status file."""

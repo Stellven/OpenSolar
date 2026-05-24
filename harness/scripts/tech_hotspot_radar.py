@@ -13,11 +13,26 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import email.utils
+import html
 import json
 import os
 import re
+import shutil
 import sqlite3
+import subprocess
 import sys
+import tempfile
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
+from email import encoders
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.utils import make_msgid
 from pathlib import Path
 from typing import Any
 
@@ -277,7 +292,7 @@ CREATE TABLE IF NOT EXISTS evidence_atoms (
     technical_depth   REAL NOT NULL DEFAULT 0.0,
     source_weight     REAL NOT NULL DEFAULT 1.0,
     created_at        TEXT NOT NULL,
-    model_used        TEXT NOT NULL DEFAULT 'local_qwen3_6',
+    model_used        TEXT NOT NULL DEFAULT 'thunderomlx_qwen3_6_35b',
     UNIQUE(source, source_id, atom_type, content)
 );
 CREATE INDEX IF NOT EXISTS idx_ea_source ON evidence_atoms(source, source_id);
@@ -309,6 +324,9 @@ CREATE TABLE IF NOT EXISTS reasoning_packets (
     input_hash        TEXT NOT NULL,
     prompt_version    TEXT NOT NULL DEFAULT 'v1',
     schema_version    TEXT NOT NULL DEFAULT 'v1',
+    model_policy_json TEXT NOT NULL DEFAULT '{}',
+    premium_escalation_json TEXT NOT NULL DEFAULT '{}',
+    embedding_policy_json TEXT NOT NULL DEFAULT '{}',
     created_at        TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_rp_type ON reasoning_packets(packet_type);
@@ -333,7 +351,7 @@ CREATE TABLE IF NOT EXISTS insight_verifications (
     claim_text        TEXT NOT NULL DEFAULT '',
     verdict           TEXT NOT NULL
         CHECK(verdict IN ('passed','weak_evidence','unsupported','contradiction_found')),
-    verifier_model    TEXT NOT NULL DEFAULT 'local_qwen3_6',
+    verifier_model    TEXT NOT NULL DEFAULT 'thunderomlx_qwen3_6_35b',
     detail            TEXT NOT NULL DEFAULT '',
     created_at        TEXT NOT NULL
 );
@@ -369,11 +387,62 @@ MODEL_ROUTER = {
     "repo_analysis": "codex_or_gpt_coding_reasoner",
     "viewpoint_synthesis": "claude_opus_like",
     "long_context_cross_source_analysis": "gemini_pro_like",
-    "cheap_preprocess": "local_qwen3_6",
+    "cheap_preprocess": "thunderomlx_qwen3_6_35b",
+    "contradiction_resolution": "claude_opus_like",
+    "cross_source_insight": "gemini_pro_like",
+    "executive_summary": "claude_opus_like",
+    "final_report": "claude_opus_like",
+    "strategic_synthesis": "claude_opus_like",
+    "trend_analysis": "claude_opus_like",
+    "trend_judgment": "claude_opus_like",
     "trend_synthesis": "claude_opus_like",
     "final_report_synthesis": "claude_opus_like",
     "cross_source_analysis": "gemini_pro_like",
 }
+
+LOCAL_KNOWLEDGE_TASKS = {
+    "canonical_normalization",
+    "chunk_cleaning",
+    "dedup",
+    "entity_extraction",
+    "evidence_atom",
+    "github_brief",
+    "ingest_batch",
+    "local_cluster",
+    "post_brief",
+    "readme_brief",
+    "reasoning_packet_build",
+    "source_preprocess",
+    "topic_tagging",
+    "transcript_chunk",
+    "x_claim",
+    "youtube_brief",
+}
+
+PREMIUM_KNOWLEDGE_TASKS = {
+    "contradiction_resolution",
+    "cross_source_analysis",
+    "cross_source_insight",
+    "executive_summary",
+    "final_report",
+    "final_report_synthesis",
+    "strategic_synthesis",
+    "trend_analysis",
+    "trend_judgment",
+    "trend_synthesis",
+    "viewpoint_synthesis",
+}
+
+EMBEDDING_TASKS = {
+    "embedding",
+    "embedding_query",
+    "embedding_upsert",
+    "rerank_embedding",
+    "vector_search",
+}
+
+LOCAL_KNOWLEDGE_MODEL = "thunderomlx_qwen3_6_35b"
+EMBEDDING_ROUTE = "embedding_unchanged"
 
 BUDGET_TRIM_PRIORITY = [
     "cross_source",
@@ -383,8 +452,102 @@ BUDGET_TRIM_PRIORITY = [
 ]
 
 
+def normalize_task_type(task_type: str) -> str:
+    return str(task_type or "").strip().lower().replace("-", "_").replace(" ", "_")
+
+
 def route_model(packet_type: str) -> str:
-    return MODEL_ROUTER.get(packet_type, "local_qwen3_6")
+    task_type = normalize_task_type(packet_type)
+    if task_type in EMBEDDING_TASKS or "embedding" in task_type:
+        return EMBEDDING_ROUTE
+    if task_type in LOCAL_KNOWLEDGE_TASKS:
+        return LOCAL_KNOWLEDGE_MODEL
+    return MODEL_ROUTER.get(task_type, LOCAL_KNOWLEDGE_MODEL)
+
+
+def knowledge_model_policy(task_type: str) -> dict[str, Any]:
+    task_type = normalize_task_type(task_type)
+    route = route_model(task_type)
+    if route == EMBEDDING_ROUTE:
+        return {
+            "task_type": task_type,
+            "route": route,
+            "default_model_family": "existing_embedding_route",
+            "embedding_route_preserved": True,
+            "premium_allowed": False,
+            "reason": "embedding workloads keep the existing embedding backend",
+        }
+    if task_type in PREMIUM_KNOWLEDGE_TASKS:
+        return {
+            "task_type": task_type,
+            "route": "premium_reasoner",
+            "default_model_family": route,
+            "embedding_route_preserved": True,
+            "premium_allowed": True,
+            "reason": "task requires trend judgment, synthesis, or final report quality",
+        }
+    return {
+        "task_type": task_type,
+        "route": "local_thunderomlx",
+        "default_model_family": LOCAL_KNOWLEDGE_MODEL,
+        "embedding_route_preserved": True,
+        "premium_allowed": False,
+        "reason": "knowledge extraction and preprocessing default to ThunderOMLX",
+    }
+
+
+def reasoning_packet_policy_payload(packet_type: str, *, premium_reason: str = "") -> dict[str, dict[str, Any]]:
+    model_policy = knowledge_model_policy(packet_type)
+    premium_allowed = bool(model_policy.get("premium_allowed"))
+    return {
+        "model_policy": model_policy,
+        "premium_escalation": {
+            "allowed": premium_allowed,
+            "reason": premium_reason or str(model_policy.get("reason") or ""),
+            "task_policy": model_policy if premium_allowed else knowledge_model_policy("trend_judgment"),
+        },
+        "embedding_policy": knowledge_model_policy("embedding"),
+    }
+
+
+def insert_reasoning_packet(
+    conn: sqlite3.Connection,
+    *,
+    packet_id: str,
+    packet_type: str,
+    compressed_evidence: str,
+    evidence_atom_count: int,
+    token_budget: int,
+    input_hash: str,
+    created_at: str,
+    cluster_id: int | None = None,
+    prompt_version: str = "v1",
+    schema_version: str = "v1",
+    premium_reason: str = "",
+) -> None:
+    policy = reasoning_packet_policy_payload(packet_type, premium_reason=premium_reason)
+    conn.execute(
+        "INSERT OR REPLACE INTO reasoning_packets "
+        "(packet_id, packet_type, cluster_id, compressed_evidence, evidence_atom_count, "
+        "token_budget, input_hash, prompt_version, schema_version, "
+        "model_policy_json, premium_escalation_json, embedding_policy_json, created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            packet_id,
+            packet_type,
+            cluster_id,
+            compressed_evidence,
+            evidence_atom_count,
+            token_budget,
+            input_hash,
+            prompt_version,
+            schema_version,
+            json.dumps(policy["model_policy"], ensure_ascii=False, sort_keys=True),
+            json.dumps(policy["premium_escalation"], ensure_ascii=False, sort_keys=True),
+            json.dumps(policy["embedding_policy"], ensure_ascii=False, sort_keys=True),
+            created_at,
+        ),
+    )
 
 
 def trim_packet_to_budget(evidence_rows: list[dict], token_budget: int,
@@ -502,6 +665,13 @@ def youtube_format_transcript_jsonl(video: dict, transcript: dict) -> str:
 def youtube_enqueue_retry(conn: sqlite3.Connection, source_id: str,
                           operation: str, error: str) -> None:
     """Enqueue a failed transcript operation to retry_queue (AC7)."""
+    existing = conn.execute(
+        "SELECT rowid FROM retry_queue WHERE source='youtube' AND source_id=? "
+        "AND operation=? AND status IN ('pending','in_progress') LIMIT 1",
+        (source_id, operation),
+    ).fetchone()
+    if existing:
+        return
     now = now_utc()
     next_retry = now + dt.timedelta(minutes=5)
     conn.execute(
@@ -527,16 +697,21 @@ def youtube_emit_evidence_atoms(conn: sqlite3.Connection, video_id: str,
     evidence_id = f"yt_{video_id}_0001"
     content = transcript_text[:500] if transcript_text else ""
     conn.execute(
-        "INSERT OR IGNORE INTO evidence_atoms "
+        "INSERT INTO evidence_atoms "
         "(evidence_id, source, source_id, source_table, atom_type, content, "
         "importance_score, novelty_score, technical_depth, source_weight, "
-        "metadata_json, created_at, model_used) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "metadata_json, created_at, model_used) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) "
+        "ON CONFLICT(evidence_id) DO UPDATE SET "
+        "content=excluded.content, importance_score=excluded.importance_score, "
+        "novelty_score=excluded.novelty_score, technical_depth=excluded.technical_depth, "
+        "source_weight=excluded.source_weight, metadata_json=excluded.metadata_json, "
+        "created_at=excluded.created_at, model_used=excluded.model_used",
         (evidence_id, "youtube", video_id, "youtube_transcripts",
          "transcript_chunk", content,
          importance, novelty, depth, source_weight,
          json.dumps({"content_type": content_type, "entities": entities or {},
                      "topic_tags": topic_tags or []}),
-         ts, "local_qwen3_6"),
+         ts, LOCAL_KNOWLEDGE_MODEL),
     )
     return 1
 
@@ -570,6 +745,519 @@ def youtube_local_brief(conn: sqlite3.Connection, video_id: str) -> str:
         parts.append(f"  [{a[0]}] importance={a[2]:.2f} novelty={a[3]:.2f} "
                       f"depth={a[4]:.2f} | {a[1][:100]}")
     return "\n".join(parts)
+
+
+def clean_transcript_text(text: str) -> str:
+    """Normalize transcript text without changing the core meaning."""
+    text = html.unescape(text or "")
+    text = re.sub(r"\[(?:music|applause|laughter|音乐|掌声|笑声)\]", " ", text, flags=re.I)
+    text = re.sub(r"https?://\S+", " ", text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def infer_transcript_language(text: str) -> str:
+    if not text:
+        return "unknown"
+    zh = len(re.findall(r"[\u4e00-\u9fff]", text))
+    ascii_letters = len(re.findall(r"[A-Za-z]", text))
+    if zh and ascii_letters:
+        return "mixed"
+    if zh:
+        return "zh"
+    if ascii_letters:
+        return "en"
+    return "unknown"
+
+
+def load_youtube_digest_module() -> Any:
+    """Load the existing YouTube digest module so caption parsing stays shared."""
+    import importlib.util
+
+    path = Path(__file__).resolve().parent / "youtube_influence_digest.py"
+    spec = importlib.util.spec_from_file_location("solar_youtube_influence_digest", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load youtube transcript helper: {path}")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def fetch_youtube_caption_transcript(video_id: str, config: dict[str, Any]) -> tuple[str, str, str]:
+    """Fetch YouTube captions using the shared AI Influence helper."""
+    mod = load_youtube_digest_module()
+    import requests  # dependency of youtube_influence_digest.py
+
+    fetch = config.get("fetch") or {}
+    session = requests.Session()
+    transcript, status, source = mod.fetch_transcript(
+        session,
+        video_id,
+        int(fetch.get("timeout_seconds", 20)),
+        str(fetch.get("user_agent", "Solar-Tech-Hotspot-Radar/1.0")),
+    )
+    return transcript or "", status or "empty", source or ""
+
+
+def transcript_state_dirs(config: dict[str, Any]) -> tuple[Path, Path]:
+    state_dir = Path((config.get("output") or {}).get(
+        "state_dir", str(Path.home() / ".solar/harness/state/tech-hotspot-radar")
+    )).expanduser()
+    audio_dir = state_dir / "asr-audio"
+    transcript_dir = state_dir / "transcripts"
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    transcript_dir.mkdir(parents=True, exist_ok=True)
+    return audio_dir, transcript_dir
+
+
+def find_asr_audio_file(audio_dir: Path, video_id: str) -> Path | None:
+    candidates = sorted(
+        [p for p in audio_dir.glob(f"{video_id}.*") if p.is_file()],
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    return candidates[0] if candidates else None
+
+
+def youtube_min_transcript_duration(config: dict[str, Any]) -> int:
+    youtube_cfg = config.get("youtube") or {}
+    return int(youtube_cfg.get("min_transcript_duration_seconds", 600) or 600)
+
+
+def probe_media_duration_seconds(path: Path) -> int | None:
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe or not path.exists():
+        return None
+    try:
+        proc = subprocess.run(
+            [ffprobe, "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=20,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            return int(float(proc.stdout.strip()))
+    except Exception:
+        return None
+    return None
+
+
+def resolve_youtube_duration_seconds(conn: sqlite3.Connection, video_id: str,
+                                     config: dict[str, Any]) -> int | None:
+    row = conn.execute(
+        "SELECT duration_seconds FROM youtube_videos WHERE video_id=?",
+        (video_id,),
+    ).fetchone()
+    if row and row[0]:
+        return int(row[0])
+
+    audio_dir, _transcript_dir = transcript_state_dirs(config)
+    audio_file = find_asr_audio_file(audio_dir, video_id)
+    duration = probe_media_duration_seconds(audio_file) if audio_file else None
+
+    if duration is None:
+        yt_dlp = shutil.which("yt-dlp")
+        if yt_dlp:
+            try:
+                proc = subprocess.run(
+                    [yt_dlp, "--dump-single-json", "--skip-download",
+                     f"https://www.youtube.com/watch?v={video_id}"],
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    timeout=60,
+                )
+                if proc.returncode == 0 and proc.stdout.strip():
+                    payload = json.loads(proc.stdout)
+                    if payload.get("duration"):
+                        duration = int(float(payload["duration"]))
+            except Exception:
+                duration = None
+
+    if duration is not None:
+        conn.execute(
+            "UPDATE youtube_videos SET duration_seconds=? WHERE video_id=?",
+            (duration, video_id),
+        )
+    return duration
+
+
+def mark_transcript_skipped_short_video(conn: sqlite3.Connection, video_id: str,
+                                        duration_seconds: int | None,
+                                        min_duration_seconds: int,
+                                        config: dict[str, Any]) -> None:
+    detail = f"skipped_short_video: duration={duration_seconds or 'unknown'}s min={min_duration_seconds}s"
+    now = iso_z()
+    conn.execute(
+        "INSERT INTO youtube_transcripts "
+        "(video_id, transcript_raw, transcript_clean, transcript_status, language, fetched_at, char_count) "
+        "VALUES (?, '', '', 'failed', '', ?, 0) "
+        "ON CONFLICT(video_id) DO UPDATE SET "
+        "transcript_raw='', transcript_clean='', transcript_status='failed', "
+        "language='', fetched_at=excluded.fetched_at, char_count=0",
+        (video_id, now),
+    )
+    conn.execute(
+        "DELETE FROM evidence_atoms WHERE source='youtube' AND source_id=?",
+        (video_id,),
+    )
+    try:
+        _audio_dir, transcript_dir = transcript_state_dirs(config)
+        transcript_path = transcript_dir / f"{video_id}.txt"
+        if transcript_path.exists():
+            transcript_path.unlink()
+    except Exception:
+        pass
+    conn.execute(
+        "UPDATE retry_queue SET status='done', last_error=? "
+        "WHERE source='youtube' AND source_id=? AND operation='fetch_transcript'",
+        (detail[:500], video_id),
+    )
+
+
+def run_youtube_asr(video_id: str, config: dict[str, Any], *, dry_run: bool = False,
+                    duration_seconds: int | None = None) -> tuple[str, str, str]:
+    """Download audio with yt-dlp and transcribe with the configured ASR backend."""
+    youtube_cfg = config.get("youtube") or {}
+    asr_cfg = youtube_cfg.get("asr") or {}
+    backend = str(asr_cfg.get("backend", "openai-whisper") or "openai-whisper").lower()
+    model = str(asr_cfg.get("whisper_model", "small"))
+    language = str(asr_cfg.get("language", "zh") or "").strip()
+    audio_dir, transcript_dir = transcript_state_dirs(config)
+    if dry_run:
+        return "", "asr_dry_run", ""
+    yt_dlp = shutil.which("yt-dlp")
+    if not yt_dlp:
+        return "", "asr_missing_ytdlp", ""
+
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    output_template = str(audio_dir / f"{video_id}.%(ext)s")
+    dl = subprocess.run(
+        [yt_dlp, "-f", "ba/bestaudio", "--no-playlist", "-o", output_template, url],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=int(asr_cfg.get("download_timeout_seconds", 900)),
+    )
+    if dl.returncode != 0:
+        return "", f"asr_download_failed:{dl.stdout[-500:]}", ""
+    audio_file = find_asr_audio_file(audio_dir, video_id)
+    if not audio_file:
+        return "", "asr_download_missing_audio", ""
+
+    if backend in {"mlx-whisper", "mlx"}:
+        mlx_whisper = shutil.which("mlx_whisper") or shutil.which("mlx-whisper")
+        if not mlx_whisper:
+            return "", "asr_missing_mlx_whisper", str(audio_file)
+        cmd = [mlx_whisper, str(audio_file), "--model", model, "--output-dir", str(transcript_dir), "--output-format", "txt"]
+        if language and language.lower() not in {"auto", "unknown"}:
+            cmd.extend(["--language", language])
+    else:
+        whisper = shutil.which("whisper")
+        if not whisper:
+            return "", "asr_missing_whisper", ""
+        openai_model = str(asr_cfg.get("openai_whisper_model", model) or model)
+        cmd = [whisper, str(audio_file), "--model", openai_model, "--output_format", "txt", "--output_dir", str(transcript_dir)]
+        if language and language.lower() not in {"auto", "unknown"}:
+            cmd.extend(["--language", language])
+
+    base_timeout = int(asr_cfg.get("transcribe_timeout_seconds", 1800))
+    dynamic_timeout = base_timeout
+    if duration_seconds:
+        dynamic_timeout = max(base_timeout, int(duration_seconds * float(asr_cfg.get("timeout_duration_multiplier", 1.2))))
+    asr = subprocess.run(
+        cmd,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=dynamic_timeout,
+    )
+    if asr.returncode != 0:
+        return "", f"asr_transcribe_failed:{asr.stdout[-500:]}", str(audio_file)
+    txt_candidates = sorted(transcript_dir.glob(f"{audio_file.stem}*.txt"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not txt_candidates:
+        return "", "asr_missing_txt", str(audio_file)
+    text = txt_candidates[0].read_text(encoding="utf-8", errors="replace")
+    return text, "asr_ok", str(txt_candidates[0])
+
+
+def mark_retry_done(conn: sqlite3.Connection, retry_id: int, detail: str = "") -> None:
+    conn.execute(
+        "UPDATE retry_queue SET status='done', last_error=? WHERE retry_id=?",
+        (detail[:500], retry_id),
+    )
+
+
+def mark_retry_failed(conn: sqlite3.Connection, row: sqlite3.Row, error: str) -> None:
+    attempt = int(row["attempt"] or 0) + 1
+    max_attempts = int(row["max_attempts"] or 3)
+    status = "abandoned" if attempt >= max_attempts else "pending"
+    delay_minutes = min(240, 5 * (2 ** max(attempt - 1, 0)))
+    next_retry = iso_z(now_utc() + dt.timedelta(minutes=delay_minutes))
+    conn.execute(
+        "UPDATE retry_queue SET attempt=?, status=?, last_error=?, next_retry_at=? WHERE retry_id=?",
+        (attempt, status, error[:500], next_retry, row["retry_id"]),
+    )
+    if status == "abandoned":
+        conn.execute(
+            "UPDATE youtube_transcripts SET transcript_status='failed', fetched_at=? WHERE video_id=?",
+            (iso_z(), row["source_id"]),
+        )
+
+
+def save_transcript_success(conn: sqlite3.Connection, video_id: str, text: str, status: str, source: str,
+                            config: dict[str, Any]) -> None:
+    clean = clean_transcript_text(text)
+    language = infer_transcript_language(clean)
+    fetched_at = iso_z()
+    transcript_status = "auto_generated" if status.startswith("asr") else "fetched"
+    conn.execute(
+        "INSERT INTO youtube_transcripts "
+        "(video_id, transcript_raw, transcript_clean, transcript_status, language, fetched_at, char_count) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT(video_id) DO UPDATE SET "
+        "transcript_raw=excluded.transcript_raw, transcript_clean=excluded.transcript_clean, "
+        "transcript_status=excluded.transcript_status, language=excluded.language, "
+        "fetched_at=excluded.fetched_at, char_count=excluded.char_count",
+        (video_id, text, clean, transcript_status, language, fetched_at, len(clean)),
+    )
+    youtube_emit_evidence_atoms(
+        conn,
+        video_id,
+        transcript_text=clean,
+        content_type="claim",
+        entities={},
+        topic_tags=["youtube", "transcript"],
+        importance=max(0.4, semantic_score(clean[:2000])),
+        novelty=0.5,
+        depth=max(0.4, semantic_score(clean[:4000])),
+        source_weight=1.0,
+    )
+    _audio_dir, transcript_dir = transcript_state_dirs(config)
+    # Best-effort local plain transcript cache for attachment/debugging.
+    try:
+        (transcript_dir / f"{video_id}.txt").write_text(clean + "\n", encoding="utf-8")
+    except Exception:
+        pass
+
+
+def cleanup_transcript_cache(config: dict[str, Any]) -> int:
+    retention_days = int((config.get("output") or {}).get("retention_days", 120))
+    if retention_days <= 0:
+        return 0
+    cutoff = time.time() - retention_days * 86400
+    audio_dir, transcript_dir = transcript_state_dirs(config)
+    removed = 0
+    for base in (audio_dir, transcript_dir):
+        for path in base.glob("*"):
+            if path.is_file() and path.stat().st_mtime < cutoff:
+                path.unlink()
+                removed += 1
+    return removed
+
+
+def cmd_process_transcripts(args: argparse.Namespace) -> int:
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.executescript(SCHEMA_SQL)
+    conn.row_factory = sqlite3.Row
+    asr_config = (config.get("youtube") or {}).get("asr", {})
+    max_asr_per_run = int(asr_config.get("max_per_run", 1) or 1)
+    limit = int(getattr(args, "limit", 0) or max_asr_per_run or 1)
+    dry_run = bool(getattr(args, "dry_run", False))
+    due_filter = "" if getattr(args, "force", False) else "AND next_retry_at <= ?"
+    params: list[Any] = ["youtube", "fetch_transcript", "pending"]
+    if not getattr(args, "force", False):
+        params.append(iso_z())
+    params.append(limit)
+    rows = conn.execute(
+        "SELECT * FROM retry_queue WHERE source=? AND operation=? AND status=? "
+        f"{due_filter} ORDER BY next_retry_at, retry_id LIMIT ?",
+        params,
+    ).fetchall()
+    if dry_run:
+        print(f"[process-transcripts] dry-run due={len(rows)} limit={limit} max_asr_per_run={max_asr_per_run}")
+        for row in rows:
+            print(f"  pending {row['source_id']} attempt={row['attempt']} next={row['next_retry_at']}")
+        conn.close()
+        return 0
+    run_id = begin_run(conn, "youtube", "process-transcripts")
+    processed = 0
+    successes = 0
+    asr_used = 0
+    failures: list[str] = []
+    skipped = 0
+    min_duration_seconds = youtube_min_transcript_duration(config)
+    for row in rows:
+        video_id = row["source_id"]
+        processed += 1
+        duration_seconds = resolve_youtube_duration_seconds(conn, video_id, config)
+        if duration_seconds is None or duration_seconds < min_duration_seconds:
+            mark_transcript_skipped_short_video(conn, video_id, duration_seconds, min_duration_seconds, config)
+            skipped += 1
+            conn.commit()
+            continue
+        conn.execute("UPDATE retry_queue SET status='in_progress' WHERE retry_id=?", (row["retry_id"],))
+        conn.commit()
+        try:
+            text, status, source = fetch_youtube_caption_transcript(video_id, config)
+            if status != "ok" or not text:
+                if asr_used >= max_asr_per_run:
+                    conn.execute("UPDATE retry_queue SET status='pending' WHERE retry_id=?", (row["retry_id"],))
+                    failures.append(f"{video_id}: asr_limit_deferred")
+                    conn.commit()
+                    continue
+                asr_used += 1
+                text, status, source = run_youtube_asr(video_id, config, dry_run=dry_run, duration_seconds=duration_seconds)
+            if text:
+                save_transcript_success(conn, video_id, text, status, source, config)
+                mark_retry_done(conn, row["retry_id"], f"{status}:{source}")
+                successes += 1
+            else:
+                # Restore from in_progress before applying retry backoff.
+                conn.execute("UPDATE retry_queue SET status='pending' WHERE retry_id=?", (row["retry_id"],))
+                mark_retry_failed(conn, row, status or "empty_transcript")
+                failures.append(f"{video_id}: {status}")
+            conn.commit()
+        except Exception as exc:
+            conn.execute("UPDATE retry_queue SET status='pending' WHERE retry_id=?", (row["retry_id"],))
+            mark_retry_failed(conn, row, f"{type(exc).__name__}: {exc}")
+            failures.append(f"{video_id}: {type(exc).__name__}: {exc}")
+            conn.commit()
+    removed = cleanup_transcript_cache(config)
+    status = "ok" if not failures else ("partial" if successes else "failed")
+    finish_run(conn, run_id, status, processed, successes, "; ".join(failures[:5]))
+    print(f"[process-transcripts] processed={processed} success={successes} skipped={skipped} failures={len(failures)} cache_removed={removed}")
+    for failure in failures[:10]:
+        print(f"  WARN {failure}")
+    conn.close()
+    return 0 if status in {"ok", "partial"} else 1
+
+
+def parse_youtube_feed(channel: sqlite3.Row, xml_text: str, fetched_at: str) -> list[dict[str, Any]]:
+    ns = {
+        "atom": "http://www.w3.org/2005/Atom",
+        "yt": "http://www.youtube.com/xml/schemas/2015",
+        "media": "http://search.yahoo.com/mrss/",
+    }
+    root = ET.fromstring(xml_text)
+    rows: list[dict[str, Any]] = []
+    for entry in root.findall("atom:entry", ns):
+        video_id = (entry.findtext("yt:videoId", default="", namespaces=ns) or "").strip()
+        if not video_id:
+            continue
+        title = (entry.findtext("atom:title", default="", namespaces=ns) or "").strip()
+        published = (entry.findtext("atom:published", default="", namespaces=ns) or "").strip()
+        media_group = entry.find("media:group", ns)
+        description = ""
+        thumbnail_url = ""
+        if media_group is not None:
+            description = (media_group.findtext("media:description", default="", namespaces=ns) or "").strip()
+            thumb = media_group.find("media:thumbnail", ns)
+            thumbnail_url = thumb.attrib.get("url", "") if thumb is not None else ""
+        rows.append({
+            "video_id": video_id,
+            "channel_id": channel["channel_id"],
+            "channel_name": channel["channel_name"],
+            "video_url": f"https://www.youtube.com/watch?v={video_id}",
+            "title": title,
+            "description": description,
+            "published_at": published or fetched_at,
+            "duration_seconds": None,
+            "thumbnail_url": thumbnail_url,
+            "view_count": 0,
+            "like_count": 0,
+            "comment_count": 0,
+            "tags": "",
+            "fetched_at": fetched_at,
+        })
+    return rows
+
+
+def cmd_collect_youtube(args: argparse.Namespace) -> int:
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.executescript(SCHEMA_SQL)
+    conn.row_factory = sqlite3.Row
+    command = "collect-youtube"
+    min_hours = float((config.get("fetch") or {}).get("min_source_interval_hours", 6))
+    if not getattr(args, "force", False) and recent_success_within(conn, "youtube", command, min_hours):
+        print(f"[collect-youtube] skipped: last successful run within {min_hours:g}h")
+        conn.close()
+        return 0
+    run_id = begin_run(conn, "youtube", command)
+    fetched = 0
+    new_items = 0
+    failures: list[str] = []
+    limit_channels = int(getattr(args, "limit_channels", 0) or 0)
+    per_channel_limit = int(getattr(args, "per_channel_limit", 0) or (config.get("youtube") or {}).get("per_channel_limit", 3))
+    channels = conn.execute(
+        "SELECT * FROM youtube_channels WHERE enabled=1 ORDER BY scan_rotation_group, priority DESC, channel_name"
+    ).fetchall()
+    if limit_channels > 0:
+        channels = channels[:limit_channels]
+    fetched_at = iso_z()
+    for idx, channel in enumerate(channels, 1):
+        feed_url = "https://www.youtube.com/feeds/videos.xml?" + urllib.parse.urlencode({"channel_id": channel["channel_id"]})
+        try:
+            rows = parse_youtube_feed(channel, http_get_text(feed_url, config), fetched_at)
+            for video in rows[:per_channel_limit]:
+                fetched += 1
+                before = conn.total_changes
+                conn.execute(
+                    "INSERT OR IGNORE INTO youtube_videos "
+                    "(video_id, channel_id, channel_name, video_url, title, description, "
+                    "published_at, duration_seconds, thumbnail_url, view_count, like_count, "
+                    "comment_count, tags, fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (video["video_id"], video["channel_id"], video["channel_name"],
+                     video["video_url"], video["title"], video["description"],
+                     video["published_at"], video["duration_seconds"], video["thumbnail_url"],
+                     video["view_count"], video["like_count"], video["comment_count"],
+                     video["tags"], video["fetched_at"]),
+                )
+                inserted = conn.total_changes > before
+                if inserted:
+                    new_items += 1
+                    conn.execute(
+                        "INSERT OR IGNORE INTO youtube_transcripts "
+                        "(video_id, transcript_raw, transcript_clean, transcript_status, language, fetched_at, char_count) "
+                        "VALUES (?, '', '', 'missing', '', ?, 0)",
+                        (video["video_id"], fetched_at),
+                    )
+                    youtube_enqueue_retry(conn, video["video_id"], "fetch_transcript", "transcript not fetched by RSS collector")
+                conn.execute(
+                    "INSERT OR IGNORE INTO youtube_video_snapshots "
+                    "(video_id, view_count, like_count, comment_count, snapshot_at) VALUES (?, ?, ?, ?, ?)",
+                    (video["video_id"], video["view_count"], video["like_count"], video["comment_count"], fetched_at),
+                )
+                hot = youtube_compute_hot_score(
+                    channel_weight=1.0 if channel["priority"] == "tier1" else 0.6,
+                    semantic_importance=semantic_score(video["title"] + " " + video["description"]),
+                    novelty=1.0 if inserted else 0.2,
+                )
+                conn.execute(
+                    "INSERT OR REPLACE INTO hotspot_events(source, source_id, event_type, hot_score, scored_at) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    ("youtube", video["video_id"], "video_hot_score", hot, fetched_at),
+                )
+            conn.execute("UPDATE youtube_channels SET last_scanned_at=? WHERE channel_id=?", (fetched_at, channel["channel_id"]))
+            conn.commit()
+        except Exception as exc:
+            failures.append(f"{channel['channel_id']}: {type(exc).__name__}: {exc}")
+        if idx < len(channels):
+            sleep_between_requests(config)
+    finish_run(conn, run_id, "partial" if failures else "ok", fetched, new_items, "; ".join(failures[:5]))
+    print(f"[collect-youtube] channels={len(channels)} fetched={fetched} new={new_items} failures={len(failures)}")
+    for failure in failures[:10]:
+        print(f"  WARN {failure}")
+    conn.close()
+    return 0 if not failures else 1
 
 
 def now_utc() -> dt.datetime:
@@ -607,7 +1295,21 @@ def ensure_db(db_path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(str(db_path))
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
+    ensure_reasoning_packet_policy_columns(conn)
     return conn
+
+
+def ensure_reasoning_packet_policy_columns(conn: sqlite3.Connection) -> None:
+    exists = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='reasoning_packets'"
+    ).fetchone()
+    if not exists:
+        return
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(reasoning_packets)").fetchall()}
+    for column in ("model_policy_json", "premium_escalation_json", "embedding_policy_json"):
+        if column not in existing:
+            conn.execute(f"ALTER TABLE reasoning_packets ADD COLUMN {column} TEXT NOT NULL DEFAULT '{{}}'")
+    conn.commit()
 
 
 def get_tables(conn: sqlite3.Connection) -> list[str]:
@@ -615,6 +1317,77 @@ def get_tables(conn: sqlite3.Connection) -> list[str]:
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
     )
     return [row[0] for row in cur.fetchall()]
+
+
+def http_get_text(url: str, config: dict[str, Any]) -> str:
+    fetch = config.get("fetch") or {}
+    timeout = int(fetch.get("timeout_seconds", 20))
+    user_agent = fetch.get("user_agent", "Solar-Tech-Hotspot-Radar/1.0")
+    req = urllib.request.Request(url, headers={"User-Agent": user_agent})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return resp.read().decode("utf-8", errors="replace")
+
+
+def sleep_between_requests(config: dict[str, Any]) -> None:
+    seconds = float((config.get("fetch") or {}).get("sleep_between_requests_seconds", 3))
+    if seconds > 0:
+        time.sleep(seconds)
+
+
+def begin_run(conn: sqlite3.Connection, source: str, command: str) -> int:
+    cur = conn.execute(
+        "INSERT INTO pipeline_runs(source, command, started_at, status) VALUES (?, ?, ?, ?)",
+        (source, command, iso_z(), "running"),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def finish_run(
+    conn: sqlite3.Connection,
+    run_id: int,
+    status: str,
+    items_fetched: int = 0,
+    items_new: int = 0,
+    error: str = "",
+) -> None:
+    conn.execute(
+        "UPDATE pipeline_runs SET finished_at=?, status=?, items_fetched=?, items_new=?, "
+        "error_message=? WHERE run_id=?",
+        (iso_z(), status, items_fetched, items_new, error[:1000], run_id),
+    )
+    conn.commit()
+
+
+def recent_success_within(
+    conn: sqlite3.Connection,
+    source: str,
+    command: str,
+    hours: float,
+) -> bool:
+    row = conn.execute(
+        "SELECT finished_at FROM pipeline_runs WHERE source=? AND command=? AND status IN ('ok','partial') "
+        "ORDER BY finished_at DESC LIMIT 1",
+        (source, command),
+    ).fetchone()
+    if not row or not row[0]:
+        return False
+    try:
+        last = dt.datetime.fromisoformat(str(row[0]).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return (now_utc() - last).total_seconds() < hours * 3600
+
+
+def semantic_score(text: str) -> float:
+    keywords = [
+        "agent", "mcp", "reasoning", "inference", "training", "llm", "model",
+        "robot", "physical ai", "multimodal", "triton", "cuda", "mlx",
+        "github", "open source", "benchmark", "release", "token",
+    ]
+    lower = text.lower()
+    hits = sum(1 for kw in keywords if kw in lower)
+    return min(1.0, hits / 5.0)
 
 
 def cmd_init(args: argparse.Namespace) -> int:
@@ -691,6 +1464,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         "social_accounts", "social_posts", "social_post_snapshots", "social_clusters",
         "github_topics", "github_repos", "github_star_snapshots",
         "hotspot_events", "cross_source_links", "hotspot_alerts",
+        "evidence_atoms", "hotspot_clusters", "reasoning_packets",
+        "premium_reasoning_results", "insight_verifications", "token_ledger",
         "pipeline_runs", "retry_queue", "_meta",
     ]
     existing = set(get_tables(conn))
@@ -723,6 +1498,26 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         for p in pending:
             print(f"  {p['source']}/{p['source_id']}  op={p['operation']}  "
                   f"attempt={p['attempt']}  next={p['next_retry_at']}")
+        asr_cfg = (config.get("youtube") or {}).get("asr") or {}
+        if asr_cfg.get("enabled", True):
+            if shutil.which("yt-dlp"):
+                print("[doctor] yt-dlp: found")
+            else:
+                issues.append("missing ASR dependency: yt-dlp")
+                print("[doctor] WARN: missing ASR dependency: yt-dlp")
+            backend = str(asr_cfg.get("backend", "openai-whisper") or "openai-whisper").lower()
+            if backend in {"mlx-whisper", "mlx"}:
+                if shutil.which("mlx_whisper") or shutil.which("mlx-whisper"):
+                    print("[doctor] mlx-whisper: found")
+                else:
+                    issues.append("missing ASR dependency: mlx-whisper")
+                    print("[doctor] WARN: missing ASR dependency: mlx-whisper")
+            else:
+                if shutil.which("whisper"):
+                    print("[doctor] whisper: found")
+                else:
+                    issues.append("missing ASR dependency: whisper")
+                    print("[doctor] WARN: missing ASR dependency: whisper")
     raw_dir = config.get("output", {}).get("raw_dir", "")
     if raw_dir and Path(raw_dir).exists():
         raw_size = sum(f.stat().st_size for f in Path(raw_dir).rglob("*") if f.is_file())
@@ -850,7 +1645,7 @@ def cmd_preprocess_fixture(args: argparse.Namespace) -> int:
          "fine-tuning. Entity: transformer, multi-modal, attention.",
          0.85, 0.6, 0.9, 1.2,
          json.dumps({"start_ts": "00:00:00", "end_ts": "00:05:30", "entities": ["transformer", "multi-modal"]}),
-         now, "local_qwen3_6")
+         now, LOCAL_KNOWLEDGE_MODEL)
     )
     atoms_created += 1
 
@@ -867,7 +1662,7 @@ def cmd_preprocess_fixture(args: argparse.Namespace) -> int:
          "baseline. Links: github.com/karpathy/nanoGPT. Entity: nanoGPT, distributed training.",
          0.9, 0.8, 0.7, 1.5,
          json.dumps({"author_tier": "tier1", "category": "core_leader", "urls": ["github.com/karpathy/nanoGPT"]}),
-         now, "local_qwen3_6")
+         now, LOCAL_KNOWLEDGE_MODEL)
     )
     atoms_created += 1
 
@@ -884,7 +1679,7 @@ def cmd_preprocess_fixture(args: argparse.Namespace) -> int:
          "rapidly (abnormal growth signal). Entity: Claude, MCP, plugin, tool-use.",
          0.75, 0.5, 0.8, 1.0,
          json.dumps({"stars": 2400, "stars_delta_7d": 400, "language": "Python"}),
-         now, "local_qwen3_6")
+         now, LOCAL_KNOWLEDGE_MODEL)
     )
     atoms_created += 1
 
@@ -962,7 +1757,10 @@ def cmd_model_router_test(args: argparse.Namespace) -> int:
         ("repo_analysis", "codex_or_gpt_coding_reasoner"),
         ("viewpoint_synthesis", "claude_opus_like"),
         ("long_context_cross_source_analysis", "gemini_pro_like"),
-        ("cheap_preprocess", "local_qwen3_6"),
+        ("cheap_preprocess", LOCAL_KNOWLEDGE_MODEL),
+        ("evidence_atom", LOCAL_KNOWLEDGE_MODEL),
+        ("reasoning_packet_build", LOCAL_KNOWLEDGE_MODEL),
+        ("embedding_upsert", EMBEDDING_ROUTE),
     ]
     ok = True
     for packet_type, expected in tests:
@@ -971,6 +1769,67 @@ def cmd_model_router_test(args: argparse.Namespace) -> int:
         if actual != expected:
             ok = False
         print(f"[model-router] {packet_type} -> {actual} (expected {expected}): {status}")
+    return 0 if ok else 1
+
+
+def cmd_knowledge_model_policy_test(args: argparse.Namespace) -> int:
+    tests = [
+        ("evidence_atom", "local_thunderomlx", LOCAL_KNOWLEDGE_MODEL, False),
+        ("youtube_brief", "local_thunderomlx", LOCAL_KNOWLEDGE_MODEL, False),
+        ("reasoning_packet_build", "local_thunderomlx", LOCAL_KNOWLEDGE_MODEL, False),
+        ("trend_judgment", "premium_reasoner", "claude_opus_like", True),
+        ("final_report_synthesis", "premium_reasoner", "claude_opus_like", True),
+        ("embedding_upsert", EMBEDDING_ROUTE, "existing_embedding_route", False),
+    ]
+    ok = True
+    for task_type, expected_route, expected_family, expected_premium in tests:
+        decision = knowledge_model_policy(task_type)
+        actual = (
+            decision.get("route") == expected_route
+            and decision.get("default_model_family") == expected_family
+            and decision.get("premium_allowed") is expected_premium
+            and decision.get("embedding_route_preserved") is True
+        )
+        status = "PASS" if actual else "FAIL"
+        if not actual:
+            ok = False
+        print(
+            "[knowledge-model-policy] "
+            f"{task_type} -> route={decision.get('route')} "
+            f"family={decision.get('default_model_family')} "
+            f"premium={decision.get('premium_allowed')} "
+            f"(expected {expected_route}/{expected_family}/{expected_premium}): {status}"
+        )
+    conn = sqlite3.connect(":memory:")
+    conn.executescript(SCHEMA_SQL)
+    ensure_reasoning_packet_policy_columns(conn)
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(reasoning_packets)").fetchall()}
+    required_columns = {"model_policy_json", "premium_escalation_json", "embedding_policy_json"}
+    if not required_columns.issubset(columns):
+        ok = False
+        print(f"[knowledge-model-policy] schema columns missing: {sorted(required_columns - columns)}")
+    insert_reasoning_packet(
+        conn,
+        packet_id="pkt-policy-001",
+        packet_type="trend_synthesis",
+        compressed_evidence='{"evidence_ids":["ev-1"]}',
+        evidence_atom_count=1,
+        token_budget=2000,
+        input_hash="hash_policy_001",
+        created_at=iso_z(),
+        premium_reason="policy self-test",
+    )
+    row = conn.execute(
+        "SELECT model_policy_json, premium_escalation_json, embedding_policy_json "
+        "FROM reasoning_packets WHERE packet_id='pkt-policy-001'"
+    ).fetchone()
+    policy_ok = bool(row) and json.loads(row[0]).get("route") == "premium_reasoner"
+    embedding_ok = bool(row) and json.loads(row[2]).get("route") == EMBEDDING_ROUTE
+    escalation_ok = bool(row) and json.loads(row[1]).get("allowed") is True
+    if not (policy_ok and embedding_ok and escalation_ok):
+        ok = False
+    print(f"[knowledge-model-policy] packet audit columns: {'PASS' if policy_ok and embedding_ok and escalation_ok else 'FAIL'}")
+    conn.close()
     return 0 if ok else 1
 
 
@@ -1042,13 +1901,16 @@ def cmd_verifier_fixture(args: argparse.Namespace) -> int:
     conn = ensure_db(db_path)
     now = iso_z()
 
-    # Insert a premium result to verify against
-    conn.execute(
-        "INSERT OR IGNORE INTO reasoning_packets "
-        "(packet_id, packet_type, compressed_evidence, evidence_atom_count, "
-        "token_budget, input_hash, created_at) VALUES (?,?,?,?,?,?,?)",
-        ("pkt-test-001", "trend_synthesis", '{"claims":["transformer scaling laws apply"]}',
-         3, 2000, "hash_pkt_001", now)
+    insert_reasoning_packet(
+        conn,
+        packet_id="pkt-test-001",
+        packet_type="trend_synthesis",
+        compressed_evidence='{"claims":["transformer scaling laws apply"]}',
+        evidence_atom_count=3,
+        token_budget=2000,
+        input_hash="hash_pkt_001",
+        created_at=now,
+        premium_reason="verifier fixture exercises premium reasoning audit metadata",
     )
     conn.execute(
         "INSERT OR IGNORE INTO premium_reasoning_results "
@@ -1066,7 +1928,7 @@ def cmd_verifier_fixture(args: argparse.Namespace) -> int:
         "(result_id, evidence_id, claim_text, verdict, verifier_model, detail, created_at) "
         "VALUES (?,?,?,?,?,?,?)",
         (1, "ev-yt-chunk-001", "Transformer scaling continues", "passed",
-         "local_qwen3_6", "Evidence found in transcript chunk", now)
+         LOCAL_KNOWLEDGE_MODEL, "Evidence found in transcript chunk", now)
     )
 
     # Insert verification: unsupported (no evidence_id)
@@ -1075,7 +1937,7 @@ def cmd_verifier_fixture(args: argparse.Namespace) -> int:
         "(result_id, evidence_id, claim_text, verdict, verifier_model, detail, created_at) "
         "VALUES (?,?,?,?,?,?,?)",
         (1, None, "Unsubstantiated claim with no backing", "unsupported",
-         "local_qwen3_6", "No evidence_id provided; claim cannot be verified", now)
+         LOCAL_KNOWLEDGE_MODEL, "No evidence_id provided; claim cannot be verified", now)
     )
 
     unsupported_count = conn.execute(
@@ -1253,7 +2115,7 @@ def social_emit_evidence_atoms(conn: sqlite3.Connection, post_id: str,
         (evidence_id, "social", post_id, "social_posts",
          "post_brief", content,
          importance, novelty, depth, source_weight,
-         json.dumps(meta), ts, "local_qwen3_6"),
+         json.dumps(meta), ts, LOCAL_KNOWLEDGE_MODEL),
     )
     return 1
 
@@ -1262,6 +2124,137 @@ def social_gap_report(conn: sqlite3.Connection, config: dict, target: int = 200)
     """Report gap between imported accounts and target count."""
     current = conn.execute("SELECT COUNT(*) FROM social_accounts").fetchone()[0]
     return {"current": current, "target": target, "gap": max(0, target - current)}
+
+
+def parse_social_rss(handle: str, xml_text: str, fetched_at: str) -> list[dict[str, Any]]:
+    root = ET.fromstring(xml_text)
+    rows: list[dict[str, Any]] = []
+    for item in root.findall(".//item"):
+        title = html.unescape((item.findtext("title") or "").strip())
+        desc = html.unescape(re.sub(r"<[^>]+>", " ", item.findtext("description") or ""))
+        text = re.sub(r"\s+", " ", (title + " " + desc).strip())
+        link = (item.findtext("link") or "").strip()
+        guid = (item.findtext("guid") or link or text[:80]).strip()
+        post_id_match = re.search(r"/status/([0-9A-Za-z_:-]+)", link)
+        post_id = post_id_match.group(1) if post_id_match else re.sub(r"[^0-9A-Za-z_-]+", "_", guid)[-80:]
+        post_url = re.sub(r"https?://nitter\.net/", "https://x.com/", link)
+        pub = item.findtext("pubDate") or ""
+        created_at = fetched_at
+        if pub:
+            try:
+                parsed = email.utils.parsedate_to_datetime(pub)
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=UTC)
+                created_at = iso_z(parsed.astimezone(UTC))
+            except Exception:
+                created_at = fetched_at
+        rows.append({
+            "post_id": post_id,
+            "author_handle": handle,
+            "post_url": post_url,
+            "text": text,
+            "created_at": created_at,
+            "lang": "unknown",
+            "reply_count": 0,
+            "repost_count": 0,
+            "quote_count": 0,
+            "like_count": 0,
+            "view_count": None,
+            "bookmarks": 0,
+            "media_urls": "",
+            "mentioned_handles": ",".join(re.findall(r"@([A-Za-z0-9_]+)", text)),
+            "urls": ",".join(re.findall(r"https?://\S+", text + " " + post_url)),
+            "fetched_at": fetched_at,
+        })
+    return rows
+
+
+def cmd_collect_social(args: argparse.Namespace) -> int:
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.executescript(SCHEMA_SQL)
+    conn.row_factory = sqlite3.Row
+    command = "collect-social"
+    min_hours = float((config.get("fetch") or {}).get("min_source_interval_hours", 6))
+    if not getattr(args, "force", False) and recent_success_within(conn, "social", command, min_hours):
+        print(f"[collect-social] skipped: last successful run within {min_hours:g}h")
+        conn.close()
+        return 0
+    run_id = begin_run(conn, "social", command)
+    limit_accounts = int(getattr(args, "limit_accounts", 0) or 0)
+    per_account_limit = int(getattr(args, "per_account_limit", 0) or 3)
+    accounts = conn.execute(
+        "SELECT * FROM social_accounts WHERE enabled=1 ORDER BY tier, weight DESC, handle"
+    ).fetchall()
+    if limit_accounts > 0:
+        accounts = accounts[:limit_accounts]
+    fetched_at = iso_z()
+    fetched = 0
+    new_items = 0
+    failures: list[str] = []
+    for idx, account in enumerate(accounts, 1):
+        handle = account["handle"]
+        url = f"https://nitter.net/{urllib.parse.quote(handle)}/rss"
+        try:
+            posts = parse_social_rss(handle, http_get_text(url, config), fetched_at)
+            for post in posts[:per_account_limit]:
+                fetched += 1
+                before = conn.total_changes
+                conn.execute(
+                    "INSERT OR IGNORE INTO social_posts "
+                    "(post_id, author_handle, author_category, author_tier, post_url, text, "
+                    "created_at, lang, reply_count, repost_count, quote_count, like_count, "
+                    "view_count, bookmarks, media_urls, mentioned_handles, urls, fetched_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (post["post_id"], handle, account["category"], account["tier"],
+                     post["post_url"], post["text"], post["created_at"], post["lang"],
+                     post["reply_count"], post["repost_count"], post["quote_count"],
+                     post["like_count"], post["view_count"], post["bookmarks"],
+                     post["media_urls"], post["mentioned_handles"], post["urls"], fetched_at),
+                )
+                inserted = conn.total_changes > before
+                if inserted:
+                    new_items += 1
+                conn.execute(
+                    "INSERT OR IGNORE INTO social_post_snapshots "
+                    "(post_id, reply_count, repost_count, like_count, view_count, snapshot_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (post["post_id"], post["reply_count"], post["repost_count"],
+                     post["like_count"], post["view_count"], fetched_at),
+                )
+                event_type = social_classify_event_type(post["text"]) or "market_signal"
+                hot = social_compute_hot_score(
+                    account_weight=min(1.0, float(account["weight"]) / 2.25),
+                    semantic_importance=semantic_score(post["text"]),
+                    novelty=1.0 if inserted else 0.2,
+                )
+                conn.execute(
+                    "INSERT OR REPLACE INTO hotspot_events(source, source_id, event_type, hot_score, scored_at) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    ("social", post["post_id"], event_type, hot, fetched_at),
+                )
+                social_emit_evidence_atoms(
+                    conn, post["post_id"], post_text=post["text"],
+                    author_handle=handle, author_tier=account["tier"],
+                    content_type=event_type, importance=hot, novelty=1.0 if inserted else 0.2,
+                    depth=semantic_score(post["text"]), source_weight=float(account["weight"]),
+                )
+            conn.execute("UPDATE social_accounts SET last_scanned_at=? WHERE handle=?", (fetched_at, handle))
+            conn.commit()
+        except Exception as exc:
+            failures.append(f"{handle}: {type(exc).__name__}: {exc}")
+        if idx < len(accounts):
+            sleep_between_requests(config)
+    social_cluster_posts(conn)
+    conn.commit()
+    finish_run(conn, run_id, "partial" if failures and fetched else ("failed" if failures else "ok"),
+               fetched, new_items, "; ".join(failures[:5]))
+    print(f"[collect-social] accounts={len(accounts)} fetched={fetched} new={new_items} failures={len(failures)}")
+    for failure in failures[:10]:
+        print(f"  WARN {failure}")
+    conn.close()
+    return 0 if not failures or fetched > 0 else 1
 
 
 def cmd_social_fixture(args: argparse.Namespace) -> int:
@@ -1562,6 +2555,27 @@ def github_compute_star_deltas(conn: sqlite3.Connection, full_name: str) -> dict
     return deltas
 
 
+def insert_alert_once(conn: sqlite3.Connection, severity: str, rule_name: str,
+                      source: str, source_id: str, title: str, detail: str,
+                      fired_at: str) -> int | None:
+    """Insert an alert only if the same rule/source/detail is not already open."""
+    existing = conn.execute(
+        "SELECT alert_id FROM hotspot_alerts "
+        "WHERE rule_name=? AND source=? AND source_id=? AND detail=? "
+        "ORDER BY fired_at DESC LIMIT 1",
+        (rule_name, source, source_id, detail),
+    ).fetchone()
+    if existing:
+        return None
+    conn.execute(
+        "INSERT INTO hotspot_alerts "
+        "(severity, rule_name, source, source_id, title, detail, fired_at) "
+        "VALUES (?,?,?,?,?,?,?)",
+        (severity, rule_name, source, source_id, title, detail, fired_at),
+    )
+    return int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+
+
 def github_generate_alerts(conn: sqlite3.Connection, full_name: str,
                            now: str) -> list[int]:
     """Generate release/readme/star alerts for a repo. Returns alert IDs."""
@@ -1580,27 +2594,23 @@ def github_generate_alerts(conn: sqlite3.Connection, full_name: str,
     if delta_1d is not None and repo[1] and repo[1] > 0:
         growth_pct = (delta_1d / repo[1]) * 100
         if growth_pct > 10:
-            conn.execute(
-                "INSERT INTO hotspot_alerts "
-                "(severity, rule_name, source, source_id, title, detail, fired_at) "
-                "VALUES (?,?,?,?,?,?,?)",
-                ("high", "star_growth_24h", "github", full_name,
-                 f"{full_name} stars +{delta_1d} in 24h ({growth_pct:.0f}%)",
-                 f"stars_delta_1d={delta_1d} growth={growth_pct:.1f}%", now),
+            alert_id = insert_alert_once(
+                conn, "high", "star_growth_24h", "github", full_name,
+                f"{full_name} stars +{delta_1d} in 24h ({growth_pct:.0f}%)",
+                f"stars_delta_1d={delta_1d} growth={growth_pct:.1f}%", now,
             )
-            alert_ids.append(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+            if alert_id is not None:
+                alert_ids.append(alert_id)
 
     # Release alert
     if repo[4]:
-        conn.execute(
-            "INSERT INTO hotspot_alerts "
-            "(severity, rule_name, source, source_id, title, detail, fired_at) "
-            "VALUES (?,?,?,?,?,?,?)",
-            ("medium", "new_release", "github", full_name,
-             f"{full_name} released {repo[4]}",
-             f"latest_release_tag={repo[4]}", now),
+        alert_id = insert_alert_once(
+            conn, "medium", "new_release", "github", full_name,
+            f"{full_name} released {repo[4]}",
+            f"latest_release_tag={repo[4]}", now,
         )
-        alert_ids.append(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+        if alert_id is not None:
+            alert_ids.append(alert_id)
 
     # README keyword alert
     readme = repo[3] or ""
@@ -1608,15 +2618,13 @@ def github_generate_alerts(conn: sqlite3.Connection, full_name: str,
     readme_lower = readme.lower()
     for kw in alert_keywords:
         if kw in readme_lower:
-            conn.execute(
-                "INSERT INTO hotspot_alerts "
-                "(severity, rule_name, source, source_id, title, detail, fired_at) "
-                "VALUES (?,?,?,?,?,?,?)",
-                ("medium", "readme_keyword", "github", full_name,
-                 f"{full_name} README mentions '{kw}'",
-                 f"keyword={kw} matched in readme", now),
+            alert_id = insert_alert_once(
+                conn, "medium", "readme_keyword", "github", full_name,
+                f"{full_name} README mentions '{kw}'",
+                f"keyword={kw} matched in readme", now,
             )
-            alert_ids.append(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+            if alert_id is not None:
+                alert_ids.append(alert_id)
             break  # one alert per repo for readme keywords
     return alert_ids
 
@@ -1648,9 +2656,179 @@ def github_emit_evidence_atoms(conn: sqlite3.Connection, full_name: str,
         (evidence_id, "github", full_name, "github_repos",
          "readme_brief", content,
          importance, novelty, depth, source_weight,
-         json.dumps(meta), ts, "local_qwen3_6"),
+         json.dumps(meta), ts, LOCAL_KNOWLEDGE_MODEL),
     )
     return 1
+
+
+def github_api_json(path: str, config: dict[str, Any]) -> dict[str, Any]:
+    fetch = config.get("fetch") or {}
+    token_env = fetch.get("github_token_env", "GITHUB_TOKEN")
+    token = os.environ.get(token_env, "")
+    url = f"https://api.github.com{path}"
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": fetch.get("user_agent", "Solar-Tech-Hotspot-Radar/1.0"),
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=int(fetch.get("timeout_seconds", 20))) as resp:
+        return json.loads(resp.read().decode("utf-8", errors="replace"))
+
+
+def github_api_text(path: str, config: dict[str, Any]) -> str:
+    fetch = config.get("fetch") or {}
+    token_env = fetch.get("github_token_env", "GITHUB_TOKEN")
+    token = os.environ.get(token_env, "")
+    url = f"https://api.github.com{path}"
+    headers = {
+        "Accept": "application/vnd.github.raw",
+        "User-Agent": fetch.get("user_agent", "Solar-Tech-Hotspot-Radar/1.0"),
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=int(fetch.get("timeout_seconds", 20))) as resp:
+        return resp.read().decode("utf-8", errors="replace")
+
+
+def upsert_github_repo(conn: sqlite3.Connection, repo_data: dict[str, Any],
+                       readme_text: str, fetched_at: str) -> bool:
+    full_name = repo_data.get("full_name") or ""
+    if not full_name or "/" not in full_name:
+        return False
+    owner, repo = full_name.split("/", 1)
+    before = conn.total_changes
+    conn.execute(
+        "INSERT INTO github_repos "
+        "(repo_id, full_name, owner, repo, html_url, description, topics, language, "
+        "license, stars, forks, watchers, open_issues, default_branch, created_at, "
+        "updated_at, pushed_at, latest_release_tag, latest_release_at, readme_text, fetched_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT(full_name) DO UPDATE SET description=excluded.description, "
+        "topics=excluded.topics, language=excluded.language, license=excluded.license, "
+        "stars=excluded.stars, forks=excluded.forks, watchers=excluded.watchers, "
+        "open_issues=excluded.open_issues, updated_at=excluded.updated_at, "
+        "pushed_at=excluded.pushed_at, latest_release_tag=excluded.latest_release_tag, "
+        "latest_release_at=excluded.latest_release_at, readme_text=excluded.readme_text, "
+        "fetched_at=excluded.fetched_at",
+        (
+            int(repo_data.get("id") or 0),
+            full_name,
+            owner,
+            repo,
+            repo_data.get("html_url") or f"https://github.com/{full_name}",
+            repo_data.get("description") or "",
+            ",".join(repo_data.get("topics") or []),
+            repo_data.get("language") or "",
+            ((repo_data.get("license") or {}).get("spdx_id") or ""),
+            int(repo_data.get("stargazers_count") or 0),
+            int(repo_data.get("forks_count") or 0),
+            int(repo_data.get("watchers_count") or 0),
+            int(repo_data.get("open_issues_count") or 0),
+            repo_data.get("default_branch") or "main",
+            repo_data.get("created_at"),
+            repo_data.get("updated_at"),
+            repo_data.get("pushed_at"),
+            repo_data.get("latest_release_tag") or "",
+            repo_data.get("latest_release_at") or "",
+            readme_text[:200000],
+            fetched_at,
+        ),
+    )
+    return conn.total_changes > before
+
+
+def cmd_collect_github(args: argparse.Namespace) -> int:
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.executescript(SCHEMA_SQL)
+    conn.row_factory = sqlite3.Row
+    command = "collect-github"
+    min_hours = float((config.get("fetch") or {}).get("min_source_interval_hours", 6))
+    if not getattr(args, "force", False) and recent_success_within(conn, "github", command, min_hours):
+        print(f"[collect-github] skipped: last successful run within {min_hours:g}h")
+        conn.close()
+        return 0
+    run_id = begin_run(conn, "github", command)
+    rows = conn.execute("SELECT full_name FROM github_repos ORDER BY full_name").fetchall()
+    limit_repos = int(getattr(args, "limit_repos", 0) or 0)
+    if limit_repos > 0:
+        rows = rows[:limit_repos]
+    fetched_at = iso_z()
+    fetched = 0
+    new_items = 0
+    failures: list[str] = []
+    for idx, row in enumerate(rows, 1):
+        full_name = row["full_name"]
+        try:
+            repo = github_api_json(f"/repos/{full_name}", config)
+            try:
+                latest = github_api_json(f"/repos/{full_name}/releases/latest", config)
+                repo["latest_release_tag"] = latest.get("tag_name") or ""
+                repo["latest_release_at"] = latest.get("published_at") or latest.get("created_at") or ""
+            except Exception:
+                repo["latest_release_tag"] = ""
+                repo["latest_release_at"] = ""
+            try:
+                readme = github_api_text(f"/repos/{full_name}/readme", config)
+            except Exception:
+                readme = ""
+            changed = upsert_github_repo(conn, repo, readme, fetched_at)
+            fetched += 1
+            if changed:
+                new_items += 1
+            conn.execute(
+                "INSERT OR IGNORE INTO github_star_snapshots "
+                "(full_name, snapshot_at, stars, forks, open_issues, watchers) VALUES (?, ?, ?, ?, ?, ?)",
+                (full_name, fetched_at, int(repo.get("stargazers_count") or 0),
+                 int(repo.get("forks_count") or 0), int(repo.get("open_issues_count") or 0),
+                 int(repo.get("watchers_count") or 0)),
+            )
+            deltas = github_compute_star_deltas(conn, full_name)
+            conn.execute(
+                "UPDATE github_star_snapshots SET stars_delta_1d=?, stars_delta_7d=?, stars_delta_30d=? "
+                "WHERE full_name=? AND snapshot_at=?",
+                (deltas.get("delta_1d"), deltas.get("delta_7d"), deltas.get("delta_30d"),
+                 full_name, fetched_at),
+            )
+            github_emit_evidence_atoms(
+                conn,
+                full_name,
+                readme_text=readme,
+                description=repo.get("description") or "",
+                topics=",".join(repo.get("topics") or []),
+                importance=semantic_score((repo.get("description") or "") + " " + readme[:2000]),
+                novelty=0.5,
+                depth=0.6 if readme else 0.2,
+                source_weight=1.0,
+            )
+            github_generate_alerts(conn, full_name, fetched_at)
+            hot = github_compute_hot_score(
+                star_growth=min(1.0, max(0, (deltas.get("delta_7d") or 0)) / 1000),
+                recent_activity=0.7 if repo.get("pushed_at") else 0.2,
+                release_signal=1.0 if repo.get("latest_release_tag") else 0.0,
+                semantic_relevance=semantic_score((repo.get("description") or "") + " " + readme[:2000]),
+                maintainer_quality=0.5,
+            )
+            conn.execute(
+                "INSERT OR REPLACE INTO hotspot_events(source, source_id, event_type, hot_score, scored_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("github", full_name, "repo_hot_score", hot, fetched_at),
+            )
+            conn.commit()
+        except Exception as exc:
+            failures.append(f"{full_name}: {type(exc).__name__}: {exc}")
+        if idx < len(rows):
+            sleep_between_requests(config)
+    finish_run(conn, run_id, "partial" if failures else "ok", fetched, new_items, "; ".join(failures[:5]))
+    print(f"[collect-github] repos={len(rows)} fetched={fetched} changed={new_items} failures={len(failures)}")
+    for failure in failures[:10]:
+        print(f"  WARN {failure}")
+    conn.close()
+    return 0 if not failures else 1
 
 
 def cmd_github_fixture(args: argparse.Namespace) -> int:
@@ -1992,38 +3170,242 @@ def report_transcript_package(conn: sqlite3.Connection, date_str: str) -> str:
     return "\n".join(lines)
 
 
-def report_html(conn: sqlite3.Connection, date_str: str) -> str:
-    """Generate HTML report with 3 source chapters + unified overview."""
-    yt_md = report_source_md(conn, "youtube", date_str)
-    social_md = report_source_md(conn, "social", date_str)
-    gh_md = report_source_md(conn, "github", date_str)
-    overview_md = report_unified_overview_md(conn, date_str)
-    # Simple HTML with inline styles (Gmail-safe)
-    chapters = [
-        ("今日科技热点总览", overview_md),
-        ("YouTube 热点", yt_md),
-        ("Social/X 热点", social_md),
-        ("GitHub 热点", gh_md),
-    ]
-    body_parts = []
-    for title, md_text in chapters:
-        # Basic markdown->HTML: headers, bold, lists
-        html = md_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        html = re.sub(r"^### (.+)$", r"<h3></h3>", html, flags=re.MULTILINE)
-        html = re.sub(r"^## (.+)$", r"<h2></h2>", html, flags=re.MULTILINE)
-        html = re.sub(r"^# (.+)$", r"<h1></h1>", html, flags=re.MULTILINE)
-        html = re.sub(r"\*\*(.+?)\*\*", r"<strong></strong>", html)
-        html = re.sub(r"^- (.+)$", r"<li></li>", html, flags=re.MULTILINE)
-        body_parts.append(f'<div style="margin-bottom:2em"><h2>{title}</h2>{html}</div>')
+def report_transcript_attachment(conn: sqlite3.Connection, date_str: str) -> str:
+    rows = conn.execute(
+        "SELECT t.video_id, t.transcript_clean, t.transcript_status, t.language, "
+        "v.title, v.channel_name, v.video_url, v.published_at "
+        "FROM youtube_transcripts t "
+        "LEFT JOIN youtube_videos v ON t.video_id = v.video_id "
+        "ORDER BY v.published_at DESC, t.video_id"
+    ).fetchall()
+    parts = [f"# YouTube Transcripts — {date_str}", ""]
+    for vid, clean, status, lang, title, channel, url, published in rows:
+        parts.extend([
+            f"## {title or vid}",
+            "",
+            f"- video_id: {vid}",
+            f"- channel: {channel or 'N/A'}",
+            f"- url: {url or 'N/A'}",
+            f"- published_at: {published or 'N/A'}",
+            f"- transcript_status: {status or 'N/A'}",
+            f"- language: {lang or 'N/A'}",
+            "",
+            clean.strip() if clean else "[transcript unavailable]",
+            "",
+            "---",
+            "",
+        ])
+    return "\n".join(parts).rstrip() + "\n"
+
+
+def html_escape(value: Any) -> str:
+    return html.escape(str(value if value is not None else ""), quote=True)
+
+
+def metric_card(label: str, value: Any, sub: str) -> str:
     return (
-        "<!DOCTYPE html><html><head><meta charset='utf-8'>"
-        f"<title>Tech Hotspot Radar — {date_str}</title>"
-        "<style>body{font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:20px}"
-        "h1{color:#333}h2{color:#555;border-bottom:1px solid #ddd;padding-bottom:4px}"
-        "li{margin:2px 0}</style></head><body>"
-        + "\n".join(body_parts)
-        + "</body></html>"
+        "<td style=\"padding:6px;width:33.3%\">"
+        "<div style=\"background:#fffdf8;border:1px solid #eadfcd;border-radius:18px;"
+        "box-shadow:0 8px 24px rgba(49,42,31,.06);padding:14px\">"
+        f"<b style=\"display:block;font-size:24px;color:#123b35\">{html_escape(value)}</b>"
+        f"<span style=\"font-size:12px;color:#66736d\">{html_escape(label)} · {html_escape(sub)}</span>"
+        "</div></td>"
     )
+
+
+def report_top_events(conn: sqlite3.Connection, source: str, limit: int = 8) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT source_id, event_type, hot_score, scored_at FROM hotspot_events "
+        "WHERE source=? ORDER BY hot_score DESC, scored_at DESC LIMIT ?",
+        (source, limit),
+    ).fetchall()
+
+
+def render_event_table(conn: sqlite3.Connection, source: str) -> str:
+    rows = report_top_events(conn, source)
+    if not rows:
+        return "<p style=\"color:#66736d\">No hotspot events recorded.</p>"
+    body = ""
+    for idx, row in enumerate(rows, 1):
+        source_id, event_type, score, scored_at = row
+        detail = ""
+        link = ""
+        if source == "youtube":
+            v = conn.execute(
+                "SELECT title, channel_name, video_url FROM youtube_videos WHERE video_id=?",
+                (source_id,),
+            ).fetchone()
+            t = conn.execute(
+                "SELECT transcript_status, char_count FROM youtube_transcripts WHERE video_id=?",
+                (source_id,),
+            ).fetchone()
+            if v:
+                detail = f"{v[1]} · {v[0]}"
+                link = v[2]
+            if t:
+                detail += f" · transcript={t[0]}({t[1]} chars)"
+        elif source == "social":
+            p = conn.execute(
+                "SELECT author_handle, post_url, substr(text,1,180) FROM social_posts WHERE post_id=?",
+                (source_id,),
+            ).fetchone()
+            if p:
+                detail = f"@{p[0]} · {p[2]}"
+                link = p[1]
+        elif source == "github":
+            g = conn.execute(
+                "SELECT description, html_url, stars FROM github_repos WHERE full_name=?",
+                (source_id,),
+            ).fetchone()
+            if g:
+                detail = f"⭐ {g[2]} · {g[0]}"
+                link = g[1]
+        title = html_escape(source_id)
+        if link:
+            title = f"<a href=\"{html_escape(link)}\" style=\"color:#0f766e;text-decoration:none\">{title}</a>"
+        bg = "background:#fbf7ef;" if idx % 2 == 0 else ""
+        body += (
+            f"<tr><td style=\"padding:10px;border-bottom:1px solid #eee3d3;{bg}\">{idx}</td>"
+            f"<td style=\"padding:10px;border-bottom:1px solid #eee3d3;{bg}\">{title}</td>"
+            f"<td style=\"padding:10px;border-bottom:1px solid #eee3d3;{bg}\">{html_escape(event_type)}</td>"
+            f"<td style=\"padding:10px;border-bottom:1px solid #eee3d3;{bg}\">{float(score or 0):.4f}</td>"
+            f"<td style=\"padding:10px;border-bottom:1px solid #eee3d3;{bg}\">{html_escape(detail)}</td>"
+            f"<td style=\"padding:10px;border-bottom:1px solid #eee3d3;{bg}\">{html_escape(scored_at)}</td></tr>"
+        )
+    return (
+        "<table style=\"width:100%;border-collapse:collapse;font-size:13px\">"
+        "<tr><th style=\"background:#123b35;color:#fff;text-align:left;padding:10px\">#</th>"
+        "<th style=\"background:#123b35;color:#fff;text-align:left;padding:10px\">ID</th>"
+        "<th style=\"background:#123b35;color:#fff;text-align:left;padding:10px\">类型</th>"
+        "<th style=\"background:#123b35;color:#fff;text-align:left;padding:10px\">热度</th>"
+        "<th style=\"background:#123b35;color:#fff;text-align:left;padding:10px\">说明</th>"
+        "<th style=\"background:#123b35;color:#fff;text-align:left;padding:10px\">时间</th></tr>"
+        f"{body}</table>"
+    )
+
+
+def render_alerts(conn: sqlite3.Connection) -> str:
+    alerts = conn.execute(
+        "SELECT severity, title, detail FROM hotspot_alerts "
+        "ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, fired_at DESC "
+        "LIMIT 8"
+    ).fetchall()
+    if not alerts:
+        return "<p style=\"color:#66736d\">No alerts.</p>"
+    items = "".join(
+        f"<li><b>{html_escape(sev.upper())}</b> {html_escape(title)} — {html_escape(detail)}</li>"
+        for sev, title, detail in alerts
+    )
+    return f"<ul>{items}</ul>"
+
+
+def report_html(conn: sqlite3.Connection, date_str: str) -> str:
+    """Generate polished Gmail-safe HTML report."""
+    counts = {
+        "youtube": conn.execute("SELECT COUNT(*) FROM hotspot_events WHERE source='youtube'").fetchone()[0],
+        "social": conn.execute("SELECT COUNT(*) FROM hotspot_events WHERE source='social'").fetchone()[0],
+        "github": conn.execute("SELECT COUNT(*) FROM hotspot_events WHERE source='github'").fetchone()[0],
+        "pending": conn.execute("SELECT COUNT(*) FROM retry_queue WHERE status='pending'").fetchone()[0],
+        "transcripts": conn.execute("SELECT COUNT(*) FROM youtube_transcripts WHERE transcript_status!='missing'").fetchone()[0],
+        "alerts": conn.execute("SELECT COUNT(*) FROM hotspot_alerts").fetchone()[0],
+    }
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Tech Hotspot Radar — {html_escape(date_str)}</title></head>
+<body style="margin:0;background:#f4efe4;color:#17231f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB',sans-serif;line-height:1.7">
+<div style="max-width:980px;margin:0 auto;padding:28px 18px 44px">
+  <div style="background:linear-gradient(135deg,#123b35,#315f4f 58%,#c9863d);color:#fff;border-radius:26px;padding:30px">
+    <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.82">Tech Hotspot Radar</div>
+    <h1 style="margin:10px 0 12px;font-size:30px;line-height:1.22">科技热点日报：YouTube / Social / GitHub</h1>
+    <div style="font-size:15px;opacity:.92;max-width:780px">日期：{html_escape(date_str)}。本邮件正文放扫描结果和关键告警；YouTube transcript 原文作为附件发送。</div>
+  </div>
+  <table style="width:100%;border-collapse:separate;border-spacing:0;margin:16px 0"><tr>
+    {metric_card("YouTube 事件", counts["youtube"], f"transcripts {counts['transcripts']} / pending {counts['pending']}")}
+    {metric_card("Social/X 事件", counts["social"], "RSS/public scan")}
+    {metric_card("GitHub 事件", counts["github"], f"alerts {counts['alerts']}")}
+  </tr></table>
+  <section style="background:#fffdf8;border:1px solid #eadfcd;border-radius:20px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:21px;margin:14px 0">
+    <h2 style="font-size:21px;color:#123b35;margin:0 0 12px">今日科技热点总览</h2>
+    <p style="margin:0;color:#52615b">本报告按 YouTube、社交媒体、GitHub 三源组织热点，并把 transcript 原文作为附件供二次研究和知识库抽取。</p>
+  </section>
+  <section style="background:#fffdf8;border:1px solid #eadfcd;border-radius:20px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:21px;margin:14px 0">
+    <h2 style="font-size:21px;color:#123b35;margin:0 0 12px">1. YouTube 热点扫描</h2>
+    {render_event_table(conn, "youtube")}
+  </section>
+  <section style="background:#fffdf8;border:1px solid #eadfcd;border-radius:20px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:21px;margin:14px 0">
+    <h2 style="font-size:21px;color:#123b35;margin:0 0 12px">2. 社交媒体热点监控</h2>
+    {render_event_table(conn, "social")}
+  </section>
+  <section style="background:#fffdf8;border:1px solid #eadfcd;border-radius:20px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:21px;margin:14px 0">
+    <h2 style="font-size:21px;color:#123b35;margin:0 0 12px">3. GitHub 热点扫描</h2>
+    {render_event_table(conn, "github")}
+  </section>
+  <section style="background:#fbf7ef;border:1px solid #eadfcd;border-radius:16px;padding:16px;margin:14px 0">
+    <h2 style="font-size:21px;color:#123b35;margin:0 0 12px">告警 / 运行状态</h2>
+    {render_alerts(conn)}
+    <p style="font-size:12px;color:#66736d">Generated by solar-harness Tech Hotspot Radar. raw path: /Users/lisihao/Knowledge/_raw/tech-hotspot-radar/{html_escape(date_str)}</p>
+  </section>
+</div></body></html>"""
+
+
+def keychain_password(service: str, account: str) -> str:
+    try:
+        proc = subprocess.run(
+            ["security", "find-generic-password", "-s", service, "-a", account, "-w"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+        )
+        return proc.stdout.strip() if proc.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
+def send_html_email(html_content: str, subject: str, attachments: list[Path]) -> dict[str, Any]:
+    import smtplib
+
+    gmail_user = os.environ.get("GMAIL_USER") or os.environ.get("AI_INFLUENCE_GMAIL_USER") or "lisihao@gmail.com"
+    gmail_to = os.environ.get("GMAIL_TO") or os.environ.get("MAIL_TO") or os.environ.get("AI_INFLUENCE_MAIL_TO") or gmail_user
+    recipients = [addr.strip() for addr in re.split(r"[,;]", gmail_to) if addr.strip()]
+    if not recipients:
+        return {"status": "warn", "backend": "gmail_smtp", "reason": "missing recipients"}
+    password = os.environ.get("GMAIL_APP_PASSWORD", "")
+    if not password:
+        service = os.environ.get("GMAIL_APP_PASSWORD_KEYCHAIN_SERVICE") or "solar-ai-influence-gmail"
+        account = os.environ.get("GMAIL_APP_PASSWORD_KEYCHAIN_ACCOUNT") or gmail_user
+        password = keychain_password(service, account)
+    if not password:
+        return {"status": "warn", "backend": "gmail_smtp", "reason": "missing gmail app password"}
+
+    msg = MIMEMultipart("mixed")
+    msg["Subject"] = subject
+    msg["From"] = gmail_user
+    msg["To"] = ", ".join(recipients)
+    msg["Message-ID"] = make_msgid(domain="solar-harness.local")
+    alt = MIMEMultipart("alternative")
+    alt.attach(MIMEText(html_content, "html", "utf-8"))
+    msg.attach(alt)
+    for path in attachments:
+        if not path.exists():
+            continue
+        part = MIMEBase("application", "octet-stream")
+        part.set_payload(path.read_bytes())
+        encoders.encode_base64(part)
+        part.add_header("Content-Disposition", "attachment", filename=path.name)
+        msg.attach(part)
+    with smtplib.SMTP("smtp.gmail.com", 587) as server:
+        server.starttls()
+        server.login(gmail_user, password)
+        refused = server.sendmail(gmail_user, recipients, msg.as_string())
+    return {
+        "status": "sent",
+        "backend": "gmail_smtp",
+        "from": gmail_user,
+        "to": recipients,
+        "message_id": msg["Message-ID"],
+        "refused": refused,
+        "attachments": [str(p) for p in attachments if p.exists()],
+    }
 
 
 def report_wiki_dispatch(output_dir: str, date_str: str) -> str:
@@ -2082,15 +3464,26 @@ def report_write_artifacts(conn: sqlite3.Connection, date_str: str,
     p.write_text(transcript_jsonl, encoding="utf-8")
     files["transcripts_jsonl"] = str(p)
 
+    transcript_txt = report_transcript_attachment(conn, date_str)
+    p = out_dir / f"youtube-transcripts-{date_str}.txt"
+    p.write_text(transcript_txt, encoding="utf-8")
+    files["transcripts_txt"] = str(p)
+
     # HTML report
     html = report_html(conn, date_str)
     p = out_dir / "report.html"
     p.write_text(html, encoding="utf-8")
     files["html"] = str(p)
 
-    # Wiki dispatch
+    # Wiki dispatch. Do not reopen a completed dispatch when reports are
+    # regenerated for the same date; create a new dispatch instead.
     dispatch = report_wiki_dispatch(str(out_dir), date_str)
     p = out_dir / "wiki-dispatch.md"
+    if p.exists():
+        existing = p.read_text(encoding="utf-8", errors="replace")
+        if re.search(r"(?m)^status:\s*completed\s*$", existing):
+            stamp = dt.datetime.now(UTC).strftime("%H%M%S")
+            p = out_dir / f"wiki-dispatch-{stamp}.md"
     p.write_text(dispatch, encoding="utf-8")
     files["wiki_dispatch"] = str(p)
 
@@ -2109,11 +3502,11 @@ def cmd_report_fixture(args: argparse.Namespace) -> int:
     date_str = now_utc().strftime("%Y-%m-%d")
     all_pass = True
 
-    # Ensure there is data from previous fixtures
-    # Use --output-dir or default Knowledge path
-    output_base = getattr(args, "output_dir", None)
+    # Ensure fixture reports never overwrite production Knowledge/_raw unless
+    # explicitly requested by the caller.
+    output_base = getattr(args, "output_base", None) or getattr(args, "output_dir", None)
     if not output_base:
-        output_base = "/Users/lisihao/Knowledge/_raw/tech-hotspot-radar"
+        output_base = str(Path(tempfile.gettempdir()) / "tech-hotspot-radar-fixture-raw")
     out_dir = Path(output_base) / date_str
 
     # AC1: source-specific reports
@@ -2212,6 +3605,92 @@ def cmd_report_fixture(args: argparse.Namespace) -> int:
     conn.commit()
     conn.close()
     return 0 if all_pass else 1
+
+
+def cmd_write_report(args: argparse.Namespace) -> int:
+    """Write production reports from current DB state without creating fixtures."""
+    config_path = resolve_config(args)
+    config = load_config(config_path)
+    db_path = resolve_db(args, config)
+    if not db_path.exists():
+        print("[write-report] database not initialized", file=sys.stderr)
+        return 1
+    conn = ensure_db(db_path)
+    output_base = getattr(args, "output_base", None) or config.get(
+        "output", {}
+    ).get("raw_dir", "/Users/lisihao/Knowledge/_raw/tech-hotspot-radar")
+    date_str = getattr(args, "date", None) or iso_z().split("T", 1)[0]
+    files = report_write_artifacts(conn, date_str, output_base)
+    conn.close()
+    print(f"[write-report] date={date_str} files={len(files)}")
+    for key in sorted(files):
+        print(f"  {key}: {files[key]}")
+    return 0
+
+
+def cmd_send_report(args: argparse.Namespace) -> int:
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    if not db_path.exists():
+        print("[send-report] database not initialized", file=sys.stderr)
+        return 1
+    conn = ensure_db(db_path)
+    date_str = getattr(args, "date", None) or iso_z().split("T", 1)[0]
+    output_base = getattr(args, "output_base", None) or config.get(
+        "output", {}
+    ).get("raw_dir", "/Users/lisihao/Knowledge/_raw/tech-hotspot-radar")
+    run_id = begin_run(conn, "report", "send-report")
+    try:
+        files = report_write_artifacts(conn, date_str, output_base)
+        html_path = Path(files["html"])
+        transcript_path = Path(files["transcripts_txt"])
+        result = send_html_email(
+            html_path.read_text(encoding="utf-8"),
+            f"Tech Hotspot Radar — {date_str}",
+            [transcript_path],
+        )
+        result_path = html_path.parent / "mail-result.json"
+        result_path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        files["mail_result"] = str(result_path)
+        finish_run(conn, run_id, "ok" if result.get("status") == "sent" else "partial", 1, 1, json.dumps(result, ensure_ascii=False)[:900])
+        print(f"[send-report] status={result.get('status')} backend={result.get('backend')} to={result.get('to', result.get('reason', 'N/A'))}")
+        for key in sorted(files):
+            print(f"  {key}: {files[key]}")
+        conn.close()
+        return 0 if result.get("status") in {"sent", "warn"} else 1
+    except Exception as exc:
+        finish_run(conn, run_id, "failed", 0, 0, f"{type(exc).__name__}: {exc}")
+        conn.close()
+        print(f"[send-report] ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+
+
+def cmd_collect_all(args: argparse.Namespace) -> int:
+    rc = 0
+    if not getattr(args, "skip_youtube", False):
+        yt_args = argparse.Namespace(**vars(args))
+        yt_args.limit_channels = getattr(args, "limit_channels", 0)
+        yt_args.per_channel_limit = getattr(args, "per_channel_limit", 0)
+        rc = max(rc, cmd_collect_youtube(yt_args))
+    if not getattr(args, "skip_github", False):
+        gh_args = argparse.Namespace(**vars(args))
+        gh_args.limit_repos = getattr(args, "limit_repos", 0)
+        rc = max(rc, cmd_collect_github(gh_args))
+    if not getattr(args, "skip_social", False):
+        social_args = argparse.Namespace(**vars(args))
+        social_args.limit_accounts = getattr(args, "limit_accounts", 0)
+        social_args.per_account_limit = getattr(args, "per_account_limit", 0)
+        rc = max(rc, cmd_collect_social(social_args))
+    if not getattr(args, "skip_transcripts", False):
+        tr_args = argparse.Namespace(**vars(args))
+        tr_args.limit = getattr(args, "transcript_limit", 0)
+        rc = max(rc, cmd_process_transcripts(tr_args))
+    if not getattr(args, "skip_report", False):
+        if getattr(args, "skip_email", False):
+            rc = max(rc, cmd_write_report(args))
+        else:
+            rc = max(rc, cmd_send_report(args))
+    return rc
 
 
 def cmd_youtube_fixture(args: argparse.Namespace) -> int:
@@ -2457,13 +3936,50 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("preprocess-fixture", help="Create local preprocess evidence atom fixtures")
     sub.add_parser("premium-gate-fixture", help="Test premium gating with fixture clusters")
     sub.add_parser("model-router-test", help="Verify model router mappings")
+    sub.add_parser("knowledge-model-policy-test", help="Verify ThunderOMLX-first knowledge model policy")
     sub.add_parser("budget-trim-test", help="Verify budget trimming priorities")
     sub.add_parser("premium-mock-test", help="Prove raw text never reaches premium model")
     sub.add_parser("verifier-fixture", help="Create verifier fixture with unsupported claim")
     sub.add_parser("youtube-fixture", help="Create YouTube pipeline fixture for N2 AC tests")
     sub.add_parser("social-fixture", help="Create social pipeline fixture for N3 AC tests")
     sub.add_parser("github-fixture", help="Create GitHub pipeline fixture for N4 AC tests")
-    sub.add_parser("report-fixture", help="Create cross-source report fixture for N5 AC tests")
+    report_fixture = sub.add_parser("report-fixture", help="Create cross-source report fixture for N5 AC tests")
+    report_fixture.add_argument("--output-base", default=None, help="Override fixture report output directory")
+    write_report = sub.add_parser("write-report", help="Write production reports without mutating fixture data")
+    write_report.add_argument("--date", default=None, help="Report date YYYY-MM-DD (default: UTC today)")
+    write_report.add_argument("--output-base", default=None, help="Override report output directory")
+    process_transcripts = sub.add_parser("process-transcripts", help="Process pending YouTube transcript retries")
+    process_transcripts.add_argument("--limit", type=int, default=0)
+    process_transcripts.add_argument("--force", action="store_true")
+    process_transcripts.add_argument("--dry-run", action="store_true")
+    send_report = sub.add_parser("send-report", help="Write and send the Tech Hotspot Radar HTML report")
+    send_report.add_argument("--date", default=None, help="Report date YYYY-MM-DD (default: UTC today)")
+    send_report.add_argument("--output-base", default=None, help="Override report output directory")
+    yt_collect = sub.add_parser("collect-youtube", help="Collect live YouTube RSS metadata with rate limits")
+    yt_collect.add_argument("--limit-channels", type=int, default=0)
+    yt_collect.add_argument("--per-channel-limit", type=int, default=0)
+    yt_collect.add_argument("--force", action="store_true")
+    gh_collect = sub.add_parser("collect-github", help="Collect live GitHub tracked repo metadata with rate limits")
+    gh_collect.add_argument("--limit-repos", type=int, default=0)
+    gh_collect.add_argument("--force", action="store_true")
+    social_collect = sub.add_parser("collect-social", help="Collect live public social RSS posts with rate limits")
+    social_collect.add_argument("--limit-accounts", type=int, default=0)
+    social_collect.add_argument("--per-account-limit", type=int, default=3)
+    social_collect.add_argument("--force", action="store_true")
+    all_collect = sub.add_parser("collect-all", help="Run live collectors and write reports")
+    all_collect.add_argument("--limit-channels", type=int, default=0)
+    all_collect.add_argument("--per-channel-limit", type=int, default=0)
+    all_collect.add_argument("--limit-repos", type=int, default=0)
+    all_collect.add_argument("--limit-accounts", type=int, default=0)
+    all_collect.add_argument("--per-account-limit", type=int, default=3)
+    all_collect.add_argument("--transcript-limit", type=int, default=0)
+    all_collect.add_argument("--force", action="store_true")
+    all_collect.add_argument("--skip-youtube", action="store_true")
+    all_collect.add_argument("--skip-social", action="store_true")
+    all_collect.add_argument("--skip-github", action="store_true")
+    all_collect.add_argument("--skip-transcripts", action="store_true")
+    all_collect.add_argument("--skip-report", action="store_true")
+    all_collect.add_argument("--skip-email", action="store_true")
     return parser
 
 
@@ -2475,6 +3991,7 @@ def main() -> int:
         "preprocess-fixture": cmd_preprocess_fixture,
         "premium-gate-fixture": cmd_premium_gate_fixture,
         "model-router-test": cmd_model_router_test,
+        "knowledge-model-policy-test": cmd_knowledge_model_policy_test,
         "budget-trim-test": cmd_budget_trim_test,
         "premium-mock-test": cmd_premium_mock_test,
         "verifier-fixture": cmd_verifier_fixture,
@@ -2482,6 +3999,13 @@ def main() -> int:
         "social-fixture": cmd_social_fixture,
         "github-fixture": cmd_github_fixture,
         "report-fixture": cmd_report_fixture,
+        "write-report": cmd_write_report,
+        "process-transcripts": cmd_process_transcripts,
+        "send-report": cmd_send_report,
+        "collect-youtube": cmd_collect_youtube,
+        "collect-github": cmd_collect_github,
+        "collect-social": cmd_collect_social,
+        "collect-all": cmd_collect_all,
     }
     handler = commands.get(args.command)
     if handler is None:
