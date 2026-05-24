@@ -55,11 +55,13 @@ const COMPARE_LOG = join(HARNESS_DIR, "coordinator-compare.jsonl");
 const ENABLED_FLAG = join(HARNESS_DIR, "coordinator-ts-enabled");
 
 const SESSION_NAME = "solar-harness";
+const LAB_SESSION_NAME = "solar-harness-lab";
 
 const PANE = {
   PM: `${SESSION_NAME}:0.0`,
   PLANNER: `${SESSION_NAME}:0.1`,
-  BUILDER: `${SESSION_NAME}:0.2`,
+  MONITOR: `${SESSION_NAME}:0.2`,
+  BUILDER: `${LAB_SESSION_NAME}:0.0`,
   EVALUATOR: `${SESSION_NAME}:0.3`,
 };
 

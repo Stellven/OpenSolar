@@ -76,19 +76,20 @@ set +e
 set +u
 set +o pipefail 2>/dev/null || true
 
-# Pane targets are session-qualified. Product Delivery and Strategy Lab are
+# Pane targets are session-qualified. Product Delivery and Builder Lab are
 # separate tmux sessions, so bare pane indexes are no longer safe identifiers.
+# Main Product Delivery now reserves pane 0.2 for monitor, not builder work.
 PANE_NOTIFY="$SESSION_NAME:0.0"       # PM/product notification lane
 PANE_PLANNER_DEFAULT="$SESSION_NAME:0.1"
-PANE_BUILDER_DEFAULT="$SESSION_NAME:0.2"
+PANE_BUILDER_DEFAULT="$LAB_SESSION_NAME:0.0"
 PANE_EVALUATOR_DEFAULT="$SESSION_NAME:0.3"
-PANE_LEGACY_BUILDER="$SESSION_NAME:0.1"
-PANE_LEGACY_EVALUATOR="$SESSION_NAME:0.2"
+PANE_LEGACY_BUILDER="$LAB_SESSION_NAME:0.0"
+PANE_LEGACY_EVALUATOR="$SESSION_NAME:0.3"
 PANE_LEGACY_ARCHITECT="$SESSION_NAME:0.3"
 PANE_LAB_ARCHITECT="$LAB_SESSION_NAME:0.0"
-PANE_LAB_BUILDER="$LAB_SESSION_NAME:0.1"
-PANE_LAB_EVALUATOR="$LAB_SESSION_NAME:0.2"
-PANE_LAB_OBSERVER="$LAB_SESSION_NAME:0.3"
+PANE_LAB_BUILDER="$LAB_SESSION_NAME:0.0"
+PANE_LAB_EVALUATOR="$LAB_SESSION_NAME:0.1"
+PANE_LAB_OBSERVER="$SESSION_NAME:0.2"
 # Compatibility variables used by older call sites; route helpers below
 # dynamically discover the actual persona target when sessions are alive.
 PANE_BUILDER="$PANE_BUILDER_DEFAULT"
@@ -2774,7 +2775,7 @@ PY
    HTML 是给用户阅读和审阅的可视化 artifact，不能替代 prd.md。必须 self-contained，不依赖外部 CSS/JS/CDN。
    优先使用统一渲染器生成:
    python3 ~/.solar/harness/lib/render_sprint_html.py render --sid ${sid} --kind prd --register
-   `prd.html` 和后续 `planning.html` 必须统一为同一套 richer 视觉系统：深色 hero、锚点目录 TOC、卡片分区、流程/架构图、技术栈/算子绑定区、风险矩阵；不能只是 Markdown 转 HTML，也不能退化成朴素米色文档页。
+   \`prd.html\` 和后续 \`planning.html\` 必须统一为同一套 richer 视觉系统：深色 hero、锚点目录 TOC、卡片分区、流程/架构图、技术栈/算子绑定区、风险矩阵；不能只是 Markdown 转 HTML，也不能退化成朴素米色文档页。
 
 5. 写完 HTML 后注册并自动打开:
    python3 ~/.solar/harness/lib/html_artifact.py register --sid ${sid} --kind prd_html --path ~/.solar/harness/sprints/${sid}.prd.html
@@ -2859,7 +2860,7 @@ PY
    HTML 是给用户阅读和审阅的可视化 artifact，不能替代 design.md、plan.md 或 task_graph.json。必须 self-contained，不依赖外部 CSS/JS/CDN。
    优先使用统一渲染器生成:
    python3 ~/.solar/harness/lib/render_sprint_html.py render --sid ${sid} --kind planning --register
-   `planning.html` 必须和 PM 侧 `prd.html` 保持同一套 richer 视觉系统：深色 hero、锚点目录 TOC、卡片分区、流程/架构图、技术栈/算子绑定区、风险矩阵；禁止回退成旧的朴素米色 planning 页。必须展示架构方案、DAG/并发边界、文件级写范围、验证命令、风险矩阵和 stop rules。
+   \`planning.html\` 必须和 PM 侧 \`prd.html\` 保持同一套 richer 视觉系统：深色 hero、锚点目录 TOC、卡片分区、流程/架构图、技术栈/算子绑定区、风险矩阵；禁止回退成旧的朴素米色 planning 页。必须展示架构方案、DAG/并发边界、文件级写范围、验证命令、风险矩阵和 stop rules。
 
 7. 写完 HTML 后注册并自动打开:
    python3 ~/.solar/harness/lib/html_artifact.py register --sid ${sid} --kind planning_html --path ~/.solar/harness/sprints/${sid}.planning.html

@@ -69,12 +69,50 @@ def _ground_derived_hit(hit: dict) -> dict:
         hit["source_doc_path"] = source_path
         hit["source_sha256"] = source_sha or ""
         hit["grounding_required"] = True
+        source = Path(source_path).expanduser()
+        if source.exists():
+            source_text = source.read_text(encoding="utf-8", errors="replace")
+            source_snippet = _best_source_snippet(source_text, str(hit.get("snippet") or ""), max_chars=700)
+            hit["grounding_status"] = "grounded"
+            hit["grounding_source_snippet"] = source_snippet
+        else:
+            hit["grounding_status"] = "weak_missing_source"
         prefix = f"[DERIVED: use source evidence `{source_path}`"
         if source_sha:
             prefix += f" sha={source_sha[:12]}"
-        prefix += "] "
-        hit["snippet"] = prefix + str(hit.get("snippet") or "")
+        prefix += f" grounding={hit.get('grounding_status', 'unknown')}] "
+        snippet = prefix + str(hit.get("snippet") or "")
+        if hit.get("grounding_source_snippet"):
+            snippet += "\n[SOURCE-GROUNDING]\n" + str(hit["grounding_source_snippet"])
+        hit["snippet"] = snippet
     return hit
+
+
+def _best_source_snippet(source_text: str, derived_snippet: str, max_chars: int = 700) -> str:
+    """Return a raw/canonical evidence snippet for a derived hit.
+
+    The matching is intentionally conservative: if no useful overlap is found,
+    use the first non-frontmatter section so the caller still has source evidence
+    instead of relying only on the derived summary.
+    """
+    text = source_text
+    if text.startswith("---\n"):
+        end = text.find("\n---", 4)
+        if end >= 0:
+            text = text[end + 4 :]
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    if not paragraphs:
+        return text.strip()[:max_chars]
+    terms = [t.lower() for t in re.findall(r"[A-Za-z0-9_\-]{4,}|[\u4e00-\u9fff]{2,}", derived_snippet)[:30]]
+    best = paragraphs[0]
+    best_score = -1
+    for para in paragraphs[:80]:
+        low = para.lower()
+        score = sum(1 for term in terms if term in low)
+        if score > best_score:
+            best = para
+            best_score = score
+    return best[:max_chars]
 
 
 def _fts_query(conn: sqlite3.Connection, query: str, max_hits: int) -> list[dict]:

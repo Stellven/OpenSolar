@@ -23,6 +23,8 @@ def classify_raw_source(path: Path, raw_root: Path) -> tuple[str, str, str]:
     abs_text = "/".join(abs_parts)
     name = path.name.lower()
 
+    if ".dispatch" in parts or ".dispatch" in abs_parts or name.endswith(".dispatch.md"):
+        return "raw_dispatch", "dispatch_control_adapter", "dispatch_control_file"
     if "ai-influence-daily-digest" in parts or "ai-influence-daily-digest" in abs_parts or "nitter" in name:
         return "raw_social", "social_signal_adapter", "social_signal"
     if "chatgpt-extension-inbox" in parts or "chatgpt-extension-inbox" in abs_parts or "chatgpt" in text or "chatgpt" in abs_text:
@@ -55,13 +57,15 @@ def iter_raw_markdown(root: Path, *, limit: int | None = None) -> Iterable[Path]
             return
 
 
-def iter_raw_sources(root: Path, *, limit: int | None = None) -> Iterable[Path]:
+def iter_raw_sources(root: Path, *, limit: int | None = None, include_dispatch: bool = False) -> Iterable[Path]:
     count = 0
     for path in sorted(root.rglob("*")):
         if not path.is_file():
             continue
         text_path = str(path)
-        if "/_extracted/" in text_path or "/.dispatch/" in text_path or "/.spans/" in text_path or "/.materialized/" in text_path:
+        if "/_extracted/" in text_path or "/.spans/" in text_path or "/.materialized/" in text_path:
+            continue
+        if "/.dispatch/" in text_path and not include_dispatch:
             continue
         if path.suffix.lower() not in SUPPORTED_SOURCE_SUFFIXES:
             continue

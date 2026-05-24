@@ -113,6 +113,21 @@ def test_control_plane_aliases_can_bind_specialized_builder_nodes() -> None:
     assert result["assigned"][0]["node"] == "N1"
 
 
+def test_product_analytics_nodes_bind_general_builder_workers() -> None:
+    worker = _worker("pane-a")
+    worker["skills"] = ["python", "product.requirements", "planning", "analytics"]
+    worker["capabilities"] = ["product.requirements", "analytics"]
+    node = {
+        "id": "N1",
+        "preferred_model": "glm-5.1",
+        "required_skills": ["analytics", "product.requirements"],
+        "required_capabilities": ["analytics", "product.requirements"],
+    }
+    result = assign_workers([node], [worker])
+    assert result["queued"] == []
+    assert result["assigned"][0]["node"] == "N1"
+
+
 def test_code_impl_and_test_generation_aliases_bind_general_builder_workers() -> None:
     worker = _worker("pane-a")
     worker["skills"] = ["python", "pytest", "refactor", "ImplementationWorker"]

@@ -31,7 +31,6 @@ SESSION = os.environ.get("SOLAR_HARNESS_MULTI_TASK_SESSION", "solar-harness-mult
 MAIN_SESSION = os.environ.get("SOLAR_HARNESS_MAIN_SESSION", "solar-harness")
 LAB_SESSION = os.environ.get("SOLAR_HARNESS_LAB_SESSION", "solar-harness-lab")
 PROFILE_PATH = Path(os.environ.get("SOLAR_MULTI_TASK_PROFILES", HARNESS_DIR / "config" / "multi-task-profiles.json"))
-PHYSICAL_OPERATORS_PATH = Path(os.environ.get("SOLAR_MULTI_TASK_OPERATORS", HARNESS_DIR / "config" / "physical-operators.json"))
 SCREEN_HISTORY_PATH = Path(os.environ.get("SOLAR_MULTI_TASK_SCREEN_HISTORY", RUN_DIR / "screen-history.txt"))
 GRAPH_SUMMARY_CACHE_PATH = Path(os.environ.get("SOLAR_MULTI_TASK_GRAPH_SUMMARY_CACHE", RUN_DIR / "graph-summary-cache.json"))
 DISPATCH_LEDGER_PATH = Path(os.environ.get("SOLAR_DISPATCH_LEDGER", HARNESS_DIR / "run" / "dispatch-ledger.jsonl"))
@@ -40,16 +39,8 @@ DEFAULT_INTERVAL = int(os.environ.get("SOLAR_MULTI_TASK_INTERVAL_SEC", "15") or 
 DEFAULT_COOLDOWN = int(os.environ.get("SOLAR_MULTI_TASK_LAUNCH_COOLDOWN_SEC", "30") or "30")
 DEFAULT_MEMORY_RESERVE_GB = float(os.environ.get("SOLAR_MULTI_TASK_MEMORY_RESERVE_GB", "4") or "4")
 DEFAULT_QUOTA_BACKOFF = int(os.environ.get("SOLAR_MULTI_TASK_QUOTA_BACKOFF_SEC", "900") or "900")
-AUTO_CLOSE_TERMINAL_WINDOWS = str(os.environ.get("SOLAR_MULTI_TASK_AUTO_CLOSE_TERMINAL_WINDOWS", "1") or "1").lower() not in {"0", "false", "no", "off"}
-AUTO_CLOSE_DELAY_SEC = max(0, int(os.environ.get("SOLAR_MULTI_TASK_AUTO_CLOSE_DELAY_SEC", "3") or "3"))
-REUSE_TERMINAL_WINDOWS = str(os.environ.get("SOLAR_MULTI_TASK_REUSE_TERMINAL_WINDOWS", "1") or "1").lower() not in {"0", "false", "no", "off"}
-REUSABLE_WINDOW_COMMANDS = {"bash", "zsh", "sh", "fish"}
-IDLE_WINDOW_POOL_TARGET = max(0, int(os.environ.get("SOLAR_MULTI_TASK_IDLE_WINDOW_POOL_TARGET", "1") or "1"))
 GRAPH_SUMMARY_CACHE_TTL_SEC = int(os.environ.get("SOLAR_MULTI_TASK_GRAPH_SUMMARY_CACHE_TTL_SEC", "5") or "5")
 PROBE_CACHE_PATH = Path(os.environ.get("SOLAR_MULTI_TASK_PROBE_CACHE", RUN_DIR / "capability-probes.json"))
-OPERATORD_SUBMIT_ENABLED: bool = os.environ.get("SOLAR_OPERATORD_SUBMIT_ENABLED", "0") == "1"
-OPERATORD_RESULT_TIMEOUT_SEC: int = int(os.environ.get("SOLAR_OPERATORD_RESULT_TIMEOUT_SEC", "0") or "0")
-OPERATORD_RESULT_POLL_INTERVAL_SEC: float = float(os.environ.get("SOLAR_OPERATORD_RESULT_POLL_INTERVAL_SEC", "2.0") or "2.0")
 
 DEFAULT_PROFILE_CONFIG: dict[str, Any] = {
     "defaults": {"profile": "builder", "backend": "claude-cli", "max_workers": 2},
@@ -121,8 +112,19 @@ DEFAULT_PROFILE_CONFIG: dict[str, Any] = {
             "backend": "command",
             "model": "thunderomlx",
             "approval_mode": "default",
-            "best_for": ["knowledge-extraction", "wiki-ingest", "qmd-indexing"],
+            "best_for": ["knowledge-extraction", "knowledge-preprocess", "evidence-atom", "wiki-ingest", "qmd-indexing"],
             "command": "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/thunderomlx_knowledge_extract_agent.py\"",
+            "max_parallel": 1,
+        },
+        "thunderomlx-benchmark": {
+            "role": "builder",
+            "label": "ThunderOMLX 缓存基准",
+            "persona": "builder",
+            "backend": "command",
+            "model": "thunderomlx",
+            "approval_mode": "default",
+            "best_for": ["benchmark", "cache-metrics", "knowledge-extraction"],
+            "command": "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/thunderomlx_cache_benchmark_agent.py\"",
             "max_parallel": 1,
         },
     },
@@ -137,16 +139,13 @@ from graph_scheduler import (  # noqa: E402
     set_node_status,
     write_scope_conflict,
 )
-import claude_surface as _claude_surface  # noqa: E402
 
 ACTIVE_TASK_STATUSES = {"queued", "dispatched", "running"}
 TERMINAL_TASK_STATUSES = {"completed", "failed", "failed_missing_handoff", "cancelled"}
-EFFECTIVE_TERMINAL_TASK_STATUSES = TERMINAL_TASK_STATUSES | {"completed_aligned", "failed_aligned"}
 TASK_STALE_WARN_SEC = int(os.environ.get("SOLAR_MULTI_TASK_STALE_WARN_SEC", "1800") or "1800")
 QUOTA_RE = re.compile(
-    r"(?:api\s+error|error|failed|exception|http)\D{0,40}(?:429|rate[- ]?limit|quota)|"
-    r"you(?:'|’)ve hit your limit|resets\s+\d|api usage billing|upgrade your plan|"
-    r"(?:rate[- ]?limit|quota)\D{0,40}(?:exceeded|reached|hit|error|failed)",
+    r"rate[- ]?limit|quota|you(?:'|’)ve hit your limit|resets\s+\d|"
+    r"api usage billing|429|upgrade your plan",
     re.I,
 )
 
@@ -162,23 +161,8 @@ def load_profiles() -> dict[str, Any]:
     return DEFAULT_PROFILE_CONFIG
 
 
-def load_physical_operators() -> dict[str, Any]:
-    if PHYSICAL_OPERATORS_PATH.exists():
-        try:
-            data = json.loads(PHYSICAL_OPERATORS_PATH.read_text(encoding="utf-8"))
-            if isinstance(data.get("operators"), dict):
-                return data
-        except Exception:
-            pass
-    return {"version": 1, "operators": {}}
-
-
 def profile_names() -> list[str]:
     return sorted((load_profiles().get("profiles") or {}).keys())
-
-
-def physical_operator_names() -> list[str]:
-    return sorted((load_physical_operators().get("operators") or {}).keys())
 
 
 def _host_from_url(value: str) -> str:
@@ -419,470 +403,6 @@ def resolve_profile(name: str) -> dict[str, Any]:
     return profile
 
 
-def _operator_ref(operator_id: str, spec: dict[str, Any]) -> dict[str, Any]:
-    op = dict(spec)
-    op["operator_id"] = operator_id
-    op["enabled"] = bool(op.get("enabled", True))
-    op["available"] = bool(op.get("available", True))
-    op["health_status"] = str(op.get("health_status") or ("ok" if op["available"] else "disabled"))
-    return op
-
-
-def resolve_operator(operator_id: str) -> dict[str, Any]:
-    operators = load_physical_operators().get("operators") or {}
-    if operator_id not in operators:
-        raise ValueError(f"unknown physical operator: {operator_id}")
-    return _operator_ref(operator_id, dict(operators[operator_id]))
-
-
-def operator_dispatchable(operator: dict[str, Any]) -> tuple[bool, str]:
-    if not operator.get("enabled", True):
-        return False, str(operator.get("disabled_reason") or "disabled")
-    if not operator.get("available", True):
-        return False, str(operator.get("health_status") or "unavailable")
-    if str(operator.get("quota_guard_state") or "ok").lower() not in {"", "ok", "ready"}:
-        return False, f"quota_guard_state={operator.get('quota_guard_state')}"
-    key_ref = str(operator.get("key_ref") or "").strip()
-    if str(operator.get("auth_mode") or "").lower() not in {"none", "local", "subscription"} and not key_ref:
-        return False, "key_ref_missing"
-    
-    # Check dynamic status override from operator_runtime if available
-    op_id = operator.get("operator_id")
-    if op_id:
-        try:
-            import operator_runtime
-            dyn_state = operator_runtime.get_operator_runtime_state(op_id)
-            if dyn_state in {"disabled", "quota_exhausted", "auth_expired"}:
-                return False, f"dynamic_state_{dyn_state}"
-        except Exception:
-            pass
-            
-    return True, "ready"
-
-
-def _selector_values(selector: Any) -> list[str]:
-    def expand(value: str) -> list[str]:
-        text = str(value or "").lower()
-        parts = [p for p in re.split(r"[^a-z0-9]+", text) if p]
-        return [text, *parts]
-
-    if selector is None or selector == "":
-        return []
-    if isinstance(selector, str):
-        return expand(selector)
-    if isinstance(selector, list):
-        values: list[str] = []
-        for v in selector:
-            if str(v).strip():
-                values.extend(expand(str(v)))
-        return values
-    if isinstance(selector, dict):
-        values: list[str] = []
-        for key in ("operator_id", "task_type", "task_class", "role", "provider", "vendor", "model", "cost_tier", "latency_tier"):
-            raw = selector.get(key)
-            if raw:
-                values.extend(expand(str(raw)))
-        for key in ("capabilities", "required_capabilities", "best_for", "preferred_for"):
-            raw = selector.get(key)
-            if isinstance(raw, list):
-                for v in raw:
-                    if str(v).strip():
-                        values.extend(expand(str(v)))
-            elif raw:
-                values.extend(expand(str(raw)))
-        return values
-    return expand(str(selector))
-
-
-def operator_score(operator: dict[str, Any], node: dict[str, Any], selector: Any) -> int:
-    values = set(_selector_values(selector))
-    role = role_from_node(node)
-    values.add(role.lower())
-    for item in node.get("required_capabilities") or []:
-        values.add(str(item).lower())
-    for item in node.get("required_skills") or []:
-        values.add(str(item).lower())
-    for key in ("goal", "title", "description"):
-        text = str(node.get(key) or "").lower()
-        for marker in (
-            "implementation", "debug", "tests", "planning", "architecture", "review",
-            "knowledge", "thunder", "gemini", "image", "vision", "multimodal",
-            "screenshot", "ui", "mockup", "diagram", "ocr",
-        ):
-            if marker in text:
-                values.add(marker)
-
-    score = 0
-    haystacks = [
-        str(operator.get("operator_id") or "").lower(),
-        str(operator.get("role") or "").lower(),
-        str(operator.get("provider") or "").lower(),
-        str(operator.get("vendor") or "").lower(),
-        str(operator.get("model") or "").lower(),
-        str(operator.get("profile") or "").lower(),
-    ]
-    for key in ("task_classes", "roles", "strengths", "preferred_for", "capabilities", "input_modalities", "output_modalities", "artifact_types"):
-        raw = operator.get(key) or []
-        if isinstance(raw, str):
-            haystacks.append(raw.lower())
-        else:
-            haystacks.extend(str(v).lower() for v in raw)
-    for value in values:
-        if not value:
-            continue
-        if any(value == h or value in h or h in value for h in haystacks if h):
-            score += 10
-    if str(operator.get("role") or "").lower() == role.lower():
-        score += 8
-    tier_bias = {"low": 3, "medium": 2, "high": 1}
-    score += tier_bias.get(str(operator.get("cost_tier") or "").lower(), 0)
-    score += tier_bias.get(str(operator.get("latency_tier") or "").lower(), 0)
-    return score
-
-
-def operator_has_any(operator: dict[str, Any], needles: set[str]) -> bool:
-    values: list[str] = []
-    for key in ("task_classes", "strengths", "preferred_for", "capabilities", "input_modalities", "output_modalities", "artifact_types"):
-        raw = operator.get(key) or []
-        if isinstance(raw, str):
-            values.append(raw.lower())
-        else:
-            values.extend(str(v).lower() for v in raw)
-    return any(needle in value or value in needle for needle in needles for value in values if value)
-
-
-def apply_operator_to_profile(profile: dict[str, Any], operator: dict[str, Any], fallback_reason: str = "") -> dict[str, Any]:
-    selected = dict(profile)
-    selected["operator_id"] = operator.get("operator_id")
-    selected["operator_vendor"] = operator.get("vendor") or operator.get("provider")
-    selected["operator_model"] = operator.get("model") or selected.get("model")
-    selected["operator_pane"] = operator.get("pane") or operator.get("tmux_pane") or "N/A"
-    selected["operator_quota_refresh_at"] = operator.get("quota_refresh_at") or "N/A"
-    selected["operator_available"] = operator.get("available", True)
-    selected["operator_fallback_reason"] = fallback_reason
-    if operator.get("profile"):
-        selected["name"] = str(operator.get("profile"))
-    if operator.get("role"):
-        selected["role"] = str(operator.get("role"))
-    if operator.get("persona"):
-        selected["persona"] = str(operator.get("persona"))
-    if operator.get("backend"):
-        selected["backend"] = str(operator.get("backend"))
-    if operator.get("model"):
-        selected["model"] = str(operator.get("model"))
-    if operator.get("approval_mode"):
-        selected["approval_mode"] = str(operator.get("approval_mode"))
-    if operator.get("command"):
-        selected["command"] = str(operator.get("command"))
-    if operator.get("base_url"):
-        selected["base_url"] = str(operator.get("base_url"))
-    if operator.get("key_ref"):
-        selected["key_ref"] = str(operator.get("key_ref"))
-    return selected
-
-
-def _is_true(val: Any) -> bool:
-    if isinstance(val, bool):
-        return val
-    if isinstance(val, str):
-        return val.lower() in {"true", "yes", "1"}
-    if isinstance(val, int):
-        return val != 0
-    return False
-
-
-def _expand_str(val: str) -> set[str]:
-    text = str(val or "").lower()
-    parts = [p for p in re.split(r"[^a-z0-9]+", text) if p]
-    return {text}.union(parts)
-
-
-def operator_supports_task_type(operator: dict[str, Any], task_type: str) -> bool:
-    if not task_type:
-        return True
-    task_type_lower = task_type.lower()
-    
-    # Check avoid lists first
-    avoid_list = []
-    if "avoid_for" in operator:
-        avoid_list.extend([str(x).lower() for x in operator["avoid_for"]])
-    if "routing" in operator and isinstance(operator["routing"], dict):
-        avoid_list.extend([str(x).lower() for x in operator["routing"].get("avoid_task_types", [])])
-    
-    task_type_parts = _expand_str(task_type)
-    for avoid_item in avoid_list:
-        avoid_parts = _expand_str(avoid_item)
-        if task_type_parts & avoid_parts:
-            return False
-            
-    # Check allowed lists
-    allowed_list = []
-    if "task_classes" in operator:
-        allowed_list.extend([str(x).lower() for x in operator["task_classes"]])
-    if "preferred_for" in operator:
-        allowed_list.extend([str(x).lower() for x in operator["preferred_for"]])
-    if "routing" in operator and isinstance(operator["routing"], dict):
-        allowed_list.extend([str(x).lower() for x in operator["routing"].get("primary_task_types", [])])
-    
-    if not allowed_list:
-        return True
-        
-    for allowed_item in allowed_list:
-        allowed_parts = _expand_str(allowed_item)
-        if task_type_parts & allowed_parts:
-            return True
-            
-    for allowed_item in allowed_list:
-        if task_type_lower in allowed_item or allowed_item in task_type_lower:
-            return True
-            
-    return False
-
-
-def get_operator_capability_score(operator: dict[str, Any], capability_name: str) -> float:
-    capability_name_lower = capability_name.lower().replace("_", "-")
-    
-    # Check capability or capabilities dict
-    caps = operator.get("capability") or operator.get("capabilities")
-    if isinstance(caps, dict):
-        for k, v in caps.items():
-            kl = str(k).lower().replace("_", "-")
-            if kl == capability_name_lower:
-                try:
-                    return float(v)
-                except (ValueError, TypeError):
-                    pass
-    
-    # Fallback to strengths presence
-    strengths = [str(x).lower().replace("_", "-") for x in operator.get("strengths") or []]
-    if capability_name_lower in strengths:
-        return 5.0
-        
-    preferred = [str(x).lower().replace("_", "-") for x in operator.get("preferred_for") or []]
-    if capability_name_lower in preferred:
-        return 4.0
-        
-    task_classes = [str(x).lower().replace("_", "-") for x in operator.get("task_classes") or []]
-    if capability_name_lower in task_classes:
-        return 4.0
-
-    return 1.0
-
-
-def check_capability_score(operator_score: float | int, constraint_str_or_val: Any) -> bool:
-    if constraint_str_or_val is None:
-        return True
-    if isinstance(constraint_str_or_val, (int, float)):
-        return operator_score >= constraint_str_or_val
-    
-    val_str = str(constraint_str_or_val).strip()
-    if not val_str:
-        return True
-        
-    match = re.match(r"^([><=]=?)\s*([0-9.]+)$", val_str)
-    if match:
-        op, val_num_str = match.groups()
-        val_num = float(val_num_str)
-        if op == ">=":
-            return operator_score >= val_num
-        elif op == ">":
-            return operator_score > val_num
-        elif op == "<=":
-            return operator_score <= val_num
-        elif op == "<":
-            return operator_score < val_num
-        elif op == "==":
-            return operator_score == val_num
-        elif op == "!=":
-            return operator_score != val_num
-    else:
-        try:
-            return operator_score >= float(val_str)
-        except ValueError:
-            pass
-    return True
-
-
-def operator_satisfies_constraints(operator: dict[str, Any], constraints: dict[str, Any]) -> bool:
-    if not constraints or not isinstance(constraints, dict):
-        return True
-        
-    tier_map = {"low": 1, "medium": 2, "high": 3}
-    
-    for key, val in constraints.items():
-        if key == "max_cost_tier":
-            op_cost = str(operator.get("cost_tier") or "medium").lower()
-            max_cost = str(val).lower()
-            if tier_map.get(op_cost, 2) > tier_map.get(max_cost, 2):
-                return False
-        elif key == "max_latency_tier":
-            op_latency = str(operator.get("latency_tier") or "medium").lower()
-            max_latency = str(val).lower()
-            if tier_map.get(op_latency, 2) > tier_map.get(max_latency, 2):
-                return False
-        elif key == "min_context_tier":
-            context_map = {"low": 1, "medium": 2, "high": 3}
-            op_context = str(operator.get("context_tier") or "medium").lower()
-            min_context = str(val).lower()
-            if context_map.get(op_context, 2) < context_map.get(min_context, 2):
-                return False
-        else:
-            op_val = operator.get(key)
-            if op_val is None and "policy" in operator and isinstance(operator["policy"], dict):
-                op_val = operator["policy"].get(key)
-            if op_val is None and "routing" in operator and isinstance(operator["routing"], dict):
-                op_val = operator["routing"].get(key)
-                
-            if op_val is not None:
-                if str(op_val).lower() != str(val).lower():
-                    return False
-    return True
-
-
-def check_quota_reserve(operator: dict[str, Any], task_type: str) -> bool:
-    quota = operator.get("quota")
-    if not quota or not isinstance(quota, dict):
-        return True
-        
-    reserve_for = quota.get("reserve_for")
-    if not reserve_for:
-        return True
-        
-    if not isinstance(reserve_for, list):
-        reserve_for = [reserve_for]
-        
-    reserve_for_lower = [str(x).lower() for x in reserve_for]
-    if not task_type or task_type.lower() not in reserve_for_lower:
-        return False
-        
-    return True
-
-
-def operator_matches_class(operator: dict[str, Any], class_name: str) -> bool:
-    op_class = operator.get("operator_class")
-    if not op_class and "routing" in operator and isinstance(operator["routing"], dict):
-        op_class = operator["routing"].get("operator_class")
-    
-    if not op_class:
-        return False
-        
-    if isinstance(op_class, list):
-        return any(str(c).lower() == class_name.lower() for c in op_class)
-    return str(op_class).lower() == class_name.lower()
-
-
-def select_operator(node: dict[str, Any], base_profile: dict[str, Any]) -> tuple[dict[str, Any] | None, str]:
-    preferred = str(node.get("preferred_operator") or "").strip()
-    if preferred:
-        operator = resolve_operator(preferred)
-        ok, reason = operator_dispatchable(operator)
-        if ok:
-            verifier_required = _is_true(node.get("verifier_required")) or _is_true((node.get("operator_selector") or {}).get("verifier_required"))
-            if verifier_required:
-                prior = node.get("prior_operator") or node.get("writer_operator") or node.get("writer")
-                if prior:
-                    prior_clean = str(prior).strip().lower()
-                    op_id_clean = str(operator.get("operator_id")).strip().lower()
-                    op_prof_clean = str(operator.get("profile") or "").strip().lower()
-                    if prior_clean in {op_id_clean, op_prof_clean}:
-                        return None, f"verifier_conflict:preferred_operator_is_writer:{prior}"
-            return operator, ""
-        fallback = str(operator.get("fallback_profile") or base_profile.get("name") or "")
-        return None, f"preferred_operator_unavailable:{preferred}:{reason};fallback_profile={fallback or 'N/A'}"
-
-    selector = node.get("operator_selector") or {}
-    
-    task_type = node.get("task_type") or selector.get("task_type")
-    req_caps = node.get("required_capabilities") or selector.get("required_capabilities") or node.get("required_capability_scores") or selector.get("required_capability_scores")
-    pref_classes = node.get("preferred_operator_classes") or selector.get("preferred_operator_classes")
-    constraints = node.get("constraints") or selector.get("constraints")
-    verifier_required = _is_true(node.get("verifier_required")) or _is_true(selector.get("verifier_required"))
-    
-    has_logical = any([
-        "operator_selector" in node,
-        task_type,
-        req_caps,
-        pref_classes,
-        constraints,
-        verifier_required
-    ])
-    
-    if not has_logical:
-        return None, ""
-        
-    operators = [
-        _operator_ref(operator_id, dict(spec))
-        for operator_id, spec in (load_physical_operators().get("operators") or {}).items()
-        if isinstance(spec, dict)
-    ]
-    
-    scored: list[tuple[int, dict[str, Any]]] = []
-    selector_values = set(_selector_values(selector))
-    if task_type:
-        selector_values.update(_expand_str(task_type))
-        
-    modality_values = {"image", "vision", "multimodal", "screenshot", "ocr", "diagram", "mockup", "ui"}
-    modality_required = bool(selector_values & modality_values)
-    
-    for operator in operators:
-        ok, _reason = operator_dispatchable(operator)
-        if not ok:
-            continue
-            
-        if verifier_required:
-            prior = node.get("prior_operator") or node.get("writer_operator") or node.get("writer")
-            if prior:
-                prior_clean = str(prior).strip().lower()
-                op_id_clean = str(operator.get("operator_id")).strip().lower()
-                op_prof_clean = str(operator.get("profile") or "").strip().lower()
-                if prior_clean in {op_id_clean, op_prof_clean}:
-                    continue
-                    
-        if task_type and not operator_supports_task_type(operator, task_type):
-            continue
-            
-        if req_caps and isinstance(req_caps, dict):
-            cap_ok = True
-            for cap_name, cap_constraint in req_caps.items():
-                op_score = get_operator_capability_score(operator, cap_name)
-                if not check_capability_score(op_score, cap_constraint):
-                    cap_ok = False
-                    break
-            if not cap_ok:
-                continue
-                
-        if constraints and not operator_satisfies_constraints(operator, constraints):
-            continue
-            
-        if not check_quota_reserve(operator, task_type):
-            continue
-
-        # Enforce claude_print reserve routing: a claude_print operator must
-        # not be consumed by bulk/fanout/low-value tasks; it is reserved for
-        # high-value task types listed in quota.reserve_for.
-        if not _claude_surface.claude_print_reserve_allows(operator, task_type):
-            continue
-
-        if modality_required and not operator_has_any(operator, selector_values & modality_values):
-            continue
-            
-        score = operator_score(operator, node, selector)
-        
-        if pref_classes:
-            classes_list = [pref_classes] if isinstance(pref_classes, str) else list(pref_classes)
-            for c in classes_list:
-                if operator_matches_class(operator, str(c)):
-                    score += 100
-                    
-        scored.append((score, operator))
-        
-    if not scored:
-        return None, "operator_selector_no_match"
-        
-    scored.sort(key=lambda item: (item[0], str(item[1].get("operator_id") or "")), reverse=True)
-    return scored[0][1], ""
-
-
 def run_capability_probe(profile_name: str, timeout_sec: int) -> dict[str, Any]:
     profile = resolve_profile(profile_name)
     backend = str(profile.get("backend") or "claude-cli")
@@ -986,14 +506,6 @@ def select_profile(node: dict[str, Any], profile_override: str = "", model_overr
     selected["model"] = str(model_override or node.get("preferred_model") or selected.get("model") or "sonnet")
     selected["backend"] = str(backend_override or selected.get("backend") or (config.get("defaults") or {}).get("backend") or "claude-cli")
     selected["approval_mode"] = str(selected.get("approval_mode") or "auto_edit")
-    operator, fallback_reason = select_operator(node, selected)
-    if operator:
-        selected = apply_operator_to_profile(selected, operator, fallback_reason)
-    elif node.get("preferred_operator"):
-        selected["operator_id"] = str(node.get("preferred_operator") or "")
-        selected["operator_fallback_reason"] = fallback_reason or "preferred_operator_unavailable"
-    elif node.get("operator_selector"):
-        selected["operator_fallback_reason"] = fallback_reason or "operator_selector_no_match"
     return selected
 
 
@@ -1103,65 +615,11 @@ def read_task_status(path: Path) -> dict[str, Any] | None:
         return None
 
 
-def resolve_graph_path(value: str) -> Path:
-    """Resolve graph paths persisted by older multi-task status files.
-
-    Some legacy rows stored paths like ``sprints/<sid>.task_graph.json``.
-    Status commands may run from outside the harness root, so plain
-    ``Path(value)`` can miss an existing graph and leave finished tasks looking
-    active forever.
-    """
-    raw = str(value or "").strip()
-    path = Path(raw).expanduser()
-    if path.is_absolute():
-        return path
-    candidates = [Path.cwd() / path, HARNESS_DIR / path]
-    if path.name.endswith(".task_graph.json"):
-        candidates.append(SPRINTS_DIR / path.name)
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    return HARNESS_DIR / path
-
-
 def task_age_s(row: dict[str, Any], now_ts: float | None = None) -> int | None:
     updated_ts = parse_iso(str(row.get("updated_at") or row.get("created_at") or ""))
     if updated_ts is None:
         return None
     return max(0, int((time.time() if now_ts is None else now_ts) - updated_ts))
-
-
-def graph_node_status_for_task(row: dict[str, Any]) -> str:
-    graph_path = str(row.get("graph") or "").strip()
-    node_id = str(row.get("node_id") or "").strip()
-    if not graph_path or not node_id:
-        return "N/A"
-    try:
-        graph = load_graph(resolve_graph_path(graph_path))
-        return str(node_status(graph, node_id) or "N/A")
-    except Exception:
-        return "N/A"
-
-
-def effective_task_status(row: dict[str, Any]) -> str:
-    """Classify worker occupancy using graph truth when task status drifted.
-
-    A tmux pane can outlive the runner status write. If the DAG node is already
-    passed/failed, or is reviewing with a handoff present, it should not keep
-    consuming a worker slot in the scheduler/status view.
-    """
-    current = str(row.get("status") or "").lower()
-    graph_status = str(row.get("graph_status") or "N/A").lower()
-    if current in ACTIVE_TASK_STATUSES:
-        if graph_status in {"passed", "done", "completed"}:
-            return "completed_aligned"
-        if graph_status in {"failed", "cancelled", "canceled", "skipped"}:
-            return "failed_aligned"
-        if graph_status == "reviewing":
-            handoff = str(row.get("handoff") or "").strip()
-            if handoff and Path(handoff).expanduser().exists():
-                return "completed_aligned"
-    return current
 
 
 def format_age_s(age_s: int | None) -> str:
@@ -1180,7 +638,7 @@ def format_age_s(age_s: int | None) -> str:
 
 
 def task_data_class(row: dict[str, Any], now_ts: float | None = None) -> str:
-    status = str(row.get("effective_status") or row.get("status") or "").lower()
+    status = str(row.get("status") or "").lower()
     tmux_status = str(row.get("tmux_status") or "").lower()
     age_s = task_age_s(row, now_ts)
     stale = age_s is not None and age_s >= TASK_STALE_WARN_SEC
@@ -1190,7 +648,7 @@ def task_data_class(row: dict[str, Any], now_ts: float | None = None) -> str:
         return "stale_active" if stale else "pending"
     if status == "dry_run":
         return "stale" if stale else "dry_run"
-    if status in EFFECTIVE_TERMINAL_TASK_STATUSES or status.startswith("reaped"):
+    if status in TERMINAL_TASK_STATUSES or status.startswith("reaped"):
         return "historical"
     return "stale" if stale else "observed"
 
@@ -1207,7 +665,7 @@ def tmux_session_exists() -> bool:
         return False
 
 
-def tmux_window_records() -> list[dict[str, str]]:
+def tmux_window_map() -> dict[str, dict[str, str]]:
     try:
         out = subprocess.check_output(
             [
@@ -1216,39 +674,29 @@ def tmux_window_records() -> list[dict[str, str]]:
                 "-t",
                 SESSION,
                 "-F",
-                "#{window_id}\t#{window_name}\t#{window_active}\t#{pane_current_command}\t#{pane_dead}\t#{pane_pid}",
+                "#{window_name}\t#{window_active}\t#{pane_current_command}\t#{pane_dead}\t#{pane_pid}",
             ],
             text=True,
             stderr=subprocess.DEVNULL,
             timeout=3,
         )
     except Exception:
-        return []
-    windows: list[dict[str, str]] = []
+        return {}
+    windows: dict[str, dict[str, str]] = {}
     for line in out.splitlines():
         if not line.strip():
             continue
         parts = line.split("\t")
-        window_id = parts[0].strip() if parts else ""
-        name = parts[1].strip() if len(parts) > 1 else ""
+        name = parts[0].strip() if parts else ""
         if not name:
             continue
-        windows.append({
-            "window_id": window_id,
+        windows[name] = {
             "window": name,
-            "target": f"{SESSION}:{window_id}" if window_id else f"{SESSION}:{name}",
-            "active": parts[2].strip() if len(parts) > 2 else "",
-            "command": parts[3].strip() if len(parts) > 3 else "",
-            "dead": parts[4].strip() if len(parts) > 4 else "",
-            "pane_pid": parts[5].strip() if len(parts) > 5 else "",
-        })
-    return windows
-
-
-def tmux_window_map() -> dict[str, dict[str, str]]:
-    windows: dict[str, dict[str, str]] = {}
-    for record in tmux_window_records():
-        windows.setdefault(str(record.get("window") or ""), record)
+            "active": parts[1].strip() if len(parts) > 1 else "",
+            "command": parts[2].strip() if len(parts) > 2 else "",
+            "dead": parts[3].strip() if len(parts) > 3 else "",
+            "pane_pid": parts[4].strip() if len(parts) > 4 else "",
+        }
     return windows
 
 
@@ -1258,7 +706,7 @@ def pane_role(session: str, pane_index: str, title: str) -> str:
         return {
             "0": "pm",
             "1": "planner",
-            "2": "builder",
+            "2": "monitor",
             "3": "evaluator",
         }.get(str(pane_index), "main")
     if session == LAB_SESSION:
@@ -1351,7 +799,7 @@ def dispatch_role(record: dict[str, Any]) -> str:
     if pane.endswith(":0.1"):
         return "planner"
     if pane.endswith(":0.2"):
-        return "builder"
+        return "monitor"
     if pane.endswith(":0.3"):
         return "evaluator"
     return "unknown"
@@ -1421,8 +869,6 @@ def enrich_task_row(row: dict[str, Any], windows: dict[str, dict[str, str]]) -> 
     enriched["tmux_status"] = tmux_status
     enriched["pane_command"] = (info or {}).get("command", "N/A")
     enriched["pane_pid"] = (info or {}).get("pane_pid", "N/A")
-    enriched["graph_status"] = graph_node_status_for_task(enriched)
-    enriched["effective_status"] = effective_task_status(enriched)
     age_s = task_age_s(enriched)
     enriched["age_s"] = age_s
     enriched["age"] = format_age_s(age_s)
@@ -1443,337 +889,7 @@ def list_task_rows() -> list[dict[str, Any]]:
 
 
 def active_tasks() -> list[dict[str, Any]]:
-    return [row for row in list_task_rows() if str(row.get("effective_status") or row.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
-
-
-def idle_tmux_window_candidates(
-    tasks: list[dict[str, Any]] | None = None,
-    windows: list[dict[str, str]] | None = None,
-) -> list[dict[str, Any]]:
-    rows = tasks if tasks is not None else list_task_rows()
-    window_records = windows if windows is not None else tmux_window_records()
-    candidates: list[dict[str, Any]] = []
-    tracked_targets: set[str] = set()
-    seen_targets: set[str] = set()
-
-    for row in rows:
-        effective_status = str(row.get("effective_status") or row.get("status") or "").lower()
-        if effective_status not in EFFECTIVE_TERMINAL_TASK_STATUSES and not effective_status.startswith("reaped"):
-            continue
-        window = str(row.get("window") or "").strip()
-        if not window:
-            continue
-        updated_at = str(row.get("updated_at") or row.get("created_at") or "")
-        updated_ts = parse_iso(updated_at)
-        for info in window_records:
-            if str(info.get("window") or "") != window:
-                continue
-            if str(info.get("dead") or "") == "1":
-                continue
-            if str(info.get("active") or "") == "1":
-                continue
-            command = str(info.get("command") or "").strip().lower()
-            if command not in REUSABLE_WINDOW_COMMANDS:
-                continue
-            target = str(info.get("target") or f"{SESSION}:{window}")
-            if target in seen_targets:
-                continue
-            tracked_targets.add(target)
-            seen_targets.add(target)
-            candidates.append({
-                "window": window,
-                "window_target": target,
-                "window_id": str(info.get("window_id") or ""),
-                "task_id": str(row.get("id") or ""),
-                "kind": "tracked",
-                "effective_status": effective_status,
-                "updated_at": updated_at or "N/A",
-                "updated_ts": updated_ts if updated_ts is not None else -1.0,
-                "command": command,
-            })
-
-    for info in window_records:
-        target = str(info.get("target") or "")
-        if target in tracked_targets:
-            continue
-        if str(info.get("dead") or "") == "1":
-            continue
-        if str(info.get("active") or "") == "1":
-            continue
-        command = str(info.get("command") or "").strip().lower()
-        if command not in REUSABLE_WINDOW_COMMANDS:
-            continue
-        if target in seen_targets:
-            continue
-        seen_targets.add(target)
-        candidates.append({
-            "window": str(info.get("window") or ""),
-            "window_target": target or f"{SESSION}:{str(info.get('window') or '')}",
-            "window_id": str(info.get("window_id") or ""),
-            "task_id": "N/A",
-            "kind": "orphan",
-            "effective_status": "orphan_shell",
-            "updated_at": "N/A",
-            "updated_ts": -1.0,
-            "command": command,
-        })
-
-    return candidates
-
-
-def historical_active_tmux_windows(
-    tasks: list[dict[str, Any]] | None = None,
-    windows: list[dict[str, str]] | None = None,
-) -> list[dict[str, Any]]:
-    rows = tasks if tasks is not None else list_task_rows()
-    window_records = windows if windows is not None else tmux_window_records()
-    records_by_name: dict[str, list[dict[str, str]]] = {}
-    for info in window_records:
-        records_by_name.setdefault(str(info.get("window") or ""), []).append(info)
-
-    seen_targets: set[str] = set()
-    results: list[dict[str, Any]] = []
-    for row in rows:
-        effective_status = str(row.get("effective_status") or row.get("status") or "").lower()
-        if effective_status not in EFFECTIVE_TERMINAL_TASK_STATUSES and not effective_status.startswith("reaped"):
-            continue
-        window = str(row.get("window") or "").strip()
-        if not window:
-            continue
-        for info in records_by_name.get(window, []):
-            if str(info.get("active") or "") != "1":
-                continue
-            if str(info.get("dead") or "") == "1":
-                continue
-            command = str(info.get("command") or "").strip().lower()
-            if command not in REUSABLE_WINDOW_COMMANDS:
-                continue
-            target = str(info.get("target") or f"{SESSION}:{window}")
-            if target in seen_targets:
-                continue
-            seen_targets.add(target)
-            results.append({
-                "window": window,
-                "window_target": target,
-                "window_id": str(info.get("window_id") or ""),
-                "task_id": str(row.get("id") or ""),
-                "effective_status": effective_status,
-                "command": command,
-            })
-    return results
-
-
-def tmux_client_records() -> list[dict[str, str]]:
-    try:
-        out = subprocess.check_output(
-            [
-                "tmux",
-                "list-clients",
-                "-t",
-                SESSION,
-                "-F",
-                "#{client_tty}\t#{window_id}\t#{session_name}",
-            ],
-            text=True,
-            stderr=subprocess.DEVNULL,
-            timeout=3,
-        )
-    except Exception:
-        return []
-    rows: list[dict[str, str]] = []
-    for line in out.splitlines():
-        if not line.strip():
-            continue
-        parts = line.split("\t")
-        tty = parts[0].strip() if parts else ""
-        window_id = parts[1].strip() if len(parts) > 1 else ""
-        session_name = parts[2].strip() if len(parts) > 2 else ""
-        if not tty:
-            continue
-        rows.append({
-            "tty": tty,
-            "window_id": window_id,
-            "session": session_name,
-        })
-    return rows
-
-
-def _anchor_window_name() -> str:
-    return short_window("mt-idle-anchor")
-
-
-def ensure_tmux_anchor_window(cwd: Path | None = None) -> tuple[str, bool]:
-    records = tmux_window_records()
-    for info in records:
-        if str(info.get("window") or "") == _anchor_window_name():
-            return str(info.get("target") or f"{SESSION}:{_anchor_window_name()}"), False
-    workdir = str(cwd or Path.cwd())
-    cmd = "exec ${SHELL:-/bin/zsh}"
-    if subprocess.run(["tmux", "has-session", "-t", SESSION], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
-        subprocess.check_call(["tmux", "new-window", "-d", "-t", SESSION, "-n", _anchor_window_name(), "-c", workdir, cmd])
-    else:
-        subprocess.check_call(["tmux", "new-session", "-d", "-s", SESSION, "-n", _anchor_window_name(), "-c", workdir, cmd])
-    for info in tmux_window_records():
-        if str(info.get("window") or "") == _anchor_window_name():
-            return str(info.get("target") or f"{SESSION}:{_anchor_window_name()}"), True
-    return f"{SESSION}:{_anchor_window_name()}", True
-
-
-def detach_and_anchor(cwd: Path | None = None, dry_run: bool = False) -> dict[str, Any]:
-    target = f"{SESSION}:{_anchor_window_name()}"
-    created = False
-    if not dry_run:
-        target, created = ensure_tmux_anchor_window(cwd=cwd)
-        subprocess.run(["tmux", "select-window", "-t", target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return {
-        "target": target,
-        "created_anchor": created,
-        "action": "dry-run" if dry_run else "selected",
-    }
-
-
-def select_reusable_tmux_window(
-    preferred_window: str,
-    tasks: list[dict[str, Any]] | None = None,
-    windows: list[dict[str, str]] | None = None,
-) -> tuple[str, bool, str, str]:
-    """Pick a safe reusable terminal window for legacy multi-task launches.
-
-    Only reuse windows that belong to tracked historical tasks, are still live in
-    the current multi-task session, are not the active tmux window, and are
-    currently sitting in an interactive shell instead of a running agent.
-    """
-    if not REUSE_TERMINAL_WINDOWS:
-        return preferred_window, False, "", ""
-    candidates = idle_tmux_window_candidates(tasks=tasks, windows=windows)
-    candidates.sort(key=lambda item: (0 if item.get("kind") == "tracked" else 1, -float(item.get("updated_ts") or -1.0), str(item.get("window") or "")))
-    for candidate in candidates:
-        return (
-            str(candidate.get("window") or preferred_window),
-            True,
-            str(candidate.get("task_id") or ""),
-            str(candidate.get("window_target") or ""),
-        )
-    return preferred_window, False, "", ""
-
-
-def prune_idle_tmux_windows(
-    target_keep: int = IDLE_WINDOW_POOL_TARGET,
-    dry_run: bool = False,
-    keep_windows: set[str] | None = None,
-    tasks: list[dict[str, Any]] | None = None,
-    windows: list[dict[str, str]] | None = None,
-) -> dict[str, Any]:
-    keep = set(keep_windows or set())
-    candidates = idle_tmux_window_candidates(tasks=tasks, windows=windows)
-    protected = [c for c in candidates if str(c.get("window_target") or "") in keep]
-    prunable = [c for c in candidates if str(c.get("window_target") or "") not in keep]
-    retain_budget = max(0, int(target_keep)) - len(protected)
-    retain_budget = max(0, retain_budget)
-    prunable.sort(key=lambda item: (0 if item.get("kind") == "orphan" else 1, float(item.get("updated_ts") or -1.0), str(item.get("window") or "")))
-    keepers = prunable[-retain_budget:] if retain_budget > 0 else []
-    keeper_names = {str(item.get("window_target") or "") for item in keepers}
-    killed: list[dict[str, Any]] = []
-    kept: list[dict[str, Any]] = []
-
-    for candidate in prunable:
-        window_target = str(candidate.get("window_target") or "")
-        if window_target in keeper_names:
-            kept.append(candidate)
-            continue
-        action = "dry-run"
-        if not dry_run and window_target:
-            rc = subprocess.run(["tmux", "kill-window", "-t", window_target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
-            action = "killed-window" if rc == 0 else "missing-window"
-        elif not dry_run:
-            action = "no-window"
-        candidate = dict(candidate)
-        candidate["action"] = action
-        killed.append(candidate)
-
-    return {
-        "target_keep": max(0, int(target_keep)),
-        "candidate_count": len(candidates),
-        "protected": protected,
-        "kept": kept + protected,
-        "killed": killed,
-    }
-
-
-def compact_tmux_session(
-    target_keep: int = IDLE_WINDOW_POOL_TARGET,
-    dry_run: bool = False,
-    cwd: Path | None = None,
-) -> dict[str, Any]:
-    tasks = list_task_rows()
-    windows = tmux_window_records()
-    historical = historical_active_tmux_windows(tasks=tasks, windows=windows)
-    reusable = idle_tmux_window_candidates(tasks=tasks, windows=windows)
-
-    destination_target = ""
-    created_anchor = False
-    orphan_targets = [
-        str(item.get("window_target") or "")
-        for item in reusable
-        if str(item.get("kind") or "") == "orphan"
-        and str(item.get("window_target") or "") not in {str(item.get("window_target") or "") for item in historical}
-    ]
-    if orphan_targets:
-        destination_target = orphan_targets[0]
-    elif historical and not dry_run:
-        destination_target, created_anchor = ensure_tmux_anchor_window(cwd=cwd)
-
-    switches: list[dict[str, str]] = []
-    if historical and destination_target:
-        active_window_ids = {str(item.get("window_id") or "") for item in historical}
-        for client in tmux_client_records():
-            if str(client.get("window_id") or "") not in active_window_ids:
-                continue
-            tty = str(client.get("tty") or "")
-            action = "dry-run"
-            if not dry_run and tty:
-                subprocess.run(["tmux", "switch-client", "-c", tty, "-t", destination_target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                action = "switched"
-            switches.append({
-                "tty": tty or "N/A",
-                "from_window_id": str(client.get("window_id") or ""),
-                "to_target": destination_target,
-                "action": action,
-            })
-        if not dry_run:
-            subprocess.run(["tmux", "select-window", "-t", destination_target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-    closed: list[dict[str, str]] = []
-    for item in historical:
-        target = str(item.get("window_target") or "")
-        action = "dry-run"
-        if not dry_run and target:
-            rc = subprocess.run(["tmux", "kill-window", "-t", target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
-            action = "killed-window" if rc == 0 else "missing-window"
-        closed.append({
-            "window": str(item.get("window") or ""),
-            "window_target": target or "N/A",
-            "task_id": str(item.get("task_id") or "N/A"),
-            "action": action,
-        })
-
-    shrink = prune_idle_tmux_windows(
-        target_keep=target_keep,
-        dry_run=dry_run,
-        keep_windows={destination_target} if destination_target else set(),
-        tasks=list_task_rows() if not dry_run else tasks,
-        windows=tmux_window_records() if not dry_run else windows,
-    )
-    return {
-        "historical_active": historical,
-        "destination_target": destination_target or "N/A",
-        "created_anchor": created_anchor,
-        "switches": switches,
-        "closed": closed,
-        "shrink": shrink,
-        "dry_run": dry_run,
-        "target_keep": target_keep,
-    }
+    return [row for row in list_task_rows() if str(row.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
 
 
 def task_inventory(tasks: list[dict[str, Any]]) -> dict[str, Any]:
@@ -1783,7 +899,7 @@ def task_inventory(tasks: list[dict[str, Any]]) -> dict[str, Any]:
     latest_ts = -1.0
     for task in tasks:
         data_class = str(task.get("data_class") or "observed")
-        status = str(task.get("effective_status") or task.get("status") or "N/A").lower()
+        status = str(task.get("status") or "N/A").lower()
         counts[data_class] = counts.get(data_class, 0) + 1
         status_counts[status] = status_counts.get(status, 0) + 1
         updated_ts = parse_iso(str(task.get("updated_at") or task.get("created_at") or ""))
@@ -1791,7 +907,7 @@ def task_inventory(tasks: list[dict[str, Any]]) -> dict[str, Any]:
             latest = task
             latest_ts = updated_ts
     live = counts.get("live", 0)
-    active = sum(1 for task in tasks if str(task.get("effective_status") or task.get("status", "")).lower() in ACTIVE_TASK_STATUSES)
+    active = sum(1 for task in tasks if str(task.get("status", "")).lower() in ACTIVE_TASK_STATUSES)
     stale = counts.get("stale", 0) + counts.get("stale_active", 0)
     historical = counts.get("historical", 0) + counts.get("dry_run", 0) + counts.get("stale", 0)
     return {
@@ -1804,151 +920,6 @@ def task_inventory(tasks: list[dict[str, Any]]) -> dict[str, Any]:
         "statuses": status_counts,
         "latest": latest,
         "latest_age": format_age_s(None if latest is None else task_age_s(latest)),
-    }
-
-
-def worker_activity_projection(tmux_live: bool, inventory: dict[str, Any], active_count: int,
-                               has_tasks: bool) -> dict[str, Any]:
-    """Return display status for worker activity without treating idle as failure."""
-    live_count = int(inventory.get("live", 0) or 0)
-    if tmux_live and live_count:
-        data_source = "live"
-        ok = True
-    elif tmux_live and active_count == 0:
-        data_source = "idle:no_active_workers"
-        ok = True
-    elif has_tasks and not tmux_live:
-        data_source = "history:no_multi_task_session"
-        ok = False
-    else:
-        data_source = "no_live_workers"
-        ok = False
-    return {
-        "ok": ok,
-        "data_source": data_source,
-        "active_workers": f"{live_count} live / {active_count} active",
-    }
-
-
-def monitor_summary(result: dict[str, Any], tasks: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-    """Build monitor findings for the existing multi-task status surface."""
-    rows = tasks if tasks is not None else list_task_rows()
-    guard = result.get("guard") or {}
-    panes = result.get("panes") or []
-    dispatches = result.get("dispatches") or []
-    graphs = result.get("graphs") or []
-    cap_summary = result.get("capability") or {}
-    inventory = task_inventory(rows)
-    active = [
-        task for task in rows
-        if str(task.get("effective_status") or task.get("status", "")).lower() in ACTIVE_TASK_STATUSES
-    ]
-    mt_live = tmux_session_exists()
-    activity = worker_activity_projection(mt_live, inventory, len(active), bool(rows))
-
-    findings: list[dict[str, Any]] = []
-    if not mt_live and active:
-        findings.append({
-            "severity": "error",
-            "type": "active_without_multi_task_session",
-            "detail": f"{len(active)} active task(s), tmux session missing",
-        })
-    for task in active:
-        tmux_status = str(task.get("tmux_status") or "N/A")
-        if tmux_status in {"missing", "dead", "no-window"}:
-            findings.append({
-                "severity": "error",
-                "type": "active_task_without_live_window",
-                "task_id": task.get("id"),
-                "sprint_id": task.get("sprint_id"),
-                "node_id": task.get("node_id"),
-                "detail": f"tmux_status={tmux_status}",
-            })
-    stale_active = [task for task in rows if str(task.get("data_class") or "") == "stale_active"]
-    if stale_active:
-        findings.append({
-            "severity": "warn",
-            "type": "stale_active_task",
-            "detail": f"{len(stale_active)} active task(s) older than stale threshold",
-            "task_id": stale_active[0].get("id"),
-        })
-    stale_history = int(inventory.get("stale", 0) or 0) - len(stale_active)
-    if stale_history > 0:
-        findings.append({
-            "severity": "warn",
-            "type": "stale_history",
-            "detail": f"{stale_history} stale historical row(s)",
-        })
-    if not guard.get("ok"):
-        findings.append({
-            "severity": "warn",
-            "type": "launch_guard_blocked",
-            "detail": str(guard.get("reason") or "N/A"),
-        })
-    cap_error_count = int(cap_summary.get("error", 0) or 0)
-    cap_ok_count = int(cap_summary.get("ok", 0) or 0)
-    if cap_error_count > 0 and cap_ok_count <= 0:
-        findings.append({
-            "severity": "error",
-            "type": "model_capability_error",
-            "detail": format_capability_summary_compact(cap_summary),
-        })
-    elif cap_error_count > 0:
-        findings.append({
-            "severity": "warn",
-            "type": "model_capability_warn",
-            "detail": format_capability_summary_compact(cap_summary),
-        })
-    elif int(cap_summary.get("warn", 0) or 0) > 0:
-        findings.append({
-            "severity": "warn",
-            "type": "model_capability_warn",
-            "detail": format_capability_summary_compact(cap_summary),
-        })
-
-    dead_panes = [pane for pane in panes if str(pane.get("state") or "").lower() == "dead"]
-    if dead_panes:
-        findings.append({
-            "severity": "error",
-            "type": "dead_pane",
-            "detail": f"{len(dead_panes)} dead pane(s)",
-            "pane": dead_panes[0].get("pane"),
-        })
-
-    ready_idle = []
-    if activity.get("ok") and str(activity.get("data_source")) == "idle:no_active_workers":
-        for graph in graphs:
-            ready = graph.get("ready") or []
-            if ready:
-                ready_idle.append({"sprint_id": graph.get("sid"), "ready": ready[:5]})
-    if ready_idle:
-        findings.append({
-            "severity": "warn",
-            "type": "ready_graph_idle",
-            "detail": f"{len(ready_idle)} graph(s) have ready nodes but no active worker",
-            "graphs": ready_idle[:5],
-        })
-
-    latest_dispatch = dispatches[0] if dispatches else {}
-    worst = "ok"
-    if any(item.get("severity") == "error" for item in findings):
-        worst = "error"
-    elif any(item.get("severity") == "warn" for item in findings):
-        worst = "warn"
-    return {
-        "status": worst,
-        "data_source": activity.get("data_source"),
-        "active_workers": activity.get("active_workers"),
-        "task_count": inventory.get("total", 0),
-        "active_task_count": len(active),
-        "historical_task_count": inventory.get("historical", 0),
-        "stale_task_count": inventory.get("stale", 0),
-        "pane_count": len(panes),
-        "dead_pane_count": len(dead_panes),
-        "graph_count": len(graphs),
-        "dispatch_count": len(dispatches),
-        "latest_dispatch": latest_dispatch,
-        "findings": findings,
     }
 
 
@@ -2076,77 +1047,9 @@ def graph_description(graph: dict[str, Any], graph_path: Path) -> str:
     return "N/A"
 
 
-def canonical_status_path_for_graph(graph: dict[str, Any], graph_path: Path) -> Path:
-    sid = sprint_id_for(graph, graph_path)
-    return graph_path.with_name(f"{sid}.status.json")
-
-
-def canonical_artifacts_for_graph(graph: dict[str, Any], graph_path: Path) -> dict[str, str]:
-    sid = sprint_id_for(graph, graph_path)
-    parent = graph_path.parent
-    candidates = {
-        "contract": parent / f"{sid}.contract.md",
-        "prd": parent / f"{sid}.prd.md",
-        "design": parent / f"{sid}.design.md",
-        "plan": parent / f"{sid}.plan.md",
-        "task_graph": graph_path,
-        "handoff": parent / f"{sid}.handoff.md",
-        "eval": parent / f"{sid}.eval.md",
-    }
-    return {key: str(path) for key, path in candidates.items() if path.exists()}
-
-
-def canonical_state_for_graph(graph: dict[str, Any], graph_path: Path) -> tuple[str, str, str]:
-    statuses = []
-    for node in graph_nodes(graph):
-        nid = str(node.get("id") or "")
-        statuses.append(node_status(graph, nid) if nid else str(node.get("status") or "invalid"))
-    if statuses and all(st in {"passed", "completed", "completed_aligned"} for st in statuses):
-        return ("reviewing", "implementation_complete", "evaluator")
-    return ("active", "planning_complete", "builder_main")
-
-
-def ensure_canonical_sprint_status_for_graph(graph: dict[str, Any], graph_path: Path) -> bool:
-    """Create the coordinator-facing status file for task_graph-only sprints."""
-    status_path = canonical_status_path_for_graph(graph, graph_path)
-    if status_path.exists():
-        return False
-    sid = sprint_id_for(graph, graph_path)
-    if not (sid.startswith("sprint-") or sid.startswith("epic-")):
-        return False
-    status, phase, handoff_to = canonical_state_for_graph(graph, graph_path)
-    try:
-        created_at = iso_from_timestamp(min(
-            path.stat().st_mtime
-            for path in [graph_path, *[Path(p) for p in canonical_artifacts_for_graph(graph, graph_path).values()]]
-            if path.exists()
-        ))
-    except Exception:
-        created_at = now_iso()
-    json_write(status_path, {
-        "sprint_id": sid,
-        "title": graph_description(graph, graph_path),
-        "status": status,
-        "phase": phase,
-        "handoff_to": handoff_to,
-        "round": 0,
-        "created_at": created_at,
-        "updated_at": now_iso(),
-        "artifacts": canonical_artifacts_for_graph(graph, graph_path),
-        "history": [{
-            "event": "status_auto_created_from_task_graph",
-            "by": "multi_task_runner",
-            "at": now_iso(),
-            "note": "task_graph existed without canonical sprint status; created coordinator-visible status",
-        }],
-    })
-    return True
-
-
 def status_summary_for_graph(graph_path: Path) -> dict[str, Any]:
     try:
         graph = load_graph(graph_path)
-        ensure_canonical_sprint_status_for_graph(graph, graph_path)
         nodes = graph_nodes(graph)
         counts: dict[str, int] = {}
         for node in nodes:
@@ -2390,11 +1293,6 @@ def runner_script(task_dir: Path, payload: dict[str, Any]) -> Path:
     provider = str(payload.get("provider") or model_provider(model, backend))
     capability_status = str(payload.get("capability_status") or "N/A")
     approval_mode = str(payload.get("approval_mode") or "auto_edit")
-    task_id_value = str(payload.get("id") or task_dir.name)
-    operator_id = str(payload.get("operator_id") or "")
-    operator_model = str(payload.get("operator_model") or model)
-    window_name = str(payload.get("window") or "")
-    window_target = str(payload.get("window_target") or "")
     agent_cmd = str(payload.get("command") or os.environ.get("SOLAR_MULTI_TASK_AGENT_CMD", "")).strip()
     adapter = HARNESS_DIR / "lib" / "gemini_adapter.py"
     if backend == "gemini-cli":
@@ -2411,7 +1309,6 @@ TASK_DIR={shlex.quote(str(task_dir))}
 STATUS_FILE={shlex.quote(str(status_file))}
 DISPATCH_FILE={shlex.quote(str(dispatch_file))}
 OUTPUT_LOG="$TASK_DIR/output.log"
-RESULT_ROOT="$HARNESS_DIR/run/operator-results"
 HARNESS_DIR={shlex.quote(str(HARNESS_DIR))}
 SPRINTS_DIR={shlex.quote(str(SPRINTS_DIR))}
 GRAPH={shlex.quote(str(graph))}
@@ -2421,40 +1318,17 @@ ROLE={shlex.quote(role)}
 PROFILE={shlex.quote(profile)}
 BACKEND={shlex.quote(backend)}
 MODEL={shlex.quote(model)}
-TASK_ID={shlex.quote(task_id_value)}
-OPERATOR_ID={shlex.quote(operator_id)}
-OPERATOR_MODEL={shlex.quote(operator_model)}
 PROVIDER={shlex.quote(provider)}
 CAPABILITY_STATUS={shlex.quote(capability_status)}
 HANDOFF={shlex.quote(str(handoff))}
 HARNESS={shlex.quote(str(harness))}
-MT_SESSION={shlex.quote(SESSION)}
-WINDOW_NAME={shlex.quote(window_name)}
-WINDOW_TARGET={shlex.quote(window_target)}
-AUTO_CLOSE_TERMINAL_WINDOWS={"1" if AUTO_CLOSE_TERMINAL_WINDOWS else "0"}
-AUTO_CLOSE_DELAY_SEC={shlex.quote(str(AUTO_CLOSE_DELAY_SEC))}
-export TASK_DIR STATUS_FILE DISPATCH_FILE OUTPUT_LOG RESULT_ROOT HARNESS_DIR SPRINTS_DIR GRAPH NODE_ID SID ROLE PROFILE BACKEND MODEL TASK_ID OPERATOR_ID OPERATOR_MODEL PROVIDER CAPABILITY_STATUS HANDOFF HARNESS MT_SESSION WINDOW_NAME WINDOW_TARGET AUTO_CLOSE_TERMINAL_WINDOWS AUTO_CLOSE_DELAY_SEC
+export TASK_DIR STATUS_FILE DISPATCH_FILE OUTPUT_LOG HARNESS_DIR SPRINTS_DIR GRAPH NODE_ID SID ROLE PROFILE BACKEND MODEL PROVIDER CAPABILITY_STATUS HANDOFF HARNESS
 
 pane_title() {{
   local title="$1"
   if [[ -n "${{TMUX:-}}" ]]; then
     tmux select-pane -T "$title" >/dev/null 2>&1 || true
   fi
-}}
-
-auto_close_window() {{
-  local reason="${{1:-terminal}}"
-  [[ "$AUTO_CLOSE_TERMINAL_WINDOWS" == "1" ]] || return 0
-  [[ -n "$WINDOW_NAME" || -n "$WINDOW_TARGET" ]] || return 0
-  [[ -n "${{TMUX:-}}" ]] || return 0
-  (
-    sleep "$AUTO_CLOSE_DELAY_SEC"
-    if [[ -n "$WINDOW_TARGET" ]]; then
-      tmux kill-window -t "$WINDOW_TARGET" >/dev/null 2>&1 || true
-    else
-      tmux kill-window -t "${{MT_SESSION}}:${{WINDOW_NAME}}" >/dev/null 2>&1 || true
-    fi
-  ) >/dev/null 2>&1 &
 }}
 
 write_status() {{
@@ -2477,57 +1351,6 @@ p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\\n", encoding="u
 PY
 }}
 
-write_operator_result() {{
-  [[ -n "$OPERATOR_ID" && "$OPERATOR_ID" != "N/A" ]] || return 0
-  python3 - <<'PY'
-import json, os
-from pathlib import Path
-
-status_path = Path(os.environ["STATUS_FILE"])
-output_path = Path(os.environ["OUTPUT_LOG"])
-result_dir = Path(os.environ["RESULT_ROOT"]) / os.environ["OPERATOR_ID"] / os.environ["TASK_ID"]
-result_dir.mkdir(parents=True, exist_ok=True)
-
-status = {{}}
-if status_path.exists():
-    try:
-        status = json.loads(status_path.read_text(encoding="utf-8"))
-    except Exception:
-        status = {{}}
-
-tail = ""
-if output_path.exists():
-    try:
-        lines = output_path.read_text(encoding="utf-8", errors="replace").splitlines()
-        tail = "\\n".join(lines[-50:])
-    except Exception:
-        tail = ""
-
-result = {{
-    "task_id": os.environ["TASK_ID"],
-    "operator_id": os.environ["OPERATOR_ID"],
-    "sprint_id": os.environ["SID"],
-    "node_id": os.environ["NODE_ID"],
-    "status": status.get("status") or "unknown",
-    "exit_code": status.get("exit_code"),
-    "started_at": status.get("created_at") or "",
-    "finished_at": status.get("updated_at") or "",
-    "model": os.environ["OPERATOR_MODEL"] or os.environ["MODEL"],
-    "backend": os.environ["BACKEND"],
-    "profile": os.environ["PROFILE"],
-    "role": os.environ["ROLE"],
-    "provider": os.environ["PROVIDER"],
-    "source": "multi-task-runner",
-    "log_tail": tail,
-}}
-
-result_path = result_dir / "result.json"
-tmp = result_path.with_suffix(".json.tmp")
-tmp.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
-tmp.replace(result_path)
-PY
-}}
-
 mkdir -p "$TASK_DIR"
 write_status running
 pane_title "MT $ROLE/$PROFILE | 模型:$MODEL | provider:$PROVIDER | 状态:running"
@@ -2539,35 +1362,20 @@ fi
 
 {{
   echo "[solar-harness multi-task] sid=$SID node=$NODE_ID backend=$BACKEND model=$MODEL start=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  echo "[solar-harness multi-task] sid=$SID node=$NODE_ID agent_launch backend=$BACKEND profile=$PROFILE dispatch=$DISPATCH_FILE"
-  (
-    if [[ "$BACKEND" == "command" && -z {shlex.quote(agent_cmd)} ]]; then
-      echo "ERROR: backend=command requires SOLAR_MULTI_TASK_AGENT_CMD"
-      exit 127
-    elif [[ -n {shlex.quote(agent_cmd)} && "$BACKEND" != "command" ]]; then
-      SOLAR_MULTI_TASK_DISPATCH_FILE="$DISPATCH_FILE" bash -lc {shlex.quote(agent_cmd)}
-    else
-      if [[ "$BACKEND" == "claude-cli" ]] && ! command -v claude >/dev/null 2>&1; then
-        echo "ERROR: claude command not found; set SOLAR_MULTI_TASK_AGENT_CMD"
-        exit 127
-      fi
-      {agent_line}
-    fi
-  ) &
-  agent_pid=$!
-  echo "$agent_pid" > "$TASK_DIR/agent.pid"
-  echo "[solar-harness multi-task] sid=$SID node=$NODE_ID agent_pid=$agent_pid"
-  sleep "${{SOLAR_MULTI_TASK_AGENT_START_GRACE_SEC:-2}}"
-  if kill -0 "$agent_pid" >/dev/null 2>&1; then
-    echo "[solar-harness multi-task] sid=$SID node=$NODE_ID agent_alive_after_grace=true"
+  if [[ "$BACKEND" == "command" && -z {shlex.quote(agent_cmd)} ]]; then
+    echo "ERROR: backend=command requires SOLAR_MULTI_TASK_AGENT_CMD"
+    exit 127
+  elif [[ -n {shlex.quote(agent_cmd)} && "$BACKEND" != "command" ]]; then
+    SOLAR_MULTI_TASK_DISPATCH_FILE="$DISPATCH_FILE" bash -lc {shlex.quote(agent_cmd)}
   else
-    echo "[solar-harness multi-task] sid=$SID node=$NODE_ID agent_alive_after_grace=false"
+    if [[ "$BACKEND" == "claude-cli" ]] && ! command -v claude >/dev/null 2>&1; then
+      echo "ERROR: claude command not found; set SOLAR_MULTI_TASK_AGENT_CMD"
+      exit 127
+    fi
+    {agent_line}
   fi
-  wait "$agent_pid"
-  agent_rc=$?
-  echo "[solar-harness multi-task] sid=$SID node=$NODE_ID agent_exit=$agent_rc at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }} > >(tee -a "$OUTPUT_LOG") 2>&1
-rc=${{agent_rc:-$?}}
+rc=$?
 
 if [[ "$rc" -eq 0 && -s "$HANDOFF" ]]; then
   "$HARNESS" graph-scheduler mark --graph "$GRAPH" --node "$NODE_ID" --status reviewing --in-place >> "$OUTPUT_LOG" 2>&1 || true
@@ -2585,8 +1393,6 @@ else
   pane_title "MT $ROLE/$PROFILE | 模型:$MODEL | provider:$PROVIDER | 状态:failed"
 fi
 echo "[solar-harness multi-task] sid=$SID node=$NODE_ID exit=$rc end=$(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee -a "$OUTPUT_LOG"
-write_operator_result
-auto_close_window "terminal"
 exit "$rc"
 """
     runner.write_text(script, encoding="utf-8")
@@ -2594,15 +1400,12 @@ exit "$rc"
     return runner
 
 
-def tmux_start(window: str, runner: Path, cwd: Path, dry_run: bool = False, reuse: bool = False, reuse_target: str = "") -> None:
+def tmux_start(window: str, runner: Path, cwd: Path, dry_run: bool = False) -> None:
     if dry_run:
         return
     cmd = f"bash {shlex.quote(str(runner))}; exec ${{SHELL:-/bin/zsh}}"
     if subprocess.run(["tmux", "has-session", "-t", SESSION], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
-        if reuse:
-            subprocess.check_call(["tmux", "respawn-window", "-k", "-t", reuse_target or f"{SESSION}:{window}", "-c", str(cwd), cmd])
-        else:
-            subprocess.check_call(["tmux", "new-window", "-d", "-t", SESSION, "-n", window, "-c", str(cwd), cmd])
+        subprocess.check_call(["tmux", "new-window", "-d", "-t", SESSION, "-n", window, "-c", str(cwd), cmd])
     else:
         subprocess.check_call(["tmux", "new-session", "-d", "-s", SESSION, "-n", window, "-c", str(cwd), cmd])
     target = f"{SESSION}:{window}"
@@ -2614,75 +1417,6 @@ def tmux_start(window: str, runner: Path, cwd: Path, dry_run: bool = False, reus
     )
 
 
-def prepare_tmux_window(preferred_window: str, dry_run: bool = False) -> tuple[str, bool, str, str]:
-    if dry_run:
-        return preferred_window, False, "", ""
-    tasks = list_task_rows()
-    windows = tmux_window_records()
-    actual_window, reused, reused_task_id, reused_window_target = select_reusable_tmux_window(preferred_window, tasks=tasks, windows=windows)
-    keep_windows = {reused_window_target} if reused and reused_window_target else set()
-    prune_idle_tmux_windows(
-        target_keep=IDLE_WINDOW_POOL_TARGET,
-        dry_run=False,
-        keep_windows=keep_windows,
-        tasks=tasks,
-        windows=windows,
-    )
-    return actual_window, reused, reused_task_id, reused_window_target
-
-
-def build_task_envelope(
-    dispatch_id: str,
-    sprint_id: str,
-    node_id: str,
-    operator_id: str,
-    node: dict[str, Any],
-    dispatch_text: str,
-    graph_path: Path,
-    handoff_path: Path,
-    command: str = "",
-    lease_ttl_seconds: int = 3600,
-) -> dict[str, Any]:
-    """Build a task envelope suitable for operator_runtime.submit."""
-    envelope = {
-        "task_id": dispatch_id,
-        "sprint_id": sprint_id,
-        "node_id": node_id,
-        "operator_id": operator_id,
-        "task_type": str(node.get("task_type") or "dag_node"),
-        "objective": str(node.get("goal") or node.get("title") or node_id)[:2000],
-        "dispatch_text": dispatch_text,
-        "graph_path": str(graph_path),
-        "handoff_path": str(handoff_path),
-        "write_scope": node.get("write_scope") or [],
-        "read_scope": node.get("read_scope") or [],
-        "acceptance": node.get("acceptance") or [],
-        "lease_ttl_seconds": lease_ttl_seconds,
-    }
-    if command.strip():
-        envelope["command"] = command.strip()
-    return envelope
-
-def wait_for_operator_result(
-    operator_id: str,
-    task_id: str,
-    timeout_sec: int,
-    poll_interval_sec: float = 2.0,
-) -> dict[str, Any] | None:
-    """Poll for operator result artifact; return result dict or None on timeout."""
-    result_path = HARNESS_DIR / "run" / "operator-results" / operator_id / task_id / "result.json"
-    deadline = time.monotonic() + timeout_sec
-    while time.monotonic() < deadline:
-        if result_path.exists():
-            try:
-                return json.loads(result_path.read_text(encoding="utf-8"))
-            except Exception:
-                pass
-        remaining = deadline - time.monotonic()
-        time.sleep(min(poll_interval_sec, max(0.05, remaining)))
-    return None
-
-
 def launch_node(graph_path: Path, graph: dict[str, Any], node: dict[str, Any], args: argparse.Namespace,
                 dry_run: bool = False) -> dict[str, Any]:
     sid = sprint_id_for(graph, graph_path)
@@ -2690,8 +1424,7 @@ def launch_node(graph_path: Path, graph: dict[str, Any], node: dict[str, Any], a
     profile = select_profile(node, getattr(args, "profile", "") or "", getattr(args, "model", "") or "", getattr(args, "backend", "") or "")
     capability = capability_for_profile(profile)
     dispatch_id = task_id(sid, node_id)
-    requested_window = short_window(f"{dispatch_id}-{profile.get('role')}-{node_id}")
-    window, reused_window, reused_task_id, reused_window_target = prepare_tmux_window(requested_window, dry_run=dry_run)
+    window = short_window(f"{dispatch_id}-{profile.get('role')}-{node_id}")
     task_dir = RUN_DIR / dispatch_id
     handoff = SPRINTS_DIR / f"{sid}.{node_id}-handoff.md"
     task_dir.mkdir(parents=True, exist_ok=True)
@@ -2703,10 +1436,6 @@ def launch_node(graph_path: Path, graph: dict[str, Any], node: dict[str, Any], a
         "status": "dry_run" if dry_run else "dispatched",
         "session": SESSION,
         "window": window,
-        "window_target": reused_window_target or f"{SESSION}:{window}",
-        "requested_window": requested_window,
-        "window_reused": reused_window,
-        "window_reused_from_task": reused_task_id or "N/A",
         "profile": profile.get("name"),
         "role": profile.get("role"),
         "persona": profile.get("persona"),
@@ -2716,12 +1445,6 @@ def launch_node(graph_path: Path, graph: dict[str, Any], node: dict[str, Any], a
         "provider": capability.get("provider"),
         "capability_status": capability.get("status"),
         "approval_mode": profile.get("approval_mode"),
-        "operator_id": profile.get("operator_id") or "N/A",
-        "operator_vendor": profile.get("operator_vendor") or capability.get("provider") or "N/A",
-        "operator_model": profile.get("operator_model") or profile.get("model") or "N/A",
-        "operator_pane": profile.get("operator_pane") or "N/A",
-        "operator_quota_refresh_at": profile.get("operator_quota_refresh_at") or "N/A",
-        "operator_fallback_reason": profile.get("operator_fallback_reason") or "",
         "graph": str(graph_path),
         "sprint_id": sid,
         "node_id": node_id,
@@ -2734,72 +1457,12 @@ def launch_node(graph_path: Path, graph: dict[str, Any], node: dict[str, Any], a
         "updated_at": now_iso(),
         "exit_code": None,
     }
-    operator_id = str(profile.get("operator_id") or "")
-
-    # ── Submit path: operator_runtime.submit (guarded by feature flag) ─────────
-    if (
-        not dry_run
-        and OPERATORD_SUBMIT_ENABLED
-        and operator_id
-        and operator_id != "N/A"
-    ):
-        try:
-            import operator_runtime as _opr  # local import to keep legacy path independent
-            envelope = build_task_envelope(
-                dispatch_id=dispatch_id,
-                sprint_id=sid,
-                node_id=node_id,
-                operator_id=operator_id,
-                node=node,
-                dispatch_text=dispatch,
-                graph_path=graph_path,
-                handoff_path=handoff,
-                command=str(profile.get("command") or ""),
-            )
-            submit_result = _opr.submit(envelope)
-            result_path_str = str(
-                HARNESS_DIR / "run" / "operator-results" / operator_id / dispatch_id / "result.json"
-            )
-            payload.update({
-                "status": "submitted",
-                "submit_mode": "operatord",
-                "operator_id": operator_id,
-                "lease_id": submit_result["lease_id"],
-                "inbox_path": submit_result["inbox_path"],
-                "result_path": result_path_str,
-                "submitted_at": submit_result["submitted_at"],
-                "updated_at": now_iso(),
-            })
-            json_write(status_path(task_dir), payload)
-            set_node_status(graph, node_id, "dispatched", pane=f"operatord:{operator_id}", dispatch_id=dispatch_id)
-            save_graph(graph_path, graph)
-            set_last_launch()
-            if OPERATORD_RESULT_TIMEOUT_SEC > 0:
-                result = wait_for_operator_result(
-                    operator_id, dispatch_id,
-                    OPERATORD_RESULT_TIMEOUT_SEC,
-                    OPERATORD_RESULT_POLL_INTERVAL_SEC,
-                )
-                if result is not None:
-                    exit_code = result.get("exit_code")
-                    payload["status"] = "completed" if exit_code == 0 else "failed"
-                    payload["exit_code"] = exit_code
-                else:
-                    payload["status"] = "result_timeout"
-                payload["updated_at"] = now_iso()
-                json_write(status_path(task_dir), payload)
-            return payload
-        except Exception as exc:
-            payload["operator_submit_error"] = str(exc)
-            payload["operator_submit_fallback"] = "legacy"
-
-    # ── Legacy dispatch path (tmux window runner) ────────────────────────────────
     json_write(status_path(task_dir), payload)
     runner = runner_script(task_dir, payload)
 
     if not dry_run:
         try:
-            tmux_start(window, runner, Path.cwd(), reuse=reused_window, reuse_target=reused_window_target)
+            tmux_start(window, runner, Path.cwd())
         except Exception as exc:
             payload["status"] = "failed_launch"
             payload["updated_at"] = now_iso()
@@ -2894,8 +1557,7 @@ def status_snapshot(args: argparse.Namespace) -> dict[str, Any]:
     cooldown_sec = int(getattr(args, "cooldown_sec", DEFAULT_COOLDOWN))
     quota_backoff_sec = int(getattr(args, "quota_backoff_sec", DEFAULT_QUOTA_BACKOFF))
     graph_arg = getattr(args, "graph", [])
-    tasks = list_task_rows()
-    result = {
+    return {
         "guard": launch_guard(max_workers, memory_reserve_gb, cooldown_sec, quota_backoff_sec),
         "launched": [],
         "skipped": [],
@@ -2903,12 +1565,9 @@ def status_snapshot(args: argparse.Namespace) -> dict[str, Any]:
         "panes": list_harness_panes(),
         "dispatches": recent_dispatch_rows(),
         "capability": capability_summary(),
-        "tasks": tasks,
         "observed_at": now_iso(),
         "refresh_mode": "fresh",
     }
-    result["monitor"] = monitor_summary(result, tasks)
-    return result
 
 
 def print_table(headers: list[str], rows: list[list[str]]) -> None:
@@ -2932,13 +1591,12 @@ def render_plain(result: dict[str, Any], no_clear: bool = False) -> None:
         print("\033[H\033[2J", end="")
     guard = result.get("guard") or {}
     mem = free_memory_gb()
-    all_tasks = result.get("tasks") or list_task_rows()
-    tasks = all_tasks[:20]
-    active = [t for t in all_tasks if str(t.get("effective_status") or t.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
-    inventory = task_inventory(all_tasks)
+    tasks = list_task_rows()[:20]
+    active = [t for t in tasks if str(t.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
+    inventory = task_inventory(tasks)
     cap_summary = result.get("capability") or capability_summary()
     mt_live = tmux_session_exists()
-    activity = worker_activity_projection(mt_live, inventory, len(active), bool(all_tasks))
+    data_source = "live" if mt_live and inventory["live"] else ("history:no_multi_task_session" if tasks and not mt_live else "no_live_workers")
     print("Solar Harness Multi-Task · tmux DAG worker pool")
     print("模型组合: " + format_capability_summary_compact(cap_summary))
     print_table(
@@ -2947,28 +1605,15 @@ def render_plain(result: dict[str, Any], no_clear: bool = False) -> None:
             ["session", "ok", SESSION],
             ["harness_panes", "ok" if result.get("panes") else "warn", str(len([p for p in result.get("panes", []) if p.get("plane") != "multi-task"]))],
             ["multi_task_session", "ok" if mt_live else "warn", "live" if mt_live else "missing"],
-            ["active_workers", "ok" if activity["ok"] else "warn", str(activity["active_workers"])],
+            ["active_workers", "ok" if inventory["live"] else "warn", f"{inventory['live']} live / {len(active)} active"],
             ["tracked_tasks", "ok" if tasks and not inventory["stale"] else "warn", f"{inventory['total']} total · history={inventory['historical']} stale={inventory['stale']}"],
-            ["data_source", "ok" if activity["ok"] else "warn", str(activity["data_source"])],
+            ["data_source", "ok" if data_source == "live" else "warn", data_source],
             ["latest_task_age", "ok" if inventory["latest_age"] not in ("N/A",) and not inventory["stale"] else "warn", str(inventory["latest_age"])],
             ["launch_guard", "ok" if guard.get("ok") else "warn", str(guard.get("reason", "N/A"))],
             ["free_memory_gb", "ok" if mem is None or mem >= DEFAULT_MEMORY_RESERVE_GB else "warn", "N/A" if mem is None else f"{mem:.2f}"],
             ["refresh_mode", "ok", str(result.get("refresh_mode") or "cached")],
             ["checked_at", "ok", str(result.get("observed_at") or now_iso())],
         ],
-    )
-
-    monitor = result.get("monitor") or monitor_summary(result, all_tasks)
-    finding_rows = [[
-        _clip_display(str(item.get("severity", "warn")), 8),
-        _clip_display(str(item.get("type", "N/A")), 32),
-        _clip_display(str(item.get("task_id") or item.get("pane") or item.get("sprint_id") or "N/A"), 34),
-        _clip_display(str(item.get("detail") or "N/A"), 52),
-    ] for item in (monitor.get("findings") or [])[:10]]
-    print()
-    print_table(
-        ["级别", "类型", "证据", "detail"],
-        finding_rows or [["ok", "无异常", "N/A", f"data_source={monitor.get('data_source', 'N/A')}"]],
     )
 
     pane_rows = [[
@@ -2987,20 +1632,17 @@ def render_plain(result: dict[str, Any], no_clear: bool = False) -> None:
 
     task_rows = [[
         _clip_display(str(t.get("id", "N/A")), 24),
-        _clip_display(str(t.get("effective_status") or t.get("status", "N/A")), 18),
+        _clip_display(str(t.get("status", "N/A")), 12),
         _clip_display(str(t.get("data_class", "N/A")), 12),
         _clip_display(str(t.get("pane_type", "N/A")), 22),
-        _clip_display(str(t.get("operator_id") or "N/A"), 18),
-        _clip_display(str(t.get("operator_vendor") or t.get("provider") or "N/A"), 12),
-        _clip_display(str(t.get("operator_pane") or "N/A"), 16),
         _clip_display(str(t.get("tmux_status", "N/A")), 10),
         _clip_display(f"{t.get('sprint_id', 'N/A')}#{t.get('node_id', 'N/A')}", 32),
         _clip_display(str(t.get("age", "N/A")), 8),
     ] for t in tasks]
     print()
     print_table(
-        ["multi_task", "status", "class", "pane_type", "operator", "vendor", "op_pane", "tmux", "sprint#node", "age"],
-        task_rows or [["N/A", "pending", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A"]],
+        ["multi_task", "status", "class", "pane_type", "tmux", "sprint#node", "age"],
+        task_rows or [["N/A", "pending", "N/A", "N/A", "N/A", "N/A", "N/A"]],
     )
 
     dispatch_rows = [[
@@ -3060,28 +1702,103 @@ def render_to_lines(result: dict[str, Any]) -> list[str]:
     return buf.getvalue().splitlines()
 
 
-def render_screen_status_lines(view_model: dict[str, Any], width: int, height: int) -> list[str]:
-    """Compact plain-text fallback renderer consuming a v1 view_model.
-
-    Backward compat: if view_model lacks schema_version (old result dict passed),
-    coerces via screen_view_model() for one release. Deprecated after S05.
-    """
-    if "schema_version" not in view_model:
-        view_model = screen_view_model(view_model, argparse.Namespace(), width)
-
+def render_screen_status_lines(result: dict[str, Any], width: int, max_lines: int) -> list[str]:
+    """Compact screen-only view; avoid nesting wide tables inside the screen box."""
     content_width = max(40, width)
-    health = view_model.get("health") or {}
-    panes = view_model.get("panes") or []
-    workers = view_model.get("workers") or {}
-    last_dispatch = view_model.get("last_dispatch") or {}
-    dag = view_model.get("dag") or {}
-    degraded = view_model.get("degraded") or []
+    guard = result.get("guard") or {}
+    cap_summary = result.get("capability") or capability_summary()
+    panes = result.get("panes") or []
+    tasks = list_task_rows()
+    active = [t for t in tasks if str(t.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
+    inventory = task_inventory(tasks)
+    dispatches = result.get("dispatches") or []
+    graphs = result.get("graphs") or []
 
-    def _cap_verdict(label: str) -> str:
-        for c in (health.get("capsules") or []):
-            if c.get("label") == label:
-                return str(c.get("verdict", "N/A"))
-        return "N/A"
+    def role_label(role: str, pane: str) -> str:
+        normalized = role.lower()
+        if normalized == "pm":
+            return "PM"
+        if normalized == "planner":
+            return "PLAN"
+        if normalized == "builder":
+            return "BUILD"
+        if normalized == "evaluator":
+            return "EVAL"
+        if "lab" in normalized:
+            suffix = pane.split(":")[-1].split(".")[-1]
+            return f"LAB{suffix}"
+        return normalized[:5].upper() or "N/A"
+
+    def display_pane_id(pane_id: str, compact: bool = False) -> str:
+        if pane_id.startswith(f"{MAIN_SESSION}:"):
+            suffix = pane_id.split(":", 1)[1].split(".")[-1]
+            return f"main:{suffix}"
+        if pane_id.startswith(f"{LAB_SESSION}:"):
+            suffix = pane_id.split(":", 1)[1].split(".")[-1]
+            return f"lab:{suffix}"
+        return pane_id
+
+    def compact_sprint(value: Any, terse: bool = False) -> str:
+        sid = str(value or "N/A")
+        match = re.match(r"^(?:sprint|epic)-(\d{8})-(.+)$", sid)
+        if not match:
+            return _clip_display(sid, 34)
+        date, tail = match.groups()
+        s_match = re.search(r"(s\d{2}(?:-[a-z0-9]+){0,2})$", tail)
+        if s_match:
+            if terse:
+                return f"{date}/{s_match.group(1).split('-', 1)[0]}"
+            return f"{date}/{s_match.group(1)}"
+        parts = [p for p in tail.split("-") if p]
+        if terse and parts:
+            return f"{date}/{parts[-1]}"
+        return f"{date}/{'-'.join(parts[-3:])}" if parts else date
+
+    def compact_time(value: Any) -> str:
+        text = str(value or "N/A")
+        match = re.search(r"T(\d{2}:\d{2}:\d{2})", text)
+        return match.group(1) if match else text.replace("2026-", "")
+
+    def compact_counts(counts: dict[str, Any]) -> str:
+        aliases = {
+            "active": "act",
+            "dispatched": "disp",
+            "passed": "pass",
+            "pending": "pend",
+            "ready": "ready",
+            "reviewing": "rev",
+            "running": "run",
+        }
+        parts = []
+        for key, value in sorted(counts.items()):
+            parts.append(f"{aliases.get(str(key), str(key)[:4])}:{value}")
+        return ",".join(parts) or "N/A"
+
+    def compact_state(value: Any) -> str:
+        text = str(value or "N/A")
+        if text.startswith("working"):
+            return "work"
+        if text.startswith("ready"):
+            return "ready"
+        return text
+
+    def model_name(value: Any, width_: int) -> str:
+        text = str(value or "N/A")
+        text = text.replace("GLM-5.1", "GLM").replace("Sonnet", "Sonn")
+        return _clip_display(text, width_)
+
+    def pane_row(pane: dict[str, Any] | None, width_: int) -> str:
+        if not pane:
+            return ""
+        pane_id = str(pane.get("pane", "N/A"))
+        role = role_label(str(pane.get("role", "N/A")), pane_id)
+        state = str(pane.get("state", "N/A"))
+        marker = ">" if state.startswith("working") else " "
+        return _clip_display(
+            f"{marker}{role:<5} {_clip_display(display_pane_id(pane_id), 7):<7} "
+            f"{model_name(pane.get('model', 'N/A'), 5):<5} {_clip_display(compact_state(state), 5):<5}",
+            width_,
+        )
 
     def pair(left: str, right: str = "") -> str:
         if content_width < 76:
@@ -3093,347 +1810,87 @@ def render_screen_status_lines(view_model: dict[str, Any], width: int, height: i
             content_width,
         )
 
-    def _vm_pane_row(pane: dict[str, Any] | None, width_: int) -> str:
-        if not pane:
-            return ""
-        label = str(pane.get("label", "N/A"))
-        role = str(pane.get("role", "N/A"))
-        state = str(pane.get("state", "N/A"))
-        model = str(pane.get("model", "N/A")).replace("GLM-5.1", "GLM").replace("Sonnet", "Sonn")
-        marker = str(pane.get("marker", " "))
-        return _clip_display(
-            f"{marker}{role:<5} {_clip_display(label, 7):<7} "
-            f"{_clip_display(model, 5):<5} {_clip_display(state, 5):<5}",
-            width_,
-        )
-
     lines: list[str] = []
-
-    w_active = int(workers.get("active", 0) or 0)
-    w_tracked = int(workers.get("tracked", 0) or 0)
-    degrade_tag = f"  degraded={len(degraded)}" if degraded else ""
+    tmux_state = "live" if tmux_session_exists() else "missing"
+    guard_state = str(guard.get("reason", "N/A"))
+    pane_count = len([p for p in panes if p.get("plane") != "multi-task"])
     lines.append(_clip_display(
-        f"Solar Harness Multi-Task  panes={len(panes)}  live={w_active} tracked={w_tracked}{degrade_tag}",
+        f"Solar Harness Multi-Task  {result.get('refresh_mode', 'cached')}  panes={pane_count}  live={inventory['live']} tracked={inventory['total']} stale={inventory['stale']}",
+        content_width,
+    ))
+    lines.append(_clip_display(
+        f"[{'ok' if tmux_state == 'live' else 'warn'}] mt={tmux_state}  "
+        f"[{'ok' if guard.get('ok') else 'warn'}] guard={guard_state.replace('low_memory', 'low_mem')}  "
+        f"age={inventory['latest_age']} models 可派={len(cap_summary.get('enabled') or [])} "
+        f"ok={cap_summary.get('ok', 0)} warn={cap_summary.get('warn', 0)} err={cap_summary.get('error', 0)}",
         content_width,
     ))
 
-    mt_v = _cap_verdict("tmux")
-    guard_v = _cap_verdict("guard")
-    models_v = _cap_verdict("models")
-    monitor_v = _cap_verdict("monitor")
-    overall_v = str(health.get("verdict", "N/A"))
-    lines.append(_clip_display(
-        f"[{mt_v}] tmux  [{guard_v}] guard  [{models_v}] models  [{monitor_v}] monitor  verdict={overall_v}",
-        content_width,
-    ))
-
-    main_panes = [p for p in panes if p.get("plane") == "main"]
-    lab_panes = [p for p in panes if p.get("plane") == "lab"]
+    main_panes = [p for p in panes if p.get("plane") == "four-pane"]
+    lab_panes = [p for p in panes if p.get("plane") == "builder-lab"]
     lines.append(pair("PANE MAP", "Builder Lab"))
-    max_rows = max(len(main_panes[:4]), len(lab_panes[:4]), 1)
+    max_rows = max(len(main_panes[:4]), len(lab_panes[:4]))
     for idx in range(max_rows):
-        left = _vm_pane_row(main_panes[idx] if idx < len(main_panes) else None, 30)
-        right = _vm_pane_row(lab_panes[idx] if idx < len(lab_panes) else None, 30)
+        left = pane_row(main_panes[idx] if idx < len(main_panes[:4]) else None, 30)
+        right = pane_row(lab_panes[idx] if idx < len(lab_panes[:4]) else None, 30)
         lines.append(pair(left, right))
 
-    if len(lines) < height:
-        counts = workers.get("counts") or {}
-        counts_text = ",".join(f"{k}:{v}" for k, v in sorted(counts.items())) or "N/A"
+    counts_text = ",".join(f"{k}:{v}" for k, v in sorted((inventory.get("statuses") or {}).items())) or "N/A"
+    if tasks and len(lines) < max_lines:
+        worker_line = f"WORKERS live={inventory['live']} active={len(active)} history={inventory['historical']} stale={inventory['stale']} {counts_text}"
+        useful_tasks = [t for t in tasks if str(t.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
+        if not useful_tasks:
+            useful_tasks = sorted(tasks, key=lambda t: str(t.get("updated_at", "")), reverse=True)[:1]
+        if useful_tasks:
+            task = useful_tasks[0]
+            pane_type = str(task.get("pane_type", "N/A")).split(":")[-1]
+            worker_line += f"  latest {task.get('data_class', 'N/A')}:{pane_type}->{compact_sprint(task.get('sprint_id'))}#{task.get('node_id', 'N/A')}"
+        lines.append(_clip_display(worker_line, content_width))
+
+    if dispatches and len(lines) < max_lines:
+        item = dispatches[0]
+        terse = content_width < 90
         lines.append(_clip_display(
-            f"WORKERS active={w_active} tracked={w_tracked}  {counts_text}",
+            f"DISPATCH {compact_time(item.get('time'))} {item.get('role', 'N/A')} "
+            f"{display_pane_id(str(item.get('pane', 'N/A')))} -> {compact_sprint(item.get('sprint'), terse=terse)}#{item.get('node', 'N/A')}",
             content_width,
         ))
 
-    if len(lines) < height:
-        d_time = str(last_dispatch.get("time", "N/A"))
-        d_role = str(last_dispatch.get("role", "N/A"))
-        d_pane = str(last_dispatch.get("pane", "N/A"))
-        d_target = str(last_dispatch.get("target", "N/A"))
+    if graphs and len(lines) < max_lines:
+        graph = graphs[0]
+        counts = compact_counts(graph.get("counts") or {})
+        ready = ",".join(graph.get("ready") or []) or "N/A"
+        terse = content_width < 90
         lines.append(_clip_display(
-            f"LAST {d_time} {d_role} {d_pane} -> {d_target}",
+            f"DAG {compact_sprint(graph.get('sid'), terse=terse)}  {counts}  ready={ready}  用 status 查看完整视图",
             content_width,
         ))
-
-    if len(lines) < height:
-        dag_sprint = str(dag.get("sprint", "N/A"))
-        dag_counts = dag.get("counts") or {}
-        dag_ready = dag.get("ready") or "N/A"
-        if isinstance(dag_ready, list):
-            dag_ready = ",".join(dag_ready) or "N/A"
-        counts_str = " ".join(f"{k}={v}" for k, v in dag_counts.items())
-        lines.append(_clip_display(
-            f"DAG {dag_sprint}  {counts_str}  ready={dag_ready}  用 status 查看完整视图",
-            content_width,
-        ))
-    elif len(lines) < height:
+    elif len(lines) < max_lines:
         lines.append(_clip_display("用 status 查看完整视图", content_width))
 
-    if len(lines) > height:
-        return lines[: max(0, height - 1)] + [_clip_display(f"... 已省略 {len(lines) - height + 1} 行；用 status 查看完整视图", content_width)]
+    if len(lines) > max_lines:
+        return lines[: max(0, max_lines - 1)] + [_clip_display(f"... 已省略 {len(lines) - max_lines + 1} 行；用 status 查看完整视图", content_width)]
     return lines
-
-
-# --- S03 N2: view-model + tvs payload (add-only; existing renderers untouched) ---
-
-SCREEN_VIEW_MODEL_SCHEMA = "multi_task_screen.view_model.v1"
-
-
-def _screen_short_pane(pane_id: str) -> str:
-    text = str(pane_id or "")
-    if text.startswith(f"{MAIN_SESSION}:"):
-        return "main:" + text.split(":", 1)[1].split(".")[-1]
-    if text.startswith(f"{LAB_SESSION}:"):
-        return "lab:" + text.split(":", 1)[1].split(".")[-1]
-    return text or "N/A"
-
-
-def _screen_role_label(role: str, pane_short: str) -> str:
-    norm = str(role or "").lower()
-    if norm == "pm":
-        return "PM"
-    if norm == "planner":
-        return "PLAN"
-    if norm == "builder":
-        return "BUILD"
-    if norm == "evaluator":
-        return "EVAL"
-    if "lab" in norm or pane_short.startswith("lab:"):
-        return "LAB"
-    return (norm[:5].upper() if norm else "N/A")
-
-
-def _screen_state_word(state: str) -> str:
-    s = str(state or "").lower()
-    if s.startswith("working") or s.startswith("running"):
-        return "working"
-    if s.startswith("active"):
-        return "active"
-    if s.startswith("ready"):
-        return "ready"
-    if s.startswith("idle"):
-        return "idle"
-    if s.startswith("block"):
-        return "blocked"
-    if s.startswith("dry"):
-        return "dry_run"
-    if s.startswith("error") or "fail" in s:
-        return "error"
-    if s.startswith("warn"):
-        return "warn"
-    if s.startswith("pend"):
-        return "pending"
-    if s.startswith("ok") or s.startswith("pass"):
-        return "ok"
-    return "idle" if not s else s[:8]
-
-
-def _screen_short_model(model: Any) -> str:
-    text = str(model or "N/A")
-    return text.replace("GLM-5.1", "GLM").replace("Sonnet", "Sonn")[:8] or "N/A"
-
-
-def _screen_short_target(sprint: Any, node: Any) -> str:
-    sid = str(sprint or "")
-    nid = str(node or "")
-    s_match = re.search(r"s(\d{2})", sid)
-    if s_match and nid:
-        return f"S{s_match.group(1)}/{nid}"
-    return nid or sid[:12] or "N/A"
-
-
-def _screen_build_pane(pane: dict[str, Any] | None, plane: str, slot: int) -> dict[str, Any]:
-    if not pane:
-        return {
-            "plane": plane,
-            "slot": slot,
-            "label": f"{plane}:{slot}",
-            "role": "LAB" if plane == "lab" else "N/A",
-            "state": "idle",
-            "model": "N/A",
-            "marker": " ",
-            "low_confidence": True,
-        }
-    short = _screen_short_pane(str(pane.get("pane", "")))
-    state = _screen_state_word(str(pane.get("state", "")))
-    return {
-        "plane": plane,
-        "slot": slot,
-        "label": short or f"{plane}:{slot}",
-        "role": _screen_role_label(str(pane.get("role", "")), short),
-        "state": state,
-        "model": _screen_short_model(pane.get("model", "")),
-        "marker": ">" if state == "working" else " ",
-        "low_confidence": bool(pane.get("low_confidence", False)),
-    }
-
-
-def screen_view_model(result: dict[str, Any], args: argparse.Namespace, width: int) -> dict[str, Any]:
-    """Build the multi-task screen view model (schema v1).
-
-    Single source of truth consumed by both the TVS payload builder and the
-    plain-text fallback renderer. State enum and panes-length=8 are locked
-    by S02 architecture; this function is add-only per S03 N2 contract.
-    """
-    panes_src = result.get("panes") or []
-    guard = result.get("guard") or {}
-    cap_summary = result.get("capability") or {}
-    dispatches = result.get("dispatches") or []
-    graphs = result.get("graphs") or []
-    monitor = result.get("monitor") or {}
-
-    cap_err = int(cap_summary.get("error", 0) or 0)
-    cap_warn = int(cap_summary.get("warn", 0) or 0)
-    guard_ok = bool(guard.get("ok"))
-    monitor_status = str(monitor.get("status") or "ok")
-    overall_verdict = "error" if cap_err or monitor_status == "error" else ("warn" if (cap_warn or not guard_ok or monitor_status == "warn") else "ok")
-    tmux_live = tmux_session_exists()
-    capsules = [
-        {"label": "models", "verdict": "ok" if cap_err == 0 else ("warn" if cap_warn else "error")},
-        {"label": "guard", "verdict": "ok" if guard_ok else "warn"},
-        {"label": "tmux", "verdict": "ok" if tmux_live else "warn"},
-        {"label": "monitor", "verdict": monitor_status},
-    ]
-
-    main_src = [p for p in panes_src if p.get("plane") == "four-pane"][:4]
-    lab_src = [p for p in panes_src if p.get("plane") == "builder-lab"][:4]
-    panes_out: list[dict[str, Any]] = []
-    for i in range(4):
-        panes_out.append(_screen_build_pane(main_src[i] if i < len(main_src) else None, "main", i))
-    for i in range(4):
-        panes_out.append(_screen_build_pane(lab_src[i] if i < len(lab_src) else None, "lab", i))
-
-    tasks = result.get("tasks") or list_task_rows()
-    inventory = task_inventory(tasks)
-    statuses = inventory.get("statuses") or {}
-    active_tasks = [t for t in tasks if str(t.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
-    workers = {
-        "active": len(active_tasks),
-        "tracked": int(inventory.get("total", 0) or 0),
-        "counts": {
-            "dry_run": int(statuses.get("dry_run", 0) or 0),
-            "live": int(inventory.get("live", 0) or 0),
-            "idle": int(statuses.get("idle", 0) or 0),
-            "blocked": int(statuses.get("blocked", 0) or 0),
-        },
-    }
-
-    last_dispatch: dict[str, Any] = {"time": "N/A", "role": "N/A", "pane": "N/A", "target": "N/A"}
-    if dispatches:
-        d = dispatches[0]
-        match = re.search(r"T?(\d{2}:\d{2})", str(d.get("time", "")))
-        last_dispatch = {
-            "time": match.group(1) if match else "N/A",
-            "role": str(d.get("role", "N/A")),
-            "pane": _screen_short_pane(str(d.get("pane", "N/A"))),
-            "target": _screen_short_target(d.get("sprint"), d.get("node")),
-        }
-
-    dag: dict[str, Any] = {"sprint": "N/A", "counts": {"pass": 0, "pending": 0, "reviewing": 0}, "ready": "N/A"}
-    if graphs:
-        g = graphs[0]
-        sid = str(g.get("sid", "N/A"))
-        s_match = re.search(r"s(\d{2})", sid)
-        gc = g.get("counts") or {}
-        dag = {
-            "sprint": f"S{s_match.group(1)}" if s_match else sid[:12],
-            "counts": {
-                "pass": int(gc.get("passed", 0) or 0),
-                "pending": int(gc.get("pending", 0) or 0),
-                "reviewing": int(gc.get("reviewing", 0) or 0),
-            },
-            "ready": g.get("ready") or "N/A",
-        }
-
-    degraded: list[dict[str, Any]] = []
-    if not tmux_live:
-        degraded.append({"source": "multi_task_session", "reason": "tmux_not_live"})
-    if not panes_src:
-        degraded.append({"source": "panes", "reason": "empty"})
-    for finding in (monitor.get("findings") or [])[:5]:
-        degraded.append({
-            "source": str(finding.get("type") or "monitor"),
-            "reason": str(finding.get("detail") or finding.get("severity") or "N/A"),
-        })
-
-    return {
-        "schema_version": SCREEN_VIEW_MODEL_SCHEMA,
-        "generated_at": now_iso(),
-        "health": {"verdict": overall_verdict, "capsules": capsules},
-        "panes": panes_out,
-        "workers": workers,
-        "last_dispatch": last_dispatch,
-        "dag": dag,
-        "degraded": degraded,
-    }
-
-
-def screen_tvs_payload(view_model: dict[str, Any], args: argparse.Namespace, width: int) -> dict[str, Any]:
-    """Build the TVS section payload from a v1 view_model (S03 N2).
-
-    Consumes view_model only; does NOT fetch fresh data. Caller passes a
-    view_model produced by screen_view_model so both render paths share a
-    single source of truth.
-    """
-    panes = view_model.get("panes") or []
-    pane_rows = [{
-        "pane": str(p.get("label", "N/A")),
-        "role": str(p.get("role", "N/A")),
-        "state": str(p.get("state", "N/A")),
-        "model": str(p.get("model", "N/A")),
-        "marker": str(p.get("marker", " ")),
-    } for p in panes]
-    capsules = (view_model.get("health") or {}).get("capsules") or []
-    return {
-        "kind": "screen.v2",
-        "width": int(width),
-        "sections": [
-            {"id": "header", "type": "capsules", "data": capsules},
-            {"id": "pane-map", "type": "table", "data": pane_rows},
-            {"id": "workers", "type": "kv", "data": view_model.get("workers") or {}},
-            {"id": "dispatch", "type": "kv", "data": view_model.get("last_dispatch") or {}},
-            {"id": "dag", "type": "kv", "data": view_model.get("dag") or {}},
-        ],
-    }
-
-
-# --- end S03 N2 ---
-
-
-# --- S03 N3: TVS dispatch stubs + draw_screen reroute ---
-
-def _tvs_available(args: argparse.Namespace) -> bool:
-    """Return True when the TVS render backend is loaded and usable. Stub: always False until TVS is wired (post-S03)."""
-    return False
-
-
-def _tvs_render(payload: dict[str, Any], height: int) -> None:
-    """Dispatch a screen.v2 TVS payload to the TVS backend. Stub: no-op until TVS is wired (post-S03)."""
-
-
-# --- end S03 N3 ---
 
 
 def tvs_payload(result: dict[str, Any], width: int = 100) -> dict[str, Any]:
     guard = result.get("guard") or {}
     mem = free_memory_gb()
-    all_tasks = result.get("tasks") or list_task_rows()
-    tasks = all_tasks[:20]
-    active = [t for t in all_tasks if str(t.get("effective_status") or t.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
-    inventory = task_inventory(all_tasks)
+    tasks = list_task_rows()[:20]
+    active = [t for t in tasks if str(t.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
+    inventory = task_inventory(tasks)
     tmux_live = tmux_session_exists()
     cap_summary = result.get("capability") or capability_summary()
-    activity = worker_activity_projection(tmux_live, inventory, len(active), bool(all_tasks))
+    data_source = "live" if tmux_live and inventory["live"] else ("history:no_multi_task_session" if tasks and not tmux_live else "no_live_workers")
     task_rows = [{
         "task": _clip_display(str(t.get("id", "N/A")).replace("mt-", ""), 18),
         "state": _clip_display(f"{t.get('status', 'N/A')}/{t.get('tmux_status', 'N/A')}", 16),
         "class": _clip_display(str(t.get("data_class", "N/A")), 12),
         "pane_type": _clip_display(str(t.get("pane_type", "N/A")), 16),
-        "operator": _clip_display(str(t.get("operator_id") or "N/A"), 16),
-        "vendor": _clip_display(str(t.get("operator_vendor") or t.get("provider") or "N/A"), 10),
         "sprint_node": _clip_display(f"{t.get('sprint_id', 'N/A')}#{t.get('node_id', 'N/A')}", 28),
         "age": _clip_display(str(t.get("age", "N/A")), 8),
     } for t in tasks] or [{
-        "task": "N/A", "state": "pending", "class": "N/A", "pane_type": "N/A", "operator": "N/A", "vendor": "N/A", "sprint_node": "N/A", "age": "N/A",
+        "task": "N/A", "state": "pending", "class": "N/A", "pane_type": "N/A", "sprint_node": "N/A", "age": "N/A",
     }]
 
     pane_rows = [{
@@ -3470,19 +1927,6 @@ def tvs_payload(result: dict[str, Any], width: int = 100) -> dict[str, Any]:
     if not graph_rows:
         graph_rows = [{"sprint": "N/A", "desc": "N/A", "status": "pending", "node_counts": "N/A", "ready": "N/A", "graph_updated": "N/A"}]
 
-    monitor = result.get("monitor") or monitor_summary(result, all_tasks)
-    monitor_rows = [{
-        "severity": _clip_display(str(item.get("severity", "warn")), 8),
-        "type": _clip_display(str(item.get("type", "N/A")), 30),
-        "evidence": _clip_display(str(item.get("task_id") or item.get("pane") or item.get("sprint_id") or "N/A"), 28),
-        "detail": _clip_display(str(item.get("detail") or "N/A"), 42),
-    } for item in (monitor.get("findings") or [])[:10]] or [{
-        "severity": "ok",
-        "type": "无异常",
-        "evidence": "N/A",
-        "detail": f"data_source={monitor.get('data_source', 'N/A')}",
-    }]
-
     sections: list[dict[str, Any]] = [
         {
             "type": "kv",
@@ -3490,28 +1934,16 @@ def tvs_payload(result: dict[str, Any], width: int = 100) -> dict[str, Any]:
                 {"key": "session", "value": SESSION},
                 {"key": "harness_panes", "value": str(len([p for p in result.get("panes", []) if p.get("plane") != "multi-task"])), "status": "success" if result.get("panes") else "warning"},
                 {"key": "multi_task_session", "value": "live" if tmux_live else "missing", "status": "success" if tmux_live else "warning"},
-                {"key": "active_workers", "value": str(activity["active_workers"]), "status": "success" if activity["ok"] else "warning"},
+                {"key": "active_workers", "value": f"{inventory['live']} live / {len(active)} active", "status": "success" if inventory["live"] else "warning"},
                 {"key": "tracked_tasks", "value": f"{inventory['total']} total · history={inventory['historical']} stale={inventory['stale']}", "status": "warning" if inventory["stale"] or not tasks else "success"},
-                {"key": "data_source", "value": str(activity["data_source"]), "status": "success" if activity["ok"] else "warning"},
+                {"key": "data_source", "value": data_source, "status": "success" if data_source == "live" else "warning"},
                 {"key": "latest_task_age", "value": str(inventory["latest_age"]), "status": "warning" if inventory["stale"] or inventory["latest_age"] == "N/A" else "success"},
                 {"key": "launch_guard", "value": str(guard.get("reason", "N/A")), "status": "success" if guard.get("ok") else "warning"},
                 {"key": "model_matrix", "value": format_capability_summary_compact(cap_summary), "status": "success" if cap_summary.get("error", 0) == 0 else "warning"},
                 {"key": "free_memory_gb", "value": "N/A" if mem is None else f"{mem:.2f}", "status": "success" if mem is None or mem >= DEFAULT_MEMORY_RESERVE_GB else "warning"},
-                {"key": "monitor_status", "value": str(monitor.get("status", "N/A")), "status": "success" if monitor.get("status") == "ok" else ("error" if monitor.get("status") == "error" else "warning")},
                 {"key": "refresh_mode", "value": str(result.get("refresh_mode") or "cached")},
                 {"key": "checked_at", "value": str(result.get("observed_at") or now_iso())},
             ],
-        },
-        {
-            "type": "table",
-            "columns": [
-                {"key": "severity", "label": "级别", "width": 8},
-                {"key": "type", "label": "类型", "width": 28},
-                {"key": "evidence", "label": "证据", "width": 24},
-                {"key": "detail", "label": "detail", "width": 34},
-            ],
-            "rows": monitor_rows,
-            "border": "minimal",
         },
         {
             "type": "table",
@@ -3533,9 +1965,7 @@ def tvs_payload(result: dict[str, Any], width: int = 100) -> dict[str, Any]:
                 {"key": "state", "label": "state", "width": 14},
                 {"key": "class", "label": "class", "width": 10},
                 {"key": "pane_type", "label": "pane_type", "width": 16},
-                {"key": "operator", "label": "operator", "width": 14},
-                {"key": "vendor", "label": "vendor", "width": 9},
-                {"key": "sprint_node", "label": "sprint#node", "width": 22},
+                {"key": "sprint_node", "label": "sprint#node", "width": 26},
                 {"key": "age", "label": "age", "width": 8},
             ],
             "rows": task_rows,
@@ -4031,14 +2461,7 @@ def draw_screen(result: dict[str, Any], messages: list[str], args: argparse.Name
         bottom_h = max(3, available - top_h)
     if not args.no_clear and sys.stdout.isatty():
         print("\033[H\033[2J", end="")
-    content_cols = max(40, cols - 4)
-    view_model = screen_view_model(result, args, content_cols)
-    if _tvs_available(args):
-        payload = screen_tvs_payload(view_model, args, content_cols)
-        _tvs_render(payload, top_h)
-    else:
-        status_lines = render_screen_status_lines(view_model, content_cols, max(1, top_h - 2))
-        print("\n".join(_box_lines("后台 pane 状态 / DAG worker 池", status_lines, cols, top_h)))
+    status_lines = render_screen_status_lines(result, max(40, cols - 4), max(1, top_h - 2))
     fixed_input_lines = [
         _screen_selection_line(args),
         "输入: 自然语言需求 / status / profiles / doctor / foreground latest / logs latest / q",
@@ -4047,6 +2470,7 @@ def draw_screen(result: dict[str, Any], messages: list[str], args: argparse.Name
     input_body_height = max(0, bottom_h - 2)
     message_slots = max(1, input_body_height - len(fixed_input_lines))
     input_lines = fixed_input_lines + messages[-message_slots:]
+    print("\n".join(_box_lines("后台 pane 状态 / DAG worker 池", status_lines, cols, top_h)))
     print("\n".join(_box_lines("自然语言指令 / Intent Engine 输入区", input_lines, cols, bottom_h)))
     print("solar> ", end="", flush=True)
 
@@ -4152,10 +2576,10 @@ def attach_or_log(task_id_value: str, attach: bool) -> int:
         return 1
     task_id_value = str(status.get("id") or task_id_value)
     if attach:
-        window = str(status.get("window_target") or f"{SESSION}:{str(status.get('window') or '')}")
+        window = str(status.get("window") or "")
         if sys.stdout.isatty():
-            return subprocess.call(["tmux", "attach", "-t", window])
-        print(f"tmux attach -t {window}")
+            return subprocess.call(["tmux", "attach", "-t", f"{SESSION}:{window}"])
+        print(f"tmux attach -t {SESSION}:{window}")
         return 0
     log = RUN_DIR / task_id_value / "output.log"
     if not log.exists():
@@ -4172,8 +2596,7 @@ def cancel(task_id_value: str) -> int:
         return 1
     task_id_value = str(status.get("id") or task_id_value)
     window = str(status.get("window") or "")
-    window_target = str(status.get("window_target") or f"{SESSION}:{window}")
-    subprocess.run(["tmux", "kill-window", "-t", window_target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["tmux", "kill-window", "-t", f"{SESSION}:{window}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     status["status"] = "cancelled"
     status["updated_at"] = now_iso()
     json_write(RUN_DIR / task_id_value / "status.json", status)
@@ -4196,10 +2619,10 @@ def reap_tasks(ttl_min: int, stale_active_min: int, dry_run: bool) -> dict[str, 
     kept: list[dict[str, Any]] = []
     for status in list_task_rows():
         task = str(status.get("id") or "")
-        current = str(status.get("effective_status") or status.get("status") or "").lower()
+        current = str(status.get("status") or "").lower()
         updated_ts = parse_iso(str(status.get("updated_at") or status.get("created_at") or ""))
         age = None if updated_ts is None else now - updated_ts
-        terminal_old = current in EFFECTIVE_TERMINAL_TASK_STATUSES and age is not None and age >= ttl
+        terminal_old = current in TERMINAL_TASK_STATUSES and age is not None and age >= ttl
         stale_active = stale_ttl > 0 and current in ACTIVE_TASK_STATUSES and age is not None and age >= stale_ttl
         if not terminal_old and not stale_active:
             kept.append({"id": task, "status": current or "N/A", "age_s": None if age is None else int(age)})
@@ -4207,9 +2630,8 @@ def reap_tasks(ttl_min: int, stale_active_min: int, dry_run: bool) -> dict[str, 
         window = str(status.get("window") or "")
         action = "dry-run"
         if not dry_run and window:
-            window_target = str(status.get("window_target") or f"{SESSION}:{window}")
-            rc = subprocess.run(["tmux", "kill-window", "-t", window_target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
-            action = "killed-window" if rc == 0 else "missing-window"
+            subprocess.run(["tmux", "kill-window", "-t", f"{SESSION}:{window}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            action = "killed-window"
         elif not dry_run:
             action = "no-window"
         if not dry_run:
@@ -4262,7 +2684,6 @@ def build_parser() -> argparse.ArgumentParser:
     status = sub.add_parser("status", help="show current scheduler summary")
     status.add_argument("--graph", action="append", default=[])
     status.add_argument("--no-clear", action="store_true")
-    status.add_argument("--json", action="store_true", help="emit machine-readable status snapshot")
     status.add_argument("--renderer", choices=["tvs", "plain"], default=os.environ.get("SOLAR_MULTI_TASK_RENDERER", "tvs"))
 
     logs = sub.add_parser("logs", help="show task log")
@@ -4278,14 +2699,6 @@ def build_parser() -> argparse.ArgumentParser:
     reap_p.add_argument("--ttl-min", type=int, default=int(os.environ.get("SOLAR_MULTI_TASK_REAP_TTL_MIN", "120") or "120"))
     reap_p.add_argument("--stale-active-min", type=int, default=int(os.environ.get("SOLAR_MULTI_TASK_STALE_ACTIVE_MIN", "0") or "0"))
     reap_p.add_argument("--dry-run", action="store_true")
-    shrink_p = sub.add_parser("shrink-idle", help="prune reusable idle/orphan multi-task shell windows")
-    shrink_p.add_argument("--target-keep", type=int, default=IDLE_WINDOW_POOL_TARGET)
-    shrink_p.add_argument("--dry-run", action="store_true")
-    compact_p = sub.add_parser("compact-session", help="safely close historical active shells and compact the multi-task session")
-    compact_p.add_argument("--target-keep", type=int, default=IDLE_WINDOW_POOL_TARGET)
-    compact_p.add_argument("--dry-run", action="store_true")
-    anchor_p = sub.add_parser("detach-and-anchor", help="select the neutral anchor window for the multi-task session")
-    anchor_p.add_argument("--dry-run", action="store_true")
     probe_p = sub.add_parser("probe", help="run a minimal real model call for one worker profile")
     probe_p.add_argument("profile", help=f"worker profile: {','.join(profile_names())}")
     probe_p.add_argument("--timeout-sec", type=int, default=90)
@@ -4322,45 +2735,6 @@ def main(argv: list[str] | None = None) -> int:
         if not rows:
             rows = [["N/A", "N/A", "N/A", "N/A", "none"]]
         print_table(["task", "old_status", "age_s", "window", "action"], rows)
-        return 0
-    if args.cmd == "shrink-idle":
-        result = prune_idle_tmux_windows(args.target_keep, args.dry_run)
-        rows = [[
-            str(row.get("window", "N/A"))[:48],
-            str(row.get("kind", "N/A")),
-            str(row.get("effective_status", "N/A")),
-            str(row.get("task_id", "N/A"))[:36],
-            str(row.get("action", "N/A")),
-        ] for row in result.get("killed", [])]
-        if not rows:
-            rows = [["N/A", "N/A", "N/A", "N/A", "none"]]
-        print_table(["window", "kind", "status", "task", "action"], rows)
-        return 0
-    if args.cmd == "compact-session":
-        result = compact_tmux_session(args.target_keep, args.dry_run, cwd=Path.cwd())
-        rows = [[
-            str(row.get("window", "N/A"))[:48],
-            str(row.get("task_id", "N/A"))[:36],
-            str(row.get("action", "N/A")),
-        ] for row in result.get("closed", [])]
-        if not rows:
-            rows = [["N/A", "N/A", "none"]]
-        print_table(["window", "task", "close"], rows)
-        switch_rows = [[
-            str(row.get("tty", "N/A"))[:18],
-            str(row.get("from_window_id", "N/A")),
-            str(row.get("to_target", "N/A"))[:28],
-            str(row.get("action", "N/A")),
-        ] for row in result.get("switches", [])]
-        print()
-        print_table(["tty", "from", "to", "action"], switch_rows or [["N/A", "N/A", "N/A", "none"]])
-        return 0
-    if args.cmd == "detach-and-anchor":
-        result = detach_and_anchor(cwd=Path.cwd(), dry_run=args.dry_run)
-        print_table(
-            ["target", "created_anchor", "action"],
-            [[str(result.get("target", "N/A")), str(result.get("created_anchor", False)), str(result.get("action", "N/A"))]],
-        )
         return 0
     if args.cmd == "probe":
         try:
@@ -4433,11 +2807,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     if args.cmd == "status":
-        result = status_snapshot(args)
-        if getattr(args, "json", False):
-            print(json.dumps(result, ensure_ascii=False, indent=2))
-            return 0
-        render_result(result, args)
+        render_result(status_snapshot(args), args)
         return 0
     if args.cmd == "screen":
         return screen_loop(args)

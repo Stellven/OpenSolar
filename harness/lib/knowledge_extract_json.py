@@ -22,6 +22,31 @@ DEFAULT_ENDPOINT = os.environ.get("THUNDEROMLX_BASE_URL", "http://127.0.0.1:8002
 DEFAULT_PROXY_MODEL = os.environ.get("THUNDEROMLX_KNOWLEDGE_MODEL", "Qwen3.6-35b-a3b")
 DEFAULT_LOCAL_MODEL = os.environ.get("THUNDEROMLX_LOCAL_MODEL", "ThunderOMLX backend")
 DEFAULT_SETTINGS = Path(os.environ.get("THUNDEROMLX_SETTINGS", str(Path.home() / ".omlx" / "settings.json"))).expanduser()
+DEFAULT_THUNDEROMLX_PAUSE_FILE = Path.home() / ".omlx" / "run" / "maintenance.json"
+
+
+def thunderomlx_pause_state(args: argparse.Namespace) -> dict[str, Any] | None:
+    path = Path(getattr(args, "pause_file", "") or DEFAULT_THUNDEROMLX_PAUSE_FILE).expanduser()
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {"enabled": True, "mode": "ingest_pause", "reason": f"unreadable pause file: {exc}", "path": str(path)}
+    if not isinstance(data, dict) or not data.get("enabled", True):
+        return None
+    mode = str(data.get("mode") or "ingest_pause")
+    if mode not in {"ingest_pause", "all"}:
+        return None
+    until = data.get("until")
+    if until:
+        try:
+            if float(until) <= time.time():
+                return None
+        except (TypeError, ValueError):
+            pass
+    data["path"] = str(path)
+    return data
 
 
 def default_api_key() -> str:
@@ -197,6 +222,10 @@ def _messages_payload(messages: list[dict[str, str]], args: argparse.Namespace) 
 
 
 def call_thunderomlx(messages: list[dict[str, str]], args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any]]:
+    pause = thunderomlx_pause_state(args)
+    if pause:
+        reason = pause.get("reason") or pause.get("path") or "maintenance pause active"
+        raise RuntimeError(f"ThunderOMLX maintenance pause active: {reason}")
     started = time.monotonic()
     base = args.endpoint.rstrip("/")
     backend = "chat_completions"
@@ -231,6 +260,16 @@ def enrich_candidate(candidate: dict[str, Any], sidecar: dict[str, Any], args: a
 
 
 def cmd_extract_sidecar(args: argparse.Namespace) -> int:
+    if not args.mock:
+        pause = thunderomlx_pause_state(args)
+        if pause:
+            print(json.dumps({
+                "ok": True,
+                "status": "paused",
+                "reason": pause.get("reason") or pause.get("path") or "ThunderOMLX maintenance pause active",
+                "mode": pause.get("mode", "ingest_pause"),
+            }, ensure_ascii=False, indent=2, sort_keys=True))
+            return 0
     sidecar_path = Path(args.sidecar).expanduser()
     sidecar = load_sidecar(sidecar_path)
     output_dir = Path(args.output_dir).expanduser()
@@ -294,6 +333,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-tokens", type=int, default=2400)
     parser.add_argument("--timeout-sec", type=int, default=900)
     parser.add_argument("--max-spans", type=int, default=20)
+    parser.add_argument("--pause-file", default=os.environ.get("THUNDEROMLX_MAINTENANCE_FILE", str(DEFAULT_THUNDEROMLX_PAUSE_FILE)))
     sub = parser.add_subparsers(dest="cmd", required=True)
     one = sub.add_parser("extract-sidecar")
     one.add_argument("--sidecar", required=True)

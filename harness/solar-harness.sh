@@ -396,13 +396,17 @@ pane_footer_label() {
   printf "%s | 能力:K/I/S/G/A" "$base"
 }
 
+product_delivery_monitor_command() {
+  printf '%s' "$HOME/.solar/bin/solar-harness multi-task screen --dry-run --interval 30 --max-workers 2 --no-clear"
+}
+
 configure_product_delivery_labels() {
   tmux has-session -t "$SESSION_NAME" 2>/dev/null || return 0
   tmux rename-window -t "$SESSION_NAME:0" "Product Delivery" 2>/dev/null || true
   configure_role_footer_style "$SESSION_NAME" "#89b4fa"
   tmux select-pane -t "$SESSION_NAME:0.0" -T "$(pane_footer_label pm "PM 产品经理")" 2>/dev/null || true
   tmux select-pane -t "$SESSION_NAME:0.1" -T "$(pane_footer_label planner "Planner 规划者")" 2>/dev/null || true
-  tmux select-pane -t "$SESSION_NAME:0.2" -T "$(pane_footer_label builder "Builder 主建设者")" 2>/dev/null || true
+  tmux select-pane -t "$SESSION_NAME:0.2" -T "$(pane_footer_label observer "Monitor 监控台")" 2>/dev/null || true
   tmux select-pane -t "$SESSION_NAME:0.3" -T "$(pane_footer_label evaluator "Evaluator 审判官")" 2>/dev/null || true
 }
 
@@ -425,10 +429,12 @@ warn_if_product_delivery_layout_incomplete() {
 
 apply_product_delivery_models() {
   tmux has-session -t "$SESSION_NAME" 2>/dev/null || { warn "主屏未运行: $SESSION_NAME"; return 0; }
-  local personas=(pm planner builder evaluator)
+  local personas=(pm planner monitor evaluator)
   local panes=("$SESSION_NAME:Product Delivery.0" "$SESSION_NAME:Product Delivery.1" "$SESSION_NAME:Product Delivery.2" "$SESSION_NAME:Product Delivery.3")
   local i target persona pane_id work_dir _esc_harness _esc_work
   _esc_harness=$(printf '%q' "$HARNESS_DIR")
+  local _monitor_cmd
+  _monitor_cmd="$(product_delivery_monitor_command)"
   for i in 0 1 2 3; do
     target="${panes[$i]}"
     persona="${personas[$i]}"
@@ -436,7 +442,11 @@ apply_product_delivery_models() {
     pane_id=$(tmux display-message -p -t "$target" '#{pane_id}' 2>/dev/null || true)
     work_dir=$(tmux display-message -p -t "$target" '#{pane_current_path}' 2>/dev/null || pwd)
     _esc_work=$(printf '%q' "$work_dir")
-    tmux respawn-pane -k -t "$target" "$(claude_clean_env_prefix) TMUX_PANE=${pane_id} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" 2>/dev/null || true
+    if [[ "$persona" == "monitor" ]]; then
+      tmux respawn-pane -k -t "$target" "TMUX_PANE=${pane_id} SOLAR_CLAUDE_BYPASS=1 exec ${_monitor_cmd}" 2>/dev/null || true
+    else
+      tmux respawn-pane -k -t "$target" "$(claude_clean_env_prefix) TMUX_PANE=${pane_id} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" 2>/dev/null || true
+    fi
     sleep 0.3
   done
   configure_product_delivery_labels
@@ -724,8 +734,8 @@ start_harness() {
   # │   产品经理    │   规划者      │
   # │   pm         │   planner    │
   # ├──────────────┼──────────────┤
-  # │   建设者      │   审判官      │
-  # │   builder    │   evaluator  │
+  # │   监控台      │   审判官      │
+  # │   monitor    │   evaluator  │
   # └──────────────┴──────────────┘
   # ================================================================
 
@@ -753,24 +763,27 @@ start_harness() {
   local _esc_harness _esc_work
   _esc_harness=$(printf '%q' "$HARNESS_DIR")
   _esc_work=$(printf '%q' "$work_dir")
+  local _monitor_cmd
+  _monitor_cmd="$(product_delivery_monitor_command)"
   launch_persona_pane() {
     local target="$1" persona="$2"
     local pane_id
     pane_id=$(tmux display-message -p -t "$target" '#{pane_id}')
-    tmux send-keys -t "$target" "$(claude_clean_env_prefix) TMUX_PANE=${pane_id} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" Enter
+    if [[ "$persona" == "monitor" ]]; then
+      tmux send-keys -t "$target" "TMUX_PANE=${pane_id} SOLAR_CLAUDE_BYPASS=1 exec ${_monitor_cmd}" Enter
+    else
+      tmux send-keys -t "$target" "$(claude_clean_env_prefix) TMUX_PANE=${pane_id} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" Enter
+    fi
   }
   sleep 1
   launch_persona_pane "$SESSION_NAME:Product Delivery.0" "pm"
   sleep 1
   launch_persona_pane "$SESSION_NAME:Product Delivery.1" "planner"
+  sleep 1
+  launch_persona_pane "$SESSION_NAME:Product Delivery.2" "monitor"
   if [[ "$mode" == "3" ]]; then
     sleep 1
-    launch_persona_pane "$SESSION_NAME:Product Delivery.2" "builder"
-    sleep 1
     launch_persona_pane "$SESSION_NAME:Product Delivery.3" "evaluator"
-  else
-    sleep 1
-    launch_persona_pane "$SESSION_NAME:Product Delivery.2" "builder"
   fi
 
   # 设置活跃 pane 为 PM (非监控)
@@ -799,8 +812,8 @@ start_harness() {
     echo "  │   产品经理    │   规划者      │"
     echo "  │   pm         │   planner    │"
     echo "  ├──────────────┼──────────────┤"
-    echo "  │   建设者      │   审判官      │"
-    echo "  │   builder    │   evaluator  │"
+    echo "  │   监控台      │   审判官      │"
+    echo "  │   monitor    │   evaluator  │"
     echo "  └──────────────┴──────────────┘"
   else
     echo "  布局 (三分屏):"
@@ -809,7 +822,7 @@ start_harness() {
     echo "  │   产品经理    │   规划者      │"
     echo "  │   pm         │   planner    │"
     echo "  ├──────────────┴──────────────┤"
-    echo "  │         建设者 builder       │"
+    echo "  │        监控台 monitor        │"
     echo "  └─────────────────────────────┘"
   fi
   echo ""
@@ -1558,7 +1571,7 @@ wake_sprint() {
     sleep 1
     tmux send-keys -t "$SESSION_NAME:0.1" "$(claude_clean_env_prefix) SOLAR_CLAUDE_BYPASS=1 bash ${_esc_h}/pane-launcher.sh planner ${_esc_w}" Enter
     sleep 1
-    tmux send-keys -t "$SESSION_NAME:0.2" "$(claude_clean_env_prefix) SOLAR_CLAUDE_BYPASS=1 bash ${_esc_h}/pane-launcher.sh builder ${_esc_w}" Enter
+    tmux send-keys -t "$SESSION_NAME:0.2" "SOLAR_CLAUDE_BYPASS=1 exec $(product_delivery_monitor_command)" Enter
     sleep 1
     tmux send-keys -t "$SESSION_NAME:0.3" "$(claude_clean_env_prefix) SOLAR_CLAUDE_BYPASS=1 bash ${_esc_h}/pane-launcher.sh evaluator ${_esc_w}" Enter
     sleep 1
@@ -2527,7 +2540,7 @@ do_models_command() {
       ;;
     set-main)
       local alias="${1:-}"
-      [[ -n "$alias" ]] || { err "用法: $0 models set-main <opus|anthropic-sonnet> [--apply]"; exit 1; }
+      [[ -n "$alias" ]] || { err "用法: $0 models set-main <opus|anthropic-sonnet|glm> [--apply]"; exit 1; }
       solar_set_main_model "$alias"
       ok "已写入主屏模型: pm/planner/builder/evaluator -> $alias"
       if [[ "${2:-}" == "--apply" ]]; then
@@ -4353,7 +4366,11 @@ EOF
           err "knowledge_qmd_indexer.py not found: $_kqi"
           exit 1
         fi
-        python3 "$_kqi" "$@" watermarks
+        if [[ "$#" -eq 0 || "$1" == --* ]]; then
+          python3 "$_kqi" "$@" watermarks
+        else
+          python3 "$_kqi" "$@"
+        fi
         ;;
       qmd-microbatch)
         _kqi="$HARNESS_DIR/lib/knowledge_qmd_indexer.py"

@@ -12,16 +12,20 @@ changed-only by default.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as dt
+import fcntl
 import hashlib
 import json
 import os
 import re
+import sqlite3
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +36,9 @@ DEFAULT_LOCAL_MODEL = "ThunderOMLX Qwen3.6 local"
 DEFAULT_PROFILE = "knowledge-extractor"
 PROMPT_VERSION = "knowledge-extract-v2"
 SCHEMA_VERSION = "extracted-md-v1"
+DEFAULT_REGISTRY_DB = Path.home() / "Knowledge" / "_registry" / "knowledge_ingest.sqlite"
+DEFAULT_THUNDEROMLX_PAUSE_FILE = Path.home() / ".omlx" / "run" / "maintenance.json"
+LOCK_EXIT_CODE = 75
 
 
 def now_iso() -> str:
@@ -40,6 +47,11 @@ def now_iso() -> str:
 
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def stable_id(prefix: str, *parts: str) -> str:
+    digest = sha256_bytes("\0".join(parts).encode("utf-8"))[:24]
+    return f"{prefix}_{digest}"
 
 
 def safe_name(text: str) -> str:
@@ -52,6 +64,52 @@ def resolve_vault(raw: str | None) -> Path:
     if raw:
         return Path(raw).expanduser()
     return Path(os.environ.get("OBSIDIAN_VAULT_PATH", str(Path.home() / "Knowledge"))).expanduser()
+
+
+def thunderomlx_pause_state(args: argparse.Namespace) -> dict[str, Any] | None:
+    path = Path(getattr(args, "pause_file", "") or DEFAULT_THUNDEROMLX_PAUSE_FILE).expanduser()
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {
+            "enabled": True,
+            "mode": "ingest_pause",
+            "reason": f"unreadable pause file: {exc}",
+            "path": str(path),
+        }
+    if not isinstance(data, dict) or not data.get("enabled", True):
+        return None
+    mode = str(data.get("mode") or "ingest_pause")
+    if mode not in {"ingest_pause", "all"}:
+        return None
+    until = data.get("until")
+    if until:
+        try:
+            if float(until) <= time.time():
+                return None
+        except (TypeError, ValueError):
+            pass
+    data["path"] = str(path)
+    return data
+
+
+def maybe_exit_for_thunderomlx_pause(args: argparse.Namespace) -> bool:
+    state = thunderomlx_pause_state(args)
+    if not state:
+        return False
+    summary = {
+        "ok": True,
+        "status": "paused",
+        "reason": state.get("reason") or "ThunderOMLX maintenance window active",
+        "pause_file": state.get("path"),
+    }
+    if args.json:
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    else:
+        print(f"[semantic-extract] paused: {summary['reason']} ({summary['pause_file']})")
+    return True
 
 
 def rel_to_vault(path: Path, vault: Path) -> Path:
@@ -72,6 +130,341 @@ def target_paths(source: Path, vault: Path, proxy_model: str) -> tuple[Path, Pat
     manifest_name = sha256_bytes(str(source.resolve()).encode("utf-8"))[:24] + ".ingest.json"
     manifest = vault / "_manifests" / "thunderomlx" / manifest_name
     return out, report, manifest
+
+
+def registry_path(args: argparse.Namespace) -> Path:
+    return Path(getattr(args, "registry_db", None) or DEFAULT_REGISTRY_DB).expanduser()
+
+
+def registry_connect(args: argparse.Namespace) -> sqlite3.Connection | None:
+    db = registry_path(args)
+    if not db.exists():
+        return None
+    conn = sqlite3.connect(str(db), timeout=30)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def registry_doc_id(conn: sqlite3.Connection | None, source: Path, content_sha: str, vault: Path) -> str:
+    fallback = str(rel_to_vault(source, vault))
+    if conn is None:
+        return fallback
+    source_s = str(source)
+    row = conn.execute("SELECT doc_id FROM documents WHERE source_path = ?", (source_s,)).fetchone()
+    if row:
+        return str(row["doc_id"])
+    # Some older registry rows use resolved paths while callers may pass a symlink/relative path.
+    try:
+        resolved = str(source.resolve())
+        row = conn.execute("SELECT doc_id FROM documents WHERE source_path = ?", (resolved,)).fetchone()
+        if row:
+            return str(row["doc_id"])
+    except Exception:
+        pass
+    now = now_iso()
+    doc_id = stable_id("doc", str(source), content_sha)
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO documents (
+          doc_id, source_kind, source_path, source_adapter, content_kind,
+          declared_doc_type, source_sha256, current_state, ingest_policy,
+          extract_policy, created_at, updated_at, provenance_quality
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            doc_id,
+            "raw" if "/_raw/" in source_s else "obsidian_vault",
+            source_s,
+            "semantic_extract_discovery",
+            "markdown",
+            None,
+            content_sha,
+            "RAW_MATERIALIZED" if "/_raw/" in source_s else "VAULT_DISCOVERED",
+            "default",
+            "default",
+            now,
+            now,
+            "observed",
+        ),
+    )
+    conn.commit()
+    return doc_id
+
+
+def registry_span_ids(conn: sqlite3.Connection | None, doc_id: str, spans: list[dict[str, Any]]) -> list[str]:
+    if conn is None:
+        return [str(span["span_id"]) for span in spans]
+    rows = conn.execute("SELECT span_id FROM spans WHERE doc_id = ? ORDER BY start_line", (doc_id,)).fetchall()
+    if rows:
+        return [str(row["span_id"]) for row in rows]
+    return [str(span["span_id"]) for span in spans]
+
+
+def registry_transition(conn: sqlite3.Connection | None, doc_id: str, state: str, payload: dict[str, Any] | None = None) -> None:
+    if conn is None:
+        return
+    now = now_iso()
+    row = conn.execute("SELECT current_state FROM documents WHERE doc_id = ?", (doc_id,)).fetchone()
+    from_state = str(row["current_state"]) if row else None
+    conn.execute("UPDATE documents SET current_state = ?, updated_at = ? WHERE doc_id = ?", (state, now, doc_id))
+    conn.execute(
+        """
+        INSERT INTO ingest_events (
+          event_id, doc_id, event_kind, from_state, to_state, source_adapter, payload_json, ts
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            stable_id("evt", doc_id, state, now, json.dumps(payload or {}, sort_keys=True)),
+            doc_id,
+            "semantic_extract_state",
+            from_state,
+            state,
+            "knowledge-semantic-extract",
+            json.dumps(payload or {}, ensure_ascii=False, sort_keys=True),
+            now,
+        ),
+    )
+    conn.commit()
+
+
+def registry_start_job(
+    conn: sqlite3.Connection | None,
+    *,
+    doc_id: str,
+    content_sha: str,
+    span_ids: list[str],
+    args: argparse.Namespace,
+) -> str:
+    job_id = stable_id(
+        "extract_job",
+        doc_id,
+        content_sha,
+        args.profile,
+        args.proxy_model,
+        PROMPT_VERSION,
+        SCHEMA_VERSION,
+        str(time.time_ns()),
+        str(os.getpid()),
+        uuid.uuid4().hex,
+    )
+    if conn is None:
+        return job_id
+    now = now_iso()
+    conn.execute(
+        """
+        INSERT INTO extract_jobs (
+          job_id, doc_id, source_span_ids, prompt_template_id, model, state,
+          created_at, updated_at, repair_count
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            job_id,
+            doc_id,
+            json.dumps(span_ids, ensure_ascii=False),
+            PROMPT_VERSION,
+            args.proxy_model,
+            "THUNDEROMLX_EXTRACT_RUNNING",
+            now,
+            now,
+            0,
+        ),
+    )
+    conn.commit()
+    registry_transition(conn, doc_id, "THUNDEROMLX_EXTRACT_RUNNING", {"job_id": job_id})
+    return job_id
+
+
+def registry_finish_job(
+    conn: sqlite3.Connection | None,
+    *,
+    job_id: str,
+    doc_id: str,
+    state: str,
+    passed: bool,
+    error_code: str | None,
+    detail: dict[str, Any],
+    repair_count: int,
+    outputs: list[tuple[str, Path, str]],
+) -> None:
+    if conn is None:
+        return
+    now = now_iso()
+    conn.execute(
+        "UPDATE extract_jobs SET state = ?, updated_at = ?, repair_count = ? WHERE job_id = ?",
+        (state, now, repair_count, job_id),
+    )
+    conn.execute(
+        """
+        INSERT INTO validation_results (
+          result_id, job_id, layer, passed, error_code, detail_json, ts
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            stable_id("validation", job_id, state, now),
+            job_id,
+            "extracted",
+            1 if passed else 0,
+            error_code,
+            json.dumps(detail, ensure_ascii=False, sort_keys=True),
+            now,
+        ),
+    )
+    for kind, path, digest in outputs:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO extract_outputs (
+              output_id, job_id, kind, path, sha256, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (stable_id("extract_output", job_id, kind, str(path)), job_id, kind, str(path), digest, now),
+        )
+    doc_state = {
+        "extract_indexed": "EXTRACTED_QMD_INDEX_PENDING",
+        "validation_failed": "VALIDATION_FAILED",
+        "extract_failed_warn": "EXTRACT_FAILED_RETRYABLE",
+        "extract_failed_circuit_open": "EXTRACT_FAILED_RETRYABLE",
+    }.get(state, state.upper())
+    conn.commit()
+    registry_transition(conn, doc_id, doc_state, {"job_id": job_id, "status": state, "error_code": error_code})
+
+
+def registry_mark_stale_jobs(args: argparse.Namespace, *, stale_minutes: int, limit: int) -> dict[str, Any]:
+    conn = registry_connect(args)
+    if conn is None:
+        return {"ok": False, "error": f"registry db not found: {registry_path(args)}", "reaped": 0}
+    cutoff_dt = dt.datetime.now(UTC) - dt.timedelta(minutes=stale_minutes)
+    cutoff = cutoff_dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    rows = conn.execute(
+        """
+        SELECT job_id, doc_id, updated_at
+        FROM extract_jobs
+        WHERE state='THUNDEROMLX_EXTRACT_RUNNING'
+          AND updated_at < ?
+        ORDER BY updated_at ASC
+        LIMIT ?
+        """,
+        (cutoff, limit),
+    ).fetchall()
+    reaped: list[dict[str, str]] = []
+    now = now_iso()
+    for row in rows:
+        job_id = str(row["job_id"])
+        doc_id = str(row["doc_id"])
+        detail = {
+            "stale_reaped": True,
+            "previous_state": "THUNDEROMLX_EXTRACT_RUNNING",
+            "previous_updated_at": str(row["updated_at"]),
+            "stale_minutes": stale_minutes,
+            "reaped_at": now,
+        }
+        conn.execute("UPDATE extract_jobs SET state=?, updated_at=? WHERE job_id=?", ("extract_failed_warn", now, job_id))
+        conn.execute(
+            """
+            INSERT INTO validation_results(result_id, job_id, layer, passed, error_code, detail_json, ts)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                stable_id("validation", job_id, "stale_reaped", now),
+                job_id,
+                "extracted",
+                0,
+                "E_WORKER_STALE_REAPED",
+                json.dumps(detail, ensure_ascii=False, sort_keys=True),
+                now,
+            ),
+        )
+        conn.execute("UPDATE documents SET current_state=?, updated_at=? WHERE doc_id=?", ("EXTRACT_FAILED_RETRYABLE", now, doc_id))
+        conn.execute(
+            """
+            INSERT INTO ingest_events(event_id, doc_id, event_kind, from_state, to_state, source_adapter, payload_json, ts)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                stable_id("evt", doc_id, "stale_reaped", job_id, now),
+                doc_id,
+                "semantic_extract_stale_reaped",
+                "THUNDEROMLX_EXTRACT_RUNNING",
+                "EXTRACT_FAILED_RETRYABLE",
+                "knowledge-semantic-extract",
+                json.dumps(detail | {"job_id": job_id}, ensure_ascii=False, sort_keys=True),
+                now,
+            ),
+        )
+        reaped.append({"job_id": job_id, "doc_id": doc_id, "updated_at": str(row["updated_at"])})
+    conn.commit()
+    conn.close()
+    return {"ok": True, "cutoff": cutoff, "stale_minutes": stale_minutes, "reaped": len(reaped), "jobs": reaped}
+
+
+def primary_error_code(errors: list[str]) -> str | None:
+    if not errors:
+        return None
+    first = errors[0]
+    if first.startswith("http_"):
+        return "E_THUNDEROMLX_HTTP"
+    if first.startswith("URLError") or "Connection refused" in first or "RemoteDisconnected" in first:
+        return "E_THUNDEROMLX_UNAVAILABLE"
+    if "TimeoutError" in first or "timed out" in first.lower():
+        return "E_THUNDEROMLX_TIMEOUT"
+    if "missing section" in first:
+        return "E_SCHEMA_REQUIRED_FIELD_MISSING"
+    if "missing raw span" in first:
+        return "E_EVIDENCE_EMPTY"
+    if "output too short" in first:
+        return "E_OUTPUT_TOO_SHORT"
+    return "E_VALIDATION_FAILED"
+
+
+@contextlib.contextmanager
+def single_worker_lock(vault: Path, args: argparse.Namespace):
+    lock_path = Path(getattr(args, "lock_path", "") or (vault / "_locks" / "knowledge-semantic-extract.lock")).expanduser()
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+", encoding="utf-8") as lock_file:
+        flags = fcntl.LOCK_EX
+        if not getattr(args, "lock_wait", False):
+            flags |= fcntl.LOCK_NB
+        try:
+            fcntl.flock(lock_file.fileno(), flags)
+        except BlockingIOError as exc:
+            raise RuntimeError(f"semantic extract worker already running: {lock_path}") from exc
+        lock_file.seek(0)
+        lock_file.truncate()
+        lock_file.write(json.dumps({"pid": os.getpid(), "started_at": now_iso()}, ensure_ascii=False) + "\n")
+        lock_file.flush()
+        try:
+            yield lock_path
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+class CircuitBreaker:
+    def __init__(self, max_consecutive_failures: int, max_fail_rate: float, min_attempts: int) -> None:
+        self.max_consecutive_failures = max_consecutive_failures
+        self.max_fail_rate = max_fail_rate
+        self.min_attempts = min_attempts
+        self.attempted = 0
+        self.failed = 0
+        self.consecutive_failed = 0
+
+    def record(self, result: dict[str, Any]) -> None:
+        if result.get("skipped") or result.get("dry_run"):
+            return
+        self.attempted += 1
+        ok = bool(result.get("ok"))
+        if ok:
+            self.consecutive_failed = 0
+            return
+        self.failed += 1
+        self.consecutive_failed += 1
+
+    def open_reason(self) -> str | None:
+        if self.max_consecutive_failures > 0 and self.consecutive_failed >= self.max_consecutive_failures:
+            return f"consecutive_failures={self.consecutive_failed}"
+        if self.attempted >= self.min_attempts and self.max_fail_rate >= 0:
+            fail_rate = self.failed / max(self.attempted, 1)
+            if fail_rate > self.max_fail_rate:
+                return f"fail_rate={fail_rate:.2f} attempted={self.attempted}"
+        return None
 
 
 def read_manifest(path: Path) -> dict[str, Any]:
@@ -248,6 +641,12 @@ source_sha256: {content_sha}
 
 
 def call_thunderomlx(messages: list[dict[str, str]], args: argparse.Namespace) -> tuple[str, dict[str, Any], int]:
+    pause = thunderomlx_pause_state(args)
+    if pause:
+        raise RuntimeError(
+            "ThunderOMLX maintenance pause active: "
+            + str(pause.get("reason") or pause.get("path") or "paused")
+        )
     payload = {
         "model": args.proxy_model,
         "max_tokens": args.max_tokens,
@@ -278,6 +677,29 @@ def call_thunderomlx(messages: list[dict[str, str]], args: argparse.Namespace) -
     text = "\n".join(parts).strip()
     text = re.sub(r"(?is)<think>.*?</think>\s*", "", text).strip()
     return text, response, latency_ms
+
+
+def call_thunderomlx_with_retries(messages: list[dict[str, str]], args: argparse.Namespace) -> tuple[str, dict[str, Any], int]:
+    attempts = max(1, int(getattr(args, "max_retries", 0)) + 1)
+    delay = max(0.0, float(getattr(args, "retry_backoff_sec", 0)))
+    last_exc: BaseException | None = None
+    total_latency = 0
+    for attempt in range(1, attempts + 1):
+        try:
+            text, response, latency = call_thunderomlx(messages, args)
+            return text, response, total_latency + latency
+        except urllib.error.HTTPError:
+            # HTTP errors include a response body; keep them precise and do not
+            # hide them behind a generic retry wrapper.
+            raise
+        except Exception as exc:
+            last_exc = exc
+            if attempt >= attempts:
+                break
+            if delay:
+                time.sleep(delay * (2 ** (attempt - 1)))
+    assert last_exc is not None
+    raise last_exc
 
 
 def validate_extracted(text: str, content_sha: str) -> list[str]:
@@ -348,25 +770,34 @@ def extract_one(source: Path, vault: Path, args: argparse.Namespace) -> dict[str
     content_sha = sha256_bytes(raw_bytes)
     output_path, report_path, manifest_path = target_paths(source, vault, args.proxy_model)
     manifest = read_manifest(manifest_path)
+    conn = registry_connect(args)
+    doc_id = registry_doc_id(conn, source, content_sha, vault)
     if not should_extract(manifest, content_sha, args):
-        return {"ok": True, "skipped": True, "source": str(source), "manifest": str(manifest_path), "output": str(output_path)}
+        if conn is not None:
+            conn.close()
+        return {"ok": True, "skipped": True, "source": str(source), "manifest": str(manifest_path), "output": str(output_path), "doc_id": doc_id}
     if args.dry_run:
-        return {"ok": True, "dry_run": True, "source": str(source), "manifest": str(manifest_path), "output": str(output_path)}
+        if conn is not None:
+            conn.close()
+        return {"ok": True, "dry_run": True, "source": str(source), "manifest": str(manifest_path), "output": str(output_path), "doc_id": doc_id}
 
     text = raw_bytes.decode("utf-8", errors="replace")
     spans = source_spans(text, args.max_chars)
+    span_ids = registry_span_ids(conn, doc_id, spans)
+    job_id = registry_start_job(conn, doc_id=doc_id, content_sha=content_sha, span_ids=span_ids, args=args)
     messages = build_messages(source, content_sha, spans)
     started_at = now_iso()
     repair_attempted = False
     repair_errors: list[str] = []
+    output_records: list[tuple[str, Path, str]] = []
     try:
-        body, response, latency_ms = call_thunderomlx(messages, args)
+        body, response, latency_ms = call_thunderomlx_with_retries(messages, args)
         body = normalize_extracted(body, spans)
         errors = validate_extracted(body, content_sha)
         if errors and args.repair_attempts > 0:
             repair_attempted = True
             repair_messages = build_repair_messages(source, content_sha, spans, body, errors)
-            repair_body, repair_response, repair_latency_ms = call_thunderomlx(repair_messages, args)
+            repair_body, repair_response, repair_latency_ms = call_thunderomlx_with_retries(repair_messages, args)
             repair_body = normalize_extracted(repair_body, spans)
             repair_errors = validate_extracted(repair_body, content_sha)
             if not repair_errors:
@@ -393,6 +824,8 @@ def extract_one(source: Path, vault: Path, args: argparse.Namespace) -> dict[str
     generated_at = now_iso()
     report = {
         "source_path": str(source),
+        "doc_id": doc_id,
+        "job_id": job_id,
         "content_sha256": content_sha,
         "output_path": str(output_path),
         "status": status,
@@ -431,10 +864,12 @@ def extract_one(source: Path, vault: Path, args: argparse.Namespace) -> dict[str
         )
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(frontmatter + body.strip() + "\n", encoding="utf-8")
+        output_records.append(("extracted_md", output_path, sha256_bytes(output_path.read_bytes())))
 
     write_json(report_path, report)
+    output_records.append(("report_json", report_path, sha256_bytes(report_path.read_bytes())))
     manifest_payload = {
-        "doc_id": str(rel_to_vault(source, vault)),
+        "doc_id": doc_id,
         "source_path": str(source),
         "content_sha256": content_sha,
         "updated_at": generated_at,
@@ -461,8 +896,22 @@ def extract_one(source: Path, vault: Path, args: argparse.Namespace) -> dict[str
         "errors": errors,
     }
     write_json(manifest_path, manifest_payload)
+    output_records.append(("manifest_json", manifest_path, sha256_bytes(manifest_path.read_bytes())))
+    registry_finish_job(
+        conn,
+        job_id=job_id,
+        doc_id=doc_id,
+        state=status,
+        passed=status == "extract_indexed",
+        error_code=primary_error_code(errors),
+        detail=report,
+        repair_count=1 if repair_attempted else 0,
+        outputs=output_records,
+    )
+    if conn is not None:
+        conn.close()
     append_log(vault, report)
-    return {"ok": status == "extract_indexed", "status": status, "source": str(source), "output": str(output_path), "manifest": str(manifest_path), "errors": errors}
+    return {"ok": status == "extract_indexed", "status": status, "source": str(source), "output": str(output_path), "manifest": str(manifest_path), "errors": errors, "doc_id": doc_id, "job_id": job_id}
 
 
 def append_log(vault: Path, payload: dict[str, Any]) -> None:
@@ -517,18 +966,28 @@ def run_qmd_update(args: argparse.Namespace) -> None:
 
 
 def cmd_extract_file(args: argparse.Namespace) -> int:
+    if maybe_exit_for_thunderomlx_pause(args):
+        return 0
     vault = resolve_vault(args.vault)
     source = Path(args.source).expanduser()
     if not source.exists():
         print(json.dumps({"ok": False, "error": f"source not found: {source}"}, ensure_ascii=False))
         return 1
-    result = extract_one(source, vault, args)
+    try:
+        with single_worker_lock(vault, args):
+            result = extract_one(source, vault, args)
+    except RuntimeError as exc:
+        result = {"ok": False, "status": "lock_busy", "error": str(exc)}
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return LOCK_EXIT_CODE
     run_qmd_update(args)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result.get("ok") else 1
 
 
 def cmd_backfill(args: argparse.Namespace) -> int:
+    if maybe_exit_for_thunderomlx_pause(args):
+        return 0
     vault = resolve_vault(args.vault)
     root = Path(args.source_dir).expanduser() if args.source_dir else vault / "_raw"
     sources = iter_sources(root, args.since_hours, include_raw=True)
@@ -538,6 +997,8 @@ def cmd_backfill(args: argparse.Namespace) -> int:
 
 
 def cmd_backfill_vault(args: argparse.Namespace) -> int:
+    if maybe_exit_for_thunderomlx_pause(args):
+        return 0
     vault = resolve_vault(args.vault)
     root = Path(args.source_dir).expanduser() if args.source_dir else vault
     sources = iter_sources(root, args.since_hours, include_raw=False)
@@ -546,27 +1007,148 @@ def cmd_backfill_vault(args: argparse.Namespace) -> int:
     return run_backfill_sources(args, sources, qmd_after=True)
 
 
+def _registry_retryable_sources(args: argparse.Namespace, limit: int) -> list[Path]:
+    conn = registry_connect(args)
+    if conn is None:
+        return []
+    rows = conn.execute(
+        """
+        SELECT source_path
+        FROM documents
+        WHERE current_state='EXTRACT_FAILED_RETRYABLE'
+          AND extract_policy != 'off'
+        ORDER BY updated_at ASC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    conn.close()
+    return [Path(str(row["source_path"])).expanduser() for row in rows if Path(str(row["source_path"])).expanduser().exists()]
+
+
+def cmd_reap_stale(args: argparse.Namespace) -> int:
+    result = registry_mark_stale_jobs(args, stale_minutes=args.stale_minutes, limit=args.limit)
+    print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0 if result.get("ok") else 1
+
+
+def cmd_supervised_backfill(args: argparse.Namespace) -> int:
+    vault = resolve_vault(args.vault)
+    root = Path(args.source_dir).expanduser() if args.source_dir else vault / "_raw"
+    overall: list[dict[str, Any]] = []
+    total_extracted = 0
+    total_failed = 0
+    total_reaped = 0
+    for batch_index in range(1, args.max_batches + 1):
+        reap = registry_mark_stale_jobs(args, stale_minutes=args.stale_minutes, limit=args.reap_limit)
+        total_reaped += int(reap.get("reaped") or 0)
+        retry_sources = _registry_retryable_sources(args, args.batch_size)
+        if retry_sources:
+            sources = retry_sources
+            source_mode = "retryable"
+        else:
+            sources = iter_sources(root, args.since_hours, include_raw=True)
+            if args.batch_size:
+                sources = sources[: args.batch_size]
+            source_mode = "scan"
+        if not sources:
+            overall.append({"batch": batch_index, "mode": source_mode, "reap": reap, "summary": {"ok": True, "total": 0, "extracted": 0}})
+            break
+        batch_results: list[dict[str, Any]] = []
+        breaker = CircuitBreaker(args.max_consecutive_failures, args.max_fail_rate, args.min_circuit_attempts)
+        try:
+            with single_worker_lock(vault, args):
+                for source in sources:
+                    open_reason = breaker.open_reason()
+                    if open_reason:
+                        batch_results.append({"ok": False, "status": "extract_failed_circuit_open", "source": str(source), "errors": [open_reason]})
+                        break
+                    result = extract_one(source, vault, args)
+                    batch_results.append(result)
+                    breaker.record(result)
+        except RuntimeError as exc:
+            batch_results.append({"ok": False, "status": "lock_busy", "error": str(exc)})
+        extracted_now = sum(1 for r in batch_results if r.get("ok") and not r.get("skipped") and not r.get("dry_run"))
+        failed_now = sum(1 for r in batch_results if not r.get("ok") and not r.get("skipped") and not r.get("dry_run"))
+        total_extracted += extracted_now
+        total_failed += failed_now
+        batch = {"batch": batch_index, "mode": source_mode, "sources": [str(p) for p in sources], "reap": reap, "extracted": extracted_now, "failed": failed_now, "results": batch_results if args.verbose else []}
+        overall.append(batch)
+        if failed_now and args.stop_on_error:
+            break
+        if args.sleep_sec:
+            time.sleep(args.sleep_sec)
+    if args.qmd_after and total_extracted > 0:
+        run_qmd_update(args)
+    payload = {"ok": total_failed == 0, "batches": len(overall), "total_reaped": total_reaped, "total_extracted_estimate": total_extracted, "total_failed_estimate": total_failed, "results": overall if args.verbose else []}
+    print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0 if payload["ok"] else 1
+
+
 def run_backfill_sources(args: argparse.Namespace, sources: list[Path], qmd_after: bool = True) -> int:
     vault = resolve_vault(args.vault)
     results = []
     ok_count = 0
     skipped = 0
-    for source in sources:
-        result = extract_one(source, vault, args)
-        results.append(result)
-        ok_count += 1 if result.get("ok") else 0
-        skipped += 1 if result.get("skipped") else 0
-        if not args.json:
-            state = "skip" if result.get("skipped") else result.get("status", "ok" if result.get("ok") else "error")
-            print(f"[semantic-extract] {state}: {source}")
+    breaker = CircuitBreaker(
+        max_consecutive_failures=int(getattr(args, "max_consecutive_failures", 5)),
+        max_fail_rate=float(getattr(args, "max_fail_rate", 0.25)),
+        min_attempts=int(getattr(args, "min_circuit_attempts", 5)),
+    )
+    try:
+        with single_worker_lock(vault, args):
+            for source in sources:
+                open_reason = breaker.open_reason()
+                if open_reason:
+                    result = {"ok": False, "status": "extract_failed_circuit_open", "source": str(source), "errors": [open_reason]}
+                    results.append(result)
+                    if not args.json:
+                        print(f"[semantic-extract] circuit-open: {open_reason}; stopped before {source}")
+                    break
+                result = extract_one(source, vault, args)
+                results.append(result)
+                ok_count += 1 if result.get("ok") and not result.get("skipped") and not result.get("dry_run") else 0
+                skipped += 1 if result.get("skipped") else 0
+                breaker.record(result)
+                if not args.json:
+                    state = "skip" if result.get("skipped") else result.get("status", "ok" if result.get("ok") else "error")
+                    print(f"[semantic-extract] {state}: {source}")
+    except RuntimeError as exc:
+        summary = {"ok": False, "status": "lock_busy", "error": str(exc), "total": 0, "extracted": 0, "skipped": 0}
+        if args.json:
+            print(json.dumps(summary, ensure_ascii=False, indent=2))
+        else:
+            print(f"[semantic-extract] lock_busy: {exc}", file=sys.stderr)
+        return LOCK_EXIT_CODE
     if qmd_after:
         run_qmd_update(args)
-    summary = {"ok": True, "total": len(results), "extracted": ok_count, "skipped": skipped, "results": results if args.verbose else []}
+    attempted = len([r for r in results if not r.get("skipped") and not r.get("dry_run")])
+    failures = len([r for r in results if not r.get("ok") and not r.get("skipped") and not r.get("dry_run")])
+    ok = True
+    if attempted > 0 and ok_count == 0:
+        ok = False
+    if any(r.get("status") == "extract_failed_circuit_open" for r in results):
+        ok = False
+    summary = {
+        "ok": ok,
+        "total": len(results),
+        "attempted": attempted,
+        "extracted": ok_count,
+        "skipped": skipped,
+        "failed": failures,
+        "circuit": {
+            "attempted": breaker.attempted,
+            "failed": breaker.failed,
+            "consecutive_failed": breaker.consecutive_failed,
+            "open_reason": breaker.open_reason(),
+        },
+        "results": results if args.verbose else [],
+    }
     if args.json:
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     else:
-        print(f"[semantic-extract] total={len(results)} extracted={ok_count} skipped={skipped}")
-    return 0
+        print(f"[semantic-extract] total={len(results)} attempted={attempted} extracted={ok_count} skipped={skipped} failed={failures} ok={ok}")
+    return 0 if ok else 1
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -581,6 +1163,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-tokens", type=int, default=int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_MAX_TOKENS", "2400")))
     parser.add_argument("--timeout-sec", type=int, default=int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_TIMEOUT_SEC", "900")))
     parser.add_argument("--repair-attempts", type=int, default=int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_REPAIR_ATTEMPTS", "1")))
+    parser.add_argument("--max-retries", type=int, default=int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_MAX_RETRIES", "2")))
+    parser.add_argument("--retry-backoff-sec", type=float, default=float(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_RETRY_BACKOFF_SEC", "10")))
+    parser.add_argument("--registry-db", default=os.environ.get("SOLAR_KNOWLEDGE_REGISTRY_DB", str(DEFAULT_REGISTRY_DB)))
+    parser.add_argument("--lock-path", default=os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_LOCK", ""))
+    parser.add_argument("--pause-file", default=os.environ.get("THUNDEROMLX_MAINTENANCE_FILE", str(DEFAULT_THUNDEROMLX_PAUSE_FILE)))
+    parser.add_argument("--lock-wait", action="store_true", default=os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_LOCK_WAIT", "0") == "1")
+    parser.add_argument("--max-consecutive-failures", type=int, default=int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_MAX_CONSECUTIVE_FAILURES", "5")))
+    parser.add_argument("--max-fail-rate", type=float, default=float(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_MAX_FAIL_RATE", "0.25")))
+    parser.add_argument("--min-circuit-attempts", type=int, default=int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_MIN_CIRCUIT_ATTEMPTS", "5")))
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--qmd-after", action="store_true")
@@ -597,13 +1188,33 @@ def build_parser() -> argparse.ArgumentParser:
     backfill_vault.add_argument("--source-dir", default=None)
     backfill_vault.add_argument("--limit", type=int, default=10)
     backfill_vault.add_argument("--since-hours", type=int, default=None)
-    for child in (one, backfill, backfill_vault):
+    reap = sub.add_parser("reap-stale")
+    reap.add_argument("--stale-minutes", type=int, default=int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_STALE_MINUTES", "30")))
+    reap.add_argument("--limit", type=int, default=50)
+    supervised = sub.add_parser("supervised-backfill")
+    supervised.add_argument("--source-dir", default=None)
+    supervised.add_argument("--batch-size", type=int, default=3)
+    supervised.add_argument("--max-batches", type=int, default=3)
+    supervised.add_argument("--since-hours", type=int, default=None)
+    supervised.add_argument("--sleep-sec", type=float, default=2.0)
+    supervised.add_argument("--stale-minutes", type=int, default=int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_STALE_MINUTES", "30")))
+    supervised.add_argument("--reap-limit", type=int, default=20)
+    supervised.add_argument("--stop-on-error", action="store_true")
+    for child in (one, backfill, backfill_vault, reap, supervised):
         child.add_argument("--force", action="store_true", default=argparse.SUPPRESS)
         child.add_argument("--dry-run", action="store_true", default=argparse.SUPPRESS)
         child.add_argument("--qmd-after", action="store_true", default=argparse.SUPPRESS)
         child.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
         child.add_argument("--verbose", action="store_true", default=argparse.SUPPRESS)
         child.add_argument("--repair-attempts", type=int, default=argparse.SUPPRESS)
+        child.add_argument("--max-retries", type=int, default=argparse.SUPPRESS)
+        child.add_argument("--retry-backoff-sec", type=float, default=argparse.SUPPRESS)
+        child.add_argument("--registry-db", default=argparse.SUPPRESS)
+        child.add_argument("--lock-path", default=argparse.SUPPRESS)
+        child.add_argument("--lock-wait", action="store_true", default=argparse.SUPPRESS)
+        child.add_argument("--max-consecutive-failures", type=int, default=argparse.SUPPRESS)
+        child.add_argument("--max-fail-rate", type=float, default=argparse.SUPPRESS)
+        child.add_argument("--min-circuit-attempts", type=int, default=argparse.SUPPRESS)
     return parser
 
 
@@ -615,6 +1226,10 @@ def main() -> int:
         return cmd_backfill(args)
     if args.command == "backfill-vault":
         return cmd_backfill_vault(args)
+    if args.command == "reap-stale":
+        return cmd_reap_stale(args)
+    if args.command == "supervised-backfill":
+        return cmd_supervised_backfill(args)
     return 1
 
 

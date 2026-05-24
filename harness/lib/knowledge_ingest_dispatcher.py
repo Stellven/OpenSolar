@@ -7,7 +7,9 @@ knowledge_ingest_registry. Later nodes add adapters, extraction and QMD workers.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -130,12 +132,13 @@ def cmd_discover_sources(args: argparse.Namespace) -> int:
     span_count = 0
     by_kind: dict[str, int] = {}
     docs: list[dict[str, Any]] = []
-    for source_path in adapters.iter_raw_sources(root, limit=limit):
+    for source_path in adapters.iter_raw_sources(root, limit=limit, include_dispatch=args.include_dispatch):
         source_kind, source_adapter, doc_type = adapters.classify_raw_source(source_path, root)
         if args.source_kind and source_kind != args.source_kind:
             continue
         ingest_path = adapters.materialize_to_markdown(source_path, target_root=materialized_root, source_kind=source_kind)
         sha = registry.hashlib.sha256(ingest_path.read_bytes()).hexdigest()
+        is_ignored = source_kind == "raw_dispatch"
         doc = registry.upsert_document(
             source_kind=source_kind,
             source_path=str(ingest_path),
@@ -143,11 +146,13 @@ def cmd_discover_sources(args: argparse.Namespace) -> int:
             content_kind="markdown",
             declared_doc_type=doc_type,
             source_sha256=sha,
-            current_state="RAW_MATERIALIZED",
+            current_state="IGNORED" if is_ignored else "RAW_MATERIALIZED",
+            ingest_policy="ignored" if is_ignored else "default",
+            extract_policy="off" if is_ignored else "default",
             provenance_quality="complete" if ingest_path == source_path else "observed",
             db_path=Path(args.db).expanduser(),
         )
-        if args.build_spans:
+        if args.build_spans and not is_ignored:
             span_info = _write_and_register_spans(path=ingest_path, doc=doc, source_kind=source_kind, args=args)
             doc["span_sidecar_path"] = span_info["sidecar_path"]
             doc["span_count"] = span_info["span_count"]
@@ -195,6 +200,318 @@ def cmd_process_queue(args: argparse.Namespace) -> int:
     return 0
 
 
+def _iter_markdown_files(root: Path) -> list[Path]:
+    if not root.exists():
+        return []
+    files: list[Path] = []
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        if path.suffix.lower() not in {".md", ".markdown"}:
+            continue
+        parts = set(path.parts)
+        text_path = str(path)
+        if ".obsidian" in parts or ".git" in parts:
+            continue
+        if "/.spans/" in text_path or "/.materialized/" in text_path:
+            continue
+        files.append(path)
+    return files
+
+
+def _registry_snapshot(db_path: Path) -> dict[str, Any]:
+    registry.migrate(db_path)
+    with registry.connect(db_path) as conn:
+        rows = list(conn.execute("SELECT doc_id, source_kind, source_path, current_state FROM documents"))
+        output_rows = list(conn.execute("SELECT kind, path FROM extract_outputs"))
+        validation_rows = list(conn.execute("SELECT passed, error_code FROM validation_results"))
+    by_kind: dict[str, int] = {}
+    by_state: dict[str, int] = {}
+    registered_paths: set[str] = set()
+    for row in rows:
+        by_kind[row["source_kind"]] = by_kind.get(row["source_kind"], 0) + 1
+        by_state[row["current_state"]] = by_state.get(row["current_state"], 0) + 1
+        registered_paths.add(str(Path(row["source_path"]).expanduser()))
+    output_paths_by_kind: dict[str, set[str]] = {}
+    for row in output_rows:
+        output_paths_by_kind.setdefault(row["kind"], set()).add(str(Path(row["path"]).expanduser()))
+    failed_validations = sum(1 for row in validation_rows if int(row["passed"]) == 0)
+    return {
+        "document_count": len(rows),
+        "by_kind": by_kind,
+        "by_state": by_state,
+        "registered_paths": registered_paths,
+        "extract_output_paths_by_kind": output_paths_by_kind,
+        "validation_total": len(validation_rows),
+        "validation_failed": failed_validations,
+    }
+
+
+def _qmd_snapshot(skip: bool) -> dict[str, Any]:
+    if skip:
+        return {"available": False, "skipped": True}
+    try:
+        proc = subprocess.run(
+            ["solar-harness", "wiki", "qmd-status"],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+        )
+    except Exception as exc:
+        return {"available": False, "error": str(exc)}
+    total = None
+    vectors = None
+    updated = None
+    for line in proc.stdout.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("Total:"):
+            try:
+                total = int(stripped.split(":", 1)[1].split()[0])
+            except Exception:
+                pass
+        elif stripped.startswith("Vectors:"):
+            try:
+                vectors = int(stripped.split(":", 1)[1].split()[0])
+            except Exception:
+                pass
+        elif stripped.startswith("Updated:"):
+            updated = stripped.split(":", 1)[1].strip()
+    return {
+        "available": proc.returncode == 0,
+        "returncode": proc.returncode,
+        "indexed_files": total,
+        "vectors": vectors,
+        "updated": updated,
+        "stderr": proc.stderr.strip()[:500],
+    }
+
+
+def _sample(paths: list[str], limit: int) -> list[str]:
+    if limit < 0:
+        return paths
+    return paths[:limit]
+
+
+def _read_frontmatter(path: Path) -> dict[str, str]:
+    text = path.read_text(encoding="utf-8", errors="replace")
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}
+    data: dict[str, str] = {}
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        data[key.strip()] = value.strip().strip('"').strip("'")
+    return data
+
+
+def _file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _find_or_register_source_doc(
+    *,
+    source_path: Path | None,
+    source_sha256: str | None,
+    db_path: Path,
+) -> tuple[str, str]:
+    if source_path is not None:
+        source_text = str(source_path)
+        with registry.connect(db_path) as conn:
+            row = conn.execute("SELECT doc_id FROM documents WHERE source_path=?", (source_text,)).fetchone()
+        if row:
+            return row["doc_id"], "matched_source_path"
+        if source_path.exists():
+            raw_root = Path.home() / "Knowledge" / "_raw"
+            source_kind, source_adapter, doc_type = adapters.classify_raw_source(source_path, raw_root)
+            doc = registry.upsert_document(
+                source_kind=source_kind,
+                source_path=source_text,
+                source_adapter=source_adapter,
+                content_kind="markdown",
+                declared_doc_type=doc_type,
+                source_sha256=source_sha256 or _file_sha256(source_path),
+                current_state="RAW_MATERIALIZED",
+                db_path=db_path,
+            )
+            return doc["doc_id"], "registered_source_path"
+    fallback_path = str(source_path) if source_path is not None else "unknown"
+    doc = registry.upsert_document(
+        source_kind="legacy_extracted",
+        source_path=fallback_path,
+        source_adapter="legacy_extracted_importer",
+        content_kind="markdown",
+        declared_doc_type="legacy_extracted_output",
+        source_sha256=source_sha256 or registry.sha256_text(fallback_path),
+        current_state="NEEDS_REVIEW",
+        ingest_policy="legacy",
+        extract_policy="off",
+        provenance_quality="inferred",
+        db_path=db_path,
+    )
+    return doc["doc_id"], "registered_legacy_needs_review"
+
+
+def cmd_import_legacy_extracted(args: argparse.Namespace) -> int:
+    extracted_root = Path(args.extracted_dir).expanduser()
+    db_path = Path(args.db).expanduser()
+    registry.migrate(db_path)
+    imported = 0
+    skipped = 0
+    failed = 0
+    details: list[dict[str, Any]] = []
+    with registry.connect(db_path) as conn:
+        known = {str(Path(row["path"]).expanduser()) for row in conn.execute("SELECT path FROM extract_outputs")}
+
+    for path in _iter_markdown_files(extracted_root):
+        if not path.name.endswith(".extracted.md"):
+            continue
+        path_text = str(path)
+        if path_text in known and not args.force:
+            skipped += 1
+            continue
+        try:
+            fm = _read_frontmatter(path)
+            source_path = Path(fm["source_path"]).expanduser() if fm.get("source_path") else None
+            source_sha = fm.get("source_sha256")
+            doc_id, source_match = _find_or_register_source_doc(source_path=source_path, source_sha256=source_sha, db_path=db_path)
+            output_sha = _file_sha256(path)
+            job_id = "legacy_extract_" + registry.sha256_text(f"{doc_id}:{path_text}:{output_sha}")[:24]
+            ts = registry.now_iso()
+            model = fm.get("proxy_model") or fm.get("local_model") or "legacy_unknown"
+            prompt = fm.get("prompt_version") or "legacy_unknown"
+            report_path = path.with_name(path.name.replace(".extracted.md", ".extracted.extract.report.json"))
+            with registry.connect(db_path) as conn:
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO extract_jobs(
+                      job_id, doc_id, source_span_ids, prompt_template_id, model,
+                      state, created_at, updated_at, repair_count
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+                    """,
+                    (job_id, doc_id, json.dumps([], ensure_ascii=False), prompt, model, "legacy_imported", ts, ts),
+                )
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO extract_outputs(output_id, job_id, kind, path, sha256, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    ("out_" + registry.sha256_text(f"{job_id}:extracted_md")[:24], job_id, "extracted_md", path_text, output_sha, ts),
+                )
+                if report_path.exists():
+                    conn.execute(
+                        """
+                        INSERT OR REPLACE INTO extract_outputs(output_id, job_id, kind, path, sha256, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        ("out_" + registry.sha256_text(f"{job_id}:report_json")[:24], job_id, "report_json", str(report_path), _file_sha256(report_path), ts),
+                    )
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO validation_results(result_id, job_id, layer, passed, error_code, detail_json, ts)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "val_" + registry.sha256_text(f"{job_id}:legacy_imported")[:24],
+                        job_id,
+                        "extracted",
+                        1,
+                        None,
+                        json.dumps({"legacy_imported": True, "source_match": source_match, "frontmatter": fm}, ensure_ascii=False, sort_keys=True),
+                        ts,
+                    ),
+                )
+                conn.commit()
+            imported += 1
+            if args.verbose:
+                details.append({"path": path_text, "doc_id": doc_id, "job_id": job_id, "source_match": source_match})
+        except Exception as exc:
+            failed += 1
+            if args.verbose:
+                details.append({"path": path_text, "error": str(exc)})
+    payload = {"ok": failed == 0, "extracted_dir": str(extracted_root), "imported": imported, "skipped": skipped, "failed": failed, "details": details}
+    emit(payload, args.json)
+    return 0 if failed == 0 else 1
+
+
+def cmd_reconcile(args: argparse.Namespace) -> int:
+    knowledge_root = Path(args.knowledge_root).expanduser()
+    raw_root = Path(args.raw_dir).expanduser()
+    vault_root = Path(args.vault).expanduser()
+    extracted_root = Path(args.extracted_dir).expanduser()
+    db_path = Path(args.db).expanduser()
+    sample_limit = args.sample_limit
+
+    raw_md = _iter_markdown_files(raw_root)
+    vault_md: list[Path] = []
+    for folder in args.vault_include:
+        vault_md.extend(_iter_markdown_files(vault_root / folder))
+    extracted_md = _iter_markdown_files(extracted_root)
+    all_md = _iter_markdown_files(knowledge_root)
+
+    registry_state = _registry_snapshot(db_path)
+    registered_paths: set[str] = registry_state["registered_paths"]
+    extract_outputs: dict[str, set[str]] = registry_state["extract_output_paths_by_kind"]
+
+    discoverable_paths = {str(path) for path in raw_md + vault_md}
+    missing_in_registry = sorted(path for path in discoverable_paths if path not in registered_paths)
+    existing_registered = sorted(path for path in registered_paths if Path(path).exists())
+    registered_missing = sorted(path for path in registered_paths if not Path(path).exists())
+    extracted_paths = sorted(str(path) for path in extracted_md)
+    known_extracted_outputs = set()
+    for kind, paths in extract_outputs.items():
+        if "extract" in kind or "semantic" in kind or kind.endswith("_md") or kind == "extracted_md":
+            known_extracted_outputs.update(paths)
+    orphan_extracted = sorted(path for path in extracted_paths if path not in known_extracted_outputs)
+
+    registry_coverage = (len(discoverable_paths) - len(missing_in_registry)) / len(discoverable_paths) if discoverable_paths else 1.0
+    qmd = _qmd_snapshot(args.skip_qmd)
+    qmd_indexed = qmd.get("indexed_files") if qmd.get("available") else None
+    qmd_vs_discoverable_ratio = (qmd_indexed / len(discoverable_paths)) if isinstance(qmd_indexed, int) and discoverable_paths else None
+
+    ok = registry_coverage >= args.min_registry_coverage and not orphan_extracted and not registered_missing
+    payload = {
+        "ok": ok,
+        "knowledge_root": str(knowledge_root),
+        "counts": {
+            "filesystem_md_total": len(all_md),
+            "discoverable_raw_vault_md": len(discoverable_paths),
+            "raw_md": len(raw_md),
+            "vault_md": len(vault_md),
+            "extracted_md": len(extracted_md),
+            "registry_documents": registry_state["document_count"],
+            "existing_registered_paths": len(existing_registered),
+            "missing_in_registry": len(missing_in_registry),
+            "registered_missing_file": len(registered_missing),
+            "orphan_extracted_outputs": len(orphan_extracted),
+        },
+        "coverage": {
+            "registry_coverage": registry_coverage,
+            "min_registry_coverage": args.min_registry_coverage,
+            "qmd_indexed_vs_discoverable_ratio": qmd_vs_discoverable_ratio,
+        },
+        "registry": {
+            "by_kind": registry_state["by_kind"],
+            "by_state": registry_state["by_state"],
+            "validation_total": registry_state["validation_total"],
+            "validation_failed": registry_state["validation_failed"],
+        },
+        "qmd": qmd,
+        "samples": {
+            "missing_in_registry": _sample(missing_in_registry, sample_limit),
+            "registered_missing_file": _sample(registered_missing, sample_limit),
+            "orphan_extracted_outputs": _sample(orphan_extracted, sample_limit),
+        },
+    }
+    emit(payload, args.json)
+    return 0 if ok or args.no_fail else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Solar Knowledge ingest dispatcher")
     parser.add_argument("--db", default=str(registry.DEFAULT_DB))
@@ -238,6 +555,7 @@ def build_parser() -> argparse.ArgumentParser:
     sources.add_argument("--source-dir", default=str(Path.home() / "Knowledge" / "_raw"))
     sources.add_argument("--source-kind")
     sources.add_argument("--limit", type=int, default=100)
+    sources.add_argument("--include-dispatch", action="store_true")
     sources.add_argument("--verbose", action="store_true")
     sources.add_argument("--build-spans", action="store_true", default=True)
     sources.add_argument("--span-root")
@@ -260,6 +578,26 @@ def build_parser() -> argparse.ArgumentParser:
     process = sub.add_parser("process-queue")
     process.set_defaults(func=cmd_process_queue)
     children.append(process)
+
+    reconcile = sub.add_parser("reconcile")
+    reconcile.add_argument("--knowledge-root", default=str(Path.home() / "Knowledge"))
+    reconcile.add_argument("--raw-dir", default=str(Path.home() / "Knowledge" / "_raw"))
+    reconcile.add_argument("--vault", default=str(Path.home() / "Knowledge"))
+    reconcile.add_argument("--vault-include", nargs="*", default=list(adapters.DEFAULT_VAULT_FOLDERS))
+    reconcile.add_argument("--extracted-dir", default=str(Path.home() / "Knowledge" / "_extracted"))
+    reconcile.add_argument("--sample-limit", type=int, default=20)
+    reconcile.add_argument("--min-registry-coverage", type=float, default=0.99)
+    reconcile.add_argument("--skip-qmd", action="store_true")
+    reconcile.add_argument("--no-fail", action="store_true")
+    reconcile.set_defaults(func=cmd_reconcile)
+    children.append(reconcile)
+
+    legacy = sub.add_parser("import-legacy-extracted")
+    legacy.add_argument("--extracted-dir", default=str(Path.home() / "Knowledge" / "_extracted"))
+    legacy.add_argument("--force", action="store_true")
+    legacy.add_argument("--verbose", action="store_true")
+    legacy.set_defaults(func=cmd_import_legacy_extracted)
+    children.append(legacy)
     for child in children:
         child.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
         child.add_argument("--db", default=argparse.SUPPRESS)
