@@ -145,9 +145,11 @@ def finalize_survey_run(
     final_eval = evaluate_survey(root, strict=True, min_finalized=min_finalized, require_complete=require_complete)
     steps.append({"step": "final_eval", "ok": final_eval.get("ok"), "issues": (final_eval.get("scorecard") or {}).get("issues", [])})
 
+    final_ok = bool(final_eval.get("ok"))
     payload = {
-        "ok": bool(final_eval.get("ok")),
-        "reason": "passed" if final_eval.get("ok") else "final_eval_failed",
+        "ok": final_ok,
+        "reason": "passed" if final_ok else "final_eval_failed",
+        "closeout_gate": "passed" if final_ok else "repairable_fail",
         "steps": steps,
         "initial_eval": initial_eval,
         "repair": repair,

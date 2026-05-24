@@ -153,13 +153,37 @@ def main() -> int:
     output_path = Path(args.output).expanduser()
     candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # B3 naming migration: ensure output is *.semantic.md
+    if output_path.name.endswith(".extracted.md"):
+        semantic_path = output_path.with_name(output_path.name.replace(".extracted.md", ".semantic.md"))
+    elif output_path.suffix == ".md" and not output_path.name.endswith(".semantic.md"):
+        semantic_path = output_path.with_name(output_path.stem + ".semantic.md")
+    else:
+        semantic_path = output_path
+
     markdown = render_extracted_markdown(candidate)
-    output_path.write_text(markdown, encoding="utf-8")
-    payload = {"ok": True, "output": str(output_path), "chars": len(markdown)}
+    semantic_path.write_text(markdown, encoding="utf-8")
+
+    # Create symlink: *.extracted.md → *.semantic.md (backward compat)
+    symlink_path = semantic_path.with_name(
+        semantic_path.name.replace(".semantic.md", ".extracted.md")
+    )
+    if symlink_path == semantic_path:
+        symlink_path = semantic_path  # no symlink needed if names match
+    if symlink_path != semantic_path:
+        try:
+            if symlink_path.is_symlink() or symlink_path.exists():
+                symlink_path.unlink()
+            symlink_path.symlink_to(semantic_path.name)
+        except OSError:
+            pass  # non-critical: symlink creation best-effort
+
+    payload = {"ok": True, "output": str(semantic_path), "symlink": str(symlink_path), "chars": len(markdown)}
     if args.json:
         print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
     else:
-        print(f"wrote {output_path}")
+        print(f"wrote {semantic_path}")
     return 0
 
 

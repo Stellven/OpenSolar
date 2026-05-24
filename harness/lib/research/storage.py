@@ -90,7 +90,8 @@ def feature_flag(flag_name: str, default: bool = False) -> bool:
 
     Falls back to `default` if the config file does not exist or the key is
     absent.  The primary consumer is ``research.evidence_ledger`` which
-    defaults to *off*.
+    defaults to *on* so deterministic evidence artifacts stay enabled unless
+    explicitly turned off.
     """
     if not CONFIG_PATH.exists():
         return default
@@ -107,7 +108,7 @@ def feature_flag(flag_name: str, default: bool = False) -> bool:
 
 def evidence_ledger_enabled() -> bool:
     """Shorthand for ``feature_flag('research.evidence_ledger')``."""
-    return feature_flag("research.evidence_ledger", default=False)
+    return feature_flag("research.evidence_ledger", default=True)
 
 
 # ---------------------------------------------------------------------------

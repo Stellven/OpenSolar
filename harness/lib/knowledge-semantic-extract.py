@@ -19,6 +19,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -40,6 +41,15 @@ DEFAULT_REGISTRY_DB = Path.home() / "Knowledge" / "_registry" / "knowledge_inges
 DEFAULT_THUNDEROMLX_PAUSE_FILE = Path.home() / ".omlx" / "run" / "maintenance.json"
 DEFAULT_THUNDEROMLX_START_SCRIPT = Path.home() / ".solar" / "harness" / "scripts" / "thunderomlx_start_8002.sh"
 LOCK_EXIT_CODE = 75
+DEFAULT_MAP_REDUCE_THRESHOLD_CHARS = 18000
+BAD_EXTRACTED_PATTERNS = [
+    r"Extracted semantic unit for retrieval routing",
+    r"(?m)^---\s*title:",
+    r"本次抽取质量不足",
+    r"需要重新抽取",
+    r"原文未生成合格",
+    r"(?m)\|\s*N/A\s*\|\s*N/A\s*\|",
+]
 
 OBSIDIAN_TOP_LEVEL_DIRS = {
     "concepts",
@@ -335,6 +345,17 @@ def registry_start_job(
     span_ids: list[str],
     args: argparse.Namespace,
 ) -> str:
+    # B5 idempotency: check for existing job with same doc_id + prompt_template_id + model
+    prompt_template_id = PROMPT_VERSION
+    model = args.proxy_model
+    if conn is not None:
+        existing = conn.execute(
+            "SELECT job_id FROM extract_jobs WHERE doc_id = ? AND prompt_template_id = ? AND model = ? LIMIT 1",
+            (doc_id, prompt_template_id, model),
+        ).fetchone()
+        if existing:
+            return existing["job_id"]
+
     job_id = stable_id(
         "extract_job",
         doc_id,
@@ -873,6 +894,70 @@ def build_map_messages(source: Path, content_sha: str, spans: list[dict[str, Any
     system = """你是 Solar Knowledge 的 map 阶段证据抽取器。
 只基于输入 spans，输出紧凑 Markdown，不要 JSON、不要代码围栏、不要外部事实。
 目标是抽取 evidence atoms，供 reduce 阶段合成最终 extracted.md。
+每条 evidence atom 必须引用 raw:Sxxx。YAML/frontmatter 只可作为 metadata，不得作为摘要主体。
+"""
+    user = json.dumps(
+        {
+            "source": str(source),
+            "source_sha256": content_sha,
+            "doc_profile": doc_profile,
+            "task": "extract compact evidence atoms from this section",
+            "output_contract": [
+                "## Section Summary: 1-2 sentences",
+                "## Evidence Atoms: 3-8 bullets, each with raw:Sxxx",
+                "## Entities: compact comma-separated list",
+                "## Claims: 1-4 bullets with raw:Sxxx",
+                "## Risks or Limits: only if directly supported",
+            ],
+            "spans": span_payload,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+def build_reduce_messages(source: Path, content_sha: str, spans: list[dict[str, Any]], map_outputs: list[str], *, doc_profile: str) -> list[dict[str, str]]:
+    system = """你是 Solar Knowledge 的 reduce 阶段语义合成器。
+你会收到多个 section-level evidence atom 摘要。请合成为最终 `# Semantic Extraction` Markdown。
+只能基于 map outputs 和给定 span ids；每个关键事实、论点、风险、验证项必须有 raw:Sxxx。
+不要 N/A，不要“需要重新抽取”，不要模板套话。输出紧凑但完整。
+"""
+    allowed = [span["span_id"] for span in spans]
+    user = f"""源文件: {source}
+source_sha256: {content_sha}
+doc_profile: {doc_profile}
+allowed_span_ids: {allowed}
+
+固定模板：
+```markdown
+{STRICT_MARKDOWN_TEMPLATE}
+```
+
+section map outputs:
+
+{chr(10).join(f"<!-- map:{i+1} -->\n{item}" for i, item in enumerate(map_outputs))}
+
+最终答案只能输出填好的 Markdown，从 `# Semantic Extraction` 开始。
+"""
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+def build_map_messages(source: Path, content_sha: str, spans: list[dict[str, Any]], *, doc_profile: str) -> list[dict[str, str]]:
+    span_payload = [
+        {
+            "span_id": span["span_id"],
+            "heading_path": span.get("heading_path") or [],
+            "start_line": span.get("start_line"),
+            "end_line": span.get("end_line"),
+            "role": span.get("role", "body"),
+            "text": span.get("text", ""),
+        }
+        for span in spans
+    ]
+    system = """你是 Solar Knowledge 的 map 阶段证据抽取器。
+只基于输入 spans，输出紧凑 Markdown，不要 JSON、不要代码围栏、不要外部事实。
+目标是抽取 evidence atoms，供 reduce 阶段合成最终 extracted.md。
 每条 evidence atom 必须引用 raw:Sxxx。
 YAML/frontmatter 只可作为 metadata，不得作为摘要主体。
 """
@@ -1005,6 +1090,51 @@ def call_thunderomlx_with_retries(messages: list[dict[str, str]], args: argparse
     raise last_exc
 
 
+def extract_map_reduce(source: Path, content_sha: str, spans: list[dict[str, Any]], args: argparse.Namespace, *, doc_profile: str) -> tuple[str, dict[str, Any], int, dict[str, Any]]:
+    """Extract long Obsidian docs by section maps plus one reduce pass."""
+    body_spans = [span for span in spans if span.get("role") != "metadata_only"] or spans
+    batches: list[list[dict[str, Any]]] = []
+    current: list[dict[str, Any]] = []
+    current_chars = 0
+    max_map_chars = int(getattr(args, "map_reduce_chunk_chars", 7000))
+    for span in body_spans:
+        span_chars = len(str(span.get("text") or ""))
+        if current and current_chars + span_chars > max_map_chars:
+            batches.append(current)
+            current = []
+            current_chars = 0
+        current.append(span)
+        current_chars += span_chars
+    if current:
+        batches.append(current)
+
+    total_latency = 0
+    usage_records: list[dict[str, Any]] = []
+    map_outputs: list[str] = []
+    original_tokens = args.max_tokens
+    try:
+        args.max_tokens = min(int(getattr(args, "map_reduce_map_tokens", 1400)), int(original_tokens))
+        for batch in batches:
+            map_body, map_response, latency = call_thunderomlx_with_retries(
+                build_map_messages(source, content_sha, batch, doc_profile=doc_profile),
+                args,
+            )
+            map_outputs.append(map_body.strip())
+            total_latency += latency
+            usage_records.append({"stage": "map", "usage": map_response.get("usage") if isinstance(map_response, dict) else {}})
+        args.max_tokens = original_tokens
+        reduce_body, reduce_response, latency = call_thunderomlx_with_retries(
+            build_reduce_messages(source, content_sha, spans, map_outputs, doc_profile=doc_profile),
+            args,
+        )
+        total_latency += latency
+        usage_records.append({"stage": "reduce", "usage": reduce_response.get("usage") if isinstance(reduce_response, dict) else {}})
+        meta = {"mode": "map_reduce", "map_batches": len(batches), "map_outputs": len(map_outputs), "usage_records": usage_records}
+        return reduce_body, reduce_response, total_latency, meta
+    finally:
+        args.max_tokens = original_tokens
+
+
 def validate_extracted(text: str, content_sha: str) -> list[str]:
     errors: list[str] = []
     required = [
@@ -1096,6 +1226,16 @@ def extract_one(source: Path, vault: Path, args: argparse.Namespace) -> dict[str
         if conn is not None:
             conn.close()
         return {"ok": True, "skipped": True, "source": str(source), "manifest": str(manifest_path), "output": str(output_path), "doc_id": doc_id}
+
+    # B5 idempotency: skip if job already exists for this doc_id + prompt_template_id + model
+    if conn is not None and not args.force:
+        existing_job = conn.execute(
+            "SELECT job_id FROM extract_jobs WHERE doc_id = ? AND prompt_template_id = ? AND model = ? LIMIT 1",
+            (doc_id, PROMPT_VERSION, args.proxy_model),
+        ).fetchone()
+        if existing_job:
+            conn.close()
+            return {"ok": True, "skipped_idempotent": True, "job_id": existing_job["job_id"], "source": str(source), "doc_id": doc_id}
     if args.dry_run:
         if conn is not None:
             conn.close()
@@ -1111,8 +1251,19 @@ def extract_one(source: Path, vault: Path, args: argparse.Namespace) -> dict[str
     repair_attempted = False
     repair_errors: list[str] = []
     output_records: list[tuple[str, Path, str]] = []
+    extraction_mode = "single"
+    extraction_meta: dict[str, Any] = {}
     try:
-        body, response, latency_ms = call_thunderomlx_with_retries(messages, args)
+        if (
+            doc_profile.startswith("obsidian_")
+            and len(text) > int(getattr(args, "map_reduce_threshold_chars", DEFAULT_MAP_REDUCE_THRESHOLD_CHARS))
+            and not getattr(args, "no_map_reduce", False)
+        ):
+            body, response, latency_ms, extraction_meta = extract_map_reduce(source, content_sha, spans, args, doc_profile=doc_profile)
+            extraction_mode = "map_reduce"
+        else:
+            body, response, latency_ms = call_thunderomlx_with_retries(messages, args)
+            extraction_meta = {"mode": "single"}
         body = normalize_extracted(body, spans)
         errors = validate_extracted(body, content_sha)
         if errors and args.repair_attempts > 0:
@@ -1159,6 +1310,8 @@ def extract_one(source: Path, vault: Path, args: argparse.Namespace) -> dict[str
         "schema_version": SCHEMA_VERSION,
         "span_count": len(spans),
         "doc_profile": doc_profile,
+        "extraction_mode": extraction_mode,
+        "extraction_meta": extraction_meta,
         "prompt_chars": sum(len(message.get("content", "")) for message in messages),
         "latency_ms": latency_ms,
         "usage": usage or {},
@@ -1182,6 +1335,7 @@ def extract_one(source: Path, vault: Path, args: argparse.Namespace) -> dict[str
             f"prompt_version: {PROMPT_VERSION}\n"
             f"schema_version: {SCHEMA_VERSION}\n"
             f"doc_profile: {doc_profile}\n"
+            f"extraction_mode: {extraction_mode}\n"
             f"generated_at: {generated_at}\n"
             "---\n\n"
         )
@@ -1248,9 +1402,15 @@ def append_log(vault: Path, payload: dict[str, Any]) -> None:
 INTERNAL_VAULT_DIRS = {
     ".obsidian",
     "_extracted",
+    "_locks",
     "_logs",
     "_manifests",
     "_meta",
+    "_queues",
+    "_quarantine",
+    "_registry",
+    "_reports",
+    "_state_mirror",
 }
 
 
@@ -1495,6 +1655,64 @@ def cmd_supervised_backfill(args: argparse.Namespace) -> int:
     return 0 if payload["ok"] else 1
 
 
+def is_bad_extracted_text(text: str) -> list[str]:
+    hits: list[str] = []
+    for pattern in BAD_EXTRACTED_PATTERNS:
+        if re.search(pattern, text):
+            hits.append(pattern)
+    na_count = len(re.findall(r"\bN/A\b", text))
+    if na_count >= 6:
+        hits.append(f"too_many_na:{na_count}")
+    return hits
+
+
+def cmd_quarantine_bad_extracted(args: argparse.Namespace) -> int:
+    vault = resolve_vault(args.vault)
+    root = Path(args.source_dir).expanduser() if args.source_dir else vault / "_extracted" / "thunderomlx"
+    stamp = now_iso().replace(":", "").replace("-", "")
+    quarantine_root = Path(args.quarantine_dir).expanduser() if args.quarantine_dir else vault / "_quarantine" / "bad-extracted" / stamp
+    candidates = sorted(root.rglob("*.md")) if root.exists() else []
+    moved: list[dict[str, Any]] = []
+    scanned = 0
+    for path in candidates:
+        if args.limit and len(moved) >= args.limit:
+            break
+        scanned += 1
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+            hits = is_bad_extracted_text(text)
+        except Exception as exc:
+            hits = [f"read_error:{exc}"]
+        if not hits:
+            continue
+        try:
+            rel = path.resolve().relative_to(root.resolve())
+        except Exception:
+            rel = Path(safe_name(str(path.resolve()).lstrip("/")))
+        target = quarantine_root / rel
+        if not args.dry_run:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(path), str(target))
+            report = path.with_suffix(".extract.report.json")
+            if report.exists():
+                shutil.move(str(report), str(target.with_suffix(".extract.report.json")))
+        moved.append({"source": str(path), "target": str(target), "reasons": hits})
+    payload = {
+        "ok": True,
+        "root": str(root),
+        "quarantine_root": str(quarantine_root),
+        "scanned": scanned,
+        "quarantined": len(moved),
+        "dry_run": bool(args.dry_run),
+        "items": moved if args.verbose or args.json else [],
+    }
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+    else:
+        print(f"[semantic-extract] bad-extracted scanned={scanned} quarantined={len(moved)} dry_run={args.dry_run}")
+    return 0
+
+
 def run_backfill_sources(args: argparse.Namespace, sources: list[Path], qmd_after: bool = True) -> int:
     vault = resolve_vault(args.vault)
     results = []
@@ -1614,6 +1832,10 @@ def build_parser() -> argparse.ArgumentParser:
     supervised.add_argument("--stale-minutes", type=int, default=int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_STALE_MINUTES", "30")))
     supervised.add_argument("--reap-limit", type=int, default=20)
     supervised.add_argument("--stop-on-error", action="store_true")
+    quarantine = sub.add_parser("quarantine-bad-extracted")
+    quarantine.add_argument("--source-dir", default=None)
+    quarantine.add_argument("--quarantine-dir", default=None)
+    quarantine.add_argument("--limit", type=int, default=0)
     for child in (one, backfill, backfill_vault, reap, supervised):
         child.add_argument("--force", action="store_true", default=argparse.SUPPRESS)
         child.add_argument("--dry-run", action="store_true", default=argparse.SUPPRESS)
@@ -1629,6 +1851,9 @@ def build_parser() -> argparse.ArgumentParser:
         child.add_argument("--max-consecutive-failures", type=int, default=argparse.SUPPRESS)
         child.add_argument("--max-fail-rate", type=float, default=argparse.SUPPRESS)
         child.add_argument("--min-circuit-attempts", type=int, default=argparse.SUPPRESS)
+    quarantine.add_argument("--dry-run", action="store_true", default=argparse.SUPPRESS)
+    quarantine.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    quarantine.add_argument("--verbose", action="store_true", default=argparse.SUPPRESS)
     return parser
 
 
@@ -1644,6 +1869,8 @@ def main() -> int:
         return cmd_reap_stale(args)
     if args.command == "supervised-backfill":
         return cmd_supervised_backfill(args)
+    if args.command == "quarantine-bad-extracted":
+        return cmd_quarantine_bad_extracted(args)
     return 1
 
 
