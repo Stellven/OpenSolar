@@ -565,7 +565,15 @@ def pane_survey_blocked(tail: str) -> bool:
 
 def pane_permissions_prompt_blocked(tail: str) -> bool:
     bottom = "\n".join(tail.splitlines()[-40:])
-    return bool(PERMISSIONS_PROMPT_RE.search(bottom))
+    if bool(PERMISSIONS_PROMPT_RE.search(bottom)):
+        return True
+    lower = bottom.lower()
+    return (
+        "accept edits on" in lower
+        or "bypass permissions on" in lower
+        or "what should claude do" in lower
+        or "do you want to proceed?" in lower
+    )
 
 
 def clear_current_prompt(target: str) -> bool:
@@ -2435,13 +2443,13 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
             mark_action(state, f, result)
             actions.append(result)
             continue
-        if target and target in used_targets:
+        if target and target in used_targets and ftype != "pane_permissions_prompt_blocked":
             actions.append({"sid": sid, "action": ftype, "skipped": "target_already_used_this_scan", "target": target})
             continue
         if not should_act(state, f, cooldown):
             actions.append({"sid": sid, "action": ftype, "skipped": "cooldown", "target": target})
             continue
-        if target_recently_dispatched(state, target, cooldown):
+        if target_recently_dispatched(state, target, cooldown) and ftype != "pane_permissions_prompt_blocked":
             actions.append({"sid": sid, "action": ftype, "skipped": "target_cooldown", "target": target})
             continue
         if dispatch and target:

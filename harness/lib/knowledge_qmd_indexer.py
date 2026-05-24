@@ -16,7 +16,7 @@ from typing import Any
 import knowledge_ingest_registry as registry
 
 
-LAYERS = ("raw", "vault", "extracted")
+LAYERS = ("raw", "vault", "semantic")
 DEFAULT_LOCK_PATH = Path.home() / "Knowledge" / "_registry" / "qmd-update.lock"
 
 
@@ -168,7 +168,7 @@ def _advance_extracted_doc_states(conn, docs: list[dict[str, Any]], *, batch_id:
     advanced_done = 0
     seen: set[str] = set()
     for doc in docs:
-        if doc.get("layer") != "extracted":
+        if doc.get("layer") != "semantic":
             continue
         doc_id = str(doc["doc_id"])
         if doc_id in seen:
@@ -177,7 +177,7 @@ def _advance_extracted_doc_states(conn, docs: list[dict[str, Any]], *, batch_id:
         row = conn.execute("SELECT current_state FROM documents WHERE doc_id=?", (doc_id,)).fetchone()
         if not row or str(row["current_state"]) != "EXTRACTED_QMD_INDEX_PENDING":
             continue
-        payload = {"layer": "extracted", "path": doc.get("path"), "indexed_sha256": doc.get("sha")}
+        payload = {"layer": "semantic", "path": doc.get("path"), "indexed_sha256": doc.get("sha")}
         if _transition_document(conn, doc_id=doc_id, to_state="EXTRACTED_QMD_INDEXED", batch_id=batch_id, payload=payload):
             advanced_indexed += 1
         if _transition_document(conn, doc_id=doc_id, to_state="DONE", batch_id=batch_id, payload=payload | {"previous_terminal_state": "EXTRACTED_QMD_INDEXED"}):
@@ -204,7 +204,7 @@ def _candidate_docs(conn, layers: set[str]) -> list[dict[str, Any]]:
                 continue
             digest = str(row["source_sha256"]) if row["source_sha256"] else _file_sha256(path)
             docs.append({"doc_id": row["doc_id"], "layer": layer, "path": _norm_path(path), "sha": digest})
-    if "extracted" in layers:
+    if "semantic" in layers:
         latest_by_path: dict[tuple[str, str, str], dict[str, Any]] = {}
         for row in conn.execute(
             """
@@ -225,10 +225,10 @@ def _candidate_docs(conn, layers: set[str]) -> list[dict[str, Any]]:
             # Deduping by path avoids an old output hash creating a permanent
             # changed-only false positive.
             norm_path = _norm_path(path)
-            key = (str(row["doc_id"]), "extracted", str(norm_path))
+            key = (str(row["doc_id"]), "semantic", str(norm_path))
             latest_by_path[key] = {
                 "doc_id": row["doc_id"],
-                "layer": "extracted",
+                "layer": "semantic",
                 "path": norm_path,
                 "sha": _file_sha256(path),
                 "created_at": row["created_at"],
@@ -249,7 +249,7 @@ def cmd_changed_only_reindex(args: argparse.Namespace) -> int:
             latest_hash = _latest_indexed_hash(conn, doc["doc_id"], doc["layer"], doc["path"])
             if args.force or latest_hash != doc["sha"]:
                 changed.append(doc)
-            elif doc["layer"] == "extracted":
+            elif doc["layer"] == "semantic":
                 indexed_candidates.append(doc)
     if args.limit:
         changed = changed[: args.limit]
@@ -320,7 +320,7 @@ def cmd_advance_indexed_states(args: argparse.Namespace) -> int:
     db_path = Path(args.db).expanduser()
     batch_id = args.batch_id or f"qmd-advance-{uuid.uuid4().hex[:10]}"
     with _connect(db_path) as conn:
-        candidates = [doc for doc in _candidate_docs(conn, {"extracted"}) if _latest_indexed_hash(conn, doc["doc_id"], doc["layer"], doc["path"]) == doc["sha"]]
+        candidates = [doc for doc in _candidate_docs(conn, {"semantic"}) if _latest_indexed_hash(conn, doc["doc_id"], doc["layer"], doc["path"]) == doc["sha"]]
         if args.limit:
             candidates = candidates[: args.limit]
         state_advances = _advance_extracted_doc_states(conn, candidates, batch_id=batch_id)
@@ -402,7 +402,7 @@ def build_parser() -> argparse.ArgumentParser:
     micro.add_argument("--lock-timeout-sec", type=int, default=600)
     micro.set_defaults(func=cmd_microbatch)
     changed = sub.add_parser("changed-only-reindex")
-    changed.add_argument("--layers", default="raw,vault,extracted")
+    changed.add_argument("--layers", default="raw,vault,semantic")
     changed.add_argument("--batch-id")
     changed.add_argument("--execute", action="store_true")
     changed.add_argument("--force", action="store_true")

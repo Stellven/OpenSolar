@@ -20,6 +20,29 @@ import knowledge_spans
 import knowledge_dashboard
 
 
+# ── State machine: valid transitions (B2) ──────────────────────────
+VALID_TRANSITIONS: set[tuple[str, str]] = {
+    # Original states
+    ("NEW", "RAW_MATERIALIZED"),
+    ("RAW_MATERIALIZED", "VAULT_DISCOVERED"),
+    ("VAULT_DISCOVERED", "EXTRACT_ELIGIBLE"),
+    ("EXTRACT_ELIGIBLE", "THUNDEROMLX_EXTRACT_RUNNING"),
+    ("THUNDEROMLX_EXTRACT_RUNNING", "DONE"),
+    ("RAW_MATERIALIZED", "EXTRACT_ELIGIBLE"),
+    ("EXTRACT_ELIGIBLE", "DONE"),
+    # B2 new transitions: retryable failure
+    ("EXTRACT_ELIGIBLE", "DONE_RAW_ONLY_WARN"),
+    ("THUNDEROMLX_EXTRACT_RUNNING", "EXTRACT_FAILED_RETRYABLE"),
+    ("EXTRACT_FAILED_RETRYABLE", "THUNDEROMLX_EXTRACT_RUNNING"),
+    ("EXTRACT_FAILED_RETRYABLE", "DONE_RAW_ONLY_WARN"),
+    # Skip path
+    ("EXTRACT_ELIGIBLE", "IGNORED"),
+}
+
+MAX_RETRY_ATTEMPTS = 3
+RETRY_BACKOFF_BASE_SEC = 10.0
+
+
 def emit(payload: dict[str, Any], as_json: bool) -> None:
     if as_json:
         print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
@@ -29,6 +52,16 @@ def emit(payload: dict[str, Any], as_json: bool) -> None:
 
 def cmd_status(args: argparse.Namespace) -> int:
     emit(registry.status(Path(args.db).expanduser()), args.json)
+    return 0
+
+
+def cmd_qmd_watermarks(args: argparse.Namespace) -> int:
+    db_path = Path(args.db).expanduser()
+    registry.migrate(db_path)
+    with registry.connect(db_path) as conn:
+        rows = conn.execute("SELECT * FROM watermarks ORDER BY layer").fetchall()
+    watermarks = [dict(zip(row.keys(), row)) for row in rows]
+    emit({"ok": True, "watermarks": watermarks, "count": len(watermarks)}, args.json)
     return 0
 
 
@@ -534,6 +567,143 @@ def _find_or_register_source_doc(
     return doc["doc_id"], "registered_legacy_needs_review"
 
 
+def drain_extract_failed_retryable(db_path: Path, max_retries: int = MAX_RETRY_ATTEMPTS,
+                                    backoff_base: float = RETRY_BACKOFF_BASE_SEC) -> dict[str, Any]:
+    """Drain EXTRACT_FAILED_RETRYABLE documents: retry up to max_retries times."""
+    import time as _time
+    registry.migrate(db_path)
+    retried = 0
+    skipped = 0
+    with registry.connect(db_path) as conn:
+        rows = list(conn.execute(
+            "SELECT doc_id, source_kind, source_path, updated_at FROM documents "
+            "WHERE current_state = 'EXTRACT_FAILED_RETRYABLE'"
+        ))
+    for row in rows:
+        doc_id = row["doc_id"]
+        # Check repair_count in extract_jobs
+        with registry.connect(db_path) as conn:
+            job = conn.execute(
+                "SELECT repair_count FROM extract_jobs WHERE doc_id = ? ORDER BY created_at DESC LIMIT 1",
+                (doc_id,),
+            ).fetchone()
+        repair_count = job["repair_count"] if job else 0
+        if repair_count >= max_retries:
+            # Exceeded max retries → DONE_RAW_ONLY_WARN
+            registry.transition_document(doc_id, "EXTRACT_FAILED_RETRYABLE", "DONE_RAW_ONLY_WARN", db_path=db_path)
+            skipped += 1
+        else:
+            # Re-queue for extraction
+            registry.transition_document(doc_id, "EXTRACT_FAILED_RETRYABLE", "THUNDEROMLX_EXTRACT_RUNNING", db_path=db_path)
+            retried += 1
+            _time.sleep(backoff_base * (2 ** min(repair_count, 3)))
+    return {"retried": retried, "skipped_to_warn": skipped, "total": len(rows)}
+
+
+def drain_extract_eligible_skip(db_path: Path) -> dict[str, Any]:
+    """Skip documents with extract_policy=skip from EXTRACT_ELIGIBLE to DONE_RAW_ONLY_WARN."""
+    registry.migrate(db_path)
+    skipped = 0
+    with registry.connect(db_path) as conn:
+        rows = list(conn.execute(
+            "SELECT doc_id FROM documents "
+            "WHERE current_state = 'EXTRACT_ELIGIBLE' AND extract_policy = 'skip'"
+        ))
+    for row in rows:
+        registry.transition_document(doc_id=row["doc_id"], from_state="EXTRACT_ELIGIBLE",
+                                    to_state="DONE_RAW_ONLY_WARN", db_path=db_path)
+        skipped += 1
+    return {"skipped": skipped}
+
+
+def cmd_drain_retry(args: argparse.Namespace) -> int:
+    result = drain_extract_failed_retryable(Path(args.db).expanduser())
+    emit({"ok": True, **result}, args.json)
+    return 0
+
+
+def cmd_drain_skip(args: argparse.Namespace) -> int:
+    result = drain_extract_eligible_skip(Path(args.db).expanduser())
+    emit({"ok": True, **result}, args.json)
+    return 0
+
+
+def _cmd_discover_adapter(adapter_key: str, args: argparse.Namespace) -> int:
+    """Generic discover command for B4 adapters."""
+    root = Path(args.source_dir).expanduser()
+    limit = args.limit
+    db_path = Path(args.db).expanduser()
+    registry.migrate(db_path)
+    count = 0
+    docs: list[dict[str, Any]] = []
+    span_count = 0
+    for path, source_kind, source_adapter, doc_type in adapters.iter_adapter_sources(root, adapter_key, limit=limit):
+        sha = registry.hashlib.sha256(path.read_bytes()).hexdigest()
+        doc = registry.upsert_document(
+            source_kind=source_kind,
+            source_path=str(path),
+            source_adapter=source_adapter,
+            content_kind="markdown",
+            declared_doc_type=doc_type,
+            source_sha256=sha,
+            current_state="RAW_MATERIALIZED",
+            db_path=db_path,
+        )
+        if args.build_spans:
+            span_info = _write_and_register_spans(path=path, doc=doc, source_kind=source_kind, args=args)
+            doc["span_sidecar_path"] = span_info["sidecar_path"]
+            doc["span_count"] = span_info["span_count"]
+            span_count += span_info["span_count"]
+        docs.append(doc)
+        count += 1
+    emit({"ok": True, "adapter": adapter_key, "source_dir": str(root), "count": count, "span_count": span_count, "documents": docs if args.verbose else []}, args.json)
+    return 0
+
+
+def cmd_discover_youtube(args: argparse.Namespace) -> int:
+    return _cmd_discover_adapter("youtube_transcript", args)
+
+
+def cmd_discover_github(args: argparse.Namespace) -> int:
+    return _cmd_discover_adapter("github_trends", args)
+
+
+def cmd_discover_pdf(args: argparse.Namespace) -> int:
+    return _cmd_discover_adapter("pdf_manual", args)
+
+
+def cmd_discover_accepted(args: argparse.Namespace) -> int:
+    return _cmd_discover_adapter("accepted_sprint", args)
+
+
+def cmd_discover_solar(args: argparse.Namespace) -> int:
+    return _cmd_discover_adapter("solar_artifact", args)
+
+
+def cmd_coverage_report(args: argparse.Namespace) -> int:
+    """Coverage report: per source_kind document counts + state breakdown, flag <20 samples."""
+    db_path = Path(args.db).expanduser()
+    registry.migrate(db_path)
+    with registry.connect(db_path) as conn:
+        rows = list(conn.execute(
+            "SELECT source_kind, current_state, COUNT(*) as cnt "
+            "FROM documents GROUP BY source_kind, current_state ORDER BY source_kind, current_state"
+        ))
+    all_kinds = sorted({r["source_kind"] for r in rows})
+    report: dict[str, Any] = {}
+    warnings: list[str] = []
+    for kind in all_kinds:
+        kind_rows = [r for r in rows if r["source_kind"] == kind]
+        total = sum(r["cnt"] for r in kind_rows)
+        states = {r["current_state"]: r["cnt"] for r in kind_rows}
+        report[kind] = {"total": total, "states": states}
+        if total < 20:
+            warnings.append(f"{kind}: only {total} documents (< 20)")
+    payload = {"ok": True, "source_kinds": report, "warnings": warnings}
+    emit(payload, args.json)
+    return 0
+
+
 def cmd_dashboard(args: argparse.Namespace) -> int:
     db_path = Path(args.db).expanduser()
     dashboard = knowledge_dashboard.gather_dashboard(db_path)
@@ -712,6 +882,11 @@ def build_parser() -> argparse.ArgumentParser:
     status = sub.add_parser("status")
     status.set_defaults(func=cmd_status)
     children.append(status)
+
+    qmd_wm = sub.add_parser("qmd-watermarks")
+    qmd_wm.set_defaults(func=cmd_qmd_watermarks)
+    children.append(qmd_wm)
+
     migrate = sub.add_parser("migrate")
     migrate.set_defaults(func=cmd_migrate)
     children.append(migrate)
@@ -816,6 +991,43 @@ def build_parser() -> argparse.ArgumentParser:
     dashboard.add_argument("--html", default="", help="Write HTML dashboard to this path")
     dashboard.set_defaults(func=cmd_dashboard)
     children.append(dashboard)
+
+    coverage = sub.add_parser("coverage-report")
+    coverage.set_defaults(func=cmd_coverage_report)
+    children.append(coverage)
+
+    drain_retry = sub.add_parser("drain-retry")
+    drain_retry.set_defaults(func=cmd_drain_retry)
+    children.append(drain_retry)
+
+    drain_skip = sub.add_parser("drain-skip")
+    drain_skip.set_defaults(func=cmd_drain_skip)
+    children.append(drain_skip)
+
+    # B4: 5 new adapter discover commands
+    for adapter_key, cmd_name in [
+        ("youtube", "discover-youtube"),
+        ("github", "discover-github"),
+        ("pdf", "discover-pdf"),
+        ("accepted", "discover-accepted"),
+        ("solar", "discover-solar"),
+    ]:
+        p = sub.add_parser(cmd_name)
+        p.add_argument("--source-dir", default=str(Path.home() / "Knowledge" / "_raw"))
+        p.add_argument("--limit", type=int, default=20)
+        p.add_argument("--verbose", action="store_true")
+        p.add_argument("--build-spans", action="store_true", default=True)
+        p.add_argument("--span-root")
+        p.add_argument("--max-span-lines", type=int, default=120)
+        func_map = {
+            "discover-youtube": cmd_discover_youtube,
+            "discover-github": cmd_discover_github,
+            "discover-pdf": cmd_discover_pdf,
+            "discover-accepted": cmd_discover_accepted,
+            "discover-solar": cmd_discover_solar,
+        }
+        p.set_defaults(func=func_map[cmd_name])
+        children.append(p)
 
     for child in children:
         child.add_argument("--json", action="store_true", default=argparse.SUPPRESS)

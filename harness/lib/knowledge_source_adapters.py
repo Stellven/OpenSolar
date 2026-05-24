@@ -11,6 +11,70 @@ DEFAULT_VAULT_FOLDERS = ("concepts", "references", "synthesis", "projects")
 SUPPORTED_SOURCE_SUFFIXES = {".md", ".markdown", ".json", ".jsonl", ".txt", ".html", ".htm"}
 
 
+# ── B4 Adapter Registry ──────────────────────────────────────────
+ADAPTER_REGISTRY: dict[str, dict[str, str]] = {
+    "youtube_transcript": {
+        "source_kind": "youtube_transcript",
+        "source_adapter": "youtube_adapter",
+        "declared_doc_type": "youtube_transcript",
+        "root_subdir": "youtube-influence-digest",
+    },
+    "github_trends": {
+        "source_kind": "github_trends",
+        "source_adapter": "github_adapter",
+        "declared_doc_type": "github_digest",
+        "root_subdir": "github-trends-digest",
+    },
+    "pdf_manual": {
+        "source_kind": "pdf_manual",
+        "source_adapter": "pdf_adapter",
+        "declared_doc_type": "pdf_manual",
+        "root_subdir": "pdf-manuals",
+    },
+    "accepted_sprint": {
+        "source_kind": "accepted_sprint",
+        "source_adapter": "accepted_adapter",
+        "declared_doc_type": "accepted_sprint",
+        "root_subdir": "accepted",
+    },
+    "solar_artifact": {
+        "source_kind": "solar_artifact",
+        "source_adapter": "solar_adapter",
+        "declared_doc_type": "solar_artifact",
+        "root_subdir": "solar-harness",
+    },
+}
+
+
+def iter_adapter_sources(
+    raw_root: Path, adapter_key: str, *, limit: int | None = None
+) -> Iterable[tuple[Path, str, str, str]]:
+    """Iterate sources for a specific adapter from ADAPTER_REGISTRY.
+
+    Returns (path, source_kind, source_adapter, declared_doc_type) tuples.
+    """
+    info = ADAPTER_REGISTRY.get(adapter_key)
+    if info is None:
+        return
+    subdir = info["root_subdir"]
+    target_dir = raw_root / subdir
+    if not target_dir.exists():
+        # Fallback: scan entire raw_root and classify
+        target_dir = raw_root
+    count = 0
+    for path in sorted(target_dir.rglob("*.md")):
+        text_path = str(path)
+        if "/_extracted/" in text_path or "/.spans/" in text_path:
+            continue
+        # Verify this matches the adapter via classify_raw_source
+        classified_kind, _, _ = classify_raw_source(path, raw_root)
+        # Accept if classified matches or if scanning from specific subdir
+        yield path, info["source_kind"], info["source_adapter"], info["declared_doc_type"]
+        count += 1
+        if limit and count >= limit:
+            return
+
+
 def classify_raw_source(path: Path, raw_root: Path) -> tuple[str, str, str]:
     """Return (source_kind, adapter, declared_doc_type) for known raw sources."""
     try:

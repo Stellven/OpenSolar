@@ -84,6 +84,7 @@ BOILERPLATE_LINE_RE = re.compile(
 )
 VALIDATED_SOURCE_TYPES = {"paper", "code", "official_doc", "benchmark"}
 HIGH_AUTHORITY_THRESHOLD = 0.75
+CITE_EVIDENCE_RE = re.compile(r"\[cite:(ev_[A-Za-z0-9_-]+)\]")
 
 
 def _normalize_policy_profile(profile: dict[str, Any]) -> dict[str, Any]:
@@ -373,6 +374,17 @@ def _read_jsonl(path: str | Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _evidence_text(row: dict[str, Any]) -> str:
+    return str(
+        row.get("content")
+        or row.get("span_text")
+        or row.get("clean_markdown")
+        or row.get("text")
+        or row.get("title")
+        or ""
+    )
+
+
 def _tokens(text: str) -> set[str]:
     return {tok.lower() for tok in TOKEN_RE.findall(text or "") if len(tok.strip()) >= 2}
 
@@ -396,6 +408,88 @@ def _source_token_sets(output_dir: Path) -> list[set[str]]:
         if len(toks) >= 6:
             token_sets.append(toks)
     return token_sets
+
+
+def _grounding_checks(text: str, cited_ids: set[str], evidence_by_id: dict[str, str]) -> list[dict[str, Any]]:
+    checks: list[dict[str, Any]] = []
+    for line_no, line in enumerate((text or "").splitlines(), start=1):
+        line_citations = set(CITE_EVIDENCE_RE.findall(line))
+        if not line_citations:
+            continue
+        context_tokens = _tokens(line)
+        for evidence_id in sorted(line_citations):
+            evidence_tokens = _tokens(evidence_by_id.get(evidence_id, ""))
+            if not evidence_tokens:
+                checks.append({
+                    "evidence_id": evidence_id,
+                    "line": line_no,
+                    "ok": False,
+                    "reason": "evidence_span_text_missing",
+                    "overlap": [],
+                })
+                continue
+            overlap = sorted(context_tokens & evidence_tokens)
+            checks.append({
+                "evidence_id": evidence_id,
+                "line": line_no,
+                "ok": bool(overlap),
+                "reason": "" if overlap else "citation_context_not_grounded",
+                "overlap": overlap[:12],
+            })
+    for evidence_id in sorted(cited_ids):
+        if any(item.get("evidence_id") == evidence_id for item in checks):
+            continue
+        checks.append({
+            "evidence_id": evidence_id,
+            "line": None,
+            "ok": False,
+            "reason": "citation_context_missing",
+            "overlap": [],
+        })
+    return checks
+
+
+def _citation_grounding_metrics(final_text: str, output_dir: Path) -> tuple[dict[str, Any], list[str], list[str]]:
+    cited_ids = set(CITE_EVIDENCE_RE.findall(final_text or ""))
+    evidence_rows = _read_jsonl(output_dir / "evidence.jsonl")
+    evidence_by_id = {
+        str(row.get("id") or row.get("evidence_id") or ""): _evidence_text(row)
+        for row in evidence_rows
+        if str(row.get("id") or row.get("evidence_id") or "")
+    }
+    errors: list[str] = []
+    warnings: list[str] = []
+    missing_ids = sorted(evidence_id for evidence_id in cited_ids if evidence_id not in evidence_by_id)
+    if missing_ids:
+        errors.append("final_md_missing_cited_evidence:" + ",".join(missing_ids[:10]))
+    checks = _grounding_checks(final_text, cited_ids - set(missing_ids), evidence_by_id)
+    grounding_failures = [
+        {
+            "evidence_id": item.get("evidence_id"),
+            "line": item.get("line"),
+            "reason": item.get("reason"),
+        }
+        for item in checks
+        if not item.get("ok")
+    ]
+    if grounding_failures:
+        failing_ids = sorted(
+            {str(item.get("evidence_id") or "") for item in grounding_failures if item.get("evidence_id")}
+        )
+        errors.append("final_md_ungrounded_evidence_citations:" + ",".join(failing_ids[:10]))
+    grounded = sum(
+        1
+        for evidence_id in cited_ids
+        if any(item.get("ok") and item.get("evidence_id") == evidence_id for item in checks)
+    )
+    metrics = {
+        "final_md_citation_count": len(cited_ids),
+        "final_md_grounded_citation_count": grounded,
+        "final_md_missing_cited_evidence_count": len(missing_ids),
+        "final_md_ungrounded_citation_count": len(grounding_failures),
+        "final_md_grounding_failures": grounding_failures[:20],
+    }
+    return metrics, errors, warnings
 
 
 def _expert_analysis_lines(expert_text: str) -> list[str]:
@@ -907,8 +1001,13 @@ def evaluate_artifacts(
         final_text = final_path.read_text(encoding="utf-8", errors="replace")
         if not final_text.strip():
             errors.append("final_md_empty")
-        if not re.search(r"\[cite:ev_[A-Za-z0-9_-]+", final_text):
+        if not CITE_EVIDENCE_RE.search(final_text):
             errors.append("final_md_missing_evidence_citations")
+        else:
+            citation_metrics, citation_errors, citation_warnings = _citation_grounding_metrics(final_text, output_dir)
+            metrics.update(citation_metrics)
+            errors.extend(citation_errors)
+            warnings.extend(citation_warnings)
         metadata_noise = len(re.findall(r"(?im)^\s*-?\s*(Title|URL|Publisher|Published|Source Type):", final_text))
         metrics["metadata_noise_lines"] = metadata_noise
         if metadata_noise > 3:

@@ -50,11 +50,12 @@ youtube:
   min_transcript_duration_seconds: 600  # do not spend transcript/ASR budget on videos under 10 minutes
   asr:
     enabled: true
-    max_per_run: 1
+    max_per_run: 2
     backend: mlx-whisper
     whisper_model: mlx-community/whisper-small-mlx
     openai_whisper_model: small
     language: zh
+    language_strategy: auto-by-channel
     archive_audio_dir: /Volumes/RAID0-Main/SolarArchive/tech-hotspot-radar/asr-audio
   languages_priority: [en, zh, auto]
   channels:

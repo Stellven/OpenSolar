@@ -1002,11 +1002,34 @@ def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path
         status = node_status(graph, node_id)
         handoff_file = _existing_node_handoff(sid, node, graph)
         if handoff_file and status in {"pending", "queued", "blocked", "assigned", "dispatched", "in_progress", "running", ""}:
+            pane = str(node.get("assigned_to") or "").strip()
+            dispatch_id = str(node.get("dispatch_id") or "").strip()
+            if pane and dispatch_id:
+                release_lease(pane, dispatch_id, "graph_dispatch_reconcile_handoff_reviewing")
+            node.pop("assigned_to", None)
+            node.pop("dispatch_id", None)
             set_node_status(graph, node_id, "reviewing")
             node["status"] = "reviewing"
             node["updated_at"] = _utc_now()
             repaired.append({"node": node_id, "status": "reviewing", "reason": "handoff_file_exists", "handoff": str(handoff_file)})
             continue
+        if handoff_file and status in {"reviewing", "ready_for_review", "needs_human_review", "failed_review"}:
+            pane = str(node.get("assigned_to") or "").strip()
+            dispatch_id = str(node.get("dispatch_id") or "").strip()
+            if pane or dispatch_id:
+                if pane and dispatch_id:
+                    release_lease(pane, dispatch_id, "graph_dispatch_reconcile_reviewing_builder_claim")
+                node.pop("assigned_to", None)
+                node.pop("dispatch_id", None)
+                node["updated_at"] = _utc_now()
+                repaired.append(
+                    {
+                        "node": node_id,
+                        "status": status,
+                        "reason": "reviewing_builder_claim_cleared",
+                        "handoff": str(handoff_file),
+                    }
+                )
         if status in {"assigned", "dispatched", "in_progress", "running"}:
             pane = str(node.get("assigned_to") or "").strip()
             dispatch_id = str(node.get("dispatch_id") or "").strip()
@@ -1278,7 +1301,8 @@ def _mark_graph_node(graph_path: str, node_id: str, status: str,
                 results.pop(node_id, None)
             else:
                 results[node_id] = {"status": status, "updated_at": updated_at}
-            if clear_assignment:
+            clear_builder_claim = clear_assignment or status in {"reviewing", "passed", "failed", "skipped"}
+            if clear_builder_claim:
                 node.pop("assigned_to", None)
                 node.pop("dispatch_id", None)
                 if isinstance(results.get(node_id), dict):
@@ -1816,6 +1840,8 @@ def _pane_has_matching_queued_prompt(pane: str, instruction_file: Path) -> bool:
 
 def _pane_dispatch_prompt_reason(tail: str) -> str:
     bottom = "\n".join((tail or "").splitlines()[-40:])
+    if "Do you want to proceed?" in bottom or "Tab to amend" in bottom:
+        return "proceed_confirmation_prompt"
     if "Do you want to make this edit" in bottom or "allow all edits during this session" in bottom:
         return "edit_confirmation_prompt"
     if "accept edits on" in bottom:
@@ -1829,6 +1855,11 @@ def _pane_dispatch_prompt_reason(tail: str) -> str:
 
 def _dismiss_dispatch_prompt(pane: str, reason: str) -> bool:
     try:
+        if reason == "proceed_confirmation_prompt":
+            subprocess.run(["tmux", "send-keys", "-t", pane, "2"], timeout=2)
+            time.sleep(0.2)
+            subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=2)
+            return True
         if reason in {"permissions_prompt", "accept_edits_footer", "edit_confirmation_prompt"}:
             subprocess.run(["tmux", "send-keys", "-t", pane, "BTab"], timeout=2)
             time.sleep(0.2)
@@ -1840,6 +1871,45 @@ def _dismiss_dispatch_prompt(pane: str, reason: str) -> bool:
     except Exception:
         return False
     return False
+
+
+def _wait_for_dispatch_window(pane: str, instruction_file: Path, *, sid: str = "", attempts: int = 8) -> tuple[bool, str]:
+    """Bring a pane back to a safe submit window before dispatching.
+
+    Graph dispatch historically assumed an alive pane was ready. In reality,
+    Claude panes often sit behind confirmation/edit prompts or stale prompt
+    residue. This helper mirrors the coordinator's more conservative preflight:
+    clear/dismiss recoverable prompt states first, then only proceed once the
+    pane no longer exposes a blocking prompt.
+    """
+    last_reason = ""
+    for _ in range(max(1, attempts)):
+        tail = _pane_tail(pane)
+        prompt_reason = _pane_dispatch_prompt_reason(tail)
+        if prompt_reason:
+            last_reason = prompt_reason
+            if _dismiss_dispatch_prompt(pane, prompt_reason):
+                time.sleep(1.5)
+                continue
+            return False, prompt_reason
+        if _pane_has_matching_queued_prompt(pane, instruction_file):
+            last_reason = "matching_queued_prompt"
+            try:
+                subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=2)
+                time.sleep(2.0)
+            except Exception:
+                return False, "matching_queued_prompt_submit_failed"
+            continue
+        if _clear_stale_prompt_residue(pane):
+            last_reason = "stale_prompt_residue"
+            time.sleep(0.5)
+            continue
+        if _pane_tui_busy(pane):
+            last_reason = "pane_tui_busy"
+            time.sleep(1.0)
+            continue
+        return True, last_reason or "ready"
+    return False, last_reason or "dispatch_window_timeout"
 
 
 def _write_submit_ack(sid: str, node_id: str, pane: str, dispatch_id: str) -> None:
@@ -1915,7 +1985,8 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
         r"Churning|Baking|Effecting|Swooping|Whirring|Smooshing|[·✳✶✽✢]\s+[A-Za-z][A-Za-z-]*…|Read\(|"
         r"Reading|Bash\(|Edit\(|Write\(|⎿|✻|✶|✳|✽|⏺"
     )
-    if _pane_tui_busy(pane):
+    ready, ready_reason = _wait_for_dispatch_window(pane, instruction_file, sid=sid)
+    if not ready and _pane_tui_busy(pane):
         if _pane_has_matching_queued_prompt(pane, instruction_file):
             for tries in range(1, 3):
                 try:
@@ -1956,8 +2027,8 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
             pane,
             dispatch_id,
             instruction_file,
-            status="pane_tui_busy_before_send",
-            error="pane is compacting, processing, or has queued prompt residue",
+            status=f"pane_not_ready_before_send:{ready_reason}",
+            error=f"pane dispatch window unavailable: {ready_reason}",
         )
         return False
     _set_pane_capability_title(pane, instruction_file)

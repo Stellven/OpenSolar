@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 UTC = dt.timezone.utc
 DEFAULT_DB = Path(os.environ.get("SOLAR_KNOWLEDGE_REGISTRY_DB", str(Path.home() / "Knowledge" / "_registry" / "knowledge_ingest.sqlite"))).expanduser()
 
@@ -149,6 +149,21 @@ CREATE INDEX IF NOT EXISTS idx_extract_jobs_state ON extract_jobs(state);
 CREATE INDEX IF NOT EXISTS idx_validation_results_job_id ON validation_results(job_id);
 """
 
+MIGRATION_V2_SQL = """
+-- v2: add 4 columns to extract_jobs
+ALTER TABLE extract_jobs ADD COLUMN schema_version INTEGER;
+ALTER TABLE extract_jobs ADD COLUMN endpoint TEXT;
+ALTER TABLE extract_jobs ADD COLUMN started_at TEXT;
+ALTER TABLE extract_jobs ADD COLUMN finished_at TEXT;
+
+-- v2: add 5 columns to extract_outputs
+ALTER TABLE extract_outputs ADD COLUMN latency_ms INTEGER;
+ALTER TABLE extract_outputs ADD COLUMN token_input_count INTEGER;
+ALTER TABLE extract_outputs ADD COLUMN token_output_count INTEGER;
+ALTER TABLE extract_outputs ADD COLUMN cost_estimate REAL;
+ALTER TABLE extract_outputs ADD COLUMN model_fingerprint TEXT;
+"""
+
 
 def connect(db_path: Path = DEFAULT_DB) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -166,11 +181,36 @@ def migrate(db_path: Path = DEFAULT_DB) -> dict[str, Any]:
             "INSERT OR IGNORE INTO migration_log(version, applied_at, checksum) VALUES (?, ?, ?)",
             (SCHEMA_VERSION, now_iso(), checksum),
         )
-        for layer in ("raw", "vault", "extracted"):
+        for layer in ("raw", "vault", "semantic"):
             conn.execute(
                 "INSERT OR IGNORE INTO watermarks(layer, updated_at) VALUES (?, ?)",
                 (layer, now_iso()),
             )
+        # B3 naming migration: replace extracted watermark with semantic
+        conn.execute(
+            "INSERT OR IGNORE INTO watermarks(layer, updated_at) VALUES ('semantic', ?)",
+            (now_iso(),),
+        )
+        conn.execute("DELETE FROM watermarks WHERE layer = 'extracted'")
+
+        # v2 migration: add columns idempotently
+        v2_applied = conn.execute(
+            "SELECT COUNT(*) FROM migration_log WHERE version = 2"
+        ).fetchone()[0]
+        if not v2_applied:
+            for stmt in MIGRATION_V2_SQL.strip().split(";"):
+                stmt = stmt.strip()
+                if not stmt or stmt.startswith("--"):
+                    continue
+                try:
+                    conn.execute(stmt)
+                except Exception:
+                    pass  # column already exists — idempotent
+            conn.execute(
+                "INSERT OR IGNORE INTO migration_log(version, applied_at, checksum) VALUES (?, ?, ?)",
+                (2, now_iso(), sha256_text(MIGRATION_V2_SQL)),
+            )
+
         conn.commit()
     return {"ok": True, "db": str(db_path), "schema_version": SCHEMA_VERSION, "checksum": checksum}
 
@@ -329,6 +369,52 @@ def replace_spans(
             )
         conn.commit()
     return {"ok": True, "doc_id": doc_id, "span_count": len(spans)}
+
+
+def transition_document(
+    doc_id: str,
+    from_state: str,
+    to_state: str,
+    *,
+    source_adapter: str = "dispatcher",
+    db_path: Path = DEFAULT_DB,
+) -> dict[str, Any]:
+    """Transition a document from one state to another, recording an ingest_event."""
+    migrate(db_path)
+    ts = now_iso()
+    with connect(db_path) as conn:
+        current = conn.execute(
+            "SELECT current_state FROM documents WHERE doc_id=?", (doc_id,)
+        ).fetchone()
+        if current is None:
+            return {"ok": False, "error": f"doc_id {doc_id} not found"}
+        actual_state = current["current_state"]
+        if actual_state != from_state:
+            return {"ok": False, "error": f"state mismatch: expected {from_state}, actual {actual_state}", "doc_id": doc_id}
+        conn.execute(
+            "UPDATE documents SET current_state=?, updated_at=? WHERE doc_id=?",
+            (to_state, ts, doc_id),
+        )
+        event_id = "evt_" + sha256_text(f"{doc_id}:transition:{from_state}:{to_state}:{ts}")[:24]
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO ingest_events(event_id, doc_id, event_kind, from_state, to_state, source_adapter, payload_json, ts)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event_id,
+                doc_id,
+                "transition",
+                from_state,
+                to_state,
+                source_adapter,
+                json.dumps({"from": from_state, "to": to_state}, ensure_ascii=False),
+                ts,
+            ),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM documents WHERE doc_id=?", (doc_id,)).fetchone()
+    return row_to_dict(row) or {"ok": True, "doc_id": doc_id, "from_state": from_state, "to_state": to_state}
 
 
 def status(db_path: Path = DEFAULT_DB) -> dict[str, Any]:

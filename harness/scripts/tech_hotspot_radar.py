@@ -45,6 +45,7 @@ except ImportError as exc:
 
 
 DEFAULT_THUNDEROMLX_PAUSE_FILE = Path.home() / ".omlx" / "run" / "maintenance.json"
+DEFAULT_MLX_WHISPER_SITE_PACKAGES = Path.home() / ".local/pipx/venvs/mlx-whisper/lib/python3.14/site-packages"
 
 
 def thunderomlx_ingest_paused() -> dict[str, Any] | None:
