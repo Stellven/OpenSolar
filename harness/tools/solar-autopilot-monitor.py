@@ -43,7 +43,10 @@ MODEL_DOCTOR_HEALTH = HARNESS / "state" / "model-registry-doctor-health.json"
 MODEL_DOCTOR_INTERVAL_SEC = int(os.environ.get("SOLAR_MODEL_DOCTOR_INTERVAL_SEC", "1800"))
 MODEL_DOCTOR_TIMEOUT_SEC = int(os.environ.get("SOLAR_MODEL_DOCTOR_TIMEOUT_SEC", "120"))
 
-sys.path.insert(0, str(HARNESS / "lib"))
+REAL_HARNESS = Path(os.environ.get("REAL_HARNESS_DIR", HARNESS))
+sys.path.insert(0, str(REAL_HARNESS / "lib"))
+if REAL_HARNESS != HARNESS:
+    sys.path.insert(1, str(HARNESS / "lib"))
 try:
     from runtime_bridge import record_legacy_event
 except Exception:  # pragma: no cover - monitor must fail open
@@ -94,6 +97,7 @@ ACTIVE_STATUSES = {"drafting", "queued", "active", "planning", "approved", "revi
 TERMINAL_STATUSES = {"passed", "completed", "finalized", "done", "cancelled", "archived"}
 GRAPH_READY_HANDOFFS = {"builder", "builder_main", "builder_parallel", "builder-lab"}
 GRAPH_EVAL_HANDOFFS = {"evaluator", "reviewer"}
+BUILDER_QUEUE_FINDINGS = {"ready_for_builder", "active_without_handoff", "pane_idle_with_pending_artifact"}
 
 import sys
 sys.path.insert(0, str(HARNESS / "lib"))
@@ -101,6 +105,10 @@ try:
     from graph_scheduler import load_graph, save_graph, enqueue_ready, parent_ready_check, validate_graph, blocked_external_prerequisites, doctor_graph, node_status
 except Exception:  # pragma: no cover - fallback for partially installed harnesses
     load_graph = save_graph = enqueue_ready = parent_ready_check = validate_graph = blocked_external_prerequisites = doctor_graph = node_status = None
+try:
+    from prerequisite_resolver import iter_blocked, normalize_prerequisite
+except Exception:  # pragma: no cover - fallback for partially installed harnesses
+    iter_blocked = normalize_prerequisite = None
 try:
     from graph_node_dispatcher import dispatch_ready as graph_dispatch_ready
     from graph_node_dispatcher import dispatch_node_evals as graph_dispatch_node_evals
@@ -305,20 +313,21 @@ def run_kb_probe(reason: str, force: bool = False) -> dict:
     last = load_json(KB_PROBE_HEALTH)
     now_epoch = time.time()
     last_age = now_epoch - float(last.get("checked_at_epoch", 0) or 0) if last else 0
-    last_ok = bool(last.get("ok")) if last else False
-    if force and last and last_ok and last.get("reason") == reason and last_age < KB_PROBE_TRIGGER_COOLDOWN_SEC:
+    last_status = str(last.get("status") or ("ok" if last.get("ok") else "error")) if last else ""
+    last_stable = last_status in {"ok", "warn"}
+    if force and last and last_stable and last.get("reason") == reason and last_age < KB_PROBE_TRIGGER_COOLDOWN_SEC:
         last["skipped"] = "trigger_cooldown"
         last["reason"] = reason
         return last
-    if not force and last and (last_ok and last_age < KB_PROBE_INTERVAL_SEC):
+    if not force and last and (last_stable and last_age < KB_PROBE_INTERVAL_SEC):
         last["skipped"] = "cooldown"
         last["reason"] = reason
         return last
-    # Do not cache a failed KB probe as a hard error for the whole cooldown
-    # window. Knowledge recovery is often external (QMD MCP restart, index
-    # refresh, Mirage route repair), and keeping the stale failure makes every
-    # pane look broken even after the default context path is healthy again.
-    # Successful probes still use the normal interval cooldown above.
+    # Successful probes and degraded coverage warnings both use the normal
+    # cooldown window. Only hard KB errors bypass the long cache because
+    # recovery is often external (QMD MCP restart, index refresh, Mirage route
+    # repair), and keeping the stale failure makes every pane look broken even
+    # after the default context path is healthy again.
     if not KB_PROBE_SCRIPT.exists():
         result = {
             "ok": False,
@@ -385,11 +394,36 @@ def run_kb_probe(reason: str, force: bool = False) -> dict:
             "checked_at_epoch": now_epoch,
             "qmd_mcp_ipv4": qmd_proxy,
         }
+    qmd_ok = bool((result.get("qmd_mcp_ipv4") or {}).get("ok"))
+    passed_count = result.get("probes_passed")
+    failed_count = result.get("probes_failed")
+    if (
+        not result.get("ok")
+        and result.get("status") == "error"
+        and qmd_ok
+        and isinstance(passed_count, int)
+        and isinstance(failed_count, int)
+    ):
+        result["status"] = "warn"
+        result["failure_class"] = "coverage_miss"
+        result["transport_ok"] = True
+        result["content_ok"] = failed_count == 0
+        result["degraded"] = True
+        result["degraded_reason"] = "knowledge_coverage_incomplete"
     save_json(KB_PROBE_HEALTH, result)
+    event_type = "autopilot_kb_probe_passed"
+    event_severity = "info"
+    if not result.get("ok"):
+        if result.get("status") == "warn":
+            event_type = "autopilot_kb_probe_degraded"
+            event_severity = "warn"
+        else:
+            event_type = "autopilot_kb_probe_failed"
+            event_severity = "error"
     append_event(
         "",
-        "autopilot_kb_probe_passed" if result.get("ok") else "autopilot_kb_probe_failed",
-        "info" if result.get("ok") else "error",
+        event_type,
+        event_severity,
         result,
     )
     return result
@@ -707,6 +741,93 @@ def pane_assignment(target: str) -> dict:
     return pane_assignments().get(target, {})
 
 
+def _rewrite_pane_assignments(assignments: dict[str, dict]) -> None:
+    PANE_ASSIGNMENTS.parent.mkdir(parents=True, exist_ok=True)
+    lines: list[str] = []
+    for pane, meta in assignments.items():
+        sid = str(meta.get("sid") or "").strip()
+        if not pane or not sid:
+            continue
+        assigned_at = meta.get("assigned_at")
+        ts = int(float(assigned_at)) if assigned_at else 0
+        lines.append(f"{pane}={sid}:{ts}")
+    payload = ("\n".join(lines) + "\n") if lines else ""
+    PANE_ASSIGNMENTS.write_text(payload)
+
+
+def clear_pane_assignment(target: str, reason: str = "") -> bool:
+    assignments = pane_assignments()
+    if target not in assignments:
+        return False
+    removed = assignments.pop(target)
+    try:
+        _rewrite_pane_assignments(assignments)
+        append_event(
+            str(removed.get("sid") or ""),
+            "autopilot_reconcile_assignment_cleared",
+            "info",
+            {"pane": target, "reason": reason, "assignment": removed},
+        )
+        return True
+    except Exception:
+        return False
+
+
+def clear_pane_lease(target: str, reason: str = "") -> bool:
+    path = PANE_LEASE_DIR / f"{pane_safe(target)}.json"
+    if not path.exists():
+        return False
+    lease = load_json(path)
+    try:
+        path.unlink(missing_ok=True)
+        append_event(
+            str(lease.get("sid") or ""),
+            "autopilot_reconcile_lease_cleared",
+            "info",
+            {"pane": target, "reason": reason, "lease": lease},
+        )
+        return True
+    except Exception:
+        return False
+
+
+def reconcile_pane_runtime_claims(target: str) -> dict:
+    lease = pane_lease(target)
+    assignment = pane_assignment(target)
+    graph_node = assigned_graph_node_for_pane(target)
+    busy = pane_is_busy(target)
+    reconciled: dict[str, bool] = {}
+
+    # A live graph node is the strongest proof of occupancy; keep both lease and
+    # assignment intact in that case, even if the pane is currently at a prompt.
+    if graph_node:
+        return {
+            "lease": lease,
+            "assignment": assignment,
+            "graph_node": graph_node,
+            "busy": busy,
+            "reconciled": reconciled,
+        }
+
+    if lease and not busy:
+        if clear_pane_lease(target, "stale_live_lease_without_active_graph_node"):
+            lease = {}
+            reconciled["lease_cleared"] = True
+
+    if assignment and not lease and not busy:
+        if clear_pane_assignment(target, "stale_assignment_without_active_graph_node"):
+            assignment = {}
+            reconciled["assignment_cleared"] = True
+
+    return {
+        "lease": lease,
+        "assignment": assignment,
+        "graph_node": graph_node,
+        "busy": busy,
+        "reconciled": reconciled,
+    }
+
+
 def enqueue_action(finding: dict, reason: str, detail: dict | None = None) -> None:
     if is_telemetry_only_finding(finding):
         append_event(
@@ -781,7 +902,7 @@ def retry_queue(state: dict, dispatch: bool, cooldown: int) -> list[dict]:
     actions: list[dict] = []
     for item in load_queue():
         sid = item.get("sid", "")
-        target = item.get("target", "")
+        target = maybe_reroute_builder_target(item, sid)
         if sid and not (SPRINTS / f"{sid}.status.json").exists():
             append_event(
                 sid,
@@ -898,15 +1019,16 @@ def retry_queue(state: dict, dispatch: bool, cooldown: int) -> list[dict]:
 
 
 def pane_gate(target: str, sid: str) -> tuple[bool, str, dict]:
-    lease = pane_lease(target)
+    state = reconcile_pane_runtime_claims(target)
+    lease = state.get("lease", {})
     if lease and lease.get("sid") != sid:
-        return False, "pane_leased", lease
-    assignment = pane_assignment(target)
+        return False, "pane_leased", state
+    assignment = state.get("assignment", {})
     if assignment and assignment.get("sid") != sid:
         age = assignment.get("age_sec")
         if age is None or age < 1800:
-            return False, "pane_assigned", assignment
-    return True, "ok", {"lease": lease, "assignment": assignment}
+            return False, "pane_assigned", state
+    return True, "ok", state
 
 
 def wake_sid(sid: str) -> bool:
@@ -1001,7 +1123,14 @@ def pane_target_for_handoff(handoff: str) -> str:
     if handoff in ("planner", "architect"):
         return f"{SESSION}:0.1"
     if handoff in ("builder", "builder_main", "builder_parallel", "builder-lab"):
-        return f"{SESSION}:0.2"
+        primary = f"{SESSION}:0.2"
+        candidates = [pane for pane in discover_worker_panes() if pane_title_matches_role(pane, "builder")]
+        ordered = [primary] + [pane for pane in candidates if pane != primary]
+        for pane in ordered:
+            allowed, _, _ = pane_gate(pane, "__probe__")
+            if allowed and not pane_is_busy(pane):
+                return pane
+        return primary
     if handoff in ("evaluator", "reviewer"):
         return f"{SESSION}:0.3"
     return f"{SESSION}:0.0"
@@ -1047,14 +1176,16 @@ def graph_workers() -> list[dict]:
     skills = [
         "bash", "shell", "python", "python-read", "dataclasses", "pytest", "subprocess", "sqlite3", "pure-functions", "time-injection", "timeouts", "concurrency", "io", "fsm", "integration", "integration-testing", "integration-tests", "regression", "regression-tests", "bash-tests", "jq", "json", "json-patch", "jsonl-tail", "typescript", "docs", "testing",
         "stub-llm", "e2e-test", "cli-view-assertion", "negative-control", "verifier", "registry-introspection",
+        "solar-harness-verification", "solar-harness-compat-review", "harness.verification", "verification",
         "cli-audit", "cli-design", "argparse", "argparse-bridge", "json-schema", "json-shape-inspect", "validation",
         "technical-writing", "markdown", "regex", "markdown-parse", "evidence-aggregation", "handoff-authoring", "traceability-patch", "knowledge-raw-writeback",
         "architecture-writing", "solar-harness-control-plane", "algorithm_design",
+        "code_impl", "test_generation", "test_execution",
         "frontend", "terminal-ui", "tvs", "vdl", "snapshot", "snapshot-testing", "flask", "http-routing", "http-endpoint", "autopilot-hooks", "json-traversal", "html", "javascript", "vanilla-dom",
-        "product", "planning",
+        "product", "planning", "optimization", "runtime_design",
         "architecture", "schema", "state-machine", "state-schema-design", "distributed-systems",
         "code-audit", "docs-audit", "type-hints", "type-protocols", "refactor", "tmux-inspect", "data-aggregation", "shutil", "urllib", "atomic-writes", "hashing", "unittest-mock", "evidence-collection", "evaluator-summary",
-        "api-design", "data-modeling", "compatibility",
+        "api-design", "data-modeling", "compatibility", "compat-review",
         "routing", "diagnostics", "evaluation", "capability-graph", "event-sourcing", "debug.systematic",
         "lazy-import",
         # Logical operator aliases so graph nodes expressed in logical classes
@@ -1064,6 +1195,7 @@ def graph_workers() -> list[dict]:
     capabilities = [
         "bash", "python", "typescript", "docs", "testing",
         "frontend", "observability", "evidence",
+        "solar-harness-verification", "solar-harness-compat-review", "harness.verification", "verification",
         "env-passthrough", "metrics",
         "harness.context_preflight", "harness.intent", "harness.dispatch_visibility", "harness.contracts",
         "harness.dag", "harness.status", "harness.model_routing",
@@ -1077,6 +1209,7 @@ def graph_workers() -> list[dict]:
         "autopilot.monitor", "autopilot.safe_apply", "pane.deadlock_detection",
         "documentation", "schema", "state-machine", "storage", "sources",
         "algorithm_design", "solar-harness-control-plane", "architecture-writing",
+        "code_impl", "test_generation", "test_execution",
         "code.review", "debug.systematic", "skill.methodology",
         "workflow.planning", "product.requirements", "test.tdd", "browser.browse", "browser.qa",
         "research.empirical_pipeline", "research.literature_review",
@@ -1097,16 +1230,48 @@ def graph_workers() -> list[dict]:
         "metric_design", "replay_design", "shell_design", "synthesis",
         "repair.pr-cot", "failure.structured_repair",
         "routing.complexity_budget", "security_review",
+        "optimization", "runtime_design",
     ]
+    schema_caps = {
+        "schema_design", "fixture_design", "mapping_design",
+        "compatibility_design", "feedback_design", "gate_design",
+        "metric_design", "replay_design", "shell_design", "synthesis",
+        "documentation", "schema", "architecture-writing", "architecture",
+        "document.convert", "document.markdown_extract", "report.compile",
+        "research.long_report_compiler", "research.report_ast"
+    }
+    schema_skills = {
+        "architecture-writing", "json-schema", "technical-writing", "markdown",
+        "architecture", "schema", "state-schema-design", "api-design", "data-modeling"
+    }
+
     for pane in discover_worker_panes():
         lease = pane_lease(pane)
-        busy = bool(lease) or pane_is_busy(pane)
+        is_busy_tui = pane_is_busy(pane)
+        busy = bool(lease) or is_busy_tui
+        
+        if lease and not is_busy_tui:
+            try:
+                (PANE_LEASE_DIR / f"{pane_safe(pane)}.json").unlink(missing_ok=True)
+                lease = {}
+                busy = False
+                append_event("", "autopilot_reconcile_lease_cleared", "info", {"pane": pane})
+            except Exception:
+                pass
+
+        pane_skills = list(skills)
+        pane_caps = list(capabilities)
+        
+        if not pane.startswith("solar-harness-lab:"):
+            pane_caps = [c for c in pane_caps if c not in schema_caps]
+            pane_skills = [s for s in pane_skills if s not in schema_skills]
+
         workers.append(
             {
                 "pane": pane,
                 "models": infer_worker_models(pane),
-                "skills": skills,
-                "capabilities": capabilities,
+                "skills": pane_skills,
+                "capabilities": pane_caps,
                 "busy": busy,
                 "lease": lease,
             }
@@ -1163,21 +1328,14 @@ def epic_child_dependency_ready(sid: str) -> tuple[bool, list[str]]:
 
 
 def normalize_external_prerequisite(raw) -> tuple[str, str, str] | None:
-    if isinstance(raw, dict):
-        upstream_sid = str(raw.get("sprint_id") or raw.get("sid") or raw.get("child_sprint_id") or "").strip()
-        required = str(raw.get("required_status") or raw.get("status") or raw.get("required") or "passed").strip().lower() or "passed"
-        label = json.dumps(raw, ensure_ascii=False, sort_keys=True)
-        return (label, upstream_sid, required) if upstream_sid else None
-    entry = str(raw).strip()
-    if not entry:
+    if normalize_prerequisite is None:
         return None
-    if ":" in entry:
-        upstream_sid, required = entry.rsplit(":", 1)
-    else:
-        upstream_sid, required = entry, "passed"
-    upstream_sid = upstream_sid.strip()
-    required = required.strip().lower() or "passed"
-    return (entry, upstream_sid, required) if upstream_sid else None
+    norm = normalize_prerequisite(raw)
+    if norm is None:
+        return None
+    label = json.dumps(raw, ensure_ascii=False, sort_keys=True) if isinstance(raw, dict) else str(raw).strip()
+    required = norm.get("required_status") or norm.get("required_phase") or "passed"
+    return (label, norm["sprint_id"], required)
 
 
 def child_graph_external_prerequisite_blocks(sid: str) -> list[dict]:
@@ -1185,42 +1343,9 @@ def child_graph_external_prerequisite_blocks(sid: str) -> list[dict]:
     if not graph_path.exists():
         return []
     graph = load_json(graph_path)
-    entries: list = []
-    for raw in graph.get("prerequisites") or []:
-        if normalize_external_prerequisite(raw):
-            entries.append(raw)
-    policy = graph.get("dependency_policy") or {}
-    if isinstance(policy, dict):
-        for raw in policy.get("blocks_until") or []:
-            if normalize_external_prerequisite(raw):
-                entries.append(raw)
-    blocked: list[dict] = []
-    seen: set[str] = set()
-    for entry in entries:
-        parsed = normalize_external_prerequisite(entry)
-        if not parsed:
-            continue
-        requirement, upstream_sid, required = parsed
-        dedupe_key = f"{upstream_sid}:{required}"
-        if dedupe_key in seen:
-            continue
-        seen.add(dedupe_key)
-        status = sprint_status_payload(upstream_sid)
-        current_status = str(status.get("status") or "").lower()
-        current_phase = str(status.get("phase") or "").lower()
-        ok = current_status == "passed" if required == "passed" else (
-            current_status == required or current_phase == required
-        )
-        if not ok:
-            blocked.append({
-                "requirement": requirement,
-                "sprint_id": upstream_sid,
-                "required": required,
-                "current_status": current_status,
-                "current_phase": current_phase,
-                "reason": "status_not_satisfied" if status else "missing_status",
-            })
-    return blocked
+    if iter_blocked is None:
+        return []
+    return iter_blocked(graph, SPRINTS)
 
 
 def set_epic_child_node_status(sid: str, node_status: str) -> bool:
@@ -1930,7 +2055,7 @@ def inspect_knowledge_context(state: dict) -> list[dict]:
             )
     reason = ",".join(reasons) if reasons else "periodic"
     last_probe = load_json(KB_PROBE_HEALTH)
-    if not force_probe and last_probe and not last_probe.get("ok"):
+    if not force_probe and last_probe and (last_probe.get("status") == "error"):
         age = time.time() - float(last_probe.get("checked_at_epoch", 0) or 0)
         if age >= KB_PROBE_TRIGGER_COOLDOWN_SEC:
             force_probe = True
@@ -1946,26 +2071,36 @@ def inspect_knowledge_context(state: dict) -> list[dict]:
             "reason": probe.get("reason"),
         }
     else:
+        probe_status = probe.get("status") or "error"
+        probe_severity = "warn" if probe_status == "warn" else "error"
+        if probe_status == "warn":
+            probe_message = (
+                "KB probe 显示默认知识链可达，但覆盖不完整；先不要把它当成 runtime 故障。"
+                "请检查 state/knowledge-probe-health.json 与 tests/test-knowledge-probe-coverage.sh，补知识页或索引。"
+            )
+        else:
+            probe_message = (
+                "KB probe failed；默认知识路径可能不可用。先不要只查 sqlite，"
+                "请检查 state/knowledge-probe-health.json 和 tests/test-knowledge-probe-coverage.sh 输出。"
+            )
         findings.append(
             {
                 "sid": "",
                 "type": "knowledge_probe_failed",
-                "severity": "error",
+                "severity": probe_severity,
                 "target": f"{SESSION}:0.0",
                 "role": "pm",
-                "message": (
-                    "KB probe failed；默认知识路径可能不可用。先不要只查 sqlite，"
-                    "请检查 state/knowledge-probe-health.json 和 tests/test-knowledge-probe-coverage.sh 输出。"
-                ),
+                "message": probe_message,
                 "probe": probe,
             }
         )
         state["knowledge_probe"] = {
-            "status": "error",
+            "status": probe_status,
             "checked_at": probe.get("checked_at"),
             "probes_passed": probe.get("probes_passed"),
             "probes_failed": probe.get("probes_failed"),
             "reason": probe.get("reason"),
+            "failure_class": probe.get("failure_class", ""),
         }
     return findings
 
@@ -2016,13 +2151,32 @@ def target_recently_dispatched(state: dict, target: str, cooldown: int) -> bool:
     return (time.time() - last) < cooldown
 
 
+def maybe_reroute_builder_target(item: dict, sid: str) -> str:
+    target = str(item.get("target") or "")
+    if target != f"{SESSION}:0.2":
+        return target
+    if str(item.get("type") or "") not in BUILDER_QUEUE_FINDINGS:
+        return target
+    rerouted = pane_target_for_handoff("builder_main")
+    if not rerouted or rerouted == target:
+        return target
+    item["target"] = rerouted
+    append_event(
+        sid,
+        "autopilot_builder_target_rerouted",
+        "info",
+        {"from": target, "to": rerouted, "type": item.get("type")},
+    )
+    return rerouted
+
+
 def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: int) -> list[dict]:
     actions = []
     used_targets = set()
     for f in findings:
         sid = f.get("sid", "")
         ftype = f.get("type", "")
-        target = f.get("target", "")
+        target = maybe_reroute_builder_target(f, sid)
         if is_telemetry_only_finding(f):
             append_event(sid, f"autopilot_{ftype}", f.get("severity", "warn"), f)
             result = {

@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import email.utils
+import hashlib
 import html
 import json
 import os
@@ -372,6 +373,25 @@ CREATE TABLE IF NOT EXISTS token_ledger (
     created_at        TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_tl_stage ON token_ledger(pipeline_stage);
+
+-- Cross-domain baseline for GitHub/Web/Solar monitoring
+CREATE TABLE IF NOT EXISTS baseline_signals (
+    signal_id         TEXT PRIMARY KEY,
+    source_kind       TEXT NOT NULL CHECK(source_kind IN ('github','web','solar')),
+    item_key          TEXT NOT NULL,
+    title             TEXT NOT NULL DEFAULT '',
+    url               TEXT NOT NULL DEFAULT '',
+    category          TEXT NOT NULL DEFAULT '',
+    metric_name       TEXT NOT NULL DEFAULT 'sighting',
+    metric_value      REAL NOT NULL DEFAULT 1.0,
+    signal_time       TEXT NOT NULL,
+    captured_at       TEXT NOT NULL,
+    raw_path          TEXT NOT NULL DEFAULT '',
+    raw_json          TEXT NOT NULL DEFAULT '{}',
+    UNIQUE(source_kind, item_key, signal_time, metric_name)
+);
+CREATE INDEX IF NOT EXISTS idx_bs_kind_time ON baseline_signals(source_kind, signal_time);
+CREATE INDEX IF NOT EXISTS idx_bs_item_time ON baseline_signals(item_key, signal_time);
 
 -- Metadata
 CREATE TABLE IF NOT EXISTS _meta (
@@ -2988,6 +3008,388 @@ def github_emit_evidence_atoms(conn: sqlite3.Connection, full_name: str,
     return 1
 
 
+BASELINE_FILE_SUFFIXES = {".md", ".markdown", ".html", ".htm", ".txt", ".json", ".jsonl"}
+GITHUB_REPO_RE = re.compile(r"github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)")
+
+
+def baseline_parse_dt(value: str | None) -> dt.datetime | None:
+    if not value:
+        return None
+    try:
+        return dt.datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
+    except Exception:
+        return None
+
+
+def baseline_date_from_path(path: Path) -> dt.datetime:
+    text = str(path)
+    patterns = [
+        r"(20\d{2})[-/](\d{2})[-/](\d{2})",
+        r"(20\d{2})(\d{2})(\d{2})T",
+        r"(20\d{2})(\d{2})(\d{2})",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            y, m, d = map(int, match.groups())
+            try:
+                return dt.datetime(y, m, d, tzinfo=UTC)
+            except ValueError:
+                continue
+    return dt.datetime.fromtimestamp(path.stat().st_mtime, UTC).replace(microsecond=0)
+
+
+def baseline_read_text(path: Path, max_chars: int = 120_000) -> str:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")[:max_chars]
+    except Exception:
+        return ""
+
+
+def baseline_title(text: str, path: Path) -> str:
+    title_match = re.search(r"(?im)^title:\s*(.+)$", text)
+    if title_match:
+        return title_match.group(1).strip().strip('"')[:240]
+    h1_match = re.search(r"(?m)^#\s+(.+)$", text)
+    if h1_match:
+        return h1_match.group(1).strip()[:240]
+    html_title = re.search(r"(?is)<title[^>]*>(.*?)</title>", text)
+    if html_title:
+        return strip_html(html_title.group(1))[:240]
+    return path.stem[:240]
+
+
+def strip_html(text: str) -> str:
+    text = re.sub(r"(?is)<(script|style).*?</\1>", " ", text or "")
+    text = re.sub(r"<[^>]+>", " ", text)
+    return re.sub(r"\s+", " ", html.unescape(text)).strip()
+
+
+def baseline_signal_id(source_kind: str, item_key: str, signal_time: str, metric_name: str) -> str:
+    raw = f"{source_kind}\0{item_key}\0{signal_time}\0{metric_name}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+
+
+def baseline_insert_signal(
+    conn: sqlite3.Connection,
+    *,
+    source_kind: str,
+    item_key: str,
+    title: str,
+    url: str = "",
+    category: str = "",
+    metric_name: str = "sighting",
+    metric_value: float = 1.0,
+    signal_time: str,
+    raw_path: str = "",
+    raw_json: dict[str, Any] | None = None,
+) -> bool:
+    signal_id = baseline_signal_id(source_kind, item_key, signal_time, metric_name)
+    before = conn.total_changes
+    conn.execute(
+        "INSERT OR IGNORE INTO baseline_signals "
+        "(signal_id, source_kind, item_key, title, url, category, metric_name, metric_value, "
+        "signal_time, captured_at, raw_path, raw_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            signal_id,
+            source_kind,
+            item_key,
+            title[:240],
+            url,
+            category,
+            metric_name,
+            float(metric_value),
+            signal_time,
+            iso_z(),
+            raw_path,
+            json.dumps(raw_json or {}, ensure_ascii=False, sort_keys=True),
+        ),
+    )
+    return conn.total_changes > before
+
+
+def baseline_iter_files(root: Path, cutoff: dt.datetime) -> list[Path]:
+    if not root.exists():
+        return []
+    files: list[Path] = []
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.suffix.lower() not in BASELINE_FILE_SUFFIXES:
+            continue
+        if any(part in {"_extracted", ".dispatch", ".spans", ".materialized"} for part in path.parts):
+            continue
+        try:
+            if dt.datetime.fromtimestamp(path.stat().st_mtime, UTC) < cutoff:
+                # Path-encoded dates can still be in-window even if mtime is old.
+                if baseline_date_from_path(path) < cutoff:
+                    continue
+        except Exception:
+            continue
+        files.append(path)
+    return files
+
+
+def baseline_collect_local(
+    conn: sqlite3.Connection,
+    *,
+    source_kind: str,
+    root: Path,
+    days: int,
+    limit: int = 0,
+) -> dict[str, Any]:
+    cutoff = now_utc() - dt.timedelta(days=days)
+    inserted = 0
+    scanned = 0
+    failures: list[str] = []
+    for path in baseline_iter_files(root, cutoff):
+        if limit and scanned >= limit:
+            break
+        scanned += 1
+        try:
+            text = baseline_read_text(path)
+            signal_dt = baseline_date_from_path(path)
+            if signal_dt < cutoff:
+                continue
+            signal_time = iso_z(signal_dt)
+            title = baseline_title(text, path)
+            if source_kind == "github":
+                repos = sorted(set(GITHUB_REPO_RE.findall(text)))
+                if not repos:
+                    # Keep the digest itself as market signal even when parser cannot resolve repo links.
+                    key = f"digest:{hashlib.sha1(str(path).encode()).hexdigest()[:16]}"
+                    if baseline_insert_signal(
+                        conn,
+                        source_kind="github",
+                        item_key=key,
+                        title=title,
+                        category="market_signal",
+                        signal_time=signal_time,
+                        raw_path=str(path),
+                        raw_json={"parser": "github_digest_file"},
+                    ):
+                        inserted += 1
+                for repo in repos:
+                    if baseline_insert_signal(
+                        conn,
+                        source_kind="github",
+                        item_key=repo,
+                        title=repo,
+                        url=f"https://github.com/{repo}",
+                        category=github_classify_trend_bucket("", text[:2000]),
+                        signal_time=signal_time,
+                        raw_path=str(path),
+                        raw_json={"parser": "github_repo_link"},
+                    ):
+                        inserted += 1
+            elif source_kind == "web":
+                url_match = re.search(r"(?im)^(url|source_url):\s*(\S+)", text)
+                url = url_match.group(2) if url_match else ""
+                key = url or f"web:{hashlib.sha1(str(path).encode()).hexdigest()[:16]}"
+                if baseline_insert_signal(
+                    conn,
+                    source_kind="web",
+                    item_key=key,
+                    title=title,
+                    url=url,
+                    category="web_capture",
+                    signal_time=signal_time,
+                    raw_path=str(path),
+                    raw_json={"parser": "web_capture_file"},
+                ):
+                    inserted += 1
+            elif source_kind == "solar":
+                key = f"solar:{path.stem}"
+                category = "accepted" if "accepted" in str(path).lower() else "solar_artifact"
+                if baseline_insert_signal(
+                    conn,
+                    source_kind="solar",
+                    item_key=key,
+                    title=title,
+                    category=category,
+                    signal_time=signal_time,
+                    raw_path=str(path),
+                    raw_json={"parser": "solar_artifact_file"},
+                ):
+                    inserted += 1
+        except Exception as exc:
+            failures.append(f"{path}: {type(exc).__name__}: {exc}")
+    conn.commit()
+    return {"source_kind": source_kind, "root": str(root), "days": days, "scanned": scanned, "inserted": inserted, "failures": failures[:10]}
+
+
+def baseline_collect_github_live(conn: sqlite3.Connection, config: dict[str, Any], *, limit_repos: int = 0) -> dict[str, Any]:
+    """Append today's GitHub repo metric snapshots into baseline_signals from github_repos."""
+    rows = conn.execute(
+        "SELECT full_name, html_url, description, topics, stars, forks, open_issues, watchers, fetched_at "
+        "FROM github_repos ORDER BY fetched_at DESC, full_name"
+    ).fetchall()
+    if limit_repos:
+        rows = rows[:limit_repos]
+    inserted = 0
+    for row in rows:
+        full_name, url, desc, topics, stars, forks, open_issues, watchers, fetched_at = row
+        signal_time = fetched_at or iso_z()
+        bucket = github_classify_trend_bucket(topics or "", desc or "")
+        metrics = {
+            "stars": stars or 0,
+            "forks": forks or 0,
+            "open_issues": open_issues or 0,
+            "watchers": watchers or 0,
+        }
+        for metric_name, metric_value in metrics.items():
+            if baseline_insert_signal(
+                conn,
+                source_kind="github",
+                item_key=full_name,
+                title=full_name,
+                url=url or f"https://github.com/{full_name}",
+                category=bucket,
+                metric_name=metric_name,
+                metric_value=float(metric_value or 0),
+                signal_time=signal_time,
+                raw_json={"source": "github_repos_live", "description": desc or "", "topics": topics or ""},
+            ):
+                inserted += 1
+    conn.commit()
+    return {"source_kind": "github", "mode": "live_metrics", "repos": len(rows), "inserted": inserted}
+
+
+def baseline_analyze(conn: sqlite3.Connection, *, generated_at: str | None = None) -> dict[str, Any]:
+    generated_at = generated_at or iso_z()
+    windows = {"1d": 1, "7d": 7, "30d": 30, "180d": 180}
+    result: dict[str, Any] = {"ok": True, "generated_at": generated_at, "windows": {}, "sources": {}}
+    for label, days in windows.items():
+        cutoff = (now_utc() - dt.timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        rows = [
+            dict(row)
+            for row in conn.execute(
+                """
+                SELECT source_kind, item_key, title, url, category,
+                       COUNT(*) AS signal_count,
+                       COUNT(DISTINCT metric_name) AS metric_count,
+                       MAX(signal_time) AS latest_seen,
+                       MAX(CASE WHEN metric_name='stars' THEN metric_value ELSE NULL END) AS latest_stars,
+                       MAX(raw_path) AS raw_path
+                FROM baseline_signals
+                WHERE signal_time >= ?
+                GROUP BY source_kind, item_key
+                ORDER BY signal_count DESC, latest_seen DESC
+                LIMIT 80
+                """,
+                (cutoff,),
+            ).fetchall()
+        ]
+        result["windows"][label] = rows
+    for source_kind in ["github", "web", "solar"]:
+        counts = conn.execute(
+            "SELECT COUNT(*), COUNT(DISTINCT item_key), MIN(signal_time), MAX(signal_time) "
+            "FROM baseline_signals WHERE source_kind=?",
+            (source_kind,),
+        ).fetchone()
+        result["sources"][source_kind] = {
+            "signals": counts[0] or 0,
+            "items": counts[1] or 0,
+            "first_seen": counts[2],
+            "latest_seen": counts[3],
+        }
+    return result
+
+
+def baseline_render_md(analysis: dict[str, Any]) -> str:
+    lines = [
+        f"# Tech Signal Baseline 趋势洞察 — {analysis.get('generated_at')}",
+        "",
+        "## 基线范围",
+        "",
+    ]
+    for source, stats in analysis.get("sources", {}).items():
+        lines.append(
+            f"- {source}: signals={stats.get('signals', 0)} items={stats.get('items', 0)} "
+            f"first={stats.get('first_seen') or 'N/A'} latest={stats.get('latest_seen') or 'N/A'}"
+        )
+    labels = {"1d": "过去 1 天", "7d": "过去 1 周", "30d": "过去 1 月", "180d": "过去 6 个月基线"}
+    for win in ["1d", "7d", "30d", "180d"]:
+        lines.extend(["", f"## {labels[win]}", ""])
+        for row in (analysis.get("windows", {}).get(win) or [])[:25]:
+            url = row.get("url") or ""
+            title = row.get("title") or row.get("item_key")
+            link = f" [{url}]({url})" if url else ""
+            lines.append(
+                f"- **{row.get('source_kind')}** `{row.get('item_key')}` "
+                f"signals={row.get('signal_count')} metrics={row.get('metric_count')} "
+                f"latest={row.get('latest_seen')} — {title}{link}"
+            )
+    return "\n".join(lines) + "\n"
+
+
+def baseline_write_report(config: dict[str, Any], analysis: dict[str, Any]) -> dict[str, str]:
+    raw_dir = Path((config.get("output") or {}).get("raw_dir", "/Users/lisihao/Knowledge/_raw/tech-hotspot-radar")).expanduser()
+    date_str = iso_z().split("T", 1)[0]
+    run_dir = raw_dir / "baseline" / date_str
+    run_dir.mkdir(parents=True, exist_ok=True)
+    md_path = run_dir / "tech-signal-baseline.md"
+    json_path = run_dir / "tech-signal-baseline.json"
+    md_path.write_text(baseline_render_md(analysis), encoding="utf-8")
+    json_path.write_text(json.dumps(analysis, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return {"markdown": str(md_path), "json": str(json_path)}
+
+
+def cmd_build_baseline(args: argparse.Namespace) -> int:
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.executescript(SCHEMA_SQL)
+    conn.row_factory = sqlite3.Row
+    days = int(getattr(args, "days", 180) or 180)
+    limit = int(getattr(args, "limit", 0) or 0)
+    raw_root = Path((config.get("output") or {}).get("knowledge_raw_root", str(Path.home() / "Knowledge" / "_raw"))).expanduser()
+    results = [
+        baseline_collect_local(conn, source_kind="github", root=raw_root / "github-trends-digest", days=days, limit=limit),
+        baseline_collect_local(conn, source_kind="web", root=raw_root / "web-captures", days=days, limit=limit),
+        baseline_collect_local(conn, source_kind="solar", root=raw_root / "solar-harness", days=days, limit=limit),
+    ]
+    # Also include current tracked GitHub metric snapshots if already collected.
+    results.append(baseline_collect_github_live(conn, config, limit_repos=int(getattr(args, "limit_repos", 0) or 0)))
+    analysis = baseline_analyze(conn)
+    files = baseline_write_report(config, analysis)
+    print(json.dumps({"ok": True, "database": str(db_path), "days": days, "results": results, "analysis": analysis["sources"], "files": files}, ensure_ascii=False, indent=2, sort_keys=True))
+    conn.close()
+    return 0
+
+
+def cmd_collect_incremental_baseline(args: argparse.Namespace) -> int:
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.executescript(SCHEMA_SQL)
+    conn.row_factory = sqlite3.Row
+    days = int(getattr(args, "days", 1) or 1)
+    raw_root = Path((config.get("output") or {}).get("knowledge_raw_root", str(Path.home() / "Knowledge" / "_raw"))).expanduser()
+    results = [
+        baseline_collect_local(conn, source_kind="github", root=raw_root / "github-trends-digest", days=days),
+        baseline_collect_local(conn, source_kind="web", root=raw_root / "web-captures", days=days),
+        baseline_collect_local(conn, source_kind="solar", root=raw_root / "solar-harness", days=days),
+        baseline_collect_github_live(conn, config, limit_repos=int(getattr(args, "limit_repos", 0) or 0)),
+    ]
+    analysis = baseline_analyze(conn)
+    files = baseline_write_report(config, analysis)
+    print(json.dumps({"ok": True, "database": str(db_path), "days": days, "results": results, "analysis": analysis["sources"], "files": files}, ensure_ascii=False, indent=2, sort_keys=True))
+    conn.close()
+    return 0
+
+
+def cmd_analyze_baseline(args: argparse.Namespace) -> int:
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.executescript(SCHEMA_SQL)
+    conn.row_factory = sqlite3.Row
+    analysis = baseline_analyze(conn)
+    files = baseline_write_report(config, analysis) if getattr(args, "write_report", False) else {}
+    print(json.dumps({"ok": True, "database": str(db_path), "analysis": analysis, "files": files}, ensure_ascii=False, indent=2, sort_keys=True))
+    conn.close()
+    return 0
+
+
 def github_api_json(path: str, config: dict[str, Any]) -> dict[str, Any]:
     fetch = config.get("fetch") or {}
     token_env = fetch.get("github_token_env", "GITHUB_TOKEN")
@@ -4295,6 +4697,15 @@ def build_parser() -> argparse.ArgumentParser:
     gh_collect = sub.add_parser("collect-github", help="Collect live GitHub tracked repo metadata with rate limits")
     gh_collect.add_argument("--limit-repos", type=int, default=0)
     gh_collect.add_argument("--force", action="store_true")
+    baseline_build = sub.add_parser("build-baseline", help="Build 180-day GitHub/Web/Solar baseline from local archives")
+    baseline_build.add_argument("--days", type=int, default=180)
+    baseline_build.add_argument("--limit", type=int, default=0, help="Limit files per source for smoke tests")
+    baseline_build.add_argument("--limit-repos", type=int, default=0)
+    baseline_collect = sub.add_parser("collect-baseline", help="Collect daily incremental GitHub/Web/Solar baseline signals")
+    baseline_collect.add_argument("--days", type=int, default=1)
+    baseline_collect.add_argument("--limit-repos", type=int, default=0)
+    baseline_analyze = sub.add_parser("analyze-baseline", help="Analyze 1d/7d/30d/180d GitHub/Web/Solar baseline windows")
+    baseline_analyze.add_argument("--write-report", action="store_true")
     social_collect = sub.add_parser("collect-social", help="Collect live public social RSS posts with rate limits")
     social_collect.add_argument("--limit-accounts", type=int, default=0)
     social_collect.add_argument("--per-account-limit", type=int, default=3)
@@ -4339,6 +4750,9 @@ def main() -> int:
         "collect-youtube": cmd_collect_youtube,
         "backfill-youtube": cmd_backfill_youtube,
         "collect-github": cmd_collect_github,
+        "build-baseline": cmd_build_baseline,
+        "collect-baseline": cmd_collect_incremental_baseline,
+        "analyze-baseline": cmd_analyze_baseline,
         "collect-social": cmd_collect_social,
         "collect-all": cmd_collect_all,
     }

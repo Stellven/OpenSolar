@@ -446,7 +446,7 @@ configure_builder_lab_labels() {
   tmux has-session -t "$LAB_SESSION_NAME" 2>/dev/null || return 0
   configure_role_footer_style "$LAB_SESSION_NAME" "#f9e2af"
   tmux select-pane -t "$LAB_SESSION_NAME:Builder Lab.0" -T "$(pane_footer_label lab-builder "Builder 1" "lab-builder-1")" 2>/dev/null || true
-  tmux select-pane -t "$LAB_SESSION_NAME:Builder Lab.1" -T "$(pane_footer_label lab-builder "Builder 2" "lab-builder-2")" 2>/dev/null || true
+  tmux select-pane -t "$LAB_SESSION_NAME:Builder Lab.1" -T "$(pane_footer_label evaluator "Evaluator 2 审判官" "lab-evaluator-2")" 2>/dev/null || true
   tmux select-pane -t "$LAB_SESSION_NAME:Builder Lab.2" -T "$(pane_footer_label lab-builder "Builder 3" "lab-builder-3")" 2>/dev/null || true
   tmux select-pane -t "$LAB_SESSION_NAME:Builder Lab.3" -T "$(pane_footer_label lab-builder "Builder 4" "lab-builder-4")" 2>/dev/null || true
 }
@@ -3749,7 +3749,7 @@ PY
     echo "  $0 pm-dispatch --role ROLE --objective TEXT [--operator ID] [--sprint SID] [--dry-run]  PM 发号施令 → 无头算子"
     echo "  $0 pm-fleet [status|inbox|result]  PM 算子舰队状态 & 任务收件箱"
     echo "  $0 mirage [search|doctor|workspace|mounts|exec|provision]  Mirage 统一虚拟文件系统"
-    echo "  $0 wiki [install|status|export-sprint|update|query|ingest|chatgpt-import|vault-status|lint|rebuild|export-graph|colorize|history|run-dispatch|dispatch-watch|dispatch-maintenance|import-solar-db|capture-server|audit-uploads|backfill-uploads|quality-gate|reingest-quarantine|reingest-scheduler|qmd-status|qmd-repair|qmd-search|qmd-update|qmd-mcp|qmd-embed|semantic-extract|ai-influence-digest|tech-hotspot-radar|help]  Obsidian Wiki 集成"
+    echo "  $0 wiki [install|status|export-sprint|update|query|ingest|chatgpt-import|vault-status|lint|rebuild|export-graph|colorize|history|run-dispatch|dispatch-watch|dispatch-maintenance|import-solar-db|capture-server|audit-uploads|backfill-uploads|quality-gate|reingest-quarantine|reingest-scheduler|qmd-status|qmd-repair|qmd-search|qmd-update|qmd-mcp|qmd-embed|semantic-extract|knowledge-ingest|knowledge-health|qmd-watermarks|qmd-microbatch|ai-influence-digest|tech-hotspot-radar|help]  Obsidian Wiki 集成"
     ;;
   mirage)
     # Mirage unified virtual filesystem — sprint-20260508-mirage-unified-vfs
@@ -4331,6 +4331,38 @@ EOF
         fi
         python3 "$_kse" "$@"
         ;;
+      knowledge-ingest)
+        _kid="$HARNESS_DIR/lib/knowledge_ingest_dispatcher.py"
+        if [[ ! -f "$_kid" ]]; then
+          err "knowledge_ingest_dispatcher.py not found: $_kid"
+          exit 1
+        fi
+        python3 "$_kid" "$@"
+        ;;
+      knowledge-health)
+        _kih="$HARNESS_DIR/lib/knowledge_ingest_health.py"
+        if [[ ! -f "$_kih" ]]; then
+          err "knowledge_ingest_health.py not found: $_kih"
+          exit 1
+        fi
+        python3 "$_kih" "$@"
+        ;;
+      qmd-watermarks)
+        _kqi="$HARNESS_DIR/lib/knowledge_qmd_indexer.py"
+        if [[ ! -f "$_kqi" ]]; then
+          err "knowledge_qmd_indexer.py not found: $_kqi"
+          exit 1
+        fi
+        python3 "$_kqi" "$@" watermarks
+        ;;
+      qmd-microbatch)
+        _kqi="$HARNESS_DIR/lib/knowledge_qmd_indexer.py"
+        if [[ ! -f "$_kqi" ]]; then
+          err "knowledge_qmd_indexer.py not found: $_kqi"
+          exit 1
+        fi
+        python3 "$_kqi" microbatch "$@"
+        ;;
       help|--help|-h|"")
         echo "Solar Harness Wiki — Obsidian LLM Wiki integration"
         echo ""
@@ -4367,6 +4399,10 @@ EOF
         echo "  $0 wiki qmd-embed [start|status|stop|run-once|run-idle|run-gentle|run-now]"
         echo "  $0 wiki semantic-extract backfill [--source-dir PATH] [--limit N] [--since-hours H] [--qmd-after]"
         echo "  $0 wiki semantic-extract backfill-vault [--limit N] [--since-hours H] [--qmd-after]  # Obsidian 正文层"
+        echo "  $0 wiki knowledge-ingest [status|migrate|submit-event|discover-raw|discover-vault|process-queue] [--json]"
+        echo "  $0 wiki knowledge-health [health|audit|circuit-check]"
+        echo "  $0 wiki qmd-watermarks [--db PATH]"
+        echo "  $0 wiki qmd-microbatch --layer raw|vault|extracted [--path PATH] [--execute]"
         echo ""
         echo "Examples:"
         echo "  $0 wiki install --vault ~/Documents/SolarWiki"

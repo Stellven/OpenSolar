@@ -366,7 +366,7 @@ def _evaluation_capacity_snapshot(plan: dict[str, Any], evaluators: list[dict[st
     selected = available[:required]
     selected_panes = [str(item.get("pane") or "") for item in selected if str(item.get("pane") or "")]
     capacity_satisfied = len(selected) >= required
-    quorum_dispatch_supported = required <= 1
+    quorum_dispatch_supported = True
     dispatchable_now = capacity_satisfied and quorum_dispatch_supported
     return {
         "available_evaluators": len(available),
@@ -380,8 +380,46 @@ def _evaluation_capacity_snapshot(plan: dict[str, Any], evaluators: list[dict[st
     }
 
 
+def _runtime_fallback_evaluation_plan(plan: dict[str, Any], capacity: dict[str, Any]) -> dict[str, Any]:
+    mode = str(plan.get("review_mode") or "single")
+    required = max(1, int(plan.get("required_evaluators") or 1))
+    available = int(capacity.get("available_evaluators") or 0)
+    if available < 1:
+        return plan
+    if mode not in {"dual", "committee"}:
+        return plan
+    if capacity.get("dispatchable_now", False):
+        return plan
+
+    fallback = dict(plan)
+    fallback["requested_review_mode"] = mode
+    fallback["requested_required_evaluators"] = required
+    fallback["fallback_applied"] = True
+    fallback["fallback_reason"] = (
+        "multi_evaluator_quorum_not_implemented"
+        if capacity.get("capacity_satisfied", False)
+        else "insufficient_evaluator_capacity"
+    )
+    fallback["followup_review_required"] = True
+    fallback["review_mode"] = "staged"
+    fallback["required_evaluators"] = 1
+    fallback["parallelizable"] = False
+    fallback["cross_provider_required"] = False
+    evidence = list(fallback.get("evidence_requirements", []) or [])
+    for item in ["runtime_fallback_notice", "followup_independent_review_pending"]:
+        if item not in evidence:
+            evidence.append(item)
+    fallback["evidence_requirements"] = evidence
+    escalation = list(fallback.get("escalation_on_fail", []) or [])
+    for item in ["Verifier", "HumanReview"]:
+        if item not in escalation:
+            escalation.append(item)
+    fallback["escalation_on_fail"] = escalation
+    return fallback
+
+
 def _evaluation_plan_block(plan: dict[str, Any]) -> str:
-    return "\n".join([
+    lines = [
         f"- Review Mode: `{plan.get('review_mode', 'single')}`",
         f"- Required Evaluators: `{plan.get('required_evaluators', 1)}`",
         f"- Risk Tier: `{plan.get('risk_tier', 'low')}`",
@@ -391,7 +429,14 @@ def _evaluation_plan_block(plan: dict[str, Any]) -> str:
         f"- Evidence Requirements: {', '.join(f'`{item}`' for item in plan.get('evidence_requirements', []) or ['handoff_md'])}",
         f"- Independence: writer_same_operator=`{((plan.get('independence_policy') or {}).get('writer_same_operator', 'denied'))}`, writer_same_provider=`{((plan.get('independence_policy') or {}).get('writer_same_provider', 'allowed'))}`",
         f"- Escalation On Fail: {', '.join(f'`{item}`' for item in plan.get('escalation_on_fail', []) or ['Verifier'])}",
-    ])
+    ]
+    if plan.get("fallback_applied"):
+        lines.append(f"- Runtime Fallback Applied: `true`")
+        lines.append(f"- Requested Review Mode: `{plan.get('requested_review_mode', 'N/A')}`")
+        lines.append(f"- Requested Evaluators: `{plan.get('requested_required_evaluators', 'N/A')}`")
+        lines.append(f"- Fallback Reason: `{plan.get('fallback_reason', 'N/A')}`")
+        lines.append(f"- Follow-up Review Required: `{str(bool(plan.get('followup_review_required'))).lower()}`")
+    return "\n".join(lines)
 
 
 def _read_json_file(path: str | Path) -> dict[str, Any]:
@@ -986,6 +1031,81 @@ def _eval_json_file(sid: str, node_id: str) -> Path:
     return SPRINTS_DIR / f"{sid}.{_safe_node_id(node_id)}-eval.json"
 
 
+def _eval_peer_md_file(sid: str, node_id: str, index: int) -> Path:
+    return SPRINTS_DIR / f"{sid}.{_safe_node_id(node_id)}-eval-q{index}.md"
+
+
+def _eval_peer_json_file(sid: str, node_id: str, index: int) -> Path:
+    return SPRINTS_DIR / f"{sid}.{_safe_node_id(node_id)}-eval-q{index}.json"
+
+
+def _eval_dispatch_member_file(sid: str, node_id: str, index: int) -> Path:
+    return SPRINTS_DIR / f"{sid}.{_safe_node_id(node_id)}-eval-dispatch-q{index}.md"
+
+
+def _node_eval_assignments(node: dict[str, Any]) -> list[dict[str, Any]]:
+    raw = node.get("eval_assignments")
+    if isinstance(raw, list):
+        normalized: list[dict[str, Any]] = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            pane = str(item.get("pane") or "").strip()
+            dispatch_id = str(item.get("dispatch_id") or "").strip()
+            if not pane or not dispatch_id:
+                continue
+            normalized.append(
+                {
+                    "pane": pane,
+                    "dispatch_id": dispatch_id,
+                    "role": str(item.get("role") or "secondary"),
+                    "eval_md_path": str(item.get("eval_md_path") or ""),
+                    "eval_json_path": str(item.get("eval_json_path") or ""),
+                }
+            )
+        if normalized:
+            return normalized
+    pane = str(node.get("eval_assigned_to") or "").strip()
+    dispatch_id = str(node.get("eval_dispatch_id") or "").strip()
+    if pane and dispatch_id:
+        return [
+            {
+                "pane": pane,
+                "dispatch_id": dispatch_id,
+                "role": "primary",
+                "eval_md_path": str(node.get("eval_md_path") or ""),
+                "eval_json_path": str(node.get("eval_json") or ""),
+            }
+        ]
+    return []
+
+
+def _store_eval_assignments(node: dict[str, Any], assignments: list[dict[str, Any]], dispatched_at: str) -> None:
+    normalized = [
+        {
+            "pane": str(item.get("pane") or ""),
+            "dispatch_id": str(item.get("dispatch_id") or ""),
+            "role": str(item.get("role") or "secondary"),
+            "eval_md_path": str(item.get("eval_md_path") or ""),
+            "eval_json_path": str(item.get("eval_json_path") or ""),
+        }
+        for item in assignments
+        if str(item.get("pane") or "") and str(item.get("dispatch_id") or "")
+    ]
+    node["eval_assignments"] = normalized
+    primary = next((item for item in normalized if item.get("role") == "primary"), normalized[0] if normalized else {})
+    node["eval_assigned_to"] = str(primary.get("pane") or "")
+    node["eval_dispatch_id"] = str(primary.get("dispatch_id") or "")
+    node["eval_dispatched_at"] = dispatched_at
+
+
+def _clear_eval_assignments(node: dict[str, Any]) -> None:
+    node.pop("eval_assignments", None)
+    node.pop("eval_assigned_to", None)
+    node.pop("eval_dispatch_id", None)
+    node.pop("eval_dispatched_at", None)
+
+
 def _queue_file(sprint_id: str) -> Path:
     qdir = HARNESS_DIR / "run" / "queue"
     qdir.mkdir(parents=True, exist_ok=True)
@@ -1208,17 +1328,48 @@ Graph: `{graph_path}`
 
 
 def build_eval_dispatch_text(graph: dict[str, Any], graph_path: str, node: dict[str, Any], pane: str,
-                             dispatch_id: str) -> str:
+                             dispatch_id: str, *, evaluator_role: str = "primary",
+                             evaluator_index: int = 1, evaluator_total: int = 1,
+                             eval_md_override: Path | None = None,
+                             eval_json_override: Path | None = None,
+                             peer_eval_json_paths: list[str] | None = None,
+                             canonical_eval_json_path: str = "",
+                             canonical_eval_md_path: str = "") -> str:
     sid = str(graph.get("sprint_id") or Path(graph_path).stem.replace(".task_graph", ""))
     node_id = str(node.get("id") or "")
-    evaluation_plan = _plan_node_evaluation(graph, node)
+    evaluation_plan = node.get("evaluation_plan_runtime") or node.get("evaluation_plan")
+    if not isinstance(evaluation_plan, dict) or not evaluation_plan:
+        evaluation_plan = _plan_node_evaluation(graph, node)
     handoff = _existing_node_handoff(sid, node, graph) or _handoff_file(sid, node_id)
     handoff_candidates = "\n".join(f"- `{candidate}`" for candidate in _node_handoff_candidates(sid, node, graph))
-    eval_md = _eval_md_file(sid, node_id)
-    eval_json = _eval_json_file(sid, node_id)
+    eval_md = eval_md_override or _eval_md_file(sid, node_id)
+    eval_json = eval_json_override or _eval_json_file(sid, node_id)
     node_dispatch = _dispatch_file(sid, node_id)
     contract = SPRINTS_DIR / f"{sid}.contract.md"
     architecture_block = dispatch_policy_block(node, graph) if dispatch_policy_block else "## Architecture Guard\n\n- unavailable"
+    peer_eval_json_paths = peer_eval_json_paths or []
+    canonical_eval_json_path = canonical_eval_json_path or str(_eval_json_file(sid, node_id))
+    canonical_eval_md_path = canonical_eval_md_path or str(_eval_md_file(sid, node_id))
+    peer_block = "\n".join(f"- `{path}`" for path in peer_eval_json_paths) if peer_eval_json_paths else "- `N/A`"
+    verdict_step = f"""3. 提交节点 verdict。通过时会自动释放下游 ready node；失败时只阻塞依赖它的下游：
+   ```bash
+   {HARNESS_DIR}/solar-harness.sh graph-dispatch node-verdict --graph "{graph_path}" --node "{node_id}" --verdict pass --eval-json "{eval_json}"
+   ```
+
+   如果失败，改用：
+   ```bash
+   {HARNESS_DIR}/solar-harness.sh graph-dispatch node-verdict --graph "{graph_path}" --node "{node_id}" --verdict fail --eval-json "{eval_json}" --reason "写清楚失败原因"
+   ```
+""" if evaluator_role == "primary" else f"""3. 不要直接提交 node verdict。你是并行副评审，只负责产出 sidecar 评审结果：
+   - Markdown sidecar: `{eval_md}`
+   - JSON sidecar: `{eval_json}`
+   - Canonical evaluator 负责最终合并并提交：`{canonical_eval_json_path}`
+"""
+    role_rules = """- 你是主评审（primary），负责读取所有副评审 sidecar 并合并成 canonical verdict。
+- 对于 dual/committee 模式，若副评审 sidecar 尚未出现，先轮询等待这些文件；不要抢先在没有 peer evidence 的情况下提交 PASS。""" if evaluator_role == "primary" and evaluator_total > 1 else (
+"""- 你是并行副评审（secondary），不要写 canonical eval.json，也不要直接调用 node-verdict。
+- 专注给出独立证据与 verdict sidecar，供主评审合并。""" if evaluator_role != "primary" else "- 当前只有一个 evaluator；直接完成 canonical verdict。"
+)
 
     return f"""{STATE_READ_PREFLIGHT}
 {DEFINITION_OF_DONE_POLICY}
@@ -1229,6 +1380,8 @@ Sprint: `{sid}`
 Node: `{node_id}`
 Pane: `{pane}`
 Dispatch ID: `{dispatch_id}`
+Evaluator Role: `{evaluator_role}`
+Evaluator Index: `{evaluator_index}/{evaluator_total}`
 Graph: `{graph_path}`
 Handoff: `{handoff}`
 
@@ -1242,6 +1395,7 @@ Handoff: `{handoff}`
 - 不要评审 parent sprint。
 - 不要把 parent sprint 标成 passed。
 - 只根据 node goal / acceptance / write_scope / handoff evidence 给 verdict。
+- {role_rules}
 
 ## Node Goal
 
@@ -1329,19 +1483,20 @@ solar-harness session evaluate "{sid}" --json
      "research_quality_gate": {{}},
      "checked_at": "{_utc_now()}",
      "eval_md_path": "{eval_md}"
-   }}
-   EOF
+    }}
+    EOF
    ```
 
-3. 提交节点 verdict。通过时会自动释放下游 ready node；失败时只阻塞依赖它的下游：
-   ```bash
-   {HARNESS_DIR}/solar-harness.sh graph-dispatch node-verdict --graph "{graph_path}" --node "{node_id}" --verdict pass --eval-json "{eval_json}"
-   ```
+## Peer Evaluator Sidecars
 
-   如果失败，改用：
-   ```bash
-   {HARNESS_DIR}/solar-harness.sh graph-dispatch node-verdict --graph "{graph_path}" --node "{node_id}" --verdict fail --eval-json "{eval_json}" --reason "写清楚失败原因"
-   ```
+{peer_block}
+
+## Canonical Eval Outputs
+
+- Markdown: `{canonical_eval_md_path}`
+- JSON: `{canonical_eval_json_path}`
+
+{verdict_step}
 """
 
 
@@ -2259,16 +2414,17 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
     worker_skills = [
         "bash", "shell", "python", "python-read", "dataclasses", "pytest", "subprocess", "sqlite3", "pure-functions", "time-injection", "timeouts", "concurrency", "io", "fsm", "integration", "integration-testing", "integration-tests", "regression", "regression-tests", "bash-tests", "jq", "json", "json-patch", "jsonl-tail", "typescript", "docs", "testing",
         "http-testing", "negative-testing", "activation-proof", "knowledge-ingest", "release-gate", "documentation",
+        "solar-harness-verification", "solar-harness-compat-review", "harness.verification", "verification",
         "stub-llm", "e2e-test", "cli-view-assertion", "negative-control", "verifier", "registry-introspection",
         "technical-writing", "markdown", "regex", "markdown-parse", "pandoc", "evidence-aggregation", "handoff-authoring", "traceability-patch", "knowledge-raw-writeback",
         "architecture-writing", "solar-harness-control-plane", "algorithm_design",
         "frontend", "ui", "terminal-ui", "tvs", "vdl", "snapshot", "snapshot-testing", "flask", "http", "curl", "http-routing", "http-endpoint", "autopilot-hooks", "json-traversal", "html", "jinja", "javascript", "vanilla-dom",
         "security", "grep", "secret-scan", "code-audit",
         "deepresearch", "cli", "cli-audit", "cli-design", "argparse", "argparse-bridge", "json-schema", "json-shape-inspect", "validation", "claude-cli", "survey", "fixture", "release", "evidence", "evidence-collection", "evaluator-summary", "autopilot", "epic",
-        "product", "planning", "workflow.planning", "governance", "risk", "risk-register",
+        "product", "planning", "optimization", "runtime_design", "workflow.planning", "governance", "risk", "risk-register",
         "architecture", "schema", "state-machine", "state-schema-design", "distributed-systems",
         "code-audit", "docs-audit", "type-hints", "type-protocols", "refactor", "tmux-inspect", "data-aggregation", "shutil", "urllib", "atomic-writes", "hashing", "unittest-mock",
-        "api-design", "data-modeling", "compatibility",
+        "api-design", "data-modeling", "compatibility", "compat-review",
         "scheduler.design", "algorithm", "state-machine.design",
         "routing", "diagnostics", "evaluation", "capability-graph", "event-sourcing",
         "lazy-import",
@@ -2278,10 +2434,12 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "autoresearch.agent_iteration", "autoresearch.score_gate",
         "repair.pr-cot",
         "DeepArchitect", "ImplementationWorker", "Critic", "Verifier",
+        "code_impl", "test_generation", "test_execution",
     ]
     worker_capabilities = [
         "bash", "python", "typescript", "docs", "testing",
         "frontend", "observability", "evidence",
+        "solar-harness-verification", "solar-harness-compat-review", "harness.verification", "verification",
         "env-passthrough", "metrics",
         "harness.context_preflight", "harness.intent", "harness.dispatch_visibility", "harness.contracts",
         "harness.dag", "harness.status", "harness.model_routing",
@@ -2303,7 +2461,9 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "multi_agent.research", "browser.agent_experiment", "document.toolkit",
         "agent.inventory", "command.catalog", "rules.catalog", "mcp.catalog",
         "repair.pr-cot", "failure.structured_repair", "routing.complexity_budget",
+        "optimization", "runtime_design",
         "algorithm_design", "solar-harness-control-plane", "architecture-writing",
+        "code_impl", "test_generation", "test_execution",
         "skill.methodology", "workflow.planning", "debug.systematic", "test.tdd",
         "architecture", "distributed-systems", "evaluation",
         "agents_sdk.design", "agents_sdk.guardrails", "agents_sdk.tracing",
@@ -2458,6 +2618,8 @@ def _node_eval_needed(graph: dict[str, Any], sid: str, node: dict[str, Any], for
     if _eval_json_file(sid, node_id).exists() and not force and not repair_mode:
         return False
     if not force:
+        recovered: list[dict[str, Any]] = []
+        recovered_at = ""
         for lease in list_leases():
             dispatch_id = str(lease.get("dispatch_id") or "")
             lease_sid = str(lease.get("sid") or lease.get("sprint_id") or "")
@@ -2467,32 +2629,40 @@ def _node_eval_needed(graph: dict[str, Any], sid: str, node: dict[str, Any], for
                 and f"-{node_id}-" in dispatch_id
                 and dispatch_id.startswith(f"graph-eval-{sid}-")
             ):
-                # A previous dispatcher cycle may have accepted the prompt but
-                # failed local submit verification before graph fields were
-                # saved. Reattach graph state to the active evaluator lease
-                # instead of dispatching a duplicate prompt.
-                node["eval_assigned_to"] = str(lease.get("pane") or "")
-                node["eval_dispatch_id"] = dispatch_id
-                node["eval_dispatched_at"] = str(lease.get("acquired_at") or _utc_now())
-                node["eval_recovered_from_lease"] = True
-                return False
+                recovered.append(
+                    {
+                        "pane": str(lease.get("pane") or ""),
+                        "dispatch_id": dispatch_id,
+                        "role": "secondary",
+                    }
+                )
+                recovered_at = str(lease.get("acquired_at") or recovered_at or _utc_now())
+        if recovered:
+            if recovered:
+                recovered[0]["role"] = "primary"
+            _store_eval_assignments(node, recovered, recovered_at or _utc_now())
+            node["eval_recovered_from_lease"] = True
+            return False
     if node.get("eval_dispatched_at") and not force:
-        pane = str(node.get("eval_assigned_to") or "")
-        dispatch_id = str(node.get("eval_dispatch_id") or "")
-        lease = read_lease(pane) if pane else {}
-        lease_matches = bool(
-            lease
-            and str(lease.get("sid") or lease.get("sprint_id") or "") == sid
-            and str(lease.get("dispatch_id") or "") == dispatch_id
-        )
+        assignments = _node_eval_assignments(node)
+        lease_matches = False
+        for assignment in assignments:
+            pane = str(assignment.get("pane") or "")
+            dispatch_id = str(assignment.get("dispatch_id") or "")
+            lease = read_lease(pane) if pane else {}
+            if (
+                lease
+                and str(lease.get("sid") or lease.get("sprint_id") or "") == sid
+                and str(lease.get("dispatch_id") or "") == dispatch_id
+            ):
+                lease_matches = True
+                break
         # If the graph says eval was dispatched but no eval artifact exists and
         # the evaluator lease is gone, the pane likely swallowed/stalled the
         # prompt. Treat it as retryable instead of permanently blocking.
         if lease_matches:
             return False
-        node.pop("eval_assigned_to", None)
-        node.pop("eval_dispatch_id", None)
-        node.pop("eval_dispatched_at", None)
+        _clear_eval_assignments(node)
         node["eval_retry_reason"] = "eval_dispatched_without_artifact_or_active_lease"
     # Use graph_scheduler.node_status so node_results (the durable scheduler
     # result map) and inline node.status do not drift. A node can be reviewing
@@ -2533,127 +2703,194 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
         node_id = str(node.get("id") or "")
         if not _node_eval_needed(graph, sid, node, force=force):
             continue
-        evaluation_plan = _plan_node_evaluation(graph, node)
-        capacity = _evaluation_capacity_snapshot(evaluation_plan, evaluators)
-        evaluation_plan["capacity"] = capacity
-        node["evaluation_plan"] = evaluation_plan
+        requested_plan = _plan_node_evaluation(graph, node)
+        requested_capacity = _evaluation_capacity_snapshot(requested_plan, evaluators)
+        requested_plan["capacity"] = requested_capacity
+        runtime_plan = _runtime_fallback_evaluation_plan(requested_plan, requested_capacity)
+        runtime_capacity = _evaluation_capacity_snapshot(runtime_plan, evaluators)
+        runtime_plan["capacity"] = runtime_capacity
+        node["evaluation_plan_requested"] = requested_plan
+        node["evaluation_plan_runtime"] = runtime_plan
+        node["evaluation_plan"] = runtime_plan
         node["evaluation_plan_updated_at"] = _utc_now()
-        if not capacity.get("available_evaluators"):
+        if not runtime_capacity.get("available_evaluators"):
             skipped.append({
                 "node": node_id,
                 "reason": "no_available_evaluator",
-                "evaluation_plan": evaluation_plan,
+                "evaluation_plan": runtime_plan,
             })
             break
-        if not capacity.get("capacity_satisfied", False):
+        if not runtime_capacity.get("capacity_satisfied", False):
             skipped.append({
                 "node": node_id,
                 "reason": "insufficient_evaluator_capacity",
-                "evaluation_plan": evaluation_plan,
+                "evaluation_plan": runtime_plan,
             })
             break
-        if not capacity.get("quorum_dispatch_supported", True):
+        if not runtime_capacity.get("quorum_dispatch_supported", True):
             skipped.append({
                 "node": node_id,
                 "reason": "multi_evaluator_quorum_not_implemented",
-                "evaluation_plan": evaluation_plan,
+                "evaluation_plan": runtime_plan,
             })
             break
-        if not capacity.get("dispatchable_now"):
+        if not runtime_capacity.get("dispatchable_now"):
             skipped.append({
                 "node": node_id,
                 "reason": "insufficient_evaluator_capacity",
-                "evaluation_plan": evaluation_plan,
+                "evaluation_plan": runtime_plan,
             })
             break
-        selected_panes = {
+        selected_panes = [
             str(pane)
-            for pane in capacity.get("selected_panes", [])
+            for pane in runtime_capacity.get("selected_panes", [])
             if str(pane)
-        }
-        evaluator = next(
-            (
-                item
-                for item in evaluators
-                if not item.get("busy") and str(item.get("pane") or "") in selected_panes
-            ),
-            None,
-        )
-        if not evaluator:
+        ]
+        selected_evaluators = [
+            item
+            for item in evaluators
+            if not item.get("busy") and str(item.get("pane") or "") in selected_panes
+        ]
+        if len(selected_evaluators) < int(runtime_plan.get("required_evaluators") or 1):
             skipped.append({
                 "node": node_id,
-                "reason": "no_available_evaluator",
-                "evaluation_plan": evaluation_plan,
+                "reason": "insufficient_selected_evaluators",
+                "evaluation_plan": runtime_plan,
             })
             break
-        pane = str(evaluator["pane"])
-        if dry_run and pane in dry_run_used_panes:
-            skipped.append({
-                "node": node_id,
-                "reason": "dry_run_evaluator_capacity",
-                "pane": pane,
-                "evaluation_plan": evaluation_plan,
-            })
+        total_evaluators = int(runtime_plan.get("required_evaluators") or 1)
+        dispatch_group_id = f"graph-eval-{sid}-{node_id}-{_utc_now().replace(':', '').replace('-', '')}"
+        planned_assignments: list[dict[str, Any]] = []
+        for idx, evaluator in enumerate(selected_evaluators[:total_evaluators], start=1):
+            pane = str(evaluator.get("pane") or "")
+            if dry_run and pane in dry_run_used_panes:
+                skipped.append({
+                    "node": node_id,
+                    "reason": "dry_run_evaluator_capacity",
+                    "pane": pane,
+                    "evaluation_plan": runtime_plan,
+                })
+                planned_assignments = []
+                break
+            role = "primary" if idx == 1 else "secondary"
+            eval_md_path = _eval_md_file(sid, node_id) if idx == 1 else _eval_peer_md_file(sid, node_id, idx)
+            eval_json_path = _eval_json_file(sid, node_id) if idx == 1 else _eval_peer_json_file(sid, node_id, idx)
+            planned_assignments.append(
+                {
+                    "pane": pane,
+                    "dispatch_id": f"{dispatch_group_id}-q{idx}",
+                    "role": role,
+                    "index": idx,
+                    "eval_md_path": str(eval_md_path),
+                    "eval_json_path": str(eval_json_path),
+                }
+            )
+        if not planned_assignments:
             break
-        dispatch_id = f"graph-eval-{sid}-{node_id}-{_utc_now().replace(':', '').replace('-', '')}"
-        lease_result = _ensure_lease(pane, sid, dispatch_id, ttl, dry_run)
-        if not lease_result.get("acquired"):
-            skipped.append({
-                "node": node_id,
-                "pane": pane,
-                "reason": lease_result.get("reason", "lease_failed"),
-                "lease": lease_result,
-                "evaluation_plan": evaluation_plan,
-            })
-            continue
 
-        instruction_file = _eval_dispatch_file(sid, node_id)
-        instruction_file.parent.mkdir(parents=True, exist_ok=True)
-        instruction_file.write_text(
-            build_eval_dispatch_text(graph, graph_path, node, pane, dispatch_id),
-            encoding="utf-8",
-        )
-        _inject_dispatch_context(instruction_file, sid=sid, pane=pane, dispatch_id=dispatch_id)
-        if dry_run:
-            dry_run_used_panes.add(pane)
-            dispatched.append({
-                "node": node_id,
-                "pane": pane,
-                "dispatch_id": dispatch_id,
-                "instruction_file": str(instruction_file),
-                "evaluation_plan": evaluation_plan,
-                "dry_run": True,
-            })
-            continue
-        sent = _send_to_pane(pane, instruction_file, dry_run, sid=sid, dispatch_id=dispatch_id)
-        if not sent:
+        lease_results: list[dict[str, Any]] = []
+        lease_failed = None
+        for assignment in planned_assignments:
+            lease_result = _ensure_lease(
+                str(assignment["pane"]),
+                sid,
+                str(assignment["dispatch_id"]),
+                ttl,
+                dry_run,
+            )
+            lease_results.append(lease_result)
+            if not lease_result.get("acquired"):
+                lease_failed = {"assignment": assignment, "lease": lease_result}
+                break
+        if lease_failed:
             if not dry_run:
-                release_lease(pane, dispatch_id, "graph_eval_dispatch_send_failed")
-            # Clear eval assignment so the node can be retried on next cycle.
-            node.pop("eval_assigned_to", None)
-            node.pop("eval_dispatch_id", None)
-            node.pop("eval_dispatched_at", None)
+                for assignment, lease_result in zip(planned_assignments, lease_results):
+                    if lease_result.get("acquired"):
+                        release_lease(str(assignment["pane"]), str(assignment["dispatch_id"]), "graph_eval_dispatch_partial_lease_failed")
             skipped.append({
                 "node": node_id,
-                "pane": pane,
-                "reason": "send_failed",
-                "evaluation_plan": evaluation_plan,
+                "pane": str(lease_failed["assignment"]["pane"]),
+                "reason": lease_failed["lease"].get("reason", "lease_failed"),
+                "lease": lease_failed["lease"],
+                "evaluation_plan": runtime_plan,
             })
             continue
 
-        if not dry_run:
-            _write_submit_ack(sid, node_id, pane, dispatch_id)
+        canonical_eval_md = str(_eval_md_file(sid, node_id))
+        canonical_eval_json = str(_eval_json_file(sid, node_id))
+        sent_records: list[dict[str, Any]] = []
+        send_failed = None
+        for assignment in planned_assignments:
+            pane = str(assignment["pane"])
+            peer_paths = [
+                str(item["eval_json_path"])
+                for item in planned_assignments
+                if item["dispatch_id"] != assignment["dispatch_id"]
+            ]
+            instruction_file = _eval_dispatch_member_file(sid, node_id, int(assignment["index"]))
+            instruction_file.parent.mkdir(parents=True, exist_ok=True)
+            instruction_file.write_text(
+                build_eval_dispatch_text(
+                    graph,
+                    graph_path,
+                    node,
+                    pane,
+                    str(assignment["dispatch_id"]),
+                    evaluator_role=str(assignment["role"]),
+                    evaluator_index=int(assignment["index"]),
+                    evaluator_total=total_evaluators,
+                    eval_md_override=Path(str(assignment["eval_md_path"])),
+                    eval_json_override=Path(str(assignment["eval_json_path"])),
+                    peer_eval_json_paths=peer_paths,
+                    canonical_eval_json_path=canonical_eval_json,
+                    canonical_eval_md_path=canonical_eval_md,
+                ),
+                encoding="utf-8",
+            )
+            _inject_dispatch_context(instruction_file, sid=sid, pane=pane, dispatch_id=str(assignment["dispatch_id"]))
+            if dry_run:
+                dry_run_used_panes.add(pane)
+                sent_records.append({
+                    "node": node_id,
+                    "pane": pane,
+                    "dispatch_id": str(assignment["dispatch_id"]),
+                    "instruction_file": str(instruction_file),
+                    "evaluation_plan": runtime_plan,
+                    "role": assignment["role"],
+                    "dry_run": True,
+                })
+                continue
+            sent = _send_to_pane(pane, instruction_file, dry_run, sid=sid, dispatch_id=str(assignment["dispatch_id"]))
+            if not sent:
+                send_failed = {"assignment": assignment, "instruction_file": str(instruction_file)}
+                break
+            _write_submit_ack(sid, node_id, pane, str(assignment["dispatch_id"]))
+            sent_records.append({
+                "node": node_id,
+                "pane": pane,
+                "dispatch_id": str(assignment["dispatch_id"]),
+                "instruction_file": str(instruction_file),
+                "evaluation_plan": runtime_plan,
+                "role": assignment["role"],
+            })
+        if send_failed:
+            if not dry_run:
+                for assignment in planned_assignments:
+                    release_lease(str(assignment["pane"]), str(assignment["dispatch_id"]), "graph_eval_dispatch_send_failed")
+            _clear_eval_assignments(node)
+            skipped.append({
+                "node": node_id,
+                "pane": str(send_failed["assignment"]["pane"]),
+                "reason": "send_failed",
+                "evaluation_plan": runtime_plan,
+            })
+            continue
+
         node["status"] = "reviewing"
-        node["eval_assigned_to"] = pane
-        node["eval_dispatch_id"] = dispatch_id
-        node["eval_dispatched_at"] = _utc_now()
-        dispatched.append({
-            "node": node_id,
-            "pane": pane,
-            "dispatch_id": dispatch_id,
-            "instruction_file": str(instruction_file),
-            "evaluation_plan": evaluation_plan,
-        })
+        node["eval_dispatch_group_id"] = dispatch_group_id
+        _store_eval_assignments(node, planned_assignments, _utc_now())
+        for item in sent_records:
+            dispatched.append(item)
 
     if not dry_run:
         save_graph(graph_path, graph)
@@ -2764,8 +3001,7 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
         note_parts.append(reason)
     if eval_json:
         note_parts.append(f"eval_json={eval_json}")
-    eval_pane = str(node.get("eval_assigned_to") or "")
-    eval_dispatch_id = str(node.get("eval_dispatch_id") or "")
+    eval_assignments = _node_eval_assignments(node)
     parent = mark_node_result(graph, node_id, status, gate_status=status, note="; ".join(note_parts) or None)
     node["status"] = status
     node["updated_at"] = _utc_now()
@@ -2792,8 +3028,8 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
             effect_result = {"ok": False, "reason": f"effect_scan_failed:{type(exc).__name__}", "error": str(exc)}
     node.pop("assigned_to", None)
     node.pop("dispatch_id", None)
-    node.pop("eval_assigned_to", None)
-    node.pop("eval_dispatch_id", None)
+    node.pop("eval_dispatch_group_id", None)
+    _clear_eval_assignments(node)
     save_graph(graph_path, graph)
 
     worker_lease_released = False
@@ -2802,8 +3038,18 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
         worker_lease_released = bool(
             release_lease(worker_pane, worker_dispatch_id, f"node_{status}").get("released")
         )
-    if not dry_run and eval_pane and eval_dispatch_id:
-        eval_lease_released = bool(release_lease(eval_pane, eval_dispatch_id, f"node_{status}").get("released"))
+    if not dry_run and eval_assignments:
+        eval_lease_released = any(
+            bool(
+                release_lease(
+                    str(assignment.get("pane") or ""),
+                    str(assignment.get("dispatch_id") or ""),
+                    f"node_{status}",
+                ).get("released")
+            )
+            for assignment in eval_assignments
+            if str(assignment.get("pane") or "") and str(assignment.get("dispatch_id") or "")
+        )
 
     downstream: dict[str, Any] = {"ok": True, "skipped": "verdict_not_passed"}
     if status == "passed" and dispatch_downstream and not parent.get("ready"):

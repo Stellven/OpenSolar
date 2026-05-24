@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://solar.local/schemas/draft/execution-capsule.v1.draft.json",
+  "title": "Solar Execution Capsule (ECapsule) v1",
+  "description": "Draft v1 schema for the Execution Capsule — a bundled dispatch unit combining Skill + MCP bindings + Policy + Contract + Verification rules. DISTINCT from the State Capsule in schemas/capsule-schema.yaml which is a sprint context transfer struct. Uses 'execution_capsule_id' (not 'capsule_id') to avoid naming collision.",
+  "schema_status": "draft",
+  "schema_version": "v1.0.0-draft",
+  "type": "object",
+  "required": [
+    "execution_capsule_id",
+    "skill_id",
+    "skill_version",
+    "sprint_id",
+    "node_id",
+    "created_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "execution_capsule_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^ecap-[a-z0-9_-]+$",
+      "description": "Unique identifier for this Execution Capsule. Prefix 'ecap-' distinguishes from State Capsule IDs. Field name 'execution_capsule_id' avoids collision with capsule-schema.yaml's 'capsule_id' if that field is ever added."
+    },
+    "skill_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Resolved Skill name from solar_skills.py registry."
+    },
+    "skill_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[a-z0-9.]+)?$",
+      "description": "Skill version at resolution time."
+    },
+    "sprint_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Sprint that generated this capsule."
+    },
+    "node_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "DAG node that generated this capsule."
+    },
+    "operator_id": {
+      "type": ["string", "null"],
+      "description": "Physical operator assigned for execution. Null until operator_runtime.py:325 submit() resolves it."
+    },
+    "created_at": {
+      "type": "string",
+      "description": "ISO 8601 UTC timestamp of capsule creation."
+    },
+    "submitted_at": {
+      "type": ["string", "null"],
+      "description": "ISO 8601 UTC timestamp when capsule was submitted to operator_runtime. Null until submitted."
+    },
+    "mcp_bindings": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "description": "provider_id that was resolved for this MCP capability token."
+      },
+      "description": "Map of mcp_tool_token → resolved provider_id. Populated by APO after capability_registry.py:186 cmd_query resolution.",
+      "default": {}
+    },
+    "policy_guard": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["policy_id", "result"],
+        "additionalProperties": true,
+        "properties": {
+          "policy_id": {
+            "type": "string",
+            "description": "Policy identifier checked."
+          },
+          "result": {
+            "type": "string",
+            "enum": ["pass", "fail", "waived"],
+            "description": "Policy check outcome. 'waived' requires P0_BYPASS flag."
+          },
+          "reason": {
+            "type": ["string", "null"],
+            "description": "Explanation, especially for fail or waived."
+          }
+        }
+      },
+      "default": [],
+      "description": "List of policy check results. All role=enforcer skills contribute mandatory checks here."
+    },
+    "contract": {
+      "type": ["object", "null"],
+      "additionalProperties": true,
+      "description": "Machine-readable acceptance criteria. Copied from Skill's verification_contract at resolution time.",
+      "default": null
+    },
+    "verification_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["check_name"],
+        "additionalProperties": true,
+        "properties": {
+          "check_name": {
+            "type": "string",
+            "description": "Name of the post-execution verification check."
+          },
+          "check_type": {
+            "type": "string",
+            "enum": ["command", "file_exists", "json_field", "regex_match", "custom"],
+            "description": "How to run the check."
+          },
+          "expected": {
+            "description": "Expected value or pattern."
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 30
+          }
+        }
+      },
+      "default": [],
+      "description": "Ordered list of post-execution checks. All must pass for capsule to be considered verified."
+    },
+    "timeout_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 3600,
+      "description": "Hard execution timeout. operator_runtime.py enforces this at the lease level."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "submitted", "running", "verified", "failed", "cancelled"],
+      "default": "pending",
+      "description": "Capsule lifecycle status."
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Collected evidence from verification_rules execution. Written by evidence_ledger.py.",
+      "default": {}
+    }
+  }
+}

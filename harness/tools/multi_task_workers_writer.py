@@ -50,6 +50,52 @@ from typing import Any
 SCHEMA_VERSION = "multi_task_screen.workers.v1"
 MAX_LOOKBACK_HARD_CAP = 500
 DEFAULT_STATE_DIR = Path.home() / ".solar" / "harness" / "state"
+DEFAULT_WORKER_SKILLS = [
+    "bash",
+    "shell",
+    "python",
+    "testing",
+    "test_execution",
+    "code_impl",
+    "test_generation",
+    "planning",
+    "optimization",
+    "runtime_design",
+    "solar-harness-verification",
+    "solar-harness-compat-review",
+    "compat-review",
+    "compatibility",
+    "harness.verification",
+    "verification",
+    "verifier",
+    "review",
+]
+DEFAULT_WORKER_CAPABILITIES = [
+    "bash",
+    "python",
+    "testing",
+    "test_execution",
+    "code_impl",
+    "test_generation",
+    "repair.pr-cot",
+    "failure.structured_repair",
+    "routing.complexity_budget",
+    "optimization",
+    "runtime_design",
+    "solar-harness-verification",
+    "solar-harness-compat-review",
+    "compat-review",
+    "compatibility",
+    "harness.verification",
+    "verification",
+    "code.review",
+]
+
+
+def _execution_labels(role: str) -> tuple[list[str], list[str]]:
+    if role.lower() in {"builder", "lab", "lab-builder", "evaluator"}:
+        return list(DEFAULT_WORKER_SKILLS), list(DEFAULT_WORKER_CAPABILITIES)
+    return [], []
 
 
 def _utc_now_iso() -> str:
@@ -191,13 +237,17 @@ def build_workers(
     out: list[dict[str, Any]] = []
     for pane_id in sorted(panes.keys()):
         w = panes[pane_id]
+        skills, capabilities = _execution_labels(str(w["role"]))
         out.append(
             {
                 "id": w["id"],
+                "pane": w["id"],
                 "role": w["role"],
                 "current_sprint": w["current_sprint"],
                 "last_event_ts": w["last_event_ts"],
                 "low_confidence": bool(w["low_confidence"]),
+                "skills": skills,
+                "capabilities": capabilities,
             }
         )
     return out

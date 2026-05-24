@@ -33,6 +33,50 @@ DEFAULT_TIMEOUT_MS = int(os.environ.get("SOLAR_KB_TIMEOUT_MS", "700"))
 DEFAULT_MAX_HITS = 8
 
 
+def _read_frontmatter(path: Path) -> dict:
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return {}
+    if not text.startswith("---\n"):
+        return {}
+    end = text.find("\n---", 4)
+    if end < 0:
+        return {}
+    meta: dict[str, str] = {}
+    for line in text[4:end].splitlines():
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        meta[key.strip()] = value.strip().strip('"')
+    return meta
+
+
+def _ground_derived_hit(hit: dict) -> dict:
+    """If a QMD hit is derived extracted.md, attach source grounding metadata."""
+    path_text = str(hit.get("path") or hit.get("id") or "")
+    if "_extracted/" not in path_text and "/_extracted/" not in path_text:
+        return hit
+    local_path = path_text
+    if local_path.startswith("qmd://"):
+        local_path = local_path.replace("qmd://solar-wiki/", str(VAULT_PATH).rstrip("/") + "/", 1)
+    path = Path(local_path)
+    meta = _read_frontmatter(path)
+    source_path = meta.get("source_path") or meta.get("source")
+    source_sha = meta.get("source_sha256")
+    if source_path:
+        hit["derived"] = True
+        hit["source_doc_path"] = source_path
+        hit["source_sha256"] = source_sha or ""
+        hit["grounding_required"] = True
+        prefix = f"[DERIVED: use source evidence `{source_path}`"
+        if source_sha:
+            prefix += f" sha={source_sha[:12]}"
+        prefix += "] "
+        hit["snippet"] = prefix + str(hit.get("snippet") or "")
+    return hit
+
+
 def _fts_query(conn: sqlite3.Connection, query: str, max_hits: int) -> list[dict]:
     """Query fts_unified_search FTS5 table."""
     # Escape FTS5 special chars
@@ -220,7 +264,7 @@ def _qmd_hits_from_raw(raw: object) -> list[dict]:
         title = str(r.get("title") or file_path.rsplit("/", 1)[-1] or "")
         snippet = str(r.get("snippet") or r.get("body") or r.get("content") or "")[:400]
         score = float(r.get("score", 0.7))
-        hits.append({
+        hit = {
             "source": "qmd:solar-wiki",
             "table": "qmd",
             "id": file_path,
@@ -228,7 +272,8 @@ def _qmd_hits_from_raw(raw: object) -> list[dict]:
             "snippet": snippet,
             "path": file_path,
             "score": score,
-        })
+        }
+        hits.append(_ground_derived_hit(hit))
     return hits
 
 
@@ -299,6 +344,8 @@ def _curated_path_boost(hit: dict) -> float:
 
 def _knowledge_layer(hit: dict) -> str:
     text = _lower_hit_text(hit)
+    if bool(hit.get("derived")) or "/_extracted/" in text or "qmd://solar-wiki/_extracted/" in text:
+        return "extracted"
     if "qmd://solar-wiki/synthesis/" in text or "/knowledge/synthesis/" in text or "/synthesis/" in text:
         return "synthesis"
     if "qmd://solar-wiki/concepts/" in text or "/knowledge/concepts/" in text or "/concepts/" in text:
@@ -315,6 +362,7 @@ def _knowledge_layer(hit: dict) -> str:
 
 def _knowledge_layer_priority(hit: dict) -> int:
     return {
+        "extracted": 0,
         "synthesis": 0,
         "concepts": 1,
         "references": 2,

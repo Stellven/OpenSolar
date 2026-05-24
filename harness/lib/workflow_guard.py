@@ -18,6 +18,11 @@ import os
 from pathlib import Path
 from typing import Any
 
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from prerequisite_resolver import iter_blocked
+del _sys, _os
+
 
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", Path.home() / ".solar" / "harness"))
 SPRINTS_DIR = Path(os.environ.get("SPRINTS_DIR", HARNESS_DIR / "sprints"))
@@ -92,19 +97,6 @@ def _graph_parent_ready(path: Path) -> bool:
     return required.issubset(passed_gates)
 
 
-def _parse_external_prerequisite(entry: Any) -> tuple[str, str, str]:
-    if isinstance(entry, dict):
-        sid = str(entry.get("sprint_id") or entry.get("sid") or entry.get("child_sprint_id") or "").strip()
-        required = str(entry.get("required_status") or entry.get("status") or entry.get("required") or "passed").strip().lower() or "passed"
-        requirement = json.dumps(entry, ensure_ascii=False, sort_keys=True)
-        return requirement, sid, required
-    entry = str(entry).strip()
-    if ":" not in entry:
-        return entry, entry, "passed"
-    sid, required = entry.rsplit(":", 1)
-    return entry, sid.strip(), (required.strip().lower() or "passed")
-
-
 def _blocked_external_prerequisites(path: Path) -> list[dict[str, Any]]:
     if not _nonempty(path):
         return []
@@ -112,52 +104,7 @@ def _blocked_external_prerequisites(path: Path) -> list[dict[str, Any]]:
         graph = json.loads(path.read_text())
     except Exception as exc:
         return [{"requirement": "task_graph", "reason": "parse_error", "error": str(exc)}]
-
-    entries: list[Any] = []
-    for raw in graph.get("prerequisites") or []:
-        if str(raw).strip():
-            entries.append(raw)
-    policy = graph.get("dependency_policy") or {}
-    if isinstance(policy, dict):
-        for raw in policy.get("blocks_until") or []:
-            if str(raw).strip():
-                entries.append(raw)
-
-    blocked: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for entry in entries:
-        requirement, upstream_sid, required = _parse_external_prerequisite(entry)
-        dedupe_key = f"{upstream_sid}:{required}"
-        if dedupe_key in seen:
-            continue
-        seen.add(dedupe_key)
-        detail: dict[str, Any] = {
-            "requirement": requirement,
-            "sprint_id": upstream_sid,
-            "required": required,
-        }
-        status_path = SPRINTS_DIR / f"{upstream_sid}.status.json"
-        if not upstream_sid:
-            detail["reason"] = "empty_sprint_id"
-            blocked.append(detail)
-            continue
-        if not status_path.exists():
-            detail["reason"] = "missing_status"
-            blocked.append(detail)
-            continue
-        status = _read_json(status_path)
-        current_status = str(status.get("status") or "").lower()
-        current_phase = str(status.get("phase") or "").lower()
-        detail["current_status"] = current_status
-        detail["current_phase"] = current_phase
-        if required == "passed":
-            ok = current_status == "passed"
-        else:
-            ok = current_status == required or current_phase == required
-        if not ok:
-            detail["reason"] = "status_not_satisfied"
-            blocked.append(detail)
-    return blocked
+    return iter_blocked(graph, SPRINTS_DIR)
 
 
 def _contract_text(sid: str) -> str:
