@@ -67,6 +67,8 @@ MODEL_DOCTOR_HEALTH = HARNESS_DIR / "state" / "model-registry-doctor-health.json
 SKILLS_CERTIFICATION = HARNESS_DIR / "state" / "skills-certification.json"
 SKILLS_INVENTORY = HARNESS_DIR / "state" / "skills-inventory.json"
 CAPABILITY_ACTIVATION_PROOF = HARNESS_DIR / "reports" / "capability-activation-proof-latest.json"
+FINAL_CONTRACT_SUMMARY_DOC = HARNESS_DIR / "docs" / "pane-as-physical-operator-final-contract-summary.md"
+FINAL_CONTRACT_SUMMARY_SPRINT_ARTIFACT = HARNESS_DIR / "sprints" / "sprint-20260523-pane-as-physical-operator-final-contract-summary.md"
 META_HARNESS_DIR = Path(os.environ.get("SOLAR_META_HARNESS_DIR", str(Path.home() / ".solar" / "meta-harness")))
 META_HARNESS_TOOL = Path(os.environ.get("SOLAR_META_HARNESS_TOOL", str(Path.home() / ".claude" / "core" / "solar-farm" / "meta-harness.ts")))
 META_HARNESS_SKILL = Path(os.environ.get("SOLAR_META_HARNESS_SKILL", str(Path.home() / ".claude" / "skills" / "meta-harness" / "SKILL.md")))
@@ -2824,6 +2826,82 @@ def _physical_operator_summary(limit: int = 8) -> dict:
         }
 
 
+def _final_contract_summary_candidates() -> list[Path]:
+    return [
+        FINAL_CONTRACT_SUMMARY_DOC,
+        FINAL_CONTRACT_SUMMARY_SPRINT_ARTIFACT,
+    ]
+
+
+def _load_final_contract_summary_text() -> tuple[str, Path | None]:
+    for path in _final_contract_summary_candidates():
+        try:
+            if path.exists():
+                return path.read_text(encoding="utf-8"), path
+        except OSError:
+            continue
+    return "", None
+
+
+def _final_contract_summary_status() -> dict:
+    text, path = _load_final_contract_summary_text()
+    if not text:
+        return {
+            "status": "missing",
+            "title": "PM -> Planner -> Headless Pool DAG Flow",
+            "path": "N/A",
+            "route": "/contract-summary",
+            "summary": "Final contract summary document not found.",
+            "source": "N/A",
+        }
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    title = lines[0].lstrip("#").strip() if lines else "PM -> Planner -> Headless Pool DAG Flow"
+    summary = ""
+    for line in lines[1:]:
+        if not line.startswith("#"):
+            summary = line
+            break
+    if not summary:
+        summary = "Canonical PM -> Planner -> Headless Pool DAG Flow contract."
+    return {
+        "status": "ok",
+        "title": title,
+        "path": str(path),
+        "route": "/contract-summary",
+        "summary": summary,
+        "source": "docs" if path == FINAL_CONTRACT_SUMMARY_DOC else "sprint-artifact",
+    }
+
+
+def _final_contract_summary_html() -> str:
+    text, path = _load_final_contract_summary_text()
+    if not text:
+        body = "<div class='card'><h2>Final Contract Summary</h2><p class='warn'>Contract summary document not found.</p></div>"
+    else:
+        body = (
+            "<div class='card'>"
+            "<h2>Final Contract Summary</h2>"
+            f"<p class='muted'>Source: {html.escape(str(path))}</p>"
+            "<pre style='white-space:pre-wrap;overflow-wrap:anywhere;margin:0'>"
+            + html.escape(text) +
+            "</pre></div>"
+        )
+    return (
+        "<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+        "<title>Final Contract Summary</title>"
+        "<style>"
+        ":root{--bg:#f3efe4;--ink:#18211f;--line:rgba(30,43,39,.14);--panel:#fffaf0;--shadow:0 24px 80px rgba(33,27,18,.12);}"
+        "*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:\"Avenir Next\",\"Gill Sans\",\"Trebuchet MS\",sans-serif;padding:32px;}"
+        ".shell{max-width:1100px;margin:0 auto}.card{border:1px solid var(--line);border-radius:24px;background:var(--panel);box-shadow:var(--shadow);padding:24px}"
+        "h1{margin:0 0 16px}.muted{color:#68726d}.warn{color:#b7791f}.topnav{margin-bottom:16px}"
+        ".topnav a{color:#0f6b68;text-decoration:none;font-weight:700}"
+        "pre{font:14px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;background:rgba(255,255,255,.48);padding:18px;border-radius:16px;border:1px solid var(--line)}"
+        "</style></head><body><div class='shell'><div class='topnav'><a href='/'>← Back to 8765 Status</a></div>"
+        f"{body}</div></body></html>"
+    )
+
+
 def _status_payload(limit: int = 50) -> dict:
     current = _current_sprint()
     runtime_interfaces = _runtime_interfaces_status(current.get("sprint_id", ""))
@@ -2850,6 +2928,7 @@ def _status_payload(limit: int = 50) -> dict:
         "meta_harness": _meta_harness_summary(),
         "pm_dispatches": _pm_dispatch_summary(),
         "physical_operators": _physical_operator_summary(),
+        "contract_summary": _final_contract_summary_status(),
     }
 
 
