@@ -328,6 +328,27 @@ choose_available_builder_pane() {
 
 sprint_queue_priority() {
   local sid="$1" sf="$SPRINTS_DIR/${sid}.status.json"
+  local compile_boost
+  compile_boost=$(python3 -c "
+import json, pathlib
+sf=pathlib.Path('$sf')
+sid=sf.name.replace('.status.json','')
+d=json.load(open(sf))
+phase=str(d.get('phase',''))
+handoff=str(d.get('handoff_to',''))
+root=sf.parent
+req=(root/f'{sid}.requirement_ir.json').exists()
+graph=(root/f'{sid}.task_graph.json').exists()
+planning=(root/f'{sid}.plan.md').exists() and (root/f'{sid}.design.md').exists()
+if req and (phase in {'drafting','prd_ready'} or handoff=='planner' or not graph or not planning):
+    print('1')
+else:
+    print('0')
+" 2>/dev/null || echo "0")
+  if [[ "$compile_boost" == "1" ]]; then
+    echo 1000
+    return 0
+  fi
   local p
   p=$(python3 -c "import json; print(str(json.load(open('$sf')).get('priority','P1')).upper())" 2>/dev/null || echo "P1")
   case "$p" in
@@ -2329,6 +2350,21 @@ $*
 EOF
 }
 
+annotate_requirement_matrix_for_planning() {
+  local sid="$1"
+  local coverage_tool="$HARNESS_DIR/lib/requirement_coverage.py"
+  [[ -f "$SPRINTS_DIR/${sid}.requirement_ir.json" ]] || return 0
+  [[ -f "$coverage_tool" ]] || return 0
+  [[ -f "$SPRINTS_DIR/${sid}.design.md" ]] || return 1
+  [[ -f "$SPRINTS_DIR/${sid}.plan.md" ]] || return 1
+  python3 "$coverage_tool" annotate-markdown --sid "$sid" --sprints-dir "$SPRINTS_DIR" --target-file "$SPRINTS_DIR/${sid}.design.md" --requested-verdict pass >/dev/null || return 1
+  python3 "$coverage_tool" annotate-markdown --sid "$sid" --sprints-dir "$SPRINTS_DIR" --target-file "$SPRINTS_DIR/${sid}.plan.md" --requested-verdict pass >/dev/null || return 1
+  local render_tool="$HARNESS_DIR/lib/render_sprint_html.py"
+  if [[ -f "$SPRINTS_DIR/${sid}.planning.html" && -f "$render_tool" ]]; then
+    python3 "$render_tool" render --sid "$sid" --kind planning --register >/dev/null 2>&1 || true
+  fi
+}
+
 # D4: 从 eval.json 提取失败项 (短路)
 extract_fail_info() {
   local sid="$1"
@@ -2855,6 +2891,11 @@ PY
 5. 写机器可执行 DAG 任务图到:
    ~/.solar/harness/sprints/${sid}.task_graph.json
 
+5.1 显式维护需求映射:
+   - task_graph.json 的每个节点都必须写出 `requirement_ids`，表示它覆盖哪些 requirement
+   - 每个节点都必须写出 `acceptance_ids`
+   - 禁止只依赖默认占位映射；Planner 必须把 requirement -> node 的关系写清楚
+
 6. 额外写人读 HTML artifact 到:
    ~/.solar/harness/sprints/${sid}.planning.html
    HTML 是给用户阅读和审阅的可视化 artifact，不能替代 design.md、plan.md 或 task_graph.json。必须 self-contained，不依赖外部 CSS/JS/CDN。
@@ -2866,7 +2907,8 @@ PY
    python3 ~/.solar/harness/lib/html_artifact.py register --sid ${sid} --kind planning_html --path ~/.solar/harness/sprints/${sid}.planning.html
    helper 失败只记录 warn，不允许阻断 Planner -> Builder 主链路。
 
-8. task_graph.json 每个节点必须包含: id、goal、depends_on、write_scope、read_scope、required_skills、preferred_model、gate、acceptance、estimated_cost。没有 write_scope 的节点不得并行。
+8. task_graph.json 每个节点必须包含: id、goal、depends_on、write_scope、read_scope、required_skills、preferred_model、gate、acceptance、estimated_cost、priority、required_phase、required_node_id、required_node_status、requirement_ids、acceptance_ids。没有 write_scope 的节点不得并行。
+   requirement_ids 必须是显式覆盖映射，不允许留空，不允许全部节点都机械复制同一组 id 除非你能在 design.md 里解释原因。
 
 9. plan 必须包含: 交付切片顺序、文件级写入范围、并发边界、验证命令、no-live-pane-mutation 保护、rollback/stop rule。
 
@@ -2897,6 +2939,13 @@ PY
     fi
     mark_drafting_flow "$sid" "planner"
     emit_event "$sid" "dispatched" "coordinator" "{\"to\":\"planner\",\"task\":\"implementation_plan\"}"
+    return 0
+  fi
+
+  if ! annotate_requirement_matrix_for_planning "$sid"; then
+    log "${R}Planner 产物存在但 Requirement Trace Matrix 注入失败，阻止推进 planning_complete${N}"
+    emit_event "$sid" "gate_blocked" "coordinator" "{\"stage\":\"planning\",\"reason\":\"requirement_trace_annotation_failed\"}"
+    rollback_state_cache "$sid"
     return 0
   fi
 
@@ -3427,11 +3476,14 @@ handle_approved() {
 
 1. 读取你的计划:
    cat ~/.solar/harness/sprints/${sid}.plan.md
+   cat ~/.solar/harness/sprints/${sid}.requirement_ir.json 2>/dev/null
+   cat ~/.solar/harness/sprints/${sid}.requirement_trace.json 2>/dev/null
 
 2. 按计划逐步实现代码
 
 3. 实现完成后写 handoff 文档到 ~/.solar/harness/sprints/${sid}.handoff.md
    必须包含: \`## 变更文件\`, \`## Done 达成\`, \`## 验证方法\`
+   还要逐条说明你完成了哪些 requirement，以及哪些仍待下轮完成；不要只写泛化总结。
 
 4. 更新状态:
    \`\`\`bash
@@ -3758,11 +3810,15 @@ PY
 
 2. 读取 handoff:
    cat ~/.solar/harness/sprints/${sid}.handoff.md
+   cat ~/.solar/harness/sprints/${sid}.requirement_trace.json 2>/dev/null
+   cat ~/.solar/harness/sprints/${sid}.coverage_report.json 2>/dev/null
+   cat ~/.solar/harness/sprints/${sid}.acceptance_verdict.json 2>/dev/null
 
 3. 逐条检查 Done 定义，查看实际代码，运行测试验证
 
 4. 写评估报告到 ~/.solar/harness/sprints/${sid}.eval.md
    必须包含: \`## 总判定\` (PASS/FAIL), \`## Done 条件逐条\`
+   还必须对照 requirement coverage，说明 partial / missing 是否已经清零。
 
 5. **写结构化反馈到 ${sid}.eval.json** (eval.json schema 见 evaluator.md)
 

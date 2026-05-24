@@ -3117,6 +3117,93 @@ def _final_contract_summary_html() -> str:
     )
 
 
+def _requirement_coverage_summary(sid: str = "") -> dict:
+    """Return requirement coverage summary, preferring the active sprint and explicitly marking fallback."""
+    candidates: list[tuple[str, str]] = []
+    requested_sid = str(sid or "").strip()
+    current_sid = str(_current_sprint().get("sprint_id") or "").strip()
+    if requested_sid:
+        candidates.append((requested_sid, "requested"))
+    if current_sid and current_sid != requested_sid:
+        candidates.append((current_sid, "active"))
+    try:
+        status_files = sorted(
+            SPRINTS_DIR.glob("*.status.json"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+    except Exception:
+        status_files = []
+    for path in status_files:
+        candidate = path.name.removesuffix(".status.json")
+        if candidate not in {sid for sid, _ in candidates}:
+            candidates.append((candidate, "recent"))
+
+    for candidate, source in candidates:
+        coverage_path = SPRINTS_DIR / f"{candidate}.coverage_report.json"
+        verdict_path = SPRINTS_DIR / f"{candidate}.acceptance_verdict.json"
+        if not coverage_path.exists():
+            continue
+        try:
+            coverage = json.loads(coverage_path.read_text(encoding="utf-8"))
+            verdict = json.loads(verdict_path.read_text(encoding="utf-8")) if verdict_path.exists() else {}
+        except Exception:
+            continue
+        summary = coverage.get("summary", {}) if isinstance(coverage, dict) else {}
+        verdict = verdict if isinstance(verdict, dict) else {}
+        total = int(summary.get("total", 0) or 0)
+        done = int(summary.get("done", 0) or 0)
+        partial = int(summary.get("partial", 0) or 0)
+        missing = int(summary.get("missing", 0) or 0)
+        ratio = summary.get("coverage_ratio", 0)
+        try:
+            coverage_ratio = float(ratio or 0)
+        except Exception:
+            coverage_ratio = 0.0
+        verdict_label = str(verdict.get("verdict") or "N/A")
+        status = "ok"
+        if partial or missing or verdict_label not in {"PASS", "N/A"}:
+            status = "warn"
+        return {
+            "ok": status == "ok",
+            "status": status,
+            "sprint_id": candidate,
+            "requested_sprint_id": requested_sid or current_sid,
+            "source": source,
+            "is_fallback": source not in {"requested", "active"},
+            "total": total,
+            "done": done,
+            "partial": partial,
+            "missing": missing,
+            "coverage_ratio": coverage_ratio,
+            "graph_complete": bool(summary.get("graph_complete", False)),
+            "acceptance_verdict": verdict_label,
+            "paths": {
+                "coverage_report": str(coverage_path),
+                "acceptance_verdict": str(verdict_path) if verdict_path.exists() else "",
+            },
+        }
+    return {
+        "ok": False,
+        "status": "missing",
+        "sprint_id": requested_sid or current_sid,
+        "requested_sprint_id": requested_sid or current_sid,
+        "source": "active_missing" if (requested_sid or current_sid) else "none",
+        "is_fallback": False,
+        "total": 0,
+        "done": 0,
+        "partial": 0,
+        "missing": 0,
+        "coverage_ratio": 0.0,
+        "graph_complete": False,
+        "acceptance_verdict": "N/A",
+        "paths": {
+            "coverage_report": "",
+            "acceptance_verdict": "",
+        },
+    }
+
+
 def _pane_title_model(title: str) -> str:
     match = re.search(r"模型:([^|]+)", title or "")
     if match:
@@ -3319,6 +3406,7 @@ def _status_payload(limit: int = 50) -> dict:
         "pm_dispatches": _pm_dispatch_summary(),
         "physical_operators": _physical_operator_summary(),
         "contract_summary": _final_contract_summary_status(),
+        "requirement_coverage": _requirement_coverage_summary(current.get("sprint_id", "")),
     }
 
 
@@ -4291,6 +4379,7 @@ tr:hover td {
       <div class="card"><h3>DeepResearch Human Search</h3><div id="overview-human-search">Loading...</div></div>
       <div class="card"><h3>DeepResearch Quality</h3><div id="overview-research">Loading...</div></div>
       <div class="card"><h3>Contract Summary</h3><div id="overview-contract-summary">Loading...</div></div>
+      <div class="card"><h3>Requirement Coverage</h3><div id="overview-requirement-coverage">Loading...</div></div>
       <div class="card"><h3>最近风险</h3><div id="overview-risk">Loading...</div></div>
     </div>
   </section>
@@ -5337,6 +5426,53 @@ function renderContractSummary(data, compact) {
     </div>
   `;
 }
+function renderRequirementCoverage(data, compact) {
+  data = data || {};
+  if (data.status === 'missing') {
+    const target = data.requested_sprint_id || data.sprint_id || 'N/A';
+    return '<div><b class="tech-id">' + esc(target) + '</b> ' + statusBadge('missing') + '</div>'
+      + '<div class="muted" style="margin-top:.35rem;">当前 active sprint 还没有 coverage 工件。</div>';
+  }
+  const total = Number(data.total || 0);
+  const done = Number(data.done || 0);
+  const partial = Number(data.partial || 0);
+  const missing = Number(data.missing || 0);
+  const verdict = data.acceptance_verdict || 'N/A';
+  const ratio = Number(data.coverage_ratio || 0);
+  const graphComplete = !!data.graph_complete;
+  const badge = statusBadge(data.status || (partial || missing ? 'warn' : 'ok'));
+  const source = data.source || 'recent';
+  const requested = data.requested_sprint_id || '';
+  const fallbackNote = data.is_fallback
+    ? 'fallback from current ' + esc(requested || 'N/A')
+    : (source === 'active' || source === 'requested' ? 'current active sprint' : source);
+  if (compact) {
+    return ''
+      + '<div><b class="tech-id">' + esc(data.sprint_id || 'N/A') + '</b> ' + badge + '</div>'
+      + '<div style="margin-top:.45rem;">verdict: <b>' + esc(verdict) + '</b></div>'
+      + '<div style="margin-top:.2rem;">done/total: <b>' + esc(done) + '/' + esc(total) + '</b></div>'
+      + '<div class="muted" style="margin-top:.3rem;">partial ' + esc(partial)
+      + ' · missing ' + esc(missing)
+      + ' · ratio ' + esc((ratio * 100).toFixed(0)) + '%'
+      + ' · graph ' + esc(graphComplete ? 'complete' : 'incomplete') + '</div>'
+      + '<div class="muted" style="margin-top:.28rem;">source: ' + fallbackNote + '</div>';
+  }
+  return ''
+    + '<div class="research-shell">'
+    + '<div class="research-overview">'
+    +   '<div class="research-stat"><div class="kv-label">Sprint</div><strong>' + esc(data.sprint_id || 'N/A') + '</strong></div>'
+    +   '<div class="research-stat"><div class="kv-label">Verdict</div><strong>' + esc(verdict) + '</strong></div>'
+    +   '<div class="research-stat"><div class="kv-label">done/total</div><strong>' + esc(done) + '/' + esc(total) + '</strong></div>'
+    +   '<div class="research-stat"><div class="kv-label">Partial</div><strong>' + esc(partial) + '</strong></div>'
+    +   '<div class="research-stat"><div class="kv-label">Missing</div><strong>' + esc(missing) + '</strong></div>'
+    +   '<div class="research-stat"><div class="kv-label">Coverage</div><strong>' + esc((ratio * 100).toFixed(0)) + '%</strong></div>'
+    +   '<div class="research-stat"><div class="kv-label">Graph</div><strong>' + esc(graphComplete ? 'complete' : 'incomplete') + '</strong></div>'
+    + '</div>'
+    + '<div class="muted" style="margin-top:.6rem;">'
+    + 'coverage report 会阻止半截交付：partial/missing 不为 0 时，PASS/finalized 不会放行。 source: ' + fallbackNote
+    + '</div>'
+    + '</div>';
+}
 function renderEvolution(evolution) {
   const el = document.getElementById('evolution-card');
   if (!el) return;
@@ -5899,6 +6035,7 @@ function render(data) {
   document.getElementById('physical-operators-card').innerHTML = renderPhysicalOperators(data.physical_operators || {}, false);
   document.getElementById('overview-contract-summary').innerHTML = renderContractSummary(data.contract_summary || {}, true);
   document.getElementById('contract-summary-card').innerHTML = renderContractSummary(data.contract_summary || {}, false);
+  document.getElementById('overview-requirement-coverage').innerHTML = renderRequirementCoverage(data.requirement_coverage || {}, true);
   document.getElementById('overview-human-search').innerHTML = renderHumanSearch(data.human_search || {}, true);
   document.getElementById('human-search-card').innerHTML = renderHumanSearch(data.human_search || {}, false);
   document.getElementById('overview-research').innerHTML = renderResearchStatus(data.research || {}, true);

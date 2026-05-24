@@ -72,6 +72,12 @@ SURVEY_PROMPT_RE = re.compile(
     r"How is Claude doing this session\?|1:\s*Bad\s+2:\s*Fine\s+3:\s*Good\s+0:\s*Dismiss",
     re.I,
 )
+PERMISSIONS_PROMPT_RE = re.compile(
+    r"bypass permissions on|"
+    r"Press up to edit queued messages[\s\S]{0,160}bypass permissions on|"
+    r"Do you want to make this edit|allow all edits during this session",
+    re.I,
+)
 PANE_BUSY_RE = re.compile(
     r"Compacting conversation|Compacting|✳|✶|✽|✢|⏺ Bash|Running|Effecting|Swooping|thinking|Cogitating|Churning|Ruminating|"
     r"Working|Mustering|Herding|Baking|Reticulating|Scurrying|Roosting|Whirring|Smooshing|"
@@ -557,6 +563,11 @@ def pane_survey_blocked(tail: str) -> bool:
     return bool(SURVEY_PROMPT_RE.search(bottom))
 
 
+def pane_permissions_prompt_blocked(tail: str) -> bool:
+    bottom = "\n".join(tail.splitlines()[-40:])
+    return bool(PERMISSIONS_PROMPT_RE.search(bottom))
+
+
 def clear_current_prompt(target: str) -> bool:
     tail = tmux_capture(target)
     if not pane_at_prompt(tail):
@@ -583,6 +594,15 @@ def dismiss_survey_prompt(target: str) -> bool:
     try:
         r = subprocess.run(["tmux", "send-keys", "-t", target, "0", "Enter"], timeout=2)
         return r.returncode == 0
+    except Exception:
+        return False
+
+
+def dismiss_permissions_prompt(target: str) -> bool:
+    try:
+        first = subprocess.run(["tmux", "send-keys", "-t", target, "BTab"], timeout=2)
+        second = subprocess.run(["tmux", "send-keys", "-t", target, "Enter"], timeout=2)
+        return first.returncode == 0 and second.returncode == 0
     except Exception:
         return False
 
@@ -2131,6 +2151,21 @@ def inspect_panes(state: dict, stall_seconds: int) -> list[dict]:
                     }
                 )
                 continue
+        if pane_permissions_prompt_blocked(tail):
+            graph_node = assigned_graph_node_for_pane(target)
+            if graph_node:
+                findings.append(
+                    {
+                        "sid": graph_node["sid"],
+                        "type": "pane_permissions_prompt_blocked",
+                        "severity": "warn",
+                        "target": target,
+                        "role": role,
+                        "graph_node": graph_node,
+                        "message": "pane 被 permissions prompt 挡住；发送 Shift+Tab + Enter 恢复当前已派发 DAG node。",
+                    }
+                )
+                continue
         if pane_at_prompt(tail) and not pane_is_busy(target):
             graph_node = assigned_graph_node_for_pane(target)
             if graph_node:
@@ -2186,6 +2221,19 @@ def inspect_panes(state: dict, stall_seconds: int) -> list[dict]:
                     "graph_node": graph_node,
                     "unavailable_reason": "rate_limit_or_api_error",
                     "message": "Assigned builder pane is alive but blocked by provider usage limit/API error; release the stale dispatch and requeue the graph node.",
+                }
+            )
+            continue
+        if graph_node and pane_permissions_prompt_blocked(tail):
+            findings.append(
+                {
+                    "sid": graph_node["sid"],
+                    "type": "pane_permissions_prompt_blocked",
+                    "severity": "warn",
+                    "target": target,
+                    "role": "lab-builder",
+                    "graph_node": graph_node,
+                    "message": "pane 被 permissions prompt 挡住；发送 Shift+Tab + Enter 恢复当前已派发 DAG node。",
                 }
             )
             continue
@@ -2412,7 +2460,7 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
             mark_action(state, f, result)
             actions.append(result)
             continue
-        if dispatch and target and ftype not in {"pane_safe_continue_prompt", "evaluator_survey_blocked"}:
+        if dispatch and target and ftype not in {"pane_safe_continue_prompt", "evaluator_survey_blocked", "pane_permissions_prompt_blocked"}:
             clear_current_prompt(target)
         if ftype in ("graph_ready_nodes",):
             result = dispatch_ready_graph_nodes(sid, lease=dispatch)
@@ -2462,6 +2510,27 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
                 "lease": f.get("lease", {}),
                 "graph_node": f.get("graph_node", {}),
                 "reroute": reroute,
+            }
+            if sent and target:
+                used_targets.add(target)
+            mark_action(state, f, result)
+            actions.append(result)
+        elif ftype == "pane_permissions_prompt_blocked":
+            append_event(
+                sid,
+                "autopilot_pane_permissions_prompt_blocked",
+                "warn",
+                {"target": target, "graph_node": f.get("graph_node", {})},
+            )
+            sent = False
+            if dispatch and target:
+                sent = dismiss_permissions_prompt(target)
+            result = {
+                "sid": sid,
+                "action": ftype,
+                "target": target,
+                "dispatched": sent,
+                "graph_node": f.get("graph_node", {}),
             }
             if sent and target:
                 used_targets.add(target)

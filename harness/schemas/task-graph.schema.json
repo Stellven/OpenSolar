@@ -51,7 +51,7 @@
   "$defs": {
     "node": {
       "type": "object",
-      "required": ["id", "goal", "depends_on", "acceptance"],
+      "required": ["id", "goal", "depends_on", "acceptance", "priority", "required_phase", "required_node_id", "required_node_status"],
       "additionalProperties": true,
       "properties": {
         "id": {
@@ -120,6 +120,32 @@
         },
         "preferred_model": {
           "type": "string"
+        },
+        "priority": {
+          "type": "number"
+        },
+        "required_phase": {
+          "type": ["string", "null"]
+        },
+        "required_node_id": {
+          "type": ["string", "null"]
+        },
+        "required_node_status": {
+          "type": ["string", "null"]
+        },
+        "requirement_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "acceptance_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
         },
         "gate": {
           "type": "string"

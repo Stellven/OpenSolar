@@ -1788,8 +1788,15 @@ do_handoff_submit() {
   local sid="$1"
   local sf="$SPRINTS_DIR/${sid}.status.json"
   local hf="$SPRINTS_DIR/${sid}.handoff.md"
+  local coverage_tool="$HARNESS_DIR/lib/requirement_coverage.py"
   rs_exists "$sid" || { err "Sprint not found: $sid"; exit 1; }
   [[ -f "$hf" ]] || { err "handoff.md not found for $sid — 先写 handoff 再提交"; exit 1; }
+  if [[ -f "$SPRINTS_DIR/${sid}.requirement_ir.json" && -f "$coverage_tool" ]]; then
+    python3 "$coverage_tool" evaluate --sid "$sid" --sprints-dir "$SPRINTS_DIR" --write >/dev/null \
+      || { err "handoff-submit: requirement coverage 工件生成失败"; exit 1; }
+    python3 "$coverage_tool" annotate-markdown --sid "$sid" --sprints-dir "$SPRINTS_DIR" --target-file "$hf" --requested-verdict pass >/dev/null \
+      || { err "handoff-submit: handoff.md coverage 摘要写入失败"; exit 1; }
+  fi
 
   local handoff_mtime
   handoff_mtime=$(stat -f %m "$hf" 2>/dev/null || echo 0)
@@ -1868,6 +1875,7 @@ do_plan_verdict() {
 
 do_eval_verdict() {
   local sid="$1" verdict="$2" reason="${3:-}"
+  local coverage_tool="$HARNESS_DIR/lib/requirement_coverage.py"
   rs_exists "$sid" || { err "Sprint not found: $sid"; exit 1; }
 
   local new_status event_name verdict_upper
@@ -1884,6 +1892,20 @@ do_eval_verdict() {
     extra_json=$(python3 -c "import json; print(json.dumps({'verdict':'$verdict_upper','reason':'$reason'}))")
   else
     extra_json="{\"verdict\":\"$verdict_upper\"}"
+  fi
+
+  if [[ -f "$SPRINTS_DIR/${sid}.requirement_ir.json" && -f "$coverage_tool" ]]; then
+    if [[ "$verdict_upper" == "PASS" ]]; then
+      python3 "$coverage_tool" evaluate --sid "$sid" --sprints-dir "$SPRINTS_DIR" --requested-verdict pass --write --require-pass >/dev/null \
+        || { err "eval-verdict: requirement coverage 未通过，拒绝 PASS"; exit 1; }
+      [[ -f "$SPRINTS_DIR/${sid}.eval.md" ]] && python3 "$coverage_tool" annotate-markdown --sid "$sid" --sprints-dir "$SPRINTS_DIR" --target-file "$SPRINTS_DIR/${sid}.eval.md" --requested-verdict pass >/dev/null \
+        || true
+    else
+      python3 "$coverage_tool" evaluate --sid "$sid" --sprints-dir "$SPRINTS_DIR" --requested-verdict fail --write >/dev/null \
+        || { err "eval-verdict: requirement coverage 工件生成失败"; exit 1; }
+      [[ -f "$SPRINTS_DIR/${sid}.eval.md" ]] && python3 "$coverage_tool" annotate-markdown --sid "$sid" --sprints-dir "$SPRINTS_DIR" --target-file "$SPRINTS_DIR/${sid}.eval.md" --requested-verdict fail >/dev/null \
+        || true
+    fi
   fi
 
   if [[ "$new_status" == "failed_review" ]]; then

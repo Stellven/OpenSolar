@@ -55,6 +55,14 @@ PANE_SURVEY_PROMPT_RE = re.compile(
     r"How is Claude doing this session\?|1:\s*Bad\s+2:\s*Fine\s+3:\s*Good\s+0:\s*Dismiss",
     re.I,
 )
+PANE_APPROVAL_PROMPT_RE = re.compile(
+    r"bypass permissions on|"
+    r"Do you want to make this edit|"
+    r"allow all edits during this session|"
+    r"accept edits on|"
+    r"Press up to edit queued messages",
+    re.I,
+)
 PANE_CONFIRMATION_PROMPT_RE = re.compile(r"Unhandled node type|Do you want to proceed\?|Enter to confirm|Esc to cancel|Bash command", re.I)
 PANE_PROMPT_RESIDUE_RE = re.compile(r"^\s*❯(?![\s\u00a0]+Try\s+\")[\s\u00a0]+[^\s\u00a0─]", re.M)
 STATE_READ_PREFLIGHT = """<!-- SOLAR_STATE_READ_PREFLIGHT -->
@@ -1806,6 +1814,34 @@ def _pane_has_matching_queued_prompt(pane: str, instruction_file: Path) -> bool:
     return instruction_file.name in tail or instruction_path in tail
 
 
+def _pane_dispatch_prompt_reason(tail: str) -> str:
+    bottom = "\n".join((tail or "").splitlines()[-40:])
+    if "Do you want to make this edit" in bottom or "allow all edits during this session" in bottom:
+        return "edit_confirmation_prompt"
+    if "accept edits on" in bottom:
+        return "accept_edits_footer"
+    if "bypass permissions on" in bottom:
+        return "permissions_prompt"
+    if PANE_QUEUED_PROMPT_RE.search(bottom):
+        return "queued_prompt_residue"
+    return ""
+
+
+def _dismiss_dispatch_prompt(pane: str, reason: str) -> bool:
+    try:
+        if reason in {"permissions_prompt", "accept_edits_footer", "edit_confirmation_prompt"}:
+            subprocess.run(["tmux", "send-keys", "-t", pane, "BTab"], timeout=2)
+            time.sleep(0.2)
+            subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=2)
+            return True
+        if reason == "queued_prompt_residue":
+            subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=2)
+            return True
+    except Exception:
+        return False
+    return False
+
+
 def _write_submit_ack(sid: str, node_id: str, pane: str, dispatch_id: str) -> None:
     """Write observable submit evidence so evaluators can verify pane received the dispatch."""
     try:
@@ -1899,6 +1935,21 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
                         return True
                 except Exception:
                     time.sleep(0.5)
+        prompt_reason = _pane_dispatch_prompt_reason(_pane_tail(pane))
+        if prompt_reason and _dismiss_dispatch_prompt(pane, prompt_reason):
+            time.sleep(2.0)
+            tail = _pane_tail(pane)
+            if processing_re.search(tail) or not _pane_dispatch_prompt_reason(tail):
+                _record_model_call(
+                    "succeeded",
+                    sid,
+                    pane,
+                    dispatch_id,
+                    instruction_file,
+                    tries=1,
+                    status=f"dispatch_prompt_dismissed:{prompt_reason}",
+                )
+                return True
         _record_model_call(
             "failed",
             sid,
@@ -1942,6 +1993,12 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
                 return True
             time.sleep(4.0)
             tail = _pane_tail(pane)
+            prompt_reason = _pane_dispatch_prompt_reason(tail)
+            if prompt_reason:
+                _dismiss_dispatch_prompt(pane, prompt_reason)
+                time.sleep(2.0)
+                tail = _pane_tail(pane)
+                prompt_reason = _pane_dispatch_prompt_reason(tail)
             has_keyword = dispatch_keyword in tail or instruction_path in tail
             has_processing = bool(processing_re.search(tail))
             if has_keyword and has_processing:
@@ -1977,6 +2034,10 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
                         )
                         return True
             if has_keyword:
+                if prompt_reason:
+                    last_error = f"dispatch blocked by {prompt_reason}"
+                    time.sleep(1.0)
+                    continue
                 # Do not send C-c after the instruction is visible. Claude Code
                 # may start processing after our verification window; cancelling
                 # here is what creates repeated "Interrupted · What should
@@ -2020,7 +2081,8 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
             last_error = str(exc)
             time.sleep(0.5)
     tail = _pane_tail(pane)
-    if dispatch_keyword in tail or instruction_path in tail or processing_re.search(tail):
+    prompt_reason = _pane_dispatch_prompt_reason(tail)
+    if (dispatch_keyword in tail or instruction_path in tail or processing_re.search(tail)) and not prompt_reason:
         _record_model_call(
             "succeeded",
             sid,
@@ -2496,13 +2558,13 @@ def drain_queue(sprint_id: str, dry_run: bool = False, max_items: int = 0, ttl: 
 
 def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
     worker_skills = [
-        "bash", "shell", "python", "python-read", "dataclasses", "pytest", "subprocess", "sqlite3", "pure-functions", "time-injection", "timeouts", "concurrency", "io", "fsm", "integration", "integration-testing", "integration-tests", "regression", "regression-tests", "bash-tests", "jq", "json", "json-patch", "jsonl-tail", "typescript", "docs", "testing",
+        "bash", "shell", "python", "python-read", "dataclasses", "pytest", "subprocess", "sqlite", "sqlite3", "pure-functions", "time-injection", "timeouts", "concurrency", "io", "fsm", "integration", "integration-testing", "integration-tests", "regression", "regression-tests", "bash-tests", "jq", "json", "json-patch", "jsonl-tail", "typescript", "docs", "testing",
         "http-testing", "negative-testing", "activation-proof", "knowledge-ingest", "release-gate", "documentation",
         "solar-harness-verification", "solar-harness-compat-review", "harness.verification", "verification",
         "stub-llm", "e2e-test", "cli-view-assertion", "negative-control", "verifier", "registry-introspection",
         "technical-writing", "markdown", "regex", "markdown-parse", "pandoc", "evidence-aggregation", "handoff-authoring", "traceability-patch", "knowledge-raw-writeback",
         "architecture-writing", "solar-harness-control-plane", "algorithm_design",
-        "frontend", "ui", "terminal-ui", "tvs", "vdl", "snapshot", "snapshot-testing", "flask", "http", "curl", "http-routing", "http-endpoint", "autopilot-hooks", "json-traversal", "html", "jinja", "javascript", "vanilla-dom",
+        "frontend", "observability", "ui", "terminal-ui", "tvs", "vdl", "snapshot", "snapshot-testing", "flask", "http", "curl", "http-routing", "http-endpoint", "autopilot-hooks", "json-traversal", "html", "jinja", "javascript", "vanilla-dom",
         "security", "grep", "secret-scan", "code-audit",
         "deepresearch", "cli", "cli-audit", "cli-design", "argparse", "argparse-bridge", "json-schema", "json-shape-inspect", "validation", "claude-cli", "survey", "fixture", "release", "evidence", "evidence-collection", "evaluator-summary", "autopilot", "epic",
         "product", "planning", "optimization", "runtime_design", "workflow.planning", "governance", "risk", "risk-register",
@@ -2511,6 +2573,7 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "api-design", "data-modeling", "compatibility", "compat-review",
         "scheduler.design", "algorithm", "state-machine.design",
         "routing", "diagnostics", "evaluation", "capability-graph", "event-sourcing",
+        "ai-rag-pipeline", "reporting",
         "lazy-import",
         "browser.browse", "browser.qa", "code.review", "document.convert",
         "persona.agent", "multi_agent.research", "debug.systematic",
@@ -2526,13 +2589,14 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "solar-harness-verification", "solar-harness-compat-review", "harness.verification", "verification",
         "env-passthrough", "metrics",
         "harness.context_preflight", "harness.intent", "harness.dispatch_visibility", "harness.contracts",
-        "harness.dag", "harness.status", "harness.model_routing",
+        "harness.dag", "harness.status", "harness.model_routing", "model.routing",
         "intent.match", "intent.audit", "dispatch.intent_telemetry",
         "models.show", "models.lab_matrix", "models.footer_labels",
         "context.inject", "wiki.status", "data_plane.audit",
         "dag.validate", "dag.ready_nodes", "dag.join_gate",
         "harness.testing", "harness.failure_recovery", "harness.autopilot",
         "harness.activation_proof", "harness.reporting", "harness.knowledge", "harness.contracts",
+        "reporting", "ai-rag-pipeline",
         "lazy-import", "cli",
         "activation.proof", "negative_control", "runtime_artifacts",
         "autopilot.monitor", "autopilot.safe_apply", "pane.deadlock_detection",

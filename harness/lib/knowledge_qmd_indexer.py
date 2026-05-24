@@ -89,6 +89,7 @@ def record_qmd_event(
 ) -> dict[str, Any]:
     event_id = f"qmd_evt_{uuid.uuid4().hex[:24]}"
     ts = registry.now_iso()
+    path = _norm_path(path)
     with _connect(db_path) as conn:
         conn.execute(
             """
@@ -105,7 +106,14 @@ def _file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _norm_path(path: str | Path | None) -> str | None:
+    if path is None:
+        return None
+    return os.path.normpath(str(Path(str(path)).expanduser()))
+
+
 def _latest_indexed_hash(conn, doc_id: str, layer: str, path: str) -> str | None:
+    path = _norm_path(path) or path
     row = conn.execute(
         """
         SELECT indexed_sha256
@@ -117,6 +125,64 @@ def _latest_indexed_hash(conn, doc_id: str, layer: str, path: str) -> str | None
         (doc_id, layer, path),
     ).fetchone()
     return str(row["indexed_sha256"]) if row and row["indexed_sha256"] else None
+
+
+def _transition_document(conn, *, doc_id: str, to_state: str, batch_id: str, payload: dict[str, Any]) -> bool:
+    row = conn.execute("SELECT current_state FROM documents WHERE doc_id=?", (doc_id,)).fetchone()
+    if not row:
+        return False
+    from_state = str(row["current_state"])
+    if from_state == to_state:
+        return False
+    ts = registry.now_iso()
+    conn.execute(
+        "UPDATE documents SET current_state=?, updated_at=? WHERE doc_id=?",
+        (to_state, ts, doc_id),
+    )
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO ingest_events(event_id, doc_id, event_kind, from_state, to_state, source_adapter, payload_json, ts)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            f"evt_{hashlib.sha256(f'{doc_id}:{from_state}:{to_state}:{batch_id}:{ts}'.encode()).hexdigest()[:24]}",
+            doc_id,
+            "qmd_extracted_index_state",
+            from_state,
+            to_state,
+            "knowledge_qmd_indexer",
+            json.dumps(payload | {"batch_id": batch_id}, ensure_ascii=False, sort_keys=True),
+            ts,
+        ),
+    )
+    return True
+
+
+def _advance_extracted_doc_states(conn, docs: list[dict[str, Any]], *, batch_id: str) -> dict[str, int]:
+    """Move successfully indexed extracted documents out of pending.
+
+    The two-step event trail preserves the explicit EXTRACTED_QMD_INDEXED state
+    while leaving fully indexed docs in DONE for health dashboards.
+    """
+    advanced_indexed = 0
+    advanced_done = 0
+    seen: set[str] = set()
+    for doc in docs:
+        if doc.get("layer") != "extracted":
+            continue
+        doc_id = str(doc["doc_id"])
+        if doc_id in seen:
+            continue
+        seen.add(doc_id)
+        row = conn.execute("SELECT current_state FROM documents WHERE doc_id=?", (doc_id,)).fetchone()
+        if not row or str(row["current_state"]) != "EXTRACTED_QMD_INDEX_PENDING":
+            continue
+        payload = {"layer": "extracted", "path": doc.get("path"), "indexed_sha256": doc.get("sha")}
+        if _transition_document(conn, doc_id=doc_id, to_state="EXTRACTED_QMD_INDEXED", batch_id=batch_id, payload=payload):
+            advanced_indexed += 1
+        if _transition_document(conn, doc_id=doc_id, to_state="DONE", batch_id=batch_id, payload=payload | {"previous_terminal_state": "EXTRACTED_QMD_INDEXED"}):
+            advanced_done += 1
+    return {"extracted_indexed": advanced_indexed, "done": advanced_done}
 
 
 def _candidate_docs(conn, layers: set[str]) -> list[dict[str, Any]]:
@@ -137,7 +203,7 @@ def _candidate_docs(conn, layers: set[str]) -> list[dict[str, Any]]:
             if not path.exists():
                 continue
             digest = str(row["source_sha256"]) if row["source_sha256"] else _file_sha256(path)
-            docs.append({"doc_id": row["doc_id"], "layer": layer, "path": str(path), "sha": digest})
+            docs.append({"doc_id": row["doc_id"], "layer": layer, "path": _norm_path(path), "sha": digest})
     if "extracted" in layers:
         latest_by_path: dict[tuple[str, str, str], dict[str, Any]] = {}
         for row in conn.execute(
@@ -158,11 +224,12 @@ def _candidate_docs(conn, layers: set[str]) -> list[dict[str, Any]]:
             # contain multiple rows for the same path after re-extraction.
             # Deduping by path avoids an old output hash creating a permanent
             # changed-only false positive.
-            key = (str(row["doc_id"]), "extracted", str(path))
+            norm_path = _norm_path(path)
+            key = (str(row["doc_id"]), "extracted", str(norm_path))
             latest_by_path[key] = {
                 "doc_id": row["doc_id"],
                 "layer": "extracted",
-                "path": str(path),
+                "path": norm_path,
                 "sha": _file_sha256(path),
                 "created_at": row["created_at"],
             }
@@ -176,7 +243,14 @@ def cmd_changed_only_reindex(args: argparse.Namespace) -> int:
     batch_id = args.batch_id or f"qmd-changed-{uuid.uuid4().hex[:10]}"
     with _connect(db_path) as conn:
         candidates = _candidate_docs(conn, layers)
-        changed = [doc for doc in candidates if args.force or _latest_indexed_hash(conn, doc["doc_id"], doc["layer"], doc["path"]) != doc["sha"]]
+        indexed_candidates: list[dict[str, Any]] = []
+        changed: list[dict[str, Any]] = []
+        for doc in candidates:
+            latest_hash = _latest_indexed_hash(conn, doc["doc_id"], doc["layer"], doc["path"])
+            if args.force or latest_hash != doc["sha"]:
+                changed.append(doc)
+            elif doc["layer"] == "extracted":
+                indexed_candidates.append(doc)
     if args.limit:
         changed = changed[: args.limit]
     if args.execute and changed:
@@ -209,14 +283,25 @@ def cmd_changed_only_reindex(args: argparse.Namespace) -> int:
                         batch_id,
                         "indexed",
                         registry.now_iso(),
-                        doc["path"],
+                        _norm_path(doc["path"]),
                         doc["sha"],
                         registry.now_iso(),
                     ),
                 )
+            state_advances = _advance_extracted_doc_states(conn, changed, batch_id=batch_id)
             conn.commit()
         for layer in layers:
             update_watermark(layer=layer, indexed=True, batch_id=batch_id, db_path=db_path)
+    else:
+        state_advances = {"extracted_indexed": 0, "done": 0}
+    if args.execute:
+        with _connect(db_path) as conn:
+            extra_advances = _advance_extracted_doc_states(conn, indexed_candidates, batch_id=batch_id)
+            conn.commit()
+        state_advances = {
+            "extracted_indexed": state_advances["extracted_indexed"] + extra_advances["extracted_indexed"],
+            "done": state_advances["done"] + extra_advances["done"],
+        }
     payload = {
         "ok": True,
         "mode": "execute" if args.execute else "dry_run",
@@ -224,7 +309,27 @@ def cmd_changed_only_reindex(args: argparse.Namespace) -> int:
         "layers": sorted(layers),
         "candidate_count": len(candidates),
         "changed_count": len(changed),
+        "state_advances": state_advances,
         "changed": changed if args.verbose else [],
+    }
+    print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_advance_indexed_states(args: argparse.Namespace) -> int:
+    db_path = Path(args.db).expanduser()
+    batch_id = args.batch_id or f"qmd-advance-{uuid.uuid4().hex[:10]}"
+    with _connect(db_path) as conn:
+        candidates = [doc for doc in _candidate_docs(conn, {"extracted"}) if _latest_indexed_hash(conn, doc["doc_id"], doc["layer"], doc["path"]) == doc["sha"]]
+        if args.limit:
+            candidates = candidates[: args.limit]
+        state_advances = _advance_extracted_doc_states(conn, candidates, batch_id=batch_id)
+        conn.commit()
+    payload = {
+        "ok": True,
+        "batch_id": batch_id,
+        "candidate_count": len(candidates),
+        "state_advances": state_advances,
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
     return 0
@@ -307,6 +412,10 @@ def build_parser() -> argparse.ArgumentParser:
     changed.add_argument("--lock-path", default=str(DEFAULT_LOCK_PATH))
     changed.add_argument("--lock-timeout-sec", type=int, default=600)
     changed.set_defaults(func=cmd_changed_only_reindex)
+    advance = sub.add_parser("advance-indexed-states")
+    advance.add_argument("--batch-id")
+    advance.add_argument("--limit", type=int, default=0)
+    advance.set_defaults(func=cmd_advance_indexed_states)
     return parser
 
 

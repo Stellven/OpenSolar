@@ -10,12 +10,14 @@ import argparse
 import hashlib
 import json
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
 import knowledge_ingest_registry as registry
 import knowledge_source_adapters as adapters
 import knowledge_spans
+import knowledge_dashboard
 
 
 def emit(payload: dict[str, Any], as_json: bool) -> None:
@@ -200,6 +202,181 @@ def cmd_process_queue(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_cmd(cmd: list[str], *, timeout: int = 900) -> dict[str, Any]:
+    started = registry.now_iso()
+    proc = subprocess.run(
+        cmd,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=timeout,
+    )
+    parsed: Any = None
+    out = proc.stdout.strip()
+    if out:
+        try:
+            parsed = json.loads(out[out.find("{") :])
+        except Exception:
+            parsed = None
+    return {
+        "cmd": cmd,
+        "ok": proc.returncode == 0,
+        "returncode": proc.returncode,
+        "started_at": started,
+        "finished_at": registry.now_iso(),
+        "stdout": proc.stdout[-8000:],
+        "stderr": proc.stderr[-4000:],
+        "json": parsed,
+    }
+
+
+def _python_lib_cmd(script_name: str, *args: str) -> list[str]:
+    return [sys.executable, str(Path(__file__).resolve().parent / script_name), *args]
+
+
+def cmd_run_pipeline(args: argparse.Namespace) -> int:
+    """Run a supervised, bounded ingest cycle from the control plane.
+
+    This is intentionally small-batch by default. It closes the common loop:
+    registry discovery -> ThunderOMLX retry/backfill -> QMD file index ->
+    embedding -> extracted state advancement -> health audit.
+    """
+    db = str(Path(args.db).expanduser())
+    steps: list[dict[str, Any]] = []
+
+    if args.discover:
+        if args.discover_raw_limit > 0:
+            steps.append(
+                _run_cmd(
+                    _python_lib_cmd(
+                        "knowledge_ingest_dispatcher.py",
+                        "--db",
+                        db,
+                        "--json",
+                        "discover-sources",
+                        "--source-dir",
+                        args.raw_dir,
+                        "--limit",
+                        str(args.discover_raw_limit),
+                    ),
+                    timeout=args.timeout_sec,
+                )
+            )
+        if args.discover_vault_limit > 0:
+            steps.append(
+                _run_cmd(
+                    _python_lib_cmd(
+                        "knowledge_ingest_dispatcher.py",
+                        "--db",
+                        db,
+                        "--json",
+                        "discover-vault",
+                        "--vault",
+                        args.vault,
+                        "--limit",
+                        str(args.discover_vault_limit),
+                    ),
+                    timeout=args.timeout_sec,
+                )
+            )
+
+    extract_cmd = _python_lib_cmd(
+        "knowledge-semantic-extract.py",
+        "--registry-db",
+        db,
+        "--max-chars",
+        str(args.max_chars),
+        "--max-tokens",
+        str(args.max_tokens),
+        "--timeout-sec",
+        str(args.extract_timeout_sec),
+        "--max-retries",
+        str(args.max_retries),
+        "--retry-backoff-sec",
+        str(args.retry_backoff_sec),
+        "--json",
+        "supervised-backfill",
+        "--source-dir",
+        args.raw_dir,
+        "--batch-size",
+        str(args.batch_size),
+        "--max-batches",
+        str(args.max_batches),
+        "--stale-minutes",
+        str(args.stale_minutes),
+        "--reap-limit",
+        str(args.reap_limit),
+        "--stop-on-error",
+    )
+    if args.force_extract:
+        extract_cmd.append("--force")
+    extract_step = _run_cmd(
+        extract_cmd,
+        timeout=args.extract_timeout_sec * max(args.batch_size, 1) * max(args.max_batches, 1) + 120,
+    )
+    steps.append(extract_step)
+    if not extract_step["ok"] and not args.continue_on_extract_failure:
+        steps.append(_run_cmd(["solar-harness", "wiki", "knowledge-health", "health"], timeout=args.timeout_sec))
+        payload = {
+            "ok": False,
+            "stopped_after": "semantic-extract",
+            "reason": "extract step failed; QMD/index/embed steps skipped to avoid noisy no-op closure",
+            "steps": [
+                {
+                    "cmd": " ".join(step["cmd"]),
+                    "ok": step["ok"],
+                    "returncode": step["returncode"],
+                    "json": step.get("json"),
+                    "stderr_tail": step.get("stderr", ""),
+                }
+                for step in steps
+            ],
+        }
+        emit(payload, args.json)
+        return 1
+
+    steps.append(
+        _run_cmd(
+            _python_lib_cmd(
+                "knowledge_qmd_indexer.py",
+                "--db",
+                db,
+                "changed-only-reindex",
+                "--layers",
+                "raw,vault,extracted",
+                "--execute",
+                "--timeout-sec",
+                str(args.qmd_timeout_sec),
+            ),
+            timeout=args.qmd_timeout_sec + 120,
+        )
+    )
+
+    if not args.skip_embed:
+        steps.append(_run_cmd(["solar-harness", "wiki", "qmd-embed", "run-now"], timeout=args.qmd_timeout_sec))
+
+    steps.append(_run_cmd(_python_lib_cmd("knowledge_qmd_indexer.py", "--db", db, "advance-indexed-states"), timeout=args.timeout_sec))
+    steps.append(_run_cmd(["solar-harness", "wiki", "knowledge-health", "health"], timeout=args.timeout_sec))
+
+    ok = all(step["ok"] for step in steps)
+    payload = {
+        "ok": ok,
+        "steps": [
+            {
+                "cmd": " ".join(step["cmd"]),
+                "ok": step["ok"],
+                "returncode": step["returncode"],
+                "json": step.get("json"),
+                "stderr_tail": step.get("stderr", ""),
+            }
+            for step in steps
+        ],
+    }
+    emit(payload, args.json)
+    return 0 if ok else 1
+
+
 def _iter_markdown_files(root: Path) -> list[Path]:
     if not root.exists():
         return []
@@ -355,6 +532,19 @@ def _find_or_register_source_doc(
         db_path=db_path,
     )
     return doc["doc_id"], "registered_legacy_needs_review"
+
+
+def cmd_dashboard(args: argparse.Namespace) -> int:
+    db_path = Path(args.db).expanduser()
+    dashboard = knowledge_dashboard.gather_dashboard(db_path)
+    html_path = getattr(args, "html", "") or ""
+    if html_path:
+        hp = Path(html_path).expanduser()
+        hp.parent.mkdir(parents=True, exist_ok=True)
+        hp.write_text(knowledge_dashboard.render_html(dashboard), encoding="utf-8")
+        dashboard["html_path"] = str(hp)
+    print(json.dumps(dashboard, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0
 
 
 def cmd_import_legacy_extracted(args: argparse.Namespace) -> int:
@@ -579,6 +769,29 @@ def build_parser() -> argparse.ArgumentParser:
     process.set_defaults(func=cmd_process_queue)
     children.append(process)
 
+    pipeline = sub.add_parser("run-pipeline")
+    pipeline.add_argument("--raw-dir", default=str(Path.home() / "Knowledge" / "_raw"))
+    pipeline.add_argument("--vault", default=str(Path.home() / "Knowledge"))
+    pipeline.add_argument("--discover", action="store_true")
+    pipeline.add_argument("--discover-raw-limit", type=int, default=0)
+    pipeline.add_argument("--discover-vault-limit", type=int, default=0)
+    pipeline.add_argument("--batch-size", type=int, default=1)
+    pipeline.add_argument("--max-batches", type=int, default=1)
+    pipeline.add_argument("--stale-minutes", type=int, default=30)
+    pipeline.add_argument("--reap-limit", type=int, default=20)
+    pipeline.add_argument("--max-chars", type=int, default=18000)
+    pipeline.add_argument("--max-tokens", type=int, default=5200)
+    pipeline.add_argument("--extract-timeout-sec", type=int, default=720)
+    pipeline.add_argument("--max-retries", type=int, default=2)
+    pipeline.add_argument("--retry-backoff-sec", type=float, default=10.0)
+    pipeline.add_argument("--qmd-timeout-sec", type=int, default=900)
+    pipeline.add_argument("--timeout-sec", type=int, default=120)
+    pipeline.add_argument("--force-extract", action="store_true")
+    pipeline.add_argument("--continue-on-extract-failure", action="store_true")
+    pipeline.add_argument("--skip-embed", action="store_true")
+    pipeline.set_defaults(func=cmd_run_pipeline)
+    children.append(pipeline)
+
     reconcile = sub.add_parser("reconcile")
     reconcile.add_argument("--knowledge-root", default=str(Path.home() / "Knowledge"))
     reconcile.add_argument("--raw-dir", default=str(Path.home() / "Knowledge" / "_raw"))
@@ -598,6 +811,12 @@ def build_parser() -> argparse.ArgumentParser:
     legacy.add_argument("--verbose", action="store_true")
     legacy.set_defaults(func=cmd_import_legacy_extracted)
     children.append(legacy)
+
+    dashboard = sub.add_parser("dashboard")
+    dashboard.add_argument("--html", default="", help="Write HTML dashboard to this path")
+    dashboard.set_defaults(func=cmd_dashboard)
+    children.append(dashboard)
+
     for child in children:
         child.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
         child.add_argument("--db", default=argparse.SUPPRESS)
