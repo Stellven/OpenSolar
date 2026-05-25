@@ -7,11 +7,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "lib"))
 
 from actor_runtime import ActorRuntime
 from capability_token import CapabilityToken
+from evidence_ledger import EvidenceLedger
 
 def _make_runtime(td):
     return ActorRuntime(
         harness_dir=Path(td),
         mailbox_base=Path(td) / "actors",
+        evidence_ledger=EvidenceLedger(Path(td) / "run" / "actor-evidence"),
     )
 
 def test_submit_returns_lease_and_paths():
@@ -100,6 +102,41 @@ def test_no_tmux_in_runtime():
     assert "tmux send-keys" not in src
     assert "send_keys" not in src
     print("PASS: no_tmux_in_runtime")
+
+
+def test_submit_materializes_execution_plan_metadata():
+    with tempfile.TemporaryDirectory() as td:
+        actors_dir = Path(td) / "config"
+        actors_dir.mkdir(parents=True, exist_ok=True)
+        actors_data = {"actors": {"test-actor": {"actor_id": "test-actor", "capability_profile": {}, "risk_profile": {}, "cost_profile": {}}}}
+        (actors_dir / "agent-actors.json").write_text(json.dumps(actors_data))
+
+        rt = ActorRuntime(
+            harness_dir=Path(td),
+            mailbox_base=Path(td) / "actors",
+            profiles_path=actors_dir / "agent-actors.json",
+            evidence_ledger=EvidenceLedger(Path(td) / "run" / "actor-evidence"),
+        )
+        envelope = {
+            "task_id": "t-plan",
+            "objective": "Implement execution plan artifacts",
+            "task_type": "implementation",
+            "task_graph_node": {
+                "id": "N2",
+                "goal": "Implement execution plan artifacts",
+                "logical_operator": "ImplementationWorker",
+                "type": "implementation",
+            },
+        }
+        result = rt.submit(envelope, actor_id="test-actor", sprint_id="s1", node_id="N2")
+        assert result.success
+
+        inbox_path = Path(result.inbox_path)
+        payload = json.loads(inbox_path.read_text(encoding="utf-8"))
+        assert payload["capsule_plan_ir"]["schema_version"] == "solar.capsule_plan_node.v1"
+        assert payload["physical_plan_ir"]["schema_version"] == "solar.physical_plan_node.v1"
+        assert Path(payload["plan_artifacts"]["capsule_plan_ir_path"]).exists()
+        assert Path(payload["plan_artifacts"]["physical_plan_ir_path"]).exists()
 
 if __name__ == "__main__":
     test_submit_returns_lease_and_paths()

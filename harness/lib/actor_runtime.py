@@ -21,6 +21,7 @@ from evidence_ledger import EvidenceLedger, build_scheduler_decision
 from context_store import ContextStore
 from capability_token import CapabilityToken
 from verification_gate import VerificationGate
+from apo_plan_compiler import compile_execution_plan_for_node, materialize_execution_plan_artifacts
 
 HOME = Path.home()
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
@@ -80,6 +81,59 @@ class ActorRuntime:
         self.profiles = load_profiles(profiles_path)
         self.router = LogicalOperatorRouter(bindings_path)
 
+    def _ensure_execution_plan_metadata(
+        self,
+        task_envelope: Dict[str, Any],
+        *,
+        logical_operator: str = "",
+        actor_id: str = "",
+        sprint_id: str = "",
+        node_id: str = "",
+    ) -> Dict[str, Any]:
+        payload = dict(task_envelope)
+        if payload.get("capsule_plan_ir") and payload.get("physical_plan_ir"):
+            return payload
+
+        graph_node = payload.get("task_graph_node") if isinstance(payload.get("task_graph_node"), dict) else {}
+        node = dict(graph_node or {})
+        node.setdefault("id", node_id or str(payload.get("node_id") or ""))
+        node.setdefault("goal", str(payload.get("objective") or ""))
+        node.setdefault("logical_operator", logical_operator or str(payload.get("logical_operator") or ""))
+        node.setdefault("type", str(payload.get("task_type") or ""))
+        if payload.get("capability_capsule_id"):
+            node.setdefault("capability_native", bool(payload.get("capability_native", True)))
+            node.setdefault("capability_capsule_id", str(payload.get("capability_capsule_id")))
+        if isinstance(payload.get("capsule_plan"), dict) and payload.get("capsule_plan"):
+            node.setdefault("capsule_plan", dict(payload["capsule_plan"]))
+
+        if not node.get("logical_operator"):
+            return payload
+
+        try:
+            compiled = compile_execution_plan_for_node(
+                node,
+                request_type=str(payload.get("task_type") or ""),
+                prefer_operator=actor_id,
+            )
+            capsule_plan = compiled.get("capsule_plan") or {}
+            physical_plan = compiled.get("physical_plan") or {}
+            payload["logical_plan_node"] = compiled.get("logical_plan_node") or {}
+            payload["capsule_plan_ir"] = capsule_plan
+            payload["physical_plan_ir"] = physical_plan
+            if capsule_plan.get("capability_capsule_id") and not payload.get("capability_capsule_id"):
+                payload["capability_capsule_id"] = str(capsule_plan["capability_capsule_id"])
+            if sprint_id and node_id:
+                payload["plan_artifacts"] = materialize_execution_plan_artifacts(
+                    sprint_id,
+                    node_id,
+                    capsule_plan=capsule_plan,
+                    physical_plan=physical_plan,
+                    base_dir=self.harness_dir / "sprints",
+                )
+        except Exception:
+            return payload
+        return payload
+
     def submit(
         self,
         task_envelope: Dict[str, Any],
@@ -115,6 +169,14 @@ class ActorRuntime:
             actor_id = selected
         elif not actor_id:
             return SubmitResult(success=False, error="no_actor_id_or_logical_operator")
+
+        task_envelope = self._ensure_execution_plan_metadata(
+            task_envelope,
+            logical_operator=logical_operator or str(task_envelope.get("logical_operator") or ""),
+            actor_id=actor_id,
+            sprint_id=sprint_id,
+            node_id=node_id,
+        )
 
         # Check profile risk denial
         profile = self.profiles.get(actor_id)
@@ -173,6 +235,9 @@ class ActorRuntime:
             effect_summary=resolved_capsule.get("effect_summary"),
             guard_results=resolved_capsule.get("attached_guard_capsules"),
             verification_results=resolved_capsule.get("verification_hooks"),
+            capsule_plan_ir=task_envelope.get("capsule_plan_ir") if isinstance(task_envelope.get("capsule_plan_ir"), dict) else None,
+            physical_plan_ir=task_envelope.get("physical_plan_ir") if isinstance(task_envelope.get("physical_plan_ir"), dict) else None,
+            plan_artifacts=task_envelope.get("plan_artifacts") if isinstance(task_envelope.get("plan_artifacts"), dict) else None,
         )
 
         return SubmitResult(

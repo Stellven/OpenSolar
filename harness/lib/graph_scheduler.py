@@ -573,6 +573,36 @@ def write_scope_conflict(a: dict[str, Any], b: dict[str, Any]) -> bool:
     return any(_scope_overlap(sa, sb) for sa in a_scopes for sb in b_scopes)
 
 
+def _node_effect_union(node: dict[str, Any]) -> dict[str, list[str]]:
+    for key in ("effect_union",):
+        raw = node.get(key)
+        if isinstance(raw, dict):
+            return {str(k): [str(item) for item in (v or [])] for k, v in raw.items()}
+    for key in ("physical_plan_ir", "capsule_plan_ir"):
+        raw = node.get(key)
+        if isinstance(raw, dict):
+            effect_union = raw.get("effect_union")
+            if isinstance(effect_union, dict):
+                return {str(k): [str(item) for item in (v or [])] for k, v in effect_union.items()}
+    return {}
+
+
+def _node_has_exclusive_effect(node: dict[str, Any]) -> bool:
+    effect_union = _node_effect_union(node)
+    risks = {str(item) for item in effect_union.get("risk", [])}
+    writes = {str(item) for item in effect_union.get("write", [])}
+    executes = {str(item) for item in effect_union.get("execute", [])}
+    if risks & {"secrets_access", "destructive_shell", "git_push", "patch_scope_drift"}:
+        return True
+    if "repo.worktree" in writes and executes:
+        return True
+    return False
+
+
+def effect_conflict(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    return _node_has_exclusive_effect(a) or _node_has_exclusive_effect(b)
+
+
 def _batch_ready_nodes(nodes: list[dict[str, Any]], max_parallel: int | None = None) -> list[list[dict[str, Any]]]:
     batches: list[list[dict[str, Any]]] = []
     for node in nodes:
@@ -581,6 +611,8 @@ def _batch_ready_nodes(nodes: list[dict[str, Any]], max_parallel: int | None = N
             if max_parallel and len(batch) >= max_parallel:
                 continue
             if any(write_scope_conflict(node, other) for other in batch):
+                continue
+            if any(effect_conflict(node, other) for other in batch):
                 continue
             batch.append(node)
             placed = True
@@ -914,7 +946,35 @@ def assign_ready(graph: dict[str, Any], workers: list[dict[str, Any]],
     blocked = blocked_external_prerequisites(graph)
     if blocked:
         return {"ok": True, "assigned": [], "queued": [], "batch": [], "blocked_prerequisites": blocked}
-    batches = _batch_ready_nodes(ready_nodes(graph), max_parallel=max_parallel)
+    ready = ready_nodes(graph)
+    try:
+        from apo_plan_compiler import compile_execution_plan_for_node  # noqa: WPS433
+
+        for node in ready:
+            if isinstance(node.get("effect_union"), dict) and isinstance(node.get("proof_obligations"), list):
+                continue
+            try:
+                compiled = compile_execution_plan_for_node(
+                    node,
+                    request_type=str(graph.get("request_type") or node.get("type") or ""),
+                    lane_hint=str(graph.get("lane") or ""),
+                    registry_path=HARNESS_DIR / "config" / "capability-capsules.registry.yaml",
+                    operators_path=HARNESS_DIR / "config" / "physical-operators.json",
+                )
+                capsule_plan = compiled.get("capsule_plan") or {}
+                physical_plan = compiled.get("physical_plan") or {}
+                if isinstance(capsule_plan, dict):
+                    node["capsule_plan_ir"] = capsule_plan
+                    node["effect_union"] = capsule_plan.get("effect_union", {})
+                    node["proof_obligations"] = capsule_plan.get("proof_obligations", [])
+                    node["artifact_types"] = capsule_plan.get("artifact_types", {})
+                if isinstance(physical_plan, dict):
+                    node["physical_plan_ir"] = physical_plan
+            except Exception:
+                continue
+    except Exception:
+        pass
+    batches = _batch_ready_nodes(ready, max_parallel=max_parallel)
     if not batches:
         return {"ok": True, "assigned": [], "queued": [], "batch": []}
     first_batch = batches[0]
@@ -1016,6 +1076,10 @@ def enqueue_ready(graph: dict[str, Any], graph_path: str, workers: list[dict[str
         from pane_lease import acquire  # noqa: WPS433
     else:
         acquire = None
+    from apo_plan_compiler import (  # noqa: WPS433
+        compile_execution_plan_for_node,
+        materialize_execution_plan_artifacts,
+    )
 
     graph = auto_enrich_graph(graph, graph_path=graph_path)
     sid = str(graph.get("sprint_id") or Path(graph_path).stem.replace(".task_graph", ""))
@@ -1028,6 +1092,68 @@ def enqueue_ready(graph: dict[str, Any], graph_path: str, workers: list[dict[str
         node_id = item["node"]
         pane = item["pane"]
         dispatch_id = f"graph-{sid}-{node_id}-{datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}"
+        node = nodes_by_id[node_id]
+        try:
+            compiled_plan = compile_execution_plan_for_node(
+                node,
+                request_type=str(graph.get("request_type") or node.get("type") or ""),
+                lane_hint=str(graph.get("lane") or ""),
+                registry_path=HARNESS_DIR / "config" / "capability-capsules.registry.yaml",
+                operators_path=HARNESS_DIR / "config" / "physical-operators.json",
+            )
+            capsule_plan_ir = dict(compiled_plan.get("capsule_plan") or {})
+            physical_plan_ir = dict(compiled_plan.get("physical_plan") or {})
+            plan_artifacts = materialize_execution_plan_artifacts(
+                sid,
+                node_id,
+                capsule_plan=capsule_plan_ir,
+                physical_plan=physical_plan_ir,
+                base_dir=SPRINTS_DIR,
+            )
+        except Exception:
+            compiled_plan = {
+                "logical_plan_node": {
+                    "node_id": node.get("id"),
+                    "logical_operator": node.get("logical_operator"),
+                    "goal": node.get("goal"),
+                    "depends_on": list(node.get("depends_on", []) or []),
+                }
+            }
+            capsule_plan_ir = {
+                "schema_version": "solar.capsule_plan_node.v1",
+                "node_id": node_id,
+                "logical_operator": str(node.get("logical_operator") or ""),
+                "selected": False,
+                "stages": [],
+            }
+            physical_plan_ir = {
+                "schema_version": "solar.physical_plan_node.v1",
+                "node_id": node_id,
+                "logical_operator": str(node.get("logical_operator") or ""),
+                "selected_operator_id": "",
+                "execution_candidates": [],
+                "attached_capsules": [],
+                "verifier_plans": [],
+            }
+            plan_artifacts = materialize_execution_plan_artifacts(
+                sid,
+                node_id,
+                capsule_plan=capsule_plan_ir,
+                physical_plan=physical_plan_ir,
+                base_dir=SPRINTS_DIR,
+            )
+        node["logical_plan_node"] = dict(compiled_plan.get("logical_plan_node") or {})
+        node["capsule_plan_ir"] = capsule_plan_ir
+        node["physical_plan_ir"] = physical_plan_ir
+        if capsule_plan_ir.get("capability_capsule_id"):
+            node["capability_native"] = True
+            node["capability_capsule_id"] = str(capsule_plan_ir.get("capability_capsule_id") or "")
+        artifacts = node.get("artifacts") if isinstance(node.get("artifacts"), dict) else {}
+        artifacts["capsule_plan_ir"] = plan_artifacts["capsule_plan_ir_path"]
+        artifacts["physical_plan_ir"] = plan_artifacts["physical_plan_ir_path"]
+        if physical_plan_ir.get("selected_operator_id"):
+            artifacts["selected_operator_id"] = str(physical_plan_ir.get("selected_operator_id") or "")
+        node["artifacts"] = artifacts
 
         lease_result = {"acquired": True, "reason": "lease_disabled"}
         if acquire is not None and not dry_run:
@@ -1049,10 +1175,14 @@ def enqueue_ready(graph: dict[str, Any], graph_path: str, workers: list[dict[str
             "type": "graph_node",
             "graph": graph_path,
             "sprint_id": sid,
-            "node": nodes_by_id[node_id],
+            "node": node,
             "assignment": item,
             "dispatch_id": dispatch_id,
             "lease": lease_result,
+            "logical_plan_node": dict(compiled_plan.get("logical_plan_node") or {}),
+            "capsule_plan_ir": capsule_plan_ir,
+            "physical_plan_ir": physical_plan_ir,
+            "plan_artifacts": plan_artifacts,
         }
         if dry_run:
             q = {"ok": True, "result": "dry_run", "id": ""}

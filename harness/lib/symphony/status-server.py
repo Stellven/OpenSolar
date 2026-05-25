@@ -1374,6 +1374,8 @@ def _current_sprint() -> dict:
     order = {"active": 0, "reviewing": 1, "ready_for_review": 2, "queued": 3, "planning": 4, "approved": 5, "drafting": 6}
     candidates.sort(key=lambda d: (order.get(str(d.get("status", "")).lower(), 9), -float(d.get("_mtime", 0))))
     d = candidates[0]
+    current_sid = d.get("id", d.get("sprint_id", ""))
+    plan_summary = _execution_plan_summary(current_sid)
     return {
         "sprint_id": d.get("id", d.get("sprint_id", "")),
         "status": d.get("status", ""),
@@ -1385,7 +1387,48 @@ def _current_sprint() -> dict:
         "lane": d.get("lane", ""),
         "description": _sprint_description(d.get("id", d.get("sprint_id", ""))),
         "is_active": True,
+        "execution_plan_summary": plan_summary.get("summary", ""),
+        "execution_plan_artifacts": plan_summary,
     }
+
+
+def _execution_plan_summary(sid: str) -> dict:
+    sid = str(sid or "").strip()
+    if not sid:
+        return {"count": 0, "summary": "N/A", "items": []}
+    items: list[dict] = []
+    for physical_path in sorted(SPRINTS_DIR.glob(f"{sid}.*-physical-plan.json")):
+        prefix = physical_path.name.removesuffix("-physical-plan.json")
+        node_id = prefix.split(".", 1)[1] if "." in prefix else prefix
+        capsule_path = SPRINTS_DIR / f"{sid}.{node_id}-capsule-plan.json"
+        selected_operator_id = ""
+        capability_capsule_id = ""
+        try:
+            physical_data = json.loads(physical_path.read_text(encoding="utf-8"))
+            if isinstance(physical_data, dict):
+                selected_operator_id = str(physical_data.get("selected_operator_id") or "")
+                capability_capsule_id = str(physical_data.get("capability_capsule_id") or "")
+        except Exception:
+            selected_operator_id = ""
+        items.append(
+            {
+                "node_id": node_id,
+                "capability_capsule_id": capability_capsule_id,
+                "selected_operator_id": selected_operator_id,
+                "physical_plan_ir": str(physical_path),
+                "capsule_plan_ir": str(capsule_path) if capsule_path.exists() else "",
+            }
+        )
+    summary = "N/A"
+    if items:
+        parts = [
+            f"{item['node_id']}->{item['selected_operator_id'] or 'unbound'}"
+            for item in items[:4]
+        ]
+        summary = " · ".join(parts)
+        if len(items) > 4:
+            summary += f" · +{len(items) - 4}"
+    return {"count": len(items), "summary": summary, "items": items}
 
 
 def _first_paragraph_after_heading(text: str, heading_pattern: str) -> str:
@@ -4827,7 +4870,8 @@ function sprintBlock(meta, sid, options = {}) {
     kv('Phase', meta.phase || '-'),
     kv('Handoff', meta.handoff_to || '-'),
     kv('Lane', meta.lane || '-'),
-    kv('Priority', meta.priority || '-')
+    kv('Priority', meta.priority || '-'),
+    kv('Physical Plan', meta.execution_plan_summary || 'N/A')
   ];
   const details = detailItems.join('');
   const id = sid ? '<div class="tech-id">id: ' + esc(sid) + '</div>' : '';
