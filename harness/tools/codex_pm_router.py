@@ -670,20 +670,25 @@ def classify_request_type(text: str, papers: list[str] | None = None) -> str:
     lowered = normalized.lower()
     if papers:
         return RESEARCH
-    if re.search(r"\b(arxiv|doi|paper|study|literature|survey|iclr|neurips|mlsys|benchmark comparison)\b", lowered):
-        return RESEARCH
-    if re.search(r"(论文|调研|研究|综述|文献|citation)", normalized):
-        return RESEARCH
 
     full_spec_markers = [
         "architecture", "runtime", "system", "platform", "compatibility",
         "rollout", "migration", "refactor", "dag scheduler", "multi-step",
         "phased", "requirement compiler", "requirement ir", "task dag",
-        "contract", "handoff", "设计", "架构", "系统", "改造", "迁移", "兼容", "规划",
+        "contract", "handoff", "operator", "physical operator",
+        "logical_operator", "actorhost", "agentactor", "registry", "schema",
+        "scheduler", "async", "state machine", "browser agent",
+        "设计", "架构", "系统", "改造", "迁移", "兼容", "规划",
+        "实现", "开发", "接入", "算子", "物理执行", "状态机", "注册",
         "需求编译器", "需求中间表示", "任务图",
     ]
     if any(marker in lowered for marker in full_spec_markers) or any(marker in normalized for marker in full_spec_markers):
         return FULL_SPEC
+
+    if re.search(r"\b(arxiv|doi|paper|study|literature|survey|iclr|neurips|mlsys|benchmark comparison)\b", lowered):
+        return RESEARCH
+    if re.search(r"(论文|调研|研究|综述|文献|citation)", normalized):
+        return RESEARCH
 
     short_markers = [
         "fix", "bug", "add", "change", "rename", "check", "trace",
@@ -698,7 +703,6 @@ def classify_request_type(text: str, papers: list[str] | None = None) -> str:
     ):
         return SHORT_IMPL
     return FULL_SPEC
-
 
 def choose_lane_hint(request_type: str, text: str) -> str:
     lowered = text.lower()

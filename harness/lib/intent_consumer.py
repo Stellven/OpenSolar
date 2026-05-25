@@ -20,8 +20,8 @@ from pathlib import Path
 from typing import Any
 
 HARNESS_DIR = Path(os.environ.get("SOLAR_HARNESS_DIR", Path(__file__).resolve().parents[1]))
-SPRINTS_DIR = Path(os.environ.get("SOLAR_HARNESS_SPRINTS_DIR", HARNESS_DIR / "sprints"))
-INTENTS_DIR = Path(os.environ.get("SOLAR_INTENT_GATEWAY_DIR", HARNESS_DIR / "intents"))
+SPRINTS_DIR = Path(os.environ.get("SOLAR_HARNESS_SPRINTS_DIR", Path.home() / ".solar" / "harness" / "sprints"))
+INTENTS_DIR = Path(os.environ.get("SOLAR_INTENT_GATEWAY_DIR", Path.home() / ".solar" / "harness" / "intents"))
 DEFAULT_TRUSTED_AUTODISPATCH_CHANNELS = (
     "pm_dispatch",
     "pm_compile_request",

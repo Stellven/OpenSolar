@@ -74,3 +74,26 @@ def test_bind_copies_intent_artifacts_to_sprint(tmp_path):
     ir = json.loads((sprints / f"{sprint_id}.requirement_ir.json").read_text())
     assert ir["intent_id"] == intent_id
     assert ir["sprint_id"] == sprint_id
+
+
+def test_browser_agent_operator_intent_mode_prefers_strategy_over_research(tmp_path):
+    env = dict(os.environ)
+    env["SOLAR_INTENT_GATEWAY_DIR"] = str(tmp_path / "intents")
+    env["SOLAR_HARNESS_SPRINTS_DIR"] = str(tmp_path / "sprints")
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "capture",
+            "--text",
+            "实现 Browser Agent 物理执行算子，调用 ChatGPT Deep Research 和 Gemini Deep Research，但必须接入 operator runtime/schema。",
+            "--json",
+        ],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=True,
+    )
+    payload = json.loads(proc.stdout)
+    ir = json.loads((tmp_path / "intents" / payload["intent_id"] / "requirement_ir.json").read_text())
+    assert ir["lane"] == "strategy"

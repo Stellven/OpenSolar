@@ -58,14 +58,24 @@ def read_text_arg(args: argparse.Namespace) -> str:
 
 def infer_mode(text: str) -> str:
     value = text.lower()
-    if any(token in value for token in ("research", "report", "论文", "调研", "报告")):
-        return "research"
+    # Engineering intents can contain words like "research" or "Deep Research"
+    # as product names. Route explicit implementation/runtime/schema/operator
+    # work to strategy before applying generic research keyword matching.
+    engineering_markers = (
+        "operator", "runtime", "schema", "registry", "scheduler",
+        "actorhost", "agentactor", "logical_operator", "physicaloperator",
+        "实现", "开发", "接入", "算子", "物理执行", "状态机", "注册",
+    )
+    if any(token in value for token in engineering_markers):
+        return "strategy"
     if any(token in value for token in ("debug", "bug", "失败", "报错", "修复", "卡住")):
         return "debug"
     if any(token in value for token in ("架构", "设计", "strategy", "architecture")):
         return "strategy"
     if any(token in value for token in ("monitor", "heartbeat", "巡检", "监控")):
         return "monitor"
+    if any(token in value for token in ("research", "report", "论文", "调研", "报告")):
+        return "research"
     return "delivery"
 
 
