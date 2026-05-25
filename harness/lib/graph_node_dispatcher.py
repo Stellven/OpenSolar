@@ -29,7 +29,7 @@ DISPATCH_LEDGER = HARNESS_DIR / "run" / "dispatch-ledger.jsonl"
 PANE_TUI_BUSY_RE = re.compile(
     r"Compacting conversation|压缩上下文|Reticulating|Scurrying|Roosting|"
     r"Mustering|Herding|Baking|Cogitating|Churning|Ruminating|Thinking|"
-    r"Whirring|Smooshing|Unhandled node type|Do you want to proceed\?|"
+    r"Whirring|Smooshing|Unhandled node type|Do you want to proceed\?|Would you like to proceed\?|"
     r"Do you want to make this edit|allow all edits during this session|"
     r"accept edits on|bypass permissions on|Enter to confirm|Esc to cancel|Bash command|"
     r"[·✳✶✽✢]\s+[A-Za-z][A-Za-z-]*…|✳|✶|✽|✢",
@@ -1040,7 +1040,39 @@ def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path
             pane = str(node.get("assigned_to") or "").strip()
             dispatch_id = str(node.get("dispatch_id") or "").strip()
             if pane and dispatch_id:
-                unavailable_reason = _pane_runtime_unavailable_reason(pane, _pane_title(pane)) or _pane_unavailable_reason(pane)
+                title = _pane_title(pane)
+                lease = read_lease(pane)
+                lease_live = bool(
+                    isinstance(lease, dict)
+                    and str(lease.get("dispatch_id") or "") == dispatch_id
+                    and str(lease.get("expires_at") or "") > _utc_now()
+                )
+                tail = _pane_tail(pane)
+                dispatch_prompt_reason = _pane_dispatch_prompt_reason(tail)
+                unavailable_reason = _pane_runtime_unavailable_reason(pane, title) or _pane_unavailable_reason(pane)
+                idle_assigned = "graph_node_idle_assigned" in title.lower()
+                if not lease_live:
+                    release_lease(
+                        pane,
+                        dispatch_id,
+                        f"graph_dispatch_reconcile_stale_active_dispatch:{dispatch_prompt_reason or unavailable_reason or 'missing_live_lease'}",
+                    )
+                    node.pop("assigned_to", None)
+                    node.pop("dispatch_id", None)
+                    node["dispatch_retry_reason"] = dispatch_prompt_reason or unavailable_reason or "stale_submit_ack_without_live_lease"
+                    node["updated_at"] = _utc_now()
+                    node["status"] = "pending"
+                    graph.setdefault("node_results", {}).pop(node_id, None)
+                    repaired.append(
+                        {
+                            "node": node_id,
+                            "pane": pane,
+                            "dispatch_id": dispatch_id,
+                            "status": "pending",
+                            "reason": node["dispatch_retry_reason"],
+                        }
+                    )
+                    continue
                 if unavailable_reason:
                     release_lease(pane, dispatch_id, f"graph_dispatch_reconcile_unavailable:{unavailable_reason}")
                     node.pop("assigned_to", None)
@@ -2093,6 +2125,9 @@ def _pane_unavailable_reason(pane: str) -> str:
         return str(health.get("reason") or "provider_health_unavailable")
     tail = _pane_tail(pane)
     bottom = "\n".join(tail.splitlines()[-40:])
+    prompt_reason = _pane_dispatch_prompt_reason(bottom)
+    if prompt_reason:
+        return prompt_reason
     if PANE_TUI_UNAVAILABLE_RE.search(bottom):
         return "rate_limit_or_api_error"
     if PANE_SURVEY_PROMPT_RE.search(bottom):
@@ -2134,7 +2169,7 @@ def _pane_has_matching_queued_prompt(pane: str, instruction_file: Path) -> bool:
 
 def _pane_dispatch_prompt_reason(tail: str) -> str:
     bottom = "\n".join((tail or "").splitlines()[-40:])
-    if "Do you want to proceed?" in bottom or "Tab to amend" in bottom:
+    if "Do you want to proceed?" in bottom or "Would you like to proceed?" in bottom or "Tab to amend" in bottom:
         return "proceed_confirmation_prompt"
     if "Do you want to make this edit" in bottom or "allow all edits during this session" in bottom:
         return "edit_confirmation_prompt"
@@ -2331,6 +2366,13 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
     short_cmd = f"{_visibility_summary(instruction_file)['text']}; 读取并执行 {instruction_path}"
     _record_model_call("request", sid, pane, dispatch_id, instruction_file, status="tmux_submit_requested")
     last_error = ""
+    def _settled_dispatch_state() -> tuple[str, str, bool, bool]:
+        time.sleep(1.0)
+        settled_tail = _pane_tail(pane)
+        settled_prompt_reason = _pane_dispatch_prompt_reason(settled_tail)
+        settled_has_keyword = dispatch_keyword in settled_tail or instruction_path in settled_tail
+        settled_has_processing = bool(processing_re.search(settled_tail))
+        return settled_tail, settled_prompt_reason, settled_has_keyword, settled_has_processing
     for tries in range(1, 4):
         try:
             subprocess.run(["tmux", "send-keys", "-t", pane, "C-u"], timeout=2)
@@ -2367,6 +2409,15 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
             has_keyword = dispatch_keyword in tail or instruction_path in tail
             has_processing = bool(processing_re.search(tail))
             if has_keyword and has_processing:
+                _, settled_prompt_reason, settled_has_keyword, settled_has_processing = _settled_dispatch_state()
+                if settled_prompt_reason:
+                    last_error = f"dispatch settled into {settled_prompt_reason}"
+                    time.sleep(1.0)
+                    continue
+                if not (settled_has_keyword or settled_has_processing):
+                    last_error = "dispatch verification lost after settle window"
+                    time.sleep(1.0)
+                    continue
                 _record_model_call(
                     "succeeded",
                     sid,
@@ -2388,6 +2439,15 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
                     time.sleep(3.0)
                     tail = _pane_tail(pane)
                     if processing_re.search(tail):
+                        _, settled_prompt_reason, settled_has_keyword, settled_has_processing = _settled_dispatch_state()
+                        if settled_prompt_reason:
+                            last_error = f"dispatch settled into {settled_prompt_reason}"
+                            time.sleep(1.0)
+                            continue
+                        if not (settled_has_keyword or settled_has_processing):
+                            last_error = "dispatch verification lost after residual rescue"
+                            time.sleep(1.0)
+                            continue
                         _record_model_call(
                             "succeeded",
                             sid,
@@ -2425,6 +2485,15 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
                 # accepted even when the wrapped screen tail no longer contains
                 # the full filename. Treat that as a successful submit; durable
                 # handoff/eval artifacts remain the completion source of truth.
+                _, settled_prompt_reason, settled_has_keyword, settled_has_processing = _settled_dispatch_state()
+                if settled_prompt_reason:
+                    last_error = f"dispatch settled into {settled_prompt_reason}"
+                    time.sleep(1.0)
+                    continue
+                if not (settled_has_keyword or settled_has_processing):
+                    last_error = "dispatch processing signal disappeared during settle window"
+                    time.sleep(1.0)
+                    continue
                 _record_model_call(
                     "succeeded",
                     sid,
@@ -2448,6 +2517,31 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
     tail = _pane_tail(pane)
     prompt_reason = _pane_dispatch_prompt_reason(tail)
     if (dispatch_keyword in tail or instruction_path in tail or processing_re.search(tail)) and not prompt_reason:
+        _, settled_prompt_reason, settled_has_keyword, settled_has_processing = _settled_dispatch_state()
+        if settled_prompt_reason:
+            _record_model_call(
+                "failed",
+                sid,
+                pane,
+                dispatch_id,
+                instruction_file,
+                tries=3,
+                status=f"late_settle_blocked:{settled_prompt_reason}",
+                error=f"dispatch settled into blocking prompt: {settled_prompt_reason}",
+            )
+            return False
+        if not (settled_has_keyword or settled_has_processing):
+            _record_model_call(
+                "failed",
+                sid,
+                pane,
+                dispatch_id,
+                instruction_file,
+                tries=3,
+                status="late_settle_signal_lost",
+                error="dispatch verification disappeared after settle window",
+            )
+            return False
         _record_model_call(
             "succeeded",
             sid,
