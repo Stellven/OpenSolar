@@ -349,6 +349,21 @@ def submit(task_envelope: Dict[str, Any]) -> Dict[str, Any]:
     node_id = task_envelope["node_id"]
     ttl = int(task_envelope.get("lease_ttl_seconds", _DEFAULT_LEASE_TTL))
 
+    # ── 1b. Capability Capsule resolution gate (capability-native only) ───
+    payload = dict(task_envelope)
+    capability_capsule_requested = (
+        payload.get("capability_native")
+        or payload.get("capability_capsule_id")
+        or payload.get("execution_capsule_id")
+    )
+    if capability_capsule_requested:
+        from capability_capsules import resolve_capability_capsule_for_envelope
+
+        resolved_capsule = resolve_capability_capsule_for_envelope(payload)
+        payload["resolved_capability_capsule"] = resolved_capsule
+        payload["capability_capsule_id"] = resolved_capsule["capability_capsule_id"]
+        payload.pop("execution_capsule_id", None)
+
     # ── 2. Operator existence check ────────────────────────────────────────
     config = get_operator_config(operator_id)
     if config is None:
@@ -379,7 +394,6 @@ def submit(task_envelope: Dict[str, Any]) -> Dict[str, Any]:
     inbox_path = inbox_dir / f"{task_id}.json"
     tmp_path = str(inbox_path) + ".tmp"
     submitted_at = _now()
-    payload = dict(task_envelope)
     payload["submitted_at"] = submitted_at
     payload["lease_expires_at"] = lease["expires_at"]
 

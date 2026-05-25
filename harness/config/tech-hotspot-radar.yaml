@@ -48,6 +48,11 @@ youtube:
   keep_seen_days: 45
   transcript_max_chars: 60000
   min_transcript_duration_seconds: 600  # do not spend transcript/ASR budget on videos under 10 minutes
+  phase_report_reasoner:
+    provider: codex_cli
+    model: gpt-5.5
+    timeout_seconds: 1200
+    max_prompt_chars: 180000
   asr:
     enabled: true
     max_per_run: 2

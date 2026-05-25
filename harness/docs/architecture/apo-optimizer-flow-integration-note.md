@@ -21,8 +21,8 @@ This note describes how the Agent Plan Optimizer (APO) integrates with the four-
 | 3. MCP binding | `lib/capability_registry.py:186` `cmd_query` | Per `mcp_tools[]` entry in Skill, query active providers at level ≥ 3 |
 | 4. Policy guard | `lib/solar_skills.py` `policy_refs` field | For each `policy_id` in skill's `policy_refs`, run policy check |
 | 5. Operator scoring | `lib/operator_runtime.py:274` `get_operator_runtime_state` + `lib/logical_operator_router.py:65` `select_actor` | Filter idle operators, apply heuristic weights |
-| 6. ECapsule creation | `schemas/draft/execution-capsule.v1.draft.json` | Assemble capsule; set `execution_capsule_id`, `mcp_bindings`, `policy_guard` |
-| 7. Submit | `lib/operator_runtime.py:325` `submit()` | Deliver ECapsule as `task_envelope` |
+| 6. Capability Capsule resolution | `schemas/draft/capability-capsule.v1.draft.json` + `lib/capability_capsules.py` | Resolve capsule; set `capability_capsule_id`, `resolved_mcp_bindings`, `effect_summary`, guard/resource attachments |
+| 7. Submit | `lib/operator_runtime.py:325` `submit()` | Deliver capability-native envelope after runtime gate |
 
 ---
 
@@ -64,7 +64,7 @@ for skill in all_skills:
     if skill["role"] == "enforcer":
         result = run_enforcer_check(skill)
         if result != "pass":
-            # Abort entire plan; log to policy_guard in ECapsule
+            # Abort entire plan; log to policy_guard in Capability Capsule
             raise EnforcerGateError(skill["name"], result)
 ```
 
@@ -74,12 +74,13 @@ The only bypass is `P0_BYPASS=true` env flag (requires explicit operator interve
 
 ## Evidence Ledger Integration
 
-After `submit()`, APO writes to `lib/evidence_ledger.py`:
-- `execution_capsule_id`
-- `operator_id` assigned
-- `skill_id`, `skill_version`
-- `mcp_bindings` (resolved map)
-- `policy_guard` results
+After `submit()`, APO/runtime writes to `lib/evidence_ledger.py`:
+- `capability_capsule_id`
+- `capsule_kind`
+- `resolved_bindings`
+- `effect_summary`
+- `guard_results`
+- `verification_results`
 - timestamp
 
 This creates an immutable record for post-mortem and compliance auditing.
@@ -91,7 +92,7 @@ This creates an immutable record for post-mortem and compliance auditing.
 1. **Sprint N (this sprint)**: Schema drafts only. No runtime code.
 2. **Sprint N+1 (APO v1)**: Implement skill resolution (step 2) and MCP binding (step 3). Use passthrough mode for steps 4-6.
 3. **Sprint N+2**: Implement enforcer gate (step 4) and heuristic scoring (step 5).
-4. **Sprint N+3**: Full ECapsule assembly + evidence ledger integration (steps 6-7).
+4. **Sprint N+3**: Full Capability Capsule runtime gate + evidence ledger integration (steps 6-7).
 
 Each sprint can be independently verified against the schema contracts defined here.
 
@@ -100,5 +101,5 @@ Each sprint can be independently verified against the schema contracts defined h
 ## Known Gaps (Not Blocking v1 Launch)
 
 - `policy_refs` check implementation: policy IDs are declared in skills but no policy runner exists yet
-- `verification_rules` runner: ECapsule carries rules but nothing executes them yet
+- `verification_rules` runner: Capability Capsule carries rules but verifier execution remains follow-up work
 - `rate_limits` enforcement: `mcp-capability.v1.draft.json` declares limits but `capability_registry.py` doesn't enforce them yet

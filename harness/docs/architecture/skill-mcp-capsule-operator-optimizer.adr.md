@@ -1,4 +1,4 @@
-# ADR: Skill / MCP-Capability / Execution-Capsule / Physical-Operator / APO Four-Tier Registry Architecture
+# ADR: Skill / MCP-Capability / Capability-Capsule / Physical-Operator / APO Four-Tier Registry Architecture
 
 **ADR-ID**: `adr-skill-mcp-capsule-operator-optimizer-v1`
 **Sprint**: `sprint-20260524-134738`
@@ -18,8 +18,8 @@ The Solar Harness control plane currently has five distinct concepts handled by 
    (managed by `lib/solar_skills.py:1700` `_load_registry` + `lib/solar_skills.py:1695` `REGISTRY_PATH`)
 3. **MCP Capability** — an external tool endpoint surfaced through the Model Context Protocol  
    (tracked by `lib/capability_registry.py:60` `_ensure_capabilities_table` + `schemas/capability.schema.json`)
-4. **Execution Capsule** — a bundled unit combining Skill + MCP bindings + Policy + Contract + Verification rules, submitted as an atomic dispatch unit  
-   (concept; not yet formally defined — distinct from the existing State Capsule, see §Naming Collision below)
+4. **Capability Capsule** — a bundled unit combining Skill + MCP bindings + Policy + Contract + Verification rules, submitted as an atomic dispatch unit  
+   (concept; distinct from the existing State Capsule, see §Naming Collision below)
 5. **APO (Agent Plan Optimizer)** — the heuristic optimizer that selects and scores physical plans  
    (sprint `sprint-20260523-agent-plan-optimizer-foundation`, not yet integrated with registries 1-4)
 
@@ -27,17 +27,18 @@ Without a unified registry architecture, each new capability adds its own lookup
 
 ---
 
-## Naming Collision — Execution Capsule vs State Capsule
+## Naming Collision — Capability Capsule vs State Capsule
 
-**Critical disambiguation**: The existing `schemas/capsule-schema.yaml` defines a **State Capsule** — a latent-state transfer structure for handoff/plan/eval documents (fields: `goal`, `facts_established`, `changes_made`, `risks`, `open_questions`, `required_next_action`, `recursion_round`, `topology`). This is a sprint context snapshot, not an execution unit.
+**Critical disambiguation**: The existing `schemas/capsule-schema.yaml` defines a **State Capsule** — a latent-state transfer structure for handoff/plan/eval documents (fields: `goal`, `facts_established`, `changes_made`, `risks`, `open_questions`, `required_next_action`, `recursion_round`, `topology`). This is a sprint context snapshot, not a capability unit.
 
-The new concept defined in this ADR is an **Execution Capsule** (ECapsule):
+The new concept defined in this ADR is a **Capability Capsule**:
 - A bundled dispatch unit combining `Skill + MCP bindings + Policy + Contract + Verification rules`
-- Uses field `execution_capsule_id` (NOT `capsule_id`) to avoid collision
-- Schema defined in `schemas/draft/execution-capsule.v1.draft.json`
+- Uses field `capability_capsule_id` as the canonical identifier
+- Accepts `execution_capsule_id` as a deprecated compatibility alias for one migration cycle
+- Schema defined in `schemas/draft/capability-capsule.v1.draft.json`
 - Does NOT replace or modify `schemas/capsule-schema.yaml`
 
-All references in this ADR and downstream schemas use `execution_capsule_id` / `ECapsule` to distinguish from the State Capsule.
+All new references in this ADR and downstream schemas use `capability_capsule_id` / `Capability Capsule` to distinguish from the State Capsule. Legacy `execution_capsule_id` references are compatibility-only.
 
 ---
 
@@ -48,7 +49,7 @@ APO (Agent Plan Optimizer)
          │
          ├─► Skill Registry         (solar_skills.py registry.yaml)
          │         │
-         ├─► ECapsule Registry      (execution-capsule.v1.draft.json — NEW)
+         ├─► Capability Capsule Registry      (capability-capsule.v1.draft.json — NEW)
          │         │
          └─► Operator Registry      (operator_runtime.py + physical-operators.schema.v2.draft.json)
                    │
@@ -108,12 +109,12 @@ The `schemas/draft/mcp-capability.v1.draft.json` schema extends `schemas/capabil
 
 ---
 
-## §D — Execution Capsule (ECapsule) Definition
+## §D — Capability Capsule Definition
 
-Schema: `schemas/draft/execution-capsule.v1.draft.json`
+Schema: `schemas/draft/capability-capsule.v1.draft.json`
 
-An ECapsule bundles:
-- `execution_capsule_id`: unique capsule identifier (distinct from State Capsule)
+A Capability Capsule bundles:
+- `capability_capsule_id`: unique capsule identifier (distinct from State Capsule)
 - `skill_id` + `skill_version`: resolved Skill entry
 - `mcp_bindings`: map of `mcp_tool_token → provider_id` (resolved from registry)
 - `policy_guard`: list of policy check results (pass/fail/waived)
@@ -122,7 +123,7 @@ An ECapsule bundles:
 - `timeout_seconds`: hard limit
 - `created_at`, `sprint_id`, `node_id`: provenance
 
-ECapsule is the unit submitted to `operator_runtime.py:325` `submit()`. The `task_envelope` already requires `task_id, sprint_id, node_id, operator_id, task_type, objective` (see `operator_runtime.py:320` `_REQUIRED_ENVELOPE_KEYS`). ECapsule adds pre-resolved skill/MCP/policy resolution before envelope creation.
+Capability Capsule is the unit resolved before `operator_runtime.py:325` `submit()`. The `task_envelope` already requires `task_id, sprint_id, node_id, operator_id, task_type, objective` (see `operator_runtime.py:320` `_REQUIRED_ENVELOPE_KEYS`). Capability Capsule resolution adds pre-resolved skill/MCP/policy/effect verification before envelope creation.
 
 ---
 
@@ -159,7 +160,7 @@ The `compat_mode: missing/unknown → warn` policy matches the baseline establis
     → logical_operator_router.py:65 select_actor → candidate ordering
     → APO applies config-driven heuristic weights (see §H)
       ↓
-[6] Emit physical plan + assemble ECapsule → submit to operator_runtime.py:325 submit()
+[6] Emit physical plan + assemble Capability Capsule plan → submit to operator_runtime.py:325 submit()
     → evidence logged to evidence_ledger.py
 ```
 
@@ -203,10 +204,10 @@ The `sprint-20260523-agent-plan-optimizer-foundation` sprint owns baseline APO f
 
 | Risk | Likelihood | Mitigation |
 |------|-----------|------------|
-| `execution_capsule_id` vs `capsule_id` naming drift in downstream code | Medium | All schemas use `execution_capsule_id`; ADR §Naming Collision is the reference |
+| `capability_capsule_id` vs legacy `execution_capsule_id` naming drift in downstream code | Medium | New schemas use `capability_capsule_id`; loader accepts legacy alias for one migration cycle |
 | Policy guard added to hot path adds latency | Low | Policy checks are registry reads (SQLite); < 5ms typical |
 | Operator addendum compat_mode silently drops new fields | Low | `compat_mode: warn` emits log event; dashboards can alert |
-| ECapsule not adopted if APO foundation defers integration | Medium | ECapsule schema is a draft; adoption gated on APO v1 stabilization |
+| Capability Capsule not adopted if APO foundation defers integration | Medium | Capability Capsule schema is a draft; adoption gated on APO v1 stabilization |
 | Skill role migration: existing skills have no `role` field | High | v2 schema defaults `role: implementation` when absent; ADR mandates migration guide in S3 |
 
 ---
@@ -221,7 +222,7 @@ The `sprint-20260523-agent-plan-optimizer-foundation` sprint owns baseline APO f
 | `logical_operator_router.py` | `lib/logical_operator_router.py:56` `get_candidates`; `lib/logical_operator_router.py:65` `select_actor`; `lib/logical_operator_router.py:17` `P0_LOGICAL_OPERATORS` | Maps logical operator types to candidate actors; APO uses this for ordering |
 | `physical-operators.schema.v2.draft.json` | `schemas/physical-operators.schema.v2.draft.json:9` `compat_mode.missing_field_policy: warn` | Establishes `warn` (not reject) policy for missing fields; addendum inherits this |
 | `capability.schema.json` | `schemas/capability.schema.json:8` `pattern: ^[a-z][a-z0-9_.:-]*$` | MCP capability token pattern; all `mcp_tools` lists in Skill v2 must match this pattern |
-| `capsule-schema.yaml` | `schemas/capsule-schema.yaml:1` header | **State Capsule** (NOT Execution Capsule); sprint context transfer struct — distinct from ECapsule |
+| `capsule-schema.yaml` | `schemas/capsule-schema.yaml:1` header | **State Capsule** (NOT Capability Capsule); sprint context transfer struct — distinct from capability-native dispatch |
 
 ---
 
@@ -231,7 +232,7 @@ The `sprint-20260523-agent-plan-optimizer-foundation` sprint owns baseline APO f
 - APO has a machine-readable registry stack to compose plans from
 - Policy enforcement is centralized at registry boundaries, not scattered in caller code
 - `compat_mode: warn` allows incremental field adoption without flag days
-- ECapsule naming avoids collision with existing State Capsule infrastructure
+- Capability Capsule naming avoids collision with existing State Capsule infrastructure while preserving legacy Execution Capsule compatibility
 
 **Negative / Trade-offs**:
 - 4 new schemas require adoption by APO implementation sprint

@@ -802,7 +802,12 @@ def anthropic_content_text(payload: dict[str, Any]) -> str:
         if isinstance(first, dict):
             msg = first.get("message")
             if isinstance(msg, dict) and isinstance(msg.get("content"), str):
-                return msg["content"]
+                content = msg["content"]
+                if content.strip():
+                    return content
+                reasoning = msg.get("reasoning_content")
+                if isinstance(reasoning, str) and reasoning.strip():
+                    return reasoning
             if isinstance(first.get("text"), str):
                 return first["text"]
     content = payload.get("content")
@@ -831,7 +836,13 @@ def extract_json_payload(text: str) -> Any:
     start = min([idx for idx in [text.find("{"), text.find("[")] if idx >= 0], default=-1)
     if start > 0:
         text = text[start:]
-    return json.loads(text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # Local model outputs can contain literal newlines/control characters
+        # inside long Chinese string values. strict=False accepts those without
+        # weakening the requirement that the payload is still valid JSON shape.
+        return json.loads(text, strict=False)
 
 
 def build_youtube_semantic_prompt(video: sqlite3.Row | tuple, transcript_clean: str,
@@ -1204,6 +1215,91 @@ def youtube_min_transcript_duration(config: dict[str, Any]) -> int:
     return int(youtube_cfg.get("min_transcript_duration_seconds", 600) or 600)
 
 
+def import_mlx_whisper_module():
+    site_dir = Path(os.environ.get("MLX_WHISPER_SITE_PACKAGES", str(DEFAULT_MLX_WHISPER_SITE_PACKAGES))).expanduser()
+    if site_dir.exists() and str(site_dir) not in sys.path:
+        sys.path.insert(0, str(site_dir))
+    import mlx_whisper  # type: ignore
+    return mlx_whisper
+
+
+def youtube_asr_language_for_video(config: dict[str, Any], row: sqlite3.Row | dict[str, Any]) -> str:
+    asr_cfg = ((config.get("youtube") or {}).get("asr") or {})
+    strategy = str(asr_cfg.get("language_strategy", "auto-by-channel") or "auto-by-channel").lower()
+    configured = str(asr_cfg.get("language", "zh") or "").strip()
+    if strategy in {"fixed", "static"}:
+        return configured
+
+    def value(key: str) -> str:
+        try:
+            return str(row[key] or "")
+        except Exception:
+            return ""
+
+    haystack = " ".join(value(k) for k in ("channel_name", "title", "description"))
+    if re.search(r"[\u4e00-\u9fff]", haystack):
+        return "zh"
+    return "en"
+
+
+def download_youtube_audio(video_id: str, config: dict[str, Any]) -> tuple[Path | None, str]:
+    asr_cfg = ((config.get("youtube") or {}).get("asr") or {})
+    audio_dir, _transcript_dir = transcript_state_dirs(config)
+    existing = find_asr_audio_file(audio_dir, video_id)
+    if existing:
+        return existing, "cached"
+    yt_dlp = shutil.which("yt-dlp")
+    if not yt_dlp:
+        return None, "asr_missing_ytdlp"
+    output_template = str(audio_dir / f"{video_id}.%(ext)s")
+    dl = subprocess.run(
+        [yt_dlp, "-f", "ba/bestaudio", "--no-playlist", "-o", output_template, f"https://www.youtube.com/watch?v={video_id}"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=int(asr_cfg.get("download_timeout_seconds", 900)),
+    )
+    if dl.returncode != 0:
+        return None, f"asr_download_failed:{dl.stdout[-500:]}"
+    audio_file = find_asr_audio_file(audio_dir, video_id)
+    if not audio_file:
+        return None, "asr_download_missing_audio"
+    return audio_file, "downloaded"
+
+
+def run_youtube_asr_inprocess(video_id: str, row: sqlite3.Row | dict[str, Any],
+                              config: dict[str, Any]) -> tuple[str, str, str]:
+    asr_cfg = ((config.get("youtube") or {}).get("asr") or {})
+    audio_file, dl_status = download_youtube_audio(video_id, config)
+    if not audio_file:
+        return "", dl_status, ""
+    try:
+        mlx_whisper = import_mlx_whisper_module()
+        model = str(asr_cfg.get("whisper_model", "small"))
+        language = youtube_asr_language_for_video(config, row)
+        decode_options: dict[str, Any] = {"fp16": True}
+        if language and language.lower() not in {"auto", "unknown"}:
+            decode_options["language"] = language
+        result = mlx_whisper.transcribe(
+            str(audio_file),
+            path_or_hf_repo=model,
+            verbose=False,
+            temperature=0.0,
+            condition_on_previous_text=False,
+            word_timestamps=False,
+            **decode_options,
+        )
+        text = str((result or {}).get("text") or "").strip()
+        if not text:
+            return "", "asr_empty_text", str(audio_file)
+        _audio_dir, transcript_dir = transcript_state_dirs(config)
+        out_path = transcript_dir / f"{audio_file.stem}.txt"
+        out_path.write_text(text + "\n", encoding="utf-8")
+        return text, "asr_ok_daemon", str(out_path)
+    except Exception as exc:
+        return "", f"asr_transcribe_failed:{type(exc).__name__}: {exc}", str(audio_file)
+
+
 def probe_media_duration_seconds(path: Path) -> int | None:
     ffprobe = shutil.which("ffprobe")
     if not ffprobe or not path.exists():
@@ -1388,7 +1484,7 @@ def mark_retry_failed(conn: sqlite3.Connection, row: sqlite3.Row, error: str) ->
 
 
 def save_transcript_success(conn: sqlite3.Connection, video_id: str, text: str, status: str, source: str,
-                            config: dict[str, Any]) -> None:
+                            config: dict[str, Any], *, semantic_postprocess: bool = True) -> None:
     clean = clean_transcript_text(text)
     language = infer_transcript_language(clean)
     fetched_at = iso_z()
@@ -1421,9 +1517,11 @@ def save_transcript_success(conn: sqlite3.Connection, video_id: str, text: str, 
         (transcript_dir / f"{video_id}.txt").write_text(clean + "\n", encoding="utf-8")
     except Exception:
         pass
-    # Semantic materialization is part of the transcript success path: the raw
-    # transcript stays in youtube_transcripts, while derived knowledge becomes
-    # evidence atoms + a reasoning packet + raw markdown for wiki extraction.
+    if not semantic_postprocess:
+        return
+    # Semantic materialization is part of the transcript success path for
+    # synchronous one-shot runs. The daemon disables it so ASR never blocks on
+    # ThunderOMLX; the semantic consumer handles derived artifacts separately.
     try:
         result = materialize_youtube_semantic_outputs(conn, video_id, clean, config)
         if result.get("error"):
@@ -1554,6 +1652,106 @@ def cmd_process_transcripts(args: argparse.Namespace) -> int:
         print(f"  WARN {failure}")
     conn.close()
     return 0 if status in {"ok", "partial"} else 1
+
+
+def cmd_process_transcripts_daemon(args: argparse.Namespace) -> int:
+    """Self-exiting ASR worker that reuses one mlx_whisper model cache."""
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    limit = int(getattr(args, "limit", 0) or 2)
+    idle_exit_after = int(getattr(args, "idle_exit_after", 3) or 3)
+    poll_seconds = float(getattr(args, "poll_seconds", 5) or 5)
+    max_batches = int(getattr(args, "max_batches", 0) or 0)
+    force = bool(getattr(args, "force", False))
+    dry_run = bool(getattr(args, "dry_run", False))
+    worker_id = str(getattr(args, "worker_id", "") or f"asr-daemon-{os.getpid()}")
+    min_duration_seconds = youtube_min_transcript_duration(config)
+    print(f"[process-transcripts-daemon] start worker={worker_id} limit={limit} idle_exit_after={idle_exit_after}")
+    idle = 0
+    batches = 0
+    while True:
+        conn = ensure_db(db_path)
+        conn.executescript(SCHEMA_SQL)
+        conn.row_factory = sqlite3.Row
+        due_filter = "" if force else "AND rq.next_retry_at <= ?"
+        params: list[Any] = ["youtube", "fetch_transcript", "pending"]
+        if not force:
+            params.append(iso_z())
+        params.append(limit)
+        rows = conn.execute(
+            "SELECT rq.*, yv.duration_seconds AS video_duration_seconds, yv.channel_name, yv.title, yv.description "
+            "FROM retry_queue rq LEFT JOIN youtube_videos yv ON yv.video_id = rq.source_id "
+            "WHERE rq.source=? AND rq.operation=? AND rq.status=? "
+            f"{due_filter} ORDER BY rq.next_retry_at, rq.retry_id LIMIT ?",
+            params,
+        ).fetchall()
+        if dry_run:
+            print(f"[process-transcripts-daemon] dry-run due={len(rows)} limit={limit}")
+            for row in rows:
+                print(f"  pending {row['source_id']} attempt={row['attempt']} duration={row['video_duration_seconds'] or 'N/A'}")
+            conn.close()
+            return 0
+        if not rows:
+            conn.close()
+            idle += 1
+            print(f"[process-transcripts-daemon] idle={idle}/{idle_exit_after}")
+            if idle >= idle_exit_after:
+                break
+            time.sleep(poll_seconds)
+            continue
+        idle = 0
+        for row in rows:
+            conn.execute(
+                "UPDATE retry_queue SET status='in_progress', last_error=? WHERE retry_id=? AND status='pending'",
+                (f"claimed_by={worker_id}", row["retry_id"]),
+            )
+        conn.commit()
+        conn.close()
+
+        successes = failures = skipped = 0
+        for row in rows:
+            video_id = row["source_id"]
+            conn = ensure_db(db_path)
+            conn.executescript(SCHEMA_SQL)
+            conn.row_factory = sqlite3.Row
+            try:
+                duration_seconds = row["video_duration_seconds"] or resolve_youtube_duration_seconds(conn, video_id, config)
+                if duration_seconds is None or int(duration_seconds) < min_duration_seconds:
+                    mark_transcript_skipped_short_video(conn, video_id, duration_seconds, min_duration_seconds, config)
+                    skipped += 1
+                    conn.commit()
+                    continue
+                text, status, source = fetch_youtube_caption_transcript(video_id, config)
+                if status != "ok" or not text:
+                    text, status, source = run_youtube_asr_inprocess(video_id, row, config)
+                if text:
+                    save_transcript_success(conn, video_id, text, status, source, config, semantic_postprocess=False)
+                    archived = archive_asr_audio(video_id, config) if status.startswith("asr") else ""
+                    detail = f"{status}:{source}"
+                    if archived:
+                        detail = f"{detail}; archived_audio={archived}"
+                    mark_retry_done(conn, row["retry_id"], detail)
+                    successes += 1
+                else:
+                    conn.execute("UPDATE retry_queue SET status='pending' WHERE retry_id=?", (row["retry_id"],))
+                    mark_retry_failed(conn, row, status or "empty_transcript")
+                    failures += 1
+                conn.commit()
+            except Exception as exc:
+                conn.execute("UPDATE retry_queue SET status='pending' WHERE retry_id=?", (row["retry_id"],))
+                mark_retry_failed(conn, row, f"{type(exc).__name__}: {exc}")
+                failures += 1
+                conn.commit()
+            finally:
+                conn.close()
+        batches += 1
+        print(f"[process-transcripts-daemon] batch={batches} claimed={len(rows)} success={successes} skipped={skipped} failures={failures}")
+        if max_batches and batches >= max_batches:
+            print(f"[process-transcripts-daemon] max_batches={max_batches} reached")
+            break
+        time.sleep(poll_seconds)
+    print(f"[process-transcripts-daemon] exit worker={worker_id} batches={batches}")
+    return 0
 
 
 def cmd_process_semantics(args: argparse.Namespace) -> int:
@@ -4370,6 +4568,87 @@ def metric_card(label: str, value: Any, sub: str) -> str:
     )
 
 
+def markdown_to_email_html(markdown: str) -> str:
+    """Small Gmail-safe renderer for model-authored Markdown reports."""
+    blocks: list[str] = []
+    paragraph: list[str] = []
+    table_rows: list[list[str]] = []
+
+    def flush_paragraph() -> None:
+        if paragraph:
+            blocks.append(f"<p style=\"margin:10px 0\">{html_escape(' '.join(paragraph))}</p>")
+            paragraph.clear()
+
+    def flush_table() -> None:
+        if not table_rows:
+            return
+        rows = table_rows.copy()
+        table_rows.clear()
+        if len(rows) >= 2 and all(re.fullmatch(r":?-{2,}:?", cell.strip()) for cell in rows[1]):
+            header = rows[0]
+            body = rows[2:]
+        else:
+            header = []
+            body = rows
+        html_rows: list[str] = []
+        if header:
+            html_rows.append(
+                "<tr>"
+                + "".join(f"<th style=\"background:#123b35;color:#fff;text-align:left;padding:9px;border:1px solid #eadfcd\">{html_escape(cell)}</th>" for cell in header)
+                + "</tr>"
+            )
+        for idx, row in enumerate(body):
+            bg = "background:#fbf7ef;" if idx % 2 else ""
+            html_rows.append(
+                "<tr>"
+                + "".join(f"<td style=\"padding:9px;border:1px solid #eadfcd;vertical-align:top;{bg}\">{html_escape(cell)}</td>" for cell in row)
+                + "</tr>"
+            )
+        blocks.append(
+            "<table style=\"width:100%;border-collapse:collapse;font-size:13px;margin:12px 0\">"
+            + "".join(html_rows)
+            + "</table>"
+        )
+
+    def parse_table_line(stripped: str) -> list[str] | None:
+        if not stripped.startswith("|") or not stripped.endswith("|"):
+            return None
+        return [cell.strip() for cell in stripped.strip("|").split("|")]
+
+    for raw_line in (markdown or "").splitlines():
+        line = raw_line.rstrip()
+        stripped = line.strip()
+        table_line = parse_table_line(stripped)
+        if table_line is not None:
+            flush_paragraph()
+            table_rows.append(table_line)
+            continue
+        flush_table()
+        if not stripped:
+            flush_paragraph()
+            continue
+        if stripped.startswith("# "):
+            flush_paragraph()
+            blocks.append(f"<h2 style=\"font-size:24px;color:#123b35;margin:8px 0 14px\">{html_escape(stripped[2:].strip())}</h2>")
+        elif stripped.startswith("## "):
+            flush_paragraph()
+            blocks.append(f"<h3 style=\"font-size:20px;color:#123b35;margin:20px 0 10px\">{html_escape(stripped[3:].strip())}</h3>")
+        elif stripped.startswith("### "):
+            flush_paragraph()
+            blocks.append(f"<h4 style=\"font-size:17px;color:#1e4b41;margin:16px 0 8px\">{html_escape(stripped[4:].strip())}</h4>")
+        elif stripped.startswith(("- ", "* ")):
+            flush_paragraph()
+            blocks.append(f"<div style=\"margin:6px 0 6px 16px\">• {html_escape(stripped[2:].strip())}</div>")
+        elif re.match(r"^\d+\.\s+", stripped):
+            flush_paragraph()
+            blocks.append(f"<div style=\"margin:6px 0 6px 16px\">{html_escape(stripped)}</div>")
+        else:
+            paragraph.append(stripped)
+    flush_paragraph()
+    flush_table()
+    return "\n".join(blocks)
+
+
 def report_top_events(conn: sqlite3.Connection, source: str, limit: int = 8) -> list[sqlite3.Row]:
     return conn.execute(
         "SELECT source_id, event_type, hot_score, scored_at FROM hotspot_events "
@@ -4519,6 +4798,652 @@ def render_alerts(conn: sqlite3.Connection) -> str:
         for sev, title, detail in alerts
     )
     return f"<ul>{items}</ul>"
+
+
+PHASE1_CORE_CHANNELS = {
+    "AI Engineer",
+    "Google for Developers",
+    "Google",
+    "Google DeepMind",
+    "Stanford Online",
+    "Databricks",
+    "硅谷101",
+    "No Priors",
+    "Dwarkesh Clips",
+    "Sequoia Capital",
+    "Y Combinator",
+    "Google Cloud",
+    "Microsoft Research",
+    "Microsoft Cloud",
+    "Alex Kantrowitz",
+    "All-In Podcast",
+}
+
+
+def phase_report_title(phase: int) -> str:
+    if phase == 1:
+        return "第一期：AI / Agent / Google I/O / 开发者生态"
+    if phase == 2:
+        return "第二期：AI Infra / Open Compute / 数据中心基础设施"
+    if phase == 3:
+        return "第三期：过去 90 天核心频道深挖"
+    if phase == 4:
+        return "第四期：YouTube + Social + GitHub 跨源综合趋势"
+    return f"第 {phase} 期：Tech Hotspot Radar 专题"
+
+
+def select_phase_youtube_videos(conn: sqlite3.Connection, *, phase: int, date_str: str,
+                                days: int, limit: int) -> list[sqlite3.Row]:
+    """Select report candidates only. Analysis is delegated to ThunderOMLX."""
+    cutoff = (dt.datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=UTC) - dt.timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+    where = [
+        "datetime(substr(v.published_at,1,19)) >= datetime(?)",
+        "coalesce(v.duration_seconds,0) >= 600",
+        "length(coalesce(t.transcript_clean,'')) > 0",
+        "rp.packet_id IS NOT NULL",
+    ]
+    params: list[Any] = [cutoff]
+    if phase == 1:
+        placeholders = ",".join("?" for _ in PHASE1_CORE_CHANNELS)
+        where.append(f"v.channel_name IN ({placeholders})")
+        params.extend(sorted(PHASE1_CORE_CHANNELS))
+    elif phase == 2:
+        where.append("(v.channel_name='Open Compute Project' OR lower(v.title) LIKE '%infrastructure%' OR lower(v.title) LIKE '%compute%')")
+    elif phase == 3:
+        # Phase 3 is the broader historical cut.
+        cutoff = (dt.datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=UTC) - dt.timedelta(days=max(days, 90))).strftime("%Y-%m-%d %H:%M:%S")
+        params[0] = cutoff
+    # Phase 4 is cross-source and currently uses all completed YouTube inputs.
+    params.append(limit)
+    return conn.execute(
+        "SELECT v.video_id, v.title, v.channel_name, v.video_url, v.published_at, "
+        "v.duration_seconds, t.transcript_clean, t.language, rp.compressed_evidence "
+        "FROM youtube_videos v "
+        "JOIN youtube_transcripts t ON t.video_id=v.video_id "
+        "JOIN reasoning_packets rp ON rp.packet_id='yt-rp-' || v.video_id "
+        f"WHERE {' AND '.join(where)} "
+        "ORDER BY v.published_at DESC, v.channel_name, v.title LIMIT ?",
+        params,
+    ).fetchall()
+
+
+def build_phase_evidence_pack(rows: list[sqlite3.Row], *, phase: int, date_str: str, days: int) -> dict[str, Any]:
+    videos: list[dict[str, Any]] = []
+    for row in rows:
+        try:
+            semantic = json.loads(row["compressed_evidence"] or "{}")
+        except Exception:
+            semantic = {}
+        summary = str(semantic.get("summary_zh") or "").strip()
+        key_points = semantic.get("key_points") if isinstance(semantic.get("key_points"), list) else []
+        claims = semantic.get("technical_claims") if isinstance(semantic.get("technical_claims"), list) else []
+        videos.append({
+            "video_id": row["video_id"],
+            "title": row["title"],
+            "channel": row["channel_name"],
+            "url": row["video_url"],
+            "published_at": row["published_at"],
+            "duration_min": round(float(row["duration_seconds"] or 0) / 60.0, 1),
+            "language": row["language"] or "unknown",
+            "summary_zh": summary[:900],
+            "key_points": [str(x)[:220] for x in key_points[:4]],
+            "topic_tags": [str(x) for x in (semantic.get("topic_tags") or [])[:10]],
+            "technical_claims": [
+                c if isinstance(c, dict) else {"claim": str(c)[:260], "confidence": "unknown"}
+                for c in claims[:4]
+            ],
+            "why_it_matters": str(semantic.get("why_it_matters") or "")[:420],
+            "model_backend": semantic.get("backend"),
+            "model": semantic.get("model"),
+            "transcript_clean": str(row["transcript_clean"] or ""),
+        })
+    return {
+        "phase": phase,
+        "phase_title": phase_report_title(phase),
+        "date": date_str,
+        "window_days": days,
+        "video_count": len(videos),
+        "source_policy": "Only completed transcripts with ThunderOMLX/Qwen3.6 semantic packets are included.",
+        "videos": videos,
+    }
+
+
+def phase4_cross_source_counts(conn: sqlite3.Connection) -> dict[str, int]:
+    def one(sql: str) -> int:
+        try:
+            return int(conn.execute(sql).fetchone()[0] or 0)
+        except Exception:
+            return 0
+
+    return {
+        "youtube_events": one("SELECT COUNT(*) FROM hotspot_events WHERE source='youtube'"),
+        "social_events": one("SELECT COUNT(*) FROM hotspot_events WHERE source='social'"),
+        "github_events": one("SELECT COUNT(*) FROM hotspot_events WHERE source='github'"),
+        "social_posts": one("SELECT COUNT(*) FROM social_posts"),
+        "github_repos": one("SELECT COUNT(*) FROM github_repos"),
+        "cross_source_links": one("SELECT COUNT(*) FROM cross_source_links"),
+    }
+
+
+def validate_phase4_cross_source_readiness(conn: sqlite3.Connection) -> tuple[bool, dict[str, int], str]:
+    counts = phase4_cross_source_counts(conn)
+    ok = (
+        counts["social_events"] >= 10
+        and counts["github_events"] >= 5
+        and counts["cross_source_links"] >= 1
+    )
+    reason = (
+        "phase 4 requires real cross-source data: social_events>=10, "
+        "github_events>=5, cross_source_links>=1"
+    )
+    return ok, counts, reason
+
+
+def build_phase_report_prompt(evidence_pack: dict[str, Any]) -> str:
+    return f"""你是 AI Influence 的主编和技术趋势分析师。
+你将收到 Tech Hotspot Radar 的一期 YouTube evidence pack。所有视频已经先由 ThunderOMLX + Qwen3.6 做过单视频语义抽取。
+
+任务：基于 evidence pack 生成一份中文“专辑式洞察报告”。不要流水账，不要只列视频。你必须做跨视频综合、趋势判断、技术方向抽象和后续观察建议。
+
+硬规则：
+- 只基于 evidence_pack，不要引入未给出的外部事实。
+- 每个重要判断必须引用相关 video_id。
+- 明确区分 real_trend / weak_signal / hype / noise / watchlist。
+- 输出必须是合法 JSON object，不要 Markdown 代码块，不要解释。
+- HTML 排版由程序完成；你只输出结构化内容。
+
+JSON schema：
+{{
+  "headline": "一句话标题",
+  "subheadline": "一句话副标题",
+  "executive_summary": "600-1000字中文总论，强调技术趋势和产业/开发者含义",
+  "top_findings": [
+    {{"finding": "关键判断", "trend_type": "real_trend|weak_signal|hype|noise|watchlist", "confidence": 0.0, "video_ids": ["..."]}}
+  ],
+  "trend_sections": [
+    {{
+      "title": "趋势标题",
+      "trend_type": "real_trend|weak_signal|hype|noise|watchlist",
+      "analysis": "500-900字分析，包含为什么现在重要、技术方向、反向信号",
+      "technical_directions": ["方向1", "方向2"],
+      "key_videos": [{{"video_id": "...", "why": "为什么支撑该趋势"}}],
+      "watch_next": ["未来1-2周观察指标"]
+    }}
+  ],
+  "video_matrix": [
+    {{"video_id": "...", "role": "在本期报告中的定位", "topic": "主题", "importance": "high|medium|low"}}
+  ],
+  "product_research_implications": ["对产品/研究/工程路线的启发"],
+  "open_questions": ["需要后续补证据的问题"],
+  "report_notes": "口径说明"
+}}
+
+evidence_pack:
+{json.dumps(evidence_pack, ensure_ascii=False)}
+"""
+
+
+def build_phase_report_markdown_prompt(evidence_pack: dict[str, Any], model_name: str) -> str:
+    return f"""你是 AI Influence 的主编、AI infra 架构师和技术趋势分析师。
+
+你将收到 Tech Hotspot Radar 的一期 YouTube evidence pack。注意：单视频 transcript 已由本地 ThunderOMLX/Qwen3.6 做过预处理；你的职责是最终趋势判断、跨视频综合、技术方向抽象、产品/研究/工程启示。
+
+硬规则：
+1. 不要流水账，不要只列视频。
+2. 只基于 evidence_pack，不要引入未给出的外部事实。
+3. 面向邮件读者，不要在正文暴露内部处理字段：不要出现 video_id、raw id、packet_id、transcript_status、noise、有效证据视频数、转录损坏等系统处理口径。
+4. “一页结论”必须是自然语言 + 3-5 条高层判断；禁止在“一页结论”放 Markdown 表格，禁止写内部证据 ID。
+5. 如需引用证据，在“关键视频证据”里用视频标题/频道/可读描述，不要用裸 video_id。
+6. 可在内部判断 real_trend / weak_signal / hype / watchlist，但正文用中文表达为“确定趋势/早期信号/待观察/可能炒作”，不要直接输出英文标签。
+7. 如果 evidence 质量不足，只写“该方向证据不足，暂不作为主结论”，不要暴露 transcript 损坏、噪声、内部排除列表。
+8. 明确区分 real_trend / weak_signal / hype / noise / watchlist。
+9. 输出中文 Markdown 正文，不要 JSON，不要代码块，不要解释系统行为。
+10. 报告要有洞察力，不能像普通摘要；要判断“为什么重要、代表什么变化、后续观察什么”。
+
+报告结构：
+# 标题
+## 一页结论
+## 核心趋势
+## 关键视频证据
+## 产品 / 研究 / 工程启示
+## Open Questions
+## Provenance
+
+Provenance 必须写：
+- final_reasoner: {model_name}
+- local_preprocess: ThunderOMLX/Qwen3.6 semantic packets
+- input_videos: {len(evidence_pack.get("videos") or [])}
+
+注意：Provenance 只放在报告最后，不要放到“一页结论”或标题附近。
+
+evidence_pack:
+{json.dumps(evidence_pack, ensure_ascii=False)}
+"""
+
+
+def call_codex_phase_report(evidence_pack: dict[str, Any], config: dict[str, Any],
+                            *, requested_model: str | None = None) -> dict[str, Any]:
+    cfg = ((config.get("youtube") or {}).get("phase_report_reasoner") or {})
+    codex_bin = str(cfg.get("codex_bin") or os.environ.get("CODEX_BIN") or shutil.which("codex") or "codex")
+    model = str(requested_model or cfg.get("model") or os.environ.get("TECH_HOTSPOT_PHASE_REPORT_MODEL") or "gpt-5.5")
+    timeout = int(cfg.get("timeout_seconds") or 1200)
+    max_chars = int(cfg.get("max_prompt_chars") or 180000)
+    prompt = build_phase_report_markdown_prompt(evidence_pack, model)
+    if len(prompt) > max_chars:
+        prompt = prompt[:max_chars] + "\n\n[TRUNCATED: evidence_pack exceeded configured max_prompt_chars]\n"
+    started = time.time()
+    with tempfile.TemporaryDirectory(prefix="tech-hotspot-codex-report-") as td:
+        out_path = Path(td) / "last-message.md"
+        cmd = [
+            codex_bin,
+            "exec",
+            "--model",
+            model,
+            "--sandbox",
+            "read-only",
+            "--cd",
+            str(Path.home()),
+            "--skip-git-repo-check",
+            "--output-last-message",
+            str(out_path),
+            "-",
+        ]
+        run = subprocess.run(
+            cmd,
+            input=prompt,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=timeout,
+        )
+        if run.returncode != 0:
+            raise RuntimeError(f"codex phase report failed rc={run.returncode}: {run.stdout[-2000:]}")
+        markdown = out_path.read_text(encoding="utf-8", errors="replace").strip() if out_path.exists() else run.stdout.strip()
+    if len(markdown) < 1800:
+        raise ValueError(f"codex phase report output too short: {len(markdown)} chars")
+    return {
+        "headline": phase_report_title(int(evidence_pack.get("phase") or 1)),
+        "subheadline": f"基于 {len(evidence_pack.get('videos') or [])} 条最近 {evidence_pack.get('window_days')} 天核心视频的 Codex/GPT 最终趋势分析",
+        "executive_summary": "",
+        "top_findings": [],
+        "trend_sections": [],
+        "video_matrix": [],
+        "product_research_implications": [],
+        "open_questions": [],
+        "_markdown_report": markdown,
+        "_model": model,
+        "_backend": "codex_cli",
+        "_local_preprocess": "ThunderOMLX/Qwen3.6 semantic packets",
+        "_latency_ms": int((time.time() - started) * 1000),
+        "_input_video_count": len(evidence_pack.get("videos") or []),
+        "_json_repair_used": False,
+        "_markdown_fallback_used": False,
+    }
+
+
+def call_thunderomlx_phase_report(evidence_pack: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    cfg = ((config.get("youtube") or {}).get("semantic_postprocess") or {})
+    base_url = str(cfg.get("base_url") or os.environ.get("THUNDEROMLX_BASE_URL") or "http://127.0.0.1:8002").rstrip("/")
+    endpoint = str(cfg.get("endpoint") or "/v1/chat/completions")
+    model = str(cfg.get("model") or "Qwen3.6-35b-a3b")
+    api_key = os.environ.get(str(cfg.get("api_key_env") or "THUNDEROMLX_AUTH_TOKEN")) or str(cfg.get("default_api_key") or "local-thunderomlx")
+    timeout = int(cfg.get("phase_report_timeout_seconds") or 420)
+    max_tokens = int(cfg.get("phase_report_max_tokens") or 5200)
+    prompt = build_phase_report_prompt(evidence_pack)
+    def post_chat(user_prompt: str, output_tokens: int) -> str:
+        req = urllib.request.Request(
+            f"{base_url}{endpoint}",
+            data=json.dumps({
+                "model": model,
+                "max_tokens": output_tokens,
+                "messages": [{"role": "user", "content": user_prompt}],
+            }, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json", "x-api-key": api_key},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+        data = json.loads(body)
+        return anthropic_content_text(data)
+
+    started = time.time()
+    raw_text = post_chat(prompt, max_tokens)
+    first_raw_text = raw_text
+    repair_used = False
+    markdown_fallback_used = False
+    try:
+        result = extract_json_payload(raw_text)
+    except Exception as first_exc:
+        repair_prompt = f"""你是 JSON 修复器。下面是 ThunderOMLX/Qwen3.6 已经完成的 AI Influence 趋势分析输出，但 JSON 语法破损。
+
+任务：
+1. 只修复 JSON 语法，不新增观点，不改写含义。
+2. 保留原有字段：headline, subheadline, executive_summary, top_findings, trend_sections, video_matrix, product_research_implications, open_questions。
+3. 字符串中的英文双引号必须转义，或改成中文引号。
+4. 禁止 Markdown 代码块，禁止解释，只输出一个 JSON object。
+
+破损输出如下：
+{raw_text}
+"""
+        try:
+            raw_text = post_chat(repair_prompt, max_tokens)
+            result = extract_json_payload(raw_text)
+            repair_used = True
+        except Exception as repair_exc:
+            markdown_prompt = f"""你是 AI Influence 主编。下面是 ThunderOMLX/Qwen3.6 已经完成的趋势分析草稿，但 JSON 格式破损。
+
+任务：不要再输出 JSON。请把草稿整理成正式中文 Markdown 报告。
+
+要求：
+1. 只基于草稿和视频证据，不新增外部事实。
+2. 必须保留关键判断、趋势、技术方向、产品/研究/工程启示。
+3. 报告结构：
+   # 标题
+   ## 一页结论
+   ## 核心趋势
+   ## 关键视频证据
+   ## 产品 / 研究 / 工程启示
+   ## Open Questions
+   ## Provenance
+4. 明确写出：模型=ThunderOMLX/Qwen3.6；输入视频数={len(evidence_pack.get("videos") or [])}。
+5. 禁止 JSON，禁止代码块，直接输出 Markdown 正文。
+
+草稿：
+{first_raw_text[:18000]}
+"""
+            markdown = post_chat(markdown_prompt, max_tokens)
+            if len(markdown.strip()) < 1200:
+                raise ValueError(f"markdown fallback output too short: {len(markdown.strip())} chars")
+            result = {
+                "headline": phase_report_title(int(evidence_pack.get("phase") or 1)),
+                "subheadline": f"基于 {len(evidence_pack.get('videos') or [])} 条最近 {evidence_pack.get('window_days')} 天核心视频的 ThunderOMLX/Qwen3.6 模型分析",
+                "executive_summary": "",
+                "top_findings": [],
+                "trend_sections": [],
+                "video_matrix": [],
+                "product_research_implications": [],
+                "open_questions": [],
+                "_markdown_report": markdown.strip(),
+                "_json_error": f"first={type(first_exc).__name__}: {first_exc}; repair={type(repair_exc).__name__}: {repair_exc}",
+            }
+            markdown_fallback_used = True
+    if not isinstance(result, dict):
+        raise ValueError("phase report output must be JSON object")
+    result["_model"] = model
+    result["_backend"] = "thunderomlx"
+    result["_latency_ms"] = int((time.time() - started) * 1000)
+    result["_input_video_count"] = len(evidence_pack.get("videos") or [])
+    result["_json_repair_used"] = repair_used
+    result["_markdown_fallback_used"] = markdown_fallback_used
+    return result
+
+
+def call_phase_report_reasoner(evidence_pack: dict[str, Any], config: dict[str, Any],
+                               *, reasoner: str | None = None, model: str | None = None) -> dict[str, Any]:
+    cfg = ((config.get("youtube") or {}).get("phase_report_reasoner") or {})
+    selected = str(
+        reasoner
+        or os.environ.get("TECH_HOTSPOT_PHASE_REPORT_REASONER")
+        or cfg.get("provider")
+        or "codex_cli"
+    ).strip().lower()
+    if selected in {"codex", "codex_cli", "gpt", "openai"}:
+        return call_codex_phase_report(evidence_pack, config, requested_model=model)
+    if selected in {"thunderomlx", "local", "qwen", "qwen3.6"}:
+        raise ValueError(
+            "phase-report final reasoning cannot use local ThunderOMLX/Qwen; "
+            "local models are limited to transcript/semantic preprocessing. "
+            "Use --reasoner codex --model gpt-5.5."
+        )
+    raise ValueError(f"unknown phase report reasoner: {selected}")
+
+
+def render_phase_report_markdown(report: dict[str, Any], evidence_pack: dict[str, Any]) -> str:
+    if report.get("_markdown_report"):
+        return str(report["_markdown_report"]).strip() + "\n"
+    lines = [
+        f"# {report.get('headline') or evidence_pack.get('phase_title')}",
+        "",
+        str(report.get("subheadline") or ""),
+        "",
+        "## 一页结论",
+        "",
+        str(report.get("executive_summary") or ""),
+        "",
+        "## Top Findings",
+    ]
+    for item in report.get("top_findings") or []:
+        if isinstance(item, dict):
+            lines.append(f"- **{item.get('trend_type','watchlist')}** {item.get('finding','')} 视频: {', '.join(item.get('video_ids') or [])}")
+    lines.extend(["", "## 趋势分析"])
+    for section in report.get("trend_sections") or []:
+        if not isinstance(section, dict):
+            continue
+        lines.extend(["", f"### {section.get('title','未命名趋势')}", "", f"- 类型: {section.get('trend_type','N/A')}", "", str(section.get("analysis") or "")])
+        directions = section.get("technical_directions") or []
+        if directions:
+            lines.extend(["", "技术方向:"])
+            for direction in directions:
+                lines.append(f"- {direction}")
+        watch = section.get("watch_next") or []
+        if watch:
+            lines.extend(["", "后续观察:"])
+            for item in watch:
+                lines.append(f"- {item}")
+    lines.extend(["", "## 视频矩阵"])
+    for item in report.get("video_matrix") or []:
+        if isinstance(item, dict):
+            lines.append(f"- `{item.get('video_id','')}` {item.get('topic','')} — {item.get('role','')}")
+    lines.extend(["", "## 产品 / 研究 / 工程启示"])
+    for item in report.get("product_research_implications") or []:
+        lines.append(f"- {item}")
+    lines.extend(["", "## Open Questions"])
+    for item in report.get("open_questions") or []:
+        lines.append(f"- {item}")
+    lines.extend(["", "## Provenance", "", f"- backend: {report.get('_backend')}", f"- model: {report.get('_model')}", f"- input_videos: {report.get('_input_video_count')}", f"- generated_at: {iso_z()}"])
+    return "\n".join(lines).strip() + "\n"
+
+
+def render_phase_report_html(report: dict[str, Any], evidence_pack: dict[str, Any]) -> str:
+    def chips(items: list[Any]) -> str:
+        return "".join(f"<span style=\"display:inline-block;margin:3px 5px 3px 0;padding:4px 9px;border-radius:999px;background:#edf5ef;color:#315f4f;font-size:12px\">{html_escape(x)}</span>" for x in items)
+
+    markdown_report = str(report.get("_markdown_report") or "").strip()
+    if markdown_report:
+        body_html = markdown_to_email_html(markdown_report)
+        title = str(report.get("headline") or evidence_pack.get("phase_title") or "Tech Hotspot Radar")
+        subtitle = str(report.get("subheadline") or "")
+        return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>{html_escape(title)}</title></head>
+<body style="margin:0;background:#f4efe4;color:#17231f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB',sans-serif;line-height:1.72">
+<div style="max-width:980px;margin:0 auto;padding:28px 18px 44px">
+  <div style="background:linear-gradient(135deg,#123b35,#315f4f 58%,#c9863d);color:#fff;border-radius:26px;padding:30px">
+    <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.82">AI Influence · Tech Hotspot Radar · Phase {html_escape(evidence_pack.get('phase'))}</div>
+    <h1 style="margin:10px 0 12px;font-size:30px;line-height:1.22">{html_escape(title)}</h1>
+    <div style="font-size:15px;opacity:.92;max-width:820px">{html_escape(subtitle)}</div>
+  </div>
+  <table style="width:100%;border-collapse:separate;border-spacing:0;margin:16px 0"><tr>
+    {metric_card("输入视频", evidence_pack.get("video_count"), "completed transcript + semantic packet")}
+    {metric_card("分析模型", report.get("_model", "Qwen3.6"), report.get("_backend", "thunderomlx"))}
+    {metric_card("时间窗口", f"{evidence_pack.get('window_days')} 天", evidence_pack.get("date"))}
+  </tr></table>
+  <section style="background:#fffdf8;border:1px solid #eadfcd;border-radius:20px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:21px;margin:14px 0">
+    {body_html}
+  </section>
+  <p style="font-size:12px;color:#66736d">Generated by ThunderOMLX/Qwen3.6 from phase evidence pack. Transcript 原文见附件。</p>
+</div></body></html>"""
+
+    trend_blocks = ""
+    for section in report.get("trend_sections") or []:
+        if not isinstance(section, dict):
+            continue
+        key_videos = section.get("key_videos") or []
+        kv = "".join(f"<li><b>{html_escape(v.get('video_id',''))}</b> — {html_escape(v.get('why',''))}</li>" for v in key_videos if isinstance(v, dict))
+        trend_blocks += f"""
+        <div style="border-left:5px solid #c9863d;padding-left:14px;margin:18px 0">
+          <h3 style="font-size:18px;color:#1e4b41;margin:0 0 6px">{html_escape(section.get('title','未命名趋势'))}</h3>
+          <div style="font-size:12px;color:#66736d;margin-bottom:8px">判断：{html_escape(section.get('trend_type','watchlist'))}</div>
+          <p style="margin:0 0 10px">{html_escape(section.get('analysis',''))}</p>
+          <div>{chips(section.get('technical_directions') or [])}</div>
+          <ul>{kv}</ul>
+        </div>"""
+
+    findings = "".join(
+        f"<li><b>{html_escape((x or {}).get('trend_type','watchlist'))}</b> {html_escape((x or {}).get('finding',''))} <span style=\"color:#66736d\">[{html_escape(', '.join((x or {}).get('video_ids') or []))}]</span></li>"
+        for x in (report.get("top_findings") or []) if isinstance(x, dict)
+    )
+    video_rows = ""
+    videos_by_id = {v["video_id"]: v for v in evidence_pack.get("videos", []) if isinstance(v, dict)}
+    for idx, item in enumerate(report.get("video_matrix") or [], 1):
+        if not isinstance(item, dict):
+            continue
+        vid = str(item.get("video_id") or "")
+        src = videos_by_id.get(vid, {})
+        bg = "background:#fbf7ef;" if idx % 2 == 0 else ""
+        video_rows += (
+            f"<tr><td style=\"padding:10px;border-bottom:1px solid #eee3d3;{bg}\">{idx}</td>"
+            f"<td style=\"padding:10px;border-bottom:1px solid #eee3d3;{bg}\"><a href=\"{html_escape(src.get('url',''))}\" style=\"color:#0f766e;text-decoration:none\">{html_escape(src.get('title', vid))}</a><br><span style=\"font-size:12px;color:#66736d\">{html_escape(src.get('channel',''))} · {html_escape(src.get('published_at',''))}</span></td>"
+            f"<td style=\"padding:10px;border-bottom:1px solid #eee3d3;{bg}\">{html_escape(item.get('topic',''))}</td>"
+            f"<td style=\"padding:10px;border-bottom:1px solid #eee3d3;{bg}\">{html_escape(item.get('role',''))}</td></tr>"
+        )
+    implications = "".join(f"<li>{html_escape(x)}</li>" for x in report.get("product_research_implications") or [])
+    open_questions = "".join(f"<li>{html_escape(x)}</li>" for x in report.get("open_questions") or [])
+    title = str(report.get("headline") or evidence_pack.get("phase_title") or "Tech Hotspot Radar")
+    subtitle = str(report.get("subheadline") or "")
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>{html_escape(title)}</title></head>
+<body style="margin:0;background:#f4efe4;color:#17231f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB',sans-serif;line-height:1.72">
+<div style="max-width:980px;margin:0 auto;padding:28px 18px 44px">
+  <div style="background:linear-gradient(135deg,#123b35,#315f4f 58%,#c9863d);color:#fff;border-radius:26px;padding:30px">
+    <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.82">AI Influence · Tech Hotspot Radar · Phase {html_escape(evidence_pack.get('phase'))}</div>
+    <h1 style="margin:10px 0 12px;font-size:30px;line-height:1.22">{html_escape(title)}</h1>
+    <div style="font-size:15px;opacity:.92;max-width:820px">{html_escape(subtitle)}</div>
+  </div>
+  <table style="width:100%;border-collapse:separate;border-spacing:0;margin:16px 0"><tr>
+    {metric_card("输入视频", evidence_pack.get("video_count"), "completed transcript + semantic packet")}
+    {metric_card("分析模型", report.get("_model", "Qwen3.6"), report.get("_backend", "thunderomlx"))}
+    {metric_card("时间窗口", f"{evidence_pack.get('window_days')} 天", evidence_pack.get("date"))}
+  </tr></table>
+  <section style="background:#fffdf8;border:1px solid #eadfcd;border-radius:20px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:21px;margin:14px 0">
+    <h2 style="font-size:21px;color:#123b35;margin:0 0 12px">一页结论</h2>
+    <p>{html_escape(report.get("executive_summary",""))}</p>
+    <ul>{findings}</ul>
+  </section>
+  <section style="background:#fffdf8;border:1px solid #eadfcd;border-radius:20px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:21px;margin:14px 0">
+    <h2 style="font-size:21px;color:#123b35;margin:0 0 12px">核心趋势</h2>
+    {trend_blocks}
+  </section>
+  <section style="background:#fffdf8;border:1px solid #eadfcd;border-radius:20px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:21px;margin:14px 0">
+    <h2 style="font-size:21px;color:#123b35;margin:0 0 12px">视频矩阵</h2>
+    <table style="width:100%;border-collapse:collapse;font-size:13px"><tr><th style="background:#123b35;color:#fff;text-align:left;padding:10px">#</th><th style="background:#123b35;color:#fff;text-align:left;padding:10px">视频</th><th style="background:#123b35;color:#fff;text-align:left;padding:10px">主题</th><th style="background:#123b35;color:#fff;text-align:left;padding:10px">定位</th></tr>{video_rows}</table>
+  </section>
+  <section style="background:#fbf7ef;border:1px solid #eadfcd;border-radius:16px;padding:16px;margin:14px 0">
+    <h2 style="font-size:21px;color:#123b35;margin:0 0 12px">产品 / 研究 / 工程启示</h2>
+    <ul>{implications}</ul>
+    <h3 style="font-size:17px;color:#1e4b41;margin:14px 0 6px">Open Questions</h3>
+    <ul>{open_questions}</ul>
+    <p style="font-size:12px;color:#66736d">Generated by ThunderOMLX/Qwen3.6 from phase evidence pack. Transcript 原文见附件。</p>
+  </section>
+</div></body></html>"""
+
+
+def phase_transcript_attachment(evidence_pack: dict[str, Any]) -> str:
+    parts = [
+        f"# YouTube Transcripts — {evidence_pack.get('phase_title')} — {evidence_pack.get('date')}",
+        "",
+        "说明：以下是视频语音 transcript 清洗正文，不是摘要、不是解读。若来源是 YouTube 自动字幕或 ASR，文本可能有识别误差。",
+        "",
+    ]
+    for item in evidence_pack.get("videos") or []:
+        transcript = str(item.get("transcript_clean") or "").strip()
+        parts.extend([
+            f"## {item.get('title')}",
+            "",
+            f"- video_id: {item.get('video_id')}",
+            f"- channel: {item.get('channel')}",
+            f"- url: {item.get('url')}",
+            f"- published_at: {item.get('published_at')}",
+            f"- transcript_chars: {len(transcript)}",
+            "",
+            "### Transcript",
+            "",
+            transcript or "[transcript unavailable]",
+        ])
+        parts.extend(["", "---", ""])
+    return "\n".join(parts).strip() + "\n"
+
+
+def cmd_phase_report(args: argparse.Namespace) -> int:
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.row_factory = sqlite3.Row
+    date_str = getattr(args, "date", None) or iso_z().split("T", 1)[0]
+    phase = int(getattr(args, "phase", 1) or 1)
+    days = int(getattr(args, "days", 7) or 7)
+    limit = int(getattr(args, "limit", 80) or 80)
+    if phase == 4:
+        ok, counts, reason = validate_phase4_cross_source_readiness(conn)
+        if not ok:
+            conn.close()
+            print(
+                f"[phase-report] phase=4 blocked: {reason}; counts={json.dumps(counts, ensure_ascii=False, sort_keys=True)}",
+                file=sys.stderr,
+            )
+            return 1
+    rows = select_phase_youtube_videos(conn, phase=phase, date_str=date_str, days=days, limit=limit)
+    if not rows:
+        conn.close()
+        print(f"[phase-report] no eligible videos phase={phase} date={date_str}", file=sys.stderr)
+        return 1
+    evidence_pack = build_phase_evidence_pack(rows, phase=phase, date_str=date_str, days=days)
+    run_id = begin_run(conn, "youtube", f"phase-report-{phase}")
+    raw_base = Path(getattr(args, "output_base", None) or (config.get("output") or {}).get("raw_dir", "/Users/lisihao/Knowledge/_raw/tech-hotspot-radar")).expanduser()
+    out_dir = raw_base / f"phase-{phase}" / date_str
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "phase-evidence-pack.json").write_text(json.dumps(evidence_pack, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    try:
+        report = call_phase_report_reasoner(
+            evidence_pack,
+            config,
+            reasoner=getattr(args, "reasoner", None),
+            model=getattr(args, "model", None),
+        )
+        files = {
+            "evidence_pack": out_dir / "phase-evidence-pack.json",
+            "report_json": out_dir / "phase-report.json",
+            "report_md": out_dir / "phase-report.md",
+            "report_html": out_dir / "report.html",
+            "transcripts_txt": out_dir / f"youtube-transcripts-phase-{phase}-{date_str}.txt",
+            "wiki_dispatch": out_dir / "wiki-dispatch.md",
+        }
+        files["report_json"].write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        files["report_md"].write_text(render_phase_report_markdown(report, evidence_pack), encoding="utf-8")
+        files["report_html"].write_text(render_phase_report_html(report, evidence_pack), encoding="utf-8")
+        files["transcripts_txt"].write_text(phase_transcript_attachment(evidence_pack), encoding="utf-8")
+        files["wiki_dispatch"].write_text(report_wiki_dispatch(str(out_dir), date_str), encoding="utf-8")
+        mail_result: dict[str, Any] = {"status": "skipped"}
+        if bool(getattr(args, "send", False)):
+            mail_result = send_html_email(
+                files["report_html"].read_text(encoding="utf-8"),
+                f"AI Influence 专辑报告 Phase {phase} — {date_str}",
+                [files["transcripts_txt"]],
+            )
+            (out_dir / "mail-result.json").write_text(json.dumps(mail_result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        finish_run(conn, run_id, "ok" if mail_result.get("status") in {"skipped", "sent", "warn"} else "partial", len(rows), len(rows), json.dumps({"phase": phase, "mail": mail_result}, ensure_ascii=False)[:900])
+        conn.close()
+        print(f"[phase-report] phase={phase} date={date_str} videos={len(rows)} backend={report.get('_backend')} model={report.get('_model')} mail={mail_result.get('status')}")
+        for key in sorted(files):
+            print(f"  {key}: {files[key]}")
+        return 0
+    except Exception as exc:
+        raw_model_output = getattr(exc, "raw_model_output", None)
+        if raw_model_output:
+            (out_dir / "phase-report-model-output-error.txt").write_text(str(raw_model_output), encoding="utf-8")
+        finish_run(conn, run_id, "failed", len(rows), 0, f"{type(exc).__name__}: {exc}"[:900])
+        conn.close()
+        print(f"[phase-report] ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
 
 
 def report_html(conn: sqlite3.Connection, date_str: str) -> str:
@@ -5175,6 +6100,14 @@ def build_parser() -> argparse.ArgumentParser:
     process_transcripts.add_argument("--limit", type=int, default=0)
     process_transcripts.add_argument("--force", action="store_true")
     process_transcripts.add_argument("--dry-run", action="store_true")
+    process_transcripts_daemon = sub.add_parser("process-transcripts-daemon", help="Self-exiting ASR worker that reuses one mlx_whisper model cache")
+    process_transcripts_daemon.add_argument("--limit", type=int, default=2)
+    process_transcripts_daemon.add_argument("--force", action="store_true")
+    process_transcripts_daemon.add_argument("--dry-run", action="store_true")
+    process_transcripts_daemon.add_argument("--worker-id", default="")
+    process_transcripts_daemon.add_argument("--idle-exit-after", type=int, default=3)
+    process_transcripts_daemon.add_argument("--poll-seconds", type=float, default=5)
+    process_transcripts_daemon.add_argument("--max-batches", type=int, default=0)
     process_semantics = sub.add_parser("process-semantics", help="Materialize ThunderOMLX semantic outputs for completed YouTube transcripts")
     process_semantics.add_argument("--limit", type=int, default=0)
     process_semantics.add_argument("--force", action="store_true")
@@ -5182,6 +6115,15 @@ def build_parser() -> argparse.ArgumentParser:
     send_report = sub.add_parser("send-report", help="Write and send the Tech Hotspot Radar HTML report")
     send_report.add_argument("--date", default=None, help="Report date YYYY-MM-DD (default: UTC today)")
     send_report.add_argument("--output-base", default=None, help="Override report output directory")
+    phase_report = sub.add_parser("phase-report", help="Generate model-based AI Influence phase report")
+    phase_report.add_argument("--phase", type=int, default=1, help="Phase number (default: 1)")
+    phase_report.add_argument("--days", type=int, default=7, help="Lookback window in days")
+    phase_report.add_argument("--limit", type=int, default=80, help="Max completed videos in evidence pack")
+    phase_report.add_argument("--date", default=None, help="Report date YYYY-MM-DD (default: UTC today)")
+    phase_report.add_argument("--output-base", default=None, help="Override report output directory")
+    phase_report.add_argument("--send", action="store_true", help="Send HTML email with transcript attachment")
+    phase_report.add_argument("--reasoner", default=None, choices=["codex", "codex_cli", "gpt", "openai"], help="Final report reasoner (default: config/env, codex_cli). Local ThunderOMLX/Qwen is not allowed for final trend judgment.")
+    phase_report.add_argument("--model", default=None, help="Final report model override (default for codex_cli: gpt-5.5)")
     yt_collect = sub.add_parser("collect-youtube", help="Collect live YouTube RSS metadata with rate limits")
     yt_collect.add_argument("--limit-channels", type=int, default=0)
     yt_collect.add_argument("--per-channel-limit", type=int, default=0)
@@ -5243,8 +6185,10 @@ def main() -> int:
         "report-fixture": cmd_report_fixture,
         "write-report": cmd_write_report,
         "process-transcripts": cmd_process_transcripts,
+        "process-transcripts-daemon": cmd_process_transcripts_daemon,
         "process-semantics": cmd_process_semantics,
         "send-report": cmd_send_report,
+        "phase-report": cmd_phase_report,
         "collect-youtube": cmd_collect_youtube,
         "backfill-youtube": cmd_backfill_youtube,
         "collect-github": cmd_collect_github,

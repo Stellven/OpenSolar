@@ -153,6 +153,10 @@ class ActorRuntime:
             rejected=[],
         )
 
+        resolved_capsule = task_envelope.get("resolved_capability_capsule") or {}
+        if not isinstance(resolved_capsule, dict):
+            resolved_capsule = {}
+
         # Write evidence ledger
         ledger_path = self.ledger.write_run_entry(
             task_id=task_id,
@@ -163,6 +167,12 @@ class ActorRuntime:
             scheduler_decision=sched_decision,
             context_packet_id=ctx_ref.get("packet_id") if ctx_ref else None,
             final_report_target=f"run/{sprint_id}/final_report.md",
+            capability_capsule_id=resolved_capsule.get("capability_capsule_id"),
+            capsule_kind=resolved_capsule.get("capsule_kind"),
+            resolved_bindings=resolved_capsule.get("resolved_mcp_bindings"),
+            effect_summary=resolved_capsule.get("effect_summary"),
+            guard_results=resolved_capsule.get("attached_guard_capsules"),
+            verification_results=resolved_capsule.get("verification_hooks"),
         )
 
         return SubmitResult(

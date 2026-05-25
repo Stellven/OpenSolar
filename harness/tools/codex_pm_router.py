@@ -27,6 +27,7 @@ from requirement_coverage import (
     build_requirement_trace,
     enrich_task_graph_defaults,
 )
+from capability_capsules import default_capability_plan_for_logical_operator
 
 try:
     import yaml  # type: ignore
@@ -200,7 +201,7 @@ def _default_stop_rules(request_type: str) -> list[str]:
     return rules
 
 
-def _node_enrichment(request_type: str, node: dict[str, Any]) -> dict[str, Any]:
+def _node_enrichment(request_type: str, lane_hint: str, node: dict[str, Any]) -> dict[str, Any]:
     owner = "subagent" if request_type == RESEARCH and node["logical_operator"] in {"ResearchScout", "ResearchSynthesizer", "ArtifactCurator"} else ("solar-harness" if node["logical_operator"] in {"Verifier", "Critic"} else "codex")
     node_type_map = {
         "DeepArchitect": "design",
@@ -235,6 +236,18 @@ def _node_enrichment(request_type: str, node: dict[str, Any]) -> dict[str, Any]:
     enriched.setdefault("uncertainty", 0.2 if request_type == SHORT_IMPL else (0.45 if request_type == FULL_SPEC else 0.55))
     enriched.setdefault("parallelizable", request_type != SHORT_IMPL and node["logical_operator"] not in {"Verifier", "Critic"})
     enriched.setdefault("approval_gate", node["logical_operator"] in {"Verifier", "Critic"})
+    capability_plan = default_capability_plan_for_logical_operator(
+        str(node.get("logical_operator") or ""),
+        request_type=CLASS_TO_CANONICAL.get(request_type, request_type),
+        lane_hint=lane_hint,
+        node=node,
+        registry_path=HARNESS_ROOT / "config" / "capability-capsules.registry.yaml",
+    )
+    if capability_plan:
+        enriched.setdefault("capability_native", True)
+        enriched.setdefault("capability_capsule_id", capability_plan["capability_capsule_id"])
+        enriched.setdefault("dispatch_task_type", capability_plan.get("dispatch_task_type") or enriched.get("type", "spec"))
+        enriched.setdefault("capsule_plan", capability_plan)
     return enriched
 
 
@@ -894,7 +907,7 @@ def build_pm_intake(
     output_mode = choose_output_mode(request_type)
     priority = choose_priority(text, request_type)
     task_graph = build_task_graph_skeleton(request_type, lane_hint)
-    task_graph["nodes"] = [_node_enrichment(request_type, node) for node in task_graph["nodes"]]
+    task_graph["nodes"] = [_node_enrichment(request_type, lane_hint, node) for node in task_graph["nodes"]]
     normalized_goal = _normalized_text(text)[:400]
     title = _safe_title(text)
     acceptance = _default_acceptance(request_type)
