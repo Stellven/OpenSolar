@@ -27,6 +27,7 @@ from requirement_coverage import (
     build_requirement_trace,
     enrich_task_graph_defaults,
 )
+from apo_plan_compiler import build_capsule_plan_ir
 from capability_capsules import default_capability_plan_for_logical_operator
 
 try:
@@ -612,6 +613,7 @@ def emit_requirement_package(
     _write_yaml(contracts_dir / "agent_execution.yaml", artifacts["contract_files"]["agent_execution"])
     _write_yaml(contracts_dir / "research.yaml", artifacts["contract_files"]["research"])
     _write_json(pm_dir / "task_dag.json", artifacts["task_dag"])
+    _write_json(pm_dir / "capsule_plan.json", artifacts["capsule_plan"])
     _write_text(handoff_dir / "codex_handoff.md", artifacts["handoff_markdown"]["codex"])
     _write_text(handoff_dir / "solar_harness_handoff.md", artifacts["handoff_markdown"]["solar_harness"])
     _write_text(evals_dir / "golden_cases.jsonl", "\n".join(json.dumps(case, ensure_ascii=False) for case in artifacts["eval_seed_cases"]) + "\n")
@@ -625,6 +627,7 @@ def emit_requirement_package(
         "prd": str(pm_dir / "prd.md"),
         "contracts_bundle": str(pm_dir / "Contracts.yaml"),
         "task_dag": str(pm_dir / "task_dag.json"),
+        "capsule_plan": str(pm_dir / "capsule_plan.json"),
         "codex_handoff": str(handoff_dir / "codex_handoff.md"),
         "solar_harness_handoff": str(handoff_dir / "solar_harness_handoff.md"),
     }
@@ -633,6 +636,7 @@ def emit_requirement_package(
         _write_text(sprint_root / f"{sprint_id}.prd.md", artifacts["prd_markdown"])
         _write_text(sprint_root / f"{sprint_id}.contract.md", artifacts["contract_markdown"])
         _write_json(sprint_root / f"{sprint_id}.task_graph.json", artifacts["task_dag"])
+        _write_json(sprint_root / f"{sprint_id}.capsule_plan.json", artifacts["capsule_plan"])
         _write_text(sprint_root / f"{sprint_id}.product-brief.md", artifacts["product_brief_markdown"])
         _write_text(sprint_root / f"{sprint_id}.handoff.md", artifacts["handoff_markdown"]["solar_harness"])
         _write_json(sprint_root / f"{sprint_id}.requirement_ir.json", requirement_ir)
@@ -645,6 +649,7 @@ def emit_requirement_package(
                 "sprint_prd": str(sprint_root / f"{sprint_id}.prd.md"),
                 "sprint_contract": str(sprint_root / f"{sprint_id}.contract.md"),
                 "sprint_task_graph": str(sprint_root / f"{sprint_id}.task_graph.json"),
+                "sprint_capsule_plan": str(sprint_root / f"{sprint_id}.capsule_plan.json"),
                 "sprint_requirement_trace": str(sprint_root / f"{sprint_id}.requirement_trace.json"),
                 "sprint_coverage_report": str(sprint_root / f"{sprint_id}.coverage_report.json"),
                 "sprint_acceptance_verdict": str(sprint_root / f"{sprint_id}.acceptance_verdict.json"),
@@ -1057,6 +1062,12 @@ def build_pm_intake(
         coverage_report,
         requested_verdict="pass",
     )
+    capsule_plan_ir = build_capsule_plan_ir(
+        task_graph,
+        request_type=canonical_request_type,
+        lane_hint=lane_hint,
+        registry_path=HARNESS_ROOT / "config" / "capability-capsules.registry.yaml",
+    )
     return {
         "pm_intake": {
             "request_type": request_type,
@@ -1101,6 +1112,7 @@ def build_pm_intake(
             "contracts_bundle": contracts["bundle"],
             "contract_markdown": contract_markdown,
             "task_dag": task_graph,
+            "capsule_plan": capsule_plan_ir,
             "requirement_trace": requirement_trace,
             "coverage_report": coverage_report,
             "acceptance_verdict": acceptance_verdict,

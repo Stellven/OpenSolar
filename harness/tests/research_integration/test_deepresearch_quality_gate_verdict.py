@@ -30,6 +30,65 @@ def _graph(sid: str) -> dict:
     }
 
 
+def _write_minimal_passable_research_artifacts(out_dir: Path) -> Path:
+    (out_dir / "report_ast.json").write_text(json.dumps({
+        "chapters": [{
+            "sections": [{
+                "id": "s1",
+                "db_section_id": "sec_db_1",
+                "section_type": "evidence_synthesis",
+                "title": "Section",
+            }],
+        }],
+    }), encoding="utf-8")
+    (out_dir / "sections.jsonl").write_text(
+        json.dumps({
+            "id": "sec_db_1",
+            "section_type": "evidence_synthesis",
+            "title": "Section",
+            "content": (
+                "# Section\n\n"
+                "This section analyzes the runtime architecture, deployment boundary, "
+                "verification strategy, and engineering implication for the research flow. "
+                "It connects source evidence to implementation guidance, highlights failure "
+                "modes, explains why evidence-backed review reduces regression risk, and "
+                "describes how implication-driven planning improves closeout quality in the "
+                "control plane. Supported claim [cite:ev_abcdef1234567890]\n"
+            ),
+        }) + "\n",
+        encoding="utf-8",
+    )
+    (out_dir / "sources.jsonl").write_text(
+        json.dumps({
+            "id": "src_1",
+            "source_type": "paper",
+            "title": "Paper Abstract",
+            "url": "https://arxiv.org/abs/2501.00001",
+        }) + "\n",
+        encoding="utf-8",
+    )
+    (out_dir / "evidence.jsonl").write_text(
+        json.dumps({
+            "id": "ev_abcdef1234567890",
+            "source_id": "src_1",
+            "content": (
+                "Supported claim evidence shows runtime architecture and implementation "
+                "guidance improve verification quality, deployment safety, and closeout "
+                "confidence for the control plane."
+            ),
+        }) + "\n",
+        encoding="utf-8",
+    )
+    (out_dir / "final.md").write_text(
+        "# Final\n\n"
+        "Supported claim evidence shows runtime architecture and implementation guidance "
+        "improve verification quality and closeout confidence [cite:ev_abcdef1234567890].\n",
+        encoding="utf-8",
+    )
+    (out_dir / "final.bibliography.json").write_text("[]", encoding="utf-8")
+    return out_dir / "report_ast.json"
+
+
 def test_deepresearch_node_verdict_requires_quality_gate(tmp_path, monkeypatch):
     sid = "sprint-test-deepresearch-gate"
     graph = _graph(sid)
@@ -103,11 +162,7 @@ def test_deepresearch_node_verdict_auto_runs_missing_quality_gate(tmp_path, monk
         "unsupported_rate": 0.0,
         "citation_accuracy": 1.0,
     }), encoding="utf-8")
-    (out_dir / "report_ast.json").write_text(json.dumps({
-        "chapters": [{"sections": [{"id": "s1", "title": "Section"}]}],
-    }), encoding="utf-8")
-    (out_dir / "final.md").write_text("Supported claim [cite:ev_abc123].\n", encoding="utf-8")
-    (out_dir / "final.bibliography.json").write_text("[]", encoding="utf-8")
+    _write_minimal_passable_research_artifacts(out_dir)
     eval_json.write_text(json.dumps({
         "verdict": "PASS",
         "research_eval_json": str(research_eval),

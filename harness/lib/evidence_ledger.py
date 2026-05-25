@@ -42,6 +42,9 @@ class EvidenceLedger:
         effect_summary: Optional[Dict[str, Any]] = None,
         guard_results: Optional[List[Any]] = None,
         verification_results: Optional[Dict[str, Any]] = None,
+        capsule_plan_ir: Optional[Dict[str, Any]] = None,
+        physical_plan_ir: Optional[Dict[str, Any]] = None,
+        plan_artifacts: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Write a run evidence entry before dispatch."""
         self.ledger_dir.mkdir(parents=True, exist_ok=True)
@@ -75,6 +78,12 @@ class EvidenceLedger:
             entry["guard_results"] = guard_results
         if verification_results is not None:
             entry["verification_results"] = verification_results
+        if capsule_plan_ir is not None:
+            entry["capsule_plan_ir"] = capsule_plan_ir
+        if physical_plan_ir is not None:
+            entry["physical_plan_ir"] = physical_plan_ir
+        if plan_artifacts is not None:
+            entry["plan_artifacts"] = plan_artifacts
         ledger_path = self.ledger_dir / f"{sprint_id}.jsonl"
         with open(ledger_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")

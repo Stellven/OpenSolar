@@ -1178,6 +1178,150 @@ def _node_eval_assignments(node: dict[str, Any]) -> list[dict[str, Any]]:
     return []
 
 
+def _read_json_file_safe(path: str | Path) -> dict[str, Any]:
+    try:
+        candidate = Path(path).expanduser()
+        if not candidate.exists():
+            return {}
+        data = json.loads(candidate.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _node_proof_obligations(sid: str, node: dict[str, Any]) -> list[dict[str, Any]]:
+    obligations = node.get("proof_obligations")
+    if isinstance(obligations, list):
+        return [item for item in obligations if isinstance(item, dict)]
+    for key in ("capsule_plan_ir", "physical_plan_ir"):
+        payload = node.get(key)
+        if isinstance(payload, dict) and isinstance(payload.get("proof_obligations"), list):
+            return [item for item in payload.get("proof_obligations", []) if isinstance(item, dict)]
+    artifacts = node.get("artifacts") if isinstance(node.get("artifacts"), dict) else {}
+    for key in ("capsule_plan_ir", "physical_plan_ir"):
+        path = artifacts.get(key)
+        if not path:
+            continue
+        data = _read_json_file_safe(path)
+        if isinstance(data.get("proof_obligations"), list):
+            return [item for item in data.get("proof_obligations", []) if isinstance(item, dict)]
+    return []
+
+
+def _proof_artifact_presence(sid: str, node: dict[str, Any], eval_json: str | Path = "") -> dict[str, bool]:
+    node_id = str(node.get("id") or "")
+    artifacts = node.get("artifacts") if isinstance(node.get("artifacts"), dict) else {}
+    handoff = _existing_node_handoff(sid, node, {"nodes": [node]})
+    eval_json_path = Path(eval_json).expanduser() if str(eval_json) else _eval_json_file(sid, node_id)
+    eval_md_path = _eval_md_file(sid, node_id)
+    patch_path = Path(str(artifacts.get("patch_diff") or "")).expanduser() if artifacts.get("patch_diff") else Path("")
+    test_path = Path(str(artifacts.get("test_log") or artifacts.get("test_report") or "")).expanduser() if (artifacts.get("test_log") or artifacts.get("test_report")) else Path("")
+    return {
+        "handoff_md": bool(handoff and Path(handoff).exists()),
+        "eval_json": bool(eval_json_path.exists()),
+        "eval_md": bool(eval_md_path.exists()),
+        "patch_diff": bool(str(patch_path) not in {"", "."} and patch_path.exists()) or bool(handoff and node.get("write_scope")),
+        "test_log": bool(str(test_path) not in {"", "."} and test_path.exists()),
+    }
+
+
+def _evaluate_proof_obligations(sid: str, node: dict[str, Any], eval_json: str | Path = "") -> dict[str, Any]:
+    obligations = _node_proof_obligations(sid, node)
+    if not obligations:
+        return {"required": False, "ok": True, "checked": [], "missing": []}
+
+    eval_data = _read_json_file_safe(eval_json or _eval_json_file(sid, str(node.get("id") or "")))
+    proof_checks = eval_data.get("proof_checks") if isinstance(eval_data.get("proof_checks"), dict) else {}
+    presence = _proof_artifact_presence(sid, node, eval_json=eval_json)
+    checked: list[dict[str, Any]] = []
+    missing: list[dict[str, Any]] = []
+
+    for obligation in obligations:
+        kind = str(obligation.get("kind") or "")
+        requirement = str(obligation.get("requirement") or "")
+        satisfied = True
+        reason = ""
+        if kind == "external_verifier":
+            satisfied = presence["eval_json"]
+            reason = "eval_json_missing" if not satisfied else ""
+        elif kind == "self_check":
+            if proof_checks:
+                value = proof_checks.get(requirement)
+                satisfied = value is not False
+                reason = "self_check_failed" if not satisfied else ""
+            else:
+                satisfied = True
+        elif kind in {"pass_condition", "postcondition"}:
+            field = str(obligation.get("field") or "")
+            if "handoff" in requirement or field == "handoff_md":
+                satisfied = presence["handoff_md"]
+                reason = "handoff_missing" if not satisfied else ""
+            elif "patch_diff" in requirement or field == "patch_diff":
+                satisfied = presence["patch_diff"]
+                reason = "patch_diff_missing" if not satisfied else ""
+            elif "test" in requirement or field in {"test_log", "test_report"}:
+                satisfied = presence["test_log"]
+                reason = "test_log_missing" if not satisfied else ""
+            elif "eval" in requirement or field == "eval_json":
+                satisfied = presence["eval_json"]
+                reason = "eval_json_missing" if not satisfied else ""
+            elif requirement == "output_present" and field:
+                satisfied = presence.get(field, False)
+                reason = f"{field}_missing" if not satisfied else ""
+        elif kind == "adapter_contract":
+            satisfied = True
+        checked.append(
+            {
+                "kind": kind,
+                "requirement": requirement,
+                "field": obligation.get("field"),
+                "satisfied": bool(satisfied),
+                "reason": reason,
+            }
+        )
+        if not satisfied:
+            missing.append(
+                {
+                    "kind": kind,
+                    "requirement": requirement,
+                    "field": obligation.get("field"),
+                    "reason": reason,
+                }
+            )
+
+    return {
+        "required": True,
+        "ok": not missing,
+        "checked": checked,
+        "missing": missing,
+        "artifact_presence": presence,
+    }
+
+
+def _proof_checks_template(obligations: list[dict[str, Any]]) -> dict[str, Any]:
+    template: dict[str, Any] = {}
+    for obligation in obligations:
+        if str(obligation.get("kind") or "") != "self_check":
+            continue
+        requirement = str(obligation.get("requirement") or "").strip()
+        if requirement:
+            template[requirement] = None
+    return template
+
+
+def _proof_obligations_block(obligations: list[dict[str, Any]]) -> str:
+    if not obligations:
+        return "- `N/A`"
+    lines = []
+    for item in obligations:
+        kind = str(item.get("kind") or "unknown")
+        requirement = str(item.get("requirement") or "N/A")
+        field = str(item.get("field") or "").strip()
+        suffix = f" | field=`{field}`" if field else ""
+        lines.append(f"- `{kind}`: `{requirement}`{suffix}")
+    return "\n".join(lines)
+
+
 def _store_eval_assignments(node: dict[str, Any], assignments: list[dict[str, Any]], dispatched_at: str) -> None:
     normalized = [
         {
@@ -1324,6 +1468,42 @@ def _mark_graph_node(graph_path: str, node_id: str, status: str,
     return False
 
 
+def _ensure_execution_plan_payload(
+    payload: dict[str, Any],
+    *,
+    graph_path: str,
+    sid: str,
+    node: dict[str, Any],
+) -> dict[str, Any]:
+    if payload.get("capsule_plan_ir") and payload.get("physical_plan_ir"):
+        return payload
+    try:
+        from apo_plan_compiler import compile_execution_plan_for_node, materialize_execution_plan_artifacts  # noqa: WPS433
+
+        compiled = compile_execution_plan_for_node(
+            node,
+            request_type=str(node.get("type") or ""),
+            lane_hint="",
+            registry_path=HARNESS_DIR / "config" / "capability-capsules.registry.yaml",
+            operators_path=HARNESS_DIR / "config" / "physical-operators.json",
+        )
+        capsule_plan_ir = dict(compiled.get("capsule_plan") or {})
+        physical_plan_ir = dict(compiled.get("physical_plan") or {})
+        payload["logical_plan_node"] = dict(compiled.get("logical_plan_node") or {})
+        payload["capsule_plan_ir"] = capsule_plan_ir
+        payload["physical_plan_ir"] = physical_plan_ir
+        payload["plan_artifacts"] = materialize_execution_plan_artifacts(
+            sid,
+            str(node.get("id") or ""),
+            capsule_plan=capsule_plan_ir,
+            physical_plan=physical_plan_ir,
+            base_dir=SPRINTS_DIR,
+        )
+    except Exception:
+        return payload
+    return payload
+
+
 def build_dispatch_text(payload: dict[str, Any], pane: str) -> str:
     node = payload.get("node") or {}
     sid = payload.get("sprint_id") or payload.get("sid") or ""
@@ -1336,6 +1516,36 @@ def build_dispatch_text(payload: dict[str, Any], pane: str) -> str:
     except Exception:
         graph_for_policy = {"nodes": [node]}
     architecture_block = dispatch_policy_block(node, graph_for_policy) if dispatch_policy_block else "## Architecture Guard\n\n- unavailable"
+    logical_plan_node = payload.get("logical_plan_node") if isinstance(payload.get("logical_plan_node"), dict) else {}
+    capsule_plan_ir = payload.get("capsule_plan_ir") if isinstance(payload.get("capsule_plan_ir"), dict) else {}
+    physical_plan_ir = payload.get("physical_plan_ir") if isinstance(payload.get("physical_plan_ir"), dict) else {}
+    plan_artifacts = payload.get("plan_artifacts") if isinstance(payload.get("plan_artifacts"), dict) else {}
+    physical_selected = str(physical_plan_ir.get("selected_operator_id") or "N/A")
+    logical_operator = str(
+        logical_plan_node.get("logical_operator")
+        or capsule_plan_ir.get("logical_operator")
+        or node.get("logical_operator")
+        or "N/A"
+    )
+    capsule_id = str(
+        capsule_plan_ir.get("capability_capsule_id")
+        or payload.get("capability_capsule_id")
+        or node.get("capability_capsule_id")
+        or "N/A"
+    )
+    stage_lines = _scope_lines(
+        [
+            f"{stage.get('stage_kind')}:{stage.get('capability_capsule_id')}"
+            for stage in (capsule_plan_ir.get("stages") or [])
+            if isinstance(stage, dict)
+        ]
+    )
+    plan_artifact_lines = _scope_lines(
+        [
+            plan_artifacts.get("capsule_plan_ir_path", ""),
+            plan_artifacts.get("physical_plan_ir_path", ""),
+        ]
+    )
 
     return f"""{STATE_READ_PREFLIGHT}
 {DEFINITION_OF_DONE_POLICY}
@@ -1347,6 +1557,20 @@ Node: `{node_id}`
 Pane: `{pane}`
 Dispatch ID: `{dispatch_id or "N/A"}`
 Graph: `{graph_path}`
+
+## Execution Plan
+
+- Logical Operator: `{logical_operator}`
+- Capability Capsule: `{capsule_id}`
+- Selected Physical Operator: `{physical_selected}`
+
+## Capsule Stages
+
+{stage_lines}
+
+## Plan Artifacts
+
+{plan_artifact_lines}
 
 ## Goal
 
@@ -1436,6 +1660,8 @@ def build_eval_dispatch_text(graph: dict[str, Any], graph_path: str, node: dict[
                              canonical_eval_md_path: str = "") -> str:
     sid = str(graph.get("sprint_id") or Path(graph_path).stem.replace(".task_graph", ""))
     node_id = str(node.get("id") or "")
+    proof_obligations = _node_proof_obligations(sid, node)
+    proof_checks_template = _proof_checks_template(proof_obligations)
     evaluation_plan = node.get("evaluation_plan_runtime") or node.get("evaluation_plan")
     if not isinstance(evaluation_plan, dict) or not evaluation_plan:
         evaluation_plan = _plan_node_evaluation(graph, node)
@@ -1512,6 +1738,10 @@ Handoff: `{handoff}`
 
 {_evaluation_plan_block(evaluation_plan)}
 
+## Proof Obligations
+
+{_proof_obligations_block(proof_obligations)}
+
 ## Write Scope
 
 {_scope_lines(node.get("write_scope"))}
@@ -1535,6 +1765,10 @@ solar-harness session evaluate "{sid}" --json
 - 如果 `session evaluate` 返回 errors/warnings，必须逐项解释是否阻塞本 node verdict。
 - 必须检查 `Architecture Guard`：新能力是否为 package/plugin/skill/connector；如触碰 protected core，必须有 `core_patch_allowed=true`、rollback 和 P0 bugfix 证据，否则 FAIL。
 - 涉及 online exploration 的 node 必须验证 >=2 个候选方向和 kill_criteria；否则 FAIL。
+- 必须把 proof obligations 逐项回填到 eval artifact：
+  - `proof_obligations`: 原样记录本 node 的 obligation 列表
+  - `proof_checks`: 对 `self_check` 逐项填 `true/false`
+  - `verification_results`: 记录 `checked_artifacts / missing_artifacts / proof_gate`
 - 如果本 node 涉及 DeepResearch / evidence ledger / claim ledger / citation / report compiler，必须先运行 deterministic artifact gate：
   ```bash
   solar-harness research eval-artifacts --eval-json "<path-to-research_eval.json>" --json
@@ -1561,6 +1795,10 @@ solar-harness session evaluate "{sid}" --json
 
    ## Acceptance Result
 
+   ## Proof Obligations
+
+   - 逐项说明哪些 obligation 已满足，哪些未满足。
+
    ## Scope Compliance
 
    ## Architecture Guard Compliance
@@ -1579,6 +1817,13 @@ solar-harness session evaluate "{sid}" --json
      "verdict": "PASS",
      "summary": "",
      "evaluation_plan": {json.dumps(evaluation_plan, ensure_ascii=False, indent=2)},
+     "proof_obligations": {json.dumps(proof_obligations, ensure_ascii=False, indent=2)},
+     "proof_checks": {json.dumps(proof_checks_template, ensure_ascii=False, indent=2)},
+     "verification_results": {{
+       "proof_gate": "PENDING",
+       "checked_artifacts": [],
+       "missing_artifacts": []
+     }},
      "research_quality_gate": {{}},
      "checked_at": "{_utc_now()}",
      "eval_md_path": "{eval_md}"
@@ -2532,6 +2777,7 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
         }
 
     text_payload = dict(payload, dispatch_id=dispatch_id, sprint_id=sid)
+    text_payload = _ensure_execution_plan_payload(text_payload, graph_path=graph_path, sid=sid, node=node)
     # Research node branch: mark fan-out section isolation for R-prefixed nodes
     # from deepresearch DAG templates. No main-loop edits; this is a single
     # if-branch that enriches the payload before dispatch text generation.
@@ -3186,6 +3432,20 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
     else:
         return {"ok": False, "reason": "invalid_verdict", "verdict": verdict}
 
+    proof_gate: dict[str, Any] = {"required": False}
+    if status == "passed":
+        resolved_eval_json = eval_json or _eval_json_file(sid, node_id)
+        proof_gate = _evaluate_proof_obligations(sid, node, eval_json=resolved_eval_json)
+        if proof_gate.get("required") and not proof_gate.get("ok"):
+            return {
+                "ok": False,
+                "reason": "proof_obligations_failed",
+                "node": node_id,
+                "status": "blocked",
+                "eval_json": str(resolved_eval_json),
+                "proof_gate": proof_gate,
+            }
+
     research_quality_gate: dict[str, Any] = {"required": False}
     if status == "passed" and _node_requires_deepresearch_quality_gate(node):
         resolved_eval_json = eval_json or _eval_json_file(sid, node_id)
@@ -3229,6 +3489,8 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
     node["updated_at"] = _utc_now()
     if eval_json:
         node["eval_json"] = eval_json
+    if proof_gate.get("required"):
+        node["proof_gate"] = proof_gate
     if research_quality_gate.get("required"):
         node["research_quality_gate"] = research_quality_gate.get("gate") or research_quality_gate
     worker_pane = str(node.get("assigned_to") or "")
@@ -3291,6 +3553,7 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
         "eval_lease_released": eval_lease_released,
         "parent_status_updated": parent_status_updated,
         "capability_effect": effect_result,
+        "proof_gate": proof_gate,
         "research_quality_gate": research_quality_gate,
     }
 
