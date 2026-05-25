@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 HOME = Path.home()
-HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
+HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", Path(__file__).resolve().parents[1]))
 SPRINTS_DIR = HARNESS_DIR / "sprints"
 SESSION = os.environ.get("SOLAR_HARNESS_SESSION", "solar-harness")
 NO_DISPATCH_FLAG = HARNESS_DIR / "run" / "no-dispatch.flag"

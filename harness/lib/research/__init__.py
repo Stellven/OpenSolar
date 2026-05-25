@@ -8,7 +8,7 @@ Exposes the three foundational submodules that downstream nodes (storage,
 evidence, sources, cli) build on.
 """
 
-from . import hashing, ids, schemas
+from . import hashing, ids, schemas, seams
 
-__all__ = ["schemas", "ids", "hashing"]
+__all__ = ["schemas", "ids", "hashing", "seams"]
 SCHEMA_VERSION = "solar.deepresearch.schemas.v1"

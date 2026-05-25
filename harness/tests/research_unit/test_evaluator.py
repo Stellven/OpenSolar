@@ -15,7 +15,7 @@ from research.evaluator import evaluate_artifacts  # noqa: E402
 
 def _write_good_artifacts(root: Path, **eval_overrides) -> Path:
     root.mkdir(parents=True, exist_ok=True)
-    (root / "final.md").write_text("# Final\n\nSupported claim [cite:ev_abcdef1234567890]\n", encoding="utf-8")
+    (root / "final.md").write_text("# Final\n\nContinuous thought evidence supports latent reasoning systems [cite:ev_1]\n", encoding="utf-8")
     (root / "sources.jsonl").write_text(
         json.dumps({
             "id": "src_1",
@@ -36,7 +36,7 @@ def _write_good_artifacts(root: Path, **eval_overrides) -> Path:
                     "This section analyzes the runtime architecture, projection gate, deployment boundary, "
                     "and evaluation policy for latent reasoning systems. The implementation should preserve "
                     "audit evidence and failure recovery while separating model exploration from control-plane "
-                    "orchestration. Supported claim [cite:ev_abcdef1234567890]\n"
+                    "orchestration. Supported claim [cite:ev_1]\n"
                 ),
             }
         )
@@ -118,7 +118,11 @@ def test_evaluate_artifacts_accepts_smoke_metric_aliases_and_named_evidence_ids(
         unsupported_claim_rate=0.0,
         citation_span_accuracy=1.0,
     )
-    (tmp_path / "final.md").write_text("# Final\n\nSupported claim [cite:ev_vaswani_self_attention]\n", encoding="utf-8")
+    (tmp_path / "final.md").write_text("# Final\n\nSupported claim about self attention evidence [cite:ev_vaswani_self_attention]\n", encoding="utf-8")
+    (tmp_path / "evidence.jsonl").write_text(
+        json.dumps({"id": "ev_vaswani_self_attention", "content": "Supported claim about self attention evidence."}) + "\n",
+        encoding="utf-8",
+    )
 
     result = evaluate_artifacts(eval_json)
 

@@ -1073,6 +1073,11 @@ def evaluate_artifacts(
             else:
                 warnings.append("expert_synthesis_novelty_gate_skipped_no_source_material")
 
+    # Evaluate figures grounding if figures file exists
+    fig_ok, fig_errors, fig_warnings = evaluate_figures_grounding(output_dir)
+    errors.extend(fig_errors)
+    warnings.extend(fig_warnings)
+
     artifacts = {
         "eval_json": str(eval_path),
         "output_dir": str(output_dir),
@@ -1222,6 +1227,7 @@ def evaluate_final_closeout(
                 "final_md_missing",
                 "final_md_empty",
                 "expert_synthesis_missing",
+                "figure_",
             }
             has_hard_fail = any(
                 any(issue.startswith(key) for key in hard_fail_keys)
@@ -1295,3 +1301,151 @@ def evaluate_final_closeout(
             "run_finalized": str(run_finalized_path) if verdict == "pass" else None,
         }
     }
+
+
+def evaluate_figures_grounding(output_dir: Path) -> tuple[bool, list[str], list[str]]:
+    """Determine figure grounding quality.
+    
+    Reads figures.json or figures.jsonl in output_dir, and validates them
+    against claim/evidence IDs.
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    figures_json_path = output_dir / "figures.json"
+    figures_jsonl_path = output_dir / "figures.jsonl"
+    
+    figures_data = []
+    if figures_json_path.exists():
+        try:
+            with open(figures_json_path, "r", encoding="utf-8") as f:
+                figures_data = json.load(f)
+        except Exception as e:
+            errors.append(f"figure_json_corrupt: {e}")
+            return False, errors, warnings
+    elif figures_jsonl_path.exists():
+        try:
+            figures_data = _read_jsonl(figures_jsonl_path)
+        except Exception as e:
+            errors.append(f"figure_jsonl_corrupt: {e}")
+            return False, errors, warnings
+    else:
+        # If no figures file, pass by default (fail-open)
+        return True, [], []
+
+    if not isinstance(figures_data, list):
+        errors.append("figure_format_invalid: figures file must contain a list of figures")
+        return False, errors, warnings
+
+    # Load claims
+    claim_ids = set()
+    claims_path = output_dir / "claims.jsonl"
+    if claims_path.exists():
+        for r in _read_jsonl(claims_path):
+            if r.get("id"):
+                claim_ids.add(r["id"])
+            elif r.get("claim_id"):
+                claim_ids.add(r["claim_id"])
+
+    # Load evidence
+    evidence_ids = set()
+    evidence_path = output_dir / "evidence.jsonl"
+    if evidence_path.exists():
+        for r in _read_jsonl(evidence_path):
+            if r.get("id"):
+                evidence_ids.add(r["id"])
+            elif r.get("evidence_id"):
+                evidence_ids.add(r["evidence_id"])
+
+    valid_ids = claim_ids | evidence_ids
+
+    for fig_dict in figures_data:
+        if not isinstance(fig_dict, dict):
+            errors.append("figure_entry_invalid: figure entry is not a dictionary")
+            continue
+
+        fig_id = fig_dict.get("figure_id") or fig_dict.get("id")
+        title = fig_dict.get("title")
+        fig_type = fig_dict.get("figure_type") or fig_dict.get("type")
+        grounding_ids = fig_dict.get("grounding_ids")
+        spec_data = fig_dict.get("spec_data")
+
+        if not fig_id:
+            errors.append("figure_id_missing: figure is missing an ID")
+            continue
+
+        if not title:
+            errors.append(f"figure_title_missing: figure {fig_id} is missing a title")
+            continue
+
+        if fig_type not in {"architecture_diagram", "timeline"}:
+            errors.append(f"figure_type_invalid: figure {fig_id} has invalid or missing type {fig_type!r}")
+            continue
+
+        if not isinstance(grounding_ids, list):
+            errors.append(f"figure_grounding_invalid: figure {fig_id} grounding_ids must be a list of strings")
+            continue
+
+        if not grounding_ids:
+            errors.append(f"figure_grounding_empty: figure {fig_id} has no grounding claims or evidence")
+            continue
+
+        # Check all grounding_ids exist
+        for gid in grounding_ids:
+            if gid not in valid_ids:
+                errors.append(f"figure_grounding_unresolved: figure {fig_id} references unknown grounding ID {gid!r}")
+
+        if not isinstance(spec_data, dict):
+            errors.append(f"figure_spec_data_invalid: figure {fig_id} spec_data must be a dictionary")
+            continue
+
+        if fig_type == "architecture_diagram":
+            nodes = spec_data.get("nodes")
+            edges = spec_data.get("edges")
+            if not isinstance(nodes, list) or not nodes:
+                errors.append(f"figure_architecture_nodes_missing: figure {fig_id} spec_data is missing nodes")
+            else:
+                for node in nodes:
+                    if not isinstance(node, dict):
+                        errors.append(f"figure_component_invalid: node in figure {fig_id} is not a dictionary")
+                        continue
+                    node_gid = node.get("grounding_id")
+                    if node_gid:
+                        if node_gid not in grounding_ids:
+                            errors.append(f"figure_component_grounding_unlisted: node in figure {fig_id} has grounding_id {node_gid!r} not in top-level grounding_ids")
+                        if node_gid not in valid_ids:
+                            errors.append(f"figure_component_grounding_unresolved: node in figure {fig_id} has unknown grounding_id {node_gid!r}")
+
+            if not isinstance(edges, list) or not edges:
+                errors.append(f"figure_architecture_edges_missing: figure {fig_id} spec_data is missing edges")
+            else:
+                for edge in edges:
+                    if not isinstance(edge, dict):
+                        errors.append(f"figure_component_invalid: edge in figure {fig_id} is not a dictionary")
+                        continue
+                    edge_gid = edge.get("grounding_id")
+                    if edge_gid:
+                        if edge_gid not in grounding_ids:
+                            errors.append(f"figure_component_grounding_unlisted: edge in figure {fig_id} has grounding_id {edge_gid!r} not in top-level grounding_ids")
+                        if edge_gid not in valid_ids:
+                            errors.append(f"figure_component_grounding_unresolved: edge in figure {fig_id} has unknown grounding_id {edge_gid!r}")
+
+        elif fig_type == "timeline":
+            events = spec_data.get("events")
+            if not isinstance(events, list) or not events:
+                errors.append(f"figure_timeline_events_missing: figure {fig_id} spec_data is missing events")
+            else:
+                for event in events:
+                    if not isinstance(event, dict):
+                        errors.append(f"figure_component_invalid: event in figure {fig_id} is not a dictionary")
+                        continue
+                    event_gid = event.get("grounding_id")
+                    if event_gid:
+                        if event_gid not in grounding_ids:
+                            errors.append(f"figure_component_grounding_unlisted: event in figure {fig_id} has grounding_id {event_gid!r} not in top-level grounding_ids")
+                        if event_gid not in valid_ids:
+                            errors.append(f"figure_component_grounding_unresolved: event in figure {fig_id} has unknown grounding_id {event_gid!r}")
+
+    ok = len(errors) == 0
+    return ok, errors, warnings
+

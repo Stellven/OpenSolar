@@ -573,6 +573,35 @@ class ReportAST:
                     )
 
 
+
+# ---------------------------------------------------------------------------
+# FigureSpec
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class FigureSpec:
+    figure_id: str
+    title: str
+    figure_type: str  # "architecture_diagram" or "timeline"
+    grounding_ids: list[str] = field(default_factory=list)
+    spec_data: dict[str, Any] = field(default_factory=dict)
+    renderer: str = "mermaid"
+    caption: Optional[str] = None
+    created_at: str = field(default_factory=_utc_now_iso)
+    schema_version: str = "v1"
+
+    def __post_init__(self) -> None:
+        if not self.figure_id:
+            raise ValueError("FigureSpec.figure_id must be non-empty")
+        if not self.title:
+            raise ValueError("FigureSpec.title must be non-empty")
+        if self.figure_type not in {"architecture_diagram", "timeline"}:
+            raise ValueError(f"FigureSpec.figure_type {self.figure_type!r} invalid")
+        if not isinstance(self.grounding_ids, list):
+            raise ValueError("FigureSpec.grounding_ids must be a list of strings")
+
+
 # ---------------------------------------------------------------------------
 # Public registry
 # ---------------------------------------------------------------------------
@@ -594,6 +623,166 @@ NESTED_MODELS: tuple[type, ...] = (
     Bibliography,
     BibEntry,
     QualityReport,
+)
+
+
+# ---------------------------------------------------------------------------
+# Future Platform Seam Models
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class LivingReport:
+    report_id: str
+    topic: str
+    active_ast_id: str
+    watch_schedules: list[dict[str, Any]] = field(default_factory=list)
+    update_policy: dict[str, Any] = field(default_factory=lambda: {"merge_strategy": "human_review", "auto_promote": False})
+    history: list[dict[str, Any]] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    schema_version: str = "v1"
+
+    def __post_init__(self) -> None:
+        if not self.report_id:
+            raise ValueError("LivingReport.report_id must be non-empty")
+        if not self.topic:
+            raise ValueError("LivingReport.topic must be non-empty")
+        if not self.active_ast_id:
+            raise ValueError("LivingReport.active_ast_id must be non-empty")
+        for ws in self.watch_schedules:
+            st = ws.get("schedule_type")
+            if st not in {"cron", "trigger", "event"}:
+                raise ValueError(f"LivingReport schedule_type {st!r} invalid")
+            if not ws.get("expression"):
+                raise ValueError("LivingReport schedule expression must be non-empty")
+        ms = self.update_policy.get("merge_strategy")
+        if ms not in {"strict_overwrite", "differential_append", "human_review"}:
+            raise ValueError(f"LivingReport merge_strategy {ms!r} invalid")
+
+
+@dataclass
+class ResearchLab:
+    lab_id: str
+    name: str
+    status: str = "active"
+    runner_slots: list[str] = field(default_factory=list)
+    active_experiments: list[str] = field(default_factory=list)
+    allowed_models: list[str] = field(default_factory=list)
+    telemetry_config: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    schema_version: str = "v1"
+
+    def __post_init__(self) -> None:
+        if not self.lab_id:
+            raise ValueError("ResearchLab.lab_id must be non-empty")
+        if not self.name:
+            raise ValueError("ResearchLab.name must be non-empty")
+        if self.status not in {"active", "paused", "maintenance", "depleted"}:
+            raise ValueError(f"ResearchLab.status {self.status!r} invalid")
+        ll = self.telemetry_config.get("log_level")
+        if ll is not None and ll not in {"debug", "info", "warning", "error"}:
+            raise ValueError(f"ResearchLab log_level {ll!r} invalid")
+
+
+@dataclass
+class ResearchMemory:
+    memory_id: str
+    scope: str = "global"
+    storage_backend: str = "sqlite"
+    read_only: bool = False
+    memory_types: list[str] = field(default_factory=list)
+    indexing_status: str = "ready"
+    embedding_model: Optional[str] = None
+    stats: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    schema_version: str = "v1"
+
+    def __post_init__(self) -> None:
+        if not self.memory_id:
+            raise ValueError("ResearchMemory.memory_id must be non-empty")
+        if self.scope not in {"global", "run-local", "operator-local", "tenant-local"}:
+            raise ValueError(f"ResearchMemory.scope {self.scope!r} invalid")
+        if self.storage_backend not in {"sqlite", "vector-db", "file-system", "obsidian"}:
+            raise ValueError(f"ResearchMemory.storage_backend {self.storage_backend!r} invalid")
+        if self.indexing_status not in {"ready", "indexing", "stale", "error"}:
+            raise ValueError(f"ResearchMemory.indexing_status {self.indexing_status!r} invalid")
+        for mt in self.memory_types:
+            if mt not in {"episodic", "semantic", "facts", "feedback"}:
+                raise ValueError(f"ResearchMemory memory_type {mt!r} invalid")
+
+
+@dataclass
+class AIInfraPack:
+    pack_id: str
+    pack_name: str
+    version: str
+    status: str = "stable"
+    mcp_servers: list[dict[str, Any]] = field(default_factory=list)
+    operator_templates: list[dict[str, Any]] = field(default_factory=list)
+    common_policies: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    schema_version: str = "v1"
+
+    def __post_init__(self) -> None:
+        import re
+        if not self.pack_id:
+            raise ValueError("AIInfraPack.pack_id must be non-empty")
+        if not self.pack_name:
+            raise ValueError("AIInfraPack.pack_name must be non-empty")
+        if self.status not in {"stable", "draft", "deprecated"}:
+            raise ValueError(f"AIInfraPack.status {self.status!r} invalid")
+        if not re.match(r"^[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9.]+)?$", self.version):
+            raise ValueError(f"AIInfraPack.version {self.version!r} invalid (must match semver)")
+        for ms in self.mcp_servers:
+            if not ms.get("name"):
+                raise ValueError("AIInfraPack mcp_server name must be non-empty")
+            et = ms.get("endpoint_type")
+            if et not in {"mcp_stdio", "mcp_sse", "mcp_http"}:
+                raise ValueError(f"AIInfraPack mcp_server endpoint_type {et!r} invalid")
+            mss = ms.get("status")
+            if mss is not None and mss not in {"active", "disabled", "degraded"}:
+                raise ValueError(f"AIInfraPack mcp_server status {mss!r} invalid")
+        for ot in self.operator_templates:
+            if not ot.get("role"):
+                raise ValueError("AIInfraPack operator_template role must be non-empty")
+            if not ot.get("vendor"):
+                raise ValueError("AIInfraPack operator_template vendor must be non-empty")
+
+
+@dataclass
+class ArtifactDelta:
+    delta_id: str
+    target_artifact_id: str
+    target_artifact_type: str
+    changes: list[dict[str, Any]] = field(default_factory=list)
+    base_version: Optional[str] = None
+    new_version: Optional[str] = None
+    timestamp: Optional[str] = None
+    author: Optional[str] = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    schema_version: str = "v1"
+
+    def __post_init__(self) -> None:
+        if not self.delta_id:
+            raise ValueError("ArtifactDelta.delta_id must be non-empty")
+        if not self.target_artifact_id:
+            raise ValueError("ArtifactDelta.target_artifact_id must be non-empty")
+        if self.target_artifact_type not in {"living_report", "research_lab", "research_memory", "ai_infra_pack"}:
+            raise ValueError(f"ArtifactDelta.target_artifact_type {self.target_artifact_type!r} invalid")
+        for ch in self.changes:
+            op = ch.get("op")
+            if op not in {"add", "replace", "remove", "append"}:
+                raise ValueError(f"ArtifactDelta change op {op!r} invalid")
+            if not ch.get("path"):
+                raise ValueError("ArtifactDelta change path must be non-empty")
+
+
+FUTURE_MODELS: tuple[type, ...] = (
+    LivingReport,
+    ResearchLab,
+    ResearchMemory,
+    AIInfraPack,
+    ArtifactDelta,
 )
 
 

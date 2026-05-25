@@ -52,6 +52,14 @@ def finalize_survey_run(
     min_sources: int = 4,
     min_evidence: int = 8,
     min_claims: int = 8,
+    narrative_backend: str = "",
+    narrative_model: str = "",
+    narrative_fallback_models: list[str] | None = None,
+    narrative_command: str = "",
+    narrative_timeout: int = 0,
+    narrative_max_budget_usd: float = 0.0,
+    narrative_min_chars: int = 0,
+    narrative_require_hitl: bool = False,
 ) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
     root.mkdir(parents=True, exist_ok=True)
