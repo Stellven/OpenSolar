@@ -54,13 +54,18 @@
       "trigger_level": "recommended",
       "recommended": true,
       "role": "planner"
+    },
+    {
+      "ts": "2026-05-25T23:18:07Z",
+      "event": "finalized",
+      "by": "coordinator"
     }
   ],
   "status": "passed",
-  "phase": "completed",
+  "phase": "finalized",
   "handoff_to": "",
   "target_role": "",
-  "updated_at": "2026-05-25T23:15:40Z",
+  "updated_at": "2026-05-25T23:16:48Z",
   "artifacts": {
     "design": "/Users/lisihao/.solar/harness/sprints/sprint-20260524-solar-research-os-v1-core.design.md",
     "plan": "/Users/lisihao/.solar/harness/sprints/sprint-20260524-solar-research-os-v1-core.plan.md",
@@ -130,5 +135,16 @@
     ],
     "missing_gates": []
   },
-  "task_graph_status": "passed"
+  "task_graph_status": "passed",
+  "knowledge_export_status": "exported",
+  "knowledge_export_path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260524-solar-research-os-v1-core.accepted.md",
+  "knowledge_source_artifact_index": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260524-solar-research-os-v1-core.source_artifact_index.md",
+  "knowledge_summary_count": 7,
+  "knowledge_ingest_dispatch": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260524-solar-research-os-v1-core.dispatch.md",
+  "knowledge_exported_at": "2026-05-25T23:16:48Z",
+  "knowledge_ingested_at": null,
+  "knowledge_closure_required": true,
+  "knowledge_closure_status": "exported",
+  "knowledge_export_error": null,
+  "knowledge_closure_error": null
 }
