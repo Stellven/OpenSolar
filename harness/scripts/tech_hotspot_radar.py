@@ -5373,6 +5373,61 @@ def phase_transcript_attachment(evidence_pack: dict[str, Any]) -> str:
     return "\n".join(parts).strip() + "\n"
 
 
+def lightly_clean_transcript_for_reading(text: str) -> str:
+    """Readable transcript cleanup that preserves wording as much as possible."""
+    raw_lines = [line.strip() for line in (text or "").splitlines()]
+    cleaned: list[str] = []
+    previous = ""
+    repeat_count = 0
+    for line in raw_lines:
+        if not line:
+            if cleaned and cleaned[-1] != "":
+                cleaned.append("")
+            continue
+        # Remove pathological token repetition from ASR/caption loops, while
+        # preserving normal repeated phrasing.
+        line = re.sub(r"(\b[\w\u4e00-\u9fff]{1,12}\b)(?:\s+\1){5,}", r"\1 \1", line, flags=re.I)
+        if line == previous:
+            repeat_count += 1
+            if repeat_count >= 2:
+                continue
+        else:
+            previous = line
+            repeat_count = 0
+        cleaned.append(line)
+    return "\n".join(cleaned).strip() + ("\n" if cleaned else "")
+
+
+def phase_transcript_attachment_clean(evidence_pack: dict[str, Any]) -> str:
+    parts = [
+        f"# YouTube Transcripts Cleaned — {evidence_pack.get('phase_title')} — {evidence_pack.get('date')}",
+        "",
+        "说明：这是 lightly-cleaned 版本，尽量保留原文，只删除明显连续重复行、过度重复词和多余空行；不做摘要，不改写观点。",
+        "",
+    ]
+    for item in evidence_pack.get("videos") or []:
+        raw_transcript = str(item.get("transcript_clean") or "").strip()
+        cleaned = lightly_clean_transcript_for_reading(raw_transcript)
+        parts.extend([
+            f"## {item.get('title')}",
+            "",
+            f"- video_id: {item.get('video_id')}",
+            f"- channel: {item.get('channel')}",
+            f"- url: {item.get('url')}",
+            f"- published_at: {item.get('published_at')}",
+            f"- raw_chars: {len(raw_transcript)}",
+            f"- cleaned_chars: {len(cleaned)}",
+            "",
+            "### Transcript Cleaned",
+            "",
+            cleaned or "[transcript unavailable]",
+            "",
+            "---",
+            "",
+        ])
+    return "\n".join(parts).strip() + "\n"
+
+
 def cmd_phase_report(args: argparse.Namespace) -> int:
     config = load_config(resolve_config(args))
     db_path = resolve_db(args, config)
@@ -5415,19 +5470,21 @@ def cmd_phase_report(args: argparse.Namespace) -> int:
             "report_md": out_dir / "phase-report.md",
             "report_html": out_dir / "report.html",
             "transcripts_txt": out_dir / f"youtube-transcripts-phase-{phase}-{date_str}.txt",
+            "transcripts_clean_txt": out_dir / f"youtube-transcripts-cleaned-phase-{phase}-{date_str}.txt",
             "wiki_dispatch": out_dir / "wiki-dispatch.md",
         }
         files["report_json"].write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         files["report_md"].write_text(render_phase_report_markdown(report, evidence_pack), encoding="utf-8")
         files["report_html"].write_text(render_phase_report_html(report, evidence_pack), encoding="utf-8")
         files["transcripts_txt"].write_text(phase_transcript_attachment(evidence_pack), encoding="utf-8")
+        files["transcripts_clean_txt"].write_text(phase_transcript_attachment_clean(evidence_pack), encoding="utf-8")
         files["wiki_dispatch"].write_text(report_wiki_dispatch(str(out_dir), date_str), encoding="utf-8")
         mail_result: dict[str, Any] = {"status": "skipped"}
         if bool(getattr(args, "send", False)):
             mail_result = send_html_email(
                 files["report_html"].read_text(encoding="utf-8"),
                 f"AI Influence 专辑报告 Phase {phase} — {date_str}",
-                [files["transcripts_txt"]],
+                [files["transcripts_txt"], files["transcripts_clean_txt"]],
             )
             (out_dir / "mail-result.json").write_text(json.dumps(mail_result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         finish_run(conn, run_id, "ok" if mail_result.get("status") in {"skipped", "sent", "warn"} else "partial", len(rows), len(rows), json.dumps({"phase": phase, "mail": mail_result}, ensure_ascii=False)[:900])

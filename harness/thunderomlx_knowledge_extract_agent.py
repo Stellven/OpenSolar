@@ -27,6 +27,7 @@ LOCAL_MODEL = os.environ.get("THUNDEROMLX_LOCAL_MODEL", "Qwen3.6-35b-a3b")
 API_KEY = os.environ.get("THUNDEROMLX_AUTH_TOKEN", "local-thunderomlx")
 MAX_SOURCE_CHARS = int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_MAX_SOURCE_CHARS", "42000") or "42000")
 MAX_TOKENS = int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_MAX_TOKENS", "2200") or "2200")
+THUNDEROMLX_PAUSE_FILE = Path(os.environ.get("THUNDEROMLX_PAUSE_FILE", HOME / ".omlx" / "run" / "maintenance.json"))
 
 
 def now() -> str:
@@ -92,7 +93,24 @@ def bad_chars(text: str) -> bool:
     return bool(re.search(r"[\ufffd\ue000-\uf8ff]", text))
 
 
+def thunderomlx_ingest_paused() -> str | None:
+    if not THUNDEROMLX_PAUSE_FILE.exists():
+        return None
+    try:
+        data = json.loads(THUNDEROMLX_PAUSE_FILE.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return f"unreadable pause file: {exc}"
+    if not data.get("enabled", True):
+        return None
+    if str(data.get("mode") or "ingest_pause") not in {"ingest_pause", "all"}:
+        return None
+    return str(data.get("reason") or THUNDEROMLX_PAUSE_FILE)
+
+
 def call_thunderomlx(prompt: str) -> dict[str, Any]:
+    pause_reason = thunderomlx_ingest_paused()
+    if pause_reason:
+        raise SystemExit(f"ThunderOMLX ingest pause active: {pause_reason}")
     payload = {
         "model": PROXY_MODEL,
         "max_tokens": MAX_TOKENS,

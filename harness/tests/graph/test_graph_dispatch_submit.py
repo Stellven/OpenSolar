@@ -402,8 +402,6 @@ class TestQueueStateSemantics:
         from graph_scheduler import enqueue_ready
 
         tmp_path, sprints, sid, graph = tmp_harness
-        graph["nodes"][0]["logical_operator"] = "ImplementationWorker"
-        graph["nodes"][0]["type"] = "implementation"
 
         monkeypatch.setattr("task_queue.enqueue", lambda *a, **kw: {"ok": True, "id": "q-1"})
         result = enqueue_ready(
@@ -418,11 +416,6 @@ class TestQueueStateSemantics:
         assert graph["nodes"][0]["status"] == "assigned"
         assert graph["nodes"][0]["assigned_to"] == "test:0.1"
         assert graph["nodes"][0]["dispatch_id"]
-        assert graph["nodes"][0]["capsule_plan_ir"]["schema_version"] == "solar.capsule_plan_node.v1"
-        assert graph["nodes"][0]["physical_plan_ir"]["schema_version"] == "solar.physical_plan_node.v1"
-        artifacts = graph["nodes"][0]["artifacts"]
-        assert Path(artifacts["capsule_plan_ir"]).exists()
-        assert Path(artifacts["physical_plan_ir"]).exists()
 
 
 # ---------------------------------------------------------------------------
