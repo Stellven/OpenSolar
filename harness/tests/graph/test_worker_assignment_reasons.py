@@ -48,11 +48,11 @@ def test_queue_reason_remains_no_matching_worker_when_skills_are_missing() -> No
     assert "pytest" in result["queued"][0]["details"]["missing_skills"]
 
 
-def test_busy_matching_worker_is_assigned_instead_of_queued() -> None:
+def test_busy_matching_worker_is_queued_instead_of_assigned() -> None:
     result = assign_workers([_node("N1")], [_worker("pane-a", busy=True)])
-    assert result["assigned"][0]["node"] == "N1"
-    assert result["assigned"][0]["pane"] == "pane-a"
-    assert result["queued"] == []
+    assert result["assigned"] == []
+    assert result["queued"][0]["node"] == "N1"
+    assert result["queued"][0]["reason"] == "worker_capacity_exhausted"
 
 
 def test_queue_reason_runtime_not_running_when_matching_worker_is_shell_residue() -> None:
