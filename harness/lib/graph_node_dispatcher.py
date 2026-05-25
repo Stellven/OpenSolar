@@ -30,7 +30,8 @@ PANE_TUI_BUSY_RE = re.compile(
     r"Compacting conversation|压缩上下文|Reticulating|Scurrying|Roosting|"
     r"Mustering|Herding|Baking|Cogitating|Churning|Ruminating|Thinking|"
     r"Whirring|Smooshing|Unhandled node type|Do you want to proceed\?|"
-    r"Enter to confirm|Esc to cancel|Bash command|"
+    r"Do you want to make this edit|allow all edits during this session|"
+    r"accept edits on|bypass permissions on|Enter to confirm|Esc to cancel|Bash command|"
     r"[·✳✶✽✢]\s+[A-Za-z][A-Za-z-]*…|✳|✶|✽|✢",
     re.I,
 )
@@ -63,7 +64,12 @@ PANE_APPROVAL_PROMPT_RE = re.compile(
     r"Press up to edit queued messages",
     re.I,
 )
-PANE_CONFIRMATION_PROMPT_RE = re.compile(r"Unhandled node type|Do you want to proceed\?|Enter to confirm|Esc to cancel|Bash command", re.I)
+PANE_CONFIRMATION_PROMPT_RE = re.compile(
+    r"Unhandled node type|Do you want to proceed\?|Do you want to make this edit|"
+    r"allow all edits during this session|accept edits on|bypass permissions on|"
+    r"Enter to confirm|Esc to cancel|Bash command",
+    re.I,
+)
 PANE_PROMPT_RESIDUE_RE = re.compile(r"^\s*❯(?![\s\u00a0]+Try\s+\")[\s\u00a0]+[^\s\u00a0─]", re.M)
 STATE_READ_PREFLIGHT = """<!-- SOLAR_STATE_READ_PREFLIGHT -->
 ## 必须先读状态 (防写入 hook 卡死)
@@ -833,7 +839,7 @@ def _quota_models_for_provider(provider: str) -> list[str]:
 
 def _quota_exhausted_models(title: str, tail: str, health: dict[str, Any], models: list[str]) -> list[str]:
     values: set[str] = set()
-    combined = f"{title}\n{tail}".lower()
+    combined = re.sub(r"\s+", " ", f"{title}\n{tail}").lower()
     health_reason = str(health.get("reason") or health.get("status") or "").lower()
     health_provider = str(health.get("provider") or health.get("vendor") or "").lower()
 

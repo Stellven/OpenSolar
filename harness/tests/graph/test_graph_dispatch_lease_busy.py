@@ -160,7 +160,7 @@ def test_worker_discovery_marks_claude_monthly_limit_as_anthropic_quota(monkeypa
     monkeypatch.setattr(
         gnd.subprocess,
         "check_output",
-        lambda *a, **kw: b"solar-harness:0.2\tBuilder | \xe6\xa8\xa1\xe5\x9e\x8b:Opus | \xe7\x8a\xb6\xe6\x80\x81:idle/no active sprint\n",
+        lambda *a, **kw: b"solar-harness-lab:0.3\tBuilder | \xe6\xa8\xa1\xe5\x9e\x8b:Opus | \xe7\x8a\xb6\xe6\x80\x81:idle/no active sprint\n",
     )
     monkeypatch.setattr(gnd, "read_lease", lambda pane: None)
     monkeypatch.setattr(gnd, "_clear_stale_prompt_residue", lambda pane: False)
@@ -180,6 +180,44 @@ def test_worker_discovery_marks_claude_monthly_limit_as_anthropic_quota(monkeypa
     assert "opus" in workers[0]["quota_exhausted"]
     assert workers[0]["busy"] is True
     assert workers[0]["unavailable_reason"] == "rate_limit_or_api_error"
+
+
+def test_worker_discovery_marks_edit_confirmation_as_busy(monkeypatch) -> None:
+    monkeypatch.setattr(gnd, "SESSION", "solar-harness")
+    monkeypatch.setattr(
+        gnd.subprocess,
+        "check_output",
+        lambda *a, **kw: b"solar-harness-lab:0.2\tBuilder | \xe6\xa8\xa1\xe5\x9e\x8b:GLM | \xe7\x8a\xb6\xe6\x80\x81:idle/no active sprint\n",
+    )
+    monkeypatch.setattr(gnd, "read_lease", lambda pane: None)
+    monkeypatch.setattr(gnd, "_clear_stale_prompt_residue", lambda pane: False)
+    monkeypatch.setattr(gnd, "_pane_current_command", lambda pane: "claude")
+    monkeypatch.setattr(gnd, "_pane_health", lambda pane: {})
+    monkeypatch.setattr(
+        gnd,
+        "_pane_tail",
+        lambda pane, lines=80: "Do you want to make this edit to /tmp/example.py?\n❯\n",
+    )
+
+    workers = gnd._discover_workers(dry_run=False)
+
+    assert len(workers) == 1
+    assert workers[0]["busy"] is True
+
+
+def test_assigned_pane_quota_detection_handles_wrapped_monthly_limit(monkeypatch) -> None:
+    monkeypatch.setattr(gnd, "_pane_title", lambda pane: "Builder 4 | 模型:Sonnet")
+    monkeypatch.setattr(gnd, "_pane_health", lambda pane: {})
+    monkeypatch.setattr(gnd, "_pane_current_command", lambda pane: "claude")
+    monkeypatch.setattr(gnd, "_pane_runtime_unavailable_reason", lambda pane, title="": "")
+    monkeypatch.setattr(gnd, "_pane_unavailable_reason", lambda pane: "")
+    monkeypatch.setattr(
+        gnd,
+        "_pane_tail",
+        lambda pane, lines=80: "⎿  You've hit your org's monthly\n     usage limit\n/login to switch to an API\n",
+    )
+
+    assert gnd._assigned_pane_unavailable_reason("solar-harness-lab:0.3") == "rate_limit_or_api_error"
 
 
 def test_dispatch_queue_item_retries_when_assigned_pane_later_hits_quota(monkeypatch) -> None:

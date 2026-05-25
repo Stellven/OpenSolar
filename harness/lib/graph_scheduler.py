@@ -895,13 +895,14 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
             if pane in used_panes:
                 blocked_by_capacity = True
                 continue
-            is_busy = _worker_busy(worker)
-            busy_penalty = 1000 if is_busy else 0
+            if _worker_busy(worker):
+                blocked_by_capacity = True
+                continue
             cap_score = _capability_score(worker, required_capabilities, capability_scores)
             skill_score = _skill_match_count(worker, required_skills)
             model_penalty = 0 if _model_match(worker, preferred_model) else 10
             load = int(worker.get("load", 0) or 0)
-            candidates.append((-cap_score, -skill_score, busy_penalty, model_penalty, load, pane, worker))
+            candidates.append((-cap_score, -skill_score, model_penalty, load, pane, worker))
 
         if not candidates:
             if blocked_by_runtime:
@@ -922,7 +923,7 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
             continue
 
         candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3], item[4], item[5]))
-        cap_rank, skill_rank, _busy_penalty, _model_penalty, _load, _pane, worker = candidates[0]
+        cap_rank, skill_rank, _model_penalty, _load, _pane, worker = candidates[0]
         used_panes.add(str(worker.get("pane")))
         assigned.append({
             "node": node["id"],
