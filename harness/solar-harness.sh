@@ -688,7 +688,7 @@ start_watchdog_sync() {
 
 start_harness() {
   local mode="${1:-3}"
-  local work_dir="${2:-$(pwd)}"
+  local work_dir="${2:-$HARNESS_DIR}"
   local skip_doctor="${3:-}"
 
   cleanup_legacy_sessions
@@ -2655,9 +2655,9 @@ do_models_command() {
 # ---- Main ----
 
 case "${1:-start}" in
-  start|"")  start_harness 3 "${2:-$(pwd)}" "${3:-}" ;;
-  2)         start_harness 2 "${2:-$(pwd)}" "${3:-}" ;;
-  3)         start_harness 3 "${2:-$(pwd)}" "${3:-}" ;;
+  start|"")  start_harness 3 "${2:-$HARNESS_DIR}" "${3:-}" ;;
+  2)         start_harness 2 "${2:-$HARNESS_DIR}" "${3:-}" ;;
+  3)         start_harness 3 "${2:-$HARNESS_DIR}" "${3:-}" ;;
   status)    show_status ;;
   main-status) do_main_status ;;
   lab-status) do_lab_status "${2:-}" ;;
@@ -2682,7 +2682,7 @@ case "${1:-start}" in
     done
     exit "$_cap_fail"
     ;;
-  --skip-doctor) start_harness 3 "${2:-$(pwd)}" "--skip-doctor" ;;
+  --skip-doctor) start_harness 3 "${2:-$HARNESS_DIR}" "--skip-doctor" ;;
   coord-status)
     # Sprint 20260420-082442 D2: 协调器状态诊断
     pidfile="$HARNESS_DIR/.coordinator.pid"
