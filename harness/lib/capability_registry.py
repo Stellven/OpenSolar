@@ -215,6 +215,28 @@ def cmd_query(capability: str, as_json: bool) -> int:
     return 0 if found else 1
 
 
+def get_active_providers(capability: str, min_level: int = 1) -> list[dict]:
+    """Return active providers for a capability without CLI side effects."""
+    conn = _open_db()
+    rows = conn.execute(
+        "SELECT capability, provider, level, status, updated_at FROM plugin_capabilities "
+        "WHERE capability=? AND status='active' AND level>=? ORDER BY level DESC, provider",
+        (capability, min_level),
+    ).fetchall()
+    conn.close()
+    return [
+        {
+            "capability": r["capability"],
+            "provider": r["provider"],
+            "level": r["level"],
+            "integration_level": LEVEL_REVERSE.get(r["level"], "dead_end"),
+            "status": r["status"],
+            "updated_at": r["updated_at"],
+        }
+        for r in rows
+    ]
+
+
 def cmd_scorecard(as_json: bool) -> int:
     """Generate a capability scorecard by integration level."""
     conn = _open_db()

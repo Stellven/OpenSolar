@@ -105,6 +105,40 @@ def is_dispatchable(op: dict[str, Any]) -> tuple[bool, str]:
     return True, ""
 
 
+def load_task_graph_node(sprint_id: str, node_id: str) -> dict[str, Any] | None:
+    path = SPRINTS_DIR / f"{sprint_id}.task_graph.json"
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    for node in payload.get("nodes", []) or []:
+        if str(node.get("id")) == node_id:
+            return dict(node)
+    return None
+
+
+def _capsule_submit_metadata(node: dict[str, Any] | None) -> dict[str, Any]:
+    if not node:
+        return {}
+    if not (
+        node.get("capability_native")
+        or node.get("capability_capsule_id")
+        or node.get("execution_capsule_id")
+        or node.get("capsule_plan")
+    ):
+        return {}
+    capsule_plan = dict(node.get("capsule_plan") or {})
+    return {
+        "capability_native": bool(node.get("capability_native", True)),
+        "capability_capsule_id": node.get("capability_capsule_id") or capsule_plan.get("capability_capsule_id"),
+        "dispatch_task_type": node.get("dispatch_task_type") or capsule_plan.get("dispatch_task_type"),
+        "logical_operator": node.get("logical_operator", ""),
+        "capsule_plan": capsule_plan,
+    }
+
+
 # ── 算子选择 ──────────────────────────────────────────────────────────────────
 
 def normalize_role(role: str) -> str:
@@ -116,6 +150,8 @@ def select_operator_by_role(
     role: str,
     task_type: str = "",
     prefer_operator: str = "",
+    resolved_capsule: dict[str, Any] | None = None,
+    logical_operator: str = "",
 ) -> tuple[str, dict[str, Any], str]:
     """选择最合适的可调度算子。
 
@@ -125,6 +161,10 @@ def select_operator_by_role(
     registry = load_registry()
     operators = registry.get("operators", {})
     norm_role = normalize_role(role)
+    capsule_constraints = dict((resolved_capsule or {}).get("operator_constraints") or {})
+    preferred_ops = set(capsule_constraints.get("preferred", []) or [])
+    forbidden_ops = set(capsule_constraints.get("forbidden", []) or [])
+    default_profile = str(capsule_constraints.get("default_operator_profile") or "")
 
     # 1. 指定 operator 优先
     if prefer_operator:
@@ -146,6 +186,8 @@ def select_operator_by_role(
         ok, _ = is_dispatchable(op)
         if not ok:
             continue
+        if op_id in forbidden_ops:
+            continue
         op_roles = [str(r).lower() for r in op.get("roles", [op.get("role", "")])]
         if norm_role not in op_roles:
             continue
@@ -162,6 +204,15 @@ def select_operator_by_role(
             task_classes = [str(t).lower() for t in op.get("task_classes", [])]
             if any(task_type.lower() in tc for tc in task_classes):
                 priority += 3
+        preferred_for = [str(item).lower() for item in op.get("preferred_for", [])]
+        if logical_operator and logical_operator.lower() in preferred_for:
+            priority += 2
+        if norm_role in preferred_for:
+            priority += 2
+        if preferred_ops and op_id in preferred_ops:
+            priority += 20
+        if default_profile and (op_id == default_profile or str(op.get("profile", "")) == default_profile):
+            priority += 8
         candidates.append((priority, op_id, op))
 
     if not candidates:
@@ -472,12 +523,37 @@ def cmd_submit(args: argparse.Namespace) -> int:
     task_type = str(args.task_type or "")
     dry_run: bool = bool(args.dry_run)
     context = str(args.context or "")
+    task_graph_node = load_task_graph_node(sprint_id, node_id)
+    capsule_submit = _capsule_submit_metadata(task_graph_node)
+    logical_operator = str(capsule_submit.get("logical_operator") or (task_graph_node or {}).get("logical_operator") or "")
+    if not task_type:
+        task_type = str(capsule_submit.get("dispatch_task_type") or (task_graph_node or {}).get("type") or "")
+
+    resolved_capsule: dict[str, Any] | None = None
+    if capsule_submit.get("capability_capsule_id"):
+        try:
+            lib_dir = HARNESS_DIR / "lib"
+            if str(lib_dir) not in sys.path:
+                sys.path.insert(0, str(lib_dir))
+            from capability_capsules import resolve_capability_capsule_for_task  # type: ignore
+
+            resolved_capsule = resolve_capability_capsule_for_task(
+                {
+                    "task_type": task_type,
+                    "objective": objective[:300],
+                    "capability_capsule_id": capsule_submit["capability_capsule_id"],
+                }
+            )
+        except Exception:
+            resolved_capsule = None
 
     # 1. 选算子
     operator_id, operator, fallback_reason = select_operator_by_role(
         role=role,
         task_type=task_type,
         prefer_operator=prefer_operator,
+        resolved_capsule=resolved_capsule,
+        logical_operator=logical_operator,
     )
     if not operator_id:
         print(f"ERROR: 没有可用算子 ({fallback_reason})", file=sys.stderr)
@@ -529,6 +605,19 @@ def cmd_submit(args: argparse.Namespace) -> int:
         "issued_at": _now(),
         "pm_context": context[:500] if context else "",
     }
+    if logical_operator:
+        envelope["logical_operator"] = logical_operator
+    if task_graph_node:
+        envelope["task_graph_node"] = {
+            "id": task_graph_node.get("id"),
+            "goal": task_graph_node.get("goal"),
+            "acceptance": task_graph_node.get("acceptance", []),
+            "requirement_ids": task_graph_node.get("requirement_ids", []),
+        }
+    if capsule_submit.get("capability_capsule_id"):
+        envelope["capability_native"] = bool(capsule_submit.get("capability_native", True))
+        envelope["capability_capsule_id"] = str(capsule_submit["capability_capsule_id"])
+        envelope["capsule_plan"] = capsule_submit.get("capsule_plan", {})
 
     record: dict[str, Any] = {
         "task_id": task_id,
@@ -541,6 +630,9 @@ def cmd_submit(args: argparse.Namespace) -> int:
         "status": "submitted",
         "submitted_at": _now(),
     }
+    if capsule_submit.get("capability_capsule_id"):
+        record["capability_capsule_id"] = capsule_submit["capability_capsule_id"]
+        record["logical_operator"] = logical_operator
 
     # 尝试通过 operator_runtime.submit 投递
     try:

@@ -36,6 +36,12 @@ class EvidenceLedger:
         dag_ref: Optional[str] = None,
         context_packet_id: Optional[str] = None,
         final_report_target: Optional[str] = None,
+        capability_capsule_id: Optional[str] = None,
+        capsule_kind: Optional[str] = None,
+        resolved_bindings: Optional[Dict[str, Any]] = None,
+        effect_summary: Optional[Dict[str, Any]] = None,
+        guard_results: Optional[List[Any]] = None,
+        verification_results: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Write a run evidence entry before dispatch."""
         self.ledger_dir.mkdir(parents=True, exist_ok=True)
@@ -57,6 +63,18 @@ class EvidenceLedger:
             },
             "final_report_target": final_report_target,
         }
+        if capability_capsule_id is not None:
+            entry["capability_capsule_id"] = capability_capsule_id
+        if capsule_kind is not None:
+            entry["capsule_kind"] = capsule_kind
+        if resolved_bindings is not None:
+            entry["resolved_bindings"] = resolved_bindings
+        if effect_summary is not None:
+            entry["effect_summary"] = effect_summary
+        if guard_results is not None:
+            entry["guard_results"] = guard_results
+        if verification_results is not None:
+            entry["verification_results"] = verification_results
         ledger_path = self.ledger_dir / f"{sprint_id}.jsonl"
         with open(ledger_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
