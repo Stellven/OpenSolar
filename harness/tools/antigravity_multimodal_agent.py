@@ -2,6 +2,7 @@
 """Command backend adapter for Antigravity multimodal/image tasks."""
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
@@ -121,6 +122,49 @@ Generated-At: {now()}
     return handoff
 
 
+
+
+def capture_raw_intent_entrypoint(text: str) -> int:
+    cmd = [
+        sys.executable,
+        str(Path.home() / ".solar" / "harness" / "lib" / "intent_gateway.py"),
+        "capture",
+        "--source-channel", "antigravity_bridge",
+        "--actor", "user",
+        "--device", "mac_mini_antigravity",
+        "--repo", str(Path.home() / ".solar" / "harness"),
+        "--source-trust", "antigravity_bridge",
+        "--text", text,
+        "--json",
+    ]
+    proc = subprocess.run(cmd, text=True, capture_output=True, timeout=30)
+    proc_stdout = proc.stdout
+    if proc.returncode == 0 and proc.stdout:
+        try:
+            payload = json.loads(proc.stdout)
+            intent_id = str(payload.get("intent_id") or "")
+            if intent_id:
+                consumer = subprocess.run([
+                    sys.executable,
+                    str(Path.home() / ".solar" / "harness" / "lib" / "intent_consumer.py"),
+                    "consume",
+                    "--intent-id", intent_id,
+                    "--json",
+                ], text=True, capture_output=True, timeout=120)
+                if consumer.returncode == 0:
+                    payload["consumer"] = json.loads(consumer.stdout)
+                    proc_stdout = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+                else:
+                    print(consumer.stderr or consumer.stdout, file=sys.stderr)
+        except Exception:
+            proc_stdout = proc.stdout
+    if proc_stdout:
+        print(proc_stdout, end="" if proc_stdout.endswith("\n") else "\n")
+    if proc.stderr:
+        print(proc.stderr, file=sys.stderr, end="" if proc.stderr.endswith("\n") else "\n")
+    return proc.returncode
+
+
 def tail_text(path: Path, limit: int = 4000) -> str:
     if not path.exists():
         return ""
@@ -129,9 +173,15 @@ def tail_text(path: Path, limit: int = 4000) -> str:
 
 
 def main() -> int:
+    raw_intent = os.environ.get("SOLAR_ANTIGRAVITY_RAW_INTENT", "").strip()
+    if not raw_intent and len(sys.argv) > 1:
+        raw_intent = " ".join(sys.argv[1:]).strip()
+    if raw_intent:
+        return capture_raw_intent_entrypoint(raw_intent)
+
     dispatch_file = Path(os.environ.get("SOLAR_MULTI_TASK_DISPATCH_FILE", "")).expanduser()
     if not dispatch_file.exists():
-        print("ERROR: SOLAR_MULTI_TASK_DISPATCH_FILE missing", file=sys.stderr)
+        print("ERROR: SOLAR_MULTI_TASK_DISPATCH_FILE missing; set SOLAR_ANTIGRAVITY_RAW_INTENT for RawIntent-only bridge mode", file=sys.stderr)
         return 2
 
     dispatch = dispatch_file.read_text(encoding="utf-8", errors="replace")

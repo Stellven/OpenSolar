@@ -13,6 +13,8 @@ cp solar-harness.sh "$TMP/solar-harness.sh"
 cp lib/run-state.sh "$TMP/lib/run-state.sh"
 cp lib/events.sh "$TMP/lib/events.sh"
 cp lib/epic_decomposer.py "$TMP/lib/epic_decomposer.py"
+cp lib/intent_gateway.py "$TMP/lib/intent_gateway.py"
+[[ -f lib/prerequisite_resolver.py ]] && cp lib/prerequisite_resolver.py "$TMP/lib/prerequisite_resolver.py"
 cp lib/workflow_guard.py "$TMP/lib/workflow_guard.py"
 cp tools/solar-autopilot-monitor.py "$TMP/tools/solar-autopilot-monitor.py"
 
@@ -30,7 +32,7 @@ chmod +x "$TMP/solar-harness.sh"
 
 RAW_DIR="$TMP/raw"
 
-SOLAR_KNOWLEDGE_RAW_DIR="$RAW_DIR" "$TMP/solar-harness.sh" intake --no-dispatch --stdin <<'EOF'
+SOLAR_KNOWLEDGE_RAW_DIR="$RAW_DIR" SOLAR_INTENT_GATEWAY_DIR="$TMP/intents" "$TMP/solar-harness.sh" intake --no-dispatch --stdin <<'EOF'
 修复一个按钮文案 typo。
 EOF
 
@@ -50,6 +52,14 @@ assert status["phase"] == "spec", status
 assert status["handoff_to"] == "pm", status
 contract = next(sprints.glob("sprint-*.contract.md")).read_text()
 assert "修复一个按钮文案 typo" in contract, contract
+raw_intent = next(sprints.glob("sprint-*.raw_intent.json"))
+rewritten = next(sprints.glob("sprint-*.rewritten_intent.json"))
+ir = next(sprints.glob("sprint-*.requirement_ir.json"))
+trace = next(sprints.glob("sprint-*.requirement_trace.json"))
+assert json.loads(raw_intent.read_text())["schema_version"] == "solar.raw_intent.v1"
+assert json.loads(rewritten.read_text())["schema_version"] == "solar.rewritten_intent.v1"
+assert json.loads(ir.read_text())["compiler_next"] == "pm_planner_task_graph"
+assert json.loads(trace.read_text())["stages"][0]["stage"] == "raw_intent_capture"
 PY
 
 simple_sid=$(python3 - "$TMP/sprints" <<'PY'
@@ -117,7 +127,7 @@ assert actions and actions[0].get("dropped") == "terminal_sprint", actions
 assert mod.load_queue() == [], mod.load_queue()
 PY
 
-SOLAR_KNOWLEDGE_RAW_DIR="$RAW_DIR" SOLAR_EPIC_MIN_CHARS=60 "$TMP/solar-harness.sh" intake --no-dispatch \
+SOLAR_KNOWLEDGE_RAW_DIR="$RAW_DIR" SOLAR_INTENT_GATEWAY_DIR="$TMP/intents" SOLAR_EPIC_MIN_CHARS=60 "$TMP/solar-harness.sh" intake --no-dispatch \
   "把 Solar-Harness 改造成大需求自动拆分、多个 PRD、设计、任务图、并行调度、验证闭环的系统。"
 
 epic_count=$(find "$TMP/sprints" -name 'epic-*.epic.json' | wc -l | tr -d ' ')

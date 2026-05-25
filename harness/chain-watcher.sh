@@ -2,8 +2,8 @@
 # Solar Chain Watcher v3 — 全文件扫描 + 通知 + flock 防多开
 # sprint-20260503-111139: 扩展扫描到 review-/research-/其它 + PLANNER-INBOX 通知
 # 1. 扫 ~/.solar/codex-bridge/from-codex/ 所有 .md (排除 template) → 按 prefix 分发
-# 2. contract-/execution-contract- → 起自动 sprint
-# 3. review-/research-/其它 → 写 PLANNER-INBOX 通知
+# 2. contract-/execution-contract-/review-/research-/其它 → 只捕获 RawIntent
+# 3. 后续 Requirement Compiler / PM / Planner 链路从 RawIntent 消费，不在 bridge 里直接建任务或塞 pane
 # 4. 检测无 active sprint → 起队列下一个 drafting
 
 # D4: mkdir 原子锁防多开 (chain-watcher.pid) — flock 在 macOS 不可用
@@ -30,6 +30,49 @@ notify_planner_codex_file() {
   ts=$(date -u +"%Y-%m-%dT%H:%MZ")
   mkdir -p "$(dirname "$PLANNER_INBOX")"
   printf '%s\n' "- [ ] [${ts}] [${type}] ${base} (~/.solar/codex-bridge/from-codex/)" >> "$PLANNER_INBOX"
+}
+
+
+
+capture_codex_raw_intent_file() {
+  local cf="$1" kind="$2" base out rc intent_id mode
+  base=$(basename "$cf")
+  mode="delivery"
+  case "$kind" in
+    CODEX-RESEARCH) mode="research" ;;
+    CODEX-REVIEW) mode="review" ;;
+    CODEX-CONTRACT) mode="delivery" ;;
+    *) mode="delivery" ;;
+  esac
+
+  out=$(SOLAR_HARNESS_DIR="$HARNESS_DIR" SOLAR_HARNESS_SPRINTS_DIR="$SPRINTS_DIR" \
+    python3 "$HARNESS_DIR/lib/intent_gateway.py" capture \
+      --source-channel codex_bridge \
+      --actor codex \
+      --device mac_mini \
+      --repo "$HARNESS_DIR" \
+      --source-trust codex_bridge_file \
+      --mode "$mode" \
+      --file "$cf" \
+      --json 2>&1)
+  rc=$?
+  if [ "$rc" != "0" ]; then
+    echo "[$(date '+%H:%M:%S')] codex RawIntent capture FAILED: ${base} rc=${rc}"
+    printf '%s\n' "$out" | tail -5
+    return 1
+  fi
+  intent_id=$(printf '%s\n' "$out" | python3 -c 'import json,sys; print((json.load(sys.stdin) or {}).get("intent_id", ""))' 2>/dev/null || true)
+  echo "[$(date '+%H:%M:%S')] codex RawIntent captured: ${base} -> ${intent_id:-unknown} (${kind})"
+  if [ -n "$intent_id" ]; then
+    SOLAR_HARNESS_DIR="$HARNESS_DIR" SOLAR_HARNESS_SPRINTS_DIR="$SPRINTS_DIR" \
+      python3 "$HARNESS_DIR/lib/intent_consumer.py" consume --intent-id "$intent_id" --json >/tmp/solar-intent-consumer-${intent_id}.json 2>/tmp/solar-intent-consumer-${intent_id}.err || {
+        echo "[$(date '+%H:%M:%S')] codex RawIntent consume FAILED: ${intent_id}"
+        tail -5 /tmp/solar-intent-consumer-${intent_id}.err 2>/dev/null || true
+        return 1
+      }
+  fi
+  type ledger_emit &>/dev/null && ledger_emit "raw_intent" "${intent_id:-$base}" "{\"source\":\"codex_bridge\",\"file\":\"$base\",\"kind\":\"$kind\"}" 2>/dev/null || true
+  return 0
 }
 
 # sprint-20260503-150911 — Planner 强制通知
@@ -213,34 +256,32 @@ ingest_codex_all_files() {
 
     case "$base" in
       contract-*|execution-contract-*)
-        if ingest_single_contract "$cf"; then
+        if capture_codex_raw_intent_file "$cf" "CODEX-CONTRACT"; then
           cp "$cf" "$CODEX_PROCESSED/$base"
           rm "$cf"
           n_contracts=$((n_contracts + 1))
         fi
         ;;
       review-*)
-        notify_planner_codex_file "CODEX-REVIEW" "$base"
-        notify_pane0_planner "CODEX-REVIEW" "$base"
-        type ledger_emit &>/dev/null && ledger_emit "consumed" "$base" "{\"source\":\"chain-watcher\"}" 2>/dev/null || true
-        cp "$cf" "$CODEX_PROCESSED/$base"
-        rm "$cf"
-        n_reviews=$((n_reviews + 1))
+        if capture_codex_raw_intent_file "$cf" "CODEX-REVIEW"; then
+          cp "$cf" "$CODEX_PROCESSED/$base"
+          rm "$cf"
+          n_reviews=$((n_reviews + 1))
+        fi
         ;;
       research-*)
-        notify_planner_codex_file "CODEX-RESEARCH" "$base"
-        notify_pane0_planner "CODEX-RESEARCH" "$base"
-        type ledger_emit &>/dev/null && ledger_emit "consumed" "$base" "{\"source\":\"chain-watcher\"}" 2>/dev/null || true
-        cp "$cf" "$CODEX_PROCESSED/$base"
-        rm "$cf"
-        n_research=$((n_research + 1))
+        if capture_codex_raw_intent_file "$cf" "CODEX-RESEARCH"; then
+          cp "$cf" "$CODEX_PROCESSED/$base"
+          rm "$cf"
+          n_research=$((n_research + 1))
+        fi
         ;;
       *)
-        notify_planner_codex_file "CODEX-UNKNOWN" "$base"
-        notify_pane0_planner "CODEX-UNKNOWN" "$base"
-        cp "$cf" "$CODEX_PROCESSED/$base"
-        rm "$cf"
-        n_unknown=$((n_unknown + 1))
+        if capture_codex_raw_intent_file "$cf" "CODEX-UNKNOWN"; then
+          cp "$cf" "$CODEX_PROCESSED/$base"
+          rm "$cf"
+          n_unknown=$((n_unknown + 1))
+        fi
         ;;
     esac
   done

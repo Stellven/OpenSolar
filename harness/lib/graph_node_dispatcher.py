@@ -518,9 +518,9 @@ def _discover_deepresearch_artifacts(sid: str, node: dict[str, Any], eval_json: 
         node.get("eval_artifacts_json"),
     ]
     research_eval = _first_existing_path(explicit_research_eval, eval_path.parent if str(eval_path) else None, want_dir=False)
-    if not research_eval and eval_path.exists() and _looks_like_research_eval_data(eval_data):
+    if (not research_eval or str(research_eval) in {"", "."}) and eval_path.exists() and _looks_like_research_eval_data(eval_data):
         research_eval = eval_path
-    if not research_eval:
+    if not research_eval or str(research_eval) in {"", "."}:
         for base in [eval_path.parent if str(eval_path) else Path(""), SPRINTS_DIR / sid, SPRINTS_DIR]:
             if not str(base) or not base.exists():
                 continue
@@ -528,10 +528,10 @@ def _discover_deepresearch_artifacts(sid: str, node: dict[str, Any], eval_json: 
                 [base / "research_eval.json", base / f"{sid}-research_eval.json", base / "run-research_eval.json"],
                 want_dir=False,
             )
-            if found:
+            if found and str(found) not in {"", "."}:
                 research_eval = found
                 break
-    research_eval_data = _read_json_file(research_eval) if research_eval else {}
+    research_eval_data = _read_json_file(research_eval) if research_eval and str(research_eval) not in {"", "."} else {}
     base_dirs = [
         eval_path.parent if str(eval_path) else Path(""),
         SPRINTS_DIR / sid,
@@ -553,7 +553,7 @@ def _discover_deepresearch_artifacts(sid: str, node: dict[str, Any], eval_json: 
             explicit.extend([eval_data.get(key), node_artifacts.get(key), node.get(key)])
         for base in base_dirs:
             found = _first_existing_path(explicit, base if str(base) else None, want_dir=False)
-            if found:
+            if found and str(found) not in {"", "."}:
                 return found
         for base in base_dirs:
             if not str(base) or not base.exists():
@@ -583,7 +583,12 @@ def _discover_deepresearch_artifacts(sid: str, node: dict[str, Any], eval_json: 
 
 def _deepresearch_quality_gate_auto_run(sid: str, node: dict[str, Any], eval_json: str | Path) -> dict[str, Any]:
     """Run deterministic DeepResearch gate during closeout when evaluator omitted it."""
-    if evaluate_research_artifacts is None:
+    try:
+        from research.evaluator import evaluate_final_closeout
+    except ImportError:
+        evaluate_final_closeout = None
+
+    if evaluate_final_closeout is None:
         return {
             "present": True,
             "ok": False,
@@ -594,6 +599,7 @@ def _deepresearch_quality_gate_auto_run(sid: str, node: dict[str, Any], eval_jso
                 "errors": ["research_evaluator_unavailable"],
             },
         }
+
     artifacts = _discover_deepresearch_artifacts(sid, node, eval_json)
     research_eval = artifacts.get("eval_json") or ""
     if not research_eval or not Path(research_eval).expanduser().exists():
@@ -608,15 +614,54 @@ def _deepresearch_quality_gate_auto_run(sid: str, node: dict[str, Any], eval_jso
                 "artifacts": artifacts,
             },
         }
-    gate = evaluate_research_artifacts(
-        research_eval,
-        report_ast=artifacts.get("report_ast") or None,
-        final_md=artifacts.get("final_md") or None,
-        bibliography=artifacts.get("bibliography") or None,
+
+    output_dir = artifacts.get("output_dir")
+    if not output_dir:
+        # fallback to the parent directory of eval_json
+        eval_path = Path(eval_json).expanduser()
+        output_dir = str(eval_path.parent) if eval_path.exists() else ""
+    
+    if not output_dir or not Path(output_dir).exists():
+        return {
+            "present": False,
+            "ok": False,
+            "auto_run": True,
+            "gate": {
+                "ok": False,
+                "verdict": "FAIL",
+                "errors": [f"research_output_dir_missing:{output_dir or 'N/A'}"],
+                "artifacts": artifacts,
+            },
+        }
+
+    closeout = evaluate_final_closeout(
+        output_dir,
+        strict=True,
     )
-    gate["auto_run"] = True
-    gate["discovered_artifacts"] = artifacts
-    return {"present": True, "ok": bool(gate.get("ok")), "auto_run": True, "gate": gate}
+
+    # Load the updated eval_json or survey_eval.json to get research_quality_gate
+    # because evaluate_final_closeout writes to it
+    eval_json_path = Path(eval_json).expanduser()
+    if eval_json_path.exists():
+        res = _deepresearch_quality_gate_from_eval(eval_json_path)
+        if res.get("present"):
+            res["auto_run"] = True
+            res["gate"]["discovered_artifacts"] = artifacts
+            return res
+
+    gate = {
+        "ok": closeout.get("ok", False),
+        "verdict": "PASS" if closeout.get("ok") else "FAIL",
+        "closeout_verdict": closeout.get("verdict", "hard_fail"),
+        "errors": closeout.get("issues") or [],
+        "discovered_artifacts": artifacts,
+    }
+    return {
+        "present": True,
+        "ok": gate["ok"],
+        "auto_run": True,
+        "gate": gate,
+    }
 
 
 def _ensure_research_run(db_path: Path, topic: str, existing_run_id: str = "") -> str:

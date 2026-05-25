@@ -20,6 +20,7 @@ import datetime
 import importlib.util
 import json
 import os
+import subprocess
 import sys
 import textwrap
 import uuid
@@ -36,7 +37,7 @@ PM_INBOX_DIR = HARNESS_DIR / "run" / "pm-inbox"
 OPERATOR_INBOX_DIR = HARNESS_DIR / "run" / "operator-inbox"
 OPERATOR_RESULTS_DIR = HARNESS_DIR / "run" / "operator-results"
 OPERATOR_STATUS_DIR = HARNESS_DIR / "run" / "operator-status"
-SPRINTS_DIR = HARNESS_DIR / "sprints"
+SPRINTS_DIR = Path(os.environ.get("SOLAR_HARNESS_SPRINTS_DIR", HARNESS_DIR / "sprints"))
 
 # ── 角色别名映射 ───────────────────────────────────────────────────────────────
 ROLE_ALIASES: dict[str, str] = {
@@ -69,6 +70,70 @@ def _now() -> str:
 
 def _short_id() -> str:
     return str(uuid.uuid4())[:8]
+
+
+
+def capture_entrypoint_raw_intent(
+    *,
+    source_channel: str,
+    text: str,
+    sprint_id: str = "",
+    node_id: str = "",
+    role: str = "",
+    repo: str = "",
+) -> dict[str, Any]:
+    full_text = text.strip()
+    if sprint_id or node_id or role:
+        full_text = (
+            f"[entrypoint_metadata]\n"
+            f"sprint_id: {sprint_id or 'N/A'}\n"
+            f"node_id: {node_id or 'N/A'}\n"
+            f"role: {role or 'N/A'}\n\n"
+            f"[raw_request]\n{full_text}"
+        )
+    cmd = [
+        sys.executable,
+        str(HARNESS_DIR / "lib" / "intent_gateway.py"),
+        "capture",
+        "--source-channel", source_channel,
+        "--actor", "user",
+        "--device", "mac_mini_pm_dispatch",
+        "--repo", repo or str(HARNESS_DIR),
+        "--source-trust", source_channel,
+        "--text", full_text,
+        "--json",
+    ]
+    if sprint_id:
+        cmd.extend(["--sprint-id", sprint_id])
+    proc = subprocess.run(cmd, text=True, capture_output=True, timeout=30)
+    if proc.returncode != 0:
+        raise RuntimeError((proc.stderr or proc.stdout or "intent_gateway capture failed").strip())
+    payload = json.loads(proc.stdout)
+    intent_id = str(payload.get("intent_id") or "")
+    if intent_id:
+        consumer_cmd = [
+            sys.executable,
+            str(HARNESS_DIR / "lib" / "intent_consumer.py"),
+            "consume",
+            "--intent-id", intent_id,
+            "--json",
+        ]
+        consumer = subprocess.run(consumer_cmd, text=True, capture_output=True, timeout=120)
+        if consumer.returncode != 0:
+            raise RuntimeError((consumer.stderr or consumer.stdout or "intent_consumer failed").strip())
+        payload["consumer"] = json.loads(consumer.stdout)
+    return payload
+
+
+def print_intent_capture(payload: dict[str, Any], entrypoint: str) -> None:
+    print("✅ RawIntent 已捕获")
+    print(f"   entrypoint  = {entrypoint}")
+    print(f"   intent_id   = {payload.get('intent_id', '')}")
+    print(f"   title       = {payload.get('title', '')}")
+    print(f"   lane        = {payload.get('lane', '')}")
+    print(f"   raw_intent  = {payload.get('raw_intent', '')}")
+    print(f"   requirement = {payload.get('requirement_ir', '')}")
+    print("   direct_dispatch = disabled")
 
 
 # ── Registry ──────────────────────────────────────────────────────────────────
@@ -448,6 +513,22 @@ def cmd_compile_request(args: argparse.Namespace) -> int:
         print("ERROR: request text is required via --text, --input-file, or stdin", file=sys.stderr)
         return 1
 
+    sprint_id = str(args.sprint or "")
+    if os.environ.get("SOLAR_PM_DISPATCH_ALLOW_DIRECT") != "1":
+        try:
+            payload = capture_entrypoint_raw_intent(
+                source_channel="pm_compile_request",
+                text=request_text,
+                sprint_id=sprint_id,
+                role="pm",
+                repo=str(Path(args.workspace_root or os.getcwd())),
+            )
+        except Exception as exc:
+            print(f"ERROR: RawIntent capture failed: {exc}", file=sys.stderr)
+            return 1
+        print_intent_capture(payload, "pm_dispatch.compile-request")
+        return 0
+
     sprint_id = str(args.sprint or _new_sprint_id())
     workspace_root = Path(args.workspace_root or os.getcwd())
 
@@ -518,6 +599,24 @@ def cmd_submit(args: argparse.Namespace) -> int:
         return 1
 
     prefer_operator = str(args.operator or "").strip()
+    requested_sprint_id = str(args.sprint or "")
+    node_id_for_intent = str(args.node or "N1")
+    if os.environ.get("SOLAR_PM_DISPATCH_ALLOW_DIRECT") != "1":
+        try:
+            payload = capture_entrypoint_raw_intent(
+                source_channel="pm_dispatch",
+                text=objective + (f"\n\n[context]\n{args.context}" if str(args.context or "").strip() else ""),
+                sprint_id=requested_sprint_id,
+                node_id=node_id_for_intent,
+                role=role,
+                repo=str(HARNESS_DIR),
+            )
+        except Exception as exc:
+            print(f"ERROR: RawIntent capture failed: {exc}", file=sys.stderr)
+            return 1
+        print_intent_capture(payload, "pm_dispatch.submit")
+        return 0
+
     sprint_id = str(args.sprint or f"pm-adhoc-{_short_id()}")
     node_id = str(args.node or "N1")
     task_type = str(args.task_type or "")
@@ -755,12 +854,12 @@ def cmd_complete(args: argparse.Namespace) -> int:
 def main() -> int:
     p = argparse.ArgumentParser(
         prog="pm_dispatch",
-        description="PM 发号施令：从主四分屏 PM pane 向无头算子 pane 派发任务",
+        description="PM 入口：默认只捕获 RawIntent；直接派发需显式 SOLAR_PM_DISPATCH_ALLOW_DIRECT=1",
     )
     sub = p.add_subparsers(dest="cmd")
 
     # submit
-    s = sub.add_parser("submit", help="向无头算子提交任务")
+    s = sub.add_parser("submit", help="捕获 PM 原始需求为 RawIntent（默认不直接派发）")
     s.add_argument("--role", default="builder", help="目标角色 (builder/planner/evaluator/knowledge)")
     s.add_argument("--objective", required=True, help="任务描述（自然语言）")
     s.add_argument("--operator", default="", help="指定物理算子 ID（可选）")
@@ -770,7 +869,7 @@ def main() -> int:
     s.add_argument("--context", default="", help="额外上下文（注入 dispatch 文件）")
     s.add_argument("--dry-run", action="store_true", help="预览，不实际提交")
 
-    cr = sub.add_parser("compile-request", help="先编译 Requirement IR/.pm/sprint package，再可选派给 planner")
+    cr = sub.add_parser("compile-request", help="捕获编译请求为 RawIntent（默认不直接创建 sprint/package）")
     cr.add_argument("--text", default="", help="原始需求文本")
     cr.add_argument("--input-file", default="", help="从文件读取原始需求")
     cr.add_argument("--paper", action="append", default=[], help="论文标题、链接或标识")

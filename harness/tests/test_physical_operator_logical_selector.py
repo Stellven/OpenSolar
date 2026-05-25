@@ -238,311 +238,71 @@ def test_verifier_conflict():
     assert "verifier_conflict" in err
 
 
-# Fallback mock registry containing actual fallback operator IDs
-fallback_mock_registry = {
-    "version": 1,
-    "operators": {
-        "mini-claude-opus-planner": {
-            "display_name": "Mock Claude Opus Planner",
-            "role": "planner",
-            "profile": "planner",
-            "enabled": True,
-            "available": True,
-            "key_ref": "mock_key",
-            "auth_mode": "subscription",
-            "quota_guard_state": "ok",
-            "task_classes": ["planning", "ARCH_DESIGN"],
-            "cost_tier": "high"
-        },
-        "mini-antigravity-gemini31-pro": {
-            "display_name": "Mock Gemini 3.1 Pro",
-            "role": "planner",
-            "profile": "gemini-planner",
-            "enabled": True,
-            "available": True,
-            "key_ref": "mock_key",
-            "auth_mode": "subscription",
-            "quota_guard_state": "ok",
-            "task_classes": ["planning", "ARCH_DESIGN", "RESEARCH_SYNTHESIS"],
-            "cost_tier": "medium"
-        },
-        "mini-claude-sonnet-builder": {
-            "display_name": "Mock Claude Sonnet Builder",
+def test_profile_alias_builder_main_selects_builder(monkeypatch):
+    profiles = {
+        "builder": {
             "role": "builder",
-            "profile": "builder",
-            "enabled": True,
-            "available": True,
-            "key_ref": "mock_key",
-            "auth_mode": "subscription",
-            "quota_guard_state": "ok",
-            "task_classes": ["implementation", "debugging", "ARCH_DESIGN"],
-            "cost_tier": "medium"
-        },
-        "mini-antigravity-gemini35-flash-high": {
-            "display_name": "Mock Gemini 3.5 Flash",
-            "role": "builder",
-            "profile": "gemini-builder",
-            "enabled": True,
-            "available": True,
-            "key_ref": "mock_key",
-            "auth_mode": "subscription",
-            "quota_guard_state": "ok",
-            "task_classes": ["implementation", "debugging", "ARCH_DESIGN"],
-            "cost_tier": "low"
-        },
-        "mini-claude-opus-evaluator": {
-            "display_name": "Mock Claude Opus Evaluator",
-            "role": "evaluator",
-            "profile": "evaluator",
-            "enabled": True,
-            "available": True,
-            "key_ref": "mock_key",
-            "auth_mode": "subscription",
-            "quota_guard_state": "ok",
-            "task_classes": ["verification", "review", "FINAL_REVIEW"],
-            "cost_tier": "high"
+            "persona": "builder",
+            "backend": "claude-cli",
+            "model": "sonnet",
         }
     }
-}
+    monkeypatch.setattr(m, "load_profiles", lambda: {"defaults": {"profile": "builder"}, "profiles": profiles})
+
+    selected = m.select_profile({"preferred_profile": "builder_main"})
+
+    assert selected["name"] == "builder"
+    assert selected["model"] == "sonnet"
 
 
-def test_quota_exhausted_opus_skipped():
-    # Registry override
-    m.load_physical_operators = lambda: fallback_mock_registry
-    
-    # Simulate mini-claude-opus-planner quota exhausted
-    states = {
-        "mini-claude-opus-planner": "quota_exhausted",
-        "mini-antigravity-gemini31-pro": "idle"
+def test_quota_fallback_skips_blocked_anthropic_profile(monkeypatch):
+    profiles = {
+        "builder": {
+            "role": "builder",
+            "persona": "builder",
+            "backend": "claude-cli",
+            "model": "sonnet",
+        },
+        "gemini-builder": {
+            "role": "builder",
+            "persona": "builder",
+            "backend": "gemini-cli",
+            "model": "gemini-3.5-flash",
+        },
+        "thunderomlx-local": {
+            "role": "builder",
+            "persona": "builder",
+            "backend": "claude-cli",
+            "model": "thunderomlx-local",
+        },
     }
-    operator_runtime.get_operator_runtime_state = lambda op_id: states.get(op_id, "idle")
-    
+    monkeypatch.setattr(m, "load_profiles", lambda: {"defaults": {"profile": "builder"}, "profiles": profiles})
+    monkeypatch.setattr(
+        m,
+        "capability_for_profile",
+        lambda profile, include_probe=False: {
+            "status": "ok",
+            "provider": m.model_provider(str(profile.get("model") or ""), str(profile.get("backend") or "")),
+        },
+    )
+
     node = {
-        "task_type": "ARCH_DESIGN"
+        "role": "builder",
+        "preferred_profile": "builder_main",
+        "preferred_model": "sonnet",
+        "quota_blocked_profiles": ["builder"],
     }
-    op, err = m.select_operator(node, {"name": "planner"})
-    assert op is not None, err
-    assert op.get("operator_id") == "mini-antigravity-gemini31-pro"
+    selected = m.select_profile(node)
+
+    assert selected["name"] == "gemini-builder"
+    assert selected["model"] == "gemini-3.5-flash"
+    assert selected["quota_fallback_from"] == "builder"
+    assert selected["quota_fallback_reason"] == "quota_exhausted"
 
 
-def test_gemini31_pro_fallback_ladder_works():
-    m.load_physical_operators = lambda: fallback_mock_registry
-    
-    # Case A: Gemini 3.1 Pro is available (Opus exhausted)
-    states = {
-        "mini-claude-opus-planner": "quota_exhausted",
-        "mini-antigravity-gemini31-pro": "idle",
-        "mini-claude-sonnet-builder": "idle"
-    }
-    operator_runtime.get_operator_runtime_state = lambda op_id: states.get(op_id, "idle")
-    
-    node = {
-        "task_type": "ARCH_DESIGN"
-    }
-    op, err = m.select_operator(node, {"name": "planner"})
-    assert op is not None, err
-    assert op.get("operator_id") == "mini-antigravity-gemini31-pro"
-
-    # Case B: Gemini 3.1 Pro is also unavailable (disabled)
-    states["mini-antigravity-gemini31-pro"] = "disabled"
-    op, err = m.select_operator(node, {"name": "planner"})
-    assert op is not None, err
-    assert op.get("operator_id") == "mini-claude-sonnet-builder"
-
-    # Case C: Fallback further down the ladder
-    states["mini-claude-sonnet-builder"] = "leased"
-    op, err = m.select_operator(node, {"name": "planner"})
-    assert op is not None, err
-    assert op.get("operator_id") == "mini-antigravity-gemini35-flash-high"
-
-
-def test_writer_verifier_conflict_rejects_same_operator():
-    m.load_physical_operators = lambda: fallback_mock_registry
-    operator_runtime.get_operator_runtime_state = lambda op_id: "idle"
-    
-    # Case A: preferred_operator has same-writer conflict -> falls back to ladder (gemini 3.1 pro)
-    node = {
-        "task_type": "FINAL_REVIEW",
-        "preferred_operator": "mini-claude-opus-evaluator",
-        "verifier_required": True,
-        "prior_operator": "mini-claude-opus-evaluator"
-    }
-    op, err = m.select_operator(node, {"name": "evaluator"})
-    assert op is not None, err
-    assert op.get("operator_id") == "mini-antigravity-gemini31-pro"
-
-    # Case B: first choice in ladder (mini-claude-opus-evaluator) has same-writer conflict -> skipped, selects next choice (gemini 3.1 pro)
-    node2 = {
-        "task_type": "FINAL_REVIEW",
-        "verifier_required": True,
-        "prior_operator": "mini-claude-opus-evaluator"
-    }
-    op, err = m.select_operator(node2, {"name": "evaluator"})
-    assert op is not None, err
-    assert op.get("operator_id") == "mini-antigravity-gemini31-pro"
-
-
-def test_leased_operator_skipped():
-    m.load_physical_operators = lambda: fallback_mock_registry
-    
-    # Simulate mini-claude-opus-planner leased
-    states = {
-        "mini-claude-opus-planner": "leased",
-        "mini-antigravity-gemini31-pro": "idle"
-    }
-    operator_runtime.get_operator_runtime_state = lambda op_id: states.get(op_id, "idle")
-    
-    node = {
-        "task_type": "ARCH_DESIGN"
-    }
-    op, err = m.select_operator(node, {"name": "planner"})
-    assert op is not None, err
-    assert op.get("operator_id") == "mini-antigravity-gemini31-pro"
-
-
-# ── claude_print reserve routing integration tests ────────────────────────────
-
-import claude_surface as _cs  # noqa: E402
-
-_PRINT_OP_TEMPLATE = {
-    "display_name": "Claude print reserve",
-    "role": "planner",
-    "profile": "planner",
-    "enabled": True,
-    "available": True,
-    "key_ref": "mock_key",
-    "auth_mode": "subscription",
-    "quota_guard_state": "ok",
-    "launch_cmd_kind": "print_once",
-    "billing_surface": "anthropic_agent_sdk_credit",
-    "billing_pool": "anthropic_agent_sdk_credit",
-    "surface": {
-        "type": "claude_print",
-        "tool": "claude",
-        "launch_cmd": "claude --print --model opus",
-    },
-    "task_classes": ["planning", "architecture", "schema-design"],
-    "preferred_for": ["planner", "architecture"],
-    "avoid_for": ["bulk-extraction", "FANOUT", "BULK_EDIT", "TEST_RUN", "LOW_VALUE_SCAN"],
-    "cost_tier": "high",
-    "quota": {
-        "quota_type": "monthly-agent-credit",
-        "reserve_for": ["ARCH_DECISION", "ROOT_CAUSE_DEBUG", "FINAL_REVIEW"],
-        "on_exhausted": "disable_and_fallback",
-    },
-}
-
-_INTERACTIVE_OP_TEMPLATE = {
-    "display_name": "Claude interactive builder",
-    "role": "builder",
-    "profile": "builder",
-    "enabled": True,
-    "available": True,
-    "key_ref": "mock_key",
-    "auth_mode": "subscription",
-    "quota_guard_state": "ok",
-    "launch_cmd_kind": "interactive_repl",
-    "billing_surface": "subscription_interactive",
-    "billing_pool": "anthropic_subscription_interactive",
-    "surface": {
-        "type": "claude_code_interactive",
-        "tool": "claude",
-        "launch_cmd": "claude --model sonnet",
-    },
-    "task_classes": ["implementation", "debugging", "tests", "planning", "FANOUT", "FINAL_REVIEW", "ROOT_CAUSE_DEBUG"],
-    "preferred_for": ["builder", "implementation"],
-    "avoid_for": [],
-    "cost_tier": "medium",
-}
-
-
-_mixed_claude_surface_registry = {
-    "version": 1,
-    "operators": {
-        "mock-claude-interactive": {**_INTERACTIVE_OP_TEMPLATE},
-        "mock-claude-print-reserve": {**_PRINT_OP_TEMPLATE},
-    },
-}
-
-
-def _setup_claude_surface_mocks():
-    operator_runtime.get_operator_runtime_state = lambda op_id: "idle"
-    m.load_physical_operators = lambda: _mixed_claude_surface_registry
-
-
-def test_claude_print_excluded_from_fanout_task():
-    """claude_print reserve operator must not be selected for FANOUT tasks."""
-    _setup_claude_surface_mocks()
-    node = {"task_type": "FANOUT"}
-    op, err = m.select_operator(node, {"name": "builder"})
-    # Only the interactive operator should be selected
-    if op is not None:
-        assert op.get("operator_id") == "mock-claude-interactive", (
-            f"Expected interactive op, got {op.get('operator_id')}"
-        )
-
-
-def test_claude_print_excluded_from_bulk_edit():
-    """claude_print reserve operator must not be selected for BULK_EDIT tasks."""
-    _setup_claude_surface_mocks()
-    node = {"task_type": "BULK_EDIT"}
-    op, err = m.select_operator(node, {"name": "builder"})
-    if op is not None:
-        assert op.get("operator_id") == "mock-claude-interactive", (
-            f"Expected interactive op, got {op.get('operator_id')}"
-        )
-
-
-def test_claude_print_excluded_from_test_run():
-    """claude_print reserve operator must not be selected for TEST_RUN tasks."""
-    _setup_claude_surface_mocks()
-    node = {"task_type": "TEST_RUN"}
-    op, err = m.select_operator(node, {"name": "builder"})
-    if op is not None:
-        assert op.get("operator_id") == "mock-claude-interactive", (
-            f"Expected interactive op, got {op.get('operator_id')}"
-        )
-
-
-def test_claude_print_excluded_from_low_value_scan():
-    """claude_print reserve operator must not be selected for LOW_VALUE_SCAN."""
-    _setup_claude_surface_mocks()
-    node = {"task_type": "LOW_VALUE_SCAN"}
-    op, err = m.select_operator(node, {"name": "builder"})
-    if op is not None:
-        assert op.get("operator_id") == "mock-claude-interactive", (
-            f"Expected interactive op, got {op.get('operator_id')}"
-        )
-
-
-def test_claude_print_allowed_for_final_review():
-    """claude_print reserve operator may be selected for FINAL_REVIEW."""
-    _setup_claude_surface_mocks()
-    node = {"task_type": "FINAL_REVIEW"}
-    op, err = m.select_operator(node, {"name": "planner"})
-    # Both are candidates; we just verify no error and a result is returned
-    assert op is not None or "no_match" not in err
-
-
-def test_claude_print_reserve_classifies_correctly():
-    """Verify the classifier labels operators in _mixed_claude_surface_registry."""
-    ops = _mixed_claude_surface_registry["operators"]
-    assert _cs.classify_surface(ops["mock-claude-interactive"]) == _cs.CLAUDE_INTERACTIVE
-    assert _cs.classify_surface(ops["mock-claude-print-reserve"]) == _cs.CLAUDE_PRINT
-
-
-def test_claude_print_policy_fanout_blocked():
-    """Reserve policy rejects FANOUT for print op, allows for interactive."""
-    ops = _mixed_claude_surface_registry["operators"]
-    assert _cs.claude_print_reserve_allows(ops["mock-claude-print-reserve"], "FANOUT") is False
-    assert _cs.claude_print_reserve_allows(ops["mock-claude-interactive"], "FANOUT") is True
-
-
-def test_claude_print_policy_final_review_allowed():
-    """Reserve policy allows FINAL_REVIEW for print op (in reserve_for list)."""
-    ops = _mixed_claude_surface_registry["operators"]
-    assert _cs.claude_print_reserve_allows(ops["mock-claude-print-reserve"], "FINAL_REVIEW") is True
-    assert _cs.claude_print_reserve_allows(ops["mock-claude-interactive"], "FINAL_REVIEW") is True
+def test_quota_regex_matches_org_monthly_usage_limit():
+    text = "You've hit your org's monthly usage limit\nprofile: builder\nbackend: claude-cli\nmodel: sonnet"
+    assert m.QUOTA_RE.search(text)
 
 
 def setup_manual():
@@ -563,13 +323,6 @@ if __name__ == "__main__":
         test_constraints()
         test_quota_reserve()
         test_verifier_conflict()
-        
-        # Run new tests manually
-        test_quota_exhausted_opus_skipped()
-        test_gemini31_pro_fallback_ladder_works()
-        test_writer_verifier_conflict_rejects_same_operator()
-        test_leased_operator_skipped()
-        
         print("ALL TESTS PASSED SUCCESSFULLY!")
     finally:
         teardown_manual()

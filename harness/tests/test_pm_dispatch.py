@@ -146,6 +146,7 @@ def test_cmd_submit_reads_task_graph_capsule_metadata(monkeypatch):
 
         fake_operator_runtime.submit = _submit  # type: ignore[attr-defined]
         monkeypatch.setitem(sys.modules, "operator_runtime", fake_operator_runtime)
+        monkeypatch.setenv("SOLAR_PM_DISPATCH_ALLOW_DIRECT", "1")
 
         args = argparse.Namespace(
             role="builder",
