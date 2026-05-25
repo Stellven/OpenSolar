@@ -1,0 +1,134 @@
+{
+  "id": "sprint-20260524-solar-research-os-v1-core",
+  "title": "请基于以下两版战略需求，为 Solar-Harness 开启一个正式实现 sprint：",
+  "summary": "Planner artifacts validated for Solar Research OS v1 Core; N1 architecture audit passed and N2 P0 default-reliability work is now the ready builder node.",
+  "created_at": "2026-05-24T20:21:29Z",
+  "round": 3,
+  "history": [
+    {
+      "ts": "2026-05-24T20:21:29Z",
+      "event": "compiled_requirement_package_created",
+      "by": "codex-pm-router"
+    },
+    {
+      "ts": "2026-05-24T20:24:04Z",
+      "event": "planner_plan_completed",
+      "by": "planner",
+      "note": "Produced design.md, plan.md, implementation task_graph.json, and builder handoff for Solar Research OS v1 Core."
+    },
+    {
+      "ts": "2026-05-24T20:30:00Z",
+      "event": "prd_gate_repair_completed",
+      "by": "pm",
+      "note": "Rewrote prd.md with all 11 required sections (context, problem, goals, user_stories, requirements, acceptance, non_goals, constraints, risks, open_questions, planner_handoff). Gate was FAIL: missing sections."
+    },
+    {
+      "ts": "2026-05-24T20:30:00Z",
+      "event": "planner_node_N1_passed",
+      "by": "planner",
+      "note": "Architecture audit and file-boundary analysis completed; graph ready shows N2 as the next runnable node."
+    },
+    {
+      "ts": "2026-05-24T20:46:23Z",
+      "event": "wake_workflow_guard_to_builder",
+      "by": "wake",
+      "note": "Workflow guard: PM PRD + planner design/plan/task_graph are ready; builder DAG dispatch is allowed."
+    },
+    {
+      "ts": "2026-05-25T17:46:01Z",
+      "event": "graph_mark_N8_passed",
+      "by": "graph_scheduler",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260524-solar-research-os-v1-core.task_graph.json"
+    },
+    {
+      "ts": "2026-05-25T23:15:39Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-05-25T23:15:40Z",
+      "event": "autoresearch_optimizer_recorded",
+      "by": "coordinator",
+      "trigger_level": "recommended",
+      "recommended": true,
+      "role": "planner"
+    }
+  ],
+  "status": "passed",
+  "phase": "completed",
+  "handoff_to": "",
+  "target_role": "",
+  "updated_at": "2026-05-25T23:15:40Z",
+  "artifacts": {
+    "design": "/Users/lisihao/.solar/harness/sprints/sprint-20260524-solar-research-os-v1-core.design.md",
+    "plan": "/Users/lisihao/.solar/harness/sprints/sprint-20260524-solar-research-os-v1-core.plan.md",
+    "task_graph": "/Users/lisihao/.solar/harness/sprints/sprint-20260524-solar-research-os-v1-core.task_graph.json",
+    "autoresearch_optimizer": {
+      "recorded_at": "2026-05-25T23:15:40Z",
+      "sid": "sprint-20260524-solar-research-os-v1-core",
+      "role": "规划者",
+      "canonical_role": "planner",
+      "recommended": true,
+      "trigger_level": "recommended",
+      "reasons": [
+        "role:planner",
+        "telemetry:round:3",
+        "telemetry:eval_json:missing"
+      ],
+      "telemetry": {
+        "status": "passed",
+        "phase": "completed",
+        "round": 3,
+        "eval_verdict": "",
+        "failed_conditions": [],
+        "error_count": 0,
+        "warning_count": 0
+      },
+      "quality_metrics": {
+        "trigger_level": "recommended",
+        "expected_effect": [
+          "reduce_dag_rework",
+          "harden_write_scope_and_stop_rules"
+        ],
+        "must_measure": [
+          "repair_round_delta",
+          "eval_failure_recurrence",
+          "evidence_gap_count"
+        ]
+      },
+      "execution_policy": {
+        "mode": "advisor_only_by_default",
+        "default_command": "dry_run",
+        "execute_requires": "--execute",
+        "replaces_builder": false
+      }
+    }
+  },
+  "event_count": 36,
+  "last_event_ts": "2026-05-24T20:46:22Z",
+  "projected_at": "2026-05-24T20:46:22Z",
+  "sid": "sprint-20260524-solar-research-os-v1-core",
+  "sprint_id": "sprint-20260524-solar-research-os-v1-core",
+  "auto_held": false,
+  "runtime_state_source": "activity_runtime",
+  "stage": "completed",
+  "active_node": null,
+  "graph_parent_ready": {
+    "ok": true,
+    "sprint_id": "sprint-20260524-solar-research-os-v1-core",
+    "ready": true,
+    "node_count": 8,
+    "open_nodes": [],
+    "failed_nodes": [],
+    "required_gates": [
+      "G_P0_DEFAULT_RELIABILITY",
+      "G_P1_COMPILER_CORE",
+      "G_P2_FIGURE_GROUNDING",
+      "G_FINAL_REVIEW"
+    ],
+    "missing_gates": []
+  },
+  "task_graph_status": "passed"
+}
