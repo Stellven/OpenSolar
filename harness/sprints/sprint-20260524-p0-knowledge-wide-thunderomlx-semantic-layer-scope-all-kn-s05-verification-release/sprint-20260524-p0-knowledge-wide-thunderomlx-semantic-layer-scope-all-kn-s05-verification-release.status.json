@@ -4,12 +4,12 @@
   "epic_id": "epic-20260524-p0-knowledge-wide-thunderomlx-semantic-layer-scope-all-kn",
   "title": "验证、回归与发布证据",
   "status": "passed",
-  "phase": "finalized",
+  "phase": "completed",
   "handoff_to": "done",
   "target_role": "done",
   "priority": "P0",
   "created_at": "2026-05-24T17:20:15Z",
-  "updated_at": "2026-05-24T23:30:33Z",
+  "updated_at": "2026-05-25T11:33:31Z",
   "dependency_policy": "activated_by_epic_dag",
   "history": [
     {
@@ -747,6 +747,12 @@
       "ts": "2026-05-24T23:32:08Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-25T11:33:31Z",
+      "event": "graph_parent_ready_passed",
+      "by": "graph-dispatch",
+      "note": "All DAG nodes and required gates passed via parent_ready_check."
     }
   ],
   "round": 1,
@@ -802,7 +808,7 @@
       }
     }
   },
-  "completed_at": "2026-05-24T23:23:24Z",
+  "completed_at": "2026-05-25T11:33:31Z",
   "graph_parent_ready": {
     "ok": true,
     "sprint_id": "sprint-20260524-p0-knowledge-wide-thunderomlx-semantic-layer-scope-all-kn-s05-verification-release",

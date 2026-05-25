@@ -182,6 +182,63 @@ class TestSendToPaneLiteral:
             }
         ]
 
+    def test_active_dispatch_without_live_lease_requeues_pending(self, tmp_harness, monkeypatch):
+        """A dispatched node without a matching live lease must not stay dispatched."""
+        tmp_path, sprints, sid, graph = tmp_harness
+        import graph_node_dispatcher as gnd
+
+        node = graph["nodes"][0]
+        node["status"] = "dispatched"
+        node["assigned_to"] = "solar-harness-lab:0.3"
+        node["dispatch_id"] = f"graph-{sid}-N1-old"
+        graph["node_results"]["N1"] = {
+            "status": "dispatched",
+            "assigned_to": node["assigned_to"],
+            "dispatch_id": node["dispatch_id"],
+        }
+
+        release_calls = []
+        monkeypatch.setattr(gnd, "read_lease", lambda *_: None)
+        monkeypatch.setattr(gnd, "_pane_title", lambda *_: "worker")
+        monkeypatch.setattr(gnd, "_pane_tail", lambda *_: "")
+        monkeypatch.setattr(gnd, "_pane_dispatch_prompt_reason", lambda *_: "")
+        monkeypatch.setattr(gnd, "_pane_runtime_unavailable_reason", lambda *_: "")
+        monkeypatch.setattr(gnd, "_pane_unavailable_reason", lambda *_: "")
+        monkeypatch.setattr(gnd, "release_lease", lambda *a, **k: release_calls.append(a) or {"released": True})
+
+        repaired = gnd._reconcile_existing_dispatches(graph, sprints / f"{sid}.task_graph.json")
+
+        assert node["status"] == "pending"
+        assert "assigned_to" not in node
+        assert "dispatch_id" not in node
+        assert node["dispatch_retry_reason"] == "stale_submit_ack_without_live_lease"
+        assert "N1" not in graph["node_results"]
+        assert len(release_calls) == 1
+        assert repaired == [
+            {
+                "node": "N1",
+                "pane": "solar-harness-lab:0.3",
+                "dispatch_id": f"graph-{sid}-N1-old",
+                "status": "pending",
+                "reason": "stale_submit_ack_without_live_lease",
+            }
+        ]
+
+    def test_assigned_pane_plan_mode_prompt_is_unavailable(self, tmp_harness, monkeypatch):
+        """A pane blocked in Claude plan-mode confirmation is not dispatchable."""
+        import graph_node_dispatcher as gnd
+
+        monkeypatch.setattr(gnd, "_pane_title", lambda *_: "Builder 3")
+        monkeypatch.setattr(gnd, "_pane_health", lambda *_: {})
+        monkeypatch.setattr(gnd, "_models_for_pane", lambda *_: ["glm"])
+        monkeypatch.setattr(
+            gnd,
+            "_pane_tail",
+            lambda *_args, **_kwargs: "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+        )
+
+        assert gnd._assigned_pane_unavailable_reason("solar-harness-lab:0.2") == "proceed_confirmation_prompt"
+
     def test_uses_confirmed_enter_submit(self, tmp_harness, monkeypatch):
         """_send_to_pane submits and verifies processing, avoiding prompt-stuck false positives."""
         calls_log = []
