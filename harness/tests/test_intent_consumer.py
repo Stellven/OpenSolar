@@ -1,0 +1,126 @@
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+GATEWAY = ROOT / "lib" / "intent_gateway.py"
+CONSUMER = ROOT / "lib" / "intent_consumer.py"
+
+
+def _env(tmp_path):
+    env = dict(os.environ)
+    env["SOLAR_HARNESS_DIR"] = str(ROOT)
+    env["SOLAR_INTENT_GATEWAY_DIR"] = str(tmp_path / "intents")
+    env["SOLAR_HARNESS_SPRINTS_DIR"] = str(tmp_path / "sprints")
+    env["SOLAR_INTENT_CONSUMER_WORKSPACE_ROOT"] = str(tmp_path / "workspace")
+    return env
+
+
+def _capture(env, text="新增 intent consumer，把 RawIntent 自动编译成 PM/Planner sprint package。", channel="test"):
+    cap = subprocess.run(
+        [
+            sys.executable,
+            str(GATEWAY),
+            "capture",
+            "--text",
+            text,
+            "--source-channel",
+            channel,
+            "--source-trust",
+            channel,
+            "--json",
+        ],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=True,
+    )
+    return json.loads(cap.stdout)["intent_id"]
+
+
+def test_consumer_compiles_rawintent_to_sprint_package(tmp_path):
+    env = _env(tmp_path)
+    intent_id = _capture(env)
+
+    proc = subprocess.run(
+        [sys.executable, str(CONSUMER), "consume", "--intent-id", intent_id, "--json"],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=True,
+    )
+    payload = json.loads(proc.stdout)
+    result = payload["results"][0]
+    sprint_id = result["sprint_id"]
+
+    assert result["status"] == "consumed"
+    assert result["direct_pane_dispatch"] is False
+    assert result["planner_runtime_submit"] is False
+    assert result["planner_handoff"]["requested"] is False
+    assert result["planner_handoff"]["reason"] == "untrusted_channel"
+    assert (tmp_path / "intents" / intent_id / "consumer.json").exists()
+    assert (tmp_path / "intents" / intent_id / "binding.json").exists()
+    assert (tmp_path / "sprints" / f"{sprint_id}.status.json").exists()
+    assert (tmp_path / "sprints" / f"{sprint_id}.product-brief.md").exists()
+    assert (tmp_path / "sprints" / f"{sprint_id}.prd.md").exists()
+    assert (tmp_path / "sprints" / f"{sprint_id}.contract.md").exists()
+    assert (tmp_path / "sprints" / f"{sprint_id}.task_graph.json").exists()
+    ir = json.loads((tmp_path / "sprints" / f"{sprint_id}.requirement_ir.json").read_text())
+    assert ir["intent_id"] == intent_id
+    assert ir["sprint_id"] == sprint_id
+
+
+def test_consumer_dry_run_marks_trusted_pm_dispatch_for_planner_handoff(tmp_path):
+    env = _env(tmp_path)
+    intent_id = _capture(env, text="可信 PM 入口应该自动进入 Planner handoff。", channel="pm_dispatch")
+
+    proc = subprocess.run(
+        [sys.executable, str(CONSUMER), "consume", "--intent-id", intent_id, "--dry-run", "--json"],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=True,
+    )
+    result = json.loads(proc.stdout)["results"][0]
+    handoff = result["planner_handoff"]
+    assert handoff["requested"] is True
+    assert handoff["reason"] == "trusted_channel"
+    assert handoff["source_channel"] == "pm_dispatch"
+
+
+def test_consumer_no_auto_dispatch_planner_disables_trusted_handoff(tmp_path):
+    env = _env(tmp_path)
+    intent_id = _capture(env, text="显式关闭 auto handoff 时只编译。", channel="pm_dispatch")
+
+    proc = subprocess.run(
+        [sys.executable, str(CONSUMER), "consume", "--intent-id", intent_id, "--dry-run", "--no-auto-dispatch-planner", "--json"],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=True,
+    )
+    handoff = json.loads(proc.stdout)["results"][0]["planner_handoff"]
+    assert handoff["requested"] is False
+    assert handoff["reason"] == "auto_dispatch_disabled"
+
+
+def test_consumer_status_lists_pending(tmp_path):
+    env = _env(tmp_path)
+    subprocess.run(
+        [sys.executable, str(GATEWAY), "capture", "--text", "pending intent", "--json"],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=True,
+    )
+    proc = subprocess.run(
+        [sys.executable, str(CONSUMER), "status", "--json"],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=True,
+    )
+    payload = json.loads(proc.stdout)
+    assert payload["pending_count"] == 1

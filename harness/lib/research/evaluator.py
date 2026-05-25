@@ -1101,3 +1101,197 @@ def evaluate_artifacts(
             "strict_profile": strict_profile,
         },
     }
+
+
+def evaluate_final_closeout(
+    output_dir: str | Path,
+    strict: bool = True,
+    *,
+    min_finalized: int | None = None,
+    require_complete: bool = False,
+) -> dict[str, Any]:
+    """Single-source final closeout gate for DeepResearch runs.
+
+    Reads blueprint, section contracts, and evaluation/survey files.
+    Returns payload with verdict in {pass, repairable_fail, hard_fail}.
+    Persists final_closeout.json and run.finalized artifacts in output_dir.
+    """
+    import datetime
+    root = Path(output_dir).expanduser()
+
+    # 1. Determine if it is a survey run or standard run
+    is_survey = (root / "survey_report_ast.json").exists() or (root / "report_blueprint.json").exists()
+
+    # Ensure blueprint and contracts are persisted
+    from research.cli import _ensure_blueprint_and_contracts
+    _ensure_blueprint_and_contracts(root)
+
+    # 2. Get baseline verdict and issues
+    issues: list[str] = []
+    ok = True
+    base_data: dict[str, Any] = {}
+
+    if is_survey:
+        # Load survey evaluator
+        from research.survey.evaluator import evaluate_survey
+        # In strict closeout, strict=True
+        base_data = evaluate_survey(
+            root,
+            strict=strict,
+            min_finalized=min_finalized,
+            require_complete=require_complete,
+        )
+        ok = bool(base_data.get("ok"))
+        issues = (base_data.get("scorecard") or {}).get("issues") or []
+    else:
+        # Standard research run closeout
+        # Find eval_json
+        eval_json_candidates = [
+            root / "research_eval.json",
+            root / "eval_artifacts.json",
+            root / "eval.json",
+            root / "run-research_eval.json",
+        ]
+        if root.exists():
+            try:
+                for p in root.iterdir():
+                    if p.is_file() and p.name.endswith(("-research_eval.json", "-eval.json")):
+                        eval_json_candidates.append(p)
+            except Exception:
+                pass
+        eval_json = root / "eval.json"
+        for cand in eval_json_candidates:
+            if cand.exists():
+                eval_json = cand
+                break
+
+        # If no eval.json, check if we can run evaluate_artifacts
+        if not eval_json.exists():
+            ok = False
+            issues = [f"research_eval_json_missing:{eval_json}"]
+        else:
+            base_data = evaluate_artifacts(
+                eval_json,
+                strict_profile=strict,
+            )
+            ok = bool(base_data.get("ok"))
+            issues = base_data.get("errors") or []
+
+    # 3. Map ok/issues to pass | repairable_fail | hard_fail
+    if ok:
+        verdict = "pass"
+    else:
+        if is_survey:
+            # Check for hard fail indicators in survey issues
+            hard_fail_keys = {
+                "evidence_packs_missing",
+                "chapter_count_low",
+                "section_count_low",
+                "source_type_count_low",
+                "evidence_count_low",
+                "claim_count_low",
+                "evidence_source_coverage_low",
+                "claim_support_coverage_low",
+                "ready_pack_ratio_low",
+                "blocked_sections",
+                "taxonomy_depth_score_low",
+                "contradiction_coverage_low",
+                "section_factual_accuracy_low",
+                "section_grounding_accuracy_low",
+            }
+            has_hard_fail = any(
+                any(issue.startswith(key) for key in hard_fail_keys)
+                for issue in issues
+            )
+            if has_hard_fail:
+                verdict = "hard_fail"
+            else:
+                verdict = "repairable_fail"
+        else:
+            # Check standard deep research errors
+            hard_fail_keys = {
+                "research_eval_json_missing",
+                "source_count_zero",
+                "evidence_count_zero",
+                "claim_count_zero",
+                "section_count_zero",
+                "unsupported_rate_too_high",
+                "citation_accuracy_too_low",
+                "report_ast_missing",
+                "report_ast_has_no_sections",
+                "final_md_missing",
+                "final_md_empty",
+                "expert_synthesis_missing",
+            }
+            has_hard_fail = any(
+                any(issue.startswith(key) for key in hard_fail_keys)
+                for issue in issues
+            )
+            if has_hard_fail:
+                verdict = "hard_fail"
+            else:
+                verdict = "repairable_fail"
+
+    # 4. Construct final closeout gate payload
+    closeout_artifact = {
+        "verdict": verdict,
+        "ok": verdict == "pass",
+        "run_id": base_data.get("run_id") or root.name,
+        "output_dir": str(root),
+        "is_survey": is_survey,
+        "issues": issues,
+        "timestamp": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "base_eval_data": {
+            "verdict": base_data.get("verdict") or ("PASS" if ok else "FAIL"),
+            "scorecard": base_data.get("scorecard") if is_survey else None,
+            "metrics": base_data.get("metrics") if not is_survey else None,
+        }
+    }
+
+    # 5. Persist final_closeout.json
+    closeout_path = root / "final_closeout.json"
+    closeout_path.write_text(json.dumps(closeout_artifact, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    # 6. run.finalized requires persisted final closeout artifact
+    run_finalized_path = root / "run.finalized"
+    if verdict == "pass":
+        run_finalized_data = {
+            "run_id": closeout_artifact["run_id"],
+            "finalized_at": closeout_artifact["timestamp"],
+            "closeout_artifact": "final_closeout.json",
+            "verdict": "pass"
+        }
+        run_finalized_path.write_text(json.dumps(run_finalized_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    else:
+        if run_finalized_path.exists():
+            try:
+                run_finalized_path.unlink()
+            except OSError:
+                pass
+
+    # Also write research_quality_gate field to eval.json/survey_eval.json for dispatcher compatibility
+    eval_json_path = root / ("survey_eval.json" if is_survey else "eval.json")
+    if eval_json_path.exists():
+        try:
+            eval_data = json.loads(eval_json_path.read_text(encoding="utf-8"))
+            if isinstance(eval_data, dict):
+                eval_data["research_quality_gate"] = {
+                    "ok": verdict == "pass",
+                    "verdict": "PASS" if verdict == "pass" else "FAIL",
+                    "closeout_verdict": verdict,
+                    "issues": issues,
+                    "errors": issues,
+                }
+                eval_json_path.write_text(json.dumps(eval_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        except Exception:
+            pass
+
+    return {
+        "ok": verdict == "pass",
+        "verdict": verdict,
+        "issues": issues,
+        "artifact_paths": {
+            "final_closeout": str(closeout_path),
+            "run_finalized": str(run_finalized_path) if verdict == "pass" else None,
+        }
+    }

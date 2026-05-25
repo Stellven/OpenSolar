@@ -3020,6 +3020,96 @@ def cmd_source_audit(args: argparse.Namespace) -> int:
     return 0 if payload.get("ok") else 1
 
 
+def _ensure_blueprint_and_contracts(output_dir: str | Path) -> None:
+    root = Path(output_dir).expanduser()
+    ast_path = root / "survey_report_ast.json"
+    if not ast_path.exists():
+        return
+    try:
+        ast = json.loads(ast_path.read_text(encoding="utf-8"))
+    except Exception:
+        return
+
+    # Create report blueprint
+    run_id = ast.get("run_id") or ""
+    blueprint_id = f"blueprint_{run_id}"
+    chapters_raw = ast.get("chapters") or []
+    sections_raw = ast.get("sections") or []
+
+    blueprint_chapters = []
+    for ch in chapters_raw:
+        ch_id = ch.get("chapter_id")
+        ch_sections = [
+            sec.get("section_id") for sec in sections_raw
+            if sec.get("chapter_id") == ch_id
+        ]
+        blueprint_chapters.append({
+            "chapter_id": ch_id,
+            "title": ch.get("title"),
+            "order": ch.get("order"),
+            "objective": ch.get("objective"),
+            "sections": ch_sections
+        })
+
+    blueprint = {
+        "blueprint_id": blueprint_id,
+        "run_id": run_id,
+        "title": ast.get("title") or "",
+        "target_chars": ast.get("target_chars") or 50000,
+        "chapters": blueprint_chapters,
+        "metadata": {
+            "schema_version": "v1.0.0-draft",
+            "generated_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        }
+    }
+
+    blueprint_path = root / "report_blueprint.json"
+    blueprint_path.write_text(json.dumps(blueprint, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    # Create section contracts
+    contracts_dir = root / "section_contracts"
+    contracts_dir.mkdir(parents=True, exist_ok=True)
+
+    default_constraints = [
+        "Use the section evidence pack as the source of truth.",
+        "Bind important factual claims to [claim:<id>] and [evidence:<id>] tags.",
+        "Separate architecture synthesis, evaluation limits, contradiction slots, and open problems.",
+        "Do not invent sources, results, paper names, URLs, or benchmark numbers.",
+        "Preserve uncertainty when evidence is weak or contradictory."
+    ]
+    default_output_contract = [
+        "Markdown section draft.",
+        "At least six second-level headings.",
+        "Follow the professor-grade section template in writing_policy.section_template.",
+        "Include Literature Lineage, Method Taxonomy, Architecture Synthesis, Comparative Positioning, Terminology Evolution, Evaluation Protocol Matrix, Evaluation And Risk Boundary, Limitations And Failure Modes, Controversy Matrix, Contradiction Slots, and Open Problems.",
+        "All core claims must reference claim_id and evidence_id tags."
+    ]
+
+    for sec in sections_raw:
+        sec_id = sec.get("section_id")
+        if not sec_id:
+            continue
+        sec_id_safe = sec_id.replace("/", "_")
+        contract = {
+            "section_id": sec_id,
+            "chapter_id": sec.get("chapter_id"),
+            "title": sec.get("title"),
+            "order": sec.get("order"),
+            "target_chars": sec.get("target_chars"),
+            "research_question": sec.get("research_question"),
+            "required_source_types": sec.get("required_source_types") or [],
+            "min_evidence": sec.get("min_evidence") or 4,
+            "min_claims": sec.get("min_claims") or 3,
+            "output_contract": default_output_contract,
+            "constraints": default_constraints,
+            "metadata": {
+                "schema_version": "v1.0.0-draft"
+            }
+        }
+        contract_path = contracts_dir / f"{sec_id_safe}.contract.json"
+        contract_path.write_text(json.dumps(contract, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
 def cmd_survey_plan(args: argparse.Namespace) -> int:
     """Plan a professor-grade survey without embedding survey logic in cli.py."""
     from research.survey.planner import create_survey_plan, write_survey_plan
@@ -3032,6 +3122,7 @@ def cmd_survey_plan(args: argparse.Namespace) -> int:
         run_id=args.run_id or None,
     )
     files = write_survey_plan(plan, args.output_dir)
+    _ensure_blueprint_and_contracts(args.output_dir)
     payload = {
         "ok": True,
         "run_id": plan["run"]["run_id"],
@@ -3221,6 +3312,7 @@ def cmd_survey_auto_repair(args: argparse.Namespace) -> int:
 
 def cmd_survey_finalize_run(args: argparse.Namespace) -> int:
     from research.survey.finalize_run import finalize_survey_run
+    from research.evaluator import evaluate_final_closeout
 
     try:
         payload = finalize_survey_run(
@@ -3258,12 +3350,30 @@ def cmd_survey_finalize_run(args: argparse.Namespace) -> int:
             narrative_min_chars=args.narrative_min_chars,
             narrative_require_hitl=args.narrative_require_hitl,
         )
+        
+        # Intercept and run final closeout gate
+        closeout = evaluate_final_closeout(
+            args.output_dir,
+            strict=True,
+            min_finalized=args.min_finalized,
+            require_complete=args.require_complete,
+        )
+        payload["ok"] = closeout["ok"]
+        payload["closeout_gate"] = closeout["verdict"]
+        payload["reason"] = "passed" if closeout["ok"] else f"closeout_gate_failed_{closeout['verdict']}"
+        payload["final_closeout_details"] = closeout
+
+        # Rewrite survey_finalize_run.json with updated payload
+        run_json_path = Path(args.output_dir).expanduser() / "survey_finalize_run.json"
+        run_json_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
     except ValueError as exc:
         payload = {"ok": False, "reason": str(exc)}
     if emit_json(args, payload):
         return 0 if payload.get("ok") or args.allow_incomplete else 1
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0 if payload.get("ok") or args.allow_incomplete else 1
+
 
 
 def cmd_survey_import_search_results(args: argparse.Namespace) -> int:
@@ -3334,6 +3444,7 @@ def cmd_survey_status_next_action(args: argparse.Namespace) -> int:
 
 def cmd_survey_continue(args: argparse.Namespace) -> int:
     from research.survey.auto_continue import continue_survey_run
+    from research.evaluator import evaluate_final_closeout
 
     payload = continue_survey_run(
         args.output_dir,
@@ -3357,10 +3468,37 @@ def cmd_survey_continue(args: argparse.Namespace) -> int:
         narrative_min_chars=args.narrative_min_chars,
         narrative_require_hitl=args.narrative_require_hitl,
     )
+    
+    # Intercept and run final closeout gate
+    if payload.get("ok"):
+        closeout = evaluate_final_closeout(
+            args.output_dir,
+            strict=True,
+            min_finalized=args.min_finalized,
+            require_complete=args.require_complete,
+        )
+        payload["ok"] = closeout["ok"]
+        payload["closeout_gate"] = closeout["verdict"]
+        payload["final_closeout_details"] = closeout
+
+        # Rewrite survey_finalize_run.json if it exists
+        run_json_path = Path(args.output_dir).expanduser() / "survey_finalize_run.json"
+        if run_json_path.exists():
+            try:
+                run_data = json.loads(run_json_path.read_text(encoding="utf-8"))
+                if isinstance(run_data, dict):
+                    run_data["ok"] = closeout["ok"]
+                    run_data["closeout_gate"] = closeout["verdict"]
+                    run_data["final_closeout_details"] = closeout
+                    run_json_path.write_text(json.dumps(run_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            except Exception:
+                pass
+
     if emit_json(args, payload):
         return 0 if payload.get("ok") and (payload.get("completed") or args.allow_pending) else 1
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0 if payload.get("ok") and (payload.get("completed") or args.allow_pending) else 1
+
 
 
 def cmd_survey_review(args: argparse.Namespace) -> int:
@@ -3376,11 +3514,13 @@ def cmd_survey_review(args: argparse.Namespace) -> int:
 def cmd_survey_compile(args: argparse.Namespace) -> int:
     from research.survey.section_compiler import compile_survey
 
+    _ensure_blueprint_and_contracts(args.output_dir)
     payload = compile_survey(args.output_dir)
     if emit_json(args, payload):
         return 0 if payload.get("ok") else 1
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0 if payload.get("ok") else 1
+
 
 
 def cmd_survey_chief_editor(args: argparse.Namespace) -> int:
@@ -3429,6 +3569,7 @@ def cmd_survey_doctor(args: argparse.Namespace) -> int:
 def cmd_survey_eval(args: argparse.Namespace) -> int:
     from research.survey.evaluator import evaluate_survey
 
+    _ensure_blueprint_and_contracts(args.output_dir)
     payload = evaluate_survey(
         args.output_dir,
         strict=args.strict,
@@ -3445,6 +3586,7 @@ def cmd_survey_eval(args: argparse.Namespace) -> int:
 def cmd_survey_diagnose(args: argparse.Namespace) -> int:
     from research.survey.diagnose import diagnose_survey, render_survey_diagnosis_markdown
 
+    _ensure_blueprint_and_contracts(args.output_dir)
     payload = diagnose_survey(
         args.output_dir,
         strict=args.strict,
@@ -3708,6 +3850,25 @@ def _enqueue_source_audit_followup(args: argparse.Namespace, payload: dict) -> d
     except Exception as exc:
         return {"ok": False, "reason": "enqueue_followup_failed", "error": f"{type(exc).__name__}: {exc}", "graph": str(graph_path)}
 
+def cmd_closeout(args: argparse.Namespace) -> int:
+    """Run single-source final closeout gate."""
+    from research.evaluator import evaluate_final_closeout
+    payload = evaluate_final_closeout(
+        args.output_dir,
+        strict=not args.non_strict,
+        min_finalized=args.min_finalized,
+        require_complete=args.require_complete,
+    )
+    if emit_json(args, payload):
+        return 0 if payload.get("ok") else 1
+    print(f"Final Closeout Verdict: {payload.get('verdict')}")
+    print(f"Artifacts Persisted: {payload.get('artifact_paths', {})}")
+    if payload.get("issues"):
+        print("Issues:")
+        for issue in payload["issues"]:
+            print(f"- {issue}")
+    return 0 if payload.get("ok") else 1
+
 
 def _sync_harness_runtime_paths() -> None:
     """Keep imported scheduler/queue modules aligned with current HARNESS_DIR.
@@ -3747,6 +3908,7 @@ ALL_SUBCOMMANDS = [
     "policy-doctor", "policy-explain",
     "source-audit",
     "survey-plan", "survey-pack", "survey-write-section", "survey-run-sections", "survey-watch-responses", "survey-watch-register", "survey-watch-tick", "survey-rewrite-queue", "survey-rewrite-run", "survey-auto-repair", "survey-finalize-run", "survey-import-search-results", "survey-enrich-papers", "survey-status-next-action", "survey-continue", "survey-review", "survey-compile", "survey-chief-editor", "survey-doctor", "survey-eval", "survey-diagnose",
+    "closeout",
 ]
 
 SUBCOMMANDS = {
@@ -3793,6 +3955,7 @@ SUBCOMMANDS = {
     "survey-doctor": cmd_survey_doctor,
     "survey-eval": cmd_survey_eval,
     "survey-diagnose": cmd_survey_diagnose,
+    "closeout": cmd_closeout,
 }
 
 
@@ -4241,6 +4404,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_diagnose.add_argument("--require-complete", action="store_true", default=True)
     p_survey_diagnose.add_argument("--write-md", action="store_true", help="Write survey_diagnosis.md next to survey artifacts")
     p_survey_diagnose.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    p_closeout = sub.add_parser("closeout", help="Run final closeout quality gate for DeepResearch run")
+    p_closeout.add_argument("output_dir", help="Path to DeepResearch output directory")
+    p_closeout.add_argument("--non-strict", action="store_true", help="Run closeout in non-strict mode")
+    p_closeout.add_argument("--min-finalized", type=int, default=None)
+    p_closeout.add_argument("--require-complete", action="store_true")
+    p_closeout.add_argument("--json", action="store_true", help="Emit JSON output")
 
     return parser
 

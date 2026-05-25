@@ -8,6 +8,7 @@
 #   solar-harness.sh status              查看状态
 #   solar-harness.sh kill                关闭
 #   solar-harness.sh sprint "需求"       创建 Sprint
+#   solar-harness.sh intent-gateway capture --text "需求"  捕获 RawIntent/重写/IR
 #
 # @module solar-farm/harness
 # ================================================================
@@ -396,17 +397,13 @@ pane_footer_label() {
   printf "%s | 能力:K/I/S/G/A" "$base"
 }
 
-product_delivery_monitor_command() {
-  printf '%s' "$HOME/.solar/bin/solar-harness multi-task screen --dry-run --interval 30 --max-workers 2 --no-clear"
-}
-
 configure_product_delivery_labels() {
   tmux has-session -t "$SESSION_NAME" 2>/dev/null || return 0
   tmux rename-window -t "$SESSION_NAME:0" "Product Delivery" 2>/dev/null || true
   configure_role_footer_style "$SESSION_NAME" "#89b4fa"
   tmux select-pane -t "$SESSION_NAME:0.0" -T "$(pane_footer_label pm "PM 产品经理")" 2>/dev/null || true
   tmux select-pane -t "$SESSION_NAME:0.1" -T "$(pane_footer_label planner "Planner 规划者")" 2>/dev/null || true
-  tmux select-pane -t "$SESSION_NAME:0.2" -T "$(pane_footer_label observer "Monitor 监控台")" 2>/dev/null || true
+  tmux select-pane -t "$SESSION_NAME:0.2" -T "$(pane_footer_label builder "Builder 主建设者")" 2>/dev/null || true
   tmux select-pane -t "$SESSION_NAME:0.3" -T "$(pane_footer_label evaluator "Evaluator 审判官")" 2>/dev/null || true
 }
 
@@ -429,12 +426,10 @@ warn_if_product_delivery_layout_incomplete() {
 
 apply_product_delivery_models() {
   tmux has-session -t "$SESSION_NAME" 2>/dev/null || { warn "主屏未运行: $SESSION_NAME"; return 0; }
-  local personas=(pm planner monitor evaluator)
+  local personas=(pm planner builder evaluator)
   local panes=("$SESSION_NAME:Product Delivery.0" "$SESSION_NAME:Product Delivery.1" "$SESSION_NAME:Product Delivery.2" "$SESSION_NAME:Product Delivery.3")
   local i target persona pane_id work_dir _esc_harness _esc_work
   _esc_harness=$(printf '%q' "$HARNESS_DIR")
-  local _monitor_cmd
-  _monitor_cmd="$(product_delivery_monitor_command)"
   for i in 0 1 2 3; do
     target="${panes[$i]}"
     persona="${personas[$i]}"
@@ -442,11 +437,7 @@ apply_product_delivery_models() {
     pane_id=$(tmux display-message -p -t "$target" '#{pane_id}' 2>/dev/null || true)
     work_dir=$(tmux display-message -p -t "$target" '#{pane_current_path}' 2>/dev/null || pwd)
     _esc_work=$(printf '%q' "$work_dir")
-    if [[ "$persona" == "monitor" ]]; then
-      tmux respawn-pane -k -t "$target" "TMUX_PANE=${pane_id} SOLAR_CLAUDE_BYPASS=1 exec ${_monitor_cmd}" 2>/dev/null || true
-    else
-      tmux respawn-pane -k -t "$target" "$(claude_clean_env_prefix) TMUX_PANE=${pane_id} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" 2>/dev/null || true
-    fi
+    tmux respawn-pane -k -t "$target" "$(claude_clean_env_prefix) TMUX_PANE=${pane_id} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" 2>/dev/null || true
     sleep 0.3
   done
   configure_product_delivery_labels
@@ -456,7 +447,7 @@ configure_builder_lab_labels() {
   tmux has-session -t "$LAB_SESSION_NAME" 2>/dev/null || return 0
   configure_role_footer_style "$LAB_SESSION_NAME" "#f9e2af"
   tmux select-pane -t "$LAB_SESSION_NAME:Builder Lab.0" -T "$(pane_footer_label lab-builder "Builder 1" "lab-builder-1")" 2>/dev/null || true
-  tmux select-pane -t "$LAB_SESSION_NAME:Builder Lab.1" -T "$(pane_footer_label evaluator "Evaluator 2 审判官" "lab-evaluator-2")" 2>/dev/null || true
+  tmux select-pane -t "$LAB_SESSION_NAME:Builder Lab.1" -T "$(pane_footer_label lab-builder "Builder 2" "lab-builder-2")" 2>/dev/null || true
   tmux select-pane -t "$LAB_SESSION_NAME:Builder Lab.2" -T "$(pane_footer_label lab-builder "Builder 3" "lab-builder-3")" 2>/dev/null || true
   tmux select-pane -t "$LAB_SESSION_NAME:Builder Lab.3" -T "$(pane_footer_label lab-builder "Builder 4" "lab-builder-4")" 2>/dev/null || true
 }
@@ -688,7 +679,7 @@ start_watchdog_sync() {
 
 start_harness() {
   local mode="${1:-3}"
-  local work_dir="${2:-$HARNESS_DIR}"
+  local work_dir="${2:-$(pwd)}"
   local skip_doctor="${3:-}"
 
   cleanup_legacy_sessions
@@ -734,8 +725,8 @@ start_harness() {
   # │   产品经理    │   规划者      │
   # │   pm         │   planner    │
   # ├──────────────┼──────────────┤
-  # │   监控台      │   审判官      │
-  # │   monitor    │   evaluator  │
+  # │   建设者      │   审判官      │
+  # │   builder    │   evaluator  │
   # └──────────────┴──────────────┘
   # ================================================================
 
@@ -763,27 +754,24 @@ start_harness() {
   local _esc_harness _esc_work
   _esc_harness=$(printf '%q' "$HARNESS_DIR")
   _esc_work=$(printf '%q' "$work_dir")
-  local _monitor_cmd
-  _monitor_cmd="$(product_delivery_monitor_command)"
   launch_persona_pane() {
     local target="$1" persona="$2"
     local pane_id
     pane_id=$(tmux display-message -p -t "$target" '#{pane_id}')
-    if [[ "$persona" == "monitor" ]]; then
-      tmux send-keys -t "$target" "TMUX_PANE=${pane_id} SOLAR_CLAUDE_BYPASS=1 exec ${_monitor_cmd}" Enter
-    else
-      tmux send-keys -t "$target" "$(claude_clean_env_prefix) TMUX_PANE=${pane_id} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" Enter
-    fi
+    tmux send-keys -t "$target" "$(claude_clean_env_prefix) TMUX_PANE=${pane_id} SOLAR_CLAUDE_BYPASS=1 bash ${_esc_harness}/pane-launcher.sh ${persona} ${_esc_work}" Enter
   }
   sleep 1
   launch_persona_pane "$SESSION_NAME:Product Delivery.0" "pm"
   sleep 1
   launch_persona_pane "$SESSION_NAME:Product Delivery.1" "planner"
-  sleep 1
-  launch_persona_pane "$SESSION_NAME:Product Delivery.2" "monitor"
   if [[ "$mode" == "3" ]]; then
     sleep 1
+    launch_persona_pane "$SESSION_NAME:Product Delivery.2" "builder"
+    sleep 1
     launch_persona_pane "$SESSION_NAME:Product Delivery.3" "evaluator"
+  else
+    sleep 1
+    launch_persona_pane "$SESSION_NAME:Product Delivery.2" "builder"
   fi
 
   # 设置活跃 pane 为 PM (非监控)
@@ -812,8 +800,8 @@ start_harness() {
     echo "  │   产品经理    │   规划者      │"
     echo "  │   pm         │   planner    │"
     echo "  ├──────────────┼──────────────┤"
-    echo "  │   监控台      │   审判官      │"
-    echo "  │   monitor    │   evaluator  │"
+    echo "  │   建设者      │   审判官      │"
+    echo "  │   builder    │   evaluator  │"
     echo "  └──────────────┴──────────────┘"
   else
     echo "  布局 (三分屏):"
@@ -822,7 +810,7 @@ start_harness() {
     echo "  │   产品经理    │   规划者      │"
     echo "  │   pm         │   planner    │"
     echo "  ├──────────────┴──────────────┤"
-    echo "  │        监控台 monitor        │"
+    echo "  │         建设者 builder       │"
     echo "  └─────────────────────────────┘"
   fi
   echo ""
@@ -1308,11 +1296,35 @@ intake_request() {
   [[ -n "$req" ]] || { err "intake 需要需求文本"; return 1; }
 
   ensure_dirs
-  local out rc raw_file autopilot_out autopilot_rc
+  local out rc raw_file autopilot_out autopilot_rc intent_out intent_rc intent_id sid_from_out
+  intent_out=""
+  intent_rc=0
+  intent_id=""
+  if [[ -f "$HARNESS_DIR/lib/intent_gateway.py" ]]; then
+    set +e
+    intent_out=$(SOLAR_HARNESS_SPRINTS_DIR="$SPRINTS_DIR" python3 "$HARNESS_DIR/lib/intent_gateway.py" capture \
+      --source-channel "${SOLAR_INTENT_SOURCE_CHANNEL:-cli_intake}" \
+      --actor "${SOLAR_INTENT_ACTOR:-user}" \
+      --device "${SOLAR_INTENT_DEVICE:-}" \
+      --repo "$(pwd)" \
+      --text "$req" \
+      --json 2>&1)
+    intent_rc=$?
+    set -e
+    if [[ "$intent_rc" == "0" ]]; then
+      intent_id=$(python3 -c 'import json,sys; print((json.loads(sys.stdin.read()).get("intent_id") or ""))' <<<"$intent_out" 2>/dev/null || true)
+    fi
+  fi
   set +e
   out=$(new_sprint "$req" 2>&1)
   rc=$?
   set -e
+  sid_from_out=$(python3 -c 'import re,sys; text=re.sub(r"\x1b\[[0-9;]*m","",sys.stdin.read());
+patterns=(r"Sprint created:\s*(\S+)", r"Epic:\s*(\S+)", r"\"epic_id\":\s*\"([^\"]+)\"");
+print(next((m.group(1) for p in patterns for m in [re.search(p,text)] if m), ""))' <<<"$out" 2>/dev/null || true)
+  if [[ "$rc" == "0" && -n "$intent_id" && -n "$sid_from_out" && -f "$HARNESS_DIR/lib/intent_gateway.py" ]]; then
+    SOLAR_HARNESS_SPRINTS_DIR="$SPRINTS_DIR" python3 "$HARNESS_DIR/lib/intent_gateway.py" bind --intent-id "$intent_id" --sprint-id "$sid_from_out" --json >/dev/null 2>&1 || true
+  fi
   raw_file="$(write_intake_raw_record "$req" "$out" 2>/dev/null || true)"
   if [[ "$rc" != "0" ]]; then
     echo "$out"
@@ -1329,17 +1341,27 @@ intake_request() {
   fi
 
   if [[ "$json" == "1" ]]; then
-    python3 - "$rc" "$raw_file" "$dispatch" "$autopilot_rc" <<'PY'
+    python3 - "$rc" "$raw_file" "$dispatch" "$autopilot_rc" "$intent_rc" "$intent_id" <<'PY'
 import json, sys
 print(json.dumps({
     "ok": int(sys.argv[1]) == 0,
     "raw_record": sys.argv[2],
     "dispatch_requested": sys.argv[3] == "1",
     "autopilot_returncode": int(sys.argv[4]),
+    "intent_gateway": {
+        "ok": int(sys.argv[5]) == 0,
+        "intent_id": sys.argv[6],
+    },
 }, ensure_ascii=False, indent=2))
 PY
   else
     echo "$out"
+    if [[ -n "$intent_id" ]]; then
+      log "RawIntent: $intent_id"
+    elif [[ "$intent_rc" != "0" ]]; then
+      warn "Intent gateway failed rc=${intent_rc}"
+      echo "$intent_out" | tail -20
+    fi
     [[ -n "$raw_file" ]] && log "Raw intake: $raw_file"
     if [[ "$dispatch" == "1" ]]; then
       if [[ "$autopilot_rc" == "0" ]]; then
@@ -1571,7 +1593,7 @@ wake_sprint() {
     sleep 1
     tmux send-keys -t "$SESSION_NAME:0.1" "$(claude_clean_env_prefix) SOLAR_CLAUDE_BYPASS=1 bash ${_esc_h}/pane-launcher.sh planner ${_esc_w}" Enter
     sleep 1
-    tmux send-keys -t "$SESSION_NAME:0.2" "SOLAR_CLAUDE_BYPASS=1 exec $(product_delivery_monitor_command)" Enter
+    tmux send-keys -t "$SESSION_NAME:0.2" "$(claude_clean_env_prefix) SOLAR_CLAUDE_BYPASS=1 bash ${_esc_h}/pane-launcher.sh builder ${_esc_w}" Enter
     sleep 1
     tmux send-keys -t "$SESSION_NAME:0.3" "$(claude_clean_env_prefix) SOLAR_CLAUDE_BYPASS=1 bash ${_esc_h}/pane-launcher.sh evaluator ${_esc_w}" Enter
     sleep 1
@@ -1788,15 +1810,8 @@ do_handoff_submit() {
   local sid="$1"
   local sf="$SPRINTS_DIR/${sid}.status.json"
   local hf="$SPRINTS_DIR/${sid}.handoff.md"
-  local coverage_tool="$HARNESS_DIR/lib/requirement_coverage.py"
   rs_exists "$sid" || { err "Sprint not found: $sid"; exit 1; }
   [[ -f "$hf" ]] || { err "handoff.md not found for $sid — 先写 handoff 再提交"; exit 1; }
-  if [[ -f "$SPRINTS_DIR/${sid}.requirement_ir.json" && -f "$coverage_tool" ]]; then
-    python3 "$coverage_tool" evaluate --sid "$sid" --sprints-dir "$SPRINTS_DIR" --write >/dev/null \
-      || { err "handoff-submit: requirement coverage 工件生成失败"; exit 1; }
-    python3 "$coverage_tool" annotate-markdown --sid "$sid" --sprints-dir "$SPRINTS_DIR" --target-file "$hf" --requested-verdict pass >/dev/null \
-      || { err "handoff-submit: handoff.md coverage 摘要写入失败"; exit 1; }
-  fi
 
   local handoff_mtime
   handoff_mtime=$(stat -f %m "$hf" 2>/dev/null || echo 0)
@@ -1875,7 +1890,6 @@ do_plan_verdict() {
 
 do_eval_verdict() {
   local sid="$1" verdict="$2" reason="${3:-}"
-  local coverage_tool="$HARNESS_DIR/lib/requirement_coverage.py"
   rs_exists "$sid" || { err "Sprint not found: $sid"; exit 1; }
 
   local new_status event_name verdict_upper
@@ -1892,20 +1906,6 @@ do_eval_verdict() {
     extra_json=$(python3 -c "import json; print(json.dumps({'verdict':'$verdict_upper','reason':'$reason'}))")
   else
     extra_json="{\"verdict\":\"$verdict_upper\"}"
-  fi
-
-  if [[ -f "$SPRINTS_DIR/${sid}.requirement_ir.json" && -f "$coverage_tool" ]]; then
-    if [[ "$verdict_upper" == "PASS" ]]; then
-      python3 "$coverage_tool" evaluate --sid "$sid" --sprints-dir "$SPRINTS_DIR" --requested-verdict pass --write --require-pass >/dev/null \
-        || { err "eval-verdict: requirement coverage 未通过，拒绝 PASS"; exit 1; }
-      [[ -f "$SPRINTS_DIR/${sid}.eval.md" ]] && python3 "$coverage_tool" annotate-markdown --sid "$sid" --sprints-dir "$SPRINTS_DIR" --target-file "$SPRINTS_DIR/${sid}.eval.md" --requested-verdict pass >/dev/null \
-        || true
-    else
-      python3 "$coverage_tool" evaluate --sid "$sid" --sprints-dir "$SPRINTS_DIR" --requested-verdict fail --write >/dev/null \
-        || { err "eval-verdict: requirement coverage 工件生成失败"; exit 1; }
-      [[ -f "$SPRINTS_DIR/${sid}.eval.md" ]] && python3 "$coverage_tool" annotate-markdown --sid "$sid" --sprints-dir "$SPRINTS_DIR" --target-file "$SPRINTS_DIR/${sid}.eval.md" --requested-verdict fail >/dev/null \
-        || true
-    fi
   fi
 
   if [[ "$new_status" == "failed_review" ]]; then
@@ -2562,7 +2562,7 @@ do_models_command() {
       ;;
     set-main)
       local alias="${1:-}"
-      [[ -n "$alias" ]] || { err "用法: $0 models set-main <opus|anthropic-sonnet|glm> [--apply]"; exit 1; }
+      [[ -n "$alias" ]] || { err "用法: $0 models set-main <opus|anthropic-sonnet> [--apply]"; exit 1; }
       solar_set_main_model "$alias"
       ok "已写入主屏模型: pm/planner/builder/evaluator -> $alias"
       if [[ "${2:-}" == "--apply" ]]; then
@@ -2655,9 +2655,9 @@ do_models_command() {
 # ---- Main ----
 
 case "${1:-start}" in
-  start|"")  start_harness 3 "${2:-$HARNESS_DIR}" "${3:-}" ;;
-  2)         start_harness 2 "${2:-$HARNESS_DIR}" "${3:-}" ;;
-  3)         start_harness 3 "${2:-$HARNESS_DIR}" "${3:-}" ;;
+  start|"")  start_harness 3 "${2:-$(pwd)}" "${3:-}" ;;
+  2)         start_harness 2 "${2:-$(pwd)}" "${3:-}" ;;
+  3)         start_harness 3 "${2:-$(pwd)}" "${3:-}" ;;
   status)    show_status ;;
   main-status) do_main_status ;;
   lab-status) do_lab_status "${2:-}" ;;
@@ -2682,7 +2682,7 @@ case "${1:-start}" in
     done
     exit "$_cap_fail"
     ;;
-  --skip-doctor) start_harness 3 "${2:-$HARNESS_DIR}" "--skip-doctor" ;;
+  --skip-doctor) start_harness 3 "${2:-$(pwd)}" "--skip-doctor" ;;
   coord-status)
     # Sprint 20260420-082442 D2: 协调器状态诊断
     pidfile="$HARNESS_DIR/.coordinator.pid"
@@ -2730,6 +2730,14 @@ print(json.dumps({
   intake|request)
     shift || true
     intake_request "$@"
+    ;;
+  intent-gateway|intent)
+    shift || true
+    python3 "$HARNESS_DIR/lib/intent_gateway.py" "$@"
+    ;;
+  intent-consumer|intent-consume)
+    shift || true
+    python3 "$HARNESS_DIR/lib/intent_consumer.py" "$@"
     ;;
   bg)
     shift || true
@@ -2847,14 +2855,7 @@ print(json.dumps({
         elif [[ -f "$_SS_PID" ]] && kill -0 "$(cat "$_SS_PID")" 2>/dev/null; then
           ok "Status server 已在运行 (PID: $(cat "$_SS_PID"), port: $(cat "$_SS_PORT_FILE" 2>/dev/null || echo '?'))"
         elif curl -fsS "http://127.0.0.1:$(cat "$_SS_PORT_FILE" 2>/dev/null || echo 8765)/healthz" >/dev/null 2>&1; then
-          _port=$(cat "$_SS_PORT_FILE" 2>/dev/null || echo 8765)
-          _listen_pid=$(lsof -tiTCP:"$_port" -sTCP:LISTEN 2>/dev/null | head -1 || true)
-          if [[ -n "$_listen_pid" ]]; then
-            echo "$_listen_pid" > "$_SS_PID"
-            ok "Status server 已在运行 (PID: $_listen_pid, port: $_port)"
-          else
-            ok "Status server 已在运行 (port: $_port, pidfile stale)"
-          fi
+          ok "Status server 已在运行 (port: $(cat "$_SS_PORT_FILE" 2>/dev/null || echo 8765), pidfile stale)"
         else
           rm -f "$_SS_PID" "$_SS_PORT_FILE"
           if command -v tmux >/dev/null 2>&1; then
@@ -2915,13 +2916,7 @@ print(json.dumps({
           curl -s "http://127.0.0.1:$_port/healthz" 2>/dev/null && echo || true
         elif curl -fsS "http://127.0.0.1:$(cat "$_SS_PORT_FILE" 2>/dev/null || echo 8765)/healthz" >/dev/null 2>&1; then
           _port=$(cat "$_SS_PORT_FILE" 2>/dev/null || echo "8765")
-          _listen_pid=$(lsof -tiTCP:"$_port" -sTCP:LISTEN 2>/dev/null | head -1 || true)
-          if [[ -n "$_listen_pid" ]]; then
-            echo "$_listen_pid" > "$_SS_PID"
-            ok "运行中 (PID: $_listen_pid, port: $_port)"
-          else
-            ok "运行中 (port: $_port, pidfile stale)"
-          fi
+          ok "运行中 (port: $_port, pidfile stale)"
           curl -s "http://127.0.0.1:$_port/healthz" 2>/dev/null && echo || true
         else
           warn "Status server 未运行"
@@ -3777,14 +3772,11 @@ PY
     echo "  $0 autopilot [status|apply|dispatch|loop|start|stop|service-status|queue]  自动监控断头 sprint/pane 并安全推进"
     echo "  $0 symphony [status|dry-run|workspace <sid>]  Symphony 调度"
     echo "  $0 graph-scheduler [validate|ready|batches|enrich-capabilities|enrich-backlog|assign|enqueue-ready|mark|parent-check]  DAG 并行调度"
-    echo "  $0 operatord [run --operator <id>|list]  operator daemon — persona load + pane title"
     echo "  $0 architecture-guard validate --graph sprint.task_graph.json [--strict]  package-first 架构门禁"
     echo "  $0 workflow-guard route <sid> [--json]  PM→Planner→DAG Builder 门禁判定"
     echo "  $0 graph-dispatch [dispatch-ready|drain-queue]  DAG 节点级 pane 派发"
-    echo "  $0 pm-dispatch --role ROLE --objective TEXT [--operator ID] [--sprint SID] [--dry-run]  PM 发号施令 → 无头算子"
-    echo "  $0 pm-fleet [status|inbox|result]  PM 算子舰队状态 & 任务收件箱"
     echo "  $0 mirage [search|doctor|workspace|mounts|exec|provision]  Mirage 统一虚拟文件系统"
-    echo "  $0 wiki [install|status|export-sprint|update|query|ingest|chatgpt-import|vault-status|lint|rebuild|export-graph|colorize|history|run-dispatch|dispatch-watch|dispatch-maintenance|import-solar-db|capture-server|audit-uploads|backfill-uploads|quality-gate|reingest-quarantine|reingest-scheduler|qmd-status|qmd-repair|qmd-search|qmd-update|qmd-mcp|qmd-embed|semantic-extract|knowledge-ingest|knowledge-health|qmd-watermarks|qmd-microbatch|ai-influence-digest|tech-hotspot-radar|help]  Obsidian Wiki 集成"
+    echo "  $0 wiki [install|status|export-sprint|update|query|ingest|chatgpt-import|vault-status|lint|rebuild|export-graph|colorize|history|run-dispatch|dispatch-watch|dispatch-maintenance|import-solar-db|capture-server|audit-uploads|backfill-uploads|quality-gate|reingest-quarantine|reingest-scheduler|qmd-status|qmd-repair|qmd-search|qmd-update|qmd-mcp|qmd-embed|help]  Obsidian Wiki 集成"
     ;;
   mirage)
     # Mirage unified virtual filesystem — sprint-20260508-mirage-unified-vfs
@@ -4358,50 +4350,6 @@ EOF
         fi
         python3 "$_aae" backfill "$@"
         ;;
-      semantic-extract)
-        _kse="$HARNESS_DIR/lib/knowledge-semantic-extract.py"
-        if [[ ! -f "$_kse" ]]; then
-          err "knowledge-semantic-extract.py not found: $_kse"
-          exit 1
-        fi
-        python3 "$_kse" "$@"
-        ;;
-      knowledge-ingest)
-        _kid="$HARNESS_DIR/lib/knowledge_ingest_dispatcher.py"
-        if [[ ! -f "$_kid" ]]; then
-          err "knowledge_ingest_dispatcher.py not found: $_kid"
-          exit 1
-        fi
-        python3 "$_kid" "$@"
-        ;;
-      knowledge-health)
-        _kih="$HARNESS_DIR/lib/knowledge_ingest_health.py"
-        if [[ ! -f "$_kih" ]]; then
-          err "knowledge_ingest_health.py not found: $_kih"
-          exit 1
-        fi
-        python3 "$_kih" "$@"
-        ;;
-      qmd-watermarks)
-        _kqi="$HARNESS_DIR/lib/knowledge_qmd_indexer.py"
-        if [[ ! -f "$_kqi" ]]; then
-          err "knowledge_qmd_indexer.py not found: $_kqi"
-          exit 1
-        fi
-        if [[ "$#" -eq 0 || "$1" == --* ]]; then
-          python3 "$_kqi" "$@" watermarks
-        else
-          python3 "$_kqi" "$@"
-        fi
-        ;;
-      qmd-microbatch)
-        _kqi="$HARNESS_DIR/lib/knowledge_qmd_indexer.py"
-        if [[ ! -f "$_kqi" ]]; then
-          err "knowledge_qmd_indexer.py not found: $_kqi"
-          exit 1
-        fi
-        python3 "$_kqi" microbatch "$@"
-        ;;
       help|--help|-h|"")
         echo "Solar Harness Wiki — Obsidian LLM Wiki integration"
         echo ""
@@ -4436,12 +4384,6 @@ EOF
         echo "  $0 wiki qmd-update"
         echo "  $0 wiki qmd-mcp [status|start|stop-proxy]"
         echo "  $0 wiki qmd-embed [start|status|stop|run-once|run-idle|run-gentle|run-now]"
-        echo "  $0 wiki semantic-extract backfill [--source-dir PATH] [--limit N] [--since-hours H] [--qmd-after]"
-        echo "  $0 wiki semantic-extract backfill-vault [--limit N] [--since-hours H] [--qmd-after]  # Obsidian 正文层"
-        echo "  $0 wiki knowledge-ingest [status|migrate|submit-event|discover-raw|discover-vault|process-queue] [--json]"
-        echo "  $0 wiki knowledge-health [health|audit|circuit-check]"
-        echo "  $0 wiki qmd-watermarks [--db PATH]"
-        echo "  $0 wiki qmd-microbatch --layer raw|vault|extracted [--path PATH] [--execute]"
         echo ""
         echo "Examples:"
         echo "  $0 wiki install --vault ~/Documents/SolarWiki"
@@ -4466,169 +4408,6 @@ EOF
         echo "  $0 wiki quality-gate --apply --json"
         echo "  $0 wiki reingest-quarantine --limit 8 --json"
         echo "  $0 wiki reingest-scheduler start 60"
-        ;;
-      ai-influence-digest)
-        # sprint-20260522-ai-influence-digest-scan N5: AI Influence Digest CLI
-        _ai_digest_source_dir="${SOLAR_HARNESS_SOURCE_DIR:-$HOME/Solar/harness}"
-        if [[ -f "$_ai_digest_source_dir/scripts/ai_influence_daily.py" ]]; then
-          _ai_digest_script="$_ai_digest_source_dir/scripts/ai_influence_daily.py"
-          _ai_digest_accounts="${_ai_digest_source_dir}/ai-influence-digest/references/accounts_extended.txt"
-        else
-          _ai_digest_script="$HARNESS_DIR/scripts/ai_influence_daily.py"
-          _ai_digest_accounts="${HARNESS_DIR}/ai-influence-digest/references/accounts_extended.txt"
-        fi
-        _ai_digest_state_dir="$HARNESS_DIR/state/ai-influence-digest"
-        _ai_digest_raw_dir="$HOME/Knowledge/_raw/ai-influence-daily-digest"
-        _ai_digest_plist="$HOME/Library/LaunchAgents/com.solar.ai-influence-digest.plist"
-        _ai_digest_label="com.solar.ai-influence-digest"
-        _ai_digest_action="${1:-help}"; shift || true
-        case "$_ai_digest_action" in
-          run)
-            mkdir -p "$_ai_digest_state_dir" "$_ai_digest_raw_dir"
-            python3 "$_ai_digest_script" \
-              --accounts "$_ai_digest_accounts" \
-              --state-dir "$_ai_digest_state_dir" \
-              --raw-dir "$_ai_digest_raw_dir" \
-              "$@" \
-              run
-            ;;
-          status)
-            python3 "$_ai_digest_script" \
-              --accounts "$_ai_digest_accounts" \
-              --state-dir "$_ai_digest_state_dir" \
-              status
-            ;;
-          doctor)
-            python3 "$_ai_digest_script" \
-              --accounts "$_ai_digest_accounts" \
-              --state-dir "$_ai_digest_state_dir" \
-              doctor
-            ;;
-          send-test)
-            # Run with dry-run in ISOLATED temp dirs — never writes production raw/state
-            # unless user explicitly passes --raw-dir / --state-dir.
-            _send_test_tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/ai-digest-send-test.XXXXXX")"
-            _send_test_raw_dir="$_send_test_tmpdir/raw"
-            _send_test_state_dir="$_send_test_tmpdir/state"
-            mkdir -p "$_send_test_raw_dir" "$_send_test_state_dir"
-            _send_test_args=()
-            # If user did not pass --raw-dir, inject isolated one
-            if ! printf ' %s ' "$*" | grep -q -- '--raw-dir'; then
-              _send_test_args+=(--raw-dir "$_send_test_raw_dir")
-            fi
-            # If user did not pass --state-dir, inject isolated one
-            if ! printf ' %s ' "$*" | grep -q -- '--state-dir'; then
-              _send_test_args+=(--state-dir "$_send_test_state_dir")
-            fi
-            python3 "$_ai_digest_script" \
-              --accounts "$_ai_digest_accounts" \
-              --dry-run \
-              "${_send_test_args[@]}" \
-              "$@" \
-              run
-            _st_rc=$?
-            echo "send-test isolated raw: $_send_test_raw_dir" >&2
-            echo "send-test isolated state: $_send_test_state_dir" >&2
-            exit $_st_rc
-            ;;
-          schedule)
-            _sched_act="${1:-status}"; shift || true
-            case "$_sched_act" in
-              start)
-                if [[ ! -f "$_ai_digest_plist" ]]; then
-                  mkdir -p "$(dirname "$_ai_digest_plist")"
-                  cat > "$_ai_digest_plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key><string>${_ai_digest_label}</string>
-  <key>ProgramArguments</key><array>
-    <string>/opt/homebrew/bin/bash</string>
-    <string>${HARNESS_DIR}/solar-harness.sh</string>
-    <string>wiki</string>
-    <string>ai-influence-digest</string>
-    <string>run</string>
-  </array>
-  <key>StartCalendarInterval</key><dict>
-    <key>Hour</key><integer>7</integer>
-    <key>Minute</key><integer>17</integer>
-  </dict>
-  <key>StandardOutPath</key><string>${HARNESS_DIR}/run/ai-influence-digest.log</string>
-  <key>StandardErrorPath</key><string>${HARNESS_DIR}/run/ai-influence-digest.log</string>
-  <key>EnvironmentVariables</key><dict>
-    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-  </dict>
-</dict>
-</plist>
-PLIST
-                fi
-                launchctl bootout "gui/$(id -u)" "$_ai_digest_plist" >/dev/null 2>&1 || true
-                launchctl bootstrap "gui/$(id -u)" "$_ai_digest_plist"
-                ok "AI Influence Digest scheduler loaded ($_ai_digest_label, daily 07:17)"
-                ;;
-              stop)
-                launchctl bootout "gui/$(id -u)" "$_ai_digest_plist" >/dev/null 2>&1 || true
-                ok "AI Influence Digest scheduler stopped ($_ai_digest_label)"
-                ;;
-              status)
-                if launchctl print "gui/$(id -u)/$_ai_digest_label" >/dev/null 2>&1; then
-                  ok "AI Influence Digest scheduler loaded ($_ai_digest_label, daily 07:17)"
-                else
-                  warn "AI Influence Digest scheduler not loaded"
-                fi
-                if [[ -f "$_ai_digest_plist" ]]; then
-                  echo "  plist: $_ai_digest_plist"
-                else
-                  echo "  plist: not created yet (run 'schedule start')"
-                fi
-                ;;
-              *)
-                err "Usage: $0 wiki ai-influence-digest schedule [start|stop|status]"
-                exit 1
-                ;;
-            esac
-            ;;
-          help|--help|-h|"")
-            echo "Solar Harness Wiki — AI Influence Daily Digest"
-            echo ""
-            echo "Usage:"
-            echo "  $0 wiki ai-influence-digest run [--date YYYY-MM-DD] [--dry-run]"
-            echo "  $0 wiki ai-influence-digest status"
-            echo "  $0 wiki ai-influence-digest doctor"
-            echo "  $0 wiki ai-influence-digest send-test [--date YYYY-MM-DD]"
-            echo "  $0 wiki ai-influence-digest schedule [start|stop|status]"
-            echo ""
-            echo "Schedule: daily at 07:17 local time. Disabled by default; use 'schedule start' to enable."
-            ;;
-          *)
-            err "Unknown ai-influence-digest action: $_ai_digest_action"
-            echo "Run '$0 wiki ai-influence-digest help' for usage." >&2
-            exit 1
-            ;;
-        esac
-        ;;
-      tech-hotspot-radar)
-        # sprint-20260523-tech-hotspot-radar-productization follow-up:
-        # expose the accepted standalone Tech Hotspot Radar CLI under wiki.
-        _thr_source_dir="${SOLAR_HARNESS_SOURCE_DIR:-$HOME/Solar/harness}"
-        if [[ -f "$_thr_source_dir/scripts/tech_hotspot_radar.py" ]]; then
-          _thr_script="$_thr_source_dir/scripts/tech_hotspot_radar.py"
-        else
-          _thr_script="$HARNESS_DIR/scripts/tech_hotspot_radar.py"
-        fi
-        if [[ ! -f "$_thr_script" ]]; then
-          err "Tech Hotspot Radar CLI not found: $_thr_script"
-          exit 1
-        fi
-        case "${1:-help}" in
-          help|--help|-h|"")
-            python3 "$_thr_script" --help
-            ;;
-          *)
-            python3 "$_thr_script" "$@"
-            ;;
-        esac
         ;;
       *)
         err "Unknown wiki subcommand: $_wiki_subcmd"
@@ -4752,27 +4531,6 @@ PLIST
         ;;
       *)
         err "Unknown graph-scheduler subcommand: $_graph_subcmd"; exit 1
-        ;;
-    esac
-    ;;
-
-  operatord)
-    # Operator daemon CLI: bootstrap operator instances, load personas and evaluator protocols.
-    shift
-    _operatord_py="$HARNESS_DIR/tools/operatord.py"
-    if [[ ! -f "$_operatord_py" ]]; then
-      err "operatord.py not found: $_operatord_py"; exit 1
-    fi
-    _operatord_subcmd="${1:-help}"; shift || true
-    case "$_operatord_subcmd" in
-      run|list)
-        python3 "$_operatord_py" "$_operatord_subcmd" "$@"
-        ;;
-      help|--help|-h|"")
-        python3 "$_operatord_py" --help
-        ;;
-      *)
-        err "Unknown operatord subcommand: $_operatord_subcmd"; exit 1
         ;;
     esac
     ;;
@@ -4963,68 +4721,6 @@ PLIST
         ;;
       *)
         err "Unknown leases subcommand: $_lease_subcmd"; exit 1
-        ;;
-    esac
-    ;;
-
-  pm-dispatch)
-    # PM 发号施令：从主四分屏 PM pane 向无头算子 pane 派发任务
-    shift
-    _pm_dispatch_py="$HARNESS_DIR/tools/pm_dispatch.py"
-    if [[ ! -f "$_pm_dispatch_py" ]]; then
-      err "pm_dispatch.py not found: $_pm_dispatch_py"; exit 1
-    fi
-    _pm_subcmd="${1:-submit}"
-    case "$_pm_subcmd" in
-      submit|compile-request)
-        shift || true
-        python3 "$_pm_dispatch_py" "$_pm_subcmd" "$@"
-        ;;
-      help|--help|-h)
-        echo "PM Dispatch"
-        echo ""
-        echo "Usage:"
-        echo "  $0 pm-dispatch submit --role builder --objective \"...\""
-        echo "  $0 pm-dispatch compile-request --text \"...\" [--dispatch-planner]"
-        ;;
-      *)
-        python3 "$_pm_dispatch_py" submit "$_pm_subcmd" "$@"
-        ;;
-    esac
-    ;;
-
-  pm-fleet)
-    # PM 算子舰队状态 & 任务收件箱
-    shift
-    _pm_dispatch_py="$HARNESS_DIR/tools/pm_dispatch.py"
-    if [[ ! -f "$_pm_dispatch_py" ]]; then
-      err "pm_dispatch.py not found: $_pm_dispatch_py"; exit 1
-    fi
-    _pm_fleet_subcmd="${1:-status}"; shift || true
-    case "$_pm_fleet_subcmd" in
-      status|fleet-status)
-        python3 "$_pm_dispatch_py" fleet-status "$@"
-        ;;
-      inbox)
-        python3 "$_pm_dispatch_py" inbox "$@"
-        ;;
-      result)
-        python3 "$_pm_dispatch_py" result "$@"
-        ;;
-      complete)
-        python3 "$_pm_dispatch_py" complete "$@"
-        ;;
-      help|--help|-h|"")
-        echo "PM Fleet — 算子舰队管理"
-        echo ""
-        echo "Usage:"
-        echo "  $0 pm-fleet status          查看所有物理算子运行状态"
-        echo "  $0 pm-fleet inbox [--limit N]  查看 PM 任务收件箱"
-        echo "  $0 pm-fleet result --task-id ID  查看任务结果"
-        echo "  $0 pm-fleet complete --task-id ID  标记任务完成"
-        ;;
-      *)
-        err "Unknown pm-fleet subcommand: $_pm_fleet_subcmd"; exit 1
         ;;
     esac
     ;;
