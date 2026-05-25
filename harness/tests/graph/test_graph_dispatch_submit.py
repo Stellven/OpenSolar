@@ -145,6 +145,43 @@ class TestSendToPaneLiteral:
         assert graph["nodes"][0]["status"] == "pending"
         assert graph["nodes"][1]["status"] == "reviewing"
 
+    def test_stale_submit_ack_without_live_lease_does_not_resurrect_dispatch(self, tmp_harness, monkeypatch):
+        """Old ack files are not proof of a current dispatch after the lease expired."""
+        tmp_path, sprints, sid, graph = tmp_harness
+        import graph_node_dispatcher as gnd
+
+        node = graph["nodes"][0]
+        node["status"] = "pending"
+        dispatch_id = f"graph-{sid}-N1-old"
+        dispatch_file = sprints / f"{sid}.N1-dispatch.md"
+        dispatch_file.write_text("# stale dispatch\n", encoding="utf-8")
+        ack_dir = sprints / "graph-acks"
+        ack_dir.mkdir()
+        (ack_dir / f"{sid}.N1-submit-ack.json").write_text(
+            json.dumps({"dispatch_id": dispatch_id, "pane": "solar-harness-lab:0.3"}) + "\n",
+            encoding="utf-8",
+        )
+
+        monkeypatch.setattr(gnd, "_ledger_dispatch_for", lambda *_: {"pane": "solar-harness-lab:0.3", "dispatch_id": dispatch_id})
+        monkeypatch.setattr(gnd, "read_lease", lambda *_: None)
+        monkeypatch.setattr(gnd, "_pane_runtime_unavailable_reason", lambda *_: "quota_exhausted")
+        monkeypatch.setattr(gnd, "_pane_unavailable_reason", lambda *_: "")
+        monkeypatch.setattr(gnd, "release_lease", lambda *a, **k: None)
+
+        repaired = gnd._reconcile_existing_dispatches(graph, sprints / f"{sid}.task_graph.json")
+
+        assert graph["nodes"][0]["status"] == "pending"
+        assert "N1" not in graph["node_results"]
+        assert repaired == [
+            {
+                "node": "N1",
+                "pane": "solar-harness-lab:0.3",
+                "dispatch_id": dispatch_id,
+                "status": "pending",
+                "reason": "quota_exhausted",
+            }
+        ]
+
     def test_uses_confirmed_enter_submit(self, tmp_harness, monkeypatch):
         """_send_to_pane submits and verifies processing, avoiding prompt-stuck false positives."""
         calls_log = []

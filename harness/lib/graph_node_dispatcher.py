@@ -1118,6 +1118,29 @@ def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path
             continue
         if str(ack.get("dispatch_id") or "") != dispatch_id:
             continue
+        lease = read_lease(pane) if pane else None
+        lease_live = bool(
+            isinstance(lease, dict)
+            and str(lease.get("dispatch_id") or "") == dispatch_id
+            and str(lease.get("expires_at") or "") > _utc_now()
+        )
+        unavailable_reason = _pane_runtime_unavailable_reason(pane, _pane_title(pane)) or _pane_unavailable_reason(pane)
+        if not lease_live or unavailable_reason:
+            node.pop("assigned_to", None)
+            node.pop("dispatch_id", None)
+            node["dispatch_retry_reason"] = unavailable_reason or "stale_submit_ack_without_live_lease"
+            node["updated_at"] = _utc_now()
+            graph.setdefault("node_results", {}).pop(node_id, None)
+            repaired.append(
+                {
+                    "node": node_id,
+                    "pane": pane,
+                    "dispatch_id": dispatch_id,
+                    "status": "pending",
+                    "reason": node["dispatch_retry_reason"],
+                }
+            )
+            continue
         set_node_status(graph, node_id, "dispatched", pane=pane or None, dispatch_id=dispatch_id or None)
         repaired.append({"node": node_id, "pane": pane, "dispatch_id": dispatch_id, "reason": "submit_ack_exists"})
     return repaired
