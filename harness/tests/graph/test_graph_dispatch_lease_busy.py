@@ -182,6 +182,46 @@ def test_worker_discovery_marks_claude_monthly_limit_as_anthropic_quota(monkeypa
     assert workers[0]["unavailable_reason"] == "rate_limit_or_api_error"
 
 
+def test_dispatch_queue_item_retries_when_assigned_pane_later_hits_quota(monkeypatch) -> None:
+    marked: list[tuple[str, str, str, bool]] = []
+
+    item = {
+        "sprint_id": "sprint-test",
+        "intent": "graph_node|node_id=N1",
+        "priority": 80,
+        "payload": {
+            "sprint_id": "sprint-test",
+            "graph": "/tmp/sprint-test.task_graph.json",
+            "dispatch_id": "dispatch-N1",
+            "node": {"id": "N1"},
+            "assignment": {"pane": "solar-harness-lab:0.3"},
+        },
+    }
+
+    monkeypatch.setattr(gnd, "_graph_node_runtime_state", lambda graph_path, node_id: {"status": "pending"})
+    monkeypatch.setattr(gnd, "_pane_exists", lambda pane: True)
+    monkeypatch.setattr(gnd, "_assigned_pane_unavailable_reason", lambda pane: "rate_limit_or_api_error")
+    monkeypatch.setattr(
+        gnd,
+        "_mark_graph_node",
+        lambda graph_path, node_id, status, clear_assignment=False: marked.append(
+            (graph_path, node_id, status, clear_assignment)
+        ),
+    )
+    monkeypatch.setattr(
+        gnd,
+        "_ensure_lease",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("lease should not be acquired")),
+    )
+
+    result = gnd.dispatch_queue_item(item, dry_run=False)
+
+    assert result["ok"] is True
+    assert result["reason"] == "assigned_pane_unavailable_retry_later"
+    assert result["unavailable_reason"] == "rate_limit_or_api_error"
+    assert marked == [("/tmp/sprint-test.task_graph.json", "N1", "pending", True)]
+
+
 def test_evaluator_discovery_ignores_expired_lease(monkeypatch) -> None:
     monkeypatch.setattr(gnd, "SESSION", "solar-harness")
     monkeypatch.setattr(

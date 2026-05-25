@@ -2075,6 +2075,26 @@ def _pane_unavailable_reason(pane: str) -> str:
     return ""
 
 
+def _assigned_pane_unavailable_reason(pane: str) -> str:
+    """Runtime guard for queue items that already carry a concrete pane.
+
+    Worker discovery filters busy/quota panes before assignment, but queued
+    items can outlive the pane state they were assigned under. Re-check the
+    target immediately before lease/send so a later quota hit or TUI block does
+    not strand the node in dispatched state.
+    """
+    title = _pane_title(pane)
+    health = _pane_health(pane)
+    models = _models_for_pane(pane, title)
+    tail = _pane_tail(pane)
+    quota_exhausted = _quota_exhausted_models(title, tail, health, models)
+    return (
+        _pane_runtime_unavailable_reason(pane, title)
+        or _pane_unavailable_reason(pane)
+        or ("rate_limit_or_api_error" if quota_exhausted else "")
+    )
+
+
 def _pane_has_matching_queued_prompt(pane: str, instruction_file: Path) -> bool:
     tail = _pane_tail(pane, lines=30)
     if not PANE_QUEUED_PROMPT_RE.search(tail):
@@ -2762,6 +2782,20 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
         enqueue(sid, item.get("intent", f"graph_node|node_id={node_id}"), item.get("priority", 80), payload)
         _mark_graph_node(graph_path, node_id, "pending", clear_assignment=True)
         return {"ok": False, "reason": "pane_missing", "node": node_id, "pane": pane, "requeued": True}
+
+    if not dry_run:
+        unavailable_reason = _assigned_pane_unavailable_reason(pane)
+        if unavailable_reason:
+            _mark_graph_node(graph_path, node_id, "pending", clear_assignment=True)
+            return {
+                "ok": True,
+                "reason": "assigned_pane_unavailable_retry_later",
+                "unavailable_reason": unavailable_reason,
+                "node": node_id,
+                "pane": pane,
+                "dispatch_id": dispatch_id,
+                "requeued": False,
+            }
 
     lease_result = _ensure_lease(pane, sid, dispatch_id, ttl, dry_run)
     if not lease_result.get("acquired"):

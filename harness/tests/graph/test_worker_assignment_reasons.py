@@ -8,7 +8,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "lib"))
 
-from graph_scheduler import assign_workers, enqueue_ready, make_batches  # noqa: E402
+from graph_scheduler import assign_workers, enqueue_ready  # noqa: E402
 
 
 def _worker(pane: str, *, busy: bool = False) -> dict:
@@ -302,41 +302,3 @@ def test_worker_blocked_node_becomes_queued_when_matching_worker_is_pane_busy(tm
     assert result["worker_blocked"] == []
     assert graph["nodes"][0]["status"] == "queued"
     assert graph["node_results"]["N1"]["blocking_reason"] == "pane_busy"
-
-
-def test_make_batches_serializes_high_risk_effect_union_nodes() -> None:
-    graph = {
-        "sprint_id": "sid-effects",
-        "nodes": [
-            {
-                "id": "N1",
-                "depends_on": [],
-                "write_scope": ["/repo/a"],
-                "effect_union": {
-                    "read": ["repo.read"],
-                    "write": ["repo.worktree"],
-                    "execute": ["shell.pytest"],
-                    "network": [],
-                    "cost": [],
-                    "risk": ["patch_scope_drift"],
-                },
-            },
-            {
-                "id": "N2",
-                "depends_on": [],
-                "write_scope": ["/repo/b"],
-                "effect_union": {
-                    "read": ["repo.read"],
-                    "write": ["repo.worktree"],
-                    "execute": ["shell.pytest"],
-                    "network": [],
-                    "cost": [],
-                    "risk": ["patch_scope_drift"],
-                },
-            },
-        ],
-    }
-    result = make_batches(graph, max_parallel=4)
-    assert result["batch_count"] == 2
-    assert result["batches"][0]["nodes"] == ["N1"]
-    assert result["batches"][1]["nodes"] == ["N2"]

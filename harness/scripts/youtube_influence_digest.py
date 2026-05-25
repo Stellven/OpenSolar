@@ -29,6 +29,23 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
+
+THUNDEROMLX_PAUSE_FILE = Path(os.environ.get("THUNDEROMLX_PAUSE_FILE", Path.home() / ".omlx" / "run" / "maintenance.json"))
+
+
+def thunderomlx_ingest_paused() -> str | None:
+    if not THUNDEROMLX_PAUSE_FILE.exists():
+        return None
+    try:
+        data = json.loads(THUNDEROMLX_PAUSE_FILE.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return f"unreadable pause file: {exc}"
+    if not data.get("enabled", True):
+        return None
+    if str(data.get("mode") or "ingest_pause") not in {"ingest_pause", "all"}:
+        return None
+    return str(data.get("reason") or THUNDEROMLX_PAUSE_FILE)
+
 try:
     import requests
 except Exception as exc:  # pragma: no cover
@@ -850,6 +867,9 @@ JSON schema:
 
 
 def call_thunderomlx_postprocess(meta: dict[str, str], transcript: str, post_cfg: dict[str, Any]) -> dict[str, Any]:
+    pause_reason = thunderomlx_ingest_paused()
+    if pause_reason:
+        raise RuntimeError(f"ThunderOMLX ingest pause active: {pause_reason}")
     base_url = str(post_cfg.get("base_url") or "http://127.0.0.1:8002").rstrip("/")
     model = str(post_cfg.get("model") or "claude-3-5-sonnet-latest")
     api_key_env = str(post_cfg.get("api_key_env") or "THUNDEROMLX_AUTH_TOKEN")

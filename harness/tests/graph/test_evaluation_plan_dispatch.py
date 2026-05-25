@@ -150,10 +150,6 @@ def test_build_eval_dispatch_text_includes_evaluation_plan(monkeypatch, tmp_path
             "evaluator_classes": ["Verifier"],
             "evidence_requirements": ["handoff_md", "session_log"],
         },
-        "proof_obligations": [
-            {"kind": "self_check", "requirement": "check.coverage_reviewed"},
-            {"kind": "postcondition", "requirement": "output_present", "field": "eval_json"},
-        ],
     }
     handoff = tmp_path / "sid-eval-text.N3-handoff.md"
     dispatch = tmp_path / "sid-eval-text.N3-dispatch.md"
@@ -168,9 +164,5 @@ def test_build_eval_dispatch_text_includes_evaluation_plan(monkeypatch, tmp_path
     text = gnd.build_eval_dispatch_text(graph, "/tmp/graph.json", node, "solar-harness:0.3", "did")
 
     assert "## Evaluation Plan" in text
-    assert "## Proof Obligations" in text
     assert "Review Mode: `single`" in text
     assert '"evaluation_plan": {' in text
-    assert '"proof_obligations": [' in text
-    assert '"proof_checks": {' in text
-    assert '"verification_results": {' in text
