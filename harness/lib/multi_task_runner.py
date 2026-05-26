@@ -281,6 +281,20 @@ def provider_model_alias(provider: str, model: str) -> str:
     return value
 
 
+def profile_model_with_compatible_override(profile: dict[str, Any], model_override: str = "", node_model: str = "") -> str:
+    base_model = str(profile.get("model") or "sonnet")
+    backend = str(profile.get("backend") or "claude-cli")
+    if model_override:
+        return str(model_override)
+    if not node_model:
+        return base_model
+    base_provider = model_provider(base_model, backend)
+    node_provider = model_provider(str(node_model), backend)
+    if base_provider == node_provider:
+        return str(node_model)
+    return base_model
+
+
 def read_probe_cache() -> dict[str, Any]:
     try:
         data = json.loads(PROBE_CACHE_PATH.read_text(encoding="utf-8"))
@@ -1117,8 +1131,8 @@ def select_profile(node: dict[str, Any], profile_override: str = "", model_overr
     selected["role"] = str(selected.get("role") or role_from_node(node))
     selected["persona"] = str(selected.get("persona") or selected["role"])
     node_model = "" if quota_fallback_from else str(node.get("preferred_model") or "")
-    selected["model"] = str(model_override or node_model or selected.get("model") or "sonnet")
     selected["backend"] = str(backend_override or selected.get("backend") or (config.get("defaults") or {}).get("backend") or "claude-cli")
+    selected["model"] = profile_model_with_compatible_override(selected, model_override, node_model)
     selected["approval_mode"] = str(selected.get("approval_mode") or "auto_edit")
     if quota_fallback_from:
         selected["quota_fallback_from"] = quota_fallback_from
@@ -1132,8 +1146,8 @@ def select_profile(node: dict[str, Any], profile_override: str = "", model_overr
                 fallback_profile["name"] = fallback
                 fallback_profile["role"] = str(fallback_profile.get("role") or role_from_node(node))
                 fallback_profile["persona"] = str(fallback_profile.get("persona") or fallback_profile["role"])
-                fallback_profile["model"] = str(node.get("preferred_model") or fallback_profile.get("model") or "sonnet")
                 fallback_profile["backend"] = str(fallback_profile.get("backend") or (config.get("defaults") or {}).get("backend") or "claude-cli")
+                fallback_profile["model"] = profile_model_with_compatible_override(fallback_profile, "", str(node.get("preferred_model") or ""))
                 fallback_profile["approval_mode"] = str(fallback_profile.get("approval_mode") or "auto_edit")
                 fallback_profile["capability_fallback_from"] = profile_name
                 fallback_profile["capability_fallback_reason"] = str(capability.get("status") or "unavailable")

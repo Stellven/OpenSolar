@@ -83,6 +83,83 @@ def conn():
             pass
 
 
+
+
+@pytest.fixture(autouse=True)
+def mock_thunderomlx_calls(monkeypatch):
+    """Keep evidence compression tests deterministic and independent of live ThunderOMLX latency."""
+    def fake_call_qwen_local(prompt, system, endpoint=None, api_key=None):
+        system_text = str(system).lower()
+        prompt_text = str(prompt).lower()
+        if '"is_wrapper"' in system_text:
+            if "chatbot ui wrapper" in prompt_text or "simple ui wrapper" in prompt_text:
+                return json.dumps({
+                    "is_wrapper": True,
+                    "wrapper_type": "api_wrapper",
+                    "technical_depth_score": 0.2,
+                    "novelty_score": 0.2,
+                    "confidence": 0.9,
+                    "claims": [{
+                        "claim_summary": "Simple API wrapper",
+                        "compressed_content": "Simple API wrapper around chat completions without custom engineering.",
+                        "importance_score": 80,
+                        "novelty_score": 0.2,
+                        "confidence": 0.9,
+                        "tags": ["wrapper"],
+                    }],
+                })
+            return json.dumps({
+                "is_wrapper": False,
+                "wrapper_type": None,
+                "technical_depth_score": 0.8,
+                "novelty_score": 0.7,
+                "confidence": 0.9,
+                "claims": [{
+                    "claim_summary": "Deep systems repository",
+                    "compressed_content": "Implements systems components with custom CUDA kernels and MCP/RAG integration.",
+                    "importance_score": 85,
+                    "novelty_score": 0.7,
+                    "confidence": 0.9,
+                    "tags": ["systems", "cuda", "mcp"],
+                }],
+            })
+        if '"features"' in system_text:
+            return json.dumps({
+                "features": [{
+                    "compressed_content": "Release adds MCP server integration and sqlite tooling improvements.",
+                    "importance_score": 80,
+                    "novelty_score": 0.6,
+                    "confidence": 0.85,
+                    "tags": ["release", "mcp"],
+                }]
+            })
+        if '"signals"' in system_text:
+            return json.dumps({
+                "signals": [{
+                    "signal_type": "issue_signal",
+                    "compressed_content": "Inference loop memory leak is reported and a PR adds GPU memory release.",
+                    "importance_score": 75,
+                    "novelty_score": 0.5,
+                    "confidence": 0.85,
+                    "tags": ["memory", "gpu"],
+                }]
+            })
+        if '"mentions"' in system_text:
+            return json.dumps({
+                "mentions": [{
+                    "source_id": "tweet_1",
+                    "source_type": "social_mention",
+                    "compressed_content": "Positive mention highlights MCP RAG stack and deployment interest.",
+                    "importance_score": 70,
+                    "novelty_score": 0.45,
+                    "confidence": 0.8,
+                    "tags": ["social", "rag"],
+                }]
+            })
+        return "{}"
+
+    monkeypatch.setattr("github_intelligence.evidence.call_qwen_local", fake_call_qwen_local)
+
 def test_clean_readme_logic():
     """Verify clean_readme strips HTML comments, image embeds, and cleans whitespace."""
     raw = """
@@ -218,7 +295,9 @@ def test_pipeline_success_and_failure(conn, monkeypatch):
     conn.execute("DELETE FROM retry_queue WHERE source='github' AND source_id=?", (TEST_REPO,))
     conn.commit()
     
-    res = run_preprocess_pipeline(conn, TEST_REPO)
+    social = [{"id": "tweet_1", "text": f"Positive mention of github.com/{TEST_REPO}"}]
+    youtube = [{"id": "yt_1", "text": f"Video mention of github.com/{TEST_REPO}"}]
+    res = run_preprocess_pipeline(conn, TEST_REPO, social_data=social, youtube_data=youtube)
     assert res is True
     
     # Check no failure entry in retry_queue
@@ -236,7 +315,7 @@ def test_pipeline_success_and_failure(conn, monkeypatch):
     monkeypatch.setattr("github_intelligence.evidence.call_qwen_local", mock_crash)
     
     with pytest.raises(RuntimeError):
-        run_preprocess_pipeline(conn, TEST_REPO)
+        run_preprocess_pipeline(conn, TEST_REPO, social_data=social, youtube_data=youtube)
         
     # Check failure entry in retry_queue
     failed_entry = conn.execute(
