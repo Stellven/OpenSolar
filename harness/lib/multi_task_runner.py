@@ -2054,6 +2054,7 @@ def runner_script(task_dir: Path, payload: dict[str, Any]) -> Path:
     capability_status = str(payload.get("capability_status") or "N/A")
     approval_mode = str(payload.get("approval_mode") or "auto_edit")
     agent_cmd = str(payload.get("command") or os.environ.get("SOLAR_MULTI_TASK_AGENT_CMD", "")).strip()
+    work_dir = str(payload.get("work_dir") or os.getcwd())
     adapter = HARNESS_DIR / "lib" / "gemini_adapter.py"
     if backend == "gemini-cli":
         agent_line = f"python3 {shlex.quote(str(adapter))} run --backend cli --model {shlex.quote(model)} --approval-mode {shlex.quote(approval_mode)} --auth subscription --prompt-file \"$DISPATCH_FILE\""
@@ -2070,6 +2071,7 @@ STATUS_FILE={shlex.quote(str(status_file))}
 DISPATCH_FILE={shlex.quote(str(dispatch_file))}
 OUTPUT_LOG="$TASK_DIR/output.log"
 HARNESS_DIR={shlex.quote(str(HARNESS_DIR))}
+HARNESS_BIN="$HARNESS_DIR/bin"
 SPRINTS_DIR={shlex.quote(str(SPRINTS_DIR))}
 GRAPH={shlex.quote(str(graph))}
 NODE_ID={shlex.quote(node_id)}
@@ -2082,7 +2084,10 @@ PROVIDER={shlex.quote(provider)}
 CAPABILITY_STATUS={shlex.quote(capability_status)}
 HANDOFF={shlex.quote(str(handoff))}
 HARNESS={shlex.quote(str(harness))}
-export TASK_DIR STATUS_FILE DISPATCH_FILE OUTPUT_LOG HARNESS_DIR SPRINTS_DIR GRAPH NODE_ID SID ROLE PROFILE BACKEND MODEL PROVIDER CAPABILITY_STATUS HANDOFF HARNESS
+WORK_DIR={shlex.quote(work_dir)}
+export TASK_DIR STATUS_FILE DISPATCH_FILE OUTPUT_LOG HARNESS_DIR HARNESS_BIN SPRINTS_DIR GRAPH NODE_ID SID ROLE PROFILE BACKEND MODEL PROVIDER CAPABILITY_STATUS HANDOFF HARNESS WORK_DIR
+export PATH="$HARNESS_BIN:$PATH"
+export SOLAR_SAFE_FIND_ROOT="$WORK_DIR"
 
 pane_title() {{
   local title="$1"

@@ -279,3 +279,39 @@ def test_stage_browser_profile_skips_when_already_staged(tmp_path):
     staged_dir, cleanup_dir = bjrt._stage_browser_profile(staged_root, "Profile 1")
     assert Path(staged_dir) == staged_root
     assert cleanup_dir is None
+
+
+def test_stage_browser_profile_uses_cache_inside_tmux_for_protected_app_data(tmp_path, monkeypatch):
+    """Verify tmux workers reuse a Solar-owned cache instead of touching protected app data roots."""
+    fake_home = tmp_path / "home"
+    source_root = fake_home / "Library" / "Application Support" / "Google" / "Chrome"
+    profile = source_root / "Profile 1"
+    profile.mkdir(parents=True)
+    (profile / "Cookies").write_text("cookie-db", encoding="utf-8")
+    (source_root / "Local State").write_text('{"profile":{"last_used":"Profile 1"}}', encoding="utf-8")
+
+    cache_root = tmp_path / "cache"
+    monkeypatch.setattr(bjrt, "HOME", fake_home)
+    monkeypatch.setattr(
+        bjrt,
+        "_PROTECTED_APP_DATA_ROOTS",
+        (
+            fake_home / "Library" / "Application Support",
+            fake_home / "Library" / "Containers",
+            fake_home / "Library" / "Group Containers",
+        ),
+    )
+    monkeypatch.setattr(bjrt, "PROFILE_CACHE_ROOT", cache_root)
+
+    refreshed = bjrt.refresh_browser_profile_cache(source_root, "Profile 1")
+    assert refreshed is not None
+
+    monkeypatch.setenv("TMUX", "/tmp/tmux-test")
+    staged_dir, cleanup_dir = bjrt._stage_browser_profile(source_root, "Profile 1")
+    assert cleanup_dir is not None
+    staged_root = Path(staged_dir)
+    staged_profile = staged_root / "Profile 1"
+    assert (staged_profile / "Cookies").exists()
+    assert (staged_root / "Local State").exists()
+
+    shutil.rmtree(cleanup_dir, ignore_errors=True)
