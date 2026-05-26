@@ -49,10 +49,6 @@ from multi_task_status import (  # noqa: E402
     ACTOR_LEASE_DIR,
     _redact_secrets,
 )
-from browser_job_runtime import BrowserSessionBroker  # noqa: E402
-
-
-BROWSER_JOBS_DIR = HARNESS_DIR / "run" / "browser-jobs"
 
 
 def _now_iso() -> str:
@@ -81,58 +77,6 @@ def _count_claude_print_processes() -> int:
         return -1
     except Exception:
         return -1
-
-
-def load_browser_jobs(jobs_dir: Path = BROWSER_JOBS_DIR, actors: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-    """Load browser job runtime state for observability surfaces."""
-    broker = BrowserSessionBroker()
-    jobs: list[dict[str, Any]] = []
-    if not jobs_dir.exists():
-        return jobs
-
-    for state_file in sorted(jobs_dir.glob("job-*/state.json")):
-        try:
-            state_data = json.loads(state_file.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        envelope = state_data.get("envelope") or {}
-        async_state = str(state_data.get("state") or "unknown")
-        profile_ref = str(envelope.get("profile_ref") or "")
-        account_label = str(envelope.get("account_label") or "")
-        if async_state == "reauth_required":
-            login_state = "reauth_required"
-        elif profile_ref or account_label:
-            login_state = broker.get_profile_health(profile_ref, account_label).get("status", "unknown")
-        else:
-            login_state = str(state_data.get("login_state") or "healthy")
-        artifacts = state_data.get("artifacts") or []
-        evidence = [str(artifact.get("name") or "") for artifact in artifacts if artifact.get("name")]
-        paths = []
-        for artifact in artifacts:
-            explicit = str(artifact.get("path") or "").strip()
-            if explicit:
-                paths.append(explicit)
-            elif artifact.get("name"):
-                paths.append(str(state_file.parent / str(artifact["name"])))
-        jobs.append(
-            {
-                "job_id": state_data.get("job_id") or state_file.parent.name,
-                "actor_id": state_data.get("actor_id") or "",
-                "async_state": async_state,
-                "projected_state": "WAITING_HUMAN" if async_state == "reauth_required" else async_state,
-                "login_state": login_state,
-                "quota_state": str(state_data.get("quota_state") or "ok"),
-                "profile_ref": profile_ref,
-                "account_label": account_label,
-                "consumer_sprint": str(envelope.get("sprint_id") or ""),
-                "logical_operator": str(envelope.get("logical_operator") or ""),
-                "evidence": evidence,
-                "paths": paths,
-                "evidence_paths": paths,
-                "updated_at": str(state_data.get("updated_at") or ""),
-            }
-        )
-    return jobs
 
 
 def build_snapshot(
@@ -196,7 +140,6 @@ def build_snapshot(
 
     # Logical operator binding summary (N4)
     lo_bindings = get_logical_operator_binding_summary(logical_ops_path)
-    browser_jobs = load_browser_jobs(HARNESS_DIR / "run" / "browser-jobs", actor_fleet)
 
     return {
         "schema": "solar.monitor_bridge.operator_fleet.v2",
@@ -210,7 +153,6 @@ def build_snapshot(
         "actor_fleet": dict(sorted(actor_fleet.items())),
         "actor_lease_counts": dict(sorted(actor_lease_counts.items())),
         "host_fleet": dict(sorted(host_fleet.items())),
-        "browser_jobs": browser_jobs,
         "logical_operator_bindings": dict(sorted(lo_bindings.items())),
     }
 

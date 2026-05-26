@@ -34,6 +34,11 @@ STATUS_FIELDS: Dict[str, Dict[str, str]] = {
     "needs_human_review": {"phase": "needs_human", "handoff_to": "planner", "target_role": "planner"},
 }
 
+TERMINAL_GRAPH_FIELDS = {
+    "passed": ("open_nodes", "failed_nodes"),
+    "failed": ("open_nodes",),
+}
+
 
 def _now_ts() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -92,6 +97,10 @@ def transition_status(
     data["status"] = new_status
     data.update(STATUS_FIELDS.get(new_status, {}))
     data.update(status_fields)
+    for field in TERMINAL_GRAPH_FIELDS.get(new_status, ()):
+        data.pop(field, None)
+    if new_status in TERMINAL_GRAPH_FIELDS:
+        data["active_node"] = None
     data["round"] = new_round
     data["updated_at"] = now
     data["runtime_state_source"] = "activity_runtime"

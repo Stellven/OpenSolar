@@ -410,6 +410,90 @@ CREATE TABLE IF NOT EXISTS repo_planning_briefs (
 );
 CREATE INDEX IF NOT EXISTS idx_rpb_repo ON repo_planning_briefs(repo_full_name);
 
+CREATE TABLE IF NOT EXISTS hf_trending_papers (
+    paper_id          TEXT PRIMARY KEY,
+    title             TEXT NOT NULL,
+    hf_url            TEXT NOT NULL,
+    arxiv_url         TEXT NOT NULL DEFAULT '',
+    summary           TEXT NOT NULL DEFAULT '',
+    authors           TEXT NOT NULL DEFAULT '',
+    rank              INTEGER NOT NULL DEFAULT 0,
+    score_text        TEXT NOT NULL DEFAULT '',
+    topic_tags        TEXT NOT NULL DEFAULT '',
+    first_seen_at     TEXT NOT NULL,
+    last_seen_at      TEXT NOT NULL,
+    fetched_at        TEXT NOT NULL,
+    raw_json          TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_hftp_rank ON hf_trending_papers(rank);
+CREATE INDEX IF NOT EXISTS idx_hftp_seen ON hf_trending_papers(last_seen_at);
+
+CREATE TABLE IF NOT EXISTS hf_trending_paper_periods (
+    paper_id          TEXT NOT NULL REFERENCES hf_trending_papers(paper_id),
+    period            TEXT NOT NULL CHECK(period IN ('daily','weekly','monthly')),
+    rank              INTEGER NOT NULL DEFAULT 0,
+    score_text        TEXT NOT NULL DEFAULT '',
+    first_seen_at     TEXT NOT NULL,
+    last_seen_at      TEXT NOT NULL,
+    fetched_at        TEXT NOT NULL,
+    raw_json          TEXT NOT NULL DEFAULT '{}',
+    PRIMARY KEY(paper_id, period)
+);
+CREATE INDEX IF NOT EXISTS idx_hfpp_period_rank ON hf_trending_paper_periods(period, rank);
+
+CREATE TABLE IF NOT EXISTS hf_paper_snapshots (
+    snapshot_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    paper_id          TEXT NOT NULL REFERENCES hf_trending_papers(paper_id),
+    snapshot_at       TEXT NOT NULL,
+    rank              INTEGER NOT NULL DEFAULT 0,
+    score_text        TEXT NOT NULL DEFAULT '',
+    title             TEXT NOT NULL DEFAULT '',
+    UNIQUE(paper_id, snapshot_at)
+);
+CREATE INDEX IF NOT EXISTS idx_hfps_paper ON hf_paper_snapshots(paper_id);
+
+CREATE TABLE IF NOT EXISTS hf_paper_period_snapshots (
+    snapshot_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    paper_id          TEXT NOT NULL REFERENCES hf_trending_papers(paper_id),
+    period            TEXT NOT NULL CHECK(period IN ('daily','weekly','monthly')),
+    snapshot_at       TEXT NOT NULL,
+    rank              INTEGER NOT NULL DEFAULT 0,
+    score_text        TEXT NOT NULL DEFAULT '',
+    title             TEXT NOT NULL DEFAULT '',
+    UNIQUE(paper_id, period, snapshot_at)
+);
+CREATE INDEX IF NOT EXISTS idx_hfpps_period ON hf_paper_period_snapshots(period, snapshot_at);
+
+CREATE TABLE IF NOT EXISTS hf_daily_papers (
+    paper_date        TEXT NOT NULL,
+    paper_id          TEXT NOT NULL,
+    title             TEXT NOT NULL,
+    hf_url            TEXT NOT NULL,
+    arxiv_url         TEXT NOT NULL DEFAULT '',
+    summary           TEXT NOT NULL DEFAULT '',
+    authors           TEXT NOT NULL DEFAULT '',
+    rank              INTEGER NOT NULL DEFAULT 0,
+    topic_tags        TEXT NOT NULL DEFAULT '',
+    first_seen_at     TEXT NOT NULL,
+    last_seen_at      TEXT NOT NULL,
+    fetched_at        TEXT NOT NULL,
+    raw_json          TEXT NOT NULL DEFAULT '{}',
+    PRIMARY KEY(paper_date, paper_id)
+);
+CREATE INDEX IF NOT EXISTS idx_hfdp_date_rank ON hf_daily_papers(paper_date, rank);
+CREATE INDEX IF NOT EXISTS idx_hfdp_paper ON hf_daily_papers(paper_id);
+
+CREATE TABLE IF NOT EXISTS hf_daily_paper_snapshots (
+    snapshot_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    paper_date        TEXT NOT NULL,
+    paper_id          TEXT NOT NULL,
+    snapshot_at       TEXT NOT NULL,
+    rank              INTEGER NOT NULL DEFAULT 0,
+    title             TEXT NOT NULL DEFAULT '',
+    UNIQUE(paper_date, paper_id, snapshot_at)
+);
+CREATE INDEX IF NOT EXISTS idx_hfdps_date ON hf_daily_paper_snapshots(paper_date, snapshot_at);
+
 CREATE TABLE IF NOT EXISTS model_call_ledger (
     ledger_id         INTEGER PRIMARY KEY AUTOINCREMENT,
     repo_full_name    TEXT NOT NULL DEFAULT '',
@@ -1879,18 +1963,34 @@ def cmd_process_transcripts(args: argparse.Namespace) -> int:
 
 
 def cmd_process_transcripts_daemon(args: argparse.Namespace) -> int:
-    """Self-exiting ASR worker that reuses one mlx_whisper model cache."""
+    """Legacy ASR worker.
+
+    MLX whisper keeps large Metal/IOAccelerator allocations inside the Python
+    process. Reusing the same process across videos looked faster, but on
+    Apple unified memory it can pin 30GB+ until the daemon exits. Keep this
+    command available only as an explicit unsafe escape hatch; normal ASR must
+    use process-transcripts, which invokes ASR as a one-shot subprocess.
+    """
     config = load_config(resolve_config(args))
     db_path = resolve_db(args, config)
-    limit = int(getattr(args, "limit", 0) or 2)
+    unsafe_reuse_mlx = bool(getattr(args, "unsafe_reuse_mlx", False))
+    if not unsafe_reuse_mlx:
+        print(
+            "[process-transcripts-daemon] disabled: mlx-whisper daemon reuse can "
+            "pin 30GB+ Metal memory. Use `process-transcripts --limit 1 --force` "
+            "for one-shot ASR, or pass --unsafe-reuse-mlx if you intentionally "
+            "accept the memory risk."
+        )
+        return 2
+    limit = min(1, int(getattr(args, "limit", 0) or 1))
     idle_exit_after = int(getattr(args, "idle_exit_after", 3) or 3)
     poll_seconds = float(getattr(args, "poll_seconds", 5) or 5)
-    max_batches = int(getattr(args, "max_batches", 0) or 0)
+    max_batches = int(getattr(args, "max_batches", 0) or 1)
     force = bool(getattr(args, "force", False))
     dry_run = bool(getattr(args, "dry_run", False))
     worker_id = str(getattr(args, "worker_id", "") or f"asr-daemon-{os.getpid()}")
     min_duration_seconds = youtube_min_transcript_duration(config)
-    print(f"[process-transcripts-daemon] start worker={worker_id} limit={limit} idle_exit_after={idle_exit_after}")
+    print(f"[process-transcripts-daemon] UNSAFE start worker={worker_id} limit={limit} idle_exit_after={idle_exit_after} max_batches={max_batches}")
     idle = 0
     batches = 0
     while True:
@@ -5399,6 +5499,411 @@ def github_api_text(path: str, config: dict[str, Any]) -> str:
         return resp.read().decode("utf-8", errors="replace")
 
 
+def hf_paper_tags(title: str, summary: str = "") -> list[str]:
+    text = f"{title} {summary}".lower()
+    rules = {
+        "agent": ["agent", "multi-agent", "tool use", "skill"],
+        "coding_agent": ["code", "coding", "software developer", "opendevin"],
+        "inference_compute": ["serving", "pagedattention", "inference", "nvfp4", "memory management"],
+        "document_ai": ["document", "parsing", "mineru", "ocr"],
+        "multimodal": ["multimodal", "vision", "video", "audio", "speech", "asr"],
+        "robotics_physical_ai": ["robot", "vla", "embodied", "manipulation"],
+        "market_signal": ["trading", "financial", "market"],
+        "memory_context": ["memory", "long-term", "context"],
+        "research_automation": ["autonomous research", "research"],
+    }
+    tags = [tag for tag, keys in rules.items() if any(k in text for k in keys)]
+    return tags or ["paper_research"]
+
+
+def hf_periods_from_config(config: dict[str, Any], requested: str | None = None) -> list[str]:
+    valid = {"daily", "weekly", "monthly"}
+    if requested and requested != "all":
+        return [requested] if requested in valid else ["daily", "weekly", "monthly"]
+    configured = (config.get("huggingface_papers") or {}).get("periods") or ["daily", "weekly", "monthly"]
+    periods = [str(p).strip().lower() for p in configured if str(p).strip().lower() in valid]
+    return periods or ["daily", "weekly", "monthly"]
+
+
+def parse_hf_trending_papers_html(page_html: str, *, limit: int = 50, period: str = "daily") -> list[dict[str, Any]]:
+    """Extract paper cards from Hugging Face Trending Papers.
+
+    The page contains duplicate desktop/mobile anchors, so this parser is
+    href-driven and de-duplicates by paper id.
+    """
+    props_match = re.search(r'data-target="DailyPapers" data-props="([^"]*)"', page_html)
+    if props_match:
+        try:
+            props = json.loads(html.unescape(props_match.group(1)))
+            papers: list[dict[str, Any]] = []
+            for item in props.get("dailyPapers") or []:
+                paper = item.get("paper") if isinstance(item, dict) else None
+                if not isinstance(paper, dict):
+                    continue
+                paper_id = str(paper.get("id") or "").strip()
+                title = str(paper.get("title") or "").strip()
+                if not paper_id or not title:
+                    continue
+                summary = str(paper.get("summary") or "").strip()
+                authors = ", ".join(
+                    str(a.get("name") or "").strip()
+                    for a in (paper.get("authors") or [])
+                    if isinstance(a, dict) and str(a.get("name") or "").strip()
+                )
+                rank = len(papers) + 1
+                papers.append({
+                    "paper_id": paper_id,
+                    "title": title,
+                    "hf_url": f"https://huggingface.co/papers/{paper_id}",
+                    "arxiv_url": f"https://arxiv.org/abs/{paper_id}",
+                    "summary": summary,
+                    "authors": authors,
+                    "rank": rank,
+                    "period": period,
+                    "score_text": str(item.get("score") or item.get("scoreText") or ""),
+                    "topic_tags": hf_paper_tags(title, summary),
+                })
+                if limit and len(papers) >= limit:
+                    break
+            if papers:
+                return papers
+        except (json.JSONDecodeError, TypeError, AttributeError):
+            pass
+
+    seen: set[str] = set()
+    papers: list[dict[str, Any]] = []
+    anchor_re = re.compile(r'<a[^>]+href="(/papers/([^"#?]+))"[^>]*>(.*?)</a>', re.S)
+    arxiv_by_id = {
+        m.group(1): f"https://arxiv.org/abs/{m.group(1)}"
+        for m in re.finditer(r'https://arxiv\.org/abs/([0-9]{4}\.[0-9]{4,5})', page_html)
+    }
+    for match in anchor_re.finditer(page_html):
+        href, paper_id, body = match.groups()
+        title = re.sub(r"<[^>]+>", " ", body)
+        title = html.unescape(re.sub(r"\s+", " ", title)).strip()
+        if not title or paper_id in seen:
+            continue
+        if len(title) < 8 or title.lower() in {"paper", "arxiv page"}:
+            continue
+        seen.add(paper_id)
+        papers.append({
+            "paper_id": paper_id,
+            "title": title,
+            "hf_url": f"https://huggingface.co{href}",
+            "arxiv_url": arxiv_by_id.get(paper_id, f"https://arxiv.org/abs/{paper_id}"),
+            "rank": len(papers) + 1,
+            "period": period,
+            "score_text": "",
+            "topic_tags": hf_paper_tags(title),
+        })
+        if limit and len(papers) >= limit:
+            break
+    return papers
+
+
+def collect_hf_trending_papers(config: dict[str, Any], *, limit: int = 50, period: str = "daily") -> list[dict[str, Any]]:
+    cfg = config.get("huggingface_papers") or {}
+    base_url = str(cfg.get("trending_url") or "https://huggingface.co/papers/trending")
+    url_parts = urllib.parse.urlparse(base_url)
+    query = dict(urllib.parse.parse_qsl(url_parts.query, keep_blank_values=True))
+    query["period"] = period
+    url = urllib.parse.urlunparse(url_parts._replace(query=urllib.parse.urlencode(query)))
+    timeout = int(cfg.get("timeout_seconds") or 30)
+    headers = {
+        "User-Agent": str(cfg.get("user_agent") or "Mozilla/5.0 TechHotspotRadar/1.0"),
+        "Accept": "text/html,application/xhtml+xml",
+    }
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        page = resp.read().decode("utf-8", errors="replace")
+    return parse_hf_trending_papers_html(page, limit=limit, period=period)
+
+
+def collect_hf_daily_papers(config: dict[str, Any], *, paper_date: str, limit: int = 50) -> list[dict[str, Any]]:
+    cfg = config.get("huggingface_papers") or {}
+    base_url = str(cfg.get("daily_url") or "https://huggingface.co/papers")
+    url_parts = urllib.parse.urlparse(base_url)
+    query = dict(urllib.parse.parse_qsl(url_parts.query, keep_blank_values=True))
+    query["date"] = paper_date
+    url = urllib.parse.urlunparse(url_parts._replace(query=urllib.parse.urlencode(query)))
+    timeout = int(cfg.get("timeout_seconds") or 30)
+    headers = {
+        "User-Agent": str(cfg.get("user_agent") or "Mozilla/5.0 TechHotspotRadar/1.0"),
+        "Accept": "text/html,application/xhtml+xml",
+    }
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        page = resp.read().decode("utf-8", errors="replace")
+    papers = parse_hf_trending_papers_html(page, limit=limit, period="daily")
+    for paper in papers:
+        paper["paper_date"] = paper_date
+        paper["daily_url"] = url
+    return papers
+
+
+def write_hf_papers_raw(config: dict[str, Any], papers_by_period: dict[str, list[dict[str, Any]]], *, fetched_at: str) -> dict[str, str]:
+    raw_root = Path((config.get("output") or {}).get("knowledge_raw_root", str(Path.home() / "Knowledge" / "_raw"))).expanduser()
+    date_str = fetched_at.split("T", 1)[0]
+    out_dir = raw_root / "huggingface-papers-trending" / date_str
+    out_dir.mkdir(parents=True, exist_ok=True)
+    json_path = out_dir / "trending-papers.json"
+    md_path = out_dir / "trending-papers.md"
+    total = sum(len(v) for v in papers_by_period.values())
+    json_path.write_text(json.dumps({"fetched_at": fetched_at, "periods": papers_by_period}, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    lines = [
+        "---",
+        "source: huggingface_papers_trending",
+        f"fetched_at: {fetched_at}",
+        f"paper_count: {total}",
+        f"periods: {', '.join(papers_by_period.keys())}",
+        "module: tech_hotspot_radar",
+        "---",
+        "",
+        f"# Hugging Face Trending Papers — {date_str}",
+        "",
+    ]
+    for period, papers in papers_by_period.items():
+        lines.append(f"## {period.capitalize()} Trending")
+        lines.append("")
+        for p in papers:
+            tags = ", ".join(p.get("topic_tags") or [])
+            lines.append(f"{p.get('rank')}. **{p.get('title')}**")
+            lines.append(f"   - HF: {p.get('hf_url')}")
+            lines.append(f"   - arXiv: {p.get('arxiv_url')}")
+            lines.append(f"   - authors: {p.get('authors') or 'N/A'}")
+            lines.append(f"   - tags: {tags or 'paper_research'}")
+        lines.append("")
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return {"json": str(json_path), "markdown": str(md_path)}
+
+
+def write_hf_daily_baseline_raw(config: dict[str, Any], papers_by_date: dict[str, list[dict[str, Any]]], *, fetched_at: str) -> dict[str, str]:
+    raw_root = Path((config.get("output") or {}).get("knowledge_raw_root", str(Path.home() / "Knowledge" / "_raw"))).expanduser()
+    run_date = fetched_at.split("T", 1)[0]
+    out_dir = raw_root / "huggingface-papers-daily-baseline" / run_date
+    out_dir.mkdir(parents=True, exist_ok=True)
+    jsonl_path = out_dir / "daily-papers-baseline.jsonl"
+    md_path = out_dir / "daily-papers-baseline.md"
+    total = 0
+    with jsonl_path.open("w", encoding="utf-8") as fh:
+        for paper_date, papers in sorted(papers_by_date.items()):
+            for paper in papers:
+                total += 1
+                fh.write(json.dumps(paper, ensure_ascii=False, sort_keys=True) + "\n")
+    lines = [
+        "---",
+        "source: huggingface_papers_daily_baseline",
+        f"fetched_at: {fetched_at}",
+        f"date_count: {len(papers_by_date)}",
+        f"paper_count: {total}",
+        "module: tech_hotspot_radar",
+        "---",
+        "",
+        f"# Hugging Face Daily Papers Baseline — {run_date}",
+        "",
+        "| Date | Papers | Top 5 |",
+        "|---|---:|---|",
+    ]
+    for paper_date, papers in sorted(papers_by_date.items(), reverse=True):
+        top = "; ".join((p.get("title") or "")[:80] for p in papers[:5])
+        lines.append(f"| {paper_date} | {len(papers)} | {top} |")
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return {"jsonl": str(jsonl_path), "markdown": str(md_path)}
+
+
+def cmd_collect_hf_papers(args: argparse.Namespace) -> int:
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.executescript(SCHEMA_SQL)
+    conn.row_factory = sqlite3.Row
+    run_id = begin_run(conn, "github", "collect-hf-papers")
+    limit = int(getattr(args, "limit", 50) or 50)
+    periods = hf_periods_from_config(config, str(getattr(args, "period", "all") or "all").lower())
+    fetched_at = iso_z()
+    try:
+        papers_by_period: dict[str, list[dict[str, Any]]] = {}
+        for period in periods:
+            papers_by_period[period] = collect_hf_trending_papers(config, limit=limit, period=period)
+        all_papers = [paper for papers in papers_by_period.values() for paper in papers]
+        if not all_papers:
+            raise ValueError("no Hugging Face trending papers parsed")
+        changed = 0
+        for period, papers in papers_by_period.items():
+            for paper in papers:
+                before = conn.total_changes
+                conn.execute(
+                    "INSERT INTO hf_trending_papers "
+                    "(paper_id, title, hf_url, arxiv_url, summary, authors, rank, score_text, topic_tags, "
+                    "first_seen_at, last_seen_at, fetched_at, raw_json) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                    "ON CONFLICT(paper_id) DO UPDATE SET "
+                    "title=excluded.title, hf_url=excluded.hf_url, arxiv_url=excluded.arxiv_url, "
+                    "summary=excluded.summary, authors=excluded.authors, "
+                    "rank=excluded.rank, score_text=excluded.score_text, topic_tags=excluded.topic_tags, "
+                    "last_seen_at=excluded.last_seen_at, fetched_at=excluded.fetched_at, raw_json=excluded.raw_json",
+                    (
+                        paper["paper_id"], paper["title"], paper["hf_url"], paper.get("arxiv_url", ""),
+                        paper.get("summary", ""), paper.get("authors", ""), int(paper.get("rank") or 0),
+                        paper.get("score_text", ""), ",".join(paper.get("topic_tags") or []),
+                        fetched_at, fetched_at, fetched_at,
+                        json.dumps(paper, ensure_ascii=False, sort_keys=True),
+                    ),
+                )
+                conn.execute(
+                    "INSERT INTO hf_trending_paper_periods "
+                    "(paper_id, period, rank, score_text, first_seen_at, last_seen_at, fetched_at, raw_json) "
+                    "VALUES (?,?,?,?,?,?,?,?) "
+                    "ON CONFLICT(paper_id, period) DO UPDATE SET "
+                    "rank=excluded.rank, score_text=excluded.score_text, last_seen_at=excluded.last_seen_at, "
+                    "fetched_at=excluded.fetched_at, raw_json=excluded.raw_json",
+                    (
+                        paper["paper_id"], period, int(paper.get("rank") or 0), paper.get("score_text", ""),
+                        fetched_at, fetched_at, fetched_at,
+                        json.dumps(paper, ensure_ascii=False, sort_keys=True),
+                    ),
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO hf_paper_snapshots "
+                    "(paper_id, snapshot_at, rank, score_text, title) VALUES (?,?,?,?,?)",
+                    (paper["paper_id"], fetched_at, int(paper.get("rank") or 0), paper.get("score_text", ""), paper["title"]),
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO hf_paper_period_snapshots "
+                    "(paper_id, period, snapshot_at, rank, score_text, title) VALUES (?,?,?,?,?,?)",
+                    (paper["paper_id"], period, fetched_at, int(paper.get("rank") or 0), paper.get("score_text", ""), paper["title"]),
+                )
+                if conn.total_changes > before:
+                    changed += 1
+                baseline_insert_signal(
+                    conn,
+                    source_kind="web",
+                    item_key=f"hf-paper:{period}:{paper['paper_id']}",
+                    title=paper["title"],
+                    url=paper["hf_url"],
+                    category=",".join(paper.get("topic_tags") or ["paper_research"]),
+                    metric_name=f"hf_trending_rank_{period}",
+                    metric_value=float(paper.get("rank") or 0),
+                    signal_time=fetched_at,
+                    raw_json={"source": "huggingface_papers_trending", "period": period, "arxiv_url": paper.get("arxiv_url", "")},
+                )
+        files = write_hf_papers_raw(config, papers_by_period, fetched_at=fetched_at)
+        finish_run(conn, run_id, "ok", len(all_papers), changed, json.dumps(files, ensure_ascii=False)[:900])
+        conn.commit()
+        print(json.dumps({"ok": True, "periods": {p: len(v) for p, v in papers_by_period.items()}, "papers": len(all_papers), "changed": changed, "files": files}, ensure_ascii=False, indent=2, sort_keys=True))
+        return 0
+    except Exception as exc:
+        finish_run(conn, run_id, "failed", 0, 0, f"{type(exc).__name__}: {exc}"[:900])
+        print(f"[collect-hf-papers] ERROR {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        conn.close()
+
+
+def cmd_backfill_hf_papers_baseline(args: argparse.Namespace) -> int:
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.executescript(SCHEMA_SQL)
+    conn.row_factory = sqlite3.Row
+    run_id = begin_run(conn, "github", "backfill-hf-papers-baseline")
+    days = int(getattr(args, "days", 180) or 180)
+    limit = int(getattr(args, "limit_per_day", 50) or 50)
+    sleep_seconds = float(getattr(args, "sleep_seconds", 0.5) or 0)
+    max_consecutive_failures = int(getattr(args, "max_consecutive_failures", 5) or 5)
+    end_date_raw = getattr(args, "end_date", None) or iso_z().split("T", 1)[0]
+    start_date_raw = getattr(args, "start_date", None)
+    end_date = dt.date.fromisoformat(end_date_raw)
+    if start_date_raw:
+        start_date = dt.date.fromisoformat(start_date_raw)
+    else:
+        start_date = end_date - dt.timedelta(days=max(days - 1, 0))
+    fetched_at = iso_z()
+    changed = 0
+    fetched_items = 0
+    failures: list[str] = []
+    consecutive_failures = 0
+    papers_by_date: dict[str, list[dict[str, Any]]] = {}
+    try:
+        current = start_date
+        while current <= end_date:
+            paper_date = current.isoformat()
+            try:
+                papers = collect_hf_daily_papers(config, paper_date=paper_date, limit=limit)
+                papers_by_date[paper_date] = papers
+                consecutive_failures = 0
+                fetched_items += len(papers)
+                for paper in papers:
+                    before = conn.total_changes
+                    conn.execute(
+                        "INSERT INTO hf_daily_papers "
+                        "(paper_date, paper_id, title, hf_url, arxiv_url, summary, authors, rank, topic_tags, "
+                        "first_seen_at, last_seen_at, fetched_at, raw_json) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                        "ON CONFLICT(paper_date, paper_id) DO UPDATE SET "
+                        "title=excluded.title, hf_url=excluded.hf_url, arxiv_url=excluded.arxiv_url, "
+                        "summary=excluded.summary, authors=excluded.authors, rank=excluded.rank, "
+                        "topic_tags=excluded.topic_tags, last_seen_at=excluded.last_seen_at, "
+                        "fetched_at=excluded.fetched_at, raw_json=excluded.raw_json",
+                        (
+                            paper_date, paper["paper_id"], paper["title"], paper["hf_url"], paper.get("arxiv_url", ""),
+                            paper.get("summary", ""), paper.get("authors", ""), int(paper.get("rank") or 0),
+                            ",".join(paper.get("topic_tags") or []), fetched_at, fetched_at, fetched_at,
+                            json.dumps(paper, ensure_ascii=False, sort_keys=True),
+                        ),
+                    )
+                    conn.execute(
+                        "INSERT OR IGNORE INTO hf_daily_paper_snapshots "
+                        "(paper_date, paper_id, snapshot_at, rank, title) VALUES (?,?,?,?,?)",
+                        (paper_date, paper["paper_id"], fetched_at, int(paper.get("rank") or 0), paper["title"]),
+                    )
+                    if conn.total_changes > before:
+                        changed += 1
+                    baseline_insert_signal(
+                        conn,
+                        source_kind="web",
+                        item_key=f"hf-daily-paper:{paper_date}:{paper['paper_id']}",
+                        title=paper["title"],
+                        url=paper["hf_url"],
+                        category=",".join(paper.get("topic_tags") or ["paper_research"]),
+                        metric_name="hf_daily_rank",
+                        metric_value=float(paper.get("rank") or 0),
+                        signal_time=f"{paper_date}T00:00:00Z",
+                        raw_json={"source": "huggingface_papers_daily", "paper_date": paper_date, "arxiv_url": paper.get("arxiv_url", "")},
+                    )
+                conn.commit()
+            except Exception as exc:
+                failures.append(f"{paper_date}:{type(exc).__name__}:{str(exc)[:160]}")
+                consecutive_failures += 1
+                if consecutive_failures >= max_consecutive_failures:
+                    failures.append(f"stopped:circuit_breaker:consecutive_failures={consecutive_failures}")
+                    break
+            if sleep_seconds:
+                time.sleep(sleep_seconds)
+            current += dt.timedelta(days=1)
+        files = write_hf_daily_baseline_raw(config, papers_by_date, fetched_at=fetched_at)
+        status = "partial" if failures else "ok"
+        error = json.dumps({"files": files, "failures": failures[:20]}, ensure_ascii=False)[:900]
+        finish_run(conn, run_id, status, fetched_items, changed, error)
+        conn.commit()
+        print(json.dumps({
+            "ok": not failures,
+            "status": status,
+            "dates": len(papers_by_date),
+            "papers": fetched_items,
+            "changed": changed,
+            "failures": failures[:20],
+            "files": files,
+        }, ensure_ascii=False, indent=2, sort_keys=True))
+        return 0 if not failures else 1
+    except Exception as exc:
+        finish_run(conn, run_id, "failed", fetched_items, changed, f"{type(exc).__name__}: {exc}"[:900])
+        print(f"[backfill-hf-papers-baseline] ERROR {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        conn.close()
+
+
 def upsert_github_repo(conn: sqlite3.Connection, repo_data: dict[str, Any],
                        readme_text: str, fetched_at: str) -> bool:
     full_name = repo_data.get("full_name") or ""
@@ -5571,6 +6076,24 @@ def cmd_analyze_github_projects(args: argparse.Namespace) -> int:
 
 def build_github_trend_pack(conn: sqlite3.Connection, *, limit: int = 10, date_str: str | None = None) -> dict[str, Any]:
     cards = github_project_cards(conn, limit=limit)
+    hf_papers = [
+        {
+            "paper_id": row["paper_id"],
+            "period": row["period"],
+            "title": row["title"],
+            "hf_url": row["hf_url"],
+            "arxiv_url": row["arxiv_url"],
+            "rank": row["rank"],
+            "topic_tags": [x for x in (row["topic_tags"] or "").split(",") if x],
+            "last_seen_at": row["last_seen_at"],
+        }
+        for row in conn.execute(
+            "SELECT p.paper_id, pp.period, p.title, p.hf_url, p.arxiv_url, pp.rank, p.topic_tags, pp.last_seen_at "
+            "FROM hf_trending_paper_periods pp JOIN hf_trending_papers p ON p.paper_id = pp.paper_id "
+            "WHERE pp.rank <= 20 "
+            "ORDER BY CASE pp.period WHEN 'daily' THEN 1 WHEN 'weekly' THEN 2 ELSE 3 END, pp.rank ASC "
+        ).fetchall()
+    ]
     source_stats = conn.execute(
         "SELECT COUNT(*) AS repos FROM github_repos"
     ).fetchone()
@@ -5583,13 +6106,15 @@ def build_github_trend_pack(conn: sqlite3.Connection, *, limit: int = 10, date_s
         "repo_count": int(source_stats[0] or 0),
         "card_tiers": {tier: count for tier, count in card_stats},
         "cards": cards,
+        "hf_trending_papers": hf_papers,
         "instructions": {
-            "goal": "Generate AI Influence GitHub trend analysis section, not a GitHub Trending mirror.",
+            "goal": "Generate AI Influence GitHub and open research trend analysis section, not a GitHub Trending mirror.",
             "must_cover": [
                 "core judgment",
                 "sudden-hot attribution",
                 "early potential radar",
                 "foundation-infra candidates",
+                "Hugging Face trending papers as research-side signals",
                 "project planning briefs",
                 "risks and watch next",
             ],
@@ -5611,8 +6136,9 @@ def build_github_trend_prompt(pack: dict[str, Any], model_name: str) -> str:
 3. 每个关键判断必须绑定 repo 名或 evidence_ids。
 4. 必须区分：确定趋势、早期潜力、可能炒作/风险、需要人工复核。
 5. 每个重点项目都要回答：它是什么、为什么值得看、火的可能原因、核心技术/产品启示、可以策划什么。
-6. 不要输出 JSON，不要代码块，直接输出 Markdown。
-7. 语气专业、直接、有洞察，适合放进 HTML 邮件日报。
+6. 如果 pack 内有 `hf_trending_papers`，必须用一节说明这些论文对 GitHub/开源趋势的侧向验证或反向发现价值。
+7. 不要输出 JSON，不要代码块，直接输出 Markdown。
+8. 语气专业、直接、有洞察，适合放进 HTML 邮件日报。
 
 报告结构：
 # AI Influence GitHub 开源趋势分析 — {pack.get("date")}
@@ -5620,6 +6146,7 @@ def build_github_trend_prompt(pack: dict[str, Any], model_name: str) -> str:
 ## 突然爆火 / 高热项目解析
 ## 早期潜力项目雷达
 ## 基础设施候选
+## Hugging Face 论文热点侧信号
 ## 可能炒作 / 风险
 ## 项目策划池
 ## 下周观察指标
@@ -7765,6 +8292,10 @@ def cmd_collect_all(args: argparse.Namespace) -> int:
         gh_args = argparse.Namespace(**vars(args))
         gh_args.limit_repos = getattr(args, "limit_repos", 0)
         rc = max(rc, cmd_collect_github(gh_args))
+        if not getattr(args, "skip_papers", False):
+            hf_args = argparse.Namespace(**vars(args))
+            hf_args.limit = getattr(args, "limit_papers", 50)
+            rc = max(rc, cmd_collect_hf_papers(hf_args))
         # Project intelligence is part of the GitHub collector contract:
         # raw snapshots should immediately materialize repo evidence atoms/cards.
         gh_analyze_args = argparse.Namespace(**vars(args))
@@ -8047,14 +8578,15 @@ def build_parser() -> argparse.ArgumentParser:
     process_transcripts.add_argument("--limit", type=int, default=0)
     process_transcripts.add_argument("--force", action="store_true")
     process_transcripts.add_argument("--dry-run", action="store_true")
-    process_transcripts_daemon = sub.add_parser("process-transcripts-daemon", help="Self-exiting ASR worker that reuses one mlx_whisper model cache")
-    process_transcripts_daemon.add_argument("--limit", type=int, default=2)
+    process_transcripts_daemon = sub.add_parser("process-transcripts-daemon", help="Legacy unsafe ASR daemon; disabled unless --unsafe-reuse-mlx is passed")
+    process_transcripts_daemon.add_argument("--limit", type=int, default=1)
     process_transcripts_daemon.add_argument("--force", action="store_true")
     process_transcripts_daemon.add_argument("--dry-run", action="store_true")
     process_transcripts_daemon.add_argument("--worker-id", default="")
     process_transcripts_daemon.add_argument("--idle-exit-after", type=int, default=3)
     process_transcripts_daemon.add_argument("--poll-seconds", type=float, default=5)
-    process_transcripts_daemon.add_argument("--max-batches", type=int, default=0)
+    process_transcripts_daemon.add_argument("--max-batches", type=int, default=1)
+    process_transcripts_daemon.add_argument("--unsafe-reuse-mlx", action="store_true")
     process_semantics = sub.add_parser("process-semantics", help="Materialize ThunderOMLX semantic outputs for completed YouTube transcripts")
     process_semantics.add_argument("--limit", type=int, default=0)
     process_semantics.add_argument("--force", action="store_true")
@@ -8083,6 +8615,18 @@ def build_parser() -> argparse.ArgumentParser:
     gh_collect = sub.add_parser("collect-github", help="Collect live GitHub tracked repo metadata with rate limits")
     gh_collect.add_argument("--limit-repos", type=int, default=0)
     gh_collect.add_argument("--force", action="store_true")
+    hf_papers = sub.add_parser("collect-hf-papers", help="Collect Hugging Face Trending Papers as research-side signals")
+    hf_papers.add_argument("--limit", type=int, default=50)
+    hf_papers.add_argument("--period", choices=["daily", "weekly", "monthly", "all"], default="all")
+    hf_papers.add_argument("--force", action="store_true")
+    hf_baseline = sub.add_parser("backfill-hf-papers-baseline", help="Backfill Hugging Face daily papers as historical baseline")
+    hf_baseline.add_argument("--days", type=int, default=180)
+    hf_baseline.add_argument("--start-date", default=None)
+    hf_baseline.add_argument("--end-date", default=None)
+    hf_baseline.add_argument("--limit-per-day", type=int, default=50)
+    hf_baseline.add_argument("--sleep-seconds", type=float, default=0.5)
+    hf_baseline.add_argument("--max-consecutive-failures", type=int, default=5)
+    hf_baseline.add_argument("--force", action="store_true")
     gh_analyze = sub.add_parser("analyze-github-projects", help="Build GitHub repo evidence atoms, reasoning packets and analysis cards")
     gh_analyze.add_argument("--limit-repos", type=int, default=0)
     gh_analyze.add_argument("--force", action="store_true")
@@ -8118,6 +8662,7 @@ def build_parser() -> argparse.ArgumentParser:
     all_collect.add_argument("--limit-channels", type=int, default=0)
     all_collect.add_argument("--per-channel-limit", type=int, default=0)
     all_collect.add_argument("--limit-repos", type=int, default=0)
+    all_collect.add_argument("--limit-papers", type=int, default=50)
     all_collect.add_argument("--limit-accounts", type=int, default=0)
     all_collect.add_argument("--per-account-limit", type=int, default=3)
     all_collect.add_argument("--transcript-limit", type=int, default=0)
@@ -8125,6 +8670,7 @@ def build_parser() -> argparse.ArgumentParser:
     all_collect.add_argument("--skip-youtube", action="store_true")
     all_collect.add_argument("--skip-social", action="store_true")
     all_collect.add_argument("--skip-github", action="store_true")
+    all_collect.add_argument("--skip-papers", action="store_true")
     all_collect.add_argument("--skip-transcripts", action="store_true")
     all_collect.add_argument("--skip-report", action="store_true")
     all_collect.add_argument("--skip-email", action="store_true")
@@ -8156,6 +8702,8 @@ def main() -> int:
         "collect-youtube": cmd_collect_youtube,
         "backfill-youtube": cmd_backfill_youtube,
         "collect-github": cmd_collect_github,
+        "collect-hf-papers": cmd_collect_hf_papers,
+        "backfill-hf-papers-baseline": cmd_backfill_hf_papers_baseline,
         "analyze-github-projects": cmd_analyze_github_projects,
         "github-trend-report": cmd_github_trend_report,
         "build-baseline": cmd_build_baseline,

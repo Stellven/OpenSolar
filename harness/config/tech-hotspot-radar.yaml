@@ -1144,6 +1144,15 @@ github:
     - rohitg00/agentmemory
     - multica-ai/andrej-karpathy-skills
     - TauricResearch/TradingAgents
+
+# ── Research paper source ─────────────────────────────────────────
+huggingface_papers:
+  enabled: true
+  daily_url: https://huggingface.co/papers
+  trending_url: https://huggingface.co/papers/trending
+  periods: [daily, weekly, monthly]
+  timeout_seconds: 30
+  user_agent: "Mozilla/5.0 TechHotspotRadar/1.0"
   hot_score_weights:
     star_growth: 0.30
     recent_activity: 0.20

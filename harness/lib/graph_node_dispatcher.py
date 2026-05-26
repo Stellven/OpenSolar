@@ -2131,6 +2131,26 @@ def _pane_runtime_unavailable_reason(pane: str, title: str = "") -> str:
     return ""
 
 
+def _multi_task_direct_dispatch_unavailable_reason(
+    pane: str,
+    *,
+    current_command: str | None = None,
+) -> str:
+    """Multi-task shell panes are launch surfaces, not prompt receivers.
+
+    `solar-harness multi-task` may keep idle shell windows in the pane pool for
+    reuse. Direct graph dispatch must not paste Claude prompts into those
+    shells; the multi-task runner is responsible for starting a model process
+    there first.
+    """
+    if not pane.startswith("solar-harness-multi-task:"):
+        return ""
+    command = (current_command if current_command is not None else _pane_current_command(pane)).lower()
+    if command in {"bash", "zsh", "sh", "fish", ""}:
+        return "multi_task_shell_not_direct_worker"
+    return ""
+
+
 def _clear_stale_prompt_residue(pane: str) -> bool:
     """Clear idle Claude prompt residue in harness-owned worker panes.
 
@@ -2198,7 +2218,8 @@ def _assigned_pane_unavailable_reason(pane: str) -> str:
     tail = _pane_tail(pane)
     quota_exhausted = _quota_exhausted_models(title, tail, health, models)
     return (
-        _pane_runtime_unavailable_reason(pane, title)
+        _multi_task_direct_dispatch_unavailable_reason(pane)
+        or _pane_runtime_unavailable_reason(pane, title)
         or _pane_unavailable_reason(pane)
         or ("rate_limit_or_api_error" if quota_exhausted else "")
     )
@@ -3193,9 +3214,11 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         quota_exhausted = _quota_exhausted_models(title, tail, health, models)
         if pane.startswith("solar-harness-lab:") or pane.startswith("solar-harness-multi-task:"):
             _clear_stale_prompt_residue(pane)
+        current_command = _pane_current_command(pane)
         runtime_unavailable_reason = _pane_runtime_unavailable_reason(pane, title)
         unavailable_reason = (
-            runtime_unavailable_reason
+            _multi_task_direct_dispatch_unavailable_reason(pane, current_command=current_command)
+            or runtime_unavailable_reason
             or _pane_unavailable_reason(pane)
             or ("rate_limit_or_api_error" if quota_exhausted else "")
         )
@@ -3209,7 +3232,7 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
             "quota_exhausted": quota_exhausted,
             "health": health,
             "unavailable_reason": unavailable_reason,
-            "current_command": _pane_current_command(pane),
+            "current_command": current_command,
         })
     workers.sort(key=lambda item: _pane_execution_priority(str(item.get("pane") or "")))
     return workers
@@ -3258,8 +3281,13 @@ def _discover_evaluators(dry_run: bool = False) -> list[dict[str, Any]]:
             title = _pane_title(pane)
             if not _pane_title_matches_role(pane, title, "evaluator"):
                 continue
+            current_command = _pane_current_command(pane)
             runtime_unavailable_reason = _pane_runtime_unavailable_reason(pane, title)
-            unavailable_reason = runtime_unavailable_reason or _pane_unavailable_reason(pane)
+            unavailable_reason = (
+                _multi_task_direct_dispatch_unavailable_reason(pane, current_command=current_command)
+                or runtime_unavailable_reason
+                or _pane_unavailable_reason(pane)
+            )
             evaluators.append({
                 "pane": pane,
                 "models": _models_for_pane(pane),
@@ -3267,7 +3295,7 @@ def _discover_evaluators(dry_run: bool = False) -> list[dict[str, Any]]:
                 "busy": _pane_has_active_lease(pane) or _pane_tui_busy(pane) or bool(unavailable_reason),
                 "title": title,
                 "unavailable_reason": unavailable_reason,
-                "current_command": _pane_current_command(pane),
+                "current_command": current_command,
             })
     evaluators.sort(key=lambda item: _pane_execution_priority(str(item.get("pane") or "")))
     return evaluators
