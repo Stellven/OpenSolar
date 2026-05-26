@@ -336,3 +336,37 @@ def test_recover_auth_failed_node_sets_auth_reason_and_fallback(monkeypatch, tmp
     assert node["auth_failure_task_id"] == "mt-auth-failed"
     assert node["preferred_profile"] == "deepseek-builder"
     assert node["quota_fallback_reason"] == "auth_expired"
+
+
+def test_quota_fallback_skips_profile_with_recent_auth_failure(monkeypatch, tmp_path):
+    run_dir = tmp_path / "run" / "multi-task"
+    task_dir = run_dir / "mt-antigravity-auth"
+    task_dir.mkdir(parents=True)
+    (task_dir / "status.json").write_text(
+        json.dumps({"profile": "antigravity-multimodal"}) + "\n",
+        encoding="utf-8",
+    )
+    (task_dir / "output.log").write_text("You are not logged into Antigravity.\n", encoding="utf-8")
+    profiles = {
+        "builder": {"role": "builder", "backend": "claude-cli", "model": "sonnet"},
+        "gemini-builder": {"role": "builder", "backend": "gemini-cli", "model": "gemini"},
+        "antigravity-multimodal": {"role": "builder", "backend": "command", "model": "gemini-3.5-flash"},
+        "deepseek-builder": {"role": "builder", "backend": "claude-cli", "model": "deepseek"},
+    }
+    node = {
+        "id": "N1",
+        "role": "builder",
+        "write_scope": ["harness/lib/example.py"],
+        "quota_blocked_profiles": ["builder", "gemini-builder"],
+    }
+    monkeypatch.setattr(multi_task_runner, "RUN_DIR", run_dir)
+    monkeypatch.setattr(multi_task_runner, "load_profiles", lambda: {"profiles": profiles})
+    monkeypatch.setattr(
+        multi_task_runner,
+        "capability_for_profile",
+        lambda profile, include_probe=True: {"status": "ok", "provider": profile.get("backend", "local")},
+    )
+
+    selected = multi_task_runner.select_quota_fallback_profile(node, "builder", profiles)
+
+    assert selected == "deepseek-builder"

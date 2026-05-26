@@ -1111,6 +1111,26 @@ def quota_fallback_candidates(node: dict[str, Any], failed_profile: str, profile
     return normalized
 
 
+
+
+def profile_recent_failure_kind(profile_name: str, kind: str, backoff_seconds: int | None = None) -> bool:
+    if not profile_name:
+        return False
+    window = DEFAULT_QUOTA_BACKOFF if backoff_seconds is None else backoff_seconds
+    cutoff = time.time() - max(0, int(window or 0))
+    for status_path in RUN_DIR.glob("*/status.json"):
+        try:
+            if status_path.stat().st_mtime < cutoff:
+                continue
+            status = read_task_status(status_path) or {}
+            if normalize_profile_name(str(status.get("profile") or ""), load_profiles().get("profiles") or {}) != profile_name:
+                continue
+            if output_log_failure_kind(status_path.parent.name) == kind:
+                return True
+        except Exception:
+            continue
+    return False
+
 def select_quota_fallback_profile(node: dict[str, Any], failed_profile: str, profiles: dict[str, Any]) -> str:
     failed = normalize_profile_name(failed_profile, profiles)
     blocked = {normalize_profile_name(v, profiles) for v in _as_string_list(node.get("quota_blocked_profiles"))}
@@ -1130,6 +1150,8 @@ def select_quota_fallback_profile(node: dict[str, Any], failed_profile: str, pro
             continue
         suitable, _suitability_reason = profile_suitable_for_node(name, profile, node)
         if not suitable:
+            continue
+        if profile_recent_failure_kind(name, "auth_expired"):
             continue
         cap = capability_for_profile(profile, include_probe=False)
         status = str(cap.get("status") or "error")
@@ -1977,7 +1999,7 @@ def recover_quota_failed_nodes(graph_path: Path, graph: dict[str, Any]) -> int:
             recovery_count = int(node.get("quota_recovery_count") or 0)
         except Exception:
             recovery_count = 0
-        max_recoveries = int(os.environ.get("SOLAR_MULTI_TASK_MAX_QUOTA_RECOVERIES_PER_NODE", "1") or "1")
+        max_recoveries = int(os.environ.get("SOLAR_MULTI_TASK_MAX_QUOTA_RECOVERIES_PER_NODE", "4") or "4")
         if (dispatch_id and dispatch_id in recovered_ids) or recovery_count >= max_recoveries:
             node["monitor_blocker"] = _recoverable_failure_limit(failure_reason)
             field_prefix = _recoverable_failure_field_prefix(failure_reason)
