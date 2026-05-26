@@ -25,7 +25,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from prerequisite_resolver import iter_blocked
+from prerequisite_resolver import evaluate_prerequisite, iter_blocked
 
 HOME = Path.home()
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
@@ -598,7 +598,21 @@ def _is_passed(graph: dict[str, Any], node_id: str) -> bool:
 
 
 def blocked_external_prerequisites(graph: dict[str, Any]) -> list[dict[str, Any]]:
-    return iter_blocked(graph, SPRINTS_DIR)
+    blocked = list(iter_blocked(graph, SPRINTS_DIR))
+    seen = {str(item.get("requirement") or "") for item in blocked}
+    for node in graph.get("nodes") or []:
+        node_id = str(node.get("id") or "")
+        for dep in _depends_on(node):
+            if not _is_external_dependency(dep):
+                continue
+            ok, detail = evaluate_prerequisite(dep, SPRINTS_DIR)
+            detail["source"] = "depends_on"
+            detail["node_id"] = node_id
+            key = str(detail.get("requirement") or dep)
+            if not ok and key not in seen:
+                blocked.append(detail)
+                seen.add(key)
+    return blocked
 
 
 def ready_nodes(graph: dict[str, Any]) -> list[dict[str, Any]]:
