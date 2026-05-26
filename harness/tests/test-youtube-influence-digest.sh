@@ -14,7 +14,7 @@ output:
   state_dir: "$TMPDIR/state"
   max_videos_per_run: 10
   per_channel_limit: 2
-  lookback_hours: 168
+  lookback_hours: 10000
   keep_seen_days: 7
   transcript_max_chars: 20000
 fetch:
