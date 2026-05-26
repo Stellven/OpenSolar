@@ -65,6 +65,19 @@ def test_queue_reason_runtime_not_running_when_matching_worker_is_shell_residue(
     assert result["queued"][0]["reason"] == "worker_runtime_not_running"
 
 
+def test_unavailable_matching_worker_is_not_assigned_even_when_not_busy() -> None:
+    worker = _worker("solar-harness-multi-task:0.0")
+    worker["busy"] = False
+    worker["unavailable_reason"] = "multi_task_shell_not_direct_worker"
+    result = assign_workers([_node("N1")], [worker])
+    assert result["assigned"] == []
+    assert result["queued"][0]["node"] == "N1"
+    assert result["queued"][0]["reason"] == "multi_task_shell_not_direct_worker"
+    assert result["queued"][0]["details"]["unavailable_reasons"] == [
+        "multi_task_shell_not_direct_worker"
+    ]
+
+
 def test_enriched_dag_capabilities_are_assignable() -> None:
     worker = _worker("pane-a")
     worker["capabilities"] = [
