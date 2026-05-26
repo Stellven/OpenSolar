@@ -724,6 +724,148 @@ def arxiv_search(query: str, max_results: int) -> tuple[list[dict], list[str]]:
     return _normalize_search_hits(raw_hits, "arxiv", max_results), []
 
 
+def _execute_browser_job(
+    action_type: str,
+    objective: str,
+    run_func,
+    *run_args,
+):
+    """Run browser-use behind the Browser Agent job envelope for S6 observability."""
+    try:
+        import browser_job_runtime as bjrt
+        from logical_operator_router import LogicalOperatorRouter
+    except Exception:
+        return run_func(*run_args)
+
+    logical_op = "WebDeepResearch" if action_type == "search" else "WebProAnalysis"
+    selected_actor = os.getenv("SOLAR_ACTIVE_ACTOR_ID") or "mini-antigravity-gemini35-flash-image"
+    try:
+        router = LogicalOperatorRouter()
+        candidates = router.get_candidates(logical_op)
+        if candidates:
+            selected_actor = candidates[0]
+    except Exception:
+        pass
+
+    task_id = os.getenv("HARNESS_TASK_ID") or os.getenv("SOLAR_TASK_ID") or f"T-{hashlib.sha256(objective.encode('utf-8')).hexdigest()[:8]}"
+    sprint_id = os.getenv("HARNESS_SPRINT_ID") or os.getenv("SOLAR_SPRINT_ID") or "sprint-default"
+    node_id = os.getenv("HARNESS_NODE_ID") or os.getenv("SOLAR_NODE_ID") or "N4"
+    envelope = {
+        "task_id": task_id,
+        "sprint_id": sprint_id,
+        "node_id": node_id,
+        "operator_id": selected_actor,
+        "task_type": "RESEARCH",
+        "logical_operator": logical_op,
+        "objective": objective,
+        "profile_ref": "browser-agent",
+        "account_label": "research-user",
+    }
+
+    mock_sequence = ["running", "done"]
+    if action_type == "fetch" and run_args:
+        envelope["url"] = run_args[0]
+    job_id = bjrt.submit_browser_job(selected_actor, envelope, mock_sequence=mock_sequence)
+
+    result_val = None
+    error_msg = None
+    try:
+        result_val = run_func(*run_args)
+    except Exception as exc:
+        error_msg = str(exc)
+
+    job_dir = bjrt.BROWSER_JOBS_DIR / job_id
+    state_file = job_dir / "state.json"
+    if state_file.exists():
+        state_data = json.loads(state_file.read_text(encoding="utf-8"))
+        now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        state_data["state"] = "done" if error_msg is None else "failed"
+        state_data["logs"] += f"\n[{now_str}] research.cli executed browser action: {action_type}\n"
+        if error_msg:
+            state_data["logs"] += f"Error: {error_msg}\n"
+        artifacts = [{"name": "logs.txt", "type": "logs", "content": state_data["logs"]}]
+        if error_msg is None and result_val is not None:
+            if action_type == "search":
+                hits, errors = result_val
+                artifacts.append({"name": "links.json", "type": "links", "content": json.dumps(hits, ensure_ascii=False, indent=2)})
+                if errors:
+                    artifacts.append({"name": "search-errors.txt", "type": "logs", "content": "\n".join(errors)})
+            elif action_type == "fetch":
+                text_content, fetch_err = result_val
+                artifacts.append({"name": "page.txt", "type": "text", "content": text_content or ""})
+                if fetch_err:
+                    artifacts.append({"name": "fetch-errors.txt", "type": "logs", "content": fetch_err})
+        state_data["artifacts"] = artifacts
+        state_data["updated_at"] = now_str
+        state_file.write_text(json.dumps(state_data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    try:
+        bjrt.poll_browser_job(job_id)
+        bjrt.poll_browser_job(job_id)
+    except Exception:
+        pass
+
+    return result_val if error_msg is None else run_func(*run_args)
+
+
+def write_s6_evidence_entry(output_md: Path | str) -> str:
+    """Write a minimal S6 run-dispatched evidence record for Browser Agent research."""
+    from evidence_ledger import EvidenceLedger, build_scheduler_decision
+
+    sprint_id = os.getenv("HARNESS_SPRINT_ID") or os.getenv("SOLAR_SPRINT_ID") or "sprint-default"
+    node_id = os.getenv("HARNESS_NODE_ID") or os.getenv("SOLAR_NODE_ID") or "N4"
+    task_id = os.getenv("HARNESS_TASK_ID") or os.getenv("SOLAR_TASK_ID") or "T001"
+    actor_id = os.getenv("SOLAR_ACTIVE_ACTOR_ID") or "mini-antigravity-gemini35-flash-image"
+    harness_dir = Path(os.environ.get("HARNESS_DIR", str(Path.home() / ".solar" / "harness")))
+    ledger = EvidenceLedger(harness_dir / "run" / "actor-evidence")
+    decision = build_scheduler_decision(
+        selected_actor=actor_id,
+        logical_operator="WebDeepResearch",
+        score_factors={},
+        penalties={},
+        rejected=[],
+    )
+    return ledger.write_run_entry(
+        task_id=task_id,
+        sprint_id=sprint_id,
+        node_id=node_id,
+        actor_id=actor_id,
+        logical_operator="WebDeepResearch",
+        scheduler_decision=decision,
+        final_report_target=str(output_md),
+    )
+
+
+def compile_figures_to_dag(output_dir: Path | str) -> Path:
+    """Append figure generation nodes to the active sprint DAG."""
+    output_dir = Path(output_dir)
+    sprint_id = os.getenv("HARNESS_SPRINT_ID") or os.getenv("SOLAR_SPRINT_ID") or "sprint-default"
+    figures_path = output_dir / "figures.json"
+    if not figures_path.exists():
+        raise FileNotFoundError(figures_path)
+    figures = json.loads(figures_path.read_text(encoding="utf-8"))
+    graph_path = Path(os.environ.get("HARNESS_DIR", str(Path.home() / ".solar" / "harness"))) / "sprints" / f"{sprint_id}.task_graph.json"
+    graph_data = json.loads(graph_path.read_text(encoding="utf-8"))
+    nodes = graph_data.setdefault("nodes", [])
+    existing_ids = {str(node.get("id")) for node in nodes}
+    for fig in figures:
+        node_id = f"fig_gen_{fig['figure_id']}"
+        if node_id in existing_ids:
+            continue
+        nodes.append(
+            {
+                "id": node_id,
+                "status": "pending",
+                "logical_operator": "BrowserAssetGeneration",
+                "goal": f"Generate {fig.get('figure_type', 'figure')} for {fig.get('title', fig['figure_id'])}",
+                "depends_on": [os.getenv("HARNESS_NODE_ID") or os.getenv("SOLAR_NODE_ID") or "N4"],
+                "figure_id": fig["figure_id"],
+            }
+        )
+    graph_path.write_text(json.dumps(graph_data, indent=2, ensure_ascii=False), encoding="utf-8")
+    return graph_path
+
+
 def browser_use_search(query: str, max_results: int, timeout: int = 90) -> tuple[list[dict], list[str]]:
     """Use browser rendering for search pages when available.
 
@@ -733,6 +875,17 @@ def browser_use_search(query: str, max_results: int, timeout: int = 90) -> tuple
     capabilities: if browser-rendered discovery fails, browser-use remains the
     preferred fetch/extract provider for concrete URLs.
     """
+    return _execute_browser_job(
+        "search",
+        f"Perform headless browser search query: {query}",
+        _original_browser_use_search,
+        query,
+        max_results,
+        timeout,
+    )
+
+
+def _original_browser_use_search(query: str, max_results: int, timeout: int = 90) -> tuple[list[dict], list[str]]:
     if os.getenv("SOLAR_RESEARCH_DISABLE_BROWSER_USE") == "1":
         return [], ["browser-use disabled by SOLAR_RESEARCH_DISABLE_BROWSER_USE=1"]
     if not BROWSER_USE_SERVER.exists():
