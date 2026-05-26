@@ -61,6 +61,20 @@ def test_late_failure_does_not_overwrite_passed_graph_node(tmp_path):
 
 
 
+
+def test_runner_rejects_stale_handoff_from_previous_run(tmp_path):
+    script = _runner_script_text(tmp_path)
+
+    assert 'RUN_STARTED_MARKER="$TASK_DIR/run.started"' in script
+    assert ': > "$RUN_STARTED_MARKER"' in script
+    assert '"$HANDOFF" -nt "$RUN_STARTED_MARKER"' in script
+    assert 'stale handoff predates current run' in script
+    assert 'write_status failed_stale_handoff 66' in script
+
+
+def test_failed_stale_handoff_is_terminal_status():
+    assert "failed_stale_handoff" in multi_task_runner.TERMINAL_TASK_STATUSES
+
 def test_quota_guard_fallback_bypass_requires_explicit_env():
     text = Path(multi_task_runner.__file__).read_text(encoding="utf-8")
 

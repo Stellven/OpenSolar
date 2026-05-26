@@ -149,7 +149,7 @@ from graph_scheduler import (  # noqa: E402
 )
 
 ACTIVE_TASK_STATUSES = {"queued", "dispatched", "running"}
-TERMINAL_TASK_STATUSES = {"completed", "failed", "failed_missing_handoff", "cancelled"}
+TERMINAL_TASK_STATUSES = {"completed", "failed", "failed_missing_handoff", "failed_stale_handoff", "cancelled"}
 EFFECTIVE_TERMINAL_TASK_STATUSES = TERMINAL_TASK_STATUSES | {"completed_aligned", "failed_aligned"}
 TASK_STALE_WARN_SEC = int(os.environ.get("SOLAR_MULTI_TASK_STALE_WARN_SEC", "1800") or "1800")
 PROFILE_ALIASES = {
@@ -2344,6 +2344,7 @@ TASK_DIR={shlex.quote(str(task_dir))}
 STATUS_FILE={shlex.quote(str(status_file))}
 DISPATCH_FILE={shlex.quote(str(dispatch_file))}
 OUTPUT_LOG="$TASK_DIR/output.log"
+RUN_STARTED_MARKER="$TASK_DIR/run.started"
 HARNESS_DIR={shlex.quote(str(HARNESS_DIR))}
 HARNESS_BIN="$HARNESS_DIR/bin"
 SPRINTS_DIR={shlex.quote(str(SPRINTS_DIR))}
@@ -2359,7 +2360,7 @@ CAPABILITY_STATUS={shlex.quote(capability_status)}
 HANDOFF={shlex.quote(str(handoff))}
 HARNESS={shlex.quote(str(harness))}
 WORK_DIR={shlex.quote(work_dir)}
-export TASK_DIR STATUS_FILE DISPATCH_FILE OUTPUT_LOG HARNESS_DIR HARNESS_BIN SPRINTS_DIR GRAPH NODE_ID SID ROLE PROFILE BACKEND MODEL PROVIDER CAPABILITY_STATUS HANDOFF HARNESS WORK_DIR
+export TASK_DIR STATUS_FILE DISPATCH_FILE OUTPUT_LOG RUN_STARTED_MARKER HARNESS_DIR HARNESS_BIN SPRINTS_DIR GRAPH NODE_ID SID ROLE PROFILE BACKEND MODEL PROVIDER CAPABILITY_STATUS HANDOFF HARNESS WORK_DIR
 export PATH="$HARNESS_BIN:$PATH"
 export SOLAR_SAFE_FIND_ROOT="$WORK_DIR"
 
@@ -2391,6 +2392,7 @@ PY
 }}
 
 mkdir -p "$TASK_DIR"
+: > "$RUN_STARTED_MARKER"
 write_status running
 pane_title "MT $ROLE/$PROFILE | 模型:$MODEL | provider:$PROVIDER | 状态:running"
 
@@ -2458,10 +2460,19 @@ mark_graph_failed_unless_passed() {{
   return 0
 }}
 
-if [[ "$rc" -eq 0 && -s "$HANDOFF" ]]; then
+if [[ "$rc" -eq 0 && -s "$HANDOFF" && "$HANDOFF" -nt "$RUN_STARTED_MARKER" ]]; then
   "$HARNESS" graph-scheduler mark --graph "$GRAPH" --node "$NODE_ID" --status reviewing --in-place >> "$OUTPUT_LOG" 2>&1 || true
   write_status completed "$rc"
   pane_title "MT $ROLE/$PROFILE | 模型:$MODEL | provider:$PROVIDER | 状态:completed"
+elif [[ "$rc" -eq 0 && -s "$HANDOFF" ]]; then
+  echo "ERROR: stale handoff predates current run: $HANDOFF" | tee -a "$OUTPUT_LOG"
+  if mark_graph_failed_unless_passed; then
+    write_status failed_stale_handoff 66
+  else
+    write_status failed_aligned 66
+  fi
+  pane_title "MT $ROLE/$PROFILE | 模型:$MODEL | provider:$PROVIDER | 状态:failed_stale_handoff"
+  rc=66
 elif [[ "$rc" -eq 0 ]]; then
   echo "ERROR: missing handoff: $HANDOFF" | tee -a "$OUTPUT_LOG"
   if mark_graph_failed_unless_passed; then
