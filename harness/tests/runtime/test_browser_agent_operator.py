@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -242,3 +243,39 @@ def test_poll_real_browser_job_surfaces_reauth(monkeypatch, tmp_path):
     state = bjrt.poll_browser_job(job_id)
     assert state["state"] == "reauth_required"
     assert state["projected_state"] == "WAITING_HUMAN"
+
+
+def test_stage_browser_profile_removes_restore_artifacts(tmp_path):
+    """Verify staged Chrome profile keeps auth data but strips session-restore junk."""
+    root = tmp_path / "Chrome"
+    profile = root / "Profile 1"
+    profile.mkdir(parents=True)
+    (profile / "Cookies").write_text("cookie-db", encoding="utf-8")
+    (profile / "Current Tabs").write_text("tabs", encoding="utf-8")
+    (profile / "Last Session").write_text("session", encoding="utf-8")
+    (profile / "Sessions").mkdir()
+    (root / "Local State").write_text('{"profile":{"last_used":"Profile 1"}}', encoding="utf-8")
+
+    staged_dir, cleanup_dir = bjrt._stage_browser_profile(root, "Profile 1")
+    assert cleanup_dir is not None
+    staged_root = Path(staged_dir)
+    staged_profile = staged_root / "Profile 1"
+
+    assert (staged_profile / "Cookies").exists()
+    assert (staged_root / "Local State").exists()
+    assert not (staged_profile / "Current Tabs").exists()
+    assert not (staged_profile / "Last Session").exists()
+    assert not (staged_profile / "Sessions").exists()
+
+    shutil.rmtree(cleanup_dir, ignore_errors=True)
+
+
+def test_stage_browser_profile_skips_when_already_staged(tmp_path):
+    """Verify already-staged temp profiles are passed through unchanged."""
+    staged_root = tmp_path / "browser-use-user-data-dir-existing"
+    profile = staged_root / "Profile 1"
+    profile.mkdir(parents=True)
+
+    staged_dir, cleanup_dir = bjrt._stage_browser_profile(staged_root, "Profile 1")
+    assert Path(staged_dir) == staged_root
+    assert cleanup_dir is None

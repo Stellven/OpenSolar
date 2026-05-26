@@ -26,6 +26,20 @@ BROWSER_JOBS_DIR = HARNESS_DIR / "run" / "browser-jobs"
 OPERATOR_RESULTS_DIR = HARNESS_DIR / "run" / "operator-results"
 BROWSER_USE_ROOT = HOME / ".claude" / "mcp-servers" / "browser-use"
 BROWSER_USE_PYTHON = BROWSER_USE_ROOT / ".venv" / "bin" / "python"
+_STAGED_PROFILE_PREFIX = "browser-use-user-data-dir-"
+_RESTORE_ARTIFACTS = {
+    "Current Session",
+    "Current Tabs",
+    "Last Session",
+    "Last Tabs",
+    "Sessions",
+}
+_LOCK_ARTIFACTS = {
+    "SingletonCookie",
+    "SingletonLock",
+    "SingletonSocket",
+    "LOCK",
+}
 
 # Regex patterns for scrubbing sensitive information
 _SECRET_PATTERNS = [
@@ -211,6 +225,45 @@ def _artifact_from_path(path: Path, artifact_type: str) -> Dict[str, Any]:
     return {"name": path.name, "type": artifact_type, "path": str(path)}
 
 
+def _stage_browser_profile(user_data_dir: str | Path | None, profile_directory: str | None) -> tuple[str | Path | None, Optional[Path]]:
+    """Create an isolated Chrome profile copy without session-restore artifacts.
+
+    browser-use already copies Chrome profiles, but its raw copy keeps session restore
+    tabs from the live profile. Those stale tabs can trigger disallowed-domain churn
+    and destabilize the CDP session before our target page opens. We pre-stage a
+    cleaned temp profile so browser-use reuses this isolated copy as-is.
+    """
+    if not user_data_dir or not profile_directory:
+        return user_data_dir, None
+
+    source_root = Path(user_data_dir)
+    source_profile = source_root / profile_directory
+    if _STAGED_PROFILE_PREFIX in str(source_root):
+        return str(source_root), None
+    if not source_root.exists() or not source_profile.exists():
+        return user_data_dir, None
+
+    staged_root = Path(tempfile.mkdtemp(prefix=_STAGED_PROFILE_PREFIX))
+    staged_profile = staged_root / profile_directory
+    shutil.copytree(source_profile, staged_profile)
+
+    local_state_src = source_root / "Local State"
+    if local_state_src.exists():
+        shutil.copy(local_state_src, staged_root / "Local State")
+
+    for name in _RESTORE_ARTIFACTS | _LOCK_ARTIFACTS:
+        for candidate in (staged_root / name, staged_profile / name):
+            if candidate.is_dir():
+                shutil.rmtree(candidate, ignore_errors=True)
+            elif candidate.exists():
+                try:
+                    candidate.unlink()
+                except OSError:
+                    pass
+
+    return str(staged_root), staged_root
+
+
 def _looks_like_login_wall(text: str) -> bool:
     sample = (text or "").lower()
     cues = [
@@ -245,6 +298,11 @@ def _run_real_browser_probe(job_id: str, envelope: Dict[str, Any], timeout: int)
     artifact_dir = job_dir / "daemon-artifacts"
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
+    staged_user_data_dir, cleanup_dir = _stage_browser_profile(
+        envelope.get("user_data_dir"),
+        str(envelope.get("profile_directory") or "Default"),
+    )
+
     payload = {
         "url": target_url,
         "allowed_domains": _resolve_allowed_domains(target_url, envelope),
@@ -252,7 +310,7 @@ def _run_real_browser_probe(job_id: str, envelope: Dict[str, Any], timeout: int)
         "headless": bool(envelope.get("headless", True)),
         "artifact_dir": str(artifact_dir),
         "wait_ms": int(envelope.get("page_wait_ms", 1500) or 1500),
-        "user_data_dir": str(envelope.get("user_data_dir") or ""),
+        "user_data_dir": str(staged_user_data_dir or ""),
         "profile_directory": str(envelope.get("profile_directory") or "Default"),
     }
 
@@ -364,6 +422,8 @@ asyncio.run(main())
             os.unlink(script_path)
         except OSError:
             pass
+        if cleanup_dir is not None:
+            shutil.rmtree(cleanup_dir, ignore_errors=True)
 
     stdout_lines = [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
     stderr_tail = " | ".join((result.stderr or "").strip().splitlines()[-5:])
