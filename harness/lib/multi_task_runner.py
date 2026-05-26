@@ -951,6 +951,127 @@ def profile_allowed_for_quota_fallback(profile: dict[str, Any]) -> tuple[bool, s
     return True, "ok"
 
 
+CODE_TASK_KEYWORDS = {
+    "api",
+    "backend",
+    "builder",
+    "code",
+    "code-edit",
+    "contract",
+    "coverage",
+    "frontend",
+    "implementation",
+    "patch",
+    "python",
+    "runtime",
+    "schema",
+    "state-machine",
+    "test",
+    "testing",
+    "typescript",
+    "unit",
+}
+
+CODE_PATH_SUFFIXES = {
+    ".c",
+    ".cc",
+    ".cpp",
+    ".go",
+    ".h",
+    ".hpp",
+    ".js",
+    ".jsx",
+    ".m",
+    ".mm",
+    ".py",
+    ".rs",
+    ".sh",
+    ".swift",
+    ".ts",
+    ".tsx",
+}
+
+KNOWLEDGE_TASK_KEYWORDS = {
+    "dashboard",
+    "extract",
+    "extraction",
+    "ingest",
+    "knowledge",
+    "knowledge-extraction",
+    "monitor-report",
+    "qmd",
+    "semantic",
+    "semantic-layer",
+    "thunderomlx",
+    "vault",
+    "wiki",
+    "wiki-ingest",
+}
+
+
+def _node_text_for_profile_match(node: dict[str, Any]) -> str:
+    fields = [
+        node.get("id"),
+        node.get("title"),
+        node.get("name"),
+        node.get("goal"),
+        node.get("objective"),
+        node.get("task_type"),
+        node.get("role"),
+        node.get("target_role"),
+        node.get("persona"),
+        node.get("acceptance"),
+        node.get("description"),
+        node.get("expected_output"),
+        node.get("read_scope"),
+        node.get("write_scope"),
+        node.get("required_capabilities"),
+        node.get("logical_operator"),
+    ]
+    return " ".join(json.dumps(v, ensure_ascii=False).lower() for v in fields if v is not None)
+
+
+def node_looks_like_code_task(node: dict[str, Any]) -> bool:
+    text = _node_text_for_profile_match(node)
+    if any(keyword in text for keyword in CODE_TASK_KEYWORDS):
+        return True
+    for path in _as_string_list(node.get("write_scope")) + _as_string_list(node.get("files")):
+        lowered = path.lower()
+        if any(lowered.endswith(suffix) for suffix in CODE_PATH_SUFFIXES):
+            return True
+    return False
+
+
+def node_looks_like_knowledge_task(node: dict[str, Any]) -> bool:
+    text = _node_text_for_profile_match(node)
+    return any(keyword in text for keyword in KNOWLEDGE_TASK_KEYWORDS)
+
+
+def profile_suitable_for_node(profile_name: str, profile: dict[str, Any], node: dict[str, Any]) -> tuple[bool, str]:
+    """Keep quota fallback from swapping code implementation nodes onto extractor-only profiles."""
+    profile_text = " ".join(
+        json.dumps(profile.get(key), ensure_ascii=False).lower()
+        for key in ("name", "role", "persona", "backend", "model", "best_for", "purpose", "capabilities")
+        if profile.get(key) is not None
+    )
+    name = str(profile_name or profile.get("name") or "").lower()
+    is_extractor = (
+        name == "knowledge-extractor"
+        or "knowledge-extractor" in name
+        or "knowledge-extraction" in profile_text
+        or "wiki-ingest" in profile_text
+        or "qmd-indexing" in profile_text
+    )
+    is_benchmark_only = name == "thunderomlx-benchmark" or "benchmark/cache-metrics" in profile_text
+    code_task = node_looks_like_code_task(node)
+    knowledge_task = node_looks_like_knowledge_task(node)
+    if code_task and not knowledge_task and is_extractor:
+        return False, "extractor_profile_not_allowed_for_code_task"
+    if code_task and not knowledge_task and is_benchmark_only:
+        return False, "benchmark_profile_not_allowed_for_code_task"
+    return True, "ok"
+
+
 def quota_fallback_candidates(node: dict[str, Any], failed_profile: str, profiles: dict[str, Any]) -> list[str]:
     role = role_from_node(node)
     base = profiles.get(failed_profile) or {}
@@ -961,10 +1082,10 @@ def quota_fallback_candidates(node: dict[str, Any], failed_profile: str, profile
         candidates.extend([
             "antigravity-multimodal",
             "gemini-builder",
-            "thunderomlx-local",
-            "knowledge-extractor",
             "deepseek-builder",
+            "thunderomlx-local",
             "builder",
+            "knowledge-extractor",
         ])
     elif role == "planner":
         candidates.extend(["glm-planner", "planner", "gemini-builder", "thunderomlx-local"])
@@ -1001,6 +1122,9 @@ def select_quota_fallback_profile(node: dict[str, Any], failed_profile: str, pro
         allowed, _reason = profile_allowed_for_quota_fallback(profile)
         if not allowed:
             continue
+        suitable, _suitability_reason = profile_suitable_for_node(name, profile, node)
+        if not suitable:
+            continue
         cap = capability_for_profile(profile, include_probe=False)
         status = str(cap.get("status") or "error")
         if status not in {"ok", "warn"}:
@@ -1022,6 +1146,9 @@ def select_capability_fallback_profile(node: dict[str, Any], failed_profile: str
             continue
         profile = dict(profiles[name])
         profile["name"] = name
+        suitable, _suitability_reason = profile_suitable_for_node(name, profile, node)
+        if not suitable:
+            continue
         cap = capability_for_profile(profile)
         if str(cap.get("status") or "") == "ok":
             return name
@@ -1132,6 +1259,22 @@ def select_profile(node: dict[str, Any], profile_override: str = "", model_overr
     profile_name = normalize_profile_name(profile_name or str((config.get("defaults") or {}).get("profile") or "builder"), profiles)
     quota_fallback_from = ""
     quota_blocked = {normalize_profile_name(v, profiles) for v in _as_string_list(node.get("quota_blocked_profiles"))}
+    if not profile_override and profile_name in profiles and node.get("quota_failure_reason"):
+        profile = dict(profiles[profile_name])
+        profile["name"] = profile_name
+        suitable, reason = profile_suitable_for_node(profile_name, profile, node)
+        if not suitable:
+            node["quota_fallback_unsuitable_profile"] = profile_name
+            node["quota_fallback_unsuitable_reason"] = reason
+            failed = normalize_profile_name(str(node.get("quota_fallback_from") or ""), profiles)
+            quota_blocked.add(profile_name)
+            if failed:
+                profile_name = failed
+            else:
+                fallback = select_quota_fallback_profile(node, profile_name, profiles)
+                if fallback:
+                    quota_fallback_from = profile_name
+                    profile_name = fallback
     if not profile_override and profile_name in quota_blocked:
         fallback = select_quota_fallback_profile(node, profile_name, profiles)
         if fallback:

@@ -128,7 +128,7 @@ def test_quota_guard_ignores_hit_for_already_passed_node(monkeypatch, tmp_path):
     assert multi_task_runner.quota_guard(3600)["ok"] is True
 
 
-def test_quota_recovered_preferred_profile_is_not_overridden_by_operator(monkeypatch):
+def test_quota_recovered_knowledge_profile_is_not_overridden_by_operator_for_knowledge_task(monkeypatch):
     monkeypatch.setattr(
         multi_task_runner,
         "load_profiles",
@@ -158,6 +158,7 @@ def test_quota_recovered_preferred_profile_is_not_overridden_by_operator(monkeyp
     node = {
         "id": "N1",
         "role": "builder",
+        "goal": "Run knowledge-extraction wiki-ingest into QMD semantic layer",
         "preferred_profile": "knowledge-extractor",
         "quota_failure_reason": "quota_exhausted",
     }
@@ -167,3 +168,104 @@ def test_quota_recovered_preferred_profile_is_not_overridden_by_operator(monkeyp
     assert selected["name"] == "knowledge-extractor"
     assert selected["model"] == "local"
     assert selected.get("operator_id") is None
+
+
+def test_quota_fallback_skips_knowledge_extractor_for_code_node(monkeypatch):
+    monkeypatch.setattr(
+        multi_task_runner,
+        "capability_for_profile",
+        lambda profile, include_probe=True: {"status": "ok", "provider": profile.get("backend", "local")},
+    )
+    profiles = {
+        "builder": {"role": "builder", "backend": "claude-cli", "model": "sonnet"},
+        "gemini-builder": {"role": "builder", "backend": "gemini-cli", "model": "gemini"},
+        "knowledge-extractor": {
+            "role": "builder",
+            "backend": "command",
+            "model": "thunderomlx",
+            "best_for": ["knowledge-extraction", "wiki-ingest", "qmd-indexing"],
+        },
+        "deepseek-builder": {"role": "builder", "backend": "claude-cli", "model": "deepseek"},
+    }
+    node = {
+        "id": "C1_schema_contract",
+        "role": "builder",
+        "write_scope": ["harness/lib/github_intelligence/schema.py"],
+        "required_capabilities": ["python", "testing"],
+        "acceptance": "schema API unit coverage and no incompatible import changes",
+        "quota_blocked_profiles": ["builder", "gemini-builder"],
+    }
+
+    selected = multi_task_runner.select_quota_fallback_profile(node, "gemini-builder", profiles)
+
+    assert selected == "deepseek-builder"
+
+
+def test_quota_recovered_unsuitable_profile_is_replaced_for_code_node(monkeypatch):
+    monkeypatch.setattr(
+        multi_task_runner,
+        "load_profiles",
+        lambda: {
+            "profiles": {
+                "gemini-builder": {"role": "builder", "backend": "gemini-cli", "model": "gemini"},
+                "knowledge-extractor": {
+                    "role": "builder",
+                    "backend": "command",
+                    "model": "thunderomlx",
+                    "best_for": ["knowledge-extraction", "wiki-ingest", "qmd-indexing"],
+                },
+                "deepseek-builder": {"role": "builder", "backend": "claude-cli", "model": "deepseek"},
+            },
+            "defaults": {"profile": "gemini-builder"},
+        },
+    )
+    monkeypatch.setattr(
+        multi_task_runner,
+        "capability_for_profile",
+        lambda profile, include_probe=True: {"status": "ok", "provider": profile.get("backend", "local")},
+    )
+    monkeypatch.setattr(multi_task_runner, "select_operator", lambda node, profile: (None, ""))
+    node = {
+        "id": "C1_schema_contract",
+        "role": "builder",
+        "preferred_profile": "knowledge-extractor",
+        "quota_failure_reason": "quota_exhausted",
+        "quota_blocked_profiles": ["builder", "gemini-builder"],
+        "write_scope": ["harness/lib/github_intelligence/schema.py"],
+        "required_capabilities": ["python", "testing"],
+        "acceptance": "schema API unit coverage",
+    }
+
+    selected = multi_task_runner.select_profile(node)
+
+    assert selected["name"] == "deepseek-builder"
+    assert node["quota_fallback_unsuitable_profile"] == "knowledge-extractor"
+
+
+def test_quota_fallback_allows_knowledge_extractor_for_knowledge_node(monkeypatch):
+    monkeypatch.setattr(
+        multi_task_runner,
+        "capability_for_profile",
+        lambda profile, include_probe=True: {"status": "ok", "provider": profile.get("backend", "local")},
+    )
+    profiles = {
+        "builder": {"role": "builder", "backend": "claude-cli", "model": "sonnet"},
+        "gemini-builder": {"role": "builder", "backend": "gemini-cli", "model": "gemini"},
+        "knowledge-extractor": {
+            "role": "builder",
+            "backend": "command",
+            "model": "thunderomlx",
+            "best_for": ["knowledge-extraction", "wiki-ingest", "qmd-indexing"],
+        },
+    }
+    node = {
+        "id": "K1_semantic_ingest",
+        "role": "builder",
+        "goal": "Run knowledge-extraction wiki-ingest into QMD semantic layer",
+        "write_scope": ["semantic.md", "monitor-reports/semantic-layer.md"],
+        "quota_blocked_profiles": ["builder", "gemini-builder"],
+    }
+
+    selected = multi_task_runner.select_quota_fallback_profile(node, "gemini-builder", profiles)
+
+    assert selected == "knowledge-extractor"
