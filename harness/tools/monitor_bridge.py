@@ -49,6 +49,7 @@ from multi_task_status import (  # noqa: E402
     ACTOR_LEASE_DIR,
     _redact_secrets,
 )
+from browser_job_runtime import BrowserSessionBroker  # noqa: E402
 
 
 def _now_iso() -> str:
@@ -77,6 +78,49 @@ def _count_claude_print_processes() -> int:
         return -1
     except Exception:
         return -1
+
+
+def load_browser_jobs(jobs_dir: Path, actors: dict[str, Any]) -> list[dict[str, Any]]:
+    """Load browser job state snapshots for observability surfaces."""
+    if not jobs_dir.exists():
+        return []
+
+    broker = BrowserSessionBroker()
+    jobs: list[dict[str, Any]] = []
+    for state_file in sorted(jobs_dir.glob("*/state.json")):
+        try:
+            state = json.loads(state_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        envelope = state.get("envelope") or {}
+        profile_ref = str(envelope.get("profile_ref") or "")
+        account_label = str(envelope.get("account_label") or "")
+        async_state = str(state.get("state") or "unknown")
+        if async_state == "reauth_required":
+            login_state = "reauth_required"
+        elif profile_ref or account_label:
+            login_state = broker.get_profile_health(profile_ref, account_label).get("status", "unknown")
+        else:
+            login_state = "healthy"
+
+        actor_id = str(state.get("actor_id") or "")
+        actor_state = actors.get(actor_id) or {}
+        quota_state = str(actor_state.get("quota_state") or "ok")
+        evidence = [str(artifact.get("name")) for artifact in (state.get("artifacts") or []) if artifact.get("name")]
+        paths = [str(state_file.parent / name) for name in evidence]
+        jobs.append(
+            {
+                "job_id": state.get("job_id") or state_file.parent.name,
+                "actor_id": actor_id,
+                "async_state": async_state,
+                "login_state": login_state,
+                "quota_state": quota_state,
+                "evidence": evidence,
+                "paths": paths,
+            }
+        )
+    return jobs
 
 
 def build_snapshot(
@@ -140,6 +184,7 @@ def build_snapshot(
 
     # Logical operator binding summary (N4)
     lo_bindings = get_logical_operator_binding_summary(logical_ops_path)
+    browser_jobs = load_browser_jobs(HARNESS_DIR / "run" / "browser-jobs", actor_fleet)
 
     return {
         "schema": "solar.monitor_bridge.operator_fleet.v2",
@@ -154,6 +199,7 @@ def build_snapshot(
         "actor_lease_counts": dict(sorted(actor_lease_counts.items())),
         "host_fleet": dict(sorted(host_fleet.items())),
         "logical_operator_bindings": dict(sorted(lo_bindings.items())),
+        "browser_jobs": browser_jobs,
     }
 
 
