@@ -23,6 +23,7 @@ from typing import Any
 HOME = Path.home()
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", Path(__file__).resolve().parents[1]))
 SPRINTS_DIR = HARNESS_DIR / "sprints"
+MULTI_TASK_RUN_DIR = HARNESS_DIR / "run" / "multi-task"
 SESSION = os.environ.get("SOLAR_HARNESS_SESSION", "solar-harness")
 NO_DISPATCH_FLAG = HARNESS_DIR / "run" / "no-dispatch.flag"
 DISPATCH_LEDGER = HARNESS_DIR / "run" / "dispatch-ledger.jsonl"
@@ -1043,6 +1044,32 @@ def _ledger_dispatch_for(sid: str, instruction_file: Path) -> dict[str, Any]:
     return found
 
 
+def _active_multi_task_status_for(sid: str, node_id: str) -> dict[str, Any] | None:
+    """Return an active multi-task worker for this graph node, if one exists.
+
+    Direct graph dispatch uses pane leases; multi-task dispatch owns its own
+    process lifecycle under run/multi-task. Reconcile must not reset a node to
+    pending while a multi-task worker for the same graph/node is still active.
+    """
+    newest: tuple[str, dict[str, Any]] | None = None
+    for status_path in MULTI_TASK_RUN_DIR.glob("*/status.json"):
+        try:
+            status = json.loads(status_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if str(status.get("sprint_id") or "") != sid:
+            continue
+        if str(status.get("node_id") or "") != node_id:
+            continue
+        task_status = str(status.get("status") or "").lower()
+        if task_status not in {"dispatched", "running", "in_progress"}:
+            continue
+        updated = str(status.get("updated_at") or status.get("created_at") or "")
+        if newest is None or updated > newest[0]:
+            newest = (updated, status)
+    return newest[1] if newest else None
+
+
 def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path) -> list[dict[str, Any]]:
     sid = str(graph.get("sprint_id") or Path(graph_path).stem.replace(".task_graph", ""))
     repaired: list[dict[str, Any]] = []
@@ -1113,6 +1140,23 @@ def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path
                         "handoff": str(handoff_file),
                     }
                 )
+        active_multi_task = _active_multi_task_status_for(sid, node_id)
+        if active_multi_task and status in {"pending", "queued", "blocked", "assigned", "dispatched", "in_progress", "running", ""}:
+            dispatch_id = str(active_multi_task.get("id") or active_multi_task.get("dispatch_id") or "").strip()
+            window = str(active_multi_task.get("window") or "").strip()
+            pane = f"multi-task:{window}" if window else "multi-task"
+            set_node_status(graph, node_id, "dispatched", pane=pane, dispatch_id=dispatch_id or None)
+            node["updated_at"] = _utc_now()
+            repaired.append(
+                {
+                    "node": node_id,
+                    "pane": pane,
+                    "dispatch_id": dispatch_id,
+                    "status": "dispatched",
+                    "reason": "active_multi_task_status_exists",
+                }
+            )
+            continue
         if status in {"assigned", "dispatched", "in_progress", "running"}:
             pane = str(node.get("assigned_to") or "").strip()
             dispatch_id = str(node.get("dispatch_id") or "").strip()

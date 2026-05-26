@@ -300,6 +300,50 @@ def test_quota_fallback_skips_blocked_anthropic_profile(monkeypatch):
     assert selected["quota_fallback_reason"] == "quota_exhausted"
 
 
+
+def test_quota_fallback_rejects_claude_cli_local_proxy(monkeypatch):
+    profiles = {
+        "builder": {
+            "role": "builder",
+            "persona": "builder",
+            "backend": "claude-cli",
+            "model": "sonnet",
+        },
+        "thunderomlx-local": {
+            "role": "builder",
+            "persona": "builder",
+            "backend": "claude-cli",
+            "model": "thunderomlx-local",
+        },
+        "knowledge-extractor": {
+            "role": "builder",
+            "persona": "builder",
+            "backend": "command",
+            "model": "thunderomlx-local",
+            "command": "python3 thunderomlx_knowledge_extract_agent.py",
+        },
+    }
+    monkeypatch.setattr(m, "load_profiles", lambda: {"defaults": {"profile": "builder"}, "profiles": profiles})
+    monkeypatch.setattr(
+        m,
+        "capability_for_profile",
+        lambda profile, include_probe=False: {
+            "status": "ok",
+            "provider": m.model_provider(str(profile.get("model") or ""), str(profile.get("backend") or "")),
+        },
+    )
+
+    selected = m.select_profile({
+        "role": "builder",
+        "preferred_profile": "builder",
+        "quota_blocked_profiles": ["builder"],
+    })
+
+    assert selected["name"] == "knowledge-extractor"
+    assert selected["backend"] == "command"
+    assert selected["quota_fallback_from"] == "builder"
+
+
 def test_command_profile_keeps_gemini_model_when_node_prefers_sonnet(monkeypatch):
     profiles = {
         "antigravity-multimodal": {

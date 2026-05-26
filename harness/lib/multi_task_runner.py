@@ -941,6 +941,16 @@ def _profile_provider(profile_name: str, profiles: dict[str, Any]) -> str:
     return model_provider(str(spec.get("model") or ""), str(spec.get("backend") or ""))
 
 
+def profile_allowed_for_quota_fallback(profile: dict[str, Any]) -> tuple[bool, str]:
+    """Reject profiles that only rename a local model onto the Claude CLI billing surface."""
+    backend = str(profile.get("backend") or "claude-cli").strip().lower()
+    model = str(profile.get("model") or "")
+    provider = model_provider(model, backend)
+    if backend == "claude-cli" and provider == "local" and not _is_true(profile.get("allow_claude_local_proxy")):
+        return False, "claude_cli_local_proxy_not_allowed"
+    return True, "ok"
+
+
 def quota_fallback_candidates(node: dict[str, Any], failed_profile: str, profiles: dict[str, Any]) -> list[str]:
     role = role_from_node(node)
     base = profiles.get(failed_profile) or {}
@@ -988,6 +998,9 @@ def select_quota_fallback_profile(node: dict[str, Any], failed_profile: str, pro
             continue
         profile = dict(profiles[name])
         profile["name"] = name
+        allowed, _reason = profile_allowed_for_quota_fallback(profile)
+        if not allowed:
+            continue
         cap = capability_for_profile(profile, include_probe=False)
         status = str(cap.get("status") or "error")
         if status not in {"ok", "warn"}:
