@@ -164,3 +164,81 @@ def test_cancel_browser_job():
     state = bjrt.poll_browser_job(job_id)
     assert state["state"] == "failed"
     assert "cancelled" in state["logs"].lower()
+
+
+def test_poll_real_browser_job_executes_probe(monkeypatch, tmp_path):
+    """Verify a real browser job transitions to done and collects path-based artifacts."""
+    artifact_dir = tmp_path / "probe"
+    artifact_dir.mkdir(parents=True)
+    shot = artifact_dir / "screenshot.png"
+    shot.write_bytes(b"png")
+    html = artifact_dir / "page.html"
+    html.write_text("<html><title>ChatGPT</title></html>", encoding="utf-8")
+    text = artifact_dir / "page.txt"
+    text.write_text("ChatGPT landing page", encoding="utf-8")
+
+    def fake_probe(job_id, envelope, timeout):
+        return {
+            "ok": True,
+            "state": "done",
+            "login_state": "healthy",
+            "title": "ChatGPT",
+            "final_url": "https://chatgpt.com/",
+            "text_excerpt": "ChatGPT landing page",
+            "artifacts": {
+                "screenshot_path": str(shot),
+                "html_path": str(html),
+                "text_path": str(text),
+            },
+        }
+
+    monkeypatch.setattr(bjrt, "_run_real_browser_probe", fake_probe)
+    job_id = bjrt.submit_browser_job(
+        "mini-browser-deepresearch",
+        {"task_id": "T-real", "operator_id": "mini-browser-deepresearch", "url": "https://chatgpt.com", "objective": "Capture landing page"},
+    )
+
+    state = bjrt.poll_browser_job(job_id)
+    assert state["state"] == "done"
+    assert state["projected_state"] == "done"
+    assert any(a["name"] == "screenshot.png" for a in state["artifacts"])
+
+    with tempfile.TemporaryDirectory() as outdir:
+        result = bjrt.collect_browser_job(job_id, output_dir=Path(outdir))
+        assert result["status"] == "completed"
+        assert (Path(outdir) / "screenshot.png").exists()
+        assert (Path(outdir) / "page.html").exists()
+        assert (Path(outdir) / "page.txt").exists()
+        metadata = json.loads((Path(outdir) / "page.json").read_text(encoding="utf-8"))
+        assert metadata["final_url"] == "https://chatgpt.com/"
+
+
+def test_poll_real_browser_job_surfaces_reauth(monkeypatch, tmp_path):
+    """Verify auth-gated browser jobs surface WAITING_HUMAN when login is required."""
+    artifact_dir = tmp_path / "probe"
+    artifact_dir.mkdir(parents=True)
+    text = artifact_dir / "page.txt"
+    text.write_text("Please sign in", encoding="utf-8")
+
+    def fake_probe(job_id, envelope, timeout):
+        return {
+            "ok": True,
+            "state": "reauth_required",
+            "login_state": "reauth_required",
+            "title": "Sign in",
+            "final_url": "https://chatgpt.com/auth/login",
+            "text_excerpt": "Please sign in",
+            "artifacts": {
+                "text_path": str(text),
+            },
+        }
+
+    monkeypatch.setattr(bjrt, "_run_real_browser_probe", fake_probe)
+    job_id = bjrt.submit_browser_job(
+        "mini-browser-deepresearch",
+        {"task_id": "T-reauth-real", "url": "https://chatgpt.com", "auth_expected": True, "objective": "Open authenticated area"},
+    )
+
+    state = bjrt.poll_browser_job(job_id)
+    assert state["state"] == "reauth_required"
+    assert state["projected_state"] == "WAITING_HUMAN"

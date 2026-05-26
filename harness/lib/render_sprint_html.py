@@ -18,11 +18,14 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from html_anything_adapter import render as render_html_anything
+from html_anything_adapter import verify_self_contained
+
 
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", Path.home() / ".solar" / "harness"))
 SPRINTS_DIR = Path(os.environ.get("SPRINTS_DIR", HARNESS_DIR / "sprints"))
 TEMPLATE_PATH = HARNESS_DIR / "templates" / "html-artifact.visual-template.html"
-VALID_KINDS = {"prd", "planning"}
+VALID_KINDS = {"prd", "planning", "design"}
 
 
 def _read_text(path: Path) -> str:
@@ -47,7 +50,7 @@ def _style_block() -> str:
     return ""
 
 
-def _html_page(title: str, body: str) -> str:
+def _legacy_html_page(title: str, body: str) -> str:
     style = _style_block()
     return (
         "<!doctype html>\n"
@@ -258,6 +261,41 @@ def _hero(title: str, meta: str, badges: list[str]) -> str:
     )
 
 
+def _title_html(text: str) -> str:
+    escaped = html.escape(text)
+    parts = escaped.split(" / ", 1)
+    if len(parts) == 2:
+        return f"{parts[0]} / <em>{parts[1]}</em>"
+    return escaped
+
+
+def _adapter_page(
+    *,
+    profile: str,
+    sid: str,
+    title: str,
+    hero_title: str,
+    lede: str,
+    badges: list[str],
+    body: str,
+) -> str:
+    toc_html = _toc().replace('class="toc"', 'class="ha-toc"')
+    html_text = render_html_anything(
+        "",
+        profile,
+        title=title,
+        hero_title=_title_html(hero_title),
+        lede=lede,
+        meta=f"Sprint: {sid}",
+        body_html=body,
+        toc_html=toc_html,
+        badges=badges,
+    )
+    if not verify_self_contained(html_text):
+        raise RuntimeError("html-anything adapter returned non self-contained html")
+    return html_text
+
+
 def _toc() -> str:
     return (
         '<nav class="toc"><h2>目录</h2><ol>'
@@ -354,7 +392,23 @@ def _render_prd(sid: str) -> str:
         _section("stack", "技术栈 / 算子绑定", stack),
         _section("validation", "验证 / 风险", validation),
     ])
-    return _html_page(f"PRD — {title}", body)
+    try:
+        return _adapter_page(
+            profile="prd",
+            sid=sid,
+            title=f"PRD — {title}",
+            hero_title=f"PRD / {title}",
+            lede="产品目标、约束、需求映射与 DAG 执行边界统一以 html-anything 默认渲染器输出。",
+            badges=[
+                str(status.get("priority") or "P0"),
+                str(status.get("lane_hint") or "strategy"),
+                "PM",
+                str(status.get("handoff_to") or "planner"),
+            ],
+            body=body,
+        )
+    except Exception:
+        return _legacy_html_page(f"PRD — {title}", body)
 
 
 def _render_planning(sid: str) -> str:
@@ -403,7 +457,78 @@ def _render_planning(sid: str) -> str:
         _section("stack", "技术栈 / 算子绑定", stack),
         _section("validation", "验证 / 风险", validation + _render_markdown_block(plan)),
     ])
-    return _html_page(f"Planning — {title}", body)
+    try:
+        return _adapter_page(
+            profile="planning",
+            sid=sid,
+            title=f"Planning — {title}",
+            hero_title=f"Planning / {title}",
+            lede="设计方案、DAG、写范围和 stop rules 统一落在 html-anything 的默认阅读界面里。",
+            badges=[
+                str(status.get("priority") or "P0"),
+                str(status.get("lane_hint") or "strategy"),
+                "Planner",
+                str(status.get("handoff_to") or "builder_main"),
+            ],
+            body=body,
+        )
+    except Exception:
+        return _legacy_html_page(f"Planning — {title}", body)
+
+
+def _render_design(sid: str) -> str:
+    base = SPRINTS_DIR
+    status = _read_json(base / f"{sid}.status.json")
+    design = _read_text(base / f"{sid}.design.md")
+    plan = _read_text(base / f"{sid}.plan.md")
+    graph = _read_json(base / f"{sid}.task_graph.json")
+    title = str(status.get("title") or sid)
+    sections = _split_sections(design or plan)
+    hero = _hero(
+        f"Architecture Design — {title}",
+        f"Sprint: {sid} · status: {status.get('status','N/A')} · phase: {status.get('phase','N/A')}",
+        [
+            ("p0", str(status.get("priority") or "P0")),
+            ("lane", str(status.get("lane_hint") or "strategy")),
+            ("role", "Architecture"),
+            ("warn", str(status.get("handoff_to") or "builder_main")),
+        ],
+    )
+    summary = _render_markdown_block("\n\n".join(body for _, body in sections[:2]))
+    cards = []
+    for name, body in sections[2:6] or sections[:4]:
+        cards.append(f'<div class="card"><h3>{html.escape(name)}</h3>{_render_markdown_block(body)}</div>')
+    flow = (
+        f'<div class="diagram">{html.escape(_diagram_from_graph(graph) if graph else "Architecture -> DAG -> Validation")}</div>'
+        + (_table(["节点", "模型", "技能", "Gate", "依赖"], _node_rows(graph)) if graph else "")
+    )
+    body = "\n".join([
+        hero,
+        _toc(),
+        _section("summary", "摘要", summary),
+        _section("architecture", "架构设计", '<div class="grid-2">' + "".join(cards) + "</div>"),
+        _section("flow", "流程 / DAG", flow),
+        _section("contracts", "设计正文", _render_markdown_block(design or plan)),
+        _section("stack", "技术栈 / 算子绑定", _table(["项", "次数", "类别"], _stack_rows(graph))),
+        _section("validation", "验证 / 风险", _render_markdown_block(plan)),
+    ])
+    try:
+        return _adapter_page(
+            profile="design",
+            sid=sid,
+            title=f"Design — {title}",
+            hero_title=f"Design / {title}",
+            lede="架构设计文档默认也由 html-anything 渲染家族输出，而不是单独维护第二套 HTML 系统。",
+            badges=[
+                str(status.get("priority") or "P0"),
+                str(status.get("lane_hint") or "strategy"),
+                "Design",
+                str(status.get("handoff_to") or "builder_main"),
+            ],
+            body=body,
+        )
+    except Exception:
+        return _legacy_html_page(f"Design — {title}", body)
 
 
 def render(args: argparse.Namespace) -> int:
@@ -413,13 +538,31 @@ def render(args: argparse.Namespace) -> int:
         print(f"invalid kind: {kind}", file=sys.stderr)
         return 2
     output = Path(args.output).expanduser() if args.output else SPRINTS_DIR / f"{sid}.{kind}.html"
-    html_text = _render_prd(sid) if kind == "prd" else _render_planning(sid)
+    if os.environ.get("SOLAR_USE_LEGACY_RENDERER", "").strip().lower() in {"1", "true", "yes", "on"}:
+        source_name = "prd.md" if kind == "prd" else "design.md" if kind == "design" else "plan.md"
+        html_text = _legacy_html_page(
+            f"{kind.title()} — {sid}",
+            _render_markdown_block(_read_text(SPRINTS_DIR / f"{sid}.{source_name}")),
+        )
+    else:
+        if kind == "prd":
+            html_text = _render_prd(sid)
+        elif kind == "planning":
+            html_text = _render_planning(sid)
+        else:
+            html_text = _render_design(sid)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(html_text, encoding="utf-8")
-    payload = {"ok": True, "sid": sid, "kind": kind, "path": str(output)}
+    payload = {
+        "ok": True,
+        "sid": sid,
+        "kind": kind,
+        "path": str(output),
+        "renderer": "html-anything" if 'x-html-anything-profile' in html_text else "legacy",
+    }
     if args.register:
         helper = HARNESS_DIR / "lib" / "html_artifact.py"
-        artifact_kind = "prd_html" if kind == "prd" else "planning_html"
+        artifact_kind = "prd_html" if kind == "prd" else "planning_html" if kind == "planning" else "design_html"
         cmd = [sys.executable, str(helper), "register", "--sid", sid, "--kind", artifact_kind, "--path", str(output)]
         proc = subprocess.run(cmd, capture_output=True, text=True)
         payload["registered"] = proc.returncode == 0

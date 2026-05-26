@@ -418,6 +418,7 @@ def _collect_artifacts(sid: str, sprints_dir: Path, redact: bool = True) -> dict
     status_f = _first(f"{sid}.status.json")
     prd_html = _first(f"{sid}.prd.html")
     planning_html = _first(f"{sid}.planning.html")
+    design_html = _first(f"{sid}.design.html")
     # Test evidence files
     test_files = list(sprints_dir.glob(f"{sid}.*test*.md")) + list(sprints_dir.glob(f"{sid}.*evidence*.md"))
 
@@ -428,6 +429,7 @@ def _collect_artifacts(sid: str, sprints_dir: Path, redact: bool = True) -> dict
         "design": design is not None,
         "plan": plan is not None,
         "planning_html": planning_html is not None,
+        "design_html": design_html is not None,
         "requirement_ir": requirement_ir is not None,
         "requirement_trace": requirement_trace is not None,
         "coverage_report": coverage_report is not None,
@@ -443,6 +445,7 @@ def _collect_artifacts(sid: str, sprints_dir: Path, redact: bool = True) -> dict
         "design": design,
         "plan": plan,
         "planning_html": planning_html,
+        "design_html": design_html,
         "requirement_ir": requirement_ir,
         "requirement_trace": requirement_trace,
         "coverage_report": coverage_report,
@@ -452,7 +455,7 @@ def _collect_artifacts(sid: str, sprints_dir: Path, redact: bool = True) -> dict
         "events": events,
     }
 
-    all_paths: list[Path] = [p for p in [prd, prd_html, contract, design, plan, planning_html, requirement_ir, requirement_trace, coverage_report, acceptance_verdict, handoff, eval_md, eval_json, events, status_f] if p]
+    all_paths: list[Path] = [p for p in [prd, prd_html, contract, design, design_html, plan, planning_html, requirement_ir, requirement_trace, coverage_report, acceptance_verdict, handoff, eval_md, eval_json, events, status_f] if p]
     all_paths.extend(test_files)
 
     # Read content
@@ -463,6 +466,7 @@ def _collect_artifacts(sid: str, sprints_dir: Path, redact: bool = True) -> dict
         "design":   _read_file(design, redact=redact) if design else "",
         "plan":     _read_file(plan, redact=redact) if plan else "",
         "planning_html": _read_html_artifact(planning_html, redact=redact),
+        "design_html": _read_html_artifact(design_html, redact=redact),
         "requirement_ir": _read_file(requirement_ir, redact=redact) if requirement_ir else "",
         "requirement_trace": _read_file(requirement_trace, redact=redact) if requirement_trace else "",
         "coverage_report": _read_file(coverage_report, redact=redact) if coverage_report else "",
@@ -530,6 +534,7 @@ source_files:
 	  prd_html: {str(sf.get('prd_html', False)).lower()}
 	  contract: {str(sf.get('contract', False)).lower()}
 	  design: {str(sf.get('design', False)).lower()}
+	  design_html: {str(sf.get('design_html', False)).lower()}
 	  plan: {str(sf.get('plan', False)).lower()}
 	  planning_html: {str(sf.get('planning_html', False)).lower()}
 	  requirement_ir: {str(sf.get('requirement_ir', False)).lower()}
@@ -596,6 +601,9 @@ source_files:
                 else "",
                 f"### Planning HTML\n\nSource: `{sp.get('planning_html').name}`\n\n{ct.get('planning_html', '')}"
                 if ct.get("planning_html") and isinstance(sp.get("planning_html"), Path)
+                else "",
+                f"### Design HTML\n\nSource: `{sp.get('design_html').name}`\n\n{ct.get('design_html', '')}"
+                if ct.get("design_html") and isinstance(sp.get("design_html"), Path)
                 else "",
             ],
         )

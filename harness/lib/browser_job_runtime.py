@@ -9,6 +9,11 @@ import datetime
 import json
 import os
 import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import urllib.parse
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -19,6 +24,8 @@ HOME = Path.home()
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
 BROWSER_JOBS_DIR = HARNESS_DIR / "run" / "browser-jobs"
 OPERATOR_RESULTS_DIR = HARNESS_DIR / "run" / "operator-results"
+BROWSER_USE_ROOT = HOME / ".claude" / "mcp-servers" / "browser-use"
+BROWSER_USE_PYTHON = BROWSER_USE_ROOT / ".venv" / "bin" / "python"
 
 # Regex patterns for scrubbing sensitive information
 _SECRET_PATTERNS = [
@@ -159,6 +166,275 @@ def _ensure_jobs_dir() -> None:
     BROWSER_JOBS_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _job_dir(job_id: str) -> Path:
+    return BROWSER_JOBS_DIR / job_id
+
+
+def _state_file(job_id: str) -> Path:
+    return _job_dir(job_id) / "state.json"
+
+
+def _load_state(job_id: str) -> Dict[str, Any]:
+    state_file = _state_file(job_id)
+    if not state_file.exists():
+        raise ValueError(f"Job {job_id} not found")
+    return json.loads(state_file.read_text(encoding="utf-8"))
+
+
+def _write_state(job_id: str, state_data: Dict[str, Any]) -> None:
+    state_data["logs"] = scrub_secrets(str(state_data.get("logs") or ""))
+    for artifact in state_data.get("artifacts", []):
+        if "content" in artifact and isinstance(artifact["content"], str):
+            artifact["content"] = scrub_secrets(artifact["content"])
+        if "path" in artifact and artifact["path"]:
+            artifact["path"] = scrub_secrets(str(artifact["path"]))
+    _state_file(job_id).write_text(json.dumps(state_data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _resolve_target_url(envelope: Dict[str, Any]) -> Optional[str]:
+    for key in ("url", "target_url", "start_url"):
+        value = str(envelope.get(key) or "").strip()
+        if value:
+            return value
+    return None
+
+
+def _resolve_allowed_domains(url: str, envelope: Dict[str, Any]) -> List[str]:
+    allowed = envelope.get("allowed_domains")
+    if isinstance(allowed, list) and allowed:
+        return [str(item).strip() for item in allowed if str(item).strip()]
+    parsed = urllib.parse.urlparse(url)
+    return [parsed.netloc] if parsed.netloc else []
+
+
+def _artifact_from_path(path: Path, artifact_type: str) -> Dict[str, Any]:
+    return {"name": path.name, "type": artifact_type, "path": str(path)}
+
+
+def _looks_like_login_wall(text: str) -> bool:
+    sample = (text or "").lower()
+    cues = [
+        "log in",
+        "sign in",
+        "login",
+        "sign up",
+        "continue with google",
+        "continue with apple",
+        "enter your password",
+        "two-factor",
+        "2fa",
+        "captcha",
+        "verify you are human",
+        "登录",
+        "注册",
+        "开始使用",
+        "使用 google 账户继续",
+        "使用 apple 账户继续",
+    ]
+    return any(cue in sample for cue in cues)
+
+
+def _run_real_browser_probe(job_id: str, envelope: Dict[str, Any], timeout: int) -> Dict[str, Any]:
+    target_url = _resolve_target_url(envelope)
+    if not target_url:
+        return {"ok": False, "error": "missing target url", "error_type": "configuration"}
+    if not BROWSER_USE_PYTHON.exists():
+        return {"ok": False, "error": f"browser-use python missing: {BROWSER_USE_PYTHON}", "error_type": "dependency"}
+
+    job_dir = _job_dir(job_id)
+    artifact_dir = job_dir / "daemon-artifacts"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+
+    payload = {
+        "url": target_url,
+        "allowed_domains": _resolve_allowed_domains(target_url, envelope),
+        "auth_expected": bool(envelope.get("auth_expected", False)),
+        "headless": bool(envelope.get("headless", True)),
+        "artifact_dir": str(artifact_dir),
+        "wait_ms": int(envelope.get("page_wait_ms", 1500) or 1500),
+        "user_data_dir": str(envelope.get("user_data_dir") or ""),
+        "profile_directory": str(envelope.get("profile_directory") or "Default"),
+    }
+
+    payload_json = json.dumps(payload, ensure_ascii=False)
+    script = f"""
+import asyncio, base64, json, re, sys
+from pathlib import Path
+from browser_use.browser.session import BrowserSession
+from browser_use.browser.profile import BrowserProfile
+from bs4 import BeautifulSoup
+
+payload = json.loads({payload_json!r})
+artifact_dir = Path(payload["artifact_dir"])
+artifact_dir.mkdir(parents=True, exist_ok=True)
+
+def clean_text(raw_html: str) -> str:
+    soup = BeautifulSoup(raw_html or "", "html.parser")
+    for tag in soup(["script", "style", "nav", "footer", "header", "noscript"]):
+        tag.decompose()
+    text = soup.get_text(separator="\\n", strip=True)
+    text = re.sub(r"\\n\\s*\\n+", "\\n\\n", text)
+    return text[:50000]
+
+def looks_like_login_wall(text: str) -> bool:
+    lowered = (text or "").lower()
+    cues = [
+        "log in",
+        "sign in",
+        "login",
+        "sign up",
+        "continue with google",
+        "continue with apple",
+        "enter your password",
+        "two-factor",
+        "2fa",
+        "captcha",
+        "verify you are human",
+        "登录",
+        "注册",
+        "开始使用",
+        "使用 google 账户继续",
+        "使用 apple 账户继续",
+    ]
+    return any(cue in lowered for cue in cues)
+
+async def main() -> None:
+    profile = BrowserProfile(
+        headless=payload["headless"],
+        allowed_domains=payload["allowed_domains"] or None,
+        user_data_dir=payload["user_data_dir"] or None,
+        profile_directory=payload["profile_directory"],
+    )
+    browser = BrowserSession(browser_profile=profile)
+    await browser.start()
+    try:
+        page = await browser.new_page()
+        await page.goto(payload["url"])
+        await asyncio.sleep(max(payload["wait_ms"], 0) / 1000.0)
+        title = await page.evaluate("() => document.title")
+        final_url = await page.evaluate("() => location.href")
+        html = await page.evaluate("() => document.documentElement.outerHTML")
+        text = clean_text(html)
+        screenshot_b64 = await page.screenshot(format="png")
+        screenshot_path = artifact_dir / "screenshot.png"
+        screenshot_path.write_bytes(base64.b64decode(screenshot_b64))
+        html_path = artifact_dir / "page.html"
+        html_path.write_text(html, encoding="utf-8")
+        text_path = artifact_dir / "page.txt"
+        text_path.write_text(text, encoding="utf-8")
+        login_wall = payload["auth_expected"] and looks_like_login_wall(text)
+        result = {{
+            "ok": True,
+            "state": "reauth_required" if login_wall else "done",
+            "login_state": "reauth_required" if login_wall else "healthy",
+            "title": title,
+            "final_url": final_url,
+            "text_excerpt": text[:1000],
+            "artifacts": {{
+                "screenshot_path": str(screenshot_path),
+                "html_path": str(html_path),
+                "text_path": str(text_path),
+            }},
+        }}
+        print(json.dumps(result, ensure_ascii=False))
+    except Exception as exc:
+        print(json.dumps({{"ok": False, "error": str(exc), "error_type": "runtime"}}, ensure_ascii=False))
+        raise
+    finally:
+        await browser.stop()
+
+asyncio.run(main())
+"""
+
+    with tempfile.NamedTemporaryFile("w", suffix="-browser-job.py", delete=False, encoding="utf-8") as handle:
+        handle.write(script)
+        script_path = handle.name
+    try:
+        result = subprocess.run(
+            [str(BROWSER_USE_PYTHON), script_path],
+            cwd=str(BROWSER_USE_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": f"browser job timeout after {timeout}s", "error_type": "timeout"}
+    finally:
+        try:
+            os.unlink(script_path)
+        except OSError:
+            pass
+
+    stdout_lines = [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
+    stderr_tail = " | ".join((result.stderr or "").strip().splitlines()[-5:])
+    payload_obj: Dict[str, Any] = {}
+    if stdout_lines:
+        try:
+            payload_obj = json.loads(stdout_lines[-1])
+        except json.JSONDecodeError:
+            payload_obj = {
+                "ok": False,
+                "error": f"non-json stdout tail: {stdout_lines[-1][:300]}",
+                "error_type": "protocol",
+            }
+    if result.returncode != 0 and payload_obj.get("ok") is not True:
+        if stderr_tail:
+            payload_obj["stderr_tail"] = stderr_tail
+    return payload_obj
+
+
+def execute_browser_job(job_id: str, timeout: Optional[int] = None) -> Dict[str, Any]:
+    """Execute a submitted browser job via the local browser-use runtime."""
+    state_data = _load_state(job_id)
+    if state_data.get("state") in {"done", "failed", "timeout"}:
+        return state_data
+    if state_data.get("mock_sequence"):
+        return state_data
+
+    envelope = state_data.get("envelope") or {}
+    state_data["state"] = "running"
+    state_data["updated_at"] = _now()
+    state_data["logs"] += f"[{_now()}] Browser execution daemon started.\n"
+    _write_state(job_id, state_data)
+
+    timeout = int(timeout or envelope.get("timeout_sec") or 90)
+    probe = _run_real_browser_probe(job_id, envelope, timeout)
+
+    state_data = _load_state(job_id)
+    if probe.get("ok"):
+        login_state = str(probe.get("login_state") or "healthy")
+        state_data["state"] = "reauth_required" if login_state == "reauth_required" else str(probe.get("state") or "done")
+        state_data["logs"] += f"[{_now()}] Real browser probe completed for {probe.get('final_url') or _resolve_target_url(envelope) or 'unknown-url'}.\n"
+        metadata_dir = _job_dir(job_id) / "daemon-artifacts"
+        metadata_dir.mkdir(parents=True, exist_ok=True)
+        artifacts = []
+        paths = probe.get("artifacts") or {}
+        for key, artifact_type in (("screenshot_path", "screenshot"), ("html_path", "html"), ("text_path", "text")):
+            raw = paths.get(key)
+            if raw:
+                artifacts.append(_artifact_from_path(Path(raw), artifact_type))
+        metadata = {
+            "title": probe.get("title") or "",
+            "final_url": probe.get("final_url") or _resolve_target_url(envelope) or "",
+            "login_state": login_state,
+            "text_excerpt": probe.get("text_excerpt") or "",
+        }
+        metadata_path = metadata_dir / "page.json"
+        metadata_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8")
+        artifacts.append(_artifact_from_path(metadata_path, "metadata"))
+        state_data["artifacts"] = artifacts
+        state_data["login_state"] = login_state
+    else:
+        err_type = str(probe.get("error_type") or "")
+        state_data["state"] = "timeout" if err_type == "timeout" else "failed"
+        state_data["logs"] += f"[{_now()}] Browser execution failed: {probe.get('error') or 'unknown error'}\n"
+        if probe.get("stderr_tail"):
+            state_data["logs"] += f"stderr: {probe['stderr_tail']}\n"
+    state_data["updated_at"] = _now()
+    _write_state(job_id, state_data)
+    return state_data
+
+
 def submit_browser_job(
     actor_id: str,
     envelope: Dict[str, Any],
@@ -192,6 +468,7 @@ def submit_browser_job(
         "actor_id": actor_id,
         "state": initial_state,
         "envelope": scrubbed_envelope,
+        "execution_mode": "mock" if mock_sequence else "real_browser",
         "logs": initial_logs,
         "artifacts": [],
         "mock_sequence": mock_sequence,
@@ -207,12 +484,7 @@ def submit_browser_job(
 
 def poll_browser_job(job_id: str) -> Dict[str, Any]:
     """Polls the state of a browser job, simulating state transitions if mock_sequence is defined."""
-    job_dir = BROWSER_JOBS_DIR / job_id
-    state_file = job_dir / "state.json"
-    if not state_file.exists():
-        raise ValueError(f"Job {job_id} not found")
-
-    state_data = json.loads(state_file.read_text(encoding="utf-8"))
+    state_data = _load_state(job_id)
 
     # State transition logic for mock sequence
     mock_sequence = state_data.get("mock_sequence")
@@ -240,6 +512,8 @@ def poll_browser_job(job_id: str) -> Dict[str, Any]:
                     ]
 
                 state_data["updated_at"] = _now()
+    elif state_data.get("execution_mode") == "real_browser" and state_data.get("state") not in {"reauth_required", "done", "failed", "timeout"}:
+        state_data = execute_browser_job(job_id)
 
     # Scrub logs & artifacts before saving/returning
     state_data["logs"] = scrub_secrets(state_data["logs"])
@@ -253,7 +527,7 @@ def poll_browser_job(job_id: str) -> Dict[str, Any]:
     else:
         state_data["projected_state"] = state_data.get("state")
 
-    state_file.write_text(json.dumps(state_data, indent=2, ensure_ascii=False), encoding="utf-8")
+    _write_state(job_id, state_data)
     return state_data
 
 
@@ -292,7 +566,18 @@ def collect_browser_job(job_id: str, output_dir: Optional[Path] = None) -> Dict[
         content = artifact.get("content", "")
         if name:
             art_file = output_dir / name
-            if isinstance(content, str):
+            artifact_path = artifact.get("path")
+            artifact_type = str(artifact.get("type") or "")
+            if artifact_path:
+                src = Path(artifact_path)
+                if src.exists():
+                    if artifact_type in {"screenshot", "binary"} or src.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
+                        shutil.copyfile(src, art_file)
+                    else:
+                        art_file.write_text(scrub_secrets(src.read_text(encoding="utf-8", errors="replace")), encoding="utf-8")
+                else:
+                    art_file.write_text("", encoding="utf-8")
+            elif isinstance(content, str):
                 art_file.write_text(scrub_secrets(content), encoding="utf-8")
             else:
                 art_file.write_bytes(content)
