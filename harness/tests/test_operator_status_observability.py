@@ -452,7 +452,7 @@ class TestMonitorBridgeSnapshot:
             status_dir=tmp_harness["status_dir"],
             lease_dir=tmp_harness["lease_dir"],
         )
-        assert snapshot["schema"] == "solar.monitor_bridge.operator_fleet.v2"
+        assert snapshot["schema"] == "solar.monitor_bridge.operator_fleet.v1"
 
     def test_snapshot_top_level_fields(self, tmp_harness: dict[str, Path]) -> None:
         mb = self._load_mb()

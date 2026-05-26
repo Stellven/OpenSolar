@@ -27,53 +27,6 @@ FACTOR_WEIGHTS = {
 RECENT_FAILURE_PENALTY = 0.15
 SAME_PROVIDER_VERIFIER_PENALTY = 0.20
 STALE_CONTEXT_PENALTY = 0.10
-ASYNC_BUSY_PENALTY = 0.10
-REAUTH_PENALTY = 1.00
-
-
-def classify_actor_type(actor_id: str, cfg: Dict[str, Any]) -> str:
-    """Classify actors into precedence buckets for fallback ordering."""
-    actor = str(actor_id or "").lower()
-    model = str(cfg.get("model") or "").lower()
-    capability_profile = cfg.get("capability_profile") or {}
-    if "chatgpt" in actor or any(token in model for token in ("gpt", "o1", "o3", "o4")):
-        return "chatgpt"
-    if "gemini" in actor or "gemini" in model:
-        return "gemini"
-    if "browser" in actor or capability_profile.get("browser_use", 0):
-        return "browser"
-    if "thunder" in actor or any(token in model for token in ("qwen", "thunder", "local")):
-        return "local"
-    return "api"
-
-
-def _fallback_precedence(actor_id: str, cfg: Dict[str, Any]) -> tuple[int, str]:
-    actor_type = classify_actor_type(actor_id, cfg)
-    model = str(cfg.get("model") or "").lower()
-    if "gemini-deep-research" in model:
-        return (0, actor_id)
-    order = {
-        "chatgpt": 1,
-        "gemini": 2,
-        "browser": 3,
-        "api": 4,
-        "local": 5,
-    }
-    return (order.get(actor_type, 9), actor_id)
-
-
-def _cost_fit(cfg: Dict[str, Any]) -> float:
-    tier = str((cfg.get("cost_profile") or {}).get("cost_tier") or "medium").lower()
-    return {"low": 0.9, "medium": 0.6, "high": 0.2}.get(tier, 0.5)
-
-
-def _risk_fit(cfg: Dict[str, Any]) -> float:
-    risk = cfg.get("risk_profile") or {}
-    if str(risk.get("destructive_actions") or "").lower() == "allowed":
-        return 0.2
-    if str(risk.get("allowed_network") or "").lower() == "denied":
-        return 0.9
-    return 0.7
 
 
 class TaskEvidence:
@@ -201,32 +154,20 @@ def rank_actors(
     task_fit_fn=None,
     evidence: Optional[TaskEvidence] = None,
     writer_actor_id: Optional[str] = None,
-    actors_cfg: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> List[OperatorScoreResult]:
     """Rank candidates by score. Returns sorted (best first) results."""
     results = []
     ev = evidence or TaskEvidence()
-    actors_cfg = actors_cfg or {}
     for i, actor_id in enumerate(candidates):
-        cfg = actors_cfg.get(actor_id, {})
         tf = task_fit_fn(actor_id) if task_fit_fn else 0.5
         hs = ev.success_rate(actor_id=actor_id)
         spv = (writer_actor_id is not None and actor_id == writer_actor_id)
-        state = str(cfg.get("state") or cfg.get("login_state") or cfg.get("status") or "").lower()
         total, factors, penalties = compute_score(
             actor_id=actor_id,
             task_fit=tf,
             historical_success=hs,
             same_provider_verifier=spv,
-            cost_fit=_cost_fit(cfg),
-            risk_fit=_risk_fit(cfg),
         )
-        if state in {"running", "waiting_human"}:
-            penalties["AsyncBusyPenalty"] = ASYNC_BUSY_PENALTY
-            total -= ASYNC_BUSY_PENALTY
-        if state == "reauth_required":
-            penalties["ReauthPenalty"] = REAUTH_PENALTY
-            total -= REAUTH_PENALTY
         results.append(OperatorScoreResult(
             actor_id=actor_id,
             total_score=total,
@@ -236,7 +177,7 @@ def rank_actors(
             selected=False,
         ))
 
-    results.sort(key=lambda r: (-r.total_score, *_fallback_precedence(r.actor_id, actors_cfg.get(r.actor_id, {}))))
+    results.sort(key=lambda r: r.total_score, reverse=True)
     if results:
         results[0].selected = True
         for r in results[1:]:

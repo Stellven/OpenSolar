@@ -220,6 +220,40 @@ def test_assigned_pane_quota_detection_handles_wrapped_monthly_limit(monkeypatch
     assert gnd._assigned_pane_unavailable_reason("solar-harness-lab:0.3") == "rate_limit_or_api_error"
 
 
+def test_assigned_multi_task_shell_is_not_direct_worker(monkeypatch) -> None:
+    monkeypatch.setattr(gnd, "_pane_title", lambda pane: "MT builder | 状态:running | 能力:能力:N/A")
+    monkeypatch.setattr(gnd, "_pane_health", lambda pane: {})
+    monkeypatch.setattr(gnd, "_pane_current_command", lambda pane: "zsh")
+    monkeypatch.setattr(gnd, "_pane_tail", lambda pane, lines=80: "zsh% ")
+
+    assert (
+        gnd._assigned_pane_unavailable_reason("solar-harness-multi-task:0.0")
+        == "multi_task_shell_not_direct_worker"
+    )
+
+
+def test_worker_discovery_marks_multi_task_shell_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr(
+        gnd.subprocess,
+        "check_output",
+        lambda *a, **kw: b"solar-harness-multi-task:0.0\tBuilder Detached | \xe6\xa8\xa1\xe5\x9e\x8b:Sonnet\n",
+    )
+    monkeypatch.setattr(gnd, "read_lease", lambda pane: None)
+    monkeypatch.setattr(gnd, "_clear_stale_prompt_residue", lambda pane: False)
+    monkeypatch.setattr(gnd, "_pane_current_command", lambda pane: "zsh")
+    monkeypatch.setattr(gnd, "_pane_tail", lambda pane, lines=80: "zsh% ")
+    monkeypatch.setattr(gnd, "_pane_health", lambda pane: {})
+    monkeypatch.setattr(gnd, "_pane_unavailable_reason", lambda pane: "")
+    monkeypatch.setattr(gnd, "_pane_runtime_unavailable_reason", lambda pane, title="": "")
+    monkeypatch.setattr(gnd, "_pane_tui_busy", lambda pane: False)
+
+    workers = gnd._discover_workers(dry_run=False)
+
+    assert len(workers) == 1
+    assert workers[0]["busy"] is True
+    assert workers[0]["unavailable_reason"] == "multi_task_shell_not_direct_worker"
+
+
 def test_dispatch_queue_item_retries_when_assigned_pane_later_hits_quota(monkeypatch) -> None:
     marked: list[tuple[str, str, str, bool]] = []
 
@@ -311,13 +345,17 @@ def test_evaluator_discovery_finds_pool_candidates_by_role(monkeypatch) -> None:
     monkeypatch.setattr(gnd, "_pane_runtime_unavailable_reason", lambda pane, title="": "")
     monkeypatch.setattr(gnd, "_pane_current_command", lambda pane: "bash")
 
-    panes = [item["pane"] for item in gnd._discover_evaluators(dry_run=False)]
+    evaluators = gnd._discover_evaluators(dry_run=False)
+    panes = [item["pane"] for item in evaluators]
 
-    assert panes == [
+    assert set(panes) == {
         "solar-harness-test:0.3",
         "solar-harness-lab:0.3",
         "solar-harness-multi-task:7",
-    ]
+    }
+    multi_task = next(item for item in evaluators if item["pane"] == "solar-harness-multi-task:7")
+    assert multi_task["busy"] is True
+    assert multi_task["unavailable_reason"] == "multi_task_shell_not_direct_worker"
 
 
 def test_force_eval_retry_allows_failed_node_after_repair_artifact(monkeypatch, tmp_path) -> None:
