@@ -178,8 +178,11 @@
       "persona": "builder",
       "backend": "claude-cli",
       "model": "thunderomlx",
+      "allow_claude_local_proxy": true,
       "approval_mode": "default",
       "best_for": [
+        "implementation",
+        "code-edit",
         "local",
         "offline",
         "low-cost"
