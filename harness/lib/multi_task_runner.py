@@ -43,6 +43,24 @@ DEFAULT_QUOTA_BACKOFF = int(os.environ.get("SOLAR_MULTI_TASK_QUOTA_BACKOFF_SEC",
 GRAPH_SUMMARY_CACHE_TTL_SEC = int(os.environ.get("SOLAR_MULTI_TASK_GRAPH_SUMMARY_CACHE_TTL_SEC", "5") or "5")
 PROBE_CACHE_PATH = Path(os.environ.get("SOLAR_MULTI_TASK_PROBE_CACHE", RUN_DIR / "capability-probes.json"))
 
+# Normalized fallback ladders for observability surfaces such as
+# ``solar_monitor_bridge``. Keep these lightweight and model-agnostic enough
+# for health reporting; scheduling logic can still apply richer scoring.
+NORM_FALLBACK_LADDERS: dict[str, list[str]] = {
+    "CODE_IMPL": [
+        "mini-antigravity-gemini35-flash-high",
+        "mini-claude-sonnet-builder",
+    ],
+    "ARCH_DESIGN": [
+        "mini-claude-sonnet-builder",
+        "mini-antigravity-gemini35-flash-high",
+    ],
+    "REVIEW": [
+        "mini-claude-sonnet-builder",
+        "mini-antigravity-gemini35-flash-high",
+    ],
+}
+
 DEFAULT_PROFILE_CONFIG: dict[str, Any] = {
     "defaults": {"profile": "builder", "backend": "claude-cli", "max_workers": 2},
     "profiles": {

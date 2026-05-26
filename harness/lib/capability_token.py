@@ -22,6 +22,10 @@ class CapabilityToken:
         actor_id: str,
         allow_paths: Optional[List[str]] = None,
         deny_paths: Optional[List[str]] = None,
+        secrets: Optional[Dict[str, Any]] = None,
+        file_scope: Optional[Dict[str, Any]] = None,
+        shell_scope: Optional[Dict[str, Any]] = None,
+        network_scope: Optional[Dict[str, Any]] = None,
     ):
         self.token_id = token_id
         self.scopes = set(scopes)
@@ -29,6 +33,10 @@ class CapabilityToken:
         self.actor_id = actor_id
         self.allow_paths = allow_paths or []
         self.deny_paths = deny_paths or []
+        self.secrets = secrets or {}
+        self.file_scope = file_scope or {}
+        self.shell_scope = shell_scope or {}
+        self.network_scope = network_scope or {}
 
     def is_expired(self) -> bool:
         now = datetime.datetime.now(datetime.timezone.utc)
@@ -64,6 +72,10 @@ class CapabilityToken:
             "actor_id": self.actor_id,
             "allow_paths": self.allow_paths,
             "deny_paths": self.deny_paths,
+            "secrets": self.secrets,
+            "file_scope": self.file_scope,
+            "shell_scope": self.shell_scope,
+            "network_scope": self.network_scope,
         }
 
     @classmethod
@@ -75,4 +87,8 @@ class CapabilityToken:
             actor_id=d.get("actor_id", ""),
             allow_paths=d.get("allow_paths"),
             deny_paths=d.get("deny_paths"),
+            secrets=d.get("secrets"),
+            file_scope=d.get("file_scope"),
+            shell_scope=d.get("shell_scope"),
+            network_scope=d.get("network_scope"),
         )
