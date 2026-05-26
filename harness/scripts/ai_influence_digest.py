@@ -38,7 +38,6 @@ except Exception as exc:  # pragma: no cover
 
 
 UTC = dt.timezone.utc
-HARNESS_DIR = Path(__file__).resolve().parents[1]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -166,6 +165,7 @@ def assert_mac_mini(config: dict[str, Any], force: bool = False) -> None:
 
 
 def load_seen(state_dir: Path, keep_days: int) -> dict[str, str]:
+    state_dir.mkdir(parents=True, exist_ok=True)
     path = state_dir / "seen.json"
     if not path.exists():
         return {}
@@ -189,56 +189,14 @@ def save_seen(state_dir: Path, seen: dict[str, str]) -> None:
     tmp.replace(state_dir / "seen.json")
 
 
-def _probe_writable_dir(path: Path) -> tuple[bool, str]:
-    try:
-        path.mkdir(parents=True, exist_ok=True)
-        probe = path / ".write_probe.tmp"
-        probe.write_text("ok\n", encoding="utf-8")
-        probe.unlink(missing_ok=True)
-        return True, ""
-    except Exception as exc:
-        return False, f"{type(exc).__name__}: {exc}"
-
-
-def _merge_seen(*dicts: dict[str, str]) -> dict[str, str]:
-    merged: dict[str, str] = {}
-    for d in dicts:
-        for key, ts in (d or {}).items():
-            prev = merged.get(key, "")
-            merged[key] = ts if ts > prev else prev
-    return merged
-
-
-def resolve_state_write_dir(preferred: Path, digest_name: str) -> tuple[Path, list[str]]:
-    notes: list[str] = []
-    ok, reason = _probe_writable_dir(preferred)
-    if ok:
-        return preferred, notes
-    mirror = HARNESS_DIR / "_state_mirror" / digest_name
-    _probe_writable_dir(mirror)
-    notes.append(f"state_write_fallback: preferred_not_writable ({reason}) -> {mirror}")
-    return mirror, notes
-
-
-def resolve_raw_write_dir(preferred: Path, digest_name: str) -> tuple[Path, list[str]]:
-    notes: list[str] = []
-    ok, reason = _probe_writable_dir(preferred)
-    if ok:
-        return preferred, notes
-    mirror = HARNESS_DIR / "_raw_mirror" / digest_name
-    _probe_writable_dir(mirror)
-    notes.append(f"raw_write_fallback: preferred_not_writable ({reason}) -> {mirror}")
-    return mirror, notes
-
-
-def request_text(session: requests.Session, url: str, timeout: int, user_agent: str) -> tuple[str | None, str]:
+def request_text(session: requests.Session, url: str, timeout: int, user_agent: str) -> str | None:
     try:
         res = session.get(url, timeout=timeout, headers={"User-Agent": user_agent})
         if res.status_code >= 400:
-            return None, f"http_{res.status_code}"
-        return res.text, ""
-    except Exception as exc:
-        return None, f"{type(exc).__name__}: {exc}"
+            return None
+        return res.text
+    except Exception:
+        return None
 
 
 def xml_text(node: ET.Element, names: list[str]) -> str:
@@ -386,25 +344,15 @@ def analyze_item(
 CURRENT_CONFIG: dict[str, Any] = {}
 
 
-def collect_account(
-    session: requests.Session,
-    account: Account,
-    config: dict[str, Any],
-    fetched_at: str,
-    failures: list[str] | None = None,
-) -> list[Item]:
+def collect_account(session: requests.Session, account: Account, config: dict[str, Any], fetched_at: str) -> list[Item]:
     fetch_cfg = config.get("fetch", {})
     timeout = int(fetch_cfg.get("timeout_seconds", 12))
     user_agent = fetch_cfg.get("user_agent", "Solar-AI-Influence-Digest/1.0")
     items: list[Item] = []
-    failure_budget = 3
     for tmpl in fetch_cfg.get("rss_templates", []):
         url = str(tmpl).format(handle=urllib.parse.quote(account.handle))
-        text, err = request_text(session, url, timeout, user_agent)
+        text = request_text(session, url, timeout, user_agent)
         if not text:
-            if failures is not None and err and failure_budget > 0:
-                failures.append(f"{account.handle}: rss_fetch_failed {url} ({err})")
-                failure_budget -= 1
             continue
         parsed = parse_rss(account.handle, account.category, account.tier, text, url, fetched_at)
         if parsed:
@@ -413,7 +361,7 @@ def collect_account(
     if fetch_cfg.get("duckduckgo_enabled", True):
         query = f"site:x.com/{account.handle} OR site:twitter.com/{account.handle} AI OR model OR chip OR research"
         url = "https://duckduckgo.com/html/?" + urllib.parse.urlencode({"q": query})
-        text, err = request_text(session, url, timeout, user_agent)
+        text = request_text(session, url, timeout, user_agent)
         if text:
             items.extend(
                 parse_duckduckgo(
@@ -426,8 +374,6 @@ def collect_account(
                     int(fetch_cfg.get("duckduckgo_limit_per_account", 2)),
                 )
             )
-        elif failures is not None and err and failure_budget > 0:
-            failures.append(f"{account.handle}: ddg_fetch_failed {url} ({err})")
     # Deduplicate within account.
     dedup: dict[str, Item] = {}
     for item in items:
@@ -464,14 +410,10 @@ def write_markdown(
     accounts: list[Account],
     selected_accounts: list[Account],
     config: dict[str, Any],
-    failures: list[str] | None = None,
-    notes: list[str] | None = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     out_cfg = config.get("output", {})
-    preferred_raw_dir = Path(out_cfg.get("raw_dir", str(Path.home() / "Knowledge/_raw/ai-influence-daily-digest"))).expanduser()
-    raw_dir, raw_notes = resolve_raw_write_dir(preferred_raw_dir, "ai-influence-daily-digest")
-    notes = [*(notes or []), *raw_notes]
+    raw_dir = Path(out_cfg.get("raw_dir", str(Path.home() / "Knowledge/_raw/ai-influence-daily-digest"))).expanduser()
     run_id = now_utc().strftime("%Y%m%dT%H%M%SZ")
     run_dir = raw_dir / now_utc().strftime("%Y/%m/%d") / run_id
     items_dir = run_dir / "items"
@@ -506,19 +448,11 @@ def write_markdown(
         f"- High impact items: {high_count}",
         f"- Output directory: `{run_dir}`",
         "",
+        "## Classified Table",
+        "",
+        "| Category | Account | Tier | Impact | Signal | Summary | Source |",
+        "|---|---:|---|---|---|---|---|",
     ]
-    lines.extend(["## Failures / Gaps", ""])
-    if failures:
-        lines.append(f"- Collector failures (sample): {min(len(failures), 12)}/{len(failures)}")
-        for msg in failures[:12]:
-            lines.append(f"  - {msg}")
-    else:
-        lines.append("- N/A")
-    if notes:
-        lines.append(f"- Notes: {min(len(notes), 8)}/{len(notes)}")
-        for msg in notes[:8]:
-            lines.append(f"  - {msg}")
-    lines.extend(["", "## Classified Table", "", "| Category | Account | Tier | Impact | Signal | Summary | Source |", "|---|---:|---|---|---|---|---|"])
     for item in items:
         lines.append(
             "| {category} | @{handle} | {tier} | {impact} | {signal} | {summary} | [link]({url}) |".format(
@@ -618,11 +552,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.limit_accounts:
         selected_accounts = selected_accounts[: args.limit_accounts]
     out_cfg = config.get("output", {})
-    preferred_state_dir = Path(out_cfg.get("state_dir", "/Users/lisihao/.solar/harness/state/ai-influence-daily-digest")).expanduser()
-    mirror_state_dir = HARNESS_DIR / "_state_mirror" / "ai-influence-daily-digest"
-    keep_seen_days = int(out_cfg.get("keep_seen_days", 21))
-    seen = _merge_seen(load_seen(preferred_state_dir, keep_seen_days), load_seen(mirror_state_dir, keep_seen_days))
-    state_write_dir, state_notes = resolve_state_write_dir(preferred_state_dir, "ai-influence-daily-digest")
+    state_dir = Path(out_cfg.get("state_dir", "/Users/lisihao/.solar/harness/state/ai-influence-daily-digest")).expanduser()
+    seen = load_seen(state_dir, int(out_cfg.get("keep_seen_days", 21)))
     fetched_at = iso_z()
     all_items: list[Item] = []
     failures: list[str] = []
@@ -636,7 +567,7 @@ def main(argv: list[str] | None = None) -> int:
         sleep_s = float(config.get("fetch", {}).get("sleep_between_accounts_seconds", 0.2))
         for account in selected_accounts:
             try:
-                all_items.extend(collect_account(session, account, config, fetched_at, failures))
+                all_items.extend(collect_account(session, account, config, fetched_at))
             except Exception as exc:
                 failures.append(f"{account.handle}: {exc}")
             if sleep_s > 0:
@@ -649,30 +580,16 @@ def main(argv: list[str] | None = None) -> int:
         int(out_cfg.get("per_account_limit", 3)),
         int(out_cfg.get("max_items_per_run", 120)),
     )
-    result = write_markdown(selected, accounts, selected_accounts, config, failures=failures, notes=state_notes, dry_run=args.dry_run)
+    result = write_markdown(selected, accounts, selected_accounts, config, dry_run=args.dry_run)
     if not args.dry_run:
         for item in selected:
             seen[item.item_id] = fetched_at
-        save_seen(state_write_dir, seen)
-        log_path = state_write_dir / "runs.jsonl"
+        save_seen(state_dir, seen)
+        log_path = state_dir / "runs.jsonl"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with log_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps({"ts": fetched_at, **result, "failures": failures[:20]}, ensure_ascii=False) + "\n")
-    print(
-        json.dumps(
-            {
-                "ok": True,
-                **result,
-                "accounts_total": len(accounts),
-                "accounts_monitored": len(selected_accounts),
-                "failures": failures[:20],
-                "state_dir_preferred": str(preferred_state_dir),
-                "state_dir_write": str(state_write_dir),
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-    )
+    print(json.dumps({"ok": True, **result, "accounts_total": len(accounts), "accounts_monitored": len(selected_accounts), "failures": failures[:20]}, ensure_ascii=False, indent=2))
     return 0
 
 

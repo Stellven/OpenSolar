@@ -1911,15 +1911,21 @@ dispatch_to_pane() {
     # pane is already executing Read/Bash calls.  Use a wider window and accept
     # either the dispatch basename, sprint id, or generic dispatch.md reference.
     verify_output=$(tmux capture-pane -t "$pane" -p 2>/dev/null | tail -120)
-    local has_keyword=0 has_processing=0
+    local has_keyword=0 has_processing=0 has_runtime_blocker=0
     printf '%s\n' "$verify_output" | grep -qF "$dispatch_keyword" && has_keyword=1
     (( has_keyword == 0 )) && printf '%s\n' "$verify_output" | grep -qF "$sid" && has_keyword=1
     (( has_keyword == 0 )) && printf '%s\n' "$verify_output" | grep -qF "dispatch.md" && has_keyword=1
+    # Quota/rate-limit errors also render with the generic "⎿" marker.  Do not
+    # treat those as successful dispatch evidence, otherwise the pane assignment
+    # is persisted while the worker never actually accepts the task.
+    printf '%s\n' "$verify_output" | grep -qiE "You've hit your limit|hit your limit|rate[- ]limit|usage limit|/upgrade to increase your usage limit|resets .*\\(America/Toronto\\)" && has_runtime_blocker=1
     # Claude 真在处理的特征。Claude Code 2.x frequently uses
     # Ideating/Musing/Orbiting/Reticulating before a tool call; treating those
     # as idle causes false dispatch failures while the pane is actually working.
     printf '%s\n' "$verify_output" | grep -qE 'Crafting|Cogitating|Wandering|Sock-hopping|Crunched|Puzzling|Gusting|Ideating|Musing|Orbiting|Reticulating|Read\(|Bash\(|Edit\(|Write\(|按 dispatch|合约、PRD 读毕|What should Claude do|⎿|✻|✶|✳|✢' && has_processing=1
-    if (( has_keyword && has_processing )); then
+    if (( has_runtime_blocker )); then
+      log "${Y}[dispatch] runtime limit/blocker detected; not assigning pane=${pane} sid=${sid} try=$((tries + 1))/${max_tries}${N}"
+    elif (( has_keyword && has_processing )); then
       PANE_CURRENT_SPRINT[$pane]="$sid"
       PANE_ASSIGN_TS[$pane]=$(date +%s)
       save_pane_assignments

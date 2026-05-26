@@ -58,7 +58,7 @@ def main() -> None:
             },
         }
         conn = mod.ensure_db(base / "state" / "github.sqlite")
-        mod.save_snapshots(conn, rows, config, mod.iso_z())
+        mod.save_snapshots(conn, rows, config, "2026-05-23T00:00:00Z")
         analysis = mod.analyze(config)
         assert analysis["windows"]["daily"]
         assert analysis["windows"]["daily"][0]["category"] == "agent"

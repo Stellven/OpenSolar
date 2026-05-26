@@ -41,6 +41,8 @@ def conn():
     
     connection = sqlite3.connect(TEST_DB_DST)
     connection.row_factory = sqlite3.Row
+    connection.execute("DELETE FROM github_star_snapshots WHERE full_name = ?", (TEST_REPO,))
+    connection.execute("DELETE FROM github_repos WHERE full_name = ?", (TEST_REPO,))
     
     # Setup test repo metadata
     connection.execute(

@@ -60,7 +60,6 @@ except Exception as exc:  # pragma: no cover
 
 
 UTC = dt.timezone.utc
-HARNESS_DIR = Path(__file__).resolve().parents[1]
 
 
 @dataclasses.dataclass
@@ -175,6 +174,7 @@ def assert_mac_mini(config: dict[str, Any], force: bool = False) -> None:
 
 
 def load_seen(state_dir: Path, keep_days: int) -> dict[str, str]:
+    state_dir.mkdir(parents=True, exist_ok=True)
     path = state_dir / "seen.json"
     if not path.exists():
         return {}
@@ -196,48 +196,6 @@ def save_seen(state_dir: Path, seen: dict[str, str]) -> None:
     tmp = state_dir / "seen.json.tmp"
     tmp.write_text(json.dumps(seen, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     tmp.replace(state_dir / "seen.json")
-
-
-def _probe_writable_dir(path: Path) -> tuple[bool, str]:
-    try:
-        path.mkdir(parents=True, exist_ok=True)
-        probe = path / ".write_probe.tmp"
-        probe.write_text("ok\n", encoding="utf-8")
-        probe.unlink(missing_ok=True)
-        return True, ""
-    except Exception as exc:
-        return False, f"{type(exc).__name__}: {exc}"
-
-
-def _merge_seen(*dicts: dict[str, str]) -> dict[str, str]:
-    merged: dict[str, str] = {}
-    for d in dicts:
-        for key, ts in (d or {}).items():
-            prev = merged.get(key, "")
-            merged[key] = ts if ts > prev else prev
-    return merged
-
-
-def resolve_state_write_dir(preferred: Path, digest_name: str) -> tuple[Path, list[str]]:
-    notes: list[str] = []
-    ok, reason = _probe_writable_dir(preferred)
-    if ok:
-        return preferred, notes
-    mirror = HARNESS_DIR / "_state_mirror" / digest_name
-    _probe_writable_dir(mirror)
-    notes.append(f"state_write_fallback: preferred_not_writable ({reason}) -> {mirror}")
-    return mirror, notes
-
-
-def resolve_raw_write_dir(preferred: Path, digest_name: str) -> tuple[Path, list[str]]:
-    notes: list[str] = []
-    ok, reason = _probe_writable_dir(preferred)
-    if ok:
-        return preferred, notes
-    mirror = HARNESS_DIR / "_raw_mirror" / digest_name
-    _probe_writable_dir(mirror)
-    notes.append(f"raw_write_fallback: preferred_not_writable ({reason}) -> {mirror}")
-    return mirror, notes
 
 
 def wiki_dispatch_dir_for_raw(raw_path: Path, config: dict[str, Any]) -> Path | None:
@@ -300,14 +258,14 @@ project: {project}
     return str(path)
 
 
-def request_text(session: requests.Session, url: str, timeout: int, user_agent: str) -> tuple[str | None, str]:
+def request_text(session: requests.Session, url: str, timeout: int, user_agent: str) -> str | None:
     try:
         res = session.get(url, timeout=timeout, headers={"User-Agent": user_agent})
         if res.status_code >= 400:
-            return None, f"http_{res.status_code}"
-        return res.text, ""
-    except Exception as exc:
-        return None, f"{type(exc).__name__}: {exc}"
+            return None
+        return res.text
+    except Exception:
+        return None
 
 
 def xml_text(node: ET.Element, names: list[str]) -> str:
@@ -343,8 +301,7 @@ def resolve_channel_id(session: requests.Session, value: str, timeout: int, user
         url = "https://www.youtube.com/" + raw.lstrip("/")
     else:
         url = f"https://www.youtube.com/@{raw}"
-    page, _ = request_text(session, url, timeout, user_agent)
-    page = page or ""
+    page = request_text(session, url, timeout, user_agent) or ""
     for pattern in (
         r'"channelId"\s*:\s*"(UC[0-9A-Za-z_-]{20,})"',
         r'<meta itemprop="channelId" content="(UC[0-9A-Za-z_-]{20,})"',
@@ -507,16 +464,13 @@ def fetch_transcript(
     user_agent: str,
     fixture_transcript: str = "",
     fixture_watch: str = "",
-    ) -> tuple[str, str, str]:
+) -> tuple[str, str, str]:
     if fixture_transcript:
         text = Path(fixture_transcript).read_text(encoding="utf-8")
         transcript = parse_transcript_payload(text)
         return transcript, "ok" if transcript else "empty", f"fixture:{fixture_transcript}"
     watch_url = f"https://www.youtube.com/watch?v={video_id}"
-    if fixture_watch:
-        page = Path(fixture_watch).read_text(encoding="utf-8")
-    else:
-        page, _ = request_text(session, watch_url, timeout, user_agent)
+    page = Path(fixture_watch).read_text(encoding="utf-8") if fixture_watch else request_text(session, watch_url, timeout, user_agent)
     if not page:
         return "", "watch_page_unavailable", watch_url
     tracks = caption_tracks_from_watch_page(page)
@@ -531,7 +485,7 @@ def fetch_transcript(
     for track in sorted(tracks, key=rank):
         base = str(track.get("baseUrl"))
         transcript_url = base + ("&fmt=json3" if "fmt=" not in base else "")
-        payload, _ = request_text(session, transcript_url, timeout, user_agent)
+        payload = request_text(session, transcript_url, timeout, user_agent)
         if not payload:
             continue
         transcript = parse_transcript_payload(payload)
@@ -671,10 +625,8 @@ def build_video(meta: dict[str, str], transcript: str, status: str, source: str,
 
 def asr_config(config: dict[str, Any]) -> dict[str, Any]:
     out_cfg = config.get("output") or {}
-    preferred_state_dir = Path(out_cfg.get("state_dir", "/Users/lisihao/.solar/harness/state/youtube-influence-digest")).expanduser()
-    preferred_raw_dir = Path(out_cfg.get("raw_dir", str(Path.home() / "Knowledge/_raw/youtube-influence-digest"))).expanduser()
-    state_dir, _ = resolve_state_write_dir(preferred_state_dir, "youtube-influence-digest")
-    raw_dir, _ = resolve_raw_write_dir(preferred_raw_dir, "youtube-influence-digest")
+    state_dir = Path(out_cfg.get("state_dir", "/Users/lisihao/.solar/harness/state/youtube-influence-digest")).expanduser()
+    raw_dir = Path(out_cfg.get("raw_dir", str(Path.home() / "Knowledge/_raw/youtube-influence-digest"))).expanduser()
     cfg = dict(config.get("asr") or {})
     cfg.setdefault("enabled", True)
     cfg.setdefault("queue_dir", str(state_dir / "asr-queue"))
@@ -1149,18 +1101,12 @@ def collect_channel(
     config: dict[str, Any],
     fetched_at: str,
     fixture_feed: str = "",
-    failures: list[str] | None = None,
 ) -> list[dict[str, str]]:
     fetch_cfg = config.get("fetch", {})
     timeout = int(fetch_cfg.get("timeout_seconds", 15))
     user_agent = fetch_cfg.get("user_agent", "Solar-YouTube-Influence-Digest/1.0")
     feed_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={urllib.parse.quote(channel.channel_id)}"
-    if fixture_feed:
-        xml = Path(fixture_feed).read_text(encoding="utf-8")
-    else:
-        xml, err = request_text(session, feed_url, timeout, user_agent)
-        if not xml and failures is not None and err:
-            failures.append(f"{channel.name}: rss_fetch_failed {feed_url} ({err})")
+    xml = Path(fixture_feed).read_text(encoding="utf-8") if fixture_feed else request_text(session, feed_url, timeout, user_agent)
     if not xml:
         return []
     videos = parse_channel_feed(channel, xml, feed_url if not fixture_feed else f"fixture:{fixture_feed}", fetched_at)
@@ -1196,18 +1142,9 @@ def md_escape(value: str) -> str:
     return value.replace("|", "\\|").replace("\n", " ")
 
 
-def write_markdown(
-    videos: list[Video],
-    channels: list[Channel],
-    config: dict[str, Any],
-    failures: list[str] | None = None,
-    notes: list[str] | None = None,
-    dry_run: bool = False,
-) -> dict[str, Any]:
+def write_markdown(videos: list[Video], channels: list[Channel], config: dict[str, Any], dry_run: bool = False) -> dict[str, Any]:
     out_cfg = config.get("output", {})
-    preferred_raw_dir = Path(out_cfg.get("raw_dir", str(Path.home() / "Knowledge/_raw/youtube-influence-digest"))).expanduser()
-    raw_dir, raw_notes = resolve_raw_write_dir(preferred_raw_dir, "youtube-influence-digest")
-    notes = [*(notes or []), *raw_notes]
+    raw_dir = Path(out_cfg.get("raw_dir", str(Path.home() / "Knowledge/_raw/youtube-influence-digest"))).expanduser()
     current = now_utc()
     run_id = current.strftime("%Y%m%dT%H%M%SZ")
     run_dir = raw_dir / current.strftime("%Y/%m/%d") / run_id
@@ -1239,19 +1176,11 @@ def write_markdown(
         f"- ASR queued: {asr_queued}",
         f"- Output directory: `{run_dir}`",
         "",
+        "## Classified Table",
+        "",
+        "| Category | Channel | Impact | Signal | Transcript | Video | Source |",
+        "|---|---|---|---|---|---|---|",
     ]
-    lines.extend(["## Failures / Gaps", ""])
-    if failures:
-        lines.append(f"- Collector failures (sample): {min(len(failures), 12)}/{len(failures)}")
-        for msg in failures[:12]:
-            lines.append(f"  - {msg}")
-    else:
-        lines.append("- N/A")
-    if notes:
-        lines.append(f"- Notes: {min(len(notes), 8)}/{len(notes)}")
-        for msg in notes[:8]:
-            lines.append(f"  - {msg}")
-    lines.extend(["", "## Classified Table", "", "| Category | Channel | Impact | Signal | Transcript | Video | Source |", "|---|---|---|---|---|---|---|"])
     for video in videos:
         lines.append(
             "| {category} | {channel} | {impact} | {signal} | {status} | {title} | [link]({url}) |".format(
@@ -1362,18 +1291,9 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(run_asr_queue(config, limit=args.asr_limit, dry_run=args.dry_run), ensure_ascii=False, indent=2))
         return 0
 
-    out_cfg = dict(config.get("output") or {})
-    config["output"] = out_cfg
-    preferred_state_dir = Path(out_cfg.get("state_dir", "/Users/lisihao/.solar/harness/state/youtube-influence-digest")).expanduser()
-    mirror_state_dir = HARNESS_DIR / "_state_mirror" / "youtube-influence-digest"
-    keep_seen_days = int(out_cfg.get("keep_seen_days", 45))
-    seen = _merge_seen(load_seen(preferred_state_dir, keep_seen_days), load_seen(mirror_state_dir, keep_seen_days))
-    state_write_dir, state_notes = resolve_state_write_dir(preferred_state_dir, "youtube-influence-digest")
-    preferred_raw_dir = Path(out_cfg.get("raw_dir", str(Path.home() / "Knowledge/_raw/youtube-influence-digest"))).expanduser()
-    raw_write_dir, raw_notes = resolve_raw_write_dir(preferred_raw_dir, "youtube-influence-digest")
-    out_cfg["state_dir"] = str(state_write_dir)
-    out_cfg["raw_dir"] = str(raw_write_dir)
-    run_notes = [*state_notes, *raw_notes]
+    out_cfg = config.get("output", {})
+    state_dir = Path(out_cfg.get("state_dir", "/Users/lisihao/.solar/harness/state/youtube-influence-digest")).expanduser()
+    seen = load_seen(state_dir, int(out_cfg.get("keep_seen_days", 45)))
     fetched_at = iso_z()
     session = requests.Session()
     channels = flatten_channels(config, session=session)
@@ -1385,7 +1305,7 @@ def main(argv: list[str] | None = None) -> int:
     sleep_channel = float((config.get("fetch") or {}).get("sleep_between_channels_seconds", 0.4))
     for channel in channels:
         try:
-            all_meta.extend(collect_channel(session, channel, config, fetched_at, fixture_feed=args.fixture_feed, failures=failures))
+            all_meta.extend(collect_channel(session, channel, config, fetched_at, fixture_feed=args.fixture_feed))
         except Exception as exc:
             failures.append(f"{channel.name}: {exc}")
         if sleep_channel > 0 and not args.fixture_feed:
@@ -1423,30 +1343,16 @@ def main(argv: list[str] | None = None) -> int:
         if sleep_video > 0 and not args.fixture_transcript and not args.fixture_watch:
             time.sleep(sleep_video)
 
-    result = write_markdown(videos, channels, config, failures=failures, notes=run_notes, dry_run=args.dry_run)
+    result = write_markdown(videos, channels, config, dry_run=args.dry_run)
     if not args.dry_run:
         for video in videos:
             seen[video.video_id] = fetched_at
-        save_seen(state_write_dir, seen)
-        log_path = state_write_dir / "runs.jsonl"
+        save_seen(state_dir, seen)
+        log_path = state_dir / "runs.jsonl"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with log_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps({"ts": fetched_at, **result, "failures": failures[:20]}, ensure_ascii=False) + "\n")
-    print(
-        json.dumps(
-            {
-                "ok": True,
-                **result,
-                "channels_total": len(channels),
-                "failures": failures[:20],
-                "state_dir_preferred": str(preferred_state_dir),
-                "state_dir_write": str(state_write_dir),
-                "raw_dir_write": str(raw_write_dir),
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-    )
+    print(json.dumps({"ok": True, **result, "channels_total": len(channels), "failures": failures[:20]}, ensure_ascii=False, indent=2))
     return 0
 
 
