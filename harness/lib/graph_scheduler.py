@@ -712,6 +712,10 @@ def _worker_busy(worker: dict[str, Any]) -> bool:
     return bool(worker.get("busy")) or str(worker.get("status", "")).lower() in {"busy", "leased", "running"}
 
 
+def _worker_unavailable_reason(worker: dict[str, Any]) -> str:
+    return str(worker.get("unavailable_reason") or "").strip()
+
+
 def _worker_quota_exhausted(worker: dict[str, Any], preferred_model: str | None = None) -> bool:
     exhausted = worker.get("quota_exhausted", False)
     if isinstance(exhausted, bool):
@@ -934,6 +938,7 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
         candidates: list[tuple[float, int, int, str, dict[str, Any]]] = []
         blocked_by_capacity = False
         blocked_by_runtime = False
+        runtime_unavailable_reasons: set[str] = set()
         any_worker_seen = False
         missing_skill_union: set[str] = set()
         missing_cap_union: set[str] = set()
@@ -955,8 +960,10 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
                 continue
             if _model_requires_strict_match(preferred_model, strict_model) and not _model_match(worker, preferred_model):
                 continue
-            if str(worker.get("unavailable_reason") or "") == "worker_runtime_not_running":
+            unavailable_reason = _worker_unavailable_reason(worker)
+            if unavailable_reason:
                 blocked_by_runtime = True
+                runtime_unavailable_reasons.add(unavailable_reason)
                 continue
             if pane in used_panes:
                 blocked_by_capacity = True
@@ -972,7 +979,10 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
 
         if not candidates:
             if blocked_by_runtime:
-                reason = "worker_runtime_not_running"
+                if len(runtime_unavailable_reasons) == 1:
+                    reason = next(iter(runtime_unavailable_reasons))
+                else:
+                    reason = "worker_runtime_unavailable"
             elif blocked_by_capacity:
                 reason = "worker_capacity_exhausted"
             else:
@@ -981,6 +991,8 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
                 "required_skills": required_skills,
                 "required_capabilities": required_capabilities,
             }
+            if blocked_by_runtime:
+                details["unavailable_reasons"] = sorted(runtime_unavailable_reasons)
             if reason == "no_matching_worker":
                 details["any_worker_seen"] = any_worker_seen
                 details["missing_skills"] = sorted(missing_skill_union)
