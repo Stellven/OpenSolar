@@ -22,8 +22,8 @@ SID = os.environ.get("SID", GRAPH.name.replace(".task_graph.json", "") if GRAPH.
 HANDOFF = Path(os.environ.get("HANDOFF", SPRINTS_DIR / f"{SID}.{NODE_ID}-handoff.md"))
 TASK_DIR = Path(os.environ.get("TASK_DIR", HARNESS_DIR / "run" / "multi-task" / "manual-thunderomlx-knowledge"))
 BASE_URL = os.environ.get("THUNDEROMLX_BASE_URL", "http://127.0.0.1:8002").rstrip("/")
-PROXY_MODEL = os.environ.get("THUNDEROMLX_ANTHROPIC_MODEL", "claude-3-5-sonnet-latest")
 LOCAL_MODEL = os.environ.get("THUNDEROMLX_LOCAL_MODEL", "Qwen3.6-35b-a3b")
+PROXY_MODEL = os.environ.get("THUNDEROMLX_ANTHROPIC_MODEL", LOCAL_MODEL)
 API_KEY = os.environ.get("THUNDEROMLX_AUTH_TOKEN", "local-thunderomlx")
 MAX_SOURCE_CHARS = int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_MAX_SOURCE_CHARS", "42000") or "42000")
 MAX_TOKENS = int(os.environ.get("SOLAR_KNOWLEDGE_EXTRACT_MAX_TOKENS", "2200") or "2200")
@@ -115,12 +115,10 @@ def call_thunderomlx(prompt: str) -> dict[str, Any]:
     payload = {
         "model": PROXY_MODEL,
         "max_tokens": MAX_TOKENS,
-        "thinking": {"type": "enabled"},
-        "chat_template_kwargs": {"enable_thinking": True},
         "messages": [{"role": "user", "content": prompt}],
     }
     req = urllib.request.Request(
-        f"{BASE_URL}/v1/messages",
+        f"{BASE_URL}/v1/chat/completions",
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
         headers={"Content-Type": "application/json", "x-api-key": API_KEY},
         method="POST",
@@ -135,6 +133,16 @@ def call_thunderomlx(prompt: str) -> dict[str, Any]:
 
 def content_text(response: dict[str, Any]) -> str:
     parts: list[str] = []
+    for choice in response.get("choices") or []:
+        if not isinstance(choice, dict):
+            continue
+        message = choice.get("message") or {}
+        if isinstance(message, dict):
+            content = str(message.get("content") or "").strip()
+            reasoning = str(message.get("reasoning_content") or "").strip()
+            parts.append(content or reasoning)
+        if "text" in choice:
+            parts.append(str(choice.get("text") or ""))
     for item in response.get("content") or []:
         if isinstance(item, dict) and item.get("type") == "text":
             parts.append(str(item.get("text") or ""))

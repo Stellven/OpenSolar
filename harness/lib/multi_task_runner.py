@@ -1165,14 +1165,15 @@ def select_profile(node: dict[str, Any], profile_override: str = "", model_overr
                 fallback_profile["capability_fallback_from"] = profile_name
                 fallback_profile["capability_fallback_reason"] = str(capability.get("status") or "unavailable")
                 selected = fallback_profile
-    operator, fallback_reason = select_operator(node, selected)
-    if operator:
-        selected = apply_operator_to_profile(selected, operator, fallback_reason)
-    elif node.get("preferred_operator"):
-        selected["operator_id"] = str(node.get("preferred_operator") or "")
-        selected["operator_fallback_reason"] = fallback_reason or "preferred_operator_unavailable"
-    elif node.get("operator_selector"):
-        selected["operator_fallback_reason"] = fallback_reason or "operator_selector_no_match"
+    if not (requested_profile and node.get("quota_failure_reason")):
+        operator, fallback_reason = select_operator(node, selected)
+        if operator:
+            selected = apply_operator_to_profile(selected, operator, fallback_reason)
+        elif node.get("preferred_operator"):
+            selected["operator_id"] = str(node.get("preferred_operator") or "")
+            selected["operator_fallback_reason"] = fallback_reason or "preferred_operator_unavailable"
+        elif node.get("operator_selector"):
+            selected["operator_fallback_reason"] = fallback_reason or "operator_selector_no_match"
     return selected
 
 
@@ -1670,10 +1671,41 @@ def quota_guard(backoff_seconds: int) -> dict[str, Any]:
             except Exception:
                 continue
             if QUOTA_RE.search(tail):
+                if quota_hit_recovered_for_fallback(log):
+                    continue
                 hits.append({"task": log.parent.name, "log": str(log)})
     if hits:
         return {"ok": False, "reason": "recent_quota_or_rate_limit", "hits": hits[:5]}
     return {"ok": True, "reason": "no_recent_quota_hit"}
+
+
+def quota_hit_recovered_for_fallback(log: Path) -> bool:
+    """Do not let a recovered provider quota hit freeze unrelated fallback work."""
+    status = read_task_status(log.parent / "status.json")
+    if not status:
+        return False
+    graph_path = str(status.get("graph") or "").strip()
+    node_id = str(status.get("node_id") or "").strip()
+    failed_profile = str(status.get("profile") or "").strip()
+    if not graph_path or not node_id or not failed_profile:
+        return False
+    try:
+        graph = load_graph(Path(graph_path).expanduser())
+    except Exception:
+        return False
+    node = next((item for item in graph_nodes(graph) if str(item.get("id") or "") == node_id), None)
+    if not node:
+        return False
+    current_profile = str(node.get("preferred_profile") or node.get("profile") or "").strip()
+    current_status = str(node_status(graph, node_id) or node.get("status") or "").lower()
+    if current_status in {"passed", "done", "completed", "skipped"}:
+        return True
+    if not current_profile or current_profile == failed_profile:
+        return False
+    if current_status not in {"active", "pending", "ready"}:
+        return False
+    recorded_failure = str(node.get("quota_failure_task_id") or "").strip()
+    return not recorded_failure or recorded_failure == log.parent.name or bool(node.get("quota_failure_reason"))
 
 
 def launch_guard(max_workers: int, reserve_gb: float, cooldown: int, quota_backoff: int) -> dict[str, Any]:
