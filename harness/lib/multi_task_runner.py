@@ -945,7 +945,7 @@ def quota_fallback_candidates(node: dict[str, Any], failed_profile: str, profile
     elif role == "planner":
         candidates.extend(["glm-planner", "planner", "gemini-builder", "thunderomlx-local"])
     elif role == "evaluator":
-        candidates.extend(["gemini-evaluator", "evaluator", "thunderomlx-local"])
+        candidates.extend(["gemini-evaluator", "antigravity-multimodal", "evaluator", "thunderomlx-local"])
     else:
         candidates.extend([role, "builder", "thunderomlx-local"])
 
@@ -985,6 +985,20 @@ def select_quota_fallback_profile(node: dict[str, Any], failed_profile: str, pro
         else:
             healthy.append(name)
     return (healthy or degraded or [""])[0]
+
+
+def select_capability_fallback_profile(node: dict[str, Any], failed_profile: str, profiles: dict[str, Any]) -> str:
+    failed = normalize_profile_name(failed_profile, profiles)
+    fallback_order = quota_fallback_candidates(node, failed, profiles)
+    for name in fallback_order:
+        if not name or name == failed or name not in profiles:
+            continue
+        profile = dict(profiles[name])
+        profile["name"] = name
+        cap = capability_for_profile(profile)
+        if str(cap.get("status") or "") == "ok":
+            return name
+    return ""
 
 
 def run_capability_probe(profile_name: str, timeout_sec: int) -> dict[str, Any]:
@@ -1048,9 +1062,11 @@ def role_from_node(node: dict[str, Any]) -> str:
     raw = (
         node.get("target_role")
         or node.get("role")
+        or node.get("owner")
         or node.get("persona")
         or node.get("worker_role")
         or node.get("handoff_to")
+        or node.get("logical_operator")
         or ""
     )
     value = str(raw).strip().lower().replace("_", "-")
@@ -1062,10 +1078,15 @@ def role_from_node(node: dict[str, Any]) -> str:
         "judge": "evaluator",
         "reviewer": "evaluator",
         "verifier": "evaluator",
+        "critic": "evaluator",
+        "artifact-curator": "evaluator",
         "product": "pm",
         "product-manager": "pm",
         "planning": "planner",
         "architect": "planner",
+        "deeparchitect": "planner",
+        "implementationworker": "builder",
+        "testrunner": "evaluator",
     }
     return aliases.get(value, value or "builder")
 
@@ -1102,6 +1123,21 @@ def select_profile(node: dict[str, Any], profile_override: str = "", model_overr
     if quota_fallback_from:
         selected["quota_fallback_from"] = quota_fallback_from
         selected["quota_fallback_reason"] = "quota_exhausted"
+    if not profile_override and not backend_override and not model_override:
+        capability = capability_for_profile(selected)
+        if str(capability.get("status") or "") != "ok":
+            fallback = select_capability_fallback_profile(node, profile_name, profiles)
+            if fallback:
+                fallback_profile = dict(profiles[fallback])
+                fallback_profile["name"] = fallback
+                fallback_profile["role"] = str(fallback_profile.get("role") or role_from_node(node))
+                fallback_profile["persona"] = str(fallback_profile.get("persona") or fallback_profile["role"])
+                fallback_profile["model"] = str(node.get("preferred_model") or fallback_profile.get("model") or "sonnet")
+                fallback_profile["backend"] = str(fallback_profile.get("backend") or (config.get("defaults") or {}).get("backend") or "claude-cli")
+                fallback_profile["approval_mode"] = str(fallback_profile.get("approval_mode") or "auto_edit")
+                fallback_profile["capability_fallback_from"] = profile_name
+                fallback_profile["capability_fallback_reason"] = str(capability.get("status") or "unavailable")
+                selected = fallback_profile
     operator, fallback_reason = select_operator(node, selected)
     if operator:
         selected = apply_operator_to_profile(selected, operator, fallback_reason)

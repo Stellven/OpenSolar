@@ -164,6 +164,62 @@ def _status_path_for_graph(graph: dict[str, Any], graph_path: str | Path | None 
     return SPRINTS_DIR / f"{sid}.status.json"
 
 
+def _ensure_status_cache_exists_from_graph(
+    graph: dict[str, Any],
+    graph_path: str | Path | None,
+    status_path: Path,
+    *,
+    actor: str,
+    event: str,
+) -> dict[str, Any] | None:
+    """Create the legacy status cache for an in-flight graph if it is missing."""
+    if status_path.exists():
+        return None
+    sid = _sprint_id_for_graph(graph, graph_path)
+    if not sid:
+        return None
+    now = _now()
+    open_nodes = [
+        str(node.get("id") or "")
+        for node in graph.get("nodes", [])
+        if str(node.get("status") or "") not in TERMINAL_STATUSES
+    ]
+    failed_nodes = [
+        str(node.get("id") or "")
+        for node in graph.get("nodes", [])
+        if str(node.get("status") or "") == "failed"
+    ]
+    status = {
+        "id": sid,
+        "sprint_id": sid,
+        "title": str(graph.get("title") or sid),
+        "status": "active",
+        "phase": "graph_in_progress",
+        "handoff_to": "builder_main",
+        "target_role": "builder_main",
+        "created_at": str(graph.get("created_at") or now),
+        "updated_at": now,
+        "task_graph": str(graph_path or ""),
+        "graph_status_cache": True,
+        "graph_parent_ready": parent_ready_check(graph),
+        "active_node": open_nodes[0] if open_nodes else None,
+        "open_nodes": open_nodes,
+        "failed_nodes": failed_nodes,
+        "history": [
+            {
+                "ts": now,
+                "event": event,
+                "by": actor,
+                "note": "created missing status cache from task_graph",
+            }
+        ],
+    }
+    tmp = status_path.with_suffix(status_path.suffix + ".tmp")
+    tmp.write_text(json.dumps(status, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(tmp, status_path)
+    return status
+
+
 def sync_status_cache_from_graph(
     graph: dict[str, Any],
     graph_path: str | Path | None = None,
@@ -184,15 +240,25 @@ def sync_status_cache_from_graph(
     result: dict[str, Any] = {
         "ok": True,
         "updated": False,
+        "created": False,
         "sprint_id": sid,
         "status_path": str(status_path),
         "parent": parent,
     }
-    if not parent.get("ready"):
-        result["reason"] = "parent_not_ready"
-        return result
     if not sid:
         result.update({"ok": False, "reason": "missing_sprint_id"})
+        return result
+    created_status = _ensure_status_cache_exists_from_graph(
+        graph,
+        graph_path,
+        status_path,
+        actor=actor,
+        event=event,
+    )
+    if created_status is not None:
+        result.update({"created": True, "status": created_status})
+    if not parent.get("ready"):
+        result["reason"] = "parent_not_ready"
         return result
     if not status_path.exists():
         result["reason"] = "status_missing"

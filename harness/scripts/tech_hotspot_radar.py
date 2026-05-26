@@ -131,12 +131,20 @@ CREATE TABLE IF NOT EXISTS youtube_transcripts (
 -- Social tables
 CREATE TABLE IF NOT EXISTS social_accounts (
     handle            TEXT PRIMARY KEY,
+    raw_handle        TEXT NOT NULL DEFAULT '',
+    account_id        TEXT NOT NULL DEFAULT '',
     platform          TEXT NOT NULL DEFAULT 'x',
     display_name      TEXT NOT NULL DEFAULT '',
     category          TEXT NOT NULL DEFAULT '',
     tier              TEXT NOT NULL DEFAULT 'tier2',
     enabled           INTEGER NOT NULL DEFAULT 1,
     weight            REAL NOT NULL DEFAULT 1.0,
+    role_profile_json TEXT NOT NULL DEFAULT '{}',
+    scan_policy_json  TEXT NOT NULL DEFAULT '{}',
+    collection_backend TEXT NOT NULL DEFAULT 'rss',
+    last_success_at   TEXT,
+    last_error        TEXT NOT NULL DEFAULT '',
+    failure_count     INTEGER NOT NULL DEFAULT 0,
     last_scanned_at   TEXT,
     imported_at       TEXT NOT NULL
 );
@@ -171,9 +179,36 @@ CREATE TABLE IF NOT EXISTS social_post_snapshots (
     repost_count      INTEGER NOT NULL DEFAULT 0,
     like_count        INTEGER NOT NULL DEFAULT 0,
     view_count        INTEGER,
+    engagement_delta_1h INTEGER NOT NULL DEFAULT 0,
+    engagement_delta_6h INTEGER NOT NULL DEFAULT 0,
+    engagement_delta_24h INTEGER NOT NULL DEFAULT 0,
+    velocity_score    REAL NOT NULL DEFAULT 0.0,
     snapshot_at       TEXT NOT NULL,
     UNIQUE(post_id, snapshot_at)
 );
+
+CREATE TABLE IF NOT EXISTS social_semantic_extracts (
+    post_id           TEXT PRIMARY KEY REFERENCES social_posts(post_id),
+    is_signal         INTEGER NOT NULL DEFAULT 0,
+    signal_type       TEXT NOT NULL DEFAULT 'noise',
+    event_type        TEXT NOT NULL DEFAULT '',
+    stance            TEXT NOT NULL DEFAULT 'neutral',
+    claim_summary     TEXT NOT NULL DEFAULT '',
+    entities_json     TEXT NOT NULL DEFAULT '{}',
+    linked_assets_json TEXT NOT NULL DEFAULT '{}',
+    technical_keywords_json TEXT NOT NULL DEFAULT '[]',
+    local_importance_score REAL NOT NULL DEFAULT 0.0,
+    novelty_score     REAL NOT NULL DEFAULT 0.0,
+    technical_depth_score REAL NOT NULL DEFAULT 0.0,
+    recommended_for_cluster INTEGER NOT NULL DEFAULT 0,
+    recommended_for_premium_reasoning INTEGER NOT NULL DEFAULT 0,
+    model_used        TEXT NOT NULL DEFAULT 'local_rules',
+    prompt_version    TEXT NOT NULL DEFAULT 'social_extract_v1',
+    schema_version    TEXT NOT NULL DEFAULT 'social_semantic_v1',
+    created_at        TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sse_event ON social_semantic_extracts(event_type);
+CREATE INDEX IF NOT EXISTS idx_sse_signal ON social_semantic_extracts(is_signal);
 
 CREATE TABLE IF NOT EXISTS social_clusters (
     cluster_id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -186,6 +221,63 @@ CREATE TABLE IF NOT EXISTS social_clusters (
     created_at        TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_scl_key ON social_clusters(cluster_key);
+
+CREATE TABLE IF NOT EXISTS social_links (
+    link_id           TEXT PRIMARY KEY,
+    post_id           TEXT NOT NULL REFERENCES social_posts(post_id),
+    url               TEXT NOT NULL DEFAULT '',
+    normalized_url    TEXT NOT NULL DEFAULT '',
+    link_type         TEXT NOT NULL DEFAULT 'unknown'
+        CHECK(link_type IN ('github_repo','arxiv','paper','youtube','product','blog','model_card','unknown')),
+    extracted_entities_json TEXT NOT NULL DEFAULT '{}',
+    dispatch_status   TEXT NOT NULL DEFAULT 'pending'
+        CHECK(dispatch_status IN ('pending','dispatched','linked','failed')),
+    created_at        TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sl_post ON social_links(post_id);
+CREATE INDEX IF NOT EXISTS idx_sl_type ON social_links(link_type);
+
+CREATE TABLE IF NOT EXISTS big_name_viewpoints (
+    viewpoint_id      TEXT PRIMARY KEY,
+    post_id           TEXT NOT NULL REFERENCES social_posts(post_id),
+    author_handle     TEXT NOT NULL DEFAULT '',
+    author_category   TEXT NOT NULL DEFAULT '',
+    author_weight     REAL NOT NULL DEFAULT 1.0,
+    target_topic      TEXT NOT NULL DEFAULT '',
+    target_entity     TEXT NOT NULL DEFAULT '',
+    viewpoint         TEXT NOT NULL DEFAULT '',
+    stance            TEXT NOT NULL DEFAULT 'neutral'
+        CHECK(stance IN ('bullish','skeptical','cautious','warning','neutral')),
+    time_horizon      TEXT NOT NULL DEFAULT 'unclear'
+        CHECK(time_horizon IN ('now','3_months','1_year','long_term','unclear')),
+    claim_type        TEXT NOT NULL DEFAULT 'ecosystem_signal'
+        CHECK(claim_type IN ('technical_prediction','product_judgment','market_judgment',
+                             'research_direction','risk_warning','ecosystem_signal')),
+    strength          TEXT NOT NULL DEFAULT 'medium'
+        CHECK(strength IN ('strong','medium','weak')),
+    confidence        REAL NOT NULL DEFAULT 0.5,
+    implications_json TEXT NOT NULL DEFAULT '{}',
+    related_entities_json TEXT NOT NULL DEFAULT '{}',
+    created_at        TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_bnv_author ON big_name_viewpoints(author_handle);
+CREATE INDEX IF NOT EXISTS idx_bnv_topic ON big_name_viewpoints(target_topic);
+
+CREATE TABLE IF NOT EXISTS propagation_chains (
+    chain_id          TEXT PRIMARY KEY,
+    cluster_id        INTEGER NOT NULL REFERENCES social_clusters(cluster_id),
+    origin_json       TEXT NOT NULL DEFAULT '{}',
+    stages_json       TEXT NOT NULL DEFAULT '[]',
+    spread_pattern    TEXT NOT NULL DEFAULT 'unclear'
+        CHECK(spread_pattern IN ('single_amplifier','multi_source_resonance','community_first',
+                                 'github_first','media_first','chinese_circle_first',
+                                 'lab_announcement','unclear')),
+    propagation_score REAL NOT NULL DEFAULT 0.0,
+    hype_risk         TEXT NOT NULL DEFAULT 'medium'
+        CHECK(hype_risk IN ('low','medium','high')),
+    created_at        TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pc_cluster ON propagation_chains(cluster_id);
 
 -- GitHub tables
 CREATE TABLE IF NOT EXISTS github_topics (
@@ -211,6 +303,7 @@ CREATE TABLE IF NOT EXISTS github_repos (
     watchers          INTEGER NOT NULL DEFAULT 0,
     open_issues       INTEGER NOT NULL DEFAULT 0,
     default_branch    TEXT NOT NULL DEFAULT 'main',
+    archived          INTEGER NOT NULL DEFAULT 0,
     created_at        TEXT,
     updated_at        TEXT,
     pushed_at         TEXT,
@@ -235,6 +328,111 @@ CREATE TABLE IF NOT EXISTS github_star_snapshots (
     UNIQUE(full_name, snapshot_at)
 );
 CREATE INDEX IF NOT EXISTS idx_gss_name ON github_star_snapshots(full_name);
+
+CREATE TABLE IF NOT EXISTS repo_evidence_atoms (
+    atom_id           TEXT PRIMARY KEY,
+    repo_full_name    TEXT NOT NULL,
+    evidence_type     TEXT NOT NULL
+        CHECK(evidence_type IN ('readme_claim','release_feature','issue_signal','pr_signal',
+                                'social_mention','youtube_mention','growth_fact')),
+    compressed_content TEXT NOT NULL DEFAULT '',
+    entities_json     TEXT NOT NULL DEFAULT '[]',
+    tags_json         TEXT NOT NULL DEFAULT '[]',
+    confidence        REAL NOT NULL DEFAULT 0.5,
+    technical_depth   REAL,
+    novelty_score     REAL,
+    raw_source_type   TEXT NOT NULL DEFAULT '',
+    raw_source_id     TEXT NOT NULL DEFAULT '',
+    span_start        INTEGER,
+    span_end          INTEGER,
+    model_used        TEXT NOT NULL DEFAULT 'local_qwen3_6',
+    created_at        TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rea_repo ON repo_evidence_atoms(repo_full_name);
+CREATE INDEX IF NOT EXISTS idx_rea_type ON repo_evidence_atoms(evidence_type);
+CREATE INDEX IF NOT EXISTS idx_rea_confidence ON repo_evidence_atoms(confidence);
+
+CREATE TABLE IF NOT EXISTS project_reasoning_packets (
+    packet_id         TEXT PRIMARY KEY,
+    repo_full_name    TEXT NOT NULL,
+    star_velocity_percentile REAL,
+    acceleration      REAL,
+    acceleration_tier TEXT
+        CHECK(acceleration_tier IS NULL OR acceleration_tier IN ('normal','warming','breakout','sudden_hot','needs_attribution')),
+    evidence_atom_count INTEGER NOT NULL DEFAULT 0,
+    evidence_atom_ids_json TEXT NOT NULL DEFAULT '[]',
+    scores_json       TEXT NOT NULL DEFAULT '{}',
+    detector_results_json TEXT NOT NULL DEFAULT '[]',
+    total_tokens      INTEGER NOT NULL DEFAULT 0,
+    schema_version    TEXT NOT NULL DEFAULT 'v1',
+    created_at        TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_prp_repo ON project_reasoning_packets(repo_full_name);
+
+CREATE TABLE IF NOT EXISTS repo_analysis_cards (
+    card_id           TEXT PRIMARY KEY,
+    repo_full_name    TEXT NOT NULL,
+    positioning       TEXT NOT NULL DEFAULT '',
+    what_it_does      TEXT NOT NULL DEFAULT '',
+    target_users      TEXT NOT NULL DEFAULT '',
+    core_technical_idea TEXT NOT NULL DEFAULT '',
+    why_hot_facts     TEXT NOT NULL DEFAULT '[]',
+    scores_json       TEXT NOT NULL DEFAULT '{}',
+    trend_implication TEXT NOT NULL DEFAULT '',
+    risks_json        TEXT NOT NULL DEFAULT '[]',
+    watch_next        TEXT NOT NULL DEFAULT '[]',
+    evidence_ids_json TEXT NOT NULL DEFAULT '[]',
+    risk_classification TEXT NOT NULL DEFAULT 'none'
+        CHECK(risk_classification IN ('none','hype','star_manipulation','license_issue','security_risk','unverified')),
+    tier              TEXT NOT NULL DEFAULT 'B'
+        CHECK(tier IN ('S','A','B','C','D')),
+    confidence        REAL NOT NULL DEFAULT 0.5,
+    model_used        TEXT NOT NULL DEFAULT '',
+    created_at        TEXT NOT NULL,
+    updated_at        TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rac_repo ON repo_analysis_cards(repo_full_name);
+CREATE INDEX IF NOT EXISTS idx_rac_tier ON repo_analysis_cards(tier);
+
+CREATE TABLE IF NOT EXISTS repo_planning_briefs (
+    brief_id          TEXT PRIMARY KEY,
+    repo_full_name    TEXT NOT NULL,
+    card_id           TEXT NOT NULL REFERENCES repo_analysis_cards(card_id),
+    opportunity       TEXT NOT NULL DEFAULT '',
+    user_pain         TEXT NOT NULL DEFAULT '',
+    mvp_sketch        TEXT NOT NULL DEFAULT '',
+    architecture_hint TEXT NOT NULL DEFAULT '',
+    go_to_market      TEXT NOT NULL DEFAULT '',
+    risks_json        TEXT NOT NULL DEFAULT '[]',
+    validation_metrics TEXT NOT NULL DEFAULT '[]',
+    model_used        TEXT NOT NULL DEFAULT '',
+    created_at        TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rpb_repo ON repo_planning_briefs(repo_full_name);
+
+CREATE TABLE IF NOT EXISTS model_call_ledger (
+    ledger_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    repo_full_name    TEXT NOT NULL DEFAULT '',
+    model             TEXT NOT NULL,
+    provider          TEXT NOT NULL DEFAULT '',
+    call_purpose      TEXT NOT NULL
+        CHECK(call_purpose IN ('evidence_compression','analysis_card','planning_brief',
+                               'why_hot_attribution','deep_analysis','counter_evidence')),
+    input_type        TEXT NOT NULL DEFAULT 'project_reasoning_packet'
+        CHECK(input_type IN ('project_reasoning_packet','raw_readme_bypass')),
+    input_token_count INTEGER NOT NULL DEFAULT 0,
+    output_token_count INTEGER NOT NULL DEFAULT 0,
+    latency_ms        INTEGER NOT NULL DEFAULT 0,
+    cost_estimate_usd REAL NOT NULL DEFAULT 0.0,
+    evidence_atom_count INTEGER NOT NULL DEFAULT 0,
+    success           INTEGER NOT NULL DEFAULT 1,
+    error_message     TEXT NOT NULL DEFAULT '',
+    created_at        TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mcl_repo ON model_call_ledger(repo_full_name);
+CREATE INDEX IF NOT EXISTS idx_mcl_model ON model_call_ledger(model);
+CREATE INDEX IF NOT EXISTS idx_mcl_purpose ON model_call_ledger(call_purpose);
+CREATE INDEX IF NOT EXISTS idx_mcl_created ON model_call_ledger(created_at);
 
 -- Cross-source tables
 CREATE TABLE IF NOT EXISTS hotspot_events (
@@ -425,6 +623,32 @@ CREATE INDEX IF NOT EXISTS idx_bs_item_time ON baseline_signals(item_key, signal
 CREATE TABLE IF NOT EXISTS _meta (
     key               TEXT PRIMARY KEY,
     value             TEXT NOT NULL
+);
+
+-- Strategy Tracks
+CREATE TABLE IF NOT EXISTS strategy_tracks (
+    name                  TEXT PRIMARY KEY,
+    keywords              TEXT NOT NULL,
+    github_topics         TEXT NOT NULL,
+    languages             TEXT NOT NULL,
+    internal_capabilities TEXT NOT NULL,
+    alert_threshold       REAL NOT NULL
+);
+
+-- Repo Master
+CREATE TABLE IF NOT EXISTS repo_master (
+    full_name             TEXT PRIMARY KEY,
+    description           TEXT NOT NULL DEFAULT '',
+    language              TEXT,
+    license               TEXT,
+    archived              INTEGER NOT NULL DEFAULT 0,
+    stars_count           INTEGER NOT NULL DEFAULT 0,
+    forks_count           INTEGER NOT NULL DEFAULT 0,
+    open_issues_count     INTEGER NOT NULL DEFAULT 0,
+    created_at            TEXT,
+    updated_at            TEXT,
+    pushed_at             TEXT,
+    imported_at           TEXT NOT NULL
 );
 """
 
@@ -2269,7 +2493,21 @@ def ensure_db(db_path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=30000")
     ensure_reasoning_packet_policy_columns(conn)
+    ensure_github_repos_columns(conn)
+    ensure_social_columns(conn)
     return conn
+
+
+def ensure_github_repos_columns(conn: sqlite3.Connection) -> None:
+    exists = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='github_repos'"
+    ).fetchone()
+    if not exists:
+        return
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(github_repos)").fetchall()}
+    if "archived" not in existing:
+        conn.execute("ALTER TABLE github_repos ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
 
 
 def ensure_reasoning_packet_policy_columns(conn: sqlite3.Connection) -> None:
@@ -2282,6 +2520,36 @@ def ensure_reasoning_packet_policy_columns(conn: sqlite3.Connection) -> None:
     for column in ("model_policy_json", "premium_escalation_json", "embedding_policy_json"):
         if column not in existing:
             conn.execute(f"ALTER TABLE reasoning_packets ADD COLUMN {column} TEXT NOT NULL DEFAULT '{{}}'")
+    conn.commit()
+
+
+def ensure_social_columns(conn: sqlite3.Connection) -> None:
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='social_accounts'").fetchone():
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(social_accounts)").fetchall()}
+        columns = {
+            "raw_handle": "TEXT NOT NULL DEFAULT ''",
+            "account_id": "TEXT NOT NULL DEFAULT ''",
+            "role_profile_json": "TEXT NOT NULL DEFAULT '{}'",
+            "scan_policy_json": "TEXT NOT NULL DEFAULT '{}'",
+            "collection_backend": "TEXT NOT NULL DEFAULT 'rss'",
+            "last_success_at": "TEXT",
+            "last_error": "TEXT NOT NULL DEFAULT ''",
+            "failure_count": "INTEGER NOT NULL DEFAULT 0",
+        }
+        for column, ddl in columns.items():
+            if column not in existing:
+                conn.execute(f"ALTER TABLE social_accounts ADD COLUMN {column} {ddl}")
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='social_post_snapshots'").fetchone():
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(social_post_snapshots)").fetchall()}
+        columns = {
+            "engagement_delta_1h": "INTEGER NOT NULL DEFAULT 0",
+            "engagement_delta_6h": "INTEGER NOT NULL DEFAULT 0",
+            "engagement_delta_24h": "INTEGER NOT NULL DEFAULT 0",
+            "velocity_score": "REAL NOT NULL DEFAULT 0.0",
+        }
+        for column, ddl in columns.items():
+            if column not in existing:
+                conn.execute(f"ALTER TABLE social_post_snapshots ADD COLUMN {column} {ddl}")
     conn.commit()
 
 
@@ -2440,6 +2708,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         "evidence_atoms", "hotspot_clusters", "reasoning_packets",
         "premium_reasoning_results", "insight_verifications", "token_ledger",
         "pipeline_runs", "retry_queue", "_meta",
+        "strategy_tracks", "repo_master",
     ]
     existing = set(get_tables(conn))
     missing = [t for t in expected if t not in existing]
@@ -2507,6 +2776,32 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return 1 if issues else 0
 
 
+def load_social_accounts_tsv(path: Path) -> list[dict[str, Any]]:
+    """Load the canonical 200-account AI Influence TSV seed."""
+    accounts: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if not line.strip() or line.startswith("#"):
+            continue
+        parts = line.split("\t")
+        if parts[0].strip().lower() == "tier" or len(parts) < 7:
+            continue
+        tier_num, category, handle, display_name, _notes, enabled, rotation_group = parts[:7]
+        handle = handle.strip().lstrip("@")
+        if not handle:
+            continue
+        accounts.append({
+            "handle": handle,
+            "raw_handle": parts[2].strip(),
+            "platform": "x",
+            "display_name": display_name.strip(),
+            "category": category.strip(),
+            "tier": "tier1" if tier_num.strip() == "1" else "tier2",
+            "enabled": enabled.strip().lower() == "true",
+            "rotation_group": rotation_group.strip(),
+        })
+    return accounts
+
+
 def cmd_seed(args: argparse.Namespace) -> int:
     config_path = resolve_config(args)
     config = load_config(config_path)
@@ -2539,7 +2834,13 @@ def cmd_seed(args: argparse.Namespace) -> int:
         youtube_count = len(channels)
         print(f"[seed] youtube channels imported: {youtube_count}")
     if source in ("all", "social"):
-        accounts = config.get("social", {}).get("accounts", [])
+        accounts = list(config.get("social", {}).get("accounts", []) or [])
+        accounts_path = Path(
+            (config.get("social", {}) or {}).get("accounts_path")
+            or (Path(__file__).resolve().parents[1] / "ai-influence-digest" / "references" / "accounts_extended.txt")
+        ).expanduser()
+        if accounts_path.exists():
+            accounts = load_social_accounts_tsv(accounts_path)
         cat_weights = config.get("social", {}).get("category_weights", {})
         tier_weights = config.get("social", {}).get("tier_weights", {})
         for acc in accounts:
@@ -2549,12 +2850,44 @@ def cmd_seed(args: argparse.Namespace) -> int:
             cat = acc.get("category", "")
             tier = acc.get("tier", "tier2")
             weight = cat_weights.get(cat, 1.0) * tier_weights.get(tier, 1.0)
+            scan_frequency = "30min" if tier == "tier1" else "4h"
+            role_type = {
+                "core_leader": "founder",
+                "paper_research": "researcher",
+                "ai_lab": "lab",
+                "open_source": "open_source_maintainer",
+                "investment_trend": "investor",
+                "agent_coding": "engineer",
+                "chinese_circle": "community_node",
+            }.get(cat, "community_node")
             conn.execute(
-                "INSERT OR IGNORE INTO social_accounts "
-                "(handle, platform, display_name, category, tier, enabled, weight, imported_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (handle, acc.get("platform", "x"), acc.get("display_name", ""),
-                 cat, tier, 1 if acc.get("enabled", True) else 0, round(weight, 4), now)
+                "INSERT INTO social_accounts "
+                "(handle, raw_handle, platform, display_name, category, tier, enabled, weight, "
+                "role_profile_json, scan_policy_json, collection_backend, imported_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(handle) DO UPDATE SET platform=excluded.platform, "
+                "display_name=excluded.display_name, category=excluded.category, "
+                "tier=excluded.tier, enabled=excluded.enabled, weight=excluded.weight, "
+                "role_profile_json=excluded.role_profile_json, scan_policy_json=excluded.scan_policy_json",
+                (
+                    handle, acc.get("raw_handle", acc.get("handle", "")), acc.get("platform", "x"), acc.get("display_name", ""),
+                    cat, tier, 1 if acc.get("enabled", True) else 0, round(weight, 4),
+                    json.dumps({
+                        "role_type": role_type,
+                        "primary_topics": [cat],
+                        "signal_strength": "high" if tier == "tier1" else "medium",
+                        "noise_risk": "medium",
+                        "known_bias": "company_affiliated" if cat == "ai_lab" else "unknown",
+                    }, ensure_ascii=False),
+                    json.dumps({
+                        "frequency": scan_frequency,
+                        "include_replies": False,
+                        "include_quotes": True,
+                        "include_reposts": False,
+                    }, ensure_ascii=False),
+                    "auto",
+                    now,
+                )
             )
         social_count = len(accounts)
         print(f"[seed] social accounts imported: {social_count}")
@@ -3142,6 +3475,87 @@ def parse_social_rss(handle: str, xml_text: str, fetched_at: str) -> list[dict[s
     return rows
 
 
+def x_api_get_json(url: str, token: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    if params:
+        url = f"{url}?{urllib.parse.urlencode(params, doseq=True)}"
+    req = urllib.request.Request(
+        url,
+        headers={"Authorization": f"Bearer {token}", "User-Agent": "solar-tech-hotspot-radar/1.0"},
+        method="GET",
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return json.loads(resp.read().decode("utf-8", errors="replace"))
+
+
+def x_api_user_id(handle: str, token: str) -> str:
+    data = x_api_get_json(
+        f"https://api.x.com/2/users/by/username/{urllib.parse.quote(handle)}",
+        token,
+        {"user.fields": "id,username,name,verified,public_metrics"},
+    )
+    return str((data.get("data") or {}).get("id") or "")
+
+
+def collect_social_x_api_posts(handle: str, account_id: str, token: str, fetched_at: str,
+                               max_results: int = 10) -> tuple[str, list[dict[str, Any]]]:
+    user_id = account_id or x_api_user_id(handle, token)
+    if not user_id:
+        raise RuntimeError(f"x api cannot resolve user id for {handle}")
+    data = x_api_get_json(
+        f"https://api.x.com/2/users/{urllib.parse.quote(user_id)}/tweets",
+        token,
+        {
+            "max_results": max(5, min(100, max_results)),
+            "tweet.fields": "created_at,lang,public_metrics,entities,referenced_tweets,conversation_id",
+            "expansions": "referenced_tweets.id,attachments.media_keys",
+            "exclude": "retweets,replies",
+        },
+    )
+    posts: list[dict[str, Any]] = []
+    for item in data.get("data") or []:
+        metrics = item.get("public_metrics") or {}
+        entities = item.get("entities") or {}
+        urls = [u.get("expanded_url") or u.get("url") for u in entities.get("urls") or [] if isinstance(u, dict)]
+        mentions = [m.get("username") for m in entities.get("mentions") or [] if isinstance(m, dict)]
+        post_id = str(item.get("id") or "")
+        posts.append({
+            "post_id": post_id,
+            "author_handle": handle,
+            "post_url": f"https://x.com/{handle}/status/{post_id}",
+            "text": str(item.get("text") or ""),
+            "created_at": str(item.get("created_at") or fetched_at),
+            "lang": str(item.get("lang") or "unknown"),
+            "reply_count": int(metrics.get("reply_count") or 0),
+            "repost_count": int(metrics.get("retweet_count") or 0),
+            "quote_count": int(metrics.get("quote_count") or 0),
+            "like_count": int(metrics.get("like_count") or 0),
+            "view_count": int(metrics.get("impression_count") or 0) if metrics.get("impression_count") is not None else None,
+            "bookmarks": int(metrics.get("bookmark_count") or 0) if metrics.get("bookmark_count") is not None else 0,
+            "media_urls": "",
+            "mentioned_handles": ",".join(x for x in mentions if x),
+            "urls": ",".join(x for x in urls if x),
+            "fetched_at": fetched_at,
+        })
+    return user_id, posts
+
+
+def collect_social_posts_for_account(handle: str, account_id: str, backend: str, config: dict[str, Any],
+                                     fetched_at: str, per_account_limit: int) -> tuple[str, str, list[dict[str, Any]]]:
+    token = os.environ.get("X_BEARER_TOKEN") or os.environ.get("TWITTER_BEARER_TOKEN")
+    selected = backend
+    if backend == "auto":
+        selected = "x-api" if token else "rss"
+    if selected == "x-api":
+        if not token:
+            raise RuntimeError("X_BEARER_TOKEN missing for x-api backend")
+        user_id, posts = collect_social_x_api_posts(handle, account_id, token, fetched_at, max_results=max(5, per_account_limit))
+        return "x-api", user_id, posts[:per_account_limit]
+    if selected == "rss":
+        url = f"https://nitter.net/{urllib.parse.quote(handle)}/rss"
+        return "rss", account_id, parse_social_rss(handle, http_get_text(url, config), fetched_at)[:per_account_limit]
+    raise ValueError(f"unknown social backend: {backend}")
+
+
 def cmd_collect_social(args: argparse.Namespace) -> int:
     config = load_config(resolve_config(args))
     db_path = resolve_db(args, config)
@@ -3157,6 +3571,7 @@ def cmd_collect_social(args: argparse.Namespace) -> int:
     run_id = begin_run(conn, "social", command)
     limit_accounts = int(getattr(args, "limit_accounts", 0) or 0)
     per_account_limit = int(getattr(args, "per_account_limit", 0) or 3)
+    backend = str(getattr(args, "backend", "auto") or "auto")
     accounts = conn.execute(
         "SELECT * FROM social_accounts WHERE enabled=1 ORDER BY tier, weight DESC, handle"
     ).fetchall()
@@ -3168,9 +3583,10 @@ def cmd_collect_social(args: argparse.Namespace) -> int:
     failures: list[str] = []
     for idx, account in enumerate(accounts, 1):
         handle = account["handle"]
-        url = f"https://nitter.net/{urllib.parse.quote(handle)}/rss"
         try:
-            posts = parse_social_rss(handle, http_get_text(url, config), fetched_at)
+            used_backend, resolved_account_id, posts = collect_social_posts_for_account(
+                handle, account["account_id"] if "account_id" in account.keys() else "", backend, config, fetched_at, per_account_limit
+            )
             for post in posts[:per_account_limit]:
                 fetched += 1
                 before = conn.total_changes
@@ -3191,10 +3607,11 @@ def cmd_collect_social(args: argparse.Namespace) -> int:
                     new_items += 1
                 conn.execute(
                     "INSERT OR IGNORE INTO social_post_snapshots "
-                    "(post_id, reply_count, repost_count, like_count, view_count, snapshot_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    "(post_id, reply_count, repost_count, like_count, view_count, engagement_delta_1h, "
+                    "engagement_delta_6h, engagement_delta_24h, velocity_score, snapshot_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (post["post_id"], post["reply_count"], post["repost_count"],
-                     post["like_count"], post["view_count"], fetched_at),
+                     post["like_count"], post["view_count"], 0, 0, 0, 0.0, fetched_at),
                 )
                 event_type = social_classify_event_type(post["text"]) or "market_signal"
                 hot = social_compute_hot_score(
@@ -3213,9 +3630,18 @@ def cmd_collect_social(args: argparse.Namespace) -> int:
                     content_type=event_type, importance=hot, novelty=1.0 if inserted else 0.2,
                     depth=semantic_score(post["text"]), source_weight=float(account["weight"]),
                 )
-            conn.execute("UPDATE social_accounts SET last_scanned_at=? WHERE handle=?", (fetched_at, handle))
+            conn.execute(
+                "UPDATE social_accounts SET last_scanned_at=?, last_success_at=?, account_id=COALESCE(NULLIF(?, ''), account_id), "
+                "collection_backend=?, last_error='', failure_count=0 WHERE handle=?",
+                (fetched_at, fetched_at, resolved_account_id, used_backend, handle),
+            )
             conn.commit()
         except Exception as exc:
+            conn.execute(
+                "UPDATE social_accounts SET last_scanned_at=?, last_error=?, failure_count=failure_count+1 WHERE handle=?",
+                (fetched_at, f"{type(exc).__name__}: {exc}"[:500], handle),
+            )
+            conn.commit()
             failures.append(f"{handle}: {type(exc).__name__}: {exc}")
         if idx < len(accounts):
             sleep_between_requests(config)
@@ -3228,6 +3654,537 @@ def cmd_collect_social(args: argparse.Namespace) -> int:
         print(f"  WARN {failure}")
     conn.close()
     return 0 if not failures or fetched > 0 else 1
+
+
+def github_repo_from_url(url: str) -> str | None:
+    match = re.search(r"github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)", url or "")
+    return match.group(1).rstrip(".git") if match else None
+
+
+def extract_youtube_video_id(url: str) -> str | None:
+    text = url or ""
+    match = re.search(r"(?:youtube\.com/watch\?v=|youtu\.be/)([A-Za-z0-9_-]{6,})", text)
+    return match.group(1) if match else None
+
+
+def social_link_type(url: str) -> str:
+    if "github.com/" in url:
+        return "github_repo"
+    if "arxiv.org/" in url:
+        return "arxiv"
+    if "youtube.com/" in url or "youtu.be/" in url:
+        return "youtube"
+    if "huggingface.co/" in url:
+        return "model_card"
+    if re.search(r"\.(?:pdf)(?:$|[?#])", url, re.I):
+        return "paper"
+    if re.search(r"(?:blog|substack|medium|news|openai|anthropic|deepmind|google|microsoft)", url, re.I):
+        return "blog"
+    return "unknown"
+
+
+def social_materialize_links(conn: sqlite3.Connection, limit: int = 0) -> int:
+    rows = conn.execute(
+        "SELECT post_id, urls, text FROM social_posts ORDER BY fetched_at DESC"
+    ).fetchall()
+    if limit:
+        rows = rows[:limit]
+    now = iso_z()
+    inserted = 0
+    for post_id, urls, text in rows:
+        found = set(re.findall(r"https?://[^\\s,，)\\]]+", f"{urls or ''} {text or ''}"))
+        for url in found:
+            normalized = url.rstrip(".,;!?)）]")
+            link_type = social_link_type(normalized)
+            entities: dict[str, Any] = {}
+            repo = github_repo_from_url(normalized)
+            if repo:
+                entities["repo"] = repo
+                link_type = "github_repo"
+            video = extract_youtube_video_id(normalized)
+            if video:
+                entities["youtube_video_id"] = video
+                link_type = "youtube"
+            arxiv = re.search(r"arxiv\\.org/(?:abs|pdf)/([0-9.]+)", normalized)
+            if arxiv:
+                entities["paper_id"] = arxiv.group(1)
+                link_type = "arxiv"
+            link_id = "sl_" + hashlib.sha256(f"{post_id}\0{normalized}".encode("utf-8")).hexdigest()[:24]
+            before = conn.total_changes
+            conn.execute(
+                "INSERT OR IGNORE INTO social_links "
+                "(link_id, post_id, url, normalized_url, link_type, extracted_entities_json, dispatch_status, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (link_id, post_id, url, normalized, link_type, json.dumps(entities, ensure_ascii=False, sort_keys=True), "pending", now),
+            )
+            if conn.total_changes > before:
+                inserted += 1
+    return inserted
+
+
+def social_semantic_extract_from_post(text: str, urls: str = "") -> dict[str, Any]:
+    event_type = social_classify_event_type(text) or "market_signal"
+    keys = social_extract_cluster_keys(text or "", urls or "")
+    repos = [value for key, value in keys if key == "repo"]
+    models = [value for key, value in keys if key == "model_entity"]
+    links = re.findall(r"https?://[^\\s,，)\\]]+", f"{text or ''} {urls or ''}")
+    linked_assets = {
+        "github_repos": repos,
+        "papers": [u for u in links if "arxiv.org" in u],
+        "youtube_videos": [extract_youtube_video_id(u) for u in links if extract_youtube_video_id(u)],
+        "model_cards": [u for u in links if "huggingface.co" in u],
+        "product_urls": [u for u in links if social_link_type(u) in {"product", "blog", "unknown"}],
+    }
+    lower = (text or "").lower()
+    stance = "warning" if re.search(r"risk|warning|danger|unsafe|风险|警告", lower) else (
+        "skeptical" if re.search(r"skeptic|overrated|hype|not ready|不可靠|炒作", lower) else (
+            "bullish" if re.search(r"breakthrough|huge|promising|important|突破|重要", lower) else "neutral"
+        )
+    )
+    technical_keywords = sorted({kw for kw in [
+        "agent", "mcp", "coding agent", "memory", "context", "llm", "inference",
+        "triton", "cuda", "vllm", "robotics", "multimodal", "benchmark", "eval",
+        "open source", "github", "paper", "model",
+    ] if kw in lower})
+    importance = semantic_score(text)
+    is_signal = bool(importance >= 0.25 or repos or models or linked_assets["papers"] or technical_keywords)
+    return {
+        "is_signal": is_signal,
+        "signal_type": "event" if event_type not in {"market_signal"} else ("opinion" if stance != "neutral" else "market_signal"),
+        "event_type": event_type,
+        "stance": stance,
+        "claim_summary": re.sub(r"\s+", " ", text or "").strip()[:260],
+        "entities": {"repos": repos, "models": models, "technologies": technical_keywords},
+        "linked_assets": linked_assets,
+        "technical_keywords": technical_keywords,
+        "local_importance_score": importance,
+        "novelty_score": 0.7 if is_signal else 0.1,
+        "technical_depth_score": min(1.0, importance + 0.1 * len(technical_keywords)),
+        "recommended_for_cluster": is_signal,
+        "recommended_for_premium_reasoning": bool(is_signal and (repos or stance in {"warning", "skeptical", "bullish"})),
+    }
+
+
+def social_materialize_semantic_extracts(conn: sqlite3.Connection, limit: int = 0) -> int:
+    rows = conn.execute(
+        "SELECT post_id, text, urls FROM social_posts ORDER BY fetched_at DESC"
+    ).fetchall()
+    if limit:
+        rows = rows[:limit]
+    now = iso_z()
+    count = 0
+    for post_id, text, urls in rows:
+        payload = social_semantic_extract_from_post(text or "", urls or "")
+        conn.execute(
+            "INSERT OR REPLACE INTO social_semantic_extracts "
+            "(post_id, is_signal, signal_type, event_type, stance, claim_summary, entities_json, "
+            "linked_assets_json, technical_keywords_json, local_importance_score, novelty_score, "
+            "technical_depth_score, recommended_for_cluster, recommended_for_premium_reasoning, "
+            "model_used, prompt_version, schema_version, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                post_id,
+                1 if payload["is_signal"] else 0,
+                payload["signal_type"],
+                payload["event_type"],
+                payload["stance"],
+                payload["claim_summary"],
+                json.dumps(payload["entities"], ensure_ascii=False, sort_keys=True),
+                json.dumps(payload["linked_assets"], ensure_ascii=False, sort_keys=True),
+                json.dumps(payload["technical_keywords"], ensure_ascii=False),
+                payload["local_importance_score"],
+                payload["novelty_score"],
+                payload["technical_depth_score"],
+                1 if payload["recommended_for_cluster"] else 0,
+                1 if payload["recommended_for_premium_reasoning"] else 0,
+                "local_rules_pending_thunderomlx",
+                "social_extract_v1",
+                "social_semantic_v1",
+                now,
+            ),
+        )
+        count += 1
+    return count
+
+
+def social_viewpoint_from_post(conn: sqlite3.Connection, post_id: str) -> str | None:
+    row = conn.execute(
+        "SELECT p.post_id, p.text, p.author_handle, p.author_category, p.author_tier, a.weight "
+        "FROM social_posts p LEFT JOIN social_accounts a ON a.handle=p.author_handle WHERE p.post_id=?",
+        (post_id,),
+    ).fetchone()
+    if not row:
+        return None
+    post_id, text, handle, category, tier, weight = row
+    lower = (text or "").lower()
+    is_high_signal = (tier == "tier1" or (weight or 1.0) >= 1.25 or category in {"core_leader", "paper_research", "ai_lab", "open_source", "agent_coding"})
+    viewpoint_keywords = [
+        "think", "believe", "should", "will", "future", "risk", "warning",
+        "breakthrough", "agent", "mcp", "memory", "inference", "robot", "model",
+        "我认为", "应该", "未来", "风险", "瓶颈", "趋势", "突破",
+    ]
+    if not is_high_signal or not any(k in lower for k in viewpoint_keywords):
+        return None
+    topic = "agent" if re.search(r"agent|mcp|coding agent|memory", lower) else (
+        "model" if re.search(r"model|llm|gemini|claude|qwen|deepseek", lower) else (
+            "compute" if re.search(r"gpu|tpu|inference|triton|cuda", lower) else "ai_ecosystem"
+        )
+    )
+    stance = "warning" if re.search(r"risk|warning|danger|unsafe|风险|警告", lower) else (
+        "skeptical" if re.search(r"skeptic|not ready|overrated|hype|不可靠|炒作", lower) else (
+            "bullish" if re.search(r"breakthrough|huge|important|promising|突破|重要", lower) else "neutral"
+        )
+    )
+    viewpoint = re.sub(r"\s+", " ", text or "").strip()[:360]
+    vp_id = "vp_" + hashlib.sha256(f"{post_id}\0{viewpoint}".encode("utf-8")).hexdigest()[:24]
+    conn.execute(
+        "INSERT OR REPLACE INTO big_name_viewpoints "
+        "(viewpoint_id, post_id, author_handle, author_category, author_weight, target_topic, "
+        "target_entity, viewpoint, stance, time_horizon, claim_type, strength, confidence, "
+        "implications_json, related_entities_json, created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            vp_id, post_id, handle or "", category or "", float(weight or 1.0), topic,
+            "", viewpoint, stance, "unclear", "ecosystem_signal",
+            "strong" if tier == "tier1" else "medium",
+            min(0.95, 0.55 + min(float(weight or 1.0), 2.5) / 5.0),
+            json.dumps({
+                "for_research": "作为趋势判断候选，需要跨源证据验证。",
+                "for_product": "若与 GitHub/YouTube 信号共振，可进入产品策划池。",
+                "for_open_source": "检查是否有 repo/paper/model 链接可反向派发。",
+                "for_ai_influence": "可进入社交热点日报的大咖观点章节。",
+            }, ensure_ascii=False),
+            json.dumps(social_extract_cluster_keys(text or "", ""), ensure_ascii=False),
+            iso_z(),
+        ),
+    )
+    return vp_id
+
+
+def social_materialize_viewpoints(conn: sqlite3.Connection, limit: int = 0) -> int:
+    rows = conn.execute("SELECT post_id FROM social_posts ORDER BY fetched_at DESC").fetchall()
+    if limit:
+        rows = rows[:limit]
+    count = 0
+    for (post_id,) in rows:
+        if social_viewpoint_from_post(conn, post_id):
+            count += 1
+    return count
+
+
+def social_materialize_propagation_chains(conn: sqlite3.Connection, limit: int = 0) -> int:
+    rows = conn.execute(
+        "SELECT cluster_id, cluster_key, post_ids, window_start, window_end FROM social_clusters ORDER BY created_at DESC"
+    ).fetchall()
+    if limit:
+        rows = rows[:limit]
+    created = 0
+    now = iso_z()
+    for cluster_id, cluster_key, post_ids_json, window_start, window_end in rows:
+        try:
+            post_ids = json.loads(post_ids_json or "[]")
+        except Exception:
+            post_ids = []
+        if not post_ids:
+            continue
+        authors = conn.execute(
+            f"SELECT DISTINCT author_handle, author_category, author_tier FROM social_posts WHERE post_id IN ({','.join('?' for _ in post_ids)})",
+            post_ids,
+        ).fetchall()
+        categories = sorted({a[1] for a in authors if a[1]})
+        tier1 = sum(1 for a in authors if a[2] == "tier1")
+        pattern = "multi_source_resonance" if len(categories) >= 3 else ("single_amplifier" if len(authors) <= 1 else "community_first")
+        score = min(1.0, 0.2 + 0.12 * len(authors) + 0.18 * tier1 + 0.08 * len(categories))
+        chain_id = f"chain_{cluster_id}"
+        conn.execute(
+            "INSERT OR REPLACE INTO propagation_chains "
+            "(chain_id, cluster_id, origin_json, stages_json, spread_pattern, propagation_score, hype_risk, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (
+                chain_id,
+                cluster_id,
+                json.dumps({"source": "social", "first_seen_entity": cluster_key, "first_seen_at": window_start}, ensure_ascii=False),
+                json.dumps([{"stage": 1, "time_window": f"{window_start} to {window_end}", "actors": [a[0] for a in authors], "description": "社交账号围绕同一实体/URL 形成聚类"}], ensure_ascii=False),
+                pattern,
+                score,
+                "high" if pattern == "single_amplifier" and tier1 else ("low" if pattern == "multi_source_resonance" else "medium"),
+                now,
+            ),
+        )
+        created += 1
+    return created
+
+
+def social_dispatch_links(conn: sqlite3.Connection) -> dict[str, int]:
+    stats = {"github_repo": 0, "youtube": 0, "paper": 0, "failed": 0}
+    rows = conn.execute(
+        "SELECT link_id, link_type, normalized_url, extracted_entities_json FROM social_links WHERE dispatch_status='pending'"
+    ).fetchall()
+    now = iso_z()
+    for link_id, link_type, url, entities_json in rows:
+        try:
+            entities = json.loads(entities_json or "{}")
+            if link_type == "github_repo" and entities.get("repo"):
+                full_name = str(entities["repo"]).strip()
+                owner, repo = full_name.split("/", 1)
+                conn.execute(
+                    "INSERT OR IGNORE INTO github_repos "
+                    "(full_name, owner, repo, html_url, source_type, tracking_status, first_seen_at, last_seen_at, fetched_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (full_name, owner, repo, f"https://github.com/{full_name}", "social_mention", "candidate", now, now, now),
+                )
+                conn.execute("UPDATE social_links SET dispatch_status='dispatched' WHERE link_id=?", (link_id,))
+                stats["github_repo"] += 1
+            elif link_type == "youtube" and entities.get("youtube_video_id"):
+                conn.execute("UPDATE social_links SET dispatch_status='linked' WHERE link_id=?", (link_id,))
+                stats["youtube"] += 1
+            elif link_type in {"arxiv", "paper"}:
+                conn.execute("UPDATE social_links SET dispatch_status='linked' WHERE link_id=?", (link_id,))
+                stats["paper"] += 1
+        except Exception:
+            conn.execute("UPDATE social_links SET dispatch_status='failed' WHERE link_id=?", (link_id,))
+            stats["failed"] += 1
+    return stats
+
+
+def write_social_raw_exports(base_dir: Path, date_str: str, pack: dict[str, Any], markdown: str) -> dict[str, str]:
+    out_dir = base_dir / "social" / date_str
+    out_dir.mkdir(parents=True, exist_ok=True)
+    files = {
+        "daily_md": out_dir / "social_hotspot_daily.md",
+        "clusters_jsonl": out_dir / "social_clusters.jsonl",
+        "viewpoints_jsonl": out_dir / "big_name_viewpoints.jsonl",
+        "dispatch_jsonl": out_dir / "cross_source_dispatch.jsonl",
+    }
+    frontmatter = (
+        "---\n"
+        "source: social_hotspot_radar\n"
+        f"date: {date_str}\n"
+        "module: ai_influence_social_monitor\n"
+        f"clusters: {pack.get('cluster_count')}\n"
+        f"hotspot_events: {len(pack.get('posts') or [])}\n"
+        "model: codex_gpt_reasoner\n"
+        "schema_version: social_daily_v1\n"
+        "---\n\n"
+    )
+    files["daily_md"].write_text(frontmatter + markdown.strip() + "\n", encoding="utf-8")
+    files["clusters_jsonl"].write_text(
+        "".join(json.dumps(x, ensure_ascii=False, sort_keys=True) + "\n" for x in pack.get("clusters") or []),
+        encoding="utf-8",
+    )
+    files["viewpoints_jsonl"].write_text(
+        "".join(json.dumps(x, ensure_ascii=False, sort_keys=True) + "\n" for x in pack.get("viewpoints") or []),
+        encoding="utf-8",
+    )
+    dispatch_rows = [x for x in pack.get("links") or [] if x.get("link_type") in {"github_repo", "arxiv", "paper", "youtube", "model_card"}]
+    files["dispatch_jsonl"].write_text(
+        "".join(json.dumps(x, ensure_ascii=False, sort_keys=True) + "\n" for x in dispatch_rows),
+        encoding="utf-8",
+    )
+    return {k: str(v) for k, v in files.items()}
+
+
+def build_social_trend_pack(conn: sqlite3.Connection, *, limit_posts: int = 40, limit_clusters: int = 12, date_str: str | None = None) -> dict[str, Any]:
+    social_materialize_links(conn)
+    social_materialize_semantic_extracts(conn)
+    social_materialize_viewpoints(conn)
+    social_materialize_propagation_chains(conn)
+    dispatch_stats = social_dispatch_links(conn)
+    conn.commit()
+    posts = [
+        dict(row)
+        for row in conn.execute(
+            "SELECT p.post_id, p.author_handle, p.author_category, p.author_tier, a.weight AS author_weight, "
+            "p.post_url, p.text, p.created_at, p.urls, e.event_type, e.hot_score "
+            "FROM social_posts p LEFT JOIN social_accounts a ON a.handle=p.author_handle "
+            "LEFT JOIN hotspot_events e ON e.source='social' AND e.source_id=p.post_id "
+            "ORDER BY COALESCE(e.hot_score,0) DESC, p.created_at DESC LIMIT ?",
+            (limit_posts,),
+        ).fetchall()
+    ]
+    clusters = [
+        dict(row)
+        for row in conn.execute(
+            "SELECT c.cluster_id, c.cluster_key, c.cluster_type, c.window_start, c.window_end, c.post_ids, "
+            "pc.spread_pattern, pc.propagation_score, pc.hype_risk "
+            "FROM social_clusters c LEFT JOIN propagation_chains pc ON pc.cluster_id=c.cluster_id "
+            "ORDER BY COALESCE(pc.propagation_score,0) DESC, c.created_at DESC LIMIT ?",
+            (limit_clusters,),
+        ).fetchall()
+    ]
+    viewpoints = [
+        dict(row)
+        for row in conn.execute(
+            "SELECT viewpoint_id, post_id, author_handle, author_category, author_weight, target_topic, "
+            "viewpoint, stance, claim_type, strength, confidence, implications_json "
+            "FROM big_name_viewpoints ORDER BY confidence DESC, created_at DESC LIMIT 20"
+        ).fetchall()
+    ]
+    links = [
+        dict(row)
+        for row in conn.execute(
+            "SELECT link_id, post_id, normalized_url, link_type, extracted_entities_json, dispatch_status "
+            "FROM social_links ORDER BY created_at DESC LIMIT 30"
+        ).fetchall()
+    ]
+    return {
+        "date": date_str or iso_z().split("T", 1)[0],
+        "source": "tech-hotspot-radar/social-signal-viewpoint-engine",
+        "account_count": conn.execute("SELECT COUNT(*) FROM social_accounts").fetchone()[0],
+        "post_count": conn.execute("SELECT COUNT(*) FROM social_posts").fetchone()[0],
+        "cluster_count": conn.execute("SELECT COUNT(*) FROM social_clusters").fetchone()[0],
+        "viewpoint_count": conn.execute("SELECT COUNT(*) FROM big_name_viewpoints").fetchone()[0],
+        "posts": posts,
+        "clusters": clusters,
+        "viewpoints": viewpoints,
+        "links": links,
+        "dispatch_stats": dispatch_stats,
+    }
+
+
+def build_social_trend_prompt(pack: dict[str, Any], model_name: str) -> str:
+    return f"""你是 AI Influence 的社交信号与大咖观点主编。
+
+你将收到 Tech Hotspot Radar 的 Social Signal Pack。它包含高信号账号 posts、社交聚类、传播模式、大咖观点和外链资产。
+
+任务：生成中文「AI Influence 社交媒体热点监控」栏目。
+
+硬规则：
+1. 不要搬运推文列表；先给今日核心判断。
+2. 只基于 pack，不引入外部事实。
+3. 不要暴露内部 post_id/viewpoint_id/cluster_id。
+4. 必须区分：真实趋势、弱信号、可能营销/噪声、需要人工复核。
+5. 必须覆盖：Top 社交热点、大咖观点、开源/GitHub 信号、论文/研究信号、中文科技圈信号、噪声和风险。
+6. 输出中文 Markdown，不要 JSON，不要代码块。
+
+报告结构：
+# AI Influence 社交媒体热点监控 — {pack.get("date")}
+## 今日核心判断
+## Top 社交热点
+## 大咖观点
+## 开源 / GitHub 信号
+## 论文 / 研究信号
+## 中文科技圈信号
+## 噪声和风险
+## 下一步观察
+## Provenance
+
+Provenance 写：
+- final_reasoner: {model_name}
+- source: Tech Hotspot Radar Social Signal Pack
+- accounts: {pack.get("account_count")}
+- posts: {pack.get("post_count")}
+- clusters: {pack.get("cluster_count")}
+- viewpoints: {pack.get("viewpoint_count")}
+
+pack:
+{json.dumps(pack, ensure_ascii=False)}
+"""
+
+
+def call_codex_social_trend_report(pack: dict[str, Any], config: dict[str, Any],
+                                   *, requested_model: str | None = None) -> dict[str, Any]:
+    cfg = ((config.get("youtube") or {}).get("phase_report_reasoner") or {})
+    codex_bin = str(cfg.get("codex_bin") or os.environ.get("CODEX_BIN") or shutil.which("codex") or "codex")
+    model = str(requested_model or cfg.get("model") or os.environ.get("TECH_HOTSPOT_PHASE_REPORT_MODEL") or "gpt-5.5")
+    timeout = int(cfg.get("timeout_seconds") or 1200)
+    prompt = build_social_trend_prompt(pack, model)
+    started = time.time()
+    with tempfile.TemporaryDirectory(prefix="tech-hotspot-social-report-") as td:
+        out_path = Path(td) / "last-message.md"
+        cmd = [
+            codex_bin, "exec", "--model", model, "--sandbox", "read-only",
+            "--cd", str(Path.home()), "--skip-git-repo-check",
+            "--output-last-message", str(out_path), "-",
+        ]
+        run = subprocess.run(cmd, input=prompt, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
+        if run.returncode != 0:
+            raise RuntimeError(f"codex social trend report failed rc={run.returncode}: {run.stdout[-2000:]}")
+        markdown = out_path.read_text(encoding="utf-8", errors="replace").strip() if out_path.exists() else run.stdout.strip()
+    if len(markdown) < 1000:
+        raise ValueError(f"codex social trend report output too short: {len(markdown)} chars")
+    return {
+        "ok": True,
+        "backend": "codex_cli",
+        "model": model,
+        "latency_ms": int((time.time() - started) * 1000),
+        "input_token_count": estimate_model_tokens(prompt),
+        "output_token_count": estimate_model_tokens(markdown),
+        "cost_estimate_usd": 0.0,
+        "markdown": markdown,
+    }
+
+
+def cmd_social_trend_report(args: argparse.Namespace) -> int:
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.executescript(SCHEMA_SQL)
+    conn.row_factory = sqlite3.Row
+    date_str = getattr(args, "date", None) or iso_z().split("T", 1)[0]
+    limit_posts = int(getattr(args, "limit_posts", 40) or 40)
+    raw_base = Path(getattr(args, "output_base", None) or (config.get("output") or {}).get("raw_dir", "/Users/lisihao/Knowledge/_raw/tech-hotspot-radar")).expanduser()
+    out_dir = raw_base / "social-trend-report" / date_str
+    out_dir.mkdir(parents=True, exist_ok=True)
+    run_id = begin_run(conn, "social", "social-trend-report")
+    try:
+        pack = build_social_trend_pack(conn, limit_posts=limit_posts, date_str=date_str)
+        if not pack.get("posts") and not pack.get("viewpoints"):
+            raise ValueError("no social posts/viewpoints available")
+        result = call_codex_social_trend_report(pack, config, requested_model=getattr(args, "model", None))
+        record_model_ledgers(
+            conn,
+            target_id=f"__social_trend_report__:{date_str}",
+            pipeline_stage="social_trend_report",
+            call_purpose="deep_analysis",
+            input_type="project_reasoning_packet",
+            packet_id=f"social-trend-report:{date_str}",
+            evidence_atom_count=len(pack.get("posts") or []),
+            result=result,
+            success=True,
+        )
+        files = {
+            "pack": out_dir / "social-trend-pack.json",
+            "report_json": out_dir / "social-trend-report.json",
+            "report_md": out_dir / "social-trend-report.md",
+            "report_html": out_dir / "social-trend-report.html",
+            "wiki_dispatch": out_dir / "wiki-dispatch.md",
+        }
+        files["pack"].write_text(json.dumps(pack, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        files["report_json"].write_text(json.dumps({k: v for k, v in result.items() if k != "markdown"}, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        files["report_md"].write_text(result["markdown"].strip() + "\n", encoding="utf-8")
+        html_report = (
+            "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>AI Influence Social Trend</title></head>"
+            "<body style=\"margin:0;background:#f4efe4;color:#17231f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB',sans-serif;line-height:1.72\">"
+            "<div style=\"max-width:980px;margin:0 auto;padding:28px 18px 44px\">"
+            "<div style=\"background:linear-gradient(135deg,#123b35,#315f4f 58%,#c9863d);color:#fff;border-radius:26px;padding:30px\">"
+            "<div style=\"font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.82\">AI Influence · Social Signal & Viewpoint Engine</div>"
+            f"<h1 style=\"margin:10px 0 12px;font-size:30px;line-height:1.22\">社交媒体热点监控 — {html_escape(date_str)}</h1>"
+            f"<div style=\"font-size:15px;opacity:.92;max-width:820px\">accounts={pack.get('account_count')} · posts={pack.get('post_count')} · clusters={pack.get('cluster_count')} · viewpoints={pack.get('viewpoint_count')}</div>"
+            "</div><section style=\"background:#fffdf8;border:1px solid #eadfcd;border-radius:20px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:21px;margin:14px 0\">"
+            f"{markdown_to_email_html(sanitize_public_report_markdown(result['markdown']))}</section></div></body></html>"
+        )
+        files["report_html"].write_text(html_report, encoding="utf-8")
+        files["wiki_dispatch"].write_text(report_wiki_dispatch(str(out_dir), date_str), encoding="utf-8")
+        social_raw_files = write_social_raw_exports(
+            Path("/Users/lisihao/Knowledge/_raw"),
+            date_str,
+            pack,
+            result["markdown"],
+        )
+        finish_run(conn, run_id, "ok", len(pack.get("posts") or []), len(pack.get("viewpoints") or []), json.dumps({"model": result["model"], "out_dir": str(out_dir)}, ensure_ascii=False)[:900])
+        print(f"[social-trend-report] date={date_str} posts={len(pack.get('posts') or [])} viewpoints={len(pack.get('viewpoints') or [])} model={result['model']} out={out_dir}")
+        for key in sorted(files):
+            print(f"  {key}: {files[key]}")
+        for key in sorted(social_raw_files):
+            print(f"  social_raw_{key}: {social_raw_files[key]}")
+        return 0
+    except Exception as exc:
+        finish_run(conn, run_id, "failed", 0, 0, f"{type(exc).__name__}: {exc}"[:900])
+        print(f"[social-trend-report] ERROR {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        conn.close()
 
 
 def cmd_social_fixture(args: argparse.Namespace) -> int:
@@ -3634,6 +4591,321 @@ def github_emit_evidence_atoms(conn: sqlite3.Connection, full_name: str,
     return 1
 
 
+def github_repo_atom_id(full_name: str, evidence_type: str, source_id: str) -> str:
+    raw = f"{full_name}\0{evidence_type}\0{source_id}"
+    return "ghatom_" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
+
+
+def github_extract_repo_entities(text: str) -> dict[str, list[str]]:
+    tech_words = [
+        "agent", "mcp", "rag", "retrieval", "memory", "context", "llm", "inference",
+        "triton", "cuda", "mlx", "vllm", "transformer", "robotics", "vla", "workflow",
+        "browser", "devtools", "compiler", "database", "benchmark", "eval",
+    ]
+    found = sorted({kw for kw in tech_words if kw in text.lower()})
+    repos = sorted(set(GITHUB_REPO_RE.findall(text)))
+    return {
+        "technologies": found[:12],
+        "repos": repos[:10],
+        "models": sorted(set(re.findall(r"\b(?:GPT-\d+(?:\.\d+)?|Claude|Gemini|Qwen\d*|DeepSeek|Llama)\b", text, re.I)))[:10],
+        "companies": sorted(set(re.findall(r"\b(?:OpenAI|Anthropic|Google|DeepMind|NVIDIA|Meta|Microsoft|DeepSeek)\b", text, re.I)))[:10],
+    }
+
+
+def github_insert_repo_atom(
+    conn: sqlite3.Connection,
+    *,
+    full_name: str,
+    evidence_type: str,
+    content: str,
+    tags: list[str],
+    confidence: float,
+    technical_depth: float,
+    novelty_score: float,
+    raw_source_type: str,
+    raw_source_id: str,
+    created_at: str,
+) -> str:
+    atom_id = github_repo_atom_id(full_name, evidence_type, raw_source_id)
+    entities = github_extract_repo_entities(content)
+    conn.execute(
+        "INSERT OR REPLACE INTO repo_evidence_atoms "
+        "(atom_id, repo_full_name, evidence_type, compressed_content, entities_json, tags_json, "
+        "confidence, technical_depth, novelty_score, raw_source_type, raw_source_id, model_used, created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            atom_id,
+            full_name,
+            evidence_type,
+            re.sub(r"\s+", " ", content or "").strip()[:1200],
+            json.dumps(entities, ensure_ascii=False, sort_keys=True),
+            json.dumps(tags, ensure_ascii=False),
+            max(0.0, min(1.0, confidence)),
+            max(0.0, min(1.0, technical_depth)),
+            max(0.0, min(1.0, novelty_score)),
+            raw_source_type,
+            raw_source_id,
+            LOCAL_KNOWLEDGE_MODEL,
+            created_at,
+        ),
+    )
+    return atom_id
+
+
+def github_star_acceleration(conn: sqlite3.Connection, full_name: str) -> tuple[float, str]:
+    rows = conn.execute(
+        "SELECT snapshot_at, stars FROM github_star_snapshots WHERE full_name=? ORDER BY snapshot_at DESC LIMIT 8",
+        (full_name,),
+    ).fetchall()
+    if len(rows) < 3:
+        return 1.0, "normal"
+    latest = rows[0][1] or 0
+    prev = rows[1][1] or 0
+    current_delta = max(0, latest - prev)
+    older_deltas = []
+    for (_, a), (_, b) in zip(rows[1:-1], rows[2:]):
+        older_deltas.append(max(0, (a or 0) - (b or 0)))
+    baseline = max(sum(older_deltas) / max(1, len(older_deltas)), 1)
+    acceleration = float(current_delta) / baseline
+    if acceleration > 20:
+        tier = "needs_attribution"
+    elif acceleration > 8:
+        tier = "sudden_hot"
+    elif acceleration > 3:
+        tier = "breakout"
+    elif acceleration > 1.5:
+        tier = "warming"
+    else:
+        tier = "normal"
+    return round(acceleration, 3), tier
+
+
+def github_materialize_project_intelligence(conn: sqlite3.Connection, full_name: str, *, force: bool = False) -> dict[str, Any]:
+    """Build local repo evidence atoms, reasoning packet, card and planning brief."""
+    row = conn.execute(
+        "SELECT full_name, description, topics, language, license, stars, forks, open_issues, "
+        "pushed_at, latest_release_tag, latest_release_at, readme_text, html_url, fetched_at "
+        "FROM github_repos WHERE full_name=?",
+        (full_name,),
+    ).fetchone()
+    if not row:
+        return {"ok": False, "repo": full_name, "error": "repo not found"}
+    (
+        full_name, description, topics, language, license_id, stars, forks, open_issues,
+        pushed_at, latest_release_tag, latest_release_at, readme_text, html_url, fetched_at,
+    ) = row
+    created_at = iso_z()
+    bucket = github_classify_trend_bucket(topics or "", description or "")
+    readme = readme_text or ""
+    deltas = github_compute_star_deltas(conn, full_name)
+    acceleration, acceleration_tier = github_star_acceleration(conn, full_name)
+    evidence_ids: list[str] = []
+
+    summary_content = (
+        f"{full_name}: {description or 'No description'}. "
+        f"Language={language or 'unknown'}, topics={topics or 'none'}, "
+        f"stars={stars or 0}, forks={forks or 0}. "
+        f"README excerpt: {readme[:900]}"
+    )
+    evidence_ids.append(github_insert_repo_atom(
+        conn, full_name=full_name, evidence_type="readme_claim",
+        content=summary_content, tags=[bucket, "readme", language or ""],
+        confidence=0.75 if readme else 0.55,
+        technical_depth=semantic_score((description or "") + " " + readme[:3000]),
+        novelty_score=0.45,
+        raw_source_type="github_readme", raw_source_id=html_url or f"https://github.com/{full_name}",
+        created_at=created_at,
+    ))
+    if latest_release_tag:
+        evidence_ids.append(github_insert_repo_atom(
+            conn, full_name=full_name, evidence_type="release_feature",
+            content=f"{full_name} latest release {latest_release_tag} at {latest_release_at or 'unknown time'}.",
+            tags=[bucket, "release"],
+            confidence=0.7, technical_depth=0.45, novelty_score=0.65,
+            raw_source_type="github_release", raw_source_id=f"{full_name}:{latest_release_tag}",
+            created_at=created_at,
+        ))
+    growth_content = (
+        f"{full_name} growth snapshot: stars={stars or 0}, forks={forks or 0}, "
+        f"delta_1d={deltas.get('delta_1d')}, delta_7d={deltas.get('delta_7d')}, "
+        f"delta_30d={deltas.get('delta_30d')}, acceleration={acceleration} ({acceleration_tier})."
+    )
+    evidence_ids.append(github_insert_repo_atom(
+        conn, full_name=full_name, evidence_type="growth_fact",
+        content=growth_content, tags=[bucket, "growth", acceleration_tier],
+        confidence=0.8, technical_depth=0.35, novelty_score=0.75 if acceleration_tier != "normal" else 0.35,
+        raw_source_type="github_snapshot", raw_source_id=f"{full_name}:{fetched_at or created_at}",
+        created_at=created_at,
+    ))
+
+    social_mentions = conn.execute(
+        "SELECT source_id, content FROM evidence_atoms WHERE source='social' AND content LIKE ? LIMIT 8",
+        (f"%github.com/{full_name}%",),
+    ).fetchall()
+    for post_id, content in social_mentions:
+        evidence_ids.append(github_insert_repo_atom(
+            conn, full_name=full_name, evidence_type="social_mention",
+            content=content, tags=[bucket, "social_cross_signal"],
+            confidence=0.65, technical_depth=0.35, novelty_score=0.6,
+            raw_source_type="social_post", raw_source_id=post_id,
+            created_at=created_at,
+        ))
+
+    atoms = conn.execute(
+        "SELECT atom_id, evidence_type, compressed_content, technical_depth, novelty_score "
+        "FROM repo_evidence_atoms WHERE repo_full_name=? ORDER BY created_at DESC",
+        (full_name,),
+    ).fetchall()
+    atom_ids = [a[0] for a in atoms]
+    technical_depth = max([float(a[3] or 0.0) for a in atoms] or [0.0])
+    novelty = max([float(a[4] or 0.0) for a in atoms] or [0.0])
+    social_cross = 1.0 if social_mentions else 0.0
+    star_delta_7d = max(0, deltas.get("delta_7d") or 0)
+    heat_score = github_compute_hot_score(
+        star_growth=min(1.0, star_delta_7d / 1000),
+        recent_activity=0.75 if pushed_at else 0.25,
+        release_signal=1.0 if latest_release_tag else 0.0,
+        semantic_relevance=semantic_score((description or "") + " " + readme[:3000]),
+        social_cross=social_cross,
+        maintainer_quality=0.55,
+    )
+    potential_score = round(
+        0.25 * semantic_score((description or "") + " " + readme[:4000])
+        + 0.20 * min(1.0, (stars or 0) / 5000)
+        + 0.15 * (0.8 if readme else 0.2)
+        + 0.15 * (0.8 if latest_release_tag else 0.3)
+        + 0.15 * (0.8 if forks and forks > 10 else 0.3)
+        + 0.10 * social_cross,
+        4,
+    )
+    if heat_score >= 0.75 and potential_score >= 0.7:
+        tier = "S"
+    elif potential_score >= 0.65:
+        tier = "A"
+    elif heat_score >= 0.5 or potential_score >= 0.45:
+        tier = "B"
+    else:
+        tier = "C"
+    risks = []
+    risk_classification = "none"
+    if not readme or len(readme) < 500:
+        risks.append("README/文档不足，技术判断置信度有限")
+        risk_classification = "unverified"
+    if heat_score > 0.65 and technical_depth < 0.35:
+        risks.append("热度高但技术深度信号弱，可能偏传播或包装")
+        risk_classification = "hype"
+    if license_id in {"", "NOASSERTION"}:
+        risks.append("license 信息不足，进入策划池前需人工复核")
+        if risk_classification == "none":
+            risk_classification = "license_issue"
+
+    detector_results = [
+        {"name": "sudden_hot", "matched": acceleration_tier in {"breakout", "sudden_hot", "needs_attribution"}, "acceleration": acceleration},
+        {"name": "early_potential", "matched": 50 <= (stars or 0) <= 2000 and potential_score >= 0.6},
+        {"name": "foundation_infra_candidate", "matched": bucket in {"agent_runtime", "agent_skill", "context_engineering", "inference_compute", "infra_os"} and technical_depth >= 0.55},
+    ]
+    scores = {
+        "heat_score": heat_score,
+        "potential_score": potential_score,
+        "technical_depth_score": round(technical_depth, 4),
+        "novelty_score": round(novelty, 4),
+        "social_cross_signal": social_cross,
+        "stars_delta_7d": star_delta_7d,
+        "acceleration": acceleration,
+    }
+    packet_id = "prp_" + hashlib.sha256(f"{full_name}\0{created_at[:10]}".encode()).hexdigest()[:20]
+    conn.execute(
+        "INSERT OR REPLACE INTO project_reasoning_packets "
+        "(packet_id, repo_full_name, star_velocity_percentile, acceleration, acceleration_tier, "
+        "evidence_atom_count, evidence_atom_ids_json, scores_json, detector_results_json, total_tokens, schema_version, created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            packet_id, full_name, None, acceleration, acceleration_tier,
+            len(atom_ids), json.dumps(atom_ids, ensure_ascii=False),
+            json.dumps(scores, ensure_ascii=False, sort_keys=True),
+            json.dumps(detector_results, ensure_ascii=False, sort_keys=True),
+            max(1, sum(len(a[2] or "") for a in atoms) // 4),
+            "project-reasoning-packet-v1",
+            created_at,
+        ),
+    )
+    positioning = f"{full_name} 是 {bucket.replace('_', ' ')} 方向的开源项目"
+    what_it_does = description or (readme[:240] if readme else "当前缺少足够 README 描述")
+    core_idea = "；".join(github_extract_repo_entities((description or "") + "\n" + readme).get("technologies")[:6]) or bucket
+    why_hot = [
+        growth_content,
+        f"trend_bucket={bucket}, latest_release={latest_release_tag or 'N/A'}, social_mentions={len(social_mentions)}",
+    ]
+    watch_next = [
+        "观察 24h/7d star 增速是否持续",
+        "检查 release、issue、PR 活跃度是否跟上热度",
+        "追踪是否被 tier1/tier2 大咖或 YouTube transcript 再次提及",
+    ]
+    card_id = "card_" + hashlib.sha256(f"{full_name}\0{created_at[:10]}".encode()).hexdigest()[:20]
+    conn.execute(
+        "INSERT OR REPLACE INTO repo_analysis_cards "
+        "(card_id, repo_full_name, positioning, what_it_does, target_users, core_technical_idea, "
+        "why_hot_facts, scores_json, trend_implication, risks_json, watch_next, evidence_ids_json, "
+        "risk_classification, tier, confidence, model_used, created_at, updated_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            card_id, full_name, positioning, what_it_does[:1000],
+            json.dumps(["AI engineer", "agent developer", "infra researcher"], ensure_ascii=False),
+            core_idea,
+            json.dumps(why_hot, ensure_ascii=False),
+            json.dumps(scores, ensure_ascii=False, sort_keys=True),
+            f"该项目说明 {bucket.replace('_', ' ')} 方向仍在形成可复用开源组件，需结合增长与跨源传播判断是真趋势还是噪声。",
+            json.dumps(risks, ensure_ascii=False),
+            json.dumps(watch_next, ensure_ascii=False),
+            json.dumps(atom_ids, ensure_ascii=False),
+            risk_classification, tier, 0.72 if readme else 0.52,
+            LOCAL_KNOWLEDGE_MODEL, created_at, created_at,
+        ),
+    )
+    brief_id = "brief_" + hashlib.sha256(f"{full_name}\0{created_at[:10]}".encode()).hexdigest()[:20]
+    conn.execute(
+        "INSERT OR REPLACE INTO repo_planning_briefs "
+        "(brief_id, repo_full_name, card_id, opportunity, user_pain, mvp_sketch, architecture_hint, "
+        "go_to_market, risks_json, validation_metrics, model_used, created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            brief_id, full_name, card_id,
+            f"围绕 {bucket.replace('_', ' ')} 做可复用工具/评测/教程选题。",
+            "开发者需要更低摩擦地验证项目是否真能解决 Agent/Infra/AI 工程痛点。",
+            "MVP: repo 复现脚本、核心 workflow demo、同类项目对比、风险清单。",
+            "数据层采集 GitHub/社媒/YouTube 证据，分析层生成 evidence atom 和 project card，报告层输出 AI Influence 栏目。",
+            "优先面向 AI 工程师、开源作者、技术内容读者，以日报/周报和 demo 文章分发。",
+            json.dumps(risks, ensure_ascii=False),
+            json.dumps(["7d star delta", "fork/issue growth", "tier1 mentions", "demo conversion"], ensure_ascii=False),
+            LOCAL_KNOWLEDGE_MODEL,
+            created_at,
+        ),
+    )
+    conn.commit()
+    return {"ok": True, "repo": full_name, "atoms": len(atom_ids), "card_id": card_id, "packet_id": packet_id, "tier": tier, "scores": scores}
+
+
+def github_analyze_projects(conn: sqlite3.Connection, *, limit: int = 0, force: bool = False) -> list[dict[str, Any]]:
+    sql = (
+        "SELECT full_name FROM github_repos ORDER BY "
+        "COALESCE(stars,0) DESC, fetched_at DESC, full_name"
+    )
+    rows = conn.execute(sql).fetchall()
+    if limit:
+        rows = rows[:limit]
+    results = []
+    for (full_name,) in rows:
+        if not force:
+            existing = conn.execute(
+                "SELECT card_id FROM repo_analysis_cards WHERE repo_full_name=?",
+                (full_name,),
+            ).fetchone()
+            if existing:
+                continue
+        results.append(github_materialize_project_intelligence(conn, full_name, force=force))
+    return results
+
+
 BASELINE_FILE_SUFFIXES = {".md", ".markdown", ".html", ".htm", ".txt", ".json", ".jsonl"}
 GITHUB_REPO_RE = re.compile(r"github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)")
 
@@ -4016,6 +5288,85 @@ def cmd_analyze_baseline(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_import_github_candidates(args: argparse.Namespace) -> int:
+    """Import owner/repo candidates discovered in baseline_signals into github_repos."""
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.executescript(SCHEMA_SQL)
+    conn.row_factory = sqlite3.Row
+    min_signals = int(getattr(args, "min_signals", 1) or 1)
+    limit = int(getattr(args, "limit", 0) or 0)
+    rows = conn.execute(
+        """
+        SELECT item_key AS full_name,
+               MAX(url) AS url,
+               MAX(category) AS category,
+               COUNT(*) AS signal_count,
+               MAX(signal_time) AS latest_seen
+        FROM baseline_signals
+        WHERE source_kind='github'
+          AND item_key LIKE '%/%'
+          AND item_key NOT LIKE 'digest:%'
+        GROUP BY item_key
+        HAVING COUNT(*) >= ?
+        ORDER BY signal_count DESC, latest_seen DESC, full_name ASC
+        """,
+        (min_signals,),
+    ).fetchall()
+    if limit > 0:
+        rows = rows[:limit]
+    inserted = 0
+    skipped_invalid = 0
+    existing = 0
+    now = iso_z()
+    for row in rows:
+        full_name = str(row["full_name"] or "").strip()
+        if not re.match(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", full_name):
+            skipped_invalid += 1
+            continue
+        if conn.execute("SELECT 1 FROM github_repos WHERE full_name=?", (full_name,)).fetchone():
+            existing += 1
+            continue
+        owner, repo = full_name.split("/", 1)
+        url = row["url"] or f"https://github.com/{full_name}"
+        category = row["category"] or "market_signal"
+        latest_seen = row["latest_seen"] or now
+        before = conn.total_changes
+        conn.execute(
+            "INSERT OR IGNORE INTO github_repos "
+            "(full_name, owner, repo, html_url, description, topics, fetched_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                full_name,
+                owner,
+                repo,
+                url,
+                f"Baseline-discovered GitHub candidate; signals={row['signal_count']}; latest_seen={latest_seen}",
+                category,
+                latest_seen,
+            ),
+        )
+        if conn.total_changes > before:
+            inserted += 1
+    conn.commit()
+    total = conn.execute("SELECT COUNT(*) FROM github_repos").fetchone()[0]
+    cards = conn.execute("SELECT COUNT(*) FROM repo_analysis_cards").fetchone()[0]
+    print(json.dumps({
+        "ok": True,
+        "database": str(db_path),
+        "candidates_seen": len(rows),
+        "inserted": inserted,
+        "existing": existing,
+        "skipped_invalid": skipped_invalid,
+        "github_repos_total": total,
+        "repo_analysis_cards": cards,
+        "next": "run collect-github --limit-repos N --force, then analyze-github-projects --limit-repos N --force",
+    }, ensure_ascii=False, indent=2, sort_keys=True))
+    conn.close()
+    return 0
+
+
 def github_api_json(path: str, config: dict[str, Any]) -> dict[str, Any]:
     fetch = config.get("fetch") or {}
     token_env = fetch.get("github_token_env", "GITHUB_TOKEN")
@@ -4173,6 +5524,7 @@ def cmd_collect_github(args: argparse.Namespace) -> int:
                 "VALUES (?, ?, ?, ?, ?)",
                 ("github", full_name, "repo_hot_score", hot, fetched_at),
             )
+            github_materialize_project_intelligence(conn, full_name, force=True)
             conn.commit()
         except Exception as exc:
             failures.append(f"{full_name}: {type(exc).__name__}: {exc}")
@@ -4184,6 +5536,289 @@ def cmd_collect_github(args: argparse.Namespace) -> int:
         print(f"  WARN {failure}")
     conn.close()
     return 0 if not failures else 1
+
+
+def cmd_analyze_github_projects(args: argparse.Namespace) -> int:
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.executescript(SCHEMA_SQL)
+    conn.row_factory = sqlite3.Row
+    run_id = begin_run(conn, "github", "analyze-github-projects")
+    limit = int(getattr(args, "limit_repos", 0) or 0)
+    force = bool(getattr(args, "force", False))
+    try:
+        results = github_analyze_projects(conn, limit=limit, force=force)
+        ok = sum(1 for r in results if r.get("ok"))
+        finish_run(conn, run_id, "ok", len(results), ok, "")
+        print(json.dumps({
+            "ok": True,
+            "database": str(db_path),
+            "processed": len(results),
+            "cards": conn.execute("SELECT COUNT(*) FROM repo_analysis_cards").fetchone()[0],
+            "repo_evidence_atoms": conn.execute("SELECT COUNT(*) FROM repo_evidence_atoms").fetchone()[0],
+            "project_reasoning_packets": conn.execute("SELECT COUNT(*) FROM project_reasoning_packets").fetchone()[0],
+            "results": results[:20],
+        }, ensure_ascii=False, indent=2, sort_keys=True))
+        return 0
+    except Exception as exc:
+        finish_run(conn, run_id, "failed", 0, 0, f"{type(exc).__name__}: {exc}")
+        print(f"[analyze-github-projects] ERROR {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        conn.close()
+
+
+def build_github_trend_pack(conn: sqlite3.Connection, *, limit: int = 10, date_str: str | None = None) -> dict[str, Any]:
+    cards = github_project_cards(conn, limit=limit)
+    source_stats = conn.execute(
+        "SELECT COUNT(*) AS repos FROM github_repos"
+    ).fetchone()
+    card_stats = conn.execute(
+        "SELECT tier, COUNT(*) FROM repo_analysis_cards GROUP BY tier ORDER BY tier"
+    ).fetchall()
+    return {
+        "date": date_str or iso_z().split("T", 1)[0],
+        "source": "tech-hotspot-radar/github-project-intelligence",
+        "repo_count": int(source_stats[0] or 0),
+        "card_tiers": {tier: count for tier, count in card_stats},
+        "cards": cards,
+        "instructions": {
+            "goal": "Generate AI Influence GitHub trend analysis section, not a GitHub Trending mirror.",
+            "must_cover": [
+                "core judgment",
+                "sudden-hot attribution",
+                "early potential radar",
+                "foundation-infra candidates",
+                "project planning briefs",
+                "risks and watch next",
+            ],
+            "evidence_policy": "Use only repo cards and evidence ids in this pack; do not invent external facts.",
+        },
+    }
+
+
+def build_github_trend_prompt(pack: dict[str, Any], model_name: str) -> str:
+    return f"""你是 AI Influence 的开源生态主编、AI infra 架构师和产品策略负责人。
+
+你将收到 Tech Hotspot Radar 生成的 GitHub Project Intelligence Pack。它包含 repo metadata、项目分析卡、potential/heat 分数、risk 和 evidence ids。
+
+任务：生成中文「AI Influence GitHub 开源趋势分析栏目」。
+
+硬规则：
+1. 不要做 GitHub Trending 搬运；先给核心判断，再解释项目。
+2. 只基于 pack，不引入外部事实。
+3. 每个关键判断必须绑定 repo 名或 evidence_ids。
+4. 必须区分：确定趋势、早期潜力、可能炒作/风险、需要人工复核。
+5. 每个重点项目都要回答：它是什么、为什么值得看、火的可能原因、核心技术/产品启示、可以策划什么。
+6. 不要输出 JSON，不要代码块，直接输出 Markdown。
+7. 语气专业、直接、有洞察，适合放进 HTML 邮件日报。
+
+报告结构：
+# AI Influence GitHub 开源趋势分析 — {pack.get("date")}
+## 今日核心判断
+## 突然爆火 / 高热项目解析
+## 早期潜力项目雷达
+## 基础设施候选
+## 可能炒作 / 风险
+## 项目策划池
+## 下周观察指标
+## Provenance
+
+Provenance 必须写：
+- final_reasoner: {model_name}
+- source: Tech Hotspot Radar GitHub project cards
+- input_repos: {len(pack.get("cards") or [])}
+- total_watchlist: {pack.get("repo_count")}
+
+pack:
+{json.dumps(pack, ensure_ascii=False)}
+"""
+
+
+def estimate_model_tokens(text: str) -> int:
+    """Cheap deterministic estimate for local ledgers when provider usage is unavailable."""
+    return max(1, int(len(text or "") / 3.6))
+
+
+def record_model_ledgers(
+    conn: sqlite3.Connection,
+    *,
+    target_id: str,
+    pipeline_stage: str,
+    call_purpose: str,
+    input_type: str,
+    packet_id: str,
+    evidence_atom_count: int,
+    result: dict[str, Any],
+    success: bool = True,
+    error_message: str = "",
+) -> None:
+    created_at = iso_z()
+    input_tokens = int(result.get("input_token_count") or 0)
+    output_tokens = int(result.get("output_token_count") or 0)
+    latency_ms = int(result.get("latency_ms") or 0)
+    conn.execute(
+        "INSERT INTO model_call_ledger "
+        "(repo_full_name, model, provider, call_purpose, input_type, input_token_count, "
+        "output_token_count, latency_ms, cost_estimate_usd, evidence_atom_count, success, error_message, created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            target_id,
+            str(result.get("model") or "unknown"),
+            str(result.get("backend") or "codex_cli"),
+            call_purpose,
+            input_type,
+            input_tokens,
+            output_tokens,
+            latency_ms,
+            float(result.get("cost_estimate_usd") or 0.0),
+            evidence_atom_count,
+            1 if success else 0,
+            error_message[:900],
+            created_at,
+        ),
+    )
+    conn.execute(
+        "INSERT INTO token_ledger "
+        "(pipeline_stage, model, provider, tokens_in, tokens_out, tokens_cached, cost_estimate, latency_ms, packet_id, cluster_id, created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            pipeline_stage,
+            str(result.get("model") or "unknown"),
+            str(result.get("backend") or "codex_cli"),
+            input_tokens,
+            output_tokens,
+            int(result.get("cached_input_tokens") or 0),
+            float(result.get("cost_estimate_usd") or 0.0),
+            latency_ms,
+            packet_id,
+            None,
+            created_at,
+        ),
+    )
+
+
+def record_github_trend_model_ledger(
+    conn: sqlite3.Connection,
+    *,
+    date_str: str,
+    pack: dict[str, Any],
+    result: dict[str, Any],
+    success: bool = True,
+    error_message: str = "",
+) -> None:
+    evidence_count = sum(len(card.get("evidence_ids") or []) for card in (pack.get("cards") or []))
+    record_model_ledgers(
+        conn,
+        target_id=f"__github_trend_report__:{date_str}",
+        pipeline_stage="github_trend_report",
+        call_purpose="deep_analysis",
+        input_type="project_reasoning_packet",
+        packet_id=f"github-trend-report:{date_str}",
+        evidence_atom_count=evidence_count,
+        result=result,
+        success=success,
+        error_message=error_message,
+    )
+
+
+def call_codex_github_trend_report(pack: dict[str, Any], config: dict[str, Any],
+                                   *, requested_model: str | None = None) -> dict[str, Any]:
+    cfg = ((config.get("youtube") or {}).get("phase_report_reasoner") or {})
+    codex_bin = str(cfg.get("codex_bin") or os.environ.get("CODEX_BIN") or shutil.which("codex") or "codex")
+    model = str(requested_model or cfg.get("model") or os.environ.get("TECH_HOTSPOT_PHASE_REPORT_MODEL") or "gpt-5.5")
+    timeout = int(cfg.get("timeout_seconds") or 1200)
+    prompt = build_github_trend_prompt(pack, model)
+    started = time.time()
+    with tempfile.TemporaryDirectory(prefix="tech-hotspot-github-report-") as td:
+        out_path = Path(td) / "last-message.md"
+        cmd = [
+            codex_bin, "exec",
+            "--model", model,
+            "--sandbox", "read-only",
+            "--cd", str(Path.home()),
+            "--skip-git-repo-check",
+            "--output-last-message", str(out_path),
+            "-",
+        ]
+        run = subprocess.run(
+            cmd,
+            input=prompt,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=timeout,
+        )
+        if run.returncode != 0:
+            raise RuntimeError(f"codex github trend report failed rc={run.returncode}: {run.stdout[-2000:]}")
+        markdown = out_path.read_text(encoding="utf-8", errors="replace").strip() if out_path.exists() else run.stdout.strip()
+    if len(markdown) < 1500:
+        raise ValueError(f"codex github trend report output too short: {len(markdown)} chars")
+    return {
+        "ok": True,
+        "backend": "codex_cli",
+        "model": model,
+        "latency_ms": int((time.time() - started) * 1000),
+        "input_token_count": estimate_model_tokens(prompt),
+        "output_token_count": estimate_model_tokens(markdown),
+        "cost_estimate_usd": 0.0,
+        "markdown": markdown,
+    }
+
+
+def cmd_github_trend_report(args: argparse.Namespace) -> int:
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.executescript(SCHEMA_SQL)
+    conn.row_factory = sqlite3.Row
+    date_str = getattr(args, "date", None) or iso_z().split("T", 1)[0]
+    limit = int(getattr(args, "limit", 10) or 10)
+    raw_base = Path(getattr(args, "output_base", None) or (config.get("output") or {}).get("raw_dir", "/Users/lisihao/Knowledge/_raw/tech-hotspot-radar")).expanduser()
+    out_dir = raw_base / "github-trend-report" / date_str
+    out_dir.mkdir(parents=True, exist_ok=True)
+    run_id = begin_run(conn, "github", "github-trend-report")
+    try:
+        pack = build_github_trend_pack(conn, limit=limit, date_str=date_str)
+        if not pack.get("cards"):
+            raise ValueError("no repo analysis cards available")
+        result = call_codex_github_trend_report(pack, config, requested_model=getattr(args, "model", None))
+        record_github_trend_model_ledger(conn, date_str=date_str, pack=pack, result=result, success=True)
+        files = {
+            "pack": out_dir / "github-trend-pack.json",
+            "report_json": out_dir / "github-trend-report.json",
+            "report_md": out_dir / "github-trend-report.md",
+            "report_html": out_dir / "github-trend-report.html",
+            "wiki_dispatch": out_dir / "wiki-dispatch.md",
+        }
+        files["pack"].write_text(json.dumps(pack, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        files["report_json"].write_text(json.dumps({k: v for k, v in result.items() if k != "markdown"}, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        files["report_md"].write_text(result["markdown"].strip() + "\n", encoding="utf-8")
+        html = (
+            "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>AI Influence GitHub Trend</title></head>"
+            "<body style=\"margin:0;background:#f4efe4;color:#17231f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB',sans-serif;line-height:1.72\">"
+            "<div style=\"max-width:980px;margin:0 auto;padding:28px 18px 44px\">"
+            "<div style=\"background:linear-gradient(135deg,#123b35,#315f4f 58%,#c9863d);color:#fff;border-radius:26px;padding:30px\">"
+            "<div style=\"font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.82\">AI Influence · GitHub Project Intelligence</div>"
+            f"<h1 style=\"margin:10px 0 12px;font-size:30px;line-height:1.22\">GitHub 开源趋势分析 — {html_escape(date_str)}</h1>"
+            f"<div style=\"font-size:15px;opacity:.92;max-width:820px\">final_reasoner={html_escape(result['model'])} · input_repos={len(pack.get('cards') or [])} · watchlist={pack.get('repo_count')}</div>"
+            "</div><section style=\"background:#fffdf8;border:1px solid #eadfcd;border-radius:20px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:21px;margin:14px 0\">"
+            f"{markdown_to_email_html(result['markdown'])}</section></div></body></html>"
+        )
+        files["report_html"].write_text(html, encoding="utf-8")
+        files["wiki_dispatch"].write_text(report_wiki_dispatch(str(out_dir), date_str), encoding="utf-8")
+        finish_run(conn, run_id, "ok", len(pack.get("cards") or []), len(pack.get("cards") or []), json.dumps({"model": result["model"], "out_dir": str(out_dir)}, ensure_ascii=False)[:900])
+        print(f"[github-trend-report] date={date_str} repos={len(pack.get('cards') or [])} model={result['model']} out={out_dir}")
+        for key in sorted(files):
+            print(f"  {key}: {files[key]}")
+        return 0
+    except Exception as exc:
+        finish_run(conn, run_id, "failed", 0, 0, f"{type(exc).__name__}: {exc}"[:900])
+        print(f"[github-trend-report] ERROR {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        conn.close()
 
 
 def cmd_github_fixture(args: argparse.Namespace) -> int:
@@ -4444,6 +6079,19 @@ def report_source_md(conn: sqlite3.Connection, source: str, date_str: str) -> st
         lines.append("## Alerts")
         for sev, rule, title, detail, fired in alerts:
             lines.append(f"- [{sev.upper()}] {title} — {detail}")
+    if source == "github":
+        cards = github_project_cards(conn, limit=20)
+        if cards:
+            lines.extend(["", "## Project Intelligence Cards", ""])
+            for card in cards:
+                scores = card.get("scores") or {}
+                lines.append(
+                    f"- **{card['repo']}** tier={card['tier']} "
+                    f"potential={scores.get('potential_score', 'N/A')} "
+                    f"heat={scores.get('heat_score', 'N/A')} "
+                    f"risk={card.get('risk_classification') or 'none'} — "
+                    f"{card.get('positioning') or card.get('what_it_does') or ''}"
+                )
     return "\n".join(lines)
 
 
@@ -4649,12 +6297,182 @@ def markdown_to_email_html(markdown: str) -> str:
     return "\n".join(blocks)
 
 
+def sanitize_public_report_markdown(markdown: str) -> str:
+    """Remove internal provenance ids before rendering user-facing email HTML."""
+    text = markdown or ""
+    text = re.split(r"(?im)^\s*##\s+Provenance\s*$", text, maxsplit=1)[0]
+    kept: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if re.search(r"\b(?:evidence_ids?|ghatom_|yt_[A-Za-z0-9_-]{8,}_\d{4})\b", stripped, re.I):
+            continue
+        if re.match(r"(?i)^-\s*(final_reasoner|source|input_repos|total_watchlist)\s*:", stripped):
+            continue
+        kept.append(line)
+    text = "\n".join(kept)
+    text = re.sub(r"`?ghatom_[a-f0-9]{16,}`?", "内部证据", text)
+    text = re.sub(r"\s*依据：\s*内部证据(?:[、,，]\s*内部证据)*[。.]?", "", text)
+    return text.strip()
+
+
+def latest_github_trend_markdown(date_str: str, output_base: str | None = None) -> str:
+    base = Path(output_base or "/Users/lisihao/Knowledge/_raw/tech-hotspot-radar").expanduser()
+    candidates = [
+        base / "github-trend-report" / date_str / "github-trend-report.md",
+    ]
+    root = base / "github-trend-report"
+    if root.exists():
+        candidates.extend(sorted(root.glob("*/github-trend-report.md"), reverse=True))
+    for path in candidates:
+        if path.exists():
+            return path.read_text(encoding="utf-8", errors="replace")
+    return ""
+
+
+def render_latest_github_trend_html(date_str: str, output_base: str | None = None) -> str:
+    markdown = latest_github_trend_markdown(date_str, output_base=output_base)
+    public_markdown = sanitize_public_report_markdown(markdown)
+    if not public_markdown:
+        return ""
+    return (
+        "<div style=\"margin:14px 0;padding:16px;border:1px solid #eadfcd;"
+        "border-radius:16px;background:#fffaf0\">"
+        "<h3 style=\"font-size:18px;color:#1e4b41;margin:0 0 8px\">GitHub 趋势洞察</h3>"
+        f"{markdown_to_email_html(public_markdown)}"
+        "</div>"
+    )
+
+
+def latest_social_trend_markdown(date_str: str, output_base: str | None = None) -> str:
+    base = Path(output_base or "/Users/lisihao/Knowledge/_raw/tech-hotspot-radar").expanduser()
+    candidates = [base / "social-trend-report" / date_str / "social-trend-report.md"]
+    root = base / "social-trend-report"
+    if root.exists():
+        candidates.extend(sorted(root.glob("*/social-trend-report.md"), reverse=True))
+    for path in candidates:
+        if path.exists():
+            return path.read_text(encoding="utf-8", errors="replace")
+    return ""
+
+
+def render_latest_social_trend_html(date_str: str, output_base: str | None = None) -> str:
+    markdown = latest_social_trend_markdown(date_str, output_base=output_base)
+    public_markdown = sanitize_public_report_markdown(markdown)
+    if not public_markdown:
+        return ""
+    return (
+        "<div style=\"margin:14px 0;padding:16px;border:1px solid #eadfcd;"
+        "border-radius:16px;background:#fffaf0\">"
+        "<h3 style=\"font-size:18px;color:#1e4b41;margin:0 0 8px\">社交大咖观点洞察</h3>"
+        f"{markdown_to_email_html(public_markdown)}"
+        "</div>"
+    )
+
+
 def report_top_events(conn: sqlite3.Connection, source: str, limit: int = 8) -> list[sqlite3.Row]:
     return conn.execute(
         "SELECT source_id, event_type, hot_score, scored_at FROM hotspot_events "
         "WHERE source=? ORDER BY hot_score DESC, scored_at DESC LIMIT ?",
         (source, limit),
     ).fetchall()
+
+
+def github_project_cards(conn: sqlite3.Connection, limit: int = 10) -> list[dict[str, Any]]:
+    """Return ranked GitHub project intelligence cards for reports."""
+    rows = conn.execute(
+        """
+        SELECT c.repo_full_name, c.tier, c.positioning, c.what_it_does,
+               c.core_technical_idea, c.trend_implication, c.risk_classification,
+               c.scores_json, c.why_hot_facts, c.risks_json, c.watch_next,
+               c.evidence_ids_json, c.confidence,
+               r.html_url, r.description, r.language, r.license, r.stars, r.forks,
+               r.open_issues, r.latest_release_tag, r.pushed_at
+        FROM repo_analysis_cards c
+        LEFT JOIN github_repos r ON r.full_name = c.repo_full_name
+        ORDER BY
+          CASE c.tier WHEN 'S' THEN 0 WHEN 'A' THEN 1 WHEN 'B' THEN 2 WHEN 'C' THEN 3 ELSE 4 END,
+          CAST(json_extract(c.scores_json, '$.potential_score') AS REAL) DESC,
+          CAST(json_extract(c.scores_json, '$.heat_score') AS REAL) DESC,
+          c.repo_full_name ASC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    cards: list[dict[str, Any]] = []
+    for row in rows:
+        (
+            repo, tier, positioning, what_it_does, core_technical_idea, trend_implication,
+            risk_classification, scores_json, why_hot_facts, risks_json, watch_next,
+            evidence_ids_json, confidence, html_url, description, language, license_id,
+            stars, forks, open_issues, latest_release_tag, pushed_at,
+        ) = row
+        def load_json(value: str, fallback: Any) -> Any:
+            try:
+                return json.loads(value or "")
+            except Exception:
+                return fallback
+        cards.append({
+            "repo": repo,
+            "tier": tier,
+            "positioning": positioning,
+            "what_it_does": what_it_does,
+            "core_technical_idea": core_technical_idea,
+            "trend_implication": trend_implication,
+            "risk_classification": risk_classification,
+            "scores": load_json(scores_json, {}),
+            "why_hot_facts": load_json(why_hot_facts, []),
+            "risks": load_json(risks_json, []),
+            "watch_next": load_json(watch_next, []),
+            "evidence_ids": load_json(evidence_ids_json, []),
+            "confidence": confidence,
+            "html_url": html_url or f"https://github.com/{repo}",
+            "description": description,
+            "language": language,
+            "license": license_id,
+            "stars": stars,
+            "forks": forks,
+            "open_issues": open_issues,
+            "latest_release_tag": latest_release_tag,
+            "pushed_at": pushed_at,
+        })
+    return cards
+
+
+def render_github_project_cards_html(conn: sqlite3.Connection, limit: int = 12) -> str:
+    cards = github_project_cards(conn, limit=limit)
+    if not cards:
+        return "<p style=\"color:#66736d\">No GitHub project cards yet.</p>"
+    rows = ""
+    for idx, card in enumerate(cards, 1):
+        scores = card.get("scores") or {}
+        bg = "background:#fbf7ef;" if idx % 2 == 0 else ""
+        risk = card.get("risk_classification") or "none"
+        desc = card.get("what_it_does") or card.get("description") or ""
+        rows += (
+            f"<tr><td style=\"padding:10px;border-bottom:1px solid #eee3d3;{bg}\">{idx}</td>"
+            f"<td style=\"padding:10px;border-bottom:1px solid #eee3d3;{bg}\">"
+            f"<a href=\"{html_escape(card.get('html_url'))}\" style=\"color:#0f766e;text-decoration:none\">{html_escape(card.get('repo'))}</a>"
+            f"<br><span style=\"font-size:12px;color:#66736d\">{html_escape(card.get('language') or 'N/A')} · ⭐ {html_escape(card.get('stars') or 0)} · forks {html_escape(card.get('forks') or 0)}</span></td>"
+            f"<td style=\"padding:10px;border-bottom:1px solid #eee3d3;{bg}\">{html_escape(card.get('tier'))}</td>"
+            f"<td style=\"padding:10px;border-bottom:1px solid #eee3d3;{bg}\">{float(scores.get('potential_score') or 0):.3f}</td>"
+            f"<td style=\"padding:10px;border-bottom:1px solid #eee3d3;{bg}\">{float(scores.get('heat_score') or 0):.3f}</td>"
+            f"<td style=\"padding:10px;border-bottom:1px solid #eee3d3;{bg}\">{html_escape(risk)}</td>"
+            f"<td style=\"padding:10px;border-bottom:1px solid #eee3d3;{bg}\">{html_escape(desc[:260])}</td></tr>"
+        )
+    return (
+        "<div style=\"margin:12px 0;padding:14px;border:1px solid #eadfcd;border-radius:16px;background:#fbf7ef\">"
+        "<h3 style=\"font-size:17px;color:#1e4b41;margin:0 0 8px\">Project Intelligence Watchlist</h3>"
+        "<p style=\"font-size:13px;color:#52615b;margin:0 0 10px\">按 potential / heat / tier 排序，不是简单 GitHub Trending 搬运。</p>"
+        "<table style=\"width:100%;border-collapse:collapse;font-size:13px\">"
+        "<tr><th style=\"background:#123b35;color:#fff;text-align:left;padding:10px\">#</th>"
+        "<th style=\"background:#123b35;color:#fff;text-align:left;padding:10px\">Repo</th>"
+        "<th style=\"background:#123b35;color:#fff;text-align:left;padding:10px\">Tier</th>"
+        "<th style=\"background:#123b35;color:#fff;text-align:left;padding:10px\">Potential</th>"
+        "<th style=\"background:#123b35;color:#fff;text-align:left;padding:10px\">Heat</th>"
+        "<th style=\"background:#123b35;color:#fff;text-align:left;padding:10px\">Risk</th>"
+        "<th style=\"background:#123b35;color:#fff;text-align:left;padding:10px\">定位</th></tr>"
+        f"{rows}</table></div>"
+    )
 
 
 def youtube_semantic_brief(conn: sqlite3.Connection, video_id: str) -> dict[str, Any] | None:
@@ -4713,6 +6531,7 @@ def render_event_table(conn: sqlite3.Connection, source: str) -> str:
         source_id, event_type, score, scored_at = row
         detail = ""
         link = ""
+        display_title = source_id
         if source == "youtube":
             v = conn.execute(
                 "SELECT title, channel_name, video_url FROM youtube_videos WHERE video_id=?",
@@ -4723,7 +6542,7 @@ def render_event_table(conn: sqlite3.Connection, source: str) -> str:
                 (source_id,),
             ).fetchone()
             if v:
-                detail = html_escape(f"{v[1]} · {v[0]}")
+                display_title = f"{v[1]} · {v[0]}"
                 link = v[2]
             if t:
                 detail += html_escape(f" · transcript={t[0]}({t[1]} chars)")
@@ -4751,6 +6570,7 @@ def render_event_table(conn: sqlite3.Connection, source: str) -> str:
                 (source_id,),
             ).fetchone()
             if p:
+                display_title = f"@{p[0]}"
                 detail = f"@{p[0]} · {p[2]}"
                 link = p[1]
         elif source == "github":
@@ -4759,9 +6579,10 @@ def render_event_table(conn: sqlite3.Connection, source: str) -> str:
                 (source_id,),
             ).fetchone()
             if g:
+                display_title = source_id
                 detail = f"⭐ {g[2]} · {g[0]}"
                 link = g[1]
-        title = html_escape(source_id)
+        title = html_escape(display_title)
         if link:
             title = f"<a href=\"{html_escape(link)}\" style=\"color:#0f766e;text-decoration:none\">{title}</a>"
         bg = "background:#fbf7ef;" if idx % 2 == 0 else ""
@@ -4776,7 +6597,7 @@ def render_event_table(conn: sqlite3.Connection, source: str) -> str:
     return (
         "<table style=\"width:100%;border-collapse:collapse;font-size:13px\">"
         "<tr><th style=\"background:#123b35;color:#fff;text-align:left;padding:10px\">#</th>"
-        "<th style=\"background:#123b35;color:#fff;text-align:left;padding:10px\">ID</th>"
+        "<th style=\"background:#123b35;color:#fff;text-align:left;padding:10px\">来源</th>"
         "<th style=\"background:#123b35;color:#fff;text-align:left;padding:10px\">类型</th>"
         "<th style=\"background:#123b35;color:#fff;text-align:left;padding:10px\">热度</th>"
         "<th style=\"background:#123b35;color:#fff;text-align:left;padding:10px\">说明</th>"
@@ -4798,6 +6619,43 @@ def render_alerts(conn: sqlite3.Connection) -> str:
         for sev, title, detail in alerts
     )
     return f"<ul>{items}</ul>"
+
+
+def render_model_ledger_summary(conn: sqlite3.Connection) -> str:
+    try:
+        rows = conn.execute(
+            "SELECT pipeline_stage, model, provider, COUNT(*), SUM(tokens_in), SUM(tokens_out), "
+            "SUM(cost_estimate), AVG(latency_ms) FROM token_ledger "
+            "GROUP BY pipeline_stage, model, provider ORDER BY MAX(created_at) DESC LIMIT 8"
+        ).fetchall()
+    except sqlite3.Error:
+        return "<p style=\"color:#66736d\">Model ledger unavailable.</p>"
+    if not rows:
+        return "<p style=\"color:#66736d\">No model calls recorded yet.</p>"
+    body = ""
+    for idx, row in enumerate(rows, 1):
+        stage, model, provider, calls, tin, tout, cost, latency = row
+        bg = "background:#fbf7ef;" if idx % 2 == 0 else ""
+        body += (
+            f"<tr><td style=\"padding:9px;border-bottom:1px solid #eee3d3;{bg}\">{html_escape(stage)}</td>"
+            f"<td style=\"padding:9px;border-bottom:1px solid #eee3d3;{bg}\">{html_escape(model)}</td>"
+            f"<td style=\"padding:9px;border-bottom:1px solid #eee3d3;{bg}\">{html_escape(provider)}</td>"
+            f"<td style=\"padding:9px;border-bottom:1px solid #eee3d3;{bg}\">{int(calls or 0)}</td>"
+            f"<td style=\"padding:9px;border-bottom:1px solid #eee3d3;{bg}\">{int(tin or 0)} / {int(tout or 0)}</td>"
+            f"<td style=\"padding:9px;border-bottom:1px solid #eee3d3;{bg}\">${float(cost or 0):.4f}</td>"
+            f"<td style=\"padding:9px;border-bottom:1px solid #eee3d3;{bg}\">{int(latency or 0)} ms</td></tr>"
+        )
+    return (
+        "<table style=\"width:100%;border-collapse:collapse;font-size:13px\">"
+        "<tr><th style=\"background:#123b35;color:#fff;text-align:left;padding:9px\">阶段</th>"
+        "<th style=\"background:#123b35;color:#fff;text-align:left;padding:9px\">模型</th>"
+        "<th style=\"background:#123b35;color:#fff;text-align:left;padding:9px\">Provider</th>"
+        "<th style=\"background:#123b35;color:#fff;text-align:left;padding:9px\">调用</th>"
+        "<th style=\"background:#123b35;color:#fff;text-align:left;padding:9px\">Tokens in/out</th>"
+        "<th style=\"background:#123b35;color:#fff;text-align:left;padding:9px\">成本</th>"
+        "<th style=\"background:#123b35;color:#fff;text-align:left;padding:9px\">平均耗时</th></tr>"
+        f"{body}</table>"
+    )
 
 
 PHASE1_CORE_CHANNELS = {
@@ -5075,6 +6933,9 @@ def call_codex_phase_report(evidence_pack: dict[str, Any], config: dict[str, Any
         "_backend": "codex_cli",
         "_local_preprocess": "ThunderOMLX/Qwen3.6 semantic packets",
         "_latency_ms": int((time.time() - started) * 1000),
+        "input_token_count": estimate_model_tokens(prompt),
+        "output_token_count": estimate_model_tokens(markdown),
+        "cost_estimate_usd": 0.0,
         "_input_video_count": len(evidence_pack.get("videos") or []),
         "_json_repair_used": False,
         "_markdown_fallback_used": False,
@@ -5464,6 +7325,24 @@ def cmd_phase_report(args: argparse.Namespace) -> int:
             reasoner=getattr(args, "reasoner", None),
             model=getattr(args, "model", None),
         )
+        record_model_ledgers(
+            conn,
+            target_id=f"__phase_report__:{phase}:{date_str}",
+            pipeline_stage="phase_report",
+            call_purpose="deep_analysis",
+            input_type="project_reasoning_packet",
+            packet_id=f"phase-report:{phase}:{date_str}",
+            evidence_atom_count=sum(int(v.get("evidence_atom_count") or 0) for v in evidence_pack.get("videos") or [] if isinstance(v, dict)),
+            result={
+                "model": report.get("_model"),
+                "backend": report.get("_backend"),
+                "latency_ms": report.get("_latency_ms"),
+                "input_token_count": report.get("input_token_count"),
+                "output_token_count": report.get("output_token_count"),
+                "cost_estimate_usd": report.get("cost_estimate_usd"),
+            },
+            success=True,
+        )
         files = {
             "evidence_pack": out_dir / "phase-evidence-pack.json",
             "report_json": out_dir / "phase-report.json",
@@ -5503,7 +7382,7 @@ def cmd_phase_report(args: argparse.Namespace) -> int:
         return 1
 
 
-def report_html(conn: sqlite3.Connection, date_str: str) -> str:
+def report_html(conn: sqlite3.Connection, date_str: str, output_base: str | None = None) -> str:
     """Generate polished Gmail-safe HTML report."""
     counts = {
         "youtube": conn.execute("SELECT COUNT(*) FROM hotspot_events WHERE source='youtube'").fetchone()[0],
@@ -5537,15 +7416,20 @@ def report_html(conn: sqlite3.Connection, date_str: str) -> str:
   </section>
   <section style="background:#fffdf8;border:1px solid #eadfcd;border-radius:20px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:21px;margin:14px 0">
     <h2 style="font-size:21px;color:#123b35;margin:0 0 12px">2. 社交媒体热点监控</h2>
+    {render_latest_social_trend_html(date_str, output_base=output_base)}
     {render_event_table(conn, "social")}
   </section>
   <section style="background:#fffdf8;border:1px solid #eadfcd;border-radius:20px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:21px;margin:14px 0">
     <h2 style="font-size:21px;color:#123b35;margin:0 0 12px">3. GitHub 热点扫描</h2>
+    {render_latest_github_trend_html(date_str, output_base=output_base)}
     {render_event_table(conn, "github")}
+    {render_github_project_cards_html(conn, 12)}
   </section>
   <section style="background:#fbf7ef;border:1px solid #eadfcd;border-radius:16px;padding:16px;margin:14px 0">
     <h2 style="font-size:21px;color:#123b35;margin:0 0 12px">告警 / 运行状态</h2>
     {render_alerts(conn)}
+    <h3 style="font-size:17px;color:#1e4b41;margin:14px 0 6px">模型调用账本</h3>
+    {render_model_ledger_summary(conn)}
     <p style="font-size:12px;color:#66736d">Generated by solar-harness Tech Hotspot Radar. raw path: /Users/lisihao/Knowledge/_raw/tech-hotspot-radar/{html_escape(date_str)}</p>
   </section>
 </div></body></html>"""
@@ -5674,7 +7558,7 @@ def report_write_artifacts(conn: sqlite3.Connection, date_str: str,
     files["transcripts_txt"] = str(p)
 
     # HTML report
-    html = report_html(conn, date_str)
+    html = report_html(conn, date_str, output_base=output_base)
     p = out_dir / "report.html"
     p.write_text(html, encoding="utf-8")
     files["html"] = str(p)
@@ -5881,6 +7765,12 @@ def cmd_collect_all(args: argparse.Namespace) -> int:
         gh_args = argparse.Namespace(**vars(args))
         gh_args.limit_repos = getattr(args, "limit_repos", 0)
         rc = max(rc, cmd_collect_github(gh_args))
+        # Project intelligence is part of the GitHub collector contract:
+        # raw snapshots should immediately materialize repo evidence atoms/cards.
+        gh_analyze_args = argparse.Namespace(**vars(args))
+        gh_analyze_args.limit_repos = getattr(args, "limit_repos", 0)
+        gh_analyze_args.force = True
+        rc = max(rc, cmd_analyze_github_projects(gh_analyze_args))
     if not getattr(args, "skip_social", False):
         social_args = argparse.Namespace(**vars(args))
         social_args.limit_accounts = getattr(args, "limit_accounts", 0)
@@ -6193,6 +8083,14 @@ def build_parser() -> argparse.ArgumentParser:
     gh_collect = sub.add_parser("collect-github", help="Collect live GitHub tracked repo metadata with rate limits")
     gh_collect.add_argument("--limit-repos", type=int, default=0)
     gh_collect.add_argument("--force", action="store_true")
+    gh_analyze = sub.add_parser("analyze-github-projects", help="Build GitHub repo evidence atoms, reasoning packets and analysis cards")
+    gh_analyze.add_argument("--limit-repos", type=int, default=0)
+    gh_analyze.add_argument("--force", action="store_true")
+    gh_trend_report = sub.add_parser("github-trend-report", help="Generate AI Influence GitHub trend analysis with Codex")
+    gh_trend_report.add_argument("--limit", type=int, default=10, help="Top project cards to include")
+    gh_trend_report.add_argument("--date", default=None, help="Report date YYYY-MM-DD")
+    gh_trend_report.add_argument("--model", default=None, help="Codex model override")
+    gh_trend_report.add_argument("--output-base", default=None, help="Override report output directory")
     baseline_build = sub.add_parser("build-baseline", help="Build 180-day GitHub/Web/Solar baseline from local archives")
     baseline_build.add_argument("--days", type=int, default=180)
     baseline_build.add_argument("--limit", type=int, default=0, help="Limit files per source for smoke tests")
@@ -6202,10 +8100,19 @@ def build_parser() -> argparse.ArgumentParser:
     baseline_collect.add_argument("--limit-repos", type=int, default=0)
     baseline_analyze = sub.add_parser("analyze-baseline", help="Analyze 1d/7d/30d/180d GitHub/Web/Solar baseline windows")
     baseline_analyze.add_argument("--write-report", action="store_true")
+    gh_import = sub.add_parser("import-github-candidates", help="Import GitHub owner/repo candidates from baseline signals")
+    gh_import.add_argument("--limit", type=int, default=0, help="Max candidates to import")
+    gh_import.add_argument("--min-signals", type=int, default=1, help="Minimum baseline signal count per repo")
     social_collect = sub.add_parser("collect-social", help="Collect live public social RSS posts with rate limits")
     social_collect.add_argument("--limit-accounts", type=int, default=0)
     social_collect.add_argument("--per-account-limit", type=int, default=3)
+    social_collect.add_argument("--backend", choices=["auto", "x-api", "rss"], default="auto")
     social_collect.add_argument("--force", action="store_true")
+    social_trend = sub.add_parser("social-trend-report", help="Generate AI Influence social signal and big-name viewpoint report with Codex")
+    social_trend.add_argument("--date", default=None, help="Report date YYYY-MM-DD")
+    social_trend.add_argument("--limit-posts", type=int, default=40)
+    social_trend.add_argument("--model", default=None, help="Codex model override")
+    social_trend.add_argument("--output-base", default=None, help="Override report output directory")
     all_collect = sub.add_parser("collect-all", help="Run live collectors and write reports")
     all_collect.add_argument("--youtube-days", type=int, default=0, help="Override YouTube backfill window")
     all_collect.add_argument("--limit-channels", type=int, default=0)
@@ -6249,10 +8156,14 @@ def main() -> int:
         "collect-youtube": cmd_collect_youtube,
         "backfill-youtube": cmd_backfill_youtube,
         "collect-github": cmd_collect_github,
+        "analyze-github-projects": cmd_analyze_github_projects,
+        "github-trend-report": cmd_github_trend_report,
         "build-baseline": cmd_build_baseline,
         "collect-baseline": cmd_collect_incremental_baseline,
         "analyze-baseline": cmd_analyze_baseline,
+        "import-github-candidates": cmd_import_github_candidates,
         "collect-social": cmd_collect_social,
+        "social-trend-report": cmd_social_trend_report,
         "collect-all": cmd_collect_all,
     }
     handler = commands.get(args.command)

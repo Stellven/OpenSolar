@@ -47,11 +47,11 @@ conn = sqlite3.connect('$TEMP_DB')
 cur = conn.execute(\"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'\")
 print(cur.fetchone()[0])
 ")
-assert "23 tables created" "$TABLE_COUNT" "23"
+assert "35 tables created" "$TABLE_COUNT" "35"
 
 # ── Test 3: core tables exist ──────────────────────────────────
 echo "--- T3: core tables ---"
-for t in youtube_channels youtube_videos youtube_video_snapshots youtube_transcripts social_accounts social_posts social_post_snapshots social_clusters github_topics github_repos github_star_snapshots hotspot_events cross_source_links hotspot_alerts pipeline_runs retry_queue _meta; do
+for t in youtube_channels youtube_videos youtube_video_snapshots youtube_transcripts social_accounts social_posts social_post_snapshots social_clusters github_topics github_repos github_star_snapshots hotspot_events cross_source_links hotspot_alerts pipeline_runs retry_queue _meta strategy_tracks repo_master; do
     EXISTS=$(python3 -c "
 import sqlite3
 conn = sqlite3.connect('$TEMP_DB')
@@ -171,7 +171,7 @@ cur = conn.execute(\"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND n
 print(cur.fetchone()[0])
 ")
 rm -f "$TEMP_DB2"
-assert "--db override creates tables" "$OVERRIDE_COUNT" "23"
+assert "--db override creates tables" "$OVERRIDE_COUNT" "35"
 
 # ── Test 14: existing source scripts still syntax valid ────────
 echo "--- T14: existing scripts not broken ---"
