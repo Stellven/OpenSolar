@@ -18,6 +18,7 @@ SECRET_RE = re.compile(
 )
 QUOTA_RE = re.compile(r"RESOURCE_EXHAUSTED|quota|rate[- ]?limit|429|resets in", re.I)
 AUTH_RE = re.compile(r"not logged in|auth(?:entication)? failed|oauth token|permission denied", re.I)
+FAILURE_RE = re.compile(r"error:\s*timed out waiting for response|timed out waiting for response|traceback|uncaught exception", re.I)
 
 
 def now() -> str:
@@ -218,8 +219,15 @@ def main() -> int:
         print(proc.stderr, file=sys.stderr, end="" if proc.stderr.endswith("\n") else "\n")
     if proc.returncode == 0:
         output = (proc.stdout or "").strip()
+        log_tail = tail_text(log_file)
+        combined_output = "\n".join(part for part in [output, log_tail] if part)
+        if FAILURE_RE.search(combined_output):
+            print("ERROR: Antigravity command backend reported failure; refusing success handoff", file=sys.stderr)
+            safe_tail = redact(combined_output[-4000:])
+            if safe_tail:
+                print(safe_tail, file=sys.stderr)
+            return 65
         if not output:
-            log_tail = tail_text(log_file)
             safe_tail = redact(log_tail)
             if QUOTA_RE.search(log_tail):
                 print("ERROR: Antigravity quota exhausted; refusing empty handoff", file=sys.stderr)
