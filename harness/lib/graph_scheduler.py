@@ -456,6 +456,14 @@ def _depends_on(node: dict[str, Any]) -> list[str]:
     return [str(d) for d in deps]
 
 
+def _is_external_dependency(dep: str) -> bool:
+    return str(dep or "").startswith("external:")
+
+
+def _internal_depends_on(node: dict[str, Any]) -> list[str]:
+    return [dep for dep in _depends_on(node) if not _is_external_dependency(dep)]
+
+
 def _estimated_cost(node: dict[str, Any]) -> float:
     try:
         return float(node.get("estimated_cost", 1) or 1)
@@ -470,6 +478,8 @@ def validate_graph(graph: dict[str, Any]) -> dict[str, Any]:
 
     for node_id, node in ids.items():
         for dep in _depends_on(node):
+            if _is_external_dependency(dep):
+                continue
             if dep not in ids:
                 errors.append(f"{node_id} depends on missing node {dep}")
         if "write_scope" not in node or not node.get("write_scope"):
@@ -517,6 +527,8 @@ def topo_order(graph: dict[str, Any]) -> list[str]:
 
     for node_id, node in ids.items():
         for dep in _depends_on(node):
+            if _is_external_dependency(dep):
+                continue
             if dep not in ids:
                 raise ValueError(f"{node_id} depends on missing node {dep}")
             indegree[node_id] += 1
@@ -548,7 +560,7 @@ def topo_layers(graph: dict[str, Any]) -> list[list[str]]:
     while remaining:
         layer = sorted([
             node_id for node_id in remaining
-            if all(dep in passed for dep in _depends_on(ids[node_id]))
+            if all(dep in passed for dep in _internal_depends_on(ids[node_id]))
         ])
         if not layer:
             raise ValueError("cycle detected while building layers")
@@ -566,7 +578,7 @@ def critical_path(graph: dict[str, Any]) -> dict[str, Any]:
 
     for node_id in order:
         node = ids[node_id]
-        deps = _depends_on(node)
+        deps = _internal_depends_on(node)
         if not deps:
             best_cost[node_id] = _estimated_cost(node)
             best_path[node_id] = [node_id]
@@ -604,7 +616,7 @@ def ready_nodes(graph: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         if status not in READY_STATUSES:
             continue
-        deps = _depends_on(ids[node_id])
+        deps = _internal_depends_on(ids[node_id])
         if all(_is_passed(graph, dep) for dep in deps):
             ready.append(deepcopy(ids[node_id]))
     return ready
