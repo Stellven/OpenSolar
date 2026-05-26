@@ -2157,19 +2157,52 @@ fi
 }} > >(tee -a "$OUTPUT_LOG") 2>&1
 rc=${{agent_rc:-$?}}
 
+graph_node_status() {{
+  python3 - "$GRAPH" "$NODE_ID" <<PY 2>/dev/null || true
+import json, sys
+from pathlib import Path
+try:
+    graph = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+    node_id = sys.argv[2]
+    for node in graph.get("nodes", []):
+        if str(node.get("id") or "") == node_id:
+            print(str(node.get("status") or ""))
+            break
+except Exception:
+    pass
+PY
+}}
+
+mark_graph_failed_unless_passed() {{
+  local current
+  current="$(graph_node_status | tail -n 1)"
+  if [[ "$current" == "passed" ]]; then
+    echo "[solar-harness multi-task] sid=$SID node=$NODE_ID late_failure_ignored_graph_already_passed=true" | tee -a "$OUTPUT_LOG"
+    return 2
+  fi
+  "$HARNESS" graph-scheduler mark --graph "$GRAPH" --node "$NODE_ID" --status failed --in-place >> "$OUTPUT_LOG" 2>&1 || true
+  return 0
+}}
+
 if [[ "$rc" -eq 0 && -s "$HANDOFF" ]]; then
   "$HARNESS" graph-scheduler mark --graph "$GRAPH" --node "$NODE_ID" --status reviewing --in-place >> "$OUTPUT_LOG" 2>&1 || true
   write_status completed "$rc"
   pane_title "MT $ROLE/$PROFILE | 模型:$MODEL | provider:$PROVIDER | 状态:completed"
 elif [[ "$rc" -eq 0 ]]; then
   echo "ERROR: missing handoff: $HANDOFF" | tee -a "$OUTPUT_LOG"
-  "$HARNESS" graph-scheduler mark --graph "$GRAPH" --node "$NODE_ID" --status failed --in-place >> "$OUTPUT_LOG" 2>&1 || true
-  write_status failed_missing_handoff 65
+  if mark_graph_failed_unless_passed; then
+    write_status failed_missing_handoff 65
+  else
+    write_status failed_aligned 65
+  fi
   pane_title "MT $ROLE/$PROFILE | 模型:$MODEL | provider:$PROVIDER | 状态:failed_missing_handoff"
   rc=65
 else
-  "$HARNESS" graph-scheduler mark --graph "$GRAPH" --node "$NODE_ID" --status failed --in-place >> "$OUTPUT_LOG" 2>&1 || true
-  write_status failed "$rc"
+  if mark_graph_failed_unless_passed; then
+    write_status failed "$rc"
+  else
+    write_status failed_aligned "$rc"
+  fi
   pane_title "MT $ROLE/$PROFILE | 模型:$MODEL | provider:$PROVIDER | 状态:failed"
 fi
 echo "[solar-harness multi-task] sid=$SID node=$NODE_ID exit=$rc end=$(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee -a "$OUTPUT_LOG"

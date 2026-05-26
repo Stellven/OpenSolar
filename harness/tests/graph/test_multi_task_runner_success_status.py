@@ -39,16 +39,22 @@ def _runner_script_text(tmp_path: Path, *, review_required: bool = False) -> str
     return runner.read_text(encoding="utf-8")
 
 
-def test_successful_handoff_defaults_to_passed(tmp_path):
+def test_successful_handoff_marks_graph_reviewing(tmp_path):
     script = _runner_script_text(tmp_path)
 
-    assert 'success_status="${SOLAR_MULTI_TASK_SUCCESS_STATUS:-passed}"' in script
-    assert '--status "$success_status"' in script
-    assert "REVIEW_REQUIRED=0" in script
+    assert '--status reviewing' in script
+    assert 'write_status completed "$rc"' in script
 
 
-def test_review_required_node_can_still_stop_at_reviewing(tmp_path):
+def test_review_required_node_uses_same_reviewing_terminal_state(tmp_path):
     script = _runner_script_text(tmp_path, review_required=True)
 
-    assert "REVIEW_REQUIRED=1" in script
-    assert 'success_status="reviewing"' in script
+    assert '--status reviewing' in script
+    assert 'write_status completed "$rc"' in script
+
+def test_late_failure_does_not_overwrite_passed_graph_node(tmp_path):
+    script = _runner_script_text(tmp_path)
+
+    assert "mark_graph_failed_unless_passed" in script
+    assert "late_failure_ignored_graph_already_passed=true" in script
+    assert "write_status failed_aligned" in script
