@@ -1052,6 +1052,38 @@ def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path
             continue
         status = node_status(graph, node_id)
         handoff_file = _existing_node_handoff(sid, node, graph)
+        eval_json_path = str(node.get("eval_json") or _eval_json_file(sid, node_id))
+        eval_payload = _read_json_file_safe(eval_json_path) if eval_json_path else {}
+        eval_verdict = str(eval_payload.get("verdict") or "").strip().upper()
+        if handoff_file and eval_verdict in {"PASS", "FAIL"} and status in {"pending", "queued", "blocked", "assigned", "dispatched", "in_progress", "running", "reviewing", "ready_for_review", "needs_human_review", "failed_review", ""}:
+            pane = str(node.get("assigned_to") or "").strip()
+            dispatch_id = str(node.get("dispatch_id") or "").strip()
+            if pane and dispatch_id:
+                release_lease(pane, dispatch_id, "graph_dispatch_reconcile_eval_verdict")
+            node.pop("assigned_to", None)
+            node.pop("dispatch_id", None)
+            verdict_status = "passed" if eval_verdict == "PASS" else "failed"
+            mark_node_result(
+                graph,
+                node_id,
+                verdict_status,
+                gate_status=verdict_status,
+                note=f"reconciled_from_eval_sidecar:{Path(eval_json_path).name}",
+            )
+            node["status"] = verdict_status
+            node["updated_at"] = _utc_now()
+            node["eval_json"] = eval_json_path
+            repaired.append(
+                {
+                    "node": node_id,
+                    "status": verdict_status,
+                    "reason": "eval_sidecar_exists",
+                    "handoff": str(handoff_file),
+                    "eval_json": eval_json_path,
+                    "verdict": eval_verdict,
+                }
+            )
+            continue
         if handoff_file and status in {"pending", "queued", "blocked", "assigned", "dispatched", "in_progress", "running", ""}:
             pane = str(node.get("assigned_to") or "").strip()
             dispatch_id = str(node.get("dispatch_id") or "").strip()
