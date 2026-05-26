@@ -174,6 +174,12 @@ QUOTA_RE = re.compile(
     r"(?:rate[- ]?limit|quota)\D{0,40}(?:exceeded|reached|hit|error|failed)",
     re.I,
 )
+AUTH_RE = re.compile(
+    r"not logged in|not authenticated|auth(?:entication)?(?:\\s+)?(?:failed|expired|required)|"
+    r"failed to get oauth token|error getting token source|failed to set auth token|"
+    r"no active conversation|login required|invalid credentials",
+    re.I,
+)
 
 
 def load_profiles() -> dict[str, Any]:
@@ -1308,7 +1314,7 @@ def select_profile(node: dict[str, Any], profile_override: str = "", model_overr
                 fallback_profile["capability_fallback_from"] = profile_name
                 fallback_profile["capability_fallback_reason"] = str(capability.get("status") or "unavailable")
                 selected = fallback_profile
-    if not (requested_profile and node.get("quota_failure_reason")):
+    if not (requested_profile and (node.get("quota_failure_reason") or node.get("auth_failure_reason"))):
         operator, fallback_reason = select_operator(node, selected)
         if operator:
             selected = apply_operator_to_profile(selected, operator, fallback_reason)
@@ -1885,15 +1891,65 @@ def graph_files(explicit: list[str]) -> list[Path]:
     return sorted(SPRINTS_DIR.glob("*.task_graph.json"), key=lambda p: p.stat().st_mtime, reverse=True)
 
 
-def output_log_has_quota_failure(task_id_value: str) -> bool:
+def output_log_failure_kind(task_id_value: str) -> str:
     if not task_id_value:
-        return False
+        return ""
     log = RUN_DIR / task_id_value / "output.log"
     try:
         tail = log.read_text(encoding="utf-8", errors="replace")[-12000:]
     except Exception:
+        return ""
+    if AUTH_RE.search(tail):
+        return "auth_expired"
+    if QUOTA_RE.search(tail):
+        return "quota_exhausted"
+    return ""
+
+
+def output_log_has_quota_failure(task_id_value: str) -> bool:
+    return output_log_failure_kind(task_id_value) == "quota_exhausted"
+
+
+def output_log_has_provider_recoverable_failure(task_id_value: str) -> bool:
+    return output_log_failure_kind(task_id_value) in {"auth_expired", "quota_exhausted"}
+
+
+def _recoverable_failure_label(reason: str) -> str:
+    if reason == "auth_expired":
+        return "auth_expired"
+    if reason == "quota_exhausted":
+        return "quota_exhausted"
+    return "provider_unavailable"
+
+
+def _recoverable_failure_no_fallback(reason: str) -> str:
+    if reason == "auth_expired":
+        return "auth_expired_no_fallback_profile"
+    if reason == "quota_exhausted":
+        return "quota_exhausted_no_fallback_profile"
+    return "provider_unavailable_no_fallback_profile"
+
+
+def _recoverable_failure_limit(reason: str) -> str:
+    if reason == "auth_expired":
+        return "auth_expired_recovery_limit_reached"
+    if reason == "quota_exhausted":
+        return "quota_exhausted_recovery_limit_reached"
+    return "provider_unavailable_recovery_limit_reached"
+
+
+def _recoverable_failure_field_prefix(reason: str) -> str:
+    if reason == "auth_expired":
+        return "auth_failure"
+    if reason == "quota_exhausted":
+        return "quota_failure"
+    return "provider_failure"
+
+
+def output_log_has_auth_failure(task_id_value: str) -> bool:
+    if not task_id_value:
         return False
-    return bool(QUOTA_RE.search(tail))
+    return output_log_failure_kind(task_id_value) == "auth_expired"
 
 
 def recover_quota_failed_nodes(graph_path: Path, graph: dict[str, Any]) -> int:
@@ -1913,7 +1969,8 @@ def recover_quota_failed_nodes(graph_path: Path, graph: dict[str, Any]) -> int:
             str((status or {}).get("profile") or node.get("preferred_profile") or node.get("profile") or ""),
             profiles,
         )
-        if not output_log_has_quota_failure(dispatch_id):
+        failure_reason = output_log_failure_kind(dispatch_id)
+        if failure_reason not in {"auth_expired", "quota_exhausted"}:
             continue
         recovered_ids = set(_as_string_list(node.get("quota_recovery_task_ids")))
         try:
@@ -1922,9 +1979,10 @@ def recover_quota_failed_nodes(graph_path: Path, graph: dict[str, Any]) -> int:
             recovery_count = 0
         max_recoveries = int(os.environ.get("SOLAR_MULTI_TASK_MAX_QUOTA_RECOVERIES_PER_NODE", "1") or "1")
         if (dispatch_id and dispatch_id in recovered_ids) or recovery_count >= max_recoveries:
-            node["monitor_blocker"] = "quota_exhausted_recovery_limit_reached"
-            node["quota_failure_reason"] = "quota_exhausted"
-            node["quota_failure_task_id"] = dispatch_id
+            node["monitor_blocker"] = _recoverable_failure_limit(failure_reason)
+            field_prefix = _recoverable_failure_field_prefix(failure_reason)
+            node[f"{field_prefix}_reason"] = _recoverable_failure_label(failure_reason)
+            node[f"{field_prefix}_task_id"] = dispatch_id
             node["updated_at"] = now_iso()
             changed += 1
             continue
@@ -1933,9 +1991,10 @@ def recover_quota_failed_nodes(graph_path: Path, graph: dict[str, Any]) -> int:
         if profile_name:
             blocked.add(profile_name)
         node["quota_blocked_profiles"] = sorted(v for v in blocked if v)
-        node["quota_failure_reason"] = "quota_exhausted"
-        node["quota_failure_task_id"] = dispatch_id
-        node["quota_recovered_at"] = now_iso()
+        field_prefix = _recoverable_failure_field_prefix(failure_reason)
+        node[f"{field_prefix}_reason"] = _recoverable_failure_label(failure_reason)
+        node[f"{field_prefix}_task_id"] = dispatch_id
+        node[f"{field_prefix}_recovered_at"] = now_iso()
         fallback = select_quota_fallback_profile(node, profile_name, profiles)
         if fallback:
             if dispatch_id:
@@ -1944,7 +2003,7 @@ def recover_quota_failed_nodes(graph_path: Path, graph: dict[str, Any]) -> int:
             node["quota_recovery_count"] = recovery_count + 1
             node["preferred_profile"] = fallback
             node["quota_fallback_from"] = profile_name
-            node["quota_fallback_reason"] = "quota_exhausted"
+            node["quota_fallback_reason"] = _recoverable_failure_label(failure_reason)
             if isinstance(graph.get("node_results"), dict):
                 graph["node_results"].pop(node_id, None)
             node["status"] = "pending"
@@ -1954,7 +2013,7 @@ def recover_quota_failed_nodes(graph_path: Path, graph: dict[str, Any]) -> int:
             node.pop("pane", None)
             node.pop("monitor_blocker", None)
         else:
-            node["monitor_blocker"] = "quota_exhausted_no_fallback_profile"
+            node["monitor_blocker"] = _recoverable_failure_no_fallback(failure_reason)
         changed += 1
     if changed:
         save_graph(graph_path, graph)

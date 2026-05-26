@@ -269,3 +269,70 @@ def test_quota_fallback_allows_knowledge_extractor_for_knowledge_node(monkeypatc
     selected = multi_task_runner.select_quota_fallback_profile(node, "gemini-builder", profiles)
 
     assert selected == "knowledge-extractor"
+
+
+def test_output_log_auth_takes_precedence_over_quota_text(monkeypatch, tmp_path):
+    run_dir = tmp_path / "run" / "multi-task"
+    task_dir = run_dir / "mt-auth"
+    task_dir.mkdir(parents=True)
+    (task_dir / "output.log").write_text(
+        "ERROR: Antigravity quota exhausted; refusing empty handoff\n"
+        "Error: failed to send message: no active conversation\n"
+        "You are not logged into Antigravity.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(multi_task_runner, "RUN_DIR", run_dir)
+
+    assert multi_task_runner.output_log_failure_kind("mt-auth") == "auth_expired"
+    assert multi_task_runner.output_log_has_quota_failure("mt-auth") is False
+    assert multi_task_runner.output_log_has_auth_failure("mt-auth") is True
+
+
+def test_recover_auth_failed_node_sets_auth_reason_and_fallback(monkeypatch, tmp_path):
+    run_dir = tmp_path / "run" / "multi-task"
+    task_dir = run_dir / "mt-auth-failed"
+    task_dir.mkdir(parents=True)
+    (task_dir / "output.log").write_text(
+        "Error: failed to send message: no active conversation\n",
+        encoding="utf-8",
+    )
+    (task_dir / "status.json").write_text(
+        json.dumps({"profile": "antigravity-multimodal"}) + "\n",
+        encoding="utf-8",
+    )
+    graph_path = tmp_path / "graph.json"
+    graph = {
+        "nodes": [
+            {
+                "id": "N1",
+                "status": "failed",
+                "dispatch_id": "mt-auth-failed",
+                "role": "builder",
+                "write_scope": ["harness/lib/example.py"],
+                "acceptance": "unit tests pass",
+            }
+        ]
+    }
+    profiles = {
+        "antigravity-multimodal": {"role": "builder", "backend": "command", "model": "gemini-3.5-flash"},
+        "deepseek-builder": {"role": "builder", "backend": "claude-cli", "model": "deepseek"},
+    }
+    monkeypatch.setattr(multi_task_runner, "RUN_DIR", run_dir)
+    monkeypatch.setattr(multi_task_runner, "load_profiles", lambda: {"profiles": profiles})
+    monkeypatch.setattr(
+        multi_task_runner,
+        "capability_for_profile",
+        lambda profile, include_probe=True: {"status": "ok", "provider": profile.get("backend", "local")},
+    )
+    monkeypatch.setattr(multi_task_runner, "save_graph", lambda path, payload: None)
+    monkeypatch.setattr(multi_task_runner, "node_status", lambda payload, node_id: payload["nodes"][0]["status"])
+
+    changed = multi_task_runner.recover_quota_failed_nodes(graph_path, graph)
+
+    node = graph["nodes"][0]
+    assert changed == 1
+    assert node["status"] == "pending"
+    assert node["auth_failure_reason"] == "auth_expired"
+    assert node["auth_failure_task_id"] == "mt-auth-failed"
+    assert node["preferred_profile"] == "deepseek-builder"
+    assert node["quota_fallback_reason"] == "auth_expired"
