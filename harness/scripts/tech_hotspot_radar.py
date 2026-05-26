@@ -1560,8 +1560,9 @@ def download_youtube_audio(video_id: str, config: dict[str, Any]) -> tuple[Path 
     if not yt_dlp:
         return None, "asr_missing_ytdlp"
     output_template = str(audio_dir / f"{video_id}.%(ext)s")
+    cookie_args = yt_dlp_auth_args(config)
     dl = subprocess.run(
-        [yt_dlp, "-f", "ba/bestaudio", "--no-playlist", "-o", output_template, f"https://www.youtube.com/watch?v={video_id}"],
+        [yt_dlp, *cookie_args, "-f", "ba/bestaudio", "--no-playlist", "-o", output_template, f"https://www.youtube.com/watch?v={video_id}"],
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -1645,8 +1646,9 @@ def resolve_youtube_duration_seconds(conn: sqlite3.Connection, video_id: str,
         yt_dlp = shutil.which("yt-dlp")
         if yt_dlp:
             try:
+                cookie_args = yt_dlp_auth_args(config)
                 proc = subprocess.run(
-                    [yt_dlp, "--dump-single-json", "--skip-download",
+                    [yt_dlp, *cookie_args, "--dump-single-json", "--skip-download",
                      f"https://www.youtube.com/watch?v={video_id}"],
                     text=True,
                     stdout=subprocess.PIPE,
@@ -1718,16 +1720,23 @@ def run_youtube_asr(video_id: str, config: dict[str, Any], *, dry_run: bool = Fa
 
     url = f"https://www.youtube.com/watch?v={video_id}"
     output_template = str(audio_dir / f"{video_id}.%(ext)s")
-    dl = subprocess.run(
-        [yt_dlp, "-f", "ba/bestaudio", "--no-playlist", "-o", output_template, url],
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        timeout=int(asr_cfg.get("download_timeout_seconds", 900)),
-    )
-    if dl.returncode != 0:
-        return "", f"asr_download_failed:{dl.stdout[-500:]}", ""
+    existing_txt = transcript_dir / f"{video_id}.txt"
+    if existing_txt.exists() and existing_txt.stat().st_size > 0:
+        text = existing_txt.read_text(encoding="utf-8", errors="replace").strip()
+        if text:
+            return text, "asr_existing_txt", str(existing_txt)
     audio_file = find_asr_audio_file(audio_dir, video_id)
+    if not audio_file:
+        dl = subprocess.run(
+            [yt_dlp, *yt_dlp_auth_args(config), "-f", "ba/bestaudio", "--no-playlist", "-o", output_template, url],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=int(asr_cfg.get("download_timeout_seconds", 900)),
+        )
+        if dl.returncode != 0:
+            return "", f"asr_download_failed:{dl.stdout[-500:]}", ""
+        audio_file = find_asr_audio_file(audio_dir, video_id)
     if not audio_file:
         return "", "asr_download_missing_audio", ""
 
@@ -2203,7 +2212,29 @@ def youtube_item_published_at(item: dict[str, Any], fallback: str) -> str:
     return fallback
 
 
-def yt_dlp_json_lines(cmd: list[str], timeout: int = 180) -> list[dict[str, Any]]:
+def yt_dlp_auth_args(config: dict[str, Any] | None) -> list[str]:
+    """Return optional yt-dlp auth args without hard-coding browser state.
+
+    YouTube sometimes blocks unauthenticated downloads with "not a bot".
+    Keep this opt-in via config so normal public fetches remain deterministic,
+    while long-running ASR backfills can use the user's existing browser cookies.
+    """
+    asr_cfg = (((config or {}).get("youtube") or {}).get("asr") or {})
+    youtube_cfg = ((config or {}).get("youtube") or {})
+    cookies_file = str(asr_cfg.get("cookies_file") or youtube_cfg.get("cookies_file") or "").strip()
+    cookies_browser = str(asr_cfg.get("cookies_from_browser") or youtube_cfg.get("cookies_from_browser") or "").strip()
+    args: list[str] = []
+    if cookies_file:
+        args.extend(["--cookies", str(Path(cookies_file).expanduser())])
+    elif cookies_browser:
+        args.extend(["--cookies-from-browser", cookies_browser])
+    return args
+
+
+def yt_dlp_json_lines(cmd: list[str], timeout: int = 180, config: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    if config:
+        yt_dlp = cmd[0] if cmd else ""
+        cmd = [yt_dlp, *yt_dlp_auth_args(config), *cmd[1:]]
     proc = subprocess.run(
         cmd,
         text=True,
@@ -2227,12 +2258,13 @@ def yt_dlp_json_lines(cmd: list[str], timeout: int = 180) -> list[dict[str, Any]
     return rows
 
 
-def yt_dlp_video_detail(video_id: str, timeout: int = 90) -> dict[str, Any]:
+def yt_dlp_video_detail(video_id: str, timeout: int = 90, config: dict[str, Any] | None = None) -> dict[str, Any]:
     yt_dlp = shutil.which("yt-dlp")
     if not yt_dlp:
         raise RuntimeError("yt-dlp not found")
+    cookie_args = yt_dlp_auth_args(config)
     proc = subprocess.run(
-        [yt_dlp, "--dump-single-json", "--skip-download", "--no-playlist",
+        [yt_dlp, *cookie_args, "--dump-single-json", "--skip-download", "--no-playlist",
          f"https://www.youtube.com/watch?v={video_id}"],
         text=True,
         stdout=subprocess.PIPE,
@@ -2474,6 +2506,7 @@ def cmd_backfill_youtube(args: argparse.Namespace) -> int:
                 [yt_dlp, "--flat-playlist", "--dump-json", "--playlist-end",
                  str(per_channel_limit), playlist_url],
                 timeout=max(120, per_channel_limit * 4),
+                config=config,
             )
             for item in flat_rows:
                 video_id = str(item.get("id") or item.get("url") or "").strip()
@@ -2486,7 +2519,7 @@ def cmd_backfill_youtube(args: argparse.Namespace) -> int:
                 detail = item
                 if not item.get("duration") or not item.get("timestamp"):
                     try:
-                        detail = {**item, **yt_dlp_video_detail(video_id)}
+                        detail = {**item, **yt_dlp_video_detail(video_id, config=config)}
                     except Exception as exc:
                         failures.append(f"{channel['channel_id']}/{video_id}: detail {type(exc).__name__}: {exc}")
                         continue

@@ -6,6 +6,7 @@ Provides mock/dry-run adapter functionality to simulate async state transitions.
 from __future__ import annotations
 
 import datetime
+import hashlib
 import json
 import os
 import re
@@ -26,6 +27,7 @@ BROWSER_JOBS_DIR = HARNESS_DIR / "run" / "browser-jobs"
 OPERATOR_RESULTS_DIR = HARNESS_DIR / "run" / "operator-results"
 BROWSER_USE_ROOT = HOME / ".claude" / "mcp-servers" / "browser-use"
 BROWSER_USE_PYTHON = BROWSER_USE_ROOT / ".venv" / "bin" / "python"
+PROFILE_CACHE_ROOT = HARNESS_DIR / "state" / "browser-profile-cache"
 _STAGED_PROFILE_PREFIX = "browser-use-user-data-dir-"
 _RESTORE_ARTIFACTS = {
     "Current Session",
@@ -40,6 +42,11 @@ _LOCK_ARTIFACTS = {
     "SingletonSocket",
     "LOCK",
 }
+_PROTECTED_APP_DATA_ROOTS = (
+    HOME / "Library" / "Application Support",
+    HOME / "Library" / "Containers",
+    HOME / "Library" / "Group Containers",
+)
 
 # Regex patterns for scrubbing sensitive information
 _SECRET_PATTERNS = [
@@ -225,6 +232,64 @@ def _artifact_from_path(path: Path, artifact_type: str) -> Dict[str, Any]:
     return {"name": path.name, "type": artifact_type, "path": str(path)}
 
 
+def _path_within(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _is_protected_app_data_root(path: Path) -> bool:
+    resolved = path.resolve()
+    return any(_path_within(resolved, root) for root in _PROTECTED_APP_DATA_ROOTS if root.exists())
+
+
+def _browser_profile_cache_path(user_data_dir: str | Path, profile_directory: str) -> Path:
+    source_root = Path(user_data_dir).resolve()
+    cache_key = hashlib.sha256(f"{source_root}::{profile_directory}".encode("utf-8")).hexdigest()[:16]
+    return PROFILE_CACHE_ROOT / cache_key
+
+
+def _remove_profile_restore_artifacts(root: Path, profile_directory: str) -> None:
+    profile_dir = root / profile_directory
+    for name in _RESTORE_ARTIFACTS | _LOCK_ARTIFACTS:
+        for candidate in (root / name, profile_dir / name):
+            if candidate.is_dir():
+                shutil.rmtree(candidate, ignore_errors=True)
+            elif candidate.exists():
+                try:
+                    candidate.unlink()
+                except OSError:
+                    pass
+
+
+def refresh_browser_profile_cache(user_data_dir: str | Path | None, profile_directory: str | None) -> Optional[Path]:
+    if not user_data_dir or not profile_directory:
+        return None
+    source_root = Path(user_data_dir)
+    source_profile = source_root / profile_directory
+    if not source_root.exists() or not source_profile.exists():
+        return None
+    cache_root = _browser_profile_cache_path(source_root, profile_directory)
+    cache_profile = cache_root / profile_directory
+    if cache_root.exists():
+        shutil.rmtree(cache_root, ignore_errors=True)
+    cache_root.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source_profile, cache_profile)
+    local_state_src = source_root / "Local State"
+    if local_state_src.exists():
+        shutil.copy(local_state_src, cache_root / "Local State")
+    _remove_profile_restore_artifacts(cache_root, profile_directory)
+    manifest = {
+        "source_root": str(source_root),
+        "profile_directory": profile_directory,
+        "cached_at": _now(),
+    }
+    (cache_root / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+    return cache_root
+
+
 def _stage_browser_profile(user_data_dir: str | Path | None, profile_directory: str | None) -> tuple[str | Path | None, Optional[Path]]:
     """Create an isolated Chrome profile copy without session-restore artifacts.
 
@@ -237,9 +302,22 @@ def _stage_browser_profile(user_data_dir: str | Path | None, profile_directory: 
         return user_data_dir, None
 
     source_root = Path(user_data_dir)
-    source_profile = source_root / profile_directory
     if _STAGED_PROFILE_PREFIX in str(source_root):
         return str(source_root), None
+    if _is_protected_app_data_root(source_root):
+        cache_root = _browser_profile_cache_path(source_root, profile_directory)
+        if os.environ.get("TMUX"):
+            cache_profile = cache_root / profile_directory
+            if cache_profile.exists():
+                source_root = cache_root
+            else:
+                return None, None
+        else:
+            refreshed = refresh_browser_profile_cache(source_root, profile_directory)
+            if refreshed is not None:
+                source_root = refreshed
+
+    source_profile = source_root / profile_directory
     if not source_root.exists() or not source_profile.exists():
         return user_data_dir, None
 
@@ -251,15 +329,7 @@ def _stage_browser_profile(user_data_dir: str | Path | None, profile_directory: 
     if local_state_src.exists():
         shutil.copy(local_state_src, staged_root / "Local State")
 
-    for name in _RESTORE_ARTIFACTS | _LOCK_ARTIFACTS:
-        for candidate in (staged_root / name, staged_profile / name):
-            if candidate.is_dir():
-                shutil.rmtree(candidate, ignore_errors=True)
-            elif candidate.exists():
-                try:
-                    candidate.unlink()
-                except OSError:
-                    pass
+    _remove_profile_restore_artifacts(staged_root, profile_directory)
 
     return str(staged_root), staged_root
 
@@ -302,6 +372,12 @@ def _run_real_browser_probe(job_id: str, envelope: Dict[str, Any], timeout: int)
         envelope.get("user_data_dir"),
         str(envelope.get("profile_directory") or "Default"),
     )
+    if envelope.get("user_data_dir") and not staged_user_data_dir:
+        return {
+            "ok": False,
+            "error": "protected browser profile cache missing for tmux worker; refresh cache outside tmux first",
+            "error_type": "protected_profile_cache_missing",
+        }
 
     payload = {
         "url": target_url,
