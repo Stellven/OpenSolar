@@ -8,6 +8,7 @@ import re
 import shlex
 import subprocess
 import sys
+import time
 import datetime as dt
 from pathlib import Path
 
@@ -173,6 +174,41 @@ def tail_text(path: Path, limit: int = 4000) -> str:
     return text[-limit:]
 
 
+def run_agy_command(cmd: list[str], log_file: Path) -> subprocess.CompletedProcess[str]:
+    """Run Antigravity and fail fast when the live log shows hard failures."""
+    proc = subprocess.Popen(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    while True:
+        rc = proc.poll()
+        if rc is not None:
+            stdout, stderr = proc.communicate()
+            return subprocess.CompletedProcess(cmd, rc, stdout=stdout or "", stderr=stderr or "")
+
+        log_tail = tail_text(log_file)
+        if QUOTA_RE.search(log_tail):
+            proc.terminate()
+            try:
+                stdout, stderr = proc.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                stdout, stderr = proc.communicate()
+            message = "ERROR: Antigravity quota exhausted; refusing empty handoff\n" + redact(log_tail)
+            stderr = ((stderr or "") + "\n" + message).strip() + "\n"
+            return subprocess.CompletedProcess(cmd, 75, stdout=stdout or "", stderr=stderr)
+
+        if FAILURE_RE.search(log_tail):
+            proc.terminate()
+            try:
+                stdout, stderr = proc.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                stdout, stderr = proc.communicate()
+            message = "ERROR: Antigravity command backend reported failure; refusing success handoff\n" + redact(log_tail)
+            stderr = ((stderr or "") + "\n" + message).strip() + "\n"
+            return subprocess.CompletedProcess(cmd, 65, stdout=stdout or "", stderr=stderr)
+
+        time.sleep(1)
+
+
 def main() -> int:
     raw_intent = os.environ.get("SOLAR_ANTIGRAVITY_RAW_INTENT", "").strip()
     if not raw_intent and len(sys.argv) > 1:
@@ -212,7 +248,7 @@ def main() -> int:
         cmd.extend(["--add-dir", directory])
     cmd.extend(["--print", prompt])
     print("[solar-harness agy-multimodal] cmd=" + " ".join(shlex.quote(part) for part in cmd[:-1]) + " <prompt>")
-    proc = subprocess.run(cmd, text=True, capture_output=True)
+    proc = run_agy_command(cmd, log_file)
     if proc.stdout:
         print(proc.stdout, end="" if proc.stdout.endswith("\n") else "\n")
     if proc.stderr:
