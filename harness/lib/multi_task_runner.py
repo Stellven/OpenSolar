@@ -1740,6 +1740,20 @@ def recover_quota_failed_nodes(graph_path: Path, graph: dict[str, Any]) -> int:
         )
         if not output_log_has_quota_failure(dispatch_id):
             continue
+        recovered_ids = set(_as_string_list(node.get("quota_recovery_task_ids")))
+        try:
+            recovery_count = int(node.get("quota_recovery_count") or 0)
+        except Exception:
+            recovery_count = 0
+        max_recoveries = int(os.environ.get("SOLAR_MULTI_TASK_MAX_QUOTA_RECOVERIES_PER_NODE", "1") or "1")
+        if (dispatch_id and dispatch_id in recovered_ids) or recovery_count >= max_recoveries:
+            node["monitor_blocker"] = "quota_exhausted_recovery_limit_reached"
+            node["quota_failure_reason"] = "quota_exhausted"
+            node["quota_failure_task_id"] = dispatch_id
+            node["updated_at"] = now_iso()
+            changed += 1
+            continue
+
         blocked = {normalize_profile_name(v, profiles) for v in _as_string_list(node.get("quota_blocked_profiles"))}
         if profile_name:
             blocked.add(profile_name)
@@ -1749,6 +1763,10 @@ def recover_quota_failed_nodes(graph_path: Path, graph: dict[str, Any]) -> int:
         node["quota_recovered_at"] = now_iso()
         fallback = select_quota_fallback_profile(node, profile_name, profiles)
         if fallback:
+            if dispatch_id:
+                recovered_ids.add(dispatch_id)
+            node["quota_recovery_task_ids"] = sorted(v for v in recovered_ids if v)
+            node["quota_recovery_count"] = recovery_count + 1
             node["preferred_profile"] = fallback
             node["quota_fallback_from"] = profile_name
             node["quota_fallback_reason"] = "quota_exhausted"
@@ -2309,7 +2327,11 @@ def schedule_once(args: argparse.Namespace) -> dict[str, Any]:
         except Exception:
             continue
     guard = launch_guard(max_workers, args.memory_reserve_gb, args.cooldown_sec, args.quota_backoff_sec)
-    if recovered_quota_failures and guard.get("reason") == "recent_quota_or_rate_limit":
+    if (
+        recovered_quota_failures
+        and guard.get("reason") == "recent_quota_or_rate_limit"
+        and os.environ.get("SOLAR_MULTI_TASK_BYPASS_QUOTA_GUARD_FOR_FALLBACK") == "1"
+    ):
         guard = dict(guard)
         guard["ok"] = True
         guard["reason"] = "recent_quota_or_rate_limit_bypassed_for_fallback"

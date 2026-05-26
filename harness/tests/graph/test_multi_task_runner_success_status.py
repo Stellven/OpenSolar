@@ -58,3 +58,11 @@ def test_late_failure_does_not_overwrite_passed_graph_node(tmp_path):
     assert "mark_graph_failed_unless_passed" in script
     assert "late_failure_ignored_graph_already_passed=true" in script
     assert "write_status failed_aligned" in script
+
+
+
+def test_quota_guard_fallback_bypass_requires_explicit_env():
+    text = Path(multi_task_runner.__file__).read_text(encoding="utf-8")
+
+    assert 'SOLAR_MULTI_TASK_BYPASS_QUOTA_GUARD_FOR_FALLBACK' in text
+    assert 'recent_quota_or_rate_limit_bypassed_for_fallback' in text
