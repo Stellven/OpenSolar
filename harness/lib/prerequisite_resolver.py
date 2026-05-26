@@ -123,6 +123,10 @@ def normalize_prerequisite(entry: Any) -> dict | None:
     entry = str(entry).strip()
     if not entry:
         return None
+    if entry.startswith("external:"):
+        entry = entry.removeprefix("external:").strip()
+        if not entry:
+            return None
     if ":" in entry:
         sid, required = entry.rsplit(":", 1)
         sid = sid.strip()
