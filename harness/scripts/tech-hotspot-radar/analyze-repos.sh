@@ -6,11 +6,13 @@ DB_PATH=""
 CONFIG_PATH=""
 EVIDENCE_ONLY="false"
 DRY_RUN="false"
+REPO_FILTER=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
     --db) DB_PATH="$2"; shift 2 ;;
     --config) CONFIG_PATH="$2"; shift 2 ;;
+    --repo) REPO_FILTER="$2"; shift 2 ;;
     --evidence-only) EVIDENCE_ONLY="true"; shift ;;
     --dry-run) DRY_RUN="true"; shift ;;
     *) echo "Unknown arg: $1"; exit 1 ;;
@@ -55,7 +57,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # We use python to query the list of repos and loop over them
-python3 - <<EOF "$DB_PATH" "$CONFIG_PATH" "$EVIDENCE_ONLY" "$DRY_RUN" "$SCRIPT_DIR"
+python3 - <<EOF "$DB_PATH" "$CONFIG_PATH" "$EVIDENCE_ONLY" "$DRY_RUN" "$SCRIPT_DIR" "$REPO_FILTER"
 import sqlite3
 import sys
 import os
@@ -67,6 +69,7 @@ config_path = sys.argv[2]
 evidence_only = sys.argv[3].lower() == "true"
 dry_run = sys.argv[4].lower() == "true"
 script_dir = sys.argv[5]
+repo_filter = sys.argv[6]
 
 # Define helpers
 lib_dir = Path(script_dir) / "lib"
@@ -99,6 +102,8 @@ except sqlite3.OperationalError:
     rows = []
 
 repos = [r["full_name"] for r in rows]
+if repo_filter:
+    repos = [repo_filter] if repo_filter in repos else []
 conn.close()
 
 if not repos:

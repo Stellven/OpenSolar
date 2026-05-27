@@ -3,7 +3,7 @@
   "title": "Managed Agent Runtime Interfaces",
   "summary": "把已完成的 session-log/projection/activity foundation 升级为稳定运行时接口层：Session API、Hand API、Worker API、Context Projection API、chaos/effect tests 和 status 可观测性。",
   "status": "passed",
-  "phase": "eval_passed",
+  "phase": "completed",
   "round": 4,
   "priority": "P0",
   "lane": "reliability/control-plane",
@@ -150,9 +150,16 @@
       "ts": "2026-05-13T11:18:32Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-26T17:56:53Z",
+      "event": "graph_doctor_repair_sync",
+      "by": "graph_scheduler",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260512-managed-agent-runtime-interfaces.task_graph.json"
     }
   ],
-  "updated_at": "2026-05-24T01:51:13Z",
+  "updated_at": "2026-05-26T17:56:53Z",
   "event_count": 46,
   "last_event_ts": "2026-05-13T01:43:54Z",
   "projected_at": "2026-05-13T01:43:54Z",
@@ -169,5 +176,27 @@
   "knowledge_source_artifact_index": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260512-managed-agent-runtime-interfaces.source_artifact_index.md",
   "knowledge_summary_count": 3,
   "knowledge_closure_required": true,
-  "knowledge_closure_status": "exported"
+  "knowledge_closure_status": "exported",
+  "stage": "completed",
+  "active_node": null,
+  "graph_parent_ready": {
+    "ok": true,
+    "sprint_id": "sprint-20260512-managed-agent-runtime-interfaces",
+    "ready": true,
+    "node_count": 8,
+    "open_nodes": [],
+    "failed_nodes": [],
+    "required_gates": [
+      "inventory-pass",
+      "session-api-pass",
+      "hands-runtime-pass",
+      "context-projection-pass",
+      "worker-runtime-pass",
+      "chaos-pass",
+      "ui-docs-pass",
+      "eval-pass"
+    ],
+    "missing_gates": []
+  },
+  "task_graph_status": "passed"
 }

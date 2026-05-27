@@ -3741,6 +3741,16 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
     proof_gate: dict[str, Any] = {"required": False}
     if status == "passed":
         resolved_eval_json = eval_json or _eval_json_file(sid, node_id)
+        observed_handoff = _existing_node_handoff(sid, node, graph) or _handoff_file(sid, node_id)
+        if observed_handoff and not Path(str(resolved_eval_json)).expanduser().exists():
+            return {
+                "ok": False,
+                "reason": "missing_eval_json_for_pass",
+                "node": node_id,
+                "status": "blocked",
+                "eval_json": str(resolved_eval_json),
+                "handoff_md": str(observed_handoff),
+            }
         proof_gate = _evaluate_proof_obligations(sid, node, eval_json=resolved_eval_json)
         if proof_gate.get("required") and not proof_gate.get("ok"):
             return {

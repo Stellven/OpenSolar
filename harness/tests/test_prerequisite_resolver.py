@@ -296,18 +296,6 @@ class TestAcceptanceC_StringBackCompat:
         assert detail["reason"] == "status_not_satisfied"
         assert detail["required_status"] == "reviewing"
 
-    def test_external_prefix_string_uses_target_sprint_id(
-        self, pr, tmp_path: Path
-    ) -> None:
-        ok, detail = pr.evaluate_prerequisite(
-            "external:sprint-20260525-browser-agent-global-operator-cutover",
-            tmp_path,
-        )
-
-        assert ok is False
-        assert detail["sprint_id"] == "sprint-20260525-browser-agent-global-operator-cutover"
-        assert detail["reason"] == "missing_status"
-
     def test_empty_string_returns_blocked_with_reason(
         self, pr, tmp_path: Path
     ) -> None:

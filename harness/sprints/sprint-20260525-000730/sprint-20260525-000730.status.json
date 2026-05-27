@@ -107,13 +107,27 @@
       "ts": "2026-05-25T08:47:05Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-26T17:56:57Z",
+      "event": "graph_parent_ready_revoked",
+      "by": "graph_scheduler",
+      "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache"
+    },
+    {
+      "ts": "2026-05-26T17:58:48Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "none",
+      "stage": "done",
+      "reason": "terminal_status"
     }
   ],
   "status": "passed",
-  "phase": "finalized",
+  "phase": "completed",
   "handoff_to": "done",
   "target_role": "done",
-  "updated_at": "2026-05-25T08:45:53Z",
+  "updated_at": "2026-05-26T17:58:48Z",
   "artifacts": {
     "autoresearch_optimizer": {
       "recorded_at": "2026-05-25T08:44:54Z",
@@ -177,5 +191,39 @@
   "knowledge_closure_required": true,
   "knowledge_closure_status": "exported",
   "knowledge_export_error": null,
-  "knowledge_closure_error": null
+  "knowledge_closure_error": null,
+  "stage": "graph_in_progress",
+  "active_node": null,
+  "open_nodes": [],
+  "failed_nodes": [],
+  "graph_parent_ready": {
+    "ok": true,
+    "sprint_id": "sprint-20260525-000730",
+    "ready": false,
+    "node_count": 8,
+    "open_nodes": [],
+    "failed_nodes": [],
+    "required_gates": [
+      "G1",
+      "G2",
+      "G3",
+      "G4",
+      "G5",
+      "G6",
+      "G7",
+      "G8"
+    ],
+    "missing_gates": [
+      "G1",
+      "G2",
+      "G3",
+      "G4",
+      "G5",
+      "G6",
+      "G7",
+      "G8"
+    ]
+  },
+  "task_graph_status": "active",
+  "completed_at": null
 }

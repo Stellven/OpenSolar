@@ -49,17 +49,40 @@ youtube:
   transcript_max_chars: 60000
   min_transcript_duration_seconds: 600  # do not spend transcript/ASR budget on videos under 10 minutes
   phase_report_reasoner:
-    provider: codex_cli
-    model: gpt-5.5
+    provider: browser_agent_chatgpt
+    model: chatgpt-5.5
+    reasoning_effort: high
+    frontdoor: chatgpt
+    operator: browser_agent
+    chatgpt_project: 杂项
     timeout_seconds: 1200
     max_prompt_chars: 180000
+  ai_influence_report_flow:
+    enabled: true
+    planner:
+      provider: browser_agent_chatgpt
+      model: chatgpt-5.5
+      reasoning_effort: high
+      max_catalog_videos: 160
+      input_policy: channel_title_summary_time_only
+    report_writer:
+      provider: browser_agent_chatgpt
+      model: chatgpt-5.5
+      reasoning_effort: high
+      max_prompt_chars: 180000
+      require_plan_file: true
+      chatgpt_project: 杂项
+    notebooklm:
+      enabled: true
+      notebook_name: ""
+      timeout_seconds: 1800
   asr:
     enabled: true
     max_per_run: 2
     backend: mlx-whisper
     whisper_model: mlx-community/whisper-small-mlx
     openai_whisper_model: small
-    language: zh
+    language: auto
     language_strategy: auto-by-channel
     archive_audio_dir: /Volumes/RAID0-Main/SolarArchive/tech-hotspot-radar/asr-audio
   languages_priority: [en, zh, auto]

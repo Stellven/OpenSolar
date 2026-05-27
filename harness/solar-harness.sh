@@ -3776,7 +3776,7 @@ PY
     echo "  $0 workflow-guard route <sid> [--json]  PM→Planner→DAG Builder 门禁判定"
     echo "  $0 graph-dispatch [dispatch-ready|drain-queue]  DAG 节点级 pane 派发"
     echo "  $0 mirage [search|doctor|workspace|mounts|exec|provision]  Mirage 统一虚拟文件系统"
-    echo "  $0 wiki [install|status|export-sprint|update|query|ingest|chatgpt-import|vault-status|lint|rebuild|export-graph|colorize|history|run-dispatch|dispatch-watch|dispatch-maintenance|import-solar-db|capture-server|audit-uploads|backfill-uploads|quality-gate|reingest-quarantine|reingest-scheduler|qmd-status|qmd-repair|qmd-search|qmd-update|qmd-mcp|qmd-embed|ai-influence-digest|help]  Obsidian Wiki 集成"
+    echo "  $0 wiki [install|status|export-sprint|update|query|ingest|chatgpt-import|vault-status|lint|rebuild|export-graph|colorize|history|run-dispatch|dispatch-watch|dispatch-maintenance|import-solar-db|capture-server|audit-uploads|backfill-uploads|quality-gate|reingest-quarantine|reingest-scheduler|qmd-status|qmd-repair|qmd-search|qmd-update|qmd-mcp|qmd-embed|ai-influence-digest|tech-hotspot-radar|help]  Obsidian Wiki 集成"
     ;;
   mirage)
     # Mirage unified virtual filesystem — sprint-20260508-mirage-unified-vfs
@@ -4385,6 +4385,7 @@ EOF
         echo "  $0 wiki qmd-mcp [status|start|stop-proxy]"
         echo "  $0 wiki qmd-embed [start|status|stop|run-once|run-idle|run-gentle|run-now]"
         echo "  $0 wiki ai-influence-digest [run|status|doctor|send-test|schedule|help]"
+        echo "  $0 wiki tech-hotspot-radar [status|plan-ai-influence-reports|run-ai-influence-planned-reports|validate-ai-influence-planned-reports|process-transcripts|help]"
         echo ""
         echo "Examples:"
         echo "  $0 wiki install --vault ~/Documents/SolarWiki"
@@ -4409,6 +4410,22 @@ EOF
         echo "  $0 wiki quality-gate --apply --json"
         echo "  $0 wiki reingest-quarantine --limit 8 --json"
         echo "  $0 wiki reingest-scheduler start 60"
+        echo "  $0 wiki tech-hotspot-radar validate-ai-influence-planned-reports --date 2026-05-25 --require-project-archive"
+        ;;
+      tech-hotspot-radar)
+        _thr_script="$HARNESS_DIR/scripts/tech_hotspot_radar.py"
+        if [[ ! -f "$_thr_script" ]]; then
+          err "Tech Hotspot Radar script not found: $_thr_script"
+          exit 1
+        fi
+        case "${1:-help}" in
+          help|--help|-h|"")
+            python3 "$_thr_script" --help
+            ;;
+          *)
+            python3 "$_thr_script" "$@"
+            ;;
+        esac
         ;;
       ai-influence-digest)
         # sprint-20260522-ai-influence-digest-scan N5: AI Influence Digest CLI

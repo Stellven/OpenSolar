@@ -19,6 +19,7 @@ import html
 import json
 import os
 import re
+import shlex
 import shutil
 import sqlite3
 import subprocess
@@ -37,6 +38,11 @@ from email.utils import make_msgid
 from pathlib import Path
 from typing import Any
 
+HARNESS_SCRIPT_DIR = Path(__file__).resolve().parent
+HARNESS_LIB_DIR = HARNESS_SCRIPT_DIR.parent / "lib"
+if str(HARNESS_LIB_DIR) not in sys.path:
+    sys.path.insert(0, str(HARNESS_LIB_DIR))
+
 try:
     import yaml
 except ImportError as exc:
@@ -46,6 +52,8 @@ except ImportError as exc:
 
 DEFAULT_THUNDEROMLX_PAUSE_FILE = Path.home() / ".omlx" / "run" / "maintenance.json"
 DEFAULT_MLX_WHISPER_SITE_PACKAGES = Path.home() / ".local/pipx/venvs/mlx-whisper/lib/python3.14/site-packages"
+TRANSCRIPT_LAYOUT_VERSION = "weekly-v1"
+_TRANSCRIPT_LAYOUT_MIGRATED: set[str] = set()
 
 
 def thunderomlx_ingest_paused() -> dict[str, Any] | None:
@@ -1156,11 +1164,18 @@ def extract_json_payload(text: str) -> Any:
 def build_youtube_semantic_prompt(video: sqlite3.Row | tuple, transcript_clean: str,
                                   max_input_chars: int = 12000,
                                   strict_retry: bool = False) -> str:
+    transcript_clean = denoise_transcript_text(transcript_clean)
     clipped = transcript_clean[:max_input_chars]
     retry_note = "\n重要：上一次输出不是合法 JSON。这次禁止 Markdown 代码块、禁止解释、禁止未转义引号，只输出一个 JSON object。\n" if strict_retry else ""
     return f"""你是 Tech Hotspot Radar 的本地语义预处理器，运行在 ThunderOMLX + Qwen3.6。
 只基于给定 YouTube transcript 做结构化抽取，不要引入外部事实，不要编造。
 {retry_note}
+
+输入 transcript 可能来自 YouTube 自动字幕或 ASR，仍可能包含重复短句、口癖和识别噪声。处理规则：
+1. 忽略“我 我 我”“嗯 嗯”“yeah yeah”等重复 filler。
+2. 忽略孤立且无信息的 1-2 字短句。
+3. 不要把 ASR 重复片段当成观点或证据。
+4. 保留有技术含义的原始表述，不要为了清洗而改写事实。
 
 输出必须是 JSON object，字段：
 {{
@@ -1256,6 +1271,428 @@ def call_thunderomlx_youtube_semantic(video: sqlite3.Row | tuple, transcript_cle
     return parsed
 
 
+def transcript_cleaning_report_dir(config: dict[str, Any]) -> Path:
+    state_dir = Path((config.get("output") or {}).get(
+        "state_dir", str(Path.home() / ".solar/harness/state/tech-hotspot-radar")
+    )).expanduser()
+    path = state_dir / "transcript-cleaning"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def split_transcript_for_cleaning(text: str, max_chars: int) -> list[str]:
+    text = (text or "").strip()
+    if not text:
+        return []
+    lines = text.splitlines()
+    chunks: list[str] = []
+    buf: list[str] = []
+    size = 0
+    for line in lines:
+        line_len = len(line) + 1
+        if buf and size + line_len > max_chars:
+            chunks.append("\n".join(buf).strip())
+            buf = []
+            size = 0
+        if line_len > max_chars:
+            for idx in range(0, len(line), max_chars):
+                part = line[idx:idx + max_chars].strip()
+                if part:
+                    chunks.append(part)
+            continue
+        buf.append(line)
+        size += line_len
+    if buf:
+        chunks.append("\n".join(buf).strip())
+    return [c for c in chunks if c]
+
+
+def build_transcript_cleaning_prompt(video: sqlite3.Row, chunk_text: str, *,
+                                     chunk_index: int, chunk_count: int,
+                                     strict_retry: bool = False) -> str:
+    retry_note = "\n上一次输出不是合法 JSON。这次只输出 JSON object，不要 Markdown，不要解释。\n" if strict_retry else ""
+    return f"""你是 Tech Hotspot Radar 的 transcript 清洗器，运行在 ThunderOMLX + Qwen3.6。
+你的任务不是总结，不是翻译，不是改写观点，而是把 ASR/自动字幕里的重复话语和噪声删掉。
+{retry_note}
+
+硬规则：
+1. 尽可能保留原始说话内容、术语、句序和语言。
+2. 删除无意义重复：例如“我 我 我”“嗯 嗯 嗯”“yeah yeah yeah”、连续重复短句、ASR 卡顿循环。
+3. 删除孤立无信息的口癖碎片：如“嗯”“啊”“呃”“我”“对对对”等，除非它们在完整句子里有意义。
+4. 不要补充外部事实，不要生成摘要，不要润色成文章。
+5. 如果不确定是否为噪声，保留原文。
+6. 输出 clean_text 应该仍然像 transcript 原文，而不是分析报告。
+7. 严禁大幅压缩正文。除非输入几乎全是重复循环，否则 clean_text 至少保留输入主体内容的 70%。
+8. 严禁只输出开头、结尾或摘要；必须覆盖整个 transcript_chunk。
+
+输出格式必须严格使用以下标签。不要 JSON，不要 Markdown 代码块：
+CLEAN_TEXT_BEGIN
+清洗后的 transcript 分块正文
+CLEAN_TEXT_END
+
+NOISE_EXAMPLES_BEGIN
+- 删除的噪声示例，最多10条
+NOISE_EXAMPLES_END
+
+QUALITY_NOTES_BEGIN
+一句话说明
+QUALITY_NOTES_END
+
+视频信息：
+- video_id: {video["video_id"]}
+- title: {video["title"] or ""}
+- channel: {video["channel_name"] or ""}
+- chunk: {chunk_index}/{chunk_count}
+
+transcript_chunk:
+{chunk_text}
+"""
+
+
+def extract_tagged_block(text: str, name: str) -> str:
+    pattern = rf"<?/?{name}_BEGIN>?\s*(.*?)\s*<?/?{name}_END>?"
+    match = re.search(pattern, text or "", flags=re.S | re.I)
+    return match.group(1).strip() if match else ""
+
+
+def call_thunderomlx_transcript_cleaner(video: sqlite3.Row, chunk_text: str,
+                                        config: dict[str, Any], *,
+                                        chunk_index: int,
+                                        chunk_count: int) -> dict[str, Any]:
+    pause = thunderomlx_ingest_paused()
+    if pause:
+        reason = pause.get("reason") or pause.get("path") or "maintenance pause active"
+        raise RuntimeError(f"ThunderOMLX ingest pause active: {reason}")
+    cfg = ((config.get("youtube") or {}).get("semantic_postprocess") or {})
+    clean_cfg = ((config.get("youtube") or {}).get("transcript_cleaning") or {})
+    base_url = str(clean_cfg.get("base_url") or cfg.get("base_url") or os.environ.get("THUNDEROMLX_BASE_URL") or "http://127.0.0.1:8002").rstrip("/")
+    endpoint = str(clean_cfg.get("endpoint") or cfg.get("endpoint") or "/v1/chat/completions")
+    model = str(clean_cfg.get("model") or cfg.get("model") or "Qwen3.6-35b-a3b")
+    api_key = os.environ.get(str(clean_cfg.get("api_key_env") or cfg.get("api_key_env") or "THUNDEROMLX_AUTH_TOKEN")) or str(clean_cfg.get("default_api_key") or cfg.get("default_api_key") or "local-thunderomlx")
+    timeout = int(clean_cfg.get("timeout_seconds") or cfg.get("timeout_seconds") or 240)
+    max_tokens = int(clean_cfg.get("max_tokens") or 5000)
+    last_error = ""
+    for attempt in range(2):
+        prompt = build_transcript_cleaning_prompt(
+            video,
+            chunk_text,
+            chunk_index=chunk_index,
+            chunk_count=chunk_count,
+            strict_retry=attempt > 0,
+        )
+        payload = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        req = urllib.request.Request(
+            f"{base_url}{endpoint}",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json", "x-api-key": api_key},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+        data = json.loads(body)
+        output_text = anthropic_content_text(data)
+        try:
+            has_clean_tag = re.search(r"<?/?CLEAN_TEXT_BEGIN>?", output_text or "", flags=re.I) is not None
+            clean_text = extract_tagged_block(output_text, "CLEAN_TEXT")
+            if has_clean_tag:
+                removed = [
+                    re.sub(r"^\s*[-*]\s*", "", line).strip()
+                    for line in extract_tagged_block(output_text, "NOISE_EXAMPLES").splitlines()
+                    if line.strip()
+                ]
+                quality_notes = extract_tagged_block(output_text, "QUALITY_NOTES")
+            elif not clean_text:
+                try:
+                    parsed = extract_json_payload(output_text)
+                    if not isinstance(parsed, dict):
+                        raise ValueError("transcript cleaning output must be tagged text or JSON object")
+                    clean_text = str(parsed.get("clean_text") or "").strip()
+                    removed = [str(x) for x in (parsed.get("removed_noise_examples") or [])]
+                    quality_notes = str(parsed.get("quality_notes") or "")
+                except Exception:
+                    # Some local-model generations ignore the envelope but
+                    # still return the cleaned transcript as plain text. Accept
+                    # that only as a candidate; the destructive length guard in
+                    # the caller still decides whether it is safe to persist.
+                    clean_text = re.sub(r"```(?:text|markdown)?\s*|\s*```", "", output_text or "", flags=re.I).strip()
+                    removed = []
+                    quality_notes = "plain_text_fallback"
+            if not clean_text and not has_clean_tag:
+                raise ValueError("transcript cleaning returned empty clean_text")
+            return {
+                "clean_text": denoise_transcript_text(clean_text),
+                "removed_noise_examples": removed,
+                "quality_notes": quality_notes,
+                "backend": "thunderomlx",
+                "model": model,
+            }
+        except Exception as exc:
+            last_error = f"{type(exc).__name__}: {exc}"
+    raise ValueError(f"transcript cleaning JSON parse failed: {last_error}")
+
+
+def cmd_clean_transcripts_thunderomlx(args: argparse.Namespace) -> int:
+    """Use ThunderOMLX to remove ASR repetition from stored transcripts."""
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.executescript(SCHEMA_SQL)
+    conn.row_factory = sqlite3.Row
+    limit = int(getattr(args, "limit", 0) or 0)
+    force = bool(getattr(args, "force", False))
+    dry_run = bool(getattr(args, "dry_run", False))
+    max_chars = int(getattr(args, "chunk_chars", 3000) or 3000)
+    reports_dir = transcript_cleaning_report_dir(config)
+    sql = (
+        "SELECT t.video_id, t.transcript_raw, t.transcript_clean, t.transcript_status, "
+        "v.title, v.channel_name, v.video_url, v.published_at, v.duration_seconds "
+        "FROM youtube_transcripts t LEFT JOIN youtube_videos v ON v.video_id=t.video_id "
+        "WHERE t.transcript_status IN ('fetched','auto_generated') "
+        "AND length(coalesce(t.transcript_raw, t.transcript_clean, '')) > 0 "
+        "ORDER BY t.fetched_at DESC"
+    )
+    if limit > 0:
+        # Fetch beyond the requested work limit because already-cleaned
+        # transcripts are skipped by input_hash. Otherwise --limit 1 can keep
+        # selecting the same skipped newest video forever.
+        sql += f" LIMIT {max(limit * 20, limit)}"
+    rows = conn.execute(sql).fetchall()
+    run_id = begin_run(conn, "youtube", "clean-transcripts-thunderomlx")
+    processed = changed = skipped = failed = 0
+    errors: list[str] = []
+    for row in rows:
+        if limit > 0 and (processed + failed) >= limit:
+            break
+        video_id = str(row["video_id"])
+        source_text = str(row["transcript_raw"] or row["transcript_clean"] or "").strip()
+        input_hash = hashlib.sha256(source_text.encode("utf-8")).hexdigest()
+        report_path = reports_dir / f"{video_id}.cleaning.json"
+        if report_path.exists() and not force:
+            try:
+                old = json.loads(report_path.read_text(encoding="utf-8"))
+                if old.get("input_hash") == input_hash and old.get("status") == "ok":
+                    skipped += 1
+                    continue
+            except Exception:
+                pass
+        if dry_run:
+            print(f"[clean-transcripts-thunderomlx] dry-run video={video_id} chars={len(source_text)}")
+            processed += 1
+            continue
+        started = time.time()
+        try:
+            chunks = split_transcript_for_cleaning(source_text, max_chars=max_chars)
+            cleaned_chunks: list[str] = []
+            removed_examples: list[str] = []
+            for idx, chunk in enumerate(chunks, 1):
+                result = call_thunderomlx_transcript_cleaner(
+                    row,
+                    chunk,
+                    config,
+                    chunk_index=idx,
+                    chunk_count=len(chunks),
+                )
+                cleaned_chunks.append(str(result.get("clean_text") or "").strip())
+                for ex in result.get("removed_noise_examples") or []:
+                    if len(removed_examples) < 20:
+                        removed_examples.append(str(ex)[:120])
+            baseline_clean = clean_transcript_text(source_text)
+            model_clean = denoise_transcript_text("\n".join(c for c in cleaned_chunks if c.strip()))
+            if not model_clean:
+                raise ValueError("empty cleaned transcript after ThunderOMLX")
+            guarded_fallback = False
+            guard_reason = ""
+            if len(baseline_clean) > 1500 and len(model_clean) < int(len(baseline_clean) * 0.65):
+                guarded_fallback = True
+                guard_reason = (
+                    "destructive_cleaning_guard: "
+                    f"raw={len(source_text)} baseline={len(baseline_clean)} model={len(model_clean)}"
+                )
+                # Preserve transcript fidelity. ThunderOMLX still ran and its
+                # failure is recorded, but destructive rewrites must not pollute
+                # downstream evidence/reporting.
+                model_clean = baseline_clean
+            existing_clean = str(row["transcript_clean"] or "").strip()
+            if model_clean != existing_clean:
+                conn.execute(
+                    "UPDATE youtube_transcripts SET transcript_clean=?, char_count=?, language=? WHERE video_id=?",
+                    (model_clean, len(model_clean), infer_transcript_language(model_clean), video_id),
+                )
+                conn.execute("DELETE FROM reasoning_packets WHERE packet_id=?", (f"yt-rp-{video_id}",))
+                conn.execute("DELETE FROM evidence_atoms WHERE source='youtube' AND source_id=?", (video_id,))
+                youtube_emit_evidence_atoms(
+                    conn,
+                    video_id,
+                    transcript_text=model_clean,
+                    content_type="claim",
+                    entities={},
+                    topic_tags=["youtube", "transcript", "thunderomlx-cleaned"],
+                    importance=max(0.4, semantic_score(model_clean[:2000])),
+                    novelty=0.5,
+                    depth=max(0.4, semantic_score(model_clean[:4000])),
+                    source_weight=1.0,
+                )
+                transcript_path_for_video(
+                    video_id,
+                    config,
+                    published_at=str(row["published_at"] or ""),
+                ).write_text(model_clean + "\n", encoding="utf-8")
+                changed += 1
+            report = {
+                "status": "ok",
+                "video_id": video_id,
+                "input_hash": input_hash,
+                "raw_chars": len(source_text),
+                "clean_chars": len(model_clean),
+                "changed": model_clean != existing_clean,
+                "guarded_fallback": guarded_fallback,
+                "guard_reason": guard_reason,
+                "removed_noise_examples": removed_examples,
+                "latency_ms": int((time.time() - started) * 1000),
+                "backend": "thunderomlx",
+                "chunk_count": len(chunks),
+                "created_at": iso_z(),
+            }
+            report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+            conn.commit()
+            processed += 1
+            print(f"  OK {video_id}: raw={len(source_text)} clean={len(model_clean)} chunks={len(chunks)} changed={model_clean != existing_clean}")
+        except Exception as exc:
+            conn.rollback()
+            failed += 1
+            err = f"{video_id}: {type(exc).__name__}: {exc}"
+            errors.append(err)
+            report_path.write_text(json.dumps({
+                "status": "failed",
+                "video_id": video_id,
+                "input_hash": input_hash,
+                "error": err,
+                "created_at": iso_z(),
+            }, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(f"  ERROR {err}", file=sys.stderr)
+    status = "ok" if failed == 0 else ("partial" if processed or changed else "failed")
+    finish_run(conn, run_id, status, processed + skipped + failed, changed, "; ".join(errors[:5]))
+    conn.close()
+    print(f"[clean-transcripts-thunderomlx] processed={processed} changed={changed} skipped={skipped} failed={failed} dry_run={dry_run}")
+    return 0 if status in {"ok", "partial"} else 1
+
+
+def acquire_named_pid_lock(pid_file: Path, *, label: str) -> bool:
+    pid_file.parent.mkdir(parents=True, exist_ok=True)
+    if pid_file.exists():
+        try:
+            existing_pid = int(pid_file.read_text(encoding="utf-8").strip() or "0")
+        except ValueError:
+            existing_pid = 0
+        if pid_is_running(existing_pid):
+            print(f"[{label}] already_running pid={existing_pid} pid_file={pid_file}")
+            return False
+        pid_file.unlink(missing_ok=True)
+    pid_file.write_text(f"{os.getpid()}\n", encoding="utf-8")
+    return True
+
+
+def count_pending_thunderomlx_transcript_cleaning(
+    conn: sqlite3.Connection,
+    config: dict[str, Any],
+    *,
+    force: bool,
+) -> int:
+    rows = conn.execute(
+        "SELECT t.video_id, t.transcript_raw, t.transcript_clean "
+        "FROM youtube_transcripts t "
+        "WHERE t.transcript_status IN ('fetched','auto_generated') "
+        "AND length(coalesce(t.transcript_raw, t.transcript_clean, '')) > 0 "
+        "ORDER BY t.fetched_at DESC"
+    ).fetchall()
+    if force:
+        return len(rows)
+    reports_dir = transcript_cleaning_report_dir(config)
+    pending = 0
+    for row in rows:
+        video_id = str(row["video_id"] if isinstance(row, sqlite3.Row) else row[0])
+        source_text = str((row["transcript_raw"] if isinstance(row, sqlite3.Row) else row[1]) or (row["transcript_clean"] if isinstance(row, sqlite3.Row) else row[2]) or "").strip()
+        input_hash = hashlib.sha256(source_text.encode("utf-8")).hexdigest()
+        report_path = reports_dir / f"{video_id}.cleaning.json"
+        if not report_path.exists():
+            pending += 1
+            continue
+        try:
+            old = json.loads(report_path.read_text(encoding="utf-8"))
+        except Exception:
+            pending += 1
+            continue
+        if old.get("input_hash") != input_hash or old.get("status") != "ok":
+            pending += 1
+    return pending
+
+
+def cmd_clean_transcripts_thunderomlx_supervised(args: argparse.Namespace) -> int:
+    """Keep ThunderOMLX transcript cleaning caught up with newly re-ASR'd text."""
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    run_dir = Path.home() / ".solar" / "harness" / "run"
+    pid_file = Path(getattr(args, "pid_file", "") or (run_dir / "tech-hotspot-transcript-cleaner.pid")).expanduser()
+    label = "clean-transcripts-thunderomlx-supervised"
+    if not acquire_named_pid_lock(pid_file, label=label):
+        return 0
+    max_rounds = int(getattr(args, "max_rounds", 0) or 0)
+    sleep_seconds = float(getattr(args, "sleep_seconds", 30) or 30)
+    idle_exit_after = int(getattr(args, "idle_exit_after", 3) or 3)
+    limit = max(1, int(getattr(args, "limit", 1) or 1))
+    force = bool(getattr(args, "force", False))
+    dry_run = bool(getattr(args, "dry_run", False))
+    audit_after = bool(getattr(args, "audit_after", True))
+    round_no = 0
+    idle_rounds = 0
+    try:
+        while True:
+            conn = ensure_db(db_path)
+            conn.executescript(SCHEMA_SQL)
+            conn.row_factory = sqlite3.Row
+            pending = count_pending_thunderomlx_transcript_cleaning(conn, config, force=force)
+            conn.close()
+            print(f"[{label}] round={round_no} pending_clean={pending} idle={idle_rounds}/{idle_exit_after}")
+            if dry_run:
+                break
+            if pending <= 0:
+                idle_rounds += 1
+                if idle_rounds >= idle_exit_after:
+                    print(f"[{label}] exit reason=idle_clean_queue")
+                    break
+                time.sleep(sleep_seconds)
+                continue
+            idle_rounds = 0
+            child_args = argparse.Namespace(**vars(args))
+            child_args.limit = limit
+            child_args.force = force
+            child_args.dry_run = False
+            rc = cmd_clean_transcripts_thunderomlx(child_args)
+            round_no += 1
+            if rc != 0:
+                print(f"[{label}] WARN child_rc={rc}")
+            if audit_after:
+                audit_args = argparse.Namespace(**vars(args))
+                audit_args.requeue = False
+                audit_args.limit = 0
+                cmd_audit_transcripts_quality(audit_args)
+            if max_rounds and round_no >= max_rounds:
+                print(f"[{label}] exit reason=max_rounds rounds={round_no}")
+                break
+            time.sleep(sleep_seconds)
+    finally:
+        try:
+            if pid_file.exists() and pid_file.read_text(encoding="utf-8").strip() == str(os.getpid()):
+                pid_file.unlink()
+        except OSError:
+            pass
+    return 0
+
+
 def fallback_youtube_semantic(video: sqlite3.Row | tuple, transcript_clean: str, error: str = "") -> dict[str, Any]:
     transcript_clean = re.sub(r"([\u4e00-\u9fffA-Za-z])\1{8,}", r"\1", transcript_clean.strip())
     sentences = re.split(r"(?<=[。！？.!?])\s+", transcript_clean)
@@ -1334,6 +1771,7 @@ def insert_youtube_semantic_atoms(conn: sqlite3.Connection, video_id: str,
 
 def materialize_youtube_semantic_outputs(conn: sqlite3.Connection, video_id: str,
                                          transcript_clean: str, config: dict[str, Any]) -> dict[str, Any]:
+    transcript_clean = denoise_transcript_text(transcript_clean)
     video = conn.execute(
         "SELECT video_id, title, channel_name, video_url, published_at, duration_seconds "
         "FROM youtube_videos WHERE video_id=?",
@@ -1449,9 +1887,200 @@ def clean_transcript_text(text: str) -> str:
     # Whisper can occasionally hallucinate a single token hundreds of times.
     # Collapse that before storage so fallback summaries do not pollute QMD.
     text = re.sub(r"([\u4e00-\u9fffA-Za-z])\1{8,}", r"\1", text)
+    text = denoise_transcript_text(text)
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
+
+
+def denoise_transcript_text(text: str) -> str:
+    """Remove ASR/caption filler loops while preserving substantive wording.
+
+    This is intentionally conservative: it removes very short repeated filler
+    lines and consecutive duplicates, but it does not paraphrase real content.
+    """
+    filler_words = {
+        "我", "嗯", "啊", "呃", "哦", "对", "是", "好", "这", "那",
+        "um", "uh", "er", "ah", "oh", "yeah", "yes", "no", "ok", "okay",
+    }
+
+    def compact_repeated_tokens(line: str) -> str:
+        # 我 我 我 / yeah yeah yeah -> 我 / yeah
+        line = re.sub(r"\b([A-Za-z]{1,12})(?:\s+\1\b){2,}", r"\1", line, flags=re.I)
+        line = re.sub(r"([\u4e00-\u9fff])(?:\s*\1){2,}", r"\1", line)
+        return line
+
+    def is_low_info_filler(line: str) -> bool:
+        raw = line.strip()
+        if not raw:
+            return True
+        normalized = re.sub(r"[\s,，.。!！?？…、~\-]+", "", raw).lower()
+        if not normalized:
+            return True
+        if normalized in filler_words:
+            return True
+        # Single-character CJK or 1-2 token Latin lines are usually ASR
+        # fragments when repeated as standalone transcript rows.
+        if re.fullmatch(r"[\u4e00-\u9fff]{1,2}", normalized) and normalized in filler_words:
+            return True
+        if re.fullmatch(r"(?:[a-z]{1,4})", normalized) and normalized in filler_words:
+            return True
+        # Lines like "我我" / "嗯嗯" after punctuation stripping.
+        if len(set(normalized)) == 1 and len(normalized) <= 6:
+            return True
+        return False
+
+    lines = [compact_repeated_tokens(line.strip()) for line in (text or "").splitlines()]
+    cleaned: list[str] = []
+    last_norm = ""
+    duplicate_run = 0
+    filler_run: dict[str, int] = {}
+    for line in lines:
+        norm = re.sub(r"\s+", " ", line).strip().lower()
+        if not norm:
+            if cleaned and cleaned[-1] != "":
+                cleaned.append("")
+            continue
+        if norm == last_norm:
+            duplicate_run += 1
+            if duplicate_run >= 1:
+                continue
+        else:
+            duplicate_run = 0
+        if is_low_info_filler(line):
+            key = re.sub(r"\s+", "", line).lower()
+            filler_run[key] = filler_run.get(key, 0) + 1
+            # Drop standalone filler entirely once it appears in a loop; keep
+            # nothing because these fragments are harmful to semantic extract.
+            if filler_run[key] >= 1:
+                last_norm = norm
+                continue
+        cleaned.append(line)
+        last_norm = norm
+
+    # Sentence-level consecutive de-dup for captions collapsed into paragraphs.
+    joined = "\n".join(cleaned)
+    pieces = re.split(r"(?<=[。！？.!?])\s+", joined)
+    deduped: list[str] = []
+    prev = ""
+    for piece in pieces:
+        p = piece.strip()
+        if not p:
+            continue
+        key = re.sub(r"\s+", "", p).lower()
+        if key and key == prev:
+            continue
+        deduped.append(p)
+        prev = key
+    return "\n".join(deduped).strip()
+
+
+def transcript_quality_metrics(text: str) -> dict[str, Any]:
+    """Detect ASR/caption loops that are unusable as evidence."""
+    lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+    chars = len(text or "")
+    if not lines:
+        return {
+            "chars": chars,
+            "line_count": 0,
+            "unique_line_ratio": 0.0,
+            "top_line_ratio": 0.0,
+            "music_ratio": 0.0,
+            "top_line": "",
+            "quality_failed": True,
+            "reason": "empty_transcript",
+        }
+    counts: dict[str, int] = {}
+    for line in lines:
+        key = re.sub(r"\s+", "", line).lower()
+        counts[key] = counts.get(key, 0) + 1
+    top_key, top_count = max(counts.items(), key=lambda kv: kv[1])
+    unique_ratio = len(counts) / max(1, len(lines))
+    top_ratio = top_count / max(1, len(lines))
+    music_count = sum(1 for line in lines if re.sub(r"[\s.!！。?？,，-]+", "", line).lower() in {"音乐", "音樂", "music", "[music]"})
+    music_ratio = music_count / max(1, len(lines))
+    low_information_short = chars < 120 and all(
+        re.sub(r"[\s.!！。?？,，-]+", "", line).lower() in {"音乐", "音樂", "music", "[music]", ""}
+        for line in lines
+    )
+    repeated_short_loop = len(lines) >= 40 and top_ratio >= 0.20 and len(top_key) <= 32
+    low_diversity_loop = len(lines) >= 80 and unique_ratio <= 0.12
+    music_loop = len(lines) >= 20 and music_ratio >= 0.30
+    quality_failed = low_information_short or repeated_short_loop or low_diversity_loop or music_loop
+    reason = ""
+    if low_information_short:
+        reason = "low_information_music_only"
+    elif music_loop:
+        reason = f"music_loop ratio={music_ratio:.2f}"
+    elif repeated_short_loop:
+        reason = f"repeated_short_line top_ratio={top_ratio:.2f} top={top_key[:40]}"
+    elif low_diversity_loop:
+        reason = f"low_unique_line_ratio unique={unique_ratio:.2f}"
+    return {
+        "chars": chars,
+        "line_count": len(lines),
+        "unique_line_ratio": unique_ratio,
+        "top_line_ratio": top_ratio,
+        "music_ratio": music_ratio,
+        "top_line": top_key[:80],
+        "quality_failed": quality_failed,
+        "reason": reason,
+    }
+
+
+def transcript_quality_failed(text: str) -> bool:
+    return bool(transcript_quality_metrics(text).get("quality_failed"))
+
+
+def cjk_char_ratio(text: str) -> float:
+    letters = [ch for ch in (text or "") if ch.isalpha() or "\u4e00" <= ch <= "\u9fff"]
+    if not letters:
+        return 0.0
+    cjk = sum(1 for ch in letters if "\u4e00" <= ch <= "\u9fff")
+    return cjk / max(1, len(letters))
+
+
+def expected_youtube_language_from_metadata(title: str = "", channel: str = "", description: str = "") -> str:
+    haystack = " ".join([title or "", channel or "", description or ""])
+    return "zh" if re.search(r"[\u4e00-\u9fff]", haystack) else "en"
+
+
+def transcript_language_mismatch(text: str, *, expected_language: str) -> bool:
+    if expected_language != "en":
+        return False
+    # English YouTube talks should not become mostly CJK. This catches forced
+    # --language zh ASR failures while allowing occasional Chinese entity names.
+    return len(text or "") >= 300 and cjk_char_ratio(text) >= 0.35
+
+
+def youtube_video_metadata_for_quality(video_id: str, config: dict[str, Any]) -> dict[str, str]:
+    try:
+        conn = sqlite3.connect(transcript_db_path(config))
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT title, channel_name, description FROM youtube_videos WHERE video_id=?",
+            (video_id,),
+        ).fetchone()
+        conn.close()
+        if row:
+            return {
+                "title": str(row["title"] or ""),
+                "channel": str(row["channel_name"] or ""),
+                "description": str(row["description"] or ""),
+            }
+    except Exception:
+        pass
+    return {"title": "", "channel": "", "description": ""}
+
+
+def transcript_quality_failed_for_video(text: str, *, title: str = "", channel: str = "",
+                                        description: str = "") -> tuple[bool, dict[str, Any]]:
+    metrics = transcript_quality_metrics(text)
+    expected = expected_youtube_language_from_metadata(title, channel, description)
+    mismatch = transcript_language_mismatch(text, expected_language=expected)
+    if mismatch:
+        metrics = {**metrics, "quality_failed": True, "reason": f"language_mismatch expected={expected} cjk_ratio={cjk_char_ratio(text):.2f}"}
+    return bool(metrics.get("quality_failed")), metrics
 
 
 def infer_transcript_language(text: str) -> str:
@@ -1498,6 +2127,227 @@ def fetch_youtube_caption_transcript(video_id: str, config: dict[str, Any]) -> t
     return transcript or "", status or "empty", source or ""
 
 
+def transcript_db_path(config: dict[str, Any]) -> Path:
+    return Path((config.get("output") or {}).get(
+        "database",
+        str(Path.home() / ".solar/harness/state/tech-hotspot-radar/tech-hotspot-radar.sqlite"),
+    )).expanduser()
+
+
+def transcript_week_key(value: str | dt.datetime | None = None) -> str:
+    parsed: dt.datetime | None = None
+    if isinstance(value, dt.datetime):
+        parsed = value.astimezone(UTC) if value.tzinfo else value.replace(tzinfo=UTC)
+    elif value is not None:
+        parsed = parse_datetime_value(str(value))
+    if parsed is None:
+        parsed = now_utc()
+    iso_year, iso_week, _iso_weekday = parsed.isocalendar()
+    return f"{iso_year}-W{iso_week:02d}"
+
+
+def transcript_published_at_for_video(video_id: str, config: dict[str, Any]) -> str:
+    db_path = transcript_db_path(config)
+    if not db_path.exists():
+        return ""
+    try:
+        conn = sqlite3.connect(str(db_path))
+        row = conn.execute(
+            "SELECT published_at FROM youtube_videos WHERE video_id=?",
+            (video_id,),
+        ).fetchone()
+        conn.close()
+    except Exception:
+        return ""
+    return str((row or ("",))[0] or "").strip()
+
+
+def transcript_week_dir(transcript_root: Path, *,
+                        published_at: str | dt.datetime | None = None,
+                        ensure: bool = True) -> Path:
+    bucket = transcript_root / transcript_week_key(published_at)
+    if ensure:
+        bucket.mkdir(parents=True, exist_ok=True)
+    return bucket
+
+
+def transcript_path_for_video(video_id: str, config: dict[str, Any], *,
+                              published_at: str | dt.datetime | None = None,
+                              ensure_parent: bool = True) -> Path:
+    _audio_dir, transcript_root = transcript_state_dirs(config)
+    published = published_at or transcript_published_at_for_video(video_id, config)
+    bucket = transcript_week_dir(transcript_root, published_at=published, ensure=ensure_parent)
+    return bucket / f"{video_id}.txt"
+
+
+def _legacy_transcript_path(transcript_root: Path, video_id: str) -> Path:
+    return transcript_root / f"{video_id}.txt"
+
+
+def find_transcript_file(video_id: str, config: dict[str, Any], *,
+                         published_at: str | dt.datetime | None = None) -> Path | None:
+    _audio_dir, transcript_root = transcript_state_dirs(config)
+    published = published_at or transcript_published_at_for_video(video_id, config)
+    canonical = transcript_week_dir(transcript_root, published_at=published, ensure=False) / f"{video_id}.txt"
+    if canonical.exists():
+        return canonical
+    legacy = _legacy_transcript_path(transcript_root, video_id)
+    if legacy.exists():
+        return legacy
+    matches = sorted(
+        transcript_root.rglob(f"{video_id}.txt"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    return matches[0] if matches else None
+
+
+def find_transcript_candidates(transcript_root: Path, stem: str) -> list[Path]:
+    return sorted(
+        [p for p in transcript_root.rglob(f"{stem}*.txt") if p.is_file()],
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+
+
+def remove_transcript_cache_files(video_id: str, config: dict[str, Any]) -> int:
+    _audio_dir, transcript_root = transcript_state_dirs(config)
+    removed = 0
+    seen: set[Path] = set()
+    for path in find_transcript_candidates(transcript_root, video_id):
+        if path in seen:
+            continue
+        seen.add(path)
+        try:
+            path.unlink()
+            removed += 1
+        except FileNotFoundError:
+            pass
+    for week_dir in sorted([p for p in transcript_root.iterdir() if p.is_dir()]):
+        try:
+            next(week_dir.iterdir())
+        except StopIteration:
+            week_dir.rmdir()
+        except Exception:
+            pass
+    return removed
+
+
+def _rewrite_transcript_result_sources(state_dir: Path, moved: dict[Path, Path], *,
+                                       db_path: Path | None = None) -> int:
+    results_dir = state_dir / "transcript-results"
+    transcript_root = state_dir / "transcripts"
+    if not results_dir.exists():
+        return 0
+    moved = moved or {}
+    conn: sqlite3.Connection | None = None
+    if db_path and db_path.exists():
+        try:
+            conn = sqlite3.connect(str(db_path))
+            conn.row_factory = sqlite3.Row
+        except Exception:
+            conn = None
+    updated = 0
+    try:
+        for json_path in results_dir.rglob("*.json"):
+            try:
+                payload = json.loads(json_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            source = str(payload.get("source") or "").strip()
+            if not source:
+                continue
+            target = moved.get(Path(source))
+            source_path = Path(source)
+            if target is None:
+                if source_path.suffix == ".txt" and source_path.parent == transcript_root and not source_path.exists():
+                    candidates = find_transcript_candidates(transcript_root, source_path.stem)
+                    if candidates:
+                        target = candidates[0]
+                    elif conn is not None:
+                        row = conn.execute(
+                            "SELECT t.transcript_clean, v.published_at "
+                            "FROM youtube_transcripts t "
+                            "LEFT JOIN youtube_videos v ON v.video_id=t.video_id "
+                            "WHERE t.video_id=?",
+                            (source_path.stem,),
+                        ).fetchone()
+                        if row and str(row["transcript_clean"] or "").strip():
+                            target = transcript_week_dir(
+                                transcript_root,
+                                published_at=str(row["published_at"] or ""),
+                            ) / source_path.name
+                            target.write_text(str(row["transcript_clean"]).strip() + "\n", encoding="utf-8")
+            if target is None:
+                continue
+            payload["source"] = str(target)
+            json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            updated += 1
+    finally:
+        if conn is not None:
+            conn.close()
+    return updated
+
+
+def migrate_transcript_cache_to_weekly(config: dict[str, Any]) -> dict[str, int | str]:
+    state_dir = Path((config.get("output") or {}).get(
+        "state_dir", str(Path.home() / ".solar/harness/state/tech-hotspot-radar")
+    )).expanduser()
+    transcript_root = state_dir / "transcripts"
+    transcript_root.mkdir(parents=True, exist_ok=True)
+    marker = transcript_root / f".layout-{TRANSCRIPT_LAYOUT_VERSION}.json"
+    cache_key = str(transcript_root.resolve())
+    flat_candidates = sorted(transcript_root.glob("*.txt"))
+    if marker.exists() and cache_key in _TRANSCRIPT_LAYOUT_MIGRATED and not flat_candidates:
+        rewritten_sources = _rewrite_transcript_result_sources(state_dir, {}, db_path=transcript_db_path(config))
+        try:
+            marker_data = json.loads(marker.read_text(encoding="utf-8"))
+        except Exception:
+            marker_data = {}
+        return {
+            "moved": int(marker_data.get("moved", 0) or 0),
+            "rewritten_sources": int(marker_data.get("rewritten_sources", 0) or 0) + rewritten_sources,
+            "status": "cached" if rewritten_sources == 0 else "repair_sources",
+        }
+
+    moved = 0
+    moved_map: dict[Path, Path] = {}
+    for path in flat_candidates:
+        video_id = path.stem
+        published_at = transcript_published_at_for_video(video_id, config)
+        if not published_at:
+            published_at = dt.datetime.fromtimestamp(path.stat().st_mtime, UTC)
+        target = transcript_week_dir(transcript_root, published_at=published_at) / path.name
+        moved_map[path] = target
+        if path == target:
+            continue
+        if target.exists():
+            try:
+                if target.read_text(encoding="utf-8", errors="replace").strip() == path.read_text(encoding="utf-8", errors="replace").strip():
+                    path.unlink()
+                    moved += 1
+                    continue
+            except Exception:
+                pass
+            backup_target = target.with_name(f"{video_id}-legacy-{int(path.stat().st_mtime)}.txt")
+            path.replace(backup_target)
+            moved_map[path] = backup_target
+            moved += 1
+            continue
+        path.replace(target)
+        moved += 1
+
+    rewritten_sources = _rewrite_transcript_result_sources(state_dir, moved_map, db_path=transcript_db_path(config))
+    marker.write_text(json.dumps({
+        "layout": TRANSCRIPT_LAYOUT_VERSION,
+        "moved": moved,
+        "rewritten_sources": rewritten_sources,
+        "updated_at": iso_z(),
+    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _TRANSCRIPT_LAYOUT_MIGRATED.add(cache_key)
+    return {"moved": moved, "rewritten_sources": rewritten_sources, "status": "ok"}
+
+
 def transcript_state_dirs(config: dict[str, Any]) -> tuple[Path, Path]:
     state_dir = Path((config.get("output") or {}).get(
         "state_dir", str(Path.home() / ".solar/harness/state/tech-hotspot-radar")
@@ -1506,6 +2356,7 @@ def transcript_state_dirs(config: dict[str, Any]) -> tuple[Path, Path]:
     transcript_dir = state_dir / "transcripts"
     audio_dir.mkdir(parents=True, exist_ok=True)
     transcript_dir.mkdir(parents=True, exist_ok=True)
+    migrate_transcript_cache_to_weekly(config)
     return audio_dir, transcript_dir
 
 
@@ -1601,8 +2452,11 @@ def run_youtube_asr_inprocess(video_id: str, row: sqlite3.Row | dict[str, Any],
         text = str((result or {}).get("text") or "").strip()
         if not text:
             return "", "asr_empty_text", str(audio_file)
-        _audio_dir, transcript_dir = transcript_state_dirs(config)
-        out_path = transcript_dir / f"{audio_file.stem}.txt"
+        out_path = transcript_path_for_video(
+            audio_file.stem,
+            config,
+            published_at=str(row["published_at"] or ""),
+        )
         out_path.write_text(text + "\n", encoding="utf-8")
         return text, "asr_ok_daemon", str(out_path)
     except Exception as exc:
@@ -1690,10 +2544,7 @@ def mark_transcript_skipped_short_video(conn: sqlite3.Connection, video_id: str,
         (video_id,),
     )
     try:
-        _audio_dir, transcript_dir = transcript_state_dirs(config)
-        transcript_path = transcript_dir / f"{video_id}.txt"
-        if transcript_path.exists():
-            transcript_path.unlink()
+        remove_transcript_cache_files(video_id, config)
     except Exception:
         pass
     conn.execute(
@@ -1704,13 +2555,15 @@ def mark_transcript_skipped_short_video(conn: sqlite3.Connection, video_id: str,
 
 
 def run_youtube_asr(video_id: str, config: dict[str, Any], *, dry_run: bool = False,
-                    duration_seconds: int | None = None) -> tuple[str, str, str]:
+                    duration_seconds: int | None = None,
+                    language_override: str | None = None,
+                    ignore_existing_txt: bool = False) -> tuple[str, str, str]:
     """Download audio with yt-dlp and transcribe with the configured ASR backend."""
     youtube_cfg = config.get("youtube") or {}
     asr_cfg = youtube_cfg.get("asr") or {}
     backend = str(asr_cfg.get("backend", "openai-whisper") or "openai-whisper").lower()
     model = str(asr_cfg.get("whisper_model", "small"))
-    language = str(asr_cfg.get("language", "zh") or "").strip()
+    language = str(language_override or asr_cfg.get("language", "zh") or "").strip()
     audio_dir, transcript_dir = transcript_state_dirs(config)
     if dry_run:
         return "", "asr_dry_run", ""
@@ -1720,11 +2573,19 @@ def run_youtube_asr(video_id: str, config: dict[str, Any], *, dry_run: bool = Fa
 
     url = f"https://www.youtube.com/watch?v={video_id}"
     output_template = str(audio_dir / f"{video_id}.%(ext)s")
-    existing_txt = transcript_dir / f"{video_id}.txt"
-    if existing_txt.exists() and existing_txt.stat().st_size > 0:
+    existing_txt = find_transcript_file(video_id, config)
+    if existing_txt and existing_txt.exists() and existing_txt.stat().st_size > 0 and not ignore_existing_txt:
         text = existing_txt.read_text(encoding="utf-8", errors="replace").strip()
-        if text:
+        meta = youtube_video_metadata_for_quality(video_id, config)
+        failed, _quality = transcript_quality_failed_for_video(
+            text,
+            title=meta.get("title", ""),
+            channel=meta.get("channel", ""),
+            description=meta.get("description", ""),
+        )
+        if text and not failed:
             return text, "asr_existing_txt", str(existing_txt)
+        remove_transcript_cache_files(video_id, config)
     audio_file = find_asr_audio_file(audio_dir, video_id)
     if not audio_file:
         dl = subprocess.run(
@@ -1744,7 +2605,8 @@ def run_youtube_asr(video_id: str, config: dict[str, Any], *, dry_run: bool = Fa
         mlx_whisper = shutil.which("mlx_whisper") or shutil.which("mlx-whisper")
         if not mlx_whisper:
             return "", "asr_missing_mlx_whisper", str(audio_file)
-        cmd = [mlx_whisper, str(audio_file), "--model", model, "--output-dir", str(transcript_dir), "--output-format", "txt"]
+        output_dir = transcript_path_for_video(video_id, config, ensure_parent=True).parent
+        cmd = [mlx_whisper, str(audio_file), "--model", model, "--output-dir", str(output_dir), "--output-format", "txt"]
         if language and language.lower() not in {"auto", "unknown"}:
             cmd.extend(["--language", language])
     else:
@@ -1752,7 +2614,8 @@ def run_youtube_asr(video_id: str, config: dict[str, Any], *, dry_run: bool = Fa
         if not whisper:
             return "", "asr_missing_whisper", ""
         openai_model = str(asr_cfg.get("openai_whisper_model", model) or model)
-        cmd = [whisper, str(audio_file), "--model", openai_model, "--output_format", "txt", "--output_dir", str(transcript_dir)]
+        output_dir = transcript_path_for_video(video_id, config, ensure_parent=True).parent
+        cmd = [whisper, str(audio_file), "--model", openai_model, "--output_format", "txt", "--output_dir", str(output_dir)]
         if language and language.lower() not in {"auto", "unknown"}:
             cmd.extend(["--language", language])
 
@@ -1769,7 +2632,7 @@ def run_youtube_asr(video_id: str, config: dict[str, Any], *, dry_run: bool = Fa
     )
     if asr.returncode != 0:
         return "", f"asr_transcribe_failed:{asr.stdout[-500:]}", str(audio_file)
-    txt_candidates = sorted(transcript_dir.glob(f"{audio_file.stem}*.txt"), key=lambda p: p.stat().st_mtime, reverse=True)
+    txt_candidates = find_transcript_candidates(transcript_dir, audio_file.stem)
     if not txt_candidates:
         return "", "asr_missing_txt", str(audio_file)
     text = txt_candidates[0].read_text(encoding="utf-8", errors="replace")
@@ -1828,10 +2691,17 @@ def save_transcript_success(conn: sqlite3.Connection, video_id: str, text: str, 
         depth=max(0.4, semantic_score(clean[:4000])),
         source_weight=1.0,
     )
-    _audio_dir, transcript_dir = transcript_state_dirs(config)
     # Best-effort local plain transcript cache for attachment/debugging.
     try:
-        (transcript_dir / f"{video_id}.txt").write_text(clean + "\n", encoding="utf-8")
+        published_at = conn.execute(
+            "SELECT published_at FROM youtube_videos WHERE video_id=?",
+            (video_id,),
+        ).fetchone()
+        transcript_path_for_video(
+            video_id,
+            config,
+            published_at=str((published_at or ("",))[0] or ""),
+        ).write_text(clean + "\n", encoding="utf-8")
     except Exception:
         pass
     if not semantic_postprocess:
@@ -1880,11 +2750,21 @@ def cleanup_transcript_cache(config: dict[str, Any]) -> int:
     cutoff = time.time() - retention_days * 86400
     audio_dir, transcript_dir = transcript_state_dirs(config)
     removed = 0
-    for base in (audio_dir, transcript_dir):
-        for path in base.glob("*"):
-            if path.is_file() and path.stat().st_mtime < cutoff:
-                path.unlink()
-                removed += 1
+    for path in audio_dir.glob("*"):
+        if path.is_file() and path.stat().st_mtime < cutoff:
+            path.unlink()
+            removed += 1
+    for path in transcript_dir.rglob("*.txt"):
+        if path.is_file() and path.stat().st_mtime < cutoff:
+            path.unlink()
+            removed += 1
+    for week_dir in sorted([p for p in transcript_dir.iterdir() if p.is_dir()]):
+        try:
+            next(week_dir.iterdir())
+        except StopIteration:
+            week_dir.rmdir()
+        except Exception:
+            pass
     return removed
 
 
@@ -1898,20 +2778,30 @@ def cmd_process_transcripts(args: argparse.Namespace) -> int:
     max_asr_per_run = int(asr_config.get("max_per_run", 1) or 1)
     limit = int(getattr(args, "limit", 0) or max_asr_per_run or 1)
     dry_run = bool(getattr(args, "dry_run", False))
-    due_filter = "" if getattr(args, "force", False) else "AND next_retry_at <= ?"
+    due_filter = "" if getattr(args, "force", False) else "AND rq.next_retry_at <= ?"
     params: list[Any] = ["youtube", "fetch_transcript", "pending"]
     if not getattr(args, "force", False):
         params.append(iso_z())
     params.append(limit)
     rows = conn.execute(
-        "SELECT * FROM retry_queue WHERE source=? AND operation=? AND status=? "
-        f"{due_filter} ORDER BY next_retry_at, retry_id LIMIT ?",
+        "SELECT rq.* FROM retry_queue rq "
+        "LEFT JOIN youtube_videos yv ON yv.video_id=rq.source_id "
+        "WHERE rq.source=? AND rq.operation=? AND rq.status=? "
+        f"{due_filter} "
+        "ORDER BY "
+        "CASE WHEN datetime(yv.published_at) >= datetime('now','-7 days') THEN 0 ELSE 1 END, "
+        "datetime(yv.published_at) DESC, "
+        "rq.next_retry_at, rq.retry_id LIMIT ?",
         params,
     ).fetchall()
     if dry_run:
         print(f"[process-transcripts] dry-run due={len(rows)} limit={limit} max_asr_per_run={max_asr_per_run}")
         for row in rows:
-            print(f"  pending {row['source_id']} attempt={row['attempt']} next={row['next_retry_at']}")
+            published = conn.execute(
+                "SELECT published_at FROM youtube_videos WHERE video_id=?",
+                (row["source_id"],),
+            ).fetchone()
+            print(f"  pending {row['source_id']} attempt={row['attempt']} next={row['next_retry_at']} published={str((published or ('',))[0] or '')}")
         conn.close()
         return 0
     run_id = begin_run(conn, "youtube", "process-transcripts")
@@ -1933,6 +2823,7 @@ def cmd_process_transcripts(args: argparse.Namespace) -> int:
         conn.execute("UPDATE retry_queue SET status='in_progress' WHERE retry_id=?", (row["retry_id"],))
         conn.commit()
         try:
+            video_row = None
             text, status, source = fetch_youtube_caption_transcript(video_id, config)
             if status != "ok" or not text:
                 if asr_used >= max_asr_per_run:
@@ -1941,9 +2832,47 @@ def cmd_process_transcripts(args: argparse.Namespace) -> int:
                     conn.commit()
                     continue
                 asr_used += 1
-                text, status, source = run_youtube_asr(video_id, config, dry_run=dry_run, duration_seconds=duration_seconds)
+                video_row = conn.execute(
+                    "SELECT video_id, channel_name, title, description FROM youtube_videos WHERE video_id=?",
+                    (video_id,),
+                ).fetchone()
+                language = youtube_asr_language_for_video(config, video_row or {"channel_name": "", "title": "", "description": ""})
+                text, status, source = run_youtube_asr(
+                    video_id,
+                    config,
+                    dry_run=dry_run,
+                    duration_seconds=duration_seconds,
+                    language_override=language,
+                    ignore_existing_txt=bool(getattr(args, "force", False)),
+                )
             if text:
-                save_transcript_success(conn, video_id, text, status, source, config)
+                if video_row is None:
+                    video_row = conn.execute(
+                        "SELECT video_id, channel_name, title, description FROM youtube_videos WHERE video_id=?",
+                        (video_id,),
+                    ).fetchone()
+                bad_quality, quality_metrics = transcript_quality_failed_for_video(
+                    text,
+                    title=str((video_row or {}).get("title", "") if isinstance(video_row, dict) else (video_row["title"] if video_row else "")),
+                    channel=str((video_row or {}).get("channel_name", "") if isinstance(video_row, dict) else (video_row["channel_name"] if video_row else "")),
+                    description=str((video_row or {}).get("description", "") if isinstance(video_row, dict) else (video_row["description"] if video_row else "")),
+                )
+                if bad_quality:
+                    conn.execute("UPDATE retry_queue SET status='pending' WHERE retry_id=?", (row["retry_id"],))
+                    mark_retry_failed(conn, row, f"transcript_quality_failed:{json.dumps(quality_metrics, ensure_ascii=False)[:300]}")
+                    remove_transcript_cache_files(video_id, config)
+                    failures.append(f"{video_id}: transcript_quality_failed")
+                    conn.commit()
+                    continue
+                save_transcript_success(
+                    conn,
+                    video_id,
+                    text,
+                    status,
+                    source,
+                    config,
+                    semantic_postprocess=bool(getattr(args, "semantic_postprocess", False)),
+                )
                 archived = archive_asr_audio(video_id, config) if status.startswith("asr") else ""
                 detail = f"{status}:{source}"
                 if archived:
@@ -1969,6 +2898,130 @@ def cmd_process_transcripts(args: argparse.Namespace) -> int:
         print(f"  WARN {failure}")
     conn.close()
     return 0 if status in {"ok", "partial"} else 1
+
+
+def pid_is_running(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def acquire_transcript_supervisor_lock(pid_file: Path) -> bool:
+    pid_file.parent.mkdir(parents=True, exist_ok=True)
+    if pid_file.exists():
+        try:
+            existing_pid = int(pid_file.read_text(encoding="utf-8").strip() or "0")
+        except ValueError:
+            existing_pid = 0
+        if pid_is_running(existing_pid):
+            print(f"[process-transcripts-supervised] already_running pid={existing_pid} pid_file={pid_file}")
+            return False
+        pid_file.unlink(missing_ok=True)
+    pid_file.write_text(f"{os.getpid()}\n", encoding="utf-8")
+    return True
+
+
+def count_youtube_transcript_retries(conn: sqlite3.Connection, *, due_only: bool, force: bool) -> int:
+    where = "source='youtube' AND operation='fetch_transcript' AND status='pending'"
+    params: list[Any] = []
+    if due_only and not force:
+        where += " AND next_retry_at <= ?"
+        params.append(iso_z())
+    row = conn.execute(f"SELECT COUNT(*) FROM retry_queue WHERE {where}", params).fetchone()
+    return int(row[0] if row else 0)
+
+
+def reap_stale_youtube_transcript_claims(conn: sqlite3.Connection, *, stale_minutes: int) -> int:
+    """Return abandoned transcript claims to pending after an interrupted worker.
+
+    retry_queue does not have a claimed_at column, so use next_retry_at as a
+    conservative stale watermark. Active workers update one row at a time; this
+    only reaps claims whose retry time is already older than the stale window.
+    """
+    if stale_minutes <= 0:
+        return 0
+    cutoff = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=stale_minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    cur = conn.execute(
+        "UPDATE retry_queue SET status='pending', last_error='reaped_stale_in_progress' "
+        "WHERE source='youtube' AND operation='fetch_transcript' AND status='in_progress' "
+        "AND next_retry_at <= ?",
+        (cutoff,),
+    )
+    return int(cur.rowcount or 0)
+
+
+def cmd_process_transcripts_supervised(args: argparse.Namespace) -> int:
+    """Safe transcript supervisor.
+
+    This replaces ad-hoc cache-only shell loops. It watches the authoritative
+    retry_queue, invokes one-shot process-transcripts batches, and exits only
+    after the due retry queue is idle. It intentionally does not reuse the MLX
+    ASR process, avoiding the 30GB+ resident-memory issue seen with daemon mode.
+    """
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    run_dir = Path.home() / ".solar" / "harness" / "run"
+    pid_file = Path(getattr(args, "pid_file", "") or (run_dir / "tech-hotspot-transcript-supervisor.pid")).expanduser()
+    if not acquire_transcript_supervisor_lock(pid_file):
+        return 0
+    max_rounds = int(getattr(args, "max_rounds", 0) or 0)
+    sleep_seconds = float(getattr(args, "sleep_seconds", 20) or 20)
+    idle_exit_after = int(getattr(args, "idle_exit_after", 3) or 3)
+    stale_minutes = int(getattr(args, "stale_minutes", 180) or 0)
+    limit = max(1, int(getattr(args, "limit", 1) or 1))
+    force = bool(getattr(args, "force", False))
+    dry_run = bool(getattr(args, "dry_run", False))
+    round_no = 0
+    idle_rounds = 0
+    try:
+        while True:
+            conn = ensure_db(db_path)
+            conn.executescript(SCHEMA_SQL)
+            conn.row_factory = sqlite3.Row
+            reaped = reap_stale_youtube_transcript_claims(conn, stale_minutes=stale_minutes)
+            due = count_youtube_transcript_retries(conn, due_only=True, force=force)
+            pending = count_youtube_transcript_retries(conn, due_only=False, force=True)
+            conn.commit()
+            conn.close()
+            print(
+                f"[process-transcripts-supervised] round={round_no} "
+                f"due={due} pending={pending} reaped={reaped} idle={idle_rounds}/{idle_exit_after}"
+            )
+            if dry_run:
+                break
+            if due <= 0:
+                idle_rounds += 1
+                if idle_rounds >= idle_exit_after:
+                    print("[process-transcripts-supervised] exit reason=idle_due_queue")
+                    break
+                time.sleep(sleep_seconds)
+                continue
+            idle_rounds = 0
+            child_args = argparse.Namespace(**vars(args))
+            child_args.limit = limit
+            child_args.force = force
+            child_args.dry_run = False
+            rc = cmd_process_transcripts(child_args)
+            round_no += 1
+            if rc != 0:
+                print(f"[process-transcripts-supervised] WARN child_rc={rc}")
+            if max_rounds and round_no >= max_rounds:
+                print(f"[process-transcripts-supervised] exit reason=max_rounds rounds={round_no}")
+                break
+            time.sleep(sleep_seconds)
+    finally:
+        try:
+            if pid_file.exists() and pid_file.read_text(encoding="utf-8").strip() == str(os.getpid()):
+                pid_file.unlink()
+        except OSError:
+            pass
+    return 0
 
 
 def cmd_process_transcripts_daemon(args: argparse.Namespace) -> int:
@@ -2015,7 +3068,11 @@ def cmd_process_transcripts_daemon(args: argparse.Namespace) -> int:
             "SELECT rq.*, yv.duration_seconds AS video_duration_seconds, yv.channel_name, yv.title, yv.description "
             "FROM retry_queue rq LEFT JOIN youtube_videos yv ON yv.video_id = rq.source_id "
             "WHERE rq.source=? AND rq.operation=? AND rq.status=? "
-            f"{due_filter} ORDER BY rq.next_retry_at, rq.retry_id LIMIT ?",
+            f"{due_filter} "
+            "ORDER BY "
+            "CASE WHEN datetime(yv.published_at) >= datetime('now','-7 days') THEN 0 ELSE 1 END, "
+            "datetime(yv.published_at) DESC, "
+            "rq.next_retry_at, rq.retry_id LIMIT ?",
             params,
         ).fetchall()
         if dry_run:
@@ -2137,6 +3194,111 @@ def cmd_process_semantics(args: argparse.Namespace) -> int:
     print(f"[process-semantics] processed={len(rows)} ok={ok} warn={warn} failed={failed}")
     conn.close()
     return 0 if failed == 0 else 1
+
+
+def cmd_clean_transcripts(args: argparse.Namespace) -> int:
+    """Repair stored transcript_clean text with the current denoise policy."""
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.executescript(SCHEMA_SQL)
+    limit = int(getattr(args, "limit", 0) or 0)
+    dry_run = bool(getattr(args, "dry_run", False))
+    sql = (
+        "SELECT video_id, transcript_clean FROM youtube_transcripts "
+        "WHERE length(coalesce(transcript_clean,'')) > 0 ORDER BY fetched_at DESC"
+    )
+    if limit > 0:
+        sql += f" LIMIT {limit}"
+    rows = conn.execute(sql).fetchall()
+    changed = 0
+    for video_id, clean in rows:
+        repaired = clean_transcript_text(clean)
+        if repaired != clean:
+            changed += 1
+            if not dry_run:
+                conn.execute(
+                    "UPDATE youtube_transcripts SET transcript_clean=?, char_count=? WHERE video_id=?",
+                    (repaired, len(repaired), video_id),
+                )
+                conn.execute("DELETE FROM reasoning_packets WHERE packet_id=?", (f"yt-rp-{video_id}",))
+                conn.execute("DELETE FROM evidence_atoms WHERE source='youtube' AND source_id=?", (video_id,))
+    if not dry_run:
+        conn.commit()
+    conn.close()
+    print(f"[clean-transcripts] scanned={len(rows)} changed={changed} dry_run={dry_run}")
+    return 0
+
+
+def cmd_audit_transcripts_quality(args: argparse.Namespace) -> int:
+    """Audit stored YouTube transcripts and optionally requeue bad ones."""
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.executescript(SCHEMA_SQL)
+    conn.row_factory = sqlite3.Row
+    requeue = bool(getattr(args, "requeue", False))
+    limit = int(getattr(args, "limit", 0) or 0)
+    rows = conn.execute(
+        "SELECT t.video_id, t.transcript_clean, t.transcript_status, "
+        "v.title, v.channel_name, v.description "
+        "FROM youtube_transcripts t "
+        "LEFT JOIN youtube_videos v ON v.video_id=t.video_id "
+        "WHERE length(coalesce(t.transcript_clean,'')) > 0 "
+        "ORDER BY t.fetched_at DESC"
+    ).fetchall()
+    bad: list[tuple[sqlite3.Row, dict[str, Any]]] = []
+    for row in rows:
+        failed, metrics = transcript_quality_failed_for_video(
+            str(row["transcript_clean"] or ""),
+            title=str(row["title"] or ""),
+            channel=str(row["channel_name"] or ""),
+            description=str(row["description"] or ""),
+        )
+        if failed:
+            bad.append((row, metrics))
+    if limit > 0:
+        bad_to_requeue = bad[:limit]
+    else:
+        bad_to_requeue = bad
+    print(f"[audit-transcripts-quality] scanned={len(rows)} bad={len(bad)} requeue={requeue} limit={limit}")
+    for row, metrics in bad[:50]:
+        print(
+            f"  BAD {row['video_id']} channel={row['channel_name'] or 'N/A'} "
+            f"reason={metrics.get('reason')}"
+        )
+    if not requeue or not bad_to_requeue:
+        conn.close()
+        return 0 if not bad else 1
+
+    run_id = begin_run(conn, "youtube", "audit-transcripts-quality")
+    now = iso_z()
+    for row, metrics in bad_to_requeue:
+        video_id = str(row["video_id"])
+        reason = "transcript_quality_failed_requeue:" + str(metrics.get("reason", "unknown"))[:420]
+        conn.execute(
+            "UPDATE youtube_transcripts SET transcript_raw='', transcript_clean='', transcript_status='missing', language='', fetched_at=?, char_count=0 WHERE video_id=?",
+            (now, video_id),
+        )
+        conn.execute("DELETE FROM reasoning_packets WHERE packet_id=?", (f"yt-rp-{video_id}",))
+        conn.execute("DELETE FROM evidence_atoms WHERE source='youtube' AND source_id=?", (video_id,))
+        cur = conn.execute(
+            "UPDATE retry_queue SET status='pending', attempt=0, next_retry_at=?, last_error=?, updated_at=? "
+            "WHERE source='youtube' AND source_id=? AND operation='fetch_transcript'",
+            (now, reason, now, video_id),
+        )
+        if cur.rowcount == 0:
+            conn.execute(
+                "INSERT INTO retry_queue(source,source_id,operation,attempt,max_attempts,next_retry_at,created_at,status,last_error,updated_at) "
+                "VALUES('youtube',?,'fetch_transcript',0,3,?,?, 'pending', ?, ?)",
+                (video_id, now, now, reason, now),
+            )
+        remove_transcript_cache_files(video_id, config)
+    finish_run(conn, run_id, "ok", len(rows), len(bad_to_requeue), f"bad={len(bad)} requeued={len(bad_to_requeue)}")
+    conn.commit()
+    conn.close()
+    print(f"[audit-transcripts-quality] requeued={len(bad_to_requeue)}")
+    return 0
 
 
 def parse_youtube_feed(channel: sqlite3.Row, xml_text: str, fetched_at: str) -> list[dict[str, Any]]:
@@ -2597,6 +3759,12 @@ def iso_z(value: dt.datetime | None = None) -> str:
     return (value or now_utc()).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def slugify(value: str) -> str:
+    text = re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip().lower())
+    text = re.sub(r"-{2,}", "-", text).strip("-._")
+    return text or "item"
+
+
 def load_config(path: Path) -> dict[str, Any]:
     if not path.exists():
         print(f"ERROR: config not found: {path}", file=sys.stderr)
@@ -2850,6 +4018,21 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         print(f"[doctor] WARN: missing tables: {missing}")
     else:
         print(f"[doctor] tables: all {len(expected)} present")
+    extension_tables = [
+        "repo_velocity_metrics",
+        "detector_results",
+        "repo_strategy_decisions",
+        "task_candidates",
+    ]
+    ext_present = [t for t in extension_tables if t in existing]
+    ext_missing = [t for t in extension_tables if t not in existing]
+    if ext_present and ext_missing:
+        issues.append(f"missing extension tables: {ext_missing}")
+        print(f"[doctor] WARN: extension tables partially present, missing={ext_missing}")
+    elif ext_present:
+        print(f"[doctor] extension tables: all {len(extension_tables)} present")
+    else:
+        print("[doctor] extension tables: not initialized yet (ok for baseline DB)")
     print("[doctor] row counts:")
     for t in sorted(existing - {"_meta"}):
         count = conn.execute(f"SELECT COUNT(*) FROM [{t}]").fetchone()[0]
@@ -7273,7 +8456,7 @@ def select_phase_youtube_videos(conn: sqlite3.Connection, *, phase: int, date_st
         params[0] = cutoff
     # Phase 4 is cross-source and currently uses all completed YouTube inputs.
     params.append(limit)
-    return conn.execute(
+    rows = conn.execute(
         "SELECT v.video_id, v.title, v.channel_name, v.video_url, v.published_at, "
         "v.duration_seconds, t.transcript_clean, t.language, rp.compressed_evidence "
         "FROM youtube_videos v "
@@ -7283,6 +8466,16 @@ def select_phase_youtube_videos(conn: sqlite3.Connection, *, phase: int, date_st
         "ORDER BY v.published_at DESC, v.channel_name, v.title LIMIT ?",
         params,
     ).fetchall()
+    filtered = []
+    for row in rows:
+        failed, _metrics = transcript_quality_failed_for_video(
+            str(row["transcript_clean"] or ""),
+            title=str(row["title"] or ""),
+            channel=str(row["channel_name"] or ""),
+        )
+        if not failed:
+            filtered.append(row)
+    return filtered
 
 
 def build_phase_evidence_pack(rows: list[sqlite3.Row], *, phase: int, date_str: str, days: int) -> dict[str, Any]:
@@ -7324,6 +8517,725 @@ def build_phase_evidence_pack(rows: list[sqlite3.Row], *, phase: int, date_str: 
         "source_policy": "Only completed transcripts with ThunderOMLX/Qwen3.6 semantic packets are included.",
         "videos": videos,
     }
+
+
+def select_ai_influence_catalog_videos(conn: sqlite3.Connection, *, date_str: str,
+                                       days: int, limit: int) -> list[dict[str, Any]]:
+    cutoff = (
+        dt.datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=UTC) - dt.timedelta(days=days)
+    ).strftime("%Y-%m-%d %H:%M:%S")
+    rows = conn.execute(
+        "SELECT v.video_id, v.title, v.channel_name, v.video_url, v.published_at, "
+        "v.duration_seconds, t.transcript_clean, t.language, rp.compressed_evidence "
+        "FROM youtube_videos v "
+        "JOIN youtube_transcripts t ON t.video_id=v.video_id "
+        "LEFT JOIN reasoning_packets rp ON rp.packet_id='yt-rp-' || v.video_id "
+        "WHERE datetime(substr(v.published_at,1,19)) >= datetime(?) "
+        "AND coalesce(v.duration_seconds,0) >= 600 "
+        "AND t.transcript_status IN ('fetched','auto_generated') "
+        "AND coalesce(t.char_count,0) > 0 "
+        "AND length(coalesce(t.transcript_clean,'')) > 0 "
+        "ORDER BY v.published_at DESC, v.channel_name, v.title LIMIT ?",
+        (cutoff, limit),
+    ).fetchall()
+    catalog: list[dict[str, Any]] = []
+    for idx, row in enumerate(rows, 1):
+        try:
+            semantic = json.loads(row["compressed_evidence"] or "{}")
+        except Exception:
+            semantic = {}
+        summary = str(semantic.get("summary_zh") or "").strip()
+        key_points = semantic.get("key_points") if isinstance(semantic.get("key_points"), list) else []
+        catalog.append({
+            "video_ref": f"V{idx:03d}",
+            "video_id": row["video_id"],
+            "channel": row["channel_name"] or "",
+            "title": row["title"] or "",
+            "url": row["video_url"] or "",
+            "published_at": row["published_at"] or "",
+            "duration_min": round(float(row["duration_seconds"] or 0) / 60.0, 1),
+            "language": row["language"] or "unknown",
+            "summary_zh": summary[:900] if summary else "[semantic_summary_missing]",
+            "key_points": [str(x)[:240] for x in key_points[:5]],
+            "topic_tags": [str(x) for x in (semantic.get("topic_tags") or [])[:12]],
+            "why_it_matters": str(semantic.get("why_it_matters") or "")[:500],
+            "transcript_chars": len(str(row["transcript_clean"] or "")),
+            "transcript_quality": transcript_quality_failed_for_video(
+                str(row["transcript_clean"] or ""),
+                title=str(row["title"] or ""),
+                channel=str(row["channel_name"] or ""),
+            )[1],
+        })
+    catalog = [item for item in catalog if not item["transcript_quality"].get("quality_failed")]
+    for idx, item in enumerate(catalog, 1):
+        item["video_ref"] = f"V{idx:03d}"
+    return catalog
+
+
+def build_ai_influence_grouping_materials(conn: sqlite3.Connection, catalog: list[dict[str, Any]],
+                                          *,
+                                          per_video_chars: int = 12000,
+                                          total_chars: int = 180000) -> list[dict[str, Any]]:
+    """Build transcript-backed materials for semantic grouping.
+
+    The report planner should not group weekly videos by keyword/time alone.
+    This packet gives ChatGPT enough transcript evidence to separate event
+    videos, keynote fragments, interviews, panels, tutorials, demos and weak
+    materials before it plans report structure.
+    """
+    materials: list[dict[str, Any]] = []
+    used_chars = 0
+    for item in catalog:
+        video_id = str(item.get("video_id") or "")
+        if not video_id:
+            continue
+        row = conn.execute(
+            "SELECT transcript_clean FROM youtube_transcripts WHERE video_id=?",
+            (video_id,),
+        ).fetchone()
+        transcript = str((row or {})["transcript_clean"] if row else "").strip()
+        if not transcript:
+            continue
+        failed, quality = transcript_quality_failed_for_video(
+            transcript,
+            title=str(item.get("title") or ""),
+            channel=str(item.get("channel") or ""),
+        )
+        if failed:
+            continue
+        remaining = max(0, total_chars - used_chars)
+        if remaining <= 0:
+            break
+        clipped = transcript[:min(per_video_chars, remaining)]
+        used_chars += len(clipped)
+        materials.append({
+            "video_ref": item.get("video_ref"),
+            "channel": item.get("channel"),
+            "title": item.get("title"),
+            "published_at": item.get("published_at"),
+            "duration_min": item.get("duration_min"),
+            "language": item.get("language"),
+            "summary_zh": item.get("summary_zh"),
+            "key_points": item.get("key_points"),
+            "topic_tags": item.get("topic_tags"),
+            "why_it_matters": item.get("why_it_matters"),
+            "transcript_chars": len(transcript),
+            "transcript_truncated_for_grouping": len(clipped) < len(transcript),
+            "transcript_excerpt": clipped,
+            "transcript_quality": quality,
+        })
+    return materials
+
+
+def build_ai_influence_video_grouping_prompt(materials: list[dict[str, Any]], *,
+                                             date_str: str, days: int,
+                                             model_name: str) -> str:
+    safe_materials = [
+        {
+            "video_ref": item.get("video_ref"),
+            "channel": item.get("channel"),
+            "title": item.get("title"),
+            "published_at": item.get("published_at"),
+            "duration_min": item.get("duration_min"),
+            "language": item.get("language"),
+            "summary_zh": item.get("summary_zh"),
+            "key_points": item.get("key_points"),
+            "topic_tags": item.get("topic_tags"),
+            "why_it_matters": item.get("why_it_matters"),
+            "transcript_chars": item.get("transcript_chars"),
+            "transcript_truncated_for_grouping": item.get("transcript_truncated_for_grouping"),
+            "transcript_excerpt": item.get("transcript_excerpt"),
+        }
+        for item in materials
+    ]
+    return f"""你是 AI Influence 的 YouTube 素材总编和研究策展人。
+
+你现在使用 Browser Agent 算子打开 ChatGPT，模型必须是 {model_name}，Thinking high。
+
+任务：基于一周 YouTube 视频的标题、频道、时间、摘要和 transcript，先做“语义分组”，不要写最终报告，也不要只按关键词或发布时间聚类。
+
+你必须识别：
+1. 是否属于同一个重要展会 / keynote / 产品发布 / 开发者大会 / 研究会议。
+2. 是否是大咖访谈、播客、圆桌、个人观点类内容。
+3. 是否是教程 / demo / workshop / 产品功能更新。
+4. 是否是公司官方发布、学术研究、开源社区、投资/产业判断、硬件/机器人等不同材料类型。
+5. 哪些视频应该被 group 在一起共同支撑一个趋势，哪些只能作为弱证据或排除。
+
+输出必须是严格 JSON object，禁止 Markdown 代码块，schema 如下：
+{{
+  "date": "{date_str}",
+  "lookback_days": {days},
+  "grouping_model": "{model_name}",
+  "grouping_summary": "string",
+  "video_groups": [
+    {{
+      "group_id": "lowercase-slug",
+      "group_title": "string",
+      "group_type": "event|keynote|conference|big_name_interview|podcast_panel|tutorial_demo|product_update|research_talk|open_source|industry_investment|hardware_robotics|weak_misc",
+      "center_of_gravity": "这组素材真正共同讨论的问题，不是关键词列表",
+      "why_grouped_together": "为什么这些视频应该放在一起",
+      "material_video_refs": ["V001"],
+      "representative_videos": ["V001"],
+      "candidate_trends": [
+        {{
+          "trend_title": "string",
+          "trend_type": "real_trend|weak_signal|watchlist|hype|noise",
+          "supporting_video_refs": ["V001"],
+          "reasoning": "string"
+        }}
+      ],
+      "reportability": "must_report|maybe_report|background_only|exclude",
+      "quality_notes": "string"
+    }}
+  ],
+  "ungrouped_materials": [
+    {{"video_ref": "V999", "reason": "string"}}
+  ],
+  "planning_guidance": [
+    "给下一步 report planner 的具体建议"
+  ]
+}}
+
+分组原则：
+- 不允许只因为 title 里都有 agent / Gemini / AI 就放在一起。
+- 同一展会/发布会/keynote/系列活动优先作为事件组。
+- 大咖访谈/播客要按人物观点和讨论问题分组，不要和产品公告混在一起。
+- workshop/tutorial/demo 可以成为“工程落地材料组”，但不要强行上升为趋势。
+- 每个 group 必须说明为什么这些视频在语义上同组。
+- 如果 transcript 证据不够，放入 weak_misc 或 ungrouped_materials，不要硬凑。
+
+视频 transcript 材料 JSON：
+{json.dumps(safe_materials, ensure_ascii=False, indent=2)}
+"""
+
+
+def normalize_ai_influence_video_groups(group_plan: dict[str, Any], catalog: list[dict[str, Any]]) -> dict[str, Any]:
+    valid_refs = {str(item.get("video_ref")) for item in catalog}
+    normalized = json.loads(json.dumps(group_plan or {}, ensure_ascii=False))
+    groups: list[dict[str, Any]] = []
+    for idx, group in enumerate(normalized.get("video_groups") or [], start=1):
+        if not isinstance(group, dict):
+            continue
+        refs = [
+            str(ref) for ref in (group.get("material_video_refs") or [])
+            if str(ref) in valid_refs
+        ]
+        representative = [
+            str(ref) for ref in (group.get("representative_videos") or [])
+            if str(ref) in valid_refs
+        ]
+        trends: list[dict[str, Any]] = []
+        for trend in group.get("candidate_trends") or []:
+            if not isinstance(trend, dict):
+                continue
+            supporting = [
+                str(ref) for ref in (trend.get("supporting_video_refs") or [])
+                if str(ref) in valid_refs
+            ]
+            trends.append({**trend, "supporting_video_refs": supporting})
+        group_id = slugify(str(group.get("group_id") or group.get("group_title") or f"group-{idx}"))[:80] or f"group-{idx}"
+        groups.append({
+            **group,
+            "group_id": group_id,
+            "material_video_refs": refs,
+            "representative_videos": representative or refs[:3],
+            "candidate_trends": trends,
+        })
+    normalized["video_groups"] = groups
+    return normalized
+
+
+def build_ai_influence_report_plan_prompt(catalog: list[dict[str, Any]], *,
+                                          date_str: str, days: int,
+                                          model_name: str,
+                                          video_group_plan: dict[str, Any] | None = None) -> str:
+    safe_catalog = [
+        {
+            "video_ref": item["video_ref"],
+            "channel": item["channel"],
+            "title": item["title"],
+            "published_at": item["published_at"],
+            "duration_min": item["duration_min"],
+            "language": item["language"],
+            "summary_zh": item["summary_zh"],
+            "key_points": item["key_points"],
+            "topic_tags": item["topic_tags"],
+            "why_it_matters": item["why_it_matters"],
+            "transcript_chars": item["transcript_chars"],
+        }
+        for item in catalog
+    ]
+    group_plan = video_group_plan or {"video_groups": [], "planning_guidance": []}
+    return f"""你是 AI Influence 的总编辑、研究主编和技术趋势报告规划师。
+
+你现在使用的是 Browser Agent 算子打开 ChatGPT，模型必须是 {model_name}，Thinking high。
+
+任务：基于下面的视频目录和“前置语义分组结果”规划报告，不写正文。
+
+重要：视频已经先通过 transcript 语义分组，分出了重要展会/发布会相关视频、大咖访谈/播客、教程 demo、产品更新、研究讨论、弱证据材料等。你必须尊重这些 group，不要重新退化成关键词匹配或发布时间关联。
+
+目标：
+1. 判断这批视频应该拆成几份高质量 AI Influence 专题报告。
+2. 每份报告要有清晰主题、读者价值、趋势结构。
+3. 每份报告必须规划为：趋势 X → 章节 Y → 小结 Z。
+4. 每个趋势、章节、小结都要明确使用哪些 video_ref 作为素材。
+4. 同时规划 0-3 个图位 figure_slots：告诉后续流水线哪些地方应该插图，以及用什么中文文本去调用 NotebookLM 的信息图功能。
+5. 不要暴露内部 video_id，不要写流水账，不要写“根据 V001”这种给读者看的正文；video_ref 只作为后续流水线引用素材。
+6. 把低质量、重复、转录损坏、纯营销、证据不足的视频列入 excluded_materials。
+
+输出必须是严格 JSON object，禁止 Markdown 代码块，schema 如下：
+{{
+  "plan_title": "string",
+  "planning_summary": "string",
+  "date": "{date_str}",
+  "lookback_days": {days},
+  "planner_model": "{model_name}",
+  "reports": [
+    {{
+      "report_id": "lowercase-slug",
+      "title": "string",
+      "priority": "high | medium | low",
+      "reader_value": "string",
+      "scope": "string",
+      "source_group_ids": ["group-id"],
+      "material_video_refs": ["V001"],
+      "figure_slots": [
+        {{
+          "figure_id": "lowercase-slug",
+          "placement_section": "摘要 | 正文 | 影响与落点 | 后续观察",
+          "placement_heading": "string",
+          "title": "string",
+          "material_video_refs": ["V001"],
+          "generation_text": "string"
+        }}
+      ],
+      "trends": [
+        {{
+          "trend_id": "lowercase-slug",
+          "trend_title": "string",
+          "trend_type": "real_trend | weak_signal | hype | noise | watchlist",
+          "source_group_ids": ["group-id"],
+          "material_video_refs": ["V001"],
+          "chapters": [
+            {{
+              "chapter_id": "lowercase-slug",
+              "title": "string",
+              "purpose": "string",
+              "material_video_refs": ["V001"],
+              "subsections": [
+                {{
+                  "subsection_id": "lowercase-slug",
+                  "title": "string",
+                  "summary_goal": "这一小节要得出的具体小结 Z",
+                  "material_video_refs": ["V001"],
+                  "questions": ["string"]
+                }}
+              ]
+            }}
+          ]
+        }}
+      ],
+      "chapters": [
+        {{
+          "title": "string",
+          "purpose": "string",
+          "material_video_refs": ["V001"],
+          "questions": ["string"]
+        }}
+      ],
+      "output_style": "string",
+      "send_as_email": true
+    }}
+  ],
+  "excluded_materials": [
+    {{"video_ref": "V999", "reason": "string"}}
+  ],
+  "open_questions": ["string"]
+}}
+
+规划原则：
+- 报告数量宁少勿滥。每份报告必须有明确中心判断。
+- 每份报告至少 2 个章节，且素材不能只靠一条视频，除非该视频特别重磅。
+- `trends` 是主结构，`chapters` 是向后兼容字段；如果二者都存在，后续写作会优先按 `trends → chapters → subsections` 执行。
+- 事件类视频必须按事件组织，大咖访谈必须按观点组织，教程/demo 必须按工程落地组织。
+- 优先按真实趋势组织：Agent 平台化、开发者生态、模型/多模态、AI Infra/Compute、企业落地、产业与投资、机器人/硬件等。
+- `figure_slots` 只给真正需要图示的地方。`generation_text` 要直接写成给 NotebookLM 生成信息图的中文指令，描述结构、层次、节点关系和重点。
+- 最终报告正文会由同一个 Browser Agent + ChatGPT 5.5 Thinking high 根据你的 plan 逐篇生成。
+
+前置语义分组 JSON：
+{json.dumps(group_plan, ensure_ascii=False, indent=2)}
+
+视频目录 JSON：
+{json.dumps(safe_catalog, ensure_ascii=False, indent=2)}
+"""
+
+
+def _plan_material_refs(report_spec: dict[str, Any]) -> list[str]:
+    refs: list[str] = []
+    def visit(obj: Any) -> None:
+        if isinstance(obj, dict):
+            for key in ("material_video_refs", "supporting_video_refs", "representative_videos"):
+                for ref in obj.get(key) or []:
+                    if isinstance(ref, str) and ref not in refs:
+                        refs.append(ref)
+            for key in ("trends", "chapters", "subsections", "sections"):
+                for child in obj.get(key) or []:
+                    visit(child)
+        elif isinstance(obj, list):
+            for child in obj:
+                visit(child)
+    visit(report_spec)
+    return refs
+
+
+def _plan_group_ids(report_spec: dict[str, Any]) -> list[str]:
+    group_ids: list[str] = []
+    def visit(obj: Any) -> None:
+        if isinstance(obj, dict):
+            for group_id in obj.get("source_group_ids") or []:
+                value = str(group_id).strip()
+                if value and value not in group_ids:
+                    group_ids.append(value)
+            for key in ("trends", "chapters", "subsections", "sections"):
+                for child in obj.get(key) or []:
+                    visit(child)
+        elif isinstance(obj, list):
+            for child in obj:
+                visit(child)
+    visit(report_spec)
+    return group_ids
+
+
+def _iter_report_plan_chapters(report_spec: dict[str, Any]) -> list[dict[str, Any]]:
+    chapters: list[dict[str, Any]] = []
+    for trend in report_spec.get("trends") or []:
+        if not isinstance(trend, dict):
+            continue
+        for chapter in trend.get("chapters") or []:
+            if isinstance(chapter, dict):
+                chapters.append({
+                    **chapter,
+                    "_trend_title": trend.get("trend_title") or trend.get("title") or "",
+                    "_trend_type": trend.get("trend_type") or "",
+                })
+    for chapter in report_spec.get("chapters") or []:
+        if isinstance(chapter, dict):
+            chapters.append(chapter)
+    return chapters
+
+
+def normalize_ai_influence_figure_slots(report_spec: dict[str, Any]) -> list[dict[str, Any]]:
+    slots: list[dict[str, Any]] = []
+    for idx, slot in enumerate(report_spec.get("figure_slots") or [], start=1):
+        if not isinstance(slot, dict):
+            continue
+        title = str(slot.get("title") or "").strip()
+        generation_text = str(slot.get("generation_text") or "").strip()
+        if not title or not generation_text:
+            continue
+        slots.append({
+            "figure_id": slugify(str(slot.get("figure_id") or title or f"figure-{idx}"))[:80] or f"figure-{idx}",
+            "placement_section": str(slot.get("placement_section") or "正文").strip() or "正文",
+            "placement_heading": str(slot.get("placement_heading") or title).strip() or title,
+            "title": title,
+            "material_video_refs": [str(ref) for ref in (slot.get("material_video_refs") or []) if str(ref).strip()],
+            "generation_text": generation_text,
+        })
+    return slots
+
+
+def build_notebooklm_transcript_bundle_text(evidence_pack: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for video in (evidence_pack.get("videos") or []):
+        parts.extend([
+            f"# {str(video.get('video_ref') or 'V???')} | {str(video.get('title') or 'Untitled')}",
+            f"频道：{str(video.get('channel') or 'N/A')}",
+            f"发布时间：{str(video.get('published_at') or 'N/A')}",
+            f"视频链接：{str(video.get('url') or 'N/A')}",
+            "",
+            "## 摘要",
+            str(video.get("summary_zh") or "N/A").strip(),
+            "",
+            "## Transcript 原文",
+            str(video.get("transcript_clean") or "").strip() or "[transcript unavailable]",
+            "",
+            "---",
+            "",
+        ])
+    return "\n".join(parts).strip() + "\n"
+
+
+def write_ai_influence_notebooklm_bundle(report_dir: Path, evidence_pack: dict[str, Any]) -> dict[str, Any]:
+    bundle_dir = report_dir / "notebooklm"
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    bundle_text = build_notebooklm_transcript_bundle_text(evidence_pack)
+    transcript_bundle = bundle_dir / "local-transcripts.txt"
+    transcript_bundle_md = bundle_dir / "local-transcripts.md"
+    transcript_bundle.write_text(bundle_text, encoding="utf-8")
+    transcript_bundle_md.write_text(bundle_text, encoding="utf-8")
+    manifest_path = bundle_dir / "manifest.json"
+    manifest = {
+        "date": evidence_pack.get("date"),
+        "report_title": ((evidence_pack.get("report_spec") or {}).get("title") or report_dir.name),
+        "video_count": len((evidence_pack.get("videos") or [])),
+        "videos": [
+            {
+                "video_ref": video.get("video_ref"),
+                "title": video.get("title"),
+                "channel": video.get("channel"),
+                "url": video.get("url"),
+                "published_at": video.get("published_at"),
+            }
+            for video in (evidence_pack.get("videos") or [])
+        ],
+        "source_files": [str(transcript_bundle_md), str(transcript_bundle)],
+    }
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return {
+        "bundle_dir": str(bundle_dir),
+        "transcript_bundle": str(transcript_bundle),
+        "transcript_bundle_md": str(transcript_bundle_md),
+        "manifest_path": str(manifest_path),
+        "source_files": [str(transcript_bundle_md), str(transcript_bundle)],
+    }
+
+
+def notebooklm_month_notebook_name(date_str: str) -> str:
+    try:
+        parsed = dt.datetime.strptime(date_str, "%Y-%m-%d")
+        return f"AI Influence {parsed.strftime('%Y-%m')}"
+    except Exception:
+        return f"AI Influence {date_str[:7]}"
+
+
+def build_ai_influence_notebooklm_request(evidence_pack: dict[str, Any], report_dir: Path, *,
+                                          notebook_name: str) -> dict[str, Any]:
+    bundle = write_ai_influence_notebooklm_bundle(report_dir, evidence_pack)
+    report_spec = (evidence_pack or {}).get("report_spec") or {}
+    return {
+        "mode": "report_bundle",
+        "notebook_name": notebook_name,
+        "source_files": bundle["source_files"],
+        "allow_text_fallback": False,
+        "mindmap": {
+            "enabled": True,
+            "title": f"{report_spec.get('title') or report_dir.name} 思维导图",
+            "prompt_text": (
+                "请基于这批本地 transcript 原文生成一个中文思维导图，"
+                "梳理核心论点、技术分支、产品线索、证据关联和仍待验证处。"
+            ),
+        },
+        "infographics": [
+            {
+                "figure_id": slot["figure_id"],
+                "title": slot["title"],
+                "placement_section": slot["placement_section"],
+                "placement_heading": slot["placement_heading"],
+                "material_video_refs": slot["material_video_refs"],
+                "prompt_text": slot["generation_text"],
+            }
+            for slot in normalize_ai_influence_figure_slots(report_spec)
+        ],
+        "output_dir": bundle["bundle_dir"],
+        "metadata": {
+            "date": evidence_pack.get("date"),
+            "report_id": report_dir.name,
+            "report_title": report_spec.get("title") or report_dir.name,
+        },
+    }
+
+
+def attach_notebooklm_context_to_evidence_pack(evidence_pack: dict[str, Any],
+                                               notebook_result: dict[str, Any] | None) -> dict[str, Any]:
+    pack = json.loads(json.dumps(evidence_pack, ensure_ascii=False))
+    if not notebook_result:
+        return pack
+    pack["notebooklm"] = {
+        "notebook_name": notebook_result.get("notebook_name") or notebook_result.get("notebook_title"),
+        "notebook_url": notebook_result.get("notebook_url") or "",
+        "source_summary": notebook_result.get("source_summary") or "",
+        "mindmap": notebook_result.get("mindmap") or {},
+        "infographics": notebook_result.get("infographics") or [],
+    }
+    return pack
+
+
+def backfill_planned_report_evidence_from_existing(report_dir: Path,
+                                                   evidence_pack: dict[str, Any]) -> dict[str, Any]:
+    existing_path = report_dir / "evidence-pack.json"
+    if not existing_path.exists():
+        return evidence_pack
+    try:
+        existing = json.loads(existing_path.read_text(encoding="utf-8"))
+    except Exception:
+        return evidence_pack
+    existing_videos = existing.get("videos") if isinstance(existing, dict) else None
+    if not isinstance(existing_videos, list):
+        return evidence_pack
+    by_ref = {
+        str(video.get("video_ref") or "").strip(): video
+        for video in existing_videos
+        if isinstance(video, dict) and str(video.get("video_ref") or "").strip()
+    }
+    videos = [video for video in (evidence_pack.get("videos") or []) if isinstance(video, dict)]
+    present_refs = {str(video.get("video_ref") or "").strip() for video in videos}
+    skipped_refs = [str(ref).strip() for ref in (evidence_pack.get("skipped_material_refs") or []) if str(ref).strip()]
+    recovered: list[str] = []
+    for ref in skipped_refs:
+        candidate = by_ref.get(ref)
+        if not candidate:
+            continue
+        if not str(candidate.get("transcript_clean") or "").strip():
+            continue
+        videos.append(json.loads(json.dumps(candidate, ensure_ascii=False)))
+        present_refs.add(ref)
+        recovered.append(ref)
+    if not recovered:
+        return evidence_pack
+    patched = json.loads(json.dumps(evidence_pack, ensure_ascii=False))
+    patched["videos"] = videos
+    patched["video_count"] = len(videos)
+    patched["skipped_material_refs"] = [ref for ref in skipped_refs if ref not in set(recovered)]
+    provenance = patched.get("provenance") if isinstance(patched.get("provenance"), dict) else {}
+    provenance["transcript_fallback"] = "existing_report_evidence_pack"
+    provenance["recovered_material_refs"] = recovered
+    patched["provenance"] = provenance
+    return patched
+
+
+def build_planned_report_evidence_pack(conn: sqlite3.Connection, catalog: list[dict[str, Any]],
+                                       report_spec: dict[str, Any], *,
+                                       date_str: str, days: int,
+                                       transcript_char_limit: int = 90000) -> dict[str, Any]:
+    by_ref = {item["video_ref"]: item for item in catalog}
+    selected_refs = [ref for ref in _plan_material_refs(report_spec) if ref in by_ref]
+    videos: list[dict[str, Any]] = []
+    included_refs: set[str] = set()
+    used_chars = 0
+    for ref in selected_refs:
+        meta = by_ref[ref]
+        row = conn.execute(
+            "SELECT t.transcript_clean, t.transcript_status, t.char_count, rp.compressed_evidence "
+            "FROM youtube_transcripts t "
+            "LEFT JOIN reasoning_packets rp ON rp.packet_id='yt-rp-' || t.video_id "
+            "WHERE t.video_id=?",
+            (meta["video_id"],),
+        ).fetchone()
+        if not row:
+            continue
+        transcript = str((row or {})["transcript_clean"] if row else "").strip()
+        if int(row["char_count"] or 0) <= 0 and not transcript:
+            continue
+        failed, quality = transcript_quality_failed_for_video(
+            transcript,
+            title=str(meta.get("title") or ""),
+            channel=str(meta.get("channel") or ""),
+        )
+        if failed and not transcript.strip():
+            continue
+        try:
+            semantic = json.loads((row or {})["compressed_evidence"] or "{}") if row else {}
+        except Exception:
+            semantic = {}
+        remaining = max(0, transcript_char_limit - used_chars)
+        clipped = transcript[:remaining]
+        used_chars += len(clipped)
+        videos.append({
+            **meta,
+            "transcript_clean": clipped,
+            "transcript_quality": quality,
+            "transcript_quality_failed": bool(failed),
+            "transcript_truncated": len(clipped) < len(transcript),
+            "semantic_packet": {
+                "summary_zh": semantic.get("summary_zh"),
+                "key_points": semantic.get("key_points"),
+                "topic_tags": semantic.get("topic_tags"),
+                "entities": semantic.get("entities"),
+                "technical_claims": semantic.get("technical_claims"),
+                "why_it_matters": semantic.get("why_it_matters"),
+            },
+        })
+        included_refs.add(ref)
+    skipped_refs = [ref for ref in selected_refs if ref not in included_refs]
+    return {
+        "date": date_str,
+        "lookback_days": days,
+        "report_spec": report_spec,
+        "source_group_ids": _plan_group_ids(report_spec),
+        "report_hierarchy_policy": "Write from report_spec.trends -> chapters -> subsections when present; use legacy chapters only for backward compatibility.",
+        "video_count": len(videos),
+        "selected_material_refs": selected_refs,
+        "skipped_material_refs": skipped_refs,
+        "videos": videos,
+        "provenance": {
+            "planner": "Browser Agent / ChatGPT 5.5 Thinking high",
+            "writer": "Browser Agent / ChatGPT 5.5 Thinking high",
+            "local_preprocess": "ThunderOMLX/Qwen3.6 semantic packets",
+            "source_policy": "Plan from title/channel/summary/time; final writing from selected transcripts and semantic packets.",
+        },
+    }
+
+
+def build_planned_report_prompt(evidence_pack: dict[str, Any], *, model_name: str) -> str:
+    spec = evidence_pack.get("report_spec") or {}
+    public_pack = json.loads(json.dumps(evidence_pack, ensure_ascii=False))
+    for item in public_pack.get("videos") or []:
+        # Keep the internal video id available only as provenance in files, not as prose guidance.
+        item.pop("video_id", None)
+    return f"""你是 AI Influence 主编兼技术趋势分析师。
+
+你现在使用的是 Browser Agent 算子打开 ChatGPT，模型必须是 {model_name}，Thinking high。
+
+任务：根据下面的 report_spec 和精选视频证据包，写一份正式中文洞察报告。
+
+硬规则：
+1. 最终趋势判断、章节内容、标题和一页结论必须由 ChatGPT 5.5 Thinking high 完成。
+2. 不要暴露内部 video_id；可以使用素材编号 V001/V002，但必须同时给出频道名、视频标题和发布时间，不能只写“根据 V001”。
+3. 不要把内部处理统计、DB 字段、token、packet、backend 写进正文。
+4. 不要凭空补外部事实。所有判断必须能回到输入证据。
+5. transcript 是视频语音原文/自动字幕/ASR 文本，可能有噪声；不要把明显转录错误当作事实。
+6. 报告要有观点，不要做视频摘要合集。
+7. 原始 transcript 会作为附件发送，正文只引用必要证据和压缩观点。
+8. 每个“核心趋势”章节开头必须写一行“本节素材：Vxxx《视频标题》 / Vyyy《视频标题》”，让读者能看出该判断来自哪些视频。
+9. “关键素材地图”必须按素材编号逐条说明：Vxxx、频道、视频标题、发布时间、它支撑了报告中的哪个判断。
+10. 如果证据包里包含 NotebookLM 思维导图摘要，请把它当成结构化参考，只能辅助组织正文，不能替代 transcript 原文本身。
+11. 如果 report_spec.figure_slots 不为空，请在正文里为这些图位保留自然落点；不要输出图片占位符语法，HTML 渲染会在相应 section 自动插入图。
+12. 如果 report_spec.trends 存在，必须按“趋势 X → 章节 Y → 小结 Z”写作：每个趋势先给判断，每章展开证据，每个 subsection 输出一个明确小结。不要把不同 group 的视频混成一锅。
+13. event/keynote/conference 组、大咖访谈组、tutorial/demo 组、产品更新组要分清角色：事件组支撑趋势背景，访谈组支撑观点分歧，demo/tutorial 组支撑工程落地，不要互相替代。
+
+建议结构：
+# {spec.get("title") or "AI Influence 专题报告"}
+
+## 一页结论
+用 4-7 段说明核心判断，不要放内部 ID 表。
+
+## 核心趋势
+优先按 report_spec.trends → chapters → subsections 写；没有 trends 时才按 report_spec.chapters 写。每章要有：
+- 判断
+- 证据来自哪些频道/视频
+- 为什么重要
+- 对产品/研究/工程/投资的启示
+- 反向证据或不确定性
+
+## 关键素材地图
+按素材编号、频道和视频标题说明每条素材在本报告中的角色，以及支撑哪个趋势判断。
+
+## 需要继续跟踪
+列出未来 2-4 周应该观察的指标、公司、项目、技术方向。
+
+## AI Influence 可转化选题
+给出可写文章/播客/产品研究/项目策划方向。
+
+## Provenance
+只写：
+- Planner: Browser Agent / ChatGPT 5.5 Thinking high
+- Writer: Browser Agent / ChatGPT 5.5 Thinking high
+- Local preprocessing: ThunderOMLX/Qwen3.6
+- Transcript 原文见附件
+
+证据包 JSON：
+{json.dumps(public_pack, ensure_ascii=False, indent=2)}
+"""
 
 
 def phase4_cross_source_counts(conn: sqlite3.Connection) -> dict[str, int]:
@@ -7437,6 +9349,1369 @@ Provenance 必须写：
 evidence_pack:
 {json.dumps(evidence_pack, ensure_ascii=False)}
 """
+
+
+def _browser_agent_request_dir(config: dict[str, Any], purpose: str) -> Path:
+    state_dir = Path((config.get("output") or {}).get(
+        "state_dir", str(Path.home() / ".solar/harness/state/tech-hotspot-radar")
+    )).expanduser()
+    stamp = dt.datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    out = state_dir / "browser-agent-requests" / f"{stamp}-{slugify(purpose)[:60]}"
+    out.mkdir(parents=True, exist_ok=True)
+    return out
+
+
+def browser_agent_chatgpt_cmd(config: dict[str, Any]) -> list[str]:
+    """Resolve the browser-agent ChatGPT executor command.
+
+    This is intentionally explicit. If the global Browser Agent operator is not
+    wired yet, we write a request artifact and fail closed instead of silently
+    falling back to Codex or local Qwen.
+    """
+    flow_cfg = ((config.get("youtube") or {}).get("ai_influence_report_flow") or {})
+    reasoner_cfg = ((config.get("youtube") or {}).get("phase_report_reasoner") or {})
+    cmd = (
+        os.environ.get("TECH_HOTSPOT_BROWSER_CHATGPT_CMD")
+        or os.environ.get("BROWSER_AGENT_CHATGPT_CMD")
+        or str((flow_cfg.get("browser_agent") or {}).get("cmd") or "")
+        or str(reasoner_cfg.get("browser_agent_cmd") or "")
+    ).strip()
+    if cmd:
+        return shlex.split(cmd)
+    wrapper = Path(__file__).resolve().with_name("browser_agent_chatgpt_wrapper.py")
+    browser_use_python = Path.home() / ".claude" / "mcp-servers" / "browser-use" / ".venv" / "bin" / "python"
+    if wrapper.exists() and browser_use_python.exists():
+        return [str(browser_use_python), str(wrapper)]
+    return []
+
+
+def browser_agent_notebooklm_cmd(config: dict[str, Any]) -> list[str]:
+    flow_cfg = ((config.get("youtube") or {}).get("ai_influence_report_flow") or {})
+    notebook_cfg = flow_cfg.get("notebooklm") or {}
+    cmd = (
+        os.environ.get("TECH_HOTSPOT_BROWSER_NOTEBOOKLM_CMD")
+        or os.environ.get("BROWSER_AGENT_NOTEBOOKLM_CMD")
+        or str(notebook_cfg.get("cmd") or "")
+    ).strip()
+    if cmd:
+        return shlex.split(cmd)
+    wrapper = Path(__file__).resolve().with_name("browser_agent_notebooklm_wrapper.py")
+    browser_use_python = Path.home() / ".claude" / "mcp-servers" / "browser-use" / ".venv" / "bin" / "python"
+    if wrapper.exists() and browser_use_python.exists():
+        return [str(browser_use_python), str(wrapper)]
+    return []
+
+
+def _strip_browser_agent_noise(text: str) -> str:
+    if not text:
+        return ""
+    lines = str(text).splitlines()
+    cleaned: list[str] = []
+    started = False
+    noise_prefixes = ("INFO     [", "WARNING  [", "ERROR    [", "DEBUG    [")
+    for line in lines:
+        if not started and (line.startswith(noise_prefixes) or not line.strip()):
+            continue
+        started = True
+        cleaned.append(line)
+    return "\n".join(cleaned).strip()
+
+
+def call_browser_agent_chatgpt_text(prompt: str, config: dict[str, Any], *,
+                                    purpose: str,
+                                    expected: str = "markdown",
+                                    requested_model: str | None = None) -> dict[str, Any]:
+    reasoner_cfg = ((config.get("youtube") or {}).get("phase_report_reasoner") or {})
+    flow_cfg = ((config.get("youtube") or {}).get("ai_influence_report_flow") or {})
+    writer_cfg = (flow_cfg.get("report_writer") or {})
+    model = str(requested_model or writer_cfg.get("model") or reasoner_cfg.get("model") or "chatgpt-5.5")
+    reasoning_effort = str(writer_cfg.get("reasoning_effort") or reasoner_cfg.get("reasoning_effort") or "high")
+    timeout = int(writer_cfg.get("timeout_seconds") or reasoner_cfg.get("timeout_seconds") or 1800)
+    max_chars = int(writer_cfg.get("max_prompt_chars") or reasoner_cfg.get("max_prompt_chars") or 180000)
+    if len(prompt) > max_chars:
+        prompt = prompt[:max_chars] + "\n\n[TRUNCATED: prompt exceeded configured max_prompt_chars]\n"
+    req_dir = _browser_agent_request_dir(config, purpose)
+    (req_dir / "prompt.md").write_text(prompt, encoding="utf-8")
+    meta = {
+        "purpose": purpose,
+        "expected": expected,
+        "provider": "browser_agent_chatgpt",
+        "model": model,
+        "reasoning_effort": reasoning_effort,
+        "created_at": iso_z(),
+        "status": "pending_executor",
+        "note": "Final AI Influence reasoning must use Browser Agent + ChatGPT 5.5 Thinking high. No Codex/local fallback is allowed.",
+    }
+    (req_dir / "request.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    cmd = browser_agent_chatgpt_cmd(config)
+    if not cmd:
+        raise RuntimeError(
+            "browser_agent_chatgpt executor is not configured; "
+            f"request written to {req_dir}. Set TECH_HOTSPOT_BROWSER_CHATGPT_CMD "
+            "to a Browser Agent operator wrapper that reads prompt from stdin and writes final output to stdout."
+        )
+    env = os.environ.copy()
+    env.update({
+        "CHATGPT_MODEL": model,
+        "CHATGPT_REASONING_EFFORT": reasoning_effort,
+        "BROWSER_AGENT_EXPECTED_OUTPUT": expected,
+        "BROWSER_AGENT_REQUEST_DIR": str(req_dir),
+    })
+    project_name = str(
+        writer_cfg.get("chatgpt_project")
+        or reasoner_cfg.get("chatgpt_project")
+        or (flow_cfg.get("browser_agent") or {}).get("chatgpt_project")
+        or "杂项"
+    ).strip()
+    if project_name:
+        env["BROWSER_AGENT_CHATGPT_PROJECT_NAME"] = project_name
+    started = time.time()
+    run = subprocess.run(
+        cmd,
+        input=prompt,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=timeout,
+        env=env,
+    )
+    output = _strip_browser_agent_noise(run.stdout or "")
+    (req_dir / "stdout.txt").write_text(output + ("\n" if output else ""), encoding="utf-8")
+    if run.returncode != 0:
+        raise RuntimeError(f"browser_agent_chatgpt failed rc={run.returncode}: {output[-2000:]}")
+    if len(output) < (500 if expected == "json" else 1000):
+        raise ValueError(f"browser_agent_chatgpt output too short: {len(output)} chars")
+    meta.update({
+        "status": "completed",
+        "latency_ms": int((time.time() - started) * 1000),
+        "output_chars": len(output),
+    })
+    (req_dir / "request.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return {
+        "ok": True,
+        "backend": "browser_agent_chatgpt",
+        "model": model,
+        "reasoning_effort": reasoning_effort,
+        "latency_ms": meta["latency_ms"],
+        "input_token_count": estimate_model_tokens(prompt),
+        "output_token_count": estimate_model_tokens(output),
+        "cost_estimate_usd": 0.0,
+        "text": output,
+        "request_dir": str(req_dir),
+    }
+
+
+def call_browser_agent_notebooklm_json(request_payload: dict[str, Any], config: dict[str, Any], *,
+                                       purpose: str) -> dict[str, Any]:
+    flow_cfg = ((config.get("youtube") or {}).get("ai_influence_report_flow") or {})
+    notebook_cfg = flow_cfg.get("notebooklm") or {}
+    timeout = int(notebook_cfg.get("timeout_seconds") or 1800)
+    req_dir = _browser_agent_request_dir(config, purpose)
+    request_payload = json.loads(json.dumps(request_payload, ensure_ascii=False))
+    request_payload["_request_dir"] = str(req_dir)
+    (req_dir / "request.json").write_text(
+        json.dumps(request_payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    cmd = browser_agent_notebooklm_cmd(config)
+    if not cmd:
+        raise RuntimeError(
+            "browser_agent_notebooklm executor is not configured; "
+            f"request written to {req_dir}. Set TECH_HOTSPOT_BROWSER_NOTEBOOKLM_CMD "
+            "to a Browser Agent NotebookLM wrapper."
+        )
+    env = os.environ.copy()
+    env.update({
+        "BROWSER_AGENT_REQUEST_DIR": str(req_dir),
+        "BROWSER_AGENT_NOTEBOOKLM_TIMEOUT": str(timeout),
+    })
+    run = subprocess.run(
+        cmd,
+        input=json.dumps(request_payload, ensure_ascii=False),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=timeout,
+        env=env,
+    )
+    output = _strip_browser_agent_noise(run.stdout or "")
+    (req_dir / "stdout.txt").write_text(output + ("\n" if output else ""), encoding="utf-8")
+    if run.returncode != 0:
+        raise RuntimeError(f"browser_agent_notebooklm failed rc={run.returncode}: {output[-2000:]}")
+    payload = extract_json_payload_lenient(output)
+    payload["_request_dir"] = str(req_dir)
+    return payload
+
+
+def extract_json_payload_lenient(text: str) -> dict[str, Any]:
+    try:
+        payload = extract_json_payload(text)
+        if isinstance(payload, dict):
+            return payload
+    except Exception:
+        pass
+    match = re.search(r"\{.*\}", text or "", flags=re.S)
+    if not match:
+        raise ValueError("no JSON object found in browser agent output")
+    payload = json.loads(match.group(0))
+    if not isinstance(payload, dict):
+        raise ValueError("browser agent JSON output must be object")
+    return payload
+
+
+def call_browser_agent_chatgpt_markdown(prompt: str, config: dict[str, Any], *,
+                                        purpose: str,
+                                        requested_model: str | None = None) -> dict[str, Any]:
+    result = call_browser_agent_chatgpt_text(
+        prompt,
+        config,
+        purpose=purpose,
+        expected="markdown",
+        requested_model=requested_model,
+    )
+    markdown = str(result.pop("text") or "").strip()
+    result["markdown"] = markdown
+    return result
+
+
+def normalize_ai_influence_markdown_report(markdown: str, *, model_name: str, input_videos: int) -> str:
+    text = str(markdown or "").strip()
+    if not text:
+        return text
+    heading_map = {
+        "一页结论": "## 一页结论",
+        "核心趋势": "## 核心趋势",
+        "关键视频证据": "## 关键视频证据",
+        "关键素材地图": "## 关键视频证据",
+        "证据来自哪些频道/视频": "## 关键视频证据",
+        "产品 / 研究 / 工程启示": "## 产品 / 研究 / 工程启示",
+        "产品、研究、工程、投资的启示": "## 产品 / 研究 / 工程启示",
+        "对产品、研究、工程、投资的启示": "## 产品 / 研究 / 工程启示",
+        "产品/研究/工程/投资的启示": "## 产品 / 研究 / 工程启示",
+        "对产品/研究/工程/投资的启示": "## 产品 / 研究 / 工程启示",
+        "Open Questions": "## Open Questions",
+        "需要继续跟踪": "## Open Questions",
+        "反向证据或不确定性": "## Open Questions",
+        "Provenance": "## Provenance",
+    }
+    lines = text.splitlines()
+    normalized: list[str] = []
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        if idx == 0 and stripped and not stripped.startswith("#"):
+            normalized.append(f"# {stripped}")
+            continue
+        replacement = heading_map.get(stripped)
+        if replacement and not stripped.startswith("#"):
+            normalized.append(replacement)
+            continue
+        normalized.append(line)
+    text = "\n".join(normalized).strip()
+    if "## Provenance" not in text:
+        text += "\n\n## Provenance\n"
+    additions: list[str] = []
+    if "final_reasoner:" not in text:
+        additions.append(f"- final_reasoner: {model_name}")
+    if "local_preprocess:" not in text:
+        additions.append("- local_preprocess: ThunderOMLX/Qwen3.6 semantic packets")
+    if "input_videos:" not in text:
+        additions.append(f"- input_videos: {input_videos}")
+    if additions:
+        text += "\n" + "\n".join(additions)
+    return text.strip()
+
+
+def validate_ai_influence_markdown_report(markdown: str) -> None:
+    """Fail closed when Browser Agent captures a partial ChatGPT response."""
+    text = str(markdown or "").strip()
+    required = [
+        "# ",
+        "## 一页结论",
+        "## 核心趋势",
+        "## 关键视频证据",
+        "## 产品 / 研究 / 工程启示",
+        "## Open Questions",
+        "## Provenance",
+        "final_reasoner:",
+        "local_preprocess:",
+        "input_videos:",
+    ]
+    missing = [item for item in required if item not in text]
+    if missing:
+        raise ValueError(f"incomplete_ai_influence_report_missing={missing}")
+    tail = text[-120:].strip()
+    if "input_videos:" not in tail and re.search(r"[\u4e00-\u9fffA-Za-z0-9，,：:；;、（(]$", tail):
+        raise ValueError(f"incomplete_ai_influence_report_suspicious_tail={tail[-60:]!r}")
+
+
+def ai_influence_chatgpt_project_name(config: dict[str, Any]) -> str:
+    youtube_cfg = config.get("youtube") or {}
+    flow_cfg = youtube_cfg.get("ai_influence_report_flow") or {}
+    writer_cfg = flow_cfg.get("report_writer") or {}
+    reasoner_cfg = youtube_cfg.get("phase_report_reasoner") or {}
+    return str(
+        writer_cfg.get("chatgpt_project")
+        or reasoner_cfg.get("chatgpt_project")
+        or (flow_cfg.get("browser_agent") or {}).get("chatgpt_project")
+        or "杂项"
+    ).strip()
+
+
+def validate_ai_influence_planned_report_dir(
+    report_dir: Path,
+    *,
+    expected_chatgpt_project: str | None = None,
+    require_project_archive: bool = False,
+) -> dict[str, Any]:
+    """Validate the hardened AI Influence YouTube planned-report contract."""
+    report_dir = Path(report_dir)
+    errors: list[str] = []
+    warnings: list[str] = []
+    required_files = [
+        "report.md",
+        "report.html",
+        "report-result.json",
+        "evidence-pack.json",
+        "transcripts.txt",
+        "transcripts-cleaned.txt",
+    ]
+    for name in required_files:
+        if not (report_dir / name).exists():
+            errors.append(f"missing_file:{name}")
+    if (report_dir / "report.blocked.json").exists():
+        errors.append("blocked_file_present:report.blocked.json")
+
+    markdown = ""
+    html_text = ""
+    result: dict[str, Any] = {}
+    evidence_pack: dict[str, Any] = {}
+    if (report_dir / "report.md").exists():
+        markdown = (report_dir / "report.md").read_text(encoding="utf-8", errors="replace")
+        try:
+            validate_ai_influence_markdown_report(markdown)
+        except Exception as exc:
+            errors.append(f"markdown_contract:{type(exc).__name__}:{exc}")
+    if (report_dir / "report.html").exists():
+        html_text = (report_dir / "report.html").read_text(encoding="utf-8", errors="replace")
+    if (report_dir / "report-result.json").exists():
+        try:
+            result = json.loads((report_dir / "report-result.json").read_text(encoding="utf-8"))
+        except Exception as exc:
+            errors.append(f"report_result_json:{type(exc).__name__}:{exc}")
+    if (report_dir / "evidence-pack.json").exists():
+        try:
+            evidence_pack = json.loads((report_dir / "evidence-pack.json").read_text(encoding="utf-8"))
+        except Exception as exc:
+            errors.append(f"evidence_pack_json:{type(exc).__name__}:{exc}")
+
+    videos = [v for v in (evidence_pack.get("videos") or []) if isinstance(v, dict)]
+    if videos and not re.search(r"\bV\d{3}\b", markdown):
+        errors.append("missing_reader_facing_video_refs:Vxxx")
+    by_ref = {str(video.get("video_ref") or ""): video for video in videos}
+    planned_refs = set(_plan_material_refs(evidence_pack.get("report_spec") or {}))
+    missing_refs = sorted(ref for ref in planned_refs if ref and ref not in by_ref)
+    if missing_refs:
+        errors.append(f"evidence_pack_missing_planned_material_refs:{','.join(missing_refs[:20])}")
+    for video in videos:
+        raw_video_id = str(video.get("video_id") or "").strip()
+        if raw_video_id and raw_video_id in markdown:
+            errors.append(f"raw_video_id_leaked:{raw_video_id}")
+        transcript = str(video.get("transcript_clean") or "").strip()
+        if transcript:
+            failed, quality = transcript_quality_failed_for_video(
+                transcript,
+                title=str(video.get("title") or ""),
+                channel=str(video.get("channel") or ""),
+            )
+            if failed:
+                errors.append(
+                    "bad_transcript_in_evidence_pack:"
+                    f"{video.get('video_ref') or raw_video_id or 'N/A'}:"
+                    f"{quality.get('reason') or 'quality_failed'}"
+                )
+        else:
+            errors.append(f"missing_transcript_in_evidence_pack:{video.get('video_ref') or raw_video_id or 'N/A'}")
+
+    if html_text:
+        html_required = [
+            "章节与视频素材对应表",
+            "ai-material-ref",
+            "ai-material-chip",
+        ]
+        for marker in html_required:
+            if marker not in html_text:
+                errors.append(f"html_missing_marker:{marker}")
+        forbidden_html_phrases = [
+            "把素材组织成",
+            "程序根据 planner",
+            "material_video_refs",
+            "建立报告主论点",
+            "形成面向 AI Influence 读者",
+        ]
+        for phrase in forbidden_html_phrases:
+            if phrase in html_text:
+                errors.append(f"internal_planning_phrase_leaked:{phrase}")
+        if "gemini-agent-platform-stack.svg" in markdown:
+            svg_path = report_dir / "gemini-agent-platform-stack.svg"
+            if not svg_path.exists():
+                errors.append("missing_svg_file:gemini-agent-platform-stack.svg")
+            if "<svg" not in html_text or "Gemini Agent 平台栈" not in html_text:
+                errors.append("svg_not_inlined_in_html")
+            if "+----------------" in html_text or "| Gemini" in html_text:
+                errors.append("ascii_architecture_diagram_leaked")
+        if "分层架构图：Agentic Developer Stack" in markdown or "agentic-developer-stack.svg" in markdown:
+            svg_path = report_dir / "agentic-developer-stack.svg"
+            if not svg_path.exists():
+                errors.append("missing_svg_file:agentic-developer-stack.svg")
+            heading_pos = html_text.find("<h2>分层架构图</h2>")
+            svg_pos = html_text.find("<svg")
+            if heading_pos < 0:
+                errors.append("missing_architecture_section_heading:agentic_developer_stack")
+            if svg_pos < 0 or (heading_pos >= 0 and svg_pos < heading_pos):
+                errors.append("architecture_svg_wrong_position:agentic_developer_stack")
+            if "<svg" not in html_text or "Agentic Developer Stack" not in html_text:
+                errors.append("agentic_stack_svg_not_inlined_in_html")
+            if "│ 6. 企业治理层" in html_text or "┌────────────────" in html_text:
+                errors.append("ascii_architecture_diagram_leaked:agentic_developer_stack")
+
+    request_dir_value = str(result.get("request_dir") or result.get("_request_dir") or "").strip()
+    if request_dir_value:
+        project_result_path = Path(request_dir_value) / "project-archive-result.json"
+        if project_result_path.exists():
+            try:
+                project_result = json.loads(project_result_path.read_text(encoding="utf-8"))
+                actual_project = str(project_result.get("project_name") or project_result.get("project") or "").strip()
+                if expected_chatgpt_project and actual_project != expected_chatgpt_project:
+                    errors.append(
+                        "chatgpt_project_mismatch:"
+                        f"expected={expected_chatgpt_project}:actual={actual_project or 'N/A'}"
+                    )
+                if not (project_result.get("ok") is True or project_result.get("status") == "ok"):
+                    errors.append(f"chatgpt_project_archive_not_ok:{project_result.get('status') or project_result.get('ok')}")
+            except Exception as exc:
+                errors.append(f"chatgpt_project_archive_json:{type(exc).__name__}:{exc}")
+        elif require_project_archive:
+            errors.append(f"missing_chatgpt_project_archive:{project_result_path}")
+        else:
+            warnings.append(f"missing_chatgpt_project_archive:{project_result_path}")
+    elif require_project_archive:
+        errors.append("missing_browser_agent_request_dir")
+
+    return {
+        "report_dir": str(report_dir),
+        "status": "ok" if not errors else "error",
+        "errors": errors,
+        "warnings": warnings,
+        "video_count": len(videos),
+        "expected_chatgpt_project": expected_chatgpt_project or "N/A",
+    }
+
+
+def call_browser_agent_chatgpt_json(prompt: str, config: dict[str, Any], *,
+                                    purpose: str,
+                                    requested_model: str | None = None) -> dict[str, Any]:
+    result = call_browser_agent_chatgpt_text(
+        prompt,
+        config,
+        purpose=purpose,
+        expected="json",
+        requested_model=requested_model,
+    )
+    payload = extract_json_payload_lenient(str(result.pop("text") or ""))
+    payload["_backend"] = result["backend"]
+    payload["_model"] = result["model"]
+    payload["_reasoning_effort"] = result["reasoning_effort"]
+    payload["_request_dir"] = result["request_dir"]
+    payload["_latency_ms"] = result["latency_ms"]
+    payload["input_token_count"] = result["input_token_count"]
+    payload["output_token_count"] = result["output_token_count"]
+    payload["cost_estimate_usd"] = result["cost_estimate_usd"]
+    return payload
+
+
+def _format_ai_influence_publish_time(value: str | None) -> str:
+    if not value:
+        return "N/A"
+    try:
+        parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        local_dt = parsed.astimezone()
+        return local_dt.strftime("%Y-%m-%d %H:%M %Z")
+    except Exception:
+        return value
+
+
+def _compact_text(value: Any, *, default: str = "N/A", max_len: int = 220) -> str:
+    text = str(value or "").strip()
+    if not text or text in {"[semantic_summary_missing]", "[summary_missing]"}:
+        return default
+    text = re.sub(r"\s+", " ", text)
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1].rstrip() + "…"
+
+
+def _ai_influence_report_date_window(videos: list[dict[str, Any]]) -> str:
+    dates: list[dt.datetime] = []
+    for video in videos:
+        value = str(video.get("published_at") or "").strip()
+        if not value:
+            continue
+        try:
+            dates.append(dt.datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone())
+        except Exception:
+            continue
+    if not dates:
+        return "发布时间范围 N/A"
+    start = min(dates).strftime("%Y-%m-%d")
+    end = max(dates).strftime("%Y-%m-%d")
+    if start == end:
+        return f"发布于 {start}"
+    return f"发布窗口 {start} 至 {end}"
+
+
+def _normalize_ai_influence_report_markdown(markdown: str, title: str) -> str:
+    lines = [line.rstrip() for line in str(markdown or "").splitlines()]
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    if lines and lines[0].strip() == title.strip():
+        lines.pop(0)
+    top_sections = {
+        "一页结论",
+        "核心趋势",
+        "关键视频证据",
+        "产品 / 研究 / 工程启示",
+        "Open Questions",
+        "开放问题",
+        "结论",
+    }
+    start_idx = 0
+    for idx, line in enumerate(lines):
+        if line.strip() in top_sections:
+            start_idx = idx
+            break
+    lines = [
+        line
+        for line in lines[start_idx:]
+        if line.strip()
+        not in {
+            "证据边界",
+            "本报告只基于本次证据包写作，不补外部事实。",
+            "需要先把材料质量说清楚：",
+        }
+    ]
+    sub_sections = {
+        "判断",
+        "证据来自哪些频道/视频",
+        "为什么重要",
+        "对产品/研究/工程/投资的启示",
+        "对产品、研究、工程、投资的启示",
+        "反向证据或不确定性",
+    }
+    top_section_display = {
+        "一页结论": "摘要",
+        "核心趋势": "正文",
+        "关键视频证据": "重点素材",
+        "产品 / 研究 / 工程启示": "影响与落点",
+        "Open Questions": "后续观察",
+        "开放问题": "后续观察",
+        "结论": "结论",
+    }
+    sub_section_display = {
+        "判断": "观察",
+        "证据来自哪些频道/视频": "素材来源",
+        "为什么重要": "影响",
+        "对产品/研究/工程/投资的启示": "落点",
+        "对产品、研究、工程、投资的启示": "落点",
+        "反向证据或不确定性": "仍待验证",
+    }
+    normalized: list[str] = []
+    for raw in lines:
+        line = raw.strip()
+        if not line:
+            if normalized and normalized[-1] != "":
+                normalized.append("")
+            continue
+        if line in top_sections:
+            if normalized and normalized[-1] != "":
+                normalized.append("")
+            normalized.append(f"## {top_section_display.get(line, line)}")
+            normalized.append("")
+            continue
+        if re.match(r"^\d+\.\s+", line):
+            if normalized and normalized[-1] != "":
+                normalized.append("")
+            line = line.replace("中心判断：", "主线：")
+            normalized.append(f"### {line}")
+            normalized.append("")
+            continue
+        if line in sub_sections:
+            if normalized and normalized[-1] != "":
+                normalized.append("")
+            normalized.append(f"#### {sub_section_display.get(line, line)}")
+            normalized.append("")
+            continue
+        normalized.append(line)
+        normalized.append("")
+    while normalized and normalized[-1] == "":
+        normalized.pop()
+    return _polish_ai_influence_reader_tone("\n".join(normalized).strip())
+
+
+def _polish_ai_influence_reader_tone(text: str) -> str:
+    cleaned = str(text or "")
+    direct_rewrites = {
+        "AI Engineer 的《Prompt to Pipeline: Building with Google's Gen Media Stack》转写噪声明显，因此只作为“Gen Media Stack 被以 pipeline 方式呈现”的弱证据，不对具体产品细节做过度推断。":
+            "AI Engineer 的《Prompt to Pipeline: Building with Google's Gen Media Stack》更适合作为方向参考：它清楚提示了 Google DeepMind 正在强调“从提示词到生产链路”的表达，但具体产品细节仍以 Google for Developers 的公开材料为主。",
+        "由于 transcript 几乎没有有效语义，本报告不引用其具体观点，只把标题作为“行业正在讨论空间化 Agent UI”的主题证据。":
+            "由于这条素材的转写质量有限，这里不展开其中的具体观点，只把它作为“行业正在讨论空间化 Agent UI”的方向参考。",
+        "由于 transcript 大面积损坏，本报告不把其中不可读内容作为事实依据。但标题本身足够说明，agent swarms 的讨论已经从“多 Agent 很酷”进入“缺什么底层 primitive”的阶段。":
+            "由于这条素材的转写质量有限，这里不把其中缺少清晰支撑的细节当作事实依据；但从标题本身仍能看出，agent swarms 的讨论已经从“多 Agent 很酷”进入“缺什么底层 primitive”的阶段。",
+        "第一，证据中的 200 秒持续推理能力来自自动转写和语义整理，虽然方向可信，但精确表述仍需后续用原视频或官方材料确认。":
+            "第一，关于 200 秒持续推理的表述主要来自公开视频转写，方向值得关注，但具体数值仍建议以后续原视频或官方材料交叉确认。",
+    }
+    for src, dst in direct_rewrites.items():
+        cleaned = cleaned.replace(src, dst)
+    generic_rewrites = [
+        ("transcript", "转写"),
+        ("低置信线索", "方向性线索"),
+        ("弱证据", "参考线索"),
+        ("无法核验", "暂时难以充分验证"),
+        ("不可读内容", "缺少清晰转写支撑的细节"),
+        ("不把其中不可读内容作为事实依据", "不把其中缺少清晰支撑的细节当作事实依据"),
+        ("本报告不引用其具体观点", "这里不展开其中的具体观点"),
+        ("结论很硬：", "可以概括为："),
+        ("这意味着", "这也说明"),
+    ]
+    for src, dst in generic_rewrites:
+        cleaned = cleaned.replace(src, dst)
+    cleaned = re.sub(r"需要先把材料质量说清楚[:：]?", "", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
+def _render_ai_influence_sources_html(videos: list[dict[str, Any]]) -> str:
+    rows: list[str] = []
+    for video in videos:
+        video_ref = html.escape(str(video.get("video_ref") or "N/A"))
+        title_text = str(video.get("title") or "Untitled video")
+        title = html.escape(title_text)
+        channel = html.escape(str(video.get("channel") or "N/A"))
+        published = html.escape(_format_ai_influence_publish_time(video.get("published_at")))
+        video_url = str(video.get("url") or "").strip()
+        duration = video.get("duration_min")
+        duration_text = "N/A"
+        try:
+            if duration is not None:
+                duration_text = f"{float(duration):.1f} 分钟"
+        except Exception:
+            duration_text = str(duration)
+        summary = html.escape(_compact_text(video.get("summary_zh"), default="摘要待补", max_len=160))
+        time_info = f"{published}<br><span class=\"ha-muted\">{html.escape(duration_text)}</span>"
+        title_html = (
+            f'<a href="{html.escape(video_url)}" target="_blank" rel="noreferrer noopener">{title}</a>'
+            if video_url
+            else title
+        )
+        rows.append(
+            f"""
+<tr>
+  <td><span class="ai-material-ref">{video_ref}</span></td>
+  <td>{channel}</td>
+  <td>{title_html}</td>
+  <td>{time_info}</td>
+  <td>{summary}</td>
+</tr>
+""".strip()
+        )
+    table_html = (
+        f"""
+<div class="ai-report-source-table">
+  <table>
+    <thead>
+      <tr>
+        <th>素材</th>
+        <th>频道</th>
+        <th>视频标题</th>
+        <th>发布时间 / 时长</th>
+        <th>摘要</th>
+      </tr>
+    </thead>
+    <tbody>
+      {"".join(rows)}
+    </tbody>
+  </table>
+</div>
+""".strip()
+        if rows
+        else '<p class="ha-muted">N/A</p>'
+    )
+    return f"""
+<section class="ai-report-sources">
+  <h2>本期素材</h2>
+  {table_html}
+</section>
+""".strip()
+
+
+def _reader_facing_chapter_title(value: Any, *, fallback: str) -> str:
+    title = str(value or fallback).strip() or fallback
+    title = re.sub(r"^(中心判断|主线判断|报告主线|写作主线|素材组织|章节目标)\s*[：:]\s*", "", title)
+    title = re.sub(r"\s+", " ", title).strip()
+    return title or fallback
+
+
+def _render_ai_influence_material_map_html(evidence_pack: dict[str, Any]) -> str:
+    report_spec = (evidence_pack or {}).get("report_spec") or {}
+    videos = (evidence_pack or {}).get("videos") or []
+    by_ref = {str(video.get("video_ref") or ""): video for video in videos}
+    rows: list[str] = []
+    for idx, chapter in enumerate(_iter_report_plan_chapters(report_spec), start=1):
+        if not isinstance(chapter, dict):
+            continue
+        trend_title = str(chapter.get("_trend_title") or "").strip()
+        chapter_text = _reader_facing_chapter_title(chapter.get("title"), fallback=f"章节 {idx}")
+        if trend_title:
+            chapter_text = f"{_reader_facing_chapter_title(trend_title, fallback='趋势')} / {chapter_text}"
+        chapter_title = html.escape(chapter_text)
+        refs = [str(ref) for ref in _plan_material_refs(chapter) if str(ref) in by_ref]
+        if not refs:
+            continue
+        material_bits: list[str] = []
+        for ref in refs:
+            video = by_ref[ref]
+            title = html.escape(str(video.get("title") or "Untitled video"))
+            channel = html.escape(str(video.get("channel") or "N/A"))
+            published = html.escape(_format_ai_influence_publish_time(video.get("published_at")))
+            url = str(video.get("url") or "").strip()
+            title_html = (
+                f'<a href="{html.escape(url)}" target="_blank" rel="noreferrer noopener">{title}</a>'
+                if url
+                else title
+            )
+            material_bits.append(
+                f'<div class="ai-material-chip"><span>{html.escape(ref)}</span><b>{title_html}</b><em>{channel} / {published}</em></div>'
+            )
+        rows.append(
+            f"""
+<tr>
+  <td><strong>{idx}. {chapter_title}</strong></td>
+  <td>{''.join(material_bits)}</td>
+</tr>
+""".strip()
+        )
+    if not rows:
+        return ""
+    return f"""
+<section class="ai-report-material-map">
+  <h2>章节与视频素材对应表</h2>
+  <p class="ha-muted">每个判断都对应到本期公开视频素材，方便反查来源；表内编号与“本期素材”一致。</p>
+  <div class="ai-report-source-table ai-material-map-table">
+    <table>
+      <thead>
+        <tr>
+          <th>报告章节</th>
+          <th>对应视频素材</th>
+        </tr>
+      </thead>
+      <tbody>
+        {''.join(rows)}
+      </tbody>
+    </table>
+  </div>
+</section>
+""".strip()
+
+
+def _notebooklm_figures_for_section(evidence_pack: dict[str, Any], section_title: str) -> list[dict[str, Any]]:
+    notebooklm = (evidence_pack or {}).get("notebooklm") or {}
+    section = str(section_title or "").strip()
+    matched: list[dict[str, Any]] = []
+    for figure in notebooklm.get("infographics") or []:
+        if not isinstance(figure, dict):
+            continue
+        placement = str(figure.get("placement_section") or "").strip()
+        if placement == section:
+            matched.append(figure)
+    return matched
+
+
+def _render_notebooklm_figure_html(figure: dict[str, Any]) -> str:
+    title = html.escape(str(figure.get("title") or "NotebookLM 信息图"))
+    prompt_excerpt = html.escape(_compact_text(figure.get("prompt_text"), default="N/A", max_len=220))
+    img_path = str(figure.get("image_path") or "").strip()
+    refs = " / ".join(html.escape(str(ref)) for ref in (figure.get("material_video_refs") or [])) or "N/A"
+    image_html = ""
+    if img_path:
+        image_html = f'<img src="{html.escape(img_path)}" alt="{title}" loading="lazy">'
+    status = html.escape(str(figure.get("status") or "pending"))
+    return f"""
+<figure class="ai-notebooklm-figure">
+  {image_html}
+  <figcaption>
+    <strong>{title}</strong>
+    <span>素材：{refs}</span>
+    <span>状态：{status}</span>
+    <em>{prompt_excerpt}</em>
+  </figcaption>
+</figure>
+""".strip()
+
+
+def _split_ai_influence_sections(markdown: str) -> list[tuple[str, str]]:
+    sections: list[tuple[str, str]] = []
+    current_title: str | None = None
+    current_lines: list[str] = []
+    for raw in str(markdown or "").splitlines():
+        line = raw.rstrip()
+        if line.startswith("## "):
+            if current_title is not None:
+                sections.append((current_title, "\n".join(current_lines).strip()))
+            current_title = line[3:].strip()
+            current_lines = []
+            continue
+        if current_title is None:
+            continue
+        current_lines.append(line)
+    if current_title is not None:
+        sections.append((current_title, "\n".join(current_lines).strip()))
+    skip_titles = {"证据边界", "素材边界", "证据说明"}
+    skip_phrases = (
+        "本报告只基于本次证据包写作",
+        "不补外部事实",
+    )
+    cleaned: list[tuple[str, str]] = []
+    for title, body in sections:
+        if title.strip() in skip_titles:
+            continue
+        body_lines = []
+        for line in body.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                body_lines.append(line)
+                continue
+            if any(phrase in stripped for phrase in skip_phrases):
+                continue
+            body_lines.append(line)
+        cleaned_body = "\n".join(body_lines).strip()
+        if cleaned_body:
+            cleaned.append((title, cleaned_body))
+    return cleaned
+
+
+def _render_ai_influence_toc_html(sections: list[tuple[str, str]]) -> str:
+    if not sections:
+        return ""
+    items = []
+    for idx, (title, _) in enumerate(sections, start=1):
+        anchor = f"section-{idx}-{slugify(title)[:48]}"
+        items.append(f'<li><a href="#{anchor}">{html.escape(title)}</a></li>')
+    return f"""
+<aside class="ha-toc">
+  <h2>目录</h2>
+  <ol>
+    {''.join(items)}
+  </ol>
+</aside>
+""".strip()
+
+
+def _gemini_agent_platform_svg_html() -> str:
+    layers = [
+        ("用户与场景入口", "Search / Android / AI Studio / Antigravity / Home / 设备端", "#0f766e", "#d8fff4"),
+        ("人机对齐层", "用户目标、子目标、欠规格信息、解释、错误恢复、信任校准", "#2563eb", "#e6f0ff"),
+        ("Agent 编排层", "ADK / Orchestrator / Sub-agents / 任务拆解 / 工具选择", "#7c3aed", "#f0e9ff"),
+        ("数据与 Grounding 层", "File Search / 引用回溯 / 元数据过滤 / GCS / 外部云内容 / Maps", "#b45309", "#fff4df"),
+        ("工具与真实世界接口", "Places / Weather / Routing / Home APIs / Camera Intelligence", "#be123c", "#ffe8ef"),
+        ("模型与运行层", "Gemini / Gemma / MediaPipe / LightRT / CPU-GPU-NPU / 端云协同", "#334155", "#eef2f7"),
+    ]
+    cards: list[str] = []
+    arrows: list[str] = []
+    y = 78
+    for idx, (title, desc, accent, fill) in enumerate(layers):
+        cards.append(f"""
+<g class="ai-arch-layer" transform="translate(72 {y})">
+  <rect width="876" height="86" rx="22" fill="{fill}" stroke="{accent}" stroke-width="2"/>
+  <circle cx="44" cy="43" r="20" fill="{accent}"/>
+  <text x="44" y="50" text-anchor="middle" font-size="18" font-weight="800" fill="#fff">{idx + 1}</text>
+  <text x="86" y="36" font-size="22" font-weight="850" fill="#111827">{html.escape(title)}</text>
+  <text x="86" y="64" font-size="15" fill="#475569">{html.escape(desc)}</text>
+</g>
+""".strip())
+        if idx < len(layers) - 1:
+            arrows.append(f"""
+<path d="M510 {y + 92} L510 {y + 114}" stroke="#64748b" stroke-width="3" stroke-linecap="round"/>
+<path d="M501 {y + 108} L510 {y + 118} L519 {y + 108}" fill="none" stroke="#64748b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+""".strip())
+        y += 114
+    return f"""
+<figure class="ai-arch-svg-card" role="img" aria-label="Gemini Agent 平台栈 SVG 架构图">
+  <svg viewBox="0 0 1020 810" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="aiArchBg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#f8fafc"/>
+        <stop offset="58%" stop-color="#fff7ed"/>
+        <stop offset="100%" stop-color="#eef2ff"/>
+      </linearGradient>
+      <filter id="aiArchShadow" x="-20%" y="-20%" width="140%" height="140%">
+        <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#0f172a" flood-opacity="0.16"/>
+      </filter>
+    </defs>
+    <rect x="20" y="20" width="980" height="770" rx="34" fill="url(#aiArchBg)" stroke="#d7dfeb"/>
+    <text x="72" y="58" font-size="26" font-weight="900" fill="#0f172a">Gemini Agent 平台栈</text>
+    <text x="948" y="58" text-anchor="end" font-size="14" font-weight="700" fill="#64748b">Model · Data · Tools · Runtime · Entry</text>
+    <g filter="url(#aiArchShadow)">
+      {''.join(cards)}
+    </g>
+    {''.join(arrows)}
+    <text x="72" y="770" font-size="14" fill="#64748b">读法：越往下越接近模型和运行时，越往上越接近用户入口；平台护城河来自多层组合，而不是单个模型接口。</text>
+  </svg>
+</figure>
+""".strip()
+
+
+def _agentic_developer_stack_svg_html() -> str:
+    layers = [
+        ("6. 企业治理层", "成本 · 权限 · 审计 · 合规 · 回放 · 人工接管", "#991b1b", "#fff1f2"),
+        ("5. 调度与运行时层", "Kubernetes · Pod · VM/沙箱 · 任务队列 · 状态同步", "#9a3412", "#fff7ed"),
+        ("4. 协议与互操作层", "ACP · agent-client · agent-agent · 工具协议", "#6d28d9", "#f5f3ff"),
+        ("3. 工具执行层", "GitHub · CLI · 文件系统 · 测试 · 浏览器 · 日历", "#0369a1", "#eff6ff"),
+        ("2. 规划与上下文层", "任务拆解 · repo 理解 · 文档 · issue · 记忆", "#047857", "#ecfdf5"),
+        ("1. 入口层", "IDE · CLI · Slack · Teams · Discord · 浏览器", "#334155", "#f8fafc"),
+    ]
+    y = 94
+    cards: list[str] = []
+    arrows: list[str] = []
+    for idx, (title, desc, accent, fill) in enumerate(layers):
+        cards.append(f"""
+<g transform="translate(76 {y})">
+  <rect width="868" height="78" rx="22" fill="{fill}" stroke="{accent}" stroke-width="2"/>
+  <rect x="20" y="20" width="44" height="38" rx="14" fill="{accent}"/>
+  <text x="42" y="46" text-anchor="middle" font-size="18" font-weight="900" fill="#fff">{6 - idx}</text>
+  <text x="88" y="34" font-size="21" font-weight="900" fill="#111827">{html.escape(title)}</text>
+  <text x="88" y="60" font-size="15" fill="#475569">{html.escape(desc)}</text>
+</g>
+""".strip())
+        if idx < len(layers) - 1:
+            arrows.append(f"""
+<path d="M510 {y + 83} L510 {y + 102}" stroke="#64748b" stroke-width="3" stroke-linecap="round"/>
+<path d="M502 {y + 97} L510 {y + 106} L518 {y + 97}" fill="none" stroke="#64748b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+""".strip())
+        y += 102
+    side_labels = [
+        ("治理", 116, "#991b1b"),
+        ("运行", 218, "#9a3412"),
+        ("协议", 320, "#6d28d9"),
+        ("执行", 422, "#0369a1"),
+        ("上下文", 524, "#047857"),
+        ("入口", 626, "#334155"),
+    ]
+    labels = "\n".join(
+        f'<text x="956" y="{y}" font-size="13" font-weight="800" fill="{color}" text-anchor="middle">{html.escape(label)}</text>'
+        for label, y, color in side_labels
+    )
+    return f"""
+<figure class="ai-arch-svg-card" role="img" aria-label="Agentic Developer Stack 分层架构 SVG 图">
+  <svg viewBox="0 0 1020 770" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="agenticStackBg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#f8fafc"/>
+        <stop offset="55%" stop-color="#eef6ff"/>
+        <stop offset="100%" stop-color="#fff7ed"/>
+      </linearGradient>
+      <filter id="agenticStackShadow" x="-20%" y="-20%" width="140%" height="140%">
+        <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#0f172a" flood-opacity="0.16"/>
+      </filter>
+    </defs>
+    <rect x="20" y="20" width="980" height="730" rx="34" fill="url(#agenticStackBg)" stroke="#d7dfeb"/>
+    <text x="76" y="60" font-size="28" font-weight="950" fill="#0f172a">Agentic Developer Stack</text>
+    <text x="944" y="60" text-anchor="end" font-size="14" font-weight="800" fill="#64748b">Entry → Context → Tools → Protocol → Runtime → Governance</text>
+    <g filter="url(#agenticStackShadow)">
+      {''.join(cards)}
+    </g>
+    {''.join(arrows)}
+    {labels}
+    <path d="M76 706 H944" stroke="#cbd5e1" stroke-width="1.5"/>
+    <text x="76" y="730" font-size="14" fill="#64748b">读法：Coding Agent 的竞争焦点正在从 IDE 插件上移到协议、运行时、审计和企业治理层。</text>
+  </svg>
+</figure>
+""".strip()
+
+
+def _extract_ai_architecture_svg(body_md: str) -> tuple[str, str]:
+    text = str(body_md or "")
+    if "agentic-developer-stack.svg" in text:
+        cleaned_lines = [
+            line
+            for line in text.splitlines()
+            if "agentic-developer-stack.svg" not in line
+        ]
+        return "\n".join(cleaned_lines).strip(), _agentic_developer_stack_svg_html()
+    if "│ 6. 企业治理层" in text and "└────────────────" in text:
+        cleaned = re.sub(
+            r"┌[^\n]*\n(?:.*\n)*?└[^\n]*",
+            "",
+            text,
+            count=1,
+        )
+        return cleaned.strip(), _agentic_developer_stack_svg_html()
+    if "分层架构图：Agentic Developer Stack" in text or ("Agentic Developer Stack" in text and "│ 6. 企业治理层" in text):
+        cleaned: list[str] = []
+        skipping = False
+        inserted = False
+        for raw in text.splitlines():
+            stripped = raw.strip()
+            if stripped.startswith("分层架构图：Agentic Developer Stack"):
+                cleaned.append("分层架构图：Agentic Developer Stack")
+                skipping = True
+                inserted = True
+                continue
+            if skipping:
+                if stripped.startswith("## 关键视频证据") or stripped.startswith("Google for Developers") or stripped.startswith("下一步跟踪指标"):
+                    skipping = False
+                    cleaned.append(raw)
+                elif stripped.startswith("读法："):
+                    continue
+                else:
+                    continue
+            else:
+                cleaned.append(raw)
+        return "\n".join(cleaned).strip(), (_agentic_developer_stack_svg_html() if inserted else "")
+    if "gemini-agent-platform-stack.svg" in text:
+        cleaned_lines = [
+            line
+            for line in text.splitlines()
+            if "gemini-agent-platform-stack.svg" not in line
+        ]
+        return "\n".join(cleaned_lines).strip(), _gemini_agent_platform_svg_html()
+    if "Gemini Agent 平台栈" not in text and "用户与场景入口" not in text:
+        return text, ""
+    cleaned: list[str] = []
+    skipping = False
+    inserted = False
+    for raw in text.splitlines():
+        stripped = raw.strip()
+        if stripped == "平台架构图建议":
+            cleaned.append("平台架构图")
+            skipping = True
+            inserted = True
+            continue
+        if skipping:
+            if stripped.startswith("开发者生态影响表") or stripped.startswith("关键素材地图") or stripped.startswith("需要继续跟踪"):
+                skipping = False
+                cleaned.append(stripped)
+            elif stripped.startswith("这张图的重点"):
+                continue
+            else:
+                continue
+        else:
+            cleaned.append(raw)
+    return "\n".join(cleaned).strip(), (_gemini_agent_platform_svg_html() if inserted else "")
+
+
+def _render_ai_influence_sections_html(markdown: str, render_markdown_body: Any,
+                                       evidence_pack: dict[str, Any] | None = None) -> tuple[str, str]:
+    sections = _split_ai_influence_sections(markdown)
+    if not sections:
+        return render_markdown_body(markdown), ""
+    blocks: list[str] = []
+    toc_html = _render_ai_influence_toc_html(sections)
+    for idx, (title, body_md) in enumerate(sections, start=1):
+        anchor = f"section-{idx}-{slugify(title)[:48]}"
+        body_md, svg_html = _extract_ai_architecture_svg(body_md)
+        figure_html = ""
+        if evidence_pack:
+            figures = _notebooklm_figures_for_section(evidence_pack, title)
+            if figures:
+                figure_html = '<div class="ai-notebooklm-figures">' + "".join(
+                    _render_notebooklm_figure_html(item) for item in figures
+                ) + "</div>\n"
+        section_body = figure_html + (svg_html + "\n" if svg_html else "") + render_markdown_body(body_md)
+        blocks.append(
+            f"""
+<section class="ai-report-section" id="{anchor}">
+  <h2>{html.escape(title)}</h2>
+  <div class="ai-report-prose">
+    {section_body}
+  </div>
+</section>
+""".strip()
+        )
+    return "\n".join(blocks), toc_html
+
+
+def _ai_influence_report_extra_css() -> str:
+    return """
+:root {
+  --ha-max: 1520px;
+  --ha-toc: 320px;
+}
+.ha-wrap {
+  padding: 28px 36px 84px;
+}
+.ha-topline, .ha-footline {
+  gap: 24px;
+}
+.ha-title {
+  max-width: 18ch;
+}
+.ha-lede {
+  max-width: 78rem;
+  font-size: 20px;
+  line-height: 1.75;
+}
+.ha-layout {
+  gap: 30px;
+}
+@media (min-width: 1180px) {
+  .ha-layout {
+    grid-template-columns: var(--ha-toc) minmax(0, 1fr);
+  }
+}
+.ha-main {
+  min-width: 0;
+}
+.ha-main section {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+.ha-main .ai-report-sources,
+.ha-main .ai-report-material-map,
+.ha-main .ai-report-section {
+  border: 1px solid var(--ha-rule);
+  background: var(--ha-surface);
+  border-radius: 22px;
+  padding: 26px 28px 24px;
+}
+.ha-main .ai-report-section + .ai-report-section {
+  margin-top: 24px;
+}
+.ha-main .ai-report-sources + .ai-report-material-map,
+.ha-main .ai-report-material-map + .ai-report-section {
+  margin-top: 24px;
+}
+.ai-material-ref {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 46px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  color: var(--ha-bg);
+  background: var(--ha-text);
+}
+.ai-material-chip {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 4px 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--ha-rule);
+}
+.ai-material-chip:last-child {
+  border-bottom: none;
+}
+.ai-material-chip span {
+  grid-row: 1 / span 2;
+  align-self: start;
+  justify-self: start;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ha-bg);
+  background: var(--ha-accent);
+}
+.ai-material-chip b {
+  font-weight: 750;
+}
+.ai-material-chip em {
+  font-style: normal;
+  color: var(--ha-muted);
+  font-size: 13px;
+}
+.ai-report-source-table {
+  overflow-x: auto;
+  border: 1px solid var(--ha-rule);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--ha-surface) 92%, white 8%);
+}
+.ai-report-source-table table {
+  min-width: 980px;
+  border: none;
+  margin: 0;
+}
+.ai-report-source-table th,
+.ai-report-source-table td {
+  border-bottom: 1px solid var(--ha-rule);
+  padding: 14px 16px;
+}
+.ai-report-source-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.ai-report-source-table th:nth-child(1),
+.ai-report-source-table td:nth-child(1) {
+  width: 8%;
+}
+.ai-report-source-table th:nth-child(2),
+.ai-report-source-table td:nth-child(2) {
+  width: 14%;
+}
+.ai-report-source-table th:nth-child(3),
+.ai-report-source-table td:nth-child(3) {
+  width: 26%;
+}
+.ai-report-source-table td:nth-child(3) a,
+.ai-material-chip a {
+  color: var(--ha-accent);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--ha-accent) 45%, transparent 55%);
+}
+.ai-report-source-table td:nth-child(3) a:hover,
+.ai-material-chip a:hover {
+  text-decoration: underline;
+}
+.ai-report-source-table th:nth-child(4),
+.ai-report-source-table td:nth-child(4) {
+  width: 15%;
+  white-space: nowrap;
+}
+.ai-report-source-table th:nth-child(5),
+.ai-report-source-table td:nth-child(5) {
+  width: 37%;
+}
+.ai-material-map-table th:nth-child(1),
+.ai-material-map-table td:nth-child(1) {
+  width: 34%;
+}
+.ai-material-map-table th:nth-child(2),
+.ai-material-map-table td:nth-child(2) {
+  width: 66%;
+}
+.ai-arch-svg-card {
+  margin: 4px 0 28px;
+  padding: 0;
+  border: 1px solid var(--ha-rule);
+  border-radius: 28px;
+  overflow: hidden;
+  background: #f8fafc;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, .10);
+}
+.ai-arch-svg-card svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.ai-notebooklm-figures {
+  display: grid;
+  gap: 18px;
+  margin: 0 0 22px;
+}
+.ai-notebooklm-figure {
+  margin: 0;
+  border: 1px solid var(--ha-rule);
+  border-radius: 22px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(248,250,252,.98), rgba(255,248,240,.96));
+  box-shadow: 0 14px 38px rgba(15, 23, 42, .08);
+}
+.ai-notebooklm-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #f8fafc;
+}
+.ai-notebooklm-figure figcaption {
+  display: grid;
+  gap: 6px;
+  padding: 16px 18px 18px;
+}
+.ai-notebooklm-figure figcaption strong {
+  font-size: 17px;
+  color: #0f172a;
+}
+.ai-notebooklm-figure figcaption span,
+.ai-notebooklm-figure figcaption em {
+  color: var(--ha-muted);
+  font-size: 14px;
+  font-style: normal;
+  line-height: 1.65;
+}
+.ai-report-section h2 {
+  margin: 0 0 18px;
+  font-size: clamp(30px, 3vw, 44px);
+}
+.ai-report-prose h4 {
+  margin-top: 24px;
+  margin-bottom: 12px;
+  font-size: 24px;
+}
+.ai-report-prose p {
+  margin: 0 0 16px;
+  font-size: 17px;
+  line-height: 1.9;
+  max-width: none;
+}
+.ai-report-prose ul,
+.ai-report-prose ol {
+  margin-left: 22px;
+}
+.ha-toc {
+  top: 24px;
+  border-radius: 20px;
+  padding: 20px 20px 16px;
+}
+.ha-toc li {
+  margin: 10px 0;
+  line-height: 1.55;
+}
+"""
+
+
+def render_ai_influence_report_html_anything(markdown: str, evidence_pack: dict[str, Any], report: dict[str, Any]) -> str:
+    from html_anything_adapter import render as render_html_anything
+    from html_anything_adapter import render_markdown_body
+
+    report_spec = (evidence_pack or {}).get("report_spec") or {}
+    videos = (evidence_pack or {}).get("videos") or []
+    title = str(report.get("headline") or report_spec.get("title") or "AI Influence Report")
+    normalized_markdown = _normalize_ai_influence_report_markdown(markdown, title)
+    sources_html = _render_ai_influence_sources_html(videos)
+    material_map_html = _render_ai_influence_material_map_html(evidence_pack)
+    sections_html, toc_html = _render_ai_influence_sections_html(
+        normalized_markdown,
+        render_markdown_body,
+        evidence_pack,
+    )
+    body_html = f"{sources_html}\n{material_map_html}\n{sections_html}"
+    date_window = _ai_influence_report_date_window(videos)
+    meta = f"{len(videos)} 条公开视频素材 / {date_window}"
+    lede = (
+        f"本报告围绕 {title} 主题整理，"
+        f"正文判断只基于本期选入的 {len(videos)} 条公开视频素材；"
+        "首页先给你看素材来源，正文再展开趋势判断。"
+    )
+    return render_html_anything(
+        normalized_markdown,
+        "design",
+        title=title,
+        hero_title=title,
+        lede=lede,
+        meta=meta,
+        body_html=body_html,
+        toc_html=toc_html,
+        surface_label="AI Influence Briefing",
+        topline_left="AI Influence",
+        topline_center=meta,
+        topline_right="",
+        footer_left="AI Influence Report",
+        footer_right=date_window,
+        footer_tail=str(evidence_pack.get("date") or iso_z().split("T", 1)[0]),
+        show_generator=False,
+        extra_css=_ai_influence_report_extra_css(),
+    )
 
 
 def call_codex_phase_report(evidence_pack: dict[str, Any], config: dict[str, Any],
@@ -7606,15 +10881,57 @@ def call_phase_report_reasoner(evidence_pack: dict[str, Any], config: dict[str, 
         reasoner
         or os.environ.get("TECH_HOTSPOT_PHASE_REPORT_REASONER")
         or cfg.get("provider")
-        or "codex_cli"
+        or "browser_agent_chatgpt"
     ).strip().lower()
+    if selected in {"browser_agent", "browser_agent_chatgpt", "chatgpt", "chatgpt55", "chatgpt-5.5"}:
+        model_name = str(model or cfg.get("model") or "chatgpt-5.5")
+        prompt = build_phase_report_markdown_prompt(evidence_pack, model_name)
+        result = call_browser_agent_chatgpt_markdown(
+            prompt,
+            config,
+            purpose=f"phase-report-{evidence_pack.get('phase')}-{evidence_pack.get('date')}",
+            requested_model=model_name,
+        )
+        markdown = result["markdown"].strip()
+        if len(markdown) < 1800:
+            raise ValueError(f"browser agent phase report output too short: {len(markdown)} chars")
+        return {
+            "headline": phase_report_title(int(evidence_pack.get("phase") or 1)),
+            "subheadline": (
+                f"基于 {len(evidence_pack.get('videos') or [])} 条最近 "
+                f"{evidence_pack.get('window_days')} 天核心视频，由 Browser Agent / "
+                f"ChatGPT 5.5 Thinking high 完成最终趋势分析"
+            ),
+            "executive_summary": "",
+            "top_findings": [],
+            "trend_sections": [],
+            "video_matrix": [],
+            "product_research_implications": [],
+            "open_questions": [],
+            "_markdown_report": markdown,
+            "_model": result.get("model") or model_name,
+            "_backend": "browser_agent_chatgpt",
+            "_reasoning_effort": result.get("reasoning_effort") or "high",
+            "_local_preprocess": "ThunderOMLX/Qwen3.6 semantic packets",
+            "_latency_ms": result.get("latency_ms"),
+            "_request_dir": result.get("request_dir"),
+            "input_token_count": result.get("input_token_count"),
+            "output_token_count": result.get("output_token_count"),
+            "cost_estimate_usd": result.get("cost_estimate_usd"),
+            "_input_video_count": len(evidence_pack.get("videos") or []),
+            "_json_repair_used": False,
+            "_markdown_fallback_used": False,
+        }
     if selected in {"codex", "codex_cli", "gpt", "openai"}:
-        return call_codex_phase_report(evidence_pack, config, requested_model=model)
+        raise ValueError(
+            "Codex/GPT direct final reporting is disabled for AI Influence. "
+            "Use Browser Agent + ChatGPT 5.5 Thinking high via --reasoner browser_agent_chatgpt."
+        )
     if selected in {"thunderomlx", "local", "qwen", "qwen3.6"}:
         raise ValueError(
             "phase-report final reasoning cannot use local ThunderOMLX/Qwen; "
             "local models are limited to transcript/semantic preprocessing. "
-            "Use --reasoner codex --model gpt-5.5."
+            "Use --reasoner browser_agent_chatgpt --model chatgpt-5.5."
         )
     raise ValueError(f"unknown phase report reasoner: {selected}")
 
@@ -7666,33 +10983,21 @@ def render_phase_report_markdown(report: dict[str, Any], evidence_pack: dict[str
 
 
 def render_phase_report_html(report: dict[str, Any], evidence_pack: dict[str, Any]) -> str:
-    def chips(items: list[Any]) -> str:
-        return "".join(f"<span style=\"display:inline-block;margin:3px 5px 3px 0;padding:4px 9px;border-radius:999px;background:#edf5ef;color:#315f4f;font-size:12px\">{html_escape(x)}</span>" for x in items)
-
     markdown_report = str(report.get("_markdown_report") or "").strip()
-    if markdown_report:
-        body_html = markdown_to_email_html(markdown_report)
-        title = str(report.get("headline") or evidence_pack.get("phase_title") or "Tech Hotspot Radar")
-        subtitle = str(report.get("subheadline") or "")
-        return f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>{html_escape(title)}</title></head>
-<body style="margin:0;background:#f4efe4;color:#17231f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB',sans-serif;line-height:1.72">
-<div style="max-width:980px;margin:0 auto;padding:28px 18px 44px">
-  <div style="background:linear-gradient(135deg,#123b35,#315f4f 58%,#c9863d);color:#fff;border-radius:26px;padding:30px">
-    <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.82">AI Influence · Tech Hotspot Radar · Phase {html_escape(evidence_pack.get('phase'))}</div>
-    <h1 style="margin:10px 0 12px;font-size:30px;line-height:1.22">{html_escape(title)}</h1>
-    <div style="font-size:15px;opacity:.92;max-width:820px">{html_escape(subtitle)}</div>
-  </div>
-  <table style="width:100%;border-collapse:separate;border-spacing:0;margin:16px 0"><tr>
-    {metric_card("输入视频", evidence_pack.get("video_count"), "completed transcript + semantic packet")}
-    {metric_card("分析模型", report.get("_model", "Qwen3.6"), report.get("_backend", "thunderomlx"))}
-    {metric_card("时间窗口", f"{evidence_pack.get('window_days')} 天", evidence_pack.get("date"))}
-  </tr></table>
-  <section style="background:#fffdf8;border:1px solid #eadfcd;border-radius:20px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:21px;margin:14px 0">
-    {body_html}
-  </section>
-  <p style="font-size:12px;color:#66736d">Generated by ThunderOMLX/Qwen3.6 from phase evidence pack. Transcript 原文见附件。</p>
-</div></body></html>"""
+    if not markdown_report:
+        markdown_report = render_phase_report_markdown(report, evidence_pack).strip()
+    phase_title = str(report.get("headline") or evidence_pack.get("phase_title") or "Tech Hotspot Radar")
+    subtitle = (
+        f"AI Influence / Phase {evidence_pack.get('phase')} / "
+        f"{evidence_pack.get('date') or iso_z().split('T', 1)[0]}"
+    )
+    report_for_render = {
+        **report,
+        "headline": phase_title,
+        "subheadline": str(report.get("subheadline") or subtitle),
+        "_reasoning_effort": report.get("_reasoning_effort") or "high",
+    }
+    return render_ai_influence_report_html_anything(markdown_report, evidence_pack, report_for_render)
 
     trend_blocks = ""
     for section in report.get("trend_sections") or []:
@@ -7763,7 +11068,7 @@ def render_phase_report_html(report: dict[str, Any], evidence_pack: dict[str, An
     <ul>{implications}</ul>
     <h3 style="font-size:17px;color:#1e4b41;margin:14px 0 6px">Open Questions</h3>
     <ul>{open_questions}</ul>
-    <p style="font-size:12px;color:#66736d">Generated by ThunderOMLX/Qwen3.6 from phase evidence pack. Transcript 原文见附件。</p>
+    <p style="font-size:12px;color:#66736d">{html_escape(footer)}</p>
   </section>
 </div></body></html>"""
 
@@ -7777,6 +11082,17 @@ def phase_transcript_attachment(evidence_pack: dict[str, Any]) -> str:
     ]
     for item in evidence_pack.get("videos") or []:
         transcript = str(item.get("transcript_clean") or "").strip()
+        failed, quality = transcript_quality_failed_for_video(
+            transcript,
+            title=str(item.get("title") or ""),
+            channel=str(item.get("channel") or ""),
+        )
+        if failed:
+            transcript = (
+                "[TRANSCRIPT_QUALITY_FAILED]\n"
+                f"reason: {quality.get('reason')}\n"
+                "该 transcript 存在 ASR/字幕循环噪声，已从可引用正文中排除，等待重新 ASR。"
+            )
         parts.extend([
             f"## {item.get('title')}",
             "",
@@ -7828,7 +11144,19 @@ def phase_transcript_attachment_clean(evidence_pack: dict[str, Any]) -> str:
     ]
     for item in evidence_pack.get("videos") or []:
         raw_transcript = str(item.get("transcript_clean") or "").strip()
-        cleaned = lightly_clean_transcript_for_reading(raw_transcript)
+        failed, quality = transcript_quality_failed_for_video(
+            raw_transcript,
+            title=str(item.get("title") or ""),
+            channel=str(item.get("channel") or ""),
+        )
+        if failed:
+            cleaned = (
+                "[TRANSCRIPT_QUALITY_FAILED]\n"
+                f"reason: {quality.get('reason')}\n"
+                "该 transcript 存在 ASR/字幕循环噪声，已从 cleaned 附件中排除，等待重新 ASR。\n"
+            )
+        else:
+            cleaned = lightly_clean_transcript_for_reading(raw_transcript)
         parts.extend([
             f"## {item.get('title')}",
             "",
@@ -7942,6 +11270,484 @@ def cmd_phase_report(args: argparse.Namespace) -> int:
         return 1
 
 
+def _ai_influence_planned_base(config: dict[str, Any], args: argparse.Namespace, date_str: str) -> Path:
+    raw_base = Path(
+        getattr(args, "output_base", None)
+        or (config.get("output") or {}).get("raw_dir", "/Users/lisihao/Knowledge/_raw/tech-hotspot-radar")
+    ).expanduser()
+    return raw_base / "ai-influence-planned" / date_str
+
+
+def _tech_hotspot_shell_root() -> Path:
+    return HARNESS_SCRIPT_DIR / "tech-hotspot-radar"
+
+
+def _run_tech_hotspot_shell(script_relpath: str, argv: list[str]) -> int:
+    script_path = _tech_hotspot_shell_root() / script_relpath
+    if not script_path.exists():
+        print(f"[tech-hotspot-shell] missing script: {script_path}", file=sys.stderr)
+        return 1
+    run = subprocess.run(["bash", str(script_path), *argv], text=True)
+    return int(run.returncode)
+
+
+def cmd_analyze_repos(args: argparse.Namespace) -> int:
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    argv = ["--db", str(db_path), "--config", str(resolve_config(args))]
+    if getattr(args, "repo", None):
+        argv += ["--repo", str(args.repo)]
+    if getattr(args, "evidence_only", False):
+        argv.append("--evidence-only")
+    if getattr(args, "dry_run", False):
+        argv.append("--dry-run")
+    return _run_tech_hotspot_shell("analyze-repos.sh", argv)
+
+
+def cmd_compute_velocity(args: argparse.Namespace) -> int:
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    argv = ["--db", str(db_path)]
+    if getattr(args, "repo", None):
+        argv += ["--repo", str(args.repo)]
+    if getattr(args, "dry_run", False):
+        argv.append("--dry-run")
+    return _run_tech_hotspot_shell("compute-velocity.sh", argv)
+
+
+def cmd_decide_strategy(args: argparse.Namespace) -> int:
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    argv = ["--db", str(db_path), "--config", str(resolve_config(args))]
+    if getattr(args, "repo", None):
+        argv += ["--repo", str(args.repo)]
+    if getattr(args, "force_decision", None):
+        argv += ["--force-decision", str(args.force_decision)]
+    if getattr(args, "dry_run", False):
+        argv.append("--dry-run")
+    return _run_tech_hotspot_shell("decide-strategy.sh", argv)
+
+
+def cmd_chart(args: argparse.Namespace) -> int:
+    chart_map = {
+        "burst-quadrant": "lib/chart-burst-quadrant.sh",
+        "pain-heatmap": "lib/chart-pain-heatmap.sh",
+        "action-matrix": "lib/chart-action-matrix.sh",
+    }
+    script_relpath = chart_map[str(args.type)]
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    argv = ["--db", str(db_path)]
+    if getattr(args, "output", None):
+        argv += ["--output", str(args.output)]
+    return _run_tech_hotspot_shell(script_relpath, argv)
+
+
+def cmd_report_github_ultimate(args: argparse.Namespace) -> int:
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    argv = ["--db", str(db_path), "--date", str(getattr(args, "date", None) or iso_z().split("T", 1)[0])]
+    if getattr(args, "output", None):
+        argv += ["--output", str(args.output)]
+    if getattr(args, "daily", False):
+        argv.append("--daily")
+    return _run_tech_hotspot_shell("report-github-ultimate.sh", argv)
+
+
+def cmd_plan_ai_influence_reports(args: argparse.Namespace) -> int:
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.row_factory = sqlite3.Row
+    date_str = getattr(args, "date", None) or iso_z().split("T", 1)[0]
+    days = int(getattr(args, "days", 7) or 7)
+    flow_cfg = ((config.get("youtube") or {}).get("ai_influence_report_flow") or {})
+    planner_cfg = flow_cfg.get("planner") or {}
+    limit = int(getattr(args, "limit", 0) or planner_cfg.get("max_catalog_videos") or 160)
+    model_name = str(getattr(args, "model", None) or planner_cfg.get("model") or "chatgpt-5.5")
+    out_dir = _ai_influence_planned_base(config, args, date_str)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    catalog = select_ai_influence_catalog_videos(conn, date_str=date_str, days=days, limit=limit)
+    (out_dir / "video-catalog.json").write_text(json.dumps(catalog, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    grouping_materials = build_ai_influence_grouping_materials(conn, catalog)
+    (out_dir / "video-grouping-materials.json").write_text(
+        json.dumps(
+            [{k: v for k, v in item.items() if k != "transcript_excerpt"} for item in grouping_materials],
+            ensure_ascii=False,
+            indent=2,
+        ) + "\n",
+        encoding="utf-8",
+    )
+    grouping_prompt = build_ai_influence_video_grouping_prompt(
+        grouping_materials,
+        date_str=date_str,
+        days=days,
+        model_name=model_name,
+    )
+    (out_dir / "grouping-prompt.md").write_text(grouping_prompt, encoding="utf-8")
+    prompt = build_ai_influence_report_plan_prompt(
+        catalog,
+        date_str=date_str,
+        days=days,
+        model_name=model_name,
+        video_group_plan={"status": "pending_grouping"},
+    )
+    (out_dir / "planner-prompt.md").write_text(prompt, encoding="utf-8")
+    run_id = begin_run(conn, "youtube", "ai-influence-report-planning")
+    try:
+        if not catalog:
+            raise RuntimeError("no completed long-video transcripts available for AI Influence planning")
+        if not grouping_materials:
+            raise RuntimeError("no transcript-backed materials available for AI Influence semantic grouping")
+        raw_group_plan = call_browser_agent_chatgpt_json(
+            grouping_prompt,
+            config,
+            purpose=f"ai-influence-video-grouping-{date_str}",
+            requested_model=model_name,
+        )
+        group_plan = normalize_ai_influence_video_groups(raw_group_plan, catalog)
+        group_plan["catalog_video_count"] = len(catalog)
+        group_plan["grouping_material_count"] = len(grouping_materials)
+        group_plan["grouping_policy"] = (
+            "ChatGPT groups weekly videos from transcript evidence before report planning; "
+            "event/keynote/interview/tutorial distinctions must be preserved."
+        )
+        (out_dir / "video-groups.json").write_text(json.dumps(group_plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        record_model_ledgers(
+            conn,
+            target_id=f"__ai_influence_video_grouping__:{date_str}",
+            pipeline_stage="ai_influence_video_grouping",
+            call_purpose="semantic_grouping",
+            input_type="transcript_reasoning_packet",
+            packet_id=f"ai-influence-groups:{date_str}",
+            evidence_atom_count=len(grouping_materials),
+            result={
+                "model": group_plan.get("_model"),
+                "backend": group_plan.get("_backend"),
+                "latency_ms": group_plan.get("_latency_ms"),
+                "input_token_count": group_plan.get("input_token_count"),
+                "output_token_count": group_plan.get("output_token_count"),
+                "cost_estimate_usd": group_plan.get("cost_estimate_usd"),
+            },
+            success=True,
+        )
+        prompt = build_ai_influence_report_plan_prompt(
+            catalog,
+            date_str=date_str,
+            days=days,
+            model_name=model_name,
+            video_group_plan=group_plan,
+        )
+        (out_dir / "planner-prompt.md").write_text(prompt, encoding="utf-8")
+        plan = call_browser_agent_chatgpt_json(
+            prompt,
+            config,
+            purpose=f"ai-influence-report-plan-{date_str}",
+            requested_model=model_name,
+        )
+        plan["catalog_video_count"] = len(catalog)
+        plan["video_group_count"] = len(group_plan.get("video_groups") or [])
+        plan["video_groups_path"] = str(out_dir / "video-groups.json")
+        plan["catalog_policy"] = "planner receives catalog plus transcript-backed semantic groups; final writing receives selected transcripts."
+        plan["fixed_flow"] = {
+            "video_grouping": "Browser Agent / ChatGPT 5.5 Thinking high over transcript-backed materials",
+            "planner": "Browser Agent / ChatGPT 5.5 Thinking high",
+            "writer": "Browser Agent / ChatGPT 5.5 Thinking high",
+            "local_preprocess": "ThunderOMLX/Qwen3.6",
+            "codex_direct_reasoning": "disabled",
+            "report_hierarchy": "video groups -> trends -> chapters -> subsections -> synthesis",
+        }
+        (out_dir / "report-plan.json").write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        blocked_path = out_dir / "report-plan.blocked.json"
+        if blocked_path.exists():
+            blocked_path.unlink()
+        (out_dir / "wiki-dispatch.md").write_text(report_wiki_dispatch(str(out_dir), date_str), encoding="utf-8")
+        record_model_ledgers(
+            conn,
+            target_id=f"__ai_influence_report_plan__:{date_str}",
+            pipeline_stage="ai_influence_report_planning",
+            call_purpose="planning_brief",
+            input_type="project_reasoning_packet",
+            packet_id=f"ai-influence-plan:{date_str}",
+            evidence_atom_count=len(catalog),
+            result={
+                "model": plan.get("_model"),
+                "backend": plan.get("_backend"),
+                "latency_ms": plan.get("_latency_ms"),
+                "input_token_count": plan.get("input_token_count"),
+                "output_token_count": plan.get("output_token_count"),
+                "cost_estimate_usd": plan.get("cost_estimate_usd"),
+            },
+            success=True,
+        )
+        finish_run(conn, run_id, "ok", len(catalog), len(plan.get("reports") or []), json.dumps({"out_dir": str(out_dir)}, ensure_ascii=False)[:900])
+        conn.close()
+        print(f"[ai-influence-plan] date={date_str} videos={len(catalog)} reports={len(plan.get('reports') or [])} out={out_dir}")
+        return 0
+    except Exception as exc:
+        blocked = {
+            "status": "blocked",
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+            "catalog_video_count": len(catalog),
+            "grouping_material_count": len(grouping_materials),
+            "required_executor": "Browser Agent / ChatGPT 5.5 Thinking high",
+            "no_fallback_policy": "Codex/direct GPT/local Qwen final planning is disabled.",
+            "grouping_prompt_path": str(out_dir / "grouping-prompt.md"),
+            "prompt_path": str(out_dir / "planner-prompt.md"),
+            "catalog_path": str(out_dir / "video-catalog.json"),
+            "created_at": iso_z(),
+        }
+        (out_dir / "report-plan.blocked.json").write_text(json.dumps(blocked, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        record_model_ledgers(
+            conn,
+            target_id=f"__ai_influence_report_plan__:{date_str}",
+            pipeline_stage="ai_influence_report_planning",
+            call_purpose="planning_brief",
+            input_type="project_reasoning_packet",
+            packet_id=f"ai-influence-plan:{date_str}",
+            evidence_atom_count=len(catalog),
+            result={"model": model_name, "backend": "browser_agent_chatgpt"},
+            success=False,
+            error_message=str(exc),
+        )
+        finish_run(conn, run_id, "failed", len(catalog), 0, f"{type(exc).__name__}: {exc}"[:900])
+        conn.close()
+        print(f"[ai-influence-plan] BLOCKED: {type(exc).__name__}: {exc}", file=sys.stderr)
+        print(f"  prompt: {out_dir / 'planner-prompt.md'}", file=sys.stderr)
+        print(f"  catalog: {out_dir / 'video-catalog.json'}", file=sys.stderr)
+        return 1
+
+
+def cmd_run_ai_influence_planned_reports(args: argparse.Namespace) -> int:
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.row_factory = sqlite3.Row
+    date_str = getattr(args, "date", None) or iso_z().split("T", 1)[0]
+    days = int(getattr(args, "days", 7) or 7)
+    out_dir = _ai_influence_planned_base(config, args, date_str)
+    plan_path = Path(getattr(args, "plan_file", None) or out_dir / "report-plan.json").expanduser()
+    if not plan_path.exists():
+        conn.close()
+        print(f"[ai-influence-run-plan] missing plan file: {plan_path}", file=sys.stderr)
+        return 1
+    catalog_path = out_dir / "video-catalog.json"
+    if not catalog_path.exists():
+        conn.close()
+        print(f"[ai-influence-run-plan] missing catalog file: {catalog_path}", file=sys.stderr)
+        return 1
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+    flow_cfg = ((config.get("youtube") or {}).get("ai_influence_report_flow") or {})
+    writer_cfg = flow_cfg.get("report_writer") or {}
+    notebook_cfg = flow_cfg.get("notebooklm") or {}
+    model_name = str(getattr(args, "model", None) or writer_cfg.get("model") or "chatgpt-5.5")
+    notebook_enabled = not bool(getattr(args, "skip_notebooklm", False))
+    notebook_name = str(
+        getattr(args, "notebook_name", None)
+        or notebook_cfg.get("notebook_name")
+        or notebooklm_month_notebook_name(date_str)
+    ).strip()
+    selected_id = str(getattr(args, "report_id", None) or "").strip()
+    reports = [r for r in (plan.get("reports") or []) if isinstance(r, dict)]
+    if selected_id:
+        reports = [r for r in reports if str(r.get("report_id") or "") == selected_id]
+    if not reports:
+        conn.close()
+        print(f"[ai-influence-run-plan] no reports selected report_id={selected_id or 'ALL'}", file=sys.stderr)
+        return 1
+    ok_count = 0
+    for spec in reports:
+        report_id = slugify(str(spec.get("report_id") or spec.get("title") or f"report-{ok_count+1}"))[:80]
+        report_dir = out_dir / "reports" / report_id
+        report_dir.mkdir(parents=True, exist_ok=True)
+        run_id = begin_run(conn, "youtube", f"ai-influence-planned-report-{report_id}")
+        try:
+            evidence_pack = build_planned_report_evidence_pack(
+                conn,
+                catalog,
+                spec,
+                date_str=date_str,
+                days=days,
+                transcript_char_limit=int(writer_cfg.get("transcript_char_limit") or 90000),
+            )
+            evidence_pack = backfill_planned_report_evidence_from_existing(report_dir, evidence_pack)
+            skipped_refs = [str(ref) for ref in evidence_pack.get("skipped_material_refs") or [] if str(ref).strip()]
+            if skipped_refs:
+                raise ValueError(
+                    "ai_influence_evidence_pack_missing_or_bad_transcripts:"
+                    + ",".join(skipped_refs[:30])
+                )
+            if not evidence_pack.get("videos"):
+                raise ValueError("ai_influence_evidence_pack_empty_after_quality_gate")
+            notebook_result: dict[str, Any] | None = None
+            if notebook_enabled:
+                notebook_request = build_ai_influence_notebooklm_request(
+                    evidence_pack,
+                    report_dir,
+                    notebook_name=notebook_name,
+                )
+                (report_dir / "notebooklm-request.json").write_text(
+                    json.dumps(notebook_request, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+                notebook_result = call_browser_agent_notebooklm_json(
+                    notebook_request,
+                    config,
+                    purpose=f"ai-influence-notebooklm-{date_str}-{report_id}",
+                )
+                (report_dir / "notebooklm-result.json").write_text(
+                    json.dumps(notebook_result, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+                evidence_pack = attach_notebooklm_context_to_evidence_pack(evidence_pack, notebook_result)
+            (report_dir / "evidence-pack.json").write_text(json.dumps(evidence_pack, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            prompt = build_planned_report_prompt(evidence_pack, model_name=model_name)
+            (report_dir / "writer-prompt.md").write_text(prompt, encoding="utf-8")
+            result = call_browser_agent_chatgpt_markdown(
+                prompt,
+                config,
+                purpose=f"ai-influence-report-{date_str}-{report_id}",
+                requested_model=model_name,
+            )
+            markdown = result["markdown"].strip()
+            markdown = normalize_ai_influence_markdown_report(
+                markdown,
+                model_name=str(result.get("model") or model_name),
+                input_videos=len(evidence_pack.get("videos") or []),
+            )
+            validate_ai_influence_markdown_report(markdown)
+            report = {
+                "headline": spec.get("title") or report_id,
+                "subheadline": "Browser Agent / ChatGPT 5.5 Thinking high 按 AI Influence 固化流程生成",
+                "_markdown_report": markdown,
+                "_backend": "browser_agent_chatgpt",
+                "_model": result.get("model") or model_name,
+                "_reasoning_effort": result.get("reasoning_effort") or "high",
+                "_local_preprocess": "ThunderOMLX/Qwen3.6 semantic packets",
+                "_latency_ms": result.get("latency_ms"),
+            }
+            (report_dir / "report.md").write_text(markdown + "\n", encoding="utf-8")
+            (report_dir / "report.html").write_text(
+                render_ai_influence_report_html_anything(markdown, evidence_pack, report),
+                encoding="utf-8",
+            )
+            (report_dir / "report-result.json").write_text(json.dumps({**report, **{k: v for k, v in result.items() if k != "markdown"}}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            blocked_path = report_dir / "report.blocked.json"
+            if blocked_path.exists():
+                blocked_path.unlink()
+            (report_dir / "transcripts.txt").write_text(phase_transcript_attachment(evidence_pack), encoding="utf-8")
+            (report_dir / "transcripts-cleaned.txt").write_text(phase_transcript_attachment_clean(evidence_pack), encoding="utf-8")
+            validation = validate_ai_influence_planned_report_dir(
+                report_dir,
+                expected_chatgpt_project=ai_influence_chatgpt_project_name(config),
+                require_project_archive=True,
+            )
+            (report_dir / "validation-result.json").write_text(json.dumps(validation, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            if validation["status"] != "ok":
+                raise ValueError(f"ai_influence_report_validation_failed:{validation['errors']}")
+            mail_result: dict[str, Any] = {
+                "status": "skipped",
+                "recommended_by_plan": bool(spec.get("send_as_email")),
+                "sent_only_when_flagged": True,
+            }
+            if bool(getattr(args, "send", False)):
+                mail_result = send_html_email(
+                    (report_dir / "report.html").read_text(encoding="utf-8"),
+                    f"AI Influence 专题：{spec.get('title') or report_id} — {date_str}",
+                    [report_dir / "transcripts.txt", report_dir / "transcripts-cleaned.txt"],
+                )
+                (report_dir / "mail-result.json").write_text(json.dumps(mail_result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            record_model_ledgers(
+                conn,
+                target_id=f"__ai_influence_planned_report__:{date_str}:{report_id}",
+                pipeline_stage="ai_influence_planned_report",
+                call_purpose="deep_analysis",
+                input_type="project_reasoning_packet",
+                packet_id=f"ai-influence-report:{date_str}:{report_id}",
+                evidence_atom_count=len(evidence_pack.get("videos") or []),
+                result={
+                    "model": result.get("model"),
+                    "backend": result.get("backend"),
+                    "latency_ms": result.get("latency_ms"),
+                    "input_token_count": result.get("input_token_count"),
+                    "output_token_count": result.get("output_token_count"),
+                    "cost_estimate_usd": result.get("cost_estimate_usd"),
+                },
+                success=True,
+            )
+            finish_run(conn, run_id, "ok", len(evidence_pack.get("videos") or []), 1, json.dumps({"report_id": report_id, "mail": mail_result}, ensure_ascii=False)[:900])
+            ok_count += 1
+            print(f"[ai-influence-run-plan] ok report_id={report_id} videos={len(evidence_pack.get('videos') or [])} mail={mail_result.get('status')}")
+        except Exception as exc:
+            (report_dir / "report.blocked.json").write_text(json.dumps({
+                "status": "blocked",
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+                "required_executor": "Browser Agent / ChatGPT 5.5 Thinking high",
+                "no_fallback_policy": "Codex/direct GPT/local Qwen final writing is disabled.",
+                "created_at": iso_z(),
+            }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            record_model_ledgers(
+                conn,
+                target_id=f"__ai_influence_planned_report__:{date_str}:{report_id}",
+                pipeline_stage="ai_influence_planned_report",
+                call_purpose="deep_analysis",
+                input_type="project_reasoning_packet",
+                packet_id=f"ai-influence-report:{date_str}:{report_id}",
+                evidence_atom_count=len(evidence_pack.get("videos") or []),
+                result={"model": model_name, "backend": "browser_agent_chatgpt"},
+                success=False,
+                error_message=str(exc),
+            )
+            finish_run(conn, run_id, "failed", len(evidence_pack.get("videos") or []), 0, f"{type(exc).__name__}: {exc}"[:900])
+            print(f"[ai-influence-run-plan] BLOCKED report_id={report_id}: {type(exc).__name__}: {exc}", file=sys.stderr)
+            if not bool(getattr(args, "continue_on_error", False)):
+                conn.close()
+                return 1
+    conn.close()
+    print(f"[ai-influence-run-plan] done date={date_str} ok={ok_count}/{len(reports)} out={out_dir / 'reports'}")
+    return 0 if ok_count == len(reports) else 1
+
+
+def cmd_validate_ai_influence_planned_reports(args: argparse.Namespace) -> int:
+    config = load_config(resolve_config(args))
+    date_str = getattr(args, "date", None) or iso_z().split("T", 1)[0]
+    out_dir = _ai_influence_planned_base(config, args, date_str)
+    reports_root = out_dir / "reports"
+    selected_id = str(getattr(args, "report_id", None) or "").strip()
+    expected_project = ai_influence_chatgpt_project_name(config)
+    require_project_archive = bool(getattr(args, "require_project_archive", False))
+    if selected_id:
+        report_dirs = [reports_root / selected_id]
+    else:
+        report_dirs = sorted([p for p in reports_root.iterdir() if p.is_dir()]) if reports_root.exists() else []
+    if not report_dirs:
+        print(f"[ai-influence-validate] no report dirs under {reports_root}", file=sys.stderr)
+        return 1
+    results: list[dict[str, Any]] = []
+    for report_dir in report_dirs:
+        result = validate_ai_influence_planned_report_dir(
+            report_dir,
+            expected_chatgpt_project=expected_project,
+            require_project_archive=require_project_archive,
+        )
+        (report_dir / "validation-result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        results.append(result)
+    ok_count = sum(1 for item in results if item.get("status") == "ok")
+    summary = {
+        "date": date_str,
+        "reports_root": str(reports_root),
+        "ok": ok_count,
+        "total": len(results),
+        "expected_chatgpt_project": expected_project,
+        "results": results,
+    }
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 0 if ok_count == len(results) else 1
+
+
 def report_html(conn: sqlite3.Connection, date_str: str, output_base: str | None = None) -> str:
     """Generate polished Gmail-safe HTML report."""
     counts = {
@@ -8012,7 +11818,9 @@ def keychain_password(service: str, account: str) -> str:
 def send_html_email(html_content: str, subject: str, attachments: list[Path]) -> dict[str, Any]:
     import smtplib
 
-    gmail_user = os.environ.get("GMAIL_USER") or os.environ.get("AI_INFLUENCE_GMAIL_USER") or "lisihao@gmail.com"
+    gmail_user = os.environ.get("GMAIL_USER") or os.environ.get("AI_INFLUENCE_GMAIL_USER") or ""
+    if not gmail_user:
+        return {"status": "warn", "backend": "gmail_smtp", "reason": "missing gmail user"}
     gmail_to = os.environ.get("GMAIL_TO") or os.environ.get("MAIL_TO") or os.environ.get("AI_INFLUENCE_MAIL_TO") or gmail_user
     recipients = [addr.strip() for addr in re.split(r"[,;]", gmail_to) if addr.strip()]
     if not recipients:
@@ -8611,6 +12419,17 @@ def build_parser() -> argparse.ArgumentParser:
     process_transcripts.add_argument("--limit", type=int, default=0)
     process_transcripts.add_argument("--force", action="store_true")
     process_transcripts.add_argument("--dry-run", action="store_true")
+    process_transcripts.add_argument("--semantic-postprocess", action="store_true", help="Also run ThunderOMLX semantic materialization inline; default is off to keep ASR reliable")
+    process_transcripts_supervised = sub.add_parser("process-transcripts-supervised", help="Safely supervise pending YouTube transcript retries without MLX daemon reuse")
+    process_transcripts_supervised.add_argument("--limit", type=int, default=1)
+    process_transcripts_supervised.add_argument("--force", action="store_true")
+    process_transcripts_supervised.add_argument("--dry-run", action="store_true")
+    process_transcripts_supervised.add_argument("--semantic-postprocess", action="store_true", help="Also run ThunderOMLX inline; default off, use process-semantics separately")
+    process_transcripts_supervised.add_argument("--max-rounds", type=int, default=0, help="0 means run until the due queue is idle")
+    process_transcripts_supervised.add_argument("--sleep-seconds", type=float, default=20)
+    process_transcripts_supervised.add_argument("--idle-exit-after", type=int, default=3)
+    process_transcripts_supervised.add_argument("--stale-minutes", type=int, default=180)
+    process_transcripts_supervised.add_argument("--pid-file", default="")
     process_transcripts_daemon = sub.add_parser("process-transcripts-daemon", help="Legacy unsafe ASR daemon; disabled unless --unsafe-reuse-mlx is passed")
     process_transcripts_daemon.add_argument("--limit", type=int, default=1)
     process_transcripts_daemon.add_argument("--force", action="store_true")
@@ -8624,6 +12443,46 @@ def build_parser() -> argparse.ArgumentParser:
     process_semantics.add_argument("--limit", type=int, default=0)
     process_semantics.add_argument("--force", action="store_true")
     process_semantics.add_argument("--dry-run", action="store_true")
+    clean_transcripts = sub.add_parser("clean-transcripts", help="Denoise stored YouTube transcript_clean text and invalidate derived semantic packets")
+    clean_transcripts.add_argument("--limit", type=int, default=0)
+    clean_transcripts.add_argument("--dry-run", action="store_true")
+    audit_transcripts_quality = sub.add_parser("audit-transcripts-quality", help="Audit transcript quality and optionally requeue bad ASR/caption outputs")
+    audit_transcripts_quality.add_argument("--requeue", action="store_true")
+    audit_transcripts_quality.add_argument("--limit", type=int, default=0)
+    clean_transcripts_thunderomlx = sub.add_parser("clean-transcripts-thunderomlx", help="Use ThunderOMLX to remove ASR repetition from stored YouTube transcripts")
+    clean_transcripts_thunderomlx.add_argument("--limit", type=int, default=1)
+    clean_transcripts_thunderomlx.add_argument("--force", action="store_true")
+    clean_transcripts_thunderomlx.add_argument("--dry-run", action="store_true")
+    clean_transcripts_thunderomlx.add_argument("--chunk-chars", type=int, default=2200)
+    clean_transcripts_thunderomlx_supervised = sub.add_parser("clean-transcripts-thunderomlx-supervised", help="Supervise ThunderOMLX transcript cleaning for newly completed ASR/caption outputs")
+    clean_transcripts_thunderomlx_supervised.add_argument("--limit", type=int, default=1)
+    clean_transcripts_thunderomlx_supervised.add_argument("--force", action="store_true")
+    clean_transcripts_thunderomlx_supervised.add_argument("--dry-run", action="store_true")
+    clean_transcripts_thunderomlx_supervised.add_argument("--chunk-chars", type=int, default=2200)
+    clean_transcripts_thunderomlx_supervised.add_argument("--max-rounds", type=int, default=0, help="0 means run until the clean queue is idle")
+    clean_transcripts_thunderomlx_supervised.add_argument("--sleep-seconds", type=float, default=30)
+    clean_transcripts_thunderomlx_supervised.add_argument("--idle-exit-after", type=int, default=3)
+    clean_transcripts_thunderomlx_supervised.add_argument("--pid-file", default="")
+    clean_transcripts_thunderomlx_supervised.add_argument("--no-audit-after", dest="audit_after", action="store_false")
+    clean_transcripts_thunderomlx_supervised.set_defaults(audit_after=True)
+    analyze_repos = sub.add_parser("analyze-repos", help="Run repo evidence extractor + dossier compiler shell pipeline")
+    analyze_repos.add_argument("--repo", default=None, help="Only analyze one owner/name repo")
+    analyze_repos.add_argument("--evidence-only", action="store_true")
+    analyze_repos.add_argument("--dry-run", action="store_true")
+    compute_velocity = sub.add_parser("compute-velocity", help="Compute star velocity metrics and anomaly detectors")
+    compute_velocity.add_argument("--repo", default=None, help="Only compute one owner/name repo")
+    compute_velocity.add_argument("--dry-run", action="store_true")
+    decide_strategy = sub.add_parser("decide-strategy", help="Run hard gates and strategy engine")
+    decide_strategy.add_argument("--repo", default=None, help="Only decide one owner/name repo")
+    decide_strategy.add_argument("--force-decision", default=None, help="Force one of the 9 decision types for validation")
+    decide_strategy.add_argument("--dry-run", action="store_true")
+    chart_cmd = sub.add_parser("chart", help="Render GitHub ultimate ECharts JSON specs")
+    chart_cmd.add_argument("--type", required=True, choices=["burst-quadrant", "pain-heatmap", "action-matrix"])
+    chart_cmd.add_argument("--output", default=None, help="Write JSON spec to file instead of stdout")
+    report_github = sub.add_parser("report-github", help="Write internal daily GitHub ultimate markdown report")
+    report_github.add_argument("--daily", action="store_true")
+    report_github.add_argument("--date", default=None, help="Report date YYYY-MM-DD")
+    report_github.add_argument("--output", default=None, help="Write markdown to file instead of stdout")
     send_report = sub.add_parser("send-report", help="Write and send the Tech Hotspot Radar HTML report")
     send_report.add_argument("--date", default=None, help="Report date YYYY-MM-DD (default: UTC today)")
     send_report.add_argument("--output-base", default=None, help="Override report output directory")
@@ -8634,8 +12493,30 @@ def build_parser() -> argparse.ArgumentParser:
     phase_report.add_argument("--date", default=None, help="Report date YYYY-MM-DD (default: UTC today)")
     phase_report.add_argument("--output-base", default=None, help="Override report output directory")
     phase_report.add_argument("--send", action="store_true", help="Send HTML email with transcript attachment")
-    phase_report.add_argument("--reasoner", default=None, choices=["codex", "codex_cli", "gpt", "openai"], help="Final report reasoner (default: config/env, codex_cli). Local ThunderOMLX/Qwen is not allowed for final trend judgment.")
-    phase_report.add_argument("--model", default=None, help="Final report model override (default for codex_cli: gpt-5.5)")
+    phase_report.add_argument("--reasoner", default=None, choices=["browser_agent", "browser_agent_chatgpt", "chatgpt"], help="Final report reasoner (default: browser_agent_chatgpt). Codex/direct GPT/local Qwen are disabled for AI Influence final judgment.")
+    phase_report.add_argument("--model", default=None, help="Final report model override (default: chatgpt-5.5)")
+    plan_reports = sub.add_parser("plan-ai-influence-reports", help="Plan AI Influence report series from video catalog using Browser Agent / ChatGPT 5.5 Thinking high")
+    plan_reports.add_argument("--date", default=None, help="Planning date YYYY-MM-DD (default: UTC today)")
+    plan_reports.add_argument("--days", type=int, default=7, help="Lookback window in days")
+    plan_reports.add_argument("--limit", type=int, default=0, help="Max completed long videos in planning catalog")
+    plan_reports.add_argument("--output-base", default=None, help="Override output base directory")
+    plan_reports.add_argument("--model", default=None, help="Planner model override (default: chatgpt-5.5)")
+    run_planned = sub.add_parser("run-ai-influence-planned-reports", help="Generate planned AI Influence reports with Browser Agent / ChatGPT 5.5 Thinking high")
+    run_planned.add_argument("--date", default=None, help="Planning date YYYY-MM-DD (default: UTC today)")
+    run_planned.add_argument("--days", type=int, default=7, help="Lookback window in days")
+    run_planned.add_argument("--plan-file", default=None, help="Path to report-plan.json")
+    run_planned.add_argument("--report-id", default=None, help="Generate only one report_id from the plan")
+    run_planned.add_argument("--output-base", default=None, help="Override output base directory")
+    run_planned.add_argument("--model", default=None, help="Writer model override (default: chatgpt-5.5)")
+    run_planned.add_argument("--send", action="store_true", help="Send each generated report by email")
+    run_planned.add_argument("--skip-notebooklm", action="store_true", help="Skip NotebookLM transcript+mindmap+infographic enrichment")
+    run_planned.add_argument("--notebook-name", default=None, help="Override NotebookLM notebook name (default: AI Influence YYYY-MM)")
+    run_planned.add_argument("--continue-on-error", action="store_true", help="Continue after one planned report fails")
+    validate_planned = sub.add_parser("validate-ai-influence-planned-reports", help="Validate hardened AI Influence planned YouTube reports")
+    validate_planned.add_argument("--date", default=None, help="Planning date YYYY-MM-DD (default: UTC today)")
+    validate_planned.add_argument("--report-id", default=None, help="Validate only one report_id")
+    validate_planned.add_argument("--output-base", default=None, help="Override output base directory")
+    validate_planned.add_argument("--require-project-archive", action="store_true", help="Fail if Browser Agent did not archive the ChatGPT conversation to the configured project")
     yt_collect = sub.add_parser("collect-youtube", help="Collect live YouTube RSS metadata with rate limits")
     yt_collect.add_argument("--limit-channels", type=int, default=0)
     yt_collect.add_argument("--per-channel-limit", type=int, default=0)
@@ -8725,13 +12606,26 @@ def main() -> int:
         "youtube-fixture": cmd_youtube_fixture,
         "social-fixture": cmd_social_fixture,
         "github-fixture": cmd_github_fixture,
+        "analyze-repos": cmd_analyze_repos,
+        "compute-velocity": cmd_compute_velocity,
+        "decide-strategy": cmd_decide_strategy,
+        "chart": cmd_chart,
+        "report-github": cmd_report_github_ultimate,
         "report-fixture": cmd_report_fixture,
         "write-report": cmd_write_report,
         "process-transcripts": cmd_process_transcripts,
+        "process-transcripts-supervised": cmd_process_transcripts_supervised,
         "process-transcripts-daemon": cmd_process_transcripts_daemon,
         "process-semantics": cmd_process_semantics,
+        "clean-transcripts": cmd_clean_transcripts,
+        "audit-transcripts-quality": cmd_audit_transcripts_quality,
+        "clean-transcripts-thunderomlx": cmd_clean_transcripts_thunderomlx,
+        "clean-transcripts-thunderomlx-supervised": cmd_clean_transcripts_thunderomlx_supervised,
         "send-report": cmd_send_report,
         "phase-report": cmd_phase_report,
+        "plan-ai-influence-reports": cmd_plan_ai_influence_reports,
+        "run-ai-influence-planned-reports": cmd_run_ai_influence_planned_reports,
+        "validate-ai-influence-planned-reports": cmd_validate_ai_influence_planned_reports,
         "collect-youtube": cmd_collect_youtube,
         "backfill-youtube": cmd_backfill_youtube,
         "collect-github": cmd_collect_github,

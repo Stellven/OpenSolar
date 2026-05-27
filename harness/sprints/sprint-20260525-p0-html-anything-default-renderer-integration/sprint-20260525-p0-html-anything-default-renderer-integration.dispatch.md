@@ -38,7 +38,7 @@
 <!-- === VARIABLE SUFFIX === -->
 
 ## 本次任务
-- Sprint ID: `sprint-20260524-p0-ai-influence-github-project-intelligence-system-upgrade-s02-architecture`
+- Sprint ID: `sprint-20260525-p0-html-anything-default-renderer-integration`
 - 角色: 规划者
 - 具体任务: Sprint 通过!
 
@@ -68,12 +68,12 @@ Trigger level: recommended
 ### Telemetry trigger
 
 - Trigger level: recommended
-- Status/phase/round: passed / completed / 2
+- Status/phase/round: passed / completed / 1
 - Eval verdict: N/A
 - Failed conditions:
   - N/A
 - Measurement: 记录 repair_round_delta、eval_failure_recurrence、evidence_gap_count，证明 autoresearch 是否真的降低返工。
 
-需求「架构设计与接口契约」已完成，审判官评审通过。
+需求「HTML Anything Default Renderer Integration」已完成，审判官评审通过。
 
 如有新需求，请直接输入。

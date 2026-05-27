@@ -85,8 +85,6 @@ release_pane_lease() {
     local lf
     lf=$(_lease_file "$pane")
 
-    [[ -f "$lf" ]] || return 0  # already gone
-
     python3 -c "
 import json, fcntl, os, sys
 
@@ -95,13 +93,16 @@ dispatch_id    = sys.argv[2]
 release_reason = sys.argv[3]
 lf             = sys.argv[4]
 
-if not os.path.exists(lf):
-    sys.exit(0)
-
 lock_path = lf + '.lock'
 with open(lock_path, 'a') as lockf:
     try:
         fcntl.flock(lockf, fcntl.LOCK_EX)
+        if not os.path.exists(lf):
+            try:
+                os.remove(lock_path)
+            except FileNotFoundError:
+                pass
+            sys.exit(0)
         existing = json.load(open(lf))
         held_by = existing.get('dispatch_id', '')
         if held_by != dispatch_id:
@@ -109,11 +110,22 @@ with open(lock_path, 'a') as lockf:
                                'held_by': held_by, 'requested': dispatch_id}))
             sys.exit(1)
         os.remove(lf)
+        try:
+            os.remove(lock_path)
+        except FileNotFoundError:
+            pass
         print(json.dumps({'released': True, 'release_reason': release_reason}))
     except FileNotFoundError:
+        try:
+            os.remove(lock_path)
+        except FileNotFoundError:
+            pass
         sys.exit(0)  # already released
     finally:
-        fcntl.flock(lockf, fcntl.LOCK_UN)
+        try:
+            fcntl.flock(lockf, fcntl.LOCK_UN)
+        except Exception:
+            pass
 " "$pane" "$dispatch_id" "$release_reason" "$lf" 2>/dev/null
     return $?
 }
@@ -136,33 +148,16 @@ lease_dir = sys.argv[1]
 now_str   = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
 reaped = 0
 
-for fname in os.listdir(lease_dir):
-    if not fname.endswith('.json') or fname.endswith('.lock.json'):
-        continue
-    path = os.path.join(lease_dir, fname)
+def remove_if_unlocked(path):
+    global reaped
     try:
-        d = json.load(open(path))
-        if d.get('expires_at', 'z') <= now_str:
-            os.remove(path)
-            reaped += 1
-    except Exception:
-        pass
-
-for fname in os.listdir(lease_dir):
-    if not fname.endswith('.json.lock'):
-        continue
-    lock_path = os.path.join(lease_dir, fname)
-    lease_path = lock_path[:-5]
-    if os.path.exists(lease_path):
-        continue
-    try:
-        with open(lock_path, 'a') as lockf:
+        with open(path, 'a') as lockf:
             try:
                 fcntl.flock(lockf, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
-                continue
+                return
             try:
-                os.remove(lock_path)
+                os.remove(path)
                 reaped += 1
             except FileNotFoundError:
                 pass
@@ -173,6 +168,28 @@ for fname in os.listdir(lease_dir):
                     pass
     except Exception:
         pass
+
+for fname in os.listdir(lease_dir):
+    if not fname.endswith('.json') or fname.endswith('.lock.json'):
+        continue
+    path = os.path.join(lease_dir, fname)
+    try:
+        d = json.load(open(path))
+        if d.get('expires_at', 'z') <= now_str:
+            os.remove(path)
+            reaped += 1
+            remove_if_unlocked(path + '.lock')
+    except Exception:
+        pass
+
+for fname in os.listdir(lease_dir):
+    if not fname.endswith('.json.lock'):
+        continue
+    lock_path = os.path.join(lease_dir, fname)
+    lease_path = lock_path[:-5]
+    if os.path.exists(lease_path):
+        continue
+    remove_if_unlocked(lock_path)
 
 print(reaped)
 " "$_PANE_LEASE_DIR" 2>/dev/null || echo 0

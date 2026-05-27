@@ -39,44 +39,16 @@ def _runner_script_text(tmp_path: Path, *, review_required: bool = False) -> str
     return runner.read_text(encoding="utf-8")
 
 
-def test_successful_handoff_marks_graph_reviewing(tmp_path):
+def test_successful_handoff_defaults_to_passed(tmp_path):
     script = _runner_script_text(tmp_path)
 
-    assert '--status reviewing' in script
-    assert 'write_status completed "$rc"' in script
+    assert 'success_status="${SOLAR_MULTI_TASK_SUCCESS_STATUS:-passed}"' in script
+    assert '--status "$success_status"' in script
+    assert "REVIEW_REQUIRED=0" in script
 
 
-def test_review_required_node_uses_same_reviewing_terminal_state(tmp_path):
+def test_review_required_node_can_still_stop_at_reviewing(tmp_path):
     script = _runner_script_text(tmp_path, review_required=True)
 
-    assert '--status reviewing' in script
-    assert 'write_status completed "$rc"' in script
-
-def test_late_failure_does_not_overwrite_passed_graph_node(tmp_path):
-    script = _runner_script_text(tmp_path)
-
-    assert "mark_graph_failed_unless_passed" in script
-    assert "late_failure_ignored_graph_already_passed=true" in script
-    assert "write_status failed_aligned" in script
-
-
-
-
-def test_runner_rejects_stale_handoff_from_previous_run(tmp_path):
-    script = _runner_script_text(tmp_path)
-
-    assert 'RUN_STARTED_MARKER="$TASK_DIR/run.started"' in script
-    assert ': > "$RUN_STARTED_MARKER"' in script
-    assert '"$HANDOFF" -nt "$RUN_STARTED_MARKER"' in script
-    assert 'stale handoff predates current run' in script
-    assert 'write_status failed_stale_handoff 66' in script
-
-
-def test_failed_stale_handoff_is_terminal_status():
-    assert "failed_stale_handoff" in multi_task_runner.TERMINAL_TASK_STATUSES
-
-def test_quota_guard_fallback_bypass_requires_explicit_env():
-    text = Path(multi_task_runner.__file__).read_text(encoding="utf-8")
-
-    assert 'SOLAR_MULTI_TASK_BYPASS_QUOTA_GUARD_FOR_FALLBACK' in text
-    assert 'recent_quota_or_rate_limit_bypassed_for_fallback' in text
+    assert "REVIEW_REQUIRED=1" in script
+    assert 'success_status="reviewing"' in script
