@@ -48,3 +48,119 @@ def test_sync_status_cache_creates_missing_inflight_status(tmp_path, monkeypatch
     assert status["active_node"] == "N2"
     assert status["open_nodes"] == ["N2"]
 
+
+# ---------------------------------------------------------------------------
+# O1_child_sprint_activation acceptance — epic-level dependency gates
+# ---------------------------------------------------------------------------
+
+
+def _epic_graph(s02="passed", s03="pending", s04="pending", s05="pending"):
+    """Build a minimal S01→S02→{S03,S04}→S05 epic graph for tests."""
+    return {
+        "schema_version": "solar.epic.task_graph.v1",
+        "epic_id": "epic-test",
+        "nodes": [
+            {"id": "S01_requirements", "status": "passed", "depends_on": []},
+            {"id": "S02_architecture", "status": s02, "depends_on": ["S01_requirements"]},
+            {"id": "S03_core_runtime", "status": s03, "depends_on": ["S02_architecture"]},
+            {"id": "S04_orchestration_ui", "status": s04, "depends_on": ["S02_architecture"]},
+            {
+                "id": "S05_verification_release",
+                "status": s05,
+                "depends_on": ["S03_core_runtime", "S04_orchestration_ui"],
+            },
+        ],
+    }
+
+
+def test_epic_s02_passed_activates_s03_and_s04_only():
+    """Acceptance: S02 passed activates S03/S04 only (S05 stays blocked)."""
+    import graph_scheduler as gs
+
+    result = gs.epic_child_activation(_epic_graph())
+    ready_ids = sorted(r["child_id"] for r in result["ready"])
+    blocked_ids = sorted(b["child_id"] for b in result["blocked"])
+    assert ready_ids == ["S03_core_runtime", "S04_orchestration_ui"], ready_ids
+    assert blocked_ids == ["S05_verification_release"], blocked_ids
+    unmet_for_s05 = next(b for b in result["blocked"] if b["child_id"] == "S05_verification_release")["unmet"]
+    assert sorted(unmet_for_s05) == ["S03_core_runtime", "S04_orchestration_ui"]
+    assert result["can_close"] is False
+    assert result["epic_done"] is False
+    # S01/S02 already passed → counted as done
+    assert "S01_requirements" in result["done"] and "S02_architecture" in result["done"]
+
+
+def test_epic_s05_requires_both_s03_and_s04():
+    """Acceptance: S05 waits for S03 AND S04, not either one alone."""
+    import graph_scheduler as gs
+
+    # Case A: only S03 passed → S05 still blocked, S04 ready
+    result_a = gs.epic_child_activation(_epic_graph(s03="passed"))
+    ready_a = sorted(r["child_id"] for r in result_a["ready"])
+    assert ready_a == ["S04_orchestration_ui"], ready_a
+    blocked_a = {b["child_id"]: b["unmet"] for b in result_a["blocked"]}
+    assert "S05_verification_release" in blocked_a
+    assert blocked_a["S05_verification_release"] == ["S04_orchestration_ui"]
+
+    # Case B: only S04 passed → S05 still blocked, S03 ready
+    result_b = gs.epic_child_activation(_epic_graph(s04="passed"))
+    ready_b = sorted(r["child_id"] for r in result_b["ready"])
+    assert ready_b == ["S03_core_runtime"], ready_b
+    blocked_b = {b["child_id"]: b["unmet"] for b in result_b["blocked"]}
+    assert blocked_b["S05_verification_release"] == ["S03_core_runtime"]
+
+    # Case C: both passed → S05 ready, nothing blocked
+    result_c = gs.epic_child_activation(_epic_graph(s03="passed", s04="passed"))
+    ready_c = sorted(r["child_id"] for r in result_c["ready"])
+    assert ready_c == ["S05_verification_release"], ready_c
+    assert result_c["blocked"] == []
+    # epic is not yet closed because S05 hasn't passed
+    assert result_c["can_close"] is False
+
+
+def test_epic_parent_cannot_close_while_any_child_open_or_failed():
+    """Acceptance: parent epic cannot close early."""
+    import graph_scheduler as gs
+
+    # While any child still active/pending, can_close must be False
+    mid = gs.epic_child_activation(_epic_graph(s03="reviewing", s04="passed"))
+    assert mid["can_close"] is False
+    assert mid["epic_done"] is False
+
+    # Only when every child has reached terminal PASSED state can the epic close
+    final = gs.epic_child_activation(
+        _epic_graph(s03="passed", s04="passed", s05="passed")
+    )
+    assert final["can_close"] is True
+    assert final["epic_done"] is True
+    assert final["blocked"] == [] and final["ready"] == []
+
+    # A failed child blocks closure even if everything else is done
+    bust = gs.epic_child_activation(
+        _epic_graph(s03="passed", s04="passed", s05="failed")
+    )
+    assert bust["can_close"] is False
+    assert bust["epic_done"] is False
+    assert "S05_verification_release" in bust["failed"]
+
+
+def test_epic_activation_on_live_github_intelligence_epic():
+    """Smoke: function runs against the real epic graph file shape."""
+    import graph_scheduler as gs
+
+    epic_path = (
+        Path(__file__).resolve().parents[2]
+        / "sprints"
+        / "epic-20260524-p0-ai-influence-github-project-intelligence-system-upgrade.task_graph.json"
+    )
+    if not epic_path.exists():
+        return  # do not hard-fail when run outside the live repo
+    graph = json.loads(epic_path.read_text(encoding="utf-8"))
+    result = gs.epic_child_activation(graph)
+    assert result["ok"] is True
+    assert result["schema_version"] == "solar.epic.task_graph.v1"
+    # the live graph must always contain S05 and it must never be in `done`
+    # until both S03 and S04 are passed
+    s05_ids = {c for c in result["done"] if c == "S05_verification_release"}
+    if "S03_core_runtime" not in result["done"] or "S04_orchestration_ui" not in result["done"]:
+        assert not s05_ids, "S05 cannot be done before S03+S04"

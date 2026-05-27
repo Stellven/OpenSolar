@@ -29,11 +29,13 @@ import subprocess
 import sys
 import re
 import html
+import hashlib
 import importlib.util
 import time
 import datetime
 import urllib.parse
 from collections import deque
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -62,6 +64,7 @@ AI_INFLUENCE_ACCOUNTS = HARNESS_DIR / "ai-influence-digest" / "references" / "ac
 GITHUB_TRENDS_CONFIG = HARNESS_DIR / "config" / "github-trends.yaml"
 GITHUB_TRENDS_DB = Path(os.environ.get("GITHUB_TRENDS_DB", str(HARNESS_DIR / "state" / "github-trends" / "github-trends.sqlite")))
 TECH_HOTSPOT_CONFIG = HARNESS_DIR / "config" / "tech-hotspot-radar.yaml"
+AI_INFLUENCE_MAIL_CONFIG = HARNESS_DIR / "state" / "ai-influence-mail-config.json"
 ACCEPTED_ASSETS_DIR = KNOWLEDGE_DIR / "_raw" / "solar-harness" / "accepted"
 ACCEPTED_ASSETS_MANIFEST = KNOWLEDGE_DIR / "_raw" / "solar-harness" / ".manifest" / "accepted-artifacts.json"
 MODEL_DOCTOR_HEALTH = HARNESS_DIR / "state" / "model-registry-doctor-health.json"
@@ -428,6 +431,38 @@ def _ai_influence_artifact_link(label: str, path: Path | None) -> dict:
     }
 
 
+def _ai_influence_report_id(kind: str, report_dir: Path) -> str:
+    digest = hashlib.sha256(f"{kind}::{report_dir.resolve()}".encode("utf-8")).hexdigest()[:16]
+    return f"air-{digest}"
+
+
+def _ai_influence_artifact_view_url(report_id: str, artifact_label: str) -> str:
+    return "/ai-influence/report?" + urllib.parse.urlencode({"id": report_id, "artifact": artifact_label})
+
+
+def _ai_influence_transcript_url(report_id: str, video: dict) -> str:
+    query = {
+        "id": report_id,
+        "video_ref": str(video.get("video_ref") or ""),
+        "video_id": str(video.get("video_id") or ""),
+    }
+    return "/ai-influence/transcript?" + urllib.parse.urlencode(query)
+
+
+def _ai_influence_public_artifact(label: str, path: Path | None, report_id: str) -> dict:
+    artifact = _ai_influence_artifact_link(label, path)
+    public = {
+        "label": artifact["label"],
+        "exists": artifact["exists"],
+        "size": artifact["size"],
+        "mtime": artifact["mtime"],
+        "view_url": _ai_influence_artifact_view_url(report_id, label) if artifact["exists"] else "",
+    }
+    if artifact["exists"]:
+        public["artifact"] = label
+    return public
+
+
 def _ai_influence_date_from_path(path: Path) -> str:
     for part in reversed(path.parts):
         if re.match(r"^\d{4}-\d{2}-\d{2}$", part):
@@ -435,7 +470,228 @@ def _ai_influence_date_from_path(path: Path) -> str:
     return ""
 
 
-def _ai_influence_report_item(run_dir: Path) -> dict:
+def _parse_ai_influence_date(value: str) -> datetime.date | None:
+    try:
+        return datetime.datetime.strptime(str(value).strip(), "%Y-%m-%d").date()
+    except Exception:
+        return None
+
+
+def _ai_influence_period_cutoff(period: str) -> tuple[str, datetime.date | None]:
+    normalized = str(period or "30d").strip().lower()
+    today = datetime.datetime.now(datetime.timezone.utc).date()
+    mapping = {
+        "7d": today - datetime.timedelta(days=7),
+        "30d": today - datetime.timedelta(days=30),
+        "90d": today - datetime.timedelta(days=90),
+        "all": None,
+    }
+    if normalized not in mapping:
+        normalized = "30d"
+    return normalized, mapping[normalized]
+
+
+def _tech_hotspot_raw_dir() -> Path:
+    cfg = _read_yaml_file(TECH_HOTSPOT_CONFIG)
+    raw_dir = ((cfg.get("output") or {}).get("raw_dir") or str(KNOWLEDGE_DIR / "_raw" / "tech-hotspot-radar"))
+    return Path(str(raw_dir)).expanduser()
+
+
+def _default_mail_to() -> str:
+    return (
+        os.environ.get("AI_INFLUENCE_MAIL_TO")
+        or os.environ.get("MAIL_TO")
+        or os.environ.get("GMAIL_TO")
+        or os.environ.get("GMAIL_USER")
+        or os.environ.get("AI_INFLUENCE_GMAIL_USER")
+        or ""
+    )
+
+
+def _default_mail_from() -> str:
+    return (
+        os.environ.get("GMAIL_USER")
+        or os.environ.get("AI_INFLUENCE_GMAIL_USER")
+        or ""
+    )
+
+
+def _ai_influence_mail_config_payload() -> dict:
+    saved = _read_json_file(AI_INFLUENCE_MAIL_CONFIG)
+    to_value = str(saved.get("to") or _default_mail_to()).strip()
+    return {
+        "ok": True,
+        "status": "ok",
+        "path": str(AI_INFLUENCE_MAIL_CONFIG),
+        "to": to_value,
+        "from": str(saved.get("from") or _default_mail_from()).strip(),
+        "updated_at": str(saved.get("updated_at") or ""),
+    }
+
+
+def _save_ai_influence_mail_config(data: dict) -> dict:
+    to_value = str(data.get("to") or "").strip()
+    if not to_value:
+        return {"ok": False, "status": "error", "error": "missing_to"}
+    payload = {
+        "to": to_value,
+        "from": _default_mail_from(),
+        "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    AI_INFLUENCE_MAIL_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    AI_INFLUENCE_MAIL_CONFIG.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return {"ok": True, "status": "ok", "config": payload}
+
+
+@contextmanager
+def _temporary_environ(overrides: dict[str, str]):
+    backup = {key: os.environ.get(key) for key in overrides}
+    try:
+        for key, value in overrides.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        yield
+    finally:
+        for key, value in backup.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+def _load_tech_hotspot_module():
+    script_path = HARNESS_DIR / "scripts" / "tech_hotspot_radar.py"
+    if not script_path.exists():
+        raise FileNotFoundError(f"tech_hotspot_radar.py missing: {script_path}")
+    spec = importlib.util.spec_from_file_location("solar_status_server_tech_hotspot_radar", str(script_path))
+    if spec is None or spec.loader is None:
+        raise RuntimeError("unable to load tech_hotspot_radar.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _ai_influence_collect_attachments(report_dir: Path) -> list[Path]:
+    attachments: list[Path] = []
+    for path in [
+        report_dir / "transcripts.txt",
+        report_dir / "transcripts-cleaned.txt",
+        report_dir / "youtube-transcripts.txt",
+        report_dir / "youtube-transcripts-cleaned.txt",
+    ]:
+        if path.exists() and path.is_file():
+            attachments.append(path)
+    for pattern in ("youtube-transcripts*.txt", "phase-transcripts*.txt"):
+        for path in sorted(report_dir.glob(pattern)):
+            if path.exists() and path.is_file():
+                attachments.append(path)
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for item in attachments:
+        raw = str(item)
+        if raw in seen:
+            continue
+        seen.add(raw)
+        unique.append(item)
+    return unique
+
+
+def _unique_preserve(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for value in values:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        out.append(text)
+    return out
+
+
+def _ai_influence_resource_links(report_dir: Path, artifact_names: list[str], report_id: str) -> list[dict]:
+    links: list[dict] = []
+    for name in artifact_names:
+        path = report_dir / name
+        if not path.exists() or not path.is_file():
+            continue
+        links.append({
+            "label": name,
+            "artifact": name,
+            "url": _ai_influence_artifact_view_url(report_id, name),
+        })
+    return links
+
+
+def _mail_status_badge(mail_result: dict | None) -> str:
+    if not isinstance(mail_result, dict):
+        return "未发送"
+    status = str(mail_result.get("status") or "N/A")
+    return {"sent": "已发送", "skipped": "未发送", "warn": "告警", "failed": "失败"}.get(status, status)
+
+
+def _build_report_subject(item: dict) -> str:
+    title = str(item.get("title") or "AI Influence 报告").strip()
+    date_str = str(item.get("date") or "").strip()
+    module_label = str(item.get("module_label") or "AI Influence").strip()
+    return f"{module_label}：{title}" + (f" — {date_str}" if date_str else "")
+
+
+def _planned_report_item(report_dir: Path) -> dict:
+    report_id = _ai_influence_report_id("planned_report", report_dir)
+    result_path = report_dir / "report-result.json"
+    evidence_path = report_dir / "evidence-pack.json"
+    html_path = report_dir / "report.html"
+    md_path = report_dir / "report.md"
+    mail_path = report_dir / "mail-result.json"
+    result = _read_json_file(result_path)
+    evidence = _read_json_file(evidence_path)
+    videos = evidence.get("videos") if isinstance(evidence.get("videos"), list) else []
+    channels = _unique_preserve([str(video.get("channel") or "") for video in videos if isinstance(video, dict)])
+    tags = _unique_preserve([str(tag) for video in videos if isinstance(video, dict) for tag in (video.get("topic_tags") or [])])
+    return {
+        "kind": "planned_report",
+        "id": report_id,
+        "module_key": "planned",
+        "module_label": "专题洞察",
+        "module_title": "AI Influence 专题报告",
+        "date": _ai_influence_date_from_path(report_dir),
+        "title": str(result.get("headline") or report_dir.name).strip(),
+        "subtitle": str(result.get("subheadline") or "").strip(),
+        "status": "ok" if html_path.exists() else "warn",
+        "primary": _ai_influence_public_artifact("report_html", html_path, report_id),
+        "artifacts": [
+            _ai_influence_public_artifact("report_html", html_path, report_id),
+            _ai_influence_public_artifact("report_md", md_path, report_id),
+            _ai_influence_public_artifact("report_result_json", result_path, report_id),
+            _ai_influence_public_artifact("evidence_pack_json", evidence_path, report_id),
+        ],
+        "mail": _read_json_file(mail_path) if mail_path.exists() else {"status": "skipped"},
+        "metrics": {
+            "素材": len(videos),
+            "模型": str(result.get("_model") or result.get("model") or "N/A"),
+            "推理": str(result.get("_reasoning_effort") or result.get("reasoning_effort") or "N/A"),
+        },
+        "filters": {
+            "themes": tags,
+            "technologies": tags,
+            "channels": channels,
+        },
+        "resources": _ai_influence_resource_links(report_dir, [
+            "transcripts.txt",
+            "transcripts-cleaned.txt",
+            "evidence-pack.json",
+            "report.md",
+            "writer-prompt.md",
+        ], report_id),
+        "_report_dir": str(report_dir),
+        "mtime": max((p.stat().st_mtime for p in [html_path, md_path, result_path, evidence_path] if p.exists()), default=report_dir.stat().st_mtime),
+    }
+
+
+def _digest_report_item(run_dir: Path) -> dict:
+    report_id = _ai_influence_report_id("daily_digest", run_dir)
     digest_json_path = run_dir / "digest.json"
     digest_html_path = run_dir / "digest.html"
     digest_md_path = run_dir / "digest.md"
@@ -446,80 +702,629 @@ def _ai_influence_report_item(run_dir: Path) -> dict:
     trends = analysis.get("trend_analysis") if isinstance(analysis, dict) else {}
     core_trends = trends.get("core_trends") if isinstance(trends, dict) else []
     items = analysis.get("items") if isinstance(analysis, dict) else []
-    date_str = str(data.get("date") or _ai_influence_date_from_path(run_dir) or run_dir.name)
-    html_link = _ai_influence_artifact_link("digest_html", digest_html_path)
-    preview_link = _ai_influence_artifact_link("digest_preview_html", preview_path)
+    themes = _unique_preserve([str(item.get("theme") or "") for item in core_trends if isinstance(item, dict)])
+    technologies = _unique_preserve([str(tag) for item in core_trends if isinstance(item, dict) for tag in (item.get("tags") or [])])
+    handles = _unique_preserve([str(item.get("handle") or "") for item in items if isinstance(item, dict)])
+    html_link = _ai_influence_public_artifact("digest_html", digest_html_path, report_id)
+    preview_link = _ai_influence_public_artifact("digest_preview_html", preview_path, report_id)
     primary = html_link if html_link["exists"] else preview_link
+    date_str = str(data.get("date") or _ai_influence_date_from_path(run_dir) or run_dir.name)
     return {
+        "kind": "daily_digest",
+        "id": report_id,
+        "module_key": "daily_digest",
+        "module_label": "日度洞察",
+        "module_title": "AI Influence Daily Digest",
         "date": date_str,
-        "run_dir": str(run_dir),
         "title": f"AI Influence Digest — {date_str}",
-        "analysis_status": analysis.get("analysis_status", "N/A") if isinstance(analysis, dict) else "N/A",
-        "model": analysis.get("model", "N/A") if isinstance(analysis, dict) else "N/A",
-        "items": len(items) if isinstance(items, list) else 0,
-        "core_trends": len(core_trends) if isinstance(core_trends, list) else 0,
-        "top_scored": stats.get("top_scored", 0),
-        "mail": data.get("gmail", {}),
-        "wiki_dispatch": data.get("wiki_dispatch", ""),
+        "subtitle": "旧版 daily digest",
+        "status": "ok" if primary.get("exists") else "warn",
         "primary": primary,
         "artifacts": [
             html_link,
             preview_link,
-            _ai_influence_artifact_link("digest_md", digest_md_path),
-            _ai_influence_artifact_link("digest_json", digest_json_path),
+            _ai_influence_public_artifact("digest_md", digest_md_path, report_id),
+            _ai_influence_public_artifact("digest_json", digest_json_path, report_id),
         ],
+        "mail": data.get("gmail", {}) if isinstance(data.get("gmail"), dict) else {"status": "skipped"},
+        "metrics": {
+            "条目": len(items) if isinstance(items, list) else 0,
+            "趋势": len(core_trends) if isinstance(core_trends, list) else 0,
+            "候选": int(stats.get("top_scored", 0) or 0),
+        },
+        "filters": {
+            "themes": themes,
+            "technologies": technologies,
+            "channels": handles,
+        },
+        "resources": _ai_influence_resource_links(run_dir, [
+            "digest.md",
+            "digest.json",
+            "digest.preview.html",
+            "digest.email-preview.html",
+            "unified-digest-result.json",
+            "youtube-transcripts-2026-05-23.txt",
+        ], report_id),
+        "_report_dir": str(run_dir),
         "mtime": max((p.stat().st_mtime for p in [digest_json_path, digest_html_path, digest_md_path, preview_path] if p.exists()), default=run_dir.stat().st_mtime if run_dir.exists() else 0),
     }
 
 
-def _ai_influence_payload(limit: int = 80) -> dict:
-    run_dirs: list[Path] = []
-    if AI_INFLUENCE_RAW_DIR.exists():
-        for child in AI_INFLUENCE_RAW_DIR.iterdir():
-            if child.is_dir() and (child / "digest.md").exists():
-                run_dirs.append(child)
-    run_dirs.sort(key=lambda p: _ai_influence_report_item(p).get("mtime", 0), reverse=True)
-    items = [_ai_influence_report_item(path) for path in run_dirs[:limit]]
+def _unified_daily_report_item(run_dir: Path) -> dict:
+    report_id = _ai_influence_report_id("unified_daily", run_dir)
+    html_path = run_dir / "report.html"
+    md_path = run_dir / "unified-overview.md"
+    mail_path = run_dir / "mail-result.json"
+    alerts_path = run_dir / "alerts.json"
+    alerts = []
+    if alerts_path.exists():
+        try:
+            payload = json.loads(alerts_path.read_text(encoding="utf-8"))
+            if isinstance(payload, list):
+                alerts = payload
+        except Exception:
+            alerts = []
+    technologies = _unique_preserve([str(row.get("source") or "") for row in alerts if isinstance(row, dict)])
     return {
-        "ok": AI_INFLUENCE_RAW_DIR.exists(),
-        "status": "ok" if AI_INFLUENCE_RAW_DIR.exists() else "warn",
-        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "raw_dir": str(AI_INFLUENCE_RAW_DIR),
-        "count": len(items),
-        "items": items,
+        "kind": "unified_daily",
+        "id": report_id,
+        "module_key": "unified_daily",
+        "module_label": "统一日报",
+        "module_title": "Tech Hotspot Radar 日报",
+        "date": _ai_influence_date_from_path(run_dir) or run_dir.name,
+        "title": f"AI Influence 综合日报 — {_ai_influence_date_from_path(run_dir) or run_dir.name}",
+        "subtitle": "YouTube / Social / GitHub 合并版",
+        "status": "ok" if html_path.exists() else "warn",
+        "primary": _ai_influence_public_artifact("report_html", html_path, report_id),
+        "artifacts": [
+            _ai_influence_public_artifact("report_html", html_path, report_id),
+            _ai_influence_public_artifact("unified_overview_md", md_path, report_id),
+        ],
+        "mail": _read_json_file(mail_path) if mail_path.exists() else {"status": "skipped"},
+        "metrics": {
+            "附件": len(list(run_dir.glob("youtube-transcripts*.txt"))),
+            "告警": 1 if (run_dir / "alerts.json").exists() else 0,
+            "派单": 1 if (run_dir / "wiki-dispatch.md").exists() else 0,
+        },
+        "filters": {
+            "themes": ["综合日报"],
+            "technologies": technologies,
+            "channels": [],
+        },
+        "resources": _ai_influence_resource_links(run_dir, [
+            "unified-overview.md",
+            "alerts.json",
+            "alerts.md",
+            "youtube-report.md",
+            "social-report.md",
+            "github-report.md",
+            "youtube-transcripts-2026-05-26.txt",
+            "transcripts.jsonl",
+        ], report_id),
+        "_report_dir": str(run_dir),
+        "mtime": max((p.stat().st_mtime for p in [html_path, md_path, mail_path] if p.exists()), default=run_dir.stat().st_mtime),
     }
 
 
-def _ai_influence_html() -> str:
-    payload = _ai_influence_payload(limit=160)
+def _phase_report_item(run_dir: Path, phase_name: str) -> dict:
+    report_id = _ai_influence_report_id("phase_report", run_dir)
+    phase_json_path = run_dir / "phase-report.json"
+    html_path = run_dir / "report.html"
+    md_path = run_dir / "phase-report.md"
+    mail_path = run_dir / "mail-result.json"
+    payload = _read_json_file(phase_json_path)
+    phase_label = phase_name.replace("-", " ").title()
+    title = str(payload.get("headline") or f"{phase_label} — {run_dir.name}").strip()
+    return {
+        "kind": "phase_report",
+        "id": report_id,
+        "module_key": phase_name,
+        "module_label": phase_label,
+        "module_title": f"{phase_label} 历史洞察",
+        "date": _ai_influence_date_from_path(run_dir) or run_dir.name,
+        "title": title,
+        "subtitle": str(payload.get("subheadline") or "").strip(),
+        "status": "ok" if html_path.exists() else "warn",
+        "primary": _ai_influence_public_artifact("report_html", html_path, report_id),
+        "artifacts": [
+            _ai_influence_public_artifact("report_html", html_path, report_id),
+            _ai_influence_public_artifact("phase_report_md", md_path, report_id),
+            _ai_influence_public_artifact("phase_report_json", phase_json_path, report_id),
+        ],
+        "mail": _read_json_file(mail_path) if mail_path.exists() else {"status": "skipped"},
+        "metrics": {
+            "素材": int(payload.get("_input_video_count", 0) or 0),
+            "附件": len(list(run_dir.glob("youtube-transcripts*.txt"))),
+            "模型": str(payload.get("_model") or "N/A"),
+        },
+        "filters": {
+            "themes": [phase_label],
+            "technologies": [phase_label],
+            "channels": [],
+        },
+        "resources": _ai_influence_resource_links(run_dir, [
+            "phase-report.md",
+            "phase-report.json",
+            "phase-evidence-pack.json",
+            "youtube-transcripts-phase-2-2026-05-24.txt",
+        ], report_id),
+        "_report_dir": str(run_dir),
+        "mtime": max((p.stat().st_mtime for p in [html_path, md_path, phase_json_path, mail_path] if p.exists()), default=run_dir.stat().st_mtime),
+    }
+
+
+def _ai_influence_group_summary(key: str, items: list[dict]) -> dict:
+    if key == "planned":
+        rows = []
+        channels: set[str] = set()
+        tags: set[str] = set()
+        total_videos = 0
+        for item in items:
+            report_dir = Path(str(item.get("_report_dir") or ""))
+            report_id = str(item.get("id") or "")
+            evidence_path = report_dir / "evidence-pack.json"
+            evidence = _read_json_file(evidence_path)
+            videos = evidence.get("videos") if isinstance(evidence.get("videos"), list) else []
+            total_videos += len(videos)
+            for video in videos[:12]:
+                channel = str(video.get("channel") or "N/A").strip()
+                channels.add(channel)
+                for tag in (video.get("topic_tags") or [])[:6]:
+                    if str(tag).strip():
+                        tags.add(str(tag).strip())
+                title = str(video.get("title") or "N/A")
+                transcript_url = _ai_influence_transcript_url(report_id, video)
+                youtube_url = str(video.get("url") or "").strip()
+                title_html = (
+                    f'<a href="{html.escape(transcript_url)}" target="_blank" rel="noreferrer">{html.escape(title)}</a>'
+                    + (
+                        f' <a class="video-source-link" href="{html.escape(youtube_url)}" target="_blank" rel="noreferrer">YouTube</a>'
+                        if youtube_url else ""
+                    )
+                )
+                rows.append({
+                    "date": item.get("date") or "N/A",
+                    "channel": channel,
+                    "title": title,
+                    "title_html": title_html,
+                    "published": str(video.get("published_at") or "N/A")[:10],
+                    "tags": ", ".join(str(tag) for tag in (video.get("topic_tags") or [])[:4]) or "N/A",
+                })
+        return {
+            "headline": f"{len(items)} 份专题报告，覆盖 {total_videos} 条视频素材、{len(channels)} 个频道。",
+            "metrics": {"报告": len(items), "素材视频": total_videos, "频道": len(channels), "主题标签": len(tags)},
+            "columns": ["日期", "频道", "视频标题", "发布时间", "标签"],
+            "rows": rows[:24],
+            "row_map": [("date", "日期"), ("channel", "频道"), ("title", "视频标题"), ("published", "发布时间"), ("tags", "标签")],
+        }
+    if key == "daily_digest":
+        rows = []
+        total_items = 0
+        total_trends = 0
+        handles: set[str] = set()
+        for item in items:
+            digest_path = Path(str(item.get("_report_dir") or "")) / "digest.json"
+            digest = _read_json_file(digest_path)
+            digest_items = digest.get("items") if isinstance(digest.get("items"), list) else []
+            trend_items = ((digest.get("trend_analysis") or {}).get("core_trends") or []) if isinstance(digest, dict) else []
+            total_items += len(digest_items)
+            total_trends += len(trend_items)
+            for row in digest_items[:12]:
+                if not isinstance(row, dict):
+                    rows.append({
+                        "date": item.get("date") or "N/A",
+                        "handle": "N/A",
+                        "title": str(row),
+                        "type": "item",
+                        "summary": "N/A",
+                    })
+                    continue
+                handle = str(row.get("handle") or "N/A")
+                handles.add(handle)
+                rows.append({
+                    "date": item.get("date") or "N/A",
+                    "handle": handle,
+                    "title": str(row.get("title") or "N/A"),
+                    "type": str(row.get("type") or "post"),
+                    "summary": str(row.get("summary") or "N/A"),
+                })
+        return {
+            "headline": f"{len(items)} 份日度洞察，汇总 {total_items} 条社交信号、{total_trends} 个核心趋势。",
+            "metrics": {"报告": len(items), "社交信号": total_items, "核心趋势": total_trends, "账号": len(handles)},
+            "columns": ["日期", "账号", "标题", "类型", "摘要"],
+            "rows": rows[:24],
+            "row_map": [("date", "日期"), ("handle", "账号"), ("title", "标题"), ("type", "类型"), ("summary", "摘要")],
+        }
+    if key == "unified_daily":
+        rows = []
+        total_alerts = 0
+        total_transcripts = 0
+        for item in items:
+            run_dir = Path(str(item.get("_report_dir") or ""))
+            alerts = []
+            alerts_path = run_dir / "alerts.json"
+            if alerts_path.exists():
+                try:
+                    payload = json.loads(alerts_path.read_text(encoding="utf-8"))
+                    if isinstance(payload, list):
+                        alerts = payload
+                except Exception:
+                    alerts = []
+            total_alerts += len(alerts)
+            total_transcripts += len(list(run_dir.glob("youtube-transcripts*.txt")))
+            for row in alerts[:12]:
+                rows.append({
+                    "date": item.get("date") or "N/A",
+                    "source": str(row.get("source") or "N/A"),
+                    "rule": str(row.get("rule_name") or "N/A"),
+                    "title": str(row.get("title") or "N/A"),
+                    "time": str(row.get("fired_at") or "N/A").replace("T", " ")[:16],
+                })
+        return {
+            "headline": f"{len(items)} 份统一日报，命中 {total_alerts} 条告警，带出 {total_transcripts} 份转写附件。",
+            "metrics": {"日报": len(items), "告警": total_alerts, "转写附件": total_transcripts},
+            "columns": ["日期", "来源", "规则", "标题", "触发时间"],
+            "rows": rows[:24],
+            "row_map": [("date", "日期"), ("source", "来源"), ("rule", "规则"), ("title", "标题"), ("time", "触发时间")],
+        }
     rows = []
-    for item in payload["items"]:
-        primary = item.get("primary") or {}
-        open_url = primary.get("view_url") or ""
-        mail = item.get("mail") if isinstance(item.get("mail"), dict) else {}
-        dispatch = item.get("wiki_dispatch") or "N/A"
-        run_dir = Path(item["run_dir"])
-        rows.append(f"""
-        <article class="report-card">
-          <div>
-            <div class="date">{html.escape(item.get("date", "N/A"))}</div>
-            <h2>{html.escape(item.get("title", "AI Influence Digest"))}</h2>
-            <p class="meta">模型 {html.escape(str(item.get("model", "N/A")))} · 状态 {html.escape(str(item.get("analysis_status", "N/A")))} · 邮件 {html.escape(str(mail.get("status", "N/A")))}</p>
-            <p class="dispatch">知识库派单：{html.escape(str(dispatch))}</p>
+    total_inputs = 0
+    for item in items:
+        report_dir = Path(str(item.get("_report_dir") or ""))
+        phase_path = report_dir / "phase-report.json"
+        phase_json = _read_json_file(phase_path)
+        total_inputs += int(phase_json.get("_input_video_count", 0) or 0)
+        rows.append({
+            "date": item.get("date") or "N/A",
+            "module": item.get("module_label") or "N/A",
+            "title": item.get("title") or "N/A",
+            "videos": int(phase_json.get("_input_video_count", 0) or 0),
+            "model": str(phase_json.get("_model") or "N/A"),
+        })
+    return {
+        "headline": f"{len(items)} 份阶段洞察，累计处理 {total_inputs} 条视频输入。",
+        "metrics": {"阶段报告": len(items), "视频输入": total_inputs},
+        "columns": ["日期", "阶段", "标题", "素材数", "模型"],
+        "rows": rows[:24],
+        "row_map": [("date", "日期"), ("module", "阶段"), ("title", "标题"), ("videos", "素材数"), ("model", "模型")],
+    }
+
+
+def _render_ai_influence_summary_table(summary: dict) -> str:
+    row_map = summary.get("row_map") or []
+    rows = summary.get("rows") or []
+    headers = "".join(f"<th>{html.escape(str(label))}</th>" for _, label in row_map)
+    body_rows = []
+    for row in rows:
+        cols = []
+        for key, _label in row_map:
+            if isinstance(row, dict) and row.get(f"{key}_html"):
+                cols.append(f"<td>{row.get(f'{key}_html')}</td>")
+                continue
+            value = row.get(key, "N/A") if isinstance(row, dict) else "N/A"
+            cols.append(f"<td>{html.escape(str(value))}</td>")
+        body_rows.append("<tr>" + "".join(cols) + "</tr>")
+    if not body_rows:
+        body_rows.append(f"<tr><td colspan='{max(1, len(row_map))}'>N/A</td></tr>")
+    return f"<div class='summary-table-wrap'><table class='summary-table'><thead><tr>{headers}</tr></thead><tbody>{''.join(body_rows)}</tbody></table></div>"
+
+
+def _sanitize_ai_influence_item(item: dict) -> dict:
+    public = dict(item)
+    public.pop("_report_dir", None)
+    public.pop("report_dir", None)
+    return public
+
+
+def _sanitize_ai_influence_payload(payload: dict) -> dict:
+    groups = []
+    for group in payload.get("groups") or []:
+        group_public = dict(group)
+        group_public["items"] = [_sanitize_ai_influence_item(item) for item in (group.get("items") or [])]
+        groups.append(group_public)
+    return {
+        "ok": payload.get("ok", False),
+        "status": payload.get("status", "warn"),
+        "generated_at": payload.get("generated_at", ""),
+        "period": payload.get("period", "30d"),
+        "count": payload.get("count", 0),
+        "items": [_sanitize_ai_influence_item(item) for item in (payload.get("items") or [])],
+        "groups": groups,
+        "module_counts": payload.get("module_counts", {}),
+        "filter_options": payload.get("filter_options", {}),
+        "mail_config": payload.get("mail_config", {}),
+    }
+
+
+def _ai_influence_payload_internal(limit: int = 80, period: str = "30d") -> dict:
+    tech_hotspot_raw_dir = _tech_hotspot_raw_dir()
+    items: list[dict] = []
+    if AI_INFLUENCE_RAW_DIR.exists():
+        for child in AI_INFLUENCE_RAW_DIR.iterdir():
+            if child.is_dir() and (child / "digest.md").exists():
+                items.append(_digest_report_item(child))
+    planned_root = tech_hotspot_raw_dir / "ai-influence-planned"
+    if planned_root.exists():
+        for date_dir in sorted((p for p in planned_root.iterdir() if p.is_dir()), reverse=True):
+            reports_dir = date_dir / "reports"
+            if not reports_dir.exists():
+                continue
+            for report_dir in sorted((p for p in reports_dir.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime, reverse=True):
+                if (report_dir / "report.html").exists():
+                    items.append(_planned_report_item(report_dir))
+    if tech_hotspot_raw_dir.exists():
+        for child in tech_hotspot_raw_dir.iterdir():
+            if child.is_dir() and re.match(r"^\d{4}-\d{2}-\d{2}$", child.name) and (child / "report.html").exists():
+                items.append(_unified_daily_report_item(child))
+        for phase_dir in sorted((p for p in tech_hotspot_raw_dir.iterdir() if p.is_dir() and p.name.startswith("phase-"))):
+            for child in sorted((p for p in phase_dir.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime, reverse=True):
+                if (child / "report.html").exists() and (child / "phase-report.json").exists():
+                    items.append(_phase_report_item(child, phase_dir.name))
+    items.sort(key=lambda item: item.get("mtime", 0), reverse=True)
+    normalized_period, cutoff = _ai_influence_period_cutoff(period)
+    if cutoff is not None:
+        items = [
+            item for item in items
+            if (_parse_ai_influence_date(str(item.get("date") or "")) or datetime.date.min) >= cutoff
+        ]
+    limited = items[:limit]
+    groups: dict[str, dict] = {}
+    for item in limited:
+        key = str(item.get("module_key") or "other")
+        group = groups.setdefault(key, {"key": key, "label": item.get("module_label") or key, "title": item.get("module_title") or item.get("module_label") or key, "items": []})
+        group["items"].append(item)
+    for key, group in groups.items():
+        group["summary"] = _ai_influence_group_summary(key, group.get("items") or [])
+    filter_themes = _unique_preserve([value for item in limited for value in ((item.get("filters") or {}).get("themes") or [])])
+    filter_technologies = _unique_preserve([value for item in limited for value in ((item.get("filters") or {}).get("technologies") or [])])
+    filter_channels = _unique_preserve([value for item in limited for value in ((item.get("filters") or {}).get("channels") or [])])
+    return {
+        "ok": bool(limited),
+        "status": "ok" if limited else "warn",
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "period": normalized_period,
+        "count": len(limited),
+        "items": limited,
+        "groups": list(groups.values()),
+        "module_counts": {group["label"]: len(group["items"]) for group in groups.values()},
+        "filter_options": {
+            "themes": filter_themes,
+            "technologies": filter_technologies,
+            "channels": filter_channels,
+        },
+        "mail_config": _ai_influence_mail_config_payload(),
+    }
+
+
+def _ai_influence_payload(limit: int = 80, period: str = "30d") -> dict:
+    return _sanitize_ai_influence_payload(_ai_influence_payload_internal(limit=limit, period=period))
+
+
+def _resolve_ai_influence_item(report_id: str) -> dict | None:
+    token = str(report_id or "").strip()
+    if not token:
+        return None
+    payload = _ai_influence_payload_internal(limit=500, period="all")
+    for item in payload.get("items") or []:
+        if str(item.get("id") or "") == token:
+            return item
+    return None
+
+
+def _resolve_ai_influence_artifact(report_id: str, artifact_label: str) -> Path | None:
+    item = _resolve_ai_influence_item(report_id)
+    if not item:
+        return None
+    report_dir = Path(str(item.get("_report_dir") or ""))
+    allowed = {
+        "report_html": report_dir / "report.html",
+        "report_md": report_dir / "report.md",
+        "report_result_json": report_dir / "report-result.json",
+        "evidence_pack_json": report_dir / "evidence-pack.json",
+        "digest_html": report_dir / "digest.html",
+        "digest_preview_html": report_dir / "digest.preview.html",
+        "digest_md": report_dir / "digest.md",
+        "digest_json": report_dir / "digest.json",
+        "unified_overview_md": report_dir / "unified-overview.md",
+        "phase_report_md": report_dir / "phase-report.md",
+        "phase_report_json": report_dir / "phase-report.json",
+    }
+    for resource in item.get("resources") or []:
+        if not isinstance(resource, dict):
+            continue
+        label = str(resource.get("label") or "").strip()
+        if label:
+            allowed[label] = report_dir / label
+    target = allowed.get(str(artifact_label or "").strip())
+    if not target or not target.exists() or not target.is_file() or not _allowed_open_path(target):
+        return None
+    return target
+
+
+def _resolve_ai_influence_mail_target(data: dict):
+    report_id = str(data.get("id") or "").strip()
+    if report_id:
+        return _resolve_ai_influence_artifact(report_id, "report_html") or _resolve_ai_influence_artifact(report_id, "digest_html") or _resolve_ai_influence_artifact(report_id, "digest_preview_html")
+    raw = urllib.parse.unquote(str(data.get("path") or "").strip())
+    if not raw:
+        return None
+    target = _resolve_open_file(raw)
+    if not target:
+        return None
+    if target.name not in {"report.html", "digest.html", "digest.preview.html"}:
+        return None
+    roots = [AI_INFLUENCE_RAW_DIR, _tech_hotspot_raw_dir()]
+    if not any(_is_within(target, root) for root in roots if root.exists()):
+        return None
+    return target
+
+
+def _ai_influence_send_report(data: dict) -> dict:
+    target = _resolve_ai_influence_mail_target(data)
+    if not target:
+        return {"ok": False, "status": "error", "error": "report_not_found_or_not_allowed"}
+    config = _ai_influence_mail_config_payload()
+    to_value = str(data.get("to") or config.get("to") or "").strip()
+    if not to_value:
+        return {"ok": False, "status": "error", "error": "missing_mail_to"}
+    module = _load_tech_hotspot_module()
+    html_content = target.read_text(encoding="utf-8", errors="ignore")
+    report_dir = target.parent
+    item = {
+        "title": data.get("title") or report_dir.name,
+        "date": data.get("date") or _ai_influence_date_from_path(report_dir),
+        "module_label": data.get("module_label") or "AI Influence",
+    }
+    subject = str(data.get("subject") or _build_report_subject(item))
+    attachments = _ai_influence_collect_attachments(report_dir)
+    with _temporary_environ({"AI_INFLUENCE_MAIL_TO": to_value}):
+        result = module.send_html_email(html_content, subject, attachments)
+    result = dict(result or {})
+    result["subject"] = subject
+    result["report_path"] = str(target)
+    result["to"] = result.get("to") or [addr.strip() for addr in re.split(r"[,;]", to_value) if addr.strip()]
+    if str(result.get("status") or "").lower() == "sent":
+        (report_dir / "mail-result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return {"ok": str(result.get("status") or "").lower() in {"sent", "warn"}, "status": result.get("status", "warn"), "result": result}
+
+
+def _ai_influence_html(period: str = "30d") -> str:
+    payload = _ai_influence_payload(limit=200, period=period)
+    mail_cfg = payload.get("mail_config") if isinstance(payload.get("mail_config"), dict) else {}
+    current_to = str(mail_cfg.get("to") or "")
+    current_period = str(payload.get("period") or "30d")
+    report_cards = []
+    resource_sections = []
+    for group in payload.get("groups") or []:
+        summary = group.get("summary") if isinstance(group.get("summary"), dict) else {}
+        summary_metrics = "".join(
+            f"<span class='summary-metric'><b>{html.escape(str(value))}</b><small>{html.escape(str(key))}</small></span>"
+            for key, value in (summary.get("metrics") or {}).items()
+        )
+        resource_rows = []
+        report_rows = []
+        rows = []
+        for item in group.get("items") or []:
+            primary = item.get("primary") if isinstance(item.get("primary"), dict) else {}
+            open_url = primary.get("view_url") or ""
+            module_label = str(item.get("module_label") or "N/A")
+            mail_status = str(((item.get("mail") or {}).get("status")) or "unsent").strip().lower()
+            mail_payload_attr = html.escape(json.dumps({
+                "id": str(item.get("id") or ""),
+                "title": str(item.get("title") or ""),
+                "date": str(item.get("date") or ""),
+                "module_label": module_label,
+            }, ensure_ascii=False), quote=True)
+            artifacts = item.get("artifacts") if isinstance(item.get("artifacts"), list) else []
+            artifact_links = []
+            for artifact in artifacts:
+                if not isinstance(artifact, dict) or not artifact.get("exists"):
+                    continue
+                label = str(artifact.get("label") or "").replace("_", " ")
+                view_url = str(artifact.get("file_view_url") or artifact.get("view_url") or "")
+                if view_url:
+                    artifact_links.append(f'<a class="btn tiny" href="{html.escape(view_url)}" target="_blank" rel="noreferrer">{html.escape(label)}</a>')
+            metric_bits = []
+            for key, value in (item.get("metrics") or {}).items():
+                metric_bits.append(f"<span><b>{html.escape(str(value))}</b><small>{html.escape(str(key))}</small></span>")
+            theme_values = (item.get("filters") or {}).get("themes") or []
+            tech_values = (item.get("filters") or {}).get("technologies") or []
+            channel_values = (item.get("filters") or {}).get("channels") or []
+            theme_tokens = " | ".join(theme_values)
+            tech_tokens = " | ".join(tech_values)
+            channel_tokens = " | ".join(channel_values)
+            primary_channel = str(channel_values[0] if channel_values else "未分配频道")
+            report_cards.append(f"""
+            <article class="report-card">
+              <div class="main"
+                   data-kind="{html.escape(str(item.get('kind') or 'report'))}"
+                   data-date="{html.escape(str(item.get('date') or 'N/A'))}"
+                   data-module="{html.escape(module_label)}"
+                   data-themes="{html.escape(theme_tokens)}"
+                   data-technologies="{html.escape(tech_tokens)}"
+                   data-channels="{html.escape(channel_tokens)}"
+                   data-primary-channel="{html.escape(primary_channel)}"
+                   data-mail-status="{html.escape(mail_status)}"
+                   data-title="{html.escape(str(item.get('title') or ''))}"
+                   data-mail-payload="{mail_payload_attr}">
+                <div class="date">{html.escape(str(item.get("date") or "N/A"))}</div>
+                <h3>{html.escape(str(item.get("title") or "AI Influence 报告"))}</h3>
+                <p class="meta">{html.escape(str(item.get("subtitle") or ""))}</p>
+                <p class="meta">模块：{html.escape(module_label)} · 邮件：{html.escape(_mail_status_badge(item.get("mail")))}</p>
+                <div class="artifact-row">{''.join(artifact_links)}</div>
+              </div>
+              <div class="metrics">{''.join(metric_bits) or '<span><b>N/A</b><small>指标</small></span>'}</div>
+              <div class="actions">
+                <a class="btn primary" href="{html.escape(open_url)}" target="_blank" rel="noreferrer">打开报告</a>
+                <button class="btn accent" data-payload="{mail_payload_attr}" onclick="sendAiInfluenceReport(JSON.parse(this.dataset.payload))">发送邮件</button>
+                <button class="btn" onclick='showMailConfig()'>配置发送邮箱</button>
+              </div>
+            </article>
+            """)
+            resource_link_bits = []
+            for resource in item.get("resources") or []:
+                if not isinstance(resource, dict):
+                    continue
+                label = str(resource.get("label") or "resource")
+                url = str(resource.get("url") or "")
+                if url:
+                    resource_link_bits.append(f'<a class="btn tiny" href="{html.escape(url)}" target="_blank" rel="noreferrer">{html.escape(label)}</a>')
+            resource_rows.append(f"""
+            <tr>
+              <td>{html.escape(str(item.get("date") or "N/A"))}</td>
+              <td>{html.escape(str(item.get("title") or "N/A"))}</td>
+              <td>{html.escape(str(item.get("module_label") or "N/A"))}</td>
+              <td>{''.join(resource_link_bits) or 'N/A'}</td>
+            </tr>
+            """)
+        resource_sections.append(f"""
+        <section class="group">
+          <div class="group-head">
+            <div>
+              <div class="group-kicker">{html.escape(str(group.get("label") or "AI Influence"))}</div>
+              <h2>{html.escape(str(group.get("title") or group.get("label") or "素材资源"))}</h2>
+            </div>
+            <span class="pill">{len(group.get("items") or [])} 份</span>
           </div>
-          <div class="metrics">
-            <span><b>{int(item.get("items", 0))}</b>条目</span>
-            <span><b>{int(item.get("core_trends", 0))}</b>趋势</span>
-            <span><b>{int(item.get("top_scored", 0) or 0)}</b>候选</span>
+          <div class="summary-card">
+            <p class="summary-headline">{html.escape(str(summary.get("headline") or "N/A"))}</p>
+            <div class="summary-metrics">{summary_metrics}</div>
+            {_render_ai_influence_summary_table(summary)}
           </div>
-          <div class="actions">
-            <a class="btn primary" href="{html.escape(open_url)}" target="_blank" rel="noreferrer">打开报告</a>
-            <a class="btn" href="/file/view?path={urllib.parse.quote(str(run_dir / 'digest.md'))}" target="_blank" rel="noreferrer">Markdown</a>
-            <a class="btn" href="/file/view?path={urllib.parse.quote(str(run_dir / 'digest.json'))}" target="_blank" rel="noreferrer">JSON</a>
+          <div class="resource-table-wrap">
+            <table class="resource-table">
+              <thead>
+                <tr><th>日期</th><th>报告</th><th>模块</th><th>素材 / 下载</th></tr>
+              </thead>
+              <tbody>
+                {''.join(resource_rows) if resource_rows else "<tr><td colspan='4'>N/A</td></tr>"}
+              </tbody>
+            </table>
           </div>
-        </article>
+        </section>
         """)
-    body = "\n".join(rows) if rows else "<div class='empty'>还没有 AI Influence 报告。先跑一次 daily digest。</div>"
+    module_pills = "".join(
+        f"<span class='pill'>{html.escape(str(name))}（{int(count)} 份报告）</span>"
+        for name, count in (payload.get("module_counts") or {}).items()
+    )
+    period_links = "".join(
+        f"<a class='pill period {'active' if current_period == key else ''}' href='/ai-influence?period={key}'>{label}</a>"
+        for key, label in (("7d", "近 7 天"), ("30d", "近 30 天"), ("90d", "近 90 天"), ("all", "全部"))
+    )
+    filter_options = payload.get("filter_options") if isinstance(payload.get("filter_options"), dict) else {}
+    theme_options = "".join(f"<option value='{html.escape(value)}'>{html.escape(value)}</option>" for value in (filter_options.get("themes") or []))
+    technology_options = "".join(f"<option value='{html.escape(value)}'>{html.escape(value)}</option>" for value in (filter_options.get("technologies") or []))
+    channel_options = "".join(f"<option value='{html.escape(value)}'>{html.escape(value)}</option>" for value in (filter_options.get("channels") or []))
+    module_options = "".join(f"<option value='{html.escape(str(group.get('label') or ''))}'>{html.escape(str(group.get('label') or ''))}</option>" for group in (payload.get("groups") or []))
+    quick_module_buttons = "".join(
+        f"<button class='quick-btn' data-module='{html.escape(str(group.get('label') or ''))}' onclick=\"setQuickModule('{html.escape(str(group.get('label') or ''))}', this)\">{html.escape(str(group.get('label') or ''))}</button>"
+        for group in (payload.get("groups") or [])
+    )
+    preset_buttons = "".join([
+        "<button class='quick-btn preset-btn' data-preset='planned_unsent' onclick=\"applyPreset('planned_unsent', this)\">专题洞察未发送</button>",
+        "<a class='quick-btn preset-link' href='/ai-influence?period=7d'>最近 7 天</a>",
+        "<a class='quick-btn preset-link' href='/ai-influence?period=30d'>近 30 天</a>",
+    ])
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -527,28 +1332,91 @@ def _ai_influence_html() -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AI Influence Reports · Solar Harness</title>
   <style>
-    :root {{ --ink:#17231f; --muted:#61706a; --line:#e8dcc8; --paper:#fffdf8; --bg:#f4efe4; --green:#123b35; --gold:#c9863d; }}
+    :root {{ --ink:#17231f; --muted:#61706a; --line:#e8dcc8; --paper:#fffdf8; --bg:#f4efe4; --green:#123b35; --gold:#c9863d; --accent:#9a5a1a; }}
     body {{ margin:0; background:radial-gradient(circle at 12% 8%, #fff7df 0, transparent 28%), linear-gradient(135deg,#f4efe4,#edf2ea); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif; }}
-    .wrap {{ max-width:1120px; margin:0 auto; padding:30px 18px 50px; }}
+    .wrap {{ max-width:1380px; margin:0 auto; padding:30px 20px 56px; }}
     .hero {{ border-radius:28px; padding:30px; color:#fff; background:linear-gradient(135deg,#123b35,#315f4f 58%,#c9863d); box-shadow:0 22px 60px rgba(30,45,37,.18); }}
     .kicker {{ font-size:12px; letter-spacing:.16em; text-transform:uppercase; opacity:.82; }}
-    h1 {{ margin:9px 0 8px; font-size:34px; line-height:1.15; }}
-    .hero p {{ margin:0; max-width:760px; opacity:.9; }}
-    .toolbar {{ display:flex; justify-content:space-between; gap:12px; align-items:center; margin:18px 0; flex-wrap:wrap; }}
-    .pill {{ border:1px solid var(--line); background:rgba(255,253,248,.74); border-radius:999px; padding:7px 12px; color:var(--muted); font-size:13px; }}
-    .report-card {{ display:grid; grid-template-columns:minmax(0,1.45fr) minmax(190px,.4fr) auto; gap:18px; align-items:center; padding:20px; margin:13px 0; border:1px solid var(--line); background:rgba(255,253,248,.88); border-radius:24px; box-shadow:0 10px 26px rgba(49,42,31,.07); }}
-    .date {{ color:var(--gold); font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }}
-    h2 {{ margin:4px 0 6px; font-size:21px; color:var(--green); }}
-    .meta,.dispatch {{ margin:4px 0; color:var(--muted); font-size:13px; }}
-    .dispatch {{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:620px; }}
-    .metrics {{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }}
-    .metrics span {{ border:1px solid #eadfcd; border-radius:16px; background:#fbf7ef; padding:10px; text-align:center; font-size:12px; color:var(--muted); }}
-    .metrics b {{ display:block; color:var(--green); font-size:22px; }}
-    .actions {{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }}
-    .btn {{ border:1px solid var(--line); background:#fff; color:var(--green); text-decoration:none; border-radius:999px; padding:9px 13px; font-size:13px; font-weight:700; }}
+    h1 {{ margin:9px 0 8px; font-size:36px; line-height:1.12; }}
+    .hero p {{ margin:0; max-width:820px; opacity:.92; }}
+    .toolbar {{ display:flex; gap:12px; align-items:center; margin:18px 0; flex-wrap:wrap; }}
+    .tabs {{ display:flex; gap:10px; margin:18px 0 10px; flex-wrap:wrap; }}
+    .tab-btn {{ border:1px solid var(--line); background:#fff; color:var(--green); border-radius:999px; padding:10px 16px; font-size:14px; font-weight:700; cursor:pointer; }}
+    .tab-btn.active {{ background:var(--green); color:#fff; border-color:var(--green); }}
+    .tab-panel {{ display:none; }}
+    .tab-panel.active {{ display:block; }}
+    .pill {{ border:1px solid var(--line); background:rgba(255,253,248,.78); border-radius:999px; padding:7px 12px; color:var(--muted); font-size:13px; }}
+    .period {{ text-decoration:none; }}
+    .period.active {{ background:var(--green); color:#fff; border-color:var(--green); }}
+    .btn {{ border:1px solid var(--line); background:#fff; color:var(--green); text-decoration:none; border-radius:999px; padding:9px 14px; font-size:13px; font-weight:700; cursor:pointer; }}
     .btn.primary {{ background:var(--green); color:#fff; border-color:var(--green); }}
+    .btn.accent {{ background:#fff4e8; color:var(--accent); border-color:#efcfaa; }}
+    .btn.tiny {{ padding:6px 10px; font-size:12px; }}
+    .mail-config {{ display:none; margin:16px 0 22px; padding:18px; border-radius:22px; border:1px solid var(--line); background:rgba(255,253,248,.9); box-shadow:0 10px 26px rgba(49,42,31,.06); }}
+    .mail-config.visible {{ display:block; }}
+    .mail-config h2 {{ margin:0 0 12px; font-size:20px; color:var(--green); }}
+    .mail-grid {{ display:grid; grid-template-columns:minmax(280px, 1fr) auto; gap:12px; align-items:end; }}
+    .mail-field label {{ display:block; font-size:12px; color:var(--muted); margin-bottom:6px; }}
+    .mail-field input {{ width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:14px; padding:12px 14px; font-size:14px; background:#fff; }}
+    .hint,.status-line {{ color:var(--muted); font-size:12px; }}
+    .status-line {{ min-height:20px; margin-top:8px; }}
+    .report-filters {{ display:grid; grid-template-columns:repeat(6,minmax(150px,1fr)); gap:10px; padding:16px; border:1px solid var(--line); background:#fffdf8; border-radius:22px; margin:6px 0 14px; }}
+    .filter-field label {{ display:block; font-size:12px; color:var(--muted); margin-bottom:6px; }}
+    .filter-field select {{ width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:14px; padding:11px 12px; font-size:14px; background:#fff; }}
+    .filter-check {{ display:flex; align-items:center; gap:8px; min-height:48px; border:1px solid var(--line); border-radius:14px; padding:0 12px; background:#fff; color:var(--ink); }}
+    .filter-check input {{ margin:0; }}
+    .quick-filters {{ display:flex; gap:8px; flex-wrap:wrap; margin:0 0 16px; }}
+    .quick-btn {{ border:1px solid var(--line); background:#fff; color:var(--green); border-radius:999px; padding:8px 13px; font-size:12px; font-weight:700; cursor:pointer; }}
+    .quick-btn.active {{ background:var(--green); color:#fff; border-color:var(--green); }}
+    .preset-link {{ text-decoration:none; display:inline-flex; align-items:center; }}
+    .active-chips {{ display:flex; gap:8px; flex-wrap:wrap; margin:0 0 16px; }}
+    .chip {{ display:inline-flex; align-items:center; gap:8px; border:1px solid #e5d8c4; background:#fff8ef; color:var(--ink); border-radius:999px; padding:8px 12px; font-size:12px; }}
+    .chip button {{ border:0; background:transparent; color:var(--muted); cursor:pointer; font-size:12px; padding:0; }}
+    .clear-filters {{ border:0; background:transparent; color:var(--accent); cursor:pointer; font-size:12px; font-weight:700; padding:0; }}
+    .results-meta {{ display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin:0 0 10px; color:var(--muted); font-size:13px; }}
+    .report-results {{ display:grid; gap:14px; }}
+    .report-source {{ display:none; }}
+    .channel-group {{ border:1px solid var(--line); border-radius:22px; background:rgba(255,253,248,.84); padding:12px 14px 6px; }}
+    .channel-group + .channel-group {{ margin-top:12px; }}
+    .channel-group summary {{ cursor:pointer; list-style:none; display:flex; justify-content:space-between; align-items:center; gap:10px; color:var(--green); font-weight:800; }}
+    .channel-group summary::-webkit-details-marker {{ display:none; }}
+    .channel-group-left,.channel-group-right {{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }}
+    .channel-group-count {{ color:var(--muted); font-size:12px; font-weight:600; }}
+    .group-send-btn {{ border:1px solid #efcfaa; background:#fff4e8; color:var(--accent); border-radius:999px; padding:7px 11px; font-size:12px; font-weight:700; cursor:pointer; }}
+    .group {{ margin-top:24px; }}
+    .group-head {{ display:flex; justify-content:space-between; align-items:end; gap:12px; margin-bottom:12px; }}
+    .group-kicker {{ color:var(--gold); font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }}
+    .group h2 {{ margin:4px 0 0; color:var(--green); font-size:25px; }}
+    .summary-card {{ margin:0 0 14px; padding:16px 18px; border:1px solid var(--line); background:#fffaf2; border-radius:22px; }}
+    .summary-headline {{ margin:0 0 10px; color:var(--ink); font-size:14px; }}
+    .summary-metrics {{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }}
+    .summary-metric {{ border:1px solid #eadfcd; border-radius:16px; background:#fff; padding:8px 12px; color:var(--muted); min-width:96px; text-align:center; }}
+    .summary-metric b {{ display:block; color:var(--green); font-size:16px; }}
+    .summary-metric small {{ display:block; font-size:11px; margin-top:2px; }}
+    .summary-table-wrap {{ overflow:auto; border:1px solid #eadfcd; border-radius:16px; background:#fff; }}
+    .summary-table {{ width:100%; border-collapse:collapse; font-size:12px; }}
+    .summary-table th, .summary-table td {{ text-align:left; padding:9px 10px; border-bottom:1px solid #f0e6d8; vertical-align:top; }}
+    .summary-table th {{ color:var(--muted); background:#fbf7ef; position:sticky; top:0; }}
+    .summary-table a {{ color:var(--green); text-decoration:none; font-weight:700; }}
+    .summary-table a.video-source-link {{ margin-left:8px; font-size:11px; color:var(--gold); font-weight:600; }}
+    .resource-table-wrap {{ overflow:auto; border:1px solid #eadfcd; border-radius:16px; background:#fff; }}
+    .resource-table {{ width:100%; border-collapse:collapse; font-size:12px; }}
+    .resource-table th, .resource-table td {{ text-align:left; padding:9px 10px; border-bottom:1px solid #f0e6d8; vertical-align:top; }}
+    .resource-table th {{ color:var(--muted); background:#fbf7ef; }}
+    .report-card {{ display:grid; grid-template-columns:minmax(0,1.45fr) minmax(220px,.48fr) auto; gap:18px; align-items:center; padding:20px; margin:13px 0; border:1px solid var(--line); background:rgba(255,253,248,.9); border-radius:24px; box-shadow:0 10px 26px rgba(49,42,31,.07); }}
+    .date {{ color:var(--gold); font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }}
+    h3 {{ margin:4px 0 6px; font-size:20px; color:var(--green); }}
+    .meta {{ margin:4px 0; color:var(--muted); font-size:13px; }}
+    .artifact-row {{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }}
+    .metrics {{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }}
+    .metrics span {{ border:1px solid #eadfcd; border-radius:16px; background:#fbf7ef; padding:10px; text-align:center; color:var(--muted); }}
+    .metrics b {{ display:block; color:var(--green); font-size:18px; line-height:1.2; }}
+    .metrics small {{ display:block; font-size:11px; margin-top:2px; }}
+    .actions {{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }}
     .empty {{ margin-top:18px; padding:22px; border:1px dashed var(--line); border-radius:20px; background:#fffdf8; color:var(--muted); }}
-    @media(max-width:860px) {{ .report-card {{ grid-template-columns:1fr; }} .actions {{ justify-content:flex-start; }} .metrics {{ grid-template-columns:repeat(3,minmax(0,1fr)); }} h1 {{ font-size:27px; }} }}
+    @media(max-width:1180px) {{ .report-filters {{ grid-template-columns:repeat(3,minmax(0,1fr)); }} }}
+    @media(max-width:980px) {{ .report-card {{ grid-template-columns:1fr; }} .actions {{ justify-content:flex-start; }} .report-filters {{ grid-template-columns:repeat(2,minmax(0,1fr)); }} }}
+    @media(max-width:720px) {{ .mail-grid, .report-filters {{ grid-template-columns:1fr; }} .wrap {{ padding-inline:14px; }} h1 {{ font-size:29px; }} }}
   </style>
 </head>
 <body>
@@ -556,29 +1424,400 @@ def _ai_influence_html() -> str:
     <section class="hero">
       <div class="kicker">Solar Harness · AI Influence</div>
       <h1>AI Influence 报告中心</h1>
-      <p>这里列出每日 AI Influence 产出。打开 HTML 报告看趋势，打开 Markdown/JSON 给知识库与复盘使用。</p>
+      <p>这里统一挂 AI Influence 的日度洞察、专题报告、统一日报和历史 phase 洞察。每条都可以直接打开，也可以在旁边一键发到配置好的邮箱。</p>
     </section>
     <div class="toolbar">
-      <span class="pill">状态：{html.escape(payload.get("status", "N/A"))}</span>
-      <span class="pill">报告数：{payload.get("count", 0)}</span>
-      <span class="pill">Raw：{html.escape(payload.get("raw_dir", ""))}</span>
+      <span class="pill">状态：{html.escape(str(payload.get("status") or "N/A"))}</span>
+      <span class="pill">总报告：{int(payload.get("count", 0) or 0)}</span>
+      <span class="pill">周期：{html.escape(current_period)}</span>
+      <span class="pill">收件人：{html.escape(current_to or 'N/A')}</span>
+      {module_pills}
+      {period_links}
       <a class="btn" href="/">回到 Solar Status</a>
+      <button class="btn accent" onclick="showMailConfig()">配置发送邮箱</button>
     </div>
-    {body}
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="reports" onclick="switchTab('reports', this)">报告汇总</button>
+      <button class="tab-btn" data-tab="resources" onclick="switchTab('resources', this)">素材资源</button>
+    </div>
+    <section id="mail-config" class="mail-config">
+      <h2>配置发送邮箱</h2>
+      <div class="mail-grid">
+        <div class="mail-field">
+          <label for="mail-to">收件人</label>
+          <input id="mail-to" value="{html.escape(current_to)}" placeholder="多个邮箱可用逗号分隔">
+        </div>
+        <button class="btn primary" onclick="saveMailConfig()">保存配置</button>
+      </div>
+      <div class="hint">当前发信会复用现有 Gmail SMTP/keychain 能力；这里主要配置默认收件人。</div>
+      <div id="mail-status" class="status-line"></div>
+    </section>
+    <section id="tab-reports" class="tab-panel active">
+      <div class="report-filters">
+        <div class="filter-field">
+          <label for="filter-theme">主题</label>
+          <select id="filter-theme" onchange="applyReportFilters()">
+            <option value="">全部主题</option>
+            {theme_options}
+          </select>
+        </div>
+        <div class="filter-field">
+          <label for="filter-technology">技术</label>
+          <select id="filter-technology" onchange="applyReportFilters()">
+            <option value="">全部技术</option>
+            {technology_options}
+          </select>
+        </div>
+        <div class="filter-field">
+          <label for="filter-channel">频道 / 账号</label>
+          <select id="filter-channel" onchange="applyReportFilters()">
+            <option value="">全部频道 / 账号</option>
+            {channel_options}
+          </select>
+        </div>
+        <div class="filter-field">
+          <label for="filter-module">模块</label>
+          <select id="filter-module" onchange="applyReportFilters()">
+            <option value="">全部模块</option>
+            {module_options}
+          </select>
+        </div>
+        <div class="filter-field">
+          <label for="sort-reports">排序方式</label>
+          <select id="sort-reports" onchange="applyReportFilters()">
+            <option value="date_desc">时间：最新优先</option>
+            <option value="date_asc">时间：最早优先</option>
+            <option value="title_asc">标题：A-Z</option>
+            <option value="module_asc">模块：A-Z</option>
+          </select>
+        </div>
+        <label class="filter-check"><input id="filter-unsent" type="checkbox" onchange="applyReportFilters()">只看未发送</label>
+        <label class="filter-check"><input id="group-channel" type="checkbox" onchange="applyReportFilters()">按频道折叠</label>
+      </div>
+      <div class="quick-filters">
+        <button class="quick-btn active" data-module="" onclick="setQuickModule('', this)">全部报告</button>
+        {quick_module_buttons}
+        {preset_buttons}
+      </div>
+      <div id="active-chips" class="active-chips">
+        <span class="chip">当前周期：{html.escape(current_period)}</span>
+      </div>
+      <div class="results-meta">
+        <div id="report-results-count">N/A</div>
+        <div>支持时间、主题、技术、频道、模块、邮件状态和频道折叠。</div>
+      </div>
+      <div id="report-source" class="report-source">{''.join(report_cards)}</div>
+      <div id="report-results" class="report-results">{'<div class="empty">还没有 AI Influence 报告。先跑一次相关流水线。</div>' if not report_cards else ''}</div>
+    </section>
+    <section id="tab-resources" class="tab-panel">
+      {' '.join(resource_sections) if resource_sections else "<div class='empty'>当前还没有素材资源。</div>"}
+    </section>
   </div>
+  <script>
+    function switchTab(tab, btn) {{
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.toggle('active', el === btn));
+      document.querySelectorAll('.tab-panel').forEach(el => el.classList.remove('active'));
+      const panel = document.getElementById('tab-' + tab);
+      if (panel) panel.classList.add('active');
+    }}
+    function showMailConfig() {{
+      document.getElementById('mail-config').classList.toggle('visible');
+    }}
+    function setQuickModule(value, btn) {{
+      const select = document.getElementById('filter-module');
+      select.value = value;
+      document.querySelectorAll('.quick-btn[data-module]').forEach(el => el.classList.toggle('active', el === btn));
+      applyReportFilters();
+    }}
+    function clearAllReportFilters() {{
+      document.getElementById('filter-theme').value = '';
+      document.getElementById('filter-technology').value = '';
+      document.getElementById('filter-channel').value = '';
+      document.getElementById('filter-module').value = '';
+      document.getElementById('sort-reports').value = 'date_desc';
+      document.getElementById('filter-unsent').checked = false;
+      document.getElementById('group-channel').checked = false;
+      document.querySelectorAll('.quick-btn').forEach(el => el.classList.remove('active'));
+      const allBtn = document.querySelector('.quick-btn[data-module=""]');
+      if (allBtn) allBtn.classList.add('active');
+    }}
+    function applyPreset(name, btn) {{
+      clearAllReportFilters();
+      if (name === 'planned_unsent') {{
+        document.getElementById('filter-module').value = '专题洞察';
+        document.getElementById('filter-unsent').checked = true;
+      }}
+      document.querySelectorAll('.preset-btn').forEach(el => el.classList.toggle('active', el === btn));
+      applyReportFilters();
+    }}
+    function renderActiveChips() {{
+      const root = document.getElementById('active-chips');
+      const chips = [`<span class="chip">当前周期：{html.escape(current_period)}</span>`];
+      const values = [
+        ['主题', document.getElementById('filter-theme').value],
+        ['技术', document.getElementById('filter-technology').value],
+        ['频道', document.getElementById('filter-channel').value],
+        ['模块', document.getElementById('filter-module').value],
+      ];
+      values.forEach(([label, value]) => {{
+        if (!value) return;
+        chips.push(`<span class="chip">${{label}}：${{value}} <button type="button" data-clear="${{label}}">清除</button></span>`);
+      }});
+      if (document.getElementById('filter-unsent').checked) chips.push('<span class="chip">邮件：未发送</span>');
+      if (document.getElementById('group-channel').checked) chips.push('<span class="chip">视图：按频道折叠</span>');
+      chips.push('<button class="clear-filters" type="button" onclick="clearAllReportFilters(); applyReportFilters();">清空筛选</button>');
+      root.innerHTML = chips.join('');
+      root.querySelectorAll('button[data-clear]').forEach(btn => {{
+        btn.addEventListener('click', () => {{
+          const label = btn.dataset.clear;
+          if (label === '主题') document.getElementById('filter-theme').value = '';
+          if (label === '技术') document.getElementById('filter-technology').value = '';
+          if (label === '频道') document.getElementById('filter-channel').value = '';
+          if (label === '模块') document.getElementById('filter-module').value = '';
+          applyReportFilters();
+        }});
+      }});
+    }}
+    function visibleReportCards() {{
+      const theme = document.getElementById('filter-theme').value;
+      const technology = document.getElementById('filter-technology').value;
+      const channel = document.getElementById('filter-channel').value;
+      const moduleName = document.getElementById('filter-module').value;
+      const unsentOnly = document.getElementById('filter-unsent').checked;
+      return Array.from(document.querySelectorAll('#report-source .report-card')).filter(card => {{
+        const main = card.querySelector('.main');
+        const okTheme = !theme || (main.dataset.themes || '').includes(theme);
+        const okTechnology = !technology || (main.dataset.technologies || '').includes(technology);
+        const okChannel = !channel || (main.dataset.channels || '').includes(channel);
+        const okModule = !moduleName || (main.dataset.module || '') === moduleName;
+        const okMail = !unsentOnly || !['sent', 'warn'].includes((main.dataset.mailStatus || '').toLowerCase());
+        return okTheme && okTechnology && okChannel && okModule && okMail;
+      }});
+    }}
+    function sortReportCards(cards) {{
+      const mode = document.getElementById('sort-reports').value;
+      cards.sort((a, b) => {{
+        const am = a.querySelector('.main');
+        const bm = b.querySelector('.main');
+        const ad = am.dataset.date || '';
+        const bd = bm.dataset.date || '';
+        const at = (am.dataset.title || '').toLowerCase();
+        const bt = (bm.dataset.title || '').toLowerCase();
+        const amod = (am.dataset.module || '').toLowerCase();
+        const bmod = (bm.dataset.module || '').toLowerCase();
+        if (mode === 'date_asc') return ad.localeCompare(bd);
+        if (mode === 'title_asc') return at.localeCompare(bt);
+        if (mode === 'module_asc') return amod.localeCompare(bmod) || bd.localeCompare(ad);
+        return bd.localeCompare(ad);
+      }});
+      return cards;
+    }}
+    function renderReportCards(cards) {{
+      const container = document.getElementById('report-results');
+      const counter = document.getElementById('report-results-count');
+      container.innerHTML = '';
+      counter.textContent = '当前可见：' + cards.length + ' 份报告';
+      if (!cards.length) {{
+        container.innerHTML = "<div class='empty'>当前筛选条件下没有报告。</div>";
+        return;
+      }}
+      if (document.getElementById('group-channel').checked) {{
+        const grouped = new Map();
+        cards.forEach(card => {{
+          const channel = card.querySelector('.main').dataset.primaryChannel || '未分配频道';
+          if (!grouped.has(channel)) grouped.set(channel, []);
+          grouped.get(channel).push(card);
+        }});
+        Array.from(grouped.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([channel, entries]) => {{
+          const details = document.createElement('details');
+          details.className = 'channel-group';
+          details.open = true;
+          const unsent = entries.filter(card => !['sent', 'warn'].includes((card.querySelector('.main').dataset.mailStatus || '').toLowerCase()));
+          const summary = document.createElement('summary');
+          summary.innerHTML = '<span class="channel-group-left"><span>' + channel + '</span><span class="channel-group-count">' + entries.length + ' 份报告</span></span>'
+            + '<span class="channel-group-right">'
+            + (unsent.length ? '<button type="button" class="group-send-btn">发送本组未发送（' + unsent.length + '）</button>' : '')
+            + '</span>';
+          details.appendChild(summary);
+          entries.forEach(card => details.appendChild(card));
+          const sendBtn = summary.querySelector('.group-send-btn');
+          if (sendBtn) {{
+            sendBtn.addEventListener('click', async (ev) => {{
+              ev.preventDefault();
+              ev.stopPropagation();
+              await sendBatchReports(unsent, channel);
+            }});
+          }}
+          container.appendChild(details);
+        }});
+        return;
+      }}
+      cards.forEach(card => container.appendChild(card));
+    }}
+    function applyReportFilters() {{
+      document.querySelectorAll('.preset-btn').forEach(el => {{
+        if (document.getElementById('filter-module').value !== '专题洞察' || !document.getElementById('filter-unsent').checked) {{
+          el.classList.remove('active');
+        }}
+      }});
+      const cards = sortReportCards(visibleReportCards());
+      renderActiveChips();
+      renderReportCards(cards);
+    }}
+    async function saveMailConfig() {{
+      const to = document.getElementById('mail-to').value.trim();
+      const status = document.getElementById('mail-status');
+      status.textContent = '保存中...';
+      const res = await fetch('/ai-influence/mail-config', {{
+        method: 'POST',
+        headers: {{'Content-Type': 'application/json'}},
+        body: JSON.stringify({{to}})
+      }});
+      const data = await res.json();
+      if (!data.ok) {{
+        status.textContent = '保存失败：' + (data.error || JSON.stringify(data));
+        return;
+      }}
+      status.textContent = '已保存，新的默认收件人：' + (data.config?.to || to);
+      setTimeout(() => location.reload(), 500);
+    }}
+    async function sendAiInfluenceReport(payload, options = {{}}) {{
+      const status = document.getElementById('mail-status');
+      status.textContent = '发信中...';
+      const body = Object.assign({{}}, payload, {{to: document.getElementById('mail-to').value.trim()}});
+      const res = await fetch('/ai-influence/send', {{
+        method: 'POST',
+        headers: {{'Content-Type': 'application/json'}},
+        body: JSON.stringify(body)
+      }});
+      const data = await res.json();
+      if (!data.ok) {{
+        status.textContent = '发送失败：' + (data.error || data.result?.reason || JSON.stringify(data));
+        return;
+      }}
+      const result = data.result || {{}};
+      status.textContent = '已发送：' + (result.subject || payload.title || '报告');
+      if (!options.silent) {{
+        setTimeout(() => location.reload(), 700);
+      }}
+    }}
+    async function sendBatchReports(cards, label) {{
+      const status = document.getElementById('mail-status');
+      const pending = cards
+        .map(card => card.querySelector('.main')?.dataset.mailPayload || '')
+        .filter(Boolean)
+        .map(raw => JSON.parse(raw));
+      if (!pending.length) {{
+        status.textContent = '这一组没有可发送的未发送报告。';
+        return;
+      }}
+      showMailConfig();
+      status.textContent = '批量发送中：' + label + '（0/' + pending.length + '）';
+      for (let i = 0; i < pending.length; i += 1) {{
+        status.textContent = '批量发送中：' + label + '（' + (i + 1) + '/' + pending.length + '）';
+        await sendAiInfluenceReport(pending[i], {{silent: true}});
+      }}
+      status.textContent = '批量发送完成：' + label + '（' + pending.length + ' 份）';
+      setTimeout(() => location.reload(), 900);
+    }}
+    applyReportFilters();
+  </script>
 </body>
 </html>"""
 
 
-def _resolve_ai_influence_report(raw: str):
-    target = _resolve_open_file(raw)
-    if not target:
+def _resolve_ai_influence_report(report_id_raw: str, artifact_raw: str):
+    report_id = urllib.parse.unquote(str(report_id_raw or "")).strip()
+    artifact = urllib.parse.unquote(str(artifact_raw or "report_html")).strip() or "report_html"
+    return _resolve_ai_influence_artifact(report_id, artifact)
+
+
+def _resolve_ai_influence_transcript(report_id_raw: str, video_ref_raw: str, video_id_raw: str) -> dict | None:
+    item = _resolve_ai_influence_item(report_id_raw)
+    if not item:
         return None
-    if target.suffix.lower() not in (".html", ".htm", ".md", ".json"):
+    report_dir = Path(str(item.get("_report_dir") or ""))
+    evidence = _read_json_file(report_dir / "evidence-pack.json")
+    videos = evidence.get("videos") if isinstance(evidence.get("videos"), list) else []
+    video_ref = str(video_ref_raw or "").strip()
+    video_id = str(video_id_raw or "").strip()
+    match = None
+    for video in videos:
+        if not isinstance(video, dict):
+            continue
+        if video_ref and str(video.get("video_ref") or "").strip() == video_ref:
+            match = video
+            break
+        if video_id and str(video.get("video_id") or "").strip() == video_id:
+            match = video
+            break
+    if not match:
         return None
-    if not (_is_within(target, AI_INFLUENCE_RAW_DIR) or _is_within(target, REPORTS_DIR)):
+    transcript = str(match.get("transcript_clean") or "")
+    if not transcript.strip():
         return None
-    return target
+    return {
+        "report_id": str(item.get("id") or ""),
+        "report_dir": report_dir,
+        "video": match,
+        "transcript": transcript,
+    }
+
+
+def _ai_influence_transcript_html(report_id: str, video: dict, transcript: str) -> str:
+    title = str(video.get("title") or "Untitled transcript")
+    channel = str(video.get("channel") or "N/A")
+    published = str(video.get("published_at") or "N/A")
+    duration = video.get("duration_min")
+    youtube_url = str(video.get("url") or "").strip()
+    duration_text = f"{float(duration):.1f} 分钟" if isinstance(duration, (int, float)) else "N/A"
+    report_url = _ai_influence_artifact_view_url(report_id, "evidence_pack_json")
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{html.escape(title)} · 原始 Transcript</title>
+  <style>
+    :root {{ --ink:#17231f; --muted:#61706a; --line:#e8dcc8; --paper:#fffdf8; --bg:#f4efe4; --green:#123b35; --gold:#c9863d; }}
+    body {{ margin:0; background:linear-gradient(135deg,#f4efe4,#edf2ea); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif; }}
+    .wrap {{ max-width:1120px; margin:0 auto; padding:28px 18px 48px; }}
+    .hero {{ border-radius:26px; padding:26px; color:#fff; background:linear-gradient(135deg,#123b35,#315f4f 58%,#c9863d); box-shadow:0 18px 50px rgba(30,45,37,.16); }}
+    .eyebrow {{ font-size:12px; letter-spacing:.14em; text-transform:uppercase; opacity:.84; }}
+    h1 {{ margin:8px 0 10px; font-size:34px; line-height:1.16; }}
+    .meta {{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }}
+    .pill {{ border:1px solid rgba(255,255,255,.28); background:rgba(255,255,255,.12); border-radius:999px; padding:7px 12px; font-size:13px; }}
+    .toolbar {{ display:flex; gap:10px; flex-wrap:wrap; margin:16px 0 18px; }}
+    .btn {{ border:1px solid var(--line); background:#fff; color:var(--green); text-decoration:none; border-radius:999px; padding:9px 14px; font-size:13px; font-weight:700; }}
+    .btn.primary {{ background:var(--green); color:#fff; border-color:var(--green); }}
+    .panel {{ border:1px solid var(--line); border-radius:24px; background:rgba(255,253,248,.92); box-shadow:0 10px 28px rgba(49,42,31,.07); }}
+    .panel-head {{ padding:18px 20px 0; color:var(--muted); font-size:13px; }}
+    pre {{ margin:0; padding:20px; white-space:pre-wrap; word-break:break-word; line-height:1.72; font-size:14px; }}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="eyebrow">AI Influence · Raw Transcript</div>
+      <h1>{html.escape(title)}</h1>
+      <div class="meta">
+        <span class="pill">频道：{html.escape(channel)}</span>
+        <span class="pill">发布时间：{html.escape(published[:10] if published != "N/A" else published)}</span>
+        <span class="pill">时长：{html.escape(duration_text)}</span>
+      </div>
+    </section>
+    <div class="toolbar">
+      <a class="btn primary" href="{html.escape(youtube_url)}" target="_blank" rel="noreferrer">打开 YouTube 原视频</a>
+      <a class="btn" href="{html.escape(report_url)}" target="_blank" rel="noreferrer">打开 evidence-pack.json</a>
+      <a class="btn" href="/ai-influence?period=30d">回到 AI Influence</a>
+    </div>
+    <section class="panel">
+      <div class="panel-head">原始转写素材</div>
+      <pre>{html.escape(transcript)}</pre>
+    </section>
+  </div>
+</body>
+</html>"""
 
 
 def _read_social_accounts(limit: int = 300) -> list[dict]:
@@ -6176,6 +7415,10 @@ class StatusHandler(BaseHTTPRequestHandler):
                 self._send_json(_append_github_topic(data))
             elif path == "/knowledge/subscriptions/github-repo":
                 self._send_json(_append_github_repo(data))
+            elif path == "/ai-influence/mail-config":
+                self._send_json(_save_ai_influence_mail_config(data))
+            elif path == "/ai-influence/send":
+                self._send_json(_ai_influence_send_report(data))
             else:
                 self._send_json({"ok": False, "error": "not found"}, status=404)
         except Exception as exc:
@@ -6258,7 +7501,8 @@ class StatusHandler(BaseHTTPRequestHandler):
             self._send_text(_knowledge_subscriptions_html(), content_type="text/html; charset=utf-8")
 
         elif path == "/ai-influence":
-            self._send_text(_ai_influence_html(), content_type="text/html; charset=utf-8")
+            period = params.get("period", ["30d"])[0]
+            self._send_text(_ai_influence_html(period=period), content_type="text/html; charset=utf-8")
 
         elif path == "/ai-influence/list":
             try:
@@ -6266,10 +7510,14 @@ class StatusHandler(BaseHTTPRequestHandler):
                 limit = max(1, min(limit, 300))
             except ValueError:
                 limit = 80
-            self._send_json(_ai_influence_payload(limit=limit))
+            period = params.get("period", ["30d"])[0]
+            self._send_json(_ai_influence_payload(limit=limit, period=period))
 
         elif path == "/ai-influence/report":
-            target = _resolve_ai_influence_report(params.get("path", [""])[0])
+            target = _resolve_ai_influence_report(
+                params.get("id", [""])[0],
+                params.get("artifact", ["report_html"])[0],
+            )
             if not target:
                 self._send_json({"ok": False, "status": "error", "error": "AI Influence report not found or not allowed"}, status=404)
             else:
@@ -6282,6 +7530,20 @@ class StatusHandler(BaseHTTPRequestHandler):
                 elif suffix in (".md", ".markdown"):
                     content_type = "text/markdown; charset=utf-8"
                 self._send_text(target.read_text(encoding="utf-8", errors="ignore"), content_type=content_type)
+
+        elif path == "/ai-influence/transcript":
+            payload = _resolve_ai_influence_transcript(
+                params.get("id", [""])[0],
+                params.get("video_ref", [""])[0],
+                params.get("video_id", [""])[0],
+            )
+            if not payload:
+                self._send_json({"ok": False, "status": "error", "error": "AI Influence transcript not found or not allowed"}, status=404)
+            else:
+                self._send_text(
+                    _ai_influence_transcript_html(payload["report_id"], payload["video"], payload["transcript"]),
+                    content_type="text/html; charset=utf-8",
+                )
 
         elif path == "/mermaid":
             self._send_text(_mermaid_index_html(), content_type="text/html; charset=utf-8")

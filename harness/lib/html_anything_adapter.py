@@ -39,7 +39,7 @@ def _escape_inline(text: str) -> str:
     return escaped
 
 
-def _render_markdown_fallback(text: str) -> str:
+def render_markdown_body(text: str) -> str:
     if not text.strip():
         return '<p class="ha-muted">N/A</p>'
     blocks: list[str] = []
@@ -263,9 +263,15 @@ def verify_self_contained(html_text: str) -> bool:
     lowered = html_text.lower()
     if "<link" in lowered and "rel=\"stylesheet\"" in lowered:
         return False
-    if re.search(r'\bsrc=["\']https?://', lowered):
+    if re.search(r'<script[^>]+\bsrc=["\']https?://', lowered):
         return False
-    if re.search(r'\bhref=["\']https?://', lowered):
+    if re.search(r'<img[^>]+\bsrc=["\']https?://', lowered):
+        return False
+    if re.search(r'<source[^>]+\bsrc=["\']https?://', lowered):
+        return False
+    if re.search(r'<iframe[^>]+\bsrc=["\']https?://', lowered):
+        return False
+    if re.search(r'<link[^>]+\bhref=["\']https?://', lowered):
         return False
     return True
 
@@ -281,19 +287,33 @@ def render(
     body_html: str | None = None,
     toc_html: str = "",
     badges: list[str] | None = None,
+    surface_label: str | None = None,
+    topline_left: str | None = None,
+    topline_center: str | None = None,
+    topline_right: str | None = None,
+    footer_left: str | None = None,
+    footer_right: str | None = None,
+    footer_tail: str | None = None,
+    show_generator: bool = True,
+    extra_css: str = "",
 ) -> str:
     """Render a self-contained html-anything-themed HTML page."""
     profile_cfg = _load_profile(profile)
     title = title or hero_title or profile_cfg.get("title", "Solar HTML Artifact")
     hero_title = hero_title or title
     lede = lede or profile_cfg.get("default_lede", "")
-    body = body_html if body_html is not None else _render_markdown_fallback(markdown_text)
+    body = body_html if body_html is not None else render_markdown_body(markdown_text)
     top_meta = meta or profile_cfg.get("meta", "")
-    kicker = profile_cfg.get("kicker", "HTML Anything")
-    footer_left = profile_cfg.get("footer_left", "Solar Harness")
-    footer_right = profile_cfg.get("footer_right", "Default HTML Renderer")
+    kicker = topline_left or profile_cfg.get("kicker", "HTML Anything")
+    footer_left = footer_left or profile_cfg.get("footer_left", "Solar Harness")
+    footer_right = footer_right or profile_cfg.get("footer_right", "Default HTML Renderer")
+    footer_tail = footer_tail or profile_cfg.get("id", profile)
     generator = _upstream_marker(profile_cfg)
     css = _theme_css(profile_cfg)
+    hero_surface_label = surface_label or profile_cfg.get("surface_label", profile)
+    top_center = topline_center if topline_center is not None else top_meta or "Solar Harness"
+    top_right = topline_right if topline_right is not None else "Apache-2.0"
+    generator_html = f'<div class="ha-generator">{html.escape(generator)}</div>' if show_generator else ""
     page = f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -305,22 +325,23 @@ def render(
   <meta name="x-html-anything-profile" content="{html.escape(profile)}">
   <style>
 {css}
+{extra_css}
   </style>
 </head>
 <body>
   <div class="ha-wrap">
     <header class="ha-topline">
       <span>{html.escape(kicker)}</span>
-      <span>{html.escape(top_meta or 'Solar Harness')}</span>
-      <span>Apache-2.0</span>
+      <span>{html.escape(top_center)}</span>
+      <span>{html.escape(top_right)}</span>
     </header>
 
     <section class="ha-hero">
-      <div class="ha-kicker">{html.escape(profile_cfg.get('surface_label', profile))}</div>
+      <div class="ha-kicker">{html.escape(hero_surface_label)}</div>
       <h1 class="ha-title">{hero_title}</h1>
       <p class="ha-lede">{html.escape(lede)}</p>
       {_normalize_badges(badges)}
-      <div class="ha-generator">{html.escape(generator)}</div>
+      {generator_html}
     </section>
 
     <div class="ha-layout">
@@ -333,7 +354,7 @@ def render(
     <footer class="ha-footline">
       <span>{html.escape(footer_left)}</span>
       <span>{html.escape(footer_right)}</span>
-      <span>{html.escape(profile_cfg.get('id', profile))}</span>
+      <span>{html.escape(footer_tail)}</span>
     </footer>
   </div>
 </body>

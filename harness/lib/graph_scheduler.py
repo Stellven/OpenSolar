@@ -31,10 +31,11 @@ HOME = Path.home()
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
 STATE_DB = Path(os.environ.get("HARNESS_STATE_DB", HARNESS_DIR / "run" / "state.db"))
 
-TERMINAL_STATUSES = {"passed", "failed", "skipped"}
+TERMINAL_STATUSES = {"passed", "failed", "skipped", "cancelled", "skipped_parent_passed"}
 ACTIVE_STATUSES = {"assigned", "dispatched", "in_progress", "running", "reviewing"}
 READY_STATUSES = {"pending", "queued", "blocked", "worker_blocked", ""}
 PASS_STATUSES = {"passed"}
+CLOSED_NON_PASS_STATUSES = {"skipped", "cancelled", "skipped_parent_passed"}
 SPRINTS_DIR = Path(os.environ.get("HARNESS_SPRINTS_DIR", HARNESS_DIR / "sprints"))
 
 LABEL_ALIAS_GROUPS = [
@@ -152,6 +153,9 @@ def _sprint_id_for_graph(graph: dict[str, Any], graph_path: str | Path | None = 
     sid = str(graph.get("sprint_id") or "").strip()
     if sid:
         return sid
+    legacy_id = str(graph.get("id") or "").strip()
+    if legacy_id:
+        return legacy_id
     if graph_path:
         return Path(graph_path).name.removesuffix(".task_graph.json")
     return ""
@@ -257,9 +261,6 @@ def sync_status_cache_from_graph(
     )
     if created_status is not None:
         result.update({"created": True, "status": created_status})
-    if not parent.get("ready"):
-        result["reason"] = "parent_not_ready"
-        return result
     if not status_path.exists():
         result["reason"] = "status_missing"
         return result
@@ -267,6 +268,40 @@ def sync_status_cache_from_graph(
         current = json.loads(status_path.read_text(encoding="utf-8"))
     except Exception as exc:
         result.update({"ok": False, "reason": "status_corrupt", "error": str(exc)})
+        return result
+    if not parent.get("ready"):
+        if str(current.get("status") or "").lower() == "passed":
+            now = _now()
+            open_nodes = parent.get("open_nodes") or []
+            failed_nodes = parent.get("failed_nodes") or []
+            history = current.get("history")
+            if not isinstance(history, list):
+                history = []
+            history.append({
+                "ts": now,
+                "event": "graph_parent_ready_revoked",
+                "by": actor,
+                "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache",
+            })
+            current.update({
+                "status": "active",
+                "phase": "graph_in_progress",
+                "stage": "graph_in_progress",
+                "active_node": open_nodes[0] if open_nodes else None,
+                "open_nodes": open_nodes,
+                "failed_nodes": failed_nodes,
+                "graph_parent_ready": parent,
+                "task_graph_status": "active",
+                "updated_at": now,
+                "completed_at": None,
+                "history": history,
+            })
+            tmp = status_path.with_suffix(status_path.suffix + ".tmp")
+            tmp.write_text(json.dumps(current, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            os.replace(tmp, status_path)
+            result.update({"updated": True, "status": current, "reason": "parent_reopened"})
+            return result
+        result["reason"] = "parent_not_ready"
         return result
 
     already_passed = str(current.get("status") or "").lower() == "passed"
@@ -418,6 +453,229 @@ def _status_rank(status: str) -> int:
     return 0
 
 
+def _node_eval_json_candidates(graph: dict[str, Any], node_id: str) -> list[Path]:
+    node = _node_map(graph)[node_id]
+    result = _node_results(graph).get(node_id) if isinstance(_node_results(graph).get(node_id), dict) else {}
+    sid = _sprint_id_for_graph(graph)
+    artifacts = node.get("artifacts") if isinstance(node.get("artifacts"), dict) else {}
+    result_artifacts = result.get("artifacts") if isinstance(result.get("artifacts"), dict) else {}
+    raw_candidates = [
+        node.get("eval_json"),
+        result.get("eval_json"),
+        artifacts.get("eval_json"),
+        result_artifacts.get("eval_json"),
+        str(SPRINTS_DIR / f"{sid}.{node_id}-eval.json") if sid else "",
+    ]
+    candidates: list[Path] = []
+    for raw in raw_candidates:
+        text = str(raw or "").strip()
+        if not text:
+            continue
+        try:
+            candidates.append(Path(text).expanduser())
+        except Exception:
+            continue
+    return candidates
+
+
+def _first_existing_path(candidates: list[Path]) -> Path | None:
+    for path in candidates:
+        try:
+            if path.exists():
+                return path
+        except Exception:
+            continue
+    return None
+
+
+def _portable_artifact_ref(path: Path) -> str:
+    try:
+        resolved = path.expanduser().resolve()
+        sprint_root = SPRINTS_DIR.expanduser().resolve()
+        if resolved.parent == sprint_root:
+            return resolved.name
+        return str(resolved)
+    except Exception:
+        return str(path)
+
+
+def _workspace_root() -> str:
+    explicit = str(os.environ.get("SOLAR_WORKSPACE_ROOT") or "").strip()
+    if explicit:
+        return explicit
+    cwd = str(Path.cwd())
+    if cwd:
+        return cwd
+    return str(HARNESS_DIR.parent)
+
+
+def _normalize_eval_sidecar_payload(
+    payload: dict[str, Any],
+    *,
+    sid: str,
+    node_id: str,
+    command_line: str,
+) -> tuple[dict[str, Any], bool]:
+    changed = False
+    normalized = dict(payload)
+    defaults = {
+        "schema_version": "solar.eval.v1",
+        "sprint_id": sid,
+        "node_id": node_id,
+        "generated_by": "graph_scheduler.doctor",
+        "generation_mode": "repair_backfill",
+        "command_line": command_line,
+        "workspace_root": _workspace_root(),
+    }
+    verdict = str(normalized.get("verdict") or "").strip().upper()
+    proof_level = "independent_verification" if verdict in {"PASS", "FAIL"} else "unknown"
+    defaults["proof_level"] = proof_level
+    for key, value in defaults.items():
+        current = normalized.get(key)
+        if current in (None, ""):
+            normalized[key] = value
+            changed = True
+    return normalized, changed
+
+
+def _sync_node_evidence_refs(
+    graph: dict[str, Any],
+    node_id: str,
+    *,
+    repair: bool = False,
+    command_line: str = "python3 lib/graph_scheduler.py doctor --repair",
+) -> dict[str, Any]:
+    node = _node_map(graph)[node_id]
+    sid = _sprint_id_for_graph(graph)
+    graph.setdefault("node_results", {})
+    result = graph["node_results"].setdefault(node_id, {})
+    artifacts = node.get("artifacts")
+    if not isinstance(artifacts, dict):
+        artifacts = {}
+        node["artifacts"] = artifacts
+    result_artifacts = result.get("artifacts")
+    if not isinstance(result_artifacts, dict):
+        result_artifacts = {}
+        result["artifacts"] = result_artifacts
+
+    outcome = {"issues": [], "repairs": []}
+
+    handoff_path = _first_existing_path(_node_handoff_candidates(graph, node_id))
+    if handoff_path is not None:
+        handoff_ref = _portable_artifact_ref(handoff_path)
+        if node.get("handoff_md") != handoff_ref:
+            outcome["issues"].append({"type": "handoff_exists_inline_missing", "node": node_id, "path": str(handoff_path)})
+            if repair:
+                node["handoff_md"] = handoff_ref
+                artifacts["handoff_md"] = handoff_ref
+                result_artifacts["handoff_md"] = handoff_ref
+                outcome["repairs"].append({"type": "handoff_exists_inline_missing", "node": node_id, "repair": "backfilled_handoff_md"})
+
+    eval_path = _first_existing_path(_node_eval_json_candidates(graph, node_id))
+    if eval_path is None:
+        stale_eval_values = {
+            "node": node.get("eval_json"),
+            "result": result.get("eval_json"),
+            "artifact": artifacts.get("eval_json"),
+            "result_artifact": result_artifacts.get("eval_json"),
+        }
+        if any(str(value or "").strip() for value in stale_eval_values.values()):
+            outcome["issues"].append({"type": "stale_eval_ref_missing_file", "node": node_id, "values": stale_eval_values})
+            if repair:
+                node.pop("eval_json", None)
+                result.pop("eval_json", None)
+                artifacts.pop("eval_json", None)
+                result_artifacts.pop("eval_json", None)
+                outcome["repairs"].append({"type": "stale_eval_ref_missing_file", "node": node_id, "repair": "cleared_stale_eval_json_refs"})
+        return outcome
+    eval_ref = _portable_artifact_ref(eval_path)
+    inline_values = {
+        "node": node.get("eval_json"),
+        "result": result.get("eval_json"),
+        "artifact": artifacts.get("eval_json"),
+        "result_artifact": result_artifacts.get("eval_json"),
+    }
+    if any(not value for value in inline_values.values()):
+        outcome["issues"].append({"type": "eval_exists_inline_missing", "node": node_id, "path": str(eval_path)})
+        if repair:
+            node["eval_json"] = eval_ref
+            result["eval_json"] = eval_ref
+            artifacts["eval_json"] = eval_ref
+            result_artifacts["eval_json"] = eval_ref
+            outcome["repairs"].append({"type": "eval_exists_inline_missing", "node": node_id, "repair": "backfilled_eval_json"})
+    elif any(str(value) != eval_ref for value in inline_values.values()):
+        outcome["issues"].append({"type": "eval_ref_drift", "node": node_id, "path": str(eval_path), "values": inline_values})
+        if repair:
+            node["eval_json"] = eval_ref
+            result["eval_json"] = eval_ref
+            artifacts["eval_json"] = eval_ref
+            result_artifacts["eval_json"] = eval_ref
+            outcome["repairs"].append({"type": "eval_ref_drift", "node": node_id, "repair": "normalized_eval_json_ref"})
+
+    try:
+        payload = json.loads(eval_path.read_text(encoding="utf-8"))
+    except Exception:
+        return outcome
+    if not isinstance(payload, dict):
+        return outcome
+    normalized, changed = _normalize_eval_sidecar_payload(
+        payload,
+        sid=sid,
+        node_id=node_id,
+        command_line=command_line,
+    )
+    if changed:
+        outcome["issues"].append({"type": "eval_missing_provenance", "node": node_id, "path": str(eval_path)})
+        if repair:
+            tmp = eval_path.with_suffix(eval_path.suffix + ".tmp")
+            tmp.write_text(json.dumps(normalized, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            os.replace(tmp, eval_path)
+            outcome["repairs"].append({"type": "eval_missing_provenance", "node": node_id, "repair": "normalized_eval_sidecar_provenance"})
+    return outcome
+
+
+def _node_handoff_candidates(graph: dict[str, Any], node_id: str) -> list[Path]:
+    node = _node_map(graph)[node_id]
+    sid = _sprint_id_for_graph(graph)
+    artifacts = node.get("artifacts") if isinstance(node.get("artifacts"), dict) else {}
+    raw_candidates = [
+        node.get("handoff_md"),
+        artifacts.get("handoff_md"),
+        str(SPRINTS_DIR / f"{sid}.{node_id}-handoff.md") if sid else "",
+    ]
+    candidates: list[Path] = []
+    for raw in raw_candidates:
+        text = str(raw or "").strip()
+        if not text:
+            continue
+        try:
+            candidates.append(Path(text).expanduser())
+        except Exception:
+            continue
+    return candidates
+
+
+def _node_has_eval_json(graph: dict[str, Any], node_id: str) -> bool:
+    return any(path.exists() for path in _node_eval_json_candidates(graph, node_id))
+
+
+def _node_has_handoff(graph: dict[str, Any], node_id: str) -> bool:
+    return any(path.exists() for path in _node_handoff_candidates(graph, node_id))
+
+
+def _passed_without_required_eval(graph: dict[str, Any], node_id: str) -> bool:
+    """Treat handoff-backed passed nodes without eval sidecar as not yet passed."""
+    return _node_has_handoff(graph, node_id) and not _node_has_eval_json(graph, node_id)
+
+
+def _assert_pass_mark_allowed(graph: dict[str, Any], node_id: str, status: str) -> None:
+    normalized = str(status or "").lower()
+    if normalized != "passed":
+        return
+    if _passed_without_required_eval(graph, node_id):
+        raise ValueError(f"passed_requires_eval_json:{node_id}")
+
+
 def node_status(graph: dict[str, Any], node_id: str) -> str:
     results = _node_results(graph)
     node = _node_map(graph)[node_id]
@@ -432,19 +690,27 @@ def node_status(graph: dict[str, Any], node_id: str) -> str:
         result_status = str(results[node_id].get("status", "") or "").lower()
         node_status_value = str(node.get("status", "pending") or "pending").lower()
         if gate_passed and "failed" not in {result_status, node_status_value}:
-            return "passed"
-        result_rank = _status_rank(result_status)
-        node_rank = _status_rank(node_status_value)
-        if result_rank != node_rank:
-            return result_status if result_rank > node_rank else node_status_value
-        result_ts = _parse_ts(results[node_id].get("updated_at"))
-        node_ts = _parse_ts(node.get("updated_at"))
-        if result_ts and node_ts and node_ts > result_ts:
-            return node_status_value
-        return result_status
-    if gate_passed and str(node.get("status", "pending") or "pending").lower() != "failed":
-        return "passed"
-    return str(node.get("status", "pending") or "pending").lower()
+            status = "passed"
+        else:
+            result_rank = _status_rank(result_status)
+            node_rank = _status_rank(node_status_value)
+            if result_rank != node_rank:
+                status = result_status if result_rank > node_rank else node_status_value
+            else:
+                result_ts = _parse_ts(results[node_id].get("updated_at"))
+                node_ts = _parse_ts(node.get("updated_at"))
+                if result_ts and node_ts and node_ts > result_ts:
+                    status = node_status_value
+                else:
+                    status = result_status
+    elif gate_passed and str(node.get("status", "pending") or "pending").lower() != "failed":
+        status = "passed"
+    else:
+        status = str(node.get("status", "pending") or "pending").lower()
+
+    if status == "passed" and _passed_without_required_eval(graph, node_id):
+        return "reviewing"
+    return status
 
 
 def _depends_on(node: dict[str, Any]) -> list[str]:
@@ -1097,6 +1363,7 @@ def mark_node_result(graph: dict[str, Any], node_id: str, status: str,
     ids = _node_map(graph)
     if node_id not in ids:
         raise ValueError(f"unknown node: {node_id}")
+    _assert_pass_mark_allowed(graph, node_id, status)
 
     updated_at = _now()
     graph.setdefault("node_results", {})
@@ -1136,6 +1403,14 @@ def mark_node_result(graph: dict[str, Any], node_id: str, status: str,
             }
         else:
             graph["gate_results"][gate] = {"status": "passed", "node": node_id, "updated_at": updated_at}
+
+    if str(status or "").lower() in {"passed", "failed", "reviewing"}:
+        _sync_node_evidence_refs(
+            graph,
+            node_id,
+            repair=True,
+            command_line=f"python3 lib/graph_scheduler.py mark --node {node_id} --status {status}",
+        )
 
     return parent_ready_check(graph)
 
@@ -1385,7 +1660,10 @@ def enrich_backlog(sprints_dir: str | Path, dry_run: bool = False,
 
 def parent_ready_check(graph: dict[str, Any]) -> dict[str, Any]:
     ids = _node_map(graph)
-    open_nodes = [node_id for node_id in ids if node_status(graph, node_id) != "passed"]
+    open_nodes = [
+        node_id for node_id in ids
+        if node_status(graph, node_id) not in (PASS_STATUSES | CLOSED_NON_PASS_STATUSES)
+    ]
     failed_nodes = [node_id for node_id in ids if node_status(graph, node_id) == "failed"]
 
     required_gates = graph.get("required_gates")
@@ -1412,6 +1690,74 @@ def parent_ready_check(graph: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def epic_child_activation(graph: dict[str, Any]) -> dict[str, Any]:
+    """Return per-child activation state for an epic-level task graph.
+
+    Used by autopilot/wake to decide which child sprint to dispatch next
+    without skipping cross-sprint dependencies. Locks in the policy:
+
+      - A child is ``ready`` only when **every** entry in its ``depends_on``
+        list points to a sibling child whose status is in PASS_STATUSES.
+      - A child is ``blocked`` if any dependency is not yet passed; the
+        ``unmet`` list records exactly which deps still need to clear.
+      - The parent epic ``can_close`` only when every child has reached a
+        terminal status and at least one is passed (i.e. all required work
+        landed). Failed children prevent closure.
+
+    Works on any graph that follows the in-sprint conventions (``nodes``
+    with ``id``/``status``/``depends_on``), including
+    ``solar.epic.task_graph.v1`` graphs whose nodes are sprint IDs.
+    """
+    ids = _node_map(graph)
+    ready: list[dict[str, Any]] = []
+    blocked: list[dict[str, Any]] = []
+    done: list[str] = []
+    failed: list[str] = []
+    pending_or_active: list[str] = []
+
+    for child_id, node in ids.items():
+        status = node_status(graph, child_id)
+        if status in PASS_STATUSES:
+            done.append(child_id)
+            continue
+        if status == "failed":
+            failed.append(child_id)
+            continue
+        if status in CLOSED_NON_PASS_STATUSES:
+            # skipped/cancelled children neither block nor unlock siblings.
+            continue
+        pending_or_active.append(child_id)
+
+        deps = _internal_depends_on(node)
+        unmet = [dep for dep in deps if not _is_passed(graph, dep)]
+        record = {
+            "child_id": child_id,
+            "status": status,
+            "depends_on": deps,
+            "unmet": unmet,
+        }
+        if unmet:
+            blocked.append(record)
+        else:
+            ready.append(record)
+
+    epic_done = bool(ids) and not pending_or_active and not failed
+    can_close = epic_done and bool(done)
+
+    return {
+        "ok": True,
+        "epic_id": graph.get("epic_id") or graph.get("sprint_id"),
+        "schema_version": graph.get("schema_version"),
+        "children_total": len(ids),
+        "ready": ready,
+        "blocked": blocked,
+        "done": done,
+        "failed": failed,
+        "epic_done": epic_done,
+        "can_close": can_close,
+    }
+
+
 def doctor_graph(graph: dict[str, Any], repair: bool = False) -> dict[str, Any]:
     """Detect and optionally repair graph state drift.
 
@@ -1426,9 +1772,33 @@ def doctor_graph(graph: dict[str, Any], repair: bool = False) -> dict[str, Any]:
     results = _node_results(graph)
 
     for node_id, node in ids.items():
+        evidence_sync = _sync_node_evidence_refs(graph, node_id, repair=repair)
+        issues.extend(evidence_sync["issues"])
+        repairs.extend(evidence_sync["repairs"])
         inline_status = str(node.get("status", "") or "").lower()
         result = results.get(node_id) if isinstance(results.get(node_id), dict) else {}
         result_status = str((result or {}).get("status", "") or "").lower()
+        if _passed_without_required_eval(graph, node_id) and ("passed" in {inline_status, result_status}):
+            issue = {
+                "type": "passed_missing_eval",
+                "node": node_id,
+                "inline_status": inline_status,
+                "inline_updated_at": node.get("updated_at", ""),
+                "result_status": result_status,
+                "result_updated_at": result.get("updated_at", ""),
+                "effective_status": "reviewing",
+            }
+            issues.append(issue)
+            if repair:
+                now = _now()
+                node["status"] = "reviewing"
+                node["updated_at"] = now
+                graph.setdefault("node_results", {})
+                graph["node_results"].setdefault(node_id, {})
+                graph["node_results"][node_id]["status"] = "reviewing"
+                graph["node_results"][node_id]["updated_at"] = now
+                repairs.append({**issue, "repair": "reopened_passed_missing_eval"})
+            continue
         if not inline_status or not result_status or inline_status == result_status:
             continue
         inline_ts = _parse_ts(node.get("updated_at"))

@@ -698,6 +698,34 @@ def _is_passed(sid: str, sprints_dir: Path) -> tuple[bool, str]:
         status = d.get("status", "")
         finalized = (sprints_dir / f"{sid}.finalized").exists()
         if status in ("passed", "eval_pass", "finalized") or finalized:
+            graph_path = sprints_dir / f"{sid}.task_graph.json"
+            if graph_path.exists():
+                try:
+                    import sys as _sys
+
+                    _sys.path.insert(0, str(HARNESS_DIR / "lib"))
+                    import graph_scheduler as _gs  # noqa: WPS433
+
+                    _gs.SPRINTS_DIR = sprints_dir
+                    graph = _gs.load_graph(graph_path)
+                    parent = _gs.parent_ready_check(graph)
+                    if not parent.get("ready"):
+                        return False, f"graph_parent_not_ready open_nodes={parent.get('open_nodes', [])}"
+                    for node in graph.get("nodes", []):
+                        node_id = str(node.get("id") or "")
+                        if not node_id:
+                            continue
+                        if not _gs._node_has_handoff(graph, node_id):
+                            continue
+                        eval_path = _gs._first_existing_path(_gs._node_eval_json_candidates(graph, node_id))
+                        if eval_path is None:
+                            return False, f"node={node_id} missing_eval_json_for_export"
+                        eval_payload = json.loads(eval_path.read_text(encoding="utf-8"))
+                        verdict = str((eval_payload or {}).get("verdict") or "").upper()
+                        if verdict != "PASS":
+                            return False, f"node={node_id} eval_verdict={verdict or 'N/A'}"
+                except Exception as e:
+                    return False, f"graph_export_guard_failed: {e}"
             return True, status
         return False, f"status={status!r} (not passed/finalized)"
     except Exception as e:

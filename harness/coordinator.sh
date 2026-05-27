@@ -1085,6 +1085,11 @@ pane_is_thinking_snapshot() {
   printf '%s\n' "$snapshot" | grep -qE '(✻ Baked|✻ Worked|✻ Vibing|✻ Churned|✶ Flummoxing|·.* Vibing)'
 }
 
+pane_has_runtime_blocker_snapshot() {
+  local snapshot="$1"
+  printf '%s\n' "$snapshot" | grep -qiE "You've hit your limit|hit your limit|rate[- ]limit|usage limit|/upgrade to increase your usage limit|resets .*\\(America/Toronto\\)|How is Claude doing this session|1:[[:space:]]*Bad[[:space:]]+2:[[:space:]]*Fine[[:space:]]+3:[[:space:]]*Good[[:space:]]+0:[[:space:]]*Dismiss"
+}
+
 pane_is_idle_snapshot() {
   local snapshot="$1"
   # sprint-20260502-182804 hot-reload follow-up: 修 idle 检测正则
@@ -1273,6 +1278,13 @@ wait_for_dispatch_window() {
     # 实测: builder pane respawn 后空白行多, ❯ 可能在倒数第 13 行
     # 修复: tail 30 行确保 ❯ 在窗口内,即使有大量空白行
     snapshot=$(capture_pane_tail "$pane" 30)
+
+    # Runtime quota/rate-limit and Claude feedback modals can still show the
+    # normal edit-mode footer. Treat them as unavailable before idle detection.
+    if pane_has_runtime_blocker_snapshot "$snapshot"; then
+      log "${Y}目标 pane 处于 runtime/modal blocker，跳过本轮派发: ${pane}${N}"
+      return 1
+    fi
 
     if pane_is_idle_snapshot "$snapshot"; then
       return 0
@@ -1919,6 +1931,9 @@ dispatch_to_pane() {
     # treat those as successful dispatch evidence, otherwise the pane assignment
     # is persisted while the worker never actually accepts the task.
     printf '%s\n' "$verify_output" | grep -qiE "You've hit your limit|hit your limit|rate[- ]limit|usage limit|/upgrade to increase your usage limit|resets .*\\(America/Toronto\\)" && has_runtime_blocker=1
+    # Claude Code survey prompts can contain generic activity glyphs/keywords, but
+    # they are modal human-feedback screens and cannot accept dispatch input.
+    printf '%s\n' "$verify_output" | grep -qiE "How is Claude doing this session|1:[[:space:]]*Bad[[:space:]]+2:[[:space:]]*Fine[[:space:]]+3:[[:space:]]*Good[[:space:]]+0:[[:space:]]*Dismiss" && has_runtime_blocker=1
     # Claude 真在处理的特征。Claude Code 2.x frequently uses
     # Ideating/Musing/Orbiting/Reticulating before a tool call; treating those
     # as idle causes false dispatch failures while the pane is actually working.
