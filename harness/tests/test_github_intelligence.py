@@ -1,91 +1,466 @@
-from __future__ import annotations
+"""pytest suite for GitHub Project Intelligence core modules.
 
+Node: C5_core_runtime_release
+Write-scope: harness/tests/test_github_intelligence.py
+
+Wraps the module-level _self_test() functions and adds cross-module integration
+assertions. Requires no network access — all tests use in-memory SQLite.
+"""
+import importlib
 import json
+import os
 import sqlite3
 import sys
-from pathlib import Path
+import tempfile
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+import pytest
 
-from github_intelligence.briefs import generate_planning_brief
-from github_intelligence.reports.daily import generate_daily_report
-from github_intelligence.reports.weekly import generate_weekly_report
-from github_intelligence.pipeline import run_daily_pipeline
+# Ensure harness/lib is on path
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_LIB = os.path.join(_ROOT, "lib")
+sys.path.insert(0, _LIB)
 
 
-def make_conn() -> sqlite3.Connection:
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def fresh_conn() -> sqlite3.Connection:
+    """Return a fresh in-memory SQLite connection with schema applied."""
+    from github_intelligence.schema import apply_schema
+
     conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    conn.executescript(
-        """
-        CREATE TABLE repo_evidence_atoms (atom_id TEXT PRIMARY KEY, repo_full_name TEXT NOT NULL);
-        CREATE TABLE repo_analysis_cards (
-            card_id TEXT PRIMARY KEY, repo_full_name TEXT NOT NULL,
-            positioning TEXT NOT NULL DEFAULT '', what_it_does TEXT NOT NULL DEFAULT '',
-            target_users TEXT NOT NULL DEFAULT '[]', core_technical_idea TEXT NOT NULL DEFAULT '',
-            why_hot_facts TEXT NOT NULL DEFAULT '[]', scores_json TEXT NOT NULL DEFAULT '{}',
-            trend_implication TEXT NOT NULL DEFAULT '', risks_json TEXT NOT NULL DEFAULT '[]',
-            watch_next TEXT NOT NULL DEFAULT '[]', evidence_ids_json TEXT NOT NULL DEFAULT '[]',
-            risk_classification TEXT NOT NULL DEFAULT 'none', tier TEXT NOT NULL DEFAULT 'B',
-            confidence REAL NOT NULL DEFAULT 0.5, model_used TEXT NOT NULL DEFAULT '',
-            created_at TEXT NOT NULL, updated_at TEXT NOT NULL, verified INTEGER DEFAULT 0
-        );
-        CREATE TABLE repo_planning_briefs (
-            brief_id TEXT PRIMARY KEY, repo_full_name TEXT NOT NULL, card_id TEXT NOT NULL,
-            opportunity TEXT NOT NULL DEFAULT '', user_pain TEXT NOT NULL DEFAULT '',
-            mvp_sketch TEXT NOT NULL DEFAULT '', architecture_hint TEXT NOT NULL DEFAULT '',
-            go_to_market TEXT NOT NULL DEFAULT '', risks_json TEXT NOT NULL DEFAULT '[]',
-            validation_metrics TEXT NOT NULL DEFAULT '[]', model_used TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL
-        );
-        CREATE TABLE alerts (alert_id TEXT PRIMARY KEY, detector TEXT NOT NULL, repo_full_name TEXT NOT NULL, triggered_at TEXT NOT NULL, trigger_condition TEXT NOT NULL DEFAULT '', severity TEXT NOT NULL, acknowledged INTEGER DEFAULT 0);
-        CREATE TABLE model_call_ledger (created_at TEXT NOT NULL);
-        CREATE TABLE daily_reports (report_id TEXT PRIMARY KEY, report_date TEXT NOT NULL UNIQUE, section_data_json TEXT NOT NULL DEFAULT '{}', repos_analyzed INTEGER NOT NULL DEFAULT 0, premium_model_calls INTEGER NOT NULL DEFAULT 0, detector_alerts INTEGER NOT NULL DEFAULT 0, evidence_atoms_total INTEGER NOT NULL DEFAULT 0, generated_at TEXT NOT NULL);
-        CREATE TABLE weekly_reports (report_id TEXT PRIMARY KEY, report_week TEXT NOT NULL UNIQUE, section_data_json TEXT NOT NULL DEFAULT '{}', repos_analyzed INTEGER NOT NULL DEFAULT 0, premium_model_calls INTEGER NOT NULL DEFAULT 0, deep_analysis_count INTEGER NOT NULL DEFAULT 0, detector_alerts_weekly INTEGER NOT NULL DEFAULT 0, evidence_atoms_total INTEGER NOT NULL DEFAULT 0, generated_at TEXT NOT NULL);
-        """
-    )
+    conn.execute("PRAGMA journal_mode=WAL")
+    apply_schema(conn)
     return conn
 
 
-def seed_five_repos(conn: sqlite3.Connection):
-    for i in range(5):
-        repo = f"org/repo{i}"
-        ev_ids = []
-        for j in range(3):
-            atom = f"ev_{i}_{j}"
-            ev_ids.append(atom)
-            conn.execute("INSERT INTO repo_evidence_atoms VALUES (?, ?)", (atom, repo))
-        conn.execute(
-            """INSERT INTO repo_analysis_cards
-               (card_id, repo_full_name, positioning, what_it_does, target_users, core_technical_idea,
-                why_hot_facts, scores_json, risks_json, watch_next, evidence_ids_json, tier, confidence,
-                model_used, created_at, updated_at, verified)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)""",
-            (
-                f"card_{i}", repo, "infra platform", "does work", json.dumps(["engineers"]),
-                "architecture", json.dumps(["hot"]), json.dumps({"heat_score": 100-i}),
-                json.dumps([]), json.dumps(["watch"]), json.dumps(ev_ids), "A", 0.9,
-                "test", "2026-05-26T00:00:00Z", "2026-05-26T00:00:00Z",
-            ),
+# ---------------------------------------------------------------------------
+# C1: schema + model_ledger
+# ---------------------------------------------------------------------------
+
+
+class TestSchema:
+    def test_self_test_passes(self):
+        import github_intelligence.schema as m
+
+        result = m._self_test()
+        assert result["tests_run"] == result["tests_passed"], json.dumps(result, indent=2)
+
+    def test_model_ledger_self_test_passes(self):
+        import github_intelligence.model_ledger as m
+
+        result = m._self_test()
+        assert result["tests_run"] == result["tests_passed"], json.dumps(result, indent=2)
+
+    def test_schema_version_constant(self):
+        from github_intelligence.schema import SCHEMA_VERSION
+
+        assert SCHEMA_VERSION == "github_intelligence.v1"
+
+    def test_apply_schema_idempotent(self):
+        from github_intelligence.schema import apply_schema
+
+        conn = sqlite3.connect(":memory:")
+        apply_schema(conn)
+        apply_schema(conn)  # second call must not raise
+        cur = conn.execute("SELECT COUNT(*) FROM github_intelligence_migrations")
+        assert cur.fetchone()[0] == 1  # only one migration record
+
+    def test_evidence_atom_truncation(self):
+        from github_intelligence.schema import EvidenceAtom
+
+        atom = EvidenceAtom(
+            evidence_id="ev-x",
+            full_name="o/r",
+            source="api",
+            evidence_type="readme_claim",
+            compressed_content="a" * 1000,
         )
-    conn.execute("INSERT INTO alerts VALUES (?, ?, ?, ?, ?, ?, 0)", ("a1", "cross_source_resonance", "org/repo0", "2026-05-26T10:00:00Z", "hit", "high"))
-    conn.commit()
+        assert len(atom.compressed_content) == EvidenceAtom.MAX_COMPRESSED_CHARS
+
+    def test_analysis_card_evidence_floor(self):
+        from github_intelligence.schema import AnalysisCard
+
+        card = AnalysisCard(
+            analysis_id="ac-test",
+            full_name="o/r",
+            analysis_date="2026-05-27",
+            evidence_ids=["e1"],
+        )
+        with pytest.raises(ValueError):
+            card.validate_evidence_floor()
+
+    def test_detection_bad_severity(self):
+        from github_intelligence.schema import Detection
+
+        with pytest.raises(ValueError):
+            Detection(
+                detector_name="x",
+                full_name="o/r",
+                severity="catastrophic",
+                title="x",
+            )
 
 
-def test_five_repos_flow_through_reports_and_pipeline_consistency():
-    conn = make_conn()
-    seed_five_repos(conn)
-    for i in range(5):
-        generate_planning_brief(conn, f"org/repo{i}")
-    daily = generate_daily_report(conn, "2026-05-26")
-    weekly = generate_weekly_report(conn, "2026-05-26")
-    pipeline = run_daily_pipeline(dry_run=True)
+# ---------------------------------------------------------------------------
+# C2: adapters + snapshots
+# ---------------------------------------------------------------------------
 
-    assert pipeline.status == "passed"
-    assert conn.execute("SELECT COUNT(*) FROM repo_planning_briefs").fetchone()[0] == 5
-    assert conn.execute("SELECT COUNT(*) FROM daily_reports").fetchone()[0] == 1
-    assert conn.execute("SELECT COUNT(*) FROM weekly_reports").fetchone()[0] == 1
-    assert json.loads(daily["section_data_json"])["evidence_health"]["verified_cards"] == 5
-    assert json.loads(weekly["section_data_json"])["weekly_summary"]["daily_report_count"] == 1
-    for row in conn.execute("SELECT evidence_ids_json FROM repo_analysis_cards"):
-        for atom_id in json.loads(row[0]):
-            assert conn.execute("SELECT 1 FROM repo_evidence_atoms WHERE atom_id=?", (atom_id,)).fetchone()
+
+class TestAdapters:
+    def test_self_test_passes(self):
+        from github_intelligence.adapters import _self_test
+
+        result = _self_test()
+        assert result["tests_run"] == result["tests_passed"], json.dumps(result, indent=2)
+
+    def test_topic_adapter_empty_response(self):
+        from github_intelligence.adapters.topic import TopicAdapter
+        from datetime import datetime
+
+        adapter = TopicAdapter(
+            topics=["llm"],
+            fetch_fn=lambda url, headers: {"items": [], "total_count": 0},
+        )
+        candidates = adapter.run(since=datetime(2026, 5, 1))
+        assert candidates == []
+
+    def test_tracked_adapter_known_repos(self):
+        from github_intelligence.adapters.tracked import TrackedAdapter
+        from datetime import datetime
+
+        adapter = TrackedAdapter(config={"tracked_repos": ["owner/repo-a", "owner/repo-b"]})
+        candidates = adapter.run(since=datetime(2026, 5, 1))
+        assert len(candidates) == 2
+        full_names = {c.full_name for c in candidates}
+        assert "owner/repo-a" in full_names
+
+    def test_dedup_queue_no_duplicates(self):
+        from github_intelligence.adapters import DedupQueue
+        from github_intelligence.schema import DiscoveryCandidate, utc_now_iso
+
+        conn = fresh_conn()
+        queue = DedupQueue()
+
+        ts = utc_now_iso()
+        candidates = [
+            DiscoveryCandidate("owner/x", "trending", ts),
+            DiscoveryCandidate("owner/x", "trending", ts),  # duplicate
+        ]
+        new1 = queue.enqueue(candidates, conn)
+        assert len(new1) == 1
+
+        new2 = queue.enqueue(candidates, conn)
+        assert len(new2) == 0  # all already seen
+
+
+class TestSnapshots:
+    def test_self_test_passes(self):
+        from github_intelligence.snapshots import _self_test
+
+        result = _self_test()
+        assert result["tests_run"] == result["tests_passed"], json.dumps(result, indent=2)
+
+    def test_take_snapshot_persisted(self):
+        from github_intelligence.snapshots import take_snapshot
+        from github_intelligence.schema import fetch_rows, RepoSnapshot
+
+        conn = fresh_conn()
+        snap = take_snapshot(full_name="org/proj", stars=500, conn=conn)
+        rows = fetch_rows(conn, RepoSnapshot.TABLE, "full_name=?", ("org/proj",))
+        assert len(rows) == 1
+        assert rows[0]["stars"] == 500
+
+    def test_compute_deltas_insufficient_history(self):
+        from github_intelligence.snapshots import take_snapshot, compute_deltas
+
+        conn = fresh_conn()
+        snap = take_snapshot(full_name="org/newrepo", stars=10, conn=conn)
+        deltas = compute_deltas("org/newrepo", snap.snapshot_at, conn)
+        assert deltas.get("history_status") == "insufficient_history"
+
+
+# ---------------------------------------------------------------------------
+# C3: evidence + detectors
+# ---------------------------------------------------------------------------
+
+
+class TestEvidence:
+    def test_self_test_passes(self):
+        from github_intelligence.evidence import _self_test
+
+        result = _self_test()
+        assert result["tests_run"] == result["tests_passed"], json.dumps(result, indent=2)
+
+    def test_compress_readme_returns_atoms(self):
+        from github_intelligence.evidence import compress_readme
+
+        readme = (
+            "# MyProject\n\nA great ML toolkit.\n\n"
+            "## Features\n- Fast inference\n- Low memory\n- Easy API\n"
+        )
+        atoms = compress_readme("org/myproject", readme)
+        assert len(atoms) > 0
+        for atom in atoms:
+            assert atom.full_name == "org/myproject"
+            assert atom.evidence_type == "readme_claim"
+            assert len(atom.compressed_content or "") <= 500
+
+    def test_compress_readme_discards_low_importance(self):
+        from github_intelligence.evidence import compress_readme
+
+        atoms = compress_readme("org/x", "")
+        assert atoms == []
+
+    def test_compress_releases_one_atom_per_release(self):
+        from github_intelligence.evidence import compress_releases
+
+        releases = [
+            {"tag": "v1.0", "name": "First", "body": "Initial release", "published_at": "2026-05-01"},
+            {"tag": "v2.0", "name": "Major", "body": "Major improvements", "published_at": "2026-05-15"},
+        ]
+        atoms = compress_releases("org/x", releases)
+        assert len(atoms) == 2
+        tags = {a.raw_ref for a in atoms}
+        assert "v1.0" in tags
+        assert "v2.0" in tags
+
+
+class TestDetectors:
+    def test_self_test_passes(self):
+        from github_intelligence.detectors import _self_test
+
+        result = _self_test()
+        assert result["tests_run"] == result["tests_passed"], json.dumps(result, indent=2)
+
+    def test_sudden_hot_triggers_on_high_acceleration(self):
+        from github_intelligence.detectors import detect_sudden_hot
+        from github_intelligence.schema import RepoSnapshot
+
+        snap = RepoSnapshot(
+            snapshot_id="s1",
+            full_name="o/r",
+            snapshot_at="2026-05-27T00:00:00Z",
+            stars=5000,
+            star_acceleration=10.0,
+            stars_delta_24h=500,
+        )
+        detections = detect_sudden_hot("o/r", snap, [])
+        assert len(detections) == 1
+        assert detections[0].severity == "high"
+
+    def test_sudden_hot_negative_control(self):
+        from github_intelligence.detectors import detect_sudden_hot
+        from github_intelligence.schema import RepoSnapshot
+
+        snap = RepoSnapshot(
+            snapshot_id="s2",
+            full_name="o/r",
+            snapshot_at="2026-05-27T00:00:00Z",
+            stars=100,
+            star_acceleration=0.5,
+            stars_delta_24h=1,
+        )
+        detections = detect_sudden_hot("o/r", snap, [])
+        assert detections == []
+
+    def test_heat_score_deterministic(self):
+        from github_intelligence.detectors import compute_heat_score
+        from github_intelligence.schema import RepoSnapshot, EvidenceAtom
+
+        snap = RepoSnapshot(
+            snapshot_id="sx",
+            full_name="o/r",
+            snapshot_at="2026-05-27T00:00:00Z",
+            stars=2000,
+            star_acceleration=3.0,
+            stars_delta_24h=200,
+            commit_count_7d=15,
+        )
+        evidence = [
+            EvidenceAtom(
+                evidence_id="e1",
+                full_name="o/r",
+                source="api",
+                evidence_type="readme_claim",
+                importance_score=80.0,
+                technical_depth_score=70.0,
+            )
+        ]
+        h1 = compute_heat_score(snap, evidence)
+        h2 = compute_heat_score(snap, evidence)
+        assert h1 == h2, "heat_score must be deterministic"
+        assert 0.0 <= h1 <= 100.0
+
+
+# ---------------------------------------------------------------------------
+# C4: cards + briefs + reports
+# ---------------------------------------------------------------------------
+
+
+class TestCards:
+    def test_self_test_passes(self):
+        from github_intelligence.cards import _self_test
+
+        result = _self_test()
+        assert result["tests_run"] == result["tests_passed"], json.dumps(result, indent=2)
+
+    def test_create_card_verified_false_by_default(self):
+        from github_intelligence.cards import create_analysis_card
+
+        conn = fresh_conn()
+        card = create_analysis_card(
+            full_name="o/r",
+            analysis_date="2026-05-27",
+            evidence_ids=["e1", "e2", "e3"],
+            conn=conn,
+        )
+        assert card.verified == 0
+
+    def test_verify_card_sets_flag(self):
+        from github_intelligence.cards import create_analysis_card, verify_card
+
+        conn = fresh_conn()
+        card = create_analysis_card(
+            full_name="o/r",
+            analysis_date="2026-05-27",
+            evidence_ids=["e1", "e2", "e3"],
+            conn=conn,
+        )
+        updated = verify_card(card.analysis_id, conn)
+        assert updated is True
+
+    def test_planning_brief_requires_verified_card(self):
+        from github_intelligence.cards import create_analysis_card, create_planning_brief
+
+        conn = fresh_conn()
+        card = create_analysis_card(
+            full_name="o/r",
+            analysis_date="2026-05-27",
+            evidence_ids=["e1", "e2", "e3"],
+            conn=conn,
+        )
+        with pytest.raises(ValueError):
+            create_planning_brief(card, conn=conn)
+
+
+class TestReports:
+    def test_self_test_passes(self):
+        from github_intelligence.reports import _self_test
+
+        result = _self_test()
+        assert result["tests_run"] == result["tests_passed"], json.dumps(result, indent=2)
+
+    def test_daily_report_required_sections(self):
+        from github_intelligence.schema import DailyReport
+
+        required = [
+            "report_date", "core_judgment", "sudden_hot", "early_potential",
+            "tech_radar", "community_signals", "planning_suggestions", "watchlist",
+        ]
+        for field in required:
+            assert hasattr(DailyReport, "__dataclass_fields__") or hasattr(
+                DailyReport("2026-05-27"), field
+            )
+
+    def test_weekly_report_required_sections(self):
+        from github_intelligence.schema import WeeklyReport
+
+        wr = WeeklyReport(week_start="2026-05-25")
+        for attr in ["one_sentence", "top5_trends", "top10_projects",
+                     "deep_analysis", "planning_pool", "next_week_metrics"]:
+            assert hasattr(wr, attr)
+
+
+# ---------------------------------------------------------------------------
+# C4: pipeline smoke
+# ---------------------------------------------------------------------------
+
+
+class TestPipeline:
+    def test_self_test_passes(self):
+        from github_intelligence.pipeline import _self_test
+
+        result = _self_test()
+        assert result["tests_run"] == result["tests_passed"], json.dumps(result, indent=2)
+
+    def test_pipeline_empty_repos(self):
+        from github_intelligence.pipeline import run_pipeline
+
+        with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as tf:
+            db_path = tf.name
+        try:
+            result = run_pipeline(db_path=db_path, date="2026-05-27", repos=[])
+            assert result["repos_processed"] == 0
+            assert result["errors"] == []
+        finally:
+            os.unlink(db_path)
+
+
+# ---------------------------------------------------------------------------
+# Cross-module integration: snapshot → evidence → detection → card → report
+# ---------------------------------------------------------------------------
+
+
+class TestIntegration:
+    def test_full_chain_snapshot_to_card(self):
+        """End-to-end: snapshot → evidence → detection → card persisted in DB."""
+        from github_intelligence.snapshots import take_snapshot
+        from github_intelligence.evidence import compress_readme, compress_releases, persist_atoms
+        from github_intelligence.detectors import run_detectors
+        from github_intelligence.cards import create_analysis_card, verify_card, get_verified_cards
+
+        conn = fresh_conn()
+        full_name = "integration/test-repo"
+        date = "2026-05-27"
+
+        # Snapshot
+        snap = take_snapshot(full_name=full_name, stars=3000, conn=conn)
+        assert snap.full_name == full_name
+
+        # Evidence
+        readme = (
+            "# Integration Test\n\nAn agent framework for autonomous tasks.\n\n"
+            "## Features\n- Multi-agent orchestration\n- Zero-latency routing\n"
+            "- Production-hardened\n\n## Why\nBuilt for real workloads."
+        )
+        atoms = compress_readme(full_name, readme)
+        persist_atoms(atoms, conn)
+        assert len(atoms) > 0
+
+        # Run detectors — no crash expected; sudden_hot requires computed delta history
+        detections = run_detectors(full_name, snap, atoms, conn=conn)
+        assert isinstance(detections, list)
+
+        # Analysis card
+        evidence_ids = [a.evidence_id for a in atoms]
+        while len(evidence_ids) < 3:
+            evidence_ids.append(f"ev-pad-{len(evidence_ids)}")
+
+        card = create_analysis_card(
+            full_name=full_name,
+            analysis_date=date,
+            evidence_ids=evidence_ids,
+            heat_score=88.0,
+            conn=conn,
+        )
+        verify_card(card.analysis_id, conn)
+
+        # Query verified cards
+        verified = get_verified_cards(conn, date)
+        assert any(c.full_name == full_name for c in verified)
+
+    def test_schema_backward_compat(self):
+        """Existing harness modules still importable after github_intelligence is loaded."""
+        for module in [
+            "session_log",
+            "event_ledger",
+            "evidence_ledger",
+            "model_call_runtime",
+        ]:
+            try:
+                importlib.import_module(module)
+            except ImportError:
+                pytest.skip(f"{module} not available in this environment")

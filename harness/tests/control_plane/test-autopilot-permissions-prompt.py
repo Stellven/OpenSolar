@@ -26,10 +26,22 @@ PERMISSIONS_TAIL = """
   ⏵⏵ bypass permissions on          ·
 """
 
+READY_FOOTER_TAIL = """
+⏺ Read(/tmp/example.md)
+  ⎿  Read 12 lines
+
+────────────────────────────────────────
+❯ Try "edit /tmp/example.md"
+────────────────────────────────────────
+  ⏵⏵ bypass permissions on (shift+tab to cycle)
+"""
+
 
 def main() -> int:
     if not mod.pane_permissions_prompt_blocked(PERMISSIONS_TAIL):
         raise SystemExit("permissions prompt was not detected")
+    if mod.pane_permissions_prompt_blocked(READY_FOOTER_TAIL):
+        raise SystemExit("ready footer was incorrectly detected as permissions prompt")
 
     mod.tmux_capture = lambda target: PERMISSIONS_TAIL
     mod.assigned_graph_node_for_pane = lambda target: {

@@ -533,6 +533,10 @@ dispatch_to_role() {
   local role="$1" sid="$2" intent="${3:-${role}_dispatch}" instruction_file="${4:-$SPRINTS_DIR/${sid}.dispatch.md}"
   local message="${5:-}"
   local pane tried=0 last_rc=0
+  local terminal_suppressible=0
+  case "$intent" in
+    passed_notify|failed_max_rounds) terminal_suppressible=1 ;;
+  esac
   while IFS= read -r -u 9 pane; do
     [[ -n "$pane" ]] || continue
     pane_target_exists "$pane" || continue
@@ -551,11 +555,17 @@ dispatch_to_role() {
     if (( last_rc == 0 )); then
       return 0
     fi
+    if (( last_rc == 3 && terminal_suppressible == 1 )); then
+      log "${Y}[worker-select] suppress terminal ${role} dispatch sid=${sid} intent=${intent} reason=terminal_phase_wake_detected${N}"
+      emit_event "$sid" "dispatch_suppressed" "coordinator" \
+        "{\"role\":\"${role}\",\"intent\":\"${intent}\",\"reason\":\"terminal_phase_wake_detected\"}"
+      return 0
+    fi
     log "${Y}[worker-select] ${role} target=${pane} dispatch rc=${last_rc}; trying next candidate${N}"
   done 9< <(role_candidate_panes "$role" 2>/dev/null || true)
 
-  if [[ "$intent" == "passed_notify" && "$last_rc" == "3" ]]; then
-    log "${Y}[worker-select] suppress terminal ${role} notify queue sid=${sid} intent=${intent} reason=terminal_phase_wake_detected${N}"
+  if (( last_rc == 3 && terminal_suppressible == 1 )); then
+    log "${Y}[worker-select] suppress terminal ${role} queue sid=${sid} intent=${intent} reason=terminal_phase_wake_detected${N}"
     emit_event "$sid" "dispatch_suppressed" "coordinator" \
       "{\"role\":\"${role}\",\"intent\":\"${intent}\",\"reason\":\"terminal_phase_wake_detected\"}"
     return 0

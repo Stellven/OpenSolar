@@ -1,172 +1,272 @@
-"""topic.py — TopicAdapter: GitHub Search API per topic query.
+"""TopicAdapter — discover repos via GitHub Search API by topic list.
 
-Reads topic definitions from the config file, queries GitHub Search API
-for each, and returns DiscoveryCandidate objects.
+Sprint: sprint-20260524-p0-ai-influence-github-project-intelligence-system-upgrade-s03-core-runtime
+Node:   C2_adapters_snapshots / adapter:topic
 
-Handles rate limiting with exponential backoff.
+Queries:
+    GET /search/repositories?q=topic:{topic}&sort=stars&order=desc
+
+fetch_fn signature:
+    fetch_fn(url: str, headers: dict[str, str]) -> dict   (parsed JSON)
 """
 from __future__ import annotations
 
-import logging
-import time
-from typing import Any
+import json
+import sys
+import urllib.error
+import urllib.request
+from datetime import datetime, timezone
+from typing import Any, Callable
 
-import yaml
+# Allow standalone execution from adapters/ directory
+if __package__ is None or __package__ == "":
+    import os as _os
+    sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+    from schema import DiscoveryCandidate, utc_now_iso
+else:
+    from ..schema import DiscoveryCandidate, utc_now_iso
 
-from .base import DiscoveryCandidate
 
-logger = logging.getLogger(__name__)
+_GH_SEARCH_URL = "https://api.github.com/search/repositories"
+_DEFAULT_TOPICS = [
+    "llm",
+    "large-language-model",
+    "ai-agent",
+    "rag",
+    "vector-database",
+    "mlx",
+    "transformer",
+]
+_DEFAULT_PER_PAGE = 30
 
-# Default path for config
-_DEFAULT_CONFIG_PATH = "/Users/lisihao/Solar/harness/config/github_intelligence_config.yaml"
+
+def _default_fetch(url: str, headers: dict[str, str]) -> dict[str, Any]:
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return json.loads(resp.read().decode())
 
 
 class TopicAdapter:
-    """Discover repos by querying GitHub Search API per topic."""
+    """Discover repos from GitHub Search API using a list of topics."""
+
+    source_type = "topic"
 
     def __init__(
         self,
-        *,
-        config_path: str = _DEFAULT_CONFIG_PATH,
+        topics: list[str] | None = None,
+        per_page: int = _DEFAULT_PER_PAGE,
         github_token: str | None = None,
-        max_results_per_topic: int = 100,
+        fetch_fn: Callable[[str, dict[str, str]], dict[str, Any]] | None = None,
     ) -> None:
-        self._config_path = config_path
-        self._github_token = github_token
-        self._max_results = max_results_per_topic
-        self._topics: list[dict[str, Any]] = []
-        self._load_config()
+        self.topics = topics if topics is not None else _DEFAULT_TOPICS
+        self.per_page = per_page
+        self.github_token = github_token
+        self._fetch = fetch_fn or _default_fetch
 
-    def _load_config(self) -> None:
-        """Load topic definitions from config file."""
-        try:
-            with open(self._config_path) as f:
-                config = yaml.safe_load(f)
-            self._topics = config.get("discovery", {}).get("topics", [])
-        except (OSError, yaml.YAMLError) as e:
-            logger.warning("Failed to load config from %s: %s", self._config_path, e)
-            self._topics = []
+    def _headers(self) -> dict[str, str]:
+        h: dict[str, str] = {
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        if self.github_token:
+            h["Authorization"] = f"Bearer {self.github_token}"
+        return h
 
-    def run(self, since: str | None = None) -> list[DiscoveryCandidate]:
-        """Query GitHub Search API for each topic.
-
-        Parameters
-        ----------
-        since : str, optional
-            ISO timestamp filter.
-
-        Returns
-        -------
-        list[DiscoveryCandidate]
-        """
-        candidates: list[DiscoveryCandidate] = []
-
-        for topic_def in self._topics:
-            try:
-                topic_candidates = self._query_topic(topic_def, since)
-                candidates.extend(topic_candidates)
-            except Exception as e:
-                logger.error(
-                    "TopicAdapter error for topic %s: %s",
-                    topic_def.get("name", "?"), e,
-                )
-                # Adapter failure → log + skip, do not block other adapters
-
-        return candidates
-
-    def _query_topic(
+    def run(
         self,
-        topic_def: dict[str, Any],
-        since: str | None,
+        since: datetime | None = None,
+        fetch_fn: Callable[[str, dict[str, str]], dict[str, Any]] | None = None,
     ) -> list[DiscoveryCandidate]:
-        """Query a single topic definition.
+        """Query each topic and return deduplicated DiscoveryCandidate list.
 
-        In production, this calls the GitHub Search API.
-        Currently returns structured candidates from the config definition.
+        Args:
+            since: Not used by GitHub Search, kept for interface parity.
+            fetch_fn: Optional override; if provided, replaces instance fetch_fn.
         """
-        name = topic_def.get("name", "unknown")
-        query = topic_def.get("query", "")
-        star_range = topic_def.get("star_range", [0, 100000])
-        recency = topic_def.get("recency", "30d")
+        fn = fetch_fn or self._fetch
+        now = utc_now_iso()
+        seen: set[str] = set()
+        results: list[DiscoveryCandidate] = []
 
-        # Build GitHub Search API URL
-        # GET https://api.github.com/search/repositories?q={query}+stars:{min}..{max}+pushed:>{since}
-        search_query = query
-        if star_range and len(star_range) == 2:
-            search_query += f" stars:{star_range[0]}..{star_range[1]}"
-        if since:
-            search_query += f" pushed:>{since}"
-
-        # Attempt real GitHub API call
-        results = self._call_github_api(search_query)
-
-        if results is None:
-            # API unavailable — return empty (no crash)
-            return []
-
-        candidates: list[DiscoveryCandidate] = []
-        for item in results:
-            full_name = item.get("full_name", "")
-            if not full_name:
-                continue
-            candidates.append(
-                DiscoveryCandidate(
-                    full_name=full_name,
-                    source_type="topic",
-                    metadata={
-                        "topic_name": name,
-                        "stars": item.get("stargazers_count", 0),
-                        "description": item.get("description", ""),
-                        "language": item.get("language", ""),
-                    },
-                )
+        for topic in self.topics:
+            url = (
+                f"{_GH_SEARCH_URL}?q=topic:{topic}"
+                f"&sort=stars&order=desc&per_page={self.per_page}"
             )
+            try:
+                data = fn(url, self._headers())
+            except urllib.error.HTTPError as exc:
+                # 403 rate-limit, 422 validation error — skip topic, don't crash
+                if exc.code in (403, 422, 429):
+                    continue
+                raise
+            except Exception:
+                continue
 
-        return candidates[:self._max_results]
+            items = data.get("items") or []
+            for item in items:
+                full_name: str = item.get("full_name", "")
+                if not full_name or full_name in seen:
+                    continue
+                seen.add(full_name)
+                results.append(
+                    DiscoveryCandidate(
+                        full_name=full_name,
+                        source_type=self.source_type,
+                        discovered_at=now,
+                        metadata={
+                            "query_topic": topic,
+                            "stars": item.get("stargazers_count"),
+                            "forks": item.get("forks_count"),
+                            "pushed_at": item.get("pushed_at"),
+                            "description": (item.get("description") or "")[:200],
+                            "topics": item.get("topics") or [],
+                        },
+                    )
+                )
 
-    def _call_github_api(self, query: str) -> list[dict[str, Any]] | None:
-        """Call GitHub Search API with rate limit backoff.
+        return results
 
-        Returns None if API is unavailable (no crash).
-        """
-        try:
-            import urllib.request
-            import json as json_mod
 
-            url = f"https://api.github.com/search/repositories?q={urllib.parse.quote(query)}&sort=stars&order=desc&per_page={self._max_results}"
-            headers = {
-                "Accept": "application/vnd.github.v3+json",
-                "User-Agent": "Solar-GitHub-Intelligence/1.0",
+# ---------------------------------------------------------------------------
+# Self-test
+# ---------------------------------------------------------------------------
+
+
+def _self_test() -> dict[str, Any]:
+    metrics: dict[str, Any] = {"tests_run": 0, "tests_passed": 0, "details": []}
+
+    def _ok(name: str) -> None:
+        metrics["tests_run"] += 1
+        metrics["tests_passed"] += 1
+        metrics["details"].append({"test": name, "status": "pass"})
+
+    def _fail(name: str, reason: str) -> None:
+        metrics["tests_run"] += 1
+        metrics["details"].append({"test": name, "status": "fail", "reason": reason})
+
+    # Stub fetch: returns two repos for 'llm', one repo for 'rag'
+    def _stub_fetch(url: str, headers: dict[str, str]) -> dict[str, Any]:
+        if "topic:llm" in url:
+            return {
+                "total_count": 2,
+                "items": [
+                    {
+                        "full_name": "owner/llm-repo",
+                        "stargazers_count": 5000,
+                        "forks_count": 300,
+                        "pushed_at": "2026-05-27T00:00:00Z",
+                        "description": "LLM inference engine",
+                        "topics": ["llm", "python"],
+                    },
+                    {
+                        "full_name": "owner/another-llm",
+                        "stargazers_count": 1200,
+                        "forks_count": 100,
+                        "pushed_at": "2026-05-26T00:00:00Z",
+                        "description": "Another LLM tool",
+                        "topics": ["llm"],
+                    },
+                ],
             }
-            if self._github_token:
-                headers["Authorization"] = f"token {self._github_token}"
+        if "topic:rag" in url:
+            return {
+                "total_count": 1,
+                "items": [
+                    {
+                        "full_name": "owner/rag-framework",
+                        "stargazers_count": 800,
+                        "forks_count": 50,
+                        "pushed_at": "2026-05-25T00:00:00Z",
+                        "description": "RAG pipeline",
+                        "topics": ["rag"],
+                    }
+                ],
+            }
+        return {"total_count": 0, "items": []}
 
-            max_retries = 3
-            for attempt in range(max_retries):
-                req = urllib.request.Request(url, headers=headers)
-                try:
-                    with urllib.request.urlopen(req, timeout=30) as resp:
-                        data = json_mod.loads(resp.read().decode())
-                        return data.get("items", [])
-                except urllib.error.HTTPError as e:
-                    if e.code in (403, 429):
-                        # Rate limit — exponential backoff
-                        wait = 2 ** attempt * 5
-                        logger.warning(
-                            "GitHub API rate limit (attempt %d/%d), waiting %ds",
-                            attempt + 1, max_retries, wait,
-                        )
-                        time.sleep(wait)
-                        continue
-                    raise
-                except urllib.error.URLError:
-                    return None
+    # Test 1: basic run returns correct candidates
+    adapter = TopicAdapter(topics=["llm", "rag"], fetch_fn=_stub_fetch)
+    candidates = adapter.run()
+    if len(candidates) == 3:
+        _ok("topic_adapter.basic_run_count")
+    else:
+        _fail("topic_adapter.basic_run_count", f"expected 3, got {len(candidates)}")
 
-            logger.error("GitHub API rate limit exhausted after %d retries", max_retries)
-            return None
+    # Test 2: all source_type == 'topic'
+    if all(c.source_type == "topic" for c in candidates):
+        _ok("topic_adapter.source_type_correct")
+    else:
+        _fail("topic_adapter.source_type_correct", "wrong source_type")
 
-        except ImportError:
-            return None
-        except Exception as e:
-            logger.error("GitHub API call failed: %s", e)
-            return None
+    # Test 3: dedup across topics (llm-repo appears in both, but stub only queries once)
+    def _dup_fetch(url: str, headers: dict[str, str]) -> dict[str, Any]:
+        return {
+            "total_count": 1,
+            "items": [
+                {
+                    "full_name": "shared/repo",
+                    "stargazers_count": 100,
+                    "forks_count": 5,
+                    "pushed_at": "2026-05-27T00:00:00Z",
+                    "description": "",
+                    "topics": [],
+                }
+            ],
+        }
+
+    dup_adapter = TopicAdapter(topics=["llm", "rag", "mlx"], fetch_fn=_dup_fetch)
+    dup_candidates = dup_adapter.run()
+    if len(dup_candidates) == 1:
+        _ok("topic_adapter.dedup_cross_topics")
+    else:
+        _fail("topic_adapter.dedup_cross_topics", f"expected 1 deduped, got {len(dup_candidates)}")
+
+    # Test 4: fetch_fn override at run() call time
+    call_log: list[str] = []
+
+    def _tracking_fetch(url: str, headers: dict[str, str]) -> dict[str, Any]:
+        call_log.append(url)
+        return {"total_count": 0, "items": []}
+
+    adapter2 = TopicAdapter(topics=["mlx"], fetch_fn=_stub_fetch)
+    adapter2.run(fetch_fn=_tracking_fetch)
+    if len(call_log) == 1 and "mlx" in call_log[0]:
+        _ok("topic_adapter.fetch_fn_runtime_override")
+    else:
+        _fail("topic_adapter.fetch_fn_runtime_override", f"call_log={call_log}")
+
+    # Test 5: HTTP 403 is silently skipped (rate limit)
+    import urllib.error as _ue
+
+    def _rate_limit_fetch(url: str, headers: dict[str, str]) -> dict[str, Any]:
+        raise _ue.HTTPError(url, 403, "rate limited", {}, None)  # type: ignore[arg-type]
+
+    rl_adapter = TopicAdapter(topics=["llm"], fetch_fn=_rate_limit_fetch)
+    rl_candidates = rl_adapter.run()
+    if rl_candidates == []:
+        _ok("topic_adapter.http_403_skipped")
+    else:
+        _fail("topic_adapter.http_403_skipped", "expected empty list")
+
+    # Test 6: empty response
+    empty_adapter = TopicAdapter(topics=[], fetch_fn=_stub_fetch)
+    if empty_adapter.run() == []:
+        _ok("topic_adapter.empty_topics_list")
+    else:
+        _fail("topic_adapter.empty_topics_list", "expected []")
+
+    # Test 7: metadata fields preserved
+    llm_cand = next(c for c in candidates if c.full_name == "owner/llm-repo")
+    if llm_cand.metadata["stars"] == 5000 and llm_cand.metadata["query_topic"] == "llm":
+        _ok("topic_adapter.metadata_fields_preserved")
+    else:
+        _fail("topic_adapter.metadata_fields_preserved", f"metadata={llm_cand.metadata}")
+
+    return metrics
+
+
+if __name__ == "__main__":
+    m = _self_test()
+    print(json.dumps(m, indent=2))
+    sys.exit(0 if m["tests_run"] == m["tests_passed"] else 1)

@@ -27,12 +27,14 @@ MULTI_TASK_RUN_DIR = HARNESS_DIR / "run" / "multi-task"
 SESSION = os.environ.get("SOLAR_HARNESS_SESSION", "solar-harness")
 NO_DISPATCH_FLAG = HARNESS_DIR / "run" / "no-dispatch.flag"
 DISPATCH_LEDGER = HARNESS_DIR / "run" / "dispatch-ledger.jsonl"
+PANE_COOLDOWN_FILE = HARNESS_DIR / "run" / "graph-dispatch-pane-cooldowns.json"
+PANE_RECOVER_COOLDOWN_SEC = int(os.environ.get("SOLAR_GRAPH_PANE_RECOVER_COOLDOWN_SEC", "900"))
 PANE_TUI_BUSY_RE = re.compile(
     r"Compacting conversation|压缩上下文|Reticulating|Scurrying|Roosting|"
     r"Mustering|Herding|Baking|Cogitating|Churning|Ruminating|Thinking|"
     r"Whirring|Smooshing|Unhandled node type|Do you want to proceed\?|Would you like to proceed\?|"
     r"Do you want to make this edit|allow all edits during this session|"
-    r"accept edits on|bypass permissions on|Enter to confirm|Esc to cancel|Bash command|"
+    r"Enter to confirm|Esc to cancel|Bash command|"
     r"[·✳✶✽✢]\s+[A-Za-z][A-Za-z-]*…|✳|✶|✽|✢",
     re.I,
 )
@@ -48,8 +50,26 @@ PANE_QUOTA_EXHAUSTED_RE = re.compile(
     r"rate[- ]limit|rate limit|RESOURCE_EXHAUSTED|429",
     re.I,
 )
+PANE_RATE_LIMIT_OPTIONS_MODAL_RE = re.compile(
+    r"What do you want to do\?[\s\S]{0,260}(?:/rate-limit-options|Upgrade your plan|Stop and wait for limit to reset)[\s\S]{0,120}Esc to cancel",
+    re.I,
+)
 PANE_DISPATCH_FAILED_IDLE_RE = re.compile(
     r"API Error:\s*Request timed out|Check your internet connection and proxy settings",
+    re.I,
+)
+PANE_PROCESSING_RE = re.compile(
+    r"Crafting|Cogitating|Orchestrating|Coalescing|Wandering|Sock-hopping|"
+    r"Puzzling|Cooking|Baked|Thinking|Considering|Newspapering|"
+    r"Reticulating|Scurrying|Roosting|Mustering|Herding|Ruminating|"
+    r"Churning|Baking|Effecting|Swooping|Whirring|Smooshing|Catapulting|Actualizing|"
+    r"Unravelling|Compacting conversation|Implementing|Writing|Running tests|"
+    r"[·✳✶✽✢]\s+[A-Za-z][A-Za-z-]*…|"
+    r"⎿|✻|✶|✳|✽|⏺",
+    re.I,
+)
+PANE_COMPLETED_MARKER_RE = re.compile(
+    r"✻\s+(?:Churned|Cogitated|Baked|Brewed|Cooked|Sautéed|Thought|Worked|Crunched)\s+for",
     re.I,
 )
 PANE_QUEUED_PROMPT_RE = re.compile(r"Press up to edit queued messages", re.I)
@@ -58,20 +78,23 @@ PANE_SURVEY_PROMPT_RE = re.compile(
     re.I,
 )
 PANE_APPROVAL_PROMPT_RE = re.compile(
-    r"bypass permissions on|"
     r"Do you want to make this edit|"
     r"allow all edits during this session|"
-    r"accept edits on|"
     r"Press up to edit queued messages",
     re.I,
 )
 PANE_CONFIRMATION_PROMPT_RE = re.compile(
     r"Unhandled node type|Do you want to proceed\?|Do you want to make this edit|"
-    r"allow all edits during this session|accept edits on|bypass permissions on|"
+    r"allow all edits during this session|"
     r"Enter to confirm|Esc to cancel|Bash command",
     re.I,
 )
 PANE_PROMPT_RESIDUE_RE = re.compile(r"^\s*❯(?![\s\u00a0]+Try\s+\")[\s\u00a0]+[^\s\u00a0─]", re.M)
+RECOVERABLE_DISPATCH_PROMPT_REASONS = {
+    "proceed_confirmation_prompt",
+    "edit_confirmation_prompt",
+    "queued_prompt_residue",
+}
 STATE_READ_PREFLIGHT = """<!-- SOLAR_STATE_READ_PREFLIGHT -->
 ## 必须先读状态 (防写入 hook 卡死)
 
@@ -1080,8 +1103,18 @@ def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path
         status = node_status(graph, node_id)
         handoff_file = _existing_node_handoff(sid, node, graph)
         eval_json_path = str(node.get("eval_json") or _eval_json_file(sid, node_id))
+        if not Path(eval_json_path).exists():
+            backfilled_eval = _maybe_backfill_eval_json_from_md(sid, node_id)
+            if backfilled_eval is not None:
+                eval_json_path = str(backfilled_eval)
         eval_payload = _read_json_file_safe(eval_json_path) if eval_json_path else {}
-        eval_verdict = str(eval_payload.get("verdict") or "").strip().upper()
+        raw_eval_verdict = str(eval_payload.get("verdict") or eval_payload.get("status") or "").strip().lower()
+        if raw_eval_verdict in {"pass", "passed", "ok", "success", "succeeded"}:
+            eval_verdict = "PASS"
+        elif raw_eval_verdict in {"fail", "failed", "error", "errored"}:
+            eval_verdict = "FAIL"
+        else:
+            eval_verdict = ""
         if handoff_file and eval_verdict in {"PASS", "FAIL"} and status in {"pending", "queued", "blocked", "assigned", "dispatched", "in_progress", "running", "reviewing", "ready_for_review", "needs_human_review", "failed_review", ""}:
             pane = str(node.get("assigned_to") or "").strip()
             dispatch_id = str(node.get("dispatch_id") or "").strip()
@@ -1168,10 +1201,38 @@ def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path
                     and str(lease.get("dispatch_id") or "") == dispatch_id
                     and str(lease.get("expires_at") or "") > _utc_now()
                 )
+                ack_file = HARNESS_DIR / "sprints" / "graph-acks" / f"{sid}.{node_id}-submit-ack.json"
+                ack_live = False
+                if ack_file.exists():
+                    try:
+                        ack_payload = json.loads(ack_file.read_text(encoding="utf-8"))
+                        ack_live = str(ack_payload.get("dispatch_id") or "") == dispatch_id
+                    except Exception:
+                        ack_live = False
                 tail = _pane_tail(pane)
                 dispatch_prompt_reason = _pane_dispatch_prompt_reason(tail)
-                unavailable_reason = _pane_runtime_unavailable_reason(pane, title) or _pane_unavailable_reason(pane)
+                unavailable_reason = _pane_cooldown_reason(pane) or _pane_runtime_unavailable_reason(pane, title) or _pane_unavailable_reason(pane)
                 idle_assigned = "graph_node_idle_assigned" in title.lower()
+                if ack_live and unavailable_reason in RECOVERABLE_DISPATCH_PROMPT_REASONS:
+                    _dismiss_dispatch_prompt(pane, unavailable_reason)
+                    set_node_status(graph, node_id, "dispatched", pane=pane, dispatch_id=dispatch_id)
+                    repaired.append(
+                        {
+                            "node": node_id,
+                            "pane": pane,
+                            "dispatch_id": dispatch_id,
+                            "status": "dispatched",
+                            "reason": f"recoverable_prompt_kept_active:{unavailable_reason}",
+                        }
+                    )
+                    continue
+                if ack_live and not unavailable_reason:
+                    # Some deployments intentionally disable runtime leases.
+                    # A matching submit ack is the durable proof that the pane
+                    # received the node, so do not reset/re-enqueue it merely
+                    # because no live lease exists.
+                    set_node_status(graph, node_id, "dispatched", pane=pane, dispatch_id=dispatch_id)
+                    continue
                 if not lease_live:
                     release_lease(
                         pane,
@@ -1224,7 +1285,7 @@ def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path
                 pane = str(assignment.get("pane") or "").strip()
                 if not pane:
                     continue
-                unavailable_reason = _pane_runtime_unavailable_reason(pane, _pane_title(pane)) or _pane_unavailable_reason(pane)
+                unavailable_reason = _pane_cooldown_reason(pane) or _pane_runtime_unavailable_reason(pane, _pane_title(pane)) or _pane_unavailable_reason(pane)
                 if unavailable_reason:
                     blocked_assignment = {
                         "pane": pane,
@@ -1321,6 +1382,54 @@ def _eval_peer_json_file(sid: str, node_id: str, index: int) -> Path:
 
 def _eval_dispatch_member_file(sid: str, node_id: str, index: int) -> Path:
     return SPRINTS_DIR / f"{sid}.{_safe_node_id(node_id)}-eval-dispatch-q{index}.md"
+
+
+def _verdict_from_eval_md(eval_md: Path) -> str:
+    try:
+        text = eval_md.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return ""
+    match = re.search(r"(?ims)^##\s+Verdict\s*\n+\s*(PASS|FAIL|FAILED|OK)\b", text)
+    if not match:
+        return ""
+    raw = match.group(1).strip().upper()
+    if raw in {"PASS", "OK"}:
+        return "PASS"
+    if raw in {"FAIL", "FAILED"}:
+        return "FAIL"
+    return ""
+
+
+def _maybe_backfill_eval_json_from_md(sid: str, node_id: str) -> Path | None:
+    """Recover evaluator sidecar JSON when the Markdown verdict is explicit.
+
+    This is intentionally narrow: it only runs for graph node eval sidecars,
+    requires a `## Verdict` section with PASS/FAIL, and records that the JSON was
+    derived from evaluator Markdown. It does not invent a verdict.
+    """
+    eval_json = _eval_json_file(sid, node_id)
+    if eval_json.exists():
+        return eval_json
+    eval_md = _eval_md_file(sid, node_id)
+    if not eval_md.exists():
+        return None
+    verdict = _verdict_from_eval_md(eval_md)
+    if verdict not in {"PASS", "FAIL"}:
+        return None
+    payload = {
+        "verdict": verdict,
+        "status": "passed" if verdict == "PASS" else "failed",
+        "node_id": node_id,
+        "sprint_id": sid,
+        "eval_md": str(eval_md),
+        "source": "backfilled_from_eval_md",
+        "created_at": _utc_now(),
+    }
+    try:
+        eval_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    except Exception:
+        return None
+    return eval_json
 
 
 def _node_eval_assignments(node: dict[str, Any]) -> list[dict[str, Any]]:
@@ -2092,6 +2201,44 @@ def _pane_execution_priority(pane: str) -> tuple[int, str]:
     return (9, pane)
 
 
+def _pane_evaluator_priority(pane: str, title: str = "") -> tuple[int, str]:
+    """Prefer the canonical evaluator as primary, then evaluator-capable pool panes.
+
+    Graph eval dispatch can run quorum/secondary reviews, but the canonical
+    eval sidecar should stay anchored to the main Evaluator when it is
+    available. Lab panes are capacity spillover, not the first choice.
+    """
+    if pane == f"{SESSION}:0.3":
+        return (0, pane)
+    if re.search(r"Evaluator|审判官", title or _pane_title(pane), re.I):
+        return (1, pane)
+    if pane.startswith("solar-harness-multi-task:"):
+        return (2, pane)
+    if pane.startswith("solar-harness-lab:"):
+        return (3, pane)
+    if pane.startswith(f"{SESSION}:"):
+        return (4, pane)
+    return (9, pane)
+
+
+def _lab_builder_can_host_evaluator(pane: str, title: str) -> bool:
+    """Allow idle lab builders to serve as evaluator spillover by default.
+
+    The eval dispatch prompt fully specifies evaluator behavior and writes
+    evaluator sidecars, so a clean lab Builder pane can safely act as a
+    secondary/overflow evaluator. This closes the previous gap where the code
+    supported multi-evaluator dispatch but only discovered one Evaluator pane.
+    """
+    if os.environ.get("SOLAR_GRAPH_ALLOW_LAB_BUILDER_EVALUATOR", "1") == "0":
+        return False
+    if not (pane.startswith("solar-harness-lab:") or pane.startswith("solar-harness-multi-task:")):
+        return False
+    normalized_title = re.split(r"\s+\|\s+状态:", title or "", maxsplit=1)[0].strip()
+    if re.search(r"PM|产品经理|Planner|规划者", normalized_title, re.I):
+        return False
+    return bool(re.search(r"Builder|建设者|lab-builder", normalized_title, re.I))
+
+
 def _pane_tail(pane: str, lines: int = 80) -> str:
     try:
         return subprocess.run(
@@ -2137,6 +2284,19 @@ def _pane_current_prompt_has_residue(text: str) -> bool:
     return False
 
 
+def _prompt_match_followed_by_idle_default_prompt(text: str, match: re.Match[str] | None) -> bool:
+    """Return true when a prompt-looking match is stale scrollback.
+
+    Claude Code often leaves old first-run confirmation prompts in tmux
+    scrollback. If a later idle default prompt is visible, that old
+    `Enter to confirm`/confirmation text must not make the pane unavailable.
+    """
+    if match is None:
+        return False
+    after = text[match.end():]
+    return bool(re.search(r"❯[\s\u00a0]+Try\s+\"", after))
+
+
 def _pane_prompt_residue_is_stale_scrollback(pane: str, text: str) -> bool:
     """Return true for old completed Claude output, not live editable input.
 
@@ -2169,26 +2329,64 @@ def _pane_prompt_residue_is_stale_scrollback(pane: str, text: str) -> bool:
 def _pane_tui_busy(pane: str) -> bool:
     tail = _pane_tail(pane)
     bottom = "\n".join(tail.splitlines()[-40:])
+    prompt_is_empty = "❯" in bottom and not _pane_current_prompt_has_residue(bottom)
+    if PANE_RATE_LIMIT_OPTIONS_MODAL_RE.search(bottom):
+        if _dismiss_rate_limit_options_modal(pane):
+            time.sleep(0.5)
+            tail = _pane_tail(pane)
+            bottom = "\n".join(tail.splitlines()[-40:])
+            prompt_is_empty = "❯" in bottom and not _pane_current_prompt_has_residue(bottom)
+            if not PANE_RATE_LIMIT_OPTIONS_MODAL_RE.search(bottom):
+                return False
+        return True
     if PANE_TUI_UNAVAILABLE_RE.search(bottom):
         return True
+    if PANE_PROCESSING_RE.search(bottom):
+        if _pane_prompt_residue_is_stale_scrollback(pane, tail):
+            return False
+        if prompt_is_empty and PANE_COMPLETED_MARKER_RE.search(bottom):
+            return False
+        return True
     if PANE_SURVEY_PROMPT_RE.search(bottom):
+        if prompt_is_empty:
+            return False
         return True
-    if PANE_CONFIRMATION_PROMPT_RE.search(bottom):
+    confirmation_match = PANE_CONFIRMATION_PROMPT_RE.search(bottom)
+    if confirmation_match and not _prompt_match_followed_by_idle_default_prompt(bottom, confirmation_match):
+        prompt_reason = _pane_dispatch_prompt_reason(bottom)
+        if prompt_reason in RECOVERABLE_DISPATCH_PROMPT_REASONS and _dismiss_dispatch_prompt(pane, prompt_reason):
+            time.sleep(0.5)
+            tail = _pane_tail(pane)
+            bottom = "\n".join(tail.splitlines()[-40:])
+            confirmation_match = PANE_CONFIRMATION_PROMPT_RE.search(bottom)
+            if not (confirmation_match and not _prompt_match_followed_by_idle_default_prompt(bottom, confirmation_match)):
+                return False
         return True
-    prompt_is_empty = "❯" in bottom and not _pane_current_prompt_has_residue(bottom)
     if PANE_TUI_BUSY_RE.search(bottom):
         if prompt_is_empty:
             return False
         return True
-    # Queued prompt residue means this pane needs to drain or be cleared before
-    # another graph dispatch. Treat it as unavailable instead of piling more
-    # instructions into Claude Code's prompt buffer.
+    # Queued prompt residue is an idle overlay, not useful work. Discovery used
+    # to return busy here before `_pane_unavailable_reason()` could clear it,
+    # which left panes permanently stranded.
     if PANE_QUEUED_PROMPT_RE.search(bottom):
+        if _clear_stale_prompt_residue(pane):
+            time.sleep(0.3)
+            tail = _pane_tail(pane)
+            bottom = "\n".join(tail.splitlines()[-40:])
+            if not PANE_QUEUED_PROMPT_RE.search(bottom):
+                return False
         return True
     # A non-empty Claude prompt at the bottom is unsubmitted input residue. If
     # we dispatch into it, Claude may concatenate unrelated tasks or open the
     # queued-message UI instead of executing the new node.
     if _pane_current_prompt_has_residue(bottom) and not _pane_prompt_residue_is_stale_scrollback(pane, tail):
+        if _clear_stale_prompt_residue(pane):
+            time.sleep(0.3)
+            tail = _pane_tail(pane)
+            bottom = "\n".join(tail.splitlines()[-40:])
+            if not (_pane_current_prompt_has_residue(bottom) and not _pane_prompt_residue_is_stale_scrollback(pane, tail)):
+                return False
         return True
     return False
 
@@ -2203,6 +2401,11 @@ def _pane_runtime_unavailable_reason(pane: str, title: str = "") -> str:
     tail = _pane_tail(pane)
     bottom = "\n".join(tail.splitlines()[-12:])
     if _pane_current_prompt_has_residue(bottom) or PANE_QUEUED_PROMPT_RE.search(bottom):
+        if _clear_stale_prompt_residue(pane):
+            tail = _pane_tail(pane)
+            bottom = "\n".join(tail.splitlines()[-12:])
+            if not (_pane_current_prompt_has_residue(bottom) or PANE_QUEUED_PROMPT_RE.search(bottom)):
+                return ""
         return "worker_runtime_not_running"
     return ""
 
@@ -2240,6 +2443,11 @@ def _clear_stale_prompt_residue(pane: str) -> bool:
     has_residue = bool(PANE_QUEUED_PROMPT_RE.search(bottom) or _pane_current_prompt_has_residue(bottom))
     if PANE_TUI_UNAVAILABLE_RE.search(bottom):
         return False
+    # Never press editing/interrupt keys while Claude is actively working.
+    # Queued-prompt text can remain visible in the frame during generation; it
+    # is not safe to clear until the pane is idle.
+    if PANE_PROCESSING_RE.search(bottom) and not PANE_QUEUED_PROMPT_RE.search(bottom):
+        return False
     if not has_residue:
         if PANE_TUI_BUSY_RE.search(bottom):
             return False
@@ -2248,7 +2456,7 @@ def _clear_stale_prompt_residue(pane: str) -> bool:
         # Claude Code prompt editing has varied across versions. Check after
         # each conservative idle-prompt clear path so active output is never
         # touched unless the pane already looked idle-with-residue.
-        for keys in (("C-a", "C-k"), ("C-u",), ("C-c",), ("Escape", "C-u")):
+        for keys in (("Escape",), ("C-a", "C-k"), ("C-u",), ("C-c",), ("Escape", "C-u")):
             subprocess.run(["tmux", "send-keys", "-t", pane, *keys], timeout=2)
             time.sleep(0.2)
             after = "\n".join(_pane_tail(pane).splitlines()[-12:])
@@ -2260,22 +2468,77 @@ def _clear_stale_prompt_residue(pane: str) -> bool:
     return not (PANE_QUEUED_PROMPT_RE.search(after) or _pane_current_prompt_has_residue(after))
 
 
+def _dismiss_rate_limit_options_modal(pane: str) -> bool:
+    """Dismiss Claude's rate-limit options modal without choosing an action.
+
+    The modal is an interactive overlay, not useful work. Leaving it visible
+    makes worker discovery report the pane busy forever and can strand unrelated
+    DAG nodes. Esc is the safe recovery path because it cancels the overlay
+    instead of selecting "wait" or "upgrade".
+    """
+    tail = _pane_tail(pane)
+    bottom = "\n".join(tail.splitlines()[-40:])
+    if not PANE_RATE_LIMIT_OPTIONS_MODAL_RE.search(bottom):
+        return False
+    try:
+        for keys in (("Escape",), ("C-c",)):
+            subprocess.run(["tmux", "send-keys", "-t", pane, *keys], timeout=2)
+            time.sleep(0.4)
+            after = "\n".join(_pane_tail(pane).splitlines()[-40:])
+            if not PANE_RATE_LIMIT_OPTIONS_MODAL_RE.search(after):
+                return True
+    except Exception:
+        return False
+    return False
+
+
 def _pane_unavailable_reason(pane: str) -> str:
     health = _pane_health(pane)
     if health.get("unavailable"):
         return str(health.get("reason") or "provider_health_unavailable")
     tail = _pane_tail(pane)
     bottom = "\n".join(tail.splitlines()[-40:])
+    if PANE_RATE_LIMIT_OPTIONS_MODAL_RE.search(bottom):
+        if _dismiss_rate_limit_options_modal(pane):
+            tail = _pane_tail(pane)
+            bottom = "\n".join(tail.splitlines()[-40:])
+            if not PANE_RATE_LIMIT_OPTIONS_MODAL_RE.search(bottom):
+                return ""
+        return "rate_limit_options_modal"
+    # Active Claude output can leave an edit/proceed prompt visible while tests
+    # or tool calls are still running. Do not recover/press keys in that state;
+    # mark it busy only, and let the idle-path hygiene clear it after the run.
+    if PANE_PROCESSING_RE.search(bottom) and not _pane_prompt_residue_is_stale_scrollback(pane, tail):
+        return ""
     prompt_reason = _pane_dispatch_prompt_reason(bottom)
     if prompt_reason:
+        if prompt_reason in RECOVERABLE_DISPATCH_PROMPT_REASONS and _dismiss_dispatch_prompt(pane, prompt_reason):
+            time.sleep(0.5)
+            tail = _pane_tail(pane)
+            bottom = "\n".join(tail.splitlines()[-40:])
+            prompt_reason = _pane_dispatch_prompt_reason(bottom)
+            if not prompt_reason:
+                return ""
         return prompt_reason
     if PANE_TUI_UNAVAILABLE_RE.search(bottom):
         return "rate_limit_or_api_error"
     if PANE_SURVEY_PROMPT_RE.search(bottom):
+        if "❯" in bottom and not _pane_current_prompt_has_residue(bottom):
+            return ""
         return "survey_prompt_blocked"
     if PANE_QUEUED_PROMPT_RE.search(bottom):
+        if _clear_stale_prompt_residue(pane):
+            tail = _pane_tail(pane)
+            bottom = "\n".join(tail.splitlines()[-40:])
+            if not PANE_QUEUED_PROMPT_RE.search(bottom):
+                return ""
         return "queued_prompt_residue"
     if _pane_current_prompt_has_residue(bottom) and not _pane_prompt_residue_is_stale_scrollback(pane, tail):
+        if _clear_stale_prompt_residue(pane):
+            tail = _pane_tail(pane)
+            bottom = "\n".join(tail.splitlines()[-40:])
+            if not (_pane_current_prompt_has_residue(bottom) and not _pane_prompt_residue_is_stale_scrollback(pane, tail)):
+                return ""
         return "unsubmitted_prompt_residue"
     return ""
 
@@ -2294,6 +2557,8 @@ def _assigned_pane_unavailable_reason(pane: str) -> str:
     tail = _pane_tail(pane)
     quota_exhausted = _quota_exhausted_models(title, tail, health, models)
     return (
+        _pane_cooldown_reason(pane)
+        or
         _multi_task_direct_dispatch_unavailable_reason(pane)
         or _pane_runtime_unavailable_reason(pane, title)
         or _pane_unavailable_reason(pane)
@@ -2311,14 +2576,15 @@ def _pane_has_matching_queued_prompt(pane: str, instruction_file: Path) -> bool:
 
 def _pane_dispatch_prompt_reason(tail: str) -> str:
     bottom = "\n".join((tail or "").splitlines()[-40:])
-    if "Do you want to proceed?" in bottom or "Would you like to proceed?" in bottom or "Tab to amend" in bottom:
+    confirmation_match = re.search(r"Do you want to proceed\?|Would you like to proceed\?|Tab to amend", bottom)
+    if confirmation_match and not _prompt_match_followed_by_idle_default_prompt(bottom, confirmation_match):
         return "proceed_confirmation_prompt"
-    if "Do you want to make this edit" in bottom or "allow all edits during this session" in bottom:
+    edit_match = re.search(r"Do you want to make this edit|allow all edits during this session", bottom)
+    if edit_match and not _prompt_match_followed_by_idle_default_prompt(bottom, edit_match):
         return "edit_confirmation_prompt"
-    if "accept edits on" in bottom:
-        return "accept_edits_footer"
-    if "bypass permissions on" in bottom:
-        return "permissions_prompt"
+    # `accept edits on` and `bypass permissions on` are Claude Code footer/mode
+    # indicators on healthy idle panes. Treat only actual confirmation/edit
+    # prompts as blockers; otherwise clean panes get stranded as unavailable.
     if PANE_QUEUED_PROMPT_RE.search(bottom):
         return "queued_prompt_residue"
     return ""
@@ -2327,18 +2593,21 @@ def _pane_dispatch_prompt_reason(tail: str) -> str:
 def _dismiss_dispatch_prompt(pane: str, reason: str) -> bool:
     try:
         if reason == "proceed_confirmation_prompt":
-            subprocess.run(["tmux", "send-keys", "-t", pane, "2"], timeout=2)
-            time.sleep(0.2)
-            subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=2)
-            return True
-        if reason in {"permissions_prompt", "accept_edits_footer", "edit_confirmation_prompt"}:
+            for keys in (("Enter",), ("1", "Enter"), ("y", "Enter")):
+                subprocess.run(["tmux", "send-keys", "-t", pane, *keys], timeout=2)
+                time.sleep(0.3)
+                after = "\n".join(_pane_tail(pane).splitlines()[-40:])
+                prompt_reason = _pane_dispatch_prompt_reason(after)
+                if prompt_reason != reason:
+                    return True
+            return False
+        if reason in {"permissions_prompt", "edit_confirmation_prompt"}:
             subprocess.run(["tmux", "send-keys", "-t", pane, "BTab"], timeout=2)
             time.sleep(0.2)
             subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=2)
             return True
         if reason == "queued_prompt_residue":
-            subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=2)
-            return True
+            return _clear_stale_prompt_residue(pane)
     except Exception:
         return False
     return False
@@ -2356,6 +2625,16 @@ def _wait_for_dispatch_window(pane: str, instruction_file: Path, *, sid: str = "
     last_reason = ""
     for _ in range(max(1, attempts)):
         tail = _pane_tail(pane)
+        if _pane_has_matching_queued_prompt(pane, instruction_file):
+            last_reason = "matching_queued_prompt"
+            if PANE_PROCESSING_RE.search(tail):
+                return True, "matching_queued_prompt_already_processing"
+            try:
+                subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=2)
+                time.sleep(2.0)
+            except Exception:
+                return False, "matching_queued_prompt_submit_failed"
+            continue
         prompt_reason = _pane_dispatch_prompt_reason(tail)
         if prompt_reason:
             last_reason = prompt_reason
@@ -2363,14 +2642,6 @@ def _wait_for_dispatch_window(pane: str, instruction_file: Path, *, sid: str = "
                 time.sleep(1.5)
                 continue
             return False, prompt_reason
-        if _pane_has_matching_queued_prompt(pane, instruction_file):
-            last_reason = "matching_queued_prompt"
-            try:
-                subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=2)
-                time.sleep(2.0)
-            except Exception:
-                return False, "matching_queued_prompt_submit_failed"
-            continue
         if _clear_stale_prompt_residue(pane):
             last_reason = "stale_prompt_residue"
             time.sleep(0.5)
@@ -2449,13 +2720,7 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
                   *, sid: str = "", dispatch_id: str = "") -> bool:
     if dry_run:
         return True
-    processing_re = re.compile(
-        r"Crafting|Cogitating|Orchestrating|Coalescing|Wandering|Sock-hopping|"
-        r"Puzzling|Cooking|Baked|Thinking|Considering|Newspapering|"
-        r"Reticulating|Scurrying|Roosting|Mustering|Herding|Ruminating|"
-        r"Churning|Baking|Effecting|Swooping|Whirring|Smooshing|[·✳✶✽✢]\s+[A-Za-z][A-Za-z-]*…|Read\(|"
-        r"Reading|Bash\(|Edit\(|Write\(|⎿|✻|✶|✳|✽|⏺"
-    )
+    processing_re = PANE_PROCESSING_RE
     ready, ready_reason = _wait_for_dispatch_window(pane, instruction_file, sid=sid)
     if not ready and _pane_tui_busy(pane):
         if _pane_has_matching_queued_prompt(pane, instruction_file):
@@ -2500,6 +2765,12 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
             instruction_file,
             status=f"pane_not_ready_before_send:{ready_reason}",
             error=f"pane dispatch window unavailable: {ready_reason}",
+        )
+        _mark_pane_recover_cooldown(
+            pane,
+            f"pane_not_ready_before_send:{ready_reason}",
+            sid=sid,
+            dispatch_id=dispatch_id,
         )
         return False
     _set_pane_capability_title(pane, instruction_file)
@@ -2548,6 +2819,15 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
                 time.sleep(2.0)
                 tail = _pane_tail(pane)
                 prompt_reason = _pane_dispatch_prompt_reason(tail)
+                if prompt_reason:
+                    last_error = f"dispatch prompt not dismissed: {prompt_reason}"
+                    _mark_pane_recover_cooldown(
+                        pane,
+                        last_error,
+                        sid=sid,
+                        dispatch_id=dispatch_id,
+                    )
+                    continue
             has_keyword = dispatch_keyword in tail or instruction_path in tail
             has_processing = bool(processing_re.search(tail))
             if has_keyword and has_processing:
@@ -2603,6 +2883,12 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
             if has_keyword:
                 if prompt_reason:
                     last_error = f"dispatch blocked by {prompt_reason}"
+                    _mark_pane_recover_cooldown(
+                        pane,
+                        last_error,
+                        sid=sid,
+                        dispatch_id=dispatch_id,
+                    )
                     time.sleep(1.0)
                     continue
                 # Do not send C-c after the instruction is visible. Claude Code
@@ -2661,6 +2947,12 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
     if (dispatch_keyword in tail or instruction_path in tail or processing_re.search(tail)) and not prompt_reason:
         _, settled_prompt_reason, settled_has_keyword, settled_has_processing = _settled_dispatch_state()
         if settled_prompt_reason:
+            _mark_pane_recover_cooldown(
+                pane,
+                f"late_settle_blocked:{settled_prompt_reason}",
+                sid=sid,
+                dispatch_id=dispatch_id,
+            )
             _record_model_call(
                 "failed",
                 sid,
@@ -2704,6 +2996,12 @@ def _send_to_pane(pane: str, instruction_file: Path, dry_run: bool,
         status="tmux_submit_failed",
         error=last_error,
     )
+    _mark_pane_recover_cooldown(
+        pane,
+        f"tmux_submit_failed:{last_error}",
+        sid=sid,
+        dispatch_id=dispatch_id,
+    )
     return False
 
 
@@ -2726,6 +3024,68 @@ def _append_dispatch_ledger(kind: str, sid: str, pane: str, dispatch_id: str, ex
                 fcntl.flock(f, fcntl.LOCK_UN)
     except Exception:
         pass
+
+
+def _pane_cooldowns() -> dict[str, Any]:
+    try:
+        data = json.loads(PANE_COOLDOWN_FILE.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _write_pane_cooldowns(data: dict[str, Any]) -> None:
+    try:
+        PANE_COOLDOWN_FILE.parent.mkdir(parents=True, exist_ok=True)
+        PANE_COOLDOWN_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _parse_utc(ts: str) -> datetime.datetime | None:
+    try:
+        if ts.endswith("Z"):
+            ts = ts[:-1] + "+00:00"
+        return datetime.datetime.fromisoformat(ts)
+    except Exception:
+        return None
+
+
+def _pane_cooldown_reason(pane: str) -> str:
+    data = _pane_cooldowns()
+    entry = data.get(pane)
+    if not isinstance(entry, dict):
+        return ""
+    until = _parse_utc(str(entry.get("until") or ""))
+    now = datetime.datetime.now(datetime.timezone.utc)
+    if until is None or until <= now:
+        data.pop(pane, None)
+        _write_pane_cooldowns(data)
+        return ""
+    reason = str(entry.get("reason") or "pane_recover_cooldown")
+    return f"pane_recover_cooldown:{reason}"
+
+
+def _mark_pane_recover_cooldown(pane: str, reason: str, *, sid: str = "", dispatch_id: str = "") -> None:
+    if not pane:
+        return
+    until = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=PANE_RECOVER_COOLDOWN_SEC)
+    data = _pane_cooldowns()
+    data[pane] = {
+        "reason": reason or "recover_failed",
+        "sid": sid,
+        "dispatch_id": dispatch_id,
+        "marked_at": _utc_now(),
+        "until": until.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    _write_pane_cooldowns(data)
+    _append_dispatch_ledger(
+        "pane_recover_cooldown",
+        sid,
+        pane,
+        dispatch_id,
+        {"reason": reason, "cooldown_sec": PANE_RECOVER_COOLDOWN_SEC},
+    )
 
 
 def _intent_telemetry_summary(instruction_file: Path) -> dict[str, Any]:
@@ -3004,7 +3364,8 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
             if _pane_has_matching_queued_prompt(pane, instruction_file):
                 sent = _send_to_pane(pane, instruction_file, dry_run, sid=sid, dispatch_id=dispatch_id)
                 if sent:
-                    _write_submit_ack(sid, node_id, pane, dispatch_id)
+                    if not dry_run:
+                        _write_submit_ack(sid, node_id, pane, dispatch_id)
                     return {
                         "ok": True,
                         "reason": "matching_queued_prompt_submitted",
@@ -3013,7 +3374,25 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
                         "dispatch_id": dispatch_id,
                         "instruction_file": str(instruction_file),
                     }
+            if dry_run:
+                return {
+                    "ok": True,
+                    "reason": "pane_busy_retry_later",
+                    "node": node_id,
+                    "pane": pane,
+                    "dispatch_id": dispatch_id,
+                    "instruction_file": str(instruction_file),
+                    "requeued": False,
+                    "graph_updated": False,
+                    "dry_run": True,
+                }
             _mark_graph_node(graph_path, node_id, "pending", clear_assignment=True)
+            _mark_pane_recover_cooldown(
+                pane,
+                "existing_dispatch_pane_busy_retry_later",
+                sid=sid,
+                dispatch_id=dispatch_id,
+            )
             return {
                 "ok": True,
                 "reason": "pane_busy_retry_later",
@@ -3051,6 +3430,12 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
     if not dry_run:
         unavailable_reason = _assigned_pane_unavailable_reason(pane)
         if unavailable_reason:
+            _mark_pane_recover_cooldown(
+                pane,
+                f"assigned_pane_unavailable:{unavailable_reason}",
+                sid=sid,
+                dispatch_id=dispatch_id,
+            )
             _mark_graph_node(graph_path, node_id, "pending", clear_assignment=True)
             return {
                 "ok": True,
@@ -3132,6 +3517,12 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
         # because that creates duplicate prompt lines. Leave it pending so the
         # next scheduler cycle can pick any then-idle worker.
         _mark_graph_node(graph_path, node_id, "pending", clear_assignment=True)
+        _mark_pane_recover_cooldown(
+            pane,
+            "send_failed_pane_busy_retry_later",
+            sid=sid,
+            dispatch_id=dispatch_id,
+        )
         return {
             "ok": True,
             "reason": "pane_busy_retry_later",
@@ -3143,6 +3534,12 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
         }
     enqueue(sid, item.get("intent", f"graph_node|node_id={node_id}"), item.get("priority", 80), payload)
     _mark_graph_node(graph_path, node_id, "pending", clear_assignment=True)
+    _mark_pane_recover_cooldown(
+        pane,
+        "send_failed_requeued",
+        sid=sid,
+        dispatch_id=dispatch_id,
+    )
     return {
         "ok": False,
         "reason": "send_failed",
@@ -3174,7 +3571,7 @@ def drain_queue(sprint_id: str, dry_run: bool = False, max_items: int = 0, ttl: 
 
 def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
     worker_skills = [
-        "bash", "shell", "python", "python-read", "dataclasses", "pytest", "subprocess", "sqlite", "sqlite3", "pure-functions", "time-injection", "timeouts", "concurrency", "io", "fsm", "integration", "integration-testing", "integration-tests", "regression", "regression-tests", "bash-tests", "jq", "json", "json-patch", "jsonl-tail", "typescript", "docs", "testing",
+        "bash", "shell", "python", "python-read", "dataclasses", "pytest", "subprocess", "ffmpeg", "sqlite", "sqlite3", "pure-functions", "time-injection", "timeouts", "concurrency", "io", "fsm", "integration", "integration-testing", "integration-tests", "regression", "regression-tests", "bash-tests", "jq", "json", "json-patch", "jsonl-tail", "typescript", "docs", "testing",
         "http-testing", "negative-testing", "activation-proof", "knowledge-ingest", "release-gate", "documentation",
         "solar-harness-verification", "solar-harness-compat-review", "harness.verification", "verification",
         "stub-llm", "e2e-test", "cli-view-assertion", "negative-control", "verifier", "registry-introspection",
@@ -3186,12 +3583,14 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "product", "planning", "optimization", "runtime_design", "workflow.planning", "governance", "risk", "risk-register",
         "architecture", "schema", "state-machine", "state-schema-design", "distributed-systems",
         "code-audit", "docs-audit", "type-hints", "type-protocols", "refactor", "tmux-inspect", "data-aggregation", "shutil", "urllib", "atomic-writes", "hashing", "unittest-mock",
-        "api-design", "data-modeling", "compatibility", "compat-review",
+        "api-design", "data-modeling", "data.modeling", "compatibility", "compat-review",
         "scheduler.design", "algorithm", "state-machine.design",
         "routing", "diagnostics", "evaluation", "capability-graph", "event-sourcing",
         "ai-rag-pipeline", "reporting",
         "lazy-import",
         "browser.browse", "browser.qa", "code.review", "document.convert",
+        "browser", "browser.automation", "web", "scraping", "crawler", "collector",
+        "social", "social.monitor", "social.signal", "social_links", "entity.extract", "link.extract", "url.extract", "cross_source.dispatch",
         "persona.agent", "multi_agent.research", "debug.systematic",
         "autoresearch.pane_optimizer", "autoresearch.issue_loop", "autoresearch.local_issue",
         "autoresearch.agent_iteration", "autoresearch.score_gate",
@@ -3200,12 +3599,13 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "code_impl", "test_generation", "test_execution",
     ]
     worker_capabilities = [
-        "bash", "python", "typescript", "docs", "testing",
+        "bash", "python", "ffmpeg", "typescript", "docs", "testing",
         "frontend", "observability", "evidence",
         "solar-harness-verification", "solar-harness-compat-review", "harness.verification", "verification",
-        "env-passthrough", "metrics",
+        "env-passthrough", "metrics", "quota", "quota-management", "quota_fallback", "quota.fallback",
         "harness.context_preflight", "harness.intent", "harness.dispatch_visibility", "harness.contracts",
         "harness.dag", "harness.status", "harness.model_routing", "model.routing",
+        "policy", "policy.verdict",
         "intent.match", "intent.audit", "dispatch.intent_telemetry",
         "models.show", "models.lab_matrix", "models.footer_labels",
         "context.inject", "wiki.status", "data_plane.audit",
@@ -3216,10 +3616,13 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "lazy-import", "cli",
         "activation.proof", "negative_control", "runtime_artifacts",
         "autopilot.monitor", "autopilot.safe_apply", "pane.deadlock_detection",
-        "documentation", "governance", "risk", "schema", "state-machine", "storage", "sources",
+        "documentation", "governance", "risk", "schema", "state-machine", "storage", "sources", "data-modeling", "data.modeling",
+        "api-adapter", "api_adapter", "api.adapter", "api-design", "integration", "subprocess", "sqlite", "sqlite3",
         "browser.browse", "browser.qa", "code.review", "code-audit",
         "browser.mcp", "browser.automation", "browser.screenshot",
         "browser.localhost_test",
+        "browser", "web", "web.capture", "scraping", "crawler", "collector",
+        "social", "social.monitor", "social.signal", "social_links", "entity.extract", "link.extract", "url.extract", "cross_source.dispatch",
         "document.convert", "document.markdown_extract", "mcp.markitdown",
         "persona.agent", "agent.catalog", "specialist.routing",
         "multi_agent.research", "browser.agent_experiment", "document.toolkit",
@@ -3288,11 +3691,15 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         tail = _pane_tail(pane)
         health = _pane_health(pane)
         quota_exhausted = _quota_exhausted_models(title, tail, health, models)
+        cooldown_reason = _pane_cooldown_reason(pane)
         if pane.startswith("solar-harness-lab:") or pane.startswith("solar-harness-multi-task:"):
-            _clear_stale_prompt_residue(pane)
+            if not cooldown_reason:
+                _clear_stale_prompt_residue(pane)
         current_command = _pane_current_command(pane)
-        runtime_unavailable_reason = _pane_runtime_unavailable_reason(pane, title)
+        runtime_unavailable_reason = "" if cooldown_reason else _pane_runtime_unavailable_reason(pane, title)
         unavailable_reason = (
+            cooldown_reason
+            or
             _multi_task_direct_dispatch_unavailable_reason(pane, current_command=current_command)
             or runtime_unavailable_reason
             or _pane_unavailable_reason(pane)
@@ -3315,7 +3722,7 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
 
 
 def _discover_evaluators(dry_run: bool = False) -> list[dict[str, Any]]:
-    if dry_run:
+    if dry_run and os.environ.get("SOLAR_GRAPH_DISPATCH_FAKE_EVALUATORS") == "1":
         return [{"pane": f"{SESSION}:0.3", "models": _models_for_pane(f"{SESSION}:0.3"), "skills": ["review", "testing", "bash"]}]
     # Graph node evaluation mutates graph verdict state. Keep it on evaluator
     # personas only, but allow a pool of evaluator hosts instead of pinning the
@@ -3355,12 +3762,18 @@ def _discover_evaluators(dry_run: bool = False) -> list[dict[str, Any]]:
         seen.add(pane)
         if _pane_exists(pane):
             title = _pane_title(pane)
-            if not _pane_title_matches_role(pane, title, "evaluator"):
+            title_matches_evaluator = _pane_title_matches_role(pane, title, "evaluator")
+            evaluator_spillover = _lab_builder_can_host_evaluator(pane, title)
+            if not (title_matches_evaluator or evaluator_spillover):
                 continue
             current_command = _pane_current_command(pane)
-            runtime_unavailable_reason = _pane_runtime_unavailable_reason(pane, title)
+            cooldown_reason = _pane_cooldown_reason(pane)
+            if (pane.startswith("solar-harness-lab:") or pane.startswith("solar-harness-multi-task:")) and not cooldown_reason:
+                _clear_stale_prompt_residue(pane)
+            runtime_unavailable_reason = "" if cooldown_reason else _pane_runtime_unavailable_reason(pane, title)
             unavailable_reason = (
-                _multi_task_direct_dispatch_unavailable_reason(pane, current_command=current_command)
+                cooldown_reason
+                or _multi_task_direct_dispatch_unavailable_reason(pane, current_command=current_command)
                 or runtime_unavailable_reason
                 or _pane_unavailable_reason(pane)
             )
@@ -3370,10 +3783,11 @@ def _discover_evaluators(dry_run: bool = False) -> list[dict[str, Any]]:
                 "skills": ["review", "testing", "bash"],
                 "busy": _pane_has_active_lease(pane) or _pane_tui_busy(pane) or bool(unavailable_reason),
                 "title": title,
+                "evaluator_host_role": "evaluator" if title_matches_evaluator else "lab_builder_spillover",
                 "unavailable_reason": unavailable_reason,
                 "current_command": current_command,
             })
-    evaluators.sort(key=lambda item: _pane_execution_priority(str(item.get("pane") or "")))
+    evaluators.sort(key=lambda item: _pane_evaluator_priority(str(item.get("pane") or ""), str(item.get("title") or "")))
     return evaluators
 
 
@@ -3468,7 +3882,7 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
     sid = str(graph.get("sprint_id") or Path(graph_path).stem.replace(".task_graph", ""))
     dispatched: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
-    dry_run_used_panes: set[str] = set()
+    used_evaluator_panes: set[str] = set()
     evaluators = _discover_evaluators(dry_run)
 
     for node in graph.get("nodes", []):
@@ -3478,10 +3892,14 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
         if not _node_eval_needed(graph, sid, node, force=force):
             continue
         requested_plan = _plan_node_evaluation(graph, node)
-        requested_capacity = _evaluation_capacity_snapshot(requested_plan, evaluators)
+        loop_evaluators = [
+            {**item, "busy": bool(item.get("busy")) or str(item.get("pane") or "") in used_evaluator_panes}
+            for item in evaluators
+        ]
+        requested_capacity = _evaluation_capacity_snapshot(requested_plan, loop_evaluators)
         requested_plan["capacity"] = requested_capacity
         runtime_plan = _runtime_fallback_evaluation_plan(requested_plan, requested_capacity)
-        runtime_capacity = _evaluation_capacity_snapshot(runtime_plan, evaluators)
+        runtime_capacity = _evaluation_capacity_snapshot(runtime_plan, loop_evaluators)
         runtime_plan["capacity"] = runtime_capacity
         node["evaluation_plan_requested"] = requested_plan
         node["evaluation_plan_runtime"] = runtime_plan
@@ -3522,7 +3940,7 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
         ]
         selected_evaluators = [
             item
-            for item in evaluators
+            for item in loop_evaluators
             if not item.get("busy") and str(item.get("pane") or "") in selected_panes
         ]
         if len(selected_evaluators) < int(runtime_plan.get("required_evaluators") or 1):
@@ -3537,10 +3955,10 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
         planned_assignments: list[dict[str, Any]] = []
         for idx, evaluator in enumerate(selected_evaluators[:total_evaluators], start=1):
             pane = str(evaluator.get("pane") or "")
-            if dry_run and pane in dry_run_used_panes:
+            if pane in used_evaluator_panes:
                 skipped.append({
                     "node": node_id,
-                    "reason": "dry_run_evaluator_capacity",
+                    "reason": "evaluator_already_used_in_batch",
                     "pane": pane,
                     "evaluation_plan": runtime_plan,
                 })
@@ -3623,7 +4041,7 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
             )
             _inject_dispatch_context(instruction_file, sid=sid, pane=pane, dispatch_id=str(assignment["dispatch_id"]))
             if dry_run:
-                dry_run_used_panes.add(pane)
+                used_evaluator_panes.add(pane)
                 sent_records.append({
                     "node": node_id,
                     "pane": pane,
@@ -3637,8 +4055,16 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
             sent = _send_to_pane(pane, instruction_file, dry_run, sid=sid, dispatch_id=str(assignment["dispatch_id"]))
             if not sent:
                 send_failed = {"assignment": assignment, "instruction_file": str(instruction_file)}
+                _mark_pane_recover_cooldown(
+                    pane,
+                    "eval_send_failed",
+                    sid=sid,
+                    dispatch_id=str(assignment["dispatch_id"]),
+                )
+                used_evaluator_panes.add(pane)
                 break
             _write_submit_ack(sid, node_id, pane, str(assignment["dispatch_id"]))
+            used_evaluator_panes.add(pane)
             sent_records.append({
                 "node": node_id,
                 "pane": pane,
@@ -3741,6 +4167,10 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
     proof_gate: dict[str, Any] = {"required": False}
     if status == "passed":
         resolved_eval_json = eval_json or _eval_json_file(sid, node_id)
+        if not Path(str(resolved_eval_json)).expanduser().exists():
+            backfilled_eval = _maybe_backfill_eval_json_from_md(sid, node_id)
+            if backfilled_eval is not None:
+                resolved_eval_json = backfilled_eval
         observed_handoff = _existing_node_handoff(sid, node, graph) or _handoff_file(sid, node_id)
         if observed_handoff and not Path(str(resolved_eval_json)).expanduser().exists():
             return {

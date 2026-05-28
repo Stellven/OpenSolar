@@ -224,6 +224,37 @@ class TestSendToPaneLiteral:
             }
         ]
 
+    def test_reconcile_accepts_lowercase_passed_eval_sidecar(self, tmp_harness, monkeypatch):
+        """Evaluator sidecars may write verdict=passed; reconcile must still close the node."""
+        tmp_path, sprints, sid, graph = tmp_harness
+        import graph_node_dispatcher as gnd
+
+        node = graph["nodes"][0]
+        node["status"] = "reviewing"
+        graph["node_results"]["N1"] = {"status": "reviewing"}
+        (sprints / f"{sid}.N1-handoff.md").write_text("# handoff\n", encoding="utf-8")
+        (sprints / f"{sid}.N1-eval.json").write_text(
+            json.dumps({"verdict": "passed", "node_id": "N1"}) + "\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(gnd, "release_lease", lambda *a, **k: {"released": True})
+
+        repaired = gnd._reconcile_existing_dispatches(graph, sprints / f"{sid}.task_graph.json")
+
+        assert graph["nodes"][0]["status"] == "passed"
+        assert graph["node_results"]["N1"]["status"] == "passed"
+        assert graph["nodes"][0]["eval_json"] == str(sprints / f"{sid}.N1-eval.json")
+        assert repaired == [
+            {
+                "node": "N1",
+                "status": "passed",
+                "reason": "eval_sidecar_exists",
+                "handoff": str(sprints / f"{sid}.N1-handoff.md"),
+                "eval_json": str(sprints / f"{sid}.N1-eval.json"),
+                "verdict": "PASS",
+            }
+        ]
+
     def test_assigned_pane_plan_mode_prompt_is_unavailable(self, tmp_harness, monkeypatch):
         """A pane blocked in Claude plan-mode confirmation is not dispatchable."""
         import graph_node_dispatcher as gnd

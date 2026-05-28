@@ -156,6 +156,21 @@ def test_rag_reporting_nodes_bind_general_builder_workers() -> None:
     assert result["assigned"][0]["node"] == "N1"
 
 
+def test_social_signal_nodes_bind_browser_collector_workers() -> None:
+    worker = _worker("pane-a")
+    worker["skills"] = ["python", "browser", "collector", "social"]
+    worker["capabilities"] = ["browser.automation", "web.capture", "social.signal", "link.extract"]
+    node = {
+        "id": "N1",
+        "preferred_model": None,
+        "required_skills": [],
+        "required_capabilities": ["browser.browse", "social_links", "entity.extract"],
+    }
+    result = assign_workers([node], [worker])
+    assert result["queued"] == []
+    assert result["assigned"][0]["node"] == "N1"
+
+
 def test_sqlite_alias_nodes_bind_sqlite3_workers() -> None:
     worker = _worker("pane-a")
     worker["skills"] = ["python", "sqlite3"]

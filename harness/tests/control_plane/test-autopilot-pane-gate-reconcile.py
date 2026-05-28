@@ -130,3 +130,67 @@ def test_builder_queue_item_reroutes_to_idle_lab_builder(monkeypatch) -> None:
 
     assert target == "solar-harness-lab:0.1"
     assert item["target"] == "solar-harness-lab:0.1"
+
+
+def test_ready_for_planner_queue_bypasses_fixed_pane_busy(tmp_path, monkeypatch) -> None:
+    sid = "sprint-planner-demo"
+    monkeypatch.setattr(mod, "QUEUE", tmp_path / "autopilot-queue.jsonl")
+    monkeypatch.setattr(mod, "SPRINTS", tmp_path / "sprints")
+    monkeypatch.setattr(mod, "append_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(mod, "pane_gate", lambda target, sid: (True, "ok", {}))
+    monkeypatch.setattr(mod, "pane_is_busy", lambda target: True)
+    monkeypatch.setattr(mod, "clear_current_prompt", lambda target: None)
+    wake_calls: list[str] = []
+    monkeypatch.setattr(mod, "wake_sid", lambda s: wake_calls.append(s) or True)
+    mod.SPRINTS.mkdir(parents=True)
+    (mod.SPRINTS / f"{sid}.status.json").write_text(json.dumps({
+        "sprint_id": sid,
+        "status": "drafting",
+        "phase": "prd_ready",
+        "handoff_to": "planner",
+    }) + "\n")
+    mod.QUEUE.write_text(json.dumps({
+        "sid": sid,
+        "type": "ready_for_planner",
+        "target": "solar-harness:0.1",
+        "created_at_epoch": 9999999999,
+    }) + "\n")
+
+    actions = mod.retry_queue({"actions": {}, "target_actions": {}}, dispatch=True, cooldown=0)
+
+    assert wake_calls == [sid]
+    assert actions[0]["dispatched_from_queue"] is True
+    assert mod.load_queue() == []
+
+
+def test_ready_for_planner_finding_bypasses_fixed_pane_busy(monkeypatch) -> None:
+    sid = "sprint-planner-demo"
+    finding = {
+        "sid": sid,
+        "type": "ready_for_planner",
+        "target": "solar-harness:0.1",
+        "message": "planner dispatch",
+        "severity": "info",
+    }
+    state: dict = {"actions": {}, "target_actions": {}}
+    monkeypatch.setattr(mod, "should_act", lambda state, f, cooldown: True)
+    monkeypatch.setattr(mod, "target_recently_dispatched", lambda state, target, cooldown: False)
+    monkeypatch.setattr(mod, "pane_gate", lambda target, sid: (True, "ok", {}))
+    monkeypatch.setattr(mod, "pane_is_busy", lambda target: True)
+    monkeypatch.setattr(mod, "clear_current_prompt", lambda target: None)
+    monkeypatch.setattr(mod, "save_json", lambda *args, **kwargs: None)
+    monkeypatch.setattr(mod, "append_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(mod, "load_json", lambda path: {
+        "sprint_id": sid,
+        "status": "drafting",
+        "phase": "prd_ready",
+        "handoff_to": "planner",
+    })
+    monkeypatch.setattr(mod, "mark_action", lambda *args, **kwargs: None)
+    wake_calls: list[str] = []
+    monkeypatch.setattr(mod, "wake_sid", lambda s: wake_calls.append(s) or True)
+
+    actions = mod.apply_findings([finding], dispatch=True, state=state, cooldown=0)
+
+    assert wake_calls == [sid]
+    assert actions[0]["dispatched"] is True

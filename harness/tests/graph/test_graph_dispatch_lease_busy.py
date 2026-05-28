@@ -89,6 +89,7 @@ def test_worker_discovery_supports_pandoc_render_nodes(monkeypatch) -> None:
         lambda *a, **kw: b"solar-harness-lab:0.0\tbuilder-glm\n",
     )
     monkeypatch.setattr(gnd, "read_lease", lambda pane: None)
+    monkeypatch.setattr(gnd, "_pane_cooldown_reason", lambda pane: "")
     monkeypatch.setattr(gnd, "_clear_stale_prompt_residue", lambda pane: False)
     monkeypatch.setattr(gnd, "_pane_unavailable_reason", lambda pane: "")
     monkeypatch.setattr(gnd, "_pane_tui_busy", lambda pane: False)
@@ -106,10 +107,12 @@ def test_worker_discovery_supports_s05_release_skill_aliases(monkeypatch) -> Non
         lambda *a, **kw: b"solar-harness-lab:0.0\tbuilder-glm\n",
     )
     monkeypatch.setattr(gnd, "read_lease", lambda pane: None)
+    monkeypatch.setattr(gnd, "_pane_cooldown_reason", lambda pane: "")
     monkeypatch.setattr(gnd, "_clear_stale_prompt_residue", lambda pane: False)
     monkeypatch.setattr(gnd, "_pane_unavailable_reason", lambda pane: "")
     monkeypatch.setattr(gnd, "_pane_tui_busy", lambda pane: False)
     monkeypatch.setattr(gnd, "_pane_health", lambda pane: {})
+    monkeypatch.setattr(gnd, "_pane_cooldown_reason", lambda pane: "")
 
     workers = gnd._discover_workers(dry_run=False)
 
@@ -139,6 +142,7 @@ def test_worker_discovery_marks_shell_prompt_residue_as_runtime_not_running(monk
         lambda *a, **kw: b"solar-harness-lab:0.3\tBuilder 4 | \xe7\x8a\xb6\xe6\x80\x81:idle/no active sprint\n",
     )
     monkeypatch.setattr(gnd, "read_lease", lambda pane: None)
+    monkeypatch.setattr(gnd, "_pane_cooldown_reason", lambda pane: "")
     monkeypatch.setattr(gnd, "_clear_stale_prompt_residue", lambda pane: False)
     monkeypatch.setattr(gnd, "_pane_current_command", lambda pane: "bash")
     monkeypatch.setattr(
@@ -163,6 +167,7 @@ def test_worker_discovery_marks_claude_monthly_limit_as_anthropic_quota(monkeypa
         lambda *a, **kw: b"solar-harness-lab:0.3\tBuilder | \xe6\xa8\xa1\xe5\x9e\x8b:Opus | \xe7\x8a\xb6\xe6\x80\x81:idle/no active sprint\n",
     )
     monkeypatch.setattr(gnd, "read_lease", lambda pane: None)
+    monkeypatch.setattr(gnd, "_pane_cooldown_reason", lambda pane: "")
     monkeypatch.setattr(gnd, "_clear_stale_prompt_residue", lambda pane: False)
     monkeypatch.setattr(gnd, "_pane_current_command", lambda pane: "bash")
     monkeypatch.setattr(gnd, "_pane_health", lambda pane: {})
@@ -211,6 +216,7 @@ def test_assigned_pane_quota_detection_handles_wrapped_monthly_limit(monkeypatch
     monkeypatch.setattr(gnd, "_pane_current_command", lambda pane: "claude")
     monkeypatch.setattr(gnd, "_pane_runtime_unavailable_reason", lambda pane, title="": "")
     monkeypatch.setattr(gnd, "_pane_unavailable_reason", lambda pane: "")
+    monkeypatch.setattr(gnd, "_pane_cooldown_reason", lambda pane: "")
     monkeypatch.setattr(
         gnd,
         "_pane_tail",
@@ -218,6 +224,180 @@ def test_assigned_pane_quota_detection_handles_wrapped_monthly_limit(monkeypatch
     )
 
     assert gnd._assigned_pane_unavailable_reason("solar-harness-lab:0.3") == "rate_limit_or_api_error"
+
+
+def test_reconcile_keeps_acknowledged_dispatch_when_leases_disabled(monkeypatch, tmp_path) -> None:
+    harness = tmp_path / "harness"
+    sprints = harness / "sprints"
+    ack_dir = sprints / "graph-acks"
+    ack_dir.mkdir(parents=True)
+    sid = "sprint-test"
+    node_id = "N1"
+    dispatch_id = "dispatch-123"
+    pane = "solar-harness-lab:0.0"
+    (ack_dir / f"{sid}.{node_id}-submit-ack.json").write_text(
+        '{"dispatch_id":"dispatch-123"}',
+        encoding="utf-8",
+    )
+    graph = {
+        "sprint_id": sid,
+        "nodes": [
+            {
+                "id": node_id,
+                "status": "dispatched",
+                "assigned_to": pane,
+                "dispatch_id": dispatch_id,
+            }
+        ],
+        "node_results": {
+            node_id: {
+                "status": "dispatched",
+                "assigned_to": pane,
+                "dispatch_id": dispatch_id,
+                "updated_at": "2026-05-27T00:00:00Z",
+            }
+        },
+    }
+    monkeypatch.setattr(gnd, "HARNESS_DIR", harness)
+    monkeypatch.setattr(gnd, "SPRINTS_DIR", sprints)
+    monkeypatch.setattr(gnd, "read_lease", lambda pane: None)
+    monkeypatch.setattr(gnd, "release_lease", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not release")))
+    monkeypatch.setattr(gnd, "_pane_title", lambda pane: "Builder | 模型:GLM")
+    monkeypatch.setattr(gnd, "_pane_tail", lambda pane, lines=80: "❯\n  ⏵⏵ bypass permissions on")
+    monkeypatch.setattr(gnd, "_pane_runtime_unavailable_reason", lambda pane, title="": "")
+    monkeypatch.setattr(gnd, "_pane_unavailable_reason", lambda pane: "")
+
+    repaired = gnd._reconcile_existing_dispatches(graph, tmp_path / f"{sid}.task_graph.json")
+
+    assert repaired == []
+    assert graph["nodes"][0]["status"] == "dispatched"
+    assert graph["nodes"][0]["dispatch_id"] == dispatch_id
+    assert graph["node_results"][node_id]["status"] == "dispatched"
+
+
+def test_reconcile_keeps_acknowledged_dispatch_on_recoverable_prompt(monkeypatch, tmp_path) -> None:
+    harness = tmp_path / "harness"
+    sprints = harness / "sprints"
+    ack_dir = sprints / "graph-acks"
+    ack_dir.mkdir(parents=True)
+    sid = "sprint-test"
+    node_id = "N1"
+    dispatch_id = "dispatch-123"
+    pane = "solar-harness-lab:0.0"
+    (ack_dir / f"{sid}.{node_id}-submit-ack.json").write_text(
+        '{"dispatch_id":"dispatch-123"}',
+        encoding="utf-8",
+    )
+    graph = {
+        "sprint_id": sid,
+        "nodes": [
+            {
+                "id": node_id,
+                "status": "dispatched",
+                "assigned_to": pane,
+                "dispatch_id": dispatch_id,
+            }
+        ],
+        "node_results": {
+            node_id: {
+                "status": "dispatched",
+                "assigned_to": pane,
+                "dispatch_id": dispatch_id,
+                "updated_at": "2026-05-27T00:00:00Z",
+            }
+        },
+    }
+    dismissed: list[tuple[str, str]] = []
+    monkeypatch.setattr(gnd, "HARNESS_DIR", harness)
+    monkeypatch.setattr(gnd, "SPRINTS_DIR", sprints)
+    monkeypatch.setattr(gnd, "read_lease", lambda pane: None)
+    monkeypatch.setattr(gnd, "release_lease", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not release")))
+    monkeypatch.setattr(gnd, "_pane_title", lambda pane: "Builder | 模型:GLM")
+    monkeypatch.setattr(gnd, "_pane_tail", lambda pane, lines=80: "Do you want to proceed?\n❯ 1. Yes\n2. No")
+    monkeypatch.setattr(gnd, "_pane_runtime_unavailable_reason", lambda pane, title="": "")
+    monkeypatch.setattr(gnd, "_pane_unavailable_reason", lambda pane: "proceed_confirmation_prompt")
+    monkeypatch.setattr(gnd, "_dismiss_dispatch_prompt", lambda pane, reason: dismissed.append((pane, reason)) or True)
+
+    repaired = gnd._reconcile_existing_dispatches(graph, tmp_path / f"{sid}.task_graph.json")
+
+    assert repaired[0]["reason"] == "recoverable_prompt_kept_active:proceed_confirmation_prompt"
+    assert dismissed == [(pane, "proceed_confirmation_prompt")]
+    assert graph["nodes"][0]["status"] == "dispatched"
+    assert graph["nodes"][0]["dispatch_id"] == dispatch_id
+
+
+def test_dispatch_queue_item_dry_run_does_not_reset_busy_active_node(monkeypatch, tmp_path) -> None:
+    sid = "sprint-test"
+    node_id = "N1"
+    dispatch_id = "dispatch-123"
+    pane = "solar-harness-lab:0.0"
+    graph_path = tmp_path / f"{sid}.task_graph.json"
+    graph = {
+        "sprint_id": sid,
+        "nodes": [
+            {
+                "id": node_id,
+                "status": "dispatched",
+                "assigned_to": pane,
+                "dispatch_id": dispatch_id,
+            }
+        ],
+        "node_results": {
+            node_id: {
+                "status": "dispatched",
+                "assigned_to": pane,
+                "dispatch_id": dispatch_id,
+                "updated_at": "2026-05-27T00:00:00Z",
+            }
+        },
+    }
+    graph_path.write_text(__import__("json").dumps(graph), encoding="utf-8")
+    monkeypatch.setattr(gnd, "_pane_tui_busy", lambda pane: True)
+    monkeypatch.setattr(gnd, "_pane_has_matching_queued_prompt", lambda pane, instruction_file: False)
+
+    result = gnd.dispatch_queue_item(
+        {
+            "sprint_id": sid,
+            "intent": f"graph_node|node_id={node_id}|pane={pane}",
+            "priority": 80,
+            "payload": {
+                "sprint_id": sid,
+                "graph": str(graph_path),
+                "node": {"id": node_id},
+                "assignment": {"pane": pane},
+                "dispatch_id": dispatch_id,
+            },
+        },
+        dry_run=True,
+    )
+
+    after = __import__("json").loads(graph_path.read_text(encoding="utf-8"))
+    assert result["dry_run"] is True
+    assert after["nodes"][0]["status"] == "dispatched"
+    assert after["nodes"][0]["dispatch_id"] == dispatch_id
+    assert after["node_results"][node_id]["status"] == "dispatched"
+
+
+def test_stale_first_run_confirmation_before_idle_prompt_is_not_busy(monkeypatch) -> None:
+    tail = """
+ Quick safety check: Is this a project you created or one you trust?
+
+ ❯ 1. Yes, I trust this folder ✔
+   2. No, exit
+
+ Enter to confirm · Esc to cancel
+ ▐▛███▜▌   Claude Code v2.1.119
+
+───────────────────────────────────────
+❯ Try "write a test for <filepath>"
+───────────────────────────────────────
+  ⏵⏵ bypass permissions on
+"""
+    monkeypatch.setattr(gnd, "_pane_tail", lambda pane, lines=80: tail)
+    monkeypatch.setattr(gnd, "_pane_health", lambda pane: {})
+
+    assert gnd._pane_dispatch_prompt_reason(tail) == ""
+    assert gnd._pane_tui_busy("solar-harness:0.3") is False
 
 
 def test_assigned_multi_task_shell_is_not_direct_worker(monkeypatch) -> None:
@@ -351,8 +531,11 @@ def test_evaluator_discovery_finds_pool_candidates_by_role(monkeypatch) -> None:
     assert set(panes) == {
         "solar-harness-test:0.3",
         "solar-harness-lab:0.3",
+        "solar-harness-lab:0.1",
         "solar-harness-multi-task:7",
     }
+    lab_builder = next(item for item in evaluators if item["pane"] == "solar-harness-lab:0.1")
+    assert lab_builder["evaluator_host_role"] == "lab_builder_spillover"
     multi_task = next(item for item in evaluators if item["pane"] == "solar-harness-multi-task:7")
     assert multi_task["busy"] is True
     assert multi_task["unavailable_reason"] == "multi_task_shell_not_direct_worker"
@@ -376,7 +559,7 @@ def test_force_eval_retry_allows_failed_node_after_repair_artifact(monkeypatch, 
 
 
 def test_clear_stale_prompt_residue_uses_ctrl_c_fallback(monkeypatch) -> None:
-    prompt_residue = "✻ Baked for 4m 16s\n────────────────\n❯\u00a0继续执行下一个 dispatch 文件\n────────────────\n"
+    prompt_residue = "────────────────\n❯\u00a0继续执行下一个 dispatch 文件\n────────────────\n"
     idle_prompt = "────────────────\n❯\u00a0\n────────────────\n"
     tails = [prompt_residue, prompt_residue, prompt_residue, idle_prompt]
     sent: list[tuple[str, ...]] = []
@@ -388,10 +571,109 @@ def test_clear_stale_prompt_residue_uses_ctrl_c_fallback(monkeypatch) -> None:
         sent.append(tuple(cmd[-(len(cmd) - cmd.index("send-keys") - 3):]))
 
     monkeypatch.setattr(gnd, "_pane_tail", fake_tail)
+    monkeypatch.setattr(gnd, "_pane_current_command", lambda pane: "bash")
     monkeypatch.setattr(gnd.subprocess, "run", fake_run)
     monkeypatch.setattr(gnd.time, "sleep", lambda seconds: None)
 
     assert gnd._clear_stale_prompt_residue("solar-harness-lab:0.3") is True
+    assert ("Escape",) in sent
     assert ("C-a", "C-k") in sent
     assert ("C-u",) in sent
-    assert ("C-c",) in sent
+
+
+def test_rate_limit_options_modal_is_dismissed_without_selecting_action(monkeypatch) -> None:
+    modal = """────────────────
+  What do you want to do?
+
+  ❯1. Stop and wait for limit to reset
+    2. Upgrade your plan
+
+  Enter to confirm · Esc to cancel
+"""
+    idle = "────────────────\n❯\u00a0\n────────────────\n"
+    tails = [modal, idle]
+    sent: list[tuple[str, ...]] = []
+
+    def fake_tail(pane: str, lines: int = 80) -> str:
+        return tails.pop(0) if tails else idle
+
+    def fake_run(cmd, **kwargs):
+        sent.append(tuple(cmd[-(len(cmd) - cmd.index("send-keys") - 3):]))
+
+    monkeypatch.setattr(gnd, "_pane_tail", fake_tail)
+    monkeypatch.setattr(gnd.subprocess, "run", fake_run)
+    monkeypatch.setattr(gnd.time, "sleep", lambda seconds: None)
+
+    assert gnd._dismiss_rate_limit_options_modal("solar-harness:0.0") is True
+    assert sent == [("Escape",)]
+
+
+def test_tui_busy_actively_clears_queued_prompt_before_marking_busy(monkeypatch) -> None:
+    queued = "────────────────\n❯\u00a0Press up to edit queued messages\n────────────────\n"
+    idle = "────────────────\n❯\u00a0\n────────────────\n"
+    tails = [queued, idle]
+    cleared: list[str] = []
+
+    def fake_tail(pane: str, lines: int = 80) -> str:
+        return tails.pop(0) if tails else idle
+
+    monkeypatch.setattr(gnd, "_pane_tail", fake_tail)
+    monkeypatch.setattr(gnd, "_clear_stale_prompt_residue", lambda pane: cleared.append(pane) or True)
+    monkeypatch.setattr(gnd.time, "sleep", lambda seconds: None)
+
+    assert gnd._pane_tui_busy("solar-harness-lab:0.2") is False
+    assert cleared == ["solar-harness-lab:0.2"]
+
+
+def test_tui_busy_actively_clears_unsubmitted_prompt_residue(monkeypatch) -> None:
+    residue = "────────────────\n❯\u00a0继续执行下一个 dispatch 文件\n────────────────\n"
+    idle = "────────────────\n❯\u00a0\n────────────────\n"
+    tails = [residue, idle]
+    cleared: list[str] = []
+
+    def fake_tail(pane: str, lines: int = 80) -> str:
+        return tails.pop(0) if tails else idle
+
+    monkeypatch.setattr(gnd, "_pane_tail", fake_tail)
+    monkeypatch.setattr(gnd, "_pane_prompt_residue_is_stale_scrollback", lambda pane, tail: False)
+    monkeypatch.setattr(gnd, "_clear_stale_prompt_residue", lambda pane: cleared.append(pane) or True)
+    monkeypatch.setattr(gnd.time, "sleep", lambda seconds: None)
+
+    assert gnd._pane_tui_busy("solar-harness-lab:0.0") is False
+    assert cleared == ["solar-harness-lab:0.0"]
+
+
+def test_unavailable_reason_does_not_recover_visible_prompt_during_active_output(monkeypatch) -> None:
+    tail = """Do you want to make this edit to test_pane_clear_manager.py?
+ ❯ 1. Yes
+   2. No
+
+✢ Running tests… (59s · ↓ 394 tokens)
+────────────────
+❯\u00a0
+────────────────
+"""
+    dismissed: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(gnd, "_pane_health", lambda pane: {})
+    monkeypatch.setattr(gnd, "_pane_tail", lambda pane, lines=80: tail)
+    monkeypatch.setattr(gnd, "_pane_prompt_residue_is_stale_scrollback", lambda pane, value: False)
+    monkeypatch.setattr(gnd, "_dismiss_dispatch_prompt", lambda pane, reason: dismissed.append((pane, reason)) or True)
+
+    assert gnd._pane_unavailable_reason("solar-harness-lab:0.0") == ""
+    assert dismissed == []
+
+
+def test_idle_survey_prompt_does_not_block_evaluator_pool(monkeypatch) -> None:
+    tail = """● How is Claude doing this session?
+  (optional)
+  1: Bad   2: Fine   3: Good  0: Dismiss
+
+────────────────
+❯\u00a0
+────────────────
+"""
+    monkeypatch.setattr(gnd, "_pane_health", lambda pane: {})
+    monkeypatch.setattr(gnd, "_pane_tail", lambda pane, lines=80: tail)
+
+    assert gnd._pane_unavailable_reason("solar-harness:0.3") == ""

@@ -4979,7 +4979,7 @@ def github_repo_from_url(url: str) -> str | None:
 
 def extract_youtube_video_id(url: str) -> str | None:
     text = url or ""
-    match = re.search(r"(?:youtube\.com/watch\?v=|youtu\.be/)([A-Za-z0-9_-]{6,})", text)
+    match = re.search(r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/live/)([A-Za-z0-9_-]{6,})", text)
     return match.group(1) if match else None
 
 
@@ -5035,6 +5035,12 @@ def social_materialize_links(conn: sqlite3.Connection, limit: int = 0) -> int:
             )
             if conn.total_changes > before:
                 inserted += 1
+            elif entities:
+                conn.execute(
+                    "UPDATE social_links SET link_type=?, extracted_entities_json=? "
+                    "WHERE link_id=? AND extracted_entities_json='{}'",
+                    (link_type, json.dumps(entities, ensure_ascii=False, sort_keys=True), link_id),
+                )
     return inserted
 
 
@@ -5232,7 +5238,7 @@ def social_materialize_propagation_chains(conn: sqlite3.Connection, limit: int =
 
 
 def social_dispatch_links(conn: sqlite3.Connection) -> dict[str, int]:
-    stats = {"github_repo": 0, "youtube": 0, "paper": 0, "failed": 0}
+    stats = {"github_repo": 0, "youtube": 0, "paper": 0, "non_actionable": 0, "failed": 0}
     rows = conn.execute(
         "SELECT link_id, link_type, normalized_url, extracted_entities_json FROM social_links WHERE dispatch_status='pending'"
     ).fetchall()
@@ -5257,6 +5263,11 @@ def social_dispatch_links(conn: sqlite3.Connection) -> dict[str, int]:
             elif link_type in {"arxiv", "paper"}:
                 conn.execute("UPDATE social_links SET dispatch_status='linked' WHERE link_id=?", (link_id,))
                 stats["paper"] += 1
+            elif link_type in {"product", "blog", "model_card", "unknown"}:
+                # Not every URL is a cross-source dispatch target. Mark these
+                # as linked so the pending queue only contains actionable work.
+                conn.execute("UPDATE social_links SET dispatch_status='linked' WHERE link_id=?", (link_id,))
+                stats["non_actionable"] += 1
         except Exception:
             conn.execute("UPDATE social_links SET dispatch_status='failed' WHERE link_id=?", (link_id,))
             stats["failed"] += 1
@@ -9122,6 +9133,9 @@ def build_planned_report_evidence_pack(conn: sqlite3.Connection, catalog: list[d
             (meta["video_id"],),
         ).fetchone()
         if not row:
+            continue
+        transcript_status = str((row or {})["transcript_status"] if row else "").strip().lower()
+        if transcript_status not in {"fetched", "auto_generated"}:
             continue
         transcript = str((row or {})["transcript_clean"] if row else "").strip()
         if int(row["char_count"] or 0) <= 0 and not transcript:
