@@ -66,6 +66,14 @@ def main() -> None:
                     "schema_version": "solar.capsule_plan_node.v1",
                     "node_id": "N2",
                     "capability_capsule_id": "cap.requirement-compiler-implementation",
+                    "selected_skills": ["skill.nano-pdf", "skill.content-research-writer"],
+                    "runtime_preferences": {"execution_surface": "prompt_guided_cli"},
+                    "skill_bridge": {
+                        "mode": "auto_discovered_installed_skills",
+                        "template_profile": "cli_tooling",
+                        "delivery_expectation": "command_log_and_artifact_delta",
+                        "specialization_family": "pdf_cli_artifact",
+                    },
                 }
             ),
         )
@@ -78,7 +86,14 @@ def main() -> None:
         assert current["execution_plan_artifacts"]["count"] == 1
         assert current["execution_plan_artifacts"]["items"][0]["node_id"] == "N2"
         assert current["execution_plan_artifacts"]["items"][0]["selected_operator_id"] == "mini-claude-sonnet-builder"
+        assert current["execution_plan_artifacts"]["items"][0]["selected_skills"] == ["skill.nano-pdf", "skill.content-research-writer"]
+        assert current["execution_plan_artifacts"]["items"][0]["execution_surface"] == "prompt_guided_cli"
+        assert current["execution_plan_artifacts"]["items"][0]["skill_bridge_mode"] == "auto_discovered_installed_skills"
+        assert current["execution_plan_artifacts"]["items"][0]["skill_template_profile"] == "cli_tooling"
+        assert current["execution_plan_artifacts"]["items"][0]["skill_delivery_expectation"] == "command_log_and_artifact_delta"
+        assert current["execution_plan_artifacts"]["items"][0]["skill_specialization_family"] == "pdf_cli_artifact"
         assert "N2->mini-claude-sonnet-builder" in current["execution_plan_summary"]
+        assert "skill.nano-pdf/cli:pdf_cli_artifact +1" in current["execution_plan_summary"]
 
     print("PASS status-server execution plan summary")
 

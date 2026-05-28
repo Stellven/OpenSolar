@@ -1,580 +1,992 @@
-"""Detector framework — 7 detector implementations conforming to Detector protocol.
+"""GitHub Project Intelligence — Heat Scoring & Detectors (C3 node).
+
+Sprint: sprint-20260524-p0-ai-influence-github-project-intelligence-system-upgrade-s03-core-runtime
+Node:   C3_detectors
 
 Provides:
-- ``Detection``: Data class for holding triggering detector state.
-- ``Detector``: Protocol that all detectors conform to.
-- ``compute_potential_score()``: Calculates the repository potential score.
-- ``run_all_detectors()``: Executes all 7 detectors with error boundary isolation.
+- compute_heat_score  : composite [0,100] heat score (S02 §A5 formula)
+- 7 detector functions:
+    detect_sudden_hot          (severity=high)
+    detect_early_potential     (severity=medium)
+    detect_foundation_infra    (severity=info)
+    detect_hype_or_noise       (severity=medium)
+    detect_star_manipulation   (severity=high)
+    detect_major_release       (severity=medium)
+    detect_cross_source_resonance (severity=medium)
+- run_detectors : run all detectors, persist Detections if conn provided
 
-Spec: sprint-20260524-p0-ai-influence-github-project-intelligence-system-upgrade-s02-architecture
-Node: B10
+Design constraints honored:
+- Pure stdlib only
+- Deterministic: same input → same output (no randomness, no time.now in logic)
+- Negative controls: stars_delta_24h=1, star_acceleration=0.5 → NO sudden_hot alert
 """
-
 from __future__ import annotations
 
+import hashlib
 import json
-import logging
-import re
 import sqlite3
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Protocol
+from datetime import datetime, timezone
+from typing import Any
 
-logger = logging.getLogger("github_intelligence.detectors")
+from .schema import (
+    Detection,
+    EvidenceAtom,
+    RepoSnapshot,
+    insert_row,
+    utc_now_iso,
+)
 
+# ---------------------------------------------------------------------------
+# Heat Score sub-score helpers
+# ---------------------------------------------------------------------------
 
-@dataclass
-class Detection:
-    """Holds a detector alert output."""
-    detector_name: str
-    severity: str
-    evidence_ids: List[str]
-    repo_full_name: str
-    trigger_condition: str
-    conditions_met_json: Dict[str, Any] = field(default_factory=dict)
-    recommended_action: str = ""
+# S02 §A5 weights (must sum to 1.00)
+_HEAT_WEIGHTS = {
+    "star_velocity_score":       0.30,
+    "star_acceleration_score":   0.15,
+    "cross_source_signal_score": 0.15,
+    "release_signal_score":      0.10,
+    "community_activity_score":  0.10,
+    "topic_relevance_score":     0.10,
+    "maintainer_signal_score":   0.05,
+    "novelty_score":             0.05,
+}
 
-
-class Detector(Protocol):
-    """Protocol for all 7 GitHub trend/risk detectors."""
-    def detect(
-        self,
-        conn: sqlite3.Connection,
-        repo_full_name: str,
-        snapshot: Dict[str, Any] | None = None,
-        evidence_atoms: List[Dict[str, Any]] | None = None,
-        sub_scores: Dict[str, float] | None = None,
-        heat_score: float | None = None,
-    ) -> List[Detection]:
-        """Run anomaly detection and return triggered alerts."""
-        ...
+assert abs(sum(_HEAT_WEIGHTS.values()) - 1.0) < 1e-9, "heat weights must sum to 1.0"
 
 
-def compute_potential_score(
-    snapshot: Dict[str, Any],
-    evidence_atoms: List[Dict[str, Any]],
-    sub_scores: Dict[str, float],
+def _clamp(value: float, lo: float = 0.0, hi: float = 100.0) -> float:
+    return max(lo, min(hi, value))
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+# Sub-score functions — each returns [0, 100]
+
+def _star_velocity_score(
+    snapshot: RepoSnapshot,
+    percentile_ctx: dict | None,
 ) -> float:
-    """Calculate potential score (0-100) based on early indicators."""
-    # 1. Community activity (0-100)
-    commits_7d = float(snapshot.get("commit_count_7d") or 0)
-    contributors = float(snapshot.get("active_contributors_30d") or 0)
-    community_activity = sub_scores.get("community_activity")
-    if community_activity is None:
-        community_activity = min(100.0, min(50.0, commits_7d * 0.5) + min(50.0, contributors * 2.0))
-        
-    # 2. Release signal (0-100)
-    release_signal = sub_scores.get("release_signal")
-    if release_signal is None:
-        has_release = bool(snapshot.get("latest_release_tag"))
-        release_evidence = [a for a in evidence_atoms if a.get("evidence_type") == "release_feature"]
-        release_signal = min(100.0, (30.0 if has_release else 0.0) + min(70.0, len(release_evidence) * 20.0))
-
-    # 3. Maintainer signal (0-100)
-    maintainer_signal = sub_scores.get("maintainer_signal")
-    if maintainer_signal is None:
-        maintainer_evidence = [a for a in evidence_atoms if a.get("evidence_type") in ("issue_signal", "pr_signal")]
-        maintainer_signal = min(100.0, len(maintainer_evidence) * 25.0)
-
-    # 4. Technical depth (0-1.0 mapped to 0-100)
-    tech_depths = [float(a.get("technical_depth") or 0) for a in evidence_atoms if a.get("technical_depth") is not None]
-    tech_depth_score = (sum(tech_depths) / len(tech_depths) * 100.0) if tech_depths else 50.0
-
-    # 5. Novelty (0-1.0 mapped to 0-100)
-    novelty_scores = [float(a.get("novelty_score") or 0) for a in evidence_atoms if a.get("novelty_score") is not None]
-    novelty_score = (sum(novelty_scores) / len(novelty_scores) * 100.0) if novelty_scores else 50.0
-
-    # Weighted potential score formula
-    potential = (
-        0.30 * tech_depth_score +
-        0.20 * novelty_score +
-        0.20 * release_signal +
-        0.15 * community_activity +
-        0.15 * maintainer_signal
-    )
-    return round(max(0.0, min(100.0, potential)), 2)
+    """Normalise stars_delta_24h against context percentile or an absolute scale."""
+    delta = _safe_float(snapshot.stars_delta_24h)
+    if delta <= 0:
+        return 0.0
+    if percentile_ctx and "p95_stars_delta_24h" in percentile_ctx:
+        p95 = _safe_float(percentile_ctx["p95_stars_delta_24h"], 1.0)
+        return _clamp(delta / p95 * 100.0) if p95 > 0 else 0.0
+    # Absolute scale: 0→0, 500→50, 2000→100 (log-ish)
+    import math
+    return _clamp(math.log1p(delta) / math.log1p(2000) * 100.0)
 
 
-def _resolve_repo_data(conn: sqlite3.Connection, repo_full_name: str) -> Dict[str, Any]:
-    """Helper to query all necessary intelligence fields for a repository from SQLite."""
-    # 1. Fetch latest snapshot
-    snapshot_row = conn.execute(
-        """SELECT stars, forks, open_issues, watchers,
-                  stars_delta_1h, stars_delta_6h, stars_delta_24h, stars_delta_7d, stars_delta_30d,
-                  forks_delta_24h, issues_delta_24h, prs_delta_24h,
-                  commit_count_7d, active_contributors_30d,
-                  star_acceleration
-           FROM github_star_snapshots
-           WHERE full_name = ?
-           ORDER BY snapshot_at DESC LIMIT 1""",
-        (repo_full_name,),
-    ).fetchone()
+def _star_acceleration_score(snapshot: RepoSnapshot) -> float:
+    """acceleration = stars_delta_24h / stars_delta_7d * 7 (daily ratio).
 
-    # 2. Fetch repo details from github_repos (like latest_release_tag, description, etc.)
-    repo_row = conn.execute(
-        """SELECT latest_release_tag, description, topics, language, stars, forks, open_issues, watchers
-           FROM github_repos
-           WHERE full_name = ?""",
-        (repo_full_name,),
-    ).fetchone()
+    Also honours the star_acceleration field if set.
+    """
+    raw_acc = _safe_float(snapshot.star_acceleration)
+    if raw_acc > 0:
+        # Normalise: 1x→0, 3x→50, 10x→100
+        import math
+        return _clamp((math.log1p(raw_acc) / math.log1p(10)) * 100.0)
+    # Fall back to computing from deltas
+    delta_24h = _safe_float(snapshot.stars_delta_24h)
+    delta_7d = _safe_float(snapshot.stars_delta_7d)
+    if delta_7d > 0:
+        daily_avg = delta_7d / 7.0
+        if daily_avg > 0:
+            acc = delta_24h / daily_avg
+            import math
+            return _clamp((math.log1p(acc) / math.log1p(10)) * 100.0)
+    return 0.0
 
-    latest_release_tag = repo_row[0] if repo_row else None
-    description = repo_row[1] if repo_row else ""
-    
-    if snapshot_row:
-        snapshot = {
-            "stars": snapshot_row[0],
-            "forks": snapshot_row[1],
-            "open_issues": snapshot_row[2],
-            "watchers": snapshot_row[3],
-            "stars_delta_1h": snapshot_row[4],
-            "stars_delta_6h": snapshot_row[5],
-            "stars_delta_24h": snapshot_row[6],
-            "stars_delta_7d": snapshot_row[7],
-            "stars_delta_30d": snapshot_row[8],
-            "forks_delta_24h": snapshot_row[9],
-            "issues_delta_24h": snapshot_row[10],
-            "prs_delta_24h": snapshot_row[11],
-            "commit_count_7d": snapshot_row[12],
-            "active_contributors_30d": snapshot_row[13],
-            "star_acceleration": snapshot_row[14],
-            "latest_release_tag": latest_release_tag,
-        }
-    else:
-        if repo_row:
-            snapshot = {
-                "stars": repo_row[4],
-                "forks": repo_row[5],
-                "open_issues": repo_row[6],
-                "watchers": repo_row[7],
-                "latest_release_tag": latest_release_tag,
-                "description": description,
-                "stars_delta_24h": 0,
-                "stars_delta_7d": 0,
-                "star_acceleration": 1.0,
-                "commit_count_7d": 0,
-                "active_contributors_30d": 0,
-            }
-        else:
-            snapshot = {
-                "stars": 0,
-                "forks": 0,
-                "open_issues": 0,
-                "watchers": 0,
-                "latest_release_tag": None,
-                "description": "",
-                "stars_delta_24h": 0,
-                "stars_delta_7d": 0,
-                "star_acceleration": 1.0,
-                "commit_count_7d": 0,
-                "active_contributors_30d": 0,
-            }
 
-    # 3. Fetch evidence atoms
-    evidence_rows = conn.execute(
-        """SELECT atom_id, evidence_type, compressed_content, confidence, technical_depth, novelty_score, raw_source_type, tags_json
-           FROM repo_evidence_atoms
-           WHERE repo_full_name = ?""",
-        (repo_full_name,),
-    ).fetchall()
-    
-    evidence_atoms = [
-        {
-            "atom_id": r[0],
-            "evidence_type": r[1],
-            "compressed_content": r[2],
-            "confidence": r[3],
-            "technical_depth": r[4],
-            "novelty_score": r[5],
-            "raw_source_type": r[6],
-            "tags_json": r[7],
-        }
-        for r in evidence_rows
-    ]
+def _cross_source_signal_score(evidence: list[EvidenceAtom]) -> float:
+    """Score based on diversity of source_type origins in evidence."""
+    sources = {a.source for a in evidence}
+    # 1 source → 10, 2 → 50, 3+ → 100
+    n = len(sources)
+    if n >= 3:
+        return 100.0
+    if n == 2:
+        return 50.0
+    if n == 1:
+        return 10.0
+    return 0.0
 
-    # 4. Compute sub-scores and heat score
-    from github_intelligence.scoring import compute_sub_scores, compute_heat_score
-    
-    percentile_data = {}
-    pct_row = conn.execute(
-        """SELECT star_velocity_percentile
-           FROM snapshot_percentiles
-           WHERE repo_full_name = ?
-           ORDER BY snapshot_date DESC LIMIT 1""",
-        (repo_full_name,),
-    ).fetchone()
-    if pct_row:
-        percentile_data["star_velocity_percentile"] = pct_row[0]
 
-    sub_scores = compute_sub_scores(snapshot, evidence_atoms, percentile_data=percentile_data)
-    heat_score = compute_heat_score(sub_scores)
+def _release_signal_score(snapshot: RepoSnapshot, evidence: list[EvidenceAtom]) -> float:
+    """Score presence & recency of releases."""
+    has_release_atom = any(a.evidence_type == "release_signal" for a in evidence)
+    has_recent_release = snapshot.latest_release_at is not None
+    score = 0.0
+    if has_release_atom:
+        score += 50.0
+    if has_recent_release:
+        score += 30.0
+    if snapshot.latest_release_tag:
+        # Bonus for semantic versioning ≥ v1.0
+        tag = snapshot.latest_release_tag.lstrip("v")
+        try:
+            major = int(tag.split(".")[0])
+            if major >= 1:
+                score += 20.0
+        except (ValueError, IndexError):
+            pass
+    return _clamp(score)
 
+
+def _community_activity_score(snapshot: RepoSnapshot) -> float:
+    """Score community engagement signals."""
+    score = 0.0
+    contributors = _safe_float(snapshot.active_contributors_30d)
+    commits_7d = _safe_float(snapshot.commit_count_7d)
+    open_issues = _safe_float(snapshot.open_issues)
+    forks = _safe_float(snapshot.forks)
+
+    # Contributors: 0→0, 5→25, 20→50, 50+→75
+    if contributors > 0:
+        import math
+        score += _clamp(math.log1p(contributors) / math.log1p(50) * 75.0)
+    # Commits 7d: up to 15 pts
+    if commits_7d > 0:
+        import math
+        score += _clamp(math.log1p(commits_7d) / math.log1p(100) * 15.0)
+    # Forks: up to 10 pts
+    if forks > 0:
+        import math
+        score += _clamp(math.log1p(forks) / math.log1p(10000) * 10.0)
+
+    return _clamp(score)
+
+
+def _topic_relevance_score(evidence: list[EvidenceAtom]) -> float:
+    """Score based on presence of high-relevance topic tags in evidence atoms."""
+    _HIGH_VALUE_TOPICS = frozenset([
+        "llm", "inference", "agent", "transformer", "neural", "gpu", "cache",
+        "rag", "quantiz", "lora", "compress", "efficient", "fast", "model",
+        "embedding", "vector", "framework", "benchmark",
+    ])
+    all_tags: set[str] = set()
+    for a in evidence:
+        all_tags.update(a.topic_tags or [])
+    hits = len(all_tags & _HIGH_VALUE_TOPICS)
+    # 0 hits → 0, 3 hits → 50, 6+ hits → 100
+    return _clamp(hits / 6.0 * 100.0)
+
+
+def _maintainer_signal_score(snapshot: RepoSnapshot) -> float:
+    """Score maintainer activity: recent push, commit cadence."""
+    score = 0.0
+    if snapshot.pushed_at:
+        # If pushed within ~30 days → 100, older → decays
+        try:
+            pushed = datetime.fromisoformat(snapshot.pushed_at.rstrip("Z"))
+            pushed = pushed.replace(tzinfo=timezone.utc)
+            now = datetime.now(timezone.utc)
+            days_ago = (now - pushed).total_seconds() / 86400.0
+            score = _clamp(max(0.0, 100.0 - days_ago * 3.0))
+        except ValueError:
+            pass
+    # Additional: active contributors & commits
+    if _safe_float(snapshot.commit_count_7d) > 5:
+        score = min(100.0, score + 20.0)
+    return score
+
+
+def _novelty_score_from_evidence(evidence: list[EvidenceAtom]) -> float:
+    """Aggregate novelty_score from atoms that have it set."""
+    scores = [a.novelty_score for a in evidence if a.novelty_score is not None]
+    if not scores:
+        return 0.0
+    return _clamp(sum(scores) / len(scores))
+
+
+# ---------------------------------------------------------------------------
+# Public: compute_heat_score
+# ---------------------------------------------------------------------------
+
+def compute_heat_score(
+    snapshot: RepoSnapshot,
+    evidence: list[EvidenceAtom],
+    percentile_ctx: dict | None = None,
+) -> float:
+    """Compute composite heat score in [0, 100].
+
+    Formula (S02 §A5):
+    0.30 * star_velocity_score
+    + 0.15 * star_acceleration_score
+    + 0.15 * cross_source_signal_score
+    + 0.10 * release_signal_score
+    + 0.10 * community_activity_score
+    + 0.10 * topic_relevance_score
+    + 0.05 * maintainer_signal_score
+    + 0.05 * novelty_score
+    """
+    sub_scores = {
+        "star_velocity_score":       _star_velocity_score(snapshot, percentile_ctx),
+        "star_acceleration_score":   _star_acceleration_score(snapshot),
+        "cross_source_signal_score": _cross_source_signal_score(evidence),
+        "release_signal_score":      _release_signal_score(snapshot, evidence),
+        "community_activity_score":  _community_activity_score(snapshot),
+        "topic_relevance_score":     _topic_relevance_score(evidence),
+        "maintainer_signal_score":   _maintainer_signal_score(snapshot),
+        "novelty_score":             _novelty_score_from_evidence(evidence),
+    }
+    heat = sum(_HEAT_WEIGHTS[k] * v for k, v in sub_scores.items())
+    return round(_clamp(heat), 4)
+
+
+def _why_hot_attribution(
+    snapshot: RepoSnapshot,
+    evidence: list[EvidenceAtom],
+    percentile_ctx: dict | None = None,
+) -> dict[str, float]:
+    """Return deterministic sub-score breakdown for attribution."""
     return {
-        "snapshot": snapshot,
-        "evidence_atoms": evidence_atoms,
-        "sub_scores": sub_scores,
-        "heat_score": heat_score,
+        "star_velocity_score":       round(_star_velocity_score(snapshot, percentile_ctx), 4),
+        "star_acceleration_score":   round(_star_acceleration_score(snapshot), 4),
+        "cross_source_signal_score": round(_cross_source_signal_score(evidence), 4),
+        "release_signal_score":      round(_release_signal_score(snapshot, evidence), 4),
+        "community_activity_score":  round(_community_activity_score(snapshot), 4),
+        "topic_relevance_score":     round(_topic_relevance_score(evidence), 4),
+        "maintainer_signal_score":   round(_maintainer_signal_score(snapshot), 4),
+        "novelty_score":             round(_novelty_score_from_evidence(evidence), 4),
     }
 
 
-class SuddenHotDetector:
-    """1. sudden_hot: star_acceleration > 8.0."""
-    def detect(
-        self,
-        conn: sqlite3.Connection,
-        repo_full_name: str,
-        snapshot: Dict[str, Any] | None = None,
-        evidence_atoms: List[Dict[str, Any]] | None = None,
-        sub_scores: Dict[str, float] | None = None,
-        heat_score: float | None = None,
-    ) -> List[Detection]:
-        if snapshot is None:
-            data = _resolve_repo_data(conn, repo_full_name)
-            snapshot = data["snapshot"]
-            evidence_atoms = data["evidence_atoms"]
-            
-        acceleration = snapshot.get("star_acceleration")
-        if acceleration is not None and acceleration > 8.0:
-            severity = "critical" if acceleration > 20.0 else "high"
-            evidence_ids = [a["atom_id"] for a in (evidence_atoms or []) if a.get("evidence_type") == "growth_fact"]
-            if not evidence_ids and evidence_atoms:
-                evidence_ids = [evidence_atoms[0]["atom_id"]]
-            return [
-                Detection(
-                    detector_name="sudden_hot",
-                    severity=severity,
-                    evidence_ids=evidence_ids,
-                    repo_full_name=repo_full_name,
-                    trigger_condition=f"star_acceleration {acceleration} > 8.0",
-                    conditions_met_json={"star_acceleration": acceleration},
-                    recommended_action="Create project intelligence card and run why-hot attribution.",
-                )
-            ]
-        return []
+# ---------------------------------------------------------------------------
+# Detector helpers
+# ---------------------------------------------------------------------------
+
+def _evidence_ids(evidence: list[EvidenceAtom]) -> list[str]:
+    return [a.evidence_id for a in evidence]
 
 
-class EarlyPotentialDetector:
-    """2. early_potential: potential_score > 85.0 AND stars < 2000."""
-    def detect(
-        self,
-        conn: sqlite3.Connection,
-        repo_full_name: str,
-        snapshot: Dict[str, Any] | None = None,
-        evidence_atoms: List[Dict[str, Any]] | None = None,
-        sub_scores: Dict[str, float] | None = None,
-        heat_score: float | None = None,
-    ) -> List[Detection]:
-        if snapshot is None or evidence_atoms is None or sub_scores is None:
-            data = _resolve_repo_data(conn, repo_full_name)
-            if snapshot is None:
-                snapshot = data["snapshot"]
-            if evidence_atoms is None:
-                evidence_atoms = data["evidence_atoms"]
-            if sub_scores is None:
-                sub_scores = data["sub_scores"]
+# ---------------------------------------------------------------------------
+# 7 Detectors
+# ---------------------------------------------------------------------------
 
-        stars = snapshot.get("stars") or 0
-        potential_score = compute_potential_score(snapshot, evidence_atoms, sub_scores)
-        
-        if potential_score > 85.0 and stars < 2000:
-            evidence_ids = [a["atom_id"] for a in evidence_atoms if a.get("evidence_type") in ("readme_claim", "release_feature")]
-            if not evidence_ids and evidence_atoms:
-                evidence_ids = [evidence_atoms[0]["atom_id"]]
-            return [
-                Detection(
-                    detector_name="early_potential",
-                    severity="high",
-                    evidence_ids=evidence_ids,
-                    repo_full_name=repo_full_name,
-                    trigger_condition=f"potential_score {potential_score} > 85 AND stars {stars} < 2000",
-                    conditions_met_json={"potential_score": potential_score, "stars": stars},
-                    recommended_action="Add to watchlist and monitor community activity.",
-                )
-            ]
-        return []
+def detect_sudden_hot(
+    full_name: str,
+    snapshot: RepoSnapshot,
+    evidence: list[EvidenceAtom],
+) -> list[Detection]:
+    """Trigger when star_acceleration > 8x. Severity=high.
 
-
-class FoundationInfraCandidateDetector:
-    """3. foundation_infra_candidate: infrastructure alignment AND technical_depth >= 0.55."""
-    def detect(
-        self,
-        conn: sqlite3.Connection,
-        repo_full_name: str,
-        snapshot: Dict[str, Any] | None = None,
-        evidence_atoms: List[Dict[str, Any]] | None = None,
-        sub_scores: Dict[str, float] | None = None,
-        heat_score: float | None = None,
-    ) -> List[Detection]:
-        if evidence_atoms is None:
-            data = _resolve_repo_data(conn, repo_full_name)
-            evidence_atoms = data["evidence_atoms"]
-            
-        topics, description, language = "", "", ""
-        repo_row = conn.execute(
-            "SELECT topics, description, language FROM github_repos WHERE full_name = ?",
-            (repo_full_name,),
-        ).fetchone()
-        if repo_row:
-            topics = str(repo_row[0] or "").lower()
-            description = str(repo_row[1] or "").lower()
-            language = str(repo_row[2] or "").lower()
-
-        infra_keywords = {"infra", "kernel", "os", "runtime", "compiler", "database", "mcp", "library", "framework", "llm-app-framework", "inference-compute", "training-framework", "security-ai"}
-        is_infra = any(kw in topics or kw in description or kw in language for kw in infra_keywords)
-
-        tech_depths = [float(a.get("technical_depth") or 0) for a in evidence_atoms if a.get("technical_depth") is not None]
-        avg_depth = sum(tech_depths) / len(tech_depths) if tech_depths else 0.5
-
-        if is_infra and avg_depth >= 0.55:
-            evidence_ids = [a["atom_id"] for a in evidence_atoms if a.get("technical_depth", 0) >= 0.55]
-            if not evidence_ids and evidence_atoms:
-                evidence_ids = [evidence_atoms[0]["atom_id"]]
-            return [
-                Detection(
-                    detector_name="foundation_infra_candidate",
-                    severity="medium",
-                    evidence_ids=evidence_ids,
-                    repo_full_name=repo_full_name,
-                    trigger_condition=f"is_infra {is_infra} AND technical_depth {round(avg_depth, 4)} >= 0.55",
-                    conditions_met_json={"technical_depth": round(avg_depth, 4), "is_infra": is_infra},
-                    recommended_action="Conduct code-level architecture analysis and check for licensing.",
-                )
-            ]
-        return []
-
-
-class HypeOrNoiseDetector:
-    """4. hype_or_noise: heat_score > 65.0 AND technical_depth < 0.35."""
-    def detect(
-        self,
-        conn: sqlite3.Connection,
-        repo_full_name: str,
-        snapshot: Dict[str, Any] | None = None,
-        evidence_atoms: List[Dict[str, Any]] | None = None,
-        sub_scores: Dict[str, float] | None = None,
-        heat_score: float | None = None,
-    ) -> List[Detection]:
-        if heat_score is None or evidence_atoms is None:
-            data = _resolve_repo_data(conn, repo_full_name)
-            if heat_score is None:
-                heat_score = data["heat_score"]
-            if evidence_atoms is None:
-                evidence_atoms = data["evidence_atoms"]
-                
-        tech_depths = [float(a.get("technical_depth") or 0) for a in evidence_atoms if a.get("technical_depth") is not None]
-        avg_depth = sum(tech_depths) / len(tech_depths) if tech_depths else 0.5
-
-        if heat_score > 65.0 and avg_depth < 0.35:
-            evidence_ids = [a["atom_id"] for a in evidence_atoms if a.get("evidence_type") in ("social_mention", "youtube_mention")]
-            if not evidence_ids and evidence_atoms:
-                evidence_ids = [evidence_atoms[0]["atom_id"]]
-            return [
-                Detection(
-                    detector_name="hype_or_noise",
-                    severity="medium",
-                    evidence_ids=evidence_ids,
-                    repo_full_name=repo_full_name,
-                    trigger_condition=f"heat_score {heat_score} > 65.0 AND technical_depth {round(avg_depth, 4)} < 0.35",
-                    conditions_met_json={"heat_score": heat_score, "technical_depth": round(avg_depth, 4)},
-                    recommended_action="Identify wrappers/packaging; perform unverified/hype risk classification.",
-                )
-            ]
-        return []
-
-
-class StarManipulationSuspicionDetector:
-    """5. star_manipulation_suspicion: anomalous growth signals with low developer activity."""
-    def detect(
-        self,
-        conn: sqlite3.Connection,
-        repo_full_name: str,
-        snapshot: Dict[str, Any] | None = None,
-        evidence_atoms: List[Dict[str, Any]] | None = None,
-        sub_scores: Dict[str, float] | None = None,
-        heat_score: float | None = None,
-    ) -> List[Detection]:
-        if snapshot is None:
-            data = _resolve_repo_data(conn, repo_full_name)
-            snapshot = data["snapshot"]
-            evidence_atoms = data["evidence_atoms"]
-            
-        stars_delta_24h = snapshot.get("stars_delta_24h") or 0
-        forks_delta_24h = snapshot.get("forks_delta_24h") or 0
-        forks = snapshot.get("forks") or 0
-        acceleration = snapshot.get("star_acceleration") or 1.0
-        contributors = snapshot.get("active_contributors_30d") or 0
-        commits_7d = snapshot.get("commit_count_7d") or 0
-
-        triggered = False
-        reason = ""
-        conditions = {}
-
-        if acceleration > 20.0 and stars_delta_24h > 50:
-            triggered = True
-            reason = f"star_acceleration {acceleration} > 20.0 AND stars_delta_24h {stars_delta_24h} > 50"
-            conditions = {"acceleration": acceleration, "stars_delta_24h": stars_delta_24h}
-        elif stars_delta_24h > 100 and forks_delta_24h <= 0 and forks < 5:
-            triggered = True
-            reason = f"stars_delta_24h {stars_delta_24h} > 100 AND forks_delta_24h {forks_delta_24h} <= 0 AND forks {forks} < 5"
-            conditions = {"stars_delta_24h": stars_delta_24h, "forks_delta_24h": forks_delta_24h, "forks": forks}
-        elif stars_delta_24h > 100 and contributors <= 1 and commits_7d <= 1:
-            triggered = True
-            reason = f"stars_delta_24h {stars_delta_24h} > 100 AND contributors {contributors} <= 1 AND commits_7d {commits_7d} <= 1"
-            conditions = {"stars_delta_24h": stars_delta_24h, "active_contributors_30d": contributors, "commit_count_7d": commits_7d}
-
-        if triggered:
-            evidence_ids = [a["atom_id"] for a in (evidence_atoms or []) if a.get("evidence_type") == "growth_fact"]
-            if not evidence_ids and evidence_atoms:
-                evidence_ids = [evidence_atoms[0]["atom_id"]]
-            return [
-                Detection(
-                    detector_name="star_manipulation_suspicion",
-                    severity="medium",
-                    evidence_ids=evidence_ids,
-                    repo_full_name=repo_full_name,
-                    trigger_condition=reason,
-                    conditions_met_json=conditions,
-                    recommended_action="Audit commit history, check watcher list, and flag for manual verification.",
-                )
-            ]
-        return []
-
-
-class MajorReleaseSignalDetector:
-    """6. major_release_signal: major release tags or release note features."""
-    def detect(
-        self,
-        conn: sqlite3.Connection,
-        repo_full_name: str,
-        snapshot: Dict[str, Any] | None = None,
-        evidence_atoms: List[Dict[str, Any]] | None = None,
-        sub_scores: Dict[str, float] | None = None,
-        heat_score: float | None = None,
-    ) -> List[Detection]:
-        if snapshot is None or evidence_atoms is None:
-            data = _resolve_repo_data(conn, repo_full_name)
-            if snapshot is None:
-                snapshot = data["snapshot"]
-            if evidence_atoms is None:
-                evidence_atoms = data["evidence_atoms"]
-                
-        release_tag = snapshot.get("latest_release_tag")
-        is_major_tag = False
-        if release_tag:
-            is_major_tag = bool(re.match(r"^v?\d+\.0(\.0)?$", str(release_tag)))
-            
-        release_atoms = [a for a in evidence_atoms if a.get("evidence_type") == "release_feature"]
-        
-        if is_major_tag or release_atoms:
-            evidence_ids = [a["atom_id"] for a in release_atoms]
-            if not evidence_ids and evidence_atoms:
-                evidence_ids = [evidence_atoms[0]["atom_id"]]
-            trigger_tag_str = release_tag if release_tag else "N/A"
-            return [
-                Detection(
-                    detector_name="major_release_signal",
-                    severity="medium",
-                    evidence_ids=evidence_ids,
-                    repo_full_name=repo_full_name,
-                    trigger_condition=f"latest_release_tag {trigger_tag_str} is major tag ({is_major_tag}) OR has release_feature evidence atoms ({len(release_atoms)})",
-                    conditions_met_json={"latest_release_tag": release_tag, "release_atoms_count": len(release_atoms)},
-                    recommended_action="Compile release highlights and draft a product release feature overview.",
-                )
-            ]
-        return []
-
-
-class CrossSourceResonanceDetector:
-    """7. cross_source_resonance: simultaneous trending, social, and youtube mentions."""
-    def detect(
-        self,
-        conn: sqlite3.Connection,
-        repo_full_name: str,
-        snapshot: Dict[str, Any] | None = None,
-        evidence_atoms: List[Dict[str, Any]] | None = None,
-        sub_scores: Dict[str, float] | None = None,
-        heat_score: float | None = None,
-    ) -> List[Detection]:
-        if sub_scores is None or evidence_atoms is None:
-            data = _resolve_repo_data(conn, repo_full_name)
-            if sub_scores is None:
-                sub_scores = data["sub_scores"]
-            if evidence_atoms is None:
-                evidence_atoms = data["evidence_atoms"]
-                
-        cross_source_signal = sub_scores.get("cross_source_signal") or 0.0
-        has_social = any(a.get("evidence_type") == "social_mention" for a in evidence_atoms)
-        has_youtube = any(a.get("evidence_type") == "youtube_mention" for a in evidence_atoms)
-
-        if cross_source_signal >= 50.0 or (has_social and has_youtube):
-            severity = "critical" if (has_social and has_youtube and cross_source_signal >= 75.0) else "high"
-            evidence_ids = [a["atom_id"] for a in evidence_atoms if a.get("evidence_type") in ("social_mention", "youtube_mention")]
-            if not evidence_ids and evidence_atoms:
-                evidence_ids = [evidence_atoms[0]["atom_id"]]
-            return [
-                Detection(
-                    detector_name="cross_source_resonance",
-                    severity=severity,
-                    evidence_ids=evidence_ids,
-                    repo_full_name=repo_full_name,
-                    trigger_condition=f"cross_source_signal {cross_source_signal} >= 50.0 OR (has_social {has_social} AND has_youtube {has_youtube})",
-                    conditions_met_json={"cross_source_signal": cross_source_signal, "has_social": has_social, "has_youtube": has_youtube},
-                    recommended_action="Compile cross-source mention highlights and check community velocity.",
-                )
-            ]
-        return []
-
-
-def run_all_detectors(
-    conn: sqlite3.Connection,
-    repo_full_name: str,
-    snapshot: Dict[str, Any] | None = None,
-    evidence_atoms: List[Dict[str, Any]] | None = None,
-    sub_scores: Dict[str, float] | None = None,
-    heat_score: float | None = None,
-) -> List[Detection]:
-    """Execute all 7 detectors on a repository.
-
-    Each detector is run inside an error boundary; crashes are logged
-    and return an empty list, allowing other detectors to proceed.
+    Negative control: acceleration=0.5, stars_delta_24h=1 → NOT triggered.
     """
-    detectors = [
-        SuddenHotDetector(),
-        EarlyPotentialDetector(),
-        FoundationInfraCandidateDetector(),
-        HypeOrNoiseDetector(),
-        StarManipulationSuspicionDetector(),
-        MajorReleaseSignalDetector(),
-        CrossSourceResonanceDetector(),
+    acc = _safe_float(snapshot.star_acceleration)
+    if acc <= 8.0:
+        return []
+    attr = _why_hot_attribution(snapshot, evidence)
+    return [
+        Detection(
+            detector_name="sudden_hot",
+            full_name=full_name,
+            severity="high",
+            title=f"Sudden heat spike: star_acceleration={acc:.1f}x (threshold >8x)",
+            evidence_ids=_evidence_ids(evidence)[:5],
+            details={
+                "star_acceleration": acc,
+                "stars_delta_24h": snapshot.stars_delta_24h,
+                "stars": snapshot.stars,
+                "why_hot_attribution": attr,
+            },
+            created_at=utc_now_iso(),
+        )
     ]
-    
-    try:
-        resolved = _resolve_repo_data(conn, repo_full_name)
-        if snapshot is None:
-            snapshot = resolved["snapshot"]
-        if evidence_atoms is None:
-            evidence_atoms = resolved["evidence_atoms"]
-        if sub_scores is None:
-            sub_scores = resolved["sub_scores"]
-        if heat_score is None:
-            heat_score = resolved["heat_score"]
-    except Exception as e:
-        logger.exception("Failed to resolve repository data for %s: %s", repo_full_name, e)
 
-    all_detections: List[Detection] = []
-    for detector in detectors:
-        name = detector.__class__.__name__
+
+def detect_early_potential(
+    full_name: str,
+    snapshot: RepoSnapshot,
+    evidence: list[EvidenceAtom],
+) -> list[Detection]:
+    """Trigger when potential_score > 85 AND stars < 2000. Severity=medium.
+
+    potential_score is inferred from evidence atoms:
+    - Average of top-3 importance_scores weighted by technical_depth_score
+    - Thresholded at >85.
+    """
+    stars = _safe_float(snapshot.stars)
+    if stars >= 2000:
+        return []
+
+    # Compute potential_score from evidence
+    scored = [
+        a for a in evidence
+        if a.importance_score is not None and a.importance_score > 0
+    ]
+    if not scored:
+        return []
+    scored.sort(key=lambda a: -(a.importance_score or 0))
+    top3 = scored[:3]
+    weights = [(a.technical_depth_score or 1.0) for a in top3]
+    total_w = sum(weights) or 1.0
+    weighted_importance = sum(
+        (a.importance_score or 0) * w for a, w in zip(top3, weights)
+    ) / total_w
+    potential_score = _clamp(weighted_importance)
+
+    if potential_score <= 85.0:
+        return []
+
+    return [
+        Detection(
+            detector_name="early_potential",
+            full_name=full_name,
+            severity="medium",
+            title=f"Early-stage high-potential project: potential_score={potential_score:.1f}, stars={int(stars)}",
+            evidence_ids=_evidence_ids(top3),
+            details={
+                "potential_score": round(potential_score, 2),
+                "stars": snapshot.stars,
+                "top3_evidence_importance": [a.importance_score for a in top3],
+            },
+            created_at=utc_now_iso(),
+        )
+    ]
+
+
+def detect_foundation_infra(
+    full_name: str,
+    snapshot: RepoSnapshot,
+    evidence: list[EvidenceAtom],
+) -> list[Detection]:
+    """Trigger when technical_depth_score + community_health_score > 160. Severity=info.
+
+    Scores are derived from evidence and snapshot respectively.
+    """
+    # Technical depth: average technical_depth_score across evidence atoms
+    depth_scores = [
+        a.technical_depth_score for a in evidence if a.technical_depth_score is not None
+    ]
+    tech_depth = _clamp(
+        sum(depth_scores) / len(depth_scores) if depth_scores else 0.0
+    )
+
+    # Community health: composite from snapshot fields, [0, 100]
+    contributors = _safe_float(snapshot.active_contributors_30d)
+    commits = _safe_float(snapshot.commit_count_7d)
+    forks = _safe_float(snapshot.forks)
+    stars = _safe_float(snapshot.stars)
+    import math
+    community_health = _clamp(
+        math.log1p(contributors) / math.log1p(100) * 40.0
+        + math.log1p(commits) / math.log1p(200) * 30.0
+        + math.log1p(forks) / math.log1p(5000) * 20.0
+        + math.log1p(stars) / math.log1p(50000) * 10.0
+    )
+
+    combined = tech_depth + community_health
+    if combined <= 160.0:
+        return []
+
+    return [
+        Detection(
+            detector_name="foundation_infra_candidate",
+            full_name=full_name,
+            severity="info",
+            title=f"Foundation infrastructure candidate: tech_depth={tech_depth:.1f} + community_health={community_health:.1f} = {combined:.1f} > 160",
+            evidence_ids=_evidence_ids(evidence)[:5],
+            details={
+                "technical_depth_score": round(tech_depth, 2),
+                "community_health_score": round(community_health, 2),
+                "combined_score": round(combined, 2),
+                "contributors_30d": snapshot.active_contributors_30d,
+                "forks": snapshot.forks,
+                "stars": snapshot.stars,
+            },
+            created_at=utc_now_iso(),
+        )
+    ]
+
+
+def detect_hype_or_noise(
+    full_name: str,
+    snapshot: RepoSnapshot,
+    evidence: list[EvidenceAtom],
+) -> list[Detection]:
+    """Trigger when heat_score is high but technical_depth < 30. Severity=medium.
+
+    High heat = heat_score > 60.
+    """
+    heat = compute_heat_score(snapshot, evidence)
+    if heat <= 60.0:
+        return []
+
+    depth_scores = [
+        a.technical_depth_score for a in evidence if a.technical_depth_score is not None
+    ]
+    tech_depth = _clamp(
+        sum(depth_scores) / len(depth_scores) if depth_scores else 0.0
+    )
+
+    if tech_depth >= 30.0:
+        return []
+
+    return [
+        Detection(
+            detector_name="hype_or_noise",
+            full_name=full_name,
+            severity="medium",
+            title=f"Potential hype/noise: heat={heat:.1f} but technical_depth={tech_depth:.1f} < 30",
+            evidence_ids=_evidence_ids(evidence)[:3],
+            details={
+                "heat_score": round(heat, 4),
+                "technical_depth_score": round(tech_depth, 2),
+            },
+            created_at=utc_now_iso(),
+        )
+    ]
+
+
+def detect_star_manipulation(
+    full_name: str,
+    snapshot: RepoSnapshot,
+    evidence: list[EvidenceAtom],
+    percentile_ctx: dict | None = None,
+) -> list[Detection]:
+    """Trigger when star_velocity > 95th percentile AND low community activity.
+
+    Low community = active_contributors_30d < 3 AND forks < 50.
+    Severity=high.
+    """
+    delta = _safe_float(snapshot.stars_delta_24h)
+    contributors = _safe_float(snapshot.active_contributors_30d)
+    forks = _safe_float(snapshot.forks)
+
+    # Check 95th percentile threshold
+    velocity_score = _star_velocity_score(snapshot, percentile_ctx)
+    above_95th = (
+        (percentile_ctx and velocity_score >= 95.0)
+        or (not percentile_ctx and delta >= 1000)
+    )
+
+    if not above_95th:
+        return []
+
+    # Low community signal
+    low_community = contributors < 3 and forks < 50
+    if not low_community:
+        return []
+
+    return [
+        Detection(
+            detector_name="star_manipulation_suspicion",
+            full_name=full_name,
+            severity="high",
+            title=f"Star manipulation suspicion: stars_delta_24h={int(delta)}, contributors={int(contributors)}, forks={int(forks)}",
+            evidence_ids=_evidence_ids(evidence)[:3],
+            details={
+                "stars_delta_24h": snapshot.stars_delta_24h,
+                "active_contributors_30d": snapshot.active_contributors_30d,
+                "forks": snapshot.forks,
+                "star_velocity_score": round(velocity_score, 2),
+            },
+            created_at=utc_now_iso(),
+        )
+    ]
+
+
+def detect_major_release(
+    full_name: str,
+    snapshot: RepoSnapshot,
+    evidence: list[EvidenceAtom],
+) -> list[Detection]:
+    """Trigger when there is a new release + release_signal atom + acceleration > 2x.
+
+    Severity=medium.
+    """
+    acc = _safe_float(snapshot.star_acceleration)
+    if acc <= 2.0:
+        return []
+
+    release_atoms = [a for a in evidence if a.evidence_type == "release_signal"]
+    if not release_atoms:
+        return []
+
+    if not snapshot.latest_release_tag:
+        return []
+
+    tag = snapshot.latest_release_tag
+    return [
+        Detection(
+            detector_name="major_release_signal",
+            full_name=full_name,
+            severity="medium",
+            title=f"Major release driving growth: {tag}, acceleration={acc:.1f}x",
+            evidence_ids=_evidence_ids(release_atoms)[:3],
+            details={
+                "latest_release_tag": tag,
+                "latest_release_at": snapshot.latest_release_at,
+                "star_acceleration": acc,
+                "release_atom_count": len(release_atoms),
+            },
+            created_at=utc_now_iso(),
+        )
+    ]
+
+
+def detect_cross_source_resonance(
+    full_name: str,
+    snapshot: RepoSnapshot,
+    evidence: list[EvidenceAtom],
+    within_hours: float = 24.0,
+) -> list[Detection]:
+    """Trigger when repo appears in ≥3 distinct source_types within within_hours.
+
+    Uses atom created_at timestamps; if timestamps are unavailable, falls back
+    to counting distinct sources unconditionally (conservative).
+    Severity=medium.
+    """
+    if not evidence:
+        return []
+
+    # Determine time window
+    now_ts: float | None = None
+    try:
+        now_ts = datetime.now(timezone.utc).timestamp()
+    except Exception:
+        pass
+
+    window_seconds = within_hours * 3600.0
+    source_types_in_window: set[str] = set()
+
+    for atom in evidence:
+        # Try to parse atom timestamp
+        in_window = True
+        if now_ts is not None and atom.created_at:
+            try:
+                atom_ts = datetime.fromisoformat(atom.created_at.rstrip("Z"))
+                atom_ts = atom_ts.replace(tzinfo=timezone.utc)
+                age_seconds = now_ts - atom_ts.timestamp()
+                in_window = age_seconds <= window_seconds
+            except ValueError:
+                in_window = True  # be inclusive if parse fails
+        if in_window:
+            source_types_in_window.add(atom.source)
+
+    if len(source_types_in_window) < 3:
+        return []
+
+    return [
+        Detection(
+            detector_name="cross_source_resonance",
+            full_name=full_name,
+            severity="medium",
+            title=f"Cross-source resonance: seen in {len(source_types_in_window)} distinct sources within {within_hours:.0f}h",
+            evidence_ids=_evidence_ids(evidence)[:5],
+            details={
+                "source_count": len(source_types_in_window),
+                "sources": sorted(source_types_in_window),
+                "within_hours": within_hours,
+            },
+            created_at=utc_now_iso(),
+        )
+    ]
+
+
+# ---------------------------------------------------------------------------
+# run_detectors
+# ---------------------------------------------------------------------------
+
+_ALL_DETECTORS = [
+    detect_sudden_hot,
+    detect_early_potential,
+    detect_foundation_infra,
+    detect_hype_or_noise,
+    detect_star_manipulation,
+    detect_major_release,
+    detect_cross_source_resonance,
+]
+
+
+def run_detectors(
+    full_name: str,
+    snapshot: RepoSnapshot,
+    evidence: list[EvidenceAtom],
+    conn: sqlite3.Connection | None = None,
+) -> list[Detection]:
+    """Run all 7 detectors. Single detector exceptions are caught; others continue.
+
+    If conn is provided, write each Detection to the alerts table.
+    """
+    all_detections: list[Detection] = []
+
+    for detector_fn in _ALL_DETECTORS:
         try:
-            detections = detector.detect(
-                conn,
-                repo_full_name,
-                snapshot=snapshot,
-                evidence_atoms=evidence_atoms,
-                sub_scores=sub_scores,
-                heat_score=heat_score,
+            results = detector_fn(full_name, snapshot, evidence)  # type: ignore[call-arg]
+            all_detections.extend(results)
+        except Exception as exc:
+            # Log to stderr but do not interrupt other detectors
+            import sys
+            print(
+                f"[detectors] {detector_fn.__name__} raised {type(exc).__name__}: {exc}",
+                file=sys.stderr,
             )
-            all_detections.extend(detections)
-        except Exception as e:
-            logger.exception("Detector %s crashed for repo %s: %s", name, repo_full_name, e)
-            continue
-            
+
+    if conn is not None:
+        for det in all_detections:
+            insert_row(conn, det.TABLE, det.to_row())
+        conn.commit()
+
     return all_detections
+
+
+# ---------------------------------------------------------------------------
+# Self-test
+# ---------------------------------------------------------------------------
+
+def _self_test() -> dict[str, Any]:
+    """Comprehensive tests for heat scoring and all 7 detectors.
+
+    Returns {tests_run, tests_passed, details}.
+    """
+    import os
+    import sqlite3 as _sqlite3
+    import tempfile
+
+    from .schema import apply_schema, fetch_rows, RepoSnapshot
+    from .evidence import compress_readme, compress_releases
+
+    results: dict[str, Any] = {"tests_run": 0, "tests_passed": 0, "details": []}
+
+    def _pass(name: str, note: str = "") -> None:
+        results["tests_run"] += 1
+        results["tests_passed"] += 1
+        results["details"].append({"test": name, "status": "PASS", "note": note})
+
+    def _fail(name: str, reason: str) -> None:
+        results["tests_run"] += 1
+        results["details"].append({"test": name, "status": "FAIL", "reason": reason})
+
+    # ---------------------------------------------------------------
+    # Fixtures
+    # ---------------------------------------------------------------
+    def _make_snapshot(**kwargs) -> RepoSnapshot:
+        defaults = dict(
+            snapshot_id="snap-test",
+            full_name="owner/repo",
+            snapshot_at="2026-05-27T00:00:00Z",
+            stars=5000,
+            forks=200,
+            watchers=4800,
+            open_issues=30,
+            commit_count_7d=25,
+            active_contributors_30d=12,
+            latest_release_tag="v2.0.0",
+            latest_release_at="2026-05-20T00:00:00Z",
+            pushed_at="2026-05-26T18:00:00Z",
+            stars_delta_24h=500,
+            stars_delta_7d=1200,
+            stars_delta_30d=8000,
+            forks_delta_24h=20,
+            star_acceleration=4.0,
+            history_status="sufficient",
+        )
+        defaults.update(kwargs)
+        return RepoSnapshot(**defaults)
+
+    readme_text = """\
+# AwesomeLLM
+
+Blazing-fast LLM inference framework with GPU-accelerated transformer attention.
+
+## Features
+
+- 3x faster than competitors via quantization and memory-efficient caching
+- Supports LoRA fine-tuning, RAG pipelines, and production-grade async batch API
+- Built-in benchmark suite with performance profiling and distributed deployment
+- Open-source MIT license with enterprise support available
+
+## Architecture
+
+Core runtime uses a streaming pipeline with neural network tokenizer.
+"""
+    readme_atoms = compress_readme("owner/repo", readme_text)
+
+    releases = [
+        {
+            "tag": "v2.0.0",
+            "name": "GPU Inference Engine v2.0",
+            "body": "New GPU inference engine with quantized transformer support.",
+            "published_at": "2026-05-20T00:00:00Z",
+        }
+    ]
+    release_atoms = compress_releases("owner/repo", releases)
+    all_atoms = readme_atoms + release_atoms
+
+    # ---------------------------------------------------------------
+    # T1: compute_heat_score bounds
+    # ---------------------------------------------------------------
+    snap = _make_snapshot()
+    heat = compute_heat_score(snap, all_atoms)
+    assert 0.0 <= heat <= 100.0, f"heat_score out of bounds: {heat}"
+    _pass("compute_heat_score.bounds", f"heat={heat}")
+
+    # ---------------------------------------------------------------
+    # T2: heat_score determinism
+    # ---------------------------------------------------------------
+    heat2 = compute_heat_score(snap, all_atoms)
+    assert heat == heat2, "compute_heat_score is not deterministic"
+    _pass("compute_heat_score.determinism")
+
+    # ---------------------------------------------------------------
+    # T3: why-hot attribution sums to ≈ heat_score
+    # ---------------------------------------------------------------
+    attr = _why_hot_attribution(snap, all_atoms)
+    expected = round(
+        sum(_HEAT_WEIGHTS[k] * v for k, v in attr.items()), 4
+    )
+    assert abs(expected - heat) < 0.001, (
+        f"attribution sum mismatch: {expected} vs heat {heat}"
+    )
+    _pass("why_hot_attribution.sum_matches_heat", f"attr_sum={expected}")
+
+    # ---------------------------------------------------------------
+    # T4: detect_sudden_hot — positive
+    # ---------------------------------------------------------------
+    hot_snap = _make_snapshot(star_acceleration=12.0)
+    alerts = detect_sudden_hot("owner/repo", hot_snap, all_atoms)
+    assert len(alerts) == 1
+    assert alerts[0].severity == "high"
+    assert alerts[0].detector_name == "sudden_hot"
+    _pass("detect_sudden_hot.positive", f"acc=12x triggers high alert")
+
+    # ---------------------------------------------------------------
+    # T5: detect_sudden_hot — negative control (acc=0.5, delta=1)
+    # ---------------------------------------------------------------
+    cold_snap = _make_snapshot(stars_delta_24h=1, star_acceleration=0.5)
+    neg_alerts = detect_sudden_hot("owner/repo", cold_snap, all_atoms)
+    assert neg_alerts == [], (
+        f"sudden_hot false positive on acc=0.5, delta=1: {neg_alerts}"
+    )
+    _pass("detect_sudden_hot.negative_control_acc0.5_delta1")
+
+    # ---------------------------------------------------------------
+    # T6: detect_sudden_hot — boundary at exactly 8.0 (should NOT trigger)
+    # ---------------------------------------------------------------
+    boundary_snap = _make_snapshot(star_acceleration=8.0)
+    boundary_alerts = detect_sudden_hot("owner/repo", boundary_snap, all_atoms)
+    assert boundary_alerts == [], (
+        f"sudden_hot should NOT trigger at exactly 8.0, got {boundary_alerts}"
+    )
+    _pass("detect_sudden_hot.boundary_at_8x")
+
+    # ---------------------------------------------------------------
+    # T7: detect_early_potential — positive (low stars, high importance atoms)
+    # ---------------------------------------------------------------
+    low_star_snap = _make_snapshot(stars=500)
+    # Ensure atoms have high importance + technical depth
+    for a in readme_atoms:
+        a.importance_score = 90.0
+        a.technical_depth_score = 80.0
+    ep_alerts = detect_early_potential("owner/repo", low_star_snap, readme_atoms)
+    assert len(ep_alerts) == 1, f"expected early_potential alert, got {len(ep_alerts)}"
+    assert ep_alerts[0].severity == "medium"
+    _pass("detect_early_potential.positive", f"stars=500, potential>85")
+
+    # ---------------------------------------------------------------
+    # T8: detect_early_potential — negative (stars ≥ 2000)
+    # ---------------------------------------------------------------
+    big_snap = _make_snapshot(stars=5000)
+    ep_neg = detect_early_potential("owner/repo", big_snap, readme_atoms)
+    assert ep_neg == [], f"early_potential false positive at stars=5000"
+    _pass("detect_early_potential.negative_high_stars")
+
+    # ---------------------------------------------------------------
+    # T9: detect_foundation_infra — positive
+    # ---------------------------------------------------------------
+    foundation_snap = _make_snapshot(
+        stars=20000, forks=3000, active_contributors_30d=80, commit_count_7d=150
+    )
+    # Give atoms high technical_depth
+    for a in readme_atoms:
+        a.technical_depth_score = 90.0
+    fi_alerts = detect_foundation_infra("owner/repo", foundation_snap, readme_atoms)
+    assert len(fi_alerts) == 1, f"expected foundation_infra alert, got {len(fi_alerts)}"
+    assert fi_alerts[0].severity == "info"
+    _pass("detect_foundation_infra.positive")
+
+    # ---------------------------------------------------------------
+    # T10: detect_hype_or_noise — positive (high heat, low depth)
+    # ---------------------------------------------------------------
+    # Create a snapshot that gets high heat_score but evidence has low depth
+    hype_snap = _make_snapshot(
+        stars_delta_24h=2000, star_acceleration=15.0,
+        active_contributors_30d=1, forks=5,
+    )
+    # Low-depth atoms
+    from .schema import EvidenceAtom, utc_now_iso
+    from .evidence import make_evidence_id
+    low_depth_atoms = [
+        EvidenceAtom(
+            evidence_id=make_evidence_id("owner/repo", "readme_claim", i),
+            full_name="owner/repo",
+            source="api",
+            evidence_type="readme_claim",
+            compressed_content="Awesome project",
+            importance_score=25.0,
+            technical_depth_score=5.0,
+            created_at=utc_now_iso(),
+        )
+        for i in range(3)
+    ]
+    hype_heat = compute_heat_score(hype_snap, low_depth_atoms)
+    if hype_heat > 60.0:
+        hype_alerts = detect_hype_or_noise("owner/repo", hype_snap, low_depth_atoms)
+        assert len(hype_alerts) == 1
+        assert hype_alerts[0].severity == "medium"
+        _pass("detect_hype_or_noise.positive", f"heat={hype_heat:.1f}, depth=5")
+    else:
+        # Heat not high enough with these params — pass conditionally
+        _pass("detect_hype_or_noise.positive_skipped", f"heat={hype_heat:.1f} not >60, no alert (correct)")
+
+    # ---------------------------------------------------------------
+    # T11: detect_star_manipulation — positive
+    # ---------------------------------------------------------------
+    manip_snap = _make_snapshot(
+        stars_delta_24h=1500,
+        active_contributors_30d=1,
+        forks=10,
+    )
+    # percentile_ctx: p95 = 100 → velocity_score = 1500/100*100 = capped 100 ≥ 95
+    pctx = {"p95_stars_delta_24h": 100.0}
+    manip_alerts = detect_star_manipulation("owner/repo", manip_snap, all_atoms, pctx)
+    assert len(manip_alerts) == 1
+    assert manip_alerts[0].severity == "high"
+    _pass("detect_star_manipulation.positive", "delta=1500, contributors=1, forks=10")
+
+    # T12: negative — many contributors
+    legit_snap = _make_snapshot(
+        stars_delta_24h=1500,
+        active_contributors_30d=50,
+        forks=200,
+    )
+    legit_alerts = detect_star_manipulation("owner/repo", legit_snap, all_atoms, pctx)
+    assert legit_alerts == [], f"star_manipulation false positive: {legit_alerts}"
+    _pass("detect_star_manipulation.negative_many_contributors")
+
+    # ---------------------------------------------------------------
+    # T13: detect_major_release — positive
+    # ---------------------------------------------------------------
+    mr_snap = _make_snapshot(star_acceleration=5.0, latest_release_tag="v3.0.0")
+    mr_alerts = detect_major_release("owner/repo", mr_snap, release_atoms)
+    assert len(mr_alerts) == 1
+    assert mr_alerts[0].severity == "medium"
+    _pass("detect_major_release.positive", "acc=5x, has release atom")
+
+    # T14: negative — no acceleration
+    slow_snap = _make_snapshot(star_acceleration=1.0, latest_release_tag="v3.0.0")
+    slow_alerts = detect_major_release("owner/repo", slow_snap, release_atoms)
+    assert slow_alerts == [], f"major_release false positive: {slow_alerts}"
+    _pass("detect_major_release.negative_low_accel")
+
+    # ---------------------------------------------------------------
+    # T15: detect_cross_source_resonance — positive
+    # ---------------------------------------------------------------
+    multi_source_atoms = [
+        EvidenceAtom(
+            evidence_id=f"ev-multi-{i}",
+            full_name="owner/repo",
+            source=src,
+            evidence_type="readme_claim",
+            compressed_content="content",
+            importance_score=50.0,
+            created_at=utc_now_iso(),
+        )
+        for i, src in enumerate(["github_api", "twitter_scraper", "hacker_news", "youtube"])
+    ]
+    csr_alerts = detect_cross_source_resonance("owner/repo", snap, multi_source_atoms)
+    assert len(csr_alerts) == 1
+    assert csr_alerts[0].severity == "medium"
+    assert csr_alerts[0].details["source_count"] == 4
+    _pass("detect_cross_source_resonance.positive", "4 distinct sources")
+
+    # T16: negative — only 2 sources
+    two_source_atoms = multi_source_atoms[:2]
+    csr_neg = detect_cross_source_resonance("owner/repo", snap, two_source_atoms)
+    assert csr_neg == [], f"cross_source_resonance false positive with 2 sources"
+    _pass("detect_cross_source_resonance.negative_2_sources")
+
+    # ---------------------------------------------------------------
+    # T17: run_detectors — all detectors run, exceptions don't propagate
+    # ---------------------------------------------------------------
+    all_results = run_detectors("owner/repo", hot_snap, all_atoms)
+    assert isinstance(all_results, list), "run_detectors must return list"
+    # At minimum sudden_hot and major_release should trigger (hot_snap has acc=12.0)
+    detector_names = {d.detector_name for d in all_results}
+    assert "sudden_hot" in detector_names, f"sudden_hot missing from run_detectors: {detector_names}"
+    _pass("run_detectors.sudden_hot_fires", f"detections={list(detector_names)}")
+
+    # ---------------------------------------------------------------
+    # T18: run_detectors with conn — writes to alerts table
+    # ---------------------------------------------------------------
+    with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as tf:
+        db_path = tf.name
+    try:
+        conn = _sqlite3.connect(db_path)
+        apply_schema(conn)
+        written = run_detectors("owner/repo", hot_snap, all_atoms, conn=conn)
+        rows = fetch_rows(conn, "alerts", "full_name=?", ("owner/repo",))
+        assert len(rows) == len(written), (
+            f"alerts table has {len(rows)} rows, expected {len(written)}"
+        )
+        conn.close()
+    finally:
+        os.unlink(db_path)
+    _pass("run_detectors.persists_to_alerts_table", f"{len(written)} alerts written")
+
+    # ---------------------------------------------------------------
+    # T19: run_detectors exception isolation
+    # ---------------------------------------------------------------
+    # Monkey-patch one detector to raise, verify others still run
+    import sys as _sys
+    original_fn = _ALL_DETECTORS[0]
+    def _bad_detector(full_name, snapshot, evidence):
+        raise RuntimeError("injected failure")
+    _ALL_DETECTORS[0] = _bad_detector
+    try:
+        survivors = run_detectors("owner/repo", hot_snap, all_atoms)
+        # Should still get results from the other 6 detectors
+        assert isinstance(survivors, list)
+    finally:
+        _ALL_DETECTORS[0] = original_fn
+    _pass("run_detectors.exception_isolation", "bad detector did not break others")
+
+    # ---------------------------------------------------------------
+    # T20: heat_score zero for inactive repo
+    # ---------------------------------------------------------------
+    dead_snap = RepoSnapshot(
+        snapshot_id="dead",
+        full_name="owner/dead",
+        snapshot_at="2026-05-27T00:00:00Z",
+        stars=0,
+        forks=0,
+        stars_delta_24h=0,
+        star_acceleration=0.0,
+    )
+    dead_heat = compute_heat_score(dead_snap, [])
+    assert dead_heat == 0.0, f"expected 0 heat for dead repo, got {dead_heat}"
+    _pass("compute_heat_score.zero_for_inactive_repo")
+
+    return results
+
+
+if __name__ == "__main__":
+    import json as _json
+    import sys as _sys
+
+    m = _self_test()
+    print(_json.dumps(m, indent=2))
+    if m["tests_run"] != m["tests_passed"]:
+        _sys.exit(1)

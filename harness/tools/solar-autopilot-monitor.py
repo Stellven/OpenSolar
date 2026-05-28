@@ -98,6 +98,10 @@ PANE_UNAVAILABLE_RE = re.compile(
     r"API Error:\s*400|Invalid API parameter|error\"\s*:\s*\{",
     re.I,
 )
+RATE_LIMIT_OPTIONS_MODAL_RE = re.compile(
+    r"What do you want to do\?[\s\S]{0,260}(?:/rate-limit-options|Upgrade your plan|Stop and wait for limit to reset)[\s\S]{0,120}Esc to cancel",
+    re.I,
+)
 PANE_PROMPT_RESIDUE_RE = re.compile(r"^\s*❯(?![\s\u00a0]+Try\\s+\")[\s\u00a0]+[^\s\u00a0─]", re.M)
 SAFE_CONTINUE_PROMPT_RE = re.compile(r"^\s*❯[\s\u00a0]*(继续|continue|继续\s+N\d+|continue\s+N\d+)\s*$", re.I | re.M)
 SQLITE_ONLY_RE = re.compile(r"sqlite3\s+~?/?.*\.solar/solar\.db", re.I)
@@ -1056,7 +1060,11 @@ def retry_queue(state: dict, dispatch: bool, cooldown: int) -> list[dict]:
             retained.append(item)
             actions.append({"sid": sid, "action": item.get("type"), "queued": True, "reason": gate_reason, "target": target})
             continue
-        if pane_is_busy(target):
+        # Planner work has coordinator-level role routing and fallback
+        # candidates (architect/lab-builder).  Do not let the autopilot's fixed
+        # target probe (solar-harness:0.1) deadhead planner dispatch before
+        # wake_sid() can ask the coordinator to choose an available role pane.
+        if item.get("type") != "ready_for_planner" and pane_is_busy(target):
             item["reason"] = "pane_busy"
             retained.append(item)
             actions.append({"sid": sid, "action": item.get("type"), "queued": True, "reason": "pane_busy", "target": target})
@@ -1112,6 +1120,13 @@ def wake_sid(sid: str) -> bool:
 def pane_is_busy(target: str) -> bool:
     tail = tmux_capture(target)
     bottom = "\n".join(tail.splitlines()[-12:])
+    if RATE_LIMIT_OPTIONS_MODAL_RE.search("\n".join(tail.splitlines()[-40:])):
+        if recover_pane_blocker(target):
+            tail = tmux_capture(target)
+            bottom = "\n".join(tail.splitlines()[-12:])
+            if not RATE_LIMIT_OPTIONS_MODAL_RE.search("\n".join(tail.splitlines()[-40:])):
+                return False
+        return True
     if PANE_UNAVAILABLE_RE.search(bottom):
         return True
     if PANE_BOTTOM_BUSY_RE.search(bottom):
@@ -1123,6 +1138,43 @@ def pane_is_busy(target: str) -> bool:
     if pane_at_prompt(tail):
         return False
     return bool(PANE_BUSY_RE.search(tail)) and not bool(PROMPT_IDLE_RE.search(tail))
+
+
+def recover_pane_blocker(target: str) -> bool:
+    """Best-effort cleanup for stale TUI blockers before marking a pane busy.
+
+    This only dismisses overlays or idle prompt residue. It does not select paid
+    upgrade/wait options, and it avoids active generation states.
+    """
+    tail = tmux_capture(target)
+    bottom40 = "\n".join(tail.splitlines()[-40:])
+    bottom12 = "\n".join(tail.splitlines()[-12:])
+    try:
+        if RATE_LIMIT_OPTIONS_MODAL_RE.search(bottom40):
+            for keys in (("Escape",), ("C-c",)):
+                subprocess.run(["tmux", "send-keys", "-t", target, *keys], timeout=2)
+                time.sleep(0.4)
+                after = "\n".join(tmux_capture(target).splitlines()[-40:])
+                if not RATE_LIMIT_OPTIONS_MODAL_RE.search(after):
+                    append_event("", "autopilot_pane_recover_succeeded", "info", {"pane": target, "reason": "rate_limit_options_modal"})
+                    return True
+            append_event("", "autopilot_pane_recover_failed", "warn", {"pane": target, "reason": "rate_limit_options_modal"})
+            return False
+        if "Press up to edit queued messages" in bottom12 or PANE_PROMPT_RESIDUE_RE.search(bottom12):
+            for keys in (("Escape",), ("C-a", "C-k"), ("C-u",), ("C-c",), ("Escape", "C-u")):
+                subprocess.run(["tmux", "send-keys", "-t", target, *keys], timeout=2)
+                time.sleep(0.2)
+                after = "\n".join(tmux_capture(target).splitlines()[-12:])
+                if "Press up to edit queued messages" not in after and not PANE_PROMPT_RESIDUE_RE.search(after):
+                    append_event("", "autopilot_pane_recover_succeeded", "info", {"pane": target, "reason": "prompt_residue"})
+                    return True
+            append_event("", "autopilot_pane_recover_failed", "warn", {"pane": target, "reason": "prompt_residue"})
+        if PANE_BOTTOM_BUSY_RE.search(bottom12):
+            return False
+    except Exception as exc:
+        append_event("", "autopilot_pane_recover_failed", "warn", {"pane": target, "error": str(exc)})
+        return False
+    return False
 
 
 def sprint_files(sid: str) -> dict[str, bool]:
@@ -1265,6 +1317,8 @@ def graph_workers() -> list[dict]:
         "api-design", "data-modeling", "compatibility", "compat-review",
         "routing", "diagnostics", "evaluation", "capability-graph", "event-sourcing", "debug.systematic",
         "lazy-import",
+        "browser", "browser.automation", "web", "scraping", "crawler", "collector",
+        "social", "social.monitor", "social.signal", "social_links", "entity.extract", "link.extract", "url.extract", "cross_source.dispatch",
         # Logical operator aliases so graph nodes expressed in logical classes
         # can still match the conservative builder worker catalog.
         "DeepArchitect", "ImplementationWorker", "Critic", "Verifier",
@@ -1308,6 +1362,8 @@ def graph_workers() -> list[dict]:
         "repair.pr-cot", "failure.structured_repair",
         "routing.complexity_budget", "security_review",
         "optimization", "runtime_design",
+        "browser", "browser.automation", "web", "web.capture", "scraping", "crawler", "collector",
+        "social", "social.monitor", "social.signal", "social_links", "entity.extract", "link.extract", "url.extract", "cross_source.dispatch",
     ]
     schema_caps = {
         "schema_design", "fixture_design", "mapping_design",
@@ -1801,9 +1857,32 @@ def dispatch_ready_graph_nodes(sid: str, lease: bool = True) -> dict:
     if graph_dispatch_ready is not None and graph_dispatch_node_evals is not None:
         evals = graph_dispatch_node_evals(str(path), dry_run=not lease, ttl=900)
         ready = graph_dispatch_ready(str(path), dry_run=not lease, ttl=900)
+        # Evaluator availability is more volatile than builder readiness: pane
+        # cleanup/reconciliation performed while dispatching ready builder work
+        # can free lab panes in the same scan. Do not leave handoff-backed
+        # `reviewing` nodes stranded until the next monitor tick after one
+        # transient `no_available_evaluator`; immediately retry a small eval
+        # batch after ready-node reconciliation.
+        eval_skipped = evals.get("skipped") if isinstance(evals, dict) else []
+        skipped_reasons = {
+            str(item.get("reason") or "")
+            for item in eval_skipped
+            if isinstance(item, dict)
+        }
+        eval_retry = {}
+        if "no_available_evaluator" in skipped_reasons:
+            eval_retry = graph_dispatch_node_evals(
+                str(path),
+                dry_run=not lease,
+                ttl=900,
+                max_items=3,
+            )
+            if (eval_retry.get("dispatched") or []) and not (eval_retry.get("skipped") or []):
+                evals = eval_retry
         return {
             "ok": bool(evals.get("ok")) and bool(ready.get("ok")),
             "evals": evals,
+            "eval_retry": eval_retry,
             "ready": ready,
         }
     if enqueue_ready is None:
@@ -2461,7 +2540,9 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
                 mark_action(state, f, result)
                 actions.append(result)
                 continue
-        if dispatch and target and pane_is_busy(target):
+        # See retry_queue(): ready_for_planner must be routed by coordinator,
+        # not pre-blocked on a single fixed Planner pane snapshot.
+        if dispatch and target and ftype != "ready_for_planner" and pane_is_busy(target):
             append_event(sid, "autopilot_dispatch_deferred_pane_busy", "warn", {"target": target, "type": ftype})
             enqueue_action(f, "pane_busy", {})
             result = {"sid": sid, "action": ftype, "skipped": "pane_busy", "target": target}

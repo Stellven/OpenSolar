@@ -1,0 +1,198 @@
+from __future__ import annotations
+
+import importlib.util
+import json
+from pathlib import Path
+
+
+_STATUS_SERVER = Path("/Users/lisihao/Solar/harness/lib/symphony/status-server.py")
+
+
+def _load_module():
+    spec = importlib.util.spec_from_file_location("solar_status_server_test", str(_STATUS_SERVER))
+    module = importlib.util.module_from_spec(spec)
+    assert spec is not None and spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_ai_influence_payload_discovers_all_report_kinds(tmp_path, monkeypatch):
+    mod = _load_module()
+    legacy_root = tmp_path / "legacy-ai-influence"
+    hotspot_root = tmp_path / "tech-hotspot-radar"
+    legacy_run = legacy_root / "2026-05-26"
+    planned_report = hotspot_root / "ai-influence-planned" / "2026-05-26" / "reports" / "planned-one"
+    unified_run = hotspot_root / "2026-05-26"
+    phase_run = hotspot_root / "phase-2" / "2026-05-24"
+
+    for path in [legacy_run, planned_report, unified_run, phase_run]:
+        path.mkdir(parents=True, exist_ok=True)
+
+    (legacy_run / "digest.md").write_text("# digest\n", encoding="utf-8")
+    (legacy_run / "digest.html").write_text("<html>digest</html>", encoding="utf-8")
+    (legacy_run / "digest.json").write_text(json.dumps({"date": "2026-05-26", "stats": {"top_scored": 3}, "items": [1, 2]}, ensure_ascii=False), encoding="utf-8")
+
+    (planned_report / "report.html").write_text("<html>planned</html>", encoding="utf-8")
+    (planned_report / "report.md").write_text("# planned\n", encoding="utf-8")
+    (planned_report / "report-result.json").write_text(json.dumps({"headline": "专题报告 A", "_model": "chatgpt-5.5", "_reasoning_effort": "high"}, ensure_ascii=False), encoding="utf-8")
+    (planned_report / "evidence-pack.json").write_text(json.dumps({"videos": [{"title": "v1"}, {"title": "v2"}]}, ensure_ascii=False), encoding="utf-8")
+
+    (unified_run / "report.html").write_text("<html>unified</html>", encoding="utf-8")
+    (unified_run / "unified-overview.md").write_text("# unified\n", encoding="utf-8")
+    (unified_run / "youtube-transcripts-2026-05-26.txt").write_text("tx", encoding="utf-8")
+
+    (phase_run / "report.html").write_text("<html>phase</html>", encoding="utf-8")
+    (phase_run / "phase-report.md").write_text("# phase\n", encoding="utf-8")
+    (phase_run / "phase-report.json").write_text(json.dumps({"headline": "Phase 2 报告", "_input_video_count": 5, "_model": "chatgpt-5.5"}, ensure_ascii=False), encoding="utf-8")
+
+    monkeypatch.setattr(mod, "AI_INFLUENCE_RAW_DIR", legacy_root)
+    monkeypatch.setattr(mod, "_tech_hotspot_raw_dir", lambda: hotspot_root)
+
+    payload = mod._ai_influence_payload(limit=20)
+
+    assert payload["count"] == 4
+    labels = {item["module_label"] for item in payload["items"]}
+    assert {"日度洞察", "专题洞察", "统一日报", "Phase 2"} <= labels
+    assert payload["module_counts"]["专题洞察"] == 1
+    assert "raw_dir" not in payload
+    assert "legacy_raw_dir" not in payload
+    assert all("report_dir" not in item for item in payload["items"])
+
+
+def test_save_ai_influence_mail_config(tmp_path, monkeypatch):
+    mod = _load_module()
+    config_path = tmp_path / "ai-influence-mail-config.json"
+    monkeypatch.setattr(mod, "AI_INFLUENCE_MAIL_CONFIG", config_path)
+
+    result = mod._save_ai_influence_mail_config({"to": "a@example.com,b@example.com"})
+
+    assert result["ok"] is True
+    saved = json.loads(config_path.read_text(encoding="utf-8"))
+    assert saved["to"] == "a@example.com,b@example.com"
+    assert "updated_at" in saved
+
+
+def test_ai_influence_html_splits_reports_and_resources_tabs(tmp_path, monkeypatch):
+    mod = _load_module()
+    legacy_root = tmp_path / "legacy-ai-influence"
+    hotspot_root = tmp_path / "tech-hotspot-radar"
+    planned_report = hotspot_root / "ai-influence-planned" / "2026-05-26" / "reports" / "planned-one"
+    planned_report.mkdir(parents=True, exist_ok=True)
+
+    (planned_report / "report.html").write_text("<html>planned</html>", encoding="utf-8")
+    (planned_report / "report.md").write_text("# planned\n", encoding="utf-8")
+    (planned_report / "transcripts.txt").write_text("transcript body", encoding="utf-8")
+    (planned_report / "report-result.json").write_text(
+        json.dumps(
+            {
+                "headline": "专题报告 A",
+                "_model": "chatgpt-5.5",
+                "_reasoning_effort": "high",
+                "topic_tags": ["Gemini", "Agent"],
+                "evidence_manifest": {
+                    "videos": [
+                        {
+                            "channel": "Google",
+                            "title": "What's new in Google AI",
+                            "published_at": "2026-05-22T20:45:00Z",
+                            "summary": "Gemini 平台更新摘要",
+                        }
+                    ]
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (planned_report / "evidence-pack.json").write_text(
+        json.dumps({"videos": [{"title": "What's new in Google AI"}]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(mod, "AI_INFLUENCE_RAW_DIR", legacy_root)
+    monkeypatch.setattr(mod, "_tech_hotspot_raw_dir", lambda: hotspot_root)
+
+    html = mod._ai_influence_html(period="30d")
+
+    assert "报告汇总" in html
+    assert "素材资源" in html
+    assert "id=\"tab-reports\"" in html
+    assert "id=\"tab-resources\"" in html
+    assert "2 份专题报告" not in html
+    assert "1 份专题报告" in html
+    assert "全部主题" in html
+    assert "全部技术" in html
+    assert "全部频道 / 账号" in html
+    assert "素材 / 下载" in html
+    assert "transcripts.txt" in html
+    assert "/ai-influence/transcript?id=" in html
+    assert str(planned_report) not in html
+    assert "/file/view?path=" not in html
+    assert "排序方式" in html
+    assert "只看未发送" in html
+    assert "按频道折叠" in html
+    assert "全部报告" in html
+    assert "专题洞察未发送" in html
+    assert "active-chips" in html
+    assert "group-send-btn" in html
+
+
+def test_ai_influence_transcript_view_resolves_planned_video(tmp_path, monkeypatch):
+    mod = _load_module()
+    hotspot_root = tmp_path / "tech-hotspot-radar"
+    planned_report = hotspot_root / "ai-influence-planned" / "2026-05-26" / "reports" / "planned-one"
+    planned_report.mkdir(parents=True, exist_ok=True)
+    (planned_report / "report.html").write_text("<html>planned</html>", encoding="utf-8")
+    (planned_report / "report-result.json").write_text(json.dumps({"headline": "专题报告 A"}, ensure_ascii=False), encoding="utf-8")
+    (planned_report / "evidence-pack.json").write_text(
+        json.dumps(
+            {
+                "videos": [
+                    {
+                        "video_ref": "V001",
+                        "video_id": "abc123",
+                        "channel": "AI Engineer",
+                        "title": "Your Agent Is an Infinite Canvas",
+                        "url": "https://www.youtube.com/watch?v=abc123",
+                        "published_at": "2026-05-23T18:00:06Z",
+                        "duration_min": 23.1,
+                        "transcript_clean": "line 1\\nline 2",
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(mod, "_tech_hotspot_raw_dir", lambda: hotspot_root)
+
+    item = mod._planned_report_item(planned_report)
+    payload = mod._resolve_ai_influence_transcript(item["id"], "V001", "abc123")
+
+    assert payload is not None
+    assert payload["video"]["title"] == "Your Agent Is an Infinite Canvas"
+    html = mod._ai_influence_transcript_html(payload["report_id"], payload["video"], payload["transcript"])
+    assert "原始转写素材" in html
+    assert "打开 YouTube 原视频" in html
+    assert "line 1" in html
+    assert str(planned_report) not in html
+
+
+def test_ai_influence_report_resolves_by_public_id(tmp_path, monkeypatch):
+    mod = _load_module()
+    hotspot_root = tmp_path / "tech-hotspot-radar"
+    planned_report = hotspot_root / "ai-influence-planned" / "2026-05-26" / "reports" / "planned-one"
+    planned_report.mkdir(parents=True, exist_ok=True)
+    (planned_report / "report.html").write_text("<html>planned</html>", encoding="utf-8")
+    (planned_report / "report.md").write_text("# planned\n", encoding="utf-8")
+    (planned_report / "report-result.json").write_text(json.dumps({"headline": "专题报告 A"}, ensure_ascii=False), encoding="utf-8")
+    (planned_report / "evidence-pack.json").write_text(json.dumps({"videos": []}, ensure_ascii=False), encoding="utf-8")
+
+    monkeypatch.setattr(mod, "_tech_hotspot_raw_dir", lambda: hotspot_root)
+    monkeypatch.setattr(mod, "_allowed_open_path", lambda _path: True)
+
+    item = mod._planned_report_item(planned_report)
+    target = mod._resolve_ai_influence_report(item["id"], "report_html")
+
+    assert target == planned_report / "report.html"

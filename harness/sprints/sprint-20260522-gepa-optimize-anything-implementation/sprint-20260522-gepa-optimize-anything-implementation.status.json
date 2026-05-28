@@ -5,11 +5,11 @@
   "priority": "P1",
   "lane": "optimizer-plane",
   "status": "passed",
-  "phase": "finalized",
-  "stage": "completed",
+  "phase": "completed",
+  "stage": "graph_in_progress",
   "active_node": null,
   "created_at": "2026-05-22T16:55:00Z",
-  "updated_at": "2026-05-24T01:51:14Z",
+  "updated_at": "2026-05-27T17:06:48Z",
   "artifacts": {
     "prd": "/Users/lisihao/.solar/harness/sprints/sprint-20260522-gepa-optimize-anything-implementation.prd.md",
     "contract": "/Users/lisihao/.solar/harness/sprints/sprint-20260522-gepa-optimize-anything-implementation.contract.md",
@@ -296,10 +296,30 @@
       "ts": "2026-05-23T00:09:15Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-26T17:56:55Z",
+      "event": "graph_parent_ready_revoked",
+      "by": "graph_scheduler",
+      "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache"
+    },
+    {
+      "ts": "2026-05-26T17:58:48Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "builder_main",
+      "stage": "planning_complete",
+      "reason": "planner_artifacts_and_task_graph_ready"
+    },
+    {
+      "ts": "2026-05-27T17:06:48Z",
+      "event": "graph_parent_ready_passed",
+      "by": "graph-dispatch",
+      "note": "All DAG nodes and required gates passed via parent_ready_check."
     }
   ],
-  "handoff_to": "",
-  "target_role": "",
+  "handoff_to": "done",
+  "target_role": "done",
   "round": 4,
   "event_count": 65,
   "last_event_ts": "2026-05-22T17:28:32Z",
@@ -330,7 +350,7 @@
     ],
     "missing_gates": []
   },
-  "task_graph_status": "passed",
+  "task_graph_status": "active",
   "knowledge_export_status": "exported",
   "knowledge_export_path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260522-gepa-optimize-anything-implementation.accepted.md",
   "knowledge_ingest_dispatch": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260522-gepa-optimize-anything-implementation.dispatch.md",
@@ -340,5 +360,6 @@
   "knowledge_source_artifact_index": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260522-gepa-optimize-anything-implementation.source_artifact_index.md",
   "knowledge_summary_count": 3,
   "knowledge_closure_required": true,
-  "knowledge_closure_status": "exported"
+  "knowledge_closure_status": "exported",
+  "completed_at": "2026-05-27T17:06:48Z"
 }

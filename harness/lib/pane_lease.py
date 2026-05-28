@@ -47,6 +47,34 @@ def _lease_path(pane: str) -> Path:
     return LEASE_DIR / f"{_pane_safe(pane)}.json"
 
 
+def _lock_path(lp: Path) -> Path:
+    return Path(str(lp) + ".lock")
+
+
+def _unlink_lock(lock_path: Path) -> bool:
+    try:
+        lock_path.unlink(missing_ok=True)
+        return True
+    except Exception:
+        return False
+
+
+def _remove_lock_if_unlocked(lock_path: Path) -> bool:
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(lock_path, "a") as lf:
+            try:
+                fcntl.flock(lf, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return False
+            try:
+                return _unlink_lock(lock_path)
+            finally:
+                fcntl.flock(lf, fcntl.LOCK_UN)
+    except Exception:
+        return False
+
+
 # ── pane existence check ──────────────────────────────────────────────────────
 
 def pane_exists(pane: str) -> bool:
@@ -74,7 +102,7 @@ def read_lease(pane: str) -> "dict | None":
 
 def _write_lease_atomic(pane: str, data: dict) -> None:
     lp = _lease_path(pane)
-    lock = str(lp) + ".lock"
+    lock = _lock_path(lp)
     with open(lock, "a") as lf:
         fcntl.flock(lf, fcntl.LOCK_EX)
         try:
@@ -88,12 +116,13 @@ def _write_lease_atomic(pane: str, data: dict) -> None:
 
 def _remove_lease(pane: str) -> None:
     lp = _lease_path(pane)
-    lock = str(lp) + ".lock"
+    lock = _lock_path(lp)
     with open(lock, "a") as lf:
         fcntl.flock(lf, fcntl.LOCK_EX)
         try:
             if lp.exists():
                 lp.unlink()
+            _unlink_lock(lock)
         finally:
             fcntl.flock(lf, fcntl.LOCK_UN)
 
@@ -118,7 +147,7 @@ def acquire(pane: str, sprint_id: str, dispatch_id: str, ttl: int = DEFAULT_TTL)
         return {"acquired": False, "reason": "no_pane", "pane": pane}
 
     lp = _lease_path(pane)
-    lock = str(lp) + ".lock"
+    lock = _lock_path(lp)
     now = _now()
 
     with open(lock, "a") as lf:
@@ -164,10 +193,11 @@ def acquire(pane: str, sprint_id: str, dispatch_id: str, ttl: int = DEFAULT_TTL)
 def release(pane: str, dispatch_id: str, reason: str = "explicit") -> dict:
     """Release lease only if dispatch_id matches."""
     lp = _lease_path(pane)
+    lock = _lock_path(lp)
     if not lp.exists():
+        _remove_lock_if_unlocked(lock)
         return {"released": True, "note": "lease_already_gone"}
 
-    lock = str(lp) + ".lock"
     with open(lock, "a") as lf:
         fcntl.flock(lf, fcntl.LOCK_EX)
         try:
@@ -179,8 +209,10 @@ def release(pane: str, dispatch_id: str, reason: str = "explicit") -> dict:
                     "held_by": existing.get("dispatch_id"),
                 }
             lp.unlink()
+            _unlink_lock(lock)
             return {"released": True, "release_reason": reason}
         except FileNotFoundError:
+            _unlink_lock(lock)
             return {"released": True, "note": "already_gone"}
         finally:
             fcntl.flock(lf, fcntl.LOCK_UN)
@@ -200,8 +232,16 @@ def reap() -> dict:
             if data.get("expires_at", "") <= now:
                 lf.unlink(missing_ok=True)
                 reaped += 1
+                if _remove_lock_if_unlocked(_lock_path(lf)):
+                    reaped += 1
         except Exception:
             pass
+    for lock in LEASE_DIR.glob("*.json.lock"):
+        lease_path = Path(str(lock)[:-5])
+        if lease_path.exists():
+            continue
+        if _remove_lock_if_unlocked(lock):
+            reaped += 1
     return {"ok": True, "reaped": reaped}
 
 

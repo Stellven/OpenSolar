@@ -1,252 +1,193 @@
-# Handoff — S05 Verification-Release (CI gate + 回归证据 + 发布文档)
+# Handoff — sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release
 
-sprint_id: `sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release`
-epic_id: `epic-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026`
-builder: 建设者化身 (Solar Builder pane)
-round: 1
-ts: 2026-05-22T06:30:00Z
+Builder: 建设者化身 (Mac mini, solar-harness:0.2)
+Dispatch: Wake (协调器恢复指令, workflow guard PM+Planner ready → builder DAG)
+Submitted: 2026-05-27T12:23:00Z
 
-Knowledge Context: solar-harness context inject used
-Harness Modules Used: harness-knowledge, harness-graph, harness-skills, pytest (real run), CLI smoke run
+Harness Modules Used: harness-knowledge (Read STATE/contract/plan/design/status/task_graph/traceability/D0-handoff), harness-graph (verified gate state in task_graph), harness-contracts (handoff-submit), harness-status (round bump).
+Knowledge Context: solar-harness context inject **not used** in this rollup round; reused the unified context already injected during the Wave-2..Wave-5 build rounds (2026-05-22). 本轮只做现状盘点 + 文件落证。
 
-## 变更文件（write_scope 内）
+## 本轮范围
 
-### D0 — `scripts/kvtc_ab_correctness.py`（MODIFY, +393 / -29 = 422 net diff lines）
+本 handoff 是 **sprint-level rollup**，不是新代码 round。触发原因：
+- 2026-05-22T06:42 `.finalized` 已写
+- 2026-05-27T12:20 planner 补齐 plan.md（满足 Workflow Guard 文件清单）
+- 2026-05-27T12:22 autopilot 触发 `wake_workflow_guard_to_builder` → 本 dispatch
+- 缺口：S05 sprint-level `.handoff.md` 不存在 → coordinator 还认 sprint
+  `status=active / round=2 / handoff_to=builder_main`，gate 已 passed 但 sprint 收尾
+  未盖章
 
-- 新增 CLI flags：`--fixture-set {stable-ci, local-only, all}` / `--fixture-dir` / `--report-dir` / `--fail-on-gate-violation` / `--emit-recon-gate-jsonl` / `--dump-meta` / `--dump-family-decisions`
-- 新增 CI-gate 主路径 `_run_ci_gate_mode()`：读 manifest.json → 加载 .npz fixture → 调用 `omlx.cache.kvtc_recon_gate.evaluate` → 写 ab_correctness.summary.json + recon_gate.jsonl + per_fixture/*.json
-- 新增 schema 常量 `_AB_SUMMARY_SCHEMA = "kvtc.ab_summary.v1"` + `_RECON_JSONL_SCHEMA = "kvtc.recon_gate.v1"`
-- 新增 hard / soft SLO 阈值常量 `_HARD_P95_MAX=0.02` / `_HARD_MIN_COS=0.999` / `_SOFT_P95_MAX=0.015` / `_SOFT_MIN_COS=0.9995`
-- 退出码：0 = ok / 1 = SLO violation 或 mismatch（`--fail-on-gate-violation`）/ 2 = fixture loader / 3 = ReconGateInternalError
-- 保留 legacy mode（无 `--fixture-set` 时走 `_run_legacy_case`，原 `_load_bf16_safetensors` + `_run_legacy_case`）
-- 维护 `reports/kvtc-ab/latest` symlink 供 UI 消费
+本轮唯一动作：写出本文件，把已落地的 D0-D6 evidence 全部聚合，让 evaluator 可在
+sprint 级别盖章。**未触碰** `src/omlx/*` 或任何 S01-S04 sprint 的 artifact。
 
-### D1 — `tests/fixtures/kvtc/` (NEW, 15 .npz + manifest.json + fetch script)
+## task_graph 节点状态（live, 2026-05-27）
 
-- 15 个 .npz fixture（5 类 × 3 列 = 15 cells）：
-  - real_ssd_block: `qwen36_ssd_block_tk_001 / _tv_001 / _tk_fallback / _tk_calmiss`（4）
-  - same_dim_family: `001 / 002_miss / 003_rev`（3）
-  - hybrid_family: `001_lz4 / 001_force_kvtc_reject`（2）
-  - synthetic_outlier: `001_pass / 001_fallback / 001_nan_reject`（3）
-  - named_prompt_cache: `001_mocked_pass / 001_mocked_fallback / 001_skip`（3）
-- 14 stable-ci + 1 local-only（满足 N6-A2 stable-ci ≥ 12 / local-only ≤ 3）
-- 每个 fixture ≤ 263 KB（远低于 100 MB 上限）
-- 合成张量用固定 numpy RandomState seed → 完全可复现
-- `manifest.json` 含 `schema_version=kvtc.fixtures.manifest.v1` + 15 fixture × 11+ 字段 + `tracking_sprint`
-- `scripts/fetch_kvtc_fixtures.sh`（chmod +x）— 验证 fixture 完整性的占位脚本；honors `KVTC_FIXTURE_SOURCE` / `KVTC_FIXTURE_DEST` envs；exit 0/1/2/3
+| Node | Status | Gate | depends_on | 备注 |
+|---|---|---|---|---|
+| D0_ab_correctness_cli_upgrade | reviewing | G_S05_verification_release_passed (passed) | — | handoff_md 已写；node-level status 仍 `reviewing` 是 stale 元数据，gate 已 passed |
+| D1_fixtures_15_cells | passed | G_S05... (passed) | D0 | — |
+| D2_e2e_tests | passed | G_S05... (passed) | D0 | — |
+| D3_ci_workflow | passed | G_S05... (passed) | D0 | — |
+| D4_smoke_run_evidence | passed | G_S05... (passed) | D1+D2+D3 | 真跑 evidence at reports/kvtc-ab/20260522T094040Z/ |
+| D5_release_docs | passed | G_S05... (passed) | D4 | docs/KVTC_RELEASE.md |
+| D6_handoff_traceability_epic_close_prep | passed | G_S05... (passed) | D5 | traceability.json 已写 |
+| **Gate G_S05_verification_release_passed** | **passed** | — | — | 2026-05-22T10:38:12Z |
 
-### D2 — `tests/regression/test_kvtc_e2e.py` (NEW, 8 cases)
+## 变更文件（本 dispatch 仅 sprint-level 文件）
 
-| Case | 覆盖 |
-|------|------|
-| E1 | CLI invocation against stable-ci runs end-to-end via subprocess |
-| E2 | ab_correctness.summary.json 7 必填字段 + Schema 3 字段集 |
-| E3 | recon_gate.jsonl 每行 Schema 2 14+ 必填字段 |
-| E4 | GET /api/kvtc/state → 200 + state=default_off + i18n_key |
-| E5 | High recon FAIL rate → state=blocked_by_gate_fail |
-| E6 | POST /v1/cache/prompt/save → 410 默认（env 未设）|
-| E7 | 410 body 含 `tracking_sprint` + `error=named_prompt_cache_save_disabled` |
-| E8 | summary.mismatches 为空（所有 fixture decision = expect_decision）|
+- `/Users/lisihao/.solar/harness/sprints/sprint-20260521-...-s05-verification-release.handoff.md` （本文件，新建）
+- `/Users/lisihao/.solar/harness/sprints/sprint-20260521-...-s05-verification-release.status.json` （round bump + reviewing）
 
-### D3 — `.github/workflows/kvtc-regression.yml` (NEW)
+引用已落地的 D0-D6 artifacts（前序 round 已写入，本 dispatch 未改）：
 
-- 2 jobs：
-  - `pre-merge` (on PR + push to main，10 min budget): 跑 stable-ci fixture set，hard violation → FAIL + 自动 issue label `kvtc-regression`，soft violation → 自动 issue label `kvtc-watchlist`
-  - `nightly` (on schedule cron `0 3 * * *`，30 min budget): 跑 all fixture set，失败不 block，只产 artifact
-- 触发 paths：`src/omlx/cache/**` + `src/omlx/server.py` + `scripts/kvtc_ab_correctness.py` + `tests/fixtures/kvtc/**` + `tests/regression/**` + workflow 自身
-- artifact upload `reports/kvtc-ab/` retention 90 天
-- ATLAS hook marker step（`atlas.kvtc.recon_gate_repair`）— 注册由运维侧完成
+仓库 `/Users/lisihao/ThunderOMLX/`：
+- `scripts/kvtc_ab_correctness.py` (23 KB, +393/-29，CI-gate mode added，legacy preserved) — D0
+- `scripts/fetch_kvtc_fixtures.sh` — D1
+- `tests/fixtures/kvtc/manifest.json` (7.8 KB) + 16 `.npz` fixtures — D1
+- `tests/regression/test_kvtc_e2e.py` (9.9 KB) + `tests/regression/__init__.py` — D2
+- `.github/workflows/kvtc-regression.yml` (8.8 KB) — D3
+- `reports/kvtc-ab/20260522T094040Z/ab_correctness.summary.json` — D4
+- `reports/kvtc-ab/20260522T094040Z/recon_gate.jsonl` — D4
+- `reports/kvtc-ab/20260522T094040Z/per_fixture/*.json` (14 files) — D4
+- `docs/KVTC_RELEASE.md` (12 KB) — D5
 
-### D4 — `reports/kvtc-ab/20260522T094040Z/` (NEW, real smoke run output)
+Solar sprint 区：
+- `sprint-20260521-...-s05-verification-release.D0_ab_correctness_cli_upgrade-handoff.md` — D0 node-level handoff
+- `sprint-20260521-...-s05-verification-release.traceability.json` — D6 (schema `solar.sprint.verification_release_traceability.v1`)
 
-实际跑命令：
+## 合约 Acceptance 对照
+
+合约三条 acceptance：
+
+1. **"单测、集成测、负控和 activation-proof 全部可复现"** ✅
+   - D2 e2e: `./venv/bin/python -m pytest tests/regression/ -v` (CPU ≤60s, 不真起 uvicorn)
+   - D0 CLI 自检: 11/11 PASS (T1-T11，验证 schema/flags/exit codes/14 字段)
+   - D4 真跑 evidence: 14 fixtures, exit 0, `hard_violations=0`，`p95_rel_rmse=0.01197 < 0.02`，
+     `min_cos=0.999076 ≥ 0.999`，1 soft violation
+   - 负控：`tests/fixtures/kvtc/named_prompt_cache_001_skip.npz`、
+     `synthetic_outlier_001_nan_reject.npz`、`hybrid_family_001_force_kvtc_reject.npz` 全在 manifest
+2. **"父 epic 不能在所有 required gate 通过前关闭"** ✅
+   - `traceability.json` 含 `epic_required_gates_status`，5 条 S01-S05 gate 状态
+   - S01-S04 全 `passed`；S05 在 traceability 中标 `reviewing_pending_evaluator`（与
+     本 sprint task_graph 的 `gate=passed` 之间存在文档延迟，由本 handoff 解决）
+   - `parent_check_ready=false` —— traceability 显式禁止 epic 在 S05 evaluator 盖章前关闭
+3. **"产出最终 handoff/eval/report 并写入知识库 raw"** ⚠️ 部分
+   - handoff: 本文件 + D0 node handoff
+   - report: docs/KVTC_RELEASE.md (R1..R7 + rollback + ATLAS hook 名 + OQ1/OQ2)
+   - **eval.md/eval.json: 当前 sprint 区不存在** — 评估侧档由 evaluator 在本 round
+     reviewing 后写入。本 handoff 不伪造 eval。
+   - 知识库 raw 写入：`/Users/lisihao/Knowledge/_raw/...` 未在本 sprint write_scope 内显式登记，
+     建议 evaluator 与 knowledge-ingest 流水线协调（status 中无 `knowledge_export_status` 字段）
+
+## D4 SLO 实测 vs 阈值
+
+| 指标 | 阈值 (hard) | 阈值 (soft) | 实测 | 判定 |
+|---|---|---|---|---|
+| p95_rel_rmse | > 0.02 FAIL | > 0.015 WARN | 0.01197 | PASS |
+| min_cos | < 0.999 FAIL | < 0.9995 WARN | 0.999076 | PASS (擦边) |
+| 混合 family kvtc_accept | > 0 FAIL | — | 0 | PASS |
+| stable-ci fixtures | < 12 FAIL | < 14 WARN | 14 | PASS |
+| hard_violations | > 0 FAIL | — | 0 | PASS |
+| NaN/Inf 未 reject | > 0 FAIL | — | 0 | PASS |
+| named_prompt_cache 2xx (env=1) | < 0.95 FAIL | < 0.99 WARN | `disabled_skip` | N/A (env=0) |
+
+总览: **soft_violations=1**, **hard_violations=0**, exit=0。符合 S05 合约判定 PASS。
+
+## Stop Rules 合规
+
+- ✅ 不 mock — D4 实测 exit 0 + 14 fixtures
+- ✅ 不超 write_scope — 本 dispatch 只写 sprint-level handoff + status；
+  `src/omlx/cache/kvtc_*` / `src/omlx/server.py` 未触碰（plan §6 禁区）
+- ✅ 不真加载 Qwen3.6 权重 — manifest fixture 是合成 + mocked
+- ✅ 不放宽 0.02 / 0.999 阈值 — 实测 0.01197 / 0.999076 均严格优于阈值
+- ✅ 不用乐观词 — 本 handoff 显式列出 `node-level status stale` 与 `latest symlink broken` 风险
+
+## 验证方法（evaluator 可重跑）
+
 ```bash
-./venv/bin/python scripts/kvtc_ab_correctness.py \
-  --fixture-set stable-ci \
-  --report-dir reports/kvtc-ab/20260522T094040Z/ \
-  --fail-on-gate-violation \
-  --emit-recon-gate-jsonl
-# exit 0
+# 1. sprint 三件套文件
+test -f /Users/lisihao/.solar/harness/sprints/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release.handoff.md && echo handoff OK
+test -f /Users/lisihao/.solar/harness/sprints/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release.traceability.json && echo traceability OK
+test -f /Users/lisihao/.solar/harness/sprints/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release.finalized && echo finalized OK
+
+# 2. ThunderOMLX 落地 artifacts
+test -f /Users/lisihao/ThunderOMLX/scripts/kvtc_ab_correctness.py && echo D0 OK
+test -f /Users/lisihao/ThunderOMLX/tests/fixtures/kvtc/manifest.json && echo D1 OK
+test -f /Users/lisihao/ThunderOMLX/tests/regression/test_kvtc_e2e.py && echo D2 OK
+test -f /Users/lisihao/ThunderOMLX/.github/workflows/kvtc-regression.yml && echo D3 OK
+test -f /Users/lisihao/ThunderOMLX/reports/kvtc-ab/20260522T094040Z/ab_correctness.summary.json && echo D4-summary OK
+test -f /Users/lisihao/ThunderOMLX/reports/kvtc-ab/20260522T094040Z/recon_gate.jsonl && echo D4-jsonl OK
+test -f /Users/lisihao/ThunderOMLX/docs/KVTC_RELEASE.md && echo D5 OK
+
+# 3. D4 SLO 现场验证（不重跑，读取已落盘 summary）
+python3 -c "
+import json
+s = json.load(open('/Users/lisihao/ThunderOMLX/reports/kvtc-ab/20260522T094040Z/ab_correctness.summary.json'))
+print('schema:', s.get('schema_version'))
+print('hard_violations:', s.get('summary',{}).get('hard_violations','?'))
+print('p95_rel_rmse:', s.get('summary',{}).get('p95_rel_rmse_observed','?'))
+print('min_cos:', s.get('summary',{}).get('min_cos_observed','?'))
+"
+# Expect: schema kvtc.ab_summary.v1, hard_violations 0, p95<0.02, min_cos>=0.999
+
+# 4. 父 epic gate roll-up
+python3 -c "
+import json
+t = json.load(open('/Users/lisihao/.solar/harness/sprints/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release.traceability.json'))
+for g in t['epic_required_gates_status']:
+    print(g['sprint_id'].split('-')[-2], '->', g['status'])
+"
+# Expect: S01..S04 passed, S05 reviewing_pending_evaluator (本 handoff 推进它)
 ```
 
-产物：
-- `ab_correctness.summary.json` — Schema 3，7 必填字段全 + 14 fixture results + slo + mismatches=[]
-- `recon_gate.jsonl` — 14 行 Schema 2，每行 14 必填字段 + profile_source 可选
-- `per_fixture/*.json` — 14 个 per-fixture diagnostic
+## 已知风险 / 数据漂移
 
-Summary snapshot:
-```text
-schema_version            : kvtc.ab_summary.v1
-fixture_set               : stable-ci
-total_fixtures            : 14
-kvtc_accept               : 5
-lz4_fallback              : 6
-skipped                   : 0
-failed                    : 0
-mismatches                : []
-slo.p95_rel_rmse_max      : 0.02
-slo.p95_rel_rmse_observed : 0.011970
-slo.min_cos_min           : 0.999
-slo.min_cos_observed      : 0.999076
-hard_violations           : 0
-soft_violations           : 1
-named_prompt_cache_status : disabled_skip
-```
+- **D0 node-level status 仍 `reviewing`**：task_graph gate 已 `passed`，但 D0 节点 status
+  没回写 `passed`。属 stale metadata，不应影响 sprint 收尾（gate 是判定准则）。建议
+  evaluator 在盖章时一并刷为 passed。
+- **`reports/kvtc-ab/latest` 软链断裂**：当前指向
+  `/private/var/folders/.../pytest-of-lisihao/pytest-27/test_e8_summary_mismatches_emp0/.../e2e_e8` —
+  是 D2 pytest tmpdir 残留，不是 D4 真跑 evidence 路径。Plan §7 表里 `latest_symlink`
+  应该是 `reports/kvtc-ab/latest -> 20260522T094040Z/`。本 round 不在 write_scope 范围内 fix，
+  建议 evaluator 让 D5/D6 在 release 流程中重建符号链接。
+- **traceability `parent_check_ready=false`**：故意如此（S05 还在 reviewing），由 evaluator
+  PASS 之后由 coordinator/epic_decomposer 写 `parent_check_ready=true`，触发 parent-check。
+- **`eval.md/eval.json` 缺失**：evaluator 的产物，本 handoff 不伪造。
+- **knowledge_export 未触发**：status 中无 `knowledge_export_status` 字段，未走
+  `_raw/solar-harness/accepted/` 流水线；与 housekeeping/S04 sprint 不同（那些有
+  `knowledge_export_status: exported`）。建议 evaluator 盖章后再触发 knowledge ingest。
 
-### D5 — `docs/KVTC_RELEASE.md` (NEW, ≈ 230 lines)
+## 结构化收尾
 
-§1 Why this epic existed / §2 What changed R1..R7 / §3 Verification evidence (D4 paths + numbers) / §4 Rollback procedures (5 env switches) / §5 Env switches canonical list / §6 ATLAS hook contract / §7 Known unresolved (OQ1..OQ4 finalised) / §8 Upgrade considerations / §9 Where to look next.
+- **已完成**:
+  - sprint-level handoff 写入
+  - 与 D0 (handoff)、D1-D6 (passed) 节点 evidence 对账完毕
+  - 4 个 ThunderOMLX artifact 路径（D0/D1/D2/D3/D4/D5）实地确认存在
+  - D4 summary.json 内 SLO 数值与 plan §4 阈值表逐条对账（hard 0、p95 0.01197、min_cos 0.999076）
+- **已验证**:
+  - 所有 D0-D6 落地文件 `test -f` 通过（见验证方法 #1, #2）
+  - D4 SLO `hard_violations=0`, `p95_rel_rmse=0.01197 < 0.02`, `min_cos=0.999076 ≥ 0.999`
+  - traceability.json 含 5 gate 全集，S01-S04 = passed
+  - task_graph `required_gates: ['G_S05_verification_release_passed']` 已 passed
+- **未验证**:
+  - 本 round 没有重跑 D2 pytest / D4 真跑（依赖 ThunderOMLX venv + 真实 fixture，不在
+    rollup round write_scope；引用 2026-05-22 evidence 落盘的实测数字）
+  - D0 node status `reviewing` 仍未刷新为 passed（stale metadata，待 evaluator）
+- **风险**:
+  - `latest` symlink 断裂（指向 pytest tmpdir）— evaluator 应触发 D5/D6 release 流程重建
+  - eval.md/eval.json 缺失 — 本 handoff 不伪造
+  - parent_check_ready=false — 由 evaluator + coordinator 接力
+- **后续待办**:
+  - evaluator 盖章 sprint-level PASS（基于本 handoff + D0-D6 evidence + D4 SLO）
+  - coordinator/epic_decomposer 在 evaluator PASS 后跑 parent-check 关闭 epic
+    `epic-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026`
+  - 修 `reports/kvtc-ab/latest` symlink 指向 `20260522T094040Z/`（D5/D6 范围）
+  - knowledge ingest pipeline 触发 `_raw/solar-harness/accepted/` 落 S05 accepted artifact
 
-Grep verifies: `THUNDEROMLX_KVTC_DISABLE` + `THUNDEROMLX_NAMED_PROMPT_CACHE_SAVE_ENABLED` + `THUNDEROMLX_KVTC_FORCE_LEGACY_CALIBRATION` + `THUNDEROMLX_KVTC_UI_FORCE_OFF` + `atlas.kvtc.recon_gate_repair` 全部出现；OQ1 + OQ2 显式列入 unresolved；无乐观词。
+## 上游依赖与下游影响
 
-### D6 — Sprint artifacts (本文件 + traceability.json)
-
-- `sprints/<s05-sid>.handoff.md`（本文件）
-- `sprints/<s05-sid>.traceability.json`
-
-## Done 定义达成（来自 .contract.md Acceptance）
-
-| Acceptance | 满足证据 |
-|------------|----------|
-| 单测、集成测、负控和 activation-proof 全部可复现 | 49 pytest cases 联合通过（S03 22 + S04 19 + S05 8），D4 真跑产 evidence；所有 fixture 用 fixed numpy seed → 100% deterministic |
-| 父 epic 不能在所有 required gate 通过前关闭 | `parent_check_ready` 由 evaluator 判定后由 epic_decomposer 跑；本 sprint 不主动 close epic |
-| 产出最终 handoff/eval/report 并写入知识库 raw | handoff.md + traceability.json + docs/KVTC_RELEASE.md + reports/kvtc-ab/20260522T094040Z/ 全集落盘 |
-
-## Test Evidence
-
-```text
-$ ./venv/bin/python -m pytest tests/kvtc/ tests/orchestration/ tests/regression/ -v --tb=short
-======================== 49 passed, 3 warnings in 4.78s ========================
-```
-
-D2 sub-output：
-```text
-$ ./venv/bin/python -m pytest tests/regression/ -v --tb=short
-collected 8 items
-tests/regression/test_kvtc_e2e.py::test_e1_ab_correctness_stable_ci_runs PASSED
-tests/regression/test_kvtc_e2e.py::test_e2_summary_json_schema_complete PASSED
-tests/regression/test_kvtc_e2e.py::test_e3_recon_gate_jsonl_fields_complete PASSED
-tests/regression/test_kvtc_e2e.py::test_e4_state_endpoint_200_default_off PASSED
-tests/regression/test_kvtc_e2e.py::test_e5_state_endpoint_blocked_by_gate_fail PASSED
-tests/regression/test_kvtc_e2e.py::test_e6_save_410_default PASSED
-tests/regression/test_kvtc_e2e.py::test_e7_save_410_body_has_tracking_sprint PASSED
-tests/regression/test_kvtc_e2e.py::test_e8_summary_mismatches_empty PASSED
-======================== 8 passed, 3 warnings in 4.66s =========================
-```
-
-## Stop-Rule Compliance
-
-- ❌ `src/omlx/cache/kvtc_*.py`（S03 范围）— NOT modified（git diff 仅 S03 sprint 时改的文件，本 sprint 期间 mtime 未变）
-- ❌ `src/omlx/cache/kvtc_ui_*.py`（S04 范围）— NOT modified
-- ❌ `src/omlx/server.py`（S04 范围）— NOT modified
-- ❌ 任何 `src/omlx/` 业务源码 — NOT modified（diff scope 限于 scripts/ + tests/ + .github/ + reports/ + docs/）
-- ❌ `~/.solar/STATE.md` / epic.* / S01/S02/S03/S04 artifact — NOT touched
-- ❌ 巨型 fixture commit — 每个 .npz ≤ 263 KB（far below 100 MB / fixture cap）
-- ❌ 乐观词「已修复 / 稳定 / 完美 / 无需担忧」— grep 验证为 0 across all S05 deliverables
-- ❌ 真实加载 Qwen3.6 模型权重 — NOT loaded (synthetic stand-ins only)
-- ❌ live pane / harness restart / curl / uvicorn — NOT invoked
-- ❌ 放宽 hard 阈值 (0.02 / 0.999) — verified pinned in `_HARD_P95_MAX` / `_HARD_MIN_COS`
-- ❌ 主动改 epic.traceability.json 或 epic.task_graph.json — NOT touched
-
-## R1..R7 Status（epic 全集，本 sprint 验证）
-
-| Req | Implementer | Status | Evidence |
-|-----|-------------|--------|----------|
-| R1 论文对齐审计 | S02 (A1) | **implemented + verified** | S02 A1 archeology with 25 `.py:line` references |
-| R2 5-dim calibration key | S03 (B1) | **implemented + verified** | 7 pytests + D4 fixtures 含 5 维 key |
-| R3 family classifier + sink/recent | S03 (B5) | **implemented + verified** | 8 pytests + D4 hybrid/mamba decisions correct |
-| R4 reconstruction gate | S03 (B2) | **implemented + verified** | 7 pytests + D4 14 recon_gate.jsonl rows + observed p95=0.012 / min_cos=0.999 |
-| R5 /v1/cache/prompt/save 410 | S04 (C1) | **implemented + verified** | E6/E7 + D4 named_prompt_cache_status=disabled_skip |
-| R6 CI 5×3 gate | S05 (D0..D3) | **implemented + verified** | D0 CLI / D1 15 fixtures / D2 8 e2e / D3 CI YAML / D4 真跑 exit 0 |
-| R7 UI default_off + 最近 A/B | S04 (C0+C1) | **implemented + verified** | E4/E5 + D4 reports/kvtc-ab/latest/ symlink |
-
-## OQ1..OQ4 最终状态
-
-| OQ | 最终状态 | 备注 |
-|----|---------|------|
-| **OQ1** stable-ci 真实 Qwen3.6 fixture | **tentatively_resolved** | 15 fixture 全部 stable-ci synthetic stand-ins；真实 Qwen3.6 dump 留待运维通过 `fetch_kvtc_fixtures.sh` 注入；fixture id naming (`qwen36_ssd_block_*`) 已为 future replacement 留位 |
-| **OQ2** /v1/cache/prompt/save 422 root cause | **partially_resolved** | S02 A1 静态扫描确认 H1+H3 命中；S04 C1 落地默认禁用（env=0 → 410）；切 env=1 仍需 staging 复现 H2 + N6 7 天 M5 ≥ 0.99（详见 `docs/KVTC_RELEASE.md` §7）|
-| **OQ3** family-profile 统一 vs 分裂阈值 | **confirmed (unified)** | S03 B2 `FAMILY_PROFILES` 含 `default/tk_default/tv_default` 三个 entry 全部等于 (0.02, 0.999)；profile_source 字段已暴露 model_card override 槽位 |
-| **OQ4** UI A/B 数据源 | **resolved** | S04 C0 + S05 D4 实施完整：`THUNDEROMLX_KVTC_UI_AB_SOURCE` env 默认指向 `reports/kvtc-ab/latest/ab_correctness.summary.json`；D4 维护 symlink |
-
-## evidence_collection_status（继承 S01 evidence_collection_plan 全集，30+ 项）
-
-| evidence_id | source node | status | location |
-|-------------|------------|--------|----------|
-| N1-E1..E4 | S02 A1 source_archeology.md | collected | `<s02-sid>.architecture.source_archeology.md` |
-| N2-E1 | S03 B6 test_calibration_key.py | collected | 7 pytests pass |
-| N2-E2 | S03 B1 manifest.jsonl writer | collected | `KVTCCalibrationStore.write_v2` |
-| N2-E3 | S03 B1 manifest schema | collected | Schema 1 ≥ 11 fields verified by D4 fixtures |
-| N2-E4 | S03 B1 / Migration M1 | partially_collected | 7-day legacy window设计已 land；运维 GC 实施 pending |
-| N3-E1..E5 | S03 B5 test_family_classifier_bypass.py | collected | 8 pytests pass + D4 hybrid → lz4 verified |
-| N4-E1..E5 | S03 B2 test_reconstruction_gate.py + D4 | collected | 7 pytests + D4 recon_gate.jsonl 14 rows |
-| N5-E1 | S04 staging 422 复现 | **pending** | 运维 staging 复现 H2 后填 |
-| N5-E2..E4 | S04 C1 + S05 D2 | collected | E6/E7 pytest pass + decision=disable 显式 |
-| N5-E5 | S04 C1 env rollback drill | collected | E7 验证 + docs §4 rollback |
-| N6-E1..E6 | S05 D0..D4 | collected | D4 reports/kvtc-ab/20260522T094040Z/ + workflow YAML |
-| N7-E1..E5 | S04 C0/C1 + S05 D2 | collected | 19 + 8 pytests pass |
-| N7-E6 | UI i18n table | collected | KVTC_UI_I18N validated, 0 forbidden words |
-
-3 个 evidence 仍 pending（N2-E4 GC、N5-E1 staging）— 不阻塞 S05 passed，但 docs/KVTC_RELEASE.md §7 显式列入 unresolved items 供运维跟进。
-
-## epic_required_gates_status (S01..S05)
-
-| Sprint | Gate | Status | Verification |
-|--------|------|--------|--------------|
-| S01_requirements | `G_S01_requirements_passed` | **passed/finalized** (2026-05-22T06:40:29Z) | `sprint-…s01-requirements.accepted.md` in solar-db |
-| S02_architecture | `G_S02_architecture_passed` | **passed/completed** (2026-05-22T08:39:39Z) | `sprint-…s02-architecture.accepted.md` |
-| S03_core_runtime | `G_S03_core_runtime_passed` | **passed/completed** (2026-05-22T09:09:00Z) | `sprint-…s03-core-runtime.accepted.md` |
-| S04_orchestration_ui | `G_S04_orchestration_ui_passed` | **passed/completed** (2026-05-22T09:22:20Z) | `sprint-…s04-orchestration-ui.accepted.md` |
-| S05_verification_release | `G_S05_verification_release_passed` | **reviewing → expected passed** (本 sprint) | 等 evaluator 抽样验证后 |
-
-**parent_check_ready**: `true` 当 evaluator 通过本 S05；当前状态 `reviewing/builder_done/evaluator`。
-
-## 已完成
-
-- 7 个 builder 节点全部实施（D0..D6）；49 个 pytest cases 联合通过 in 4.78s。
-- D4 真跑 `scripts/kvtc_ab_correctness.py --fixture-set stable-ci --fail-on-gate-violation --emit-recon-gate-jsonl` exit 0；产 ab_correctness.summary.json (Schema 3) + recon_gate.jsonl (Schema 2, 14 rows × 14+1 fields) + 14 per_fixture/*.json。
-- D4 observed metrics: p95_rel_rmse=0.011970 ≤ 0.02 hard / min_cos=0.999076 ≥ 0.999 hard / mismatches=[] / hard_violations=0 / soft_violations=1。
-- 15 fixtures（14 stable-ci + 1 local-only）覆盖 5×3 矩阵；每 fixture ≤ 263 KB；用固定 numpy seed 100% 可复现。
-- `.github/workflows/kvtc-regression.yml` 2 jobs（pre-merge + nightly），含 PR 自动 issue label + ATLAS hook marker。
-- `docs/KVTC_RELEASE.md` ≈ 230 lines 含 R1..R7 状态 + D4 evidence 数字 + 5 个 env rollback + ATLAS hook 名 + OQ1/OQ2 unresolved。
-- `reports/kvtc-ab/latest` symlink 自动维护供 S04 UI 消费。
-
-## 已验证（本 sprint 边界内）
-
-- 8 个 e2e cases all PASS（含 CLI subprocess + Schema 校验 + TestClient + 410 行为）。
-- 41 cases 联合回归 PASS（S03 + S04，防 S05 误改）。
-- D4 真跑 exit 0 + 14 fixture 全 decision=expect_decision + hard_violations=0。
-- ab_correctness.summary.json 7 必填字段验证通过（schema_version=`kvtc.ab_summary.v1` / generated_at / fixture_set / summary / slo / named_prompt_cache_status / tracking_sprint）。
-- recon_gate.jsonl 字段集合 14 必填 + profile_source 可选 = 15 字段全在。
-- CI YAML 解析通过（yaml.safe_load）+ 2 jobs + 3 触发器（pull_request / push / schedule）。
-- 5 env switches 在 docs §5 完整列出 + 在 §4 rollback 各有执行示例。
-- ATLAS hook 名 `atlas.kvtc.recon_gate_repair` 在 docs 出现 + CI YAML 含 marker step。
-- OQ1..OQ4 状态 docs §7 明示。
-
-## 未验证（运维 / 外部责任，本 sprint 不替代）
-
-- ATLAS hook 实际注册（运维侧）→ S05 仅 docs 记录合同。
-- 真实 Qwen3.6 SSD block dump 注入 → 运维通过 `fetch_kvtc_fixtures.sh` + `KVTC_FIXTURE_SOURCE` 实施。
-- `/v1/cache/prompt/save` env=1 切换 → 等 staging 复现 H2 + N6 7 天 M5 ≥ 0.99。
-- GitHub Actions 自动 issue label 实际触发 → 等 PR 真实跑 CI。
-- 真实 Qwen3.6 head_dim / num_heads 推断 → 等 S05+ 后续 sprint 接入。
-
-## 风险
-
-- **N5-E1 仍 pending**：staging 复现 422 与决策切换 env=1 由运维触发；本 sprint 默认禁用是安全姿态，但 named_prompt_cache_status=disabled_skip 状态在 docs/KVTC_RELEASE.md §7 显式标 unresolved。
-- **OQ1 真实 Qwen3.6 fixture**：CI 用 synthetic stand-ins 标 fixture_id 为 `qwen36_ssd_block_*`，命名为 future replacement 留位；运维必须替换为真实 dump 方能完全闭环 R1（论文对齐审计的执行端）。
-- **CI YAML 未真跑**：本 sprint 验证 YAML schema 解析通过，但 GitHub Actions 实际 runner 行为待 PR 提交时验证（issue creation script、artifact upload、ATLAS marker 可能在 GitHub 环境暴露差异）。
-- **synthetic outlier_001_pass 在 soft 边界**：D4 报 soft_violations=1，但 hard_violations=0 → 不阻塞 SLO；运维监控 watchlist 即可。
-- **paged_ssd_cache.py 仅 KVTC 区域改动**（S03 实施）：epic 完成后若有其他 sprint 重排 server.py / paged_ssd_cache.py，需确认 hunk 位置仍在 KVTC 区域。
-
-## 后续待办
-
-1. **本 sprint**：协调器 → `reviewing/builder_done/evaluator`；等审判官评估。
-2. **审判官**：跑 `solar-harness session evaluate sprint-…s05-verification-release --json` + 抽样 plan §5 验证 A-M 全集；重点抽样：(a) 49 pytest 实际通过；(b) D4 真跑 exit 0；(c) summary.json schema_version=`kvtc.ab_summary.v1`；(d) recon_gate.jsonl 字段集；(e) ATLAS hook 名出现在 CI YAML + docs；(f) docs §4 rollback bash 片段含 4 个 env；(g) hard 阈值 0.02 / 0.999 仍 hard-pinned。
-3. **PASS 后**：epic_decomposer 自动跑 epic parent-check。`required_gates`（S01..S05）全部 passed → epic `ready=true` → coordinator 可关闭 epic。
-4. **epic close 后**：运维侧 follow-up：
-   - 注册 ATLAS hook `atlas.kvtc.recon_gate_repair`（Solar Harness 部署 runbook）
-   - 通过 `fetch_kvtc_fixtures.sh` 注入真实 Qwen3.6 dump（OQ1 闭环）
-   - staging 验证 H2 + 监控 M5 7 天 → 切 `THUNDEROMLX_NAMED_PROMPT_CACHE_SAVE_ENABLED=1`（OQ2 完全闭环）
-   - 监控 `legacy_calibration_read_count` → 7 天后 GC v1 路径
-5. **后续 sprint 可参考**：FlashMLX KV bridge（MEMORY 中 Phase 10b 工作）、Meta-Harness Phase 3、ThunderOMLX MemBoost AME / MemCollab 后续优化。
+- **上游**: S01-S04（contract / requirements / architecture / core-runtime / orchestration-ui）
+  已全部 passed，本 sprint 是 epic 末尾切片。
+- **下游 (intra-sprint)**: 无—D6 是最后节点。
+- **跨 Sprint**: 父 epic close 依赖本 sprint evaluator PASS；S03 不触发 round-2（D4
+  SLO 都在阈值内）。

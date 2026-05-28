@@ -95,11 +95,33 @@ event_seen="$(cat "$EVENTS")"
 
 check "terminal passed_notify hook abort is treated as non-blocking" "$rc" "0"
 check "terminal passed_notify is not queued after hook abort" "$queue_seen" "no"
+check "terminal passed_notify stops after first hook abort" "$tried" "solar-harness:0.1"
 case "$event_seen" in
   *dispatch_suppressed*terminal_phase_wake_detected*) got="yes" ;;
   *) got="no" ;;
 esac
 check "terminal notify suppression emits event" "$got" "yes"
+
+>"$ROLE_TRIED"
+rm -f "$QUEUE_CALLED"
+>"$EVENTS"
+
+dispatch_to_role "planner" "sprint-test-failed-max-rounds" "failed_max_rounds" "/tmp/dispatch.md" "msg"
+rc=$?
+
+tried="$(paste -sd, "$ROLE_TRIED")"
+queue_seen="no"
+[[ -f "$QUEUE_CALLED" ]] && queue_seen="yes"
+event_seen="$(cat "$EVENTS")"
+
+check "terminal failed_max_rounds hook abort is treated as non-blocking" "$rc" "0"
+check "terminal failed_max_rounds is not queued after hook abort" "$queue_seen" "no"
+check "terminal failed_max_rounds stops after first hook abort" "$tried" "solar-harness:0.1"
+case "$event_seen" in
+  *dispatch_suppressed*terminal_phase_wake_detected*) got="yes" ;;
+  *) got="no" ;;
+esac
+check "terminal failed_max_rounds suppression emits event" "$got" "yes"
 
 echo ""
 echo "=== RESULT: PASS=$PASS FAIL=$FAIL ==="

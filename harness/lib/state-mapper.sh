@@ -234,6 +234,10 @@ elif st == 'failed':
     lc = 'failed'
     role = 'none'
 
+elif st == 'blocked':
+    lc = 'blocked'
+    role = 'planner'
+
 elif st == 'queued':
     if handoff_to == 'evaluator':
         lc = 'build_complete'
