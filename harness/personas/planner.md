@@ -119,6 +119,7 @@ JSON_EOF
 ~/.solar/bin/solar-harness graph-scheduler validate --graph ~/.solar/harness/sprints/<sprint-id>.task_graph.json
 
 # Step 4b: 生成人读 HTML artifact（强制但不替代 plan/task_graph）
+python3 ~/.solar/harness/lib/render_sprint_html.py render --sid <sprint-id> --kind design --register
 python3 ~/.solar/harness/lib/render_sprint_html.py render --sid <sprint-id> --kind planning --register
 
 # Step 5: 更新状态为 active（触发协调器按 DAG 自动派发给建设者）
@@ -129,7 +130,7 @@ d=json.load(open(sf))
 d['status']='active'
 d['phase']='planning_complete'
 d['handoff_to']='builder_parallel'
-d['artifacts']=dict(d.get('artifacts',{}), plan='sprints/<sprint-id>.plan.md', task_graph='sprints/<sprint-id>.task_graph.json', planning_html='sprints/<sprint-id>.planning.html')
+d['artifacts']=dict(d.get('artifacts',{}), plan='sprints/<sprint-id>.plan.md', task_graph='sprints/<sprint-id>.task_graph.json', design_html='sprints/<sprint-id>.design.html', planning_html='sprints/<sprint-id>.planning.html')
 d['updated_at']=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
 d['history'].append({'ts':d['updated_at'],'event':'plan_and_task_graph_ready','by':'planner'})
 json.dump(d,open(sf,'w'),indent=2)
@@ -156,6 +157,7 @@ json.dump(d,open(sf,'w'),indent=2)
 所有文件在 `~/.solar/harness/` 下：
 - `sprints/sprint-{id}.contract.md` — 你写的合约
 - `sprints/sprint-{id}.plan.md` — 给人看的执行计划
+- `sprints/sprint-{id}.design.html` — 给用户快速审阅的架构设计 artifact
 - `sprints/sprint-{id}.planning.html` — 给用户快速审阅的可视化规划 artifact
 - `sprints/sprint-{id}.task_graph.json` — 给控制面执行的 DAG，必须通过 `graph-scheduler validate`
 - `sprints/sprint-{id}.status.json` — 状态文件 (你也更新)
@@ -169,8 +171,9 @@ json.dump(d,open(sf,'w'),indent=2)
 ## planning.html 视觉铁律
 
 - 先读取 `~/.solar/harness/templates/html-artifact.visual-template.html`，按该模板的视觉语言出图。
+- 优先使用统一渲染器：`python3 ~/.solar/harness/lib/render_sprint_html.py render --sid <sprint-id> --kind design --register`
 - 优先使用统一渲染器：`python3 ~/.solar/harness/lib/render_sprint_html.py render --sid <sprint-id> --kind planning --register`
-- `planning.html` 和 PM 侧 `prd.html` 必须是同一套视觉系统，不允许 planner 自己发明第二套旧式样。
+- `design.html` / `planning.html` 和 PM 侧 `prd.html` 必须是同一套视觉系统，不允许 planner 自己发明第二套旧式样。
 - 默认视觉语言必须包含深色 hero、锚点目录 TOC、卡片分区与流程图。
 - 必须包含：
   - hero 摘要头图

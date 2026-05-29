@@ -170,35 +170,39 @@ class TestBrokerEventFields:
 
 
 class TestBrokerCoverageFields:
-    """broker_coverage.schema.json must have exactly 8 required fields."""
+    """broker_coverage.schema.json must match the current telemetry contract."""
 
     def test_required_fields_count(self):
         schema = _load("broker_coverage.schema.json")
         required = schema["required"]
         expected = {
-            "uncontracted_action_count", "unscoped_write_count",
-            "total_actions", "contracted_actions", "coverage_ratio",
-            "legacy_path_actions", "by_kind", "health",
+            "total_actions",
+            "contracted_actions",
+            "coverage_pct",
+            "unscoped_write_count",
+            "policy_denied_count",
+            "lease_denied_count",
+            "human_approval_pending",
         }
         assert set(required) == expected
-        assert len(required) == 8
+        assert len(required) == 7
 
-    def test_health_enum(self):
+    def test_coverage_pct_bounds(self):
         schema = _load("broker_coverage.schema.json")
-        health_enum = schema["properties"]["health"]["enum"]
-        assert set(health_enum) == {"PASS", "FAIL", "DEGRADED"}
+        coverage = schema["properties"]["coverage_pct"]
+        assert coverage["minimum"] == 0
+        assert coverage["maximum"] == 100
 
     def test_valid_pass_fixture(self):
         schema = _load("broker_coverage.schema.json")
         fixture = {
-            "uncontracted_action_count": 0,
-            "unscoped_write_count": 0,
             "total_actions": 10,
             "contracted_actions": 10,
-            "coverage_ratio": 1.0,
-            "legacy_path_actions": 0,
-            "by_kind": {"shell": 5, "python": 5},
-            "health": "PASS",
+            "coverage_pct": 100,
+            "unscoped_write_count": 0,
+            "policy_denied_count": 0,
+            "lease_denied_count": 0,
+            "human_approval_pending": 0,
         }
         jsonschema.validate(instance=fixture, schema=schema)
 

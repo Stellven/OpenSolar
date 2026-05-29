@@ -3787,6 +3787,27 @@ def resolve_config(args: argparse.Namespace) -> Path:
     return Path.home() / "Solar" / "harness" / "config" / "tech-hotspot-radar.yaml"
 
 
+def tech_hotspot_state_dir(config: dict[str, Any]) -> Path:
+    return Path((config.get("output") or {}).get(
+        "state_dir", str(Path.home() / ".solar/harness/state/tech-hotspot-radar")
+    )).expanduser()
+
+
+def social_browser_backend_x_artifact_root(config: dict[str, Any]) -> Path:
+    root = tech_hotspot_state_dir(config) / "social-browser-backend-x"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def social_browser_backend_x_disabled(config: dict[str, Any]) -> bool:
+    raw = os.environ.get("SOLAR_SOCIAL_BROWSER_BACKEND_DISABLE")
+    if raw is not None:
+        return str(raw).strip().lower() not in {"", "0", "false", "no", "off"}
+    social_cfg = (config.get("social") or {})
+    backend_cfg = (social_cfg.get("browser_backend_x") or {})
+    return bool(backend_cfg.get("disabled", False))
+
+
 def ensure_db(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path))
@@ -4872,9 +4893,133 @@ def collect_social_posts_for_account(handle: str, account_id: str, backend: str,
     raise ValueError(f"unknown social backend: {backend}")
 
 
+def _load_social_browser_backend_x_accounts(
+    conn: sqlite3.Connection,
+    limit_accounts: int,
+) -> list[Any]:
+    from social_browser_backend_x.pipeline import AccountConfig
+    from social_browser_backend_x.mock_browser_fixture import PROFILE_FIXTURES
+
+    conn.row_factory = sqlite3.Row
+    accounts: list[AccountConfig] = []
+    try:
+        rows = conn.execute(
+            "SELECT handle, tier, enabled FROM social_accounts "
+            "WHERE enabled=1 ORDER BY tier, weight DESC, handle"
+        ).fetchall()
+    except sqlite3.Error:
+        rows = []
+    def _tier_to_int(raw: Any) -> int:
+        text = str(raw or "").strip().lower()
+        if text in {"1", "tier1", "p0", "high"}:
+            return 1
+        if text in {"2", "tier2", "normal"}:
+            return 2
+        try:
+            return int(text or "1")
+        except ValueError:
+            return 1
+
+    for row in rows:
+        handle = str(row["handle"] or "").strip()
+        if not handle:
+            continue
+        accounts.append(
+            AccountConfig(
+                handle=handle.lstrip("@"),
+                tier=_tier_to_int(row["tier"]),
+                profile_url=f"https://x.com/{handle.lstrip('@')}",
+                enabled=bool(row["enabled"]),
+            )
+        )
+    if not accounts:
+        accounts = [
+            AccountConfig(
+                handle=fixture.handle,
+                tier=fixture.tier,
+                profile_url=fixture.profile_url,
+                enabled=True,
+            )
+            for fixture in PROFILE_FIXTURES
+        ]
+    if limit_accounts > 0:
+        accounts = accounts[:limit_accounts]
+    return accounts
+
+
+def _cmd_collect_social_browser_backend_x(
+    args: argparse.Namespace,
+    db_path: Path,
+    config: dict[str, Any],
+) -> int:
+    from social_browser_backend_x import cli as social_cli
+    from social_browser_backend_x.hard_blocker_guard import CallableResolver, HardBlockerGuard
+    from social_browser_backend_x.pipeline import Pipeline
+
+    limit_accounts = int(getattr(args, "limit_accounts", 0) or 0)
+    backend = str(getattr(args, "backend", "auto") or "auto")
+    dry_run = bool(getattr(args, "dry_run", False))
+
+    source_conn = ensure_db(db_path)
+    source_conn.executescript(SCHEMA_SQL)
+    accounts = _load_social_browser_backend_x_accounts(source_conn, limit_accounts)
+    source_conn.close()
+
+    run_conn = sqlite3.connect(":memory:" if dry_run else str(db_path))
+    run_conn.executescript(SCHEMA_SQL)
+    run_conn.row_factory = sqlite3.Row
+
+    socket_dir: Path | None = None
+    socket_path = Path.home() / ".thunderomlx" / "socket"
+    if dry_run:
+        socket_dir = Path(tempfile.mkdtemp(prefix="social-browser-backend-x-"))
+        socket_path = socket_dir / "thunderomlx.sock"
+        socket_path.write_text("ready", encoding="utf-8")
+
+    guard = HardBlockerGuard(
+        resolver=CallableResolver(lambda: True),
+        mock_mode_probe=(lambda: dry_run),
+    )
+    pipeline = Pipeline(
+        run_conn,
+        guard=guard,
+        thunderomlx_socket=socket_path,
+        artifact_root=social_browser_backend_x_artifact_root(config),
+    )
+
+    def _run(cli_args):
+        return pipeline.run_as_cli_callback(cli_args, accounts=accounts)
+
+    argv = ["--backend", "x_api" if backend == "x-api" else backend, "--json-only"]
+    if limit_accounts > 0:
+        argv.extend(["--limit-accounts", str(limit_accounts)])
+    old_mock_flag = os.environ.get("BROWSER_AGENT_MOCK_MODE")
+    if dry_run:
+        os.environ["BROWSER_AGENT_MOCK_MODE"] = "1"
+    try:
+        return social_cli.main(argv, run_callback=_run, stdout=sys.stdout, stderr=sys.stderr)
+    finally:
+        if dry_run:
+            if old_mock_flag is None:
+                os.environ.pop("BROWSER_AGENT_MOCK_MODE", None)
+            else:
+                os.environ["BROWSER_AGENT_MOCK_MODE"] = old_mock_flag
+        run_conn.close()
+        if socket_dir is not None:
+            shutil.rmtree(socket_dir, ignore_errors=True)
+
+
 def cmd_collect_social(args: argparse.Namespace) -> int:
     config = load_config(resolve_config(args))
     db_path = resolve_db(args, config)
+    backend = str(getattr(args, "backend", "auto") or "auto")
+    use_browser_backend = backend in {"browser", "manual", "auto"} or bool(getattr(args, "dry_run", False))
+    if use_browser_backend and not social_browser_backend_x_disabled(config):
+        return _cmd_collect_social_browser_backend_x(args, db_path, config)
+    if use_browser_backend and social_browser_backend_x_disabled(config):
+        print("[collect-social] social-browser-backend-x disabled by rollback flag; using legacy collector")
+        if backend in {"browser", "manual", "auto"}:
+            args = argparse.Namespace(**{**vars(args), "backend": "auto"})
     conn = ensure_db(db_path)
     conn.executescript(SCHEMA_SQL)
     conn.row_factory = sqlite3.Row
@@ -12575,10 +12720,11 @@ def build_parser() -> argparse.ArgumentParser:
     gh_import = sub.add_parser("import-github-candidates", help="Import GitHub owner/repo candidates from baseline signals")
     gh_import.add_argument("--limit", type=int, default=0, help="Max candidates to import")
     gh_import.add_argument("--min-signals", type=int, default=1, help="Minimum baseline signal count per repo")
-    social_collect = sub.add_parser("collect-social", help="Collect live public social RSS posts with rate limits")
+    social_collect = sub.add_parser("collect-social", help="Collect social signals via browser/rss/manual/x-api backends")
     social_collect.add_argument("--limit-accounts", type=int, default=0)
     social_collect.add_argument("--per-account-limit", type=int, default=3)
-    social_collect.add_argument("--backend", choices=["auto", "x-api", "rss"], default="auto")
+    social_collect.add_argument("--backend", choices=["auto", "browser", "manual", "x-api", "rss"], default="auto")
+    social_collect.add_argument("--dry-run", action="store_true")
     social_collect.add_argument("--force", action="store_true")
     social_trend = sub.add_parser("social-trend-report", help="Generate AI Influence social signal and big-name viewpoint report with Codex")
     social_trend.add_argument("--date", default=None, help="Report date YYYY-MM-DD")

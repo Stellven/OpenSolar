@@ -171,6 +171,7 @@ class TestParentReadyCloseout:
         monkeypatch.setattr(gnd, "_mark_parent_sprint_passed_if_ready", mock_mark_parent)
 
         eval_json_path = str(sprints / f"{sid}.N1-eval.json")
+        Path(eval_json_path).write_text(json.dumps({"verdict": "PASS"}) + "\n", encoding="utf-8")
         result = gnd.node_verdict(
             str(sprints / f"{sid}.task_graph.json"),
             "N1",
@@ -229,6 +230,39 @@ class TestParentReadyCheckIntegration:
         assert parent["ready"] is False
         assert graph["gate_results"]["gate-shared"]["status"] == "blocked"
         assert graph["gate_results"]["gate-shared"]["open_nodes"] == ["N2"]
+
+    def test_standard_graph_auto_assigns_default_gates_for_closeout(self):
+        from graph_scheduler import mark_node_result, parent_ready_check
+
+        graph = {
+            "sprint_id": "standard-auto-gates",
+            "dag_variant": "standard",
+            "required_gates": ["G_PLAN", "G_IMPL", "G_VERIFY", "G_REVIEW"],
+            "nodes": [
+                {"id": "S1", "depends_on": [], "status": "reviewing"},
+                {"id": "S2", "depends_on": ["S1"], "status": "pending"},
+                {"id": "S3", "depends_on": ["S2"], "status": "pending"},
+                {"id": "S4", "depends_on": ["S3"], "status": "pending"},
+                {"id": "S5", "depends_on": ["S4"], "status": "pending"},
+            ],
+            "node_results": {},
+            "gate_results": {},
+        }
+
+        mark_node_result(graph, "S1", "passed")
+        mark_node_result(graph, "S2", "passed")
+        mark_node_result(graph, "S3", "passed")
+        mark_node_result(graph, "S4", "passed")
+        mark_node_result(graph, "S5", "passed")
+
+        by_id = {node["id"]: node for node in graph["nodes"]}
+        assert by_id["S1"]["gate"] == "G_PLAN"
+        assert by_id["S2"]["gate"] == "G_IMPL"
+        assert by_id["S3"]["gate"] == "G_VERIFY"
+        assert by_id["S4"]["gate"] == "G_REVIEW"
+        assert by_id["S5"]["gate"] == "G_REVIEW"
+        assert graph["gate_results"]["G_REVIEW"]["status"] == "passed"
+        assert parent_ready_check(graph)["ready"] is True
 
     def test_all_passed_means_ready(self, tmp_harness):
         """When all nodes and gates pass, parent_ready_check returns ready."""
