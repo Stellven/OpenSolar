@@ -32,7 +32,9 @@
             "remote_vm",
             "local_workstation",
             "cloud_container",
-            "localhost"
+            "localhost",
+            "browser_profile_host",
+            "browser_agent_session"
           ]
         },
         "display_name": {"type": "string"},

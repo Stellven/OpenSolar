@@ -26,7 +26,7 @@ LO_SCHEMA_FILE = CONFIG_DIR / "logical-operators.schema.json"
 LO_FILE = CONFIG_DIR / "logical-operators.json"
 ACTORS_FILE = CONFIG_DIR / "agent-actors.json"
 
-P0_OPERATOR_TYPES = [
+OPERATOR_TYPES = [
     "DeepArchitect",
     "RootCauseDebugger",
     "ImplementationWorker",
@@ -43,6 +43,9 @@ P0_OPERATOR_TYPES = [
     "QuotaBroker",
     "ContextCompressor",
     "ArtifactCurator",
+    "DeepResearchBrowser",
+    "DeepResearchGemini",
+    "DeepResearchChatGPT",
 ]
 
 
@@ -59,7 +62,7 @@ def _load_actors() -> dict:
 
 
 class TestLogicalOperatorSchemaEnum:
-    """Schema enum must include all 16 P0 logical operator types."""
+    """Schema enum must include all declared logical operator types."""
 
     def test_schema_defines_logical_operator_type_enum(self):
         schema = _load_lo_schema()
@@ -71,18 +74,18 @@ class TestLogicalOperatorSchemaEnum:
     def test_enum_contains_all_16_types(self):
         schema = _load_lo_schema()
         enum_vals = schema["$defs"]["logical_operator_type"].get("enum", [])
-        missing = set(P0_OPERATOR_TYPES) - set(enum_vals)
+        missing = set(OPERATOR_TYPES) - set(enum_vals)
         assert not missing, f"logical_operator_type enum missing: {missing}"
 
-    def test_enum_has_exactly_16_entries(self):
+    def test_enum_has_exactly_19_entries(self):
         schema = _load_lo_schema()
         enum_vals = schema["$defs"]["logical_operator_type"].get("enum", [])
-        assert len(enum_vals) == 16, (
-            f"Expected 16 P0 operator types, got {len(enum_vals)}: {enum_vals}"
+        assert len(enum_vals) == 19, (
+            f"Expected 19 logical operator types, got {len(enum_vals)}: {enum_vals}"
         )
 
-    @pytest.mark.parametrize("op_type", P0_OPERATOR_TYPES)
-    def test_each_p0_type_in_enum(self, op_type):
+    @pytest.mark.parametrize("op_type", OPERATOR_TYPES)
+    def test_each_type_in_enum(self, op_type):
         schema = _load_lo_schema()
         enum_vals = schema["$defs"]["logical_operator_type"].get("enum", [])
         assert op_type in enum_vals, (
@@ -188,7 +191,7 @@ class TestDAGNodePhysicalIdRejection:
 
 
 class TestLogicalOperatorFixture:
-    """Fixture must define entries for all 16 P0 types."""
+    """Fixture must define entries for all declared types."""
 
     def test_fixture_has_logical_operators_section(self):
         lo = _load_lo()
@@ -198,15 +201,15 @@ class TestLogicalOperatorFixture:
         lo = _load_lo()
         assert "bindings" in lo, "logical-operators.json missing bindings"
 
-    def test_fixture_defines_all_16_operator_types(self):
+    def test_fixture_defines_all_operator_types(self):
         lo = _load_lo()
         defined = set(lo["logical_operators"].keys())
-        missing = set(P0_OPERATOR_TYPES) - defined
+        missing = set(OPERATOR_TYPES) - defined
         assert not missing, (
             f"logical-operators.json missing operator definitions: {missing}"
         )
 
-    @pytest.mark.parametrize("op_type", P0_OPERATOR_TYPES)
+    @pytest.mark.parametrize("op_type", OPERATOR_TYPES)
     def test_each_operator_type_has_definition(self, op_type):
         lo = _load_lo()
         assert op_type in lo["logical_operators"], (
@@ -240,17 +243,17 @@ class TestLogicalOperatorFixture:
 
 
 class TestBindingFixture:
-    """Binding table must cover all 16 types; all candidate actor_ids must exist."""
+    """Binding table must cover all declared types; all candidate actor_ids must exist."""
 
-    def test_binding_table_covers_all_16_types(self):
+    def test_binding_table_covers_all_types(self):
         lo = _load_lo()
         defined = set(lo["bindings"].keys())
-        missing = set(P0_OPERATOR_TYPES) - defined
+        missing = set(OPERATOR_TYPES) - defined
         assert not missing, (
             f"logical-operators.json bindings missing entries for: {missing}"
         )
 
-    @pytest.mark.parametrize("op_type", P0_OPERATOR_TYPES)
+    @pytest.mark.parametrize("op_type", OPERATOR_TYPES)
     def test_each_type_has_binding(self, op_type):
         lo = _load_lo()
         assert op_type in lo["bindings"], (

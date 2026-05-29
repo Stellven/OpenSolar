@@ -4,6 +4,7 @@ Verifies submit, poll, collect, and cancel flows under the mock job runner.
 """
 from __future__ import annotations
 
+import datetime
 import json
 import os
 import shutil
@@ -151,6 +152,88 @@ def test_collect_browser_job_failed():
         assert result["status"] == "failed"
         assert result["exit_code"] == 1
         assert (out_path / "result.json").exists()
+
+
+def test_resolve_chatgpt_monthly_project_name() -> None:
+    value = bjrt.resolve_chatgpt_monthly_project_name(
+        datetime.datetime(2026, 5, 29, 12, 0, tzinfo=datetime.timezone.utc)
+    )
+    assert value == "需求研究-2026-05"
+
+
+def test_build_frontdoor_research_job_envelope() -> None:
+    envelope = bjrt.build_frontdoor_research_job_envelope(
+        raw_request="请研究这个需求",
+        ingress_channel="codex",
+        now=datetime.datetime(2026, 5, 29, 12, 0, tzinfo=datetime.timezone.utc),
+    )
+    assert envelope["chatgpt_project"] == "需求研究-2026-05"
+    assert envelope["project_routing"]["create_if_missing"] is True
+    assert envelope["capture_policy"]["messages_required"] is True
+    assert "messages" in envelope["research_artifact_schema"]["required_fields"]
+
+
+def test_build_frontdoor_research_artifact_preserves_whole_messages() -> None:
+    class FakeIngest:
+        @staticmethod
+        def build_conversation(**kwargs):
+            return {
+                "conversation_id": "conv-123",
+                "source_url": "https://chatgpt.com/c/conv-123",
+                "canonical_url": "https://chatgpt.com/c/conv-123",
+                "capture_method": "chatgpt-role-attribute",
+                "capture_schema_version": 2,
+                "metadata": {"site_name": "ChatGPT"},
+                "partial_transcript": False,
+                "messages": [
+                    {"role": "user", "text": "需求一"},
+                    {"role": "assistant", "text": "分析一"},
+                    {"role": "user", "text": "需求二"},
+                    {"role": "assistant", "text": "最终总结"},
+                ],
+            }
+
+    original = bjrt._CHATGPT_INGEST_CACHE
+    bjrt._CHATGPT_INGEST_CACHE = FakeIngest()
+    try:
+        artifact = bjrt.build_frontdoor_research_artifact(
+            {
+                "conversation_id": "conv-123",
+                "url": "https://chatgpt.com/c/conv-123",
+                "canonical_url": "https://chatgpt.com/c/conv-123",
+                "captured_at": "2026-05-29T15:00:00Z",
+                "messages": [
+                    {"role": "user", "text": "需求一"},
+                    {"role": "assistant", "text": "分析一"},
+                    {"role": "user", "text": "需求二"},
+                    {"role": "assistant", "text": "最终总结"},
+                ],
+            },
+            raw_request="请研究这个需求",
+            ingress_channel="codex",
+            project_name="需求研究-2026-05",
+        )
+    finally:
+        bjrt._CHATGPT_INGEST_CACHE = original
+
+    assert artifact["conversation_id"] == "conv-123"
+    assert artifact["chatgpt_project"] == "需求研究-2026-05"
+    assert [m["text"] for m in artifact["messages"]] == ["需求一", "分析一", "需求二", "最终总结"]
+    assert artifact["summary"] == "最终总结"
+
+
+def test_submit_frontdoor_research_job_writes_monthly_project_to_state() -> None:
+    job_id = bjrt.submit_frontdoor_research_job(
+        "mini-browser-deepresearch",
+        raw_request="请研究这个需求",
+        ingress_channel="codex",
+        now=datetime.datetime(2026, 5, 29, 12, 0, tzinfo=datetime.timezone.utc),
+        mock_sequence=["running", "done"],
+    )
+    state = json.loads((bjrt.BROWSER_JOBS_DIR / job_id / "state.json").read_text(encoding="utf-8"))
+    assert state["envelope"]["chatgpt_project"] == "需求研究-2026-05"
+    assert state["envelope"]["project_routing"]["create_if_missing"] is True
+    assert state["envelope"]["capture_policy"]["final_answer_only_forbidden"] is True
 
 
 def test_cancel_browser_job():

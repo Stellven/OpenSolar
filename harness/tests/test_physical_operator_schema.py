@@ -194,7 +194,7 @@ class TestSchemaConditionalValidation:
                     "surface": {
                         "type": "claude_code_interactive",
                         "tool": "claude",
-                        "launch_cmd": "claude --model opus",
+                        "launch_cmd": "claude --dangerously-skip-permissions --model opus",
                     },
                     "billing_surface": "subscription_interactive",
                 }

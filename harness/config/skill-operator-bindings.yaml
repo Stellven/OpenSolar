@@ -1,0 +1,27 @@
+version: 1
+skill_operator_bindings:
+- skill_id: understand-anything.chat
+  logical_operator: CodebaseChatBuilder
+  physical_operator: mini-understand-anything-pane-bridge
+  capsule_id: cap.understand-anything-chat-builder
+  actor: codex
+  semantic_backend: ThunderOMLX
+- skill_id: understand-anything.domain_analysis
+  logical_operator: DomainAnalysisBuilder
+  physical_operator: mini-understand-anything-pane-bridge
+  capsule_id: cap.understand-anything-domain-analysis-builder
+  actor: codex
+  semantic_backend: ThunderOMLX
+- skill_id: understand-anything.knowledge_graph
+  logical_operator: KnowledgeGraphBuilder
+  physical_operator: mini-understand-anything-pane-bridge
+  capsule_id: cap.understand-anything-knowledge-graph-builder
+  actor: codex
+  semantic_backend: ThunderOMLX
+- skill_id: understand-anything.tour
+  logical_operator: RepositoryTourBuilder
+  physical_operator: mini-understand-anything-pane-bridge
+  capsule_id: cap.understand-anything-tour-builder
+  actor: codex
+  semantic_backend: ThunderOMLX
+defaults: {}

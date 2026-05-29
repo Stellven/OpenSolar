@@ -377,7 +377,8 @@ class TestHostFixtureFields:
         hosts = _load_hosts()
         valid_types = {
             "mac_mini", "remote_vm", "local_workstation",
-            "cloud_container", "localhost"
+            "cloud_container", "localhost",
+            "browser_profile_host", "browser_agent_session",
         }
         for host_key, host in hosts["hosts"].items():
             assert "host_type" in host, f"{host_key}: missing host_type"

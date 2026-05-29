@@ -21,7 +21,7 @@
       "surface": {
         "type": "claude_code_interactive",
         "tool": "claude",
-        "launch_cmd": "claude --model opus"
+        "launch_cmd": "claude --dangerously-skip-permissions --model opus"
       },
       "billing_surface": "subscription_interactive",
       "billing_pool": "anthropic_subscription_interactive",
@@ -81,7 +81,7 @@
       "surface": {
         "type": "claude_code_interactive",
         "tool": "claude",
-        "launch_cmd": "claude --model sonnet"
+        "launch_cmd": "claude --dangerously-skip-permissions --model sonnet"
       },
       "billing_surface": "subscription_interactive",
       "billing_pool": "anthropic_subscription_interactive",
@@ -140,7 +140,7 @@
       "surface": {
         "type": "claude_code_interactive",
         "tool": "claude",
-        "launch_cmd": "claude --model opus"
+        "launch_cmd": "claude --dangerously-skip-permissions --model opus"
       },
       "billing_surface": "subscription_interactive",
       "billing_pool": "anthropic_subscription_interactive",
@@ -1105,6 +1105,69 @@
           "ARCH_DECISION"
         ],
         "on_exhausted": "disable_and_fallback"
+      }
+    },
+    "webapp_research_operator": {
+      "display_name": "Browser Agent Webapp Research Operator",
+      "plane": "interactive_browser",
+      "owner_host": "localhost",
+      "pane": "N/A",
+      "profile": "browser-agent",
+      "role": "knowledge-extractor",
+      "persona": "builder",
+      "provider": "browser",
+      "vendor": "BrowserUse",
+      "backend": "desktop_bridge",
+      "model": "webapp-research",
+      "model_config": "persistent-profile",
+      "base_url": "native-browser",
+      "auth_mode": "oauth",
+      "key_ref": "none",
+      "surface": {
+        "type": "desktop_bridge",
+        "tool": "browser-use",
+        "launch_cmd": "browser-use deep-research"
+      },
+      "billing_surface": "unknown",
+      "billing_pool": "browser_webapp_research",
+      "launch_cmd_kind": "local",
+      "operator_class": "BrowserComputerUse",
+      "enabled": true,
+      "available": true,
+      "health_status": "ok",
+      "roles": ["knowledge-extractor"],
+      "task_classes": ["browser-research", "deep-research", "competitive-analysis"],
+      "strengths": ["browser", "multimodal", "long-running-jobs"],
+      "preferred_for": ["browser-research", "deep-research"],
+      "avoid_for": ["direct-code-edit"],
+      "cost_tier": "high",
+      "latency_tier": "high",
+      "context_tier": "high",
+      "max_concurrency": 1,
+      "fallback_profile": "knowledge-extractor",
+      "routing": {
+        "operator_class": "BrowserComputerUse",
+        "primary_task_types": ["browser_research", "deep_research"],
+        "fallback_operator_classes": ["ResearchSynthesis"]
+      },
+      "quota": {
+        "quota_type": "webapp_session",
+        "period": "unknown",
+        "on_exhausted": "manual_review"
+      },
+      "policy": {
+        "write_files": "restricted",
+        "run_shell": "denied",
+        "network": "allowed",
+        "secrets_access": "denied",
+        "git_commit": "denied"
+      },
+      "state": {
+        "availability": "enabled",
+        "runtime_state": "idle",
+        "last_heartbeat_at": null,
+        "last_success_at": null,
+        "last_error": null
       }
     }
   }
