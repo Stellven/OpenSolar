@@ -8,24 +8,16 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
+from pathlib import Path
 from typing import Optional
 
-sys.path.insert(0, ".")
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "lib"))
 
 from lib.pane_hygiene_registry import PaneHygieneRegistry, PaneState
-
-PANE_ROLE_MAP: dict[str, str] = {
-    "solar-harness:0.0": "planner",
-    "solar-harness:0.1": "builder",
-    "solar-harness:0.2": "evaluator",
-    "solar-harness:0.3": "architect",
-    "solar-harness-lab:0.0": "builder",
-    "solar-harness-lab:0.1": "builder",
-    "solar-harness-lab:0.2": "builder",
-    "solar-harness-lab:0.3": "builder",
-}
+from lib.pane_role_pool import infer_role, list_tmux_panes
 
 DEFAULT_MODEL_MAP: dict[str, str] = {
     "solar-harness:0.0": "anthropic-opus",
@@ -40,16 +32,7 @@ DEFAULT_MODEL_MAP: dict[str, str] = {
 
 
 def discover_panes(tmux_binary: str = "tmux") -> list[str]:
-    try:
-        result = subprocess.run(
-            [tmux_binary, "list-panes", "-a", "-F", "#{session_name}:#{window_index}.#{pane_index}"],
-            capture_output=True, text=True, timeout=5,
-        )
-    except (subprocess.TimeoutExpired, OSError):
-        return []
-    if result.returncode != 0:
-        return []
-    return [line.strip() for line in result.stdout.strip().splitlines() if line.strip()]
+    return [item["pane"] for item in list_tmux_panes()]
 
 
 def init_registry(
@@ -57,18 +40,27 @@ def init_registry(
     pane_ids: Optional[list[str]] = None,
     *,
     tmux_binary: str = "tmux",
+    pane_titles: Optional[dict[str, str]] = None,
 ) -> dict:
     if pane_ids is None:
         pane_ids = discover_panes(tmux_binary)
+    if pane_titles is None:
+        pane_titles = {item["pane"]: item["title"] for item in list_tmux_panes()}
     registry = PaneHygieneRegistry(output_path)
     registered = []
     for pid in pane_ids:
-        role = PANE_ROLE_MAP.get(pid, "builder")
+        role = infer_role(pid, pane_titles.get(pid, ""))
         model = DEFAULT_MODEL_MAP.get(pid)
         try:
-            registry.register_pane(pid, role, initial_state=PaneState.clean, model=model)
-            registered.append(pid)
-        except ValueError:
+            already_present = True
+            try:
+                registry.get_pane_state(pid)
+            except KeyError:
+                already_present = False
+            registry.ensure_pane(pid, role, initial_state=PaneState.clean, model=model)
+            if not already_present:
+                registered.append(pid)
+        except Exception:
             pass
     return {"registered": registered, "count": len(registered)}
 

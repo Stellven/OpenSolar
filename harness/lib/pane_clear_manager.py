@@ -23,7 +23,8 @@ from recover_detector import (
     RecoverDetector,
 )
 
-PATTERN_EMPTY_PROMPT = re.compile(r"^\s*[\$>]\s*$")
+PATTERN_EMPTY_PROMPT = re.compile(r'^\s*(?:[\$>]|❯(?:\s*$|\s+Try\s+"))')
+PASSIVE_PERMISSIONS_FOOTER_RE = re.compile(r"bypass permissions on", re.I)
 
 
 class ClearLedger(Protocol):
@@ -131,17 +132,21 @@ class PaneClearManager:
         """Check three-signal success criteria per architecture.md §6.3."""
         output = self._detector._capture(pane_id)
         lines = output.splitlines()
-
-        last_line = lines[-1] if lines else ""
-        signal_empty = bool(PATTERN_EMPTY_PROMPT.match(last_line))
+        window = lines[-12:] if lines else []
+        tail = list(reversed(window))
+        signal_empty = any(PATTERN_EMPTY_PROMPT.match(line.strip()) for line in tail)
 
         signal_no_queued = not any(
-            DET_QUEUED.search(line) for line in lines
+            DET_QUEUED.search(line) for line in window
         )
 
         signal_no_confirm = not any(
-            DET_PROCEED.search(line) or DET_PERMISSION.search(line)
-            for line in lines
+            DET_PROCEED.search(line)
+            or (
+                DET_PERMISSION.search(line)
+                and not PASSIVE_PERMISSIONS_FOOTER_RE.search(line)
+            )
+            for line in window
         )
 
         return signal_empty, signal_no_queued, signal_no_confirm

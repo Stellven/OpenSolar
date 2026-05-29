@@ -99,6 +99,85 @@ def test_pane_gate_keeps_active_graph_claims_even_when_pane_is_idle(tmp_path, mo
     assert lease_path.exists() is True
 
 
+def test_reconcile_preserves_lease_when_graph_claim_is_recoverable_from_runtime_evidence(tmp_path, monkeypatch) -> None:
+    lease_dir = tmp_path / "pane-leases"
+    lease_dir.mkdir(parents=True)
+    lease_path = lease_dir / f"{mod.pane_safe('solar-harness-lab:0.4')}.json"
+    lease_path.write_text(json.dumps({
+        "pane": "solar-harness-lab:0.4",
+        "sid": "recoverable-sprint",
+        "dispatch_id": "dispatch-ua-1",
+        "expires_at": _utc_after(600),
+        "ttl_sec": 600,
+    }) + "\n")
+    graph_path = tmp_path / "sprints" / "recoverable-sprint.task_graph.json"
+    graph_path.parent.mkdir(parents=True, exist_ok=True)
+    graph_path.write_text(json.dumps({
+        "sprint_id": "recoverable-sprint",
+        "nodes": [
+            {
+                "id": "S1",
+                "status": "dispatched",
+                "assigned_to": "solar-harness-lab:0.4",
+                "dispatch_id": "dispatch-ua-1",
+            }
+        ],
+    }) + "\n")
+    monkeypatch.setattr(mod, "PANE_ASSIGNMENTS", tmp_path / ".pane-assignments")
+    monkeypatch.setattr(mod, "PANE_LEASE_DIR", lease_dir)
+    monkeypatch.setattr(mod, "SPRINTS", graph_path.parent)
+    monkeypatch.setattr(mod, "append_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(mod, "active_statuses", lambda: [])
+    monkeypatch.setattr(mod, "load_graph", lambda path: json.loads(Path(path).read_text()))
+    monkeypatch.setattr(mod, "node_status", lambda graph, node_id: graph["nodes"][0]["status"])
+    monkeypatch.setattr(mod, "pane_is_busy", lambda target: False)
+
+    allowed, reason, detail = mod.pane_gate("solar-harness-lab:0.4", "fresh-sprint")
+
+    assert allowed is False
+    assert reason == "pane_leased"
+    assert detail["graph_node"]["sid"] == "recoverable-sprint"
+    assert detail["graph_node"]["node_id"] == "S1"
+    assert detail["graph_node"]["recovered_from_runtime_evidence"] is True
+    assert lease_path.exists() is True
+
+
+def test_inspect_sprints_releases_blocked_dependency_waiting_status_when_route_is_ready(tmp_path, monkeypatch) -> None:
+    sprints = tmp_path / "sprints"
+    sprints.mkdir(parents=True)
+    sid = "sprint-unblock-ready"
+    status_path = sprints / f"{sid}.status.json"
+    status_path.write_text(json.dumps({
+        "sprint_id": sid,
+        "status": "blocked",
+        "phase": "external_dependency_waiting",
+        "handoff_to": "",
+        "target_role": "",
+    }) + "\n")
+    monkeypatch.setattr(mod, "SPRINTS", sprints)
+    monkeypatch.setattr(mod, "append_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(mod, "epic_child_dependency_ready", lambda sid: (True, []))
+    monkeypatch.setattr(
+        mod,
+        "workflow_guard_route",
+        lambda sid: {
+            "ok": True,
+            "violations": [],
+            "route_role": "planner",
+            "stage": "prd_ready",
+            "reason": "pm_prd_ready",
+        },
+    )
+
+    mod.inspect_sprints()
+    payload = json.loads(status_path.read_text())
+
+    assert payload["status"] == "drafting"
+    assert payload["phase"] == "prd_ready"
+    assert payload["handoff_to"] == "planner"
+    assert payload["target_role"] == "planner"
+
+
 def test_builder_handoff_prefers_idle_lab_builder_when_primary_is_occupied(monkeypatch) -> None:
     monkeypatch.setattr(
         mod,
@@ -130,6 +209,48 @@ def test_builder_queue_item_reroutes_to_idle_lab_builder(monkeypatch) -> None:
 
     assert target == "solar-harness-lab:0.1"
     assert item["target"] == "solar-harness-lab:0.1"
+
+
+def test_planner_handoff_prefers_idle_planner_pool_candidate(monkeypatch) -> None:
+    monkeypatch.setattr(
+        mod,
+        "discover_role_pool",
+        lambda role: [
+            {"pane": "solar-harness:0.1"},
+            {"pane": "solar-harness-lab:0.4"},
+        ] if role == "planner" else [],
+    )
+    monkeypatch.setattr(
+        mod,
+        "pane_gate",
+        lambda pane, sid: (
+            (False, "pane_leased", {}) if pane == "solar-harness:0.1" else (True, "ok", {})
+        ),
+    )
+    monkeypatch.setattr(mod, "pane_is_busy", lambda pane: False)
+
+    assert mod.pane_target_for_handoff("planner") == "solar-harness-lab:0.4"
+
+
+def test_evaluator_handoff_prefers_idle_evaluator_pool_candidate(monkeypatch) -> None:
+    monkeypatch.setattr(
+        mod,
+        "discover_role_pool",
+        lambda role: [
+            {"pane": "solar-harness:0.3"},
+            {"pane": "solar-harness-lab:0.1"},
+        ] if role == "evaluator" else [],
+    )
+    monkeypatch.setattr(
+        mod,
+        "pane_gate",
+        lambda pane, sid: (
+            (False, "pane_leased", {}) if pane == "solar-harness:0.3" else (True, "ok", {})
+        ),
+    )
+    monkeypatch.setattr(mod, "pane_is_busy", lambda pane: False)
+
+    assert mod.pane_target_for_handoff("evaluator") == "solar-harness-lab:0.1"
 
 
 def test_ready_for_planner_queue_bypasses_fixed_pane_busy(tmp_path, monkeypatch) -> None:

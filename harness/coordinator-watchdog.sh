@@ -262,9 +262,45 @@ pane_key() {
   printf '%s' "$pane" | sed 's/[^A-Za-z0-9_.-]/_/g'
 }
 
+pane_host_role() {
+  local pane="$1" title="${2:-}" registry="$HARNESS_DIR/run/pane-hygiene.json"
+  if [[ -f "$registry" ]]; then
+    local role
+    role=$(python3 - "$registry" "$pane" <<'PY' 2>/dev/null || true
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+entry = data.get(sys.argv[2]) if isinstance(data, dict) else None
+if isinstance(entry, dict):
+    print(entry.get("pane_role", ""))
+PY
+)
+    if [[ -n "$role" ]]; then
+      printf '%s' "$role"
+      return 0
+    fi
+  fi
+  local base lowered
+  base="${title%%|*}"
+  lowered="$(printf '%s' "$base" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$pane" == "$SESSION_NAME:0.0" && ( "$lowered" == *"pm"* || "$base" == *"产品经理"* ) ]]; then
+    printf '%s' "pm"
+  elif [[ "$lowered" == *"planner"* || "$base" == *"规划者"* ]]; then
+    printf '%s' "planner"
+  elif [[ "$lowered" == *"evaluator"* || "$base" == *"审判官"* ]]; then
+    printf '%s' "evaluator"
+  elif [[ "$lowered" == *"architect"* || "$base" == *"架构师"* ]]; then
+    printf '%s' "architect"
+  elif [[ "$lowered" == *"observer"* || "$base" == *"观察"* ]]; then
+    printf '%s' "observer"
+  else
+    printf '%s' "builder"
+  fi
+}
+
 # --- D5: 死 pane 检测 + 自动重启 ---
-# Full tmux target → persona. Product Delivery and Strategy Lab live in
-# separate sessions, so numeric pane indexes would collide.
+# Full tmux target → startup persona seed. Host role truth comes from
+# pane-hygiene / pane title inference; startup still needs persona for
+# start-incarnation compatibility.
 declare -A PERSONA_PANES=(
   ["$SESSION_NAME:0.0"]="pm"
   ["$SESSION_NAME:0.1"]="planner"
@@ -371,6 +407,9 @@ check_panes() {
     fi
 
     local persona="${PERSONA_PANES[$target]}"
+    local pane_title host_role
+    pane_title=$(tmux display-message -p -t "$target" '#{pane_title}' 2>/dev/null || true)
+    host_role="$(pane_host_role "$target" "$pane_title")"
     local pidx
     pidx="$(pane_key "$target")"
 
@@ -400,19 +439,19 @@ check_panes() {
       done
       if [[ -n "$active_sid" ]]; then
         bash "$HARNESS_DIR/session.sh" append "$active_sid" \
-          "{\"event\":\"pane_restart_rate_limited\",\"by\":\"watchdog\",\"data\":{\"pane\":\"$target\",\"persona\":\"$persona\",\"count\":$count}}" 2>/dev/null || true
+          "{\"event\":\"pane_restart_rate_limited\",\"by\":\"watchdog\",\"data\":{\"pane\":\"$target\",\"persona\":\"$persona\",\"host_role\":\"$host_role\",\"count\":$count}}" 2>/dev/null || true
       fi
-      warn "Pane $target ($persona) rate-limited (${count}/${PANE_MAX_RESTARTS} in ${PANE_RESTART_COOLDOWN}s)"
+      warn "Pane $target (host_role=$host_role, persona=$persona) rate-limited (${count}/${PANE_MAX_RESTARTS} in ${PANE_RESTART_COOLDOWN}s)"
       # sprint-20260503-100705 D4: 熔断通知限频 — 同一 pane 5 分钟窗口最多 1 条
       local cb_ts
       cb_ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
       local cb_now
       cb_now=$(date +%s)
       if (( cb_now - _last_cb_notify_ts >= 300 )); then
-        printf '%s\n' "- [ ] [${cb_ts}] [WATCHDOG-CIRCUIT-BREAKER] Pane ${target} (${persona}) ${PANE_RESTART_COOLDOWN}s 内 restart ${count}/${PANE_MAX_RESTARTS} 次,已熔断,停止重启,需人工介入" \
+        printf '%s\n' "- [ ] [${cb_ts}] [WATCHDOG-CIRCUIT-BREAKER] Pane ${target} (host_role=${host_role}, persona=${persona}) ${PANE_RESTART_COOLDOWN}s 内 restart ${count}/${PANE_MAX_RESTARTS} 次,已熔断,停止重启,需人工介入" \
           >> "$HARNESS_DIR/PLANNER-INBOX.md"
-        printf '%s\tcircuit_breaker\t\twatchdog 熔断 pane=%s persona=%s count=%s window=%ss\n' \
-          "$cb_ts" "$target" "$persona" "$count" "$PANE_RESTART_COOLDOWN" \
+        printf '%s\tcircuit_breaker\t\twatchdog 熔断 pane=%s host_role=%s persona=%s count=%s window=%ss\n' \
+          "$cb_ts" "$target" "$host_role" "$persona" "$count" "$PANE_RESTART_COOLDOWN" \
           > "$HARNESS_DIR/.planner-last-notice"
         _last_cb_notify_ts=$cb_now
       fi
@@ -420,7 +459,7 @@ check_panes() {
     fi
 
     # 重启 pane
-    log "Pane $target ($persona) 异常 (cmd=$pcmd)，重启..."
+    log "Pane $target (host_role=$host_role, persona=$persona) 异常 (cmd=$pcmd)，重启..."
     tmux send-keys -t "$target" C-c 2>/dev/null || true
     sleep 0.5
     # D3/D5 sprint-20260502-191700: 传 work_dir + 路径转义
@@ -455,8 +494,8 @@ check_panes() {
     local _post_respawn_dead
     _post_respawn_dead=$(tmux display-message -p -t "$target" '#{pane_dead}' 2>/dev/null || echo 1)
     if [[ "${_post_respawn_dead:-0}" == "1" ]]; then
-      err "Pane $target ($persona) respawn 后立即死亡! (status 127 或其他)"
-      echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event\":\"respawn_immediate_death\",\"pane\":\"$target\",\"persona\":\"$persona\",\"path\":\"${_user_path}\"}" \
+      err "Pane $target (host_role=$host_role, persona=$persona) respawn 后立即死亡! (status 127 或其他)"
+      echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event\":\"respawn_immediate_death\",\"pane\":\"$target\",\"persona\":\"$persona\",\"host_role\":\"$host_role\",\"path\":\"${_user_path}\"}" \
         >> "$HARNESS_DIR/logs/pane-exit.jsonl"
     fi
 
@@ -478,11 +517,11 @@ check_panes() {
       break
     done
     if [[ -n "$active_sid" ]]; then
-      bash "$HARNESS_DIR/session.sh" append "$active_sid" \
-        "{\"event\":\"pane_auto_restarted\",\"by\":\"watchdog\",\"data\":{\"pane\":\"$target\",\"persona\":\"$persona\",\"restart_count\":$new_count}}" 2>/dev/null || true
+        bash "$HARNESS_DIR/session.sh" append "$active_sid" \
+        "{\"event\":\"pane_auto_restarted\",\"by\":\"watchdog\",\"data\":{\"pane\":\"$target\",\"persona\":\"$persona\",\"host_role\":\"$host_role\",\"restart_count\":$new_count}}" 2>/dev/null || true
     fi
 
-    log "Pane $target ($persona) 已重启 (restart #${new_count})"
+    log "Pane $target (host_role=$host_role, persona=$persona) 已重启 (restart #${new_count})"
   done
 }
 

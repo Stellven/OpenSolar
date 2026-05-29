@@ -452,12 +452,28 @@ choose_lab_observer_pane() {
   discover_pane_by_persona "$LAB_SESSION_NAME" 0 "observer" "$PANE_LAB_OBSERVER"
 }
 
+role_pool_candidates_via_python() {
+  local role="$1"
+  local helper="$HARNESS_DIR/lib/pane_role_pool.py"
+  [[ -f "$helper" ]] || return 1
+  python3 "$helper" discover-role-pool --role "$role" 2>/dev/null | \
+    python3 -c 'import json,sys; data=json.load(sys.stdin); [print(item.get("pane","")) for item in data.get("panes",[]) if item.get("pane")]' 2>/dev/null
+}
+
 role_candidate_panes() {
   local role="$1" seen="" pane
+  while IFS= read -r pane; do
+    [[ -z "$pane" ]] && continue
+    case "$seen" in *" $pane "*) continue ;; esac
+    printf '%s\n' "$pane"
+    seen+=" $pane "
+  done < <(role_pool_candidates_via_python "$role" 2>/dev/null || true)
   case "$role" in
     builder)
       pane="$(choose_builder_pane)"
-      [[ -n "$pane" ]] && printf '%s\n' "$pane" && seen=" $pane "
+      if [[ -n "$pane" ]]; then
+        case "$seen" in *" $pane "*) ;; *) printf '%s\n' "$pane"; seen+=" $pane " ;; esac
+      fi
       while IFS= read -r pane; do
         [[ -z "$pane" ]] && continue
         case "$seen" in *" $pane "*) continue ;; esac
@@ -467,7 +483,9 @@ role_candidate_panes() {
       ;;
     pm)
       pane="$(choose_pm_pane)"
-      [[ -n "$pane" ]] && printf '%s\n' "$pane" && seen=" $pane "
+      if [[ -n "$pane" ]]; then
+        case "$seen" in *" $pane "*) ;; *) printf '%s\n' "$pane"; seen+=" $pane " ;; esac
+      fi
       while IFS= read -r pane; do
         [[ -z "$pane" ]] && continue
         case "$seen" in *" $pane "*) continue ;; esac
@@ -477,7 +495,9 @@ role_candidate_panes() {
       ;;
     evaluator)
       pane="$(choose_evaluator_pane)"
-      [[ -n "$pane" ]] && printf '%s\n' "$pane" && seen=" $pane "
+      if [[ -n "$pane" ]]; then
+        case "$seen" in *" $pane "*) ;; *) printf '%s\n' "$pane"; seen+=" $pane " ;; esac
+      fi
       while IFS= read -r pane; do
         [[ -z "$pane" ]] && continue
         case "$seen" in *" $pane "*) continue ;; esac
@@ -487,7 +507,9 @@ role_candidate_panes() {
       ;;
     planner)
       pane="$(choose_planner_pane)"
-      [[ -n "$pane" ]] && printf '%s\n' "$pane" && seen=" $pane "
+      if [[ -n "$pane" ]]; then
+        case "$seen" in *" $pane "*) ;; *) printf '%s\n' "$pane"; seen+=" $pane " ;; esac
+      fi
       pane="$(choose_architect_pane 2>/dev/null || true)"
       if [[ -n "$pane" ]]; then
         case "$seen" in *" $pane "*) ;; *) printf '%s\n' "$pane"; seen+=" $pane " ;; esac
@@ -1650,6 +1672,51 @@ except Exception as e:
   return 0
 }
 
+infer_dispatch_role_for_pane() {
+  local pane="$1" title=""
+  title="$(tmux display-message -p -t "$pane" '#{pane_title}' 2>/dev/null || true)"
+  if [[ "$title" =~ PM|产品经理 ]]; then
+    echo "pm"
+    return 0
+  fi
+  if [[ "$title" =~ Planner|规划者 ]]; then
+    echo "planner"
+    return 0
+  fi
+  if [[ "$title" =~ Evaluator|审判官 ]]; then
+    echo "evaluator"
+    return 0
+  fi
+  if [[ "$title" =~ Architect|架构师 ]]; then
+    echo "planner"
+    return 0
+  fi
+  if [[ "$title" =~ Builder|建设者|lab-builder ]]; then
+    echo "builder"
+    return 0
+  fi
+  case "$pane" in
+    "$SESSION_NAME:0.0") echo "pm" ;;
+    "$SESSION_NAME:0.1") echo "planner" ;;
+    "$SESSION_NAME:0.3") echo "evaluator" ;;
+    *) echo "builder" ;;
+  esac
+}
+
+ensure_clean_dispatch_boundary() {
+  local pane="$1" role="$2"
+  local helper="$HARNESS_DIR/lib/pane_role_pool.py"
+  [[ -f "$helper" ]] || return 0
+  local result rc=0
+  result="$(python3 "$helper" ensure-clean --pane "$pane" --role "$role" --registry "$HARNESS_DIR/run/pane-hygiene.json" 2>/dev/null)" || rc=$?
+  if (( rc != 0 )); then
+    log "${Y}[dispatch] /clear gate failed: pane=${pane} role=${role} result=${result:-N/A}${N}"
+    return 1
+  fi
+  log "${C}[dispatch] /clear gate passed: pane=${pane} role=${role}${N}"
+  return 0
+}
+
 # 向 pane 发送指令 (核心调度动作)
 # 原理: 长消息写到指令文件，tmux 只发一行短命令让 Claude 读文件
 dispatch_paused() {
@@ -1663,6 +1730,8 @@ dispatch_to_pane() {
   local message="$2"
   local sid="${3:-dispatch}"
   local instruction_file="${4:-$SPRINTS_DIR/${sid}.dispatch.md}"
+  local role
+  role="$(infer_dispatch_role_for_pane "$pane")"
 
   if dispatch_paused; then
     log "${Y}[dispatch] paused by no-dispatch flag; refusing pane dispatch sid=${sid} pane=${pane}${N}"
@@ -1840,6 +1909,15 @@ dispatch_to_pane() {
   fi
 
   ensure_state_read_preflight "$instruction_file" || true
+
+  if ! ensure_clean_dispatch_boundary "$pane" "$role"; then
+    [[ -n "${_dispatch_id:-}" ]] && type release_pane_lease &>/dev/null && \
+      release_pane_lease "$pane" "$_dispatch_id" "clear_gate_failed" 2>/dev/null || true
+    rm -rf "$lock_dir"
+    emit_event "$sid" "dispatch_failed" "coordinator" \
+      "{\"pane\":\"${pane}\",\"reason\":\"clear_gate_failed\",\"role\":\"${role}\"}"
+    return 1
+  fi
 
   # 派发前预解锁输入态，避免 modal / plan mode / 残留输入吞键
   if [[ "$pane" =~ \.[0-9]+$ ]]; then
@@ -2391,7 +2469,8 @@ annotate_requirement_matrix_for_planning() {
   python3 "$coverage_tool" annotate-markdown --sid "$sid" --sprints-dir "$SPRINTS_DIR" --target-file "$SPRINTS_DIR/${sid}.design.md" --requested-verdict pass >/dev/null || return 1
   python3 "$coverage_tool" annotate-markdown --sid "$sid" --sprints-dir "$SPRINTS_DIR" --target-file "$SPRINTS_DIR/${sid}.plan.md" --requested-verdict pass >/dev/null || return 1
   local render_tool="$HARNESS_DIR/lib/render_sprint_html.py"
-  if [[ -f "$SPRINTS_DIR/${sid}.planning.html" && -f "$render_tool" ]]; then
+  if [[ -f "$render_tool" ]]; then
+    python3 "$render_tool" render --sid "$sid" --kind design --register >/dev/null 2>&1 || true
     python3 "$render_tool" render --sid "$sid" --kind planning --register >/dev/null 2>&1 || true
   fi
 }
@@ -2784,8 +2863,7 @@ handle_queued() {
     return 0
   fi
   if [[ "$phase" == "epic_waiting_dependency" || "$dependency_policy" == "activated_by_epic_dag" ]]; then
-    log "${Y}Queued epic child ${sid} 由 epic DAG/autopilot 激活，coordinator 不直接推进 PM intake${N}"
-    return 0
+    log "${G}Queued epic child ${sid} 依赖已满足，解除 epic_waiting_dependency 并回到 workflow guard 主链${N}"
   fi
 
   log "${G}Queued sprint ${sid} 阻塞已解除 → 推进 drafting/PM intake${N}"
@@ -2928,13 +3006,17 @@ PY
    - 禁止只依赖默认占位映射；Planner 必须把 requirement -> node 的关系写清楚
 
 6. 额外写人读 HTML artifact 到:
+   ~/.solar/harness/sprints/${sid}.design.html
    ~/.solar/harness/sprints/${sid}.planning.html
    HTML 是给用户阅读和审阅的可视化 artifact，不能替代 design.md、plan.md 或 task_graph.json。必须 self-contained，不依赖外部 CSS/JS/CDN。
+   `design.html` 用来承载架构设计视图，`planning.html` 用来承载执行计划 / DAG 视图；两者必须属于同一套 html-anything 默认视觉系统。
    优先使用统一渲染器生成:
+   python3 ~/.solar/harness/lib/render_sprint_html.py render --sid ${sid} --kind design --register
    python3 ~/.solar/harness/lib/render_sprint_html.py render --sid ${sid} --kind planning --register
-   \`planning.html\` 必须和 PM 侧 \`prd.html\` 保持同一套 richer 视觉系统：深色 hero、锚点目录 TOC、卡片分区、流程/架构图、技术栈/算子绑定区、风险矩阵；禁止回退成旧的朴素米色 planning 页。必须展示架构方案、DAG/并发边界、文件级写范围、验证命令、风险矩阵和 stop rules。
+   \`design.html\` / \`planning.html\` 必须和 PM 侧 \`prd.html\` 保持同一套 richer 视觉系统：深色 hero、锚点目录 TOC、卡片分区、流程/架构图、技术栈/算子绑定区、风险矩阵；禁止回退成旧的朴素米色 planning 页。`design.html` 必须突出架构方案与技术栈绑定，`planning.html` 必须突出 DAG/并发边界、文件级写范围、验证命令、风险矩阵和 stop rules。
 
 7. 写完 HTML 后注册并自动打开:
+   python3 ~/.solar/harness/lib/html_artifact.py register --sid ${sid} --kind design_html --path ~/.solar/harness/sprints/${sid}.design.html
    python3 ~/.solar/harness/lib/html_artifact.py register --sid ${sid} --kind planning_html --path ~/.solar/harness/sprints/${sid}.planning.html
    helper 失败只记录 warn，不允许阻断 Planner -> Builder 主链路。
 
@@ -2947,6 +3029,7 @@ PY
    - status: active
    - phase: planning_complete
    - handoff_to: builder_main
+   - artifacts 追加 design_html: sprints/${sid}.design.html
    - artifacts 追加 planning_html: sprints/${sid}.planning.html
    - history 追加 planner_plan_completed
 

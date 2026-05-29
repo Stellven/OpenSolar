@@ -58,6 +58,7 @@ LABEL_ALIAS_GROUPS = [
         "markdown",
         "docs",
         "documentation",
+        "spec.write",
     },
     {
         "algorithm_design",
@@ -73,6 +74,9 @@ LABEL_ALIAS_GROUPS = [
     {
         "code_impl",
         "ImplementationWorker",
+        "backend-development",
+        "backend.development",
+        "backend",
         "python",
         "typescript",
         "refactor",
@@ -138,11 +142,15 @@ LABEL_ALIAS_GROUPS = [
         "integration",
         "subprocess",
         "python",
+        "provider.contract",
+        "api-design",
+        "schema",
     },
     {
         "browser.browse",
         "browser.qa",
         "browser",
+        "browser-automation",
         "browser.automation",
         "browser.agent",
         "web",
@@ -185,7 +193,7 @@ LABEL_ALIAS_GROUPS = [
 
 
 def _now() -> str:
-    return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def load_graph(path: str | Path) -> dict[str, Any]:
@@ -321,13 +329,14 @@ def sync_status_cache_from_graph(
         result.update({"ok": False, "reason": "status_corrupt", "error": str(exc)})
         return result
     if not parent.get("ready"):
+        now = _now()
+        open_nodes = parent.get("open_nodes") or []
+        failed_nodes = parent.get("failed_nodes") or []
+        desired_active_node = open_nodes[0] if open_nodes else None
+        history = current.get("history")
+        if not isinstance(history, list):
+            history = []
         if str(current.get("status") or "").lower() == "passed":
-            now = _now()
-            open_nodes = parent.get("open_nodes") or []
-            failed_nodes = parent.get("failed_nodes") or []
-            history = current.get("history")
-            if not isinstance(history, list):
-                history = []
             history.append({
                 "ts": now,
                 "event": "graph_parent_ready_revoked",
@@ -338,7 +347,7 @@ def sync_status_cache_from_graph(
                 "status": "active",
                 "phase": "graph_in_progress",
                 "stage": "graph_in_progress",
-                "active_node": open_nodes[0] if open_nodes else None,
+                "active_node": desired_active_node,
                 "open_nodes": open_nodes,
                 "failed_nodes": failed_nodes,
                 "graph_parent_ready": parent,
@@ -352,6 +361,34 @@ def sync_status_cache_from_graph(
             os.replace(tmp, status_path)
             result.update({"updated": True, "status": current, "reason": "parent_reopened"})
             return result
+        projection_changed = any([
+            current.get("active_node") != desired_active_node,
+            list(current.get("open_nodes") or []) != list(open_nodes),
+            list(current.get("failed_nodes") or []) != list(failed_nodes),
+            (current.get("graph_parent_ready") or {}) != parent,
+            str(current.get("task_graph_status") or "") != "active",
+        ])
+        if projection_changed:
+            history.append({
+                "ts": now,
+                "event": "graph_parent_projection_refreshed",
+                "by": actor,
+                "note": "task_graph changed while in flight; refreshing legacy status projection",
+            })
+            current.update({
+                "active_node": desired_active_node,
+                "open_nodes": open_nodes,
+                "failed_nodes": failed_nodes,
+                "graph_parent_ready": parent,
+                "task_graph_status": "active",
+                "updated_at": now,
+                "history": history,
+            })
+            tmp = status_path.with_suffix(status_path.suffix + ".tmp")
+            tmp.write_text(json.dumps(current, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            os.replace(tmp, status_path)
+            result.update({"updated": True, "status": current, "reason": "parent_projection_refreshed"})
+            return result
         result["reason"] = "parent_not_ready"
         return result
 
@@ -361,7 +398,13 @@ def sync_status_cache_from_graph(
         "done",
         "",
     }
-    if already_passed and already_closed and (current.get("graph_parent_ready") or {}).get("ready") is True:
+    already_graph_passed = str(current.get("task_graph_status") or "").lower() == "passed"
+    if (
+        already_passed
+        and already_closed
+        and already_graph_passed
+        and (current.get("graph_parent_ready") or {}).get("ready") is True
+    ):
         result["reason"] = "already_synced"
         return result
 
@@ -727,7 +770,76 @@ def _assert_pass_mark_allowed(graph: dict[str, Any], node_id: str, status: str) 
         raise ValueError(f"passed_requires_eval_json:{node_id}")
 
 
+def _ensure_required_gate_node_mapping(graph: dict[str, Any]) -> int:
+    ids = _node_map(graph)
+    if not ids:
+        return 0
+    required = [str(g) for g in (graph.get("required_gates") or []) if g]
+    if not required:
+        return 0
+    required_set = set(required)
+    dag_variant = str(graph.get("dag_variant") or "").strip().lower()
+    mapping: dict[str, str] = {}
+    if dag_variant == "short" or required_set == {"G_IMPL", "G_TEST", "G_REVIEW"}:
+        mapping = {"S1": "G_IMPL", "S2": "G_TEST", "S3": "G_REVIEW"}
+    elif dag_variant == "parallel_spec":
+        mapping = {
+            "S1": "G_PLAN",
+            "S2": "G_IMPL",
+            "S3": "G_IMPL",
+            "S4": "G_VERIFY",
+            "S5": "G_REVIEW",
+        }
+    elif dag_variant == "standard" or required_set == {"G_PLAN", "G_IMPL", "G_VERIFY", "G_REVIEW"}:
+        mapping = {
+            "S1": "G_PLAN",
+            "S2": "G_IMPL",
+            "S3": "G_VERIFY",
+            "S4": "G_REVIEW",
+            "S5": "G_REVIEW",
+        }
+    elif dag_variant == "research" or required_set == {"G_SOURCE", "G_EVIDENCE", "G_SYNTHESIS", "G_REVIEW"}:
+        mapping = {
+            "R1": "G_SOURCE",
+            "R2": "G_EVIDENCE",
+            "R3": "G_EVIDENCE",
+            "R4": "G_SYNTHESIS",
+            "R5": "G_REVIEW",
+            "R6": "G_REVIEW",
+        }
+
+    assigned = 0
+    for node_id, node in ids.items():
+        if node.get("gate"):
+            continue
+        gate = mapping.get(node_id)
+        if gate and gate in required_set:
+            node["gate"] = gate
+            assigned += 1
+
+    owners: dict[str, list[str]] = {gate: [] for gate in required}
+    for node_id, node in ids.items():
+        gate = str(node.get("gate") or "")
+        if gate in owners:
+            owners[gate].append(node_id)
+
+    missing = [gate for gate in required if not owners.get(gate)]
+    if not missing:
+        return assigned
+
+    try:
+        ordered_ids = topo_order(graph)
+    except Exception:
+        ordered_ids = list(ids.keys())
+    unassigned = [node_id for node_id in ordered_ids if not ids[node_id].get("gate")]
+    for gate, node_id in zip(missing, unassigned):
+        ids[node_id]["gate"] = gate
+        assigned += 1
+    return assigned
+
+
 def node_status(graph: dict[str, Any], node_id: str) -> str:
+    _ensure_required_gate_node_mapping(graph)
     results = _node_results(graph)
     node = _node_map(graph)[node_id]
     gate = node.get("gate")
@@ -1116,15 +1228,28 @@ def _label_aliases(value: Any) -> set[str]:
     if not raw:
         return set()
     aliases = {raw}
+    normalized = raw.replace("-", ".").replace("_", ".").replace(" ", ".")
+    aliases.add(normalized)
+    aliases.add(raw.replace("-", "_"))
+    aliases.add(raw.replace(".", "-"))
     parts = [part.strip() for part in raw.split(".") if part.strip()]
+    normalized_parts = [part.strip() for part in normalized.split(".") if part.strip()]
     if len(parts) > 1:
         for end in range(1, len(parts)):
             aliases.add(".".join(parts[:end]))
         aliases.add(parts[-1])
         if parts[-1] == "design":
             aliases.add("architecture")
+    if len(normalized_parts) > 1:
+        for end in range(1, len(normalized_parts)):
+            aliases.add(".".join(normalized_parts[:end]))
+        aliases.add(normalized_parts[-1])
+        aliases.add("-".join(normalized_parts))
+        aliases.add("_".join(normalized_parts))
+        if normalized_parts[-1] == "design":
+            aliases.add("architecture")
     for group in LABEL_ALIAS_GROUPS:
-        if raw in group:
+        if aliases & group:
             aliases.update(group)
     return aliases
 
@@ -1260,6 +1385,48 @@ def _capability_score(worker: dict[str, Any], required_capabilities: list[str],
         return 0.0
 
 
+def _worker_role(worker: dict[str, Any]) -> str:
+    return str(
+        worker.get("dispatch_role")
+        or worker.get("host_role")
+        or worker.get("role")
+        or ""
+    ).strip().lower()
+
+
+def _node_dispatch_role(node: dict[str, Any]) -> str:
+    physical_plan = node.get("physical_plan_ir") if isinstance(node.get("physical_plan_ir"), dict) else {}
+    capsule_plan = node.get("capsule_plan_ir") if isinstance(node.get("capsule_plan_ir"), dict) else {}
+    for raw in (
+        physical_plan.get("role"),
+        capsule_plan.get("role"),
+        node.get("target_role"),
+        node.get("role"),
+    ):
+        role = str(raw or "").strip().lower()
+        if role:
+            return role
+    logical_operator = str(node.get("logical_operator") or "").strip()
+    if logical_operator in {"DeepArchitect", "ResearchScout", "ResearchSynthesizer", "ArtifactCurator"}:
+        return "planner"
+    return "builder"
+
+
+def _role_penalty(node_role: str, worker_role: str) -> int | None:
+    normalized_node = str(node_role or "").strip().lower() or "builder"
+    normalized_worker = str(worker_role or "").strip().lower()
+    if normalized_worker in {"lab", "lab-builder"}:
+        normalized_worker = "builder"
+    compatibility = {
+        "planner": {"planner": 0, "architect": 1, "builder": 2},
+        "architect": {"architect": 0, "planner": 1, "builder": 2},
+        "builder": {"builder": 0},
+        "evaluator": {"evaluator": 0, "builder": 1},
+        "pm": {"pm": 0, "observer": 1},
+    }
+    return compatibility.get(normalized_node, {"builder": 0}).get(normalized_worker)
+
+
 def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, Any]]) -> dict[str, Any]:
     """Assign one batch to available workers.
 
@@ -1278,19 +1445,25 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
         strict_model = bool(node.get("strict_model") or node.get("model_strict"))
         required_skills = [str(s) for s in node.get("required_skills", [])]
         required_capabilities = _capability_list(node)
-        candidates: list[tuple[float, int, int, str, dict[str, Any]]] = []
+        node_role = _node_dispatch_role(node)
+        candidates: list[tuple[int, float, int, int, int, str, dict[str, Any]]] = []
         blocked_by_capacity = False
         blocked_by_runtime = False
         runtime_unavailable_reasons: set[str] = set()
         any_worker_seen = False
         missing_skill_union: set[str] = set()
         missing_cap_union: set[str] = set()
+        role_candidates_seen = False
 
         for worker in workers:
             pane = str(worker.get("pane", ""))
             if not pane:
                 continue
             any_worker_seen = True
+            role_penalty = _role_penalty(node_role, _worker_role(worker))
+            if role_penalty is None:
+                continue
+            role_candidates_seen = True
             for item in _missing_skills(worker, required_skills):
                 missing_skill_union.add(item)
             for item in _missing_capabilities(worker, required_capabilities):
@@ -1318,7 +1491,7 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
             skill_score = _skill_match_count(worker, required_skills)
             model_penalty = 0 if _model_match(worker, preferred_model) else 10
             load = int(worker.get("load", 0) or 0)
-            candidates.append((-cap_score, -skill_score, model_penalty, load, pane, worker))
+            candidates.append((role_penalty, -cap_score, -skill_score, model_penalty, load, pane, worker))
 
         if not candidates:
             if blocked_by_runtime:
@@ -1331,6 +1504,7 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
             else:
                 reason = "no_matching_worker"
             details: dict[str, Any] = {
+                "required_role": node_role,
                 "required_skills": required_skills,
                 "required_capabilities": required_capabilities,
             }
@@ -1338,21 +1512,25 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
                 details["unavailable_reasons"] = sorted(runtime_unavailable_reasons)
             if reason == "no_matching_worker":
                 details["any_worker_seen"] = any_worker_seen
+                details["role_candidates_seen"] = role_candidates_seen
                 details["missing_skills"] = sorted(missing_skill_union)
                 details["missing_capabilities"] = sorted(missing_cap_union)
             queued.append({"node": node["id"], "reason": reason, "details": details})
             continue
 
         candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3], item[4], item[5]))
-        cap_rank, skill_rank, _model_penalty, _load, _pane, worker = candidates[0]
+        role_rank, cap_rank, skill_rank, _model_penalty, _load, _pane, worker = candidates[0]
         used_panes.add(str(worker.get("pane")))
         assigned.append({
             "node": node["id"],
             "pane": worker.get("pane"),
+            "dispatch_role": node_role,
+            "worker_role": _worker_role(worker),
             "preferred_model": preferred_model,
             "selected_models": worker.get("models", []),
             "fallback_model": not _model_match(worker, preferred_model),
             "required_capabilities": required_capabilities,
+            "role_penalty": int(role_rank),
             "capability_score": round(-cap_rank, 3),
             "skill_match_count": int(-skill_rank),
         })
@@ -1411,6 +1589,7 @@ def assign_ready(graph: dict[str, Any], workers: list[dict[str, Any]],
 
 def mark_node_result(graph: dict[str, Any], node_id: str, status: str,
                      gate_status: str | None = None, note: str | None = None) -> dict[str, Any]:
+    _ensure_required_gate_node_mapping(graph)
     ids = _node_map(graph)
     if node_id not in ids:
         raise ValueError(f"unknown node: {node_id}")
@@ -1710,6 +1889,7 @@ def enrich_backlog(sprints_dir: str | Path, dry_run: bool = False,
 
 
 def parent_ready_check(graph: dict[str, Any]) -> dict[str, Any]:
+    _ensure_required_gate_node_mapping(graph)
     ids = _node_map(graph)
     open_nodes = [
         node_id for node_id in ids
@@ -1722,6 +1902,19 @@ def parent_ready_check(graph: dict[str, Any]) -> dict[str, Any]:
         required_gates = [node.get("gate") for node in ids.values() if node.get("gate")]
     required_gates = [str(g) for g in required_gates if g]
 
+    graph.setdefault("gate_results", {})
+    gate_results = graph.get("gate_results") or {}
+    for gate in required_gates:
+        gate_nodes = [node_id for node_id, node in ids.items() if str(node.get("gate") or "") == gate]
+        if gate_nodes and all(node_status(graph, node_id) in PASS_STATUSES for node_id in gate_nodes):
+            current_gate = gate_results.get(gate)
+            if not isinstance(current_gate, dict) or current_gate.get("status") != "passed":
+                graph["gate_results"][gate] = {
+                    "status": "passed",
+                    "node": gate_nodes[-1],
+                    "updated_at": _now(),
+                    "reason": "parent_ready_self_heal",
+                }
     gate_results = graph.get("gate_results") or {}
     missing_gates = [
         gate for gate in required_gates

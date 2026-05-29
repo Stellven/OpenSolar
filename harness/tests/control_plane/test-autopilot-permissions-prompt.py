@@ -36,12 +36,28 @@ READY_FOOTER_TAIL = """
   ⏵⏵ bypass permissions on (shift+tab to cycle)
 """
 
+STALE_QUEUED_SCROLLBACK_TAIL = """
+────────────────────────────────────────
+❯ Press up to edit queued messages
+────────────────────────────────────────
+  ⏵⏵ bypass permissions on
+
+✶ Sprouting… (0s)
+
+────────────────────────────────────────
+❯
+────────────────────────────────────────
+  ⏵⏵ bypass permissions on (shift+tab to cycle)
+"""
+
 
 def main() -> int:
     if not mod.pane_permissions_prompt_blocked(PERMISSIONS_TAIL):
         raise SystemExit("permissions prompt was not detected")
     if mod.pane_permissions_prompt_blocked(READY_FOOTER_TAIL):
         raise SystemExit("ready footer was incorrectly detected as permissions prompt")
+    if mod.pane_permissions_prompt_blocked(STALE_QUEUED_SCROLLBACK_TAIL):
+        raise SystemExit("stale queued scrollback was incorrectly detected as permissions prompt")
 
     mod.tmux_capture = lambda target: PERMISSIONS_TAIL
     mod.assigned_graph_node_for_pane = lambda target: {
