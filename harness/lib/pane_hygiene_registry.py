@@ -141,6 +141,34 @@ class PaneHygieneRegistry:
         self._persist()
         return entry
 
+    def ensure_pane(
+        self,
+        pane_id: str,
+        role: str,
+        *,
+        initial_state: PaneState = PaneState.clean,
+        model: Optional[str] = None,
+    ) -> PaneEntry:
+        if pane_id not in self._cache:
+            return self.register_pane(
+                pane_id,
+                role,
+                initial_state=initial_state,
+                model=model,
+            )
+        entry = self._cache[pane_id]
+        changed = False
+        if role and entry.pane_role != role:
+            entry.pane_role = role
+            changed = True
+        if model is not None and entry.model != model:
+            entry.model = model
+            changed = True
+        if changed:
+            self._persist()
+            entry = self._cache[pane_id]
+        return entry
+
     def unregister_pane(self, pane_id: str) -> None:
         if pane_id not in self._cache:
             raise KeyError(f"Pane not registered: {pane_id}")

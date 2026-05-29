@@ -54,6 +54,7 @@ ALL_EVENTS = EVENTS_DIR / "all.jsonl"
 COORD_STATE = HARNESS_DIR / ".coordinator-state"
 PANE_ASSIGNMENTS = HARNESS_DIR / ".pane-assignments"
 PANE_ASSIGNMENTS_JSON = HARNESS_DIR / ".pane-assignments.json"
+PANE_HYGIENE_JSON = HARNESS_DIR / "run" / "pane-hygiene.json"
 MERMAID_DIST = HARNESS_DIR / "vendor" / "mermaid-viewer" / "node_modules" / "mermaid" / "dist"
 INTEGRATIONS_HEALTH = HARNESS_DIR / "lib" / "external-integrations-health.py"
 KNOWLEDGE_PROBE_HEALTH = HARNESS_DIR / "state" / "knowledge-probe-health.json"
@@ -105,6 +106,10 @@ _MODEL_CALL_SCAN_BUDGET_SECONDS = 0.025
 _RUNTIME_INTERFACES_CACHE = {}
 _RUNTIME_INTERFACES_CACHE_TTL_SECONDS = 20.0
 _RUNTIME_INTERFACES_TIMEOUT_SECONDS = 1.0
+_STATUS_PAYLOAD_CACHE = {}
+_STATUS_PAYLOAD_CACHE_TTL_SECONDS = 2.0
+_EVENTS_CACHE = {}
+_EVENTS_CACHE_TTL_SECONDS = 3.0
 _ACTIVE_SPRINT_STATUSES = {
     "drafting",
     "queued",
@@ -127,10 +132,31 @@ def _read_jsonl(path: Path, limit: int = 50, sprint_id: str = "", filter_synthet
     """Read last `limit` lines from a JSONL file, optionally filtered by sprint_id."""
     if not path.exists():
         return []
+    cache_key = f"{path}|{limit}|{sprint_id}|{int(filter_synthetic)}"
+    now = time.monotonic()
+    try:
+        stat = path.stat()
+        mtime_ns = stat.st_mtime_ns
+        size = stat.st_size
+    except OSError:
+        return []
+    cached = _EVENTS_CACHE.get(cache_key)
+    if cached:
+        if (
+            now - cached.get("ts", 0.0) <= _EVENTS_CACHE_TTL_SECONDS
+            and cached.get("mtime_ns") == mtime_ns
+            and cached.get("size") == size
+        ):
+            return list(cached.get("value") or [])
     lines = []
     try:
-        with open(path) as f:
-            for raw in f:
+        if not sprint_id:
+            with open(path, encoding="utf-8") as f:
+                raw_lines = list(deque(f, maxlen=max(limit * 6, limit + 40)))
+        else:
+            with open(path, encoding="utf-8") as f:
+                raw_lines = list(f)
+        for raw in raw_lines:
                 raw = raw.strip()
                 if not raw:
                     continue
@@ -145,7 +171,14 @@ def _read_jsonl(path: Path, limit: int = 50, sprint_id: str = "", filter_synthet
                 lines.append(obj)
     except OSError:
         return []
-    return lines[-limit:]
+    value = lines[-limit:]
+    _EVENTS_CACHE[cache_key] = {
+        "ts": now,
+        "mtime_ns": mtime_ns,
+        "size": size,
+        "value": list(value),
+    }
+    return value
 
 
 def _runtime_events_path(sprint_id: str) -> Path:
@@ -340,6 +373,7 @@ def _asset_package_from_accepted(path: Path, manifest_entry: dict | None = None)
         ("prd", ".prd.md"),
         ("prd_html", artifacts.get("prd_html") or ".prd.html"),
         ("design", ".design.md"),
+        ("design_html", artifacts.get("design_html") or ".design.html"),
         ("plan", ".plan.md"),
         ("planning_html", artifacts.get("planning_html") or ".planning.html"),
         ("task_graph", ".task_graph.json"),
@@ -368,7 +402,7 @@ def _asset_package_from_accepted(path: Path, manifest_entry: dict | None = None)
         "sprint_artifacts": sprint_artifacts,
         "artifact_count": len(present_artifacts),
         "artifact_labels": present_artifacts,
-        "has_html": any(label in present_artifacts for label in ("prd_html", "planning_html")),
+        "has_html": any(label in present_artifacts for label in ("prd_html", "design_html", "planning_html")),
         "knowledge_path": str(path),
         "source_hash": (manifest_entry or {}).get("source_hash", ""),
     }
@@ -2615,6 +2649,8 @@ def _current_sprint() -> dict:
     d = candidates[0]
     current_sid = d.get("id", d.get("sprint_id", ""))
     plan_summary = _execution_plan_summary(current_sid)
+    understand_anything_summary = _current_understand_anything_summary(plan_summary)
+    gate_audit_summary = _latest_task_graph_gate_audit_summary()
     return {
         "sprint_id": d.get("id", d.get("sprint_id", "")),
         "status": d.get("status", ""),
@@ -2628,6 +2664,8 @@ def _current_sprint() -> dict:
         "is_active": True,
         "execution_plan_summary": plan_summary.get("summary", ""),
         "execution_plan_artifacts": plan_summary,
+        "understand_anything_summary": understand_anything_summary,
+        "task_graph_gate_audit": gate_audit_summary,
     }
 
 
@@ -2642,6 +2680,19 @@ def _execution_plan_summary(sid: str) -> dict:
         capsule_path = SPRINTS_DIR / f"{sid}.{node_id}-capsule-plan.json"
         selected_operator_id = ""
         capability_capsule_id = ""
+        selected_skills: list[str] = []
+        execution_surface = ""
+        skill_bridge_mode = ""
+        skill_template_profile = ""
+        skill_delivery_expectation = ""
+        skill_specialization_family = ""
+        knowledge_graph_path = ""
+        understand_meta_path = ""
+        understand_chunk_manifest_path = ""
+        understand_resume_state_path = ""
+        understand_chunks_total = 0
+        understand_chunks_completed = 0
+        understand_resumed = False
         try:
             physical_data = json.loads(physical_path.read_text(encoding="utf-8"))
             if isinstance(physical_data, dict):
@@ -2649,25 +2700,126 @@ def _execution_plan_summary(sid: str) -> dict:
                 capability_capsule_id = str(physical_data.get("capability_capsule_id") or "")
         except Exception:
             selected_operator_id = ""
+        try:
+            if capsule_path.exists():
+                capsule_data = json.loads(capsule_path.read_text(encoding="utf-8"))
+                if isinstance(capsule_data, dict):
+                    selected_skills = list(capsule_data.get("selected_skills") or [])
+                    runtime_preferences = capsule_data.get("runtime_preferences") if isinstance(capsule_data.get("runtime_preferences"), dict) else {}
+                    execution_surface = str(runtime_preferences.get("execution_surface") or "")
+                    skill_bridge = capsule_data.get("skill_bridge") if isinstance(capsule_data.get("skill_bridge"), dict) else {}
+                    skill_bridge_mode = str(skill_bridge.get("mode") or "")
+                    skill_template_profile = str(skill_bridge.get("template_profile") or "")
+                    skill_delivery_expectation = str(skill_bridge.get("delivery_expectation") or "")
+                    skill_specialization_family = str(skill_bridge.get("specialization_family") or "")
+        except Exception:
+            pass
+        operator_results_root = HARNESS_DIR / "run" / "operator-results"
+        if operator_results_root.exists():
+            for result_json in operator_results_root.glob("*/*/result.json"):
+                try:
+                    result_data = json.loads(result_json.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+                if str(result_data.get("sprint_id") or "") != sid or str(result_data.get("node_id") or "") != node_id:
+                    continue
+                result_dir = result_json.parent
+                ua_result_path = result_dir / "understand-anything-result.json"
+                if ua_result_path.exists():
+                    try:
+                        ua_result = json.loads(ua_result_path.read_text(encoding="utf-8"))
+                    except Exception:
+                        ua_result = {}
+                    knowledge_graph_path = str(ua_result.get("knowledge_graph_path") or "")
+                    dispatch_result = ua_result.get("dispatch_result") if isinstance(ua_result.get("dispatch_result"), dict) else {}
+                    understand_meta_path = str(dispatch_result.get("meta_path") or "")
+                    understand_chunk_manifest_path = str(dispatch_result.get("manifest_path") or "")
+                    understand_resume_state_path = str(dispatch_result.get("resume_state_path") or "")
+                    understand_chunks_total = int(dispatch_result.get("chunks_total") or 0)
+                    understand_chunks_completed = int(dispatch_result.get("chunks_completed") or 0)
+                    understand_resumed = bool(dispatch_result.get("resumed"))
+                break
         items.append(
             {
                 "node_id": node_id,
                 "capability_capsule_id": capability_capsule_id,
                 "selected_operator_id": selected_operator_id,
+                "selected_skills": selected_skills,
+                "execution_surface": execution_surface,
+                "skill_bridge_mode": skill_bridge_mode,
+                "skill_template_profile": skill_template_profile,
+                "skill_delivery_expectation": skill_delivery_expectation,
+                "skill_specialization_family": skill_specialization_family,
+                "knowledge_graph_path": knowledge_graph_path,
+                "understand_meta_path": understand_meta_path,
+                "understand_chunk_manifest_path": understand_chunk_manifest_path,
+                "understand_resume_state_path": understand_resume_state_path,
+                "understand_chunks_total": understand_chunks_total,
+                "understand_chunks_completed": understand_chunks_completed,
+                "understand_resumed": understand_resumed,
                 "physical_plan_ir": str(physical_path),
                 "capsule_plan_ir": str(capsule_path) if capsule_path.exists() else "",
             }
         )
     summary = "N/A"
     if items:
-        parts = [
-            f"{item['node_id']}->{item['selected_operator_id'] or 'unbound'}"
-            for item in items[:4]
-        ]
+        parts = []
+        for item in items[:4]:
+            part = f"{item['node_id']}->{item['selected_operator_id'] or 'unbound'}"
+            if item.get("selected_skills"):
+                family = str(item.get("skill_specialization_family") or "")
+                surface = str(item.get("skill_template_profile") or "")
+                skill0 = str((item.get("selected_skills") or [""])[0] or "")
+                suffix = ""
+                if surface or family:
+                    suffix = f"/{surface.replace('_tooling', '').replace('_methodology', '')}:{family}" if family else f"/{surface}"
+                if len(item["selected_skills"]) > 1:
+                    part += f" · {skill0}{suffix} +{len(item['selected_skills']) - 1}"
+                else:
+                    part += f" · {skill0}{suffix}"
+            elif item.get("knowledge_graph_path"):
+                chunk_total = int(item.get("understand_chunks_total") or 0)
+                part += f" · ua:{chunk_total}chunks"
+            parts.append(part)
         summary = " · ".join(parts)
         if len(items) > 4:
             summary += f" · +{len(items) - 4}"
     return {"count": len(items), "summary": summary, "items": items}
+
+
+def _current_understand_anything_summary(plan_summary: dict) -> dict:
+    items = list(plan_summary.get("items") or [])
+    for item in items:
+        if not item.get("knowledge_graph_path"):
+            continue
+        return {
+            "present": True,
+            "node_id": str(item.get("node_id") or ""),
+            "knowledge_graph_path": str(item.get("knowledge_graph_path") or ""),
+            "meta_path": str(item.get("understand_meta_path") or ""),
+            "chunk_manifest_path": str(item.get("understand_chunk_manifest_path") or ""),
+            "resume_state_path": str(item.get("understand_resume_state_path") or ""),
+            "chunks_total": int(item.get("understand_chunks_total") or 0),
+            "chunks_completed": int(item.get("understand_chunks_completed") or 0),
+            "resumed": bool(item.get("understand_resumed")),
+            "summary": (
+                f"{item.get('node_id') or 'N/A'} · "
+                f"{int(item.get('understand_chunks_completed') or 0)}/"
+                f"{int(item.get('understand_chunks_total') or 0)} chunks"
+            ),
+        }
+    return {
+        "present": False,
+        "node_id": "",
+        "knowledge_graph_path": "",
+        "meta_path": "",
+        "chunk_manifest_path": "",
+        "resume_state_path": "",
+        "chunks_total": 0,
+        "chunks_completed": 0,
+        "resumed": False,
+        "summary": "N/A",
+    }
 
 
 def _first_paragraph_after_heading(text: str, heading_pattern: str) -> str:
@@ -2855,6 +3007,53 @@ def _skills_certification_summary() -> dict:
     }
 
 
+def _latest_task_graph_gate_audit_summary() -> dict:
+    reports = sorted(REPORTS_DIR.glob("task-graph-gate-backfill-audit-*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not reports:
+        return {
+            "present": False,
+            "status": "missing",
+            "summary": "N/A",
+            "generated_at": "",
+            "graphs_changed": 0,
+            "graphs_unresolved": 0,
+            "report_path": "",
+            "markdown_report_path": "",
+        }
+    path = reports[0]
+    data = _read_json_file(path)
+    if not data:
+        return {
+            "present": False,
+            "status": "corrupt",
+            "summary": "latest gate audit unreadable",
+            "generated_at": "",
+            "graphs_changed": 0,
+            "graphs_unresolved": 0,
+            "report_path": str(path),
+            "markdown_report_path": "",
+        }
+    unresolved = int(data.get("graphs_unresolved") or 0)
+    changed = int(data.get("graphs_changed") or 0)
+    md_path = str(data.get("markdown_report") or data.get("markdown_report_path") or "")
+    if not md_path:
+        inferred_md = path.with_suffix(".md")
+        if inferred_md.exists():
+            md_path = str(inferred_md)
+    status = "warn" if unresolved else "ok"
+    summary = f"{changed} changed / {unresolved} unresolved"
+    return {
+        "present": True,
+        "status": status,
+        "summary": summary,
+        "generated_at": str(data.get("generated_at") or ""),
+        "graphs_changed": changed,
+        "graphs_unresolved": unresolved,
+        "report_path": str(path),
+        "markdown_report_path": md_path,
+    }
+
+
 def _capability_health_summary(runtime_interfaces=None) -> dict:
     """Project runtime capability evidence for UI and activation proof.
 
@@ -2939,7 +3138,62 @@ def _capability_health_summary(runtime_interfaces=None) -> dict:
 def _pane_info() -> list:
     """Return list of known pane assignments."""
     d = _read_assignments()
-    return [{"pane": k, "sprint_id": v, "sprint": _sprint_meta(v)} for k, v in d.items()]
+    hygiene = _pane_hygiene_entries()
+    rows = []
+    for pane, sid in d.items():
+        entry = hygiene.get(pane, {})
+        rows.append(
+            {
+                "pane": pane,
+                "sprint_id": sid,
+                "sprint": _sprint_meta(sid),
+                "host_role": str(entry.get("pane_role") or ""),
+                "hygiene_state": str(entry.get("state") or ""),
+            }
+        )
+    return rows
+
+
+def _pane_hygiene_entries() -> dict:
+    if not PANE_HYGIENE_JSON.exists():
+        return {}
+    try:
+        data = json.loads(PANE_HYGIENE_JSON.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _infer_host_role(target: str, title: str, fallback: str = "") -> str:
+    base = (title or "").split("|", 1)[0].strip()
+    lowered = base.lower()
+    if target.endswith(":0.0") and target.startswith("solar-harness:") and ("pm" in lowered or "产品经理" in base):
+        return "pm"
+    if "planner" in lowered or "规划者" in base:
+        return "planner"
+    if "evaluator" in lowered or "审判官" in base:
+        return "evaluator"
+    if "architect" in lowered or "架构师" in base:
+        return "architect"
+    if "observer" in lowered or "观察" in base:
+        return "observer"
+    if "builder" in lowered or "建设者" in base or "lab-builder" in lowered:
+        return "builder"
+    if target.startswith("solar-harness-lab:") or target.startswith("solar-harness-multi-task:"):
+        return "builder"
+    return fallback or ""
+
+
+def _host_role_label(role: str) -> str:
+    mapping = {
+        "pm": "PM",
+        "planner": "Planner",
+        "builder": "Builder",
+        "evaluator": "Evaluator",
+        "architect": "Architect",
+        "observer": "Observer",
+    }
+    return mapping.get(str(role or "").strip().lower(), str(role or "").strip() or "N/A")
 
 
 def _run_tmux(args: list, timeout: float = 0.8) -> str:
@@ -3223,10 +3477,13 @@ def _pane_snapshot(target: str, role: str, assignment: str = "", capability_heal
     assignment_meta = _sprint_meta(assignment) if assignment else {}
     pane_id = _run_tmux(["display-message", "-p", "-t", target, "#{pane_id}"])
     health = capability_health or _capability_health_summary()
+    hygiene_entry = _pane_hygiene_entries().get(target, {})
     if not pane_id:
         return {
             "target": target,
             "role": role,
+            "host_role": _host_role_label(hygiene_entry.get("pane_role") or ""),
+            "hygiene_state": str(hygiene_entry.get("state") or "missing"),
             "runtime_state": "missing",
             "assignment": assignment or "",
             "assignment_meta": assignment_meta,
@@ -3237,9 +3494,12 @@ def _pane_snapshot(target: str, role: str, assignment: str = "", capability_heal
         }
     title = _run_tmux(["display-message", "-p", "-t", target, "#{pane_title}"])
     tail = _run_tmux(["capture-pane", "-t", target, "-p", "-S", "-8"], timeout=1.0)
+    host_role = hygiene_entry.get("pane_role") or _infer_host_role(target, title, str(role or "").lower())
     return {
         "target": target,
         "role": role,
+        "host_role": _host_role_label(str(host_role or "")),
+        "hygiene_state": str(hygiene_entry.get("state") or "unknown"),
         "runtime_state": _runtime_from_tail(tail),
         "assignment": assignment or "",
         "assignment_meta": assignment_meta,
@@ -3258,7 +3518,7 @@ def _main_screen(capability_health=None, include_model_call: bool = True) -> dic
         target = f"solar-harness:0.{idx}"
         panes.append(_pane_snapshot(target, role, assignments.get(target, ""), capability_health=capability_health, include_model_call=include_model_call))
     return {
-        "note": "runtime_state, assignment, and artifact are separate; pane output alone is not proof of progress.",
+        "note": "host_role/hygiene come from pane-hygiene registry; runtime_state, assignment, and artifact are separate signals.",
         "panes": panes,
     }
 
@@ -3282,7 +3542,7 @@ def _lab_screen(capability_health=None, include_model_call: bool = True) -> dict
             }
         panes.append(snap)
     return {
-        "note": "artifact != runtime: handoff files prove delivery; pane state proves current activity.",
+        "note": "lab panes show host_role/hygiene truth from pane-hygiene registry; artifact != runtime.",
         "panes": panes,
     }
 
@@ -4657,13 +4917,30 @@ def _multi_task_pane_pool_summary(panes: list[dict]) -> dict:
     return counts
 
 
-def _status_payload(limit: int = 50) -> dict:
-    current = _current_sprint()
+def _status_payload(limit: int = 50, sprint_id: str = "") -> dict:
+    requested_sid = str(sprint_id or "").strip()
+    cache_key = f"{requested_sid}|{limit}"
+    now = time.monotonic()
+    cached = _STATUS_PAYLOAD_CACHE.get(cache_key)
+    if cached and now - cached.get("ts", 0.0) <= _STATUS_PAYLOAD_CACHE_TTL_SECONDS:
+        payload = dict(cached.get("value") or {})
+        payload["status_cache"] = "hit"
+        return payload
+    current = _sprint_meta(requested_sid) if requested_sid else _current_sprint()
+    current["requested_sprint_id"] = requested_sid
+    current["focus_mode"] = "requested" if requested_sid else "active"
+    plan_summary = _execution_plan_summary(current.get("sprint_id", ""))
+    current["execution_plan_artifacts"] = plan_summary
+    current["understand_anything_summary"] = _current_understand_anything_summary(plan_summary)
+    gate_audit_summary = _latest_task_graph_gate_audit_summary()
+    current["task_graph_gate_audit"] = gate_audit_summary
     runtime_interfaces = _runtime_interfaces_status(current.get("sprint_id", ""))
     capability_health = _capability_health_summary(runtime_interfaces)
     multi_task_panes = _multi_task_panes_info()
-    return {
+    payload = {
         "current_sprint": current,
+        "requested_sprint_id": requested_sid,
+        "task_graph_gate_audit": gate_audit_summary,
         "panes": _pane_info(),
         "main_screen": _main_screen(capability_health, include_model_call=False),
         "lab_screen": _lab_screen(capability_health, include_model_call=False),
@@ -4688,8 +4965,11 @@ def _status_payload(limit: int = 50) -> dict:
         "pm_dispatches": _pm_dispatch_summary(),
         "physical_operators": _physical_operator_summary(),
         "contract_summary": _final_contract_summary_status(),
-        "requirement_coverage": _requirement_coverage_summary(current.get("sprint_id", "")),
+        "requirement_coverage": _requirement_coverage_summary(requested_sid or current.get("sprint_id", "")),
+        "status_cache": "miss",
     }
+    _STATUS_PAYLOAD_CACHE[cache_key] = {"ts": time.monotonic(), "value": dict(payload)}
+    return payload
 
 
 def _runtime_interfaces_status(sprint_id: str) -> dict:
@@ -5645,6 +5925,7 @@ tr:hover td {
     <div class="overview-shell">
       <div class="card"><h2>当前主线</h2><div id="overview-sprint">Loading...</div></div>
       <div class="overview-stack">
+        <div class="card overview-side-card"><h3>Gate Audit</h3><div id="overview-gate-audit">Loading...</div></div>
         <div class="card overview-side-card"><h3>Pane Health</h3><div id="overview-panes">Loading...</div></div>
         <div class="card overview-side-card"><h3>KPI</h3><div id="overview-kpi">Loading...</div></div>
       </div>
@@ -6102,6 +6383,8 @@ function sprintBlock(meta, sid, options = {}) {
   meta = meta || {};
   const title = meta.title || sid || 'N/A';
   const status = meta.status ? statusBadge(meta.status) : '';
+  const ua = meta.understand_anything_summary || {};
+  const gateAudit = meta.task_graph_gate_audit || {};
   const detailItems = options.compact ? [
     kv('Phase', meta.phase || '-'),
     kv('Handoff', meta.handoff_to || '-')
@@ -6110,19 +6393,87 @@ function sprintBlock(meta, sid, options = {}) {
     kv('Handoff', meta.handoff_to || '-'),
     kv('Lane', meta.lane || '-'),
     kv('Priority', meta.priority || '-'),
-    kv('Physical Plan', meta.execution_plan_summary || 'N/A')
+    kv('Physical Plan', meta.execution_plan_summary || 'N/A'),
+    kv('Understand Anything', ua.summary || 'N/A'),
+    kv('Gate Audit', gateAudit.summary || 'N/A')
   ];
   const details = detailItems.join('');
   const id = sid ? '<div class="tech-id">id: ' + esc(sid) + '</div>' : '';
+  const uaPaths = !options.compact && ua.present
+    ? '<div class="task-block" style="margin-top:0.8rem;"><div class="task-title" style="font-size:0.88rem;">Understand Anything</div>' +
+      '<div class="kv-grid">' +
+      kv('Node', ua.node_id || '-') +
+      kv('Chunks', String((ua.chunks_completed || 0)) + '/' + String((ua.chunks_total || 0))) +
+      kv('Resumed', ua.resumed ? 'yes' : 'no') +
+      '</div>' +
+      '<div style="margin-top:0.45rem;">' +
+      researchPathLink('knowledge-graph', ua.knowledge_graph_path || '', !!ua.knowledge_graph_path) +
+      researchPathLink('meta', ua.meta_path || '', !!ua.meta_path) +
+      researchPathLink('chunk-manifest', ua.chunk_manifest_path || '', !!ua.chunk_manifest_path) +
+      researchPathLink('resume-state', ua.resume_state_path || '', !!ua.resume_state_path) +
+      '</div>' +
+      '</div>'
+    : '';
+  const gateAuditBlock = !options.compact && gateAudit.present
+    ? '<div class="task-block" style="margin-top:0.8rem;"><div class="task-title" style="font-size:0.88rem;">Task Graph Gate Audit</div>' +
+      '<div class="kv-grid">' +
+      kv('Status', gateAudit.status || '-') +
+      kv('Changed', String(gateAudit.graphs_changed || 0)) +
+      kv('Unresolved', String(gateAudit.graphs_unresolved || 0)) +
+      kv('Generated', gateAudit.generated_at || '-') +
+      '</div>' +
+      '<div style="margin-top:0.45rem;">' +
+      researchPathLink('gate-audit-json', gateAudit.report_path || '', !!gateAudit.report_path) +
+      researchPathLink('gate-audit-md', gateAudit.markdown_report_path || '', !!gateAudit.markdown_report_path) +
+      '</div>' +
+      '</div>'
+    : '';
   return '<div class="task-block">' +
     '<div class="task-head"><div class="task-title">' + esc(title) + '</div><div>' + status + '</div></div>' +
     '<div class="kv-grid">' + details + '</div>' +
     (options.hideDescription ? '' : summaryList(meta.description || '')) +
+    uaPaths +
+    gateAuditBlock +
     (options.hideId ? '' : id) +
     '</div>';
 }
 function taskCell(meta, sid) {
   return sprintBlock(meta, sid, {compact: true, hideDescription: true});
+}
+function renderTaskGraphGateAudit(audit, compact) {
+  audit = audit || {};
+  if (!audit.present) {
+    return '<div class="health-metrics">' +
+      '<div class="mini-metric"><div class="kv-label">Status</div><span class="num">missing</span></div>' +
+      '<div class="mini-metric"><div class="kv-label">Unresolved</div><span class="num">0</span></div>' +
+      '</div><div class="muted">暂无 task graph gate audit 报告。</div>';
+  }
+  const metrics = '<div class="health-metrics">' +
+    '<div class="mini-metric"><div class="kv-label">Status</div><span class="num">' + esc(audit.status || 'ok') + '</span></div>' +
+    '<div class="mini-metric"><div class="kv-label">Changed</div><span class="num">' + esc(String(audit.graphs_changed || 0)) + '</span></div>' +
+    '<div class="mini-metric"><div class="kv-label">Unresolved</div><span class="num">' + esc(String(audit.graphs_unresolved || 0)) + '</span></div>' +
+    '</div>';
+  const summary = '<div class="muted" style="margin-top:.45rem;">'
+    + esc(audit.summary || 'N/A')
+    + (audit.generated_at ? ' · ' + esc(audit.generated_at) : '')
+    + '</div>';
+  const links = '<div style="margin-top:0.45rem;">'
+    + researchPathLink('gate-audit-json', audit.report_path || '', !!audit.report_path)
+    + researchPathLink('gate-audit-md', audit.markdown_report_path || '', !!audit.markdown_report_path)
+    + '</div>';
+  if (compact) {
+    return metrics + summary + links;
+  }
+  return '<div class="task-block">' +
+    '<div class="task-head"><div class="task-title">Task Graph Gate Audit</div><div>' + statusBadge(audit.status || 'ok') + '</div></div>' +
+    '<div class="kv-grid">' +
+      kv('Changed', String(audit.graphs_changed || 0)) +
+      kv('Unresolved', String(audit.graphs_unresolved || 0)) +
+      kv('Generated', audit.generated_at || '-') +
+      kv('Summary', audit.summary || 'N/A') +
+    '</div>' +
+    links +
+    '</div>';
 }
 function copyText(text) {
   navigator.clipboard.writeText(text).catch(() => {});
@@ -6150,10 +6501,11 @@ function renderPaneMatrix(cardId, screen) {
     return;
   }
   let t = '<div class="refresh">' + esc((screen && screen.note) || '') + '</div>';
-  t += '<table><tr><th>Pane</th><th>Role</th><th>Runtime</th><th>能力证据</th><th>模型调用</th><th>当前任务</th><th>Artifact</th><th>Title</th></tr>';
+  t += '<table><tr><th>Pane</th><th>Host Role</th><th>Hygiene</th><th>Runtime</th><th>能力证据</th><th>模型调用</th><th>当前任务</th><th>Artifact</th><th>Title</th></tr>';
   panes.forEach(p => {
     t += '<tr><td>' + esc(p.target || '-') + '</td>' +
-         '<td>' + esc(p.role || '-') + '</td>' +
+         '<td>' + esc(p.host_role || p.role || '-') + (p.role && p.host_role && p.role !== p.host_role ? '<div class="muted" style="font-size:0.72rem;margin-top:0.2rem;">legacy: ' + esc(p.role) + '</div>' : '') + '</td>' +
+         '<td>' + statusBadge((p.hygiene_state === 'clean' || p.hygiene_state === 'running') ? 'ok' : ((p.hygiene_state === 'missing' || p.hygiene_state === 'unknown') ? 'warn' : 'error')) + '<div class="muted" style="font-size:0.72rem;margin-top:0.2rem;">' + esc(p.hygiene_state || '-') + '</div></td>' +
          '<td class="' + runtimeClass(p.runtime_state) + '">' + esc(p.runtime_state || '-') + '</td>' +
          '<td>' + capabilityHealthCell(p.capability_health || {}) + '</td>' +
          '<td>' + modelCallCell(p.model_call) + '<div style="margin-top:0.25rem;"><button class="btn" style="padding:3px 7px;font-size:0.7rem;" onclick="loadPaneModelCall(\\'' + esc(p.target || '') + '\\')">查调用</button></div><div class="muted" id="pane-call-' + esc((p.target || '').replace(/[^A-Za-z0-9_.-]/g, '_')) + '" style="font-size:0.72rem;margin-top:0.2rem;"></div></td>' +
@@ -6803,7 +7155,7 @@ function assetButtons(pkg) {
   }
   (pkg.sprint_artifacts || []).forEach(link => {
     if (!link || !link.exists) return;
-    const cls = (link.label === 'planning_html' || link.label === 'prd_html') ? ' primary' : '';
+    const cls = (link.label === 'planning_html' || link.label === 'prd_html' || link.label === 'design_html') ? ' primary' : '';
     buttons.push('<a class="btn' + cls + '" href="' + esc(link.view_url || link.open_url) + '" target="_blank" rel="noreferrer">' + esc(link.label) + '</a>');
   });
   return buttons.join('');
@@ -6825,7 +7177,7 @@ function renderAssetPackages(data) {
       '<div class="status-tile"><div class="kv-label">HTML</div><strong>' + esc(data.html_asset_packages || 0) + '</strong></div>' +
       '<div class="status-tile"><div class="kv-label">Accepted Dir</div><strong class="path-text">' + esc(data.accepted_dir || 'N/A') + '</strong></div>' +
     '</div>' +
-    '<div class="muted">资产包生成自 Knowledge accepted 目录；点击 planning_html / prd_html 可直接查看人类可读页面。</div>';
+    '<div class="muted">资产包生成自 Knowledge accepted 目录；点击 planning_html / design_html / prd_html 可直接查看人类可读页面。</div>';
   if (!items.length) {
     cardEl.innerHTML = '<div class="card muted">没有 accepted knowledge package。先运行 accepted artifact export。</div>';
     return;
@@ -7206,15 +7558,21 @@ function render(data) {
   document.getElementById('refresh-ts').textContent = 'Last updated: ' + now;
 
   const sp = data.current_sprint || {};
+  const requestedSprintId = data.requested_sprint_id || '';
   if (sp.sprint_id && sp.is_active !== false) {
+    const sprintTitle = requestedSprintId && requestedSprintId === sp.sprint_id
+      ? (sp.title || sp.sprint_id) + ' · Focus'
+      : (sp.title || sp.sprint_id);
     const sprintHtml = sprintBlock({
-      title: sp.title || sp.sprint_id,
+      title: sprintTitle,
       status: sp.status,
       phase: sp.phase || '-',
       handoff_to: sp.handoff_to || '-',
       lane: sp.lane || '-',
       priority: sp.priority || '-',
-      description: sp.description || ''
+      description: sp.description || '',
+      understand_anything_summary: sp.understand_anything_summary || {},
+      task_graph_gate_audit: sp.task_graph_gate_audit || data.task_graph_gate_audit || {}
     }, sp.sprint_id);
     document.getElementById('sprint-card').innerHTML = sprintHtml;
     document.getElementById('overview-sprint').innerHTML = sprintHtml;
@@ -7228,6 +7586,7 @@ function render(data) {
     document.getElementById('sprint-card').innerHTML = idleHtml;
     document.getElementById('overview-sprint').innerHTML = idleHtml;
   }
+  document.getElementById('overview-gate-audit').innerHTML = renderTaskGraphGateAudit(data.task_graph_gate_audit || {}, true);
 
   const panes = data.panes || [];
   const assignedMainPanes = ((data.main_screen || {}).panes || []).filter(p => p.assignment);
@@ -7330,7 +7689,9 @@ function render(data) {
 function refresh() {
   if (window.__solarStatusRefreshInFlight) return;
   window.__solarStatusRefreshInFlight = true;
-  fetch('/status?ts=' + Date.now(), {cache: 'no-store'})
+  const sprintFocus = new URLSearchParams(location.search).get('sprint_id') || '';
+  const focusQuery = sprintFocus ? '&sprint_id=' + encodeURIComponent(sprintFocus) : '';
+  fetch('/status?ts=' + Date.now() + focusQuery, {cache: 'no-store'})
     .then(r => r.json())
     .then(render)
     .catch(e => {
@@ -7433,7 +7794,8 @@ class StatusHandler(BaseHTTPRequestHandler):
             self._send_text("ok")
 
         elif path == "/status":
-            self._send_json(_status_payload(limit=50))
+            sprint_id = params.get("sprint_id", [""])[0]
+            self._send_json(_status_payload(limit=50, sprint_id=sprint_id))
 
         elif path == "/api/pane-model-call":
             target = params.get("target", [""])[0]
