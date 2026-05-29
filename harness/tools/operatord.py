@@ -274,6 +274,53 @@ def _parse_utc(value: str) -> dt.datetime:
     return dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
 
 
+def _int_value(value: Any, default: int) -> int:
+    try:
+        return int(str(value).strip())
+    except Exception:
+        return default
+
+
+def _failure_flow_control_settings(config: dict[str, Any], envelope: dict[str, Any]) -> dict[str, int]:
+    flow_control = dict(config.get("flow_control") or {})
+    return {
+        "rate_limit_cooldown_seconds": _int_value(
+            envelope.get("rate_limit_cooldown_seconds")
+            or os.environ.get("SOLAR_OPERATOR_RATE_LIMIT_COOLDOWN_SECONDS")
+            or flow_control.get("rate_limit_cooldown_seconds"),
+            3600,
+        ),
+        "auth_cooldown_seconds": _int_value(
+            envelope.get("auth_cooldown_seconds")
+            or os.environ.get("SOLAR_OPERATOR_AUTH_COOLDOWN_SECONDS")
+            or flow_control.get("auth_cooldown_seconds"),
+            21600,
+        ),
+    }
+
+
+def _apply_failure_runtime_override(
+    *,
+    operator_id: str,
+    config: dict[str, Any],
+    envelope: dict[str, Any],
+    task_dir: Path,
+    failure_text: str,
+) -> dict[str, Any]:
+    import operator_flow_control as ofc  # noqa: E402
+
+    settings = _failure_flow_control_settings(config, envelope)
+    return ofc.apply_failure_flow_control(
+        task_dir,
+        operator_id=operator_id,
+        failure_text=failure_text,
+        rate_limit_cooldown_seconds=int(settings["rate_limit_cooldown_seconds"]),
+        auth_cooldown_seconds=int(settings["auth_cooldown_seconds"]),
+        defer_on_cooldown=False,
+        defer_on_auth=False,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Subcommand: daemon
 # ---------------------------------------------------------------------------
@@ -524,6 +571,23 @@ def cmd_daemon(args: argparse.Namespace) -> int:
 
         # ── Write result artifact ─────────────────────────────────────────────
         log_tail = "\n".join(log_lines[-50:])
+        flow_control_decision: dict[str, Any] | None = None
+        if result_status not in {"completed", "draining"} and log_tail.strip():
+            try:
+                flow_control_decision = _apply_failure_runtime_override(
+                    operator_id=operator_id,
+                    config=config,
+                    envelope=envelope,
+                    task_dir=result_dir,
+                    failure_text=log_tail,
+                )
+            except Exception as exc:
+                log_lines.append(f"[WARN] failure flow control hook failed: {exc}")
+            else:
+                runtime_state = str((flow_control_decision or {}).get("runtime_state") or "").strip()
+                if runtime_state:
+                    log_lines.append(f"[flow-control] runtime_state={runtime_state}")
+            log_tail = "\n".join(log_lines[-50:])
         result_path = write_result(
             operator_id=operator_id,
             task_id=task_id,

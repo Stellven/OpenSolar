@@ -75,3 +75,37 @@ def test_antigravity_live_quota_log_fails_fast(tmp_path, monkeypatch):
     assert result.returncode == 75
     assert fake.terminated is True
     assert "quota exhausted" in result.stderr.lower()
+
+
+def test_antigravity_no_active_conversation_retries_with_continue(tmp_path, monkeypatch):
+    log_file = tmp_path / "antigravity.log"
+    calls: list[list[str]] = []
+
+    class FakeProc:
+        def __init__(self, cmd, *, stderr_text=""):
+            self.cmd = list(cmd)
+            self.stderr_text = stderr_text
+        def poll(self):
+            return 1
+        def communicate(self, timeout=None):
+            return "", self.stderr_text
+
+    procs = [
+        FakeProc(["agy", "--print", "x"], stderr_text="Error: failed to send message: no active conversation\n"),
+        FakeProc(["agy", "--continue", "--print", "x"], stderr_text=""),
+    ]
+
+    def fake_popen(cmd, **kwargs):
+        calls.append(list(cmd))
+        return procs.pop(0)
+
+    monkeypatch.setattr(agy.subprocess, "Popen", fake_popen)
+    result = agy.run_agy_command(["agy", "--print", "x"], log_file)
+
+    assert result.returncode == 1
+    assert calls == [["agy", "--print", "x"], ["agy", "--continue", "--print", "x"]]
+
+
+def test_antigravity_quota_regex_ignores_quota_project():
+    assert agy.QUOTA_RE.search("quotaProject=") is None
+    assert agy.QUOTA_RE.search("You've hit your limit · resets 1:40pm")

@@ -694,3 +694,82 @@ class TestBuildCommand:
             {"task_id": "pm-sample", "command": ""},
         )
         assert cmd == ["bash", "-lc", "python3 /tmp/agent.py"]
+
+
+class TestFailureFlowControl:
+    def _submit_command_task(self, tmp_path: Path, env: dict, *, task_id: str, command: str) -> None:
+        envelope = {
+            "task_id": task_id,
+            "sprint_id": "sprint-command",
+            "node_id": "N1",
+            "operator_id": "test-command-builder",
+            "task_type": "dummy",
+            "objective": "exercise failure flow control",
+            "command": command,
+        }
+        envelope_path = tmp_path / f"{task_id}.json"
+        envelope_path.write_text(json.dumps(envelope), encoding="utf-8")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(TOOLS_DIR / "..") + "/lib/operator_runtime.py",
+                "submit",
+                "--envelope",
+                str(envelope_path),
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == 0, (
+            f"submit failed:\nstdout={result.stdout}\nstderr={result.stderr}"
+        )
+
+    def _run_command_daemon_once(self, env: dict) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [
+                sys.executable,
+                str(TOOLS_DIR / "operatord.py"),
+                "daemon",
+                "--operator",
+                "test-command-builder",
+                "--once",
+                "--poll-interval",
+                "0.2",
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+    def test_failed_quota_task_sets_cooldown(self, tmp_path):
+        env = _setup_command_harness(tmp_path)
+        self._submit_command_task(
+            tmp_path,
+            env,
+            task_id="T-cooldown-001",
+            command='python3 -c "print(\\"You\'ve hit your limit · resets 1:40pm\\", flush=True); raise SystemExit(1)"',
+        )
+        daemon_proc = self._run_command_daemon_once(env)
+        assert daemon_proc.returncode == 0, daemon_proc.stderr
+
+        status_path = tmp_path / "run" / "operator-status" / "test-command-builder.json"
+        status = json.loads(status_path.read_text(encoding="utf-8"))
+        assert status["runtime_state"] == "cooldown"
+
+    def test_failed_auth_task_sets_auth_expired(self, tmp_path):
+        env = _setup_command_harness(tmp_path)
+        self._submit_command_task(
+            tmp_path,
+            env,
+            task_id="T-auth-001",
+            command='python3 -c "print(\\"You are not logged in\\", flush=True); raise SystemExit(1)"',
+        )
+        daemon_proc = self._run_command_daemon_once(env)
+        assert daemon_proc.returncode == 0, daemon_proc.stderr
+
+        status_path = tmp_path / "run" / "operator-status" / "test-command-builder.json"
+        status = json.loads(status_path.read_text(encoding="utf-8"))
+        assert status["runtime_state"] == "auth_expired"

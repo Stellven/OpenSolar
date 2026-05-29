@@ -17,9 +17,18 @@ IMAGE_RE = re.compile(r"(?P<path>(?:/[^\s`'\"<>]+|~[^\s`'\"<>]+)\.(?:png|jpe?g|w
 SECRET_RE = re.compile(
     r"(?i)(api[_-]?key|token|secret|password|authorization|cookie)(\s*[:=]\s*)([^\s`'\"<>]+)"
 )
-QUOTA_RE = re.compile(r"RESOURCE_EXHAUSTED|quota|rate[- ]?limit|429|resets in", re.I)
-AUTH_RE = re.compile(r"not logged in|auth(?:entication)? failed|oauth token|permission denied", re.I)
+QUOTA_RE = re.compile(
+    r"RESOURCE_EXHAUSTED|\bquota(?:\s+exhausted)?\b|rate[- ]?limit|\b429\b|resets?\s+in|"
+    r"You've hit .*limit|Individual quota reached",
+    re.I,
+)
+AUTH_RE = re.compile(
+    r"not logged in|not authenticated|auth(?:entication)? failed|oauth token|permission denied|"
+    r"login required|logged out",
+    re.I,
+)
 FAILURE_RE = re.compile(r"error:\s*timed out waiting for response|timed out waiting for response|traceback|uncaught exception", re.I)
+NO_ACTIVE_CONVERSATION_RE = re.compile(r"no active conversation", re.I)
 
 
 def now() -> str:
@@ -174,39 +183,67 @@ def tail_text(path: Path, limit: int = 4000) -> str:
     return text[-limit:]
 
 
+def _with_continue_flag(cmd: list[str]) -> list[str]:
+    if "--continue" in cmd:
+        return list(cmd)
+    if "--print" in cmd:
+        idx = cmd.index("--print")
+        return [*cmd[:idx], "--continue", *cmd[idx:]]
+    return [*cmd, "--continue"]
+
+
 def run_agy_command(cmd: list[str], log_file: Path) -> subprocess.CompletedProcess[str]:
     """Run Antigravity and fail fast when the live log shows hard failures."""
-    proc = subprocess.Popen(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    allow_continue_retry = "--continue" not in cmd
+    current_cmd = list(cmd)
     while True:
-        rc = proc.poll()
-        if rc is not None:
-            stdout, stderr = proc.communicate()
-            return subprocess.CompletedProcess(cmd, rc, stdout=stdout or "", stderr=stderr or "")
-
-        log_tail = tail_text(log_file)
-        if QUOTA_RE.search(log_tail):
-            proc.terminate()
-            try:
-                stdout, stderr = proc.communicate(timeout=5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
+        proc = subprocess.Popen(current_cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        retry_with_continue = False
+        while True:
+            rc = proc.poll()
+            if rc is not None:
                 stdout, stderr = proc.communicate()
-            message = "ERROR: Antigravity quota exhausted; refusing empty handoff\n" + redact(log_tail)
-            stderr = ((stderr or "") + "\n" + message).strip() + "\n"
-            return subprocess.CompletedProcess(cmd, 75, stdout=stdout or "", stderr=stderr)
+                combined = "\n".join(
+                    part for part in [stdout or "", stderr or "", tail_text(log_file)] if part
+                )
+                if allow_continue_retry and NO_ACTIVE_CONVERSATION_RE.search(combined):
+                    allow_continue_retry = False
+                    current_cmd = _with_continue_flag(current_cmd)
+                    print(
+                        "INFO: Antigravity conversation missing; retrying once with --continue",
+                        file=sys.stderr,
+                    )
+                    retry_with_continue = True
+                    break
+                return subprocess.CompletedProcess(current_cmd, rc, stdout=stdout or "", stderr=stderr or "")
 
-        if FAILURE_RE.search(log_tail):
-            proc.terminate()
-            try:
-                stdout, stderr = proc.communicate(timeout=5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                stdout, stderr = proc.communicate()
-            message = "ERROR: Antigravity command backend reported failure; refusing success handoff\n" + redact(log_tail)
-            stderr = ((stderr or "") + "\n" + message).strip() + "\n"
-            return subprocess.CompletedProcess(cmd, 65, stdout=stdout or "", stderr=stderr)
+            log_tail = tail_text(log_file)
+            if QUOTA_RE.search(log_tail):
+                proc.terminate()
+                try:
+                    stdout, stderr = proc.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    stdout, stderr = proc.communicate()
+                message = "ERROR: Antigravity quota exhausted; refusing empty handoff\n" + redact(log_tail)
+                stderr = ((stderr or "") + "\n" + message).strip() + "\n"
+                return subprocess.CompletedProcess(current_cmd, 75, stdout=stdout or "", stderr=stderr)
 
-        time.sleep(1)
+            if FAILURE_RE.search(log_tail):
+                proc.terminate()
+                try:
+                    stdout, stderr = proc.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    stdout, stderr = proc.communicate()
+                message = "ERROR: Antigravity command backend reported failure; refusing success handoff\n" + redact(log_tail)
+                stderr = ((stderr or "") + "\n" + message).strip() + "\n"
+                return subprocess.CompletedProcess(current_cmd, 65, stdout=stdout or "", stderr=stderr)
+
+            time.sleep(1)
+
+        if retry_with_continue:
+            continue
 
 
 def main() -> int:

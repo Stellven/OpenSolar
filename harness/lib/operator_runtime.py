@@ -314,7 +314,14 @@ def get_operator_runtime_state(operator_id: str) -> str:
 # ── Submit ───────────────────────────────────────────────────────────────────
 
 # States that prevent task submission
-_NON_DISPATCHABLE_STATES = {"disabled", "leased", "running", "quota_exhausted", "auth_expired"}
+_NON_DISPATCHABLE_STATES = {
+    "disabled",
+    "leased",
+    "running",
+    "cooldown",
+    "quota_exhausted",
+    "auth_expired",
+}
 
 # Required keys in a task envelope
 _REQUIRED_ENVELOPE_KEYS = {"task_id", "sprint_id", "node_id", "operator_id", "task_type", "objective"}
@@ -476,20 +483,34 @@ def write_heartbeat(
     path = OPERATOR_STATUS_DIR / f"{operator_id}.json"
     lock_path = OPERATOR_STATUS_DIR / f"{operator_id}.lock"
 
-    data: Dict[str, Any] = {
-        "operator_id": operator_id,
-        "runtime_state": state,
-        "state": state,
-        "heartbeat_at": _now(),
-    }
-    if current_task_id is not None:
-        data["current_task_id"] = current_task_id
-    if resolved_persona is not None:
-        data["resolved_persona"] = resolved_persona
-
     with open(lock_path, "a") as lf:
         fcntl.flock(lf, fcntl.LOCK_EX)
         try:
+            existing: Dict[str, Any] = {}
+            if path.exists():
+                try:
+                    existing = json.loads(path.read_text(encoding="utf-8"))
+                except Exception:
+                    existing = {}
+            preserved_runtime_state = str(existing.get("runtime_state") or "").strip()
+            preserve_block_override = preserved_runtime_state in {"cooldown", "quota_exhausted", "auth_expired"}
+
+            data: Dict[str, Any] = {
+                "operator_id": operator_id,
+                "runtime_state": preserved_runtime_state if preserve_block_override else state,
+                "state": state,
+                "heartbeat_at": _now(),
+            }
+            if current_task_id is not None:
+                data["current_task_id"] = current_task_id
+            if resolved_persona is not None:
+                data["resolved_persona"] = resolved_persona
+            if preserve_block_override:
+                if str(existing.get("expires_at") or "").strip():
+                    data["expires_at"] = str(existing["expires_at"])
+                if str(existing.get("updated_at") or "").strip():
+                    data["updated_at"] = str(existing["updated_at"])
+
             tmp = str(path) + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
