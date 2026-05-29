@@ -18,12 +18,19 @@ BLOCKING_STATES = {"cooldown", "quota_exhausted", "auth_expired"}
 RATE_LIMIT_RE = re.compile(
     r"RESOURCE_EXHAUSTED|\bquota(?:\s+exhausted)?\b|monthly usage limit|"
     r"rate[- ]?limit|\b429\b|too many requests|resets?\s+in|"
-    r"Upgrade your plan|You've hit .*limit|Individual quota reached|capacity",
+    r"Upgrade your plan|You've hit .*limit|Individual quota reached|\bcapacity\b",
     re.I,
 )
+# NOTE: \bquota\b requires a word boundary after "quota", so "quotaProject=" is
+# NOT matched — the word continues with "P" which is a word character.
 AUTH_RE = re.compile(
-    r"not logged in|auth(?:entication)? failed|oauth|permission denied|"
-    r"sign in|login wall|login required|logged out",
+    r"not logged in|you are not logged|auth(?:entication)? failed|oauth|permission denied|"
+    r"sign in|login wall|login required|logged out|auth expired",
+    re.I,
+)
+# Conversation bootstrap failure — distinct from auth: session exists but no active conversation.
+NO_ACTIVE_CONVERSATION_RE = re.compile(
+    r"no active conversation|failed to send message.*no active|Error:.*no active conversation",
     re.I,
 )
 
@@ -85,11 +92,42 @@ def int_value(value: Any, default: int) -> int:
 
 
 def classify_failure_state(text: str) -> str:
+    """Return a failure state string from operator output text.
+
+    Priority: auth_expired > cooldown > bootstrap_failed > "".
+    bootstrap_failed is a transient state (recoverable with --continue) and is
+    NOT a member of BLOCKING_STATES; it exists only for diagnostics.
+    """
     if AUTH_RE.search(text or ""):
         return "auth_expired"
     if RATE_LIMIT_RE.search(text or ""):
         return "cooldown"
+    if NO_ACTIVE_CONVERSATION_RE.search(text or ""):
+        return "bootstrap_failed"
     return ""
+
+
+def format_auth_blocker_message(
+    operator_id: str,
+    runtime_state: str,
+    *,
+    expires_at: str = "",
+    recovery_cmd: str = "agy login",
+) -> str:
+    """Return a human-readable auth blocker surface message with recovery suggestion."""
+    lines = [
+        f"[auth-blocker] operator={operator_id} state={runtime_state}",
+    ]
+    if expires_at:
+        lines.append(f"  Blocked until: {expires_at}")
+    if runtime_state == "auth_expired":
+        lines.append("  Cause: Antigravity session not authenticated or token expired.")
+        lines.append(f"  Recovery: Run `{recovery_cmd}` and re-authenticate, then clear the operator block:")
+        lines.append(f"    python3 -m operator_runtime clear-override --operator {operator_id}")
+    elif runtime_state == "bootstrap_failed":
+        lines.append("  Cause: No active Antigravity conversation; --continue retry also failed.")
+        lines.append("  Recovery: Start a new conversation in Antigravity, then retry the dispatch.")
+    return "\n".join(lines)
 
 
 def current_block_state(

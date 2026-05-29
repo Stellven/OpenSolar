@@ -23,12 +23,22 @@ QUOTA_RE = re.compile(
     re.I,
 )
 AUTH_RE = re.compile(
-    r"not logged in|not authenticated|auth(?:entication)? failed|oauth token|permission denied|"
-    r"login required|logged out",
+    r"not logged in|you are not logged|not authenticated|auth(?:entication)? failed|oauth token|"
+    r"permission denied|login required|logged out|auth expired",
     re.I,
 )
 FAILURE_RE = re.compile(r"error:\s*timed out waiting for response|timed out waiting for response|traceback|uncaught exception", re.I)
-NO_ACTIVE_CONVERSATION_RE = re.compile(r"no active conversation", re.I)
+NO_ACTIVE_CONVERSATION_RE = re.compile(
+    r"no active conversation|failed to send message.*no active|Error:.*no active conversation",
+    re.I,
+)
+
+# Exit codes
+EXIT_SUCCESS = 0
+EXIT_GENERIC_FAILURE = 65
+EXIT_QUOTA_EXHAUSTED = 75
+EXIT_AUTH_EXPIRED = 76
+EXIT_BOOTSTRAP_FAILED = 77
 
 
 def now() -> str:
@@ -192,10 +202,28 @@ def _with_continue_flag(cmd: list[str]) -> list[str]:
     return [*cmd, "--continue"]
 
 
+def _terminate_proc(proc: "subprocess.Popen[str]") -> tuple[str, str]:
+    proc.terminate()
+    try:
+        stdout, stderr = proc.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        stdout, stderr = proc.communicate()
+    return stdout or "", stderr or ""
+
+
 def run_agy_command(cmd: list[str], log_file: Path) -> subprocess.CompletedProcess[str]:
-    """Run Antigravity and fail fast when the live log shows hard failures."""
+    """Run Antigravity and fail fast when the live log shows hard failures.
+
+    Exit-code semantics:
+      75 — quota exhausted
+      76 — auth expired / not logged in
+      77 — bootstrap failed (no active conversation, --continue retry also failed)
+      65 — generic backend failure
+    """
     allow_continue_retry = "--continue" not in cmd
     current_cmd = list(cmd)
+    tried_continue = False
     while True:
         proc = subprocess.Popen(current_cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         retry_with_continue = False
@@ -206,44 +234,94 @@ def run_agy_command(cmd: list[str], log_file: Path) -> subprocess.CompletedProce
                 combined = "\n".join(
                     part for part in [stdout or "", stderr or "", tail_text(log_file)] if part
                 )
+                # Auth check takes priority even at process-exit time.
+                if AUTH_RE.search(combined):
+                    message = (
+                        "ERROR: Antigravity auth expired or not logged in; refusing handoff\n"
+                        "  Recovery: run `agy login` and re-authenticate.\n"
+                        + redact(combined[-2000:])
+                    )
+                    merged_stderr = ((stderr or "") + "\n" + message).strip() + "\n"
+                    return subprocess.CompletedProcess(current_cmd, EXIT_AUTH_EXPIRED, stdout=stdout or "", stderr=merged_stderr)
+
                 if allow_continue_retry and NO_ACTIVE_CONVERSATION_RE.search(combined):
                     allow_continue_retry = False
                     current_cmd = _with_continue_flag(current_cmd)
+                    tried_continue = True
                     print(
                         "INFO: Antigravity conversation missing; retrying once with --continue",
                         file=sys.stderr,
                     )
                     retry_with_continue = True
                     break
+
+                # If we already retried with --continue and still no active conversation,
+                # classify as bootstrap_failed so callers can surface a clear diagnostic.
+                if tried_continue and NO_ACTIVE_CONVERSATION_RE.search(combined):
+                    message = (
+                        "ERROR: Antigravity bootstrap failed; no active conversation even after --continue retry.\n"
+                        "  Recovery: start a new conversation in Antigravity, then retry the dispatch.\n"
+                        + redact(combined[-2000:])
+                    )
+                    merged_stderr = ((stderr or "") + "\n" + message).strip() + "\n"
+                    return subprocess.CompletedProcess(current_cmd, EXIT_BOOTSTRAP_FAILED, stdout=stdout or "", stderr=merged_stderr)
+
                 return subprocess.CompletedProcess(current_cmd, rc, stdout=stdout or "", stderr=stderr or "")
 
             log_tail = tail_text(log_file)
             if QUOTA_RE.search(log_tail):
-                proc.terminate()
-                try:
-                    stdout, stderr = proc.communicate(timeout=5)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
-                    stdout, stderr = proc.communicate()
+                stdout, stderr = _terminate_proc(proc)
                 message = "ERROR: Antigravity quota exhausted; refusing empty handoff\n" + redact(log_tail)
                 stderr = ((stderr or "") + "\n" + message).strip() + "\n"
-                return subprocess.CompletedProcess(current_cmd, 75, stdout=stdout or "", stderr=stderr)
+                return subprocess.CompletedProcess(current_cmd, EXIT_QUOTA_EXHAUSTED, stdout=stdout, stderr=stderr)
+
+            if AUTH_RE.search(log_tail):
+                stdout, stderr = _terminate_proc(proc)
+                message = (
+                    "ERROR: Antigravity auth expired or not logged in; refusing handoff\n"
+                    "  Recovery: run `agy login` and re-authenticate.\n"
+                    + redact(log_tail)
+                )
+                stderr = ((stderr or "") + "\n" + message).strip() + "\n"
+                return subprocess.CompletedProcess(current_cmd, EXIT_AUTH_EXPIRED, stdout=stdout, stderr=stderr)
 
             if FAILURE_RE.search(log_tail):
-                proc.terminate()
-                try:
-                    stdout, stderr = proc.communicate(timeout=5)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
-                    stdout, stderr = proc.communicate()
+                stdout, stderr = _terminate_proc(proc)
                 message = "ERROR: Antigravity command backend reported failure; refusing success handoff\n" + redact(log_tail)
                 stderr = ((stderr or "") + "\n" + message).strip() + "\n"
-                return subprocess.CompletedProcess(current_cmd, 65, stdout=stdout or "", stderr=stderr)
+                return subprocess.CompletedProcess(current_cmd, EXIT_GENERIC_FAILURE, stdout=stdout, stderr=stderr)
 
             time.sleep(1)
 
         if retry_with_continue:
             continue
+
+
+def _preflight_operator_check(operator_id: str) -> int | None:
+    """Check operator block state before launching Antigravity.
+
+    Returns an exit code if blocked, or None if clear to proceed.
+    """
+    try:
+        lib_dir = Path.home() / ".solar" / "harness" / "lib"
+        if str(lib_dir) not in sys.path:
+            sys.path.insert(0, str(lib_dir))
+        import operator_flow_control as ofc  # type: ignore
+
+        snapshot = ofc.current_block_state(operator_id, allow_unregistered=True)
+        if snapshot is None:
+            return None
+        runtime_state = str(snapshot.get("runtime_state") or "")
+        expires_at = str(snapshot.get("expires_at") or "")
+        msg = ofc.format_auth_blocker_message(operator_id, runtime_state, expires_at=expires_at)
+        print(f"ERROR: pre-flight operator check blocked dispatch.\n{msg}", file=sys.stderr)
+        if runtime_state == "auth_expired":
+            return EXIT_AUTH_EXPIRED
+        return EXIT_GENERIC_FAILURE
+    except Exception as exc:
+        # Don't block dispatch if the check itself fails; just warn.
+        print(f"WARN: pre-flight operator check error (proceeding): {exc}", file=sys.stderr)
+        return None
 
 
 def main() -> int:
@@ -257,6 +335,13 @@ def main() -> int:
     if not dispatch_file.exists():
         print("ERROR: SOLAR_MULTI_TASK_DISPATCH_FILE missing; set SOLAR_ANTIGRAVITY_RAW_INTENT for RawIntent-only bridge mode", file=sys.stderr)
         return 2
+
+    # Pre-flight: check if operator is blocked before launching the AGY process.
+    operator_id = os.environ.get("SOLAR_OPERATOR_ID", "").strip()
+    if operator_id:
+        preflight_rc = _preflight_operator_check(operator_id)
+        if preflight_rc is not None:
+            return preflight_rc
 
     dispatch = dispatch_file.read_text(encoding="utf-8", errors="replace")
     images = image_paths(dispatch)
@@ -299,23 +384,38 @@ def main() -> int:
             safe_tail = redact(combined_output[-4000:])
             if safe_tail:
                 print(safe_tail, file=sys.stderr)
-            return 65
+            return EXIT_GENERIC_FAILURE
         if not output:
             safe_tail = redact(log_tail)
             if QUOTA_RE.search(log_tail):
                 print("ERROR: Antigravity quota exhausted; refusing empty handoff", file=sys.stderr)
                 if safe_tail:
                     print(safe_tail, file=sys.stderr)
-                return 75
+                return EXIT_QUOTA_EXHAUSTED
             if AUTH_RE.search(log_tail):
-                print("ERROR: Antigravity auth unavailable; refusing empty handoff", file=sys.stderr)
+                print(
+                    "ERROR: Antigravity auth expired or not logged in; refusing empty handoff\n"
+                    "  Recovery: run `agy login` and re-authenticate.\n"
+                    "  If operator tracking is enabled, clear the block:\n"
+                    f"    python3 -m operator_runtime clear-override --operator <operator-id>",
+                    file=sys.stderr,
+                )
                 if safe_tail:
                     print(safe_tail, file=sys.stderr)
-                return 76
+                return EXIT_AUTH_EXPIRED
+            if NO_ACTIVE_CONVERSATION_RE.search(log_tail):
+                print(
+                    "ERROR: Antigravity bootstrap failed; no active conversation.\n"
+                    "  Recovery: start a new conversation in Antigravity, then retry the dispatch.",
+                    file=sys.stderr,
+                )
+                if safe_tail:
+                    print(safe_tail, file=sys.stderr)
+                return EXIT_BOOTSTRAP_FAILED
             print("ERROR: Antigravity command backend returned empty stdout; refusing empty handoff", file=sys.stderr)
             if safe_tail:
                 print(safe_tail, file=sys.stderr)
-            return 65
+            return EXIT_GENERIC_FAILURE
         handoff = write_handoff(dispatch, output)
         print(f"[solar-harness agy-multimodal] wrote_handoff={handoff}")
     return proc.returncode
