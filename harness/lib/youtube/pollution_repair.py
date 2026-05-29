@@ -1,7 +1,8 @@
 """Pollution repair: audit and repair contaminated transcript records.
 
-Per dispatch: dry-run scans transcript_status='missing' AND clean_path IS NOT NULL
-should return COUNT=165 on test fixture DB. Real production cleanup deferred to S05.
+Supports both the legacy transcript-storage schema used by the B2 fixture
+(`clean_path`/`raw_path`/`segments_json_path`) and the newer production schema
+(`transcript_clean`/`transcript_raw`).
 """
 from __future__ import annotations
 
@@ -25,24 +26,49 @@ class RepairReport:
     dry_run: bool
 
 
+def _columns(conn: sqlite3.Connection) -> set[str]:
+    return {str(row[1]) for row in conn.execute("PRAGMA table_info(youtube_transcripts)").fetchall()}
+
+
+def _schema_mode(conn: sqlite3.Connection) -> str:
+    cols = _columns(conn)
+    if "clean_path" in cols:
+        return "legacy_paths"
+    if "transcript_clean" in cols:
+        return "inline_text"
+    raise sqlite3.OperationalError("youtube_transcripts missing both clean_path and transcript_clean columns")
+
+
+def _audit_rows(conn: sqlite3.Connection) -> list[tuple]:
+    mode = _schema_mode(conn)
+    if mode == "legacy_paths":
+        return conn.execute(
+            """SELECT transcript_id, video_id, clean_path, raw_path, segments_json_path
+               FROM youtube_transcripts
+               WHERE transcript_status = 'missing' AND clean_path IS NOT NULL
+               ORDER BY video_id""",
+        ).fetchall()
+    return conn.execute(
+        """SELECT video_id, video_id, transcript_clean, transcript_raw, NULL
+           FROM youtube_transcripts
+           WHERE transcript_status = 'missing'
+             AND transcript_clean IS NOT NULL
+             AND trim(transcript_clean) != ''
+           ORDER BY video_id""",
+    ).fetchall()
+
+
 def audit_pollution(
     conn: sqlite3.Connection,
     dry_run: bool = True,
 ) -> PollutionReport:
     """Scan for polluted transcript records.
 
-    Pollution = transcript_status='missing' AND clean_path IS NOT NULL.
-    These represent records where processing partially completed but status
-    was never updated to reflect the existing clean transcript.
+    Pollution means a transcript is still marked `missing` even though clean
+    transcript material is already present.
     """
     pollution_types: dict[str, int] = {}
-
-    rows = conn.execute(
-        """SELECT transcript_id, video_id, clean_path, raw_path, segments_json_path
-           FROM youtube_transcripts
-           WHERE transcript_status = 'missing' AND clean_path IS NOT NULL
-           ORDER BY video_id""",
-    ).fetchall()
+    rows = _audit_rows(conn)
 
     # Categorize pollution types
     for r in rows:
@@ -71,35 +97,30 @@ def repair_pollution(
 ) -> RepairReport:
     """Repair polluted records in a single transaction (per OQC-1 atomicity).
 
-    For each polluted record:
-    - If has clean_path AND raw_path → status='success' (fully processed)
-    - If has raw_path but no clean_path → status='failed' (needs reprocessing)
-    - If has segments_json_path only → status='quarantined' (manual review)
+    For each polluted record we normalize the status to `success`, because the
+    clean transcript payload is already present and the bad state is the stale
+    `missing` marker itself.
     """
     repair_actions: dict[str, int] = {}
-
-    rows = conn.execute(
-        """SELECT transcript_id, clean_path, raw_path, segments_json_path
-           FROM youtube_transcripts
-           WHERE transcript_status = 'missing' AND clean_path IS NOT NULL""",
-    ).fetchall()
+    mode = _schema_mode(conn)
+    rows = _audit_rows(conn)
 
     if not dry_run:
-        for r in rows:
-            tid, clean, raw, segments = r
-            if raw:
-                new_status = "success"
-            elif segments:
-                new_status = "quarantined"
-            else:
-                new_status = "success"
-            repair_actions[new_status] = repair_actions.get(new_status, 0) + 1
-
-        conn.execute(
-            """UPDATE youtube_transcripts
-               SET transcript_status = 'success'
-               WHERE transcript_status = 'missing' AND clean_path IS NOT NULL""",
-        )
+        repair_actions["success"] = len(rows)
+        if mode == "legacy_paths":
+            conn.execute(
+                """UPDATE youtube_transcripts
+                   SET transcript_status = 'success'
+                   WHERE transcript_status = 'missing' AND clean_path IS NOT NULL""",
+            )
+        else:
+            conn.execute(
+                """UPDATE youtube_transcripts
+                   SET transcript_status = 'success'
+                   WHERE transcript_status = 'missing'
+                     AND transcript_clean IS NOT NULL
+                     AND trim(transcript_clean) != ''""",
+            )
         conn.commit()
     else:
         repair_actions["dry_run_success"] = len(rows)
@@ -118,16 +139,20 @@ def load_pollution_fixture(conn: sqlite3.Connection, sql_path: str) -> int:
     conn.executescript(sql)
     conn.commit()
 
-    count = conn.execute(
-        """SELECT COUNT(*) FROM youtube_transcripts
-           WHERE transcript_status = 'missing' AND clean_path IS NOT NULL""",
-    ).fetchone()[0]
-    return count
+    return verify_repair(conn)
 
 
 def verify_repair(conn: sqlite3.Connection) -> int:
     """Count remaining polluted records after repair. Should return 0."""
+    mode = _schema_mode(conn)
+    if mode == "legacy_paths":
+        return conn.execute(
+            """SELECT COUNT(*) FROM youtube_transcripts
+               WHERE transcript_status = 'missing' AND clean_path IS NOT NULL""",
+        ).fetchone()[0]
     return conn.execute(
         """SELECT COUNT(*) FROM youtube_transcripts
-           WHERE transcript_status = 'missing' AND clean_path IS NOT NULL""",
+           WHERE transcript_status = 'missing'
+             AND transcript_clean IS NOT NULL
+             AND trim(transcript_clean) != ''""",
     ).fetchone()[0]
