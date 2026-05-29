@@ -54,6 +54,84 @@ class TestSchema:
         result = m._self_test()
         assert result["tests_run"] == result["tests_passed"], json.dumps(result, indent=2)
 
+    def test_model_ledger_persists_budget_exhausted_audit_row(self, monkeypatch):
+        import github_intelligence.model_ledger as m
+
+        monkeypatch.setattr(m, "MAX_PREMIUM_CALLS_PER_DAY", 50)
+        monkeypatch.setattr(m, "MAX_PREMIUM_COST_PER_DAY", 0.10)
+
+        conn = sqlite3.connect(":memory:")
+        ledger = m.ModelLedger(conn)
+        ledger.record_event(
+            model_name="claude-opus",
+            provider="anthropic",
+            call_type="editorial",
+            cost_estimate=0.04,
+            created_at="2026-05-27T00:00:00Z",
+            call_id="ok-1",
+        )
+        ledger.record_event(
+            model_name="claude-opus",
+            provider="anthropic",
+            call_type="editorial",
+            cost_estimate=0.05,
+            created_at="2026-05-27T01:00:00Z",
+            call_id="ok-2",
+        )
+
+        with pytest.raises(m.BudgetExceeded):
+            ledger.record_event(
+                model_name="claude-opus",
+                provider="anthropic",
+                call_type="editorial",
+                cost_estimate=0.02,
+                created_at="2026-05-27T02:00:00Z",
+                call_id="blocked",
+            )
+
+        rows = ledger.list_calls(limit=20, include_budget_exhausted=True)
+        blocked = next(call for call in rows if call.call_id == "blocked")
+        assert blocked.usage_extra["budget_exhausted"] is True
+        assert blocked.usage_extra["budget_reason"] == "premium_daily_usd_cap"
+        assert blocked.usage_extra["attempted_cost_estimate"] == 0.02
+        assert blocked.cost_estimate == 0.0
+        assert ledger.premium_count_on("2026-05-27") == 2
+        assert round(ledger.get_total_cost_today("2026-05-27"), 2) == 0.09
+
+    def test_model_ledger_aggregation_helpers(self):
+        import github_intelligence.model_ledger as m
+
+        conn = sqlite3.connect(":memory:")
+        ledger = m.ModelLedger(conn)
+        ledger.record_event(
+            model_name="qwen3.6-thunderomlx",
+            provider="thunderomlx",
+            call_type="preprocess",
+            input_tokens=10,
+            output_tokens=5,
+            created_at="2026-05-27T00:00:00Z",
+            call_id="local-1",
+        )
+        ledger.record_event(
+            model_name="gemini-pro",
+            provider="google",
+            call_type="reasoning",
+            input_tokens=20,
+            output_tokens=10,
+            cost_estimate=0.11,
+            created_at="2026-05-27T01:00:00Z",
+            call_id="premium-1",
+        )
+
+        by_provider = ledger.get_calls_by_provider()
+        by_model = ledger.get_calls_by_model()
+        assert by_provider["google"]["calls"] == 1
+        assert by_provider["thunderomlx"]["calls"] == 1
+        assert by_model["gemini-pro"]["cost"] == 0.11
+        assert ledger.get_call_count() == 2
+        assert ledger.get_call_count(provider="google") == 1
+        assert round(ledger.get_total_cost_today("2026-05-27"), 2) == 0.11
+
     def test_schema_version_constant(self):
         from github_intelligence.schema import SCHEMA_VERSION
 
