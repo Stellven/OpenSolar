@@ -1296,10 +1296,14 @@ intake_request() {
   [[ -n "$req" ]] || { err "intake 需要需求文本"; return 1; }
 
   ensure_dirs
-  local out rc raw_file autopilot_out autopilot_rc intent_out intent_rc intent_id sid_from_out
+  local out rc raw_file autopilot_out autopilot_rc intent_out intent_rc intent_id sid_from_out consumer_out consumer_rc consumer_status planner_handoff_status
   intent_out=""
   intent_rc=0
   intent_id=""
+  consumer_out=""
+  consumer_rc=0
+  consumer_status=""
+  planner_handoff_status=""
   if [[ -f "$HARNESS_DIR/lib/intent_gateway.py" ]]; then
     set +e
     intent_out=$(SOLAR_HARNESS_SPRINTS_DIR="$SPRINTS_DIR" python3 "$HARNESS_DIR/lib/intent_gateway.py" capture \
@@ -1315,15 +1319,42 @@ intake_request() {
       intent_id=$(python3 -c 'import json,sys; print((json.loads(sys.stdin.read()).get("intent_id") or ""))' <<<"$intent_out" 2>/dev/null || true)
     fi
   fi
-  set +e
-  out=$(new_sprint "$req" 2>&1)
-  rc=$?
-  set -e
-  sid_from_out=$(python3 -c 'import re,sys; text=re.sub(r"\x1b\[[0-9;]*m","",sys.stdin.read());
+  if [[ "$intent_rc" == "0" && -n "$intent_id" && -f "$HARNESS_DIR/lib/intent_consumer.py" ]] && ! should_epic_decompose_request "$req"; then
+    set +e
+    consumer_out=$(SOLAR_HARNESS_SPRINTS_DIR="$SPRINTS_DIR" python3 "$HARNESS_DIR/lib/intent_consumer.py" consume \
+      --intent-id "$intent_id" \
+      --json 2>&1)
+    consumer_rc=$?
+    set -e
+    if [[ "$consumer_rc" == "0" ]]; then
+      sid_from_out=$(python3 -c 'import json,sys; payload=json.loads(sys.stdin.read()); results=payload.get("results") or [{}]; print((results[0] or {}).get("sprint_id") or "")' <<<"$consumer_out" 2>/dev/null || true)
+      consumer_status=$(python3 -c 'import json,sys; payload=json.loads(sys.stdin.read()); results=payload.get("results") or [{}]; print((results[0] or {}).get("status") or "")' <<<"$consumer_out" 2>/dev/null || true)
+      planner_handoff_status=$(python3 -c 'import json,sys; payload=json.loads(sys.stdin.read()); results=payload.get("results") or [{}]; handoff=((results[0] or {}).get("planner_handoff") or {}); print(handoff.get("status") or handoff.get("reason") or "")' <<<"$consumer_out" 2>/dev/null || true)
+      out=$(python3 - "$sid_from_out" "$intent_id" "$consumer_status" "$planner_handoff_status" <<'PY'
+import sys
+sid, intent_id, consumer_status, planner = sys.argv[1:5]
+planner = planner or "N/A"
+print(f"Sprint created: {sid}")
+print(f"RawIntent consumed: {intent_id} ({consumer_status or 'N/A'})")
+print(f"Planner handoff: {planner}")
+PY
+)
+      rc=0
+    else
+      out="$consumer_out"
+      rc="$consumer_rc"
+    fi
+  else
+    set +e
+    out=$(new_sprint "$req" 2>&1)
+    rc=$?
+    set -e
+    sid_from_out=$(python3 -c 'import re,sys; text=re.sub(r"\x1b\[[0-9;]*m","",sys.stdin.read());
 patterns=(r"Sprint created:\s*(\S+)", r"Epic:\s*(\S+)", r"\"epic_id\":\s*\"([^\"]+)\"");
 print(next((m.group(1) for p in patterns for m in [re.search(p,text)] if m), ""))' <<<"$out" 2>/dev/null || true)
-  if [[ "$rc" == "0" && -n "$intent_id" && -n "$sid_from_out" && -f "$HARNESS_DIR/lib/intent_gateway.py" ]]; then
-    SOLAR_HARNESS_SPRINTS_DIR="$SPRINTS_DIR" python3 "$HARNESS_DIR/lib/intent_gateway.py" bind --intent-id "$intent_id" --sprint-id "$sid_from_out" --json >/dev/null 2>&1 || true
+    if [[ "$rc" == "0" && -n "$intent_id" && -n "$sid_from_out" && -f "$HARNESS_DIR/lib/intent_gateway.py" ]]; then
+      SOLAR_HARNESS_SPRINTS_DIR="$SPRINTS_DIR" python3 "$HARNESS_DIR/lib/intent_gateway.py" bind --intent-id "$intent_id" --sprint-id "$sid_from_out" --json >/dev/null 2>&1 || true
+    fi
   fi
   raw_file="$(write_intake_raw_record "$req" "$out" 2>/dev/null || true)"
   if [[ "$rc" != "0" ]]; then
@@ -2319,9 +2350,60 @@ REFRESH_HELP
   ( cd "${HARNESS_DIR%/harness}" && exec python3 -m harness.lib.refresh.orchestrator "$@" )
 }
 
+pane_hygiene_field() {
+  local pane="$1" field="$2" registry="${HARNESS_DIR}/run/pane-hygiene.json"
+  [[ -f "$registry" ]] || return 1
+  python3 - "$registry" "$pane" "$field" <<'PY' 2>/dev/null || return 1
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+entry = data.get(sys.argv[2]) if isinstance(data, dict) else None
+if not isinstance(entry, dict):
+    raise SystemExit(1)
+value = entry.get(sys.argv[3], "")
+print("" if value is None else value)
+PY
+}
+
+display_role_label() {
+  case "${1:-}" in
+    pm) printf '%s' "PM" ;;
+    planner) printf '%s' "Planner" ;;
+    builder) printf '%s' "Builder" ;;
+    evaluator) printf '%s' "Evaluator" ;;
+    architect) printf '%s' "Architect" ;;
+    observer) printf '%s' "Observer" ;;
+    *) printf '%s' "${1:-N/A}" ;;
+  esac
+}
+
+pane_host_role() {
+  local pane="$1" title="${2:-}" role
+  role="$(pane_hygiene_field "$pane" "pane_role" 2>/dev/null || true)"
+  if [[ -n "$role" ]]; then
+    printf '%s' "$role"
+    return 0
+  fi
+  local base lowered
+  base="${title%%|*}"
+  lowered="$(printf '%s' "$base" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$pane" == "$SESSION_NAME:0.0" && ( "$lowered" == *"pm"* || "$base" == *"产品经理"* ) ]]; then
+    printf '%s' "pm"
+  elif [[ "$lowered" == *"planner"* || "$base" == *"规划者"* ]]; then
+    printf '%s' "planner"
+  elif [[ "$lowered" == *"evaluator"* || "$base" == *"审判官"* ]]; then
+    printf '%s' "evaluator"
+  elif [[ "$lowered" == *"architect"* || "$base" == *"架构师"* ]]; then
+    printf '%s' "architect"
+  elif [[ "$lowered" == *"observer"* || "$base" == *"观察"* ]]; then
+    printf '%s' "observer"
+  else
+    printf '%s' "builder"
+  fi
+}
+
 do_main_status() {
   printf '%s\n' "Solar Harness Main Status"
-  printf '%s\n' "runtime != assignment != artifact: pane output alone is not proof of progress."
+  printf '%s\n' "host role / hygiene / runtime / assignment / artifact are separate signals."
   local physical_panes
   physical_panes="$(product_delivery_pane_count 2>/dev/null || printf '0')"
   if [[ "$physical_panes" == "$EXPECTED_PRODUCT_DELIVERY_PANES" ]]; then
@@ -2342,11 +2424,11 @@ do_main_status() {
   _bench_banner="$(python3 -c 'from harness.lib.benchmark.orchestration.status_banner import render_banner; print(render_banner())' 2>/dev/null)" || _bench_banner="Benchmark: no recent benchmark run"
   printf '%s\n' "$_bench_banner"
   printf '%s\n' ""
-  printf '┌────────────┬────────────┬──────────────┬────────────────────────────┬─────────────────────┬────────────────────────────┐\n'
-  printf '│ Pane       │ Role       │ Runtime      │ Assignment                 │ Artifact            │ Title                      │\n'
-  printf '├────────────┼────────────┼──────────────┼────────────────────────────┼─────────────────────┼────────────────────────────┤\n'
+  printf '┌────────────┬────────────┬──────────────┬──────────────┬────────────────────────────┬─────────────────────┬────────────────────────────┐\n'
+  printf '│ Pane       │ Host Role  │ Hygiene      │ Runtime      │ Assignment                 │ Artifact            │ Title                      │\n'
+  printf '├────────────┼────────────┼──────────────┼──────────────┼────────────────────────────┼─────────────────────┼────────────────────────────┤\n'
 
-  local i pane role title tail runtime assignment sid artifact file
+  local i pane role title tail runtime assignment sid artifact file host_role hygiene_state artifact_role
   for i in 0 1 2 3; do
     pane="$SESSION_NAME:0.$i"
     case "$i" in
@@ -2355,7 +2437,7 @@ do_main_status() {
       2) role="Builder" ;;
       3) role="Evaluator" ;;
     esac
-    title="N/A"; runtime="missing"; assignment="N/A"; artifact="N/A"
+    title="N/A"; runtime="missing"; assignment="N/A"; artifact="N/A"; hygiene_state="missing"
 
     if tmux display-message -p -t "$pane" '#{pane_id}' >/dev/null 2>&1; then
       title=$(tmux display-message -p -t "$pane" '#{pane_title}' 2>/dev/null || echo "N/A")
@@ -2372,6 +2454,8 @@ do_main_status() {
         runtime="idle"
       fi
     fi
+    host_role="$(pane_host_role "$pane" "$title")"
+    hygiene_state="$(pane_hygiene_field "$pane" "state" 2>/dev/null || printf '%s' "$hygiene_state")"
 
     if [[ -f "$HARNESS_DIR/.pane-assignments" ]]; then
       assignment=$(awk -F'[=:]' -v p="$pane" '$1":"$2 == p {print $3}' "$HARNESS_DIR/.pane-assignments" 2>/dev/null | tail -1)
@@ -2380,7 +2464,8 @@ do_main_status() {
 
     sid="$assignment"
     if [[ "$sid" != "N/A" ]]; then
-      case "$role" in
+      artifact_role="$(display_role_label "$host_role")"
+      case "$artifact_role" in
         PM)
           file="$SPRINTS_DIR/${sid}.prd.md"
           [[ -f "$file" ]] || file="$SPRINTS_DIR/${sid}.product-brief.md"
@@ -2396,11 +2481,11 @@ do_main_status() {
       fi
     fi
 
-    printf '│ %-10s │ %-10s │ %-12s │ %-26s │ %-19s │ %-26s │\n' \
-      "pane$i" "$role" "$runtime" "$(printf '%.26s' "$assignment")" "$(printf '%.19s' "$artifact")" "$(printf '%.26s' "$title")"
+    printf '│ %-10s │ %-10s │ %-12s │ %-12s │ %-26s │ %-19s │ %-26s │\n' \
+      "pane$i" "$(display_role_label "$host_role")" "$hygiene_state" "$runtime" "$(printf '%.26s' "$assignment")" "$(printf '%.19s' "$artifact")" "$(printf '%.26s' "$title")"
   done
 
-  printf '└────────────┴────────────┴──────────────┴────────────────────────────┴─────────────────────┴────────────────────────────┘\n'
+  printf '└────────────┴────────────┴──────────────┴──────────────┴────────────────────────────┴─────────────────────┴────────────────────────────┘\n'
 }
 
 do_lab_status() {
@@ -2848,14 +2933,43 @@ print(json.dumps({
     _SS_PORT_FILE="$HARNESS_DIR/run/status-server.port"
     _SS_TMUX_SESSION="solar-harness-status-server"
     mkdir -p "$HARNESS_DIR/run"
+    _status_server_live_pids() {
+      ps ax -o pid= -o args= | awk -v script="$HARNESS_DIR/lib/symphony/status-server.py" '
+        index($0, script) && $0 !~ /awk -v script/ { print $1 }
+      '
+    }
+    _status_server_live_ports() {
+      local _p
+      for _p in $(seq 8765 8775); do
+        if curl -fsS "http://127.0.0.1:${_p}/healthz" >/dev/null 2>&1; then
+          printf '%s\n' "$_p"
+        fi
+      done
+    }
+    _status_server_terminate_pids() {
+      local _pids="$1" _pid
+      [[ -n "$_pids" ]] || return 0
+      kill $_pids 2>/dev/null || true
+      sleep 0.3
+      for _pid in $_pids; do
+        if kill -0 "$_pid" 2>/dev/null; then
+          kill -9 "$_pid" 2>/dev/null || true
+        fi
+      done
+    }
     case "${2:-start}" in
       start)
+        _live_pids="$(_status_server_live_pids || true)"
+        _live_ports="$(_status_server_live_ports || true)"
         if tmux has-session -t "$_SS_TMUX_SESSION" 2>/dev/null; then
           ok "Status server 已在运行 (tmux: $_SS_TMUX_SESSION, port: $(cat "$_SS_PORT_FILE" 2>/dev/null || echo '?'))"
         elif [[ -f "$_SS_PID" ]] && kill -0 "$(cat "$_SS_PID")" 2>/dev/null; then
           ok "Status server 已在运行 (PID: $(cat "$_SS_PID"), port: $(cat "$_SS_PORT_FILE" 2>/dev/null || echo '?'))"
-        elif curl -fsS "http://127.0.0.1:$(cat "$_SS_PORT_FILE" 2>/dev/null || echo 8765)/healthz" >/dev/null 2>&1; then
-          ok "Status server 已在运行 (port: $(cat "$_SS_PORT_FILE" 2>/dev/null || echo 8765), pidfile stale)"
+        elif [[ -n "$_live_pids" || -n "$_live_ports" ]]; then
+          _port="$(printf '%s\n' "$_live_ports" | head -1)"
+          [[ -n "$_live_pids" ]] && printf '%s\n' "$(printf '%s\n' "$_live_pids" | head -1)" > "$_SS_PID"
+          [[ -n "$_port" ]] && printf '%s\n' "$_port" > "$_SS_PORT_FILE"
+          ok "Status server 已在运行 (healed from live runtime; pid: $(printf '%s\n' "$_live_pids" | head -1), port: ${_port:-?})"
         else
           rm -f "$_SS_PID" "$_SS_PORT_FILE"
           if command -v tmux >/dev/null 2>&1; then
@@ -2875,26 +2989,37 @@ print(json.dumps({
         ;;
       stop)
         _stopped=0
+        _recorded_port="$(cat "$_SS_PORT_FILE" 2>/dev/null || true)"
+        _live_pids="$(_status_server_live_pids || true)"
+        _live_ports="$(_status_server_live_ports || true)"
         if tmux has-session -t "$_SS_TMUX_SESSION" 2>/dev/null; then
           tmux kill-session -t "$_SS_TMUX_SESSION" 2>/dev/null || true
-          rm -f "$_SS_PID" "$_SS_PORT_FILE"
-          ok "Status server 已停止"
           _stopped=1
         elif [[ -f "$_SS_PID" ]]; then
           _pid_val=$(cat "$_SS_PID" 2>/dev/null || true)
           if [[ "$_pid_val" =~ ^[0-9]+$ ]]; then
             kill "$_pid_val" 2>/dev/null || true
           fi
-          rm -f "$_SS_PID" "$_SS_PORT_FILE"
-          ok "Status server 已停止"
           _stopped=1
         fi
-        _listen_pids=$(lsof -tiTCP:$(cat "$_SS_PORT_FILE" 2>/dev/null || echo 8765) -sTCP:LISTEN 2>/dev/null || true)
-        if [[ -n "$_listen_pids" ]]; then
-          kill $_listen_pids 2>/dev/null || true
-          rm -f "$_SS_PID" "$_SS_PORT_FILE"
-          ok "Status server 端口残留进程已停止 (PID: ${_listen_pids//$'\n'/,})"
+        if [[ -n "$_live_pids" ]]; then
+          _status_server_terminate_pids "$_live_pids"
           _stopped=1
+        fi
+        if [[ -n "$_recorded_port" ]]; then
+          _live_ports="$(printf '%s\n%s\n' "$_recorded_port" "$_live_ports" | awk 'NF && !seen[$0]++')"
+        fi
+        if [[ -n "$_live_ports" ]]; then
+          while IFS= read -r _port; do
+            [[ -n "$_port" ]] || continue
+            _listen_pids=$(lsof -tiTCP:"$_port" -sTCP:LISTEN 2>/dev/null || true)
+            [[ -n "$_listen_pids" ]] && kill $_listen_pids 2>/dev/null || true
+          done <<< "$_live_ports"
+          _stopped=1
+        fi
+        rm -f "$_SS_PID" "$_SS_PORT_FILE"
+        if [[ "$_stopped" == "1" ]]; then
+          ok "Status server 已停止"
         fi
         if [[ "$_stopped" == "0" ]]; then
           warn "Status server 未运行"
@@ -2906,6 +3031,8 @@ print(json.dumps({
         "$0" status-server start
         ;;
       status)
+        _live_pids="$(_status_server_live_pids || true)"
+        _live_ports="$(_status_server_live_ports || true)"
         if tmux has-session -t "$_SS_TMUX_SESSION" 2>/dev/null; then
           _port=$(cat "$_SS_PORT_FILE" 2>/dev/null || echo "8765")
           ok "运行中 (tmux: $_SS_TMUX_SESSION, port: $_port)"
@@ -2914,9 +3041,11 @@ print(json.dumps({
           _port=$(cat "$_SS_PORT_FILE" 2>/dev/null || echo "8765")
           ok "运行中 (PID: $(cat "$_SS_PID"), port: $_port)"
           curl -s "http://127.0.0.1:$_port/healthz" 2>/dev/null && echo || true
-        elif curl -fsS "http://127.0.0.1:$(cat "$_SS_PORT_FILE" 2>/dev/null || echo 8765)/healthz" >/dev/null 2>&1; then
-          _port=$(cat "$_SS_PORT_FILE" 2>/dev/null || echo "8765")
-          ok "运行中 (port: $_port, pidfile stale)"
+        elif [[ -n "$_live_pids" || -n "$_live_ports" ]]; then
+          _port=$(printf '%s\n' "$_live_ports" | head -1)
+          [[ -n "$_live_pids" ]] && printf '%s\n' "$(printf '%s\n' "$_live_pids" | head -1)" > "$_SS_PID"
+          [[ -n "$_port" ]] && printf '%s\n' "$_port" > "$_SS_PORT_FILE"
+          ok "运行中 (healed from live runtime, pid: $(printf '%s\n' "$_live_pids" | head -1), port: ${_port:-?})"
           curl -s "http://127.0.0.1:$_port/healthz" 2>/dev/null && echo || true
         else
           warn "Status server 未运行"
@@ -3861,6 +3990,14 @@ PY
           exit 1
         fi
         ;;
+      knowledge-ingest)
+        _knowledge_ingest="${HARNESS_DIR}/lib/knowledge_ingest_dispatcher.py"
+        if [[ ! -f "$_knowledge_ingest" ]]; then
+          err "knowledge ingest dispatcher not found: $_knowledge_ingest"
+          exit 1
+        fi
+        python3 "$_knowledge_ingest" "$@"
+        ;;
       chatgpt-import|import-chatgpt)
         _chatgpt_importer="${HARNESS_DIR}/lib/chatgpt-conversation-ingest.py"
         if [[ ! -f "$_chatgpt_importer" ]]; then
@@ -4360,6 +4497,7 @@ EOF
         echo "  $0 wiki update [--project <path>] [--mode append|full]"
         echo "  $0 wiki query \"<question>\" [--quick]"
         echo "  $0 wiki ingest [--source <path>] [--mode append|full|raw] [--project <name>]"
+        echo "  $0 wiki knowledge-ingest <status|migrate|submit-event|discover-raw|discover-sources|discover-vault|process-queue|run-pipeline|reconcile|import-legacy-extracted|dashboard|coverage-report|drain-retry|drain-skip|discover-youtube|discover-github|discover-pdf|discover-accepted|discover-solar> [args]"
         echo "  $0 wiki chatgpt-import [--browser-all [auto|chrome|arc|edge|brave|safari]|--browser [auto|chrome|arc|edge|brave|safari]|--source <conversations.json|transcript.md|dir|->|--clipboard] [--no-dispatch] [--limit N]"
         echo "  $0 wiki vault-status [--insights]"
         echo "  $0 wiki lint [--fix]"

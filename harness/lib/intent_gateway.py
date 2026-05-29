@@ -56,6 +56,21 @@ def read_text_arg(args: argparse.Namespace) -> str:
     return text
 
 
+def extract_research_artifact(args: argparse.Namespace) -> dict[str, Any] | None:
+    path = str(getattr(args, "research_artifact", "") or "").strip()
+    project_name = str(getattr(args, "research_project_name", "") or "").strip()
+    conversation_id = str(getattr(args, "research_conversation_id", "") or "").strip()
+    source_url = str(getattr(args, "research_source_url", "") or "").strip()
+    if not any((path, project_name, conversation_id, source_url)):
+        return None
+    return {
+        "path": path,
+        "project_name": project_name,
+        "conversation_id": conversation_id,
+        "source_url": source_url,
+    }
+
+
 def infer_mode(text: str) -> str:
     value = text.lower()
     # Engineering intents can contain words like "research" or "Deep Research"
@@ -162,10 +177,25 @@ def model_rewrite(raw_intent: dict[str, Any], prompt_path: Path) -> tuple[dict[s
 
 
 def build_requirement_ir(intent_id: str, raw_intent: dict[str, Any], rewritten: dict[str, Any]) -> dict[str, Any]:
+    context = raw_intent.get("context", {}) if isinstance(raw_intent.get("context"), dict) else {}
+    raw_block = raw_intent.get("raw", {}) if isinstance(raw_intent.get("raw"), dict) else {}
+    research = raw_intent.get("research") if isinstance(raw_intent.get("research"), dict) else None
+    source_inputs: dict[str, Any] = {
+        "raw_request": str(raw_block.get("text") or "").strip(),
+        "repo_context": [context.get("repo")] if context.get("repo") else [],
+    }
+    if research:
+        source_inputs["research_artifact"] = {
+            "path": research.get("path", ""),
+            "project_name": research.get("project_name", ""),
+            "conversation_id": research.get("conversation_id", ""),
+            "source_url": research.get("source_url", ""),
+        }
     return {
         "schema_version": "solar.requirement_ir.v1",
         "intent_id": intent_id,
         "source": raw_intent.get("source", {}),
+        "source_inputs": source_inputs,
         "title": rewritten.get("title", ""),
         "problem": rewritten.get("problem", ""),
         "objective": rewritten.get("objective", ""),
@@ -184,6 +214,7 @@ def capture(args: argparse.Namespace) -> dict[str, Any]:
     created = now_iso()
     digest = hashlib.sha1(f"{created}\n{raw_text}".encode("utf-8")).hexdigest()[:10]
     intent_id = args.intent_id or f"intent-{dt.datetime.now(dt.timezone.utc).strftime('%Y%m%d-%H%M%S')}-{digest}"
+    research = extract_research_artifact(args)
     raw_intent = {
         "schema_version": "solar.raw_intent.v1",
         "intent_id": intent_id,
@@ -211,6 +242,7 @@ def capture(args: argparse.Namespace) -> dict[str, Any]:
             "mode": args.mode or infer_mode(raw_text),
             "allow_autodispatch": not args.no_autodispatch,
             "requires_human_confirm": args.requires_human_confirm,
+            "require_research_artifact": bool(args.require_research_artifact or research),
         },
         "trust": {
             "source_trust": args.source_trust,
@@ -218,6 +250,8 @@ def capture(args: argparse.Namespace) -> dict[str, Any]:
             "contains_secrets": "unknown",
         },
     }
+    if research:
+        raw_intent["research"] = research
     base = INTENTS_DIR / intent_id
     model_result, rewrite_meta = model_rewrite(raw_intent, base / "rewrite_prompt.json")
     rewritten = model_result or deterministic_rewrite(raw_text)
@@ -298,6 +332,11 @@ def main(argv: list[str] | None = None) -> int:
     cap.add_argument("--source-trust", default="user_direct")
     cap.add_argument("--no-autodispatch", action="store_true")
     cap.add_argument("--requires-human-confirm", action="store_true")
+    cap.add_argument("--require-research-artifact", action="store_true")
+    cap.add_argument("--research-artifact", default="")
+    cap.add_argument("--research-project-name", default="")
+    cap.add_argument("--research-conversation-id", default="")
+    cap.add_argument("--research-source-url", default="")
     cap.add_argument("--sprint-id", default="")
     cap.add_argument("--json", action="store_true")
 
