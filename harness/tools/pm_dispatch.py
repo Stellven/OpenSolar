@@ -61,7 +61,7 @@ ROLE_ALIASES: dict[str, str] = {
     "product-manager": "pm",
 }
 
-NON_DISPATCHABLE_STATES = {"leased", "running", "draining", "quota_exhausted", "auth_expired", "disabled"}
+NON_DISPATCHABLE_STATES = {"leased", "running", "draining", "cooldown", "quota_exhausted", "auth_expired", "disabled"}
 
 
 def _now() -> str:
@@ -158,6 +158,37 @@ def get_operator_runtime_state(operator_id: str) -> str:
         return "idle"
 
 
+def get_operator_status_data(operator_id: str) -> dict[str, Any]:
+    """Return the full status JSON for an operator, or empty dict if absent/expired."""
+    status_file = OPERATOR_STATUS_DIR / f"{operator_id}.json"
+    if not status_file.exists():
+        return {}
+    try:
+        return json.loads(status_file.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _format_reset_eta(expires_at: str) -> str:
+    """Return a human-readable reset ETA string, or empty string if not available."""
+    if not expires_at:
+        return ""
+    try:
+        exp = datetime.datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+        now = datetime.datetime.now(datetime.timezone.utc)
+        delta = exp - now
+        total_secs = int(delta.total_seconds())
+        if total_secs <= 0:
+            return "soon"
+        hours, rem = divmod(total_secs, 3600)
+        minutes = rem // 60
+        if hours > 0:
+            return f"~{hours}h{minutes:02d}m"
+        return f"~{minutes}m"
+    except Exception:
+        return ""
+
+
 def is_dispatchable(op: dict[str, Any]) -> tuple[bool, str]:
     if not op.get("enabled", False):
         return False, f"disabled: {op.get('disabled_reason', 'unknown')}"
@@ -166,6 +197,16 @@ def is_dispatchable(op: dict[str, Any]) -> tuple[bool, str]:
     operator_id = op.get("operator_id", "")
     state = get_operator_runtime_state(operator_id)
     if state in NON_DISPATCHABLE_STATES:
+        if state in ("cooldown", "quota_exhausted", "auth_expired"):
+            status = get_operator_status_data(operator_id)
+            expires_at = str(status.get("expires_at") or "")
+            eta = _format_reset_eta(expires_at)
+            reason = f"runtime_state={state}"
+            if eta:
+                reason += f", resets {eta}"
+            if expires_at:
+                reason += f" (until {expires_at})"
+            return False, reason
         return False, f"runtime_state={state}"
     return True, ""
 
@@ -661,7 +702,20 @@ def cmd_submit(args: argparse.Namespace) -> int:
         logical_operator=logical_operator,
     )
     if not operator_id:
-        print(f"ERROR: 没有可用算子 ({fallback_reason})", file=sys.stderr)
+        msg = f"ERROR: 没有可用算子 ({fallback_reason})"
+        # Surface cooldown ETA when the fallback reason mentions cooldown/quota
+        if any(kw in fallback_reason for kw in ("cooldown", "quota_exhausted", "auth_expired")):
+            # Try to find the preferred/blocked operator for ETA details
+            _blocked_op = prefer_operator or ""
+            if _blocked_op:
+                _status = get_operator_status_data(_blocked_op)
+                _expires = str(_status.get("expires_at") or "")
+                _eta = _format_reset_eta(_expires)
+                if _eta:
+                    msg += f"\n  ⏳ 冷却中，重置时间: {_eta}"
+                if _expires:
+                    msg += f" (until {_expires})"
+        print(msg, file=sys.stderr)
         return 1
 
     # 2. 构建 task_id 和结果路径
@@ -788,19 +842,30 @@ def cmd_submit(args: argparse.Namespace) -> int:
 def cmd_fleet_status(args: argparse.Namespace) -> int:
     registry = load_registry()
     operators = registry.get("operators", {})
-    print(f"{'算子 ID':<40} {'角色':<12} {'模型':<20} {'状态':<10} {'运行时'}")
-    print("-" * 100)
+    print(f"{'算子 ID':<40} {'角色':<12} {'模型':<20} {'运行时状态':<18} {'冷却/重置 ETA'}")
+    print("-" * 110)
     for op_id, spec in operators.items():
         op = dict(spec)
         enabled = op.get("enabled", False)
         if not enabled:
             rt_state = "disabled"
+            cooldown_col = ""
         else:
             rt_state = get_operator_runtime_state(op_id)
+            cooldown_col = ""
+            if rt_state in ("cooldown", "quota_exhausted", "auth_expired"):
+                status = get_operator_status_data(op_id)
+                expires_at = str(status.get("expires_at") or "")
+                eta = _format_reset_eta(expires_at)
+                cooldown_col = f"{rt_state}"
+                if eta:
+                    cooldown_col += f" resets {eta}"
+                if expires_at:
+                    cooldown_col += f" [{expires_at}]"
         role = str(op.get("role", "?"))
         model = str(op.get("model", "?"))
         ok_sym = "✅" if enabled else "❌"
-        print(f"{ok_sym} {op_id:<38} {role:<12} {model:<20} {rt_state}")
+        print(f"{ok_sym} {op_id:<38} {role:<12} {model:<20} {rt_state:<18} {cooldown_col}")
     return 0
 
 
@@ -831,6 +896,22 @@ def cmd_result(args: argparse.Namespace) -> int:
         print(f"ERROR: task {task_id} not found in PM inbox", file=sys.stderr)
         return 1
     print(json.dumps(record, indent=2, ensure_ascii=False))
+
+    # Surface any active cooldown for the operator that ran this task
+    operator_id = str(record.get("operator_id") or "")
+    if operator_id:
+        rt_state = get_operator_runtime_state(operator_id)
+        if rt_state in ("cooldown", "quota_exhausted", "auth_expired"):
+            status = get_operator_status_data(operator_id)
+            expires_at = str(status.get("expires_at") or "")
+            eta = _format_reset_eta(expires_at)
+            print(f"\n⚠️  算子冷却中: operator={operator_id} state={rt_state}", end="")
+            if eta:
+                print(f", resets {eta}", end="")
+            if expires_at:
+                print(f" (until {expires_at})", end="")
+            print()
+
     result_path = Path(record.get("result_path", ""))
     if result_path.exists():
         print("\n--- 结果文件内容 ---")
