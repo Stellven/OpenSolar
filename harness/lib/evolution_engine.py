@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -195,6 +196,11 @@ def _event_counts(event_names: set[str]) -> dict[str, int]:
 
 
 def _node_requires_deepresearch_quality_gate(node: dict[str, Any]) -> bool:
+    explicit = node.get("research_quality_gate_required")
+    if explicit is False:
+        return False
+    if explicit is True:
+        return True
     caps: set[str] = set()
     for key in ("required_capabilities", "capabilities"):
         raw = node.get(key, [])
@@ -202,9 +208,17 @@ def _node_requires_deepresearch_quality_gate(node: dict[str, Any]) -> bool:
             caps.add(raw)
         elif isinstance(raw, list):
             caps.update(str(item) for item in raw if str(item))
-    if any(cap.startswith("research.") for cap in caps):
+    gate_capability_re = re.compile(
+        r"^research\.(?:"
+        r"factuality|citation|claim(?:[_\.]|$)|evidence(?:[_\.]|$)|"
+        r"report(?:[_\.](?:ast|finalize|quality|review)|_ast)|"
+        r"survey(?:[_\.](?:chief_editor|finalize|quality|review))"
+        r")",
+        re.I,
+    )
+    if caps & {"citation.verify", "factuality.evaluate"}:
         return True
-    if caps & {"citation.verify", "factuality.evaluate", "report.compile", "evidence.extract", "claim.mine"}:
+    if any(gate_capability_re.match(cap) for cap in caps):
         return True
     artifact_values: list[str] = []
     artifacts = node.get("artifacts") if isinstance(node.get("artifacts"), dict) else {}
@@ -225,14 +239,7 @@ def _node_requires_deepresearch_quality_gate(node: dict[str, Any]) -> bool:
     elif isinstance(raw_scope, list):
         artifact_values.extend(str(item) for item in raw_scope)
     artifact_text = " ".join(artifact_values).lower()
-    return any(token in artifact_text for token in (
-        "research_eval",
-        "report_ast",
-        "final.md",
-        "final_report",
-        "evidence.jsonl",
-        "claims.jsonl",
-    ))
+    return bool(re.search(r"research_eval|report_ast|final\.md|final_report|evidence\.jsonl|claims\.jsonl", artifact_text))
 
 
 def _node_result_status(graph: dict[str, Any], node: dict[str, Any]) -> str:

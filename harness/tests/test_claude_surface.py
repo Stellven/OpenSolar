@@ -22,7 +22,7 @@ def _make_interactive(model: str = "opus") -> dict:
         "surface": {
             "type": "claude_code_interactive",
             "tool": "claude",
-            "launch_cmd": f"claude --model {model}",
+            "launch_cmd": f"claude --dangerously-skip-permissions --model {model}",
         },
     }
 
@@ -98,7 +98,7 @@ class TestClassifySurface:
         assert cs.classify_surface(op) == cs.CLAUDE_PRINT
 
     def test_launch_cmd_interactive_no_print_flag(self):
-        op = {"surface": {"launch_cmd": "claude --model opus"}}
+        op = {"surface": {"launch_cmd": "claude --dangerously-skip-permissions --model opus"}}
         # No print flag → falls through to SURFACE_UNKNOWN (no other hints)
         assert cs.classify_surface(op) == cs.SURFACE_UNKNOWN
 

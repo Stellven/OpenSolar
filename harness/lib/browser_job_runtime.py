@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import datetime
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -28,6 +29,9 @@ OPERATOR_RESULTS_DIR = HARNESS_DIR / "run" / "operator-results"
 BROWSER_USE_ROOT = HOME / ".claude" / "mcp-servers" / "browser-use"
 BROWSER_USE_PYTHON = BROWSER_USE_ROOT / ".venv" / "bin" / "python"
 PROFILE_CACHE_ROOT = HARNESS_DIR / "state" / "browser-profile-cache"
+_CHATGPT_CAPTURE_MODULE = HARNESS_DIR / "lib" / "chatgpt-conversation-ingest.py"
+CHATGPT_MONTHLY_PROJECT_PREFIX = "需求研究"
+CHATGPT_FRONTDOOR_URL = "https://chatgpt.com/"
 _STAGED_PROFILE_PREFIX = "browser-use-user-data-dir-"
 _RESTORE_ARTIFACTS = {
     "Current Session",
@@ -62,6 +66,8 @@ _SECRET_PATTERNS = [
     (re.compile(r'(?i)\b(password|passwd)\s*[=:]\s*[^\s"\']{4,}'), r'\1=[SCRUBBED]'),
     (re.compile(r'(?i)\b(token|secret)\s*[=:]\s*[^\s"\']{4,}'), r'\1=[SCRUBBED]'),
 ]
+
+_CHATGPT_INGEST_CACHE: Any = None
 
 
 def scrub_secrets(text: str) -> str:
@@ -181,6 +187,172 @@ class BrowserSessionBroker:
 
 def _now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _load_chatgpt_ingest_module() -> Any:
+    global _CHATGPT_INGEST_CACHE
+    if _CHATGPT_INGEST_CACHE is not None:
+        return _CHATGPT_INGEST_CACHE
+    spec = importlib.util.spec_from_file_location("chatgpt_conversation_ingest", _CHATGPT_CAPTURE_MODULE)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"failed to load ChatGPT ingest module from {_CHATGPT_CAPTURE_MODULE}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    _CHATGPT_INGEST_CACHE = module
+    return module
+
+
+def resolve_chatgpt_monthly_project_name(now: Optional[datetime.datetime] = None) -> str:
+    current = now or datetime.datetime.now(datetime.timezone.utc)
+    return f"{CHATGPT_MONTHLY_PROJECT_PREFIX}-{current.strftime('%Y-%m')}"
+
+
+def build_frontdoor_research_job_envelope(
+    *,
+    raw_request: str,
+    ingress_channel: str,
+    source_url: str = CHATGPT_FRONTDOOR_URL,
+    now: Optional[datetime.datetime] = None,
+    project_name: Optional[str] = None,
+) -> Dict[str, Any]:
+    project = project_name or resolve_chatgpt_monthly_project_name(now)
+    objective = (
+        f"Route the requirement research flow through ChatGPT project {project}, "
+        "preserve the whole conversation transcript, and return a machine-readable research artifact."
+    )
+    return {
+        "task_type": "RESEARCH",
+        "objective": objective,
+        "url": source_url,
+        "target_url": source_url,
+        "allowed_domains": ["chatgpt.com", "chat.openai.com"],
+        "ingress_channel": ingress_channel,
+        "raw_request": raw_request,
+        "chatgpt_project": project,
+        "artifact_kind": "frontdoor_research",
+        "capture_policy": {
+            "mode": "whole_conversation",
+            "messages_required": True,
+            "final_answer_only_forbidden": True,
+        },
+        "project_routing": {
+            "project_name": project,
+            "project_name_rule": f"{CHATGPT_MONTHLY_PROJECT_PREFIX}-YYYY-MM",
+            "create_if_missing": True,
+        },
+        "research_artifact_schema": {
+            "required_fields": [
+                "conversation_id",
+                "source_url",
+                "chatgpt_project",
+                "messages",
+                "summary",
+                "constraints",
+                "risks",
+                "open_questions",
+                "recommended_decomposition",
+            ]
+        },
+    }
+
+
+def submit_frontdoor_research_job(
+    actor_id: str,
+    *,
+    raw_request: str,
+    ingress_channel: str,
+    source_url: str = CHATGPT_FRONTDOOR_URL,
+    now: Optional[datetime.datetime] = None,
+    project_name: Optional[str] = None,
+    mock_sequence: Optional[List[str]] = None,
+    capability_token: Optional[CapabilityToken] = None,
+    extra_envelope: Optional[Dict[str, Any]] = None,
+) -> str:
+    envelope = build_frontdoor_research_job_envelope(
+        raw_request=raw_request,
+        ingress_channel=ingress_channel,
+        source_url=source_url,
+        now=now,
+        project_name=project_name,
+    )
+    if extra_envelope:
+        envelope.update(extra_envelope)
+    return submit_browser_job(
+        actor_id,
+        envelope,
+        mock_sequence=mock_sequence,
+        capability_token=capability_token,
+    )
+
+
+def build_frontdoor_research_artifact(
+    capture: Dict[str, Any],
+    *,
+    raw_request: str,
+    ingress_channel: str,
+    project_name: str,
+) -> Dict[str, Any]:
+    ingest = _load_chatgpt_ingest_module()
+    turns = list(capture.get("messages") or [])
+    conversation = ingest.build_conversation(
+        conversation_id=str(capture.get("conversation_id") or ""),
+        title=str(capture.get("title") or "ChatGPT Frontdoor Research"),
+        created_at=str(capture.get("captured_at") or _now()),
+        updated_at=str(capture.get("captured_at") or _now()),
+        source_file=Path("<browser-capture>"),
+        turns=turns,
+        min_answer_chars=1,
+        url=str(capture.get("url") or ""),
+        canonical_url=str(capture.get("canonical_url") or ""),
+        metadata=capture.get("metadata") if isinstance(capture.get("metadata"), dict) else {},
+        capture_method=str(capture.get("capture_method") or ""),
+        capture_schema_version=capture.get("capture_schema_version") or "",
+    )
+    if not conversation:
+        raise ValueError("browser capture did not contain a usable conversation")
+    messages = list(conversation.get("messages") or [])
+    assistant_messages = [m for m in messages if str(m.get("role")) == "assistant" and str(m.get("text") or "").strip()]
+    summary = str(assistant_messages[-1].get("text") if assistant_messages else "").strip()
+    return {
+        "artifact_type": "browser_agent_frontdoor_research.v1",
+        "ingress_channel": ingress_channel,
+        "raw_request": raw_request,
+        "chatgpt_project": project_name,
+        "conversation_id": conversation.get("conversation_id") or "",
+        "source_url": conversation.get("source_url") or capture.get("url") or "",
+        "canonical_url": conversation.get("canonical_url") or capture.get("canonical_url") or "",
+        "captured_at": capture.get("captured_at") or _now(),
+        "messages": messages,
+        "summary": summary,
+        "summary_source": "latest_assistant_message" if summary else "empty",
+        "constraints": [],
+        "risks": [],
+        "open_questions": [],
+        "recommended_decomposition": [],
+        "capture_method": conversation.get("capture_method") or "",
+        "capture_schema_version": conversation.get("capture_schema_version") or "",
+        "metadata": conversation.get("metadata") or {},
+        "partial_transcript": bool(conversation.get("partial_transcript")),
+    }
+
+
+def collect_frontdoor_research_artifact(
+    *,
+    browser: str = "auto",
+    raw_request: str,
+    ingress_channel: str,
+    project_name: Optional[str] = None,
+) -> Dict[str, Any]:
+    ingest = _load_chatgpt_ingest_module()
+    browser_id, capture = ingest.capture_browser(browser)
+    artifact = build_frontdoor_research_artifact(
+        capture,
+        raw_request=raw_request,
+        ingress_channel=ingress_channel,
+        project_name=project_name or resolve_chatgpt_monthly_project_name(),
+    )
+    artifact["browser"] = browser_id
+    return artifact
 
 
 def _ensure_jobs_dir() -> None:

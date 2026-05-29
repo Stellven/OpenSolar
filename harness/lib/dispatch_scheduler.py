@@ -36,6 +36,14 @@ class LedgerProto(Protocol):
         sprint_id: Optional[str] = None,
     ) -> None: ...
 
+    def record_respawn(
+        self, pane_id: str, *, before_state: str, after_state: str,
+        success: bool, reason: str, attempt: int = 1,
+        sprint_id: Optional[str] = None, from_pane: Optional[str] = None,
+        to_pane: Optional[str] = None, task_id: Optional[str] = None,
+        extra: Optional[dict[str, Any]] = None,
+    ) -> None: ...
+
 
 class ReinjectorProto(Protocol):
     def inject_all(self, pane_id: str, role: str, sprint_id: str) -> Any: ...
@@ -53,7 +61,7 @@ class SafetyViolationError(RuntimeError):
     pass
 
 
-PROTECTED_PANES = [
+PROTECTED_MAIN_PANES = [
     "solar-harness:0.0",
     "solar-harness:0.1",
     "solar-harness:0.2",
@@ -66,6 +74,8 @@ DEFAULT_SPILLOVER_POOL: list[str] = [
     "solar-harness-lab:0.2",
     "solar-harness-lab:0.3",
 ]
+
+PROTECTED_PANES = PROTECTED_MAIN_PANES + DEFAULT_SPILLOVER_POOL
 
 _FORBIDDEN_PATTERNS = [
     re.compile(r"(?i)(rm\s+-rf|pkill|kill\s+-9|systemctl\s+restart)"),
@@ -85,12 +95,15 @@ class DispatchScheduler:
         reinjector: ReinjectorProto,
         *,
         spillover_pool: Optional[list[str]] = None,
+        respawn_max_concurrent: int = 1,
     ) -> None:
         self._registry = registry
         self._ledger = ledger
         self._reinjector = reinjector
         self._pool = spillover_pool or DEFAULT_SPILLOVER_POOL
         self._rr_cursor = 0
+        self._respawn_max_concurrent = respawn_max_concurrent
+        self._active_respawns: set[str] = set()
 
     def select_pane(
         self,
@@ -155,6 +168,11 @@ class DispatchScheduler:
         assigned: list[tuple[str, str]] = []
 
         clean_panes = self._registry.query_clean_panes(role=role)
+        if role == "evaluator" and len(clean_panes) < len(batch):
+            expanded: dict[str, Any] = {p.pane_id: p for p in clean_panes}
+            for pane in self._registry.query_clean_panes(role=None):
+                expanded.setdefault(pane.pane_id, pane)
+            clean_panes = list(expanded.values())
         pool_order = {pid: i for i, pid in enumerate(self._pool)}
         clean_panes.sort(key=lambda p: pool_order.get(p.pane_id, 999))
 
@@ -218,12 +236,71 @@ class DispatchScheduler:
             pane_id, PaneState.dirty, reason="task_completed",
         )
 
+    def can_respawn(self, pane_id: str) -> ScheduleResult:
+        try:
+            self._assert_respawn_target_allowed(pane_id)
+        except SafetyViolationError as exc:
+            return ScheduleResult(ok=False, reason=str(exc))
+        if self._respawn_max_concurrent <= 0:
+            return ScheduleResult(
+                ok=False,
+                reason="respawn_disabled_by_max_concurrent_zero",
+            )
+        if len(self._active_respawns) >= self._respawn_max_concurrent:
+            return ScheduleResult(
+                ok=False,
+                reason="respawn_max_concurrent_reached",
+            )
+        return ScheduleResult(ok=True)
+
+    def begin_respawn(
+        self,
+        pane_id: str,
+        *,
+        reason: str,
+        sprint_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ) -> ScheduleResult:
+        allowed = self.can_respawn(pane_id)
+        if not allowed.ok:
+            self._ledger.record_respawn(
+                pane_id,
+                before_state="needs_respawn",
+                after_state="needs_respawn",
+                success=False,
+                reason=allowed.reason or "respawn_not_allowed",
+                sprint_id=sprint_id,
+                task_id=task_id,
+            )
+            return allowed
+        self._active_respawns.add(pane_id)
+        self._ledger.record_respawn(
+            pane_id,
+            before_state="needs_respawn",
+            after_state="running",
+            success=True,
+            reason=reason,
+            sprint_id=sprint_id,
+            task_id=task_id,
+            extra={"active_respawns": len(self._active_respawns)},
+        )
+        return ScheduleResult(ok=True, assigned=[(task_id or "", pane_id)])
+
+    def finish_respawn(self, pane_id: str) -> None:
+        self._active_respawns.discard(pane_id)
+
     # ── SafetyGuard ──────────────────────────────────────────────────
 
     def _assert_not_kill_main_pane(self, target_pane_id: str) -> None:
-        if target_pane_id in PROTECTED_PANES:
+        if target_pane_id in PROTECTED_MAIN_PANES:
             raise SafetyViolationError(
                 f"Operation targets protected main pane: {target_pane_id}"
+            )
+
+    def _assert_respawn_target_allowed(self, target_pane_id: str) -> None:
+        if target_pane_id in PROTECTED_PANES:
+            raise SafetyViolationError(
+                f"Respawn targets protected pane: {target_pane_id}"
             )
 
     def _assert_no_user_data_delete(self) -> None:

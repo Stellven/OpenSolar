@@ -28,8 +28,10 @@ TOOLS_DIR = HARNESS_ROOT / "tools"
 REAL_PERSONAS_DIR = HARNESS_ROOT / "personas"
 
 sys.path.insert(0, str(LIB_DIR))
+sys.path.insert(0, str(TOOLS_DIR))
 
 import operator_runtime as _rt  # noqa: E402 — after path setup
+import operatord as _od  # noqa: E402 — after path setup
 
 
 # ---------------------------------------------------------------------------
@@ -122,12 +124,37 @@ dispatch = Path(os.environ["SOLAR_MULTI_TASK_DISPATCH_FILE"]).read_text(encoding
 handoff = Path(os.environ["HANDOFF"])
 handoff.parent.mkdir(parents=True, exist_ok=True)
 handoff.write_text("# Handoff\\n\\n" + dispatch, encoding="utf-8")
+result_path = os.environ.get("RESULT_PATH") or os.environ.get("PM_RESULT_PATH") or ""
+if result_path:
+    result = Path(result_path)
+    result.parent.mkdir(parents=True, exist_ok=True)
+    result.write_text("# PM Task Result\\n\\n## 已完成\\n- command backend wrote result\\n", encoding="utf-8")
 print("dispatch_seen=" + str(Path(os.environ["SOLAR_MULTI_TASK_DISPATCH_FILE"]).exists()))
 print("handoff_written=" + str(handoff))
 """,
         encoding="utf-8",
     )
     writer.chmod(0o755)
+
+    pm_dispatch = tmp_path / "tools" / "pm_dispatch.py"
+    pm_dispatch.write_text(
+        """#!/usr/bin/env python3
+import json
+import sys
+from pathlib import Path
+
+if len(sys.argv) >= 4 and sys.argv[1] == "complete" and sys.argv[2] == "--task-id":
+    task_id = sys.argv[3]
+    log = Path(__file__).resolve().parent.parent / "run" / "pm-complete.json"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text(json.dumps({"task_id": task_id}, ensure_ascii=False), encoding="utf-8")
+    print(f"✅ 任务 {task_id} 已标记为 completed")
+    raise SystemExit(0)
+raise SystemExit(2)
+""",
+        encoding="utf-8",
+    )
+    pm_dispatch.chmod(0o755)
 
     env = {**os.environ, "HARNESS_DIR": str(tmp_path)}
     env["COMMAND_AGENT"] = f"python3 {writer}"
@@ -438,6 +465,41 @@ class TestDaemonOnce:
         log_content = output_log.read_text()
         assert "T-n3-test-002" in log_content or "operatord" in log_content
 
+    def test_recovers_expired_lease_and_processes_task(self, tmp_path):
+        env = _setup_harness(tmp_path)
+        envelope_path = tmp_path / "expired-lease-envelope.json"
+        envelope = dict(_TASK_ENVELOPE)
+        envelope["task_id"] = "T-expired-lease-001"
+        envelope_path.write_text(json.dumps(envelope), encoding="utf-8")
+
+        submit_out = self._run_submit(env, envelope_path)
+        assert submit_out["status"] == "submitted"
+
+        lease_file = (
+            tmp_path
+            / "run"
+            / "operator-leases"
+            / f"{self.OPERATOR_ID}.json"
+        )
+        lease = json.loads(lease_file.read_text(encoding="utf-8"))
+        lease["expires_at"] = "2000-01-01T00:00:00Z"
+        lease_file.write_text(json.dumps(lease, indent=2), encoding="utf-8")
+
+        daemon_proc = self._run_daemon_once(env)
+        assert daemon_proc.returncode == 0, daemon_proc.stderr
+
+        result_json = (
+            tmp_path
+            / "run"
+            / "operator-results"
+            / self.OPERATOR_ID
+            / "T-expired-lease-001"
+            / "result.json"
+        )
+        assert result_json.exists()
+        result = json.loads(result_json.read_text(encoding="utf-8"))
+        assert result["status"] == "completed"
+
     def test_command_backend_uses_materialized_dispatch_file(self, tmp_path):
         env = _setup_command_harness(tmp_path)
         envelope = {
@@ -494,6 +556,68 @@ class TestDaemonOnce:
         handoff = tmp_path / "sprints" / "sprint-command.N1-handoff.md"
         assert handoff.exists()
 
+    def test_pm_dispatch_result_path_and_complete_hook(self, tmp_path):
+        env = _setup_command_harness(tmp_path)
+        dispatch_dir = tmp_path / "run" / "pm-dispatch-files"
+        dispatch_dir.mkdir(parents=True, exist_ok=True)
+        dispatch_file = dispatch_dir / "pm-T-command-002.md"
+        dispatch_file.write_text("# Solar PM Dispatch\\n\\nhello pm dispatch\\n", encoding="utf-8")
+
+        envelope = {
+            "task_id": "pm-T-command-002",
+            "sprint_id": "sprint-command",
+            "node_id": "N1",
+            "operator_id": "test-command-builder",
+            "task_type": "planning",
+            "objective": "Verify PM dispatch completion path",
+            "dispatch_file": str(dispatch_file),
+            "result_path": str(tmp_path / "sprints" / "sprint-command.N1.pm-result.md"),
+            "handoff_path": str(tmp_path / "sprints" / "sprint-command.N1-handoff.md"),
+            "command": "$COMMAND_AGENT",
+        }
+        envelope_path = tmp_path / "pm-envelope.json"
+        envelope_path.write_text(json.dumps(envelope), encoding="utf-8")
+
+        submit_out = self._run_submit(env, envelope_path)
+        assert submit_out["status"] == "submitted"
+
+        daemon_proc = subprocess.run(
+            [
+                sys.executable,
+                str(TOOLS_DIR / "operatord.py"),
+                "daemon",
+                "--operator",
+                "test-command-builder",
+                "--once",
+                "--poll-interval",
+                "0.2",
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert daemon_proc.returncode == 0, daemon_proc.stderr
+
+        result_json = (
+            tmp_path
+            / "run"
+            / "operator-results"
+            / "test-command-builder"
+            / "pm-T-command-002"
+            / "result.json"
+        )
+        result = json.loads(result_json.read_text())
+        assert result["status"] == "completed"
+
+        pm_result = tmp_path / "sprints" / "sprint-command.N1.pm-result.md"
+        assert pm_result.exists()
+        assert "command backend wrote result" in pm_result.read_text(encoding="utf-8")
+
+        complete_log = tmp_path / "run" / "pm-complete.json"
+        assert complete_log.exists()
+        assert json.loads(complete_log.read_text(encoding="utf-8"))["task_id"] == "pm-T-command-002"
+
     def test_signal_leaves_final_status(self, tmp_path):
         """SIGTERM while idle should leave a final idle status file."""
         import signal as _signal
@@ -543,3 +667,30 @@ class TestDaemonOnce:
         assert hb["runtime_state"] == "idle", (
             f"Final heartbeat after SIGTERM should be idle, got {hb['runtime_state']}"
         )
+
+
+class TestBuildCommand:
+    def test_claude_cli_backend_uses_print_command(self):
+        cmd = _od._build_command(
+            {"backend": "claude-cli", "model": "claude-opus-4-8"},
+            {"task_id": "pm-sample", "dispatch_file": "/tmp/dispatch.md"},
+        )
+        joined = " ".join(cmd)
+        assert cmd[:2] == ["bash", "-lc"]
+        assert "claude --dangerously-skip-permissions" in joined
+        assert "local-stub" not in joined
+        assert 'cat "$DISPATCH_FILE"' in joined
+
+    def test_command_backend_uses_registry_command_when_envelope_missing_command(self):
+        cmd = _od._build_command(
+            {"backend": "command", "command": "python3 /tmp/agent.py"},
+            {"task_id": "pm-sample"},
+        )
+        assert cmd == ["bash", "-lc", "python3 /tmp/agent.py"]
+
+    def test_empty_envelope_command_does_not_shadow_registry_command(self):
+        cmd = _od._build_command(
+            {"backend": "command", "command": "python3 /tmp/agent.py"},
+            {"task_id": "pm-sample", "command": ""},
+        )
+        assert cmd == ["bash", "-lc", "python3 /tmp/agent.py"]

@@ -145,7 +145,12 @@ if [[ "$SOLAR_CLAUDE_BYPASS" == "1" ]]; then
       SOLAR_CLAUDE_PERMISSION_MODE="bypassPermissions"
       ;;
   esac
-  CLAUDE_CMD="$CLAUDE_BIN --permission-mode ${SOLAR_CLAUDE_PERMISSION_MODE}"
+  SOLAR_CLAUDE_SKIP_PERMISSIONS="${SOLAR_CLAUDE_SKIP_PERMISSIONS:-1}"
+  if [[ "$SOLAR_CLAUDE_SKIP_PERMISSIONS" == "1" ]]; then
+    CLAUDE_CMD="$CLAUDE_BIN --dangerously-skip-permissions --permission-mode ${SOLAR_CLAUDE_PERMISSION_MODE}"
+  else
+    CLAUDE_CMD="$CLAUDE_BIN --permission-mode ${SOLAR_CLAUDE_PERMISSION_MODE}"
+  fi
 fi
 [[ -n "$MODEL_FLAG" ]] && CLAUDE_CMD="$CLAUDE_CMD $MODEL_FLAG"
 [[ -n "$TOOL_FLAG" ]] && CLAUDE_CMD="$CLAUDE_CMD $TOOL_FLAG"

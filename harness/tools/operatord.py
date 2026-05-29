@@ -20,6 +20,7 @@ list    Print enabled operators from the registry.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 import shlex
@@ -106,12 +107,45 @@ def _configured_launch_command(config: dict) -> str:
     return str(config.get("launch_cmd") or "").strip()
 
 
-def _materialize_envelope_context(result_dir: Path, envelope: dict) -> dict[str, str]:
-    env: dict[str, str] = {}
+def _claude_model_arg(model: str) -> str:
+    value = str(model or "sonnet").strip().lower()
+    if "opus" in value:
+        return "opus"
+    if "sonnet" in value or value in {"claude", "anthropic"}:
+        return "sonnet"
+    return value or "sonnet"
+
+
+def _dispatch_file_for_env(result_dir: Path, envelope: dict[str, Any]) -> Path | None:
     dispatch_text = str(envelope.get("dispatch_text") or "").strip()
     if dispatch_text:
         dispatch_file = result_dir / "dispatch.md"
         dispatch_file.write_text(dispatch_text, encoding="utf-8")
+        return dispatch_file
+
+    dispatch_file_value = str(envelope.get("dispatch_file") or "").strip()
+    if not dispatch_file_value:
+        return None
+
+    dispatch_path = Path(dispatch_file_value).expanduser()
+    if dispatch_path.exists():
+        # Keep a local copy next to result.json for auditability while still
+        # pointing the task at the canonical dispatch file.
+        try:
+            (result_dir / "dispatch.md").write_text(
+                dispatch_path.read_text(encoding="utf-8", errors="replace"),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
+        return dispatch_path
+    return dispatch_path
+
+
+def _materialize_envelope_context(result_dir: Path, envelope: dict) -> dict[str, str]:
+    env: dict[str, str] = {}
+    dispatch_file = _dispatch_file_for_env(result_dir, envelope)
+    if dispatch_file is not None:
         env["SOLAR_MULTI_TASK_DISPATCH_FILE"] = str(dispatch_file)
         env["DISPATCH_FILE"] = str(dispatch_file)
     envelope_file = result_dir / "envelope.json"
@@ -127,11 +161,38 @@ def _materialize_envelope_context(result_dir: Path, envelope: dict) -> dict[str,
         env["NODE_ID"] = str(envelope["node_id"])
     if str(envelope.get("sprint_id") or "").strip():
         env["SID"] = str(envelope["sprint_id"])
+    result_path = str(envelope.get("result_path") or "").strip()
+    if result_path:
+        env["RESULT_PATH"] = result_path
+        env["PM_RESULT_PATH"] = result_path
+    pm_context = str(envelope.get("pm_context") or "").strip()
+    if pm_context:
+        env["PM_CONTEXT"] = pm_context
     env["TASK_DIR"] = str(result_dir)
     env["OUTPUT_LOG"] = str(result_dir / "output.log")
     env["HARNESS_DIR"] = str(HARNESS_DIR)
     env["SPRINTS_DIR"] = str(HARNESS_DIR / "sprints")
     return env
+
+
+def _claude_print_command(config: dict[str, Any]) -> list[str]:
+    model = _claude_model_arg(str(config.get("model") or "sonnet"))
+    empty_mcp = HARNESS_DIR / "config" / "empty-mcp.json"
+    command = "\n".join([
+        "export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
+        "export CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1",
+        "export DISABLE_NON_ESSENTIAL_MODEL_CALLS=1",
+        "export CLAUDE_CODE_MAX_OUTPUT_TOKENS=${CLAUDE_CODE_MAX_OUTPUT_TOKENS:-4096}",
+        (
+            "claude --dangerously-skip-permissions "
+            "--permission-mode bypassPermissions "
+            f"--model {shlex.quote(model)} "
+            f"--add-dir {shlex.quote(str(HARNESS_DIR))} "
+            f"--strict-mcp-config --mcp-config {shlex.quote(str(empty_mcp))} "
+            '-p "$(cat "$DISPATCH_FILE")"'
+        ),
+    ])
+    return ["bash", "-lc", command]
 
 
 def _build_command(config: dict, envelope: dict) -> list[str]:
@@ -146,8 +207,8 @@ def _build_command(config: dict, envelope: dict) -> list[str]:
     backend: str = str(config.get("backend", "local")).lower()
 
     # Explicit command in the envelope takes highest priority.
-    if "command" in envelope:
-        cmd_val = envelope["command"]
+    cmd_val = envelope.get("command")
+    if cmd_val:
         if isinstance(cmd_val, list):
             return [str(c) for c in cmd_val]
         return ["bash", "-lc", str(cmd_val)]
@@ -155,6 +216,13 @@ def _build_command(config: dict, envelope: dict) -> list[str]:
     launch_cmd = _configured_launch_command(config)
     if backend == "command" and launch_cmd:
         return ["bash", "-lc", launch_cmd]
+    if backend == "command":
+        configured_command = str(config.get("command") or "").strip()
+        if configured_command:
+            return ["bash", "-lc", configured_command]
+
+    if backend == "claude-cli":
+        return _claude_print_command(config)
 
     task_id: str = str(envelope.get("task_id", "unknown"))
     objective: str = str(envelope.get("objective", ""))[:120]
@@ -185,6 +253,27 @@ def _build_command(config: dict, envelope: dict) -> list[str]:
     ]
 
 
+def _is_pm_dispatch_task(envelope: dict[str, Any]) -> bool:
+    task_id = str(envelope.get("task_id") or "").strip()
+    result_path = str(envelope.get("result_path") or "").strip()
+    return task_id.startswith("pm-") or result_path.endswith(".pm-result.md")
+
+
+def _pm_result_path(envelope: dict[str, Any]) -> Path | None:
+    value = str(envelope.get("result_path") or "").strip()
+    if not value:
+        return None
+    return Path(value).expanduser()
+
+
+def _pm_dispatch_complete_command(task_id: str) -> list[str]:
+    return [sys.executable, str(HARNESS_DIR / "tools" / "pm_dispatch.py"), "complete", "--task-id", task_id]
+
+
+def _parse_utc(value: str) -> dt.datetime:
+    return dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+
+
 # ---------------------------------------------------------------------------
 # Subcommand: daemon
 # ---------------------------------------------------------------------------
@@ -197,6 +286,7 @@ def cmd_daemon(args: argparse.Namespace) -> int:
     import time
 
     from operator_runtime import (  # noqa: E402
+        acquire_operator_lease,
         get_operator_lease,
         get_operator_runtime_state,
         list_inbox_tasks,
@@ -282,13 +372,31 @@ def cmd_daemon(args: argparse.Namespace) -> int:
 
         lease = get_operator_lease(operator_id)
         if lease is None or lease.get("task_id") != task_id:
+            recovered_lease = None
+            if lease is None:
+                try:
+                    recovered_lease = acquire_operator_lease(
+                        operator_id=operator_id,
+                        task_id=task_id,
+                        sprint_id=str(envelope.get("sprint_id") or ""),
+                        node_id=str(envelope.get("node_id") or ""),
+                        ttl_seconds=int(envelope.get("lease_ttl_seconds") or 3600),
+                        initial_state="leased",
+                    )
+                    lease = recovered_lease
+                    _info(f"Recovered missing/expired lease for task {task_id}")
+                except Exception as exc:
+                    _info(f"Lease recovery failed for task {task_id}: {exc}")
             # Lease missing or for a different task; skip and wait.
-            _info(
-                f"No valid lease found for task {task_id} "
-                f"(current lease task: {lease.get('task_id') if lease else 'none'})"
-            )
-            time.sleep(poll_interval)
-            continue
+            if lease is not None and lease.get("task_id") == task_id:
+                pass
+            else:
+                _info(
+                    f"No valid lease found for task {task_id} "
+                    f"(current lease task: {lease.get('task_id') if lease else 'none'})"
+                )
+                time.sleep(poll_interval)
+                continue
 
         if lease.get("state") not in ("leased",):
             _info(f"Task {task_id} lease state={lease.get('state')} — skipping")
@@ -324,6 +432,14 @@ def cmd_daemon(args: argparse.Namespace) -> int:
         log_path = result_dir / "output.log"
         exec_env = os.environ.copy()
         exec_env.update(_materialize_envelope_context(result_dir, envelope))
+        pm_result_path = _pm_result_path(envelope) if _is_pm_dispatch_task(envelope) else None
+        if pm_result_path is not None:
+            try:
+                pm_result_path.parent.mkdir(parents=True, exist_ok=True)
+                if pm_result_path.exists():
+                    pm_result_path.unlink()
+            except Exception as exc:
+                _info(f"Unable to clear stale pm result {pm_result_path}: {exc}")
 
         cmd = _build_command(config, envelope)
         _info(f"Executing: {' '.join(shlex.quote(part) for part in cmd[:8])}")
@@ -364,6 +480,47 @@ def cmd_daemon(args: argparse.Namespace) -> int:
             _state["current_state"] = "draining"
 
         finished_at: str = _now_utc()
+
+        if result_status == "completed" and pm_result_path is not None:
+            if not pm_result_path.exists():
+                log_lines.append(f"[ERROR] missing pm_result: {pm_result_path}")
+                result_status = "failed_missing_pm_result"
+                exit_code = exit_code or 65
+            else:
+                try:
+                    started_dt = _parse_utc(started_at)
+                    result_dt = dt.datetime.fromtimestamp(
+                        pm_result_path.stat().st_mtime,
+                        tz=dt.timezone.utc,
+                    )
+                    if result_dt < started_dt:
+                        log_lines.append(f"[ERROR] stale pm_result predates current run: {pm_result_path}")
+                        result_status = "failed_stale_pm_result"
+                        exit_code = exit_code or 66
+                except Exception:
+                    pass
+
+        if result_status == "completed" and pm_result_path is not None:
+            try:
+                completed = subprocess.run(
+                    _pm_dispatch_complete_command(task_id),
+                    capture_output=True,
+                    text=True,
+                    env=exec_env,
+                    timeout=30,
+                )
+                stdout = completed.stdout.strip()
+                stderr = completed.stderr.strip()
+                if stdout:
+                    log_lines.append(stdout)
+                if stderr:
+                    log_lines.append(stderr)
+                if completed.returncode != 0:
+                    log_lines.append(
+                        f"[WARN] pm_dispatch complete returned {completed.returncode} for {task_id}"
+                    )
+            except Exception as exc:
+                log_lines.append(f"[WARN] pm_dispatch complete hook failed: {exc}")
 
         # ── Write result artifact ─────────────────────────────────────────────
         log_tail = "\n".join(log_lines[-50:])

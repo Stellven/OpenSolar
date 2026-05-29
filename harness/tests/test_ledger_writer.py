@@ -62,6 +62,40 @@ class TestRecordRecover:
         assert len(jsonl_records) == 5
 
 
+# --- record_respawn ---
+
+class TestRecordRespawn:
+    def test_respawn_record(self, ledger, tmp_path):
+        ledger.record_respawn(
+            "test:0.2",
+            before_state="needs_respawn",
+            after_state="running",
+            success=True,
+            reason="worker_pane_recreated",
+            sprint_id="sprint-123",
+            task_id="task-123",
+            extra={"active_respawns": 1},
+        )
+        records = _read_jsonl(str(tmp_path / "test-ledger.jsonl"))
+        rows = _read_sqlite(str(tmp_path / "test-ledger.sqlite"))
+        assert records[0]["action"] == "respawn"
+        assert records[0]["task_id"] == "task-123"
+        assert records[0]["extra"]["active_respawns"] == 1
+        assert rows[0]["action"] == "respawn"
+
+    def test_respawn_rejection_record(self, ledger, tmp_path):
+        ledger.record_respawn(
+            "test:0.2",
+            before_state="needs_respawn",
+            after_state="needs_respawn",
+            success=False,
+            reason="respawn_max_concurrent_reached",
+        )
+        records = _read_jsonl(str(tmp_path / "test-ledger.jsonl"))
+        assert records[0]["success"] is False
+        assert records[0]["reason"] == "respawn_max_concurrent_reached"
+
+
 # --- record_clear ---
 
 class TestRecordClear:
@@ -168,11 +202,16 @@ class TestDualWriteFailure:
         jsonl = str(tmp_path / "readonly" / "ledger.jsonl")
         sqlite = str(tmp_path / "test.sqlite")
         fallback = str(tmp_path / "fallback.jsonl")
-        (tmp_path / "readonly").mkdir()
-        lw = LedgerWriter(jsonl, sqlite, fallback_path=fallback)
-        lw.record_clear("p", before_state="dirty", after_state="clean",
-                        success=True, reason="test")
-        assert (tmp_path / "fallback.jsonl").exists()
+        readonly = tmp_path / "readonly"
+        readonly.mkdir()
+        readonly.chmod(0o500)
+        try:
+            lw = LedgerWriter(jsonl, sqlite, fallback_path=fallback)
+            lw.record_clear("p", before_state="dirty", after_state="clean",
+                            success=True, reason="test")
+            assert (tmp_path / "fallback.jsonl").exists()
+        finally:
+            readonly.chmod(0o700)
 
     def test_sqlite_failure_continues(self, tmp_path):
         jsonl = str(tmp_path / "ledger.jsonl")
