@@ -27,6 +27,9 @@ def _graph(sid: str) -> dict:
                 {"kind": "self_check", "source_capsule_id": "cap.understand-anything-indexer", "requirement": "check.semantic_backend_thunderomlx_declared"},
                 {"kind": "self_check", "source_capsule_id": "cap.understand-anything-indexer", "requirement": "check.semantic_proof_artifact_written"},
                 {"kind": "self_check", "source_capsule_id": "cap.understand-anything-indexer", "requirement": "check.semantic_phase_request_written"},
+                {"kind": "self_check", "source_capsule_id": "cap.understand-anything-indexer", "requirement": "check.chunk_manifest_written"},
+                {"kind": "self_check", "source_capsule_id": "cap.understand-anything-indexer", "requirement": "check.resume_state_written"},
+                {"kind": "self_check", "source_capsule_id": "cap.understand-anything-indexer", "requirement": "check.meta_written"},
                 {"kind": "postcondition", "source_capsule_id": "cap.understand-anything-indexer", "requirement": "output_present", "field": "understand_anything_dispatch_result"},
                 {"kind": "external_verifier", "source_capsule_id": "cap.understand-anything-indexer", "requirement": "external_verifier.required"},
             ],
@@ -49,7 +52,24 @@ def test_understand_anything_proof_gate_passes_from_operator_artifacts(tmp_path,
         json.dumps({"sprint_id": sid, "node_id": "N1", "status": "completed"}),
         encoding="utf-8",
     )
-    (result_dir / "understand-anything-result.json").write_text(json.dumps({"ok": True}), encoding="utf-8")
+    ua_root = tmp_path / "ua"
+    ua_root.mkdir()
+    (ua_root / "chunk-manifest.json").write_text(json.dumps({"ok": True}), encoding="utf-8")
+    (ua_root / "resume-state.json").write_text(json.dumps({"ok": True}), encoding="utf-8")
+    (ua_root / "meta.json").write_text(json.dumps({"ok": True}), encoding="utf-8")
+    (result_dir / "understand-anything-result.json").write_text(
+        json.dumps(
+            {
+                "ok": True,
+                "dispatch_result": {
+                    "manifest_path": str(ua_root / "chunk-manifest.json"),
+                    "resume_state_path": str(ua_root / "resume-state.json"),
+                    "meta_path": str(ua_root / "meta.json"),
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     (result_dir / "understand-anything-semantic-proof.json").write_text(
         json.dumps({"semantic_backend_declared": "ThunderOMLX"}),
         encoding="utf-8",
@@ -84,7 +104,24 @@ def test_understand_anything_proof_gate_blocks_missing_semantic_request(tmp_path
         json.dumps({"sprint_id": sid, "node_id": "N1", "status": "completed"}),
         encoding="utf-8",
     )
-    (result_dir / "understand-anything-result.json").write_text(json.dumps({"ok": True}), encoding="utf-8")
+    ua_root = tmp_path / "ua-missing"
+    ua_root.mkdir()
+    (ua_root / "chunk-manifest.json").write_text(json.dumps({"ok": True}), encoding="utf-8")
+    (ua_root / "resume-state.json").write_text(json.dumps({"ok": True}), encoding="utf-8")
+    (ua_root / "meta.json").write_text(json.dumps({"ok": True}), encoding="utf-8")
+    (result_dir / "understand-anything-result.json").write_text(
+        json.dumps(
+            {
+                "ok": True,
+                "dispatch_result": {
+                    "manifest_path": str(ua_root / "chunk-manifest.json"),
+                    "resume_state_path": str(ua_root / "resume-state.json"),
+                    "meta_path": str(ua_root / "meta.json"),
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     (result_dir / "understand-anything-semantic-proof.json").write_text(
         json.dumps({"semantic_backend_declared": "ThunderOMLX"}),
         encoding="utf-8",

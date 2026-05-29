@@ -41,6 +41,12 @@ contract:
         type: json
       - name: knowledge_graph_path
         type: path
+      - name: meta_path
+        type: path
+      - name: chunk_manifest_path
+        type: path
+      - name: resume_state_path
+        type: path
   preconditions:
     - check: task_type_in
       values:
@@ -94,7 +100,7 @@ bindings:
   required_resource_capsules:
     - resource.repo-workspace
 runtime_preferences:
-  execution_surface: tui_pane_skill_command
+  execution_surface: deterministic_scan_and_thunderomlx_semantic
   skill_command_template: /understand --language {language} {repo_path}
   pane_target: best_effort
   pane_target_selector: builder_idle
@@ -107,12 +113,16 @@ verification:
     - check.semantic_backend_thunderomlx_declared
     - check.semantic_proof_artifact_written
     - check.semantic_phase_request_written
+    - check.chunk_manifest_written
+    - check.resume_state_written
+    - check.meta_written
   external_verifier:
     required: false
     preferred_capsules:
       - cap.requirement-compiler-verification
   pass_conditions:
     - understand_anything_dispatch_result exists
+    - knowledge_graph_path exists when local semantic pipeline succeeds
 operator_compatibility:
   preferred:
     - mini-understand-anything-pane-bridge

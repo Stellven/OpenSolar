@@ -187,6 +187,43 @@
       },
       "cost_hint": "low",
       "concurrency": {"max_parallel": 3, "singleton": false}
+    },
+    "DeepResearchBrowser": {
+      "operator_type": "DeepResearchBrowser",
+      "description": "Runs long-horizon browser-mediated research tasks that require persistent webapp sessions and async artifact collection.",
+      "primary_role": "knowledge-extractor",
+      "required_capabilities": {
+        "research_synthesis": 5,
+        "browser_use": 5,
+        "gui_use": 4,
+        "long_context": 4
+      },
+      "cost_hint": "high",
+      "concurrency": {"max_parallel": 1, "singleton": false}
+    },
+    "DeepResearchGemini": {
+      "operator_type": "DeepResearchGemini",
+      "description": "Routes deep research tasks to Gemini-oriented long-context synthesis workers when browser-first execution is unavailable.",
+      "primary_role": "knowledge-extractor",
+      "required_capabilities": {
+        "research_synthesis": 5,
+        "long_context": 5,
+        "browser_use": 2
+      },
+      "cost_hint": "high",
+      "concurrency": {"max_parallel": 2, "singleton": false}
+    },
+    "DeepResearchChatGPT": {
+      "operator_type": "DeepResearchChatGPT",
+      "description": "Routes deep research tasks to ChatGPT-oriented synthesis workers as a premium fallback path.",
+      "primary_role": "knowledge-extractor",
+      "required_capabilities": {
+        "research_synthesis": 5,
+        "academic_critique": 4,
+        "long_context": 5
+      },
+      "cost_hint": "high",
+      "concurrency": {"max_parallel": 2, "singleton": false}
     }
   },
   "bindings": {
@@ -340,6 +377,36 @@
         {"actor_id": "mini-antigravity-gemini35-flash-high", "priority": 2, "condition": "always"}
       ],
       "selection_policy": "cost_optimal",
+      "fallback_policy": "queue"
+    },
+    "DeepResearchBrowser": {
+      "operator_type": "DeepResearchBrowser",
+      "candidates": [
+        {"actor_id": "browser_agent_session", "priority": 1, "condition": "always"},
+        {"actor_id": "mini-gemini-deep-research", "priority": 2, "condition": "quota_ok"},
+        {"actor_id": "mini-chatgpt-deep-research", "priority": 3, "condition": "always"}
+      ],
+      "selection_policy": "priority_first",
+      "fallback_policy": "queue"
+    },
+    "DeepResearchGemini": {
+      "operator_type": "DeepResearchGemini",
+      "candidates": [
+        {"actor_id": "mini-gemini-deep-research", "priority": 1, "condition": "always"},
+        {"actor_id": "browser_agent_session", "priority": 2, "condition": "quota_ok"},
+        {"actor_id": "mini-claude-opus-planner", "priority": 3, "condition": "always"}
+      ],
+      "selection_policy": "priority_first",
+      "fallback_policy": "queue"
+    },
+    "DeepResearchChatGPT": {
+      "operator_type": "DeepResearchChatGPT",
+      "candidates": [
+        {"actor_id": "mini-chatgpt-deep-research", "priority": 1, "condition": "always"},
+        {"actor_id": "browser_agent_session", "priority": 2, "condition": "quota_ok"},
+        {"actor_id": "mini-claude-opus-planner", "priority": 3, "condition": "always"}
+      ],
+      "selection_policy": "priority_first",
       "fallback_policy": "queue"
     }
   }

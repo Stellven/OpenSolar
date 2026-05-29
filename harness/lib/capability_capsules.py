@@ -29,6 +29,22 @@ CAPSULE_REGISTRY_PATH = HARNESS_DIR / "config" / "capability-capsules.registry.y
 CAPSULE_SCHEMA_PATH = HARNESS_DIR / "schemas" / "draft" / "capability-capsule.v1.draft.json"
 
 HIGH_RISK_EFFECTS = {"secrets_access", "destructive_shell", "git_push"}
+UNDERSTAND_ANYTHING_SIGNAL_TOKENS = {
+    "understand-anything",
+    "knowledge graph",
+    "knowledge-graph",
+    "codebase index",
+    "codebase-index",
+    "codebase indexing",
+    "codebase-indexing",
+    "code understanding",
+    "code-understanding",
+    "repository understanding",
+    "repo understanding",
+    "repo map",
+    "architecture map",
+    "onboarding",
+}
 
 DEFAULT_CAPSULE_BY_LOGICAL_OPERATOR = {
     "DeepArchitect": "cap.requirement-compiler-planner",
@@ -53,6 +69,51 @@ DEFAULT_TASK_TYPE_BY_LOGICAL_OPERATOR = {
     "ResearchSynthesizer": "research",
     "ArtifactCurator": "evidence",
 }
+
+
+def _skill_driven_override(
+    logical_operator: str,
+    *,
+    registry_env: str = "SOLAR_SKILL_OPERATOR_REGISTRY",
+) -> Dict[str, str]:
+    registry_hint = str(os.environ.get(registry_env, "") or "").strip()
+    if not registry_hint:
+        return {}
+    try:
+        from skill_operator_registry import DEFAULT_BINDINGS_PATH, lookup_by_logical_operator
+    except Exception:
+        return {}
+    binding_path = DEFAULT_BINDINGS_PATH if registry_hint in {"1", "true", "TRUE", "yes"} else Path(registry_hint)
+    binding = lookup_by_logical_operator(str(logical_operator or ""), path=binding_path)
+    if binding is None:
+        return {}
+    return {
+        "capsule_id": binding.capsule_id,
+        "dispatch_task_type": "knowledge-extraction",
+        "physical_operator": binding.physical_operator,
+        "actor": binding.actor,
+        "semantic_backend": binding.semantic_backend or "",
+    }
+
+
+def _looks_like_understand_anything_task(
+    logical_operator: str,
+    *,
+    request_type: str = "",
+    lane_hint: str = "",
+    node: Optional[Dict[str, Any]] = None,
+) -> bool:
+    if str(logical_operator or "") not in {"ResearchScout", "ResearchSynthesizer", "ArtifactCurator", "DeepArchitect"}:
+        return False
+    text_parts = [
+        str(request_type or ""),
+        str(lane_hint or ""),
+        str((node or {}).get("goal", "")),
+        str((node or {}).get("title", "")),
+        str((node or {}).get("type", "")),
+    ]
+    haystack = " ".join(text_parts).lower()
+    return any(token in haystack for token in UNDERSTAND_ANYTHING_SIGNAL_TOKENS)
 
 
 class CapsuleError(RuntimeError):
@@ -409,18 +470,21 @@ def validate_capability_capsule(
     *,
     schema_path: Optional[Path] = None,
 ) -> List[str]:
-    import jsonschema
-
     normalized = normalize_capability_capsule(payload)
-    schema = _load_schema(schema_path)
     errors: List[str] = []
-    validator = jsonschema.Draft202012Validator(schema)
-    for err in sorted(validator.iter_errors(normalized), key=lambda e: list(e.path)):
-        path = ".".join(str(part) for part in err.path)
-        if path:
-            errors.append(f"{path}: {err.message}")
-        else:
-            errors.append(err.message)
+    try:
+        import jsonschema
+    except Exception:
+        jsonschema = None  # type: ignore[assignment]
+    if jsonschema is not None:
+        schema = _load_schema(schema_path)
+        validator = jsonschema.Draft202012Validator(schema)
+        for err in sorted(validator.iter_errors(normalized), key=lambda e: list(e.path)):
+            path = ".".join(str(part) for part in err.path)
+            if path:
+                errors.append(f"{path}: {err.message}")
+            else:
+                errors.append(err.message)
     errors.extend(validate_capability_capsule_semantics(normalized))
     return errors
 
@@ -483,7 +547,21 @@ def default_capability_plan_for_logical_operator(
     node: Optional[Dict[str, Any]] = None,
     registry_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    capsule_id = DEFAULT_CAPSULE_BY_LOGICAL_OPERATOR.get(str(logical_operator or ""))
+    skill_override = _skill_driven_override(logical_operator)
+    if skill_override:
+        capsule_id = skill_override["capsule_id"]
+        dispatch_task_type = skill_override["dispatch_task_type"]
+    elif _looks_like_understand_anything_task(
+        logical_operator,
+        request_type=request_type,
+        lane_hint=lane_hint,
+        node=node,
+    ):
+        capsule_id = "cap.understand-anything-indexer"
+        dispatch_task_type = "code-understanding"
+    else:
+        capsule_id = DEFAULT_CAPSULE_BY_LOGICAL_OPERATOR.get(str(logical_operator or ""))
+        dispatch_task_type = DEFAULT_TASK_TYPE_BY_LOGICAL_OPERATOR.get(str(logical_operator or ""), "")
     if not capsule_id:
         return {}
     entry = get_registry_entry(capsule_id, path=registry_path, include_nonstable=True)
@@ -495,7 +573,7 @@ def default_capability_plan_for_logical_operator(
     return {
         "capability_native": True,
         "capability_capsule_id": capsule_id,
-        "dispatch_task_type": DEFAULT_TASK_TYPE_BY_LOGICAL_OPERATOR.get(str(logical_operator or ""), ""),
+        "dispatch_task_type": dispatch_task_type,
         "selection_mode": "logical_operator_default",
         "request_type": request_type,
         "lane_hint": lane_hint,
@@ -509,6 +587,8 @@ def default_capability_plan_for_logical_operator(
             "forbidden": list(operator_compat.get("forbidden", [])),
             "default_operator_profile": entry.default_operator_profile,
         },
+        "skill_driven_override": bool(skill_override),
+        "semantic_backend": skill_override.get("semantic_backend", ""),
     }
 
 

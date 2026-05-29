@@ -28,6 +28,14 @@ RECENT_FAILURE_PENALTY = 0.15
 SAME_PROVIDER_VERIFIER_PENALTY = 0.20
 STALE_CONTEXT_PENALTY = 0.10
 
+_ACTOR_TYPE_PRECEDENCE = {
+    "chatgpt": 0,
+    "gemini": 1,
+    "browser": 2,
+    "api": 3,
+    "local": 4,
+}
+
 
 class TaskEvidence:
     """Historical task evidence for computing HistoricalSuccess."""
@@ -149,15 +157,40 @@ def compute_score(
     return total, factors, penalties
 
 
+def classify_actor_type(actor_id: str, actor_cfg: Optional[Dict[str, Any]] = None) -> str:
+    """Classify actors for fallback ordering compatibility.
+
+    The Browser Agent cutover tests still expect a stable precedence ladder when
+    multiple actors land on identical scores:
+    ChatGPT > Gemini > Browser > API > Local.
+    """
+    cfg = actor_cfg or {}
+    actor_id_l = str(actor_id or "").lower()
+    model = str(cfg.get("model") or cfg.get("provider_model") or "").lower()
+    capability_profile = cfg.get("capability_profile") if isinstance(cfg.get("capability_profile"), dict) else {}
+
+    if "chatgpt" in actor_id_l or model.startswith(("o1", "o3", "o4", "gpt-", "chatgpt")):
+        return "chatgpt"
+    if "gemini" in actor_id_l or "gemini" in model:
+        return "gemini"
+    if "browser" in actor_id_l or capability_profile.get("browser_use", 0):
+        return "browser"
+    if "thunder" in actor_id_l or model.startswith(("qwen", "llama", "mistral", "thunder")):
+        return "local"
+    return "api"
+
+
 def rank_actors(
     candidates: List[str],
     task_fit_fn=None,
     evidence: Optional[TaskEvidence] = None,
     writer_actor_id: Optional[str] = None,
+    actors_cfg: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> List[OperatorScoreResult]:
     """Rank candidates by score. Returns sorted (best first) results."""
     results = []
     ev = evidence or TaskEvidence()
+    cfg = actors_cfg or {}
     for i, actor_id in enumerate(candidates):
         tf = task_fit_fn(actor_id) if task_fit_fn else 0.5
         hs = ev.success_rate(actor_id=actor_id)
@@ -177,7 +210,13 @@ def rank_actors(
             selected=False,
         ))
 
-    results.sort(key=lambda r: r.total_score, reverse=True)
+    results.sort(
+        key=lambda r: (
+            -r.total_score,
+            _ACTOR_TYPE_PRECEDENCE.get(classify_actor_type(r.actor_id, cfg.get(r.actor_id, {})), 99),
+            r.actor_id,
+        )
+    )
     if results:
         results[0].selected = True
         for r in results[1:]:

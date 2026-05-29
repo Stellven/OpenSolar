@@ -18,6 +18,7 @@ if str(ROOT / "lib") not in sys.path:
 
 from hands_runtime import PaneHand, ResultStatus  # noqa: E402
 import operator_flow_control as ofc  # noqa: E402
+import understand_anything_local_pipeline as local_pipeline  # noqa: E402
 
 
 DEFAULT_OPERATOR_ID = "mini-understand-anything-pane-bridge"
@@ -26,6 +27,8 @@ DEFAULT_SEMANTIC_BACKEND = "ThunderOMLX"
 DEFAULT_SEMANTIC_OPERATOR_ID = "mini-thunderomlx-qwen36-knowledge"
 DEFAULT_PANE_TARGET = "0"
 DEFAULT_SKILL_COMMAND_TEMPLATE = "/understand --language {language} {repo_path}"
+DEFAULT_EXECUTION_SURFACE = "deterministic_scan_and_thunderomlx_semantic"
+LEGACY_EXECUTION_SURFACE = "tui_pane_skill_command"
 DEFAULT_PANE_SESSIONS = (
     "solar-harness-lab",
     "solar-harness-multi-task",
@@ -208,7 +211,7 @@ def build_request(envelope: dict[str, Any], *, task_dir: Path | None = None) -> 
             or runtime_preferences.get("semantic_operator_id")
             or DEFAULT_SEMANTIC_OPERATOR_ID
         ),
-        "execution_surface": str(runtime_preferences.get("execution_surface") or "tui_pane_skill_command"),
+        "execution_surface": str(runtime_preferences.get("execution_surface") or DEFAULT_EXECUTION_SURFACE),
         "skill_command_template": str(
             runtime_preferences.get("skill_command_template")
             or envelope.get("skill_command_template")
@@ -289,10 +292,13 @@ def _validate_request(request: dict[str, Any]) -> None:
         raise RuntimeError(
             f"semantic backend must be {DEFAULT_SEMANTIC_BACKEND}, got {semantic_backend or 'N/A'}"
         )
-    if str(request.get("execution_surface") or "").strip() != "tui_pane_skill_command":
-        raise RuntimeError("execution_surface must be tui_pane_skill_command")
-    if not str(request.get("pane_target") or "").strip():
-        raise RuntimeError("pane_target must not be empty")
+    execution_surface = str(request.get("execution_surface") or "").strip()
+    if execution_surface not in {DEFAULT_EXECUTION_SURFACE, LEGACY_EXECUTION_SURFACE}:
+        raise RuntimeError(
+            f"execution_surface must be {DEFAULT_EXECUTION_SURFACE} or {LEGACY_EXECUTION_SURFACE}"
+        )
+    if execution_surface == LEGACY_EXECUTION_SURFACE and not str(request.get("pane_target") or "").strip():
+        raise RuntimeError("pane_target must not be empty for legacy pane dispatch")
 
 
 def _ensure_semantic_backend_ready(request: dict[str, Any], *, task_dir: Path) -> None:
@@ -336,8 +342,10 @@ def _summary_markdown(response: dict[str, Any]) -> str:
             f"- repo_path: {response.get('repo_path') or 'N/A'}",
             f"- pane_target: {response.get('pane_target') or 'N/A'}",
             f"- skill_command: {response.get('skill_command') or 'N/A'}",
+            f"- execution_surface: {response.get('execution_surface') or 'N/A'}",
             f"- semantic_backend: {response.get('semantic_backend') or 'N/A'}",
             f"- proof_artifact: {response.get('proof_artifact') or 'N/A'}",
+            f"- knowledge_graph_path: {response.get('knowledge_graph_path') or 'N/A'}",
         ]
     )
 
@@ -368,7 +376,7 @@ def _write_semantic_proof_artifact(
         "enforcement_mode": "contract_and_runtime_gate",
         "proof_note": (
             "This artifact proves Solar Harness enforced ThunderOMLX at the capsule/runtime/operator level "
-            "before dispatching the understand-anything skill command into a TUI pane."
+            "before executing understand-anything through the governed execution surface."
         ),
     }
     path = Path(task_dir) / "understand-anything-semantic-proof.json"
@@ -412,37 +420,47 @@ def _write_semantic_phase_request_artifacts(request: dict[str, Any], *, task_dir
     return request_path, prompt_path
 
 
-def run_request(request: dict[str, Any], *, task_dir: Path) -> dict[str, Any]:
-    _validate_request(request)
-    _ensure_semantic_backend_ready(request, task_dir=task_dir)
-    task_dir.mkdir(parents=True, exist_ok=True)
-    (task_dir / "understand-anything-request.json").write_text(
-        json.dumps(request, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
+def _run_local_semantic_pipeline(request: dict[str, Any], *, task_dir: Path) -> dict[str, Any]:
+    knowledge_dir = Path(str(request.get("output_dir") or "")).expanduser()
+    if not knowledge_dir.is_absolute():
+        knowledge_dir = Path(str(request.get("repo_path") or "")).expanduser() / ".understand-anything"
+    pipeline_result = local_pipeline.run_pipeline(
+        str(request["repo_path"]),
+        output_dir=str(knowledge_dir),
+        language=str(request.get("language") or DEFAULT_LANGUAGE),
+        objective=str(request.get("objective") or ""),
     )
-    contract = {
-        "execution_surface": request["execution_surface"],
-        "skill_command": request["skill_command"],
-        "skill_command_template": request["skill_command_template"],
-        "pane_target": request["pane_target"],
-        "pane_resolution": request.get("pane_resolution") or {},
+    response = {
+        "ok": True,
         "repo_path": request["repo_path"],
+        "pane_target": "N/A",
+        "skill_command": "N/A",
+        "skill_command_template": request["skill_command_template"],
+        "execution_surface": request["execution_surface"],
         "semantic_backend": request["semantic_backend"],
         "semantic_operator_id": request["semantic_operator_id"],
-        "status": "dispatching",
+        "pane_resolution": request.get("pane_resolution") or {},
+        "knowledge_graph_path": pipeline_result["knowledge_graph_path"],
+        "knowledge_output_dir": pipeline_result["output_dir"],
+        "chunk_manifest_path": pipeline_result["manifest_path"],
+        "resume_state_path": pipeline_result["resume_state_path"],
+        "dispatch_result": {
+            "mode": "local_pipeline",
+            "scan_path": pipeline_result["scan_path"],
+            "summary_path": pipeline_result["summary_path"],
+            "meta_path": pipeline_result["meta_path"],
+            "manifest_path": pipeline_result["manifest_path"],
+            "resume_state_path": pipeline_result["resume_state_path"],
+            "chunks_total": pipeline_result.get("chunks_total"),
+            "chunks_completed": pipeline_result.get("chunks_completed"),
+            "resumed": pipeline_result.get("resumed"),
+            "usage": pipeline_result.get("usage") or {},
+        },
     }
-    (task_dir / "understand-anything-bridge-contract.json").write_text(
-        json.dumps(contract, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    semantic_request_path, semantic_prompt_path = _write_semantic_phase_request_artifacts(request, task_dir=task_dir)
-    proof_path = _write_semantic_proof_artifact(
-        request,
-        task_dir=task_dir,
-        semantic_phase_request_path=str(semantic_request_path),
-        semantic_phase_prompt_path=str(semantic_prompt_path),
-    )
+    return response
 
+
+def _run_legacy_pane_dispatch(request: dict[str, Any]) -> dict[str, Any]:
     pane_target = str(request["pane_target"])
     hand = PaneHand()
     hand_ref = hand.provision(
@@ -458,20 +476,62 @@ def run_request(request: dict[str, Any], *, task_dir: Path) -> dict[str, Any]:
     )
     if result.status != ResultStatus.OK:
         raise RuntimeError(result.error or "pane dispatch failed")
-    response = {
+    return {
         "ok": True,
         "repo_path": request["repo_path"],
         "pane_target": pane_target,
         "skill_command": request["skill_command"],
         "skill_command_template": request["skill_command_template"],
+        "execution_surface": request["execution_surface"],
         "semantic_backend": request["semantic_backend"],
         "semantic_operator_id": request["semantic_operator_id"],
         "pane_resolution": request.get("pane_resolution") or {},
-        "proof_artifact": str(proof_path),
-        "semantic_phase_request_artifact": str(semantic_request_path),
-        "semantic_phase_prompt_artifact": str(semantic_prompt_path),
         "dispatch_result": result.output,
     }
+
+
+def run_request(request: dict[str, Any], *, task_dir: Path) -> dict[str, Any]:
+    _validate_request(request)
+    _ensure_semantic_backend_ready(request, task_dir=task_dir)
+    task_dir.mkdir(parents=True, exist_ok=True)
+    (task_dir / "understand-anything-request.json").write_text(
+        json.dumps(request, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    contract = {
+        "execution_surface": request["execution_surface"],
+        "skill_command": request["skill_command"],
+        "skill_command_template": request["skill_command_template"],
+        "pane_target": request.get("pane_target") or "",
+        "pane_resolution": request.get("pane_resolution") or {},
+        "repo_path": request["repo_path"],
+        "semantic_backend": request["semantic_backend"],
+        "semantic_operator_id": request["semantic_operator_id"],
+        "execution_surface": request["execution_surface"],
+        "status": "dispatching",
+    }
+    (task_dir / "understand-anything-bridge-contract.json").write_text(
+        json.dumps(contract, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    semantic_request_path, semantic_prompt_path = _write_semantic_phase_request_artifacts(request, task_dir=task_dir)
+    proof_path = _write_semantic_proof_artifact(
+        request,
+        task_dir=task_dir,
+        semantic_phase_request_path=str(semantic_request_path),
+        semantic_phase_prompt_path=str(semantic_prompt_path),
+    )
+    if str(request.get("execution_surface") or "") == DEFAULT_EXECUTION_SURFACE:
+        response = _run_local_semantic_pipeline(request, task_dir=task_dir)
+    else:
+        response = _run_legacy_pane_dispatch(request)
+    response.update(
+        {
+            "proof_artifact": str(proof_path),
+            "semantic_phase_request_artifact": str(semantic_request_path),
+            "semantic_phase_prompt_artifact": str(semantic_prompt_path),
+        }
+    )
     (task_dir / "understand-anything-result.json").write_text(
         json.dumps(response, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",

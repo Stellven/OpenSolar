@@ -452,7 +452,7 @@ class TestMonitorBridgeSnapshot:
             status_dir=tmp_harness["status_dir"],
             lease_dir=tmp_harness["lease_dir"],
         )
-        assert snapshot["schema"] == "solar.monitor_bridge.operator_fleet.v1"
+        assert snapshot["schema"] == "solar.monitor_bridge.operator_fleet.v2"
 
     def test_snapshot_top_level_fields(self, tmp_harness: dict[str, Path]) -> None:
         mb = self._load_mb()
@@ -665,7 +665,7 @@ class TestOperatorStatusSurfaceAndBilling:
         surface_cfg = {
             "type": "claude_code_interactive",
             "tool": "claude",
-            "launch_cmd": "claude --model sonnet",
+            "launch_cmd": "claude --dangerously-skip-permissions --model sonnet",
         }
         op_cfg = {"role": "builder", "enabled": True, "surface": surface_cfg}
         entry = get_operator_status_entry("op-with-surface", op_cfg, **dirs)
@@ -760,7 +760,7 @@ class TestOperatorStatusSurfaceAndBilling:
                     "surface": {
                         "type": "claude_code_interactive",
                         "tool": "claude",
-                        "launch_cmd": "claude --model sonnet",
+                        "launch_cmd": "claude --dangerously-skip-permissions --model sonnet",
                     },
                     "enabled": True,
                 },

@@ -1596,6 +1596,299 @@
         "knobs_override": {}
       },
       "fallback_ladder": []
+    },
+    "browser_agent_session": {
+      "actor_id": "browser_agent_session",
+      "host_id": "browser_profile_host",
+      "operator_alias": "webapp_research_operator",
+      "aliases": ["browser_agent_session", "webapp_research_operator", "mini-browser-deepresearch"],
+      "role": "knowledge-extractor",
+      "display_meta": {
+        "display_name": "Browser Agent Session",
+        "tmux_session": null,
+        "tmux_window": null,
+        "tmux_pane_index": null
+      },
+      "lease": {
+        "acquired_at": null,
+        "expires_at": null,
+        "renewable": true,
+        "preemptible": false,
+        "heartbeat_timeout_sec": 120,
+        "lease_id": null,
+        "holder_sprint": null
+      },
+      "mailbox": {
+        "inbox": "actors/browser_agent_session/inbox",
+        "outbox": "actors/browser_agent_session/outbox",
+        "logs": "actors/browser_agent_session/logs",
+        "state_json": "actors/browser_agent_session/state.json",
+        "heartbeat_json": "actors/browser_agent_session/heartbeat.json"
+      },
+      "context_packet_ref": {
+        "path": null,
+        "packet_id": null
+      },
+      "evidence_ledger_ref": {
+        "path": "actors/browser_agent_session/evidence"
+      },
+      "capability": {
+        "research": 5,
+        "browser": 5,
+        "multimodal": 4,
+        "reliability": 3
+      },
+      "capability_profile": {
+        "architecture_reasoning": 2,
+        "code_impl": 1,
+        "root_cause_debug": 2,
+        "test_generation": 1,
+        "test_execution": 2,
+        "research_synthesis": 5,
+        "academic_critique": 3,
+        "browser_use": 5,
+        "gui_use": 4,
+        "long_context": 4,
+        "multi_agent_coordination": 2,
+        "speed": 2
+      },
+      "risk_profile": {
+        "allowed_write_scope": "project",
+        "allowed_shell_scope": "denied",
+        "allowed_network": "allowed",
+        "allowed_secrets": "denied",
+        "destructive_actions": "denied",
+        "git_commit": "denied",
+        "git_push": "denied",
+        "payment_or_external_action": "denied",
+        "requires_human_for": ["external_login", "reauth_required", "payment_or_external_action"]
+      },
+      "cost_profile": {
+        "cost_tier": "high",
+        "token_budget_class": "large",
+        "quota_period": "monthly",
+        "reserve_ratio": 0.25,
+        "effort": "heavy",
+        "prefer_for": ["deep-research", "browser-research"],
+        "avoid_for": ["code-implementation"]
+      },
+      "quota": {
+        "quota_type": "browser-session",
+        "period": "unknown",
+        "on_exhausted": "manual_review"
+      },
+      "policy": {
+        "write_files": "artifact_dir_only",
+        "run_shell": "denied",
+        "network": "allowed",
+        "secrets_access": "denied",
+        "git_commit": "denied"
+      },
+      "evidence": {
+        "last_smoke_at": null,
+        "last_smoke_result": null,
+        "last_task_at": null,
+        "last_task_id": null,
+        "last_task_result": null,
+        "provenance": "browser agent operator registry bootstrap 2026-05-28"
+      },
+      "persona_binding": {
+        "persona_id": "builder",
+        "persona_file": "personas/builder.md",
+        "knobs_override": {}
+      },
+      "fallback_ladder": [
+        {"actor_id": "mini-gemini-deep-research", "condition": "quota_exhausted"},
+        {"actor_id": "mini-chatgpt-deep-research", "condition": "reauth_required"}
+      ]
+    },
+    "mini-gemini-deep-research": {
+      "actor_id": "mini-gemini-deep-research",
+      "host_id": "mini",
+      "operator_alias": "mini-antigravity-gemini31-pro",
+      "aliases": ["mini-gemini-deep-research"],
+      "role": "knowledge-extractor",
+      "display_meta": {
+        "display_name": "Gemini Deep Research",
+        "tmux_session": "solar-harness-multi-task",
+        "tmux_window": null,
+        "tmux_pane_index": null
+      },
+      "lease": {
+        "acquired_at": null,
+        "expires_at": null,
+        "renewable": true,
+        "preemptible": true,
+        "heartbeat_timeout_sec": 120,
+        "lease_id": null,
+        "holder_sprint": null
+      },
+      "mailbox": {
+        "inbox": "actors/mini-gemini-deep-research/inbox",
+        "outbox": "actors/mini-gemini-deep-research/outbox",
+        "logs": "actors/mini-gemini-deep-research/logs",
+        "state_json": "actors/mini-gemini-deep-research/state.json",
+        "heartbeat_json": "actors/mini-gemini-deep-research/heartbeat.json"
+      },
+      "context_packet_ref": {"path": null, "packet_id": null},
+      "evidence_ledger_ref": {"path": "actors/mini-gemini-deep-research/evidence"},
+      "capability": {"research": 5, "browser": 2, "multimodal": 3, "reliability": 3},
+      "capability_profile": {
+        "architecture_reasoning": 3,
+        "code_impl": 1,
+        "root_cause_debug": 2,
+        "test_generation": 1,
+        "test_execution": 1,
+        "research_synthesis": 5,
+        "academic_critique": 3,
+        "browser_use": 2,
+        "gui_use": 1,
+        "long_context": 5,
+        "multi_agent_coordination": 2,
+        "speed": 3
+      },
+      "risk_profile": {
+        "allowed_write_scope": "project",
+        "allowed_shell_scope": "denied",
+        "allowed_network": "allowed",
+        "allowed_secrets": "secret_ref_only",
+        "destructive_actions": "denied",
+        "git_commit": "denied",
+        "git_push": "denied",
+        "payment_or_external_action": "denied",
+        "requires_human_for": ["payment_or_external_action"]
+      },
+      "cost_profile": {
+        "cost_tier": "high",
+        "token_budget_class": "large",
+        "quota_period": "monthly",
+        "reserve_ratio": 0.2,
+        "effort": "heavy",
+        "prefer_for": ["deep-research", "competitive-analysis"],
+        "avoid_for": ["code-implementation"]
+      },
+      "quota": {
+        "quota_type": "webapp-account",
+        "period": "unknown",
+        "on_exhausted": "disable_and_fallback"
+      },
+      "policy": {
+        "write_files": "artifact_dir_only",
+        "run_shell": "denied",
+        "network": "allowed",
+        "secrets_access": "secret_ref_only",
+        "git_commit": "denied"
+      },
+      "evidence": {
+        "last_smoke_at": null,
+        "last_smoke_result": null,
+        "last_task_at": null,
+        "last_task_id": null,
+        "last_task_result": null,
+        "provenance": "browser agent operator registry bootstrap 2026-05-28"
+      },
+      "persona_binding": {
+        "persona_id": "builder",
+        "persona_file": "personas/builder.md",
+        "knobs_override": {}
+      },
+      "fallback_ladder": [
+        {"actor_id": "mini-claude-opus-planner", "condition": "quota_exhausted"}
+      ]
+    },
+    "mini-chatgpt-deep-research": {
+      "actor_id": "mini-chatgpt-deep-research",
+      "host_id": "mini",
+      "operator_alias": "mini-claude-opus-planner",
+      "aliases": ["mini-chatgpt-deep-research"],
+      "role": "knowledge-extractor",
+      "display_meta": {
+        "display_name": "ChatGPT Deep Research",
+        "tmux_session": "solar-harness-multi-task",
+        "tmux_window": null,
+        "tmux_pane_index": null
+      },
+      "lease": {
+        "acquired_at": null,
+        "expires_at": null,
+        "renewable": true,
+        "preemptible": true,
+        "heartbeat_timeout_sec": 120,
+        "lease_id": null,
+        "holder_sprint": null
+      },
+      "mailbox": {
+        "inbox": "actors/mini-chatgpt-deep-research/inbox",
+        "outbox": "actors/mini-chatgpt-deep-research/outbox",
+        "logs": "actors/mini-chatgpt-deep-research/logs",
+        "state_json": "actors/mini-chatgpt-deep-research/state.json",
+        "heartbeat_json": "actors/mini-chatgpt-deep-research/heartbeat.json"
+      },
+      "context_packet_ref": {"path": null, "packet_id": null},
+      "evidence_ledger_ref": {"path": "actors/mini-chatgpt-deep-research/evidence"},
+      "capability": {"research": 5, "browser": 2, "multimodal": 3, "reliability": 4},
+      "capability_profile": {
+        "architecture_reasoning": 4,
+        "code_impl": 1,
+        "root_cause_debug": 2,
+        "test_generation": 1,
+        "test_execution": 1,
+        "research_synthesis": 5,
+        "academic_critique": 4,
+        "browser_use": 2,
+        "gui_use": 1,
+        "long_context": 5,
+        "multi_agent_coordination": 2,
+        "speed": 2
+      },
+      "risk_profile": {
+        "allowed_write_scope": "project",
+        "allowed_shell_scope": "denied",
+        "allowed_network": "allowed",
+        "allowed_secrets": "secret_ref_only",
+        "destructive_actions": "denied",
+        "git_commit": "denied",
+        "git_push": "denied",
+        "payment_or_external_action": "denied",
+        "requires_human_for": ["payment_or_external_action"]
+      },
+      "cost_profile": {
+        "cost_tier": "high",
+        "token_budget_class": "large",
+        "quota_period": "monthly",
+        "reserve_ratio": 0.2,
+        "effort": "heavy",
+        "prefer_for": ["deep-research", "strategic-insight"],
+        "avoid_for": ["code-implementation"]
+      },
+      "quota": {
+        "quota_type": "webapp-account",
+        "period": "unknown",
+        "on_exhausted": "disable_and_fallback"
+      },
+      "policy": {
+        "write_files": "artifact_dir_only",
+        "run_shell": "denied",
+        "network": "allowed",
+        "secrets_access": "secret_ref_only",
+        "git_commit": "denied"
+      },
+      "evidence": {
+        "last_smoke_at": null,
+        "last_smoke_result": null,
+        "last_task_at": null,
+        "last_task_id": null,
+        "last_task_result": null,
+        "provenance": "browser agent operator registry bootstrap 2026-05-28"
+      },
+      "persona_binding": {
+        "persona_id": "builder",
+        "persona_file": "personas/builder.md",
+        "knobs_override": {}
+      },
+      "fallback_ladder": [
+        {"actor_id": "mini-claude-opus-planner", "condition": "quota_exhausted"}
+      ]
     }
   }
 }

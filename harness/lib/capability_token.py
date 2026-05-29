@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import datetime
 import json
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
@@ -22,6 +21,11 @@ class CapabilityToken:
         actor_id: str,
         allow_paths: Optional[List[str]] = None,
         deny_paths: Optional[List[str]] = None,
+        file_scope: Optional[Dict[str, Any]] = None,
+        shell_scope: Optional[Dict[str, Any]] = None,
+        network: Optional[Dict[str, Any]] = None,
+        git: Optional[Dict[str, Any]] = None,
+        secrets: Optional[Dict[str, Any]] = None,
     ):
         self.token_id = token_id
         self.scopes = set(scopes)
@@ -29,6 +33,11 @@ class CapabilityToken:
         self.actor_id = actor_id
         self.allow_paths = allow_paths or []
         self.deny_paths = deny_paths or []
+        self.file_scope = dict(file_scope or {})
+        self.shell_scope = dict(shell_scope or {})
+        self.network = dict(network or {})
+        self.git = dict(git or {})
+        self.secrets = dict(secrets or {})
 
     def is_expired(self) -> bool:
         now = datetime.datetime.now(datetime.timezone.utc)
@@ -40,9 +49,17 @@ class CapabilityToken:
 
     def check_path_access(self, path: str) -> Dict[str, Any]:
         """Check if path is allowed and not denied."""
+        for deny in self.file_scope.get("deny_paths", []) or []:
+            if path.startswith(str(deny)):
+                return {"allowed": False, "reason": f"deny_path: {deny}"}
         for deny in self.deny_paths:
             if path.startswith(deny):
                 return {"allowed": False, "reason": f"deny_path: {deny}"}
+        file_allow_paths = self.file_scope.get("write_paths") or self.file_scope.get("read_paths") or []
+        if file_allow_paths:
+            allowed = any(path.startswith(str(a)) for a in file_allow_paths)
+            if not allowed:
+                return {"allowed": False, "reason": "not_in_file_scope_paths"}
         if self.allow_paths:
             allowed = any(path.startswith(a) for a in self.allow_paths)
             if not allowed:
@@ -64,6 +81,11 @@ class CapabilityToken:
             "actor_id": self.actor_id,
             "allow_paths": self.allow_paths,
             "deny_paths": self.deny_paths,
+            "file_scope": self.file_scope,
+            "shell_scope": self.shell_scope,
+            "network": self.network,
+            "git": self.git,
+            "secrets": self.secrets,
         }
 
     @classmethod
@@ -75,4 +97,9 @@ class CapabilityToken:
             actor_id=d.get("actor_id", ""),
             allow_paths=d.get("allow_paths"),
             deny_paths=d.get("deny_paths"),
+            file_scope=d.get("file_scope"),
+            shell_scope=d.get("shell_scope"),
+            network=d.get("network"),
+            git=d.get("git"),
+            secrets=d.get("secrets"),
         )

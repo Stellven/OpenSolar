@@ -15,6 +15,7 @@ Subcommands (called via solar-harness skills <sub>):
   promote   --skill SKILL    promote candidate→stable (requires eval+regression pass)
   rollback  --skill SKILL [--to STATUS]  demote skill status in registry
   export    --skill SKILL [--dest DIR] [--force] [--dry-run]  safe export/symlink
+  compile-to-capsule [--plugin ID] [--dry-run] [--json]       compile plugin skills to capsule drafts
 """
 from __future__ import annotations
 
@@ -713,6 +714,32 @@ def cmd_doctor(args: list[str]) -> int:
             print(f"  {p['pane']:20s} model={p['model']:12s} mcp={p['mcp_mode']:8s} {kb}")
         print(f"Overall: {overall['status']}")
     return 0
+
+
+def cmd_compile_to_capsule(args: list[str]) -> int:
+    from skill_to_capsule_compiler import batch_compile, compile_report_jsonable
+
+    plugin_id: str | None = None
+    dry_run = "--dry-run" in args
+    as_json = "--json" in args
+    if "--plugin" in args:
+        idx = args.index("--plugin")
+        if idx + 1 >= len(args):
+            print("--plugin requires a value", file=sys.stderr)
+            return 2
+        plugin_id = args[idx + 1]
+    report = batch_compile(dry_run=dry_run, plugin_id=plugin_id)
+    payload = compile_report_jsonable(report)
+    if as_json:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        print(
+            f"compile-to-capsule: ok={payload['ok']} dry_run={payload['dry_run']} "
+            f"capsules={payload['capsule_count']} skipped={len(payload['skipped'])} errors={len(payload['errors'])}"
+        )
+        for item in payload.get("generated", []):
+            print(f"  - {item['capsule_id']} <- {item['capability_id']}")
+    return 0 if payload.get("ok") else 1
 
 
 # ── inject ─────────────────────────────────────────────────────────────────
@@ -2017,6 +2044,7 @@ def main() -> None:
         "export": cmd_export,
         "effect-scan": cmd_effect_scan,
         "registry": cmd_registry_list,
+        "compile-to-capsule": cmd_compile_to_capsule,
     }
 
     fn = dispatch.get(sub)

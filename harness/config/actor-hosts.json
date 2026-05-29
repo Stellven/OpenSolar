@@ -29,6 +29,39 @@
         "probe_cmd": "ssh lisihao@100.122.223.55 echo SOLAR_HOST_OK",
         "probe_expected": "SOLAR_HOST_OK"
       }
+    },
+    "browser_profile_host": {
+      "host_id": "browser_profile_host",
+      "host_type": "browser_profile_host",
+      "display_name": "Browser Profile Host (Deep Research Session Cache)",
+      "lifecycle": {
+        "state": "online",
+        "started_at": "2026-05-25T16:30:00Z",
+        "last_seen_at": "2026-05-25T16:30:00Z",
+        "shutdown_policy": "manual"
+      },
+      "address": {
+        "ssh": null,
+        "tailscale_ip": null,
+        "hostname": "localhost",
+        "harness_dir": "/Users/lisihao/.solar/harness"
+      },
+      "heartbeat": {
+        "interval_sec": 15,
+        "timeout_sec": 45,
+        "path": "actors/_host/browser_profile_host/heartbeat.json"
+      },
+      "probe": {
+        "last_probe_at": "2026-05-25T16:30:00Z",
+        "last_probe_result": "ok",
+        "probe_cmd": "test -d /Users/lisihao/.solar/harness/run/browser-jobs && echo BROWSER_HOST_OK",
+        "probe_expected": "BROWSER_HOST_OK"
+      },
+      "browser_metadata": {
+        "profile_dir": "/Users/lisihao/.solar/harness/run/browser-profiles/deepresearch",
+        "debugging_port": 9222,
+        "headful_default": true
+      }
     }
   }
 }

@@ -38,7 +38,10 @@
         "SecurityGate",
         "QuotaBroker",
         "ContextCompressor",
-        "ArtifactCurator"
+        "ArtifactCurator",
+        "DeepResearchBrowser",
+        "DeepResearchGemini",
+        "DeepResearchChatGPT"
       ],
       "description": "P0 logical operator types. These are abstract routing labels — never physical actor or model ids."
     },
