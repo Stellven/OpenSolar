@@ -42,6 +42,23 @@ def _nonempty(path: Path) -> bool:
         return False
 
 
+def _artifact_path(sid: str, suffix: str, *, node_level: bool = True) -> Path:
+    direct = SPRINTS_DIR / f"{sid}.{suffix}"
+    if _nonempty(direct):
+        return direct
+    if not node_level:
+        return direct
+    matches = sorted(
+        SPRINTS_DIR.glob(f"{sid}.*-{suffix}"),
+        key=lambda path: path.stat().st_mtime if path.exists() else 0,
+        reverse=True,
+    )
+    for candidate in matches:
+        if _nonempty(candidate):
+            return candidate
+    return direct
+
+
 def _graph_valid(path: Path) -> tuple[bool, str]:
     if not _nonempty(path):
         return False, "missing"
@@ -62,8 +79,11 @@ def _graph_valid(path: Path) -> tuple[bool, str]:
         if node_id in seen:
             return False, f"duplicate_node:{node_id}"
         seen.add(node_id)
-        if "write_scope" not in node:
-            return False, f"node_{node_id}_missing_write_scope"
+        if not str(node.get("goal") or "").strip():
+            return False, f"node_{node_id}_missing_goal"
+        depends_on = node.get("depends_on", [])
+        if depends_on is None or not isinstance(depends_on, list):
+            return False, f"node_{node_id}_invalid_depends_on"
     return True, "ok"
 
 
@@ -146,15 +166,17 @@ def route(sid: str) -> dict[str, Any]:
     target_role = str(status.get("target_role") or "").strip()
     text = _contract_text(sid)
 
-    prd = SPRINTS_DIR / f"{sid}.prd.md"
-    product_brief = SPRINTS_DIR / f"{sid}.product-brief.md"
-    design = SPRINTS_DIR / f"{sid}.design.md"
-    plan = SPRINTS_DIR / f"{sid}.plan.md"
+    prd = _artifact_path(sid, "prd.md", node_level=False)
+    product_brief = _artifact_path(sid, "product-brief.md", node_level=False)
+    design = _artifact_path(sid, "design.md")
+    plan = _artifact_path(sid, "plan.md")
     graph = SPRINTS_DIR / f"{sid}.task_graph.json"
     prd_html = SPRINTS_DIR / f"{sid}.prd.html"
+    design_html = SPRINTS_DIR / f"{sid}.design.html"
     planning_html = SPRINTS_DIR / f"{sid}.planning.html"
-    handoff = SPRINTS_DIR / f"{sid}.handoff.md"
-    eval_md = SPRINTS_DIR / f"{sid}.eval.md"
+    handoff = _artifact_path(sid, "handoff.md")
+    eval_md = _artifact_path(sid, "eval.md")
+    eval_json = _artifact_path(sid, "eval.json")
 
     graph_ok, graph_reason = _graph_valid(graph)
     graph_parent_ready = _graph_parent_ready(graph)
@@ -165,11 +187,12 @@ def route(sid: str) -> dict[str, Any]:
         "design": _nonempty(design),
         "plan": _nonempty(plan),
         "prd_html": _nonempty(prd_html),
+        "design_html": _nonempty(design_html),
         "planning_html": _nonempty(planning_html),
         "task_graph": graph_ok,
         "task_graph_parent_ready": graph_parent_ready,
         "handoff": _nonempty(handoff),
-        "eval": _nonempty(eval_md),
+        "eval": _nonempty(eval_md) or _nonempty(eval_json),
     }
     planner_ready = artifacts["prd"] and artifacts["design"] and artifacts["plan"] and artifacts["task_graph"]
     requirements_ready = artifacts["prd"]
