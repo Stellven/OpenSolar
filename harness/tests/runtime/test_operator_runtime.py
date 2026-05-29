@@ -142,6 +142,20 @@ def test_status_override_states():
     assert optime.get_operator_runtime_state(operator_id) == "idle"
 
 
+def test_heartbeat_preserves_blocking_override():
+    """Daemon heartbeats must not clear cooldown/auth/quota overrides."""
+    operator_id = "mini-claude-sonnet-builder"
+
+    optime.set_operator_status(operator_id, "cooldown", ttl_seconds=30)
+    optime.write_heartbeat(operator_id, "idle", resolved_persona="builder")
+
+    status_path = optime.OPERATOR_STATUS_DIR / f"{operator_id}.json"
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    assert status["runtime_state"] == "cooldown"
+    assert status["state"] == "idle"
+    assert "expires_at" in status
+
+
 def test_registry_disabled_state():
     """Verify that disabled operators in registry are classified as disabled."""
     operator_id = "mini-antigravity-gemini35-flash-high"
@@ -256,6 +270,15 @@ def test_submit_rejects_auth_expired_operator():
     optime.set_operator_status(operator_id, "auth_expired")
     envelope = _make_envelope(operator_id=operator_id)
     with pytest.raises(RuntimeError, match="not dispatchable.*auth_expired"):
+        optime.submit(envelope)
+
+
+def test_submit_rejects_cooldown_operator():
+    """Operator with cooldown status override raises RuntimeError."""
+    operator_id = "mini-claude-sonnet-builder"
+    optime.set_operator_status(operator_id, "cooldown", ttl_seconds=30)
+    envelope = _make_envelope(operator_id=operator_id)
+    with pytest.raises(RuntimeError, match="not dispatchable.*cooldown"):
         optime.submit(envelope)
 
 

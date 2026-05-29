@@ -16,9 +16,9 @@ HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
 TASK_CONTROL_FILENAME = "operator-task-control.json"
 BLOCKING_STATES = {"cooldown", "quota_exhausted", "auth_expired"}
 RATE_LIMIT_RE = re.compile(
-    r"RESOURCE_EXHAUSTED|quota(?: exhausted)?|monthly usage limit|"
-    r"rate[- ]?limit|429|too many requests|resets?\s+in|"
-    r"Upgrade your plan|You've hit .*limit|capacity",
+    r"RESOURCE_EXHAUSTED|\bquota(?:\s+exhausted)?\b|monthly usage limit|"
+    r"rate[- ]?limit|\b429\b|too many requests|resets?\s+in|"
+    r"Upgrade your plan|You've hit .*limit|Individual quota reached|capacity",
     re.I,
 )
 AUTH_RE = re.compile(
