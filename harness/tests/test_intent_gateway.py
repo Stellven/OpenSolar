@@ -97,3 +97,40 @@ def test_browser_agent_operator_intent_mode_prefers_strategy_over_research(tmp_p
     payload = json.loads(proc.stdout)
     ir = json.loads((tmp_path / "intents" / payload["intent_id"] / "requirement_ir.json").read_text())
     assert ir["lane"] == "strategy"
+
+
+def test_capture_embeds_research_artifact_into_requirement_ir(tmp_path):
+    env = dict(os.environ)
+    env["SOLAR_INTENT_GATEWAY_DIR"] = str(tmp_path / "intents")
+    env["SOLAR_HARNESS_SPRINTS_DIR"] = str(tmp_path / "sprints")
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "capture",
+            "--text",
+            "通过 Browser Agent 前门做需求研究并继续编译。",
+            "--require-research-artifact",
+            "--research-artifact",
+            "/tmp/frontdoor-research.json",
+            "--research-project-name",
+            "需求研究-2026-05",
+            "--research-conversation-id",
+            "conv-frontdoor-001",
+            "--research-source-url",
+            "https://chatgpt.com/c/conv-frontdoor-001",
+            "--json",
+        ],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=True,
+    )
+    payload = json.loads(proc.stdout)
+    intent_id = payload["intent_id"]
+    base = tmp_path / "intents" / intent_id
+    raw = json.loads((base / "raw_intent.json").read_text())
+    ir = json.loads((base / "requirement_ir.json").read_text())
+    assert raw["routing_hints"]["require_research_artifact"] is True
+    assert raw["research"]["path"] == "/tmp/frontdoor-research.json"
+    assert ir["source_inputs"]["research_artifact"]["conversation_id"] == "conv-frontdoor-001"

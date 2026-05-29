@@ -87,12 +87,62 @@ def list_pending(limit: int = 20, oldest_first: bool = True) -> list[str]:
     return result
 
 
+def extract_research_artifact(raw: dict[str, Any], ir: dict[str, Any]) -> dict[str, Any] | None:
+    research = raw.get("research") if isinstance(raw.get("research"), dict) else None
+    if research:
+        return research
+    source_inputs = ir.get("source_inputs") if isinstance(ir.get("source_inputs"), dict) else {}
+    research = source_inputs.get("research_artifact") if isinstance(source_inputs.get("research_artifact"), dict) else None
+    return research
+
+
+def require_research_artifact(raw: dict[str, Any], ir: dict[str, Any]) -> bool:
+    routing = raw.get("routing_hints", {}) if isinstance(raw.get("routing_hints"), dict) else {}
+    if routing.get("require_research_artifact"):
+        return True
+    return extract_research_artifact(raw, ir) is not None
+
+
+def annotate_compiled_package_with_research_artifact(sprint_id: str, research: dict[str, Any]) -> None:
+    ir_path = SPRINTS_DIR / f"{sprint_id}.requirement_ir.json"
+    product_brief_path = SPRINTS_DIR / f"{sprint_id}.product-brief.md"
+    prd_path = SPRINTS_DIR / f"{sprint_id}.prd.md"
+    requirement_ir = read_json(ir_path)
+    source_inputs = requirement_ir.get("source_inputs")
+    if not isinstance(source_inputs, dict):
+        source_inputs = {}
+    source_inputs["research_artifact"] = {
+        "path": str(research.get("path") or ""),
+        "project_name": str(research.get("project_name") or ""),
+        "conversation_id": str(research.get("conversation_id") or ""),
+        "source_url": str(research.get("source_url") or ""),
+    }
+    requirement_ir["source_inputs"] = source_inputs
+    write_json(ir_path, requirement_ir)
+
+    lines = [
+        "## Research Artifact Inputs",
+        "",
+        f"- path: {research.get('path') or 'N/A'}",
+        f"- project_name: {research.get('project_name') or 'N/A'}",
+        f"- conversation_id: {research.get('conversation_id') or 'N/A'}",
+        f"- source_url: {research.get('source_url') or 'N/A'}",
+    ]
+    block = "\n".join(lines) + "\n"
+    for path in (product_brief_path, prd_path):
+        text = path.read_text(encoding="utf-8")
+        if "## Research Artifact Inputs" in text:
+            continue
+        path.write_text(text.rstrip() + "\n\n" + block, encoding="utf-8")
+
+
 def build_consumer_text(raw: dict[str, Any], rewritten: dict[str, Any], ir: dict[str, Any]) -> str:
     source = raw.get("source", {}) if isinstance(raw.get("source"), dict) else {}
     raw_text = (((raw.get("raw") or {}).get("text")) or "").strip()
     constraints = rewritten.get("constraints") or ir.get("constraints") or []
     acceptance = rewritten.get("acceptance") or ir.get("acceptance") or []
     title = str(rewritten.get("title") or ir.get("title") or "RawIntent")
+    research = extract_research_artifact(raw, ir)
     lines = [
         f"# RawIntent Consumer Request - {title}",
         "",
@@ -120,10 +170,24 @@ def build_consumer_text(raw: dict[str, Any], rewritten: dict[str, Any], ir: dict
         "",
         *(f"- {item}" for item in acceptance),
         "",
+    ]
+    if research:
+        lines.extend([
+            "## Research Artifact Inputs",
+            "",
+            f"- path: {research.get('path') or 'N/A'}",
+            f"- project_name: {research.get('project_name') or 'N/A'}",
+            f"- conversation_id: {research.get('conversation_id') or 'N/A'}",
+            f"- source_url: {research.get('source_url') or 'N/A'}",
+            "",
+            "Research artifact must remain a first-class source input for product-brief, PRD, and requirement_ir generation.",
+            "",
+        ])
+    lines.extend([
         "## Raw User Intent",
         "",
         raw_text,
-    ]
+    ])
     return "\n".join(lines).strip() + "\n"
 
 
@@ -241,6 +305,8 @@ def consume_one(
     auto_dispatch_planner: bool = True,
 ) -> dict[str, Any]:
     base, raw, rewritten, ir = load_intent(intent_id)
+    research = extract_research_artifact(raw, ir)
+    research_required = require_research_artifact(raw, ir)
     existing = base / "consumer.json"
     if existing.exists() and not dry_run:
         data = read_json(existing)
@@ -253,6 +319,17 @@ def consume_one(
         explicit_dispatch_planner=dispatch_planner,
         auto_dispatch_planner=auto_dispatch_planner,
     )
+    if research_required and not research:
+        payload = {
+            "ok": False,
+            "status": "blocked_missing_research_artifact",
+            "intent_id": intent_id,
+            "sprint_id": sid,
+            "updated_at": now_iso(),
+            "planner_handoff": handoff,
+        }
+        write_json(base / "consumer.json", payload)
+        return payload
     request_text = build_consumer_text(raw, rewritten, ir)
     cmd = [
         sys.executable,
@@ -311,6 +388,9 @@ def consume_one(
         }
         write_json(base / "consumer.json", payload)
         return payload
+
+    if research:
+        annotate_compiled_package_with_research_artifact(sid, research)
 
     if handoff.get("requested"):
         handoff = {**handoff, **submit_planner_handoff(sid, SPRINTS_DIR / f"{sid}.requirement_ir.json")}

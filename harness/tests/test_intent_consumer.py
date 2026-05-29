@@ -124,3 +124,80 @@ def test_consumer_status_lists_pending(tmp_path):
     )
     payload = json.loads(proc.stdout)
     assert payload["pending_count"] == 1
+
+
+def test_consumer_blocks_when_research_artifact_is_required_but_missing(tmp_path):
+    env = _env(tmp_path)
+    cap = subprocess.run(
+        [
+            sys.executable,
+            str(GATEWAY),
+            "capture",
+            "--text",
+            "前门研究必须存在，否则不得 compile-ready。",
+            "--require-research-artifact",
+            "--json",
+        ],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=True,
+    )
+    intent_id = json.loads(cap.stdout)["intent_id"]
+    proc = subprocess.run(
+        [sys.executable, str(CONSUMER), "consume", "--intent-id", intent_id, "--json"],
+        text=True,
+        capture_output=True,
+        env=env,
+    )
+    assert proc.returncode == 1
+    result = json.loads(proc.stdout)["results"][0]
+    assert result["ok"] is False
+    assert result["status"] == "blocked_missing_research_artifact"
+
+
+def test_consumer_injects_research_artifact_refs_into_compiled_package(tmp_path):
+    env = _env(tmp_path)
+    cap = subprocess.run(
+        [
+            sys.executable,
+            str(GATEWAY),
+            "capture",
+            "--text",
+            "通过 Browser Agent 前门研究后再编译 requirement package。",
+            "--source-channel",
+            "pm_dispatch",
+            "--source-trust",
+            "pm_dispatch",
+            "--research-artifact",
+            "/tmp/frontdoor-research.json",
+            "--research-project-name",
+            "需求研究-2026-05",
+            "--research-conversation-id",
+            "conv-frontdoor-002",
+            "--research-source-url",
+            "https://chatgpt.com/c/conv-frontdoor-002",
+            "--json",
+        ],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=True,
+    )
+    intent_id = json.loads(cap.stdout)["intent_id"]
+    proc = subprocess.run(
+        [sys.executable, str(CONSUMER), "consume", "--intent-id", intent_id, "--json"],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=True,
+    )
+    result = json.loads(proc.stdout)["results"][0]
+    sprint_id = result["sprint_id"]
+    ir = json.loads((tmp_path / "sprints" / f"{sprint_id}.requirement_ir.json").read_text())
+    product_brief = (tmp_path / "sprints" / f"{sprint_id}.product-brief.md").read_text()
+    prd = (tmp_path / "sprints" / f"{sprint_id}.prd.md").read_text()
+    assert ir["source_inputs"]["research_artifact"]["path"] == "/tmp/frontdoor-research.json"
+    assert "## Research Artifact Inputs" in product_brief
+    assert "conv-frontdoor-002" in product_brief
+    assert "## Research Artifact Inputs" in prd
