@@ -4,6 +4,11 @@ set -euo pipefail
 ROOT="${ROOT:-/Users/lisihao/Solar/harness}"
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
+PUBLISHED_AT="$(python3 - <<'PY'
+import datetime as dt
+print((dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S+00:00"))
+PY
+)"
 
 cat > "$TMPDIR/config.yaml" <<YAML
 version: 1
@@ -39,7 +44,7 @@ cat > "$TMPDIR/feed.xml" <<XML
     <yt:videoId>abc123xyz00</yt:videoId>
     <title>Build an AI agent demo with tools</title>
     <link rel="alternate" href="https://www.youtube.com/watch?v=abc123xyz00"/>
-    <published>2026-05-10T12:00:00+00:00</published>
+    <published>${PUBLISHED_AT}</published>
   </entry>
 </feed>
 XML

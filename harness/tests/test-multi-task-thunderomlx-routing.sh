@@ -23,6 +23,7 @@ assert "ANTHROPIC_BASE_URL" in line
 assert "127.0.0.1:8002" in line
 assert "claude-3-5-sonnet-latest" in line
 assert "Qwen3.6-35b-a3b" in line
+assert "--dangerously-skip-permissions" in line
 assert "--model Qwen3.6-35b-a3b" not in line
 assert "SOLAR_MULTI_TASK_AGENT_CMD" not in line
 assert "knowledge_extraction_multitask_agent.py" not in line

@@ -2,6 +2,11 @@
 # scripts/tech-hotspot-radar/lib/license-policy.sh - Normalize SPDX ids and classify policy tier
 set -euo pipefail
 
+if [[ "${1:-}" == "--list-classifications" ]]; then
+    printf '%s\n' allowed restricted forbidden
+    exit 0
+fi
+
 python3 - <<'PY' "${1:-}"
 import json, sys
 
@@ -16,19 +21,26 @@ forbidden = {"PROPRIETARY", "ALL-RIGHTS-RESERVED", "CUSTOM-NONCOMMERCIAL"}
 
 if normalized in allowed:
     classification = "allowed"
+    reason = "spdx allow-list"
 elif normalized in restricted:
     classification = "restricted"
+    reason = "spdx restrict-list (review before productization)"
 elif normalized in forbidden:
     classification = "forbidden"
+    reason = "spdx forbid-list (auto-block default)"
 elif normalized in {"NOASSERTION", "UNKNOWN", "NONE"}:
     classification = "restricted"
+    reason = "license missing or NOASSERTION; treat as restricted"
 else:
     classification = "restricted"
+    reason = "spdx not on any list; treat as restricted pending review"
 
+copy_left = normalized.startswith(("GPL", "AGPL", "LGPL"))
 payload = {
     "license_id": normalized,
     "classification": classification,
-    "copy_left_flag": normalized.startswith(("GPL", "AGPL", "LGPL")),
+    "classification_reason": reason,
+    "copy_left_flag": copy_left,
     "auto_block_default": normalized in forbidden,
 }
 print(json.dumps(payload, ensure_ascii=False))

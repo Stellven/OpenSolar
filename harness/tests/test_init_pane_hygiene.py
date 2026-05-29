@@ -39,7 +39,7 @@ class TestInitFromPaneIds:
         path = str(tmp_path / "test.json")
         init_registry(path, pane_ids=pane_ids)
         reg = PaneHygieneRegistry(path)
-        assert reg.get_pane_state("solar-harness:0.3").pane_role == "architect"
+        assert reg.get_pane_state("solar-harness:0.3").pane_role == "evaluator"
         assert reg.get_pane_state("solar-harness-lab:0.0").pane_role == "builder"
 
     def test_models_assigned(self, tmp_path):

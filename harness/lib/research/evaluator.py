@@ -1246,7 +1246,7 @@ def evaluate_final_closeout(
         "output_dir": str(root),
         "is_survey": is_survey,
         "issues": issues,
-        "timestamp": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "timestamp": datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "base_eval_data": {
             "verdict": base_data.get("verdict") or ("PASS" if ok else "FAIL"),
             "scorecard": base_data.get("scorecard") if is_survey else None,
@@ -1448,4 +1448,3 @@ def evaluate_figures_grounding(output_dir: Path) -> tuple[bool, list[str], list[
 
     ok = len(errors) == 0
     return ok, errors, warnings
-
