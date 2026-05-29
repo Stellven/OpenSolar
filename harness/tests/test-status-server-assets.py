@@ -79,12 +79,14 @@ def main() -> None:
                     "phase": "eval_passed",
                     "title": "Asset Package Test",
                     "artifacts": {
+                        "design_html": f"sprints/{sid}.design.html",
                         "planning_html": f"sprints/{sid}.planning.html",
                         "prd_html": f"sprints/{sid}.prd.html",
                     },
                 }
             ),
         )
+        write(sprints / f"{sid}.design.html", "<!doctype html><h1>Design HTML</h1>")
         write(sprints / f"{sid}.plan.md", "# Plan\n")
         write(sprints / f"{sid}.handoff.md", "# Handoff\n")
         write(sprints / f"{sid}.eval.md", "# Eval\n")
@@ -109,9 +111,11 @@ def main() -> None:
         assert item["accepted_md"]["exists"] is True
         assert item["dispatch"]["exists"] is True
         labels = {artifact["label"]: artifact for artifact in item["sprint_artifacts"]}
+        assert labels["design_html"]["exists"] is True
         assert labels["planning_html"]["exists"] is True
         assert labels["planning_html"]["view_url"].startswith("/file/view?path=")
         assert labels["prd_html"]["exists"] is True
+        assert "design_html" in item["artifact_labels"]
         assert "planning_html" in item["artifact_labels"]
         assert "prd_html" in item["artifact_labels"]
 

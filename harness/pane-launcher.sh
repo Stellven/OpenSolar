@@ -270,7 +270,7 @@ record_pane_model_session() {
 CLAUDE_CMD="$CLAUDE_BIN"
 SOLAR_CLAUDE_BYPASS="${SOLAR_CLAUDE_BYPASS:-1}"
 if [[ "$SOLAR_CLAUDE_BYPASS" == "1" ]]; then
-  CLAUDE_CMD="$CLAUDE_BIN --permission-mode ${SOLAR_CLAUDE_PERMISSION_MODE:-bypassPermissions}"
+  CLAUDE_CMD="$CLAUDE_BIN --dangerously-skip-permissions --permission-mode ${SOLAR_CLAUDE_PERMISSION_MODE:-bypassPermissions}"
 fi
 [[ -n "$MODEL_FLAG" ]] && CLAUDE_CMD="$CLAUDE_CMD $MODEL_FLAG"
 [[ -n "$TOOL_FLAG" ]] && CLAUDE_CMD="$CLAUDE_CMD $TOOL_FLAG"

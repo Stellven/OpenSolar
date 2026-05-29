@@ -547,7 +547,8 @@ def claude_agent_line(model: str, dispatch_expr: str = '"$(cat "$DISPATCH_FILE")
             "export DISABLE_NON_ESSENTIAL_MODEL_CALLS=1",
             "export CLAUDE_CODE_MAX_OUTPUT_TOKENS=${CLAUDE_CODE_MAX_OUTPUT_TOKENS:-4096}",
             (
-                "claude --permission-mode bypassPermissions "
+                "claude --dangerously-skip-permissions "
+                "--permission-mode bypassPermissions "
                 f"--model {shlex.quote(route_model)} "
                 "--tools default "
                 f"-p {dispatch_expr}"
@@ -563,11 +564,11 @@ def claude_agent_line(model: str, dispatch_expr: str = '"$(cat "$DISPATCH_FILE")
             "eval \"$persona_config\"",
             "apply_persona_env lab-builder",
             "if [[ -n \"${LAUNCH_ERROR:-}\" ]]; then echo \"ERROR: $LAUNCH_ERROR\"; exit 66; fi",
-            f"claude $MODEL_FLAG $EXTRA_FLAGS -p {dispatch_expr}",
+            f"claude --dangerously-skip-permissions $MODEL_FLAG $EXTRA_FLAGS -p {dispatch_expr}",
         ])
     empty_mcp = HARNESS_DIR / "config" / "empty-mcp.json"
     return (
-        "claude --permission-mode bypassPermissions "
+        "claude --dangerously-skip-permissions --permission-mode bypassPermissions "
         f"--model {shlex.quote(claude_model_arg(model))} "
         f"--tools default --strict-mcp-config --mcp-config {shlex.quote(str(empty_mcp))} "
         f"-p {dispatch_expr}"

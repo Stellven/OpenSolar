@@ -64,8 +64,13 @@ class LedgerWriter:
             or str(self._jsonl_path.parent / "ledger-fallback.jsonl")
         )
         self._jsonl_path.parent.mkdir(parents=True, exist_ok=True)
-        self._sqlite_path.parent.mkdir(parents=True, exist_ok=True)
-        self._init_sqlite()
+        try:
+            self._sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+            self._init_sqlite()
+        except (OSError, sqlite3.Error) as exc:
+            self._sqlite_init_error = exc
+        else:
+            self._sqlite_init_error = None
 
     def _init_sqlite(self) -> None:
         conn = sqlite3.connect(str(self._sqlite_path))
@@ -106,6 +111,8 @@ class LedgerWriter:
         sqlite_ok = self._write_sqlite(rec)
         if not jsonl_ok and not sqlite_ok:
             self._write_fallback(rec)
+        elif not jsonl_ok or not sqlite_ok:
+            self._write_partial_failure_fallback(rec)
 
     def _write_jsonl(self, rec: LedgerRecord) -> bool:
         try:
@@ -119,6 +126,8 @@ class LedgerWriter:
 
     def _write_sqlite(self, rec: LedgerRecord) -> bool:
         try:
+            if self._sqlite_init_error is not None:
+                raise sqlite3.Error(str(self._sqlite_init_error))
             conn = sqlite3.connect(str(self._sqlite_path), timeout=5)
             conn.execute(
                 "INSERT INTO ledger_events "
@@ -154,6 +163,15 @@ class LedgerWriter:
             print(f"[ledger-writer] FATAL: fallback write also failed",
                   file=sys.stderr)
 
+    def _write_partial_failure_fallback(self, rec: LedgerRecord) -> None:
+        try:
+            self._fallback_path.parent.mkdir(parents=True, exist_ok=True)
+            line = _record_to_jsonl(rec) + "\n"
+            with open(self._fallback_path, "a", encoding="utf-8") as f:
+                f.write(line)
+        except OSError:
+            pass
+
     def record_recover(
         self,
         pane_id: str,
@@ -170,6 +188,31 @@ class LedgerWriter:
             before_state=before_state, after_state=after_state,
             ts=_utc_now_ms(), reason=reason,
             sprint_id=sprint_id, attempt=attempt, success=success,
+        )
+        self._dual_write(rec)
+
+    def record_respawn(
+        self,
+        pane_id: str,
+        *,
+        before_state: str,
+        after_state: str,
+        success: bool,
+        reason: str,
+        attempt: int = 1,
+        sprint_id: Optional[str] = None,
+        from_pane: Optional[str] = None,
+        to_pane: Optional[str] = None,
+        task_id: Optional[str] = None,
+        extra: Optional[dict[str, Any]] = None,
+    ) -> None:
+        rec = LedgerRecord(
+            pane_id=pane_id, action="respawn",
+            before_state=before_state, after_state=after_state,
+            ts=_utc_now_ms(), reason=reason,
+            from_pane=from_pane, to_pane=to_pane, task_id=task_id,
+            sprint_id=sprint_id, attempt=attempt, success=success,
+            extra=extra,
         )
         self._dual_write(rec)
 

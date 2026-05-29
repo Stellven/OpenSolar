@@ -52,6 +52,9 @@ class FakeLedger:
     def record_reassign(self, from_pane, to_pane, **kw):
         self.records.append(("reassign", from_pane, to_pane))
 
+    def record_respawn(self, pane_id, **kw):
+        self.records.append(("respawn", pane_id, kw))
+
 
 def _make_scheduler(registry, reinjector=None, ledger=None):
     return DispatchScheduler(
@@ -153,6 +156,56 @@ class TestSafetyGuard:
     def test_lab_pane_allowed(self):
         sched = DispatchScheduler.__new__(DispatchScheduler)
         sched._assert_not_kill_main_pane("solar-harness-lab:0.0")
+
+    def test_protected_panes_include_main_and_spillover(self):
+        assert len(PROTECTED_PANES) == 8
+        assert "solar-harness:0.0" in PROTECTED_PANES
+        assert "solar-harness-lab:0.3" in PROTECTED_PANES
+
+    def test_respawn_protected_pane_blocked(self):
+        sched = DispatchScheduler.__new__(DispatchScheduler)
+        with pytest.raises(SafetyViolationError):
+            sched._assert_respawn_target_allowed("solar-harness-lab:0.0")
+
+    def test_respawn_max_concurrent_zero_blocks(self, registry):
+        sched = DispatchScheduler(
+            registry, FakeLedger(), FakeReinjector(),
+            respawn_max_concurrent=0,
+        )
+        result = sched.can_respawn("scratch-worker:0.0")
+        assert not result.ok
+        assert result.reason == "respawn_disabled_by_max_concurrent_zero"
+
+    def test_begin_respawn_records_rejection(self, registry):
+        ledger = FakeLedger()
+        sched = DispatchScheduler(
+            registry, ledger, FakeReinjector(),
+            respawn_max_concurrent=0,
+        )
+        result = sched.begin_respawn(
+            "scratch-worker:0.0",
+            reason="test",
+            sprint_id="sprint-1",
+            task_id="task-1",
+        )
+        assert not result.ok
+        assert ledger.records[0][0] == "respawn"
+        assert ledger.records[0][2]["success"] is False
+
+    def test_begin_finish_respawn_tracks_concurrency(self, registry):
+        ledger = FakeLedger()
+        sched = DispatchScheduler(
+            registry, ledger, FakeReinjector(),
+            respawn_max_concurrent=1,
+        )
+        first = sched.begin_respawn("scratch-worker:0.0", reason="test")
+        second = sched.begin_respawn("scratch-worker:0.1", reason="test")
+        assert first.ok
+        assert not second.ok
+        assert second.reason == "respawn_max_concurrent_reached"
+        sched.finish_respawn("scratch-worker:0.0")
+        third = sched.begin_respawn("scratch-worker:0.1", reason="test")
+        assert third.ok
 
     def test_forbidden_command_pattern(self):
         sched = DispatchScheduler.__new__(DispatchScheduler)

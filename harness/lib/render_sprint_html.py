@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Render richer sprint HTML artifacts from canonical markdown/json artifacts.
 
-This keeps PM/Planner human-readable HTML in one visual system instead of
-letting personas handcraft divergent pages.
+Default path uses the html-anything adapter family. The legacy inline renderer
+remains available behind ``SOLAR_USE_LEGACY_RENDERER=1`` and as a fail-open
+fallback if the adapter raises.
 """
 
 from __future__ import annotations
@@ -22,7 +23,16 @@ from typing import Any
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", Path.home() / ".solar" / "harness"))
 SPRINTS_DIR = Path(os.environ.get("SPRINTS_DIR", HARNESS_DIR / "sprints"))
 TEMPLATE_PATH = HARNESS_DIR / "templates" / "html-artifact.visual-template.html"
-VALID_KINDS = {"prd", "planning"}
+VALID_KINDS = {"prd", "planning", "design"}
+
+try:
+    from html_anything_adapter import (
+        HtmlAnythingAdapterError,
+        render as render_html_anything,
+    )
+except Exception:  # pragma: no cover - fail-open to legacy renderer
+    HtmlAnythingAdapterError = RuntimeError  # type: ignore[assignment]
+    render_html_anything = None
 
 
 def _read_text(path: Path) -> str:
@@ -303,7 +313,61 @@ def _coverage_block(requirement_trace: dict[str, Any], coverage_report: dict[str
     )
 
 
-def _render_prd(sid: str) -> str:
+def _ha_toc() -> str:
+    return (
+        '<nav class="ha-toc"><h2>目录</h2><ol>'
+        '<li><a href="#summary">摘要</a></li>'
+        '<li><a href="#architecture">架构设计</a></li>'
+        '<li><a href="#flow">流程 / DAG</a></li>'
+        '<li><a href="#requirements">Requirement Trace Matrix</a></li>'
+        '<li><a href="#contracts">合约 / 约束</a></li>'
+        '<li><a href="#stack">技术栈 / 算子绑定</a></li>'
+        '<li><a href="#validation">验证 / 风险</a></li>'
+        '</ol></nav>'
+    )
+
+
+def _render_adapter_page(
+    *,
+    profile: str,
+    title: str,
+    hero_title: str,
+    lede: str,
+    meta: str,
+    body_html: str,
+    badges: list[str],
+) -> str:
+    if render_html_anything is None:
+        raise HtmlAnythingAdapterError("adapter_unavailable")
+    return render_html_anything(
+        "",
+        profile,
+        title=title,
+        hero_title=html.escape(hero_title),
+        lede=lede,
+        meta=meta,
+        body_html=body_html,
+        toc_html=_ha_toc(),
+        badges=badges,
+        surface_label=profile.upper(),
+        topline_left="Solar Harness",
+        topline_center=meta,
+        topline_right="html-anything",
+        footer_left="Solar Harness",
+        footer_right="Default HTML Renderer",
+        footer_tail=profile,
+    )
+
+
+def _summary_text(*blocks: str) -> str:
+    for block in blocks:
+        sections = _split_sections(block)
+        if sections:
+            return "\n\n".join(body for _, body in sections[:2])
+    return ""
+
+
+def _render_prd_legacy(sid: str) -> str:
     base = SPRINTS_DIR
     status = _read_json(base / f"{sid}.status.json")
     prd = _read_text(base / f"{sid}.prd.md")
@@ -357,7 +421,7 @@ def _render_prd(sid: str) -> str:
     return _html_page(f"PRD — {title}", body)
 
 
-def _render_planning(sid: str) -> str:
+def _render_planning_legacy(sid: str) -> str:
     base = SPRINTS_DIR
     status = _read_json(base / f"{sid}.status.json")
     design = _read_text(base / f"{sid}.design.md")
@@ -406,6 +470,187 @@ def _render_planning(sid: str) -> str:
     return _html_page(f"Planning — {title}", body)
 
 
+def _render_design_legacy(sid: str) -> str:
+    base = SPRINTS_DIR
+    status = _read_json(base / f"{sid}.status.json")
+    design = _read_text(base / f"{sid}.design.md")
+    contract = _read_text(base / f"{sid}.contract.md")
+    plan = _read_text(base / f"{sid}.plan.md")
+    graph = _read_json(base / f"{sid}.task_graph.json")
+    title = str(status.get("title") or sid)
+    design_sections = _split_sections(design)
+    hero = _hero(
+        f"Design — {title}",
+        f"Sprint: {sid} · status: {status.get('status','N/A')} · phase: {status.get('phase','N/A')}",
+        [
+            ("p0", str(status.get("priority") or "P0")),
+            ("lane", str(status.get("lane_hint") or "strategy")),
+            ("role", "Architecture"),
+            ("warn", str(status.get("handoff_to") or "builder_main")),
+        ],
+    )
+    summary = _render_markdown_block(_summary_text(design, contract))
+    arch_cards = []
+    for name, body in design_sections[:4]:
+        arch_cards.append(f'<div class="card"><h3>{html.escape(name)}</h3>{_render_markdown_block(body)}</div>')
+    flow = (
+        f'<div class="diagram">{html.escape(_diagram_from_graph(graph))}</div>'
+        + _table(["节点", "模型", "技能", "Gate", "依赖"], _node_rows(graph))
+    )
+    body = "\n".join([
+        hero,
+        _toc(),
+        _section("summary", "摘要", summary),
+        _section("architecture", "架构设计", '<div class="grid-2">' + "".join(arch_cards) + "</div>"),
+        _section("flow", "流程 / DAG", flow),
+        _section("requirements", "Requirement Trace Matrix", _render_markdown_block("N/A")),
+        _section("contracts", "合约 / 约束", _render_markdown_block(contract)),
+        _section("stack", "技术栈 / 算子绑定", _table(["项", "次数", "类别"], _stack_rows(graph))),
+        _section("validation", "验证 / 风险", _table(["节点/来源", "验收 / 验证", "计数"], _acceptance_rows(graph, [design, contract, plan]))),
+    ])
+    return _html_page(f"Design — {title}", body)
+
+
+def _render_legacy(kind: str, sid: str) -> str:
+    if kind == "prd":
+        return _render_prd_legacy(sid)
+    if kind == "planning":
+        return _render_planning_legacy(sid)
+    return _render_design_legacy(sid)
+
+
+def _render_prd_adapter(sid: str) -> str:
+    base = SPRINTS_DIR
+    status = _read_json(base / f"{sid}.status.json")
+    prd = _read_text(base / f"{sid}.prd.md")
+    contract = _read_text(base / f"{sid}.contract.md")
+    graph = _read_json(base / f"{sid}.task_graph.json")
+    requirement_trace = _read_json(base / f"{sid}.requirement_trace.json")
+    coverage_report = _read_json(base / f"{sid}.coverage_report.json")
+    acceptance_verdict = _read_json(base / f"{sid}.acceptance_verdict.json")
+    sections = _split_sections(prd)
+    title = str(status.get("title") or sid)
+    summary_html = _render_markdown_block("\n\n".join(body for _, body in sections[:2]))
+    cards = [
+        f'<div class="ha-card"><h3>{html.escape(name)}</h3>{_render_markdown_block(body)}</div>'
+        for name, body in (sections[2:4] or sections[:2])
+    ]
+    body = "\n".join([
+        f'<section id="summary"><h2>摘要</h2>{summary_html}</section>',
+        f'<section id="architecture"><h2>架构设计</h2><div class="ha-grid-2">{"".join(cards) or "<div class=\"ha-card\"><p>N/A</p></div>"}</div></section>',
+        f'<section id="flow"><h2>流程 / DAG</h2><div class="ha-diagram">{html.escape(_diagram_from_graph(graph) if graph else "PM -> Planner -> Builder -> Evaluator")}</div>{_table(["节点", "模型", "技能", "Gate", "依赖"], _node_rows(graph)) if graph else ""}</section>',
+        f'<section id="requirements"><h2>Requirement Trace Matrix</h2>{_coverage_block(requirement_trace, coverage_report, acceptance_verdict)}</section>',
+        f'<section id="contracts"><h2>合约 / 约束</h2>{_table(["来源", "说明"], [["prd.md", "canonical PM 文档"], ["contract.md", "Planner/Builder 约束视图"], ["task_graph.json", "如存在则展示后续执行图"]])}{_render_markdown_block(contract)}</section>',
+        f'<section id="stack"><h2>技术栈 / 算子绑定</h2>{_table(["项", "次数", "类别"], _stack_rows(graph))}</section>',
+        f'<section id="validation"><h2>验证 / 风险</h2>{_table(["节点/来源", "验收 / 验证", "计数"], _acceptance_rows(graph, [prd, contract]))}</section>',
+    ])
+    return _render_adapter_page(
+        profile="prd",
+        title=f"PRD — {title}",
+        hero_title=f"PRD — {title}",
+        lede=_summary_text(prd, contract)[:220] or "产品需求、约束与交付图谱。",
+        meta=f"Sprint: {sid} · status: {status.get('status','N/A')} · phase: {status.get('phase','N/A')}",
+        body_html=body,
+        badges=[
+            str(status.get("priority") or "P0"),
+            str(status.get("lane_hint") or "strategy"),
+            "PM",
+            str(status.get("handoff_to") or "planner"),
+        ],
+    )
+
+
+def _render_planning_adapter(sid: str) -> str:
+    base = SPRINTS_DIR
+    status = _read_json(base / f"{sid}.status.json")
+    design = _read_text(base / f"{sid}.design.md")
+    plan = _read_text(base / f"{sid}.plan.md")
+    contract = _read_text(base / f"{sid}.contract.md")
+    graph = _read_json(base / f"{sid}.task_graph.json")
+    requirement_trace = _read_json(base / f"{sid}.requirement_trace.json")
+    coverage_report = _read_json(base / f"{sid}.coverage_report.json")
+    acceptance_verdict = _read_json(base / f"{sid}.acceptance_verdict.json")
+    title = str(status.get("title") or sid)
+    design_sections = _split_sections(design)
+    plan_sections = _split_sections(plan)
+    cards = [
+        f'<div class="ha-card"><h3>{html.escape(name)}</h3>{_render_markdown_block(body)}</div>'
+        for name, body in (design_sections[:2] + plan_sections[:2])[:4]
+    ]
+    body = "\n".join([
+        f'<section id="summary"><h2>摘要</h2>{_render_markdown_block(_summary_text(design, plan))}</section>',
+        f'<section id="architecture"><h2>架构设计</h2><div class="ha-grid-2">{"".join(cards) or "<div class=\"ha-card\"><p>N/A</p></div>"}</div></section>',
+        f'<section id="flow"><h2>流程 / DAG</h2><div class="ha-diagram">{html.escape(_diagram_from_graph(graph))}</div>{_table(["节点", "模型", "技能", "Gate", "依赖"], _node_rows(graph))}</section>',
+        f'<section id="requirements"><h2>Requirement Trace Matrix</h2>{_coverage_block(requirement_trace, coverage_report, acceptance_verdict)}</section>',
+        f'<section id="contracts"><h2>合约 / 约束</h2>{_table(["节点", "write_scope", "risk"], _write_scope_rows(graph))}{_render_markdown_block(contract)}</section>',
+        f'<section id="stack"><h2>技术栈 / 算子绑定</h2>{_table(["项", "次数", "类别"], _stack_rows(graph))}</section>',
+        f'<section id="validation"><h2>验证 / 风险</h2>{_table(["节点/来源", "验收 / 验证", "计数"], _acceptance_rows(graph, [design, plan, contract]))}{_render_markdown_block(plan)}</section>',
+    ])
+    return _render_adapter_page(
+        profile="planning",
+        title=f"Planning — {title}",
+        hero_title=f"Planning — {title}",
+        lede=_summary_text(design, plan)[:220] or "规划、节点拆解与执行合约。",
+        meta=f"Sprint: {sid} · status: {status.get('status','N/A')} · phase: {status.get('phase','N/A')}",
+        body_html=body,
+        badges=[
+            str(status.get("priority") or "P0"),
+            str(status.get("lane_hint") or "strategy"),
+            "Planner",
+            str(status.get("handoff_to") or "builder_main"),
+        ],
+    )
+
+
+def _render_design_adapter(sid: str) -> str:
+    base = SPRINTS_DIR
+    status = _read_json(base / f"{sid}.status.json")
+    design = _read_text(base / f"{sid}.design.md")
+    contract = _read_text(base / f"{sid}.contract.md")
+    plan = _read_text(base / f"{sid}.plan.md")
+    graph = _read_json(base / f"{sid}.task_graph.json")
+    requirement_trace = _read_json(base / f"{sid}.requirement_trace.json")
+    coverage_report = _read_json(base / f"{sid}.coverage_report.json")
+    acceptance_verdict = _read_json(base / f"{sid}.acceptance_verdict.json")
+    title = str(status.get("title") or sid)
+    design_sections = _split_sections(design)
+    cards = [
+        f'<div class="ha-card"><h3>{html.escape(name)}</h3>{_render_markdown_block(body)}</div>'
+        for name, body in design_sections[:4]
+    ]
+    body = "\n".join([
+        f'<section id="summary"><h2>摘要</h2>{_render_markdown_block(_summary_text(design, contract, plan))}</section>',
+        f'<section id="architecture"><h2>架构设计</h2><div class="ha-grid-2">{"".join(cards) or "<div class=\"ha-card\"><p>N/A</p></div>"}</div></section>',
+        f'<section id="flow"><h2>流程 / DAG</h2><div class="ha-diagram">{html.escape(_diagram_from_graph(graph))}</div>{_table(["节点", "模型", "技能", "Gate", "依赖"], _node_rows(graph)) if graph else ""}</section>',
+        f'<section id="requirements"><h2>Requirement Trace Matrix</h2>{_coverage_block(requirement_trace, coverage_report, acceptance_verdict)}</section>',
+        f'<section id="contracts"><h2>合约 / 约束</h2>{_render_markdown_block(contract)}</section>',
+        f'<section id="stack"><h2>技术栈 / 算子绑定</h2>{_table(["项", "次数", "类别"], _stack_rows(graph))}</section>',
+        f'<section id="validation"><h2>验证 / 风险</h2>{_table(["节点/来源", "验收 / 验证", "计数"], _acceptance_rows(graph, [design, contract, plan]))}</section>',
+    ])
+    return _render_adapter_page(
+        profile="design",
+        title=f"Design — {title}",
+        hero_title=f"Design — {title}",
+        lede=_summary_text(design, contract, plan)[:220] or "架构设计、边界与验证面。",
+        meta=f"Sprint: {sid} · status: {status.get('status','N/A')} · phase: {status.get('phase','N/A')}",
+        body_html=body,
+        badges=[
+            str(status.get("priority") or "P0"),
+            str(status.get("lane_hint") or "strategy"),
+            "Architecture",
+            str(status.get("handoff_to") or "builder_main"),
+        ],
+    )
+
+
+def _render_default(kind: str, sid: str) -> str:
+    if kind == "prd":
+        return _render_prd_adapter(sid)
+    if kind == "planning":
+        return _render_planning_adapter(sid)
+    return _render_design_adapter(sid)
+
+
 def render(args: argparse.Namespace) -> int:
     sid = args.sid
     kind = args.kind
@@ -413,14 +658,29 @@ def render(args: argparse.Namespace) -> int:
         print(f"invalid kind: {kind}", file=sys.stderr)
         return 2
     output = Path(args.output).expanduser() if args.output else SPRINTS_DIR / f"{sid}.{kind}.html"
-    html_text = _render_prd(sid) if kind == "prd" else _render_planning(sid)
+    renderer = "legacy" if os.environ.get("SOLAR_USE_LEGACY_RENDERER", "").strip() in {"1", "true", "TRUE", "yes", "on"} else "html-anything"
+    warnings: list[str] = []
+    try:
+        html_text = _render_legacy(kind, sid) if renderer == "legacy" else _render_default(kind, sid)
+    except Exception as exc:
+        if renderer == "legacy":
+            raise
+        warnings.append(f"html_anything_fallback:{exc}")
+        renderer = "legacy"
+        html_text = _render_legacy(kind, sid)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(html_text, encoding="utf-8")
-    payload = {"ok": True, "sid": sid, "kind": kind, "path": str(output)}
+    payload: dict[str, Any] = {"ok": True, "sid": sid, "kind": kind, "path": str(output), "renderer": renderer}
+    if warnings:
+        payload["warnings"] = warnings
     if args.register:
         helper = HARNESS_DIR / "lib" / "html_artifact.py"
-        artifact_kind = "prd_html" if kind == "prd" else "planning_html"
-        cmd = [sys.executable, str(helper), "register", "--sid", sid, "--kind", artifact_kind, "--path", str(output)]
+        artifact_kind_map = {
+            "prd": "prd_html",
+            "planning": "planning_html",
+            "design": "design_html",
+        }
+        cmd = [sys.executable, str(helper), "register", "--sid", sid, "--kind", artifact_kind_map[kind], "--path", str(output)]
         proc = subprocess.run(cmd, capture_output=True, text=True)
         payload["registered"] = proc.returncode == 0
         payload["register_stdout"] = (proc.stdout or "").strip()
@@ -428,7 +688,7 @@ def render(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
-        print(f"render_sprint_html sid={sid} kind={kind} path={output}")
+        print(f"render_sprint_html sid={sid} kind={kind} renderer={renderer} path={output}")
     return 0
 
 

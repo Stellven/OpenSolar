@@ -21,7 +21,7 @@ from typing import Any
 
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", Path.home() / ".solar" / "harness"))
 SPRINTS_DIR = Path(os.environ.get("SPRINTS_DIR", HARNESS_DIR / "sprints"))
-VALID_KINDS = {"prd_html", "planning_html"}
+VALID_KINDS = {"prd_html", "planning_html", "design_html"}
 
 
 def _warn(message: str) -> None:

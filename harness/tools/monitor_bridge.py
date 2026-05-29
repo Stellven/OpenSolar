@@ -49,6 +49,7 @@ from multi_task_status import (  # noqa: E402
     ACTOR_LEASE_DIR,
     _redact_secrets,
 )
+from browser_job_runtime import BrowserSessionBroker  # noqa: E402
 
 
 def _now_iso() -> str:
@@ -77,6 +78,61 @@ def _count_claude_print_processes() -> int:
         return -1
     except Exception:
         return -1
+
+
+def load_browser_jobs(jobs_dir: Path, actors: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """Load browser job state with monitor-friendly observability fields."""
+    broker = BrowserSessionBroker(harness_dir=HARNESS_DIR)
+    actor_map = actors or {}
+    jobs: list[dict[str, Any]] = []
+    if not jobs_dir.exists():
+        return jobs
+
+    for state_file in sorted(jobs_dir.glob("*/state.json")):
+        try:
+            state = json.loads(state_file.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        envelope = state.get("envelope") if isinstance(state.get("envelope"), dict) else {}
+        actor_id = str(state.get("actor_id") or envelope.get("actor_id") or "")
+        profile_ref = str(envelope.get("profile_ref") or "")
+        account_label = str(envelope.get("account_label") or "")
+        if profile_ref or account_label:
+            health = broker.get_profile_health(profile_ref, account_label)
+        else:
+            raw_state = str(state.get("state") or "unknown")
+            health = {
+                "status": "reauth_required" if raw_state == "reauth_required" else "healthy",
+                "projected_state": "WAITING_HUMAN" if raw_state == "reauth_required" else raw_state,
+            }
+        artifacts = state.get("artifacts") if isinstance(state.get("artifacts"), list) else []
+        evidence = [str(item.get("name")) for item in artifacts if isinstance(item, dict) and item.get("name")]
+        paths: list[str] = []
+        for item in artifacts:
+            if not isinstance(item, dict):
+                continue
+            if item.get("path"):
+                paths.append(str(item.get("path")))
+            elif item.get("name"):
+                paths.append(str(state_file.parent / str(item.get("name"))))
+        actor_entry = actor_map.get(actor_id) if isinstance(actor_map, dict) else {}
+        jobs.append({
+            "job_id": str(state.get("job_id") or state_file.parent.name),
+            "actor_id": actor_id,
+            "actor_state": actor_entry.get("state") if isinstance(actor_entry, dict) else None,
+            "async_state": str(state.get("state") or "unknown"),
+            "projected_state": str(state.get("projected_state") or health.get("projected_state") or state.get("state") or "unknown"),
+            "login_state": str(state.get("login_state") or health.get("status") or "unknown"),
+            "quota_state": str(state.get("quota_state") or "ok"),
+            "consumer_sprint": envelope.get("sprint_id") or envelope.get("consumer_sprint"),
+            "logical_operator": envelope.get("logical_operator") or envelope.get("operator_id"),
+            "profile_ref": profile_ref or None,
+            "account_label": account_label or None,
+            "evidence": evidence,
+            "paths": paths,
+            "state_path": str(state_file),
+        })
+    return jobs
 
 
 def build_snapshot(
@@ -140,6 +196,7 @@ def build_snapshot(
 
     # Logical operator binding summary (N4)
     lo_bindings = get_logical_operator_binding_summary(logical_ops_path)
+    browser_jobs = load_browser_jobs(HARNESS_DIR / "run" / "browser-jobs", actor_fleet)
 
     return {
         "schema": "solar.monitor_bridge.operator_fleet.v2",
@@ -154,6 +211,8 @@ def build_snapshot(
         "actor_lease_counts": dict(sorted(actor_lease_counts.items())),
         "host_fleet": dict(sorted(host_fleet.items())),
         "logical_operator_bindings": dict(sorted(lo_bindings.items())),
+        "browser_job_count": len(browser_jobs),
+        "browser_jobs": browser_jobs,
     }
 
 

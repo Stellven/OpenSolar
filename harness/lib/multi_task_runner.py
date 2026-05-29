@@ -11,6 +11,7 @@ import os
 import re
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -40,6 +41,9 @@ DEFAULT_INTERVAL = int(os.environ.get("SOLAR_MULTI_TASK_INTERVAL_SEC", "15") or 
 DEFAULT_COOLDOWN = int(os.environ.get("SOLAR_MULTI_TASK_LAUNCH_COOLDOWN_SEC", "30") or "30")
 DEFAULT_MEMORY_RESERVE_GB = float(os.environ.get("SOLAR_MULTI_TASK_MEMORY_RESERVE_GB", "4") or "4")
 DEFAULT_QUOTA_BACKOFF = int(os.environ.get("SOLAR_MULTI_TASK_QUOTA_BACKOFF_SEC", "900") or "900")
+OPERATORD_SUBMIT_ENABLED = os.environ.get("SOLAR_OPERATORD_SUBMIT_ENABLED", "1").lower() not in {"0", "false", "off", "no"}
+OPERATORD_RESULT_TIMEOUT_SEC = float(os.environ.get("SOLAR_OPERATORD_RESULT_TIMEOUT_SEC", "0") or "0")
+OPERATORD_RESULT_POLL_INTERVAL_SEC = float(os.environ.get("SOLAR_OPERATORD_RESULT_POLL_INTERVAL_SEC", "1") or "1")
 GRAPH_SUMMARY_CACHE_TTL_SEC = int(os.environ.get("SOLAR_MULTI_TASK_GRAPH_SUMMARY_CACHE_TTL_SEC", "5") or "5")
 PROBE_CACHE_PATH = Path(os.environ.get("SOLAR_MULTI_TASK_PROBE_CACHE", RUN_DIR / "capability-probes.json"))
 
@@ -152,6 +156,18 @@ ACTIVE_TASK_STATUSES = {"queued", "dispatched", "running"}
 TERMINAL_TASK_STATUSES = {"completed", "failed", "failed_missing_handoff", "failed_stale_handoff", "cancelled"}
 EFFECTIVE_TERMINAL_TASK_STATUSES = TERMINAL_TASK_STATUSES | {"completed_aligned", "failed_aligned"}
 TASK_STALE_WARN_SEC = int(os.environ.get("SOLAR_MULTI_TASK_STALE_WARN_SEC", "1800") or "1800")
+SCHEDULER_PID_DIR = RUN_DIR / "schedulers"
+_SCHED_GRAPH_TERMINAL = frozenset({"passed", "failed", "skipped", "done", "completed", "cancelled", "canceled"})
+
+
+def _display_tmux_status(task_status: str, tmux_status: str) -> str:
+    """Translate terminal task rows away from misleading live-window wording."""
+    status = str(task_status or "").lower()
+    tmux = str(tmux_status or "").lower()
+    if status in EFFECTIVE_TERMINAL_TASK_STATUSES and tmux == "live":
+        return "idle"
+    return tmux or "N/A"
+_SCHED_GRAPH_ACTIVE = frozenset({"assigned", "dispatched", "in_progress", "running", "reviewing"})
 PROFILE_ALIASES = {
     "builder_main": "builder",
     "builder-main": "builder",
@@ -1386,7 +1402,8 @@ def claude_agent_line(model: str, dispatch_expr: str = '"$(cat "$DISPATCH_FILE")
             "export DISABLE_NON_ESSENTIAL_MODEL_CALLS=1",
             "export CLAUDE_CODE_MAX_OUTPUT_TOKENS=${CLAUDE_CODE_MAX_OUTPUT_TOKENS:-4096}",
             (
-                "claude --permission-mode bypassPermissions "
+                "claude --dangerously-skip-permissions "
+                "--permission-mode bypassPermissions "
                 f"--model {shlex.quote(route_model)} "
                 "--tools default "
                 f"-p {dispatch_expr}"
@@ -1402,11 +1419,11 @@ def claude_agent_line(model: str, dispatch_expr: str = '"$(cat "$DISPATCH_FILE")
             "eval \"$persona_config\"",
             "apply_persona_env lab-builder",
             "if [[ -n \"${LAUNCH_ERROR:-}\" ]]; then echo \"ERROR: $LAUNCH_ERROR\"; exit 66; fi",
-            f"claude $MODEL_FLAG $EXTRA_FLAGS -p {dispatch_expr}",
+            f"claude --dangerously-skip-permissions $MODEL_FLAG $EXTRA_FLAGS -p {dispatch_expr}",
         ])
     empty_mcp = HARNESS_DIR / "config" / "empty-mcp.json"
     return (
-        "claude --permission-mode bypassPermissions "
+        "claude --dangerously-skip-permissions --permission-mode bypassPermissions "
         f"--model {shlex.quote(claude_model_arg(model))} "
         f"--tools default --strict-mcp-config --mcp-config {shlex.quote(str(empty_mcp))} "
         f"-p {dispatch_expr}"
@@ -1454,6 +1471,240 @@ def read_task_status(path: Path) -> dict[str, Any] | None:
         return None
 
 
+def _scheduler_pid_file(pid: int | None = None) -> Path:
+    pid_value = os.getpid() if pid is None else int(pid)
+    return SCHEDULER_PID_DIR / f"scheduler-{pid_value}.json"
+
+
+def _scheduler_log_file(pid: int | None = None) -> Path:
+    pid_value = os.getpid() if pid is None else int(pid)
+    return SCHEDULER_PID_DIR / f"scheduler-{pid_value}.log"
+
+
+def _append_scheduler_log(message: str, pid: int | None = None) -> None:
+    path = _scheduler_log_file(pid)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(f"{now_iso()} {message}\n")
+
+
+def _extract_graph_args(command: str) -> list[str]:
+    try:
+        parts = shlex.split(str(command or ""))
+    except ValueError:
+        parts = str(command or "").split()
+    values: list[str] = []
+    idx = 0
+    while idx < len(parts):
+        item = parts[idx]
+        if item == "--graph" and idx + 1 < len(parts):
+            values.append(parts[idx + 1])
+            idx += 2
+            continue
+        if item.startswith("--graph="):
+            values.append(item.split("=", 1)[1])
+        idx += 1
+    return [str(Path(value).expanduser()) for value in values if str(value).strip()]
+
+
+def _register_scheduler_pid(explicit_graphs: list[str]) -> Path:
+    path = _scheduler_pid_file()
+    log_path = _scheduler_log_file()
+    graphs = [str(Path(item).expanduser()) for item in explicit_graphs if str(item).strip()]
+    payload = {
+        "pid": os.getpid(),
+        "ppid": os.getppid(),
+        "started_at": now_iso(),
+        "graphs": graphs,
+        "graph_count": len(graphs),
+        "argv": list(sys.argv),
+        "cwd": str(Path.cwd()),
+        "log": str(log_path),
+        "command": " ".join(shlex.quote(arg) for arg in sys.argv),
+    }
+    json_write(path, payload)
+    _append_scheduler_log(f"register graphs={len(graphs)}", os.getpid())
+    return path
+
+
+def _unregister_scheduler_pid(pid: int | None = None) -> None:
+    pid_value = os.getpid() if pid is None else int(pid)
+    path = _scheduler_pid_file(pid_value)
+    try:
+        if path.exists():
+            path.unlink()
+    except Exception:
+        pass
+    _append_scheduler_log("unregister", pid_value)
+
+
+def _pid_is_alive(pid: int) -> bool:
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except OSError:
+        return False
+
+
+def _ps_snapshot_by_pid() -> dict[int, dict[str, Any]]:
+    try:
+        out = subprocess.check_output(
+            ["ps", "-Ao", "pid=,etime=,rss=,command="],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+        )
+    except Exception:
+        return {}
+    rows: dict[int, dict[str, Any]] = {}
+    for line in out.splitlines():
+        raw = line.strip()
+        if not raw:
+            continue
+        parts = raw.split(None, 3)
+        if len(parts) < 4:
+            continue
+        try:
+            pid = int(parts[0])
+        except Exception:
+            continue
+        rows[pid] = {
+            "pid": pid,
+            "elapsed": parts[1],
+            "rss_kb": int(parts[2]) if parts[2].isdigit() else 0,
+            "command": parts[3],
+        }
+    return rows
+
+
+def _scheduler_process_rows() -> list[dict[str, Any]]:
+    rows = _ps_snapshot_by_pid()
+    found: list[dict[str, Any]] = []
+    for record in rows.values():
+        command = str(record.get("command") or "")
+        if "multi_task_runner.py" not in command or " start " not in f" {command} ":
+            continue
+        if "--graph" not in command:
+            continue
+        found.append(record)
+    return found
+
+
+def _graph_runner_state(graph_path: Path) -> dict[str, Any]:
+    try:
+        graph = load_graph(graph_path.expanduser())
+    except Exception as exc:
+        return {
+            "ok": False,
+            "graph": str(graph_path),
+            "sid": graph_path.stem,
+            "all_terminal": False,
+            "has_active": False,
+            "ready_nodes": [],
+            "reason": f"graph_load_error:{exc}",
+        }
+    node_ids = [str(node.get("id") or "") for node in graph.get("nodes", [])]
+    statuses = [str(node_status(graph, node_id) or "pending").lower() for node_id in node_ids]
+    ready = [str(node.get("id") or "") for node in ready_nodes(graph)]
+    all_terminal = bool(statuses) and all(status in _SCHED_GRAPH_TERMINAL for status in statuses)
+    has_active = any(status in _SCHED_GRAPH_ACTIVE for status in statuses)
+    return {
+        "ok": True,
+        "graph": str(graph_path.expanduser()),
+        "sid": sprint_id_for(graph, graph_path),
+        "all_terminal": all_terminal,
+        "has_active": has_active,
+        "ready_nodes": ready,
+        "reason": "completed_graph_runner" if (all_terminal and not has_active and not ready) else "graph_not_terminal",
+        "statuses": statuses,
+    }
+
+
+def _all_graphs_terminal(explicit_graphs: list[str]) -> bool:
+    if not explicit_graphs:
+        return False
+    graphs = graph_files(explicit_graphs)
+    if not graphs:
+        return False
+    for graph_path in graphs:
+        state = _graph_runner_state(graph_path)
+        if not state.get("ok"):
+            return False
+        if not state.get("all_terminal"):
+            return False
+        if state.get("has_active"):
+            return False
+        if state.get("ready_nodes"):
+            return False
+    return True
+
+
+def detect_stale_scheduler_runners(apply_cleanup: bool = False) -> list[dict[str, Any]]:
+    registry_rows: dict[int, dict[str, Any]] = {}
+    for pid_file in SCHEDULER_PID_DIR.glob("scheduler-*.json"):
+        payload = read_task_status(pid_file)
+        if not payload:
+            continue
+        try:
+            pid = int(payload.get("pid"))
+        except Exception:
+            continue
+        registry_rows[pid] = payload
+
+    ps_rows = {int(row["pid"]): row for row in _scheduler_process_rows()}
+    combined_pids = sorted(set(registry_rows) | set(ps_rows))
+    rows: list[dict[str, Any]] = []
+    for pid in combined_pids:
+        reg = registry_rows.get(pid) or {}
+        ps_row = ps_rows.get(pid) or {}
+        command = str(ps_row.get("command") or reg.get("command") or "")
+        graphs = list(reg.get("graphs") or _extract_graph_args(command))
+        if not graphs:
+            rows.append({
+                "pid": pid,
+                "graph": "N/A",
+                "sprint_id": "N/A",
+                "elapsed": str(ps_row.get("elapsed") or "N/A"),
+                "rss_mb": round(float(ps_row.get("rss_kb") or 0) / 1024.0, 1),
+                "log": str(reg.get("log") or _scheduler_log_file(pid)),
+                "reason": "no_explicit_graph",
+                "stale": False,
+                "action": "keep",
+                "started_at": str(reg.get("started_at") or "N/A"),
+            })
+            continue
+        graph_states = [_graph_runner_state(Path(graph_path)) for graph_path in graphs]
+        stale = bool(graph_states) and all(
+            state.get("ok")
+            and state.get("all_terminal")
+            and not state.get("has_active")
+            and not state.get("ready_nodes")
+            for state in graph_states
+        )
+        action = "keep"
+        if stale and apply_cleanup and _pid_is_alive(pid):
+            try:
+                os.kill(pid, signal.SIGTERM)
+                action = "sigterm"
+                _append_scheduler_log("stale_cleanup_sigterm", pid)
+            except OSError as exc:
+                action = f"sigterm_error:{exc}"
+        for state in graph_states:
+            rows.append({
+                "pid": pid,
+                "graph": str(state.get("graph") or "N/A"),
+                "sprint_id": str(state.get("sid") or "N/A"),
+                "elapsed": str(ps_row.get("elapsed") or "N/A"),
+                "rss_mb": round(float(ps_row.get("rss_kb") or 0) / 1024.0, 1),
+                "log": str(reg.get("log") or _scheduler_log_file(pid)),
+                "reason": str(state.get("reason") or "N/A"),
+                "stale": stale,
+                "action": action,
+                "started_at": str(reg.get("started_at") or "N/A"),
+            })
+    return rows
+
+
 def task_age_s(row: dict[str, Any], now_ts: float | None = None) -> int | None:
     updated_ts = parse_iso(str(row.get("updated_at") or row.get("created_at") or ""))
     if updated_ts is None:
@@ -1467,7 +1718,14 @@ def graph_node_status_for_task(row: dict[str, Any]) -> str:
     if not graph_path or not node_id:
         return "N/A"
     try:
-        graph = load_graph(Path(graph_path).expanduser())
+        path = Path(graph_path).expanduser()
+        if not path.is_absolute():
+            candidates = [Path.cwd() / path, HARNESS_DIR / path, SPRINTS_DIR / path.name]
+            for candidate in candidates:
+                if candidate.exists():
+                    path = candidate
+                    break
+        graph = load_graph(path)
         return str(node_status(graph, node_id) or "N/A")
     except Exception:
         return "N/A"
@@ -1523,6 +1781,11 @@ def task_data_class(row: dict[str, Any], now_ts: float | None = None) -> str:
     if status in EFFECTIVE_TERMINAL_TASK_STATUSES or status.startswith("reaped"):
         return "historical"
     return "stale" if stale else "observed"
+
+
+def task_work_label(row: dict[str, Any]) -> str:
+    status = str(row.get("effective_status") or row.get("status") or "").lower()
+    return "ACTIVE" if status in ACTIVE_TASK_STATUSES else "hist"
 
 
 def tmux_session_exists() -> bool:
@@ -1743,6 +2006,7 @@ def enrich_task_row(row: dict[str, Any], windows: dict[str, dict[str, str]]) -> 
     enriched["pane_pid"] = (info or {}).get("pane_pid", "N/A")
     enriched["graph_status"] = graph_node_status_for_task(enriched)
     enriched["effective_status"] = effective_task_status(enriched)
+    enriched["work"] = task_work_label(enriched)
     age_s = task_age_s(enriched)
     enriched["age_s"] = age_s
     enriched["age"] = format_age_s(age_s)
@@ -1794,6 +2058,52 @@ def task_inventory(tasks: list[dict[str, Any]]) -> dict[str, Any]:
         "statuses": status_counts,
         "latest": latest,
         "latest_age": format_age_s(None if latest is None else task_age_s(latest)),
+    }
+
+
+def worker_activity_projection(
+    tmux_live: bool,
+    inventory: dict[str, Any],
+    active_count: int,
+    has_tasks: bool,
+) -> dict[str, Any]:
+    live = int(inventory.get("live", 0) or 0)
+    if tmux_live:
+        data_source = "live" if live else "idle:no_active_workers"
+        ok = True
+    else:
+        data_source = "history:no_multi_task_session" if has_tasks else "no_live_workers"
+        ok = not has_tasks
+    return {
+        "ok": ok,
+        "data_source": data_source,
+        "active_workers": f"{live} live / {int(active_count)} active",
+    }
+
+
+def monitor_summary(result: dict[str, Any], _messages: list[str]) -> dict[str, Any]:
+    tasks = list_task_rows()
+    inventory = task_inventory(tasks)
+    active_count = sum(
+        1
+        for task in tasks
+        if str(task.get("effective_status") or task.get("status") or "").lower() in ACTIVE_TASK_STATUSES
+    )
+    projection = worker_activity_projection(tmux_session_exists(), inventory, active_count, bool(tasks))
+    findings: list[dict[str, Any]] = []
+    for graph in result.get("graphs") or []:
+        if graph.get("ready") and active_count == 0:
+            findings.append({
+                "type": "ready_graph_idle",
+                "sid": str(graph.get("sid") or "N/A"),
+                "ready": list(graph.get("ready") or []),
+            })
+    status = "warn" if findings or not projection.get("ok") else "ok"
+    return {
+        "status": status,
+        "data_source": projection.get("data_source"),
+        "active_workers": projection.get("active_workers"),
+        "findings": findings,
     }
 
 
@@ -2515,6 +2825,58 @@ def tmux_start(window: str, runner: Path, cwd: Path, dry_run: bool = False) -> N
     )
 
 
+def _operator_submit_eligible(profile: dict[str, Any], dry_run: bool = False) -> bool:
+    operator_id = str(profile.get("operator_id") or "").strip()
+    return (
+        OPERATORD_SUBMIT_ENABLED
+        and not dry_run
+        and operator_id not in {"", "N/A"}
+    )
+
+
+def _operator_result_path(operator_id: str, dispatch_id: str) -> Path:
+    return HARNESS_DIR / "run" / "operator-results" / operator_id / dispatch_id / "result.json"
+
+
+def _build_operator_envelope(
+    dispatch_id: str,
+    sid: str,
+    node_id: str,
+    node: dict[str, Any],
+    profile: dict[str, Any],
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "task_id": dispatch_id,
+        "sprint_id": sid,
+        "node_id": node_id,
+        "operator_id": str(profile.get("operator_id") or "").strip(),
+        "task_type": str(profile.get("role") or "builder"),
+        "objective": str(node.get("goal") or node.get("title") or node_id),
+        "command": profile.get("command"),
+        "backend": profile.get("backend"),
+        "model": profile.get("model"),
+        "profile": profile.get("name"),
+        "write_scope": payload.get("write_scope") or [],
+        "handoff_path": payload.get("handoff"),
+        "dispatch_file": payload.get("dispatch_file"),
+        "approval_mode": profile.get("approval_mode"),
+    }
+
+
+def _poll_operator_result(result_path: Path, timeout_sec: float, interval_sec: float) -> dict[str, Any] | None:
+    deadline = time.time() + max(0.0, timeout_sec)
+    interval = max(0.01, interval_sec)
+    while time.time() <= deadline:
+        if result_path.exists():
+            try:
+                return json.loads(result_path.read_text(encoding="utf-8"))
+            except Exception:
+                return None
+        time.sleep(interval)
+    return None
+
+
 def launch_node(graph_path: Path, graph: dict[str, Any], node: dict[str, Any], args: argparse.Namespace,
                 dry_run: bool = False) -> dict[str, Any]:
     sid = sprint_id_for(graph, graph_path)
@@ -2564,6 +2926,45 @@ def launch_node(graph_path: Path, graph: dict[str, Any], node: dict[str, Any], a
         "exit_code": None,
     }
     json_write(status_path(task_dir), payload)
+
+    if _operator_submit_eligible(profile, dry_run=dry_run):
+        try:
+            import operator_runtime
+
+            envelope = _build_operator_envelope(dispatch_id, sid, node_id, node, profile, payload)
+            submit_result = operator_runtime.submit(envelope)
+            operator_id = str(submit_result.get("operator_id") or envelope["operator_id"])
+            result_path = _operator_result_path(operator_id, dispatch_id)
+            payload.update(submit_result)
+            payload["submit_mode"] = "operatord"
+            payload["result_path"] = str(result_path)
+            payload["updated_at"] = now_iso()
+            json_write(status_path(task_dir), payload)
+            set_node_status(graph, node_id, "dispatched", pane=f"operator:{operator_id}", dispatch_id=dispatch_id)
+            save_graph(graph_path, graph)
+            set_last_launch()
+
+            if OPERATORD_RESULT_TIMEOUT_SEC > 0:
+                result = _poll_operator_result(
+                    result_path,
+                    OPERATORD_RESULT_TIMEOUT_SEC,
+                    OPERATORD_RESULT_POLL_INTERVAL_SEC,
+                )
+                if result is None:
+                    payload["status"] = "result_timeout"
+                else:
+                    payload["status"] = str(result.get("status") or "completed")
+                    payload["exit_code"] = result.get("exit_code")
+                    payload["operator_result"] = result
+                payload["updated_at"] = now_iso()
+                json_write(status_path(task_dir), payload)
+            return payload
+        except (RuntimeError, ValueError) as exc:
+            payload["operator_submit_fallback"] = "legacy"
+            payload["operator_submit_error"] = str(exc)
+            payload["updated_at"] = now_iso()
+            json_write(status_path(task_dir), payload)
+
     runner = runner_script(task_dir, payload)
 
     if not dry_run:
@@ -2756,20 +3157,27 @@ def render_plain(result: dict[str, Any], no_clear: bool = False) -> None:
 
     task_rows = [[
         _clip_display(str(t.get("id", "N/A")), 24),
+        _clip_display(str(t.get("work", "N/A")), 8),
         _clip_display(str(t.get("effective_status") or t.get("status", "N/A")), 18),
         _clip_display(str(t.get("data_class", "N/A")), 12),
         _clip_display(str(t.get("pane_type", "N/A")), 22),
         _clip_display(str(t.get("operator_id") or "N/A"), 18),
         _clip_display(str(t.get("operator_vendor") or t.get("provider") or "N/A"), 12),
         _clip_display(str(t.get("operator_pane") or "N/A"), 16),
-        _clip_display(str(t.get("tmux_status", "N/A")), 10),
+        _clip_display(
+            _display_tmux_status(
+                str(t.get("effective_status") or t.get("status", "N/A")),
+                str(t.get("tmux_status", "N/A")),
+            ),
+            10,
+        ),
         _clip_display(f"{t.get('sprint_id', 'N/A')}#{t.get('node_id', 'N/A')}", 32),
         _clip_display(str(t.get("age", "N/A")), 8),
     ] for t in tasks]
     print()
     print_table(
-        ["multi_task", "status", "class", "pane_type", "operator", "vendor", "op_pane", "tmux", "sprint#node", "age"],
-        task_rows or [["N/A", "pending", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A"]],
+        ["multi_task", "work", "status", "class", "pane_type", "operator", "vendor", "op_pane", "tmux", "sprint#node", "age"],
+        task_rows or [["N/A", "hist", "pending", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A"]],
     )
 
     dispatch_rows = [[
@@ -2842,6 +3250,7 @@ def render_screen_status_lines(view_model: dict[str, Any], width: int, height: i
     health = view_model.get("health") or {}
     panes = view_model.get("panes") or []
     workers = view_model.get("workers") or {}
+    tasks = view_model.get("tasks") or []
     last_dispatch = view_model.get("last_dispatch") or {}
     dag = view_model.get("dag") or {}
     degraded = view_model.get("degraded") or []
@@ -2909,6 +3318,14 @@ def render_screen_status_lines(view_model: dict[str, Any], width: int, height: i
         counts_text = ",".join(f"{k}:{v}" for k, v in sorted(counts.items())) or "N/A"
         lines.append(_clip_display(
             f"WORKERS active={w_active} tracked={w_tracked}  {counts_text}",
+            content_width,
+        ))
+
+    for task in tasks[:2]:
+        if len(lines) >= height:
+            break
+        lines.append(_clip_display(
+            f"TASK [{task.get('work', 'hist')}] {task.get('task', 'N/A')} -> {task.get('target', 'N/A')}",
             content_width,
         ))
 
@@ -3070,7 +3487,7 @@ def screen_view_model(result: dict[str, Any], args: argparse.Namespace, width: i
     tasks = list_task_rows()
     inventory = task_inventory(tasks)
     statuses = inventory.get("statuses") or {}
-    active_tasks = [t for t in tasks if str(t.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
+    active_tasks = [t for t in tasks if str(t.get("effective_status") or t.get("status") or "").lower() in ACTIVE_TASK_STATUSES]
     workers = {
         "active": len(active_tasks),
         "tracked": int(inventory.get("total", 0) or 0),
@@ -3115,12 +3532,24 @@ def screen_view_model(result: dict[str, Any], args: argparse.Namespace, width: i
     if not panes_src:
         degraded.append({"source": "panes", "reason": "empty"})
 
+    task_summary = [{
+        "task": _clip_display(str(task.get("id", "N/A")).replace("mt-", ""), 16),
+        "work": str(task.get("work", "hist")),
+        "target": _clip_display(f"{task.get('sprint_id', 'N/A')}#{task.get('node_id', 'N/A')}", 28),
+        "state": _clip_display(
+            f"{task.get('effective_status') or task.get('status', 'N/A')}/"
+            f"{_display_tmux_status(str(task.get('effective_status') or task.get('status', 'N/A')), str(task.get('tmux_status', 'N/A')))}",
+            16,
+        ),
+    } for task in tasks[:4]]
+
     return {
         "schema_version": SCREEN_VIEW_MODEL_SCHEMA,
         "generated_at": now_iso(),
         "health": {"verdict": overall_verdict, "capsules": capsules},
         "panes": panes_out,
         "workers": workers,
+        "tasks": task_summary,
         "last_dispatch": last_dispatch,
         "dag": dag,
         "degraded": degraded,
@@ -3150,6 +3579,7 @@ def screen_tvs_payload(view_model: dict[str, Any], args: argparse.Namespace, wid
             {"id": "header", "type": "capsules", "data": capsules},
             {"id": "pane-map", "type": "table", "data": pane_rows},
             {"id": "workers", "type": "kv", "data": view_model.get("workers") or {}},
+            {"id": "tasks", "type": "table", "data": view_model.get("tasks") or []},
             {"id": "dispatch", "type": "kv", "data": view_model.get("last_dispatch") or {}},
             {"id": "dag", "type": "kv", "data": view_model.get("dag") or {}},
         ],
@@ -3177,14 +3607,19 @@ def tvs_payload(result: dict[str, Any], width: int = 100) -> dict[str, Any]:
     guard = result.get("guard") or {}
     mem = free_memory_gb()
     tasks = list_task_rows()[:20]
-    active = [t for t in tasks if str(t.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
+    active = [t for t in tasks if str(t.get("effective_status") or t.get("status") or "").lower() in ACTIVE_TASK_STATUSES]
     inventory = task_inventory(tasks)
     tmux_live = tmux_session_exists()
     cap_summary = result.get("capability") or capability_summary()
     data_source = "live" if tmux_live and inventory["live"] else ("history:no_multi_task_session" if tasks and not tmux_live else "no_live_workers")
     task_rows = [{
         "task": _clip_display(str(t.get("id", "N/A")).replace("mt-", ""), 18),
-        "state": _clip_display(f"{t.get('status', 'N/A')}/{t.get('tmux_status', 'N/A')}", 16),
+        "work": _clip_display(str(t.get("work", "hist")), 8),
+        "state": _clip_display(
+            f"{t.get('effective_status') or t.get('status', 'N/A')}/"
+            f"{_display_tmux_status(str(t.get('effective_status') or t.get('status', 'N/A')), str(t.get('tmux_status', 'N/A')))}",
+            16,
+        ),
         "class": _clip_display(str(t.get("data_class", "N/A")), 12),
         "pane_type": _clip_display(str(t.get("pane_type", "N/A")), 16),
         "operator": _clip_display(str(t.get("operator_id") or "N/A"), 16),
@@ -3192,7 +3627,7 @@ def tvs_payload(result: dict[str, Any], width: int = 100) -> dict[str, Any]:
         "sprint_node": _clip_display(f"{t.get('sprint_id', 'N/A')}#{t.get('node_id', 'N/A')}", 28),
         "age": _clip_display(str(t.get("age", "N/A")), 8),
     } for t in tasks] or [{
-        "task": "N/A", "state": "pending", "class": "N/A", "pane_type": "N/A", "operator": "N/A", "vendor": "N/A", "sprint_node": "N/A", "age": "N/A",
+        "task": "N/A", "work": "hist", "state": "pending", "class": "N/A", "pane_type": "N/A", "operator": "N/A", "vendor": "N/A", "sprint_node": "N/A", "age": "N/A",
     }]
 
     pane_rows = [{
@@ -3264,6 +3699,7 @@ def tvs_payload(result: dict[str, Any], width: int = 100) -> dict[str, Any]:
             "type": "table",
             "columns": [
                 {"key": "task", "label": "multi_task", "width": 18},
+                {"key": "work", "label": "work", "width": 8},
                 {"key": "state", "label": "state", "width": 14},
                 {"key": "class", "label": "class", "width": 10},
                 {"key": "pane_type", "label": "pane_type", "width": 16},
@@ -4006,9 +4442,12 @@ def build_parser() -> argparse.ArgumentParser:
     cancel_p = sub.add_parser("cancel", help="cancel task and mark graph node failed")
     cancel_p.add_argument("task_id")
     reap_p = sub.add_parser("reap", help="kill/archive old terminal or stale tmux task windows")
-    reap_p.add_argument("--ttl-min", type=int, default=int(os.environ.get("SOLAR_MULTI_TASK_REAP_TTL_MIN", "120") or "120"))
+    reap_p.add_argument("--ttl-min", "--ttl-minutes", dest="ttl_min", type=int, default=int(os.environ.get("SOLAR_MULTI_TASK_REAP_TTL_MIN", "120") or "120"))
     reap_p.add_argument("--stale-active-min", type=int, default=int(os.environ.get("SOLAR_MULTI_TASK_STALE_ACTIVE_MIN", "0") or "0"))
     reap_p.add_argument("--dry-run", action="store_true")
+    stale_p = sub.add_parser("stale-schedulers", help="report or terminate exact stale multi-task scheduler processes")
+    stale_p.add_argument("--apply", action="store_true", help="send SIGTERM to exact stale completed-graph scheduler runners")
+    stale_p.add_argument("--json", action="store_true")
     probe_p = sub.add_parser("probe", help="run a minimal real model call for one worker profile")
     probe_p.add_argument("profile", help=f"worker profile: {','.join(profile_names())}")
     probe_p.add_argument("--timeout-sec", type=int, default=90)
@@ -4045,6 +4484,26 @@ def main(argv: list[str] | None = None) -> int:
         if not rows:
             rows = [["N/A", "N/A", "N/A", "N/A", "none"]]
         print_table(["task", "old_status", "age_s", "window", "action"], rows)
+        return 0
+    if args.cmd == "stale-schedulers":
+        rows = detect_stale_scheduler_runners(apply_cleanup=bool(args.apply))
+        if getattr(args, "json", False):
+            print(json.dumps({"rows": rows, "apply": bool(args.apply)}, ensure_ascii=False, indent=2))
+            return 0
+        table_rows = [[
+            str(row.get("pid", "N/A")),
+            _clip_display(str(row.get("sprint_id", "N/A")), 26),
+            _clip_display(str(row.get("graph", "N/A")), 36),
+            str(row.get("elapsed", "N/A")),
+            str(row.get("rss_mb", "N/A")),
+            str(row.get("stale", False)).lower(),
+            _clip_display(str(row.get("reason", "N/A")), 24),
+            _clip_display(str(row.get("action", "keep")), 18),
+        ] for row in rows]
+        print_table(
+            ["pid", "sprint", "graph", "elapsed", "rss_mb", "stale", "reason", "action"],
+            table_rows or [["N/A", "N/A", "N/A", "N/A", "N/A", "false", "none", "keep"]],
+        )
         return 0
     if args.cmd == "probe":
         try:
@@ -4123,12 +4582,24 @@ def main(argv: list[str] | None = None) -> int:
         return screen_loop(args)
 
     if args.cmd in {None, "start"}:
-        while True:
-            result = schedule_once(args)
-            render_result(result, args)
-            if args.once:
-                return 0
-            time.sleep(max(1, int(args.interval)))
+        explicit_graphs = [str(path) for path in graph_files(getattr(args, "graph", []))] if getattr(args, "graph", []) else []
+        registered = False
+        try:
+            if explicit_graphs:
+                _register_scheduler_pid(explicit_graphs)
+                registered = True
+            while True:
+                result = schedule_once(args)
+                render_result(result, args)
+                if args.once:
+                    return 0
+                if explicit_graphs and _all_graphs_terminal(explicit_graphs) and not active_tasks():
+                    _append_scheduler_log("all_graphs_terminal_no_active_tasks_exit")
+                    return 0
+                time.sleep(max(1, int(args.interval)))
+        finally:
+            if registered:
+                _unregister_scheduler_pid()
 
     parser.print_help()
     return 2
