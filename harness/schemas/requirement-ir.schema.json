@@ -168,7 +168,7 @@
       "properties": {
         "dag_variant": {
           "type": "string",
-          "enum": ["short", "standard", "research"]
+          "enum": ["short", "standard", "parallel_spec", "research"]
         },
         "nodes": {
           "type": "array",

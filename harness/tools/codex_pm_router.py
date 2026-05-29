@@ -10,7 +10,9 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import re
+import subprocess
 import sys
 import uuid
 from pathlib import Path
@@ -44,6 +46,58 @@ CLASS_TO_CANONICAL = {
     FULL_SPEC: "full_prd",
     RESEARCH: "research",
 }
+CODE_UNDERSTANDING_TOKENS = (
+    "knowledge graph",
+    "knowledge-graph",
+    "codebase index",
+    "codebase-index",
+    "codebase indexing",
+    "codebase-indexing",
+    "code understanding",
+    "code-understanding",
+    "architecture map",
+    "architecture-map",
+    "onboarding",
+    "repo map",
+    "repository understanding",
+    "代码库理解",
+    "知识图",
+    "架构图",
+    "onboard",
+)
+PARALLEL_SPEC_TOKENS = (
+    "convergence",
+    "productization",
+    "blueprint",
+    "traceability",
+    "收口",
+    "产品化",
+    "蓝图",
+    "追踪矩阵",
+)
+
+RAWINTENT_SECTION_HEADERS = (
+    "Source",
+    "Rewritten Objective",
+    "Problem",
+    "Constraints",
+    "Acceptance",
+    "Raw User Intent",
+)
+RAWINTENT_METADATA_PREFIXES = (
+    "intent_id:",
+    "channel:",
+    "actor:",
+    "device:",
+    "thread_ref:",
+    "session_id:",
+    "source-channel:",
+    "source_trust:",
+    "source-trust:",
+    "sprint_id:",
+    "node_id:",
+    "role:",
+)
 
 
 def _now() -> str:
@@ -77,6 +131,84 @@ def _write_yaml(path: Path, payload: Any) -> None:
 def _safe_title(text: str) -> str:
     line = next((line.strip() for line in text.splitlines() if line.strip()), "").strip(" -:#")
     return line[:80] or "Untitled Request"
+
+
+def _strip_yaml_frontmatter(text: str) -> str:
+    stripped = text.lstrip()
+    if not stripped.startswith("---"):
+        return text
+    lines = stripped.splitlines()
+    if len(lines) < 3 or lines[0].strip() != "---":
+        return text
+    for index in range(1, len(lines)):
+        if lines[index].strip() == "---":
+            return "\n".join(lines[index + 1 :]).strip()
+    return text
+
+
+def _extract_markdown_section(text: str, heading: str) -> str:
+    pattern = rf"(?ims)^\s*##\s+{re.escape(heading)}\s*$\n(.*?)(?=^\s*##\s+|\Z)"
+    match = re.search(pattern, text)
+    return match.group(1).strip() if match else ""
+
+
+def _collapse_goal_text(text: str) -> str:
+    lines: list[str] = []
+    for raw_line in _strip_yaml_frontmatter(text).splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        lower = line.lower()
+        if line in {"[entrypoint_metadata]", "[raw_request]"}:
+            continue
+        if line.startswith("```") or line.startswith("---"):
+            continue
+        if lower.startswith(RAWINTENT_METADATA_PREFIXES):
+            continue
+        if re.fullmatch(r"#+\s*(?:RawIntent Consumer Request|Source|Rewritten Objective|Problem|Constraints|Acceptance|Raw User Intent)\s*", line, re.I):
+            continue
+        line = re.sub(r"^#+\s*", "", line).strip()
+        if not line:
+            continue
+        lines.append(line)
+    collapsed = re.sub(r"\s+", " ", " ".join(lines)).strip()
+    return collapsed
+
+
+def _extract_effective_request_text(text: str) -> dict[str, str]:
+    whole = _collapse_goal_text(text)
+    if "# RawIntent Consumer Request" not in text:
+        return {
+            "effective_text": whole,
+            "goal_text": whole,
+            "problem_text": whole,
+            "raw_user_text": whole,
+        }
+
+    objective = _collapse_goal_text(_extract_markdown_section(text, "Rewritten Objective"))
+    problem = _collapse_goal_text(_extract_markdown_section(text, "Problem"))
+    raw_user_intent = _collapse_goal_text(_extract_markdown_section(text, "Raw User Intent"))
+    effective = raw_user_intent or problem or objective or whole
+    goal = objective or problem or raw_user_intent or effective
+    return {
+        "effective_text": effective,
+        "goal_text": goal,
+        "problem_text": problem or effective,
+        "raw_user_text": raw_user_intent or effective,
+    }
+
+
+def _looks_like_raw_metadata_pollution(text: str) -> bool:
+    lowered = text.lower()
+    suspicious_tokens = (
+        "# rawintent consumer request",
+        "## source",
+        "[entrypoint_metadata]",
+        "[raw_request]",
+        "intent_id:",
+        "thread_ref:",
+    )
+    return any(token in lowered for token in suspicious_tokens)
 
 
 def _derive_confidence(request_type: str, text: str, papers: list[str]) -> float:
@@ -202,6 +334,50 @@ def _default_stop_rules(request_type: str) -> list[str]:
     return rules
 
 
+def _is_code_understanding_request(text: str, repo_context: list[str] | None = None) -> bool:
+    haystack = " ".join([str(text or ""), *[str(x) for x in (repo_context or [])]]).lower()
+    return any(token in haystack for token in CODE_UNDERSTANDING_TOKENS)
+
+
+def _is_parallel_spec_request(request_type: str, text: str) -> bool:
+    if request_type != FULL_SPEC:
+        return False
+    normalized = _normalized_text(text)
+    lowered = normalized.lower()
+    return any(token in lowered or token in normalized for token in PARALLEL_SPEC_TOKENS)
+
+
+def _adapt_graph_for_code_understanding(graph: dict[str, Any], request_type: str) -> dict[str, Any]:
+    adapted = json.loads(json.dumps(graph, ensure_ascii=False))
+    by_id = {str(node.get("id") or ""): node for node in adapted.get("nodes") or [] if isinstance(node, dict)}
+    if request_type == RESEARCH:
+        if "R1" in by_id:
+            by_id["R1"]["goal"] = "Ingest repo context and build a codebase knowledge graph, onboarding map, and source manifest for the target repository."
+            by_id["R1"]["acceptance"] = ["Knowledge graph inputs and source manifest are recorded."]
+        if "R2" in by_id:
+            by_id["R2"]["goal"] = "Extract architecture map, module boundaries, key entrypoints, and technical levers from the codebase."
+            by_id["R2"]["acceptance"] = ["Architecture map and module-level findings are produced."]
+        if "R4" in by_id:
+            by_id["R4"]["goal"] = "Synthesize codebase understanding into onboarding guidance and actionable architecture insights."
+            by_id["R4"]["acceptance"] = ["Onboarding and architecture synthesis is drafted."]
+        if "R6" in by_id:
+            by_id["R6"]["goal"] = "Translate codebase understanding into implementation, PRD, and task-graph implications."
+    else:
+        if "S1" in by_id:
+            by_id["S1"]["goal"] = "Lock code-understanding scope, repo boundaries, and knowledge-graph/onboarding deliverables."
+            by_id["S1"]["acceptance"] = ["Codebase-understanding path and deliverables are explicit."]
+        if "S2" in by_id:
+            by_id["S2"]["logical_operator"] = "ResearchScout"
+            by_id["S2"]["goal"] = "Generate the codebase knowledge graph, architecture map, and onboarding artifacts for the approved repository scope."
+            by_id["S2"]["acceptance"] = ["Knowledge graph and onboarding artifacts are produced within declared scope."]
+        if "S3" in by_id:
+            by_id["S3"]["goal"] = "Verify knowledge-graph, meta, chunk-manifest, and resume-state artifacts."
+            by_id["S3"]["acceptance"] = ["Artifact verification evidence is attached."]
+        if "S4" in by_id:
+            by_id["S4"]["goal"] = "Perform independent review of the code-understanding artifacts and closeout decision."
+    return adapted
+
+
 def _node_enrichment(request_type: str, lane_hint: str, node: dict[str, Any]) -> dict[str, Any]:
     owner = "subagent" if request_type == RESEARCH and node["logical_operator"] in {"ResearchScout", "ResearchSynthesizer", "ArtifactCurator"} else ("solar-harness" if node["logical_operator"] in {"Verifier", "Critic"} else "codex")
     node_type_map = {
@@ -247,7 +423,28 @@ def _node_enrichment(request_type: str, lane_hint: str, node: dict[str, Any]) ->
     if capability_plan:
         enriched.setdefault("capability_native", True)
         enriched.setdefault("capability_capsule_id", capability_plan["capability_capsule_id"])
-        enriched.setdefault("dispatch_task_type", capability_plan.get("dispatch_task_type") or enriched.get("type", "spec"))
+        dispatch_task_type = capability_plan.get("dispatch_task_type") or enriched.get("type", "spec")
+        enriched.setdefault("dispatch_task_type", dispatch_task_type)
+        if capability_plan.get("capability_capsule_id") == "cap.understand-anything-indexer":
+            enriched["type"] = "code-understanding"
+            enriched["signals"] = sorted(
+                {
+                    *[str(x) for x in (enriched.get("signals") or [])],
+                    "code-understanding",
+                    "knowledge-graph",
+                    "onboarding",
+                    "architecture-map",
+                }
+            )
+            enriched["outputs"] = ["knowledge-graph.json", "meta.json", "chunk-manifest.json", "resume-state.json"]
+            enriched["validation"] = [
+                {"kind": "artifact", "target": "knowledge-graph.json", "required": True},
+                {"kind": "artifact", "target": "meta.json", "required": True},
+                {"kind": "artifact", "target": "chunk-manifest.json", "required": True},
+                {"kind": "artifact", "target": "resume-state.json", "required": True},
+            ]
+        elif enriched.get("type") == "research" and dispatch_task_type in {"code-understanding", "codebase-indexing"}:
+            enriched["type"] = str(dispatch_task_type)
         enriched.setdefault("capsule_plan", capability_plan)
     return enriched
 
@@ -549,6 +746,28 @@ def _render_handoff_markdown(
     return "\n".join(lines)
 
 
+def _sprint_handoff_artifacts(sprint_id: str, target: str) -> list[str]:
+    if sprint_id and sprint_id != "N/A":
+        artifacts = [
+            f"{sprint_id}.requirement_ir.json",
+            f"{sprint_id}.prd.md",
+            f"{sprint_id}.Contracts.yaml",
+            f"{sprint_id}.task_graph.json",
+        ]
+        if target == "solar_harness":
+            artifacts.append(f"{sprint_id}.handoff.md")
+        return artifacts
+    artifacts = [
+        ".pm/requirement_ir.json",
+        ".pm/prd.md",
+        ".pm/Contracts.yaml",
+        ".pm/task_dag.json",
+    ]
+    if target == "solar_harness":
+        artifacts.append(".pm/handoff/solar_harness_handoff.md")
+    return artifacts
+
+
 def _render_product_brief_markdown(brief: dict[str, Any]) -> str:
     return "\n".join(
         [
@@ -827,6 +1046,55 @@ def _standard_task_graph(strategy_lane: bool) -> dict[str, Any]:
     }
 
 
+def _parallel_spec_task_graph() -> dict[str, Any]:
+    return {
+        "dag_variant": "parallel_spec",
+        "required_gates": ["G_PLAN", "G_IMPL", "G_VERIFY", "G_REVIEW"],
+        "nodes": [
+            {
+                "id": "S1",
+                "goal": "Lock convergence scope, constraints, and the branch split for parallel spec workstreams.",
+                "logical_operator": "DeepArchitect",
+                "depends_on": [],
+                "acceptance": ["Parallel workstreams, constraints, and merge conditions are explicit."],
+                "estimated_cost": 2,
+            },
+            {
+                "id": "S2",
+                "goal": "Draft the architecture, contract, and interface convergence slice.",
+                "logical_operator": "DeepArchitect",
+                "depends_on": ["S1"],
+                "acceptance": ["Architecture and contract convergence decisions are explicit."],
+                "estimated_cost": 2,
+            },
+            {
+                "id": "S3",
+                "goal": "Draft the migration, compatibility, and rollout convergence slice.",
+                "logical_operator": "DeepArchitect",
+                "depends_on": ["S1"],
+                "acceptance": ["Migration and rollout implications are explicit."],
+                "estimated_cost": 2,
+            },
+            {
+                "id": "S4",
+                "goal": "Compile the task-graph, traceability, and verification slice for the converged plan.",
+                "logical_operator": "ArtifactCurator",
+                "depends_on": ["S1"],
+                "acceptance": ["Task-graph and traceability implications are explicit."],
+                "estimated_cost": 2,
+            },
+            {
+                "id": "S5",
+                "goal": "Perform integrated review across all slices and record the closeout decision.",
+                "logical_operator": "Verifier",
+                "depends_on": ["S2", "S3", "S4"],
+                "acceptance": ["Integrated review decision is machine-readable and grounded in all branches."],
+                "estimated_cost": 2,
+            },
+        ],
+    }
+
+
 def _research_task_graph() -> dict[str, Any]:
     return {
         "dag_variant": "research",
@@ -890,12 +1158,78 @@ def _research_task_graph() -> dict[str, Any]:
     }
 
 
-def build_task_graph_skeleton(request_type: str, lane_hint: str) -> dict[str, Any]:
+def _apply_default_gate_assignments(graph: dict[str, Any]) -> dict[str, Any]:
+    dag_variant = str(graph.get("dag_variant") or "").strip().lower()
+    nodes = [node for node in (graph.get("nodes") or []) if isinstance(node, dict)]
+    if not nodes:
+        return graph
+
+    gate_by_node_id: dict[str, str] = {}
+    if dag_variant == "short":
+        gate_by_node_id = {
+            "S1": "G_IMPL",
+            "S2": "G_TEST",
+            "S3": "G_REVIEW",
+        }
+    elif dag_variant == "standard":
+        gate_by_node_id = {
+            "S1": "G_PLAN",
+            "S2": "G_IMPL",
+            "S3": "G_VERIFY",
+            "S4": "G_REVIEW",
+            "S5": "G_REVIEW",
+        }
+    elif dag_variant == "parallel_spec":
+        gate_by_node_id = {
+            "S1": "G_PLAN",
+            "S2": "G_IMPL",
+            "S3": "G_IMPL",
+            "S4": "G_VERIFY",
+            "S5": "G_REVIEW",
+        }
+    elif dag_variant == "research":
+        gate_by_node_id = {
+            "R1": "G_SOURCE",
+            "R2": "G_EVIDENCE",
+            "R3": "G_EVIDENCE",
+            "R4": "G_SYNTHESIS",
+            "R5": "G_REVIEW",
+            "R6": "G_REVIEW",
+        }
+
+    required = [str(g) for g in (graph.get("required_gates") or []) if g]
+    allowed = set(required)
+    for node in nodes:
+        node_id = str(node.get("id") or "")
+        if node.get("gate"):
+            continue
+        gate = gate_by_node_id.get(node_id)
+        if gate and (not allowed or gate in allowed):
+            node["gate"] = gate
+
+    owners: dict[str, list[str]] = {gate: [] for gate in required}
+    for node in nodes:
+        gate = str(node.get("gate") or "")
+        if gate in owners:
+            owners[gate].append(str(node.get("id") or ""))
+    missing = [gate for gate in required if not owners.get(gate)]
+    if not missing:
+        return graph
+
+    unassigned = [node for node in nodes if not node.get("gate")]
+    for gate, node in zip(missing, unassigned):
+        node["gate"] = gate
+    return graph
+
+
+def build_task_graph_skeleton(request_type: str, lane_hint: str, request_text: str = "") -> dict[str, Any]:
     if request_type == SHORT_IMPL:
-        return _short_task_graph()
+        return _apply_default_gate_assignments(_short_task_graph())
     if request_type == RESEARCH:
-        return _research_task_graph()
-    return _standard_task_graph(strategy_lane=lane_hint == "strategy")
+        return _apply_default_gate_assignments(_research_task_graph())
+    if _is_parallel_spec_request(request_type, request_text):
+        return _apply_default_gate_assignments(_parallel_spec_task_graph())
+    return _apply_default_gate_assignments(_standard_task_graph(strategy_lane=lane_hint == "strategy"))
 
 
 def build_pm_intake(
@@ -910,23 +1244,33 @@ def build_pm_intake(
     papers = papers or []
     logs = logs or []
     repo_context = repo_context or []
-    request_type = classify_request_type(text, papers)
+    effective_text = _extract_effective_request_text(text)
+    compile_text = effective_text["effective_text"] or _normalized_text(text)
+    goal_text = effective_text["goal_text"] or compile_text
+    problem_text = effective_text["problem_text"] or compile_text
+    raw_user_text = effective_text["raw_user_text"] or compile_text
+    request_type = classify_request_type(compile_text, papers)
     canonical_request_type = CLASS_TO_CANONICAL[request_type]
-    lane_hint = choose_lane_hint(request_type, text)
+    lane_hint = choose_lane_hint(request_type, compile_text)
     output_mode = choose_output_mode(request_type)
-    priority = choose_priority(text, request_type)
-    task_graph = build_task_graph_skeleton(request_type, lane_hint)
+    priority = choose_priority(compile_text, request_type)
+    task_graph = build_task_graph_skeleton(request_type, lane_hint, compile_text)
+    if _is_code_understanding_request(compile_text, repo_context):
+        task_graph = _adapt_graph_for_code_understanding(task_graph, request_type)
     task_graph["nodes"] = [_node_enrichment(request_type, lane_hint, node) for node in task_graph["nodes"]]
-    normalized_goal = _normalized_text(text)[:400]
-    title = _safe_title(text)
+    normalized_goal = _normalized_text(goal_text)[:400]
+    normalized_problem = _normalized_text(problem_text)[:400]
+    normalized_user_intent = _normalized_text(raw_user_text)[:400]
+    title = _safe_title(goal_text or compile_text)
     acceptance = _default_acceptance(request_type)
     non_goals = _default_non_goals(request_type)
     stop_rules = _default_stop_rules(request_type)
-    open_questions = _derive_open_questions(request_type, text, papers)
+    open_questions = _derive_open_questions(request_type, compile_text, papers)
     risk_register = _derive_risk_register(request_type)
     requirements = _build_requirement_items(normalized_goal, acceptance, priority)
     source_inputs = {
-        "raw_request": text,
+        "raw_request": raw_user_text or text,
+        "raw_request_original": text,
         "papers": papers,
         "logs": logs,
         "repo_context": repo_context,
@@ -956,8 +1300,9 @@ def build_pm_intake(
         "priority": priority,
         "lane_hint": lane_hint,
         "source_inputs": source_inputs,
-        "user_intent": normalized_goal,
+        "user_intent": normalized_user_intent or normalized_goal,
         "normalized_goal": normalized_goal,
+        "problem_statement": normalized_problem,
         "assumptions": _derive_assumptions(request_type, lane_hint),
         "open_questions": open_questions,
         "risk_register": risk_register,
@@ -979,22 +1324,11 @@ def build_pm_intake(
         "handoff_view": {
             "codex": {
                 "target": "Codex",
-                "artifacts": [
-                    ".pm/requirement_ir.json",
-                    ".pm/prd.md",
-                    ".pm/Contracts.yaml",
-                    ".pm/task_dag.json",
-                ],
+                "artifacts": _sprint_handoff_artifacts(sprint_id or "", "codex"),
             },
             "solar_harness": {
                 "target": "solar-harness",
-                "artifacts": [
-                    ".pm/requirement_ir.json",
-                    ".pm/prd.md",
-                    ".pm/Contracts.yaml",
-                    ".pm/task_dag.json",
-                    ".pm/handoff/solar_harness_handoff.md",
-                ],
+                "artifacts": _sprint_handoff_artifacts(sprint_id or "", "solar_harness"),
             },
         },
         "evidence_policy": task_graph.get("evidence_policy", {}),
@@ -1006,7 +1340,7 @@ def build_pm_intake(
         "title": title,
         "source": "codex-pm-router",
         "intent": normalized_goal,
-        "problem": normalized_goal,
+        "problem": normalized_problem or normalized_goal,
         "priority": priority,
         "lane_hint": lane_hint,
         "acceptance": acceptance,
@@ -1017,7 +1351,7 @@ def build_pm_intake(
         "template_variant": output_mode["prd"],
         "pm_intake": {
             "request_type": request_type,
-            "intent_summary": _normalized_text(text)[:240],
+            "intent_summary": _normalized_text(normalized_problem or normalized_goal)[:240],
             "source_inputs": {
                 "papers": papers,
                 "logs": logs,
@@ -1025,7 +1359,9 @@ def build_pm_intake(
             },
             "output_mode": output_mode,
         },
-        "requirement_ir_ref": ".pm/requirement_ir.json",
+        "requirement_ir_ref": (
+            f"{sprint_id}.requirement_ir.json" if sprint_id and sprint_id != "N/A" else ".pm/requirement_ir.json"
+        ),
         "notes": "Requirement Compiler produced canonical IR, compiled contracts, and a task DAG proposal.",
     }
     prd_markdown = _render_prd_markdown(title, prd_view)
@@ -1033,8 +1369,8 @@ def build_pm_intake(
     codex_handoff_md = _render_handoff_markdown(
         title,
         "Codex",
-        _normalized_text(text)[:400],
-        [".pm/requirement_ir.json", ".pm/prd.md", ".pm/Contracts.yaml", ".pm/task_dag.json"],
+        normalized_problem or normalized_goal,
+        _sprint_handoff_artifacts(sprint_id or "", "codex"),
         acceptance,
         [
             "Treat requirement_ir.json and contracts/*.yaml as canonical sources.",
@@ -1046,7 +1382,7 @@ def build_pm_intake(
         title,
         "solar-harness",
         "Read compiled PRD / contract / task graph proposal, then produce planner artifacts without skipping governance.",
-        [".pm/requirement_ir.json", ".pm/prd.md", ".pm/Contracts.yaml", ".pm/task_dag.json", ".pm/handoff/solar_harness_handoff.md"],
+        _sprint_handoff_artifacts(sprint_id or "", "solar_harness"),
         [
             "Planner produces design.md and plan.md.",
             "Planner may refine task_graph.json but must preserve compiled governance constraints and explicit requirement_ids mapping.",
@@ -1075,7 +1411,7 @@ def build_pm_intake(
     return {
         "pm_intake": {
             "request_type": request_type,
-            "intent_summary": _normalized_text(text)[:240],
+            "intent_summary": _normalized_text(normalized_problem or normalized_goal)[:240],
             "source_inputs": {
                 "papers": papers,
                 "logs": logs,
@@ -1087,7 +1423,7 @@ def build_pm_intake(
         "canonical_request_type": canonical_request_type,
         "prd_variant": output_mode["prd"],
         "contract_variant": output_mode["contract"],
-        "dag_variant": output_mode["dag"],
+        "dag_variant": str(task_graph.get("dag_variant") or output_mode["dag"]),
         "lane_hint": lane_hint,
         "priority": priority,
         "acceptance_profile": choose_acceptance_profile(request_type),
@@ -1136,11 +1472,104 @@ def build_pm_intake(
                 {
                     "case_id": f"golden-{requirement_ir['id']}",
                     "request_type": request_type,
-                    "goal": _normalized_text(text)[:400],
+                    "goal": normalized_goal,
                     "expected_dag_variant": task_graph["dag_variant"],
                     "expected_template_variant": output_mode["prd"],
                 }
             ],
+        },
+    }
+
+
+def validate_compiled_package(payload: dict[str, Any]) -> dict[str, Any]:
+    errors: list[str] = []
+    warnings: list[str] = []
+    requirement_ir = dict(payload.get("requirement_ir") or {})
+    compiled = dict(payload.get("compiled_artifacts") or {})
+    product_brief = dict(compiled.get("product_brief") or {})
+    graph = dict(compiled.get("task_dag") or {})
+    nodes = [node for node in (graph.get("nodes") or []) if isinstance(node, dict)]
+    trace_items = list((compiled.get("requirement_trace") or {}).get("items") or [])
+    acceptance = list(product_brief.get("acceptance") or requirement_ir.get("contracts", {}).get("product", {}).get("acceptance", []) or [])
+    normalized_goal = str(requirement_ir.get("normalized_goal") or "")
+    problem_statement = str(requirement_ir.get("problem_statement") or product_brief.get("problem") or "")
+
+    if requirement_ir.get("schema_version") != "solar.requirement_ir.v1":
+        errors.append("invalid_requirement_ir_schema")
+    if not normalized_goal.strip():
+        errors.append("normalized_goal_missing")
+    if not problem_statement.strip():
+        errors.append("problem_statement_missing")
+    if _looks_like_raw_metadata_pollution(normalized_goal) or _looks_like_raw_metadata_pollution(problem_statement):
+        errors.append("raw_metadata_pollution_detected")
+    if not acceptance:
+        errors.append("acceptance_missing")
+    if not nodes:
+        errors.append("task_graph_nodes_missing")
+
+    node_ids: list[str] = []
+    duplicates: set[str] = set()
+    for node in nodes:
+        node_id = str(node.get("id") or "").strip()
+        if not node_id:
+            errors.append("task_graph_node_id_missing")
+            continue
+        if node_id in node_ids:
+            duplicates.add(node_id)
+        node_ids.append(node_id)
+        if not (node.get("acceptance") or []):
+            errors.append(f"node_acceptance_missing:{node_id}")
+        if not (node.get("requirement_ids") or []):
+            errors.append(f"node_requirement_ids_missing:{node_id}")
+    if duplicates:
+        errors.append("duplicate_node_ids:" + ",".join(sorted(duplicates)))
+
+    node_id_set = set(node_ids)
+    graph_map = {str(node.get("id") or ""): node for node in nodes}
+    for node in nodes:
+        node_id = str(node.get("id") or "")
+        for dep in node.get("depends_on") or []:
+            dep_id = str(dep)
+            if dep_id not in node_id_set:
+                errors.append(f"unknown_dependency:{node_id}->{dep_id}")
+
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def _walk(node_id: str) -> bool:
+        if node_id in visiting:
+            return True
+        if node_id in visited:
+            return False
+        visiting.add(node_id)
+        for dep in graph_map.get(node_id, {}).get("depends_on") or []:
+            if _walk(str(dep)):
+                return True
+        visiting.remove(node_id)
+        visited.add(node_id)
+        return False
+
+    if any(_walk(node_id) for node_id in node_ids):
+        errors.append("task_graph_cycle_detected")
+
+    if trace_items:
+        unmapped = [item.get("requirement_id", "N/A") for item in trace_items if not (item.get("mapped_nodes") or [])]
+        if unmapped:
+            errors.append("requirement_mapping_missing:" + ",".join(str(x) for x in unmapped))
+        missing_artifacts = [item.get("requirement_id", "N/A") for item in trace_items if not (item.get("expected_artifacts") or [])]
+        if missing_artifacts:
+            warnings.append("requirement_expected_artifacts_missing:" + ",".join(str(x) for x in missing_artifacts))
+    else:
+        errors.append("requirement_trace_missing")
+
+    return {
+        "ok": not errors,
+        "errors": errors,
+        "warnings": warnings,
+        "summary": {
+            "node_count": len(nodes),
+            "requirement_count": len(requirement_ir.get("requirements") or []),
+            "trace_count": len(trace_items),
         },
     }
 
@@ -1181,6 +1610,71 @@ def _read_text(args: argparse.Namespace) -> str:
     raise SystemExit("Provide --text, --input-file, or stdin.")
 
 
+def _capture_and_consume_rawintent(args: argparse.Namespace, text: str) -> int:
+    env = dict(os.environ)
+    env.setdefault("SOLAR_HARNESS_DIR", str(HARNESS_ROOT))
+    env.setdefault("HARNESS_DIR", str(HARNESS_ROOT))
+    gateway_cmd = [
+        sys.executable,
+        str(HARNESS_ROOT / "lib" / "intent_gateway.py"),
+        "capture",
+        "--source-channel", "codex_pm_router",
+        "--source-trust", "codex_pm_router",
+        "--actor", "user",
+        "--device", "codex_pm_router_cli",
+        "--repo", str(Path(args.emit_dir or HARNESS_ROOT)),
+        "--text", text,
+        "--json",
+    ]
+    if args.sprint_id:
+        gateway_cmd.extend(["--sprint-id", args.sprint_id])
+    captured = subprocess.run(gateway_cmd, text=True, capture_output=True, env=env, timeout=60)
+    if captured.returncode != 0:
+        print(captured.stderr or captured.stdout or "intent capture failed", file=sys.stderr)
+        return 1
+    gateway_payload = json.loads(captured.stdout)
+    consumer_cmd = [
+        sys.executable,
+        str(HARNESS_ROOT / "lib" / "intent_consumer.py"),
+        "consume",
+        "--intent-id", str(gateway_payload.get("intent_id") or ""),
+        "--json",
+    ]
+    if args.sprint_id:
+        consumer_cmd.extend(["--sprint-id", args.sprint_id])
+    if not args.auto_dispatch_planner:
+        consumer_cmd.append("--no-auto-dispatch-planner")
+    consumed = subprocess.run(consumer_cmd, text=True, capture_output=True, env=env, timeout=180)
+    if consumed.returncode != 0:
+        print(consumed.stderr or consumed.stdout or "intent consume failed", file=sys.stderr)
+        return 1
+    consumer_payload = json.loads(consumed.stdout)
+    result = {
+        "ok": True,
+        "mode": "rawintent",
+        "gateway": gateway_payload,
+        "consumer": consumer_payload,
+    }
+    if args.format == "markdown":
+        sys.stdout.write(
+            "\n".join(
+                [
+                    "# Codex PM Router RawIntent Handoff",
+                    "",
+                    f"- intent_id: `{gateway_payload.get('intent_id', '')}`",
+                    f"- lane: `{gateway_payload.get('lane', '')}`",
+                    f"- requirement_ir: `{gateway_payload.get('requirement_ir', '')}`",
+                    f"- consumer_status: `{(consumer_payload.get('results') or [{}])[0].get('status', 'N/A')}`",
+                ]
+            )
+            + "\n"
+        )
+    else:
+        json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
+        sys.stdout.write("\n")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Compile a request into Requirement IR and PM intake artifacts.")
     parser.add_argument("--text", help="Inline request text.")
@@ -1193,9 +1687,14 @@ def main() -> int:
     parser.add_argument("--format", default="json", choices=["json", "markdown"], help="Output format.")
     parser.add_argument("--emit-dir", default="", help="Workspace root where .pm/ artifacts should be emitted.")
     parser.add_argument("--emit-sprint-root", default="", help="Optional sprint directory for compiled sprint artifacts.")
+    parser.add_argument("--direct-compile", action="store_true", help="Bypass RawIntent capture/consume and compile directly.")
+    parser.add_argument("--no-auto-dispatch-planner", dest="auto_dispatch_planner", action="store_false", help="When routing via RawIntent, do not request trusted planner auto handoff.")
+    parser.set_defaults(auto_dispatch_planner=True)
     args = parser.parse_args()
 
     text = _read_text(args)
+    if not args.direct_compile and os.environ.get("SOLAR_PM_ROUTER_ALLOW_DIRECT") != "1":
+        return _capture_and_consume_rawintent(args, text)
     payload = build_pm_intake(
         text,
         papers=args.paper,
@@ -1204,6 +1703,18 @@ def main() -> int:
         sprint_id=args.sprint_id,
         target_system=args.target_system,
     )
+    validation = validate_compiled_package(payload)
+    if not validation["ok"]:
+        if args.format == "markdown":
+            sys.stdout.write(
+                "# Codex PM Router Validation Failed\n\n"
+                + "\n".join(f"- {item}" for item in validation["errors"])
+                + "\n"
+            )
+        else:
+            json.dump({"ok": False, "validation": validation, "payload": payload}, sys.stdout, ensure_ascii=False, indent=2)
+            sys.stdout.write("\n")
+        return 2
     if args.emit_dir:
         emit_requirement_package(
             payload,

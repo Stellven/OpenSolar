@@ -548,6 +548,12 @@ def cmd_compile_request(args: argparse.Namespace) -> int:
         sprint_id=sprint_id,
         target_system=str(getattr(args, "target_system", "solar-harness") or "solar-harness"),
     )
+    validation = router.validate_compiled_package(payload)
+    if not validation.get("ok", False):
+        print("ERROR: compiled requirement package failed validation", file=sys.stderr)
+        for item in validation.get("errors", []) or []:
+            print(f" - {item}", file=sys.stderr)
+        return 2
     emitted = router.emit_requirement_package(
         payload,
         workspace_root=workspace_root,

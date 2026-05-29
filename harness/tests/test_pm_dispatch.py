@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import sys
 import tempfile
 import types
@@ -165,3 +166,48 @@ def test_cmd_submit_reads_task_graph_capsule_metadata(monkeypatch):
         assert envelope["capability_capsule_id"] == "cap.requirement-compiler-implementation"
         assert envelope["logical_operator"] == "ImplementationWorker"
         assert envelope["task_type"] == "implementation"
+
+
+def test_cmd_compile_request_rejects_invalid_compiled_package(monkeypatch, tmp_path):
+    pm_dispatch = _load_pm_dispatch()
+    monkeypatch.setenv("SOLAR_PM_DISPATCH_ALLOW_DIRECT", "1")
+    monkeypatch.setattr(pm_dispatch, "SPRINTS_DIR", tmp_path / "sprints")
+    monkeypatch.setattr(pm_dispatch, "HARNESS_DIR", tmp_path / "harness")
+
+    router = types.SimpleNamespace(
+        build_pm_intake=lambda *args, **kwargs: {"compiled_artifacts": {"product_brief": {"title": "bad", "problem": "bad"}}},
+        validate_compiled_package=lambda payload: {"ok": False, "errors": ["raw_metadata_pollution_detected"]},
+        emit_requirement_package=lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("emit should not run")),
+    )
+
+    class _Loader:
+        def exec_module(self, module):
+            return None
+
+    fake_spec = types.SimpleNamespace(loader=_Loader())
+    monkeypatch.setattr(pm_dispatch.importlib.util, "spec_from_file_location", lambda *args, **kwargs: fake_spec)
+    monkeypatch.setattr(pm_dispatch.importlib.util, "module_from_spec", lambda spec: router)
+
+    touched: dict[str, object] = {"status": False}
+
+    def _unexpected_status(*args, **kwargs):
+        touched["status"] = True
+        raise AssertionError("status should not be created when validation fails")
+
+    monkeypatch.setattr(pm_dispatch, "ensure_compiled_sprint_status", _unexpected_status)
+
+    args = argparse.Namespace(
+        text="坏包不能继续落 status",
+        input_file="",
+        sprint="sprint-test",
+        workspace_root=str(tmp_path / "workspace"),
+        paper=[],
+        log=[],
+        repo_context=[],
+        target_system="solar-harness",
+        dispatch_planner=False,
+        dry_run=False,
+    )
+    rc = pm_dispatch.cmd_compile_request(args)
+    assert rc == 2
+    assert touched["status"] is False
