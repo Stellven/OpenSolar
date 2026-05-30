@@ -11,6 +11,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT / "lib") not in sys.path:
+    sys.path.insert(0, str(ROOT / "lib"))
+
+from gemini_enhanced_search import main as gemini_enhanced_search_main  # noqa: E402
+
 
 def _model_alias(value: str) -> str:
     raw = (value or "gemini").strip().lower()
@@ -174,11 +180,39 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--auth", default=os.environ.get("SOLAR_GEMINI_CLI_AUTH", "subscription"),
                      choices=["subscription", "oauth", "oauth-personal", "api-key", "auto"],
                      help="Gemini CLI auth route. Default subscription uses Google login/Pro, not API keys.")
+    enhanced = sub.add_parser("enhanced-search")
+    enhanced.add_argument("--prompt-file", required=True)
+    enhanced.add_argument("--gem-name", default="李教授提示词大师")
+    enhanced.add_argument("--rewrite-model", default="gemini-3.5-flash-high")
+    enhanced.add_argument("--research-model", default="gemini-3.1-pro")
+    enhanced.add_argument("--print-timeout", default="10m")
+    enhanced.add_argument("--subprocess-timeout-sec", default="900")
+    enhanced.add_argument("--require-direct-gem", action="store_true")
     args = parser.parse_args(argv)
 
     if args.cmd == "doctor":
         print(json.dumps(doctor(), ensure_ascii=False, indent=2))
         return 0 if doctor().get("ok") else 1
+
+    if args.cmd == "enhanced-search":
+        forward = [
+            "run",
+            "--prompt-file",
+            args.prompt_file,
+            "--gem-name",
+            args.gem_name,
+            "--rewrite-model",
+            args.rewrite_model,
+            "--research-model",
+            args.research_model,
+            "--print-timeout",
+            str(args.print_timeout),
+            "--subprocess-timeout-sec",
+            str(args.subprocess_timeout_sec),
+        ]
+        if args.require_direct_gem:
+            forward.append("--require-direct-gem")
+        return gemini_enhanced_search_main(forward)
 
     prompt = Path(args.prompt_file).read_text(encoding="utf-8")
     if args.backend == "sdk":
