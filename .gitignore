@@ -48,6 +48,19 @@ target/
 coverage/
 *.cover
 
+# Solar Harness 运行时/证据产物
+harness/.coverage
+harness/run/
+harness/state/
+reports/
+harness/intake-requests/
+harness/intents/intent-*/
+harness/handovers/*.md
+harness/sprints/*-eval.json
+harness/sprints/*-handoff.md
+harness/sprints/*.handoff.md
+harness/sprints/*.traceability.json
+
 # 其他
 paste-cache/
 file-history/
