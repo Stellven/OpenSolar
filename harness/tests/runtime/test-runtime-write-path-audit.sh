@@ -35,6 +35,12 @@ with open(event_file, "a") as f:
     f.write("{}\n")
 PY
 
+cat > "$TMP/tools/mirage_events.py" <<'PY'
+EVENTS_JSONL = "telemetry.events.jsonl"
+with open(EVENTS_JSONL, "a") as f:
+    f.write("{}\n")
+PY
+
 cat > "$TMP/reports/ignored.py" <<'PY'
 open("ignored.status.json", "w").write("{}")
 PY
@@ -53,11 +59,13 @@ import sys
 d = json.loads(sys.argv[1])
 assert d["counts"]["error"] == 1, d
 assert d["counts"]["warn"] == 1, d
-assert d["counts"]["ok"] == 1, d
+assert d["counts"]["ok"] == 2, d
 paths = {f["path"]: f for f in d["findings"]}
 assert "tools/bad_status.py" in paths, paths
 assert "tools/bad_event.py" in paths, paths
 assert "lib/good_writer.py" in paths, paths
+assert "tools/mirage_events.py" in paths, paths
+assert paths["tools/mirage_events.py"]["status"] == "ok", paths["tools/mirage_events.py"]
 assert "reports/ignored.py" not in paths, paths
 print("PASS runtime write-path audit classifies ok/warn/error")
 PY

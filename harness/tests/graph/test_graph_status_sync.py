@@ -37,8 +37,8 @@ def test_sync_status_cache_creates_missing_inflight_status(tmp_path, monkeypatch
     status_path = sprints / f"{sid}.status.json"
     assert result["ok"] is True
     assert result["created"] is True
-    assert result["updated"] is True
-    assert result["reason"] == "parent_projection_refreshed"
+    assert result["updated"] is False
+    assert result["reason"] == "parent_not_ready"
     assert status_path.exists()
 
     status = json.loads(status_path.read_text(encoding="utf-8"))
@@ -96,6 +96,56 @@ def test_sync_status_cache_repairs_stale_task_graph_status_for_passed_parent(tmp
     assert updated["status"] == "passed"
     assert updated["task_graph_status"] == "passed"
     assert updated["active_node"] is None
+
+
+def test_sync_status_cache_does_not_reopen_passed_sprint_with_terminal_evidence(tmp_path, monkeypatch):
+    import graph_scheduler as gs
+
+    sprints = tmp_path / "sprints"
+    sprints.mkdir()
+    monkeypatch.setattr(gs, "SPRINTS_DIR", sprints)
+
+    sid = "sprint-test-terminal-evidence"
+    graph_path = sprints / f"{sid}.task_graph.json"
+    status_path = sprints / f"{sid}.status.json"
+    (sprints / f"{sid}.handoff.md").write_text("# handoff\n", encoding="utf-8")
+    (sprints / f"{sid}.eval.md").write_text("# eval\n", encoding="utf-8")
+
+    graph = {
+        "sprint_id": sid,
+        "title": "Terminal evidence child",
+        "created_at": "2026-05-31T20:00:00Z",
+        "required_gates": ["G4"],
+        "nodes": [
+            {"id": "R1", "status": "passed", "depends_on": [], "gate": "G1"},
+            {"id": "R2", "status": "pending", "depends_on": ["R1"], "gate": "G4"},
+        ],
+        "node_results": {
+            "R1": {"status": "passed"},
+        },
+        "gate_results": {},
+    }
+    graph_path.write_text(json.dumps(graph), encoding="utf-8")
+    status_path.write_text(json.dumps({
+        "sprint_id": sid,
+        "status": "passed",
+        "phase": "completed",
+        "stage": "completed",
+        "active_node": None,
+        "task_graph_status": "passed",
+        "graph_parent_ready": {"ready": True, "open_nodes": [], "failed_nodes": []},
+        "history": [],
+    }), encoding="utf-8")
+
+    result = gs.sync_status_cache_from_graph(graph, graph_path, actor="test", event="graph_parent_ready_revoked")
+
+    updated = json.loads(status_path.read_text(encoding="utf-8"))
+    assert result["ok"] is True
+    assert result["updated"] is True
+    assert result["reason"] == "terminal_evidence_preserved"
+    assert updated["status"] == "passed"
+    assert updated["phase"] == "completed"
+    assert all(item.get("event") != "graph_parent_ready_revoked" for item in updated.get("history", []))
 
 
 def test_parent_ready_check_self_heals_stale_blocked_gate(tmp_path, monkeypatch):

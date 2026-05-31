@@ -179,6 +179,32 @@ def test_inspect_sprints_releases_blocked_dependency_waiting_status_when_route_i
     assert payload["target_role"] == "planner"
 
 
+def test_epic_child_dependency_ready_syncs_parent_projection_from_child_status(tmp_path, monkeypatch) -> None:
+    sprints = tmp_path / "sprints"
+    sprints.mkdir(parents=True)
+    epic_id = "epic-demo"
+    dep_sid = "sprint-dep"
+    child_sid = "sprint-child"
+    (sprints / f"{dep_sid}.status.json").write_text(json.dumps({"sprint_id": dep_sid, "status": "passed"}) + "\n")
+    (sprints / f"{child_sid}.status.json").write_text(json.dumps({"sprint_id": child_sid, "status": "drafting", "epic_id": epic_id}) + "\n")
+    (sprints / f"{epic_id}.task_graph.json").write_text(json.dumps({
+        "nodes": [
+            {"id": "S01", "child_sprint_id": dep_sid, "status": "pending", "gate_status": None},
+            {"id": "S02", "child_sprint_id": child_sid, "status": "pending", "depends_on": ["S01"]},
+        ]
+    }) + "\n")
+    monkeypatch.setattr(mod, "SPRINTS", sprints)
+
+    ready, blocked = mod.epic_child_dependency_ready(child_sid)
+
+    graph = json.loads((sprints / f"{epic_id}.task_graph.json").read_text())
+    dep_node = next(node for node in graph["nodes"] if node["id"] == "S01")
+    assert ready is True
+    assert blocked == []
+    assert dep_node["status"] == "passed"
+    assert dep_node["gate_status"] == "passed"
+
+
 def test_builder_handoff_prefers_idle_lab_builder_when_primary_is_occupied(monkeypatch) -> None:
     monkeypatch.setattr(
         mod,
@@ -231,6 +257,38 @@ def test_planner_handoff_prefers_idle_planner_pool_candidate(monkeypatch) -> Non
     monkeypatch.setattr(mod, "pane_is_busy", lambda pane: False)
 
     assert mod.pane_target_for_handoff("planner") == "solar-harness-lab:0.4"
+
+
+def test_epic_child_dependency_blocked_skips_terminal_sprint(tmp_path, monkeypatch) -> None:
+    sprints = tmp_path / "sprints"
+    sprints.mkdir(parents=True)
+    sid = "sprint-terminal-child"
+    status_path = sprints / f"{sid}.status.json"
+    status_path.write_text(json.dumps({
+        "sprint_id": sid,
+        "status": "passed",
+        "phase": "completed",
+        "stage": "completed",
+        "handoff_to": "",
+        "target_role": "",
+    }) + "\n")
+    (sprints / f"{sid}.handoff.md").write_text("# handoff\n")
+    (sprints / f"{sid}.eval.md").write_text("# eval\n")
+    monkeypatch.setattr(mod, "SPRINTS", sprints)
+    monkeypatch.setattr(mod, "append_event", lambda *args, **kwargs: None)
+
+    actions = mod.apply_findings(
+        [{"sid": sid, "type": "epic_child_dependency_blocked", "blocked_by": ["S02_architecture"]}],
+        dispatch=False,
+        state={"actions": {}},
+        cooldown=0,
+    )
+
+    payload = json.loads(status_path.read_text())
+    assert payload["status"] == "passed"
+    assert payload["phase"] == "completed"
+    assert actions[0]["skipped"] is True
+    assert actions[0]["reason"] == "terminal_evidence_present"
 
 
 def test_evaluator_handoff_prefers_idle_evaluator_pool_candidate(monkeypatch) -> None:
@@ -456,8 +514,8 @@ def test_scan_once_epic_filter_applies_before_action_budget(tmp_path, monkeypatc
     unrelated_findings = [{"sid": sid, "type": "ready_for_planner", "target": "solar-harness:0.1", "message": sid} for sid in other_sids]
     monkeypatch.setattr(mod, "inspect_epics", lambda: [])
     monkeypatch.setattr(mod, "inspect_epic_child_state_drift", lambda: [])
-    monkeypatch.setattr(mod, "inspect_sprints", lambda: unrelated_findings + target_findings)
-    monkeypatch.setattr(mod, "inspect_deepresearch_quality_gates", lambda: [])
+    monkeypatch.setattr(mod, "inspect_sprints", lambda **kwargs: unrelated_findings + target_findings)
+    monkeypatch.setattr(mod, "inspect_deepresearch_quality_gates", lambda **kwargs: [])
     monkeypatch.setattr(mod, "inspect_panes", lambda state, stall_seconds: [])
     monkeypatch.setattr(mod, "inspect_knowledge_context", lambda state: [])
     monkeypatch.setattr(mod, "inspect_model_registry", lambda state: [])
@@ -520,6 +578,36 @@ def test_ready_for_planner_role_pool_failure_queues_without_wake(monkeypatch) ->
     assert actions[0]["reason"] == "role_pool_unavailable"
 
 
+def test_inspect_sprints_keeps_ready_for_planner_until_design_plan_graph_exist(tmp_path, monkeypatch) -> None:
+    sid = "sprint-architecture-gap"
+    sprints = tmp_path / "sprints"
+    sprints.mkdir()
+    monkeypatch.setattr(mod, "SPRINTS", sprints)
+    monkeypatch.setattr(mod, "_ensure_graph_status_caches", lambda: None)
+    monkeypatch.setattr(mod, "inspect_epics", lambda: [])
+    monkeypatch.setattr(mod, "workflow_guard_route", lambda sid: {"ok": True, "violations": []})
+    monkeypatch.setattr(mod, "pane_target_for_handoff", lambda handoff: "solar-harness-multi-task:0.0")
+    monkeypatch.setattr(mod, "append_event", lambda *args, **kwargs: None)
+
+    (sprints / f"{sid}.status.json").write_text(json.dumps({
+        "sprint_id": sid,
+        "status": "active",
+        "phase": "prd_ready",
+        "handoff_to": "planner",
+        "target_role": "planner",
+    }) + "\n")
+    (sprints / f"{sid}.prd.md").write_text("# PRD\n")
+    (sprints / f"{sid}.contract.md").write_text("# Contract\n")
+    (sprints / f"{sid}.plan.md").write_text("# Plan\n")
+
+    findings = mod.inspect_sprints()
+
+    planner_findings = [item for item in findings if item.get("sid") == sid and item.get("type") == "ready_for_planner"]
+    assert len(planner_findings) == 1
+    assert "design.md" in planner_findings[0]["message"]
+    assert "task_graph.json" in planner_findings[0]["message"]
+
+
 def test_ready_for_planner_does_not_downgrade_active_epic_child(monkeypatch) -> None:
     sid = "sprint-epic-child"
     saved: list[dict] = []
@@ -535,6 +623,46 @@ def test_ready_for_planner_does_not_downgrade_active_epic_child(monkeypatch) -> 
         lambda path: {
             "sprint_id": sid,
             "status": "active",
+            "phase": "prd_ready",
+            "handoff_to": "planner",
+            "target_role": "planner",
+            "epic_id": "epic-demo",
+            "dependency_policy": "activated_by_epic_dag",
+            "history": [],
+        },
+    )
+    monkeypatch.setattr(mod, "save_json", lambda path, data: saved.append(dict(data)))
+    monkeypatch.setattr(mod, "mark_action", lambda *args, **kwargs: None)
+    monkeypatch.setattr(mod, "dispatch_role_handoff", lambda s, t: (True, {"role": "planner"}))
+
+    actions = mod.apply_findings(
+        [{"sid": sid, "type": "ready_for_planner", "target": "solar-harness:0.1", "message": "planner dispatch"}],
+        dispatch=True,
+        state={"actions": {}, "target_actions": {}},
+        cooldown=0,
+    )
+
+    assert actions[0]["dispatched"] is True
+    assert saved[0]["status"] == "active"
+    assert saved[0]["phase"] == "prd_ready"
+    assert saved[0]["handoff_to"] == "planner"
+
+
+def test_ready_for_planner_promotes_drafting_epic_child_to_active(monkeypatch) -> None:
+    sid = "sprint-epic-child-drafting"
+    saved: list[dict] = []
+    monkeypatch.setattr(mod, "should_act", lambda state, f, cooldown: True)
+    monkeypatch.setattr(mod, "target_recently_dispatched", lambda state, target, cooldown: False)
+    monkeypatch.setattr(mod, "pane_gate", lambda target, sid: (True, "ok", {}))
+    monkeypatch.setattr(mod, "pane_is_busy", lambda target: False)
+    monkeypatch.setattr(mod, "clear_current_prompt", lambda target: None)
+    monkeypatch.setattr(mod, "append_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        mod,
+        "load_json",
+        lambda path: {
+            "sprint_id": sid,
+            "status": "drafting",
             "phase": "prd_ready",
             "handoff_to": "planner",
             "target_role": "planner",
