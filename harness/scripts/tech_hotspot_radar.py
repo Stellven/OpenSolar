@@ -126,14 +126,83 @@ CREATE TABLE IF NOT EXISTS youtube_video_snapshots (
 );
 
 CREATE TABLE IF NOT EXISTS youtube_transcripts (
-    video_id          TEXT PRIMARY KEY REFERENCES youtube_videos(video_id),
-    transcript_raw    TEXT NOT NULL DEFAULT '',
-    transcript_clean  TEXT NOT NULL DEFAULT '',
-    transcript_status TEXT NOT NULL DEFAULT 'missing'
-        CHECK(transcript_status IN ('missing','fetched','auto_generated','failed')),
-    language          TEXT NOT NULL DEFAULT '',
-    fetched_at        TEXT,
-    char_count        INTEGER NOT NULL DEFAULT 0
+    video_id             TEXT PRIMARY KEY REFERENCES youtube_videos(video_id),
+    transcript_id        TEXT UNIQUE,
+    transcript_raw       TEXT NOT NULL DEFAULT '',
+    transcript_clean     TEXT NOT NULL DEFAULT '',
+    transcript_status    TEXT NOT NULL DEFAULT 'missing'
+        CHECK(transcript_status IN ('missing','fetched','auto_generated','failed','pending','success','quarantined','metadata_only')),
+    source               TEXT NOT NULL DEFAULT 'metadata'
+        CHECK(source IN ('standard_caption','youtube_asr_caption','browser_caption','faster_whisper','whisperx','mlx_whisper','premium','metadata','legacy_asr')),
+    language             TEXT NOT NULL DEFAULT '',
+    fetched_at           TEXT,
+    char_count           INTEGER NOT NULL DEFAULT 0,
+    is_auto_generated    INTEGER NOT NULL DEFAULT 0,
+    model                TEXT,
+    model_version        TEXT,
+    audio_hash           TEXT,
+    transcript_hash      TEXT,
+    raw_path             TEXT,
+    clean_path           TEXT,
+    segments_json_path   TEXT,
+    quality_score        REAL CHECK (quality_score IS NULL OR (quality_score >= 0.0 AND quality_score <= 1.0)),
+    quality_tier         TEXT CHECK (quality_tier IS NULL OR quality_tier IN ('T0','T1','T2','T3')),
+    coverage_ratio       REAL CHECK (coverage_ratio IS NULL OR (coverage_ratio >= 0.0 AND coverage_ratio <= 1.0)),
+    hallucination_risk   REAL CHECK (hallucination_risk IS NULL OR (hallucination_risk >= 0.0 AND hallucination_risk <= 1.0)),
+    created_at           TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_yt_quality_tier ON youtube_transcripts(quality_tier, quality_score DESC);
+CREATE INDEX IF NOT EXISTS idx_yt_status ON youtube_transcripts(transcript_status);
+
+CREATE TABLE IF NOT EXISTS youtube_subtitle_tracks (
+    track_id          TEXT PRIMARY KEY,
+    video_id          TEXT NOT NULL,
+    source_backend    TEXT NOT NULL,
+    language          TEXT NOT NULL,
+    language_name     TEXT,
+    track_kind        TEXT NOT NULL,
+    format            TEXT,
+    is_auto_generated INTEGER NOT NULL DEFAULT 0,
+    is_translatable   INTEGER NOT NULL DEFAULT 1,
+    confidence        REAL NOT NULL DEFAULT 0.0,
+    discovered_at     TEXT NOT NULL,
+    download_status   TEXT NOT NULL DEFAULT 'pending',
+    file_path         TEXT,
+    error             TEXT,
+    url               TEXT,
+    UNIQUE(video_id, source_backend, language, track_kind)
+);
+CREATE INDEX IF NOT EXISTS idx_yst_video ON youtube_subtitle_tracks(video_id, download_status);
+
+CREATE TABLE IF NOT EXISTS youtube_transcript_jobs (
+    job_id              TEXT PRIMARY KEY,
+    video_id            TEXT NOT NULL,
+    job_type            TEXT NOT NULL,
+    priority            TEXT NOT NULL DEFAULT 'P2',
+    status              TEXT NOT NULL DEFAULT 'pending',
+    backend             TEXT,
+    attempt_count       INTEGER NOT NULL DEFAULT 0,
+    max_attempts        INTEGER NOT NULL DEFAULT 3,
+    next_retry_at       TEXT,
+    error_code          TEXT,
+    error_message       TEXT,
+    created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    started_at          TEXT,
+    finished_at         TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ytj_dequeue ON youtube_transcript_jobs(priority, status, next_retry_at);
+CREATE INDEX IF NOT EXISTS idx_ytj_video ON youtube_transcript_jobs(video_id, job_type);
+
+CREATE TABLE IF NOT EXISTS quality_checks (
+    check_id            TEXT PRIMARY KEY,
+    transcript_id       TEXT NOT NULL,
+    check_version       TEXT NOT NULL,
+    quality_score       REAL NOT NULL,
+    quality_tier        TEXT NOT NULL,
+    coverage_ratio      REAL,
+    hallucination_risk  REAL,
+    issues_json         TEXT,
+    checked_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 -- Social tables
@@ -509,9 +578,11 @@ CREATE TABLE IF NOT EXISTS model_call_ledger (
     provider          TEXT NOT NULL DEFAULT '',
     call_purpose      TEXT NOT NULL
         CHECK(call_purpose IN ('evidence_compression','analysis_card','planning_brief',
-                               'why_hot_attribution','deep_analysis','counter_evidence')),
+                               'why_hot_attribution','deep_analysis','counter_evidence',
+                               'semantic_grouping','report_generation')),
     input_type        TEXT NOT NULL DEFAULT 'project_reasoning_packet'
-        CHECK(input_type IN ('project_reasoning_packet','raw_readme_bypass')),
+        CHECK(input_type IN ('project_reasoning_packet','raw_readme_bypass',
+                             'transcript_reasoning_packet','report_evidence_packet')),
     input_token_count INTEGER NOT NULL DEFAULT 0,
     output_token_count INTEGER NOT NULL DEFAULT 0,
     latency_ms        INTEGER NOT NULL DEFAULT 0,

@@ -36,7 +36,7 @@ PHYSICAL_OPERATORS_PATH = Path(os.environ.get("SOLAR_MULTI_TASK_OPERATORS", HARN
 SCREEN_HISTORY_PATH = Path(os.environ.get("SOLAR_MULTI_TASK_SCREEN_HISTORY", RUN_DIR / "screen-history.txt"))
 GRAPH_SUMMARY_CACHE_PATH = Path(os.environ.get("SOLAR_MULTI_TASK_GRAPH_SUMMARY_CACHE", RUN_DIR / "graph-summary-cache.json"))
 DISPATCH_LEDGER_PATH = Path(os.environ.get("SOLAR_DISPATCH_LEDGER", HARNESS_DIR / "run" / "dispatch-ledger.jsonl"))
-DEFAULT_MAX_WORKERS = int(os.environ.get("SOLAR_MULTI_TASK_MAX_WORKERS", "2") or "2")
+DEFAULT_MAX_WORKERS = int(os.environ.get("SOLAR_MULTI_TASK_MAX_WORKERS", "4") or "4")
 DEFAULT_INTERVAL = int(os.environ.get("SOLAR_MULTI_TASK_INTERVAL_SEC", "15") or "15")
 DEFAULT_COOLDOWN = int(os.environ.get("SOLAR_MULTI_TASK_LAUNCH_COOLDOWN_SEC", "30") or "30")
 DEFAULT_MEMORY_RESERVE_GB = float(os.environ.get("SOLAR_MULTI_TASK_MEMORY_RESERVE_GB", "4") or "4")
@@ -66,7 +66,7 @@ NORM_FALLBACK_LADDERS: dict[str, list[str]] = {
 }
 
 DEFAULT_PROFILE_CONFIG: dict[str, Any] = {
-    "defaults": {"profile": "builder", "backend": "claude-cli", "max_workers": 2},
+    "defaults": {"profile": "builder", "backend": "claude-cli", "max_workers": 4},
     "profiles": {
         "builder": {
             "role": "builder",
@@ -76,7 +76,7 @@ DEFAULT_PROFILE_CONFIG: dict[str, Any] = {
             "model": "sonnet",
             "approval_mode": "yolo",
             "best_for": ["implementation", "debugging", "tests"],
-            "max_parallel": 2,
+            "max_parallel": 4,
         },
         "planner": {
             "role": "planner",
@@ -86,7 +86,7 @@ DEFAULT_PROFILE_CONFIG: dict[str, Any] = {
             "model": "sonnet",
             "approval_mode": "auto_edit",
             "best_for": ["planning", "architecture"],
-            "max_parallel": 1,
+            "max_parallel": 2,
         },
         "evaluator": {
             "role": "evaluator",
@@ -96,7 +96,7 @@ DEFAULT_PROFILE_CONFIG: dict[str, Any] = {
             "model": "opus",
             "approval_mode": "auto_edit",
             "best_for": ["verification", "review"],
-            "max_parallel": 1,
+            "max_parallel": 2,
         },
         "pm": {
             "role": "pm",
@@ -106,7 +106,7 @@ DEFAULT_PROFILE_CONFIG: dict[str, Any] = {
             "model": "sonnet",
             "approval_mode": "auto_edit",
             "best_for": ["requirements", "acceptance"],
-            "max_parallel": 1,
+            "max_parallel": 2,
         },
         "gemini-builder": {
             "role": "builder",
@@ -116,7 +116,7 @@ DEFAULT_PROFILE_CONFIG: dict[str, Any] = {
             "model": "gemini",
             "approval_mode": "auto_edit",
             "best_for": ["large-context", "implementation"],
-            "max_parallel": 1,
+            "max_parallel": 2,
         },
         "gemini-evaluator": {
             "role": "evaluator",
@@ -126,7 +126,7 @@ DEFAULT_PROFILE_CONFIG: dict[str, Any] = {
             "model": "gemini",
             "approval_mode": "auto_edit",
             "best_for": ["verification", "review", "evidence"],
-            "max_parallel": 1,
+            "max_parallel": 2,
         },
         "knowledge-extractor": {
             "role": "builder",
@@ -137,7 +137,7 @@ DEFAULT_PROFILE_CONFIG: dict[str, Any] = {
             "approval_mode": "default",
             "best_for": ["knowledge-extraction", "wiki-ingest", "qmd-indexing"],
             "command": "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/thunderomlx_knowledge_extract_agent.py\"",
-            "max_parallel": 1,
+            "max_parallel": 2,
         },
     },
 }
@@ -199,17 +199,44 @@ AUTH_RE = re.compile(
 
 
 def load_profiles() -> dict[str, Any]:
+    def _apply_concurrency_knob(data: dict[str, Any]) -> dict[str, Any]:
+        try:
+            if str(HARNESS_DIR / "lib") not in sys.path:
+                sys.path.insert(0, str(HARNESS_DIR / "lib"))
+            import concurrency_policy  # type: ignore
+
+            builder_limit = int(concurrency_policy.effective_max_parallel(4, scope="builder"))
+            defaults = data.setdefault("defaults", {})
+            if isinstance(defaults, dict):
+                defaults["max_workers"] = builder_limit
+                defaults["concurrency_level"] = concurrency_policy.active_level()
+            for spec in (data.get("profiles") or {}).values():
+                if not isinstance(spec, dict):
+                    continue
+                role = str(spec.get("role") or "").strip().lower()
+                if role == "builder":
+                    spec["max_parallel"] = builder_limit
+        except Exception:
+            pass
+        return data
+
     if PROFILE_PATH.exists():
         try:
             data = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
             if isinstance(data.get("profiles"), dict):
-                return data
+                return _apply_concurrency_knob(data)
         except Exception:
             pass
-    return DEFAULT_PROFILE_CONFIG
+    return _apply_concurrency_knob(json.loads(json.dumps(DEFAULT_PROFILE_CONFIG)))
 
 
 def load_physical_operators() -> dict[str, Any]:
+    try:
+        import operator_flow_control as ofc
+
+        ofc.prune_expired_operator_config_blocks()
+    except Exception:
+        pass
     if PHYSICAL_OPERATORS_PATH.exists():
         try:
             data = json.loads(PHYSICAL_OPERATORS_PATH.read_text(encoding="utf-8"))
@@ -512,6 +539,16 @@ def operator_dispatchable(operator: dict[str, Any]) -> tuple[bool, str]:
     if not operator.get("available", True):
         return False, str(operator.get("health_status") or "unavailable")
     if str(operator.get("quota_guard_state") or "ok").lower() not in {"", "ok", "ready"}:
+        expires = str(operator.get("quota_refresh_at") or (operator.get("state") or {}).get("cooldown_until") or "")
+        try:
+            import operator_flow_control as ofc
+
+            parsed = ofc._parse_time(expires)  # type: ignore[attr-defined]
+            if parsed is not None and parsed <= ofc._now():  # type: ignore[attr-defined]
+                ofc.clear_expired_operator_config_block(str(operator.get("operator_id") or ""))
+                return True, "ready"
+        except Exception:
+            pass
         return False, f"quota_guard_state={operator.get('quota_guard_state')}"
     key_ref = str(operator.get("key_ref") or "").strip()
     if str(operator.get("auth_mode") or "").lower() not in {"none", "local", "subscription"} and not key_ref:
@@ -717,6 +754,16 @@ def get_operator_capability_score(operator: dict[str, Any], capability_name: str
     caps = operator.get("capability") or operator.get("capabilities")
     if isinstance(caps, dict):
         for k, v in caps.items():
+            kl = str(k).lower().replace("_", "-")
+            if kl == capability_name_lower:
+                try:
+                    return float(v)
+                except (ValueError, TypeError):
+                    pass
+
+    profile_caps = operator.get("capability_profile")
+    if isinstance(profile_caps, dict):
+        for k, v in profile_caps.items():
             kl = str(k).lower().replace("_", "-")
             if kl == capability_name_lower:
                 try:

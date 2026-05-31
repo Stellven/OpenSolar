@@ -528,11 +528,11 @@ class TestQueueStateSemantics:
 
         tmp_path, sprints, sid, graph = tmp_harness
 
-        monkeypatch.setattr("task_queue.enqueue", lambda *a, **kw: {"ok": True, "id": "q-1"})
+        monkeypatch.setattr("task_queue.enqueue", lambda sid, intent, priority, payload: {"ok": True, "id": "q-1", "intent": intent})
         result = enqueue_ready(
             graph,
             str(sprints / f"{sid}.task_graph.json"),
-            [{"pane": "test:0.1", "models": ["sonnet"], "skills": ["bash"], "capabilities": []}],
+            [{"pane": "test:0.1", "models": ["sonnet"], "skills": ["bash"], "capabilities": ["read", "shell", "bash"], "role": "builder", "dispatch_role": "builder", "host_role": "builder"}],
             lease=False,
         )
 
@@ -541,6 +541,7 @@ class TestQueueStateSemantics:
         assert graph["nodes"][0]["status"] == "assigned"
         assert graph["nodes"][0]["assigned_to"] == "test:0.1"
         assert graph["nodes"][0]["dispatch_id"]
+        assert "dispatch_id=" in result["enqueued"][0]["queue"].get("intent", "")
 
 
 # ---------------------------------------------------------------------------

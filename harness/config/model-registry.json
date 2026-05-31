@@ -6,10 +6,10 @@
   },
   "models": {
     "claude-opus": {
-      "label": "Claude Opus 4.7",
+      "label": "Claude Opus 4.8",
       "short_label": "Opus",
       "provider": "anthropic",
-      "model_flag": "--model opus",
+      "model_flag": "--model claude-opus-4-8",
       "model_key": "claude-opus",
       "main_allowed": true,
       "lab_allowed": true,
@@ -20,7 +20,11 @@
         "opus-4.7",
         "opus-4-7",
         "claude-opus-4.7",
-        "claude-opus-4-7"
+        "claude-opus-4-7",
+        "opus-4.8",
+        "opus-4-8",
+        "claude-opus-4.8",
+        "claude-opus-4-8"
       ]
     },
     "claude-sonnet": {

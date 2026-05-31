@@ -1,0 +1,45 @@
+{
+  "schema_version": "solar.operator_schedules.v1",
+  "generated_at": "2026-05-30T23:55:19Z",
+  "bindings": {
+    "x_social": {
+      "line": "x_social",
+      "primary": "scripts/ai_influence_daily.py",
+      "source_schedule": "daily",
+      "type": "cron",
+      "cron": "0 8 * * *"
+    },
+    "github_trends": {
+      "line": "github_trends",
+      "primary": "scripts/github_trends_digest.py",
+      "source_schedule": "daily",
+      "type": "cron",
+      "cron": "30 8 * * *",
+      "dual_run": {
+        "enabled": true,
+        "comparison_view": true
+      }
+    },
+    "hf_papers": {
+      "line": "hf_papers",
+      "primary": "scripts/tech_hotspot_radar.py",
+      "source_schedule": "daily",
+      "type": "cron",
+      "cron": "0 9 * * *"
+    },
+    "gemini_research": {
+      "line": "gemini_research",
+      "primary": "tools/gemini_deep_research_operator.py",
+      "source_schedule": "on_demand",
+      "type": "manual",
+      "cron": null
+    },
+    "youtube": {
+      "line": "youtube",
+      "primary": "scripts/youtube_influence_digest.py",
+      "source_schedule": "daily",
+      "type": "cron",
+      "cron": "30 9 * * *"
+    }
+  }
+}

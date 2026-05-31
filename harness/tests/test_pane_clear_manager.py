@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 
 from pane_constants import CLEAR_FAILED_EXHAUSTED
 from pane_hygiene_registry import PaneEntry, PaneHygieneRegistry, PaneState
-from pane_clear_manager import PaneClearManager, ClearResult
+from pane_clear_manager import PaneClearManager, ClearResult, _tmux_send_keys
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "tmux_capture_samples"
 
@@ -109,6 +109,27 @@ class TestClearPane:
         mgr.clear_pane("solar-harness:0.3")
         entry = registry.get_pane_state("solar-harness:0.3")
         assert entry.state == PaneState.clean
+
+    def test_default_tmux_sender_clears_residue_and_sends_literal(self, monkeypatch):
+        calls = []
+
+        def fake_run(args, **kwargs):
+            calls.append(args)
+
+            class Result:
+                returncode = 0
+
+            return Result()
+
+        monkeypatch.setattr("pane_clear_manager.subprocess.run", fake_run)
+
+        _tmux_send_keys("solar-harness-lab:0.3", "/clear")
+
+        assert calls == [
+            ["tmux", "send-keys", "-t", "solar-harness-lab:0.3", "C-u"],
+            ["tmux", "send-keys", "-t", "solar-harness-lab:0.3", "-l", "/clear"],
+            ["tmux", "send-keys", "-t", "solar-harness-lab:0.3", "Enter"],
+        ]
 
 
 # --- verify_clear_success three-signal ---

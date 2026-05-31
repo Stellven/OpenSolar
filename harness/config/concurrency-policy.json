@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "active_level": "normal",
+  "env_override": "SOLAR_CONCURRENCY_LEVEL",
+  "levels": {
+    "low": {
+      "graph_max_parallel": 2,
+      "builder_dispatch_limit": 2,
+      "drain_max_items": 2,
+      "operator_task_timeout_seconds": 900
+    },
+    "normal": {
+      "graph_max_parallel": 4,
+      "builder_dispatch_limit": 5,
+      "drain_max_items": 4,
+      "operator_task_timeout_seconds": 1800
+    },
+    "high": {
+      "graph_max_parallel": 8,
+      "builder_dispatch_limit": 9,
+      "drain_max_items": 8,
+      "operator_task_timeout_seconds": 2700
+    },
+    "burst": {
+      "graph_max_parallel": 13,
+      "builder_dispatch_limit": 13,
+      "drain_max_items": 13,
+      "operator_task_timeout_seconds": 3600
+    }
+  },
+  "builder_pool": {
+    "enabled": true,
+    "desired_total": 13,
+    "groups": {
+      "glm-5.1": {
+        "desired": 3,
+        "priority": 80
+      },
+      "sonnet": {
+        "desired": 3,
+        "priority": 90
+      },
+      "thunderomlx": {
+        "desired": 1,
+        "priority": 55
+      },
+      "deepseek-v4-flash": {
+        "desired": 2,
+        "priority": 85
+      },
+      "codex-gpt-5.5-medium": {
+        "desired": 2,
+        "priority": 82
+      },
+      "antigravity-gemini-3.5-flash": {
+        "desired": 2,
+        "priority": 70
+      }
+    }
+  },
+  "role_pool_spillover": {
+    "enabled": true,
+    "roles": {
+      "planner": {
+        "enabled": true,
+        "max_active": 8,
+        "allowed_source_roles": [
+          "builder",
+          "evaluator"
+        ],
+        "preferred_groups": [
+          "deepseek-v4-flash",
+          "codex-gpt-5.5-medium",
+          "antigravity-gemini-3.5-flash",
+          "thunderomlx"
+        ],
+        "reason": "Independent planning work may borrow capable non-planner operators when the canonical planner pool is blocked."
+      },
+      "evaluator": {
+        "enabled": true,
+        "max_active": 4,
+        "allowed_source_roles": [
+          "builder"
+        ],
+        "preferred_groups": [
+          "deepseek-v4-flash",
+          "antigravity-gemini-3.5-flash",
+          "codex-gpt-5.5-medium"
+        ],
+        "reason": "Independent evaluator work may borrow builder operators when evaluator pool is temporarily blocked."
+      }
+    }
+  },
+  "dynamic_concurrency": {
+    "enabled": true,
+    "mode": "aggressive_spend_down",
+    "snapshot_path": "run/quota-snapshots/latest.json",
+    "snapshot_ttl_seconds": 600,
+    "min_level": "normal",
+    "max_level": "burst",
+    "prefer_efficiency_over_reserve": true,
+    "backlog_high_threshold": 6,
+    "backlog_burst_threshold": 12,
+    "available_ratio_high": 0.45,
+    "available_ratio_burst": 0.65,
+    "blocked_ratio_low": 0.7
+  },
+  "recovery": {
+    "high_backlog_pending_tasks": 6,
+    "critical_backlog_pending_tasks": 12,
+    "min_available_ratio": 0.5,
+    "stale_runtime_seconds": 900,
+    "health_cache_seconds": 60,
+    "auto_start_services": false,
+    "auto_clear_stale_dead_pid": true
+  }
+}

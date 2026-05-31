@@ -277,6 +277,32 @@ class TestWriteResult:
         assert result["finished_at"] == "2026-05-22T00:00:05Z"
         assert "log_tail" in result
 
+    def test_writes_model_route_fields(self, tmp_path, monkeypatch):
+        self._patch_dirs(monkeypatch, tmp_path)
+        path = _rt.write_result(
+            operator_id="op-glm",
+            task_id="T-glm",
+            sprint_id="sprint-1",
+            node_id="N1",
+            status="completed",
+            exit_code=0,
+            started_at="2026-05-22T00:00:00Z",
+            finished_at="2026-05-22T00:00:05Z",
+            log_tail="ok",
+            model_route={
+                "requested_model": "glm-5.1",
+                "routing_model": "opus",
+                "effective_provider": "zhipu",
+                "effective_model": "glm-5.1",
+            },
+        )
+        result = json.loads(path.read_text())
+        assert result["requested_model"] == "glm-5.1"
+        assert result["routing_model"] == "opus"
+        assert result["effective_provider"] == "zhipu"
+        assert result["effective_model"] == "glm-5.1"
+        assert result["model_route"]["effective_model"] == "glm-5.1"
+
     def test_scrubs_secrets_in_log_tail(self, tmp_path, monkeypatch):
         self._patch_dirs(monkeypatch, tmp_path)
         _rt.write_result(
@@ -680,6 +706,30 @@ class TestBuildCommand:
         assert "claude --dangerously-skip-permissions" in joined
         assert "local-stub" not in joined
         assert 'cat "$DISPATCH_FILE"' in joined
+
+    def test_glm_claude_cli_backend_uses_zhipu_opus_route(self):
+        cmd = _od._build_command(
+            {"backend": "claude-cli", "provider": "glm", "model": "glm-5.1"},
+            {"task_id": "pm-glm", "dispatch_file": "/tmp/dispatch.md"},
+        )
+        joined = " ".join(cmd)
+        assert cmd[:2] == ["bash", "-lc"]
+        assert "ANTHROPIC_BASE_URL" in joined
+        assert "ANTHROPIC_API_KEY" in joined
+        assert "ANTHROPIC_DEFAULT_OPUS_MODEL" in joined
+        assert "--model opus" in joined
+        assert "--model glm-5.1" not in joined
+
+    def test_glm_model_route_metadata_exposes_effective_model(self):
+        route = _od._model_route_metadata(
+            {"backend": "claude-cli", "provider": "glm", "model": "glm-5.1"}
+        )
+        assert route == {
+            "requested_model": "glm-5.1",
+            "routing_model": "opus",
+            "effective_provider": "zhipu",
+            "effective_model": "glm-5.1",
+        }
 
     def test_command_backend_uses_registry_command_when_envelope_missing_command(self):
         cmd = _od._build_command(

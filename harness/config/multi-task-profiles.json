@@ -3,7 +3,7 @@
   "defaults": {
     "profile": "builder",
     "backend": "claude-cli",
-    "max_workers": 2
+    "max_workers": 4
   },
   "profiles": {
     "builder": {
@@ -19,7 +19,7 @@
         "tests",
         "refactor"
       ],
-      "max_parallel": 2
+      "max_parallel": 4
     },
     "planner": {
       "role": "planner",
@@ -34,7 +34,7 @@
         "decomposition",
         "risk"
       ],
-      "max_parallel": 1
+      "max_parallel": 2
     },
     "evaluator": {
       "role": "evaluator",
@@ -49,7 +49,7 @@
         "evidence",
         "regression"
       ],
-      "max_parallel": 1
+      "max_parallel": 2
     },
     "pm": {
       "role": "pm",
@@ -64,7 +64,7 @@
         "prioritization",
         "handoff"
       ],
-      "max_parallel": 1
+      "max_parallel": 2
     },
     "gemini-builder": {
       "role": "builder",
@@ -79,7 +79,7 @@
         "code-search",
         "tests"
       ],
-      "max_parallel": 1
+      "max_parallel": 2
     },
     "gemini-evaluator": {
       "role": "evaluator",
@@ -94,7 +94,7 @@
         "evidence",
         "regression"
       ],
-      "max_parallel": 1
+      "max_parallel": 2
     },
     "antigravity-multimodal": {
       "role": "builder",
@@ -112,7 +112,7 @@
         "pdf-page-image"
       ],
       "command": "AGY_BIN=/Users/lisihao/.local/bin/agy PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/antigravity_multimodal_agent.py\"",
-      "max_parallel": 1
+      "max_parallel": 2
     },
     "knowledge-extractor": {
       "role": "builder",
@@ -127,7 +127,7 @@
         "qmd-indexing"
       ],
       "command": "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/thunderomlx_knowledge_extract_agent.py\"",
-      "max_parallel": 1
+      "max_parallel": 2
     },
     "thunderomlx-benchmark": {
       "role": "builder",
@@ -142,7 +142,7 @@
         "knowledge-extraction"
       ],
       "command": "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/thunderomlx_cache_benchmark_agent.py\"",
-      "max_parallel": 1
+      "max_parallel": 2
     },
     "deepseek-builder": {
       "role": "builder",
@@ -156,7 +156,7 @@
         "fast-patch",
         "code-edit"
       ],
-      "max_parallel": 1
+      "max_parallel": 2
     },
     "glm-planner": {
       "role": "planner",
@@ -170,7 +170,7 @@
         "analysis",
         "chinese-reasoning"
       ],
-      "max_parallel": 1
+      "max_parallel": 2
     },
     "thunderomlx-local": {
       "role": "builder",
@@ -187,7 +187,7 @@
         "offline",
         "low-cost"
       ],
-      "max_parallel": 1
+      "max_parallel": 2
     }
   }
 }

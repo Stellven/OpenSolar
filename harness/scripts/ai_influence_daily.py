@@ -36,6 +36,7 @@ UTC = dt.timezone.utc
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_ACCOUNTS_PATH = SCRIPT_DIR / ".." / "ai-influence-digest" / "references" / "accounts_extended.txt"
 DEFAULT_STATE_DIR = Path.home() / ".solar" / "harness" / "state" / "ai-influence-digest"
+DEFAULT_MAX_AGE_DAYS = int(os.environ.get("AI_INFLUENCE_MAX_AGE_DAYS", "30"))
 USER_AGENT = "Solar-AI-Influence-Daily/2.0"
 DEFAULT_MAIL_TO = "sean.lisihao@huawei.com"
 DEFAULT_GMAIL_USER = "lisihao@gmail.com"
@@ -65,6 +66,9 @@ class Candidate:
     published_at: str
     source_method: str  # ddg | profile | rss
     raw_score: int = 0
+    external_links: list[str] = dataclasses.field(default_factory=list)
+    images: list[str] = dataclasses.field(default_factory=list)
+    external_text: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -199,160 +203,207 @@ def simulate_rotation(accounts: list[Account], start_date: str | None = None) ->
 
 
 # ---------------------------------------------------------------------------
-# Collectors — DDG → profile → RSS fallback chain
+# Collectors — Webwright physical operator
 # ---------------------------------------------------------------------------
-
-def _request_text(session: requests.Session, url: str, timeout: int = 12) -> str | None:
-    try:
-        res = session.get(url, timeout=timeout, headers={"User-Agent": USER_AGENT})
-        if res.status_code >= 400:
-            return None
-        return res.text
-    except Exception:
-        return None
-
 
 def _strip_html(text: str) -> str:
     text = html.unescape(text or "")
     text = re.sub(r"<[^>]+>", " ", text)
     return re.sub(r"\s+", " ", text).strip()
 
-
-def collect_ddg(handle: str, session: requests.Session, limit: int = 3, dry_run: bool = False) -> list[Candidate]:
-    """Search DuckDuckGo HTML for recent tweets/pages from handle."""
+def collect_via_dom_llm(handle: str, session: requests.Session, dry_run: bool = False) -> list[Candidate]:
+    """Fetch recent tweets using Playwright DOM extraction directly (bypassing unstable local LLM)."""
     if dry_run:
         return [Candidate(
             handle=handle,
-            text=f"[DRY-RUN DDG] Recent AI update from @{handle}",
-            tweet_url=f"https://x.com/{handle}/status/DRYRUN_DDG_{handle}",
+            text=f"[DRY-RUN DOM] Recent AI update from @{handle}",
+            tweet_url=f"https://x.com/{handle}/status/DRYRUN_DOM_{handle}",
             published_at=_now_iso(),
-            source_method="ddg",
+            source_method="dom_direct",
         )]
-    query = f"site:x.com/{handle} OR site:twitter.com/{handle} (AI OR model OR agent OR tool OR prompt)"
-    url = "https://duckduckgo.com/html/?" + urllib.parse.urlencode({"q": query})
-    text = _request_text(session, url)
-    if not text:
-        return []
 
-    pattern = re.compile(r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>', re.I | re.S)
-    candidates: list[Candidate] = []
-    for raw_url, raw_title in pattern.findall(text):
-        link = html.unescape(raw_url)
-        if "uddg=" in link:
-            qs = urllib.parse.parse_qs(urllib.parse.urlparse(link).query)
-            link = qs.get("uddg", [link])[0]
-        title = _strip_html(raw_title)
-        if not title or not link:
-            continue
-        candidates.append(Candidate(
-            handle=handle,
-            text=title,
-            tweet_url=link,
-            published_at=_now_iso(),
-            source_method="ddg",
-        ))
-        if len(candidates) >= limit:
-            break
-    return candidates
+    print(f"      [DOM_DIRECT] Launching Playwright to scrape DOM for @{handle}...", flush=True)
 
-
-def collect_profile(handle: str, session: requests.Session, dry_run: bool = False) -> list[Candidate]:
-    """Fetch public profile page for recent posts. Does NOT bypass login walls."""
-    if dry_run:
-        return [Candidate(
-            handle=handle,
-            text=f"[DRY-RUN PROFILE] Bio or pinned content from @{handle}",
-            tweet_url=f"https://x.com/{handle}/status/DRYRUN_PROFILE_{handle}",
-            published_at=_now_iso(),
-            source_method="profile",
-        )]
-    # Public profile fetch — only reads what's visible without auth
-    url = f"https://nitter.net/{handle}"
-    text = _request_text(session, url)
-    if not text:
-        return []
-
-    candidates: list[Candidate] = []
-    for m in re.finditer(r'<a[^>]+href="(/[^/]+/status/\d+)"[^>]*>(.*?)</a>', text, re.I | re.S):
-        link = f"https://x.com{m.group(1)}"
-        title = _strip_html(m.group(2))
-        if title:
-            candidates.append(Candidate(
-                handle=handle,
-                text=title[:500],
-                tweet_url=link,
-                published_at=_now_iso(),
-                source_method="profile",
-            ))
-    return candidates[:3]
-
-
-def collect_rss(handle: str, session: requests.Session, dry_run: bool = False) -> list[Candidate]:
-    """Fetch RSS/Nitter/public aggregation feed for recent posts."""
-    if dry_run:
-        return [Candidate(
-            handle=handle,
-            text=f"[DRY-RUN RSS] Feed item from @{handle}",
-            tweet_url=f"https://x.com/{handle}/status/DRYRUN_RSS_{handle}",
-            published_at=_now_iso(),
-            source_method="rss",
-        )]
-    # Try Nitter RSS feed
-    url = f"https://nitter.net/{handle}/rss"
-    text = _request_text(session, url)
-    if not text:
-        return []
-
+    scraper_path = str(Path(__file__).resolve().parent.parent / "tools" / "playwright_twitter_scraper.py")
+    python_bin = "/Users/lisihao/.claude/mcp-servers/browser-use/.venv/bin/python"
+    
     try:
-        root = ET.fromstring(text.encode("utf-8"))
-    except ET.ParseError:
+        proc = subprocess.run([python_bin, scraper_path, handle], capture_output=True, text=True, timeout=60)
+        if proc.returncode != 0:
+            print(f"      [DOM_DIRECT] Scraper failed: {proc.stderr}", flush=True)
+            return []
+            
+        try:
+            output = json.loads(proc.stdout)
+        except json.JSONDecodeError:
+            print(f"      [DOM_DIRECT] Failed to parse scraper output: {proc.stdout[:500]}", flush=True)
+            return []
+            
+        if "error" in output:
+            print(f"      [DOM_DIRECT] Scraper error: {output['error']}", flush=True)
+            return []
+            
+        items = output.get("result", [])
+        if not items:
+            print(f"      [DOM_DIRECT] No tweets found in DOM.", flush=True)
+            return []
+
+        candidates = []
+        for item in items:
+            text = _strip_html(item.get("text", ""))
+            url = item.get("tweet_url", "")
+            pub = item.get("published_at", _now_iso())
+            
+            # Simple check to filter out invalid or malformed data
+            if text and url and "/status/" in url:
+                candidates.append(Candidate(
+                    handle=handle,
+                    text=text[:500],
+                    tweet_url=url,
+                    published_at=pub,
+                    source_method="dom_direct",
+                    external_links=item.get("external_links", [])
+                ))
+                
+        print(f"      [DOM_DIRECT] Successfully extracted {len(candidates)} candidates.", flush=True)
+        return candidates
+
+    except Exception as e:
+        print(f"      [DOM_DIRECT] Unexpected error: {e}", flush=True)
         return []
-
-    candidates: list[Candidate] = []
-    for item in root.findall(".//item"):
-        title_el = item.find("title")
-        link_el = item.find("link")
-        pub_el = item.find("pubDate")
-        if title_el is None or link_el is None:
-            continue
-        title = _strip_html(title_el.text or "")
-        link = (link_el.text or "").strip()
-        # Convert nitter links back to x.com
-        link = re.sub(r"https?://nitter\.net/", "https://x.com/", link)
-        published = pub_el.text.strip() if pub_el is not None and pub_el.text else _now_iso()
-        if title and link:
-            candidates.append(Candidate(
-                handle=handle,
-                text=title[:500],
-                tweet_url=link,
-                published_at=published,
-                source_method="rss",
-            ))
-    return candidates[:5]
-
 
 def collect_with_fallback(handle: str, session: requests.Session, dry_run: bool = False) -> list[Candidate]:
-    """Try DDG → profile → RSS fallback chain."""
-    # 1. DDG search
-    results = collect_ddg(handle, session, dry_run=dry_run)
-    if results:
-        return results
-
-    # 2. Public profile page
-    results = collect_profile(handle, session, dry_run=dry_run)
-    if results:
-        return results
-
-    # 3. RSS/Nitter feed
-    return collect_rss(handle, session, dry_run=dry_run)
+    """Single collector using Playwright DOM extraction directly."""
+    return collect_via_dom_llm(handle, session, dry_run=dry_run)
 
 
 # ---------------------------------------------------------------------------
 # Dedupe — SQLite state by tweet_url, content_hash, handle, date
 # ---------------------------------------------------------------------------
 
+def fetch_external_article(url: str, images_dir: Path) -> tuple[str, list[str]]:
+    """Fetch external article, extract text and download up to 3 images."""
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError:
+        print("      [EXT_FETCH] bs4 not installed, skipping text extraction.", flush=True)
+        return "", []
+
+    print(f"      [EXT_FETCH] Fetching external URL: {url}", flush=True)
+    try:
+        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        if resp.status_code != 200:
+            return "", []
+            
+        soup = BeautifulSoup(resp.text, 'html.parser')
+        
+        # Try to find main content
+        main_content = soup.find('article') or soup.find('main') or soup.find('body')
+        if not main_content:
+            return "", []
+            
+        # Extract text
+        paragraphs = main_content.find_all(['p', 'h1', 'h2', 'h3'])
+        text_content = "\n\n".join(p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True))
+        if not text_content:
+            text_content = main_content.get_text(separator="\n\n", strip=True)
+            
+        # Extract images
+        downloaded_images = []
+        images_dir.mkdir(parents=True, exist_ok=True)
+        
+        img_tags = main_content.find_all('img')
+        for img in img_tags:
+            if len(downloaded_images) >= 3:
+                break
+                
+            src = img.get('src') or img.get('data-src')
+            if not src:
+                continue
+                
+            src = urllib.parse.urljoin(url, src)
+            if not src.startswith("http"):
+                continue
+                
+            try:
+                # Basic check for image extensions to avoid tracking pixels, or rely on requests
+                img_resp = requests.get(src, stream=True, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
+                if img_resp.status_code == 200 and 'image' in img_resp.headers.get('content-type', ''):
+                    # Filter out tiny images if length is provided and very small
+                    content_length = img_resp.headers.get('content-length')
+                    if content_length and int(content_length) < 5000:
+                        continue
+                        
+                    ext = src.split('.')[-1].split('?')[0].lower()
+                    if ext not in ['jpg', 'jpeg', 'png', 'webp', 'gif']:
+                        ext = 'jpg'
+                        
+                    img_filename = hashlib.md5(src.encode('utf-8')).hexdigest()[:10] + f".{ext}"
+                    img_path = images_dir / img_filename
+                    
+                    with open(img_path, 'wb') as f:
+                        for chunk in img_resp.iter_content(1024):
+                            f.write(chunk)
+                    
+                    downloaded_images.append(str(img_path))
+                    print(f"      [EXT_FETCH] Downloaded image: {img_filename}", flush=True)
+            except Exception as e:
+                print(f"      [EXT_FETCH] Failed to download image {src}: {e}", flush=True)
+                
+        return text_content[:3000], downloaded_images # Return up to 3000 chars of external text
+    except Exception as e:
+        print(f"      [EXT_FETCH] Failed to fetch external article {url}: {e}", flush=True)
+        return "", []
+
+
 def content_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+def parse_published_at(value: str | None) -> dt.datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = dt.datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _freshness_cutoff(date_str: str | None, max_age_days: int) -> dt.datetime:
+    if date_str:
+        base_day = dt.datetime.strptime(date_str[:10], "%Y-%m-%d").replace(tzinfo=UTC)
+    else:
+        base_day = dt.datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    return base_day - dt.timedelta(days=max_age_days)
+
+
+def filter_recent_candidates(
+    candidates: list[Candidate],
+    *,
+    date_str: str | None,
+    max_age_days: int,
+) -> tuple[list[Candidate], list[Candidate], list[Candidate]]:
+    """Keep only candidates within the freshness window.
+
+    Returns `(recent, stale, missing_published_at)`.
+    """
+    cutoff = _freshness_cutoff(date_str, max_age_days)
+    recent: list[Candidate] = []
+    stale: list[Candidate] = []
+    missing: list[Candidate] = []
+    for candidate in candidates:
+        published = parse_published_at(candidate.published_at)
+        if published is None:
+            missing.append(candidate)
+        elif published < cutoff:
+            stale.append(candidate)
+        else:
+            recent.append(candidate)
+    return recent, stale, missing
 
 
 def init_state_db(db_path: Path) -> None:
@@ -483,7 +534,13 @@ def rank_candidates(candidates: list[Candidate], top_n: int = 15) -> list[Candid
     """Score and rank candidates, return top N."""
     for c in candidates:
         c.raw_score = score_text(c.text)
-    candidates.sort(key=lambda c: c.raw_score, reverse=True)
+    candidates.sort(
+        key=lambda c: (
+            c.raw_score,
+            parse_published_at(c.published_at) or dt.datetime.min.replace(tzinfo=UTC),
+        ),
+        reverse=True,
+    )
     return candidates[:top_n]
 
 
@@ -634,6 +691,8 @@ def _validate_glm_items(items: list[dict], candidates: list[Candidate]) -> list[
             "hotness": str(item.get("hotness") or item.get("热度") or "⭐3"),
             "tweet_url": url,
         }
+        if candidate and getattr(candidate, "images", None):
+            repaired["images"] = candidate.images
         if not repaired["key_points"]:
             repaired["key_points"] = [repaired["summary"][:80]]
         valid.append(repaired)
@@ -664,11 +723,21 @@ def local_heuristic_analysis(candidates: list[Candidate], top_n: int = 15) -> di
     }
 
 
-def analyze_with_glm(candidates: list[Candidate], top_n: int = 15) -> dict[str, Any]:
+def analyze_with_glm(candidates: list[Candidate], top_n: int = 15, images_dir: Path | None = None) -> dict[str, Any]:
     """Analyze top candidates with GLM-5.1. Returns analysis result or degraded fallback."""
     top = rank_candidates(candidates, top_n)
     if not top:
         return {"analysis_status": "empty", "items": [], "model": "none"}
+        
+    if images_dir:
+        for c in top:
+            if getattr(c, "external_links", None):
+                ext_text, imgs = fetch_external_article(c.external_links[0], images_dir)
+                if ext_text:
+                    c.external_text = ext_text
+                    c.text += f"\n\n[External Content Snippet]:\n{ext_text}"
+                if imgs:
+                    c.images = imgs
 
     # Build prompt
     items_text = "\n\n".join(
@@ -1027,6 +1096,12 @@ def render_digest_md(analysis: dict, date_str: str) -> str:
         lines.append("")
         lines.append(f"**摘要**: {item.get('summary', '')}")
         lines.append("")
+        images = item.get("images", [])
+        if images:
+            lines.append("**相关图片**:")
+            for img in images:
+                lines.append(f"![img](file://{img})")
+            lines.append("")
         kp = item.get("key_points", [])
         if kp:
             lines.append("**要点**:")
@@ -1062,11 +1137,15 @@ def render_digest_html(analysis: dict, date_str: str) -> str:
     rows = ""
     for idx, item in enumerate(items):
         row_bg = "background:#fbf7ef;" if idx % 2 else ""
+        images_html = ""
+        if item.get('images'):
+            images_html = "<br>".join(f'<img src="file://{_h(img)}" style="max-height:100px; margin-top:5px; border-radius:4px;">' for img in item.get('images', []))
+            
         rows += f"""<tr>
 <td style="border-bottom:1px solid #eee3d3;padding:9px;text-align:left;vertical-align:top;{row_bg}">{_h(item.get('handle',''))}</td>
 <td style="border-bottom:1px solid #eee3d3;padding:9px;text-align:left;vertical-align:top;{row_bg}">{_h(item.get('type',''))}</td>
 <td style="border-bottom:1px solid #eee3d3;padding:9px;text-align:left;vertical-align:top;{row_bg}"><a style="color:#0f766e;text-decoration:none" href="{_h(item.get('tweet_url',''))}">{_h(item.get('title',''))}</a></td>
-<td style="border-bottom:1px solid #eee3d3;padding:9px;text-align:left;vertical-align:top;{row_bg}">{_h(item.get('summary','')[:100])}</td>
+<td style="border-bottom:1px solid #eee3d3;padding:9px;text-align:left;vertical-align:top;{row_bg}">{_h(item.get('summary','')[:100])}<br>{images_html}</td>
 <td style="border-bottom:1px solid #eee3d3;padding:9px;text-align:left;vertical-align:top;{row_bg}">{_h(item.get('hotness',''))}</td>
 </tr>\n"""
     return f"""<!DOCTYPE html>
@@ -1456,6 +1535,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     state_dir = Path(args.state_dir)
     dry_run = args.dry_run
     date_str = args.date
+    max_age_days = max(0, int(args.max_age_days))
     sleep_between_accounts = max(0.0, float(args.sleep_between_accounts))
 
     accounts = parse_accounts(accounts_path)
@@ -1494,19 +1574,29 @@ def cmd_run(args: argparse.Namespace) -> int:
         file=sys.stderr,
     )
 
-    if unique:
-        record_candidates(unique, db_path)
+    recent, stale, missing_published = filter_recent_candidates(
+        unique,
+        date_str=date_str,
+        max_age_days=max_age_days,
+    )
+    print(
+        f"Freshness gate: keep={len(recent)} stale={len(stale)} missing_published_at={len(missing_published)} cutoff_days={max_age_days}",
+        file=sys.stderr,
+    )
+
+    if recent:
+        record_candidates(recent, db_path)
 
     # Score and rank
-    top = rank_candidates(unique, top_n=15)
+    top = rank_candidates(recent, top_n=15)
 
     # GLM analysis (skip if dry-run and no candidates)
     analysis = {"analysis_status": "skipped", "items": []}
     if top and not dry_run:
-        analysis = analyze_with_glm(unique, top_n=15)
+        analysis = analyze_with_glm(recent, top_n=15)
     elif top and dry_run:
         # In dry-run, use local scoring only (no GLM/network LLM call)
-        analysis = local_heuristic_analysis(unique, top_n=15)
+        analysis = local_heuristic_analysis(recent, top_n=15)
         analysis["analysis_status"] = "dry_run_local"
     analysis["trend_analysis"] = build_trend_analysis(analysis, top)
 
@@ -1518,6 +1608,10 @@ def cmd_run(args: argparse.Namespace) -> int:
         "stats": {
             "total_collected": len(all_candidates),
             "unique_after_dedupe": len(unique),
+            "fresh_candidates": len(recent),
+            "stale_filtered": len(stale),
+            "missing_published_at_filtered": len(missing_published),
+            "max_age_days": max_age_days,
             "top_scored": len(top),
             "failures": failures[:20],
         },
@@ -1718,6 +1812,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--date", default=None, help="Override date (YYYY-MM-DD)")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--raw-dir", default=None, help="Override raw output directory")
+    parser.add_argument(
+        "--max-age-days",
+        type=int,
+        default=DEFAULT_MAX_AGE_DAYS,
+        help="Hard freshness window for candidates. Older posts are excluded from analysis.",
+    )
     parser.add_argument(
         "--sleep-between-accounts",
         type=float,

@@ -4929,6 +4929,81 @@ PLIST
     esac
     ;;
 
+  pm-fleet|builder-pool|concurrency)
+    # PM dispatch / builder pool / unified concurrency knob
+    _pm_entrypoint="$1"
+    shift
+    _pm_dispatch_py="$HARNESS_DIR/tools/pm_dispatch.py"
+    if [[ ! -f "$_pm_dispatch_py" ]]; then
+      err "pm_dispatch.py not found: $_pm_dispatch_py"; exit 1
+    fi
+    _pm_subcmd="${1:-status}"; shift || true
+    case "$_pm_subcmd" in
+      status|fleet-status)
+        if [[ "$_pm_entrypoint" == "concurrency" ]]; then
+          python3 "$_pm_dispatch_py" concurrency-status "$@"
+        else
+          python3 "$_pm_dispatch_py" fleet-status "$@"
+        fi
+        ;;
+      builder-pool-status|pool|pool-status)
+        python3 "$_pm_dispatch_py" builder-pool-status "$@"
+        ;;
+      concurrency-status|status-concurrency)
+        python3 "$_pm_dispatch_py" concurrency-status "$@"
+        ;;
+      concurrency-set|set)
+        python3 "$_pm_dispatch_py" concurrency-set "$@"
+        ;;
+      prune-rate-limits|prune|cleanup)
+        python3 "$_pm_dispatch_py" prune-rate-limits "$@"
+        ;;
+      quota-refresh|refresh-quota|quota-status)
+        python3 "$_pm_dispatch_py" quota-refresh "$@"
+        ;;
+      install-quota-refresh|install-quota-launchd)
+        bash "$HARNESS_DIR/scripts/quota-refresh-daemon.sh" install "$@"
+        ;;
+      uninstall-quota-refresh|uninstall-quota-launchd)
+        bash "$HARNESS_DIR/scripts/quota-refresh-daemon.sh" uninstall
+        ;;
+      quota-refresh-status|quota-launchd-status)
+        bash "$HARNESS_DIR/scripts/quota-refresh-daemon.sh" status
+        ;;
+      install-rate-limit-pruner|install-prune-launchd)
+        bash "$HARNESS_DIR/scripts/operator-rate-limit-pruner.sh" install "$@"
+        ;;
+      uninstall-rate-limit-pruner|uninstall-prune-launchd)
+        bash "$HARNESS_DIR/scripts/operator-rate-limit-pruner.sh" uninstall "$@"
+        ;;
+      rate-limit-pruner-status|prune-launchd-status)
+        bash "$HARNESS_DIR/scripts/operator-rate-limit-pruner.sh" status "$@"
+        ;;
+      inbox|result|complete|submit|compile-request)
+        python3 "$_pm_dispatch_py" "$_pm_subcmd" "$@"
+        ;;
+      help|--help|-h)
+        echo "Solar PM Fleet / Builder Pool"
+        echo ""
+        echo "Usage:"
+        echo "  $0 pm-fleet status"
+        echo "  $0 pm-fleet builder-pool-status [--json]"
+        echo "  $0 pm-fleet prune-rate-limits [--json]"
+        echo "  $0 pm-fleet quota-refresh [--json] [--apply]"
+        echo "  $0 pm-fleet install-quota-refresh [--interval SECONDS]"
+        echo "  $0 pm-fleet quota-refresh-status"
+        echo "  $0 pm-fleet install-rate-limit-pruner [--interval SECONDS]"
+        echo "  $0 pm-fleet rate-limit-pruner-status"
+        echo "  $0 pm-fleet uninstall-rate-limit-pruner"
+        echo "  $0 concurrency concurrency-status [--json]"
+        echo "  $0 concurrency set --level low|normal|high|burst"
+        ;;
+      *)
+        err "Unknown pm-fleet subcommand: $_pm_subcmd"; exit 1
+        ;;
+    esac
+    ;;
+
   runtime)
     # Managed Agent Runtime — session log, projection, activity, doctor
     shift

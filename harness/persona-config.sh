@@ -98,7 +98,7 @@ _configure_anthropic_persona_model() {
     claude-opus)
       model_id="$alias"
       model_flag="$(solar_model_flag "$alias")"
-      display_model="Claude Opus 4.7 (Anthropic)"
+      display_model="Claude Opus 4.8 (Anthropic)"
       ;;
     claude-sonnet)
       model_id="$alias"
@@ -283,7 +283,7 @@ get_persona_config() {
     lab-evaluator)
       cn="实验审判官"
       if _zhipu_available; then
-        model_flag="--model opus"
+        model_flag="--model claude-opus-4-8"
         base_url="${ZHIPU_BASE_URL:-}"
         auth_token="${ZHIPU_AUTH_TOKEN:-}"
         auth_source="zhipu"
@@ -301,7 +301,7 @@ get_persona_config() {
     observer)
       cn="观察者"
       if _zhipu_available; then
-        model_flag="--model opus"
+        model_flag="--model claude-opus-4-8"
         base_url="${ZHIPU_BASE_URL:-}"
         auth_token="${ZHIPU_AUTH_TOKEN:-}"
         auth_source="zhipu"
@@ -319,7 +319,7 @@ get_persona_config() {
     *)
       cn="$persona"
       if _zhipu_available; then
-        model_flag="--model opus"
+        model_flag="--model claude-opus-4-8"
         base_url="${ZHIPU_BASE_URL:-}"
         auth_token="${ZHIPU_AUTH_TOKEN:-}"
         auth_source="zhipu"

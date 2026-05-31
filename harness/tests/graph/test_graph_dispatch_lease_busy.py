@@ -753,6 +753,47 @@ def test_assigned_multi_task_shell_is_not_direct_worker(monkeypatch) -> None:
     )
 
 
+def test_stale_working_title_does_not_block_clean_idle_pane(monkeypatch) -> None:
+    monkeypatch.setattr(gnd, "_pane_hygiene_unavailable_reason", lambda pane: "")
+    monkeypatch.setattr(gnd, "read_lease", lambda pane: None)
+    monkeypatch.setattr(gnd, "_pane_tail", lambda pane: "────────────────\n● 0 tokens\n❯\u00a0\n")
+
+    reason = gnd._pane_title_active_unavailable_reason(
+        "solar-harness-lab:0.3",
+        "Builder 4 | 状态:working/pane_permissions_prompt_blocked:sprint-old",
+    )
+
+    assert reason == ""
+
+
+def test_working_title_still_blocks_when_live_lease_exists(monkeypatch) -> None:
+    monkeypatch.setattr(gnd, "_pane_hygiene_unavailable_reason", lambda pane: "")
+    monkeypatch.setattr(gnd, "read_lease", lambda pane: {"expires_at": _ts(60)})
+    monkeypatch.setattr(gnd, "_pane_tail", lambda pane: "────────────────\n● 0 tokens\n❯\u00a0\n")
+
+    reason = gnd._pane_title_active_unavailable_reason(
+        "solar-harness-lab:0.3",
+        "Builder 4 | 状态:working/active:sprint-live",
+    )
+
+    assert reason == "pane_title_active_work"
+
+
+def test_assigned_pane_recheck_ignores_own_stale_working_title_when_idle(monkeypatch) -> None:
+    monkeypatch.setattr(gnd, "_pane_hygiene_unavailable_reason", lambda pane: "")
+    monkeypatch.setattr(gnd, "read_lease", lambda pane: {"expires_at": _ts(60)})
+    monkeypatch.setattr(gnd, "_pane_title", lambda pane: "Builder 4 | 状态:working/graph_node_idle_assigned:sprint-old")
+    monkeypatch.setattr(gnd, "_pane_health", lambda pane: {})
+    monkeypatch.setattr(gnd, "_models_for_pane", lambda pane, title: ["claude-sonnet"])
+    monkeypatch.setattr(gnd, "_pane_tail", lambda pane: "────────────────\n● 0 tokens\n❯\u00a0\n")
+    monkeypatch.setattr(gnd, "_pane_cooldown_reason", lambda pane: "")
+    monkeypatch.setattr(gnd, "_multi_task_direct_dispatch_unavailable_reason", lambda pane, current_command=None: "")
+    monkeypatch.setattr(gnd, "_pane_runtime_unavailable_reason", lambda pane, title="": "")
+    monkeypatch.setattr(gnd, "_pane_unavailable_reason", lambda pane: "")
+
+    assert gnd._assigned_pane_unavailable_reason("solar-harness-lab:0.3") == ""
+
+
 def test_worker_discovery_marks_multi_task_shell_unavailable(monkeypatch) -> None:
     monkeypatch.setattr(
         gnd.subprocess,
@@ -825,8 +866,10 @@ def test_evaluator_discovery_ignores_expired_lease(monkeypatch) -> None:
     monkeypatch.setattr(gnd, "_pane_exists", lambda pane: True)
     monkeypatch.setattr(gnd, "_pane_title", lambda pane: "Evaluator 审判官 | 模型:Opus")
     monkeypatch.setattr(gnd, "read_lease", lambda pane: {"expires_at": _ts(-60)})
+    monkeypatch.setattr(gnd, "_pane_hygiene_unavailable_reason", lambda pane: "")
     monkeypatch.setattr(gnd, "_pane_unavailable_reason", lambda pane: "")
     monkeypatch.setattr(gnd, "_pane_tui_busy", lambda pane: False)
+    monkeypatch.setattr(gnd, "_pane_cooldown_reason", lambda pane: "")
     monkeypatch.setattr(gnd, "_pane_runtime_unavailable_reason", lambda pane, title="": "")
     monkeypatch.setattr(gnd, "_pane_current_command", lambda pane: "bash")
 

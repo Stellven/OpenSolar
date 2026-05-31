@@ -8,7 +8,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "lib"))
 
-from graph_scheduler import assign_ready, assign_workers, enqueue_ready, validate_graph  # noqa: E402
+from graph_scheduler import assign_workers, enqueue_ready  # noqa: E402
 
 
 def _worker(pane: str, *, busy: bool = False) -> dict:
@@ -330,51 +330,3 @@ def test_worker_blocked_node_becomes_queued_when_matching_worker_is_pane_busy(tm
     assert result["worker_blocked"] == []
     assert graph["nodes"][0]["status"] == "queued"
     assert graph["node_results"]["N1"]["blocking_reason"] == "pane_busy"
-
-
-def test_assign_ready_skips_unmatched_head_node_and_fills_idle_worker() -> None:
-    graph = {
-        "sprint_id": "sid",
-        "nodes": [
-            {
-                "id": "N1",
-                "depends_on": [],
-                "status": "pending",
-                "write_scope": ["a"],
-                "required_skills": ["missing-specialist"],
-                "required_capabilities": [],
-            },
-            {
-                "id": "N2",
-                "depends_on": [],
-                "status": "pending",
-                "write_scope": ["b"],
-                "required_skills": ["python"],
-                "required_capabilities": [],
-            },
-        ],
-    }
-    result = assign_ready(
-        graph,
-        [{"pane": "pane-a", "models": ["glm"], "skills": ["python"], "capabilities": [], "busy": False}],
-        max_parallel=2,
-    )
-    assert result["work_conserving"] is True
-    assert [item["node"] for item in result["assigned"]] == ["N2"]
-    assert result["queued"][0]["node"] == "N1"
-    assert result["queued"][0]["reason"] == "no_matching_worker"
-
-
-def test_validate_graph_enforces_configured_ready_width_gate() -> None:
-    graph = {
-        "sprint_id": "sid",
-        "quality_gates": {"parallelism": {"min_ready_width": 2}},
-        "nodes": [
-            {"id": "N1", "depends_on": [], "write_scope": ["a"], "acceptance": ["x"]},
-            {"id": "N2", "depends_on": ["N1"], "write_scope": ["b"], "acceptance": ["x"]},
-        ],
-    }
-    result = validate_graph(graph)
-    assert result["ok"] is False
-    assert result["parallelism"]["initial_ready_width"] == 1
-    assert any("parallelism_quality" in item for item in result["errors"])

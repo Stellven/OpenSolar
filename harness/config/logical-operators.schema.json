@@ -41,7 +41,10 @@
         "ArtifactCurator",
         "DeepResearchBrowser",
         "DeepResearchGemini",
-        "DeepResearchChatGPT"
+        "DeepResearchChatGPT",
+        "WebwrightPlaywright",
+        "BrowserUseMcp",
+        "YoutubeTranscriptExtractor"
       ],
       "description": "P0 logical operator types. These are abstract routing labels — never physical actor or model ids."
     },
@@ -61,7 +64,7 @@
           "description": "Minimum capability_profile scores required for actor assignment.",
           "additionalProperties": false,
           "patternProperties": {
-            "^(architecture_reasoning|code_impl|root_cause_debug|test_generation|test_execution|research_synthesis|academic_critique|browser_use|gui_use|long_context|multi_agent_coordination|speed)$": {
+            "^(architecture_reasoning|code_impl|root_cause_debug|test_generation|test_execution|research_synthesis|academic_critique|browser_use|gui_use|long_context|multi_agent_coordination|speed|data_extraction)$": {
               "type": "integer",
               "minimum": 0,
               "maximum": 5
