@@ -76,6 +76,12 @@ class TestRegexPatterns:
     def test_no_active_conversation_re_no_false_positive(self):
         assert not agy.NO_ACTIVE_CONVERSATION_RE.search("active session started successfully")
 
+    def test_placeholder_handoff_is_rejected(self):
+        assert agy.output_is_placeholder("# Handoff")
+        assert agy.output_is_placeholder("done")
+        assert agy.output_is_placeholder("I will list my current permissions to see if I can read files.")
+        assert not agy.output_is_placeholder("IMAGE_OPERATOR_SMOKE_OK: image accessible and verified.")
+
 
 # ---------------------------------------------------------------------------
 # Unit: operator_flow_control classify_failure_state
@@ -259,6 +265,17 @@ class TestMainSilentAuth:
         assert agy.main() == agy.EXIT_BOOTSTRAP_FAILED
         err = capsys.readouterr().err
         assert "bootstrap failed" in err.lower()
+
+    def test_placeholder_stdout_exits_generic_failure(self, tmp_path, monkeypatch, capsys):
+        _fake_env(tmp_path, monkeypatch)
+
+        def fake_run(cmd, lf):
+            return subprocess.CompletedProcess(cmd, 0, stdout="# Handoff\n", stderr="")
+
+        monkeypatch.setattr(agy, "run_agy_command", fake_run)
+        assert agy.main() == agy.EXIT_GENERIC_FAILURE
+        err = capsys.readouterr().err
+        assert "placeholder handoff" in err
 
 
 # ---------------------------------------------------------------------------

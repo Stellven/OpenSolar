@@ -26,6 +26,7 @@ import json
 import os
 import shlex
 import sys
+import re
 from pathlib import Path
 from typing import Any, Optional
 
@@ -215,6 +216,34 @@ def _model_route_metadata(config: dict[str, Any]) -> dict[str, str]:
         "effective_provider": effective_provider or "N/A",
         "effective_model": effective_model or "N/A",
     }
+
+
+_ANTIGRAVITY_NONFINAL_RE = re.compile(
+    r"^\s*(i\s+will|i'll|i\s+am\s+going\s+to|let\s+me|i\s+need\s+to|i'll\s+now)\b",
+    re.I,
+)
+_ANTIGRAVITY_PLACEHOLDER_RE = re.compile(r"^\s*#*\s*(handoff|completed|done)\s*#*\s*$", re.I)
+
+
+def _antigravity_output_is_nonfinal(log_lines: list[str]) -> bool:
+    content = [
+        line.strip()
+        for line in log_lines
+        if line.strip() and not line.startswith("[solar-harness agy-multimodal] cmd=")
+    ]
+    if not content:
+        return True
+    first = content[0]
+    joined = " ".join(content)
+    if len(content) == 1 and _ANTIGRAVITY_PLACEHOLDER_RE.match(first):
+        return True
+    if _ANTIGRAVITY_NONFINAL_RE.match(first) and not re.search(
+        r"\b(completed|verified|done|image_unsupported|smoke_ok|handoff)\b",
+        joined,
+        re.I,
+    ):
+        return True
+    return False
 
 
 def _dispatch_file_for_env(result_dir: Path, envelope: dict[str, Any]) -> Path | None:
@@ -867,6 +896,15 @@ def cmd_daemon(args: argparse.Namespace) -> int:
                 _state["current_state"] = "draining"
 
             finished_at: str = _now_utc()
+
+            if (
+                result_status == "completed"
+                and "antigravity" in operator_id.lower()
+                and _antigravity_output_is_nonfinal(log_lines)
+            ):
+                log_lines.append("[ERROR] Antigravity output was placeholder/non-final; refusing false completed status")
+                result_status = "failed_nonfinal_output"
+                exit_code = exit_code or 65
 
             if result_status == "completed" and pm_result_path is not None:
                 if not pm_result_path.exists():
