@@ -49,6 +49,8 @@ except Exception:  # pragma: no cover
 
 # ── Paths ──
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", str(Path.home() / ".solar" / "harness")))
+if str(HARNESS_DIR / "lib") not in sys.path:
+    sys.path.insert(0, str(HARNESS_DIR / "lib"))
 SPRINTS_DIR = HARNESS_DIR / "sprints"
 REPORTS_DIR = HARNESS_DIR / "reports"
 SESSIONS_DIR = HARNESS_DIR / "sessions"
@@ -78,6 +80,11 @@ THUNDEROMLX_BASE_URL = os.environ.get("THUNDEROMLX_BASE_URL", "http://127.0.0.1:
 THUNDEROMLX_AUTH_TOKEN = os.environ.get("THUNDEROMLX_AUTH_TOKEN", "local-thunderomlx")
 THUNDEROMLX_START_SCRIPT = Path(os.environ.get("THUNDEROMLX_START_SCRIPT", str(HARNESS_DIR / "scripts" / "thunderomlx_start_8002.sh")))
 THUNDEROMLX_TMUX_SESSION = os.environ.get("THUNDEROMLX_TMUX_SESSION", "thunderomlx-qwen36")
+
+try:
+    from pane_overlay_state import pane_overlay_detail as shared_pane_overlay_detail
+except Exception:  # pragma: no cover
+    shared_pane_overlay_detail = None  # type: ignore
 THUNDEROMLX_LOG_FILE = Path(os.environ.get("THUNDEROMLX_LOG_FILE", str(HARNESS_DIR / "logs" / "thunderomlx-8002.log")))
 THUNDEROMLX_STATUS_START_LOG = HARNESS_DIR / "logs" / "thunderomlx-start-from-status.log"
 THUNDEROMLX_STATUS_CACHE_TTL_SECONDS = 3.0
@@ -3465,6 +3472,59 @@ def _run_tmux(args: list, timeout: float = 0.8) -> str:
         return ""
 
 
+PANE_OVERLAY_PATTERNS = {
+    "survey": re.compile(r"Do you want to proceed\?|是否继续|survey_blocked", re.I),
+    "permission": re.compile(r"permissions?_prompt_blocked|pane_permissions_prompt_blocked|allow this command|approve|approval required", re.I),
+    "queued_input": re.compile(r"ready_for_builder|ready_for_evaluator|run the evaluator on|graph_node_idle_assigned", re.I),
+}
+
+
+def _pane_live_prompt_index(lines: list[str], footer_at: int | None = None) -> int:
+    footer_at = len(lines) if footer_at is None else footer_at
+    prompt_indexes = [idx for idx, line in enumerate(lines) if "❯" in line]
+    for idx in reversed(prompt_indexes):
+        if idx <= footer_at and footer_at - idx <= 8:
+            return idx
+    return -1
+
+
+def _pane_overlay_detail(tail: str) -> dict:
+    """Separate active TUI overlays from stale scrollback residue.
+
+    A survey/permission prompt is only blocking when it appears after the
+    current live prompt/footer. If Claude Code has already returned to a fresh
+    prompt, the old text is scrollback and must not become a cooldown warning.
+    """
+    if shared_pane_overlay_detail:
+        return dict(shared_pane_overlay_detail(tail))
+    lines = str(tail or "").splitlines()
+    if not lines:
+        return {"state": "none", "type": "", "detail": ""}
+    footer_re = re.compile(r"⏵.*(auto|accept edits|edit|bypass permissions).*mode on|shift\+tab|esc to interrupt", re.I)
+    footer_indexes = [idx for idx, line in enumerate(lines) if footer_re.search(line)]
+    footer_at = footer_indexes[-1] if footer_indexes else len(lines)
+    live_prompt_at = _pane_live_prompt_index(lines, footer_at)
+    newest_match: tuple[int, str, str] | None = None
+    for idx, line in enumerate(lines):
+        for kind, pattern in PANE_OVERLAY_PATTERNS.items():
+            if pattern.search(line):
+                newest_match = (idx, kind, line.strip())
+    if newest_match is None:
+        return {"state": "none", "type": "", "detail": ""}
+    match_at, kind, detail = newest_match
+    if live_prompt_at >= 0 and live_prompt_at > match_at:
+        return {
+            "state": "stale_scrollback_ignored",
+            "type": kind,
+            "detail": detail[:240],
+        }
+    return {
+        "state": "pane_overlay_blocked",
+        "type": kind,
+        "detail": detail[:240],
+    }
+
+
 def _runtime_from_tail(tail: str) -> str:
     """Classify pane runtime from current Claude Code prompt/footer.
 
@@ -3472,6 +3532,9 @@ def _runtime_from_tail(tail: str) -> str:
     already returned to the prompt. Treat the current prompt/footer as stronger
     evidence than historical activity text.
     """
+    overlay = _pane_overlay_detail(tail)
+    if overlay.get("state") == "pane_overlay_blocked":
+        return "pane_overlay_blocked"
     lines = tail.splitlines()
     footer_re = re.compile(r"⏵.*(auto|accept edits|edit|bypass permissions).*mode on|shift\+tab|esc to interrupt", re.I)
     footer_indexes = [idx for idx, line in enumerate(lines) if footer_re.search(line)]
@@ -3739,6 +3802,7 @@ def _pane_snapshot(target: str, role: str, assignment: str = "", capability_heal
             "host_role": _host_role_label(hygiene_entry.get("pane_role") or ""),
             "hygiene_state": str(hygiene_entry.get("state") or "missing"),
             "runtime_state": "missing",
+            "pane_overlay": {"state": "none", "type": "", "detail": ""},
             "assignment": assignment or "",
             "assignment_meta": assignment_meta,
             "artifact": _artifact_for_assignment(role, assignment),
@@ -3747,7 +3811,8 @@ def _pane_snapshot(target: str, role: str, assignment: str = "", capability_heal
             "capability_health": health,
         }
     title = _run_tmux(["display-message", "-p", "-t", target, "#{pane_title}"])
-    tail = _run_tmux(["capture-pane", "-t", target, "-p", "-S", "-8"], timeout=1.0)
+    tail = _run_tmux(["capture-pane", "-t", target, "-p", "-S", "-40"], timeout=1.0)
+    pane_overlay = _pane_overlay_detail(tail)
     host_role = hygiene_entry.get("pane_role") or _infer_host_role(target, title, str(role or "").lower())
     return {
         "target": target,
@@ -3755,6 +3820,7 @@ def _pane_snapshot(target: str, role: str, assignment: str = "", capability_heal
         "host_role": _host_role_label(str(host_role or "")),
         "hygiene_state": str(hygiene_entry.get("state") or "unknown"),
         "runtime_state": _runtime_from_tail(tail),
+        "pane_overlay": pane_overlay,
         "assignment": assignment or "",
         "assignment_meta": assignment_meta,
         "artifact": _artifact_for_assignment(role, assignment),
@@ -3774,6 +3840,67 @@ def _main_screen(capability_health=None, include_model_call: bool = True) -> dic
     return {
         "note": "host_role/hygiene come from pane-hygiene registry; runtime_state, assignment, and artifact are separate signals.",
         "panes": panes,
+    }
+
+
+def _pane_warning_breakdown(main_screen: dict, lab_screen: dict, multi_task_pool: dict, physical_operators: dict) -> dict:
+    """Expose why the status page is warning without mixing panes and operators."""
+    role_pools = physical_operators.get("role_pools") if isinstance(physical_operators, dict) else {}
+    operator_counts = {
+        "true_quota_cooldown": 0,
+        "stale_local_cooldown": 0,
+        "output_token_limit": 0,
+        "cooldown_unclassified": 0,
+    }
+    for pool in (role_pools or {}).values():
+        block_counts = pool.get("block_counts") if isinstance(pool, dict) else {}
+        for key in operator_counts:
+            operator_counts[key] += int(block_counts.get(key) or 0)
+
+    panes = []
+    for screen in (main_screen, lab_screen):
+        if isinstance(screen, dict):
+            panes.extend(screen.get("panes") or [])
+    pane_overlay_blocked = 0
+    stale_scrollback_ignored = 0
+    overlay_samples = []
+    stale_samples = []
+    for pane in panes:
+        overlay = pane.get("pane_overlay") if isinstance(pane, dict) else {}
+        state = str((overlay or {}).get("state") or "")
+        if state == "pane_overlay_blocked":
+            pane_overlay_blocked += 1
+            if len(overlay_samples) < 4:
+                overlay_samples.append({
+                    "target": pane.get("target") or "",
+                    "role": pane.get("role") or "",
+                    "type": (overlay or {}).get("type") or "",
+                    "detail": (overlay or {}).get("detail") or "",
+                })
+        elif state == "stale_scrollback_ignored":
+            stale_scrollback_ignored += 1
+            if len(stale_samples) < 4:
+                stale_samples.append({
+                    "target": pane.get("target") or "",
+                    "role": pane.get("role") or "",
+                    "type": (overlay or {}).get("type") or "",
+                    "detail": (overlay or {}).get("detail") or "",
+                })
+
+    operator_cooldown = (
+        operator_counts["true_quota_cooldown"]
+        + operator_counts["stale_local_cooldown"]
+        + operator_counts["output_token_limit"]
+        + operator_counts["cooldown_unclassified"]
+    )
+    return {
+        "operator_cooldown": operator_cooldown,
+        "operator_cooldown_breakdown": operator_counts,
+        "pane_overlay_blocked": pane_overlay_blocked + int((multi_task_pool or {}).get("pane_overlay_blocked") or 0),
+        "stale_scrollback_ignored": stale_scrollback_ignored + int((multi_task_pool or {}).get("stale_scrollback_ignored") or 0),
+        "overlay_samples": overlay_samples,
+        "stale_samples": stale_samples,
+        "note": "operator cooldown comes from registry/lease; pane overlay comes from live TUI prompt; stale scrollback is counted but ignored as a blocker.",
     }
 
 
@@ -4766,6 +4893,58 @@ def _operator_roles(cfg: dict) -> list[str]:
     return [role or "unknown"]
 
 
+def _operator_capacity_class(cfg: dict) -> str:
+    pane_binding = str(cfg.get("pane") or cfg.get("target_pane") or "").strip()
+    if pane_binding.startswith("solar-harness-multi-task:"):
+        return "elastic"
+    if pane_binding:
+        return "dedicated"
+    return "headless"
+
+
+OUTPUT_TOKEN_LIMIT_RE = re.compile(r"response exceeded .*output token maximum|CLAUDE_CODE_MAX_OUTPUT_TOKENS", re.I)
+TRUE_QUOTA_RE = re.compile(
+    r"You(?:'|’)ve hit .*limit|RESOURCE_EXHAUSTED|rate[- ]?limit|\b429\b|too many requests|quota(?:\s+exhausted)?|resets?\s+",
+    re.I,
+)
+
+
+def _operator_block_detail(item: dict) -> str:
+    state = str(item.get("runtime_state") or "").lower()
+    source = str(item.get("runtime_state_source") or "").lower()
+    status = item.get("status_override") if isinstance(item.get("status_override"), dict) else {}
+    health = item.get("latest_health") if isinstance(item.get("latest_health"), dict) else {}
+    text = "\n".join(
+        str(value or "")
+        for value in (
+            status.get("reason"),
+            status.get("evidence"),
+            status.get("last_error"),
+            status.get("log_tail"),
+            health.get("reason"),
+            health.get("error"),
+            item.get("quota_guard_state"),
+        )
+    )
+    if state == "disabled" or not item.get("enabled"):
+        return "disabled"
+    if state in {"leased", "running", "draining"}:
+        return "busy"
+    if state == "auth_expired":
+        return "auth_expired"
+    if OUTPUT_TOKEN_LIMIT_RE.search(text):
+        return "output_token_limit"
+    if state in {"cooldown", "quota_exhausted"}:
+        if source == "operator_status" and not str(status.get("reason") or status.get("evidence") or "").strip():
+            return "stale_local_cooldown"
+        if source == "registry_quota" or TRUE_QUOTA_RE.search(text):
+            return "true_quota_cooldown"
+        return "cooldown_unclassified"
+    if state not in {"idle", ""}:
+        return state
+    return "none"
+
+
 def _role_pool_summary(items: list[dict], role: str) -> dict:
     role_items = [item for item in items if role in (item.get("roles") or [])]
     counts = {
@@ -4778,13 +4957,27 @@ def _role_pool_summary(items: list[dict], role: str) -> dict:
         "disabled": 0,
         "other_blocked": 0,
     }
+    block_counts = {
+        "true_quota_cooldown": 0,
+        "stale_local_cooldown": 0,
+        "output_token_limit": 0,
+        "disabled": 0,
+        "busy": 0,
+        "auth_expired": 0,
+        "cooldown_unclassified": 0,
+        "other": 0,
+    }
     dispatchable = 0
     blocked = 0
     next_available: str | None = None
+    capacity_mix = {"dedicated": 0, "elastic": 0, "headless": 0}
     for item in role_items:
         state = str(item.get("runtime_state") or "unknown")
         enabled = bool(item.get("enabled"))
         available = bool(item.get("available"))
+        capacity_class = str(item.get("capacity_class") or "headless")
+        if capacity_class in capacity_mix:
+            capacity_mix[capacity_class] += 1
         if state in counts:
             counts[state] += 1
         elif state != "idle":
@@ -4793,6 +4986,11 @@ def _role_pool_summary(items: list[dict], role: str) -> dict:
             dispatchable += 1
         else:
             blocked += 1
+            detail = str(item.get("block_detail") or _operator_block_detail(item))
+            if detail in block_counts:
+                block_counts[detail] += 1
+            else:
+                block_counts["other"] += 1
         reset_at = str(item.get("reset_at") or "")
         if state in {"cooldown", "quota_exhausted", "auth_expired"} and reset_at:
             if next_available is None or reset_at < next_available:
@@ -4807,6 +5005,8 @@ def _role_pool_summary(items: list[dict], role: str) -> dict:
         "dispatchable": dispatchable,
         "blocked": blocked,
         "counts": counts,
+        "block_counts": block_counts,
+        "capacity_mix": capacity_mix,
         "next_available_at": next_available or "",
         "next_available_eta": _status_reset_eta(next_available or ""),
         "items": role_items,
@@ -5229,6 +5429,8 @@ def _physical_operator_summary(limit: int = 8) -> dict:
                 "operator_id": operator_id,
                 "role": role,
                 "roles": op_roles,
+                "pane_binding": str(cfg.get("pane") or cfg.get("target_pane") or ""),
+                "capacity_class": _operator_capacity_class(cfg),
                 "backend": str(cfg.get("backend") or "unknown"),
                 "provider": provider,
                 "vendor": _operator_vendor(provider),
@@ -5269,7 +5471,9 @@ def _physical_operator_summary(limit: int = 8) -> dict:
                 ),
                 "expires_at": str(lease.get("expires_at") or reset_at or ""),
                 "latest_health": health,
+                "status_override": status_override,
             })
+            items[-1]["block_detail"] = _operator_block_detail(items[-1])
 
         recent_results = _recent_operator_results(results_dir, multi_task_dir, limit=limit)
 
@@ -5277,11 +5481,11 @@ def _physical_operator_summary(limit: int = 8) -> dict:
             runtime_state = str(item.get("runtime_state") or "")
             enabled = bool(item.get("enabled"))
             available = bool(item.get("available"))
-            if runtime_state in {"leased", "running", "draining"}:
-                return (0, 0, str(item.get("operator_id") or ""))
-            if runtime_state in {"cooldown", "quota_exhausted", "auth_expired", "error"}:
-                return (1, 0, str(item.get("operator_id") or ""))
             if enabled and available and runtime_state == "idle":
+                return (0, 0, str(item.get("operator_id") or ""))
+            if runtime_state in {"leased", "running", "draining"}:
+                return (1, 0, str(item.get("operator_id") or ""))
+            if runtime_state in {"cooldown", "quota_exhausted", "auth_expired", "error"}:
                 return (2, 0, str(item.get("operator_id") or ""))
             if runtime_state == "disabled" or not enabled:
                 return (3, 0, str(item.get("operator_id") or ""))
@@ -5562,7 +5766,8 @@ def _multi_task_shell_panes_info() -> list:
         task_meta = latest_by_window.get(w_name) or {}
         task_status = str(task_meta.get("status") or "").lower()
         
-        status = _headless_pane_status(p_cmd, p_title)
+        tail = _run_tmux(["capture-pane", "-t", pane_target, "-p", "-S", "-40"], timeout=1.0)
+        status = _headless_pane_status(p_cmd, p_title, tail)
         if lease:
             status = "leased"
         elif task_status in {"completed", "completed_aligned", "failed", "failed_missing_handoff", "cancelled", "reaped", "reaped_stale_active"} or task_status.startswith("reaped"):
@@ -5604,9 +5809,11 @@ def _builder_lab_panes_info() -> list:
         if len(parts) < 8:
             continue
         w_idx, w_name, w_active, p_idx, p_cmd, p_title, p_active, p_id = parts[:8]
-        status = _headless_pane_status(p_cmd, p_title)
+        pane_target = f"{session}:0.{p_idx}"
+        tail = _run_tmux(["capture-pane", "-t", pane_target, "-p", "-S", "-40"], timeout=1.0)
+        status = _headless_pane_status(p_cmd, p_title, tail)
         panes_list.append({
-            "pane": f"{session}:0.{p_idx}",
+            "pane": pane_target,
             "session": session,
             "pool": "builder-lab",
             "operator_type": _pane_operator_type("builder-lab", p_cmd),
@@ -5632,11 +5839,20 @@ def _multi_task_panes_info() -> list:
     return _builder_lab_panes_info() + _multi_task_shell_panes_info()
 
 
-def _headless_pane_status(current_command: str, title: str) -> str:
+def _headless_pane_status(current_command: str, title: str, tail: str = "") -> str:
     cmd = str(current_command or "").strip().lower()
     title_l = str(title or "").strip().lower()
     if cmd and cmd not in {"zsh", "bash", "sh", "fish"}:
         return "running"
+    if tail:
+        bottom = "\n".join(str(tail or "").splitlines()[-40:])
+        if re.search(
+            r"Cooking…|Misting…|Thinking|Cogitating|Churning|Ruminating|"
+            r"[·✳✶✽✢]\s+[A-Za-z][A-Za-z-]*…",
+            bottom,
+            re.I,
+        ) and "esc to interrupt" in bottom.lower():
+            return "running"
     if any(token in title_l for token in ("auth_expired", "quota_exhausted")):
         return "auth_expired"
     if "cooldown" in title_l:
@@ -5648,7 +5864,17 @@ def _headless_pane_status(current_command: str, title: str) -> str:
         "human_required",
         "blocked",
     )):
-        return "blocked"
+        if tail:
+            overlay = _pane_overlay_detail(tail)
+            if overlay.get("state") == "pane_overlay_blocked":
+                return "pane_overlay_blocked"
+            if overlay.get("state") == "stale_scrollback_ignored":
+                return "stale_scrollback_ignored"
+            if cmd in {"zsh", "bash", "sh", "fish", ""}:
+                return "idle"
+        return "pane_overlay_blocked"
+    if "stale_scrollback_ignored" in title_l:
+        return "stale_scrollback_ignored"
     if any(token in title_l for token in (
         "leased",
         "assigned",
@@ -5680,6 +5906,8 @@ def _multi_task_pane_pool_summary(panes: list[dict]) -> dict:
         "leased": 0,
         "running": 0,
         "blocked": 0,
+        "pane_overlay_blocked": 0,
+        "stale_scrollback_ignored": 0,
         "auth_expired": 0,
         "cooldown": 0,
     }
@@ -5911,15 +6139,19 @@ def _status_payload(limit: int = 50, sprint_id: str = "") -> dict:
     runtime_interfaces = _runtime_interfaces_status(current.get("sprint_id", ""))
     capability_health = _capability_health_summary(runtime_interfaces)
     multi_task_panes = _multi_task_panes_info()
+    main_screen = _main_screen(capability_health, include_model_call=False)
+    lab_screen = _lab_screen(capability_health, include_model_call=False)
+    multi_task_pool = _multi_task_pane_pool_summary(multi_task_panes)
+    physical_operators = _physical_operator_summary()
     payload = {
         "current_sprint": current,
         "requested_sprint_id": requested_sid,
         "task_graph_gate_audit": gate_audit_summary,
         "panes": _pane_info(),
-        "main_screen": _main_screen(capability_health, include_model_call=False),
-        "lab_screen": _lab_screen(capability_health, include_model_call=False),
+        "main_screen": main_screen,
+        "lab_screen": lab_screen,
         "multi_task_panes": multi_task_panes,
-        "multi_task_pane_pool": _multi_task_pane_pool_summary(multi_task_panes),
+        "multi_task_pane_pool": multi_task_pool,
         "thunderomlx": _thunderomlx_status(),
         "recent_events": _read_jsonl(ALL_EVENTS, limit=limit, filter_synthetic=True),
         "kpi": _kpi(),
@@ -5938,7 +6170,8 @@ def _status_payload(limit: int = 50, sprint_id: str = "") -> dict:
         "autoresearch_impact": _autoresearch_impact_summary(),
         "meta_harness": _meta_harness_summary(),
         "pm_dispatches": _pm_dispatch_summary(),
-        "physical_operators": _physical_operator_summary(),
+        "physical_operators": physical_operators,
+        "warning_breakdown": _pane_warning_breakdown(main_screen, lab_screen, multi_task_pool, physical_operators),
         "contract_summary": _final_contract_summary_status(),
         "requirement_coverage": _requirement_coverage_summary(requested_sid or current.get("sprint_id", "")),
         "status_cache": "miss",
@@ -7350,26 +7583,41 @@ function renderPhysicalOperators(data, compact) {
       '</tr>').join('') + '</table>' : '<div class="muted" style="margin-top:.8rem">Recent Results: none</div>');
 }
 
-function renderRolePools(data, compact) {
+function renderRolePools(data, compact, root) {
   data = data || {};
+  root = root || {};
   const pools = data.role_pools || {};
   const roles = ['planner', 'evaluator'];
   if (!roles.some(role => pools[role])) {
     return '<div class="muted">暂无 planner/evaluator pool 数据。</div>';
   }
+  const wb = root.warning_breakdown || {};
+  const wbc = wb.operator_cooldown_breakdown || {};
+  const breakdownHtml = '<div class="muted" style="margin:0 0 .65rem 0;">warn拆分：operator cooldown ' + esc(wb.operator_cooldown || 0) +
+    '（真实quota ' + esc(wbc.true_quota_cooldown || 0) +
+    ' / stale本地 ' + esc(wbc.stale_local_cooldown || 0) +
+    ' / 输出上限 ' + esc(wbc.output_token_limit || 0) +
+    '） · pane overlay blocked ' + esc(wb.pane_overlay_blocked || 0) +
+    ' · stale scrollback ignored ' + esc(wb.stale_scrollback_ignored || 0) + '</div>';
   const poolCard = (role) => {
     const p = pools[role] || {};
     const items = p.items || [];
     const blocked = Number(p.blocked || 0);
     const dispatchable = Number(p.dispatchable || 0);
+    const mix = p.capacity_mix || {};
+    const dedicated = Number(mix.dedicated || 0);
+    const elastic = Number(mix.elastic || 0);
+    const headless = Number(mix.headless || 0);
     const status = p.status || (dispatchable > 0 ? 'ok' : 'blocked');
     const color = dispatchable > 0 ? '#10b981' : '#fbbf24';
     const line = items.slice(0, compact ? 3 : 8).map(item => {
       const state = item.runtime_state || 'unknown';
       const eta = item.reset_eta ? ' · ' + item.reset_eta : '';
+      const capacity = item.capacity_class || 'headless';
+      const capacityLabel = capacity === 'elastic' ? 'elastic' : capacity === 'dedicated' ? 'dedicated' : 'headless';
       return '<div class="research-path"><span class="tech-id">' + esc(item.operator_id || '-') + '</span><span>' +
         statusBadge(state === 'idle' ? 'ok' : state === 'disabled' ? 'error' : 'warn') +
-        '<span class="muted" style="margin-left:.35rem;">' + esc(state + eta) + '</span></span></div>';
+        '<span class="muted" style="margin-left:.35rem;">' + esc(capacityLabel + ' · ' + state + eta) + '</span></span></div>';
     }).join('') || '<div class="muted">无该角色算子。</div>';
     return '<div class="task-block">' +
       '<div class="task-head"><div class="task-title">' + esc(role) + '</div><div>' + statusBadge(status === 'ok' ? 'ok' : 'warn') + '</div></div>' +
@@ -7378,15 +7626,23 @@ function renderRolePools(data, compact) {
         '<div class="mini-metric"><div class="kv-label">阻塞</div><span class="num">' + esc(blocked) + '</span></div>' +
         '<div class="mini-metric"><div class="kv-label">下次可用</div><span class="num">' + esc(p.next_available_eta || 'N/A') + '</span></div>' +
       '</div>' +
+      '<div class="muted" style="margin-top:.45rem;">执行面真值来自 operator registry + runtime lease，不是四分屏 pane 数量。</div>' +
+      '<div class="muted" style="margin-top:.25rem;">dedicated ' + esc(dedicated) +
+        ' · elastic ' + esc(elastic) +
+        ' · headless ' + esc(headless) + '</div>' +
       '<div class="muted" style="margin-top:.45rem;">idle ' + esc((p.counts || {}).idle || 0) +
         ' · running ' + esc((p.counts || {}).running || 0) +
         ' · cooldown ' + esc((p.counts || {}).cooldown || 0) +
         ' · auth ' + esc((p.counts || {}).auth_expired || 0) + '</div>' +
+      '<div class="muted" style="margin-top:.25rem;">真实quota ' + esc((p.block_counts || {}).true_quota_cooldown || 0) +
+        ' · stale本地 ' + esc((p.block_counts || {}).stale_local_cooldown || 0) +
+        ' · 输出上限 ' + esc((p.block_counts || {}).output_token_limit || 0) +
+        ' · disabled ' + esc((p.block_counts || {}).disabled || 0) + '</div>' +
       (compact ? '' : '<div style="margin-top:.6rem;">' + line + '</div>') +
       (compact && dispatchable === 0 ? '<div class="warn" style="margin-top:.45rem;">池子无可调度算子；planner/evaluator handoff 会排队，不会退回固定 pane。</div>' : '') +
       '</div>';
   };
-  return '<div class="research-shell"><div class="research-overview" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">' +
+  return '<div class="research-shell">' + breakdownHtml + '<div class="research-overview" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">' +
     roles.map(poolCard).join('') +
     '</div></div>';
 }
@@ -9045,7 +9301,7 @@ function render(data) {
   document.getElementById('meta-harness-card').innerHTML = renderMetaHarness(data.meta_harness || {}, false);
   document.getElementById('overview-pm-dispatch').innerHTML = renderPmDispatches(data.pm_dispatches || {}, true);
   document.getElementById('pm-dispatch-card').innerHTML = renderPmDispatches(data.pm_dispatches || {}, false);
-  document.getElementById('overview-role-pools').innerHTML = renderRolePools(data.physical_operators || {}, true);
+  document.getElementById('overview-role-pools').innerHTML = renderRolePools(data.physical_operators || {}, true, data);
   document.getElementById('overview-physical-operators').innerHTML = renderPhysicalOperators(data.physical_operators || {}, true);
   document.getElementById('physical-operators-card').innerHTML = renderPhysicalOperators(data.physical_operators || {}, false);
   document.getElementById('overview-contract-summary').innerHTML = renderContractSummary(data.contract_summary || {}, true);
