@@ -436,6 +436,26 @@ def _remove_profile_restore_artifacts(root: Path, profile_directory: str) -> Non
                     pass
 
 
+def _browser_profile_copy_ignore(_dir: str, names: list[str]) -> set[str]:
+    # Chrome extension assets can change while the live profile is being copied.
+    # They are not required for ChatGPT auth/session reuse and have repeatedly
+    # caused flaky FileNotFoundError during Browser Agent profile staging.
+    ignored = {
+        "Extensions",
+        "Extension State",
+        "Extension Rules",
+        "Extension Scripts",
+        "Extension Cookies",
+        "ShaderCache",
+        "GrShaderCache",
+        "GPUCache",
+        "Code Cache",
+        "Cache",
+        "DawnCache",
+    }
+    return {name for name in names if name in ignored}
+
+
 def refresh_browser_profile_cache(user_data_dir: str | Path | None, profile_directory: str | None) -> Optional[Path]:
     if not user_data_dir or not profile_directory:
         return None
@@ -450,7 +470,7 @@ def refresh_browser_profile_cache(user_data_dir: str | Path | None, profile_dire
     cache_root.mkdir(parents=True, exist_ok=True)
     if cache_profile.exists():
         shutil.rmtree(cache_profile, ignore_errors=True)
-    shutil.copytree(source_profile, cache_profile, dirs_exist_ok=True)
+    shutil.copytree(source_profile, cache_profile, dirs_exist_ok=True, ignore=_browser_profile_copy_ignore)
     local_state_src = source_root / "Local State"
     if local_state_src.exists():
         shutil.copy(local_state_src, cache_root / "Local State")
@@ -497,7 +517,7 @@ def _stage_browser_profile(user_data_dir: str | Path | None, profile_directory: 
 
     staged_root = Path(tempfile.mkdtemp(prefix=_STAGED_PROFILE_PREFIX))
     staged_profile = staged_root / profile_directory
-    shutil.copytree(source_profile, staged_profile, dirs_exist_ok=True)
+    shutil.copytree(source_profile, staged_profile, dirs_exist_ok=True, ignore=_browser_profile_copy_ignore)
 
     local_state_src = source_root / "Local State"
     if local_state_src.exists():
