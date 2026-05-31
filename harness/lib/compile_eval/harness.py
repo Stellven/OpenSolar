@@ -18,8 +18,11 @@ from __future__ import annotations
 import dataclasses
 import datetime
 import datetime as _dt
+import importlib.util
 import json
+import sys
 import uuid
+from pathlib import Path
 from typing import Any, Optional
 
 from .dimensions import evaluate as _evaluate_dimensions
@@ -49,6 +52,81 @@ class CompileEvalResult:
     hard_validators_passed: bool
     hard_validator_failures: list[str]
     hard_validator_details: dict[str, tuple[bool, str]]
+    compile_artifacts: dict[str, Any] = dataclasses.field(default_factory=dict)
+    side_info: dict[str, Any] = dataclasses.field(default_factory=dict)
+
+
+def _load_codex_pm_router_module():
+    tools_dir = Path(__file__).resolve().parents[2] / "tools"
+    module_path = tools_dir / "codex_pm_router.py"
+    if "compile_eval_codex_pm_router" in sys.modules:
+        return sys.modules["compile_eval_codex_pm_router"]
+    spec = importlib.util.spec_from_file_location("compile_eval_codex_pm_router", module_path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    sys.modules["compile_eval_codex_pm_router"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _profile_policy_params(profile: dict[str, Any], key: str) -> dict[str, Any]:
+    policies = profile.get("policies") if isinstance(profile.get("policies"), dict) else {}
+    policy = policies.get(key) if isinstance(policies, dict) else None
+    if not isinstance(policy, dict):
+        return {}
+    params = policy.get("params")
+    return params if isinstance(params, dict) else {}
+
+
+def _normalize_compiled_artifacts(payload: dict[str, Any], candidate_profile: dict[str, Any]) -> dict[str, Any]:
+    requirement_ir = dict(payload.get("requirement_ir") or {})
+    compiled = dict(payload.get("compiled_artifacts") or {})
+    task_dag = dict(compiled.get("task_dag") or payload.get("task_graph_skeleton") or {})
+    contract_files = compiled.get("contract_files") if isinstance(compiled.get("contract_files"), dict) else {}
+    product_contract = contract_files.get("product") if isinstance(contract_files, dict) else {}
+    product_contract = product_contract if isinstance(product_contract, dict) else {}
+    acceptance_list = list(product_contract.get("acceptance") or [])
+    acceptance_map = {
+        f"ACC-{idx + 1}": str(item)
+        for idx, item in enumerate(acceptance_list)
+        if str(item).strip()
+    }
+    contract_goal = str(product_contract.get("goal") or requirement_ir.get("normalized_goal") or "").strip()
+    traces = {
+        "planner": {"nodes": [str(node.get("id") or "") for node in (task_dag.get("nodes") or []) if str(node.get("id") or "")]},
+        "builder": {"nodes": [str(node.get("id") or "") for node in (task_dag.get("nodes") or []) if str(node.get("id") or "")]},
+        "evaluator": {"nodes": [str(node.get("id") or "") for node in (task_dag.get("nodes") or []) if str(node.get("id") or "")]},
+    }
+    return {
+        "requirement_ir": {
+            "goal": requirement_ir.get("normalized_goal") or requirement_ir.get("user_intent") or "",
+            "success_metrics": acceptance_list,
+            "non_goals": list(product_contract.get("non_goals") or []),
+            "schema_version": requirement_ir.get("schema_version", ""),
+            "source_requirement_ir": requirement_ir,
+        },
+        "contracts": {
+            "goal": contract_goal,
+            "policies": candidate_profile.get("policies", {}),
+            "acceptance": acceptance_map,
+            "manifest": compiled.get("contracts_bundle") or {},
+            "product_contract": product_contract,
+        },
+        "dag": task_dag,
+        "traces": traces,
+        "closure": compiled.get("closure_record") or {},
+        "task_dag_state": compiled.get("task_dag_state") or {},
+    }
+
+
+def _expected_case_payload(case: Any) -> dict[str, Any]:
+    return {
+        "requirement_text": getattr(case, "input", ""),
+        "expected_ir": getattr(case, "expected_ir", {}) or {},
+        "expected_contracts": getattr(case, "expected_contracts", []) or [],
+        "expected_dag": getattr(case, "expected_dag", {}) or {},
+        "sprint_id": getattr(case, "sprint_id", "") or "",
+    }
 
 
 class CompileGEPAAdapter:
@@ -85,6 +163,7 @@ class CompileGEPAAdapter:
         expected: dict[str, Any],
         *,
         golden_case_id: str = "",
+        side_info: Optional[dict[str, Any]] = None,
     ) -> CompileEvalResult:
         """Evaluate artifacts and compute ASI score + dimension breakdown.
 
@@ -122,6 +201,8 @@ class CompileGEPAAdapter:
             hard_validators_passed=hv_result.passed,
             hard_validator_failures=hv_result.failures,
             hard_validator_details=hv_result.details,
+            compile_artifacts=artifacts,
+            side_info=side_info or {},
         )
 
         # Record trace
@@ -147,6 +228,34 @@ class CompileGEPAAdapter:
 
         return result
 
+    def compile_case(
+        self,
+        candidate_profile: dict[str, Any],
+        case: Any,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Compile one golden case via the deterministic requirement compiler."""
+        router = _load_codex_pm_router_module()
+        intake_kwargs: dict[str, Any] = {
+            "text": getattr(case, "input", ""),
+            "sprint_id": getattr(case, "sprint_id", "") or "",
+            "compiler_profile": candidate_profile,
+        }
+        raw_payload = router.build_pm_intake(**intake_kwargs)
+        normalized = _normalize_compiled_artifacts(raw_payload, candidate_profile)
+        compile_side_info = {
+            "profile_id": candidate_profile.get("profile_id", ""),
+            "profile_version": candidate_profile.get("version", 0),
+            "golden_case_id": getattr(case, "sprint_id", "") or "",
+            "request_text": getattr(case, "input", ""),
+            "raw_payload_summary": {
+                "classification": raw_payload.get("classification"),
+                "canonical_request_type": raw_payload.get("canonical_request_type"),
+                "dag_variant": raw_payload.get("dag_variant"),
+                "node_count": len((raw_payload.get("compiled_artifacts") or {}).get("task_dag", {}).get("nodes", []) or []),
+            },
+        }
+        return normalized, compile_side_info
+
     def fitness_function(
         self,
         candidate_profile: dict[str, Any],
@@ -171,20 +280,13 @@ class CompileGEPAAdapter:
 
         scores: list[float] = []
         for case in golden_cases:
-            # Build artifacts from the golden case expected data
-            artifacts = {
-                "requirement_ir": case.expected_ir,
-                "contracts": case.expected_contracts[0] if case.expected_contracts else {},
-                "dag": case.expected_dag,
-                "traces": {},
-            }
-            expected = {
-                "requirement_text": case.input,
-            }
+            artifacts, compile_side_info = self.compile_case(candidate_profile, case)
+            expected = _expected_case_payload(case)
 
             result = self.evaluate(
                 artifacts, expected,
                 golden_case_id=case.sprint_id,
+                side_info=compile_side_info,
             )
             scores.append(result.asi_score)
 

@@ -17,6 +17,8 @@ mac_mini_only: true
 allowed_hostnames:
   - lisihaodeMac-mini-3.local
   - lisihaodeMac-mini-3
+  - lisihaodeMini-3.local
+  - lisihaodeMini-3
 
 output:
   raw_dir: /Users/lisihao/Knowledge/_raw/tech-hotspot-radar

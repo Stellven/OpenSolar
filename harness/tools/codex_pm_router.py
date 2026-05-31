@@ -29,6 +29,14 @@ from requirement_coverage import (
     build_requirement_trace,
     enrich_task_graph_defaults,
 )
+from requirement_compiler import (
+    build_closure_record,
+    build_contract_manifest,
+    build_request_envelope,
+    build_task_graph_state,
+    make_artifact_refs,
+    sprint_handoff_artifacts,
+)
 from apo_plan_compiler import build_capsule_plan_ir
 from capability_capsules import default_capability_plan_for_logical_operator
 
@@ -46,6 +54,7 @@ CLASS_TO_CANONICAL = {
     FULL_SPEC: "full_prd",
     RESEARCH: "research",
 }
+CANONICAL_TO_CLASS = {value: key for key, value in CLASS_TO_CANONICAL.items()}
 CODE_UNDERSTANDING_TOKENS = (
     "knowledge graph",
     "knowledge-graph",
@@ -759,25 +768,7 @@ def _render_handoff_markdown(
 
 
 def _sprint_handoff_artifacts(sprint_id: str, target: str) -> list[str]:
-    if sprint_id and sprint_id != "N/A":
-        artifacts = [
-            f"{sprint_id}.requirement_ir.json",
-            f"{sprint_id}.prd.md",
-            f"{sprint_id}.Contracts.yaml",
-            f"{sprint_id}.task_graph.json",
-        ]
-        if target == "solar_harness":
-            artifacts.append(f"{sprint_id}.handoff.md")
-        return artifacts
-    artifacts = [
-        ".pm/requirement_ir.json",
-        ".pm/prd.md",
-        ".pm/Contracts.yaml",
-        ".pm/task_dag.json",
-    ]
-    if target == "solar_harness":
-        artifacts.append(".pm/handoff/solar_harness_handoff.md")
-    return artifacts
+    return sprint_handoff_artifacts(sprint_id, target)
 
 
 def _render_product_brief_markdown(brief: dict[str, Any]) -> str:
@@ -833,6 +824,7 @@ def emit_requirement_package(
     artifacts = payload["compiled_artifacts"]
     requirement_ir = payload["requirement_ir"]
     _write_json(pm_dir / "intake.json", payload["pm_intake"])
+    _write_json(pm_dir / "request_envelope.json", artifacts["request_envelope"])
     _write_json(pm_dir / "requirement_ir.json", requirement_ir)
     _write_json(pm_dir / "requirement_trace.json", artifacts["requirement_trace"])
     _write_json(pm_dir / "coverage_report.json", artifacts["coverage_report"])
@@ -844,6 +836,8 @@ def emit_requirement_package(
     _write_yaml(contracts_dir / "agent_execution.yaml", artifacts["contract_files"]["agent_execution"])
     _write_yaml(contracts_dir / "research.yaml", artifacts["contract_files"]["research"])
     _write_json(pm_dir / "task_dag.json", artifacts["task_dag"])
+    _write_json(pm_dir / "task_dag.state.json", artifacts["task_dag_state"])
+    _write_json(pm_dir / "closure.json", artifacts["closure_record"])
     _write_json(pm_dir / "capsule_plan.json", artifacts["capsule_plan"])
     _write_text(handoff_dir / "codex_handoff.md", artifacts["handoff_markdown"]["codex"])
     _write_text(handoff_dir / "solar_harness_handoff.md", artifacts["handoff_markdown"]["solar_harness"])
@@ -851,6 +845,7 @@ def emit_requirement_package(
 
     emitted = {
         "pm_dir": str(pm_dir),
+        "request_envelope": str(pm_dir / "request_envelope.json"),
         "requirement_ir": str(pm_dir / "requirement_ir.json"),
         "requirement_trace": str(pm_dir / "requirement_trace.json"),
         "coverage_report": str(pm_dir / "coverage_report.json"),
@@ -858,6 +853,8 @@ def emit_requirement_package(
         "prd": str(pm_dir / "prd.md"),
         "contracts_bundle": str(pm_dir / "Contracts.yaml"),
         "task_dag": str(pm_dir / "task_dag.json"),
+        "task_dag_state": str(pm_dir / "task_dag.state.json"),
+        "closure": str(pm_dir / "closure.json"),
         "capsule_plan": str(pm_dir / "capsule_plan.json"),
         "codex_handoff": str(handoff_dir / "codex_handoff.md"),
         "solar_harness_handoff": str(handoff_dir / "solar_harness_handoff.md"),
@@ -867,6 +864,9 @@ def emit_requirement_package(
         _write_text(sprint_root / f"{sprint_id}.prd.md", artifacts["prd_markdown"])
         _write_text(sprint_root / f"{sprint_id}.contract.md", artifacts["contract_markdown"])
         _write_json(sprint_root / f"{sprint_id}.task_graph.json", artifacts["task_dag"])
+        _write_json(sprint_root / f"{sprint_id}.request_envelope.json", artifacts["request_envelope"])
+        _write_json(sprint_root / f"{sprint_id}.task_dag.state.json", artifacts["task_dag_state"])
+        _write_json(sprint_root / f"{sprint_id}.closure.json", artifacts["closure_record"])
         _write_json(sprint_root / f"{sprint_id}.capsule_plan.json", artifacts["capsule_plan"])
         _write_text(sprint_root / f"{sprint_id}.product-brief.md", artifacts["product_brief_markdown"])
         _write_text(sprint_root / f"{sprint_id}.handoff.md", artifacts["handoff_markdown"]["solar_harness"])
@@ -878,8 +878,11 @@ def emit_requirement_package(
         emitted.update(
             {
                 "sprint_prd": str(sprint_root / f"{sprint_id}.prd.md"),
+                "sprint_request_envelope": str(sprint_root / f"{sprint_id}.request_envelope.json"),
                 "sprint_contract": str(sprint_root / f"{sprint_id}.contract.md"),
                 "sprint_task_graph": str(sprint_root / f"{sprint_id}.task_graph.json"),
+                "sprint_task_dag_state": str(sprint_root / f"{sprint_id}.task_dag.state.json"),
+                "sprint_closure": str(sprint_root / f"{sprint_id}.closure.json"),
                 "sprint_capsule_plan": str(sprint_root / f"{sprint_id}.capsule_plan.json"),
                 "sprint_requirement_trace": str(sprint_root / f"{sprint_id}.requirement_trace.json"),
                 "sprint_coverage_report": str(sprint_root / f"{sprint_id}.coverage_report.json"),
@@ -1322,6 +1325,7 @@ def build_pm_intake(
     repo_context: list[str] | None = None,
     sprint_id: str = "",
     target_system: str = "solar-harness",
+    compiler_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     papers = papers or []
     logs = logs or []
@@ -1332,10 +1336,38 @@ def build_pm_intake(
     problem_text = effective_text["problem_text"] or compile_text
     raw_user_text = effective_text["raw_user_text"] or compile_text
     request_type = classify_request_type(compile_text, papers)
+    compiler_profile = compiler_profile if isinstance(compiler_profile, dict) else {}
+    profile_policies = compiler_profile.get("policies") if isinstance(compiler_profile.get("policies"), dict) else {}
+
+    def _policy_params(policy_key: str) -> dict[str, Any]:
+        payload = profile_policies.get(policy_key)
+        if not isinstance(payload, dict):
+            return {}
+        params = payload.get("params")
+        return params if isinstance(params, dict) else {}
+
+    def _policy_text(policy_key: str) -> str:
+        payload = profile_policies.get(policy_key)
+        if not isinstance(payload, dict):
+            return ""
+        return str(payload.get("text") or "").strip()
+
+    intake_policy = _policy_params("intake_policy")
+    requirement_ir_policy = _policy_params("requirement_ir_policy")
+    contract_compiler_policy = _policy_params("contract_compiler_policy")
+    dag_compiler_policy = _policy_params("dag_compiler_policy")
+    evidence_policy_params = _policy_params("evidence_policy")
+    handoff_policy = _policy_params("handoff_policy")
+    request_type = str(intake_policy.get("request_type_override") or request_type or "").strip() or request_type
+    request_type = CANONICAL_TO_CLASS.get(request_type, request_type)
     canonical_request_type = CLASS_TO_CANONICAL[request_type]
-    lane_hint = choose_lane_hint(request_type, compile_text)
+    lane_hint = str(intake_policy.get("lane_hint_override") or choose_lane_hint(request_type, compile_text) or "").strip()
     output_mode = choose_output_mode(request_type)
-    priority = choose_priority(compile_text, request_type)
+    for output_key in ("prd", "contract", "dag"):
+        override_value = str(dag_compiler_policy.get(f"{output_key}_variant_override") or "").strip()
+        if override_value:
+            output_mode[output_key] = override_value
+    priority = str(intake_policy.get("priority_override") or choose_priority(compile_text, request_type) or "").strip()
     task_graph = build_task_graph_skeleton(request_type, lane_hint, compile_text)
     if _is_code_understanding_request(compile_text, repo_context):
         task_graph = _adapt_graph_for_code_understanding(task_graph, request_type)
@@ -1349,6 +1381,21 @@ def build_pm_intake(
     stop_rules = _default_stop_rules(request_type)
     open_questions = _derive_open_questions(request_type, compile_text, papers)
     risk_register = _derive_risk_register(request_type)
+    extra_acceptance = contract_compiler_policy.get("additional_acceptance") or []
+    if isinstance(extra_acceptance, list):
+        acceptance.extend(str(item).strip() for item in extra_acceptance if str(item).strip())
+    extra_non_goals = contract_compiler_policy.get("additional_non_goals") or []
+    if isinstance(extra_non_goals, list):
+        non_goals.extend(str(item).strip() for item in extra_non_goals if str(item).strip())
+    extra_stop_rules = contract_compiler_policy.get("additional_stop_rules") or []
+    if isinstance(extra_stop_rules, list):
+        stop_rules.extend(str(item).strip() for item in extra_stop_rules if str(item).strip())
+    extra_questions = requirement_ir_policy.get("additional_open_questions") or []
+    if isinstance(extra_questions, list):
+        open_questions.extend(str(item).strip() for item in extra_questions if str(item).strip())
+    extra_risks = requirement_ir_policy.get("additional_risks") or []
+    if isinstance(extra_risks, list):
+        risk_register.extend(str(item).strip() for item in extra_risks if str(item).strip())
     requirements = _build_requirement_items(normalized_goal, acceptance, priority)
     source_inputs = {
         "raw_request": raw_user_text or text,
@@ -1375,6 +1422,21 @@ def build_pm_intake(
         text,
         papers,
     )
+    artifact_refs = make_artifact_refs(sprint_id or "")
+    request_envelope = build_request_envelope(
+        request_id=f"reqenv-{uuid.uuid4().hex[:12]}",
+        raw_text=text,
+        classification={
+            "legacy": request_type,
+            "canonical": canonical_request_type,
+        },
+        repo_context=repo_context,
+        papers=papers,
+        logs=logs,
+        created_at=_now(),
+        sprint_id=sprint_id or "N/A",
+        target_system=target_system,
+    )
     requirement_ir = {
         "schema_version": "solar.requirement_ir.v1",
         "id": f"req-{uuid.uuid4().hex[:12]}",
@@ -1395,29 +1457,51 @@ def build_pm_intake(
             "lane_hint": lane_hint,
         },
         "confidence": _derive_confidence(request_type, text, papers),
-        "prd_view": prd_view,
-        "contracts": {
-            "product": contracts["product"],
-            "interface": contracts["interface"],
-            "agent_execution": contracts["agent_execution"],
-            "research": contracts["research"],
-        },
-        "dag_view": task_graph,
-        "handoff_view": {
-            "codex": {
-                "target": "Codex",
-                "artifacts": _sprint_handoff_artifacts(sprint_id or "", "codex"),
-            },
-            "solar_harness": {
-                "target": "solar-harness",
-                "artifacts": _sprint_handoff_artifacts(sprint_id or "", "solar_harness"),
-            },
+        "artifact_refs": artifact_refs,
+        "compiled_artifacts": {
+            "prd": artifact_refs["prd"],
+            "contracts_manifest": artifact_refs["contracts_manifest"],
+            "task_dag": artifact_refs["task_dag"],
+            "task_dag_state": artifact_refs["task_dag_state"],
+            "closure_record": artifact_refs["closure"],
+            "handoff_codex": artifact_refs["codex_handoff"],
+            "handoff_solar_harness": artifact_refs["solar_harness_handoff"],
         },
         "evidence_policy": task_graph.get("evidence_policy", {}),
+        "compiler_profile_meta": {
+            "profile_id": str(compiler_profile.get("profile_id") or ""),
+            "profile_version": int(compiler_profile.get("version") or 0) if str(compiler_profile.get("version") or "").isdigit() else compiler_profile.get("version", 0),
+            "policy_texts": {
+                "intake_policy": _policy_text("intake_policy"),
+                "requirement_ir_policy": _policy_text("requirement_ir_policy"),
+                "contract_compiler_policy": _policy_text("contract_compiler_policy"),
+                "dag_compiler_policy": _policy_text("dag_compiler_policy"),
+                "evidence_policy": _policy_text("evidence_policy"),
+                "handoff_policy": _policy_text("handoff_policy"),
+            },
+        },
     }
     task_graph = _apply_requirement_mapping(task_graph, requirements, request_type)
     task_graph = enrich_task_graph_defaults(task_graph, requirement_ir, sprint_id=sprint_id or "N/A")
     requirement_ir["dag_view"] = task_graph
+    contract_manifest = build_contract_manifest(
+        sprint_id=sprint_id or "N/A",
+        requirement_ir_ref=artifact_refs["requirement_ir"],
+        product=contracts["product"],
+        interface=contracts["interface"],
+        agent_execution=contracts["agent_execution"],
+        research=contracts["research"],
+    )
+    task_dag_state = build_task_graph_state(
+        sprint_id=sprint_id or "N/A",
+        graph=task_graph,
+    )
+    closure_record = build_closure_record(
+        sprint_id=sprint_id or "N/A",
+        requirement_ir_ref=artifact_refs["requirement_ir"],
+        contracts_manifest_ref=artifact_refs["contracts_manifest"],
+        graph_ref=artifact_refs["task_dag"],
+    )
     product_brief = {
         "title": title,
         "source": "codex-pm-router",
@@ -1490,6 +1574,8 @@ def build_pm_intake(
         lane_hint=lane_hint,
         registry_path=HARNESS_ROOT / "config" / "capability-capsules.registry.yaml",
     )
+    if evidence_policy_params:
+        capsule_plan_ir.setdefault("compiler_profile_hints", {})["evidence_policy"] = evidence_policy_params
     return {
         "pm_intake": {
             "request_type": request_type,
@@ -1530,16 +1616,21 @@ def build_pm_intake(
         "task_graph_skeleton": task_graph,
         "requirement_ir": requirement_ir,
         "compiled_artifacts": {
+            "request_envelope": request_envelope,
             "prd_markdown": prd_markdown,
-            "contracts_bundle": contracts["bundle"],
+            "contracts_bundle": contract_manifest,
             "contract_markdown": contract_markdown,
             "task_dag": task_graph,
+            "task_dag_state": task_dag_state,
+            "closure_record": closure_record,
             "capsule_plan": capsule_plan_ir,
             "requirement_trace": requirement_trace,
             "coverage_report": coverage_report,
             "acceptance_verdict": acceptance_verdict,
             "product_brief": product_brief,
             "product_brief_markdown": product_brief_markdown,
+            "artifact_refs": artifact_refs,
+            "compiler_profile_meta": requirement_ir.get("compiler_profile_meta", {}),
             "handoff_markdown": {
                 "codex": codex_handoff_md,
                 "solar_harness": solar_handoff_md,

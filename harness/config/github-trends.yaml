@@ -11,6 +11,15 @@ output:
   retention_days: 100
 fetch:
   timeout_seconds: 20
+  retry_attempts: 3
+  retry_backoff_seconds: 3
+  retry_statuses:
+  - 408
+  - 429
+  - 500
+  - 502
+  - 503
+  - 504
   sleep_between_requests_seconds: 8
   min_source_interval_hours: 6
   user_agent: Solar-GitHub-Trends/1.0 (+local research digest)

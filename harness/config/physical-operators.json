@@ -251,6 +251,7 @@
       "provider": "local",
       "vendor": "ThunderOMLX",
       "backend": "command",
+      "command": "LOCAL_LLM_BACKEND=thunderomlx LOCAL_LLM_BASE_URL=http://127.0.0.1:8002 LOCAL_LLM_MODEL=Qwen3.6-35b-a3b LOCAL_LLM_API_KEY=${THUNDEROMLX_AUTH_TOKEN:-local-thunderomlx} PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/openai_compatible_pm_operator.py\"",
       "model": "thunderomlx",
       "model_config": "Qwen3.6-35b-a3b;hot-cache=8GB;thinking=disabled",
       "base_url": "http://127.0.0.1:8002",

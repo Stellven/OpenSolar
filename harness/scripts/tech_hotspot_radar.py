@@ -295,6 +295,10 @@ CREATE TABLE IF NOT EXISTS social_clusters (
     window_start      TEXT NOT NULL,
     window_end        TEXT NOT NULL,
     post_ids          TEXT NOT NULL DEFAULT '',
+    lifecycle         TEXT NOT NULL DEFAULT 'emerging',
+    source_mix        TEXT NOT NULL DEFAULT '{}',
+    summary           TEXT NOT NULL DEFAULT '',
+    why_it_matters    TEXT NOT NULL DEFAULT '',
     created_at        TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_scl_key ON social_clusters(cluster_key);
@@ -3943,6 +3947,17 @@ def ensure_social_columns(conn: sqlite3.Connection) -> None:
         for column, ddl in columns.items():
             if column not in existing:
                 conn.execute(f"ALTER TABLE social_post_snapshots ADD COLUMN {column} {ddl}")
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='social_clusters'").fetchone():
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(social_clusters)").fetchall()}
+        columns = {
+            "lifecycle": "TEXT NOT NULL DEFAULT 'emerging'",
+            "source_mix": "TEXT NOT NULL DEFAULT '{}'",
+            "summary": "TEXT NOT NULL DEFAULT ''",
+            "why_it_matters": "TEXT NOT NULL DEFAULT ''",
+        }
+        for column, ddl in columns.items():
+            if column not in existing:
+                conn.execute(f"ALTER TABLE social_clusters ADD COLUMN {column} {ddl}")
     conn.commit()
 
 
@@ -4072,8 +4087,64 @@ def cmd_status(args: argparse.Namespace) -> int:
     pending = conn.execute("SELECT COUNT(*) FROM retry_queue WHERE status='pending'").fetchone()[0]
     if pending > 0:
         print(f"\n[status] pending retries: {pending}")
+    hf_health = hf_paper_insight_health(config)
+    if hf_health.get("ok"):
+        print("\n[status] hf paper insight:")
+        print(
+            "  packets={packets} recent_checked={recent_checked} gate_passed={gate_passed} "
+            "github_linked={github_linked} hf_assets={hf_assets} latest={latest_built_at}".format(**hf_health)
+        )
+    else:
+        print(f"\n[status] hf paper insight: unavailable ({hf_health.get('error', 'unknown')})")
     conn.close()
     return 0
+
+
+def hf_paper_insight_health(config: dict[str, Any], *, recent_limit: int = 160) -> dict[str, Any]:
+    store_path = hf_paper_insight_db_path(config)
+    if not store_path.exists():
+        return {"ok": False, "error": f"store_not_found:{store_path}"}
+    try:
+        conn = sqlite3.connect(str(store_path))
+        conn.row_factory = sqlite3.Row
+        packets = conn.execute("SELECT COUNT(*) FROM paper_evidence_packets").fetchone()[0]
+        latest = conn.execute("SELECT MAX(built_at) FROM paper_evidence_packets").fetchone()[0] or ""
+        rows = conn.execute(
+            "SELECT packet_gate_json FROM paper_evidence_packets ORDER BY built_at DESC LIMIT ?",
+            (recent_limit,),
+        ).fetchall()
+        gate_passed = sum(1 for r in rows if bool(json.loads(r["packet_gate_json"] or "{}").get("passed")))
+        enrichment_rows = conn.execute(
+            "SELECT hf_assets_json, github_repo_json FROM paper_enrichment ORDER BY fetched_at DESC LIMIT ?",
+            (recent_limit,),
+        ).fetchall()
+        github_linked = 0
+        hf_assets = 0
+        for row in enrichment_rows:
+            assets = json.loads(row["hf_assets_json"] or "{}")
+            github = json.loads(row["github_repo_json"] or "{}")
+            if github.get("url"):
+                github_linked += 1
+            if (
+                assets.get("linked_models")
+                or assets.get("linked_datasets")
+                or assets.get("linked_spaces")
+                or assets.get("demo_urls")
+            ):
+                hf_assets += 1
+        conn.close()
+        return {
+            "ok": True,
+            "store": str(store_path),
+            "packets": packets,
+            "recent_checked": len(rows),
+            "gate_passed": gate_passed,
+            "github_linked": github_linked,
+            "hf_assets": hf_assets,
+            "latest_built_at": latest,
+        }
+    except Exception as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}", "store": str(store_path)}
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
@@ -4168,6 +4239,22 @@ def cmd_doctor(args: argparse.Namespace) -> int:
                 else:
                     issues.append("missing ASR dependency: whisper")
                     print("[doctor] WARN: missing ASR dependency: whisper")
+    hf_health = hf_paper_insight_health(config)
+    if not hf_health.get("ok"):
+        issues.append("hf paper insight unavailable")
+        print(f"[doctor] WARN: hf paper insight unavailable: {hf_health.get('error')}")
+    else:
+        print(
+            "[doctor] hf paper insight: packets={packets} recent_checked={recent_checked} "
+            "gate_passed={gate_passed} github_linked={github_linked} hf_assets={hf_assets} "
+            "latest={latest_built_at}".format(**hf_health)
+        )
+        if int(hf_health.get("recent_checked") or 0) and int(hf_health.get("gate_passed") or 0) == 0:
+            issues.append("hf paper insight packet gate has zero recent passes")
+            print("[doctor] WARN: hf paper insight packet gate has zero recent passes")
+        if int(hf_health.get("github_linked") or 0) == 0 and int(hf_health.get("hf_assets") or 0) == 0:
+            issues.append("hf paper insight has no recent code/source evidence")
+            print("[doctor] WARN: hf paper insight has no recent code/source evidence")
     raw_dir = config.get("output", {}).get("raw_dir", "")
     if raw_dir and Path(raw_dir).exists():
         raw_size = sum(f.stat().st_size for f in Path(raw_dir).rglob("*") if f.is_file())
@@ -4736,21 +4823,55 @@ def social_extract_cluster_keys(post_text: str, post_urls: str = "") -> list[tup
 def social_cluster_posts(conn: sqlite3.Connection, window_hours: int = 48) -> int:
     """Cluster social posts by extracted keys within time window. Returns clusters created."""
     posts = conn.execute(
-        "SELECT post_id, text, urls, created_at FROM social_posts WHERE created_at IS NOT NULL"
+        "SELECT post_id, text, urls, created_at, author_handle, author_category, author_tier "
+        "FROM social_posts WHERE created_at IS NOT NULL"
     ).fetchall()
     if not posts:
         return 0
 
-    cluster_map: dict[str, list[str]] = {}
+    cluster_map: dict[str, list[dict[str, Any]]] = {}
     now = now_utc()
-    for post_id, text, urls, created_at in posts:
+    for post_id, text, urls, created_at, author_handle, author_category, author_tier in posts:
         keys = social_extract_cluster_keys(text or "", urls or "")
         for key_type, key_value in keys:
-            cluster_map.setdefault(key_value, []).append(post_id)
+            cluster_map.setdefault(key_value, []).append({
+                "post_id": post_id,
+                "text": text or "",
+                "created_at": created_at or "",
+                "author_handle": author_handle or "",
+                "author_category": author_category or "",
+                "author_tier": author_tier or "",
+                "key_type": key_type,
+            })
+
+    def cluster_lifecycle(items: list[dict[str, Any]]) -> str:
+        tier1_count = sum(1 for item in items if item.get("author_tier") == "tier1")
+        source_count = len({item.get("author_handle") for item in items if item.get("author_handle")})
+        if len(items) >= 5 or tier1_count >= 3 or source_count >= 4:
+            return "peaking"
+        if len(items) >= 2 or tier1_count >= 1:
+            return "heating"
+        return "emerging"
+
+    def cluster_source_mix(items: list[dict[str, Any]]) -> dict[str, int]:
+        mix: dict[str, int] = {}
+        for item in items:
+            category = str(item.get("author_category") or "unknown")
+            mix[category] = mix.get(category, 0) + 1
+        return mix
+
+    def cluster_type_for(key_type: str, key_value: str) -> str:
+        if key_type == "repo_url":
+            return "strong_repo"
+        if key_type == "paper_url":
+            return "strong_paper"
+        if "://" in key_value:
+            return "strong_url"
+        return "strong_name"
 
     created = 0
-    for key_value, post_ids in cluster_map.items():
-        if len(post_ids) < 1:
+    for key_value, items in cluster_map.items():
+        if len(items) < 1:
             continue
         cluster_key = f"social:{key_value}"
         existing = conn.execute(
@@ -4758,19 +4879,30 @@ def social_cluster_posts(conn: sqlite3.Connection, window_hours: int = 48) -> in
         ).fetchone()
         if existing:
             continue
-        first_post = conn.execute(
-            "SELECT created_at FROM social_posts WHERE post_id=?",
-            (post_ids[0],),
-        ).fetchone()
-        window_start = first_post[0] if first_post else iso_z(now)
+        post_ids = [str(item["post_id"]) for item in items]
+        window_start = min([str(item.get("created_at") or "") for item in items if item.get("created_at")] or [iso_z(now)])
         window_end_dt = now_utc()
+        first_text = next((str(item.get("text") or "").strip() for item in items if item.get("text")), "")
+        lifecycle = cluster_lifecycle(items)
+        source_mix = cluster_source_mix(items)
+        summary = f"{key_value} 在 {len(items)} 条社交信号中被提及。{first_text[:160]}".strip()
+        why_it_matters = (
+            f"该聚类处于 {lifecycle} 阶段，覆盖 {len(source_mix)} 类来源，"
+            f"可作为跨账号传播、项目热度或技术观点变化的候选信号。"
+        )
         conn.execute(
             "INSERT INTO social_clusters "
-            "(cluster_key, cluster_type, window_start, window_end, post_ids, created_at) "
-            "VALUES (?,?,?,?,?,?)",
-            (cluster_key, "strong_url" if "://" in key_value else "strong_name",
+            "(cluster_key, cluster_type, window_start, window_end, post_ids, "
+            "lifecycle, source_mix, summary, why_it_matters, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (cluster_key, cluster_type_for(str(items[0].get("key_type") or ""), key_value),
              window_start, iso_z(window_end_dt),
-             json.dumps(post_ids), iso_z(now)),
+             json.dumps(post_ids),
+             lifecycle,
+             json.dumps(source_mix, ensure_ascii=False, sort_keys=True),
+             summary,
+             why_it_matters,
+             iso_z(now)),
         )
         created += 1
     return created
@@ -4783,17 +4915,26 @@ def social_compute_hot_score(
     network_spread: float = 0.0,
     novelty: float = 0.0,
     cross_source_signal: float = 0.0,
+    viewpoint_strength: float = 0.0,
+    technical_depth: float = 0.0,
+    noise_signal: bool = False,
+    single_amplifier_risk: bool = False,
 ) -> float:
     """PRD FR3: weighted hot score for social posts."""
-    return round(
-        0.25 * engagement_velocity
-        + 0.20 * account_weight
-        + 0.20 * semantic_importance
-        + 0.15 * network_spread
+    score = (
+        0.20 * engagement_velocity
+        + 0.18 * account_weight
+        + 0.18 * semantic_importance
+        + 0.12 * network_spread
         + 0.10 * novelty
-        + 0.10 * cross_source_signal,
-        4,
+        + 0.10 * cross_source_signal
+        + 0.07 * viewpoint_strength
+        + 0.05 * technical_depth
     )
+    score = min(1.0, max(0.0, score))
+    if noise_signal or single_amplifier_risk:
+        score *= 0.4
+    return round(score, 4)
 
 
 def social_emit_evidence_atoms(conn: sqlite3.Connection, post_id: str,
@@ -5084,7 +5225,13 @@ def cmd_collect_social(args: argparse.Namespace) -> int:
     config = load_config(resolve_config(args))
     db_path = resolve_db(args, config)
     backend = str(getattr(args, "backend", "auto") or "auto")
-    use_browser_backend = backend in {"browser", "manual", "auto"} or bool(getattr(args, "dry_run", False))
+    browser_cfg = ((config.get("social") or {}).get("browser_backend_x") or {})
+    browser_auto_enabled = bool(browser_cfg.get("enabled", False))
+    use_browser_backend = (
+        backend in {"browser", "manual"}
+        or bool(getattr(args, "dry_run", False))
+        or (backend == "auto" and browser_auto_enabled)
+    )
     if use_browser_backend and not social_browser_backend_x_disabled(config):
         return _cmd_collect_social_browser_backend_x(args, db_path, config)
     if use_browser_backend and social_browser_backend_x_disabled(config):
@@ -5098,6 +5245,9 @@ def cmd_collect_social(args: argparse.Namespace) -> int:
     min_hours = float((config.get("fetch") or {}).get("min_source_interval_hours", 6))
     if not getattr(args, "force", False) and recent_success_within(conn, "social", command, min_hours):
         print(f"[collect-social] skipped: last successful run within {min_hours:g}h")
+        if not getattr(args, "skip_materialize", False):
+            stats = social_materialize_after_collect(conn, limit=int(getattr(args, "materialize_limit", 0) or 0))
+            print(f"[collect-social] materialize_after_skip={json.dumps(stats, ensure_ascii=False, sort_keys=True)}")
         conn.close()
         return 0
     run_id = begin_run(conn, "social", command)
@@ -5178,10 +5328,15 @@ def cmd_collect_social(args: argparse.Namespace) -> int:
         if idx < len(accounts):
             sleep_between_requests(config)
     social_cluster_posts(conn)
+    materialize_stats = {}
+    if not getattr(args, "skip_materialize", False):
+        materialize_stats = social_materialize_after_collect(conn, limit=int(getattr(args, "materialize_limit", 0) or 0))
     conn.commit()
     finish_run(conn, run_id, "partial" if failures and fetched else ("failed" if failures else "ok"),
-               fetched, new_items, "; ".join(failures[:5]))
+               fetched, new_items, json.dumps({"failures": failures[:5], "materialize": materialize_stats}, ensure_ascii=False)[:900])
     print(f"[collect-social] accounts={len(accounts)} fetched={fetched} new={new_items} failures={len(failures)}")
+    if materialize_stats:
+        print(f"[collect-social] materialize={json.dumps(materialize_stats, ensure_ascii=False, sort_keys=True)}")
     for failure in failures[:10]:
         print(f"  WARN {failure}")
     conn.close()
@@ -5200,6 +5355,9 @@ def extract_youtube_video_id(url: str) -> str | None:
 
 
 def social_link_type(url: str) -> str:
+    parsed = urllib.parse.urlparse(url)
+    host = parsed.netloc.lower()
+    path = parsed.path.lower()
     if "github.com/" in url:
         return "github_repo"
     if "arxiv.org/" in url:
@@ -5208,9 +5366,12 @@ def social_link_type(url: str) -> str:
         return "youtube"
     if "huggingface.co/" in url:
         return "model_card"
+    if host in {"openai.com", "www.openai.com", "anthropic.com", "www.anthropic.com", "replicate.com", "www.replicate.com"}:
+        if path in {"", "/"} or any(part in path for part in ("/api", "/claude", "/chatgpt", "/models", "/stability-ai")):
+            return "product"
     if re.search(r"\.(?:pdf)(?:$|[?#])", url, re.I):
         return "paper"
-    if re.search(r"(?:blog|substack|medium|news|openai|anthropic|deepmind|google|microsoft)", url, re.I):
+    if re.search(r"(?:blog|substack|medium|news|deepmind|google|microsoft)", url, re.I):
         return "blog"
     return "unknown"
 
@@ -5224,7 +5385,7 @@ def social_materialize_links(conn: sqlite3.Connection, limit: int = 0) -> int:
     now = iso_z()
     inserted = 0
     for post_id, urls, text in rows:
-        found = set(re.findall(r"https?://[^\\s,，)\\]]+", f"{urls or ''} {text or ''}"))
+        found = set(re.findall(r"https?://[^\s,，)\]]+", f"{urls or ''} {text or ''}"))
         for url in found:
             normalized = url.rstrip(".,;!?)）]")
             link_type = social_link_type(normalized)
@@ -5237,7 +5398,7 @@ def social_materialize_links(conn: sqlite3.Connection, limit: int = 0) -> int:
             if video:
                 entities["youtube_video_id"] = video
                 link_type = "youtube"
-            arxiv = re.search(r"arxiv\\.org/(?:abs|pdf)/([0-9.]+)", normalized)
+            arxiv = re.search(r"arxiv\.org/(?:abs|pdf)/([0-9.]+)", normalized)
             if arxiv:
                 entities["paper_id"] = arxiv.group(1)
                 link_type = "arxiv"
@@ -5265,7 +5426,7 @@ def social_semantic_extract_from_post(text: str, urls: str = "") -> dict[str, An
     keys = social_extract_cluster_keys(text or "", urls or "")
     repos = [value for key, value in keys if key == "repo"]
     models = [value for key, value in keys if key == "model_entity"]
-    links = re.findall(r"https?://[^\\s,，)\\]]+", f"{text or ''} {urls or ''}")
+    links = re.findall(r"https?://[^\s,，)\]]+", f"{text or ''} {urls or ''}")
     linked_assets = {
         "github_repos": repos,
         "papers": [u for u in links if "arxiv.org" in u],
@@ -5305,7 +5466,10 @@ def social_semantic_extract_from_post(text: str, urls: str = "") -> dict[str, An
 
 def social_materialize_semantic_extracts(conn: sqlite3.Connection, limit: int = 0) -> int:
     rows = conn.execute(
-        "SELECT post_id, text, urls FROM social_posts ORDER BY fetched_at DESC"
+        "SELECT p.post_id, p.text, p.urls FROM social_posts p "
+        "LEFT JOIN social_semantic_extracts e ON e.post_id=p.post_id "
+        "WHERE e.post_id IS NULL "
+        "ORDER BY p.fetched_at DESC"
     ).fetchall()
     if limit:
         rows = rows[:limit]
@@ -5467,15 +5631,20 @@ def social_dispatch_links(conn: sqlite3.Connection) -> dict[str, int]:
                 owner, repo = full_name.split("/", 1)
                 conn.execute(
                     "INSERT OR IGNORE INTO github_repos "
-                    "(full_name, owner, repo, html_url, source_type, tracking_status, first_seen_at, last_seen_at, fetched_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (full_name, owner, repo, f"https://github.com/{full_name}", "social_mention", "candidate", now, now, now),
+                    "(full_name, owner, repo, html_url, fetched_at) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (full_name, owner, repo, f"https://github.com/{full_name}", now),
                 )
                 conn.execute("UPDATE social_links SET dispatch_status='dispatched' WHERE link_id=?", (link_id,))
                 stats["github_repo"] += 1
             elif link_type == "youtube" and entities.get("youtube_video_id"):
                 conn.execute("UPDATE social_links SET dispatch_status='linked' WHERE link_id=?", (link_id,))
                 stats["youtube"] += 1
+            elif link_type == "youtube":
+                # Channel/profile links are useful context, but not a video
+                # dispatch target. Do not leave them as permanent pending work.
+                conn.execute("UPDATE social_links SET dispatch_status='linked' WHERE link_id=?", (link_id,))
+                stats["non_actionable"] += 1
             elif link_type in {"arxiv", "paper"}:
                 conn.execute("UPDATE social_links SET dispatch_status='linked' WHERE link_id=?", (link_id,))
                 stats["paper"] += 1
@@ -5488,6 +5657,72 @@ def social_dispatch_links(conn: sqlite3.Connection) -> dict[str, int]:
             conn.execute("UPDATE social_links SET dispatch_status='failed' WHERE link_id=?", (link_id,))
             stats["failed"] += 1
     return stats
+
+
+def social_materialize_after_collect(conn: sqlite3.Connection, limit: int = 0) -> dict[str, Any]:
+    """Close the cheap social control-plane loop after raw post collection."""
+    before = {
+        "missing_extracts": conn.execute(
+            "SELECT COUNT(*) FROM social_posts p LEFT JOIN social_semantic_extracts e ON e.post_id=p.post_id WHERE e.post_id IS NULL"
+        ).fetchone()[0],
+        "pending_links": conn.execute("SELECT COUNT(*) FROM social_links WHERE dispatch_status='pending'").fetchone()[0],
+    }
+    links = social_materialize_links(conn, limit=limit)
+    extracts = social_materialize_semantic_extracts(conn, limit=limit)
+    viewpoints = social_materialize_viewpoints(conn, limit=limit)
+    chains = social_materialize_propagation_chains(conn, limit=limit)
+    dispatch = social_dispatch_links(conn)
+    repo_master_synced = github_sync_repo_master(conn)
+    conn.commit()
+    after = {
+        "missing_extracts": conn.execute(
+            "SELECT COUNT(*) FROM social_posts p LEFT JOIN social_semantic_extracts e ON e.post_id=p.post_id WHERE e.post_id IS NULL"
+        ).fetchone()[0],
+        "pending_links": conn.execute("SELECT COUNT(*) FROM social_links WHERE dispatch_status='pending'").fetchone()[0],
+    }
+    return {
+        "before": before,
+        "links_inserted": links,
+        "extracts_inserted": extracts,
+        "viewpoints_materialized": viewpoints,
+        "chains_materialized": chains,
+        "dispatch": dispatch,
+        "repo_master_synced": repo_master_synced,
+        "after": after,
+    }
+
+
+def github_sync_repo_master(conn: sqlite3.Connection, limit: int = 0) -> int:
+    """Mirror current github_repos into repo_master for downstream reports."""
+    rows = conn.execute(
+        "SELECT full_name, description, language, license, archived, stars, forks, "
+        "open_issues, created_at, updated_at, pushed_at, fetched_at "
+        "FROM github_repos ORDER BY fetched_at DESC"
+    ).fetchall()
+    if limit:
+        rows = rows[:limit]
+    changed = 0
+    for row in rows:
+        before = conn.total_changes
+        conn.execute(
+            "INSERT INTO repo_master "
+            "(full_name, description, language, license, archived, stars_count, forks_count, "
+            "open_issues_count, created_at, updated_at, pushed_at, imported_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(full_name) DO UPDATE SET "
+            "description=excluded.description, language=excluded.language, license=excluded.license, "
+            "archived=excluded.archived, stars_count=excluded.stars_count, forks_count=excluded.forks_count, "
+            "open_issues_count=excluded.open_issues_count, created_at=excluded.created_at, "
+            "updated_at=excluded.updated_at, pushed_at=excluded.pushed_at, imported_at=excluded.imported_at",
+            (
+                row[0], row[1] or "", row[2], row[3], int(row[4] or 0),
+                int(row[5] or 0), int(row[6] or 0), int(row[7] or 0),
+                row[8], row[9], row[10], row[11] or iso_z(),
+            ),
+        )
+        if conn.total_changes > before:
+            changed += 1
+    return changed
 
 
 def write_social_raw_exports(base_dir: Path, date_str: str, pack: dict[str, Any], markdown: str) -> dict[str, str]:
@@ -7347,6 +7582,403 @@ def cmd_backfill_hf_papers_baseline(args: argparse.Namespace) -> int:
         conn.close()
 
 
+def hf_paper_insight_db_path(config: dict[str, Any]) -> Path:
+    output = config.get("output") or {}
+    state_dir = Path(output.get("state_dir") or "/Users/lisihao/.solar/harness/state/tech-hotspot-radar").expanduser()
+    return state_dir / "hf-paper-insight.sqlite"
+
+
+def hf_paper_http_json(url: str, *, timeout_seconds: int = 20, retries: int = 2) -> tuple[dict[str, Any] | list[Any] | None, str]:
+    """Fetch JSON with bounded retries for HF Paper enrichment providers."""
+    headers = {"Accept": "application/json", "User-Agent": "Solar-Tech-Hotspot-Radar/1.0"}
+    last_error = ""
+    for attempt in range(1, max(1, retries) + 1):
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:
+                text = resp.read().decode("utf-8", errors="replace")
+            return json.loads(text), ""
+        except urllib.error.HTTPError as exc:
+            last_error = f"http_{exc.code}"
+            if exc.code in {400, 401, 403, 404}:
+                break
+        except Exception as exc:
+            last_error = f"{type(exc).__name__}: {exc}"
+        if attempt < retries:
+            time.sleep(min(2.0 * attempt, 5.0))
+    return None, last_error or "unknown_error"
+
+
+def hf_paper_arxiv_metadata(arxiv_id: str, *, timeout_seconds: int = 20) -> tuple[dict[str, Any], str]:
+    if not arxiv_id:
+        return {}, "no_arxiv_id"
+    url = "https://export.arxiv.org/api/query?" + urllib.parse.urlencode({"id_list": arxiv_id, "max_results": "1"})
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Solar-Tech-Hotspot-Radar/1.0"})
+        with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:
+            xml_data = resp.read()
+    except Exception as exc:
+        return {}, f"{type(exc).__name__}: {exc}"
+
+    ns = {"atom": "http://www.w3.org/2005/Atom"}
+    try:
+        root = ET.fromstring(xml_data)
+    except ET.ParseError as exc:
+        return {}, f"parse_error:{exc}"
+    entry = root.find("atom:entry", ns)
+    if entry is None:
+        return {}, "not_found"
+
+    def text_of(name: str) -> str:
+        el = entry.find(f"atom:{name}", ns)
+        return (el.text or "").strip().replace("\n", " ") if el is not None else ""
+
+    authors = []
+    for author_el in entry.findall("atom:author", ns):
+        name_el = author_el.find("atom:name", ns)
+        if name_el is not None and name_el.text:
+            authors.append(name_el.text.strip())
+    categories = [x.get("term", "") for x in entry.findall("atom:category", ns) if x.get("term")]
+    return {
+        "arxiv_id": arxiv_id,
+        "title": text_of("title"),
+        "abstract": text_of("summary"),
+        "summary": text_of("summary"),
+        "authors": authors,
+        "categories": categories,
+        "published": text_of("published"),
+        "updated": text_of("updated"),
+        "abs_url": f"https://arxiv.org/abs/{arxiv_id}",
+        "pdf_url": f"https://arxiv.org/pdf/{arxiv_id}",
+    }, ""
+
+
+def hf_paper_normalize_assets(raw: Any) -> dict[str, Any]:
+    """Normalize HF /api/papers/{paper_id}/repos payload to gate-compatible fields."""
+    def item_id(item: Any) -> str:
+        if isinstance(item, str):
+            return item
+        if isinstance(item, dict):
+            return str(item.get("id") or item.get("name") or item.get("repo_id") or item.get("fullName") or "")
+        return ""
+
+    def item_entry(item: Any) -> dict[str, Any] | None:
+        repo_id = item_id(item)
+        if not repo_id:
+            return None
+        data = item if isinstance(item, dict) else {}
+        return {
+            "id": repo_id,
+            "name": str(data.get("name") or repo_id.split("/")[-1]),
+            "url": str(data.get("url") or f"https://huggingface.co/{repo_id}"),
+            "likes": int(data.get("likes") or 0),
+            "downloads": int(data.get("downloads") or 0),
+        }
+
+    # HF Papers main API embeds assets in linkedModels / linkedDatasets / linkedSpaces.
+    if isinstance(raw, dict) and any(k in raw for k in ("linkedModels", "linkedDatasets", "linkedSpaces")):
+        models = [x for x in (item_entry(i) for i in raw.get("linkedModels") or []) if x]
+        datasets = [x for x in (item_entry(i) for i in raw.get("linkedDatasets") or []) if x]
+        spaces = [x for x in (item_entry(i) for i in raw.get("linkedSpaces") or []) if x]
+        return {
+            "models": models,
+            "datasets": datasets,
+            "spaces": spaces,
+            "linked_models": [x["id"] for x in models],
+            "linked_datasets": [x["id"] for x in datasets],
+            "linked_spaces": [x["id"] for x in spaces],
+            "demo_urls": [x["url"] for x in spaces],
+            "total_assets": len(models) + len(datasets) + len(spaces),
+        }
+
+    if isinstance(raw, dict):
+        items = raw.get("repos") or raw.get("items") or raw.get("data") or []
+    elif isinstance(raw, list):
+        items = raw
+    else:
+        items = []
+    models: list[dict[str, Any]] = []
+    datasets: list[dict[str, Any]] = []
+    spaces: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        repo_type = str(item.get("type") or item.get("repoType") or item.get("repo_type") or "").lower()
+        entry = item_entry(item)
+        if not entry:
+            continue
+        if repo_type == "dataset":
+            datasets.append(entry)
+        elif repo_type == "space":
+            spaces.append(entry)
+        else:
+            models.append(entry)
+    return {
+        "models": models,
+        "datasets": datasets,
+        "spaces": spaces,
+        "linked_models": [x["id"] for x in models],
+        "linked_datasets": [x["id"] for x in datasets],
+        "linked_spaces": [x["id"] for x in spaces],
+        "demo_urls": [x["url"] for x in spaces],
+        "total_assets": len(models) + len(datasets) + len(spaces),
+    }
+
+
+def hf_paper_extract_github_repos(*texts: str) -> list[str]:
+    repos: set[str] = set()
+    for text in texts:
+        for owner_repo in GITHUB_REPO_RE.findall(text or ""):
+            repos.add(owner_repo.rstrip(".),]}'\""))
+    return sorted(repos)
+
+
+def hf_paper_github_metadata(repo_full_name: str, config: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    if not repo_full_name:
+        return {}, "no_repo"
+    try:
+        repo = github_api_json(f"/repos/{repo_full_name}", config)
+    except Exception as exc:
+        return {
+            "full_name": repo_full_name,
+            "url": f"https://github.com/{repo_full_name}",
+            "html_url": f"https://github.com/{repo_full_name}",
+            "metadata_error": f"{type(exc).__name__}: {exc}",
+        }, f"{type(exc).__name__}: {exc}"
+    return {
+        "full_name": repo.get("full_name") or repo_full_name,
+        "url": repo.get("html_url") or f"https://github.com/{repo_full_name}",
+        "html_url": repo.get("html_url") or f"https://github.com/{repo_full_name}",
+        "description": repo.get("description") or "",
+        "stars": int(repo.get("stargazers_count") or 0),
+        "forks": int(repo.get("forks_count") or 0),
+        "open_issues": int(repo.get("open_issues_count") or 0),
+        "language": repo.get("language") or "",
+        "topics": repo.get("topics") or [],
+        "license": ((repo.get("license") or {}).get("spdx_id") or ""),
+        "pushed_at": repo.get("pushed_at") or "",
+    }, ""
+
+
+def cmd_materialize_hf_paper_insights(args: argparse.Namespace) -> int:
+    """Materialize HF paper snapshots into the Paper Insight runtime store."""
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.executescript(SCHEMA_SQL)
+    conn.row_factory = sqlite3.Row
+    run_id = begin_run(conn, "hf_papers", "materialize-hf-paper-insights")
+    limit = int(getattr(args, "limit", 80) or 80)
+    try:
+        module_dir = Path(__file__).resolve().parents[1] / "tools" / "hf_paper_insight"
+        if str(module_dir) not in sys.path:
+            sys.path.insert(0, str(module_dir))
+        from canonicalizer import Canonicalizer  # type: ignore
+        from enricher import _ttl_expiry  # type: ignore
+        from packet import PacketBuilder  # type: ignore
+        from schema import PaperEnrichment, _gen_id, _utc_now  # type: ignore
+        from scoring import SignalScorer  # type: ignore
+        from storage import PaperStore  # type: ignore
+        from taxonomy import PaperClassifier  # type: ignore
+
+        store_path = str(hf_paper_insight_db_path(config))
+        store = PaperStore(store_path)
+        canonicalizer = Canonicalizer(store)
+        classifier = PaperClassifier()
+        scorer = SignalScorer()
+        packet_builder = PacketBuilder()
+        live_enrichment = not bool(getattr(args, "no_live_enrichment", False))
+        timeout_seconds = int(getattr(args, "timeout_seconds", 20) or 20)
+        max_provider_retries = int(getattr(args, "provider_retries", 2) or 2)
+
+        rows = conn.execute(
+            """
+            SELECT paper_id, title, hf_url, arxiv_url, summary, authors, rank, score_text,
+                   topic_tags, first_seen_at, last_seen_at, fetched_at, 'trending' AS source
+            FROM hf_trending_papers
+            UNION ALL
+            SELECT paper_id, title, hf_url, arxiv_url, summary, authors, rank, '' AS score_text,
+                   topic_tags, first_seen_at, last_seen_at, fetched_at, 'daily' AS source
+            FROM hf_daily_papers
+            ORDER BY fetched_at DESC, rank ASC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        materialized = 0
+        packets = 0
+        gate_passed = 0
+        provider_success_counts: dict[str, int] = {}
+        provider_failure_counts: dict[str, int] = {}
+        for row in rows:
+            authors = [x.strip() for x in str(row["authors"] or "").split(",") if x.strip()]
+            canonical = canonicalizer.canonicalize_from_raw(
+                str(row["paper_id"]),
+                str(row["title"] or ""),
+                str(row["hf_url"] or ""),
+                authors_json=json.dumps(authors, ensure_ascii=False),
+                arxiv_abs_url=str(row["arxiv_url"] or "") or None,
+                published_at=str(row["first_seen_at"] or row["fetched_at"] or "") or None,
+            )
+            store.upsert(canonical)
+            tags = [x.strip() for x in str(row["topic_tags"] or "").split(",") if x.strip()]
+            provider_success = ["local_hf_snapshot"]
+            provider_failures: dict[str, str] = {}
+            hf_meta = {
+                "repo_id": row["paper_id"],
+                "title": row["title"],
+                "rank": int(row["rank"] or 0),
+                "score_text": row["score_text"] or "",
+                "tags": tags,
+                "source": row["source"],
+                "card_data": {"description": row["summary"] or ""},
+            }
+            arxiv_meta = {
+                "arxiv_id": canonical.arxiv_id or "",
+                "title": row["title"] or "",
+                "abstract": row["summary"] or "",
+                "summary": row["summary"] or "",
+                "published": row["first_seen_at"] or row["fetched_at"] or "",
+            }
+            hf_assets: dict[str, Any] = {"linked_models": [], "linked_datasets": [], "linked_spaces": [], "demo_urls": [], "total_assets": 0}
+            github_repo: dict[str, Any] = {}
+            if live_enrichment:
+                hf_payload, hf_error = hf_paper_http_json(
+                    f"https://huggingface.co/api/papers/{canonical.paper_id}",
+                    timeout_seconds=timeout_seconds,
+                    retries=max_provider_retries,
+                )
+                if isinstance(hf_payload, dict):
+                    hf_meta.update({
+                        "title": hf_payload.get("title") or hf_meta["title"],
+                        "authors": hf_payload.get("authors") or authors,
+                        "summary": hf_payload.get("summary") or hf_payload.get("abstract") or row["summary"] or "",
+                        "tags": hf_payload.get("tags") or tags,
+                        "upvotes": int(hf_payload.get("upvotes") or hf_payload.get("likes") or 0),
+                        "published_at": hf_payload.get("publishedAt") or hf_payload.get("published_at") or "",
+                        "paper_page": f"https://huggingface.co/papers/{canonical.paper_id}",
+                        "github_repo": hf_payload.get("githubRepo") or "",
+                        "github_stars": int(hf_payload.get("githubStars") or 0),
+                        "raw_keys": sorted(hf_payload.keys())[:50],
+                    })
+                    hf_meta["card_data"] = {"description": hf_meta.get("summary") or row["summary"] or ""}
+                    hf_assets = hf_paper_normalize_assets(hf_payload)
+                    provider_success.append("huggingface")
+                    if hf_assets.get("total_assets"):
+                        provider_success.append("hf_assets")
+                elif hf_error:
+                    provider_failures["huggingface"] = hf_error
+
+                arxiv_payload, arxiv_error = hf_paper_arxiv_metadata(canonical.arxiv_id or "", timeout_seconds=timeout_seconds)
+                if arxiv_payload:
+                    arxiv_meta.update(arxiv_payload)
+                    if arxiv_payload.get("summary") and not arxiv_meta.get("abstract"):
+                        arxiv_meta["abstract"] = arxiv_payload["summary"]
+                    provider_success.append("arxiv")
+                elif arxiv_error:
+                    provider_failures["arxiv"] = arxiv_error
+
+                assets_payload, assets_error = (None, "")
+                if not hf_assets.get("total_assets"):
+                    assets_payload, assets_error = hf_paper_http_json(
+                        f"https://huggingface.co/api/papers/{canonical.paper_id}/repos",
+                        timeout_seconds=timeout_seconds,
+                        retries=max_provider_retries,
+                    )
+                if assets_payload is not None:
+                    hf_assets = hf_paper_normalize_assets(assets_payload)
+                    if hf_assets.get("total_assets"):
+                        provider_success.append("hf_assets")
+                elif assets_error and assets_error != "http_404":
+                    provider_failures["hf_assets"] = assets_error
+
+            github_repos = hf_paper_extract_github_repos(
+                str(row["summary"] or ""),
+                str(hf_meta.get("github_repo") or ""),
+                json.dumps(hf_meta, ensure_ascii=False),
+                json.dumps(arxiv_meta, ensure_ascii=False),
+                json.dumps(hf_assets, ensure_ascii=False),
+            )
+            if github_repos:
+                provider_success.append("github_link")
+                github_repos_meta: list[dict[str, Any]] = []
+                for repo_name in github_repos[:3]:
+                    repo_meta, repo_error = hf_paper_github_metadata(repo_name, config) if live_enrichment else (
+                        {"full_name": repo_name, "url": f"https://github.com/{repo_name}", "html_url": f"https://github.com/{repo_name}"},
+                        "",
+                    )
+                    github_repos_meta.append(repo_meta)
+                    if repo_error:
+                        provider_failures[f"github:{repo_name}"] = repo_error
+                if github_repos_meta:
+                    github_repo = dict(github_repos_meta[0])
+                    github_repo["repos"] = github_repos_meta
+                    github_repo["repo_count"] = len(github_repos_meta)
+            enrichment = PaperEnrichment(
+                enrichment_id=_gen_id("enr-"),
+                paper_id=canonical.paper_id,
+                hf_metadata_json=json.dumps(hf_meta, ensure_ascii=False, sort_keys=True),
+                arxiv_metadata_json=json.dumps(arxiv_meta, ensure_ascii=False, sort_keys=True),
+                hf_assets_json=json.dumps(hf_assets, ensure_ascii=False, sort_keys=True),
+                github_repo_json=json.dumps(github_repo, ensure_ascii=False, sort_keys=True),
+                semantic_scholar_json="{}",
+                provider_success_json=json.dumps(sorted(set(provider_success)), ensure_ascii=False),
+                provider_failures_json=json.dumps(provider_failures, ensure_ascii=False, sort_keys=True),
+                fetched_at=_utc_now(),
+                ttl_expires_at=_ttl_expiry(),
+            )
+            store.upsert(enrichment)
+            taxonomy = classifier.classify_paper(enrichment)
+            store.upsert(taxonomy)
+            signal = scorer.compute_scores(canonical, enrichment, taxonomy, profile_name="ai-influence-local")
+            store.upsert(signal)
+            gate = scorer.packet_gate_check(signal, enrichment)
+            packet = packet_builder.build_packet_v2(canonical, enrichment, taxonomy, signal, gate_result=gate)
+            store.upsert(packet)
+            if gate.get("passed"):
+                gate_passed += 1
+            for provider in sorted(set(provider_success)):
+                provider_success_counts[provider] = provider_success_counts.get(provider, 0) + 1
+            for provider in provider_failures:
+                key = provider.split(":", 1)[0]
+                provider_failure_counts[key] = provider_failure_counts.get(key, 0) + 1
+            materialized += 1
+            packets += 1
+        finish_run(
+            conn,
+            run_id,
+            "ok",
+            len(rows),
+            materialized,
+            json.dumps({
+                "store": store_path,
+                "packets": packets,
+                "gate_passed": gate_passed,
+                "provider_success": provider_success_counts,
+                "provider_failures": provider_failure_counts,
+            }, ensure_ascii=False)[:900],
+        )
+        conn.commit()
+        store.close()
+        print(json.dumps({
+            "ok": True,
+            "rows": len(rows),
+            "materialized": materialized,
+            "packets": packets,
+            "gate_passed": gate_passed,
+            "store": store_path,
+            "provider_success": provider_success_counts,
+            "provider_failures": provider_failure_counts,
+        }, ensure_ascii=False, indent=2, sort_keys=True))
+        return 0
+    except Exception as exc:
+        finish_run(conn, run_id, "failed", 0, 0, f"{type(exc).__name__}: {exc}"[:900])
+        print(f"[materialize-hf-paper-insights] ERROR {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        conn.close()
+
+
 def upsert_github_repo(conn: sqlite3.Connection, repo_data: dict[str, Any],
                        readme_text: str, fetched_at: str) -> bool:
     full_name = repo_data.get("full_name") or ""
@@ -7417,6 +8049,8 @@ def cmd_collect_github(args: argparse.Namespace) -> int:
     failures: list[str] = []
     for idx, row in enumerate(rows, 1):
         full_name = row["full_name"]
+        if idx == 1 or idx == len(rows) or idx % 10 == 0:
+            print(f"[collect-github] progress {idx}/{len(rows)} repo={full_name}", flush=True)
         try:
             repo = github_api_json(f"/repos/{full_name}", config)
             try:
@@ -7478,8 +8112,18 @@ def cmd_collect_github(args: argparse.Namespace) -> int:
             failures.append(f"{full_name}: {type(exc).__name__}: {exc}")
         if idx < len(rows):
             sleep_between_requests(config)
-    finish_run(conn, run_id, "partial" if failures else "ok", fetched, new_items, "; ".join(failures[:5]))
+    repo_master_synced = github_sync_repo_master(conn)
+    conn.commit()
+    finish_run(
+        conn,
+        run_id,
+        "partial" if failures else "ok",
+        fetched,
+        new_items,
+        json.dumps({"failures": failures[:5], "repo_master_synced": repo_master_synced}, ensure_ascii=False)[:900],
+    )
     print(f"[collect-github] repos={len(rows)} fetched={fetched} changed={new_items} failures={len(failures)}")
+    print(f"[collect-github] repo_master_synced={repo_master_synced}")
     for failure in failures[:10]:
         print(f"  WARN {failure}")
     conn.close()
@@ -12359,14 +13003,15 @@ def cmd_collect_all(args: argparse.Namespace) -> int:
         yt_args.limit_channels = getattr(args, "limit_channels", 0)
         yt_args.per_channel_limit = getattr(args, "per_channel_limit", 0)
         rc = max(rc, cmd_backfill_youtube(yt_args))
+    if not getattr(args, "skip_papers", False):
+        hf_args = argparse.Namespace(**vars(args))
+        hf_args.limit = getattr(args, "limit_papers", 50)
+        hf_args.period = getattr(args, "period", "all")
+        rc = max(rc, cmd_collect_hf_papers(hf_args))
     if not getattr(args, "skip_github", False):
         gh_args = argparse.Namespace(**vars(args))
         gh_args.limit_repos = getattr(args, "limit_repos", 0)
         rc = max(rc, cmd_collect_github(gh_args))
-        if not getattr(args, "skip_papers", False):
-            hf_args = argparse.Namespace(**vars(args))
-            hf_args.limit = getattr(args, "limit_papers", 50)
-            rc = max(rc, cmd_collect_hf_papers(hf_args))
         # Project intelligence is part of the GitHub collector contract:
         # raw snapshots should immediately materialize repo evidence atoms/cards.
         gh_analyze_args = argparse.Namespace(**vars(args))
@@ -12771,6 +13416,11 @@ def build_parser() -> argparse.ArgumentParser:
     hf_baseline.add_argument("--sleep-seconds", type=float, default=0.5)
     hf_baseline.add_argument("--max-consecutive-failures", type=int, default=5)
     hf_baseline.add_argument("--force", action="store_true")
+    hf_insight = sub.add_parser("materialize-hf-paper-insights", help="Materialize HF paper canonical/signal/packet store without high-model reasoning")
+    hf_insight.add_argument("--limit", type=int, default=80)
+    hf_insight.add_argument("--no-live-enrichment", action="store_true", help="Use only local HF snapshots; skip HF/arXiv/GitHub live enrichment")
+    hf_insight.add_argument("--timeout-seconds", type=int, default=20, help="Per-provider HTTP timeout for live enrichment")
+    hf_insight.add_argument("--provider-retries", type=int, default=2, help="Bounded retry count for HF live enrichment providers")
     gh_analyze = sub.add_parser("analyze-github-projects", help="Build GitHub repo evidence atoms, reasoning packets and analysis cards")
     gh_analyze.add_argument("--limit-repos", type=int, default=0)
     gh_analyze.add_argument("--force", action="store_true")
@@ -12797,6 +13447,8 @@ def build_parser() -> argparse.ArgumentParser:
     social_collect.add_argument("--backend", choices=["auto", "browser", "manual", "x-api", "rss"], default="auto")
     social_collect.add_argument("--dry-run", action="store_true")
     social_collect.add_argument("--force", action="store_true")
+    social_collect.add_argument("--skip-materialize", action="store_true", help="Only collect raw posts; do not materialize semantic/link/viewpoint layers")
+    social_collect.add_argument("--materialize-limit", type=int, default=0, help="Limit social materialization rows; 0 means all backlog")
     social_trend = sub.add_parser("social-trend-report", help="Generate AI Influence social signal and big-name viewpoint report with Codex")
     social_trend.add_argument("--date", default=None, help="Report date YYYY-MM-DD")
     social_trend.add_argument("--limit-posts", type=int, default=40)
@@ -12862,6 +13514,7 @@ def main() -> int:
         "collect-github": cmd_collect_github,
         "collect-hf-papers": cmd_collect_hf_papers,
         "backfill-hf-papers-baseline": cmd_backfill_hf_papers_baseline,
+        "materialize-hf-paper-insights": cmd_materialize_hf_paper_insights,
         "analyze-github-projects": cmd_analyze_github_projects,
         "github-trend-report": cmd_github_trend_report,
         "build-baseline": cmd_build_baseline,

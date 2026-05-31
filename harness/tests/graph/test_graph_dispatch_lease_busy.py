@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import datetime
+import importlib.util
 from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "lib"))
-
-import graph_node_dispatcher as gnd  # noqa: E402
+MODULE_PATH = ROOT / "lib" / "graph_node_dispatcher.py"
+spec = importlib.util.spec_from_file_location("graph_node_dispatcher", MODULE_PATH)
+gnd = importlib.util.module_from_spec(spec)  # noqa: E402
+assert spec and spec.loader
+sys.modules["graph_node_dispatcher"] = gnd
+spec.loader.exec_module(gnd)
 
 
 def _ts(delta_seconds: int) -> str:
@@ -70,16 +75,18 @@ def test_worker_discovery_ignores_expired_lease(monkeypatch) -> None:
         lambda *a, **kw: b"solar-harness-lab:0.0\tbuilder-glm\n",
     )
     monkeypatch.setattr(gnd, "read_lease", lambda pane: {"expires_at": _ts(-60)})
+    monkeypatch.setattr(gnd, "_pane_cooldown_reason", lambda pane: "")
     monkeypatch.setattr(gnd, "_clear_stale_prompt_residue", lambda pane: False)
+    monkeypatch.setattr(gnd, "_pane_tail", lambda pane, lines=80: "")
+    monkeypatch.setattr(gnd, "_pane_runtime_unavailable_reason", lambda pane, title="": "")
     monkeypatch.setattr(gnd, "_pane_unavailable_reason", lambda pane: "")
     monkeypatch.setattr(gnd, "_pane_tui_busy", lambda pane: False)
     monkeypatch.setattr(gnd, "_pane_health", lambda pane: {})
 
     workers = gnd._discover_workers(dry_run=False)
 
-    assert len(workers) == 1
-    assert workers[0]["pane"] == "solar-harness-lab:0.0"
-    assert workers[0]["busy"] is False
+    worker = next(item for item in workers if item["pane"] == "solar-harness-lab:0.0")
+    assert worker["busy"] is False
 
 
 def test_worker_discovery_supports_pandoc_render_nodes(monkeypatch) -> None:
@@ -154,9 +161,9 @@ def test_worker_discovery_marks_shell_prompt_residue_as_runtime_not_running(monk
 
     workers = gnd._discover_workers(dry_run=False)
 
-    assert len(workers) == 1
-    assert workers[0]["busy"] is True
-    assert workers[0]["unavailable_reason"] == "worker_runtime_not_running"
+    worker = next(item for item in workers if item["pane"] == "solar-harness-lab:0.3")
+    assert worker["busy"] is True
+    assert worker["unavailable_reason"] == "worker_runtime_not_running"
 
 
 def test_completed_output_with_empty_prompt_is_not_busy(monkeypatch) -> None:
@@ -337,12 +344,12 @@ def test_worker_discovery_marks_claude_monthly_limit_as_anthropic_quota(monkeypa
 
     workers = gnd._discover_workers(dry_run=False)
 
-    assert len(workers) == 1
-    assert "anthropic" in workers[0]["quota_exhausted"]
-    assert "claude" in workers[0]["quota_exhausted"]
-    assert "opus" in workers[0]["quota_exhausted"]
-    assert workers[0]["busy"] is True
-    assert workers[0]["unavailable_reason"] == "rate_limit_or_api_error"
+    worker = next(item for item in workers if item["pane"] == "solar-harness-lab:0.3")
+    assert "anthropic" in worker["quota_exhausted"]
+    assert "claude" in worker["quota_exhausted"]
+    assert "opus" in worker["quota_exhausted"]
+    assert worker["busy"] is True
+    assert worker["unavailable_reason"] == "rate_limit_or_api_error"
 
 
 def test_worker_discovery_marks_edit_confirmation_as_busy(monkeypatch) -> None:
@@ -364,8 +371,8 @@ def test_worker_discovery_marks_edit_confirmation_as_busy(monkeypatch) -> None:
 
     workers = gnd._discover_workers(dry_run=False)
 
-    assert len(workers) == 1
-    assert workers[0]["busy"] is True
+    worker = next(item for item in workers if item["pane"] == "solar-harness-lab:0.2")
+    assert worker["busy"] is True
 
 
 def test_assigned_pane_quota_detection_handles_wrapped_monthly_limit(monkeypatch) -> None:
@@ -811,9 +818,9 @@ def test_worker_discovery_marks_multi_task_shell_unavailable(monkeypatch) -> Non
 
     workers = gnd._discover_workers(dry_run=False)
 
-    assert len(workers) == 1
-    assert workers[0]["busy"] is True
-    assert workers[0]["unavailable_reason"] == "multi_task_shell_not_direct_worker"
+    worker = next(item for item in workers if item["pane"] == "solar-harness-multi-task:0.0")
+    assert worker["busy"] is True
+    assert worker["unavailable_reason"] == "multi_task_shell_not_direct_worker"
 
 
 def test_dispatch_queue_item_retries_when_assigned_pane_later_hits_quota(monkeypatch) -> None:
@@ -875,9 +882,8 @@ def test_evaluator_discovery_ignores_expired_lease(monkeypatch) -> None:
 
     evaluators = gnd._discover_evaluators(dry_run=False)
 
-    assert len(evaluators) == 1
-    assert evaluators[0]["pane"] == "solar-harness:0.3"
-    assert evaluators[0]["busy"] is False
+    evaluator = next(item for item in evaluators if item["pane"] == "solar-harness:0.3")
+    assert evaluator["busy"] is False
 
 
 def test_evaluator_discovery_finds_pool_candidates_by_role(monkeypatch) -> None:
@@ -912,12 +918,13 @@ def test_evaluator_discovery_finds_pool_candidates_by_role(monkeypatch) -> None:
     evaluators = gnd._discover_evaluators(dry_run=False)
     panes = [item["pane"] for item in evaluators]
 
-    assert set(panes) == {
+    assert {
         "solar-harness-test:0.3",
         "solar-harness-lab:0.3",
         "solar-harness-lab:0.1",
         "solar-harness-multi-task:7",
-    }
+    }.issubset(set(panes))
+    assert "operator-pool:evaluator.0" in set(panes)
     lab_builder = next(item for item in evaluators if item["pane"] == "solar-harness-lab:0.1")
     assert lab_builder["evaluator_host_role"] == "lab_builder_spillover"
     multi_task = next(item for item in evaluators if item["pane"] == "solar-harness-multi-task:7")

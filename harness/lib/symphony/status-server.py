@@ -2293,6 +2293,10 @@ def _knowledge_ingest_progress_payload() -> dict:
     asr_queue = state_root / "youtube-influence-digest" / "asr-queue"
     asr_done = state_root / "youtube-influence-digest" / "asr-done"
     asr_audio = state_root / "youtube-influence-digest" / "asr-audio"
+    youtube_cfg = _read_yaml_file(YOUTUBE_DIGEST_CONFIG)
+    asr_cfg = youtube_cfg.get("asr") if isinstance(youtube_cfg.get("asr"), dict) else {}
+    asr_blocks_progress = bool(asr_cfg.get("blocking_for_knowledge_progress", False))
+    asr_queue_policy = str(asr_cfg.get("queue_health_policy") or ("blocking" if asr_blocks_progress else "fallback_non_blocking"))
     dispatch = _dispatch_status_counts(dispatch_dir)
     counts = dispatch.get("counts", {})
     completed = sum(v for k, v in counts.items() if str(k) in {"completed", "success", "skipped", "skipped-duplicate"})
@@ -2304,8 +2308,9 @@ def _knowledge_ingest_progress_payload() -> dict:
     asr_queue_count = _count_files(asr_queue, "*.json")
     asr_done_count = _count_files(asr_done, "*.json")
     asr_audio_bytes = _dir_size_bytes(asr_audio)
+    asr_blocking_count = asr_queue_count if asr_blocks_progress else 0
     status = "ok"
-    if pending or blocked or asr_queue_count:
+    if pending or blocked or asr_blocking_count:
         status = "pending"
     if failed:
         status = "warn"
@@ -2319,7 +2324,7 @@ def _knowledge_ingest_progress_payload() -> dict:
         blockers.append({"level": "warn", "title": "有失败 dispatch", "detail": f"{failed} 个 dispatch 失败，需要人工看失败原因或重派。"})
     if blocked:
         blockers.append({"level": "pending", "title": "有阻塞项", "detail": f"{blocked} 个 dispatch 被标记为 blocked，通常是缺 transcript 或等待人工确认。"})
-    if asr_queue_count:
+    if asr_blocking_count:
         blockers.append({"level": "pending", "title": "YouTube ASR 队列积压", "detail": f"{asr_queue_count} 个视频等音频转文字；完成后才能产出高质量知识。"})
     if pending:
         blockers.append({"level": "pending", "title": "有待处理 dispatch", "detail": f"{pending} 个 dispatch 还没完成。"})
@@ -2330,7 +2335,7 @@ def _knowledge_ingest_progress_payload() -> dict:
     next_actions = []
     if failed:
         next_actions.append("先查看 failed dispatch，决定重派还是标记 skipped。")
-    if asr_queue_count:
+    if asr_blocking_count:
         next_actions.append("让 YouTube ASR queue 低速处理，先不要继续批量抓字幕以免 429。")
     if pending:
         next_actions.append("确认 wiki dispatch tail/调度器是否在消费 pending。")
@@ -2345,7 +2350,7 @@ def _knowledge_ingest_progress_payload() -> dict:
         "vault": str(KNOWLEDGE_DIR),
         "raw_dir": str(raw_dir),
         "headline": (
-            f"还有 {pending} 个待处理、{failed} 个失败、{blocked} 个阻塞、{asr_queue_count} 个视频等 ASR；"
+            f"还有 {pending} 个待处理、{failed} 个失败、{blocked} 个阻塞；"
             f"近 24 小时新增/更新 {vault_md.get('recent_24h', 0)} 个知识页。"
         ),
         "funnel": {
@@ -2356,6 +2361,8 @@ def _knowledge_ingest_progress_payload() -> dict:
             "blocked": blocked,
             "unknown": unknown,
             "asr_waiting": asr_queue_count,
+            "asr_blocking": asr_blocking_count,
+            "asr_policy": asr_queue_policy,
             "asr_done": asr_done_count,
             "recent_knowledge_24h": vault_md.get("recent_24h", 0),
         },
@@ -2376,6 +2383,9 @@ def _knowledge_ingest_progress_payload() -> dict:
         },
         "asr": {
             "queue": asr_queue_count,
+            "blocking_for_progress": asr_blocks_progress,
+            "blocking_count": asr_blocking_count,
+            "policy": asr_queue_policy,
             "done": asr_done_count,
             "queue_dir": str(asr_queue),
             "audio_dir": str(asr_audio),
@@ -4268,10 +4278,22 @@ def _research_status_summary(limit: int = 5) -> dict:
             name = re.sub(r"[-_]20\d{4}$", "", name)
             return " ".join(part for part in re.split(r"[-_]+", name) if part).strip()
 
+        def local_user_path(path: str | Path | None, fallback: Path) -> Path:
+            candidate = Path(str(path or fallback)).expanduser()
+            if candidate.exists():
+                return candidate
+            parts = candidate.parts
+            home = Path.home()
+            if len(parts) >= 4 and parts[0] == "/" and parts[1] == "Users" and parts[2] != home.name:
+                rewritten = home.joinpath(*parts[3:])
+                if rewritten.exists():
+                    return rewritten
+            return candidate
+
         def run_from_eval(ef: Path) -> dict:
             data = load_json(ef)
-            output_dir = Path(str(data.get("output_dir") or ef.parent)).expanduser()
-            final_md = Path(str(data.get("final_md") or output_dir / "final.md")).expanduser()
+            output_dir = local_user_path(data.get("output_dir"), ef.parent)
+            final_md = local_user_path(data.get("final_md"), output_dir / "final.md")
             metrics = data.get("execution_metrics") if isinstance(data.get("execution_metrics"), dict) else {}
             if not metrics:
                 metrics_path = output_dir / "research_execution_metrics.json"
@@ -4331,11 +4353,30 @@ def _research_status_summary(limit: int = 5) -> dict:
             list(SPRINTS_DIR.glob("*research_eval*.json")) + list(REPORTS_DIR.glob("*/*research_eval*.json")),
             key=lambda p: p.stat().st_mtime,
         )
-        runs = [run_from_eval(ef) for ef in eval_files[-limit:]]
-        gates = (mod.discover_quality_gates(SPRINTS_DIR, "", limit=limit).get("items") or [])[-limit:]
+        filtered_eval_files = []
+        for ef in eval_files:
+            data = load_json(ef)
+            gate_override = data.get("gate_override") if isinstance(data.get("gate_override"), dict) else {}
+            if gate_override.get("reason") == "audit_node_no_research_output":
+                continue
+            if not data.get("status") and not data.get("run_id") and not data.get("source_count"):
+                continue
+            filtered_eval_files.append(ef)
+        runs = [run_from_eval(ef) for ef in filtered_eval_files[-limit:]]
+        gate_items = mod.discover_quality_gates(SPRINTS_DIR, "", limit=limit * 4).get("items") or []
+        gates = [
+            gate
+            for gate in gate_items
+            if "deepresearch" in str(gate.get("sprint_id") or gate.get("graph_path") or "").lower()
+        ][-limit:]
+        blocking_gates = [
+            gate for gate in gates[-limit:]
+            if gate.get("status") == "failed"
+            or (gate.get("status") == "missing" and gate.get("node_status") not in {"passed", "skipped", "cancelled"})
+        ]
         status = "idle"
         if runs or gates:
-            status = "ok" if all(r.get("status") == "passed" for r in runs[-limit:]) and all(g.get("ok") for g in gates[-limit:]) else "warn"
+            status = "ok" if all(r.get("status") == "passed" for r in runs[-limit:]) and not blocking_gates else "warn"
         return {
             "ok": status == "ok" or not runs,
             "status": status,
@@ -7954,7 +7995,7 @@ function renderKnowledgeProgress(progress) {
       '<div class="status-tile"><div class="kv-label">待处理</div><strong>' + esc(funnel.pending || 0) + '</strong></div>' +
       '<div class="status-tile"><div class="kv-label">失败</div><strong>' + esc(funnel.failed || 0) + '</strong></div>' +
       '<div class="status-tile"><div class="kv-label">阻塞</div><strong>' + esc(funnel.blocked || 0) + '</strong></div>' +
-      '<div class="status-tile"><div class="kv-label">等视频ASR</div><strong>' + esc(funnel.asr_waiting || 0) + '</strong></div>' +
+      '<div class="status-tile"><div class="kv-label">ASR fallback</div><strong>' + esc(funnel.asr_waiting || 0) + '</strong></div>' +
       '<div class="status-tile"><div class="kv-label">ASR缓存</div><strong>' + esc(formatBytes(asr.audio_cache_bytes || 0)) + '</strong></div>' +
       '<div class="status-tile"><div class="kv-label">近24h知识页</div><strong>' + esc(funnel.recent_knowledge_24h || 0) + '</strong></div>' +
       '<div class="status-tile"><div class="kv-label">QMD</div><strong>' + esc(qmd.status || 'unknown') + '</strong></div>' +
@@ -7965,7 +8006,7 @@ function renderKnowledgeProgress(progress) {
       kv('最新派单', ((latestDispatch || {}).path || 'N/A')) +
       kv('最新知识页', ((latestKnowledge || {}).path || 'N/A')) +
       kv('QMD 语义索引', 'indexed ' + (qmd.indexed || 0) + ' · pending ' + (qmd.pending === undefined ? 'N/A' : qmd.pending)) +
-      kv('ASR 进度', '等待 ' + (funnel.asr_waiting || 0) + ' · 已完成 ' + (funnel.asr_done || 0)) +
+      kv('ASR fallback', '等待 ' + (funnel.asr_waiting || 0) + ' · 阻塞 ' + (funnel.asr_blocking || 0) + ' · 策略 ' + (funnel.asr_policy || 'fallback_non_blocking')) +
       kv('ASR 缓存目录', formatBytes(asr.audio_cache_bytes || 0) + ' · ' + (asr.audio_dir || 'N/A')) +
     '</div>' +
     '<h3>当前卡点</h3>' +

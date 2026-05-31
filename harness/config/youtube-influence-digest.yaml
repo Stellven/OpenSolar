@@ -4,6 +4,8 @@ mac_mini_only: true
 allowed_hostnames:
 - lisihaodeMac-mini-3.local
 - lisihaodeMac-mini-3
+- lisihaodeMini-3.local
+- lisihaodeMini-3
 timezone: America/Toronto
 schedule:
   hours:
@@ -27,6 +29,10 @@ fetch:
   user_agent: Solar-YouTube-Influence-Digest/1.0 (+local transcript capture)
 asr:
   enabled: true
+  # ASR is a fallback path. Browser-agent transcript capture is the primary path,
+  # so ASR backlog must not block /knowledge/progress health by default.
+  blocking_for_knowledge_progress: false
+  queue_health_policy: fallback_non_blocking
   max_per_run: 1
   queue_dir: /Users/lisihao/.solar/harness/state/youtube-influence-digest/asr-queue
   done_dir: /Users/lisihao/.solar/harness/state/youtube-influence-digest/asr-done

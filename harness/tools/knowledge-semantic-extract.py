@@ -1566,8 +1566,39 @@ def iter_sources(root: Path, since_hours: int | None, include_raw: bool = True) 
 def run_qmd_update(args: argparse.Namespace) -> None:
     if not args.qmd_after:
         return
-    cmd = ["solar-harness", "wiki", "qmd-update"]
-    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=180)
+    solar_harness = (
+        os.environ.get("SOLAR_HARNESS_BIN")
+        or shutil.which("solar-harness")
+        or "/Users/lisihao/.solar/bin/solar-harness"
+    )
+    if not Path(solar_harness).exists():
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "stage": "qmd_after",
+                    "error": f"solar-harness not found: {solar_harness}",
+                },
+                ensure_ascii=False,
+            ),
+            file=sys.stderr,
+        )
+        return
+    cmd = [solar_harness, "wiki", "qmd-update"]
+    try:
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=180, check=False)
+    except subprocess.TimeoutExpired:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "stage": "qmd_after",
+                    "error": "solar-harness wiki qmd-update timed out",
+                },
+                ensure_ascii=False,
+            ),
+            file=sys.stderr,
+        )
 
 
 def cmd_extract_file(args: argparse.Namespace) -> int:
