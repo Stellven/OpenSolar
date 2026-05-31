@@ -14,6 +14,7 @@ Pipeline:
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import os
@@ -415,6 +416,211 @@ async def _wait_and_download_image(page, request_dir: Path, timeout_s: int = 120
     return {"status": "timeout", "error": "Image generation timed out."}
 
 
+async def _install_original_image_capture(page, request_dir: Path) -> dict:
+    """Capture original image bytes from network responses after prompt submit."""
+    state: dict = {
+        "active": False,
+        "tasks": [],
+        "candidates": [],
+        "counter": 0,
+    }
+
+    async def capture_response(response) -> None:
+        if not state["active"]:
+            return
+        try:
+            url = response.url or ""
+            lower_url = url.lower()
+            headers = {str(k).lower(): str(v) for k, v in (response.headers or {}).items()}
+            content_type = headers.get("content-type", "").lower()
+            if not (
+                content_type.startswith("image/")
+                or any(ext in lower_url for ext in (".png", ".webp", ".jpg", ".jpeg"))
+                or any(token in lower_url for token in ("oaiusercontent", "dalle", "imagegen", "generated"))
+            ):
+                return
+            if any(skip in lower_url for skip in (
+                "avatar",
+                "favicon",
+                "sprites",
+                "onboarding",
+                "doodles",
+                "share-og",
+                "googleusercontent.com/a/",
+            )):
+                return
+            body = await response.body()
+            if len(body) < 50_000:
+                return
+            suffix = ".png"
+            if "webp" in content_type or lower_url.endswith(".webp"):
+                suffix = ".webp"
+            elif "jpeg" in content_type or "jpg" in content_type or lower_url.endswith((".jpg", ".jpeg")):
+                suffix = ".jpg"
+            state["counter"] += 1
+            out_path = request_dir / f"generated_original_candidate_{state['counter']}{suffix}"
+            out_path.write_bytes(body)
+            width = height = 0
+            try:
+                from PIL import Image
+                with Image.open(out_path) as image:
+                    width, height = image.size
+            except Exception:
+                pass
+            state["candidates"].append({
+                "path": str(out_path),
+                "url": url,
+                "bytes": len(body),
+                "width": width,
+                "height": height,
+                "content_type": content_type,
+            })
+            _write_json(request_dir / "network-image-candidates.json", state["candidates"])
+            print(
+                f"[TechDiagram] Captured image response candidate: {out_path} "
+                f"({width}x{height}, {len(body)} bytes)",
+                flush=True,
+            )
+        except Exception as exc:
+            print(f"[TechDiagram] Image response capture skipped: {exc}", flush=True)
+
+    def on_response(response) -> None:
+        task = asyncio.create_task(capture_response(response))
+        state["tasks"].append(task)
+
+    page.on("response", on_response)
+    return state
+
+
+async def _best_original_capture(state: dict, request_dir: Path) -> dict | None:
+    tasks = [task for task in state.get("tasks", []) if not task.done()]
+    if tasks:
+        await asyncio.wait(tasks, timeout=5)
+    candidates = list(state.get("candidates") or [])
+    if not candidates:
+        return None
+    best = max(
+        candidates,
+        key=lambda item: (
+            int(item.get("width") or 0) * int(item.get("height") or 0),
+            int(item.get("bytes") or 0),
+        ),
+    )
+    src = Path(str(best["path"]))
+    suffix = src.suffix or ".png"
+    out_path = request_dir / f"generated_diagram{suffix}"
+    out_path.write_bytes(src.read_bytes())
+    best["selected_path"] = str(out_path)
+    _write_json(request_dir / "selected-original-image.json", best)
+    return {
+        "status": "success",
+        "image_path": str(out_path),
+        "url": best.get("url") or "network-image-response",
+        "source": "network-image-response",
+        "width": best.get("width"),
+        "height": best.get("height"),
+        "bytes": best.get("bytes"),
+    }
+
+
+async def _extract_dom_original_asset(page, request_dir: Path) -> dict | None:
+    """Try to extract large canvas/blob/data images directly from the page."""
+    assets = await page.evaluate("""
+        async () => {
+            const out = [];
+            async function blobToDataUrl(blob) {
+                return await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                });
+            }
+            for (const canvas of Array.from(document.querySelectorAll('canvas'))) {
+                if (canvas.width < 512 || canvas.height < 256) continue;
+                try {
+                    out.push({
+                        kind: 'canvas',
+                        width: canvas.width,
+                        height: canvas.height,
+                        data_url: canvas.toDataURL('image/png')
+                    });
+                } catch (_) {}
+            }
+            for (const img of Array.from(document.querySelectorAll('img'))) {
+                const rect = img.getBoundingClientRect();
+                const src = img.currentSrc || img.src || '';
+                if (rect.width < 512 || rect.height < 256) continue;
+                if (!src || src.includes('googleusercontent.com/a/') || src.includes('avatar')) continue;
+                if (src.startsWith('blob:') || src.startsWith('data:')) {
+                    try {
+                        const response = await fetch(src);
+                        const blob = await response.blob();
+                        out.push({
+                            kind: 'img-blob',
+                            width: img.naturalWidth || Math.round(rect.width),
+                            height: img.naturalHeight || Math.round(rect.height),
+                            data_url: await blobToDataUrl(blob)
+                        });
+                    } catch (_) {}
+                } else {
+                    out.push({
+                        kind: 'img-url',
+                        width: img.naturalWidth || Math.round(rect.width),
+                        height: img.naturalHeight || Math.round(rect.height),
+                        url: src
+                    });
+                }
+            }
+            return out;
+        }
+    """)
+    if not assets:
+        return None
+    _write_json(request_dir / "dom-image-assets.json", assets)
+    best = max(
+        assets,
+        key=lambda item: int(item.get("width") or 0) * int(item.get("height") or 0),
+    )
+    if best.get("data_url"):
+        header, encoded = str(best["data_url"]).split(",", 1)
+        suffix = ".png"
+        if "webp" in header:
+            suffix = ".webp"
+        elif "jpeg" in header:
+            suffix = ".jpg"
+        out_path = request_dir / f"generated_diagram{suffix}"
+        out_path.write_bytes(base64.b64decode(encoded))
+        return {
+            "status": "success",
+            "image_path": str(out_path),
+            "url": f"dom-{best.get('kind')}",
+            "source": best.get("kind"),
+            "width": best.get("width"),
+            "height": best.get("height"),
+        }
+    if best.get("url"):
+        try:
+            response = await page.request.get(str(best["url"]))
+            if response.ok:
+                body = await response.body()
+                if len(body) > 50_000:
+                    out_path = request_dir / "generated_diagram.png"
+                    out_path.write_bytes(body)
+                    return {
+                        "status": "success",
+                        "image_path": str(out_path),
+                        "url": best["url"],
+                        "source": "dom-img-url",
+                        "width": best.get("width"),
+                        "height": best.get("height"),
+                        "bytes": len(body),
+                    }
+        except Exception as exc:
+            print(f"[TechDiagram] DOM image URL extraction failed: {exc}", flush=True)
+    return None
+
+
 async def _try_download_generated_card(page, request_dir: Path) -> dict | None:
     """Click ChatGPT's generated-image download button when it is present."""
     marked = await page.evaluate("""
@@ -623,6 +829,7 @@ async def _run(input_data: dict) -> int:
                 raise RuntimeError("failed_to_connect_via_playwright_cdp")
             playwright_page = pw_context.pages[0] if pw_context.pages else await pw_context.new_page()
             await playwright_page.set_viewport_size({"width": 1920, "height": 1200})
+            original_capture = await _install_original_image_capture(playwright_page, request_dir)
 
             # 1. Navigate to ChatGPT
             print(f"[TechDiagram] Navigating to {DEFAULT_URL}", flush=True)
@@ -640,9 +847,18 @@ async def _run(input_data: dict) -> int:
             submitted = await _submit_prompt(playwright_page, full_prompt)
             if not submitted:
                 raise RuntimeError("failed_to_submit_prompt")
+            original_capture["active"] = True
 
             # 5. Wait for image
             result = await _wait_and_download_image(playwright_page, request_dir, timeout_s=timeout_s)
+            if result.get("status") == "success" and str(result.get("url") or "").endswith("fallback"):
+                original = await _best_original_capture(original_capture, request_dir)
+                if original:
+                    result = original
+                else:
+                    dom_asset = await _extract_dom_original_asset(playwright_page, request_dir)
+                    if dom_asset:
+                        result = dom_asset
 
             # Save results
             (request_dir / "result.json").write_text(
