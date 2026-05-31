@@ -2,6 +2,7 @@
 set -uo pipefail
 
 HARNESS_DIR="${HARNESS_DIR:-/Users/lisihao/Solar/harness}"
+export HOME="${HOME:-/Users/lisihao}"
 PYTHON="${PYTHON:-python3}"
 CONFIG="${CONFIG:-$HARNESS_DIR/config/tech-hotspot-radar.yaml}"
 DB="${DB:-/Users/lisihao/.solar/harness/state/tech-hotspot-radar/tech-hotspot-radar.sqlite}"
@@ -42,6 +43,20 @@ run_step() {
 }
 
 echo "Running Tech Hotspot Radar collectors at $(date)"
+if [[ -z "${GITHUB_TOKEN:-}" ]] && command -v gh >/dev/null 2>&1; then
+  if GH_TOKEN_VALUE="$(gh auth token 2>/dev/null)" && [[ -n "$GH_TOKEN_VALUE" ]]; then
+    export GITHUB_TOKEN="$GH_TOKEN_VALUE"
+    unset GH_TOKEN_VALUE
+    echo "[github-auth] using gh auth token"
+  else
+    unset GH_TOKEN_VALUE
+    echo "[github-auth] warn: no GITHUB_TOKEN and gh auth token unavailable; GitHub API will be unauthenticated" >&2
+  fi
+elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
+  echo "[github-auth] using GITHUB_TOKEN"
+else
+  echo "[github-auth] warn: no GITHUB_TOKEN; GitHub API will be unauthenticated" >&2
+fi
 
 run_step "hf-trending" \
   "${RADAR[@]}" collect-hf-papers --period all --limit 80 --force "$@"
@@ -56,7 +71,9 @@ run_step "hf-daily-baseline ${START_UTC}..${TODAY_UTC}" \
   --force "$@"
 
 run_step "hf-paper-insights" \
-  "${RADAR[@]}" materialize-hf-paper-insights --limit "${HF_INSIGHT_LIMIT:-160}" "$@"
+  "${RADAR[@]}" materialize-hf-paper-insights \
+  --limit "${HF_INSIGHT_LIMIT:-160}" \
+  --sleep-seconds "${HF_INSIGHT_SLEEP_SECONDS:-0.5}" "$@"
 
 run_step "github" \
   "${RADAR[@]}" collect-github --limit-repos "${GITHUB_LIMIT_REPOS:-80}" --force "$@"

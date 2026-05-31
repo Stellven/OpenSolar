@@ -36,6 +36,7 @@ fetch:
   sleep_between_requests_seconds: 3
   min_source_interval_hours: 6
   user_agent: Solar-Tech-Hotspot-Radar/1.0 (+local knowledge capture)
+  github_token_env: GITHUB_TOKEN
 
 # ── YouTube source ──────────────────────────────────────────────────
 youtube:

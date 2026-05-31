@@ -54,6 +54,20 @@ DEFAULT_THUNDEROMLX_PAUSE_FILE = Path.home() / ".omlx" / "run" / "maintenance.js
 DEFAULT_MLX_WHISPER_SITE_PACKAGES = Path.home() / ".local/pipx/venvs/mlx-whisper/lib/python3.14/site-packages"
 TRANSCRIPT_LAYOUT_VERSION = "weekly-v1"
 _TRANSCRIPT_LAYOUT_MIGRATED: set[str] = set()
+_GITHUB_TOKEN_CACHE: dict[str, str] = {}
+
+
+class GitHubRateLimitError(RuntimeError):
+    """GitHub API quota is exhausted; retry only after reset/backoff."""
+
+    def __init__(self, message: str, *, reset_at: str = "", retry_after: int | None = None):
+        super().__init__(message)
+        self.reset_at = reset_at
+        self.retry_after = retry_after
+
+
+class GitHubApiError(RuntimeError):
+    """GitHub API request failed with a non-rate-limit HTTP error."""
 
 
 def thunderomlx_ingest_paused() -> dict[str, Any] | None:
@@ -7145,36 +7159,131 @@ def cmd_import_github_candidates(args: argparse.Namespace) -> int:
     return 0
 
 
-def github_api_json(path: str, config: dict[str, Any]) -> dict[str, Any]:
-    fetch = config.get("fetch") or {}
-    token_env = fetch.get("github_token_env", "GITHUB_TOKEN")
-    token = os.environ.get(token_env, "")
-    url = f"https://api.github.com{path}"
+def github_fetch_config(config: dict[str, Any]) -> dict[str, Any]:
+    fetch = dict(config.get("fetch") or {})
+    github_cfg = config.get("github") or {}
+    # Historical config stores github_token_env under github:, while older
+    # code only read fetch:. Preserve both so scheduled collectors are
+    # authenticated without requiring a config migration.
+    if not fetch.get("github_token_env") and github_cfg.get("github_token_env"):
+        fetch["github_token_env"] = github_cfg.get("github_token_env")
+    return fetch
+
+
+def github_resolve_token(config: dict[str, Any]) -> tuple[str, str]:
+    fetch = github_fetch_config(config)
+    token_env = str(fetch.get("github_token_env") or "GITHUB_TOKEN")
+    token = os.environ.get(token_env, "").strip()
+    if token:
+        return token, f"env:{token_env}"
+    token_file = os.environ.get("GITHUB_TOKEN_FILE") or str(fetch.get("github_token_file") or "")
+    if token_file:
+        try:
+            value = Path(token_file).expanduser().read_text(encoding="utf-8").strip()
+            if value:
+                return value, "file:GITHUB_TOKEN_FILE"
+        except Exception:
+            pass
+    if token_env not in _GITHUB_TOKEN_CACHE:
+        try:
+            proc = subprocess.run(
+                ["gh", "auth", "token"],
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=5,
+            )
+            _GITHUB_TOKEN_CACHE[token_env] = proc.stdout.strip() if proc.returncode == 0 else ""
+        except Exception:
+            _GITHUB_TOKEN_CACHE[token_env] = ""
+    if _GITHUB_TOKEN_CACHE.get(token_env):
+        return _GITHUB_TOKEN_CACHE[token_env], "gh-auth-token"
+    return "", "unauthenticated"
+
+
+def github_api_headers(config: dict[str, Any], *, accept: str) -> dict[str, str]:
+    fetch = github_fetch_config(config)
+    token, _source = github_resolve_token(config)
     headers = {
-        "Accept": "application/vnd.github+json",
+        "Accept": accept,
+        "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": fetch.get("user_agent", "Solar-Tech-Hotspot-Radar/1.0"),
     }
     if token:
         headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
+def github_rate_reset_iso(headers: Any) -> str:
+    reset_raw = ""
+    try:
+        reset_raw = str(headers.get("X-RateLimit-Reset") or "")
+    except Exception:
+        reset_raw = ""
+    if not reset_raw:
+        return ""
+    try:
+        return dt.datetime.fromtimestamp(int(reset_raw), tz=dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except (TypeError, ValueError, OSError):
+        return reset_raw
+
+
+def github_api_error_from_http(exc: urllib.error.HTTPError, path: str) -> Exception:
+    body = ""
+    try:
+        body = exc.read().decode("utf-8", errors="replace")
+    except Exception:
+        body = ""
+    headers = getattr(exc, "headers", {}) or {}
+    remaining = str(headers.get("X-RateLimit-Remaining") or "")
+    retry_after_raw = str(headers.get("Retry-After") or "")
+    retry_after = int(retry_after_raw) if retry_after_raw.isdigit() else None
+    reset_at = github_rate_reset_iso(headers)
+    body_lower = body.lower()
+    is_rate_limit = (
+        exc.code in {403, 429}
+        and (
+            remaining == "0"
+            or "rate limit" in body_lower
+            or "secondary rate limit" in body_lower
+            or "api rate limit exceeded" in body_lower
+        )
+    )
+    message = f"GitHub API {exc.code} {path}"
+    if reset_at:
+        message += f" reset_at={reset_at}"
+    if retry_after is not None:
+        message += f" retry_after={retry_after}s"
+    if body:
+        message += f" body={body[:240]}"
+    if is_rate_limit:
+        return GitHubRateLimitError(message, reset_at=reset_at, retry_after=retry_after)
+    return GitHubApiError(message)
+
+
+def github_api_json(path: str, config: dict[str, Any]) -> dict[str, Any]:
+    fetch = github_fetch_config(config)
+    url = f"https://api.github.com{path}"
+    headers = github_api_headers(config, accept="application/vnd.github+json")
     req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=int(fetch.get("timeout_seconds", 20))) as resp:
-        return json.loads(resp.read().decode("utf-8", errors="replace"))
+    try:
+        with urllib.request.urlopen(req, timeout=int(fetch.get("timeout_seconds", 20))) as resp:
+            return json.loads(resp.read().decode("utf-8", errors="replace"))
+    except urllib.error.HTTPError as exc:
+        raise github_api_error_from_http(exc, path) from exc
 
 
 def github_api_text(path: str, config: dict[str, Any]) -> str:
-    fetch = config.get("fetch") or {}
-    token_env = fetch.get("github_token_env", "GITHUB_TOKEN")
-    token = os.environ.get(token_env, "")
+    fetch = github_fetch_config(config)
     url = f"https://api.github.com{path}"
-    headers = {
-        "Accept": "application/vnd.github.raw",
-        "User-Agent": fetch.get("user_agent", "Solar-Tech-Hotspot-Radar/1.0"),
-    }
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+    headers = github_api_headers(config, accept="application/vnd.github.raw")
     req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=int(fetch.get("timeout_seconds", 20))) as resp:
-        return resp.read().decode("utf-8", errors="replace")
+    try:
+        with urllib.request.urlopen(req, timeout=int(fetch.get("timeout_seconds", 20))) as resp:
+            return resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        raise github_api_error_from_http(exc, path) from exc
 
 
 def hf_paper_tags(title: str, summary: str = "") -> list[str]:
@@ -7733,9 +7842,46 @@ def hf_paper_extract_github_repos(*texts: str) -> list[str]:
     return sorted(repos)
 
 
-def hf_paper_github_metadata(repo_full_name: str, config: dict[str, Any]) -> tuple[dict[str, Any], str]:
+def hf_paper_github_metadata(
+    repo_full_name: str,
+    config: dict[str, Any],
+    conn: sqlite3.Connection | None = None,
+    *,
+    live_api: bool = False,
+) -> tuple[dict[str, Any], str]:
     if not repo_full_name:
         return {}, "no_repo"
+    if conn is not None:
+        try:
+            row = conn.execute(
+                "SELECT full_name, html_url, description, stars, forks, open_issues, language, topics, license, pushed_at "
+                "FROM github_repos WHERE lower(full_name)=lower(?)",
+                (repo_full_name,),
+            ).fetchone()
+            if row:
+                return {
+                    "full_name": row["full_name"],
+                    "url": row["html_url"] or f"https://github.com/{row['full_name']}",
+                    "html_url": row["html_url"] or f"https://github.com/{row['full_name']}",
+                    "description": row["description"] or "",
+                    "stars": int(row["stars"] or 0),
+                    "forks": int(row["forks"] or 0),
+                    "open_issues": int(row["open_issues"] or 0),
+                    "language": row["language"] or "",
+                    "topics": [x for x in str(row["topics"] or "").split(",") if x],
+                    "license": row["license"] or "",
+                    "pushed_at": row["pushed_at"] or "",
+                    "metadata_source": "local_github_repos",
+                }, ""
+        except Exception:
+            pass
+    if not live_api:
+        return {
+            "full_name": repo_full_name,
+            "url": f"https://github.com/{repo_full_name}",
+            "html_url": f"https://github.com/{repo_full_name}",
+            "metadata_source": "link_only",
+        }, ""
     try:
         repo = github_api_json(f"/repos/{repo_full_name}", config)
     except Exception as exc:
@@ -7757,6 +7903,7 @@ def hf_paper_github_metadata(repo_full_name: str, config: dict[str, Any]) -> tup
         "topics": repo.get("topics") or [],
         "license": ((repo.get("license") or {}).get("spdx_id") or ""),
         "pushed_at": repo.get("pushed_at") or "",
+        "metadata_source": "github_api",
     }, ""
 
 
@@ -7788,8 +7935,10 @@ def cmd_materialize_hf_paper_insights(args: argparse.Namespace) -> int:
         scorer = SignalScorer()
         packet_builder = PacketBuilder()
         live_enrichment = not bool(getattr(args, "no_live_enrichment", False))
+        live_github_metadata = bool(getattr(args, "live_github_metadata", False))
         timeout_seconds = int(getattr(args, "timeout_seconds", 20) or 20)
         max_provider_retries = int(getattr(args, "provider_retries", 2) or 2)
+        provider_sleep_seconds = float(getattr(args, "sleep_seconds", 0.0) or 0.0)
 
         rows = conn.execute(
             """
@@ -7808,6 +7957,7 @@ def cmd_materialize_hf_paper_insights(args: argparse.Namespace) -> int:
         materialized = 0
         packets = 0
         gate_passed = 0
+        skipped_rate_limited = 0
         provider_success_counts: dict[str, int] = {}
         provider_failure_counts: dict[str, int] = {}
         for row in rows:
@@ -7867,6 +8017,10 @@ def cmd_materialize_hf_paper_insights(args: argparse.Namespace) -> int:
                     if hf_assets.get("total_assets"):
                         provider_success.append("hf_assets")
                 elif hf_error:
+                    if hf_error == "http_429":
+                        skipped_rate_limited += 1
+                        provider_failure_counts["huggingface_rate_limited"] = provider_failure_counts.get("huggingface_rate_limited", 0) + 1
+                        continue
                     provider_failures["huggingface"] = hf_error
 
                 arxiv_payload, arxiv_error = hf_paper_arxiv_metadata(canonical.arxiv_id or "", timeout_seconds=timeout_seconds)
@@ -7877,20 +8031,6 @@ def cmd_materialize_hf_paper_insights(args: argparse.Namespace) -> int:
                     provider_success.append("arxiv")
                 elif arxiv_error:
                     provider_failures["arxiv"] = arxiv_error
-
-                assets_payload, assets_error = (None, "")
-                if not hf_assets.get("total_assets"):
-                    assets_payload, assets_error = hf_paper_http_json(
-                        f"https://huggingface.co/api/papers/{canonical.paper_id}/repos",
-                        timeout_seconds=timeout_seconds,
-                        retries=max_provider_retries,
-                    )
-                if assets_payload is not None:
-                    hf_assets = hf_paper_normalize_assets(assets_payload)
-                    if hf_assets.get("total_assets"):
-                        provider_success.append("hf_assets")
-                elif assets_error and assets_error != "http_404":
-                    provider_failures["hf_assets"] = assets_error
 
             github_repos = hf_paper_extract_github_repos(
                 str(row["summary"] or ""),
@@ -7903,9 +8043,16 @@ def cmd_materialize_hf_paper_insights(args: argparse.Namespace) -> int:
                 provider_success.append("github_link")
                 github_repos_meta: list[dict[str, Any]] = []
                 for repo_name in github_repos[:3]:
-                    repo_meta, repo_error = hf_paper_github_metadata(repo_name, config) if live_enrichment else (
-                        {"full_name": repo_name, "url": f"https://github.com/{repo_name}", "html_url": f"https://github.com/{repo_name}"},
-                        "",
+                    owner, repo = repo_name.split("/", 1)
+                    conn.execute(
+                        "INSERT OR IGNORE INTO github_repos (full_name, owner, repo, html_url, fetched_at) VALUES (?, ?, ?, ?, ?)",
+                        (repo_name, owner, repo, f"https://github.com/{repo_name}", _utc_now()),
+                    )
+                    repo_meta, repo_error = hf_paper_github_metadata(
+                        repo_name,
+                        config,
+                        conn,
+                        live_api=live_enrichment and live_github_metadata,
                     )
                     github_repos_meta.append(repo_meta)
                     if repo_error:
@@ -7944,16 +8091,19 @@ def cmd_materialize_hf_paper_insights(args: argparse.Namespace) -> int:
                 provider_failure_counts[key] = provider_failure_counts.get(key, 0) + 1
             materialized += 1
             packets += 1
+            if provider_sleep_seconds > 0 and materialized < len(rows):
+                time.sleep(provider_sleep_seconds)
         finish_run(
             conn,
             run_id,
-            "ok",
+            "partial" if skipped_rate_limited else "ok",
             len(rows),
             materialized,
             json.dumps({
                 "store": store_path,
                 "packets": packets,
                 "gate_passed": gate_passed,
+                "skipped_rate_limited": skipped_rate_limited,
                 "provider_success": provider_success_counts,
                 "provider_failures": provider_failure_counts,
             }, ensure_ascii=False)[:900],
@@ -7966,6 +8116,7 @@ def cmd_materialize_hf_paper_insights(args: argparse.Namespace) -> int:
             "materialized": materialized,
             "packets": packets,
             "gate_passed": gate_passed,
+            "skipped_rate_limited": skipped_rate_limited,
             "store": store_path,
             "provider_success": provider_success_counts,
             "provider_failures": provider_failure_counts,
@@ -8047,6 +8198,12 @@ def cmd_collect_github(args: argparse.Namespace) -> int:
     fetched = 0
     new_items = 0
     failures: list[str] = []
+    rate_limited = False
+    token, token_source = github_resolve_token(config)
+    print(
+        f"[collect-github] auth={'token' if token else 'unauthenticated'} source={token_source} repos={len(rows)}",
+        flush=True,
+    )
     for idx, row in enumerate(rows, 1):
         full_name = row["full_name"]
         if idx == 1 or idx == len(rows) or idx % 10 == 0:
@@ -8057,11 +8214,15 @@ def cmd_collect_github(args: argparse.Namespace) -> int:
                 latest = github_api_json(f"/repos/{full_name}/releases/latest", config)
                 repo["latest_release_tag"] = latest.get("tag_name") or ""
                 repo["latest_release_at"] = latest.get("published_at") or latest.get("created_at") or ""
+            except GitHubRateLimitError:
+                raise
             except Exception:
                 repo["latest_release_tag"] = ""
                 repo["latest_release_at"] = ""
             try:
                 readme = github_api_text(f"/repos/{full_name}/readme", config)
+            except GitHubRateLimitError:
+                raise
             except Exception:
                 readme = ""
             changed = upsert_github_repo(conn, repo, readme, fetched_at)
@@ -8108,6 +8269,11 @@ def cmd_collect_github(args: argparse.Namespace) -> int:
             )
             github_materialize_project_intelligence(conn, full_name, force=True)
             conn.commit()
+        except GitHubRateLimitError as exc:
+            rate_limited = True
+            failures.append(f"{full_name}: {type(exc).__name__}: {exc}")
+            print(f"[collect-github] rate_limited repo={full_name} {exc}", flush=True)
+            break
         except Exception as exc:
             failures.append(f"{full_name}: {type(exc).__name__}: {exc}")
         if idx < len(rows):
@@ -8120,9 +8286,15 @@ def cmd_collect_github(args: argparse.Namespace) -> int:
         "partial" if failures else "ok",
         fetched,
         new_items,
-        json.dumps({"failures": failures[:5], "repo_master_synced": repo_master_synced}, ensure_ascii=False)[:900],
+        json.dumps({
+            "failures": failures[:5],
+            "repo_master_synced": repo_master_synced,
+            "rate_limited": rate_limited,
+            "auth": "token" if token else "unauthenticated",
+            "auth_source": token_source,
+        }, ensure_ascii=False)[:900],
     )
-    print(f"[collect-github] repos={len(rows)} fetched={fetched} changed={new_items} failures={len(failures)}")
+    print(f"[collect-github] repos={len(rows)} fetched={fetched} changed={new_items} failures={len(failures)} rate_limited={rate_limited}")
     print(f"[collect-github] repo_master_synced={repo_master_synced}")
     for failure in failures[:10]:
         print(f"  WARN {failure}")
@@ -10252,6 +10424,9 @@ def browser_agent_chatgpt_cmd(config: dict[str, Any]) -> list[str]:
     ).strip()
     if cmd:
         return shlex.split(cmd)
+    operator = Path(__file__).resolve().parents[1] / "tools" / "chatgpt_report_operator.py"
+    if operator.exists():
+        return [sys.executable, str(operator)]
     wrapper = Path(__file__).resolve().with_name("browser_agent_chatgpt_wrapper.py")
     browser_use_python = Path.home() / ".claude" / "mcp-servers" / "browser-use" / ".venv" / "bin" / "python"
     if wrapper.exists() and browser_use_python.exists():
@@ -10330,6 +10505,7 @@ def call_browser_agent_chatgpt_text(prompt: str, config: dict[str, Any], *,
         "CHATGPT_REASONING_EFFORT": reasoning_effort,
         "BROWSER_AGENT_EXPECTED_OUTPUT": expected,
         "BROWSER_AGENT_REQUEST_DIR": str(req_dir),
+        "BROWSER_AGENT_PURPOSE": purpose,
     })
     project_name = str(
         writer_cfg.get("chatgpt_project")
@@ -13419,8 +13595,10 @@ def build_parser() -> argparse.ArgumentParser:
     hf_insight = sub.add_parser("materialize-hf-paper-insights", help="Materialize HF paper canonical/signal/packet store without high-model reasoning")
     hf_insight.add_argument("--limit", type=int, default=80)
     hf_insight.add_argument("--no-live-enrichment", action="store_true", help="Use only local HF snapshots; skip HF/arXiv/GitHub live enrichment")
+    hf_insight.add_argument("--live-github-metadata", action="store_true", help="Fetch GitHub repo metadata live during HF enrichment; default uses local/link-only evidence to avoid rate limits")
     hf_insight.add_argument("--timeout-seconds", type=int, default=20, help="Per-provider HTTP timeout for live enrichment")
     hf_insight.add_argument("--provider-retries", type=int, default=2, help="Bounded retry count for HF live enrichment providers")
+    hf_insight.add_argument("--sleep-seconds", type=float, default=0.2, help="Small delay between live enrichment papers to avoid provider rate limits")
     gh_analyze = sub.add_parser("analyze-github-projects", help="Build GitHub repo evidence atoms, reasoning packets and analysis cards")
     gh_analyze.add_argument("--limit-repos", type=int, default=0)
     gh_analyze.add_argument("--force", action="store_true")
