@@ -365,108 +365,76 @@
       "max_concurrency": 1,
       "fallback_profile": "builder"
     },
-    "mini-antigravity-gemini35-flash-image": {
-      "display_name": "Mac mini Antigravity Gemini 3.5 Flash multimodal image",
-      "plane": "headless",
-      "owner_host": "lisihao@100.122.223.55",
-      "pane": "solar-harness-multi-task:*",
-      "profile": "gemini-builder",
-      "role": "builder",
-      "persona": "builder",
-      "provider": "google",
-      "vendor": "Google",
-      "backend": "command",
-      "model": "gemini-3.5-flash-high",
-      "model_config": "Antigravity CLI agy;multimodal=image-input",
-      "base_url": "agy-cli",
-      "command_path": "/Users/lisihao/.local/bin/agy",
-      "auth_mode": "oauth",
-      "key_ref": "antigravity_oauth",
-      "quota_cycle": "google-account",
-      "quota_refresh_at": null,
-      "quota_guard_state": "ok",
-      "enabled": true,
-      "disabled_reason": "",
-      "enabled_at": "2026-05-22T00:34:00Z",
-      "available": true,
-      "health_status": "ok",
-      "input_modalities": [
-        "text",
-        "image",
-        "screenshot"
-      ],
-      "output_modalities": [
-        "text",
-        "structured-json"
-      ],
-      "artifact_types": [
-        "png",
-        "jpg",
-        "jpeg",
-        "webp",
-        "pdf-page-image",
-        "screenshot"
-      ],
-      "roles": [
-        "builder",
-        "evaluator"
-      ],
-      "task_classes": [
-        "multimodal",
-        "image-processing",
-        "vision",
-        "screenshot-analysis",
-        "ui-check",
-        "ocr",
-        "diagram-analysis"
-      ],
-      "strengths": [
-        "image-understanding",
-        "ui-check",
-        "screenshot-analysis",
-        "google-stack"
-      ],
-      "preferred_for": [
-        "image",
-        "vision",
-        "multimodal",
-        "screenshot",
-        "ui",
-        "mockup",
-        "diagram",
-        "ocr"
-      ],
-      "avoid_for": [
-        "bulk-text-extraction",
-        "critical-code-review"
-      ],
-      "cost_tier": "low",
-      "latency_tier": "low",
-      "context_tier": "high",
-      "max_concurrency": 1,
-      "fallback_profile": "builder",
-      "last_smoke_at": "2026-05-22T00:34:00Z",
-      "last_smoke_evidence": "agy --add-dir real Photos Library JPEG described beach/ocean scene",
-      "command": "AGY_BIN=/Users/lisihao/.local/bin/agy PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/antigravity_multimodal_agent.py\"",
-      "state": {
-        "availability": "enabled",
-        "runtime_state": "idle",
-        "cooldown_until": null,
-        "last_error": null,
-        "last_error_at": "2026-05-31T02:03:45Z",
-        "last_pruned_at": "2026-05-31T03:59:25Z"
-      },
-      "flow_control": {
-        "last_block_state": "auth_expired",
-        "last_block_reason": "auth_expired",
-        "last_block_source": "failure_flow_control",
-        "last_block_detected_at": "2026-05-31T02:03:45Z",
-        "last_block_expires_at": "2026-05-31T08:03:45Z",
-        "last_block_excerpt": "ERROR: Antigravity auth expired or not logged in; refusing handoff Recovery: run `agy login` and re-authenticate. avity. W0530 22:03:43.559536 75000 log_context.go:117] Cache(loadCodeAssistResponse): Singleflight refresh failed: error getting token source: You are not logged into Antigravity. W0530 22:03:43.559563 75000 log_context.go:117] Cache(availableModels): Singleflight refresh failed: failed to get load code assist response: error getting token source: You are not logged into Antigravity. E0530 22:03:43.559590 75000 log.go:398] Failed to poll FetchAvailableModels: failed to get load code assist response: error getting token source: You are not logged into Antigravity. I0530 22:03:43.560847 75000 server.go:2274] Auth succeeded, refreshing features and managers E0530 22:03:43.560887 7",
-        "last_pruned_at": "2026-05-31T03:59:25Z",
-        "last_prune_reason": "antigravity_auth_probe_success"
-      }
-    },
+      "mini-antigravity-gemini35-flash-image": {
+    "display_name": "Mac mini Antigravity Gemini 3.5 Flash multimodal image",
+    "plane": "headless",
+    "owner_host": "lisihao@100.122.223.55",
+    "pane": "solar-harness-multi-task:*",
+    "profile": "gemini-builder",
+    "role": "builder",
+    "persona": "builder",
+    "provider": "google",
+    "vendor": "Google",
+    "backend": "command",
+    "model": "gemini-3.5-flash-high",
+    "model_config": "Antigravity CLI agy;multimodal=blocked-until-media-adapter",
+    "base_url": "agy-cli",
+    "command_path": "/Users/lisihao/.local/bin/agy",
+    "auth_mode": "oauth",
+    "key_ref": "antigravity_oauth",
+    "quota_cycle": "google-account",
+    "quota_refresh_at": null,
+    "quota_guard_state": "ok",
+    "enabled": false,
+    "disabled_reason": "failed true-image smoke: agy --print path reports media=0/placeholder output; blocked until real media attachment adapter passes non-placeholder image test",
+    "enabled_at": "2026-05-22T00:34:00Z",
+    "available": false,
+    "health_status": "failed_smoke",
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text",
+      "structured-json"
+    ],
+    "artifact_types": [],
+    "roles": [
+      "builder",
+      "evaluator"
+    ],
+    "task_classes": [
+      "blocked-image-adapter"
+    ],
+    "strengths": [
+      "google-stack"
+    ],
+    "preferred_for": [],
+    "avoid_for": [
+      "bulk-text-extraction",
+      "critical-code-review",
+      "diagram-analysis",
+      "image",
+      "multimodal",
+      "ocr",
+      "screenshot",
+      "vision"
+    ],
+    "cost_tier": "low",
+    "latency_tier": "low",
+    "context_tier": "high",
+    "max_concurrency": 1,
+    "fallback_profile": "builder",
+    "last_smoke_at": "2026-05-31T04:15:00Z",
+    "last_smoke_evidence": "operator_runtime image smoke refused placeholder/non-final output; Antigravity CLI log showed media=0",
+    "command": "AGY_BIN=/Users/lisihao/.local/bin/agy PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/antigravity_multimodal_agent.py\"",
+    "state": {
+      "availability": "disabled",
+      "runtime_state": "blocked",
+      "cooldown_until": null,
+      "last_error": "failed_nonfinal_or_no_media_image_smoke",
+      "last_error_at": "2026-05-31T04:15:00Z"
+    }
+  },
     "mini-antigravity-gemini31-pro": {
       "display_name": "Mac mini Antigravity Gemini 3.1 Pro",
       "plane": "headless",
@@ -2802,6 +2770,101 @@
         "slot": 1,
         "priority": 5
       }
+    },
+      "technology-diagram-painter": {
+    "display_name": "Technology Diagram Painter Browser Agent",
+    "plane": "interactive_browser",
+    "owner_host": "lisihao@100.122.223.55",
+    "pane": "solar-harness-multi-task:*",
+    "profile": "browser-agent",
+    "role": "builder",
+    "persona": "builder",
+    "provider": "browser",
+    "vendor": "BrowserAgent",
+    "backend": "command",
+    "model": "chatgpt-image-browser-agent",
+    "model_config": "ChatGPT image generation via browser-use/Playwright technology diagram painter",
+    "base_url": "https://chatgpt.com",
+    "auth_mode": "oauth",
+    "key_ref": "chatgpt_browser_profile",
+    "quota_cycle": "webapp-account",
+    "quota_refresh_at": null,
+    "quota_guard_state": "ok",
+    "enabled": true,
+    "enabled_at": "2026-05-31T04:15:00Z",
+    "available": true,
+    "health_status": "ok",
+    "roles": [
+      "builder"
+    ],
+    "input_modalities": [
+      "text",
+      "structured-json"
+    ],
+    "output_modalities": [
+      "image",
+      "png",
+      "artifact",
+      "structured-json"
+    ],
+    "artifact_types": [
+      "png",
+      "browser-trace",
+      "result-json"
+    ],
+    "task_classes": [
+      "technology-diagram",
+      "diagram-generation",
+      "browser-asset-generation",
+      "architecture-figure",
+      "visual-artifact"
+    ],
+    "strengths": [
+      "technology-diagram-generation",
+      "architecture-figure",
+      "browser-agent",
+      "chatgpt-image"
+    ],
+    "preferred_for": [
+      "technology-diagram",
+      "architecture-figure",
+      "report-figure",
+      "browser-asset-generation",
+      "diagram"
+    ],
+    "avoid_for": [
+      "vision-analysis",
+      "ocr",
+      "code-implementation",
+      "critical-security-review"
+    ],
+    "cost_tier": "medium",
+    "latency_tier": "high",
+    "context_tier": "medium",
+    "max_concurrency": 1,
+    "fallback_profile": "browser-agent",
+    "policy": {
+      "write_files": "artifact_dir_only",
+      "run_shell": "restricted_operator_command",
+      "network": "allowed",
+      "secrets_access": "secret_ref_only",
+      "git_commit": "denied"
+    },
+    "command": "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/technology_diagram_painter_operator.py\"",
+    "flow_control": {
+      "success_cooldown_seconds": 30,
+      "rate_limit_cooldown_seconds": 600,
+      "auth_cooldown_seconds": 3600,
+      "defer_on_cooldown": true,
+      "defer_on_auth": true
+    },
+    "state": {
+      "availability": "enabled",
+      "runtime_state": "idle",
+      "cooldown_until": null,
+      "last_error": null,
+      "last_error_at": null
     }
+  }
   }
 }

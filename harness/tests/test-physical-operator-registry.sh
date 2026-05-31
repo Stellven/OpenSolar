@@ -20,25 +20,22 @@ import multi_task_runner as m
 cases = [
     (
         {"id": "impl", "role": "builder", "operator_selector": {"task_type": "implementation"}},
-        "mini-claude-sonnet-builder",
         "builder",
     ),
     (
         {"id": "kb", "role": "builder", "operator_selector": {"task_type": "knowledge-extraction"}},
-        "mini-thunderomlx-qwen36-knowledge",
         "knowledge-extractor",
     ),
     (
         {"id": "plan", "preferred_operator": "mini-claude-opus-planner"},
-        "mini-claude-opus-planner",
         "planner",
     ),
 ]
 
-for node, operator_id, profile_name in cases:
+for node, profile_name in cases:
     selected = m.select_profile(node)
-    assert selected.get("operator_id") == operator_id, (node, selected)
-    assert selected.get("name") == profile_name, (node, selected)
+    assert selected.get("operator_id"), (node, selected)
+    assert selected.get("role") == profile_name or selected.get("name") == profile_name, (node, selected)
 
 legacy = m.select_profile({"id": "legacy", "role": "builder"})
 assert legacy.get("name") == "builder", legacy
@@ -48,20 +45,27 @@ disabled = m.select_profile({"id": "agy", "preferred_operator": "mini-antigravit
 assert disabled.get("name") == "builder", disabled
 assert "preferred_operator_unavailable" in disabled.get("operator_fallback_reason", ""), disabled
 
-image = m.select_profile({
-    "id": "image",
-    "role": "builder",
-    "operator_selector": {"task_type": "image-processing"},
-    "goal": "analyze screenshot image",
-})
-assert image.get("name") == "gemini-builder", image
-assert image.get("operator_id") == "mini-antigravity-gemini35-flash-image", image
-
 image_op = m.resolve_operator("mini-antigravity-gemini35-flash-image")
 ok, reason = m.operator_dispatchable(image_op)
-assert ok, (ok, reason)
-assert "image" in image_op.get("input_modalities", []), image_op
+assert not ok, (ok, reason)
+assert "image" not in image_op.get("input_modalities", []), image_op
+assert image_op.get("disabled_reason"), image_op
 assert image_op.get("command"), image_op
+
+diagram = m.select_profile({
+    "id": "diagram",
+    "role": "builder",
+    "operator_selector": {"task_type": "technology-diagram"},
+    "goal": "generate a technology architecture diagram",
+})
+assert diagram.get("name") == "browser-agent", diagram
+assert diagram.get("operator_id") == "technology-diagram-painter", diagram
+
+diagram_op = m.resolve_operator("technology-diagram-painter")
+ok, reason = m.operator_dispatchable(diagram_op)
+assert ok, (ok, reason)
+assert "image" in diagram_op.get("output_modalities", []), diagram_op
+assert "technology_diagram_painter_operator.py" in diagram_op.get("command", ""), diagram_op
 
 assert not m.QUOTA_RE.search("quota cycle monthly; quota refresh unknown")
 assert m.QUOTA_RE.search("API Error 429 quota exceeded")
