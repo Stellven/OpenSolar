@@ -6,6 +6,7 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 
 MODULE_PATH = Path(__file__).resolve().parents[2] / "tools" / "solar-autopilot-monitor.py"
@@ -353,6 +354,135 @@ def test_role_pool_handoffs_do_not_share_fixed_target_cooldown(monkeypatch) -> N
     assert [item["dispatched"] for item in actions] == [True, True]
 
 
+def test_epic_filter_keeps_target_epic_and_child_sprints(tmp_path, monkeypatch) -> None:
+    epic_id = "epic-target"
+    target_sid = "sprint-target"
+    other_sid = "sprint-other"
+    sprints_dir = tmp_path / "sprints"
+    sprints_dir.mkdir()
+    monkeypatch.setattr(mod, "SPRINTS", sprints_dir)
+    (sprints_dir / f"{target_sid}.status.json").write_text(json.dumps({
+        "sprint_id": target_sid,
+        "epic_id": epic_id,
+    }) + "\n")
+    (sprints_dir / f"{other_sid}.status.json").write_text(json.dumps({
+        "sprint_id": other_sid,
+        "epic_id": "epic-other",
+    }) + "\n")
+
+    findings = [
+        {"sid": "epic-target", "type": "epic_ready_children"},
+        {"sid": target_sid, "type": "ready_for_planner"},
+        {"sid": other_sid, "type": "ready_for_planner"},
+        {"sid": "", "type": "model_registry_doctor_failed"},
+    ]
+
+    filtered = mod.filter_findings_by_epic(findings, epic_id)
+
+    assert [item["sid"] for item in filtered] == ["epic-target", target_sid]
+
+
+def test_retry_queue_epic_filter_preserves_unrelated_items(tmp_path, monkeypatch) -> None:
+    epic_id = "epic-target"
+    target_sid = "sprint-target"
+    other_sid = "sprint-other"
+    monkeypatch.setattr(mod, "QUEUE", tmp_path / "autopilot-queue.jsonl")
+    monkeypatch.setattr(mod, "SPRINTS", tmp_path / "sprints")
+    mod.SPRINTS.mkdir()
+    (mod.SPRINTS / f"{target_sid}.status.json").write_text(json.dumps({
+        "sprint_id": target_sid,
+        "status": "active",
+        "epic_id": epic_id,
+    }) + "\n")
+    (mod.SPRINTS / f"{other_sid}.status.json").write_text(json.dumps({
+        "sprint_id": other_sid,
+        "status": "active",
+        "epic_id": "epic-other",
+    }) + "\n")
+    mod.QUEUE.write_text(
+        json.dumps({"sid": target_sid, "type": "ready_for_planner", "target": "solar-harness:0.1", "created_at_epoch": 9999999999}) + "\n"
+        + json.dumps({"sid": other_sid, "type": "ready_for_planner", "target": "solar-harness:0.1", "created_at_epoch": 9999999999}) + "\n"
+    )
+    monkeypatch.setattr(mod, "append_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(mod, "target_recently_dispatched", lambda state, target, cooldown: False)
+    monkeypatch.setattr(mod, "pane_gate", lambda target, sid: (True, "ok", {}))
+    monkeypatch.setattr(mod, "pane_is_busy", lambda target: False)
+    monkeypatch.setattr(mod, "clear_current_prompt", lambda target: None)
+    monkeypatch.setattr(mod, "mark_action", lambda *args, **kwargs: None)
+    role_calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(mod, "dispatch_role_handoff", lambda s, t: role_calls.append((s, t)) or (True, {"role": "planner"}))
+
+    actions = mod.retry_queue({"actions": {}, "target_actions": {}}, dispatch=True, cooldown=0, epic_filter=epic_id)
+
+    assert role_calls == [(target_sid, "ready_for_planner")]
+    assert actions == [{
+        "sid": target_sid,
+        "action": "ready_for_planner",
+        "dispatched_from_queue": True,
+        "target": "solar-harness:0.1",
+        "role_pool_dispatch": {"role": "planner"},
+    }]
+    assert [item["sid"] for item in mod.load_queue()] == [other_sid]
+
+
+def test_scan_once_epic_filter_applies_before_action_budget(tmp_path, monkeypatch) -> None:
+    epic_id = "epic-target"
+    target_a = "sprint-target-a"
+    target_b = "sprint-target-b"
+    other_sids = [f"sprint-other-{idx}" for idx in range(7)]
+    sprints_dir = tmp_path / "sprints"
+    sprints_dir.mkdir()
+    monkeypatch.setattr(mod, "SPRINTS", sprints_dir)
+    monkeypatch.setattr(mod, "QUEUE", tmp_path / "autopilot-queue.jsonl")
+    monkeypatch.setenv("SOLAR_AUTOPILOT_MAX_ACTIONS", "6")
+    for sid in [target_a, target_b]:
+        (sprints_dir / f"{sid}.status.json").write_text(json.dumps({
+            "sprint_id": sid,
+            "status": "active",
+            "phase": "prd_ready",
+            "handoff_to": "planner",
+            "epic_id": epic_id,
+        }) + "\n")
+    for sid in other_sids:
+        (sprints_dir / f"{sid}.status.json").write_text(json.dumps({
+            "sprint_id": sid,
+            "status": "active",
+            "phase": "prd_ready",
+            "handoff_to": "planner",
+            "epic_id": "epic-other",
+        }) + "\n")
+
+    target_findings = [{"sid": sid, "type": "ready_for_planner", "target": "solar-harness:0.1", "message": sid} for sid in [target_a, target_b]]
+    unrelated_findings = [{"sid": sid, "type": "ready_for_planner", "target": "solar-harness:0.1", "message": sid} for sid in other_sids]
+    monkeypatch.setattr(mod, "inspect_epics", lambda: [])
+    monkeypatch.setattr(mod, "inspect_epic_child_state_drift", lambda: [])
+    monkeypatch.setattr(mod, "inspect_sprints", lambda: unrelated_findings + target_findings)
+    monkeypatch.setattr(mod, "inspect_deepresearch_quality_gates", lambda: [])
+    monkeypatch.setattr(mod, "inspect_panes", lambda state, stall_seconds: [])
+    monkeypatch.setattr(mod, "inspect_knowledge_context", lambda state: [])
+    monkeypatch.setattr(mod, "inspect_model_registry", lambda state: [])
+    monkeypatch.setattr(mod, "reconcile_pm_inbox", lambda: {})
+    monkeypatch.setattr(mod, "update_idle_pane_titles", lambda state: [])
+    monkeypatch.setattr(mod, "save_state", lambda state: None)
+    monkeypatch.setattr(mod, "append_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(mod, "should_act", lambda state, f, cooldown: True)
+    monkeypatch.setattr(mod, "target_recently_dispatched", lambda state, target, cooldown: False)
+    monkeypatch.setattr(mod, "save_json", lambda *args, **kwargs: None)
+    monkeypatch.setattr(mod, "mark_action", lambda *args, **kwargs: None)
+    role_calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(mod, "dispatch_role_handoff", lambda s, t: role_calls.append((s, t)) or (True, {"role": "planner"}))
+
+    payload = mod.scan_once(
+        SimpleNamespace(apply=True, dispatch=True, cooldown=0, loop=False, stall_seconds=300, epic=epic_id),
+        {"actions": {}, "target_actions": {}},
+    )
+
+    assert payload["findings_before_epic_filter"] == 9
+    assert [item["sid"] for item in payload["findings"]] == [target_a, target_b]
+    assert role_calls == [(target_a, "ready_for_planner"), (target_b, "ready_for_planner")]
+    assert not [item for item in payload["actions"] if item.get("skipped") == "autopilot_action_budget"]
+
+
 def test_ready_for_planner_role_pool_failure_queues_without_wake(monkeypatch) -> None:
     sid = "sprint-planner-no-capacity"
     finding = {
@@ -388,3 +518,74 @@ def test_ready_for_planner_role_pool_failure_queues_without_wake(monkeypatch) ->
     assert queued[0][1] == "role_pool_unavailable"
     assert actions[0]["queued"] is True
     assert actions[0]["reason"] == "role_pool_unavailable"
+
+
+def test_ready_for_planner_does_not_downgrade_active_epic_child(monkeypatch) -> None:
+    sid = "sprint-epic-child"
+    saved: list[dict] = []
+    monkeypatch.setattr(mod, "should_act", lambda state, f, cooldown: True)
+    monkeypatch.setattr(mod, "target_recently_dispatched", lambda state, target, cooldown: False)
+    monkeypatch.setattr(mod, "pane_gate", lambda target, sid: (True, "ok", {}))
+    monkeypatch.setattr(mod, "pane_is_busy", lambda target: False)
+    monkeypatch.setattr(mod, "clear_current_prompt", lambda target: None)
+    monkeypatch.setattr(mod, "append_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        mod,
+        "load_json",
+        lambda path: {
+            "sprint_id": sid,
+            "status": "active",
+            "phase": "prd_ready",
+            "handoff_to": "planner",
+            "target_role": "planner",
+            "epic_id": "epic-demo",
+            "dependency_policy": "activated_by_epic_dag",
+            "history": [],
+        },
+    )
+    monkeypatch.setattr(mod, "save_json", lambda path, data: saved.append(dict(data)))
+    monkeypatch.setattr(mod, "mark_action", lambda *args, **kwargs: None)
+    monkeypatch.setattr(mod, "dispatch_role_handoff", lambda s, t: (True, {"role": "planner"}))
+
+    actions = mod.apply_findings(
+        [{"sid": sid, "type": "ready_for_planner", "target": "solar-harness:0.1", "message": "planner dispatch"}],
+        dispatch=True,
+        state={"actions": {}, "target_actions": {}},
+        cooldown=0,
+    )
+
+    assert actions[0]["dispatched"] is True
+    assert saved[0]["status"] == "active"
+    assert saved[0]["phase"] == "prd_ready"
+    assert saved[0]["handoff_to"] == "planner"
+
+
+def test_role_pool_unavailable_cache_expires(monkeypatch) -> None:
+    mod.ROLE_POOL_UNAVAILABLE_CACHE.clear()
+    monkeypatch.setattr(mod, "ROLE_POOL_UNAVAILABLE_CACHE_TTL_SEC", 1)
+    calls: list[int] = []
+
+    class _Proc:
+        def __init__(self, rc: int, stderr: str):
+            self.returncode = rc
+            self.stdout = ""
+            self.stderr = stderr
+
+    monkeypatch.setattr(
+        mod.subprocess,
+        "run",
+        lambda *args, **kwargs: calls.append(1) or _Proc(1, "ERROR: 没有可用算子 (no_dispatchable_operator_for_role: planner)\n"),
+    )
+
+    ok1, detail1 = mod.dispatch_role_handoff("sprint-a", "ready_for_planner")
+    ok2, detail2 = mod.dispatch_role_handoff("sprint-a", "ready_for_planner")
+    assert ok1 is False and ok2 is False
+    assert detail2.get("cached") is True
+    assert len(calls) == 1
+
+    original_time = mod.time.time
+    monkeypatch.setattr(mod.time, "time", lambda: original_time() + 5)
+    ok3, detail3 = mod.dispatch_role_handoff("sprint-a", "ready_for_planner")
+    assert ok3 is False
+    assert detail3.get("cached") is not True
+    assert len(calls) == 2

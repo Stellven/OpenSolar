@@ -1334,6 +1334,70 @@ def _active_multi_task_status_for(sid: str, node_id: str) -> dict[str, Any] | No
     return newest[1] if newest else None
 
 
+def _latest_operator_result_for(sid: str, node_id: str, operator_id: str = "") -> dict[str, Any] | None:
+    """Return the newest terminal PM/operator result for a graph node.
+
+    Operator-pool dispatch is asynchronous: `pm_dispatch submit` can succeed
+    while the real worker later produces no node handoff.  Graph reconciliation
+    must therefore inspect the operator result artifact instead of treating the
+    submit ack as durable completion proof.
+    """
+    root = HARNESS_DIR / "run" / "operator-results"
+    if not root.exists():
+        return None
+    newest: tuple[str, dict[str, Any]] | None = None
+    for result_json in root.glob("*/*/result.json"):
+        data = _read_json_file_safe(result_json)
+        if str(data.get("sprint_id") or "") != sid:
+            continue
+        if str(data.get("node_id") or "") != node_id:
+            continue
+        if operator_id and str(data.get("operator_id") or "") != operator_id:
+            continue
+        status = str(data.get("status") or "").strip().lower()
+        if status not in {"completed", "failed", "failed_missing_handoff", "failed_stale_handoff", "cancelled", "error"}:
+            continue
+        finished = str(data.get("finished_at") or data.get("updated_at") or data.get("started_at") or "")
+        item = dict(data)
+        item["_result_json"] = str(result_json)
+        if newest is None or finished > newest[0]:
+            newest = (finished, item)
+    return newest[1] if newest else None
+
+
+def _operator_terminal_result_closeout(
+    sid: str,
+    node_id: str,
+    node: dict[str, Any],
+    graph: dict[str, Any],
+) -> dict[str, Any] | None:
+    pane = str(node.get("assigned_to") or "").strip()
+    if not pane.startswith("operator:"):
+        return None
+    operator_id = pane.split(":", 1)[1].strip()
+    result = _latest_operator_result_for(sid, node_id, operator_id=operator_id)
+    if not result:
+        return None
+    status = str(result.get("status") or "").strip().lower()
+    if status == "completed" and _existing_node_handoff(sid, node, graph):
+        return None
+    if status == "completed":
+        return {
+            "reason": "failed_contract_closeout",
+            "operator_status": status,
+            "result_json": str(result.get("_result_json") or ""),
+            "operator_id": operator_id,
+            "detail": "operator completed but node handoff/eval artifacts are missing",
+        }
+    return {
+        "reason": f"operator_result_{status or 'failed'}",
+        "operator_status": status or "failed",
+        "result_json": str(result.get("_result_json") or ""),
+        "operator_id": operator_id,
+        "exit_code": result.get("exit_code"),
+    }
+
+
 def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path) -> list[dict[str, Any]]:
     sid = str(graph.get("sprint_id") or Path(graph_path).stem.replace(".task_graph", ""))
     repaired: list[dict[str, Any]] = []
@@ -1431,6 +1495,39 @@ def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path
                 }
             )
             continue
+        if status in {"assigned", "dispatched", "in_progress", "running"}:
+            closeout = _operator_terminal_result_closeout(sid, node_id, node, graph)
+            if closeout:
+                pane = str(node.get("assigned_to") or "").strip()
+                dispatch_id = str(node.get("dispatch_id") or "").strip()
+                if pane and dispatch_id:
+                    release_lease(pane, dispatch_id, f"graph_dispatch_reconcile_{closeout['reason']}")
+                node.pop("assigned_to", None)
+                node.pop("dispatch_id", None)
+                node["dispatch_retry_reason"] = closeout["reason"]
+                node["last_operator_closeout_failure"] = closeout
+                node["updated_at"] = _utc_now()
+                node["status"] = "pending"
+                graph.setdefault("node_results", {}).pop(node_id, None)
+                _append_dispatch_ledger(
+                    "dispatch_reassigned_after_operator_closeout_failure",
+                    sid,
+                    pane,
+                    dispatch_id,
+                    {"node": node_id, **closeout},
+                )
+                repaired.append(
+                    {
+                        "node": node_id,
+                        "pane": pane,
+                        "dispatch_id": dispatch_id,
+                        "status": "pending",
+                        "reason": closeout["reason"],
+                        "operator_status": closeout.get("operator_status"),
+                        "result_json": closeout.get("result_json"),
+                    }
+                )
+                continue
         if status in {"assigned", "dispatched", "in_progress", "running"}:
             pane = str(node.get("assigned_to") or "").strip()
             dispatch_id = str(node.get("dispatch_id") or "").strip()
@@ -1587,6 +1684,45 @@ def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path
                     continue
         if status in {"reviewing", "ready_for_review", "needs_human_review", "failed_review"}:
             assignments = _node_eval_assignments(node)
+            terminal_operator_assignment = None
+            for assignment in assignments:
+                pane = str(assignment.get("pane") or "").strip()
+                if not pane.startswith("operator:"):
+                    continue
+                operator_id = pane.split(":", 1)[1].strip()
+                result = _latest_operator_result_for(sid, node_id, operator_id=operator_id)
+                if result and not Path(str(assignment.get("eval_json_path") or _eval_json_file(sid, node_id))).exists():
+                    terminal_operator_assignment = {
+                        "pane": pane,
+                        "dispatch_id": str(assignment.get("dispatch_id") or "").strip(),
+                        "reason": "eval_failed_contract_closeout",
+                        "operator_status": str(result.get("status") or ""),
+                        "result_json": str(result.get("_result_json") or ""),
+                    }
+                    break
+            if terminal_operator_assignment:
+                if terminal_operator_assignment["dispatch_id"]:
+                    release_lease(
+                        terminal_operator_assignment["pane"],
+                        terminal_operator_assignment["dispatch_id"],
+                        "graph_eval_reconcile_failed_contract_closeout",
+                    )
+                _clear_eval_assignments(node)
+                node["eval_retry_reason"] = terminal_operator_assignment["reason"]
+                node["last_eval_closeout_failure"] = terminal_operator_assignment
+                node["updated_at"] = _utc_now()
+                repaired.append(
+                    {
+                        "node": node_id,
+                        "pane": terminal_operator_assignment["pane"],
+                        "dispatch_id": terminal_operator_assignment["dispatch_id"],
+                        "status": status,
+                        "reason": terminal_operator_assignment["reason"],
+                        "operator_status": terminal_operator_assignment.get("operator_status"),
+                        "result_json": terminal_operator_assignment.get("result_json"),
+                    }
+                )
+                continue
             blocked_assignment = None
             for assignment in assignments:
                 pane = str(assignment.get("pane") or "").strip()
@@ -2106,6 +2242,33 @@ def _mark_graph_node(graph_path: str, node_id: str, status: str,
     except Exception:
         return False
     return False
+
+
+def _mark_graph_node_compat(
+    graph_path: str,
+    node_id: str,
+    status: str,
+    *,
+    pane: str | None = None,
+    dispatch_id: str | None = None,
+    clear_assignment: bool = False,
+) -> bool:
+    try:
+        return _mark_graph_node(
+            graph_path,
+            node_id,
+            status,
+            pane=pane,
+            dispatch_id=dispatch_id,
+            clear_assignment=clear_assignment,
+        )
+    except TypeError:
+        return _mark_graph_node(  # type: ignore[misc]
+            graph_path,
+            node_id,
+            status,
+            clear_assignment=clear_assignment,
+        )
 
 
 def _ensure_execution_plan_payload(
@@ -2940,6 +3103,66 @@ def _pane_unavailable_reason(pane: str) -> str:
     return ""
 
 
+def _pane_hygiene_file() -> Path:
+    return HARNESS_DIR / "run" / "pane-hygiene.json"
+
+
+def _pane_hygiene_entries() -> dict[str, Any]:
+    path = _pane_hygiene_file()
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    panes = payload.get("panes")
+    return panes if isinstance(panes, dict) else {}
+
+
+def _recover_pane_hygiene_if_idle(pane: str, state: str) -> bool:
+    if state not in {"cooling", "needs_recover"}:
+        return False
+    if _pane_has_active_lease(pane):
+        return False
+    if _pane_tui_busy(pane):
+        return False
+    return True
+
+
+def _pane_hygiene_unavailable_reason(pane: str) -> str:
+    entry = _pane_hygiene_entries().get(pane)
+    if not isinstance(entry, dict):
+        return ""
+    state = str(entry.get("state") or "").strip().lower()
+    if not state or state in {"clean", "running"}:
+        return ""
+    if state == "needs_respawn":
+        return "pane_hygiene_needs_respawn"
+    if state == "dirty":
+        return "pane_hygiene_dirty"
+    if state in {"cooling", "needs_recover"}:
+        if _recover_pane_hygiene_if_idle(pane, state):
+            return ""
+        return f"pane_hygiene_{state}"
+    return ""
+
+
+def _pane_title_active_unavailable_reason(pane: str, title: str) -> str:
+    title_lower = str(title or "").lower()
+    if "状态:working/" not in title_lower:
+        return ""
+    # Historical title metadata can lag behind the real pane state. When the
+    # pane is now idle, or when we deliberately tagged the pane as an
+    # idle-assigned graph worker, do not strand redispatch on stale title text.
+    if "graph_node_idle_assigned" in title_lower:
+        return ""
+    if not _pane_has_active_lease(pane):
+        return ""
+    if not _pane_tui_busy(pane):
+        return "pane_title_active_work"
+    return "pane_title_active_work"
+
+
 def _assigned_pane_unavailable_reason(pane: str) -> str:
     """Runtime guard for queue items that already carry a concrete pane.
 
@@ -2954,7 +3177,11 @@ def _assigned_pane_unavailable_reason(pane: str) -> str:
     tail = _pane_tail(pane)
     quota_exhausted = _quota_exhausted_models(title, tail, health, models)
     return (
+        _pane_hygiene_unavailable_reason(pane)
+        or
         _pane_cooldown_reason(pane)
+        or
+        _pane_title_active_unavailable_reason(pane, title)
         or
         _multi_task_direct_dispatch_unavailable_reason(pane)
         or _pane_runtime_unavailable_reason(pane, title)
@@ -4135,7 +4362,13 @@ def _submit_builder_to_operator_pool(
     if pane:
         release_lease(pane, dispatch_id, "graph_dispatch_reassigned_to_operator_pool")
     _write_submit_ack(sid, node_id, operator_pane, dispatch_id)
-    graph_updated = _mark_graph_node(graph_path, node_id, "dispatched", pane=operator_pane, dispatch_id=dispatch_id)
+    graph_updated = _mark_graph_node_compat(
+        graph_path,
+        node_id,
+        "dispatched",
+        pane=operator_pane,
+        dispatch_id=dispatch_id,
+    )
     _append_dispatch_ledger(
         "operator_pool_dispatched",
         sid,
@@ -4287,7 +4520,12 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
     human_handoff = _prepare_human_search_handoff(sid, graph_path, node, dry_run=dry_run)
     if human_handoff is not None:
         return human_handoff
-    if current_status in {"assigned", "pending", "queued"} and (not current_dispatch_id or current_dispatch_id == dispatch_id):
+    use_operator_pool = (
+        current_status in {"assigned", "pending", "queued"}
+        and (not current_dispatch_id or current_dispatch_id == dispatch_id)
+        and (not pane or str(pane).startswith("operator-pool:"))
+    )
+    if use_operator_pool:
         pool_result = _submit_builder_to_operator_pool(
             item=item,
             payload=payload,

@@ -9,6 +9,7 @@ Tests verify:
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import sys
@@ -21,6 +22,19 @@ import pytest
 # Add harness lib to path
 HARNESS_LIB = Path(__file__).resolve().parent.parent.parent / "lib"
 sys.path.insert(0, str(HARNESS_LIB))
+
+
+def _load_local_module(name: str):
+    spec = importlib.util.spec_from_file_location(name, HARNESS_LIB / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_load_local_module("graph_scheduler")
+_load_local_module("graph_node_dispatcher")
 
 
 # ---------------------------------------------------------------------------
@@ -221,6 +235,138 @@ class TestSendToPaneLiteral:
                 "dispatch_id": f"graph-{sid}-N1-old",
                 "status": "pending",
                 "reason": "stale_submit_ack_without_live_lease",
+            }
+        ]
+
+    def test_operator_completed_without_handoff_requeues_pending(self, tmp_harness, monkeypatch):
+        """Operator-pool exit_code=0 is not node completion without a node handoff."""
+        tmp_path, sprints, sid, graph = tmp_harness
+        import graph_node_dispatcher as gnd
+
+        node = graph["nodes"][0]
+        node["status"] = "dispatched"
+        node["assigned_to"] = "operator:mini-reasonix-deepseek-v4-flash-builder-1"
+        node["dispatch_id"] = f"graph-{sid}-N1-op"
+        graph["node_results"]["N1"] = {
+            "status": "dispatched",
+            "assigned_to": node["assigned_to"],
+            "dispatch_id": node["dispatch_id"],
+        }
+
+        result_dir = tmp_path / "run" / "operator-results" / "mini-reasonix-deepseek-v4-flash-builder-1" / "pm-test"
+        result_dir.mkdir(parents=True)
+        result_json = result_dir / "result.json"
+        result_json.write_text(
+            json.dumps(
+                {
+                    "sprint_id": sid,
+                    "node_id": "N1",
+                    "operator_id": "mini-reasonix-deepseek-v4-flash-builder-1",
+                    "status": "completed",
+                    "exit_code": 0,
+                    "finished_at": "2026-05-31T12:32:51Z",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        release_calls = []
+        monkeypatch.setattr(gnd, "release_lease", lambda *a, **k: release_calls.append(a) or {"released": True})
+
+        repaired = gnd._reconcile_existing_dispatches(graph, sprints / f"{sid}.task_graph.json")
+
+        assert node["status"] == "pending"
+        assert "assigned_to" not in node
+        assert "dispatch_id" not in node
+        assert node["dispatch_retry_reason"] == "failed_contract_closeout"
+        assert node["last_operator_closeout_failure"]["result_json"] == str(result_json)
+        assert "N1" not in graph["node_results"]
+        assert release_calls == [
+            (
+                "operator:mini-reasonix-deepseek-v4-flash-builder-1",
+                f"graph-{sid}-N1-op",
+                "graph_dispatch_reconcile_failed_contract_closeout",
+            )
+        ]
+        assert repaired == [
+            {
+                "node": "N1",
+                "pane": "operator:mini-reasonix-deepseek-v4-flash-builder-1",
+                "dispatch_id": f"graph-{sid}-N1-op",
+                "status": "pending",
+                "reason": "failed_contract_closeout",
+                "operator_status": "completed",
+                "result_json": str(result_json),
+            }
+        ]
+
+    def test_eval_operator_completed_without_eval_json_clears_assignment(self, tmp_harness, monkeypatch):
+        """Evaluator operator completion is not review completion without eval sidecars."""
+        tmp_path, sprints, sid, graph = tmp_harness
+        import graph_node_dispatcher as gnd
+
+        node = graph["nodes"][0]
+        node["status"] = "reviewing"
+        node["eval_assignments"] = [
+            {
+                "pane": "operator:mini-reasonix-deepseek-v4-builder",
+                "dispatch_id": f"graph-eval-{sid}-N1-q1",
+                "role": "primary",
+                "eval_md_path": str(sprints / f"{sid}.N1-eval.md"),
+                "eval_json_path": str(sprints / f"{sid}.N1-eval.json"),
+            }
+        ]
+        node["eval_assigned_to"] = "operator:mini-reasonix-deepseek-v4-builder"
+        node["eval_dispatch_id"] = f"graph-eval-{sid}-N1-q1"
+        graph["node_results"]["N1"] = {"status": "reviewing"}
+        (sprints / f"{sid}.N1-handoff.md").write_text("# handoff\n", encoding="utf-8")
+
+        result_dir = tmp_path / "run" / "operator-results" / "mini-reasonix-deepseek-v4-builder" / "pm-eval-test"
+        result_dir.mkdir(parents=True)
+        result_json = result_dir / "result.json"
+        result_json.write_text(
+            json.dumps(
+                {
+                    "sprint_id": sid,
+                    "node_id": "N1",
+                    "operator_id": "mini-reasonix-deepseek-v4-builder",
+                    "status": "completed",
+                    "exit_code": 0,
+                    "finished_at": "2026-05-31T13:39:10Z",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        release_calls = []
+        monkeypatch.setattr(gnd, "release_lease", lambda *a, **k: release_calls.append(a) or {"released": True})
+
+        repaired = gnd._reconcile_existing_dispatches(graph, sprints / f"{sid}.task_graph.json")
+
+        assert node["status"] == "reviewing"
+        assert "eval_assignments" not in node
+        assert "eval_assigned_to" not in node
+        assert "eval_dispatch_id" not in node
+        assert node["eval_retry_reason"] == "eval_failed_contract_closeout"
+        assert node["last_eval_closeout_failure"]["result_json"] == str(result_json)
+        assert release_calls == [
+            (
+                "operator:mini-reasonix-deepseek-v4-builder",
+                f"graph-eval-{sid}-N1-q1",
+                "graph_eval_reconcile_failed_contract_closeout",
+            )
+        ]
+        assert repaired == [
+            {
+                "node": "N1",
+                "pane": "operator:mini-reasonix-deepseek-v4-builder",
+                "dispatch_id": f"graph-eval-{sid}-N1-q1",
+                "status": "reviewing",
+                "reason": "eval_failed_contract_closeout",
+                "operator_status": "completed",
+                "result_json": str(result_json),
             }
         ]
 

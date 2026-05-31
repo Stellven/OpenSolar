@@ -163,8 +163,9 @@ def assert_mac_mini(config: dict[str, Any], force: bool = False) -> None:
         hostnames.add(socket.getfqdn())
     except Exception:
         pass
-    allowed = set(config.get("allowed_hostnames") or [])
-    if not (hostnames & allowed):
+    normalized_hostnames = {h.strip().lower() for h in hostnames if str(h).strip()}
+    allowed = {str(h).strip().lower() for h in (config.get("allowed_hostnames") or []) if str(h).strip()}
+    if not (normalized_hostnames & allowed):
         print(
             "skip: this job is Mac-mini-only; "
             f"host={sorted(hostnames)} allowed={sorted(allowed)}",
@@ -684,6 +685,59 @@ def build_video(meta: dict[str, str], transcript: str, status: str, source: str,
         score=score,
         why_it_matters=why_it_matters(signal_type, impact, meta["category"]),
     )
+
+
+def assess_transcript_quality(
+    meta: dict[str, str],
+    transcript: str,
+    status: str,
+    source: str,
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    """Classify transcript quality before exposing the full body in reports."""
+    text = re.sub(r"\s+", " ", transcript or "").strip()
+    word_count = len(re.findall(r"\w+", text))
+    title = str(meta.get("title") or "")
+    title_terms = {t.lower() for t in re.findall(r"[A-Za-z][A-Za-z0-9_-]{2,}", title)}
+    transcript_lower = text.lower()
+    title_overlap = sum(1 for term in title_terms if term in transcript_lower)
+    if not text or status.startswith("asr_queued"):
+        tier, quality_status, reason = "T3", "degraded", "missing_or_queued_transcript"
+    elif len(text) < 80 or word_count < 20:
+        tier, quality_status, reason = "T3", "degraded", "too_short"
+    elif title_terms and title_overlap == 0 and len(text) < 500:
+        tier, quality_status, reason = "T2", "partial", "weak_title_overlap"
+    else:
+        tier, quality_status, reason = "T1", "ok", "usable"
+    return {
+        "tier": tier,
+        "status": quality_status,
+        "reason": reason,
+        "chars": len(text),
+        "word_count": word_count,
+        "source": source,
+        "video_id": meta.get("video_id", ""),
+    }
+
+
+def render_transcript_for_report(video: Video) -> str:
+    quality = assess_transcript_quality(
+        meta={
+            "video_id": video.video_id,
+            "title": video.title,
+            "channel_name": video.channel_name,
+        },
+        transcript=video.transcript,
+        status=video.transcript_status,
+        source=video.transcript_source,
+        config={},
+    )
+    if quality["tier"] == "T3":
+        return (
+            f"质量门禁判定为 `T3`，不展示低质量 transcript 正文。"
+            f" reason={quality['reason']} chars={quality['chars']} source={quality['source']}"
+        )
+    return video.transcript or "N/A"
 
 
 def asr_config(config: dict[str, Any]) -> dict[str, Any]:
@@ -1320,7 +1374,7 @@ def write_markdown(videos: list[Video], channels: list[Channel], config: dict[st
             "",
             "## Transcript",
             "",
-            video.transcript or "N/A",
+            render_transcript_for_report(video),
             "",
         ]
         item_name = f"{video.video_id}-{stable_id(video.video_id, video.title, video.published_at)}-{slugify(video.title)}.md"

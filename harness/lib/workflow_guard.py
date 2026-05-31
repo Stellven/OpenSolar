@@ -91,30 +91,20 @@ def _graph_parent_ready(path: Path) -> bool:
     if not _nonempty(path):
         return False
     try:
-        graph = json.loads(path.read_text())
+        import sys as _sys
+
+        lib_dir = Path(__file__).resolve().parent
+        if str(lib_dir) not in _sys.path:
+            _sys.path.insert(0, str(lib_dir))
+        from graph_scheduler import load_graph, parent_ready_check  # noqa: WPS433
+
+        graph = load_graph(path)
+        closure = _closure_payload(_sprint_id_for_path(path))
+        if str(closure.get("status") or "").lower() in {"closed", "passed", "finalized"}:
+            return True
+        return bool(parent_ready_check(graph).get("ready"))
     except Exception:
         return False
-    nodes = [n for n in graph.get("nodes", []) if isinstance(n, dict)]
-    if not nodes:
-        return False
-    statuses = {str(n.get("status") or "").lower() for n in nodes}
-    if any(st in {"failed", "error"} for st in statuses):
-        return False
-    if any(st not in {"passed", "skipped"} for st in statuses):
-        return False
-    required = set(str(x) for x in graph.get("required_gates", []) or [] if str(x))
-    if not required:
-        return True
-    results = graph.get("node_results") if isinstance(graph.get("node_results"), dict) else {}
-    passed_gates = set()
-    for node in nodes:
-        node_id = str(node.get("id") or "")
-        gate = str(node.get("gate") or "")
-        result = results.get(node_id) if isinstance(results, dict) else None
-        result_status = str((result or {}).get("status") or node.get("status") or "").lower()
-        if gate and result_status in {"passed", "skipped"}:
-            passed_gates.add(gate)
-    return required.issubset(passed_gates)
 
 
 def _blocked_external_prerequisites(path: Path) -> list[dict[str, Any]]:
@@ -157,6 +147,18 @@ def _contract_value(text: str, key: str) -> str:
     return ""
 
 
+def _sprint_id_for_path(path: Path) -> str:
+    return path.name.removesuffix(".task_graph.json")
+
+
+def _state_payload(sid: str) -> dict[str, Any]:
+    return _read_json(SPRINTS_DIR / f"{sid}.task_dag.state.json")
+
+
+def _closure_payload(sid: str) -> dict[str, Any]:
+    return _read_json(SPRINTS_DIR / f"{sid}.closure.json")
+
+
 def route(sid: str) -> dict[str, Any]:
     sf = SPRINTS_DIR / f"{sid}.status.json"
     status = _read_json(sf)
@@ -167,10 +169,15 @@ def route(sid: str) -> dict[str, Any]:
     text = _contract_text(sid)
 
     prd = _artifact_path(sid, "prd.md", node_level=False)
+    request_envelope = _artifact_path(sid, "request_envelope.json", node_level=False)
+    requirement_ir = _artifact_path(sid, "requirement_ir.json", node_level=False)
+    contracts_manifest = _artifact_path(sid, "Contracts.yaml", node_level=False)
     product_brief = _artifact_path(sid, "product-brief.md", node_level=False)
     design = _artifact_path(sid, "design.md")
     plan = _artifact_path(sid, "plan.md")
     graph = SPRINTS_DIR / f"{sid}.task_graph.json"
+    task_dag_state = _artifact_path(sid, "task_dag.state.json", node_level=False)
+    closure = _artifact_path(sid, "closure.json", node_level=False)
     prd_html = SPRINTS_DIR / f"{sid}.prd.html"
     design_html = SPRINTS_DIR / f"{sid}.design.html"
     planning_html = SPRINTS_DIR / f"{sid}.planning.html"
@@ -181,8 +188,13 @@ def route(sid: str) -> dict[str, Any]:
     graph_ok, graph_reason = _graph_valid(graph)
     graph_parent_ready = _graph_parent_ready(graph)
     blocked_prerequisites = _blocked_external_prerequisites(graph)
+    closure_payload = _closure_payload(sid)
+    state_payload = _state_payload(sid)
     artifacts = {
+        "request_envelope": _nonempty(request_envelope),
+        "requirement_ir": _nonempty(requirement_ir),
         "prd": _nonempty(prd),
+        "contracts_manifest": _nonempty(contracts_manifest),
         "product_brief": _nonempty(product_brief),
         "design": _nonempty(design),
         "plan": _nonempty(plan),
@@ -190,11 +202,19 @@ def route(sid: str) -> dict[str, Any]:
         "design_html": _nonempty(design_html),
         "planning_html": _nonempty(planning_html),
         "task_graph": graph_ok,
+        "task_dag_state": _nonempty(task_dag_state),
+        "closure": _nonempty(closure),
         "task_graph_parent_ready": graph_parent_ready,
         "handoff": _nonempty(handoff),
         "eval": _nonempty(eval_md) or _nonempty(eval_json),
     }
-    planner_ready = artifacts["prd"] and artifacts["design"] and artifacts["plan"] and artifacts["task_graph"]
+    planner_ready = (
+        artifacts["prd"]
+        and artifacts["design"]
+        and artifacts["plan"]
+        and artifacts["task_graph"]
+        and (artifacts["task_dag_state"] or not artifacts["requirement_ir"])
+    )
     requirements_ready = artifacts["prd"]
 
     contract_bypass = _contract_flag(text, "bypass_pm") or _contract_flag(text, "bypass pm")
@@ -220,7 +240,8 @@ def route(sid: str) -> dict[str, Any]:
     if _nonempty(graph) and not graph_ok:
         violations.append(f"invalid_task_graph:{graph_reason}")
 
-    if st in {"passed", "done", "eval_pass", "finalized", "superseded"} or graph_parent_ready:
+    closure_status = str(closure_payload.get("status") or "").strip().lower()
+    if st in {"passed", "done", "eval_pass", "finalized", "superseded"} or graph_parent_ready or closure_status in {"closed", "passed", "finalized"}:
         role, stage, reason = "none", "done", "terminal_status"
     elif st in {"reviewing", "ready_for_review"} or (artifacts["handoff"] and handoff_to == "evaluator"):
         role, stage, reason = "evaluator", "build_complete", "handoff_ready_for_eval"
@@ -244,6 +265,8 @@ def route(sid: str) -> dict[str, Any]:
         "handoff_to": handoff_to,
         "target_role": target_role,
         "artifacts": artifacts,
+        "state_status": str(state_payload.get("status") or ""),
+        "closure_status": closure_status,
         "graph_reason": graph_reason,
         "blocked_prerequisites": blocked_prerequisites,
         "violations": violations,

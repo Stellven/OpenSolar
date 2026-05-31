@@ -534,6 +534,13 @@ def _extract_video_id(url: str) -> str:
     return ""
 
 
+def _normalize_youtube_watch_url(url: str) -> str:
+    video_id = _extract_video_id(url)
+    if not video_id:
+        return url
+    return f"https://www.youtube.com/watch?v={video_id}"
+
+
 async def _get_video_metadata(page) -> dict:
     """Extract basic video metadata from the page."""
     return await page.evaluate("""
@@ -566,6 +573,7 @@ async def _get_video_metadata(page) -> dict:
 # ---------------------------------------------------------------------------
 
 async def _run(youtube_url: str) -> int:
+    youtube_url = _normalize_youtube_watch_url(youtube_url)
     request_dir = _request_dir()
     profile_directory = str(os.environ.get("BROWSER_AGENT_PROFILE_DIRECTORY") or DEFAULT_PROFILE_DIRECTORY)
     user_data_dir = Path(os.environ.get("BROWSER_AGENT_USER_DATA_DIR") or str(DEFAULT_USER_DATA_DIR)).expanduser()

@@ -209,15 +209,174 @@ def _now() -> str:
 
 
 def load_graph(path: str | Path) -> dict[str, Any]:
-    return json.loads(Path(path).read_text())
+    graph_path = Path(path)
+    graph = json.loads(graph_path.read_text())
+    state = _load_graph_state_for_path(graph_path, graph)
+    _attach_runtime_planes(graph, graph_path=graph_path, state=state)
+    return graph
 
 
 def save_graph(path: str | Path, graph: dict[str, Any]) -> None:
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
+    state = _runtime_state_from_graph(graph, graph_path=p)
+    _save_graph_state(_state_path_for_graph(graph, p), state)
+    _save_closure_projection(_closure_path_for_graph(graph, p), graph, state)
+    spec_graph = _graph_spec_payload(graph)
     tmp = p.with_suffix(p.suffix + ".tmp")
-    tmp.write_text(json.dumps(graph, indent=2, ensure_ascii=False) + "\n")
+    tmp.write_text(json.dumps(spec_graph, indent=2, ensure_ascii=False) + "\n")
     os.replace(tmp, p)
+
+
+def _state_path_for_graph(graph: dict[str, Any], graph_path: str | Path | None = None) -> Path:
+    sid = _sprint_id_for_graph(graph, graph_path)
+    if graph_path:
+        base_dir = Path(graph_path).expanduser().parent
+    else:
+        base_dir = SPRINTS_DIR
+    return base_dir / f"{sid}.task_dag.state.json"
+
+
+def _closure_path_for_graph(graph: dict[str, Any], graph_path: str | Path | None = None) -> Path:
+    sid = _sprint_id_for_graph(graph, graph_path)
+    if graph_path:
+        base_dir = Path(graph_path).expanduser().parent
+    else:
+        base_dir = SPRINTS_DIR
+    return base_dir / f"{sid}.closure.json"
+
+
+def _load_graph_state_for_path(graph_path: Path, graph: dict[str, Any]) -> dict[str, Any]:
+    state_path = _state_path_for_graph(graph, graph_path)
+    if not state_path.exists():
+        return {}
+    try:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _attach_runtime_planes(
+    graph: dict[str, Any],
+    *,
+    graph_path: Path | None,
+    state: dict[str, Any] | None = None,
+) -> None:
+    runtime = graph.get("_solar_runtime")
+    if not isinstance(runtime, dict):
+        runtime = {}
+        graph["_solar_runtime"] = runtime
+    runtime["graph_path"] = str(graph_path) if graph_path else ""
+    if state is None:
+        state = {}
+    runtime["state_path"] = str(_state_path_for_graph(graph, graph_path)) if graph_path else ""
+    runtime["closure_path"] = str(_closure_path_for_graph(graph, graph_path)) if graph_path else ""
+    runtime["state"] = deepcopy(state) if state else {}
+    node_results = state.get("node_results") if isinstance(state.get("node_results"), dict) else {}
+    gate_results = state.get("gate_results") if isinstance(state.get("gate_results"), dict) else {}
+    if node_results:
+        graph["node_results"] = deepcopy(node_results)
+    elif "node_results" not in graph:
+        graph["node_results"] = {}
+    if gate_results:
+        graph["gate_results"] = deepcopy(gate_results)
+    elif "gate_results" not in graph:
+        graph["gate_results"] = {}
+    ids = _node_map(graph)
+    for node_id, result in node_results.items():
+        if node_id not in ids or not isinstance(result, dict):
+            continue
+        status = str(result.get("status") or "").strip().lower()
+        if status:
+            ids[node_id]["status"] = status
+        updated_at = str(result.get("updated_at") or "").strip()
+        if updated_at:
+            ids[node_id]["updated_at"] = updated_at
+        if result.get("assigned_to"):
+            ids[node_id]["assigned_to"] = result.get("assigned_to")
+        if result.get("dispatch_id"):
+            ids[node_id]["dispatch_id"] = result.get("dispatch_id")
+
+
+def _runtime_state_from_graph(graph: dict[str, Any], *, graph_path: Path | None = None) -> dict[str, Any]:
+    runtime = graph.get("_solar_runtime") if isinstance(graph.get("_solar_runtime"), dict) else {}
+    base_state = deepcopy(runtime.get("state")) if isinstance(runtime.get("state"), dict) else {}
+    sid = _sprint_id_for_graph(graph, graph_path)
+    base_state["schema_version"] = str(base_state.get("schema_version") or "solar.task_graph_state.v1")
+    base_state["sprint_id"] = sid
+    base_state["graph_ref"] = f"{sid}.task_graph.json" if sid else str(graph_path or "")
+    base_state["node_results"] = deepcopy(_node_results(graph))
+    gate_results = graph.get("gate_results") if isinstance(graph.get("gate_results"), dict) else {}
+    base_state["gate_results"] = deepcopy(gate_results)
+    leases = base_state.get("leases")
+    if not isinstance(leases, dict):
+        leases = {}
+    dispatch_ids = base_state.get("dispatch_ids")
+    if not isinstance(dispatch_ids, dict):
+        dispatch_ids = {}
+    for node_id, result in base_state["node_results"].items():
+        if not isinstance(result, dict):
+            continue
+        dispatch_id = str(result.get("dispatch_id") or "").strip()
+        assigned_to = str(result.get("assigned_to") or "").strip()
+        if dispatch_id:
+            dispatch_ids[node_id] = dispatch_id
+        if assigned_to:
+            leases[node_id] = {"pane": assigned_to, "dispatch_id": dispatch_id}
+    base_state["leases"] = leases
+    base_state["dispatch_ids"] = dispatch_ids
+    base_state["updated_at"] = _now()
+    events = base_state.get("events")
+    if not isinstance(events, list):
+        base_state["events"] = []
+    return base_state
+
+
+def _graph_spec_payload(graph: dict[str, Any]) -> dict[str, Any]:
+    spec = deepcopy(graph)
+    spec.pop("_solar_runtime", None)
+    spec.pop("node_results", None)
+    spec.pop("gate_results", None)
+    return spec
+
+
+def _save_graph_state(path: Path, state: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _save_closure_projection(path: Path, graph: dict[str, Any], state: dict[str, Any]) -> None:
+    parent = parent_ready_check(graph)
+    existing: dict[str, Any] = {}
+    if path.exists():
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                existing = payload
+        except Exception:
+            existing = {}
+    record = dict(existing)
+    record["schema_version"] = str(record.get("schema_version") or "solar.closure_record.v1")
+    record["sprint_id"] = _sprint_id_for_graph(graph)
+    record["graph_ref"] = f"{record['sprint_id']}.task_graph.json" if record["sprint_id"] else str(path)
+    record["graph_state_ref"] = str(state.get("graph_ref") or f"{record['sprint_id']}.task_dag.state.json")
+    record["status"] = "closed" if parent.get("ready") else "pending"
+    record["all_nodes_passed"] = not parent.get("open_nodes") and not parent.get("failed_nodes")
+    record["all_required_gates_passed"] = not parent.get("missing_gates")
+    record["acceptance_traceability_coverage"] = record.get("acceptance_traceability_coverage", 0)
+    record["open_nodes"] = list(parent.get("open_nodes") or [])
+    record["failed_nodes"] = list(parent.get("failed_nodes") or [])
+    record["missing_gates"] = list(parent.get("missing_gates") or [])
+    record["updated_at"] = _now()
+    if parent.get("ready") and not record.get("closed_at"):
+        record["closed_at"] = record["updated_at"]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def _sprint_id_for_graph(graph: dict[str, Any], graph_path: str | Path | None = None) -> str:
@@ -1754,7 +1913,10 @@ def set_node_status(graph: dict[str, Any], node_id: str, status: str,
     if node_id not in ids:
         raise ValueError(f"unknown node: {node_id}")
     current = node_status(graph, node_id)
-    if _status_rank(current) > _status_rank(status):
+    reopening_from_pass = current in PASS_STATUSES and status in {
+        "reviewing", "pending", "queued", "blocked", "worker_blocked", "assigned", "dispatched", "in_progress", "running",
+    }
+    if _status_rank(current) > _status_rank(status) and not reopening_from_pass:
         return
     updated_at = _now()
     ids[node_id]["status"] = status
@@ -1772,6 +1934,11 @@ def set_node_status(graph: dict[str, Any], node_id: str, status: str,
         graph["node_results"][node_id]["assigned_to"] = pane
     if dispatch_id:
         graph["node_results"][node_id]["dispatch_id"] = dispatch_id
+    gate = str(ids[node_id].get("gate") or "")
+    if gate and status not in PASS_STATUSES:
+        gate_results = graph.get("gate_results")
+        if isinstance(gate_results, dict) and gate in gate_results:
+            gate_results.pop(gate, None)
 
 
 def enqueue_ready(graph: dict[str, Any], graph_path: str, workers: list[dict[str, Any]],
@@ -1897,6 +2064,8 @@ def enqueue_ready(graph: dict[str, Any], graph_path: str, workers: list[dict[str
         payload = {
             "type": "graph_node",
             "graph": graph_path,
+            "graph_state": str(_state_path_for_graph(graph, graph_path)),
+            "closure_record": str(_closure_path_for_graph(graph, graph_path)),
             "sprint_id": sid,
             "node": node,
             "assignment": item,
@@ -1910,7 +2079,7 @@ def enqueue_ready(graph: dict[str, Any], graph_path: str, workers: list[dict[str
         if dry_run:
             q = {"ok": True, "result": "dry_run", "id": ""}
         else:
-            q = enqueue(sid, f"graph_node|node_id={node_id}|pane={pane}", 80, payload)
+            q = enqueue(sid, f"graph_node|node_id={node_id}|pane={pane}|dispatch_id={dispatch_id}", 80, payload)
             # Queueing is not dispatch. The graph node becomes "dispatched"
             # only after graph_node_dispatcher writes the instruction file and
             # successfully submits it to the pane. Marking it dispatched here

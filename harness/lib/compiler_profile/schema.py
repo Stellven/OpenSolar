@@ -13,12 +13,12 @@ Schema::
     tags:         list[str]     — categorisation tags
     created_at:   str (ISO 8601)
     policies:     dict with exactly 6 keys
-      intake_policy:              {version: str, params: dict}
-      requirement_ir_policy:      {version: str, params: dict}
-      contract_compiler_policy:   {version: str, params: dict}
-      dag_compiler_policy:        {version: str, params: dict}
-      evidence_policy:            {version: str, params: dict}
-      handoff_policy:             {version: str, params: dict}
+      intake_policy:              {version: str, text?: str, params: dict}
+      requirement_ir_policy:      {version: str, text?: str, params: dict}
+      contract_compiler_policy:   {version: str, text?: str, params: dict}
+      dag_compiler_policy:        {version: str, text?: str, params: dict}
+      evidence_policy:            {version: str, text?: str, params: dict}
+      handoff_policy:             {version: str, text?: str, params: dict}
 """
 from __future__ import annotations
 
@@ -115,6 +115,8 @@ def validate_profile(data: dict[str, Any]) -> tuple[bool, list[str]]:
                 errors.append(f"'policies.{key}' missing 'version'")
             elif not isinstance(policy["version"], str):
                 errors.append(f"'policies.{key}.version' must be a string")
+            if "text" in policy and not isinstance(policy["text"], str):
+                errors.append(f"'policies.{key}.text' must be a string when present")
             if "params" not in policy:
                 errors.append(f"'policies.{key}' missing 'params'")
             elif not isinstance(policy["params"], dict):

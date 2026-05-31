@@ -1101,13 +1101,58 @@ def save_queue(items: list[dict]) -> None:
     tmp.replace(QUEUE)
 
 
-def retry_queue(state: dict, dispatch: bool, cooldown: int) -> list[dict]:
+def sprint_epic_id_for_sid(sid: str) -> str:
+    sid = str(sid or "")
+    if not sid:
+        return ""
+    status_path = SPRINTS / f"{sid}.status.json"
+    if not status_path.exists():
+        return ""
+    try:
+        status = load_json(status_path)
+    except Exception:
+        return ""
+    return str(status.get("epic_id") or "")
+
+
+def finding_matches_epic(finding: dict, epic_id: str) -> bool:
+    epic_id = str(epic_id or "")
+    if not epic_id:
+        return True
+    sid = str(finding.get("sid") or "")
+    if sid == epic_id:
+        return True
+    if str(finding.get("epic_id") or "") == epic_id:
+        return True
+    if sprint_epic_id_for_sid(sid) == epic_id:
+        return True
+    ready_children = finding.get("ready_children")
+    if isinstance(ready_children, list):
+        for child in ready_children:
+            if not isinstance(child, dict):
+                continue
+            child_sid = str(child.get("sid") or "")
+            if child_sid and sprint_epic_id_for_sid(child_sid) == epic_id:
+                return True
+    return False
+
+
+def filter_findings_by_epic(findings: list[dict], epic_id: str) -> list[dict]:
+    if not epic_id:
+        return findings
+    return [finding for finding in findings if finding_matches_epic(finding, epic_id)]
+
+
+def retry_queue(state: dict, dispatch: bool, cooldown: int, epic_filter: str = "") -> list[dict]:
     now_epoch = time.time()
     retained: list[dict] = []
     actions: list[dict] = []
     for item in load_queue():
         sid = item.get("sid", "")
         target = maybe_reroute_builder_target(item, sid)
+        if epic_filter and not finding_matches_epic(item, epic_filter):
+            retained.append(item)
+            continue
         if sid and not (SPRINTS / f"{sid}.status.json").exists():
             append_event(
                 sid,
@@ -1275,7 +1320,51 @@ def wake_sid(sid: str) -> bool:
 
 
 ROLE_POOL_HANDOFF_FINDINGS = {"ready_for_planner", "ready_for_builder", "active_without_handoff", "pane_idle_with_pending_artifact", "ready_for_evaluator"}
+ROLE_POOL_UNAVAILABLE_CACHE_TTL_SEC = int(os.environ.get("SOLAR_ROLE_POOL_UNAVAILABLE_CACHE_TTL_SEC", "120"))
 ROLE_POOL_UNAVAILABLE_CACHE: dict[str, dict] = {}
+
+
+def _role_pool_cache_get(role: str) -> dict | None:
+    entry = ROLE_POOL_UNAVAILABLE_CACHE.get(role)
+    if not isinstance(entry, dict):
+        return None
+    cached_at = float(entry.get("_cached_at_epoch") or 0)
+    ttl = float(entry.get("_ttl_sec") or ROLE_POOL_UNAVAILABLE_CACHE_TTL_SEC)
+    if cached_at and (time.time() - cached_at) > ttl:
+        ROLE_POOL_UNAVAILABLE_CACHE.pop(role, None)
+        return None
+    return entry
+
+
+def _role_pool_cache_put(role: str, detail: dict, *, ttl_sec: int | None = None) -> None:
+    payload = dict(detail)
+    payload["_cached_at_epoch"] = time.time()
+    payload["_ttl_sec"] = int(ttl_sec or ROLE_POOL_UNAVAILABLE_CACHE_TTL_SEC)
+    ROLE_POOL_UNAVAILABLE_CACHE[role] = payload
+
+
+def _last_history_event(status: dict) -> str:
+    hist = status.get("history")
+    if not isinstance(hist, list) or not hist:
+        return ""
+    last = hist[-1]
+    if not isinstance(last, dict):
+        return ""
+    return str(last.get("event") or "")
+
+
+def _append_status_history_once(status: dict, event: str, note: str = "", **extra: object) -> bool:
+    hist = status.setdefault("history", [])
+    if not isinstance(hist, list):
+        return False
+    if _last_history_event(status) == event:
+        return False
+    payload = {"ts": utc_now(), "event": event, "by": "solar-autopilot"}
+    if note:
+        payload["note"] = note
+    payload.update(extra)
+    hist.append(payload)
+    return True
 
 
 def finding_uses_operator_role_pool(ftype: str) -> bool:
@@ -1330,8 +1419,9 @@ def dispatch_role_handoff(sid: str, ftype: str) -> tuple[bool, dict]:
     role = role_for_handoff_finding(ftype)
     if not sid or not role:
         return False, {"reason": "not_role_pool_handoff"}
-    if role in ROLE_POOL_UNAVAILABLE_CACHE:
-        return False, {**ROLE_POOL_UNAVAILABLE_CACHE[role], "cached": True}
+    cached = _role_pool_cache_get(role)
+    if cached is not None:
+        return False, {**cached, "cached": True}
     node = "N0" if role == "planner" else ("B0" if role == "builder" else "E0")
     task_type = "planning" if role == "planner" else ("implementation" if role == "builder" else "evaluation")
     env = os.environ.copy()
@@ -1365,8 +1455,10 @@ def dispatch_role_handoff(sid: str, ftype: str) -> tuple[bool, dict]:
         "stderr": proc.stderr[-2000:],
     }
     ok = proc.returncode == 0
-    if not ok and "no_dispatchable_operator_for_role" in (proc.stderr or ""):
-        ROLE_POOL_UNAVAILABLE_CACHE[role] = detail
+    if ok:
+        ROLE_POOL_UNAVAILABLE_CACHE.pop(role, None)
+    elif "no_dispatchable_operator_for_role" in (proc.stderr or ""):
+        _role_pool_cache_put(role, detail)
     return ok, detail
 
 
@@ -2297,8 +2389,11 @@ def normalize_status_to_workflow_route(sid: str, status: dict, route: dict) -> b
     elif not role or role == "pm":
         return False
     else:
+        planner_status = "drafting"
+        if str(status.get("status") or "").lower() == "active" or status.get("epic_id") or str(status.get("dependency_policy") or "") == "activated_by_epic_dag":
+            planner_status = "active"
         fields = {
-            "planner": ("drafting", "prd_ready", "planner", "planner"),
+            "planner": (planner_status, "prd_ready", "planner", "planner"),
             "builder_main": ("active", "planning_complete", "builder_main", "builder_main"),
             "builder": ("active", "planning_complete", "builder", "builder"),
             "evaluator": ("reviewing", "handoff_ready", "evaluator", "evaluator"),
@@ -2328,15 +2423,12 @@ def normalize_status_to_workflow_route(sid: str, status: dict, route: dict) -> b
     )
     hist = status.setdefault("history", [])
     if isinstance(hist, list):
-        hist.append(
-            {
-                "ts": utc_now(),
-                "event": "autopilot_workflow_route_normalized",
-                "by": "solar-autopilot",
-                "route_role": role,
-                "stage": stage,
-                "reason": route.get("reason", ""),
-            }
+        _append_status_history_once(
+            status,
+            "autopilot_workflow_route_normalized",
+            route_role=role,
+            stage=stage,
+            reason=route.get("reason", ""),
         )
     save_json(SPRINTS / f"{sid}.status.json", status)
     append_event(
@@ -3168,24 +3260,32 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
         elif ftype in ("ready_for_pm", "ready_for_planner", "ready_for_builder", "ready_for_evaluator", "active_without_handoff", "pane_compacting_stall", "pane_idle_with_pending_artifact"):
             status_path = SPRINTS / f"{sid}.status.json"
             status = load_json(status_path)
-            hist = status.setdefault("history", [])
-            hist.append(
-                {
-                    "ts": utc_now(),
-                    "event": f"autopilot_{ftype}",
-                    "by": "solar-autopilot",
-                    "note": f.get("message", ""),
-                }
-            )
-            status["updated_at"] = utc_now()
+            status_changed = False
             if ftype == "ready_for_pm":
-                status["status"] = status.get("status") or "drafting"
-                status["phase"] = "spec"
-                status["handoff_to"] = "pm"
-                status["target_role"] = "pm"
+                desired = {
+                    "status": status.get("status") or "drafting",
+                    "phase": "spec",
+                    "handoff_to": "pm",
+                    "target_role": "pm",
+                }
+                for key, value in desired.items():
+                    if status.get(key) != value:
+                        status[key] = value
+                        status_changed = True
             elif ftype == "ready_for_planner":
-                status["phase"] = "spec"
-            save_json(status_path, status)
+                desired = {"handoff_to": "planner", "target_role": "planner"}
+                current_phase = str(status.get("phase") or "")
+                if not current_phase:
+                    desired["phase"] = "prd_ready"
+                for key, value in desired.items():
+                    if status.get(key) != value:
+                        status[key] = value
+                        status_changed = True
+            if _append_status_history_once(status, f"autopilot_{ftype}", str(f.get("message", ""))):
+                status_changed = True
+            if status_changed:
+                status["updated_at"] = utc_now()
+                save_json(status_path, status)
             append_event(sid, f"autopilot_{ftype}", f.get("severity", "info"), {"target": f.get("target", "")})
             sent = False
             role_dispatch_detail: dict = {}
@@ -3307,8 +3407,9 @@ def reconcile_pm_inbox() -> dict:
 
 
 def scan_once(args: argparse.Namespace, state: dict) -> dict:
+    epic_filter = str(getattr(args, "epic", "") or "")
     reconcile_action = reconcile_pm_inbox() if args.apply else {}
-    queue_actions = retry_queue(state, args.dispatch, args.cooldown) if args.apply else []
+    queue_actions = retry_queue(state, args.dispatch, args.cooldown, epic_filter=epic_filter) if args.apply else []
     findings = (
         inspect_epics()
         + inspect_epic_child_state_drift()
@@ -3318,6 +3419,9 @@ def scan_once(args: argparse.Namespace, state: dict) -> dict:
         + inspect_knowledge_context(state)
         + inspect_model_registry(state)
     )
+    findings_before_epic_filter = len(findings)
+    if epic_filter:
+        findings = filter_findings_by_epic(findings, epic_filter)
     actions = apply_findings(findings, args.dispatch, state, args.cooldown) if args.apply else []
     idle_title_actions = update_idle_pane_titles(state) if args.apply else []
     payload = {
@@ -3325,6 +3429,8 @@ def scan_once(args: argparse.Namespace, state: dict) -> dict:
         "apply": args.apply,
         "dispatch": args.dispatch,
         "loop": args.loop,
+        "epic_filter": epic_filter,
+        "findings_before_epic_filter": findings_before_epic_filter,
         "findings": findings,
         "actions": ([reconcile_action] if reconcile_action else []) + queue_actions + actions + [
             {"action": "idle_titles_updated", "panes": idle_title_actions, "dispatched": False}
@@ -3412,7 +3518,7 @@ def main() -> int:
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--epic-status-matrix", action="store_true", dest="epic_status_matrix",
                         help="Print epic child sprint state matrix and exit")
-    parser.add_argument("--epic", default="", help="Filter --epic-status-matrix by epic_id")
+    parser.add_argument("--epic", default="", help="Filter --epic-status-matrix and apply/dispatch scans by epic_id")
     args = parser.parse_args()
     if args.epic_status_matrix:
         return epic_status_matrix(epic_id=args.epic, output_json=args.json)

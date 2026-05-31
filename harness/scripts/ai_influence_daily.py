@@ -69,6 +69,7 @@ class Candidate:
     external_links: list[str] = dataclasses.field(default_factory=list)
     images: list[str] = dataclasses.field(default_factory=list)
     external_text: str = ""
+    is_pinned: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -404,6 +405,38 @@ def filter_recent_candidates(
         else:
             recent.append(candidate)
     return recent, stale, missing
+
+
+def filter_pinned_candidates(candidates: list[Candidate]) -> tuple[list[Candidate], list[Candidate]]:
+    """Split out pinned/profile-sticky rows so stale promoted posts do not dominate."""
+    kept: list[Candidate] = []
+    pinned: list[Candidate] = []
+    for candidate in candidates:
+        if getattr(candidate, "is_pinned", False):
+            pinned.append(candidate)
+        else:
+            kept.append(candidate)
+    return kept, pinned
+
+
+def prune_recent_per_handle(
+    candidates: list[Candidate],
+    *,
+    max_per_handle: int,
+) -> tuple[list[Candidate], list[Candidate]]:
+    """Keep the newest N candidates per handle and return overflow separately."""
+    grouped: dict[str, list[Candidate]] = {}
+    for candidate in candidates:
+        grouped.setdefault(candidate.handle.lower(), []).append(candidate)
+    kept: list[Candidate] = []
+    overflow: list[Candidate] = []
+    for group in grouped.values():
+        ordered = sorted(group, key=lambda c: parse_published_at(c.published_at) or dt.datetime.min.replace(tzinfo=UTC), reverse=True)
+        kept.extend(ordered[:max_per_handle])
+        overflow.extend(ordered[max_per_handle:])
+    kept.sort(key=lambda c: parse_published_at(c.published_at) or dt.datetime.min.replace(tzinfo=UTC), reverse=True)
+    overflow.sort(key=lambda c: parse_published_at(c.published_at) or dt.datetime.min.replace(tzinfo=UTC), reverse=True)
+    return kept, overflow
 
 
 def init_state_db(db_path: Path) -> None:

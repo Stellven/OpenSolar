@@ -448,7 +448,9 @@ def refresh_browser_profile_cache(user_data_dir: str | Path | None, profile_dire
     if cache_root.exists():
         shutil.rmtree(cache_root, ignore_errors=True)
     cache_root.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(source_profile, cache_profile)
+    if cache_profile.exists():
+        shutil.rmtree(cache_profile, ignore_errors=True)
+    shutil.copytree(source_profile, cache_profile, dirs_exist_ok=True)
     local_state_src = source_root / "Local State"
     if local_state_src.exists():
         shutil.copy(local_state_src, cache_root / "Local State")
@@ -495,7 +497,7 @@ def _stage_browser_profile(user_data_dir: str | Path | None, profile_directory: 
 
     staged_root = Path(tempfile.mkdtemp(prefix=_STAGED_PROFILE_PREFIX))
     staged_profile = staged_root / profile_directory
-    shutil.copytree(source_profile, staged_profile)
+    shutil.copytree(source_profile, staged_profile, dirs_exist_ok=True)
 
     local_state_src = source_root / "Local State"
     if local_state_src.exists():
