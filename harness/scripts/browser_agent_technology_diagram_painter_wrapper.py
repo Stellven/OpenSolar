@@ -401,11 +401,180 @@ async def _wait_and_download_image(page, request_dir: Path, timeout_s: int = 120
         })()
     """)
     if generated_visible:
+        downloaded = await _try_download_generated_card(page, request_dir)
+        if downloaded:
+            return downloaded
         out_path = request_dir / "generated_diagram.png"
+        clipped = await _screenshot_generated_card(page, out_path)
+        if clipped:
+            print(f"[TechDiagram] Generated visual detected; saved clipped card to {out_path}", flush=True)
+            return {"status": "success", "image_path": str(out_path), "url": "card-screenshot-fallback"}
         await page.screenshot(path=str(out_path), full_page=True)
         print(f"[TechDiagram] Generated visual detected; saved page screenshot to {out_path}", flush=True)
         return {"status": "success", "image_path": str(out_path), "url": "page-screenshot-fallback"}
     return {"status": "timeout", "error": "Image generation timed out."}
+
+
+async def _try_download_generated_card(page, request_dir: Path) -> dict | None:
+    """Click ChatGPT's generated-image download button when it is present."""
+    marked = await page.evaluate("""
+        (() => {
+            document.querySelectorAll('[data-solar-tech-diagram-download-candidate]').forEach((n) => {
+                n.removeAttribute('data-solar-tech-diagram-download-candidate');
+            });
+            const viewportW = window.innerWidth || document.documentElement.clientWidth;
+            const viewportH = window.innerHeight || document.documentElement.clientHeight;
+            const buttons = Array.from(document.querySelectorAll('button'));
+            let best = null;
+            let bestScore = -1;
+            for (const button of buttons) {
+                const rect = button.getBoundingClientRect();
+                if (!rect || rect.width < 28 || rect.height < 28 || rect.width > 120 || rect.height > 120) continue;
+                if (rect.x < viewportW * 0.55 || rect.y < viewportH * 0.35) continue;
+                if (!button.querySelector('svg')) continue;
+                const label = (button.getAttribute('aria-label') || button.innerText || '').toLowerCase();
+                const labelBonus =
+                    label.includes('download') || label.includes('下载') || label.includes('save') ? 500 : 0;
+                const score = labelBonus + rect.x + rect.y * 2;
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = button;
+                }
+            }
+            if (!best) return false;
+            best.setAttribute('data-solar-tech-diagram-download-candidate', '1');
+            return true;
+        })()
+    """)
+    if not marked:
+        return None
+    try:
+        candidate = page.locator('[data-solar-tech-diagram-download-candidate="1"]').first
+        async with page.expect_download(timeout=15000) as download_info:
+            await candidate.click()
+        download = await download_info.value
+        suggested = download.suggested_filename or "generated_diagram.png"
+        suffix = Path(suggested).suffix or ".png"
+        out_path = request_dir / f"generated_diagram{suffix}"
+        await download.save_as(str(out_path))
+        print(f"[TechDiagram] Downloaded generated image to {out_path}", flush=True)
+        return {"status": "success", "image_path": str(out_path), "url": "chatgpt-download-button"}
+    except Exception as exc:
+        print(f"[TechDiagram] Download button fallback failed: {exc}", flush=True)
+        return None
+
+
+async def _screenshot_generated_card(page, out_path: Path) -> bool:
+    """Capture only the generated image card when direct download is not exposed."""
+    rect = await page.evaluate("""
+        (() => {
+            const viewportW = window.innerWidth || document.documentElement.clientWidth;
+            const viewportH = window.innerHeight || document.documentElement.clientHeight;
+            const minSidebarX = Math.min(520, Math.floor(viewportW * 0.25));
+
+            const visualNodes = Array.from(document.querySelectorAll('img, canvas, svg'));
+            let bestVisual = null;
+            let bestVisualScore = -1;
+            for (const node of visualNodes) {
+                const rect = node.getBoundingClientRect();
+                if (!rect || rect.width < 720 || rect.height < 260) continue;
+                if (rect.x < minSidebarX || rect.y < 80) continue;
+                if (rect.width > viewportW * 0.9 || rect.height > viewportH * 0.9) continue;
+                const alt = (node.getAttribute('alt') || '').toLowerCase();
+                const src = (node.getAttribute('src') || '').toLowerCase();
+                if (alt.includes('user') || src.includes('googleusercontent.com/a/')) continue;
+                const area = rect.width * rect.height;
+                const score = area + (rect.y > 180 ? 50000 : 0);
+                if (score > bestVisualScore) {
+                    bestVisualScore = score;
+                    bestVisual = {
+                        x: Math.max(0, Math.floor(rect.x - 10)),
+                        y: Math.max(0, Math.floor(rect.y - 10)),
+                        width: Math.min(viewportW - Math.max(0, Math.floor(rect.x - 10)), Math.ceil(rect.width + 20)),
+                        height: Math.min(viewportH - Math.max(0, Math.floor(rect.y - 10)), Math.ceil(rect.height + 20)),
+                        score,
+                        source: 'visual'
+                    };
+                }
+            }
+            if (bestVisual) return bestVisual;
+
+            const nodes = Array.from(document.querySelectorAll('article, [data-message-author-role], main div, main section, div'));
+            let best = null;
+            let bestScore = -1;
+            const keywords = ['编辑', 'download', 'generated', 'Solar-Harness Diagram', 'PNG Artifact', 'result.json'];
+
+            for (const node of nodes) {
+                const text = (node.innerText || node.textContent || '').trim();
+                const rect = node.getBoundingClientRect();
+                if (!rect || rect.width < 260 || rect.height < 180) continue;
+                if (rect.x < minSidebarX) continue;
+                if (rect.width > viewportW * 0.85 || rect.height > viewportH * 0.9) continue;
+
+                const lower = text.toLowerCase();
+                const hasKeyword = keywords.some((kw) => lower.includes(kw.toLowerCase()));
+                const visualCount = node.querySelectorAll('img, canvas, svg').length;
+                const buttonCount = node.querySelectorAll('button').length;
+                if (!hasKeyword && visualCount < 2) continue;
+
+                const area = rect.width * rect.height;
+                const centerBonus = rect.x > minSidebarX && rect.y > 60 ? 40 : 0;
+                const score = visualCount * 80 + buttonCount * 8 + Math.min(area / 5000, 120) + centerBonus;
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = {
+                        x: Math.max(0, Math.floor(rect.x - 12)),
+                        y: Math.max(0, Math.floor(rect.y - 12)),
+                        width: Math.min(viewportW - Math.max(0, Math.floor(rect.x - 12)), Math.ceil(rect.width + 24)),
+                        height: Math.min(viewportH - Math.max(0, Math.floor(rect.y - 12)), Math.ceil(rect.height + 24)),
+                        score
+                    };
+                }
+            }
+            return best;
+        })()
+    """)
+    if not rect:
+        return False
+    try:
+        await page.screenshot(path=str(out_path), clip=rect)
+        _trim_chatgpt_header(out_path)
+        (out_path.with_suffix(".clip.json")).write_text(
+            json.dumps(rect, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        return True
+    except Exception as exc:
+        print(f"[TechDiagram] Clipped card screenshot failed: {exc}", flush=True)
+        return False
+
+
+def _trim_chatgpt_header(path: Path) -> None:
+    """Remove ChatGPT prompt/thought chrome that can appear above screenshot fallback."""
+    try:
+        from PIL import Image
+    except Exception:
+        return
+    try:
+        image = Image.open(path).convert("RGB")
+        width, height = image.size
+        start_y = int(height * 0.15)
+        crop_y = 0
+        for y in range(start_y, height):
+            dark_count = 0
+            for x in range(0, width, 4):
+                r, g, b = image.getpixel((x, y))
+                if max(r, g, b) < 45:
+                    continue
+                if min(r, g, b) < 235 and (max(r, g, b) - min(r, g, b) > 8 or min(r, g, b) < 210):
+                    dark_count += 1
+            if dark_count > 30:
+                crop_y = max(0, y - 40)
+                break
+        if crop_y > 0:
+            image.crop((0, crop_y, width, height)).save(path)
+    except Exception as exc:
+        print(f"[TechDiagram] Header trim failed: {exc}", flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -453,6 +622,7 @@ async def _run(input_data: dict) -> int:
             if pw_context is None:
                 raise RuntimeError("failed_to_connect_via_playwright_cdp")
             playwright_page = pw_context.pages[0] if pw_context.pages else await pw_context.new_page()
+            await playwright_page.set_viewport_size({"width": 1920, "height": 1200})
 
             # 1. Navigate to ChatGPT
             print(f"[TechDiagram] Navigating to {DEFAULT_URL}", flush=True)
