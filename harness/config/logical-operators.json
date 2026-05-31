@@ -224,6 +224,71 @@
       },
       "cost_hint": "high",
       "concurrency": {"max_parallel": 3, "singleton": false}
+    },
+    "WebwrightPlaywright": {
+      "operator_type": "WebwrightPlaywright",
+      "description": "Runs deterministic Playwright/Webwright browser automation for browser research, UI inspection, and web artifact collection.",
+      "primary_role": "knowledge-extractor",
+      "required_capabilities": {
+        "browser_use": 5,
+        "gui_use": 4,
+        "data_extraction": 4
+      },
+      "risk_constraints": {
+        "allowed_write_scope": "artifact_dir_only",
+        "payment_or_external_action": "denied"
+      },
+      "cost_hint": "medium",
+      "concurrency": {"max_parallel": 2, "singleton": false}
+    },
+    "BrowserUseMcp": {
+      "operator_type": "BrowserUseMcp",
+      "description": "Runs quick browser-use MCP automation for lightweight snapshots, extraction, and browser-mediated checks.",
+      "primary_role": "knowledge-extractor",
+      "required_capabilities": {
+        "browser_use": 4,
+        "gui_use": 3,
+        "data_extraction": 4,
+        "speed": 4
+      },
+      "risk_constraints": {
+        "allowed_write_scope": "artifact_dir_only",
+        "payment_or_external_action": "denied"
+      },
+      "cost_hint": "low",
+      "concurrency": {"max_parallel": 3, "singleton": false}
+    },
+    "YoutubeTranscriptExtractor": {
+      "operator_type": "YoutubeTranscriptExtractor",
+      "description": "Extracts YouTube transcripts and related metadata through browser/webapp automation into auditable artifacts.",
+      "primary_role": "knowledge-extractor",
+      "required_capabilities": {
+        "browser_use": 4,
+        "data_extraction": 5,
+        "speed": 3
+      },
+      "risk_constraints": {
+        "allowed_write_scope": "artifact_dir_only",
+        "payment_or_external_action": "denied"
+      },
+      "cost_hint": "low",
+      "concurrency": {"max_parallel": 2, "singleton": false}
+    },
+    "TechnologyDiagramPainter": {
+      "operator_type": "TechnologyDiagramPainter",
+      "description": "Generates polished technology architecture diagrams and report figures through the browser-agent technology diagram painter.",
+      "primary_role": "builder",
+      "required_capabilities": {
+        "browser_use": 5,
+        "gui_use": 4,
+        "data_extraction": 2
+      },
+      "risk_constraints": {
+        "allowed_write_scope": "artifact_dir_only",
+        "payment_or_external_action": "denied"
+      },
+      "cost_hint": "medium",
+      "concurrency": {"max_parallel": 1, "singleton": false}
     }
   },
   "workflow_vocabulary": {
@@ -473,6 +538,38 @@
         {"actor_id": "mini-chatgpt-deep-research", "priority": 1, "condition": "always"},
         {"actor_id": "browser_agent_session", "priority": 2, "condition": "quota_ok"},
         {"actor_id": "mini-claude-opus-planner", "priority": 3, "condition": "always"}
+      ],
+      "selection_policy": "priority_first",
+      "fallback_policy": "queue"
+    },
+    "WebwrightPlaywright": {
+      "operator_type": "WebwrightPlaywright",
+      "candidates": [
+        {"actor_id": "op.browser.webwright.playwright.01", "priority": 1, "condition": "always"}
+      ],
+      "selection_policy": "priority_first",
+      "fallback_policy": "queue"
+    },
+    "BrowserUseMcp": {
+      "operator_type": "BrowserUseMcp",
+      "candidates": [
+        {"actor_id": "op.browser.browser_use_mcp.quick.01", "priority": 1, "condition": "always"}
+      ],
+      "selection_policy": "priority_first",
+      "fallback_policy": "queue"
+    },
+    "YoutubeTranscriptExtractor": {
+      "operator_type": "YoutubeTranscriptExtractor",
+      "candidates": [
+        {"actor_id": "mini-youtube-transcript-extractor", "priority": 1, "condition": "always"}
+      ],
+      "selection_policy": "priority_first",
+      "fallback_policy": "queue"
+    },
+    "TechnologyDiagramPainter": {
+      "operator_type": "TechnologyDiagramPainter",
+      "candidates": [
+        {"actor_id": "technology-diagram-painter", "priority": 1, "condition": "always"}
       ],
       "selection_policy": "priority_first",
       "fallback_policy": "queue"

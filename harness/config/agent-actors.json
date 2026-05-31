@@ -527,111 +527,129 @@
         {"actor_id": "mini-claude-sonnet-builder", "condition": "unavailable"}
       ]
     },
-    "mini-antigravity-gemini35-flash-image": {
-      "actor_id": "mini-antigravity-gemini35-flash-image",
-      "host_id": "mini",
-      "operator_alias": "mini-antigravity-gemini35-flash-image",
-      "aliases": ["mini-antigravity-gemini35-flash-image"],
-      "role": "builder",
-      "display_meta": {
-        "display_name": "Mac mini Antigravity Gemini 3.5 Flash multimodal image",
-        "tmux_session": "solar-harness-multi-task",
-        "tmux_window": null,
-        "tmux_pane_index": null
-      },
-      "lease": {
-        "acquired_at": null,
-        "expires_at": null,
-        "renewable": false,
-        "preemptible": true,
-        "heartbeat_timeout_sec": 60,
-        "lease_id": null,
-        "holder_sprint": null
-      },
-      "mailbox": {
-        "inbox": "actors/mini-antigravity-gemini35-flash-image/inbox",
-        "outbox": "actors/mini-antigravity-gemini35-flash-image/outbox",
-        "logs": "actors/mini-antigravity-gemini35-flash-image/logs",
-        "state_json": "actors/mini-antigravity-gemini35-flash-image/state.json",
-        "heartbeat_json": "actors/mini-antigravity-gemini35-flash-image/heartbeat.json"
-      },
-      "context_packet_ref": {
-        "path": null,
-        "packet_id": null
-      },
-      "evidence_ledger_ref": {
-        "path": "actors/mini-antigravity-gemini35-flash-image/evidence"
-      },
-      "capability": {
-        "coding": 4,
-        "multimodal": 5,
-        "speed": 5,
-        "cost_efficiency": 5,
-        "reliability": 3
-      },
-      "capability_profile": {
-        "architecture_reasoning": 3,
-        "code_impl": 4,
-        "root_cause_debug": 3,
-        "test_generation": 3,
-        "test_execution": 3,
-        "research_synthesis": 3,
-        "academic_critique": 2,
-        "browser_use": 3,
-        "gui_use": 4,
-        "long_context": 4,
-        "multi_agent_coordination": 2,
-        "speed": 5
-      },
-      "risk_profile": {
-        "allowed_write_scope": "harness",
-        "allowed_shell_scope": "allowed",
-        "allowed_network": "allowed",
-        "allowed_secrets": "secret_ref_only",
-        "destructive_actions": "denied",
-        "git_commit": "allowed",
-        "git_push": "denied",
-        "payment_or_external_action": "denied",
-        "requires_human_for": ["git_push", "payment_or_external_action"]
-      },
-      "cost_profile": {
-        "cost_tier": "low",
-        "token_budget_class": "medium",
-        "quota_period": "daily",
-        "reserve_ratio": 0.0,
-        "effort": "light",
-        "prefer_for": ["image", "vision", "multimodal", "screenshot", "ui-check"],
-        "avoid_for": ["bulk-text-extraction", "critical-code-review"]
-      },
-      "quota": {
-        "quota_type": "google-account",
-        "period": "daily",
-        "on_exhausted": "disable_and_fallback"
-      },
-      "policy": {
-        "write_files": "allowed",
-        "run_shell": "allowed",
-        "network": "allowed",
-        "secrets_access": "secret_ref_only",
-        "git_commit": "allowed"
-      },
-      "evidence": {
-        "last_smoke_at": "2026-05-22T00:34:00Z",
-        "last_smoke_result": "agy --add-dir real Photos Library JPEG described beach/ocean scene",
-        "last_task_at": null,
-        "last_task_id": null,
-        "last_task_result": null,
-        "provenance": "migrated from physical-operators.json:mini-antigravity-gemini35-flash-image at 2026-05-23T01:06:55Z; profiles added 2026-05-23T01:30:00Z"
-      },
-      "persona_binding": {
-        "persona_id": "builder",
-        "persona_file": "personas/builder.md",
-        "knobs_override": {}
-      },
-      "fallback_ladder": [
-        {"actor_id": "mini-antigravity-gemini31-pro-image", "condition": "unavailable"}
+      "mini-antigravity-gemini35-flash-image": {
+    "actor_id": "mini-antigravity-gemini35-flash-image",
+    "host_id": "mini",
+    "operator_alias": "mini-antigravity-gemini35-flash-image",
+    "aliases": [
+      "mini-antigravity-gemini35-flash-image"
+    ],
+    "role": "builder",
+    "display_meta": {
+      "display_name": "Mac mini Antigravity Gemini 3.5 Flash multimodal image",
+      "tmux_session": "solar-harness-multi-task",
+      "tmux_window": null,
+      "tmux_pane_index": null
+    },
+    "lease": {
+      "acquired_at": null,
+      "expires_at": null,
+      "renewable": false,
+      "preemptible": true,
+      "heartbeat_timeout_sec": 60,
+      "lease_id": null,
+      "holder_sprint": null
+    },
+    "mailbox": {
+      "inbox": "actors/mini-antigravity-gemini35-flash-image/inbox",
+      "outbox": "actors/mini-antigravity-gemini35-flash-image/outbox",
+      "logs": "actors/mini-antigravity-gemini35-flash-image/logs",
+      "state_json": "actors/mini-antigravity-gemini35-flash-image/state.json",
+      "heartbeat_json": "actors/mini-antigravity-gemini35-flash-image/heartbeat.json"
+    },
+    "context_packet_ref": {
+      "path": null,
+      "packet_id": null
+    },
+    "evidence_ledger_ref": {
+      "path": "actors/mini-antigravity-gemini35-flash-image/evidence"
+    },
+    "capability": {
+      "coding": 4,
+      "multimodal": 0,
+      "speed": 5,
+      "cost_efficiency": 5,
+      "reliability": 1
+    },
+    "capability_profile": {
+      "architecture_reasoning": 3,
+      "code_impl": 4,
+      "root_cause_debug": 3,
+      "test_generation": 3,
+      "test_execution": 3,
+      "research_synthesis": 3,
+      "academic_critique": 2,
+      "browser_use": 0,
+      "gui_use": 0,
+      "long_context": 4,
+      "multi_agent_coordination": 2,
+      "speed": 5
+    },
+    "risk_profile": {
+      "allowed_write_scope": "harness",
+      "allowed_shell_scope": "allowed",
+      "allowed_network": "allowed",
+      "allowed_secrets": "secret_ref_only",
+      "destructive_actions": "denied",
+      "git_commit": "allowed",
+      "git_push": "denied",
+      "payment_or_external_action": "denied",
+      "requires_human_for": [
+        "git_push",
+        "payment_or_external_action"
       ]
     },
+    "cost_profile": {
+      "cost_tier": "low",
+      "token_budget_class": "medium",
+      "quota_period": "daily",
+      "reserve_ratio": 0.0,
+      "effort": "light",
+      "prefer_for": [],
+      "avoid_for": [
+        "bulk-text-extraction",
+        "critical-code-review",
+        "diagram-analysis",
+        "image",
+        "multimodal",
+        "ocr",
+        "screenshot",
+        "ui-check",
+        "vision"
+      ]
+    },
+    "quota": {
+      "quota_type": "google-account",
+      "period": "daily",
+      "on_exhausted": "disable_and_fallback"
+    },
+    "policy": {
+      "write_files": "allowed",
+      "run_shell": "allowed",
+      "network": "allowed",
+      "secrets_access": "secret_ref_only",
+      "git_commit": "allowed"
+    },
+    "evidence": {
+      "last_smoke_at": "2026-05-31T04:15:00Z",
+      "last_smoke_result": "FAILED: true image smoke produced placeholder/non-final output and Antigravity CLI log showed media=0; blocked from image routing",
+      "last_task_at": null,
+      "last_task_id": null,
+      "last_task_result": "fail",
+      "provenance": "migrated from physical-operators.json:mini-antigravity-gemini35-flash-image at 2026-05-23T01:06:55Z; profiles added 2026-05-23T01:30:00Z"
+    },
+    "persona_binding": {
+      "persona_id": "builder",
+      "persona_file": "personas/builder.md",
+      "knobs_override": {}
+    },
+    "fallback_ladder": [
+      {
+        "actor_id": "mini-antigravity-gemini31-pro-image",
+        "condition": "unavailable"
+      }
+    ]
+  },
     "mini-antigravity-gemini31-pro": {
       "actor_id": "mini-antigravity-gemini31-pro",
       "host_id": "mini",
@@ -2282,6 +2300,132 @@
         {"actor_id": "browser_agent_session", "condition": "quota_exhausted"},
         {"actor_id": "mini-claude-opus-planner", "condition": "unavailable"}
       ]
-    }
+    },
+      "technology-diagram-painter": {
+    "actor_id": "technology-diagram-painter",
+    "host_id": "mini",
+    "operator_alias": "technology-diagram-painter",
+    "aliases": [
+      "technology-diagram-painter",
+      "technology_diagram_painter"
+    ],
+    "role": "builder",
+    "display_meta": {
+      "display_name": "Technology Diagram Painter Browser Agent",
+      "tmux_session": "solar-harness-multi-task",
+      "tmux_window": null,
+      "tmux_pane_index": null
+    },
+    "lease": {
+      "acquired_at": null,
+      "expires_at": null,
+      "renewable": true,
+      "preemptible": true,
+      "heartbeat_timeout_sec": 180,
+      "lease_id": null,
+      "holder_sprint": null
+    },
+    "mailbox": {
+      "inbox": "actors/technology-diagram-painter/inbox",
+      "outbox": "actors/technology-diagram-painter/outbox",
+      "logs": "actors/technology-diagram-painter/logs",
+      "state_json": "actors/technology-diagram-painter/state.json",
+      "heartbeat_json": "actors/technology-diagram-painter/heartbeat.json"
+    },
+    "context_packet_ref": {
+      "path": null,
+      "packet_id": null
+    },
+    "evidence_ledger_ref": {
+      "path": "actors/technology-diagram-painter/evidence"
+    },
+    "capability": {
+      "research": 2,
+      "browser": 5,
+      "multimodal": 4,
+      "reliability": 3
+    },
+    "capability_profile": {
+      "architecture_reasoning": 2,
+      "code_impl": 1,
+      "root_cause_debug": 1,
+      "test_generation": 1,
+      "test_execution": 1,
+      "research_synthesis": 2,
+      "academic_critique": 1,
+      "browser_use": 5,
+      "gui_use": 5,
+      "long_context": 3,
+      "multi_agent_coordination": 2,
+      "data_extraction": 2,
+      "speed": 2
+    },
+    "risk_profile": {
+      "allowed_write_scope": "project",
+      "allowed_shell_scope": "denied",
+      "allowed_network": "allowed",
+      "allowed_secrets": "secret_ref_only",
+      "destructive_actions": "denied",
+      "git_commit": "denied",
+      "git_push": "denied",
+      "payment_or_external_action": "denied",
+      "requires_human_for": [
+        "payment_or_external_action"
+      ]
+    },
+    "cost_profile": {
+      "cost_tier": "medium",
+      "token_budget_class": "medium",
+      "quota_period": "monthly",
+      "reserve_ratio": 0.1,
+      "effort": "heavy",
+      "prefer_for": [
+        "technology-diagram",
+        "architecture-figure",
+        "report-figure",
+        "browser-asset-generation"
+      ],
+      "avoid_for": [
+        "code-implementation",
+        "vision-analysis",
+        "ocr"
+      ]
+    },
+    "quota": {
+      "quota_type": "webapp-account",
+      "period": "unknown",
+      "on_exhausted": "disable_and_fallback"
+    },
+    "policy": {
+      "write_files": "artifact_dir_only",
+      "run_shell": "restricted_operator_command",
+      "network": "allowed",
+      "secrets_access": "secret_ref_only",
+      "git_commit": "denied"
+    },
+    "evidence": {
+      "last_smoke_at": null,
+      "last_smoke_result": null,
+      "last_task_at": null,
+      "last_task_id": null,
+      "last_task_result": null,
+      "provenance": "technology diagram painter browser-agent operator bootstrap 2026-05-31"
+    },
+    "persona_binding": {
+      "persona_id": "builder",
+      "persona_file": "personas/builder.md",
+      "knobs_override": {}
+    },
+    "fallback_ladder": [
+      {
+        "actor_id": "op.browser.webwright.playwright.01",
+        "condition": "unavailable"
+      },
+      {
+        "actor_id": "op.browser.browser_use_mcp.quick.01",
+        "condition": "quota_exhausted"
+      }
+    ]
+  }
   }
 }

@@ -17,6 +17,16 @@
       "type": "object",
       "description": "Maps each logical_operator_type to an ordered list of candidate actor_ids.",
       "additionalProperties": {"$ref": "#/$defs/binding_entry"}
+    },
+    "workflow_vocabulary": {
+      "type": "object",
+      "description": "Optional workflow stage vocabulary used by APO workflow expansion.",
+      "additionalProperties": true
+    },
+    "workflow_templates": {
+      "type": "object",
+      "description": "Optional workflow templates that reference workflow_vocabulary stages.",
+      "additionalProperties": true
     }
   },
   "$defs": {
@@ -44,9 +54,10 @@
         "DeepResearchChatGPT",
         "WebwrightPlaywright",
         "BrowserUseMcp",
-        "YoutubeTranscriptExtractor"
+        "YoutubeTranscriptExtractor",
+        "TechnologyDiagramPainter"
       ],
-      "description": "P0 logical operator types. These are abstract routing labels — never physical actor or model ids."
+      "description": "Solar logical operator types. These are abstract routing labels — never physical actor or model ids."
     },
     "logical_operator_def": {
       "type": "object",

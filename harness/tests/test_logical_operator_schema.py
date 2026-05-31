@@ -49,6 +49,7 @@ OPERATOR_TYPES = [
     "WebwrightPlaywright",
     "BrowserUseMcp",
     "YoutubeTranscriptExtractor",
+    "TechnologyDiagramPainter",
 ]
 
 
@@ -80,11 +81,11 @@ class TestLogicalOperatorSchemaEnum:
         missing = set(OPERATOR_TYPES) - set(enum_vals)
         assert not missing, f"logical_operator_type enum missing: {missing}"
 
-    def test_enum_has_exactly_22_entries(self):
+    def test_enum_has_exactly_23_entries(self):
         schema = _load_lo_schema()
         enum_vals = schema["$defs"]["logical_operator_type"].get("enum", [])
-        assert len(enum_vals) == 22, (
-            f"Expected 22 logical operator types, got {len(enum_vals)}: {enum_vals}"
+        assert len(enum_vals) == 23, (
+            f"Expected 23 logical operator types, got {len(enum_vals)}: {enum_vals}"
         )
 
     @pytest.mark.parametrize("op_type", OPERATOR_TYPES)
