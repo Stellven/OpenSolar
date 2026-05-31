@@ -1869,7 +1869,9 @@ def enqueue_ready(graph: dict[str, Any], graph_path: str, workers: list[dict[str
         node["artifacts"] = artifacts
 
         lease_result = {"acquired": True, "reason": "lease_disabled"}
-        if acquire is not None and not dry_run:
+        if pane.startswith("operator-pool:"):
+            lease_result = {"acquired": True, "reason": "operator_pool_virtual_pane"}
+        elif acquire is not None and not dry_run:
             lease_result = acquire(pane, sid, dispatch_id, ttl)
             if not lease_result.get("acquired"):
                 set_node_status(graph, node_id, "queued")

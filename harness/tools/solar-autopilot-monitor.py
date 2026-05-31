@@ -2200,7 +2200,11 @@ def dispatch_ready_graph_nodes(sid: str, lease: bool = True) -> dict:
     if not validation.get("ok"):
         return {"ok": False, "reason": "task_graph_invalid", "validation": validation}
     if graph_dispatch_ready is not None and graph_dispatch_node_evals is not None:
-        evals = graph_dispatch_node_evals(str(path), dry_run=not lease, ttl=900)
+        try:
+            eval_max_items = max(1, int(os.environ.get("SOLAR_AUTOPILOT_EVAL_MAX_ITEMS", "1") or "1"))
+        except Exception:
+            eval_max_items = 1
+        evals = graph_dispatch_node_evals(str(path), dry_run=not lease, ttl=900, max_items=eval_max_items)
         ready = graph_dispatch_ready(str(path), dry_run=not lease, ttl=900)
         # Evaluator availability is more volatile than builder readiness: pane
         # cleanup/reconciliation performed while dispatching ready builder work
@@ -2220,7 +2224,7 @@ def dispatch_ready_graph_nodes(sid: str, lease: bool = True) -> dict:
                 str(path),
                 dry_run=not lease,
                 ttl=900,
-                max_items=3,
+                max_items=eval_max_items,
             )
             if (eval_retry.get("dispatched") or []) and not (eval_retry.get("skipped") or []):
                 evals = eval_retry
