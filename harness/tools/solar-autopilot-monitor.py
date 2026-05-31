@@ -1185,30 +1185,49 @@ def retry_queue(state: dict, dispatch: bool, cooldown: int) -> list[dict]:
             append_event(sid, "autopilot_queue_expired", "warn", {"target": target, "type": item.get("type"), "age_sec": int(age)})
             actions.append({"sid": sid, "action": item.get("type"), "expired": True, "target": target})
             continue
-        if target_recently_dispatched(state, target, cooldown):
+        role_pool_handoff = finding_uses_operator_role_pool(str(item.get("type") or ""))
+        if not role_pool_handoff and target_recently_dispatched(state, target, cooldown):
             retained.append(item)
             actions.append({"sid": sid, "action": item.get("type"), "queued": True, "reason": "target_cooldown", "target": target})
             continue
-        allowed, gate_reason, gate_detail = pane_gate(target, sid)
-        if not allowed:
-            item["reason"] = gate_reason
-            item["detail"] = gate_detail
-            retained.append(item)
-            actions.append({"sid": sid, "action": item.get("type"), "queued": True, "reason": gate_reason, "target": target})
-            continue
+        if not role_pool_handoff:
+            allowed, gate_reason, gate_detail = pane_gate(target, sid)
+            if not allowed:
+                item["reason"] = gate_reason
+                item["detail"] = gate_detail
+                retained.append(item)
+                actions.append({"sid": sid, "action": item.get("type"), "queued": True, "reason": gate_reason, "target": target})
+                continue
         # Planner work has coordinator-level role routing and fallback
         # candidates (architect/lab-builder).  Do not let the autopilot's fixed
         # target probe (solar-harness:0.1) deadhead planner dispatch before
         # wake_sid() can ask the coordinator to choose an available role pane.
-        if item.get("type") != "ready_for_planner" and pane_is_busy(target):
+        if not role_pool_handoff and pane_is_busy(target):
             item["reason"] = "pane_busy"
             retained.append(item)
             actions.append({"sid": sid, "action": item.get("type"), "queued": True, "reason": "pane_busy", "target": target})
             continue
         sent = False
-        if dispatch and target and item.get("type") != "pane_safe_continue_prompt":
+        if dispatch and target and not role_pool_handoff and item.get("type") != "pane_safe_continue_prompt":
             clear_current_prompt(target)
-        if dispatch and sid:
+        role_dispatch_detail: dict = {}
+        if dispatch and sid and role_pool_handoff:
+            sent, role_dispatch_detail = dispatch_role_handoff(sid, str(item.get("type") or ""))
+            if not sent:
+                append_event(sid, "autopilot_role_pool_dispatch_failed", "warn", {"target": target, "type": item.get("type"), **role_dispatch_detail})
+                item["reason"] = "role_pool_unavailable"
+                item["detail"] = role_dispatch_detail
+                retained.append(item)
+                actions.append({
+                    "sid": sid,
+                    "action": item.get("type"),
+                    "queued": True,
+                    "reason": "role_pool_unavailable",
+                    "target": target,
+                    "role_pool_dispatch": role_dispatch_detail,
+                })
+                continue
+        elif dispatch and sid:
             sent = wake_sid(sid)
         elif dispatch and target and item.get("message"):
             sent = tmux_send(target, item["message"])
@@ -1216,6 +1235,8 @@ def retry_queue(state: dict, dispatch: bool, cooldown: int) -> list[dict]:
         if sent:
             append_event(sid, "autopilot_queue_dispatched", "info", {"target": target, "type": item.get("type"), "attempts": item["attempts"]})
             result = {"sid": sid, "action": item.get("type"), "dispatched_from_queue": True, "target": target}
+            if role_pool_handoff:
+                result["role_pool_dispatch"] = role_dispatch_detail or {"fallback": "wake_sid"}
             mark_action(state, {"sid": sid, "type": item.get("type", ""), "target": target}, result)
             actions.append(result)
         else:
@@ -1251,6 +1272,102 @@ def wake_sid(sid: str) -> bool:
         return r.returncode == 0
     except Exception:
         return False
+
+
+ROLE_POOL_HANDOFF_FINDINGS = {"ready_for_planner", "ready_for_builder", "active_without_handoff", "pane_idle_with_pending_artifact", "ready_for_evaluator"}
+ROLE_POOL_UNAVAILABLE_CACHE: dict[str, dict] = {}
+
+
+def finding_uses_operator_role_pool(ftype: str) -> bool:
+    """PM handoffs should consume physical operator pools, not fixed panes.
+
+    The legacy wake path still targets the canonical 4-pane layout.  For planner
+    and evaluator handoffs, prefer pm_dispatch/operator_runtime so multiple
+    configured physical operators can be leased independently.
+    """
+    return ftype in ROLE_POOL_HANDOFF_FINDINGS
+
+
+def role_for_handoff_finding(ftype: str) -> str:
+    if ftype == "ready_for_planner":
+        return "planner"
+    if ftype in {"ready_for_builder", "active_without_handoff", "pane_idle_with_pending_artifact"}:
+        return "builder"
+    if ftype == "ready_for_evaluator":
+        return "evaluator"
+    return ""
+
+
+def objective_for_role_handoff(sid: str, role: str) -> str:
+    base = str(SPRINTS / sid)
+    if role == "planner":
+        return (
+            f"请接手 {sid}：读取 {base}.prd.md、{base}.contract.md、"
+            f"{base}.product-brief.md、{base}.requirement_ir.json、{base}.task_graph.json（存在即读）。"
+            f"产出 {base}.design.md 和 {base}.plan.md；如 task_graph 还只是粗粒度需求图，"
+            "请细化为可执行 DAG。不得跳过 PM->Planner->task_graph 主链直接交 Builder。"
+            "完成后把 status 更新为 phase=planning_complete handoff_to=builder_main target_role=builder_main；"
+            "如果证据不足或需求不完整，写明 blocker 和下一步。"
+        )
+    if role == "evaluator":
+        return (
+            f"请接手 {sid} 的评审：读取 {base}.handoff.md、{base}.plan.md、"
+            f"{base}.design.md、{base}.task_graph.json（存在即读）。"
+            f"产出 {base}.eval.md 或对应节点 eval artifact。"
+            "必须核查验收条件、实际命令证据、风险和未验证项；不要自证通过。"
+        )
+    if role == "builder":
+        return (
+            f"请接手 {sid} 的 Builder 执行：优先读取 {base}.task_graph.json，"
+            f"再读取 {base}.plan.md、{base}.design.md、{base}.handoff.md（存在即读）。"
+            "按 DAG/graph-dispatch 执行 ready nodes；不要绕过节点验收，也不要在缺少 DAG 时直接写 parent handoff。"
+            "完成节点后必须写对应 handoff/evidence，并通过 graph node verdict 或状态 artifact 回写进度。"
+        )
+    return f"请接手 {sid} 的 {role} handoff，并按 Solar Harness 标准产出对应 artifact。"
+
+
+def dispatch_role_handoff(sid: str, ftype: str) -> tuple[bool, dict]:
+    role = role_for_handoff_finding(ftype)
+    if not sid or not role:
+        return False, {"reason": "not_role_pool_handoff"}
+    if role in ROLE_POOL_UNAVAILABLE_CACHE:
+        return False, {**ROLE_POOL_UNAVAILABLE_CACHE[role], "cached": True}
+    node = "N0" if role == "planner" else ("B0" if role == "builder" else "E0")
+    task_type = "planning" if role == "planner" else ("implementation" if role == "builder" else "evaluation")
+    env = os.environ.copy()
+    env["HARNESS_DIR"] = str(HARNESS)
+    env["SOLAR_PM_DISPATCH_ALLOW_DIRECT"] = "1"
+    cmd = [
+        sys.executable,
+        str(HARNESS / "tools" / "pm_dispatch.py"),
+        "submit",
+        "--role",
+        role,
+        "--sprint",
+        sid,
+        "--node",
+        node,
+        "--task-type",
+        task_type,
+        "--objective",
+        objective_for_role_handoff(sid, role),
+        "--context",
+        "source=solar-autopilot role_pool_handoff=1",
+    ]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60, env=env)
+    except Exception as exc:
+        return False, {"role": role, "error": f"{type(exc).__name__}: {exc}"}
+    detail = {
+        "role": role,
+        "returncode": proc.returncode,
+        "stdout": proc.stdout[-2000:],
+        "stderr": proc.stderr[-2000:],
+    }
+    ok = proc.returncode == 0
+    if not ok and "no_dispatchable_operator_for_role" in (proc.stderr or ""):
+        ROLE_POOL_UNAVAILABLE_CACHE[role] = detail
+    return ok, detail
 
 
 def pane_is_busy(target: str) -> bool:
@@ -2115,7 +2232,16 @@ def dispatch_ready_graph_nodes(sid: str, lease: bool = True) -> dict:
         }
     if enqueue_ready is None:
         return {"ok": False, "reason": "graph_dispatcher_unavailable"}
-    result = enqueue_ready(graph, str(path), graph_workers(), max_parallel=8, lease=lease, ttl=900)
+    max_parallel = 8
+    try:
+        if str(HARNESS_DIR / "lib") not in sys.path:
+            sys.path.insert(0, str(HARNESS_DIR / "lib"))
+        import concurrency_policy  # type: ignore
+
+        max_parallel = int(concurrency_policy.effective_max_parallel(8, scope="graph"))
+    except Exception:
+        max_parallel = 8
+    result = enqueue_ready(graph, str(path), graph_workers(), max_parallel=max_parallel, lease=lease, ttl=900)
     from graph_scheduler import save_graph  # imported late so older installs can still inspect
     save_graph(path, graph)
     return {"ok": result.get("ok"), "ready": result}
@@ -2705,7 +2831,7 @@ def mark_action(state: dict, finding: dict, result: dict) -> None:
     key = f"{finding.get('sid','')}:{finding.get('type','')}:{finding.get('target','')}"
     state["actions"][key] = {"at": time.time(), "ts": utc_now(), "result": result}
     target = finding.get("target", "")
-    if target and (result.get("dispatched") or result.get("dispatched_from_queue")):
+    if target and not result.get("role_pool_dispatch") and (result.get("dispatched") or result.get("dispatched_from_queue")):
         state["target_actions"][target] = {"at": time.time(), "ts": utc_now(), "result": result}
         update_work_pane_title(target, result.get("sid") or finding.get("sid", ""), result.get("action") or finding.get("type", "dispatch"))
 
@@ -2742,7 +2868,8 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
     for f in findings:
         sid = f.get("sid", "")
         ftype = f.get("type", "")
-        target = maybe_reroute_builder_target(f, sid)
+        role_pool_handoff = finding_uses_operator_role_pool(ftype)
+        target = f.get("target", "") if role_pool_handoff else maybe_reroute_builder_target(f, sid)
         if is_telemetry_only_finding(f):
             append_event(sid, f"autopilot_{ftype}", f.get("severity", "warn"), f)
             result = {
@@ -2755,16 +2882,16 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
             mark_action(state, f, result)
             actions.append(result)
             continue
-        if target and target in used_targets and ftype != "pane_permissions_prompt_blocked":
+        if target and target in used_targets and ftype != "pane_permissions_prompt_blocked" and not role_pool_handoff:
             actions.append({"sid": sid, "action": ftype, "skipped": "target_already_used_this_scan", "target": target})
             continue
         if not should_act(state, f, cooldown):
             actions.append({"sid": sid, "action": ftype, "skipped": "cooldown", "target": target})
             continue
-        if target_recently_dispatched(state, target, cooldown) and ftype != "pane_permissions_prompt_blocked":
+        if not role_pool_handoff and target_recently_dispatched(state, target, cooldown) and ftype != "pane_permissions_prompt_blocked":
             actions.append({"sid": sid, "action": ftype, "skipped": "target_cooldown", "target": target})
             continue
-        if dispatch and target:
+        if dispatch and target and not role_pool_handoff:
             allowed, gate_reason, gate_detail = pane_gate(target, sid)
             if not allowed:
                 enqueue_action(f, gate_reason, gate_detail)
@@ -2773,16 +2900,16 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
                 mark_action(state, f, result)
                 actions.append(result)
                 continue
-        # See retry_queue(): ready_for_planner must be routed by coordinator,
-        # not pre-blocked on a single fixed Planner pane snapshot.
-        if dispatch and target and ftype != "ready_for_planner" and pane_is_busy(target):
+        # See retry_queue(): role-pool handoffs must be routed by coordinator,
+        # not pre-blocked on a single fixed pane snapshot.
+        if dispatch and target and not role_pool_handoff and pane_is_busy(target):
             append_event(sid, "autopilot_dispatch_deferred_pane_busy", "warn", {"target": target, "type": ftype})
             enqueue_action(f, "pane_busy", {})
             result = {"sid": sid, "action": ftype, "skipped": "pane_busy", "target": target}
             mark_action(state, f, result)
             actions.append(result)
             continue
-        if dispatch and target and ftype not in {"pane_safe_continue_prompt", "evaluator_survey_blocked", "pane_permissions_prompt_blocked"}:
+        if dispatch and target and not role_pool_handoff and ftype not in {"pane_safe_continue_prompt", "evaluator_survey_blocked", "pane_permissions_prompt_blocked"}:
             clear_current_prompt(target)
         if ftype in ("graph_ready_nodes",):
             result = dispatch_ready_graph_nodes(sid, lease=dispatch)
@@ -3009,12 +3136,31 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
             save_json(status_path, status)
             append_event(sid, f"autopilot_{ftype}", f.get("severity", "info"), {"target": f.get("target", "")})
             sent = False
-            if dispatch and sid:
+            role_dispatch_detail: dict = {}
+            if dispatch and sid and role_pool_handoff:
+                sent, role_dispatch_detail = dispatch_role_handoff(sid, ftype)
+                if not sent:
+                    append_event(sid, "autopilot_role_pool_dispatch_failed", "warn", {"target": target, "type": ftype, **role_dispatch_detail})
+                    enqueue_action(f, "role_pool_unavailable", role_dispatch_detail)
+                    result = {
+                        "sid": sid,
+                        "action": ftype,
+                        "queued": True,
+                        "reason": "role_pool_unavailable",
+                        "target": target,
+                        "role_pool_dispatch": role_dispatch_detail,
+                    }
+                    mark_action(state, f, result)
+                    actions.append(result)
+                    continue
+            elif dispatch and sid:
                 sent = wake_sid(sid)
             elif dispatch and f.get("message") and f.get("target"):
                 sent = tmux_send(f["target"], f["message"])
             result = {"sid": sid, "action": ftype, "dispatched": sent, "target": f.get("target", "")}
-            if sent and target:
+            if role_pool_handoff:
+                result["role_pool_dispatch"] = role_dispatch_detail or {"fallback": "wake_sid"}
+            if sent and target and not role_pool_handoff:
                 used_targets.add(target)
             mark_action(state, f, result)
             actions.append(result)
@@ -3090,7 +3236,26 @@ def release_lock() -> None:
         pass
 
 
+def reconcile_pm_inbox() -> dict:
+    cmd = [
+        sys.executable,
+        str(HARNESS / "tools" / "pm_dispatch.py"),
+        "reconcile",
+        "--max-age-minutes",
+        "30",
+        "--apply",
+        "--json",
+    ]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        payload = json.loads(proc.stdout) if proc.stdout.strip().startswith("{") else {"stdout": proc.stdout[-2000:]}
+        return {"action": "pm_inbox_reconcile", "ok": proc.returncode == 0, **payload}
+    except Exception as exc:
+        return {"action": "pm_inbox_reconcile", "ok": False, "error": str(exc)}
+
+
 def scan_once(args: argparse.Namespace, state: dict) -> dict:
+    reconcile_action = reconcile_pm_inbox() if args.apply else {}
     queue_actions = retry_queue(state, args.dispatch, args.cooldown) if args.apply else []
     findings = (
         inspect_epics()
@@ -3109,9 +3274,9 @@ def scan_once(args: argparse.Namespace, state: dict) -> dict:
         "dispatch": args.dispatch,
         "loop": args.loop,
         "findings": findings,
-        "actions": queue_actions + actions + [
+        "actions": ([reconcile_action] if reconcile_action else []) + queue_actions + actions + [
             {"action": "idle_titles_updated", "panes": idle_title_actions, "dispatched": False}
-        ] if idle_title_actions else queue_actions + actions,
+        ] if idle_title_actions else ([reconcile_action] if reconcile_action else []) + queue_actions + actions,
         "queue_actions": queue_actions,
         "queue_depth": len(load_queue()),
         "state_path": str(STATE),

@@ -58,6 +58,29 @@ PANE_QUOTA_EXHAUSTED_RE = re.compile(
     r"RESOURCE_EXHAUSTED|429",
     re.I,
 )
+PANE_RATE_LIMIT_FALLBACK_SEC = int(os.environ.get("SOLAR_PANE_RATE_LIMIT_FALLBACK_SEC", "900"))
+
+
+def _effective_graph_max_parallel(default: int = 8) -> int:
+    try:
+        if str(HARNESS_DIR / "lib") not in sys.path:
+            sys.path.insert(0, str(HARNESS_DIR / "lib"))
+        import concurrency_policy  # type: ignore
+
+        return int(concurrency_policy.effective_max_parallel(default, scope="graph"))
+    except Exception:
+        return int(default)
+
+
+def _prune_expired_operator_blocks() -> None:
+    try:
+        if str(HARNESS_DIR / "lib") not in sys.path:
+            sys.path.insert(0, str(HARNESS_DIR / "lib"))
+        import operator_flow_control as ofc  # type: ignore
+
+        ofc.prune_expired_operator_config_blocks()
+    except Exception:
+        pass
 PANE_RATE_LIMIT_OPTIONS_MODAL_RE = re.compile(
     r"What do you want to do\?[\s\S]{0,260}(?:/rate-limit-options|Upgrade your plan|Stop and wait for limit to reset)[\s\S]{0,120}Esc to cancel",
     re.I,
@@ -218,6 +241,8 @@ def _dispatch_role_for_pane(pane: str) -> str:
 
 
 def _clear_dispatch_boundary(pane: str, sid: str, dispatch_id: str) -> tuple[bool, str]:
+    if not (pane.startswith("solar-harness:") or pane.startswith("solar-harness-lab:") or pane.startswith("solar-harness-multi-task:")):
+        return True, "non_harness_pane"
     if ensure_clean_for_dispatch_boundary is None:
         return True, "helper_unavailable"
     role = _dispatch_role_for_pane(pane)
@@ -1066,6 +1091,85 @@ def _quota_exhausted_models(title: str, tail: str, health: dict[str, Any], model
             values.update(_quota_models_for_provider("deepseek"))
 
     return sorted(v for v in values if v)
+
+
+def _operator_models_match(operator: dict[str, Any], models: list[str]) -> bool:
+    values = {str(item).strip().lower() for item in models if str(item).strip()}
+    combined = " ".join(
+        str(operator.get(key) or "")
+        for key in ("operator_id", "provider", "model", "model_config", "vendor")
+    ).lower()
+    if not values:
+        return False
+    if any(value and value in combined for value in values):
+        return True
+    if "sonnet" in values and "sonnet" in combined:
+        return True
+    if values & {"glm", "glm-5", "glm-5.1", "zhipu"} and ("glm" in combined or "zhipu" in combined):
+        return True
+    if any("deepseek" in value for value in values) and "deepseek" in combined:
+        return True
+    if any("opus" in value for value in values) and "opus" in combined:
+        return True
+    return False
+
+
+def _pane_matches_operator(pane: str, operator: dict[str, Any]) -> bool:
+    configured = str(operator.get("pane") or "").strip()
+    if not configured:
+        return False
+    if configured == pane:
+        return True
+    if configured.endswith(":*"):
+        return pane.startswith(configured[:-1])
+    return False
+
+
+def _persist_pane_rate_limit_block(pane: str, title: str, tail: str, models: list[str]) -> list[dict[str, Any]]:
+    """Write pane-discovered rate limit state back to matching physical operators."""
+    try:
+        lib_dir = HARNESS_DIR / "lib"
+        if str(lib_dir) not in sys.path:
+            sys.path.insert(0, str(lib_dir))
+        import operator_flow_control as ofc  # type: ignore
+    except Exception:
+        return []
+    try:
+        registry = json.loads((HARNESS_DIR / "config" / "physical-operators.json").read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    operators = registry.get("operators") if isinstance(registry.get("operators"), dict) else {}
+    reset_at = ofc.parse_rate_limit_reset_at(tail or title)
+    block_reason = "pane_tui_rate_limit"
+    if reset_at is None:
+        fallback_sec = max(60, int(PANE_RATE_LIMIT_FALLBACK_SEC or 900))
+        reset_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=fallback_sec)
+        block_reason = "pane_tui_rate_limit_fallback_ttl"
+    evidence = "\n".join([title, tail])[-4000:]
+    updates: list[dict[str, Any]] = []
+    for op_id, spec in operators.items():
+        if not isinstance(spec, dict):
+            continue
+        if not spec.get("enabled", True):
+            continue
+        if not (_pane_matches_operator(pane, spec) or _operator_models_match({"operator_id": op_id, **spec}, models)):
+            continue
+        result = ofc.persist_operator_block(
+            str(op_id),
+            "cooldown",
+            expires_at=reset_at,
+            reason=block_reason,
+            source=f"tmux_pane:{pane}",
+            evidence_text=evidence,
+        )
+        if result.get("ok"):
+            ttl = ofc._seconds_until(reset_at, 3600)  # type: ignore[attr-defined]
+            try:
+                ofc.set_operator_state(str(op_id), "cooldown", ttl_seconds=ttl)
+            except Exception:
+                pass
+            updates.append(result)
+    return updates
 
 
 def _node_id_from_intent(intent: str) -> str:
@@ -2927,8 +3031,15 @@ def _wait_for_dispatch_window(pane: str, instruction_file: Path, *, sid: str = "
     pane no longer exposes a blocking prompt.
     """
     last_reason = ""
+    instruction_path = str(instruction_file.resolve())
     for _ in range(max(1, attempts)):
         tail = _pane_tail(pane)
+        if (
+            (instruction_file.name in tail or instruction_path in tail)
+            and PANE_PROCESSING_RE.search(tail)
+            and not _pane_dispatch_prompt_reason(tail)
+        ):
+            return True, "matching_dispatch_already_processing"
         if _pane_has_matching_queued_prompt(pane, instruction_file):
             last_reason = "matching_queued_prompt"
             if PANE_PROCESSING_RE.search(tail):
@@ -3718,6 +3829,308 @@ def _ensure_lease(pane: str, sid: str, dispatch_id: str, ttl: int, dry_run: bool
     return acquire_lease(pane, sid, dispatch_id, ttl)
 
 
+def _builder_operator_pool_enabled() -> bool:
+    return str(os.environ.get("SOLAR_GRAPH_BUILDER_OPERATOR_POOL", "1")).strip().lower() not in {
+        "0",
+        "false",
+        "off",
+        "no",
+    }
+
+
+def _builder_operator_pool_allowed_for_pane(pane: str) -> bool:
+    if str(os.environ.get("SOLAR_GRAPH_BUILDER_OPERATOR_POOL_ALL_PANES", "")).strip().lower() in {
+        "1",
+        "true",
+        "on",
+        "yes",
+    }:
+        return True
+    return (
+        pane.startswith("operator-pool:builder")
+        or pane.startswith("solar-harness-lab:")
+        or pane.startswith("solar-harness-multi-task:")
+    )
+
+
+def _builder_operator_pool_available_count() -> int:
+    if not _builder_operator_pool_enabled():
+        return 0
+    try:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(HARNESS_DIR / "tools" / "pm_dispatch.py"),
+                "builder-pool-status",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=8,
+            env=_broker_env(),
+        )
+    except Exception:
+        return 0
+    if completed.returncode != 0:
+        return 0
+    try:
+        data = json.loads(completed.stdout)
+    except Exception:
+        return 0
+    try:
+        available = int(data.get("total_available") or 0)
+    except Exception:
+        available = 0
+    if available <= 0:
+        groups = data.get("groups") if isinstance(data.get("groups"), dict) else {}
+        for group in groups.values():
+            if not isinstance(group, dict):
+                continue
+            try:
+                available += int(group.get("available") or 0)
+            except Exception:
+                pass
+    return max(0, available)
+
+
+def _builder_operator_pool_workers(
+    worker_skills: list[str],
+    worker_capabilities: list[str],
+) -> list[dict[str, Any]]:
+    available = _builder_operator_pool_available_count()
+    if available <= 0:
+        return []
+    try:
+        limit = int(os.environ.get("SOLAR_GRAPH_BUILDER_OPERATOR_POOL_SLOTS", "0") or "0")
+    except Exception:
+        limit = 0
+    slots = min(available, limit) if limit > 0 else available
+    models = [
+        "operator-pool",
+        "sonnet",
+        "glm-5.1",
+        "deepseek-v4-flash",
+        "gpt-5.5",
+        "thunderomlx",
+        "gemini-3.5-flash",
+    ]
+    return [
+        {
+            "pane": f"operator-pool:builder.{idx}",
+            "models": models,
+            "skills": worker_skills,
+            "capabilities": worker_capabilities,
+            "role": "builder",
+            "dispatch_role": "builder",
+            "host_role": "operator_pool",
+            "busy": False,
+            "title": "operator pool builder",
+            "unavailable_reason": "",
+            "load": idx,
+        }
+        for idx in range(max(0, slots))
+    ]
+
+
+def _graph_queue_dispatch_role(payload: dict[str, Any], node: dict[str, Any], assignment: dict[str, Any]) -> str:
+    raw = (
+        assignment.get("dispatch_role")
+        or payload.get("dispatch_role")
+        or node.get("dispatch_role")
+        or node.get("role")
+        or "builder"
+    )
+    return str(raw or "builder").strip().lower()
+
+
+def _graph_node_task_type(node: dict[str, Any]) -> str:
+    for key in ("dispatch_task_type", "task_type", "type", "logical_operator"):
+        value = str(node.get(key) or "").strip()
+        if value:
+            return value
+    return "implementation"
+
+
+def _parse_pm_submit_output(stdout: str) -> dict[str, str]:
+    parsed: dict[str, str] = {}
+    task_match = re.search(r"task_id\s*=\s*(\S+)", stdout)
+    operator_match = re.search(r"operator\s*=\s*([^\s(]+)", stdout)
+    dispatch_match = re.search(r"dispatch\s*=\s*(\S+)", stdout)
+    result_match = re.search(r"result\s*=\s*(\S+)", stdout)
+    if task_match:
+        parsed["pm_task_id"] = task_match.group(1)
+    if operator_match:
+        parsed["operator_id"] = operator_match.group(1)
+    if dispatch_match:
+        parsed["pm_dispatch_file"] = dispatch_match.group(1)
+    if result_match:
+        parsed["pm_result_path"] = result_match.group(1)
+    return parsed
+
+
+def _submit_builder_to_operator_pool(
+    *,
+    item: dict[str, Any],
+    payload: dict[str, Any],
+    sid: str,
+    node: dict[str, Any],
+    node_id: str,
+    graph_path: str,
+    pane: str,
+    dispatch_id: str,
+    dry_run: bool,
+) -> dict[str, Any]:
+    if not _builder_operator_pool_enabled():
+        return {"ok": False, "reason": "operator_pool_disabled"}
+
+    assignment = payload.get("assignment") or {}
+    if _graph_queue_dispatch_role(payload, node, assignment) != "builder":
+        return {"ok": False, "reason": "not_builder_role"}
+    if pane and not _builder_operator_pool_allowed_for_pane(pane):
+        return {"ok": False, "reason": "operator_pool_not_enabled_for_pane"}
+
+    instruction_file = _dispatch_file(sid, node_id)
+    text_payload = dict(payload, dispatch_id=dispatch_id, sprint_id=sid)
+    text_payload = _ensure_execution_plan_payload(text_payload, graph_path=graph_path, sid=sid, node=node)
+    if node_id.startswith("R"):
+        text_payload["research_node"] = True
+        if node.get("fan_out_parent"):
+            text_payload["section_isolation"] = True
+            text_payload["section_id"] = node.get("section_id", "")
+    instruction_file.parent.mkdir(parents=True, exist_ok=True)
+    instruction_file.write_text(build_dispatch_text(text_payload, "operator-pool:builder"), encoding="utf-8")
+    if not dry_run:
+        _inject_dispatch_context(instruction_file, sid=sid, pane="operator-pool:builder", dispatch_id=dispatch_id)
+
+    dispatch_preview = instruction_file.read_text(encoding="utf-8")
+    if len(dispatch_preview) > 60000:
+        dispatch_preview = (
+            dispatch_preview[:60000]
+            + "\n\n[TRUNCATED] Full graph dispatch instructions are in the file path above; read the file before acting."
+        )
+    objective = (
+        "你是 graph-dispatch builder。请严格执行下面这个 DAG 节点分发文件；"
+        "不要只总结，必须完成节点要求并按文件内的 graph node verdict/closeout 规则回写。\n\n"
+        f"Graph dispatch file: {instruction_file}\n"
+        f"Sprint: {sid}\n"
+        f"Node: {node_id}\n"
+        f"Original assigned pane fallback: {pane or 'N/A'}\n\n"
+        "--- BEGIN GRAPH DISPATCH FILE ---\n"
+        f"{dispatch_preview}"
+        "\n--- END GRAPH DISPATCH FILE ---"
+    )
+    context = json.dumps(
+        {
+            "source": "graph_node_dispatcher",
+            "graph": graph_path,
+            "dispatch_id": dispatch_id,
+            "original_assigned_pane": pane,
+            "queue_item_id": item.get("id", ""),
+        },
+        ensure_ascii=False,
+    )
+    cmd = [
+        sys.executable,
+        str(HARNESS_DIR / "tools" / "pm_dispatch.py"),
+        "submit",
+        "--role",
+        "builder",
+        "--sprint",
+        sid,
+        "--node",
+        node_id,
+        "--task-type",
+        _graph_node_task_type(node),
+        "--objective",
+        objective,
+        "--context",
+        context,
+    ]
+    if dry_run:
+        cmd.append("--dry-run")
+    env = _broker_env(sid)
+    env["SOLAR_PM_DISPATCH_ALLOW_DIRECT"] = "1"
+    env.setdefault("SOLAR_PM_DISPATCH_SOURCE", "graph_node_dispatcher")
+
+    try:
+        completed = subprocess.run(cmd, capture_output=True, text=True, timeout=45, env=env)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "reason": "operator_pool_submit_exception",
+            "error": str(exc),
+            "instruction_file": str(instruction_file),
+        }
+    if completed.returncode != 0:
+        return {
+            "ok": False,
+            "reason": "operator_pool_submit_failed",
+            "returncode": completed.returncode,
+            "stdout": completed.stdout[-1200:],
+            "stderr": completed.stderr[-1200:],
+            "instruction_file": str(instruction_file),
+        }
+
+    parsed = _parse_pm_submit_output(completed.stdout)
+    operator_id = parsed.get("operator_id") or "unknown"
+    operator_pane = f"operator:{operator_id}"
+    if dry_run:
+        return {
+            "ok": True,
+            "node": node_id,
+            "pane": operator_pane,
+            "dispatch_id": dispatch_id,
+            "instruction_file": str(instruction_file),
+            "dispatch_mode": "operator_pool",
+            "pm_dispatch": parsed,
+            "dry_run": True,
+            "graph_updated": False,
+        }
+
+    if pane:
+        release_lease(pane, dispatch_id, "graph_dispatch_reassigned_to_operator_pool")
+    _write_submit_ack(sid, node_id, operator_pane, dispatch_id)
+    graph_updated = _mark_graph_node(graph_path, node_id, "dispatched", pane=operator_pane, dispatch_id=dispatch_id)
+    _append_dispatch_ledger(
+        "operator_pool_dispatched",
+        sid,
+        operator_pane,
+        dispatch_id,
+        {
+            "node": node_id,
+            "graph": graph_path,
+            "pm_dispatch": parsed,
+            "instruction_file": str(instruction_file),
+            "fallback_pane": pane,
+        },
+    )
+    _append_event(
+        sid,
+        {
+            "event": "graph_builder_operator_pool_dispatched",
+            "by": "graph-dispatch",
+            "data": {
+                "node": node_id,
+                "operator_id": operator_id,
+                "pm_task_id": parsed.get("pm_task_id", ""),
+                "fallback_pane": pane,
+                "dispatch_id": dispatch_id,
+            },
+        },
+    )
+    return {
+        "ok": True,
+        "node": node_id,
+        "pane": operator_pane,
+        "dispatch_id": dispatch_id,
+        "instruction_file": str(instruction_file),
+        "dispatch_mode": "operator_pool",
+        "pm_dispatch": parsed,
+        "dry_run": False,
+        "graph_updated": graph_updated,
+    }
+
+
 def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 900) -> dict[str, Any]:
     payload = item.get("payload") or {}
     sid = payload.get("sprint_id") or item.get("sprint_id") or item.get("sid") or ""
@@ -3730,11 +4143,40 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
 
     if not sid or not node_id:
         return {"ok": False, "reason": "invalid_graph_queue_item", "item": item}
-    if not pane:
-        return {"ok": False, "reason": "missing_assigned_pane", "node": node_id}
     runtime_state = _graph_node_runtime_state(graph_path, node_id)
     current_status = str(runtime_state.get("status") or "")
     current_dispatch_id = str(runtime_state.get("dispatch_id") or "")
+    human_handoff = _prepare_human_search_handoff(sid, graph_path, node, dry_run=dry_run)
+    if human_handoff is not None:
+        return human_handoff
+    if current_status in {"assigned", "pending", "queued"} and (not current_dispatch_id or current_dispatch_id == dispatch_id):
+        pool_result = _submit_builder_to_operator_pool(
+            item=item,
+            payload=payload,
+            sid=sid,
+            node=node,
+            node_id=node_id,
+            graph_path=graph_path,
+            pane=pane,
+            dispatch_id=dispatch_id,
+            dry_run=dry_run,
+        )
+        if pool_result.get("ok"):
+            return pool_result
+        if pool_result.get("reason") not in {
+            "operator_pool_disabled",
+            "operator_pool_not_enabled_for_pane",
+            "not_builder_role",
+        }:
+            _append_dispatch_ledger(
+                "operator_pool_fallback_to_pane",
+                sid,
+                pane or "unknown",
+                dispatch_id,
+                {"node": node_id, "reason": pool_result.get("reason"), "detail": pool_result},
+            )
+    if not pane:
+        return {"ok": False, "reason": "missing_assigned_pane", "node": node_id}
     if current_status in {"assigned", "dispatched", "in_progress", "running"} and current_dispatch_id == dispatch_id:
         instruction_file = _dispatch_file(sid, node_id)
         if _pane_tui_busy(pane):
@@ -3787,9 +4229,6 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
             "status": current_status,
             "dispatch_id": dispatch_id,
         }
-    human_handoff = _prepare_human_search_handoff(sid, graph_path, node, dry_run=dry_run)
-    if human_handoff is not None:
-        return human_handoff
     if current_status in {"assigned", "dispatched", "in_progress", "running"} and current_dispatch_id and current_dispatch_id != dispatch_id:
         return {
             "ok": True,
@@ -3943,6 +4382,7 @@ def drain_queue(sprint_id: str, dry_run: bool = False, max_items: int = 0, ttl: 
 
 
 def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
+    _prune_expired_operator_blocks()
     worker_skills = [
         "bash", "shell", "python", "python-read", "dataclasses", "pytest", "subprocess", "ffmpeg", "sqlite", "sqlite3", "pure-functions", "time-injection", "timeouts", "concurrency", "io", "fsm", "integration", "integration-testing", "integration-tests", "regression", "regression-tests", "bash-tests", "jq", "json", "json-patch", "jsonl-tail", "typescript", "docs", "testing",
         "http-testing", "negative-testing", "activation-proof", "knowledge-ingest", "release-gate", "documentation",
@@ -4068,6 +4508,7 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         tail = _pane_tail(pane)
         health = _pane_health(pane)
         quota_exhausted = _quota_exhausted_models(title, tail, health, models)
+        rate_limit_blocks = _persist_pane_rate_limit_block(pane, title, tail, quota_exhausted) if quota_exhausted else []
         cooldown_reason = _pane_cooldown_reason(pane)
         if pane.startswith("solar-harness-lab:") or pane.startswith("solar-harness-multi-task:"):
             if not cooldown_reason:
@@ -4093,15 +4534,19 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
             "busy": _pane_has_active_lease(pane) or _pane_tui_busy(pane) or bool(unavailable_reason),
             "title": title,
             "quota_exhausted": quota_exhausted,
+            "rate_limit_operator_blocks": rate_limit_blocks,
             "health": health,
             "unavailable_reason": unavailable_reason,
             "current_command": current_command,
         })
+    if not dry_run:
+        workers.extend(_builder_operator_pool_workers(worker_skills, worker_capabilities))
     workers.sort(key=lambda item: _pane_execution_priority(str(item.get("pane") or "")))
     return workers
 
 
 def _discover_evaluators(dry_run: bool = False) -> list[dict[str, Any]]:
+    _prune_expired_operator_blocks()
     if dry_run and os.environ.get("SOLAR_GRAPH_DISPATCH_FAKE_EVALUATORS") == "1":
         return [{"pane": f"{SESSION}:0.3", "models": _models_for_pane(f"{SESSION}:0.3"), "skills": ["review", "testing", "bash"]}]
     # Graph node evaluation mutates graph verdict state. Keep it on evaluator
@@ -4150,21 +4595,29 @@ def _discover_evaluators(dry_run: bool = False) -> list[dict[str, Any]]:
             cooldown_reason = _pane_cooldown_reason(pane)
             if (pane.startswith("solar-harness-lab:") or pane.startswith("solar-harness-multi-task:")) and not cooldown_reason:
                 _clear_stale_prompt_residue(pane)
+            tail = _pane_tail(pane)
+            models = _models_for_pane(pane, title)
+            health = _pane_health(pane)
+            quota_exhausted = _quota_exhausted_models(title, tail, health, models)
+            rate_limit_blocks = _persist_pane_rate_limit_block(pane, title, tail, quota_exhausted) if quota_exhausted else []
             runtime_unavailable_reason = "" if cooldown_reason else _pane_runtime_unavailable_reason(pane, title)
             unavailable_reason = (
                 cooldown_reason
                 or _multi_task_direct_dispatch_unavailable_reason(pane, current_command=current_command)
                 or runtime_unavailable_reason
                 or _pane_unavailable_reason(pane)
+                or ("rate_limit_or_api_error" if quota_exhausted else "")
             )
             evaluators.append({
                 "pane": pane,
-                "models": _models_for_pane(pane),
+                "models": models,
                 "skills": ["review", "testing", "bash"],
                 "busy": _pane_has_active_lease(pane) or _pane_tui_busy(pane) or bool(unavailable_reason),
                 "title": title,
                 "evaluator_host_role": "evaluator" if title_matches_evaluator else "lab_builder_spillover",
                 "unavailable_reason": unavailable_reason,
+                "quota_exhausted": quota_exhausted,
+                "rate_limit_operator_blocks": rate_limit_blocks,
                 "current_command": current_command,
             })
     evaluators.sort(key=lambda item: _pane_evaluator_priority(str(item.get("pane") or ""), str(item.get("title") or "")))
@@ -4480,11 +4933,12 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
 
 
 def dispatch_ready(graph_path: str, dry_run: bool = False, ttl: int = 900,
-                   max_parallel: int = 8) -> dict[str, Any]:
+                   max_parallel: int | None = None) -> dict[str, Any]:
     if _no_dispatch_enabled() and not dry_run:
         return {"ok": False, "reason": "no_dispatch_flag", "graph": graph_path, "enqueue": {}, "drain": {}}
     graph = load_graph(graph_path)
     sid = graph.get("sprint_id") or Path(graph_path).stem.replace(".task_graph", "")
+    effective_max_parallel = int(max_parallel) if max_parallel is not None else _effective_graph_max_parallel(8)
     reconciled: list[dict[str, Any]] = []
     if not dry_run:
         reconciled = _reconcile_existing_dispatches(graph, graph_path)
@@ -4494,7 +4948,7 @@ def dispatch_ready(graph_path: str, dry_run: bool = False, ttl: int = 900,
         graph,
         graph_path,
         _discover_workers(dry_run),
-        max_parallel=max_parallel,
+        max_parallel=effective_max_parallel,
         lease=not dry_run,
         ttl=ttl,
         dry_run=dry_run,
@@ -4519,6 +4973,7 @@ def dispatch_ready(graph_path: str, dry_run: bool = False, ttl: int = 900,
     return {
         "ok": enqueue_result.get("ok") and drain_result.get("ok"),
         "reconciled": reconciled,
+        "concurrency": {"graph_max_parallel": effective_max_parallel},
         "enqueue": enqueue_result,
         "drain": drain_result,
     }
@@ -4697,7 +5152,7 @@ def main() -> int:
     p.add_argument("--graph", required=True)
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--ttl", type=int, default=900)
-    p.add_argument("--max-parallel", type=int, default=8)
+    p.add_argument("--max-parallel", type=int, default=None)
 
     p = sub.add_parser("dispatch-evals")
     p.add_argument("--graph", required=True)
