@@ -1725,6 +1725,30 @@ def validate_compiled_package(payload: dict[str, Any]) -> dict[str, Any]:
     if any(_walk(node_id) for node_id in node_ids):
         errors.append("task_graph_cycle_detected")
 
+    graph_variant = str(graph.get("dag_variant") or payload.get("dag_variant") or "").strip().lower()
+    nonlinear = graph_variant not in {"", "linear", "serial", "sequential", "single", "single_node"}
+    quality = graph.get("quality_gates") if isinstance(graph.get("quality_gates"), dict) else {}
+    parallelism = quality.get("parallelism") if isinstance(quality.get("parallelism"), dict) else {}
+    explicit_min = parallelism.get("min_ready_width") or quality.get("min_ready_width") or graph.get("min_ready_width")
+    try:
+        min_ready_width = int(explicit_min or 0)
+    except Exception:
+        min_ready_width = 0
+    if nonlinear and len(nodes) >= 4:
+        min_ready_width = min_ready_width or 2
+        source_nodes = [
+            str(node.get("id") or "")
+            for node in nodes
+            if not [dep for dep in (node.get("depends_on") or []) if str(dep) in node_id_set]
+        ]
+        if len(source_nodes) < min_ready_width:
+            errors.append(
+                "task_graph_ready_width_below_min:"
+                f"source_width={len(source_nodes)}"
+                f"<min_ready_width={min_ready_width}"
+                f":variant={graph_variant or 'nonlinear'}"
+            )
+
     if trace_items:
         unmapped = [item.get("requirement_id", "N/A") for item in trace_items if not (item.get("mapped_nodes") or [])]
         if unmapped:

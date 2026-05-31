@@ -251,6 +251,50 @@ def test_validate_compiled_package_rejects_raw_metadata_pollution():
     assert "raw_metadata_pollution_detected" in result["errors"]
 
 
+def test_validate_compiled_package_rejects_nonlinear_graph_without_ready_width():
+    router = _load_router()
+    payload = {
+        "dag_variant": "parallel_delivery",
+        "requirement_ir": {
+            "schema_version": "solar.requirement_ir.v1",
+            "normalized_goal": "Improve DAG parallelism.",
+            "problem_statement": "Single chain underuses workers.",
+            "requirements": [{"id": "REQ-1"}],
+            "contracts": {"product": {"acceptance": ["Parallelism gate rejects narrow DAGs."]}},
+        },
+        "compiled_artifacts": {
+            "product_brief": {
+                "problem": "Single chain underuses workers.",
+                "acceptance": ["Parallelism gate rejects narrow DAGs."],
+            },
+            "task_dag": {
+                "dag_variant": "parallel_delivery",
+                "quality_gates": {"parallelism": {"min_ready_width": 2}},
+                "nodes": [
+                    {"id": "N1", "depends_on": [], "acceptance": ["ok"], "requirement_ids": ["REQ-1"]},
+                    {"id": "N2", "depends_on": ["N1"], "acceptance": ["ok"], "requirement_ids": ["REQ-1"]},
+                    {"id": "N3", "depends_on": ["N2"], "acceptance": ["ok"], "requirement_ids": ["REQ-1"]},
+                    {"id": "N4", "depends_on": ["N3"], "acceptance": ["ok"], "requirement_ids": ["REQ-1"]},
+                ],
+            },
+            "requirement_trace": {
+                "items": [
+                    {
+                        "requirement_id": "REQ-1",
+                        "mapped_nodes": ["N1", "N2", "N3", "N4"],
+                        "expected_artifacts": ["task_graph.json"],
+                    }
+                ]
+            },
+        },
+    }
+
+    result = router.validate_compiled_package(payload)
+
+    assert result["ok"] is False
+    assert any(error.startswith("task_graph_ready_width_below_min:") for error in result["errors"])
+
+
 def test_codex_pm_router_cli_defaults_to_rawintent(tmp_path):
     env = dict(os.environ)
     env["SOLAR_HARNESS_DIR"] = str(ROOT)
