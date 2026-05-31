@@ -273,6 +273,11 @@ class TestSendToPaneLiteral:
 
         release_calls = []
         monkeypatch.setattr(gnd, "release_lease", lambda *a, **k: release_calls.append(a) or {"released": True})
+        monkeypatch.setattr(
+            gnd,
+            "_cooldown_operator_after_contract_closeout",
+            lambda operator_id, closeout: {"ok": True, "operator_id": operator_id, "cooldown_sec": 900},
+        )
 
         repaired = gnd._reconcile_existing_dispatches(graph, sprints / f"{sid}.task_graph.json")
 
@@ -298,6 +303,11 @@ class TestSendToPaneLiteral:
                 "reason": "failed_contract_closeout",
                 "operator_status": "completed",
                 "result_json": str(result_json),
+                "operator_cooldown": {
+                    "ok": True,
+                    "operator_id": "mini-reasonix-deepseek-v4-flash-builder-1",
+                    "cooldown_sec": 900,
+                },
             }
         ]
 
@@ -358,17 +368,18 @@ class TestSendToPaneLiteral:
                 "graph_eval_reconcile_failed_contract_closeout",
             )
         ]
-        assert repaired == [
-            {
-                "node": "N1",
-                "pane": "operator:mini-reasonix-deepseek-v4-builder",
-                "dispatch_id": f"graph-eval-{sid}-N1-q1",
-                "status": "reviewing",
-                "reason": "eval_failed_contract_closeout",
-                "operator_status": "completed",
-                "result_json": str(result_json),
-            }
-        ]
+        assert len(repaired) == 1
+        item = repaired[0]
+        assert item["node"] == "N1"
+        assert item["pane"] == "operator:mini-reasonix-deepseek-v4-builder"
+        assert item["dispatch_id"] == f"graph-eval-{sid}-N1-q1"
+        assert item["status"] == "reviewing"
+        assert item["reason"] == "eval_failed_contract_closeout"
+        assert item["operator_status"] == "completed"
+        assert item["result_json"] == str(result_json)
+        assert item["operator_cooldown"]["ok"] is True
+        assert item["operator_cooldown"]["operator_id"] == "mini-reasonix-deepseek-v4-builder"
+        assert item["operator_cooldown"]["cooldown_sec"] == 900
 
     def test_reconcile_accepts_lowercase_passed_eval_sidecar(self, tmp_harness, monkeypatch):
         """Evaluator sidecars may write verdict=passed; reconcile must still close the node."""

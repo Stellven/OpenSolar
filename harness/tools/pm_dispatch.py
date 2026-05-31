@@ -24,6 +24,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import textwrap
 import time
 import uuid
@@ -47,6 +48,7 @@ SPRINTS_DIR = Path(os.environ.get("SOLAR_HARNESS_SPRINTS_DIR", HARNESS_DIR / "sp
 # ── 角色别名映射 ───────────────────────────────────────────────────────────────
 ROLE_ALIASES: dict[str, str] = {
     "build": "builder",
+    "builder-main": "builder",
     "implementation": "builder",
     "implementer": "builder",
     "coder": "builder",
@@ -424,8 +426,8 @@ def _write_health_cache(operator_id: str, ok: bool, reason: str) -> None:
         "checked_at": _now(),
         "checked_at_epoch": time.time(),
     }
-    tmp = str(path) + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
+    fd, tmp = tempfile.mkstemp(prefix=f"{operator_id}.", suffix=".tmp", dir=str(path.parent))
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False)
     os.replace(tmp, str(path))
 
@@ -1089,6 +1091,30 @@ def _active_pm_task_ids() -> set[str]:
                 if value.startswith("pm-"):
                     active.add(value)
     return active
+
+
+def _pm_expected_artifacts(record: dict[str, Any]) -> list[Path]:
+    """Artifacts that prove a PM role task actually satisfied its contract."""
+    role = normalize_role(str(record.get("requested_role") or ""))
+    sprint_id = str(record.get("sprint_id") or "").strip()
+    if not sprint_id:
+        return []
+    if role == "planner":
+        return [
+            SPRINTS_DIR / f"{sprint_id}.plan.md",
+            SPRINTS_DIR / f"{sprint_id}.task_graph.json",
+        ]
+    return []
+
+
+def _pm_closeout_status(record: dict[str, Any]) -> dict[str, Any]:
+    expected = _pm_expected_artifacts(record)
+    missing = [str(path) for path in expected if not path.exists() or path.stat().st_size <= 0]
+    return {
+        "ok": not missing,
+        "expected_artifacts": [str(path) for path in expected],
+        "missing_artifacts": missing,
+    }
 
 
 def _record_age_minutes(record: dict[str, Any], path: Path) -> float:
@@ -1909,19 +1935,60 @@ def cmd_reconcile(args: argparse.Namespace) -> int:
 
         task_id = str(record.get("task_id") or path.stem)
         status = str(record.get("status") or "").strip()
-        if status in {"completed", "cancelled", "failed", "failed_missing_pm_result"}:
+        if status == "completed":
+            closeout = _pm_closeout_status(record)
+            if closeout.get("ok"):
+                continue
+            actions.append({
+                "task_id": task_id,
+                "action": "fail_contract_closeout",
+                "reason": "completed_without_required_artifacts",
+                **closeout,
+            })
+            if apply_changes:
+                record["task_id"] = task_id
+                record["status"] = "failed_contract_closeout"
+                record["failed_at"] = now
+                record["failure_reason"] = "completed_without_required_artifacts"
+                record["closeout_status"] = closeout
+                record.setdefault("reconcile_history", []).append(
+                    {"ts": now, "action": "fail_contract_closeout", "reason": "completed_without_required_artifacts", **closeout}
+                )
+                write_pm_task_record(task_id, record)
+            continue
+        if status in {"cancelled", "failed", "failed_missing_pm_result", "failed_contract_closeout"}:
             continue
 
         result_path = Path(str(record.get("result_path") or ""))
         result_exists = bool(str(result_path) and result_path.exists())
         if result_exists:
-            actions.append({"task_id": task_id, "action": "complete", "reason": "result_path_exists"})
+            closeout = _pm_closeout_status(record)
+            if not closeout.get("ok"):
+                actions.append({
+                    "task_id": task_id,
+                    "action": "fail_contract_closeout",
+                    "reason": "result_path_exists_but_required_artifacts_missing",
+                    **closeout,
+                })
+                if apply_changes:
+                    record["task_id"] = task_id
+                    record["status"] = "failed_contract_closeout"
+                    record["failed_at"] = now
+                    record["failure_reason"] = "result_path_exists_but_required_artifacts_missing"
+                    record["closeout_status"] = closeout
+                    record.setdefault("reconcile_history", []).append(
+                        {"ts": now, "action": "fail_contract_closeout", "reason": "result_path_exists_but_required_artifacts_missing", **closeout}
+                    )
+                    write_pm_task_record(task_id, record)
+                continue
+            actions.append({"task_id": task_id, "action": "complete", "reason": "result_path_exists", **closeout})
             if apply_changes:
                 record["task_id"] = task_id
                 record["status"] = "completed"
                 record["completed_at"] = now
+                record["closeout_status"] = closeout
                 record.setdefault("reconcile_history", []).append(
-                    {"ts": now, "action": "complete", "reason": "result_path_exists"}
+                    {"ts": now, "action": "complete", "reason": "result_path_exists", **closeout}
                 )
                 write_pm_task_record(task_id, record)
             continue

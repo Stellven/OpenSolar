@@ -24,6 +24,12 @@ def _load_pm_dispatch():
     return module
 
 
+def test_normalize_role_maps_builder_main_to_builder():
+    pm_dispatch = _load_pm_dispatch()
+    assert pm_dispatch.normalize_role("builder_main") == "builder"
+    assert pm_dispatch.normalize_role("builder-main") == "builder"
+
+
 def test_select_operator_by_role_prefers_capsule_operator_constraints(monkeypatch):
     pm_dispatch = _load_pm_dispatch()
     monkeypatch.setattr(
@@ -211,3 +217,61 @@ def test_cmd_compile_request_rejects_invalid_compiled_package(monkeypatch, tmp_p
     rc = pm_dispatch.cmd_compile_request(args)
     assert rc == 2
     assert touched["status"] is False
+
+
+def test_reconcile_marks_planner_result_without_required_artifacts_failed(monkeypatch, tmp_path, capsys):
+    pm_dispatch = _load_pm_dispatch()
+    monkeypatch.setattr(pm_dispatch, "HARNESS_DIR", tmp_path)
+    monkeypatch.setattr(pm_dispatch, "SPRINTS_DIR", tmp_path / "sprints")
+    monkeypatch.setattr(pm_dispatch, "PM_INBOX_DIR", tmp_path / "run" / "pm-inbox")
+    monkeypatch.setattr(pm_dispatch, "_active_pm_task_ids", lambda: set())
+    pm_dispatch.SPRINTS_DIR.mkdir(parents=True)
+    pm_dispatch.PM_INBOX_DIR.mkdir(parents=True)
+    result_path = pm_dispatch.SPRINTS_DIR / "sprint-demo.N0.pm-result.md"
+    result_path.write_text("# PM Task Result\n\n## 已完成\n- only summary\n", encoding="utf-8")
+    pm_dispatch.write_pm_task_record("pm-demo", {
+        "task_id": "pm-demo",
+        "sprint_id": "sprint-demo",
+        "node_id": "N0",
+        "requested_role": "planner",
+        "status": "submitted",
+        "result_path": str(result_path),
+    })
+
+    rc = pm_dispatch.cmd_reconcile(argparse.Namespace(max_age_minutes=30, apply=True, json=True, limit=40))
+
+    assert rc == 0
+    updated = pm_dispatch.read_pm_task_record("pm-demo")
+    assert updated["status"] == "failed_contract_closeout"
+    assert updated["closeout_status"]["ok"] is False
+    assert str(pm_dispatch.SPRINTS_DIR / "sprint-demo.plan.md") in updated["closeout_status"]["missing_artifacts"]
+    assert "fail_contract_closeout" in capsys.readouterr().out
+
+
+def test_reconcile_completes_planner_when_required_artifacts_exist(monkeypatch, tmp_path):
+    pm_dispatch = _load_pm_dispatch()
+    monkeypatch.setattr(pm_dispatch, "HARNESS_DIR", tmp_path)
+    monkeypatch.setattr(pm_dispatch, "SPRINTS_DIR", tmp_path / "sprints")
+    monkeypatch.setattr(pm_dispatch, "PM_INBOX_DIR", tmp_path / "run" / "pm-inbox")
+    monkeypatch.setattr(pm_dispatch, "_active_pm_task_ids", lambda: set())
+    pm_dispatch.SPRINTS_DIR.mkdir(parents=True)
+    pm_dispatch.PM_INBOX_DIR.mkdir(parents=True)
+    result_path = pm_dispatch.SPRINTS_DIR / "sprint-demo.N0.pm-result.md"
+    result_path.write_text("# PM Task Result\n", encoding="utf-8")
+    (pm_dispatch.SPRINTS_DIR / "sprint-demo.plan.md").write_text("# Plan\n", encoding="utf-8")
+    (pm_dispatch.SPRINTS_DIR / "sprint-demo.task_graph.json").write_text('{"nodes":[]}\n', encoding="utf-8")
+    pm_dispatch.write_pm_task_record("pm-demo", {
+        "task_id": "pm-demo",
+        "sprint_id": "sprint-demo",
+        "node_id": "N0",
+        "requested_role": "planner",
+        "status": "submitted",
+        "result_path": str(result_path),
+    })
+
+    rc = pm_dispatch.cmd_reconcile(argparse.Namespace(max_age_minutes=30, apply=True, json=True, limit=40))
+
+    assert rc == 0
+    updated = pm_dispatch.read_pm_task_record("pm-demo")
+    assert updated["status"] == "completed"
+    assert updated["closeout_status"]["ok"] is True
