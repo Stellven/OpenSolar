@@ -38,6 +38,18 @@ PASS_STATUSES = {"passed"}
 CLOSED_NON_PASS_STATUSES = {"skipped", "cancelled", "skipped_parent_passed"}
 SPRINTS_DIR = Path(os.environ.get("HARNESS_SPRINTS_DIR", HARNESS_DIR / "sprints"))
 
+
+def _effective_graph_max_parallel(default: int | None = None) -> int | None:
+    try:
+        lib_dir = HARNESS_DIR / "lib"
+        if str(lib_dir) not in sys.path:
+            sys.path.insert(0, str(lib_dir))
+        import concurrency_policy  # type: ignore
+
+        return int(concurrency_policy.effective_max_parallel(default or 8, scope="graph"))
+    except Exception:
+        return default
+
 LABEL_ALIAS_GROUPS = [
     {
         "solar-harness-control-plane",
@@ -900,6 +912,33 @@ def _estimated_cost(node: dict[str, Any]) -> float:
         return 1.0
 
 
+def graph_parallelism_metrics(graph: dict[str, Any]) -> dict[str, Any]:
+    ids = _node_map(graph)
+    source_nodes: list[str] = []
+    missing_write_scope: list[str] = []
+    for node_id, node in ids.items():
+        if not _internal_depends_on(node):
+            source_nodes.append(node_id)
+        if "write_scope" not in node or not node.get("write_scope"):
+            missing_write_scope.append(node_id)
+    initial_ready: list[str] = []
+    for node_id, node in ids.items():
+        status = node_status(graph, node_id)
+        if status in TERMINAL_STATUSES or status in ACTIVE_STATUSES or status not in READY_STATUSES:
+            continue
+        deps = _internal_depends_on(node)
+        if all(_is_passed(graph, dep) for dep in deps):
+            initial_ready.append(node_id)
+    return {
+        "initial_ready_width": len(initial_ready),
+        "initial_ready_nodes": initial_ready,
+        "source_width": len(source_nodes),
+        "source_nodes": source_nodes,
+        "missing_write_scope_count": len(missing_write_scope),
+        "missing_write_scope_nodes": missing_write_scope,
+    }
+
+
 def validate_graph(graph: dict[str, Any]) -> dict[str, Any]:
     ids = _node_map(graph)
     errors: list[str] = []
@@ -940,10 +979,27 @@ def validate_graph(graph: dict[str, Any]) -> dict[str, Any]:
     except Exception as exc:
         warnings.append(f"architecture_guard unavailable: {type(exc).__name__}")
 
+    parallelism = graph_parallelism_metrics(graph) if not errors else {}
+    quality = graph.get("quality_gates") if isinstance(graph.get("quality_gates"), dict) else {}
+    parallelism_gate = quality.get("parallelism") if isinstance(quality.get("parallelism"), dict) else {}
+    min_ready_width = int(
+        parallelism_gate.get("min_ready_width")
+        or quality.get("min_ready_width")
+        or graph.get("min_ready_width")
+        or 0
+    )
+    if min_ready_width > 0 and parallelism.get("initial_ready_width", 0) < min_ready_width:
+        errors.append(
+            "parallelism_quality:"
+            f" initial_ready_width={parallelism.get('initial_ready_width', 0)}"
+            f" < min_ready_width={min_ready_width}"
+        )
+
     return {
         "ok": not errors,
         "sprint_id": graph.get("sprint_id"),
         "node_count": len(ids),
+        "parallelism": parallelism,
         "errors": errors,
         "warnings": warnings,
     }
@@ -1146,7 +1202,8 @@ def _batch_ready_nodes(nodes: list[dict[str, Any]], max_parallel: int | None = N
 def make_batches(graph: dict[str, Any], max_parallel: int | None = None) -> dict[str, Any]:
     blocked = blocked_external_prerequisites(graph)
     nodes = ready_nodes(graph)
-    batches = _batch_ready_nodes(nodes, max_parallel=max_parallel)
+    effective_max_parallel = max_parallel if max_parallel is not None else _effective_graph_max_parallel(None)
+    batches = _batch_ready_nodes(nodes, max_parallel=effective_max_parallel)
     return {
         "ok": True,
         "sprint_id": graph.get("sprint_id"),
@@ -1390,7 +1447,7 @@ def _worker_role(worker: dict[str, Any]) -> str:
         worker.get("dispatch_role")
         or worker.get("host_role")
         or worker.get("role")
-        or ""
+        or "builder"
     ).strip().lower()
 
 
@@ -1538,6 +1595,21 @@ def assign_workers(batch_nodes: list[dict[str, Any]], workers: list[dict[str, An
     return {"ok": True, "assigned": assigned, "queued": queued}
 
 
+def _workers_with_used_panes_marked_busy(workers: list[dict[str, Any]], used_panes: set[str]) -> list[dict[str, Any]]:
+    if not used_panes:
+        return workers
+    patched: list[dict[str, Any]] = []
+    for worker in workers:
+        pane = str(worker.get("pane") or "")
+        if pane in used_panes:
+            copy = dict(worker)
+            copy["busy"] = True
+            patched.append(copy)
+        else:
+            patched.append(worker)
+    return patched
+
+
 def assign_ready(graph: dict[str, Any], workers: list[dict[str, Any]],
                  max_parallel: int | None = None,
                  graph_path: str | Path | None = None,
@@ -1574,12 +1646,43 @@ def assign_ready(graph: dict[str, Any], workers: list[dict[str, Any]],
                 continue
     except Exception:
         pass
-    batches = _batch_ready_nodes(ready, max_parallel=max_parallel)
-    if not batches:
+    effective_max_parallel = max_parallel if max_parallel is not None else _effective_graph_max_parallel(None)
+    max_selected = effective_max_parallel if effective_max_parallel and effective_max_parallel > 0 else len(ready)
+    selected_nodes: list[dict[str, Any]] = []
+    assigned: list[dict[str, Any]] = []
+    queued: list[dict[str, Any]] = []
+    used_panes: set[str] = set()
+
+    for node in ready:
+        if len(assigned) >= max_selected:
+            break
+        if any(write_scope_conflict(node, other) or effect_conflict(node, other) for other in selected_nodes):
+            queued.append({
+                "node": node["id"],
+                "reason": "conflicts_with_selected_batch",
+                "details": {"selected_nodes": [str(item.get("id") or "") for item in selected_nodes]},
+            })
+            continue
+        result = assign_workers([node], _workers_with_used_panes_marked_busy(workers, used_panes))
+        if result.get("assigned"):
+            item = result["assigned"][0]
+            assigned.append(item)
+            selected_nodes.append(node)
+            if item.get("pane"):
+                used_panes.add(str(item.get("pane")))
+            continue
+        queued.extend(result.get("queued") or [])
+
+    if not assigned and not queued:
         return {"ok": True, "assigned": [], "queued": [], "batch": []}
-    first_batch = batches[0]
-    result = assign_workers(first_batch, workers)
-    result["batch"] = [node["id"] for node in first_batch]
+    result = {
+        "ok": True,
+        "assigned": assigned,
+        "queued": queued,
+        "batch": [node["id"] for node in selected_nodes],
+    }
+    result["work_conserving"] = True
+    result["ready_width"] = len(ready)
     result["capability_enrichment"] = {
         "changed_nodes": _changed_nodes(graph),
         "auto": True,
