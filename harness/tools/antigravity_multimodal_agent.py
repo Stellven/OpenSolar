@@ -32,6 +32,11 @@ AUTH_SUCCESS_RE = re.compile(
     re.I,
 )
 FAILURE_RE = re.compile(r"error:\s*timed out waiting for response|timed out waiting for response|traceback|uncaught exception", re.I)
+PLACEHOLDER_OUTPUT_RE = re.compile(r"^\s*#*\s*(handoff|completed|done)\s*#*\s*$", re.I)
+NONFINAL_OUTPUT_RE = re.compile(
+    r"^\s*(i\s+will|i'll|i\s+am\s+going\s+to|let\s+me|i\s+need\s+to|i'll\s+now)\b",
+    re.I,
+)
 NO_ACTIVE_CONVERSATION_RE = re.compile(
     r"no active conversation|failed to send message.*no active|Error:.*no active conversation",
     re.I,
@@ -88,6 +93,19 @@ def auth_failure_is_current(text: str) -> bool:
         if success.start() > last_auth.start():
             return False
     return True
+
+
+def output_is_placeholder(text: str) -> bool:
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    clean = re.sub(r"\s+", " ", text or "").strip()
+    if not clean:
+        return True
+    if len(lines) == 1 and PLACEHOLDER_OUTPUT_RE.match(lines[0]):
+        return True
+    if NONFINAL_OUTPUT_RE.match(clean) and not re.search(r"\b(completed|verified|done|image_unsupported|smoke_ok|handoff)\b", clean, re.I):
+        return True
+    # A valid operator handoff needs some evidence, not just a section title.
+    return len(lines) == 1 and len(clean) < 24 and not re.search(r"\b(ok|pass|verified|image_unsupported|smoke_ok)\b", clean, re.I)
 
 
 def extract_section(text: str, heading: str) -> str:
@@ -541,6 +559,12 @@ def main() -> int:
                     print(safe_tail, file=sys.stderr)
                 return EXIT_BOOTSTRAP_FAILED
             print("ERROR: Antigravity command backend returned empty stdout; refusing empty handoff", file=sys.stderr)
+            if safe_tail:
+                print(safe_tail, file=sys.stderr)
+            return EXIT_GENERIC_FAILURE
+        if output_is_placeholder(output):
+            print("ERROR: Antigravity command backend returned placeholder handoff; refusing false success", file=sys.stderr)
+            safe_tail = redact(combined_output[-4000:])
             if safe_tail:
                 print(safe_tail, file=sys.stderr)
             return EXIT_GENERIC_FAILURE
