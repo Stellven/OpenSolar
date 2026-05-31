@@ -4313,6 +4313,18 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
                 dispatch_id,
                 {"node": node_id, "reason": pool_result.get("reason"), "detail": pool_result},
             )
+            if str(pane).startswith("operator-pool:"):
+                if not dry_run:
+                    enqueue(sid, item.get("intent", f"graph_node|node_id={node_id}"), item.get("priority", 80), payload)
+                    _mark_graph_node(graph_path, node_id, "pending", clear_assignment=True)
+                return {
+                    "ok": False,
+                    "reason": str(pool_result.get("reason") or "operator_pool_submit_failed"),
+                    "node": node_id,
+                    "pane": pane,
+                    "operator_pool": pool_result,
+                    "requeued": not dry_run,
+                }
     if not pane:
         return {"ok": False, "reason": "missing_assigned_pane", "node": node_id}
     if current_status in {"assigned", "dispatched", "in_progress", "running"} and current_dispatch_id == dispatch_id:
