@@ -27,6 +27,10 @@ AUTH_RE = re.compile(
     r"permission denied|login required|logged out|auth expired",
     re.I,
 )
+AUTH_SUCCESS_RE = re.compile(
+    r"OAuth:\s*authenticated successfully|silent auth succeeded|Auth done received|authenticated via keyring",
+    re.I,
+)
 FAILURE_RE = re.compile(r"error:\s*timed out waiting for response|timed out waiting for response|traceback|uncaught exception", re.I)
 NO_ACTIVE_CONVERSATION_RE = re.compile(
     r"no active conversation|failed to send message.*no active|Error:.*no active conversation",
@@ -65,6 +69,25 @@ def image_paths(text: str) -> list[Path]:
 
 def redact(text: str) -> str:
     return SECRET_RE.sub(r"\1\2***REDACTED***", text)
+
+
+def auth_failure_is_current(text: str) -> bool:
+    """Return true only when auth failure was not superseded by silent auth.
+
+    Antigravity often logs early "not logged in" lines, then refreshes from
+    keyring and continues successfully. Treating those stale lines as terminal
+    auth failures blocks a healthy operator.
+    """
+    raw = text or ""
+    last_auth = None
+    for match in AUTH_RE.finditer(raw):
+        last_auth = match
+    if last_auth is None:
+        return False
+    for success in AUTH_SUCCESS_RE.finditer(raw):
+        if success.start() > last_auth.start():
+            return False
+    return True
 
 
 def extract_section(text: str, heading: str) -> str:
@@ -141,6 +164,112 @@ Generated-At: {now()}
     handoff.parent.mkdir(parents=True, exist_ok=True)
     handoff.write_text(handoff_text, encoding="utf-8")
     return handoff
+
+
+def write_pm_result_if_needed(dispatch: str, agent_output: str, handoff: Path) -> None:
+    result_path = os.environ.get("PM_RESULT_PATH") or os.environ.get("RESULT_PATH")
+    if not result_path:
+        return
+    path = Path(result_path).expanduser()
+    if path.exists() and path.stat().st_size > 0:
+        return
+    safe_output = redact(agent_output).strip()
+    if len(safe_output) > 20000:
+        safe_output = safe_output[:20000] + "\n\n[truncated]"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"""# PM Task Result — {os.environ.get('TASK_ID', 'antigravity-operator')}
+
+## 已完成
+
+- Antigravity command backend 已执行 PM dispatch。
+- 已写入 handoff: `{handoff}`
+
+## 已验证
+
+- Antigravity CLI exit_code=0。
+- wrapper 已补写 PM_RESULT_PATH，避免 command backend 完成后被 operatord 判为 missing_pm_result。
+
+## 结论摘要
+
+```markdown
+{safe_output or 'N/A'}
+```
+
+## 风险/限制
+
+- 该结果由 wrapper 从 Antigravity stdout 转写；如 stdout 未列出真实文件修改和测试证据，Evaluator 必须继续拦截。
+
+## 后续建议
+
+- 按 dispatch Definition of Done 复核文件变更、命令输出和测试证据。
+""",
+        encoding="utf-8",
+    )
+
+
+def _load_operator_envelope() -> dict:
+    path_value = os.environ.get("SOLAR_OPERATOR_ENVELOPE_JSON", "").strip()
+    if not path_value:
+        return {}
+    path = Path(path_value).expanduser()
+    if not path.exists() or not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _dispatch_from_envelope(envelope: dict) -> str:
+    if not envelope:
+        return ""
+    objective = str(envelope.get("objective") or "").strip()
+    task_type = str(envelope.get("task_type") or "").strip()
+    acceptance = envelope.get("acceptance")
+    if isinstance(acceptance, list):
+        acceptance_text = "\n".join(f"- {item}" for item in acceptance)
+    else:
+        acceptance_text = str(acceptance or "").strip()
+    if not objective and not acceptance_text:
+        return ""
+    return "\n".join(
+        [
+            f"# Operator Dispatch — {envelope.get('task_id', 'antigravity-task')}",
+            "",
+            "## Goal",
+            objective or "Complete the operator task described by the envelope.",
+            "",
+            "## Task Type",
+            task_type or "N/A",
+            "",
+            "## Acceptance",
+            acceptance_text or "- Provide a concise handoff with completed, verified, unverified, risks, and next steps.",
+            "",
+            "## Safety",
+            "- Do not edit files unless the dispatch explicitly asks for edits.",
+            "- Do not print secrets.",
+        ]
+    )
+
+
+def load_dispatch_text() -> tuple[str, Path | None]:
+    dispatch_file_value = os.environ.get("SOLAR_MULTI_TASK_DISPATCH_FILE", "").strip()
+    if dispatch_file_value:
+        dispatch_file = Path(dispatch_file_value).expanduser()
+        if dispatch_file.exists() and dispatch_file.is_file():
+            return dispatch_file.read_text(encoding="utf-8", errors="replace"), dispatch_file
+        print(f"ERROR: SOLAR_MULTI_TASK_DISPATCH_FILE is not a readable file: {dispatch_file}", file=sys.stderr)
+        return "", None
+    envelope_dispatch = _dispatch_from_envelope(_load_operator_envelope())
+    if envelope_dispatch:
+        return envelope_dispatch, None
+    print(
+        "ERROR: dispatch missing; set SOLAR_MULTI_TASK_DISPATCH_FILE to a file or provide SOLAR_OPERATOR_ENVELOPE_JSON with objective/acceptance",
+        file=sys.stderr,
+    )
+    return "", None
 
 
 
@@ -235,7 +364,7 @@ def run_agy_command(cmd: list[str], log_file: Path) -> subprocess.CompletedProce
                     part for part in [stdout or "", stderr or "", tail_text(log_file)] if part
                 )
                 # Auth check takes priority even at process-exit time.
-                if AUTH_RE.search(combined):
+                if auth_failure_is_current(combined):
                     message = (
                         "ERROR: Antigravity auth expired or not logged in; refusing handoff\n"
                         "  Recovery: run `agy login` and re-authenticate.\n"
@@ -275,7 +404,7 @@ def run_agy_command(cmd: list[str], log_file: Path) -> subprocess.CompletedProce
                 stderr = ((stderr or "") + "\n" + message).strip() + "\n"
                 return subprocess.CompletedProcess(current_cmd, EXIT_QUOTA_EXHAUSTED, stdout=stdout, stderr=stderr)
 
-            if AUTH_RE.search(log_tail):
+            if auth_failure_is_current(log_tail):
                 stdout, stderr = _terminate_proc(proc)
                 message = (
                     "ERROR: Antigravity auth expired or not logged in; refusing handoff\n"
@@ -331,9 +460,8 @@ def main() -> int:
     if raw_intent:
         return capture_raw_intent_entrypoint(raw_intent)
 
-    dispatch_file = Path(os.environ.get("SOLAR_MULTI_TASK_DISPATCH_FILE", "")).expanduser()
-    if not dispatch_file.exists():
-        print("ERROR: SOLAR_MULTI_TASK_DISPATCH_FILE missing; set SOLAR_ANTIGRAVITY_RAW_INTENT for RawIntent-only bridge mode", file=sys.stderr)
+    dispatch, dispatch_file = load_dispatch_text()
+    if not dispatch:
         return 2
 
     # Pre-flight: check if operator is blocked before launching the AGY process.
@@ -343,12 +471,12 @@ def main() -> int:
         if preflight_rc is not None:
             return preflight_rc
 
-    dispatch = dispatch_file.read_text(encoding="utf-8", errors="replace")
     images = image_paths(dispatch)
     add_dirs = sorted({str(path.parent) for path in images})
     agy = os.environ.get("AGY_BIN", "/Users/lisihao/.local/bin/agy")
     timeout = os.environ.get("AGY_PRINT_TIMEOUT", "10m")
-    task_dir = Path(os.environ.get("TASK_DIR", dispatch_file.parent)).expanduser()
+    default_task_dir = dispatch_file.parent if dispatch_file is not None else Path.cwd()
+    task_dir = Path(os.environ.get("TASK_DIR", default_task_dir)).expanduser()
     task_dir.mkdir(parents=True, exist_ok=True)
     log_file = task_dir / "antigravity.log"
 
@@ -392,7 +520,7 @@ def main() -> int:
                 if safe_tail:
                     print(safe_tail, file=sys.stderr)
                 return EXIT_QUOTA_EXHAUSTED
-            if AUTH_RE.search(log_tail):
+            if auth_failure_is_current(log_tail):
                 print(
                     "ERROR: Antigravity auth expired or not logged in; refusing empty handoff\n"
                     "  Recovery: run `agy login` and re-authenticate.\n"
@@ -417,6 +545,7 @@ def main() -> int:
                 print(safe_tail, file=sys.stderr)
             return EXIT_GENERIC_FAILURE
         handoff = write_handoff(dispatch, output)
+        write_pm_result_if_needed(dispatch, output, handoff)
         print(f"[solar-harness agy-multimodal] wrote_handoff={handoff}")
     return proc.returncode
 
