@@ -25,6 +25,8 @@ import operator_flow_control as ofc  # noqa: E402
 DEFAULT_OPERATOR_ID = "technology-diagram-painter"
 DEFAULT_WRAPPER = ROOT / "scripts" / "browser_agent_technology_diagram_painter_wrapper.py"
 DEFAULT_BROWSER_USE_PYTHON = Path.home() / ".claude" / "mcp-servers" / "browser-use" / ".venv" / "bin" / "python"
+OPERATOR_RESULTS_DIR = Path(os.environ.get("SOLAR_OPERATOR_RESULTS_DIR", ROOT / "run" / "operator-results"))
+OPERATOR_HEALTH_DIR = Path(os.environ.get("SOLAR_OPERATOR_HEALTH_DIR", ROOT / "run" / "operator-health"))
 
 
 def _load_envelope() -> dict[str, Any]:
@@ -62,6 +64,103 @@ def _wrapper_cmd() -> list[str]:
 
 def _operator_id(envelope: dict[str, Any]) -> str:
     return str(envelope.get("operator_id") or "").strip() or DEFAULT_OPERATOR_ID
+
+
+def _utc_now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _task_id_from_env(task_dir: Path) -> str:
+    raw = str(os.environ.get("TASK_ID") or os.environ.get("SOLAR_TASK_ID") or "").strip()
+    return raw or task_dir.name or "technology-diagram-task"
+
+
+def _is_original_image_response(response: dict[str, Any]) -> bool:
+    source = str(response.get("source") or "").strip()
+    url = str(response.get("url") or "").strip()
+    image_path = str(response.get("image_path") or "").strip()
+    return (
+        source in {"network-image-response", "dom-original-asset"}
+        or "/backend-api/estuary/content" in url
+        or "generated_original_candidate" in image_path
+    )
+
+
+def _canonical_result(
+    response: dict[str, Any],
+    *,
+    operator_id: str,
+    task_dir: Path,
+    task_id: str,
+    status: str = "success",
+    error: str = "",
+) -> dict[str, Any]:
+    original_image = _is_original_image_response(response)
+    return {
+        "schema_version": "solar.operator_result.v1",
+        "operator_id": operator_id,
+        "task_id": task_id,
+        "status": status,
+        "result_kind": "technology_diagram",
+        "source": str(response.get("source") or ""),
+        "original_image_response": bool(original_image),
+        "original_image_ok": bool(status == "success" and original_image),
+        "image_path": str(response.get("image_path") or ""),
+        "url": str(response.get("url") or ""),
+        "width": response.get("width"),
+        "height": response.get("height"),
+        "bytes": response.get("bytes"),
+        "request_dir": str(response.get("request_dir") or ""),
+        "task_dir": str(task_dir),
+        "finished_at": _utc_now(),
+        "error": error,
+    }
+
+
+def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def record_operator_result(
+    response: dict[str, Any],
+    *,
+    operator_id: str,
+    task_dir: Path,
+    task_id: str | None = None,
+    status: str = "success",
+    error: str = "",
+) -> dict[str, Any]:
+    """Persist canonical operator result and latest health projection.
+
+    The status page intentionally reads this durable projection instead of
+    scraping terminal text or browser output.
+    """
+    resolved_task_id = task_id or _task_id_from_env(task_dir)
+    result = _canonical_result(
+        response,
+        operator_id=operator_id,
+        task_dir=task_dir,
+        task_id=resolved_task_id,
+        status=status,
+        error=error,
+    )
+    _write_json_atomic(task_dir / "operator-results" / "result.json", result)
+    _write_json_atomic(OPERATOR_RESULTS_DIR / operator_id / resolved_task_id / "result.json", result)
+    health = {
+        **result,
+        "health_status": "ok" if result.get("original_image_ok") else ("warn" if status == "success" else "error"),
+        "health_summary": (
+            "last run captured original image response"
+            if result.get("original_image_ok")
+            else "last run fell back to screenshot or failed before original image capture"
+        ),
+        "updated_at": result["finished_at"],
+    }
+    _write_json_atomic(OPERATOR_HEALTH_DIR / f"{operator_id}.json", health)
+    return result
 
 
 def build_request(envelope: dict[str, Any], *, task_dir: Path | None = None) -> dict[str, Any]:
@@ -231,7 +330,7 @@ def _summary_markdown(response: dict[str, Any]) -> str:
     ])
 
 
-def run_request(request: dict[str, Any], *, task_dir: Path) -> dict[str, Any]:
+def run_request(request: dict[str, Any], *, task_dir: Path, operator_id: str = DEFAULT_OPERATOR_ID) -> dict[str, Any]:
     input_text = str(request.get("input_text") or "").strip()
     if not input_text:
         raise RuntimeError("Technology Diagram operator requires input_text")
@@ -295,6 +394,7 @@ def run_request(request: dict[str, Any], *, task_dir: Path) -> dict[str, Any]:
                 json.dumps(result, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
             )
+            record_operator_result(result, operator_id=operator_id, task_dir=task_dir)
 
             print(_summary_markdown(result))
             return result
@@ -336,13 +436,24 @@ def main() -> int:
     operator_id = str(rate_control["operator_id"])
     try:
         ofc.ensure_operator_available(operator_id)
-        run_request(request, task_dir=task_dir)
+        run_request(request, task_dir=task_dir, operator_id=operator_id)
         ofc.apply_success_cooldown(
             operator_id,
             success_cooldown_seconds=int(rate_control.get("success_cooldown_seconds") or 0),
         )
         return 0
     except Exception as exc:
+        record_operator_result(
+            {
+                "status": "error",
+                "source": "operator",
+                "request_dir": str(request.get("request_dir") or ""),
+            },
+            operator_id=operator_id,
+            task_dir=task_dir,
+            status="error",
+            error=f"{type(exc).__name__}: {exc}",
+        )
         ofc.apply_failure_flow_control(
             task_dir,
             operator_id=operator_id,

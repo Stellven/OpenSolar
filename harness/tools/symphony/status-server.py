@@ -4234,6 +4234,13 @@ def _recent_operator_results(results_dir: Path, multi_task_dir: Path, limit: int
                 "node_id": str(data.get("node_id") or ""),
                 "model": str(data.get("model") or data.get("operator_model") or ""),
                 "backend": str(data.get("backend") or ""),
+                "result_kind": str(data.get("result_kind") or ""),
+                "original_image_ok": bool(data.get("original_image_ok") or data.get("original_image_response")),
+                "image_path": str(data.get("image_path") or ""),
+                "url": str(data.get("url") or ""),
+                "width": data.get("width"),
+                "height": data.get("height"),
+                "bytes": data.get("bytes"),
                 "source": "operator-results",
             }))
 
@@ -4274,12 +4281,33 @@ def _recent_operator_results(results_dir: Path, multi_task_dir: Path, limit: int
     return [row for _, row in rows[:max_items]]
 
 
+def _operator_health_records(health_dir: Path) -> dict[str, dict]:
+    """Load latest per-operator health projections."""
+    records: dict[str, dict] = {}
+    if not health_dir.exists():
+        return records
+    try:
+        paths = sorted(health_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    except OSError:
+        return records
+    for path in paths:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        operator_id = str(data.get("operator_id") or path.stem).strip()
+        if operator_id:
+            records[operator_id] = data
+    return records
+
+
 def _physical_operator_summary(limit: int = 8) -> dict:
     """Summarize physical operator fleet state for the main status dashboard."""
     registry_path = HARNESS_DIR / "config" / "physical-operators.json"
     lease_dir = HARNESS_DIR / "run" / "operator-leases"
     status_dir = HARNESS_DIR / "run" / "operator-status"
     results_dir = HARNESS_DIR / "run" / "operator-results"
+    health_dir = HARNESS_DIR / "run" / "operator-health"
     multi_task_dir = HARNESS_DIR / "run" / "multi-task"
     empty = {
         "ok": False,
@@ -4298,6 +4326,7 @@ def _physical_operator_summary(limit: int = 8) -> dict:
             "leases": str(lease_dir),
             "status": str(status_dir),
             "results": str(results_dir),
+            "health": str(health_dir),
             "multi_task": str(multi_task_dir),
         },
     }
@@ -4330,6 +4359,7 @@ def _physical_operator_summary(limit: int = 8) -> dict:
                 if expires_at and expires_at <= now:
                     continue
                 overrides[path.stem] = data
+        health_records = _operator_health_records(health_dir)
 
         items = []
         alerts = []
@@ -4375,6 +4405,7 @@ def _physical_operator_summary(limit: int = 8) -> dict:
                 })
 
             lease = leases.get(operator_id) or {}
+            health = health_records.get(operator_id) or {}
             items.append({
                 "operator_id": operator_id,
                 "role": role,
@@ -4387,6 +4418,7 @@ def _physical_operator_summary(limit: int = 8) -> dict:
                 "sprint_id": str(lease.get("sprint_id") or ""),
                 "task_id": str(lease.get("task_id") or ""),
                 "expires_at": str(lease.get("expires_at") or ""),
+                "latest_health": health,
             })
 
         recent_results = _recent_operator_results(results_dir, multi_task_dir, limit=limit)
@@ -4430,6 +4462,7 @@ def _physical_operator_summary(limit: int = 8) -> dict:
                 "leases": str(lease_dir),
                 "status": str(status_dir),
                 "results": str(results_dir),
+                "health": str(health_dir),
                 "multi_task": str(multi_task_dir),
             },
         }
@@ -7087,7 +7120,8 @@ function renderOperatorsPage() {
                     (item.runtime_state || '').toLowerCase().includes(q) ||
                     (item.sprint_id || '').toLowerCase().includes(q) ||
                     (item.task_id || '').toLowerCase().includes(q) ||
-                    (item.role || '').toLowerCase().includes(q);
+                    (item.role || '').toLowerCase().includes(q) ||
+                    JSON.stringify(item.latest_health || {}).toLowerCase().includes(q);
       if (!match) return false;
     }
     return true;
@@ -7142,12 +7176,28 @@ function renderOperatorsPage() {
           </div>
         `;
       }
+
+      const health = item.latest_health || {};
+      let painterHealth = '';
+      if (item.operator_id === 'technology-diagram-painter' || health.result_kind === 'technology_diagram') {
+        const healthOk = !!health.original_image_ok;
+        const healthClass = healthOk ? 'ok' : (health.health_status === 'error' ? 'missing' : 'warn');
+        const dims = health.width && health.height ? `${health.width}×${health.height}` : 'N/A';
+        const bytes = health.bytes ? `${Math.round(Number(health.bytes) / 1024)} KB` : 'N/A';
+        painterHealth = `
+          <div style="margin-top:0.35rem;">
+            <span class="level-badge ${healthClass}" style="font-size:0.7rem;">原图 ${healthOk ? 'ok' : 'warn'}</span>
+            <span class="muted" style="font-size:0.72rem; margin-left:0.35rem;">${esc(health.source || 'N/A')} · ${esc(dims)} · ${esc(bytes)}</span>
+          </div>
+        `;
+      }
       
       listHtml += `
         <div class="op-row" style="${rowStyle}">
           <div>
             <div style="font-weight: 800; font-size: 0.95rem; color:#ffffff;">${esc(item.operator_id)}</div>
             ${item.display_name && item.display_name !== item.operator_id ? `<div class="muted" style="font-size: 0.75rem; margin-top:0.15rem;">${esc(item.display_name)}</div>` : ''}
+            ${painterHealth}
           </div>
           <div>
             <span class="badge default" style="background: rgba(255,255,255,0.04); padding: 0.3rem 0.6rem; border-radius: 8px;">${esc(item.role)}</span>
@@ -7183,16 +7233,24 @@ function renderOperatorsPage() {
   if (!recentResults.length) {
     document.getElementById('operator-results-detailed').innerHTML = '<div class="muted">暂无最近执行结果记录。</div>';
   } else {
-    let t = '<table><tr><th>Operator</th><th>模型 / 后端</th><th>Task</th><th>Sprint</th><th>Verdict / Status</th><th>Started</th><th>Finished</th></tr>';
+    let t = '<table><tr><th>Operator</th><th>模型 / 后端</th><th>Task</th><th>Sprint</th><th>Verdict / Status</th><th>Artifact</th><th>Started</th><th>Finished</th></tr>';
     recentResults.forEach(item => {
       const finished = item.finished_at ? new Date(item.finished_at).toLocaleString() : (item.started_at ? 'running' : 'N/A');
       const started = item.started_at ? new Date(item.started_at).toLocaleString() : 'N/A';
+      let artifact = '<span class="muted">N/A</span>';
+      if (item.result_kind === 'technology_diagram' || item.image_path || item.url) {
+        const dims = item.width && item.height ? `${item.width}×${item.height}` : 'N/A';
+        const bytes = item.bytes ? `${Math.round(Number(item.bytes) / 1024)} KB` : 'N/A';
+        artifact = '<div>' + statusBadge(item.original_image_ok ? 'original-image-ok' : 'image-fallback') + '</div>' +
+          '<div class="muted" style="font-size:0.72rem;margin-top:0.15rem;">' + esc(dims + ' · ' + bytes) + '</div>';
+      }
       t += '<tr>' +
         '<td><b class="tech-id" style="display:inline;">' + esc(item.operator_id || '-') + '</b><div class="muted" style="font-size:0.72rem; margin-top:0.15rem;">' + esc(item.source || 'operator-results') + '</div></td>' +
         '<td><div style="font-weight:800; font-size:0.78rem;">' + esc(item.model || 'N/A') + '</div><div class="tech-id" style="font-size:0.72rem; margin-top:0.12rem;">' + esc(item.backend || 'N/A') + '</div></td>' +
         '<td><span class="tech-id">' + esc(item.task_id || '-') + '</span></td>' +
         '<td><span class="tech-id">' + esc(item.sprint_id || '-') + '</span></td>' +
         '<td>' + statusBadge(item.status || 'unknown') + '</td>' +
+        '<td>' + artifact + '</td>' +
         '<td>' + esc(started) + '</td>' +
         '<td>' + esc(finished) + '</td>' +
       '</tr>';
