@@ -105,6 +105,25 @@ def test_productization_request_uses_parallel_spec_dag():
     assert by_id["S5"]["logical_operator"] == "Verifier"
 
 
+def test_p0_repair_request_uses_parallel_delivery_dag():
+    router = _load_router()
+    payload = router.build_pm_intake(
+        "P0 修复单：修复 Solar-Harness DAG 并行调度和 evaluator 卡点。",
+        sprint_id="sprint-test",
+        target_system="solar-harness",
+    )
+    nodes = payload["compiled_artifacts"]["task_dag"]["nodes"]
+    by_id = {node["id"]: node for node in nodes}
+    assert payload["classification"] == router.FULL_SPEC
+    assert payload["dag_variant"] == "parallel_delivery"
+    assert by_id["S1"]["depends_on"] == []
+    assert by_id["S2"]["depends_on"] == []
+    assert by_id["S3"]["depends_on"] == []
+    assert by_id["S4"]["depends_on"] == ["S1", "S2", "S3"]
+    assert by_id["S5"]["depends_on"] == ["S4"]
+    assert payload["compiled_artifacts"]["task_dag"]["quality_gates"]["parallelism"]["min_ready_width"] == 3
+
+
 def test_plain_paper_research_request_still_uses_research_dag():
     router = _load_router()
     payload = router.build_pm_intake(

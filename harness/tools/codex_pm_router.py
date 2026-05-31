@@ -347,6 +347,18 @@ def _is_parallel_spec_request(request_type: str, text: str) -> bool:
     return any(token in lowered or token in normalized for token in PARALLEL_SPEC_TOKENS)
 
 
+def _is_parallel_delivery_request(request_type: str, text: str) -> bool:
+    if request_type != FULL_SPEC:
+        return False
+    normalized = _normalized_text(text)
+    lowered = normalized.lower()
+    return bool(
+        re.search(r"\bp0\b|\bp1\b", lowered)
+        or any(token in normalized for token in ("修复单", "架构整改单", "整改单"))
+        or any(token in lowered for token in ("bug", "fix", "repair", "hotfix", "reliability"))
+    )
+
+
 def _adapt_graph_for_code_understanding(graph: dict[str, Any], request_type: str) -> dict[str, Any]:
     adapted = json.loads(json.dumps(graph, ensure_ascii=False))
     by_id = {str(node.get("id") or ""): node for node in adapted.get("nodes") or [] if isinstance(node, dict)}
@@ -903,6 +915,11 @@ def classify_request_type(text: str, papers: list[str] | None = None) -> str:
     ]
     if any(marker in lowered for marker in full_spec_markers) or any(marker in normalized for marker in full_spec_markers):
         return FULL_SPEC
+    if (
+        re.search(r"\bp0\b|\bp1\b", lowered)
+        or any(marker in normalized for marker in ("修复单", "架构整改单", "整改单"))
+    ):
+        return FULL_SPEC
 
     if re.search(r"\b(arxiv|doi|paper|study|literature|survey|iclr|neurips|mlsys|benchmark comparison)\b", lowered):
         return RESEARCH
@@ -1095,6 +1112,61 @@ def _parallel_spec_task_graph() -> dict[str, Any]:
     }
 
 
+def _parallel_delivery_task_graph() -> dict[str, Any]:
+    return {
+        "dag_variant": "parallel_delivery",
+        "required_gates": ["G_PLAN", "G_IMPL", "G_VERIFY", "G_REVIEW"],
+        "quality_gates": {
+            "parallelism": {
+                "min_ready_width": 3,
+            }
+        },
+        "nodes": [
+            {
+                "id": "S1",
+                "goal": "Lock interface, compatibility, and write-scope constraints for the requested fix.",
+                "logical_operator": "DeepArchitect",
+                "depends_on": [],
+                "acceptance": ["Interface and write-scope constraints are explicit."],
+                "estimated_cost": 2,
+            },
+            {
+                "id": "S2",
+                "goal": "Inspect runtime path, failure evidence, and affected integration points.",
+                "logical_operator": "Critic",
+                "depends_on": [],
+                "acceptance": ["Failure evidence and affected paths are mapped."],
+                "estimated_cost": 2,
+            },
+            {
+                "id": "S3",
+                "goal": "Prepare verification plan, regression commands, and acceptance probes.",
+                "logical_operator": "TestRunner",
+                "depends_on": [],
+                "acceptance": ["Verification commands and acceptance probes are ready."],
+                "estimated_cost": 2,
+            },
+            {
+                "id": "S4",
+                "goal": "Implement the fix using the combined constraints and evidence.",
+                "logical_operator": "ImplementationWorker",
+                "depends_on": ["S1", "S2", "S3"],
+                "acceptance": ["Patch is produced within declared scope and linked to evidence."],
+                "verifier_required": True,
+                "estimated_cost": 3,
+            },
+            {
+                "id": "S5",
+                "goal": "Run regression verification and record the release decision.",
+                "logical_operator": "Verifier",
+                "depends_on": ["S4"],
+                "acceptance": ["Verifier decision and regression evidence are machine-readable."],
+                "estimated_cost": 2,
+            },
+        ],
+    }
+
+
 def _research_task_graph() -> dict[str, Any]:
     return {
         "dag_variant": "research",
@@ -1187,6 +1259,14 @@ def _apply_default_gate_assignments(graph: dict[str, Any]) -> dict[str, Any]:
             "S4": "G_VERIFY",
             "S5": "G_REVIEW",
         }
+    elif dag_variant == "parallel_delivery":
+        gate_by_node_id = {
+            "S1": "G_PLAN",
+            "S2": "G_PLAN",
+            "S3": "G_VERIFY",
+            "S4": "G_IMPL",
+            "S5": "G_REVIEW",
+        }
     elif dag_variant == "research":
         gate_by_node_id = {
             "R1": "G_SOURCE",
@@ -1229,6 +1309,8 @@ def build_task_graph_skeleton(request_type: str, lane_hint: str, request_text: s
         return _apply_default_gate_assignments(_research_task_graph())
     if _is_parallel_spec_request(request_type, request_text):
         return _apply_default_gate_assignments(_parallel_spec_task_graph())
+    if _is_parallel_delivery_request(request_type, request_text):
+        return _apply_default_gate_assignments(_parallel_delivery_task_graph())
     return _apply_default_gate_assignments(_standard_task_graph(strategy_lane=lane_hint == "strategy"))
 
 
