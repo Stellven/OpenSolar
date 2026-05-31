@@ -2869,6 +2869,42 @@ def maybe_reroute_builder_target(item: dict, sid: str) -> str:
 def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: int) -> list[dict]:
     actions = []
     used_targets = set()
+    try:
+        max_budgeted_actions = max(1, int(os.environ.get("SOLAR_AUTOPILOT_MAX_ACTIONS", "6") or "6"))
+    except Exception:
+        max_budgeted_actions = 6
+    try:
+        max_graph_actions = max(1, int(os.environ.get("SOLAR_AUTOPILOT_MAX_GRAPH_ACTIONS", "3") or "3"))
+    except Exception:
+        max_graph_actions = 3
+    budgeted_actions = {
+        "graph_ready_nodes",
+        "graph_node_idle_assigned",
+        "evaluator_survey_blocked",
+        "pane_permissions_prompt_blocked",
+        "graph_node_unavailable_assigned",
+        "graph_parent_ready",
+        "deepresearch_quality_gate_repair",
+        "missing_task_graph",
+        "invalid_task_graph",
+        "ready_for_pm",
+        "ready_for_planner",
+        "ready_for_builder",
+        "ready_for_evaluator",
+        "active_without_handoff",
+        "pane_compacting_stall",
+        "pane_idle_with_pending_artifact",
+        "pane_asks_boss",
+        "pane_safe_continue_prompt",
+    }
+    graph_action_types = {
+        "graph_ready_nodes",
+        "evaluator_survey_blocked",
+        "graph_node_unavailable_assigned",
+        "deepresearch_quality_gate_repair",
+    }
+    budget_used = 0
+    graph_budget_used = 0
     for f in findings:
         sid = f.get("sid", "")
         ftype = f.get("type", "")
@@ -2895,6 +2931,18 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
         if not role_pool_handoff and target_recently_dispatched(state, target, cooldown) and ftype != "pane_permissions_prompt_blocked":
             actions.append({"sid": sid, "action": ftype, "skipped": "target_cooldown", "target": target})
             continue
+        is_budgeted = ftype in budgeted_actions
+        is_graph_action = ftype in graph_action_types
+        if is_budgeted and budget_used >= max_budgeted_actions:
+            actions.append({"sid": sid, "action": ftype, "skipped": "autopilot_action_budget", "target": target})
+            continue
+        if is_graph_action and graph_budget_used >= max_graph_actions:
+            actions.append({"sid": sid, "action": ftype, "skipped": "autopilot_graph_action_budget", "target": target})
+            continue
+        if is_budgeted:
+            budget_used += 1
+        if is_graph_action:
+            graph_budget_used += 1
         if dispatch and target and not role_pool_handoff:
             allowed, gate_reason, gate_detail = pane_gate(target, sid)
             if not allowed:
