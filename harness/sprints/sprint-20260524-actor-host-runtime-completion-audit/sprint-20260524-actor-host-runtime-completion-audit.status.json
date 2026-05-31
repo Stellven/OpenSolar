@@ -4,13 +4,13 @@
   "title": "Actor Host Runtime Completion Audit",
   "summary": "逐项核查 actor/operator/runtime 13 个升级点的真实完成度，区分 implemented / partial / contract_only / missing。",
   "status": "passed",
-  "phase": "finalized",
-  "handoff_to": "done",
-  "target_role": "done",
+  "phase": "completed",
+  "handoff_to": "",
+  "target_role": "",
   "priority": "P0",
   "parent_sprint_id": "sprint-20260523-pane-as-physical-operator-architecture",
   "created_at": "2026-05-24T02:02:34Z",
-  "updated_at": "2026-05-24T03:09:47Z",
+  "updated_at": "2026-05-29T01:45:25Z",
   "round": 2,
   "runtime_state_source": "activity_runtime",
   "history": [
@@ -221,13 +221,19 @@
       "ts": "2026-05-24T03:10:48Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-29T01:45:25Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260524-actor-host-runtime-completion-audit.task_graph.json"
     }
   ],
   "artifacts": {
     "prd": "sprints/sprint-20260524-actor-host-runtime-completion-audit.prd.md",
     "contract": "sprints/sprint-20260524-actor-host-runtime-completion-audit.contract.md",
     "pm_order": "sprints/sprint-20260524-actor-host-runtime-completion-audit.pm-order.md",
-    "planning_html": "sprints/sprint-20260524-actor-host-runtime-completion-audit.planning.html",
     "design": "sprints/sprint-20260524-actor-host-runtime-completion-audit.design.md",
     "plan": "sprints/sprint-20260524-actor-host-runtime-completion-audit.plan.md",
     "task_graph": "sprints/sprint-20260524-actor-host-runtime-completion-audit.task_graph.json",
@@ -306,5 +312,8 @@
   "knowledge_closure_required": true,
   "knowledge_closure_status": "exported",
   "knowledge_export_error": null,
-  "knowledge_closure_error": null
+  "knowledge_closure_error": null,
+  "stage": "completed",
+  "active_node": null,
+  "task_graph_status": "passed"
 }

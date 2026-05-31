@@ -426,14 +426,17 @@ for child in sorted(harness.iterdir()):
 PY
   stage_file_filtered="$(mktemp)"
   ignored_paths_file="$(mktemp)"
+  ignored_paths_lines="$(mktemp)"
+  # `git check-ignore` will escape/quote non-ASCII paths unless -z is used.
   # `git check-ignore` exits with 1 when there are no matches; treat that as success.
-  git -C "$SOLAR_REPO" check-ignore --stdin < "$stage_file" > "$ignored_paths_file" || true
+  git -C "$SOLAR_REPO" check-ignore -z --stdin < "$stage_file" > "$ignored_paths_file" || true
   if [[ -s "$ignored_paths_file" ]]; then
-    grep -Fvx -f "$ignored_paths_file" "$stage_file" > "$stage_file_filtered" || true
+    tr '\0' '\n' < "$ignored_paths_file" > "$ignored_paths_lines"
+    grep -Fvx -f "$ignored_paths_lines" "$stage_file" > "$stage_file_filtered" || true
   else
     cp "$stage_file" "$stage_file_filtered"
   fi
-  rm -f "$ignored_paths_file" "$stage_file"
+  rm -f "$ignored_paths_file" "$ignored_paths_lines" "$stage_file"
 
   git -C "$SOLAR_REPO" add -A --pathspec-from-file="$stage_file_filtered"
   rm -f "$stage_file_filtered"

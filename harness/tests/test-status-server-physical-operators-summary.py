@@ -57,3 +57,55 @@ def test_physical_operator_summary_returns_full_fleet_and_prioritizes_idle(tmp_p
     assert len(summary["items"]) == 3
     assert summary["items"][0]["operator_id"] == "op-idle"
     assert summary["items"][-1]["operator_id"] == "op-disabled"
+
+
+def test_physical_operator_summary_exposes_planner_evaluator_role_pools(tmp_path, monkeypatch):
+    harness = tmp_path / "harness"
+    config_dir = harness / "config"
+    config_dir.mkdir(parents=True)
+    registry = {
+        "version": 1,
+        "operators": {
+            "planner-cooldown": {
+                "role": "planner",
+                "roles": ["planner"],
+                "backend": "claude-cli",
+                "enabled": True,
+                "available": True,
+                "quota_guard_state": "cooldown",
+                "quota_refresh_at": "2099-01-01T00:00:00Z",
+            },
+            "planner-evaluator-auth": {
+                "role": "planner",
+                "roles": ["planner", "evaluator"],
+                "backend": "antigravity",
+                "enabled": True,
+                "available": True,
+                "quota_guard_state": "auth_expired",
+                "quota_refresh_at": "2099-01-02T00:00:00Z",
+            },
+            "evaluator-idle": {
+                "role": "evaluator",
+                "roles": ["evaluator"],
+                "backend": "claude-cli",
+                "enabled": True,
+                "available": True,
+            },
+        },
+    }
+    (config_dir / "physical-operators.json").write_text(json.dumps(registry), encoding="utf-8")
+    monkeypatch.setattr(status_server, "HARNESS_DIR", harness)
+
+    summary = status_server._physical_operator_summary(limit=4)
+
+    planner = summary["role_pools"]["planner"]
+    evaluator = summary["role_pools"]["evaluator"]
+    assert planner["total"] == 2
+    assert planner["dispatchable"] == 0
+    assert planner["status"] == "blocked"
+    assert planner["counts"]["cooldown"] == 1
+    assert planner["counts"]["auth_expired"] == 1
+    assert planner["next_available_at"] == "2099-01-01T00:00:00Z"
+    assert evaluator["total"] == 2
+    assert evaluator["dispatchable"] == 1
+    assert evaluator["status"] == "ok"

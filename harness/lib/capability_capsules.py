@@ -503,6 +503,284 @@ def _signals_from_task(task_envelope: Dict[str, Any]) -> List[str]:
     return [token for token in objective.replace("/", " ").replace(",", " ").split() if token]
 
 
+TAXONOMY_PATH = HARNESS_DIR / "config" / "task-taxonomy.json"
+OPERATORS_PATH = HARNESS_DIR / "config" / "logical-operators.json"
+SKILL_BINDINGS_PATH = HARNESS_DIR / "config" / "skill-operator-bindings.yaml"
+
+
+def _load_taxonomy() -> Dict[str, Any]:
+    try:
+        return json.loads(TAXONOMY_PATH.read_text())
+    except Exception:
+        return {}
+
+
+def _load_operators_config() -> Dict[str, Any]:
+    try:
+        return json.loads(OPERATORS_PATH.read_text())
+    except Exception:
+        return {}
+
+
+def _load_skill_bindings() -> Dict[str, Any]:
+    try:
+        return yaml.safe_load(SKILL_BINDINGS_PATH.read_text()) or {}
+    except Exception:
+        return {}
+
+
+def classify_task_goal(
+    goal: str,
+    *,
+    context_hints: Optional[List[str]] = None,
+    taxonomy_path: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """Score a goal string against the task taxonomy and return task_classification artifact."""
+    taxonomy_data = (
+        json.loads(Path(taxonomy_path).read_text()) if taxonomy_path else _load_taxonomy()
+    )
+    task_classes = taxonomy_data.get("task_classes", {})
+    weights = taxonomy_data.get("signal_weights", {"primary": 2, "secondary": 1, "negative": -3})
+    thresholds = taxonomy_data.get("confidence_thresholds", {"high": 6, "medium": 3, "low": 1})
+
+    tokens = set(goal.lower().replace("/", " ").replace(",", " ").split())
+    if context_hints:
+        for hint in context_hints:
+            tokens.update(hint.lower().split())
+
+    scores: Dict[str, float] = {}
+    detected_signals_per_class: Dict[str, List[Dict[str, Any]]] = {}
+
+    for class_id, class_def in task_classes.items():
+        score = 0.0
+        signals_detected = []
+        for sig in class_def.get("primary_signals", []):
+            if sig.lower() in tokens:
+                score += weights["primary"]
+                signals_detected.append({"signal": sig, "weight": weights["primary"], "source": "goal_text"})
+        for sig in class_def.get("secondary_signals", []):
+            if sig.lower() in tokens:
+                score += weights["secondary"]
+                signals_detected.append({"signal": sig, "weight": weights["secondary"], "source": "goal_text"})
+        for sig in class_def.get("negative_signals", []):
+            if sig.lower() in tokens:
+                score += weights["negative"]
+                signals_detected.append({"signal": sig, "weight": weights["negative"], "source": "goal_text"})
+        scores[class_id] = score
+        detected_signals_per_class[class_id] = signals_detected
+
+    ranked = sorted(scores.items(), key=lambda x: -x[1])
+    selected = [(cid, sc) for cid, sc in ranked if sc >= task_classes.get(cid, {}).get("min_signal_score", 1)]
+    rejected = [(cid, sc) for cid, sc in ranked if sc < task_classes.get(cid, {}).get("min_signal_score", 1)]
+
+    if not selected:
+        # No class cleared threshold — emit fallback with empty selection
+        return {
+            "selected_classes": [],
+            "primary_class": None,
+            "confidence": "low",
+            "signal_score": 0,
+            "signals_detected": [],
+            "rejected_classes": [
+                {"class_id": cid, "score": sc, "reason": "below_min_signal_score"}
+                for cid, sc in ranked
+            ],
+            "classifier_version": "v1",
+        }
+
+    primary_class_id, primary_score = selected[0]
+    if primary_score >= thresholds["high"]:
+        confidence = "high"
+    elif primary_score >= thresholds["medium"]:
+        confidence = "medium"
+    else:
+        confidence = "low"
+
+    all_detected = []
+    seen = set()
+    for cid, _ in selected:
+        for sig_entry in detected_signals_per_class[cid]:
+            key = sig_entry["signal"]
+            if key not in seen:
+                seen.add(key)
+                all_detected.append(sig_entry)
+
+    rejected_list = []
+    for cid, sc in ranked:
+        if cid not in {c for c, _ in selected}:
+            rejected_list.append({"class_id": cid, "score": sc, "reason": "below_min_signal_score"})
+    for cid, sc in selected[1:]:
+        rejected_list.append({"class_id": cid, "score": sc, "reason": "outscored_by_primary"})
+
+    return {
+        "selected_classes": [cid for cid, _ in selected],
+        "primary_class": primary_class_id,
+        "confidence": confidence,
+        "signal_score": primary_score,
+        "signals_detected": all_detected,
+        "rejected_classes": rejected_list,
+        "classifier_version": "v1",
+    }
+
+
+def expand_logical_workflow(
+    task_classification: Dict[str, Any],
+    *,
+    operators_path: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """Select a workflow template based on primary_class and expand it into stages."""
+    ops_config = (
+        json.loads(Path(operators_path).read_text()) if operators_path else _load_operators_config()
+    )
+    workflow_vocab = ops_config.get("workflow_vocabulary", {})
+    workflow_templates = ops_config.get("workflow_templates", {})
+
+    primary_class = task_classification.get("primary_class")
+    if not primary_class:
+        return {"template": "none", "stages": [], "rationale": "No task class detected; no workflow expanded."}
+
+    # Find matching template
+    selected_template_id = None
+    selected_template = None
+    for tmpl_id, tmpl in workflow_templates.items():
+        if primary_class in tmpl.get("applicable_task_classes", []):
+            selected_template_id = tmpl_id
+            selected_template = tmpl
+            break
+
+    if not selected_template:
+        return {
+            "template": "none",
+            "stages": [],
+            "rationale": f"No workflow template matches task class {primary_class}.",
+        }
+
+    stages = []
+    for pos, stage_name in enumerate(selected_template.get("stages", []), start=1):
+        stage_def = workflow_vocab.get(stage_name, {})
+        operators = stage_def.get("maps_to_operators", [])
+        stages.append({
+            "stage_name": stage_name,
+            "logical_operators": operators,
+            "rationale": stage_def.get("description", ""),
+            "position": pos,
+        })
+
+    return {
+        "template": selected_template_id,
+        "stages": stages,
+        "rationale": f"Workflow template '{selected_template_id}' selected because primary task class is {primary_class}. {selected_template.get('description', '')}",
+    }
+
+
+def resolve_skill_plan(
+    logical_workflow: Dict[str, Any],
+    capsule_manifest: Optional[Dict[str, Any]] = None,
+    *,
+    skill_bindings_path: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """For each workflow stage, identify candidate and selected skills."""
+    bindings_data = (
+        yaml.safe_load(Path(skill_bindings_path).read_text()) if skill_bindings_path
+        else _load_skill_bindings()
+    )
+    skill_meta_list = bindings_data.get("skill_capability_metadata", [])
+    # index by applicable_workflow_stages
+    stage_to_skills: Dict[str, List[Dict[str, Any]]] = {}
+    for skill_meta in skill_meta_list:
+        for stage in skill_meta.get("applicable_workflow_stages", []):
+            stage_to_skills.setdefault(stage, []).append(skill_meta)
+
+    # Also add capsule-mandated skills as candidates
+    capsule_required_skills = set()
+    if capsule_manifest:
+        capsule_required_skills = set(
+            capsule_manifest.get("bindings", {}).get("skills", {}).get("required", [])
+        )
+
+    skill_plan: Dict[str, Any] = {}
+    for stage in logical_workflow.get("stages", []):
+        stage_name = stage["stage_name"]
+        candidates_raw = stage_to_skills.get(stage_name, [])
+        candidates = []
+        selected = None
+        for meta in candidates_raw:
+            skill_id = meta["skill_id"]
+            tier = meta.get("readiness_tier", "draft")
+            candidates.append({"skill_id": skill_id, "readiness_tier": tier, "rationale": meta.get("display_name", "")})
+            if selected is None and tier in ("stable", "draft"):
+                selected = skill_id
+        # If capsule mandates a skill relevant to this stage, prefer it
+        for mandated in capsule_required_skills:
+            if mandated not in {c["skill_id"] for c in candidates}:
+                candidates.append({"skill_id": mandated, "readiness_tier": "stable", "rationale": "capsule_required"})
+            if selected is None:
+                selected = mandated
+
+        rejected = [
+            {"skill_id": c["skill_id"], "reason": "lower_readiness_tier_or_outscored"}
+            for c in candidates if c["skill_id"] != selected
+        ]
+        skill_plan[stage_name] = {
+            "candidates": candidates,
+            "selected": selected,
+            "rejection_rationale": rejected,
+        }
+
+    return skill_plan
+
+
+def resolve_mcp_plan(
+    skill_plan: Dict[str, Any],
+    capsule_manifest: Optional[Dict[str, Any]] = None,
+    *,
+    skill_bindings_path: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """Aggregate MCP requirements from selected skills and capsule manifest."""
+    bindings_data = (
+        yaml.safe_load(Path(skill_bindings_path).read_text()) if skill_bindings_path
+        else _load_skill_bindings()
+    )
+    skill_meta_by_id: Dict[str, Dict[str, Any]] = {
+        m["skill_id"]: m for m in bindings_data.get("skill_capability_metadata", [])
+    }
+
+    seen_capabilities: Dict[str, Dict[str, Any]] = {}
+
+    # Collect from selected skills
+    for stage_name, stage_data in skill_plan.items():
+        selected_skill_id = stage_data.get("selected")
+        if not selected_skill_id:
+            continue
+        skill_meta = skill_meta_by_id.get(selected_skill_id, {})
+        for mcp_req in skill_meta.get("mcp_requirements", []):
+            cap = mcp_req.get("capability", "")
+            if cap and cap not in seen_capabilities:
+                seen_capabilities[cap] = {
+                    "capability": cap,
+                    "why_needed": mcp_req.get("why", f"Required by skill {selected_skill_id} in stage {stage_name}"),
+                    "provider_candidates": [],
+                    "selected_provider": None,
+                }
+
+    # Collect from capsule manifest mcp_capabilities
+    if capsule_manifest:
+        capsule_mcp = capsule_manifest.get("bindings", {}).get("mcp_capabilities", {})
+        for cap, access_modes in capsule_mcp.items():
+            if cap not in seen_capabilities:
+                seen_capabilities[cap] = {
+                    "capability": cap,
+                    "why_needed": f"Required by capsule manifest (access: {access_modes})",
+                    "provider_candidates": [],
+                    "selected_provider": None,
+                }
+
+    return {
+        "required_mcp": list(seen_capabilities.values()),
+        "optional_mcp": [],
+    }
+
+
 def query_capability_capsules(
     *,
     task_type: Optional[str] = None,
@@ -546,11 +824,16 @@ def default_capability_plan_for_logical_operator(
     lane_hint: str = "",
     node: Optional[Dict[str, Any]] = None,
     registry_path: Optional[Path] = None,
+    goal_text: str = "",
 ) -> Dict[str, Any]:
+    # ── Priority 1: skill-driven override (understand-anything etc.) ──────────
     skill_override = _skill_driven_override(logical_operator)
     if skill_override:
         capsule_id = skill_override["capsule_id"]
         dispatch_task_type = skill_override["dispatch_task_type"]
+        selection_mode = "skill_driven_override"
+        fallback_used = False
+        fallback_reason = None
     elif _looks_like_understand_anything_task(
         logical_operator,
         request_type=request_type,
@@ -559,9 +842,45 @@ def default_capability_plan_for_logical_operator(
     ):
         capsule_id = "cap.understand-anything-indexer"
         dispatch_task_type = "code-understanding"
+        selection_mode = "understand_anything_heuristic"
+        fallback_used = False
+        fallback_reason = None
     else:
-        capsule_id = DEFAULT_CAPSULE_BY_LOGICAL_OPERATOR.get(str(logical_operator or ""))
-        dispatch_task_type = DEFAULT_TASK_TYPE_BY_LOGICAL_OPERATOR.get(str(logical_operator or ""), "")
+        # ── Priority 2: goal-driven classifier → capsule query ─────────────
+        effective_goal = goal_text or str((node or {}).get("goal", "")) or request_type
+        capsule_id = None
+        fallback_used = False
+        fallback_reason = None
+        selection_mode = "goal_driven_classifier"
+        if effective_goal:
+            classification = classify_task_goal(effective_goal)
+            primary_class = classification.get("primary_class")
+            signals = [s["signal"] for s in classification.get("signals_detected", []) if s["weight"] > 0]
+            if primary_class and signals:
+                candidates = query_capability_capsules(
+                    task_type=primary_class,
+                    signals=signals,
+                    capsule_kind="capability",
+                    registry_path=registry_path,
+                )
+                if candidates and candidates[0]["score"] > 0:
+                    best = candidates[0]
+                    capsule_id = best["entry"]["capability_capsule_id"]
+                    dispatch_task_type = primary_class
+                else:
+                    fallback_reason = "no_capsule_matched_signals"
+            else:
+                fallback_reason = "classifier_score_below_threshold"
+        else:
+            fallback_reason = "no_goal_text_available"
+
+        # ── Priority 3: static default (fallback only) ────────────────────
+        if not capsule_id:
+            capsule_id = DEFAULT_CAPSULE_BY_LOGICAL_OPERATOR.get(str(logical_operator or ""))
+            dispatch_task_type = DEFAULT_TASK_TYPE_BY_LOGICAL_OPERATOR.get(str(logical_operator or ""), "")
+            fallback_used = True
+            selection_mode = "static_default_fallback"
+
     if not capsule_id:
         return {}
     entry = get_registry_entry(capsule_id, path=registry_path, include_nonstable=True)
@@ -574,7 +893,9 @@ def default_capability_plan_for_logical_operator(
         "capability_native": True,
         "capability_capsule_id": capsule_id,
         "dispatch_task_type": dispatch_task_type,
-        "selection_mode": "logical_operator_default",
+        "selection_mode": selection_mode,
+        "fallback_used": fallback_used,
+        "fallback_reason": fallback_reason,
         "request_type": request_type,
         "lane_hint": lane_hint,
         "logical_operator": logical_operator,
@@ -588,7 +909,7 @@ def default_capability_plan_for_logical_operator(
             "default_operator_profile": entry.default_operator_profile,
         },
         "skill_driven_override": bool(skill_override),
-        "semantic_backend": skill_override.get("semantic_backend", ""),
+        "semantic_backend": skill_override.get("semantic_backend", "") if skill_override else "",
     }
 
 

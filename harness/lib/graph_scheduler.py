@@ -1823,6 +1823,14 @@ def enqueue_ready(graph: dict[str, Any], graph_path: str, workers: list[dict[str
                 physical_plan=physical_plan_ir,
                 base_dir=SPRINTS_DIR,
             )
+            # Store APO supply-chain planning artifact for evidence ledger and downstream
+            plan_artifacts["task_classification"] = compiled_plan.get("task_classification") or {}
+            plan_artifacts["logical_workflow"] = compiled_plan.get("logical_workflow") or {}
+            plan_artifacts["skill_plan"] = compiled_plan.get("skill_plan") or {}
+            plan_artifacts["mcp_plan"] = compiled_plan.get("mcp_plan") or {}
+            plan_artifacts["capsule_plan_artifact"] = compiled_plan.get("capsule_plan_artifact") or {}
+            plan_artifacts["selection_rationale"] = compiled_plan.get("selection_rationale") or {}
+            plan_artifacts["evidence_policy"] = compiled_plan.get("evidence_policy") or {}
         except Exception:
             compiled_plan = {
                 "logical_plan_node": {

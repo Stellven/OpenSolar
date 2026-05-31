@@ -457,6 +457,57 @@ def parse_transcript_payload(text: str) -> str:
     return strip_text(" ".join(parts))
 
 
+def fetch_transcript_via_browser_operator(video_id: str, timeout_seconds: int = 300) -> tuple[str, str, str]:
+    import tempfile
+
+    # We want a minimum timeout of 300 seconds for the browser operator
+    timeout_seconds = max(timeout_seconds, 300)
+
+    with tempfile.TemporaryDirectory() as td:
+        td_path = Path(td)
+        envelope_path = td_path / "envelope.json"
+
+        envelope = {
+            "operator_id": "mini-youtube-transcript-extractor",
+            "youtube_url": f"https://www.youtube.com/watch?v={video_id}",
+            "timeout_seconds": timeout_seconds,
+            "max_retries": 1,
+            "output_format": "timestamped"
+        }
+
+        envelope_path.write_text(json.dumps(envelope, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        env = os.environ.copy()
+        env["SOLAR_OPERATOR_ENVELOPE_JSON"] = str(envelope_path)
+        env["TASK_DIR"] = str(td_path)
+        if "BROWSER_AGENT_HEADLESS" not in env:
+            env["BROWSER_AGENT_HEADLESS"] = "true"
+
+        operator_script = Path("/Users/lisihao/Solar/harness/tools/youtube_transcript_operator.py")
+        if not operator_script.exists():
+            operator_script = Path(__file__).resolve().parents[1] / "tools" / "youtube_transcript_operator.py"
+
+        try:
+            proc = subprocess.run(
+                [sys.executable, str(operator_script)],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds + 30
+            )
+
+            result_file = td_path / "youtube-transcript-result.json"
+            if result_file.exists():
+                res = json.loads(result_file.read_text(encoding="utf-8"))
+                if res.get("ok") and res.get("text"):
+                    return res["text"], "ok", "browser_caption"
+
+            raise RuntimeError(f"Operator failed with code {proc.returncode}. stderr: {proc.stderr}")
+        except Exception as e:
+            print(f"[fetch_transcript] Browser operator attempt failed: {e}", file=sys.stderr)
+            raise e
+
+
 def fetch_transcript(
     session: requests.Session,
     video_id: str,
@@ -469,6 +520,18 @@ def fetch_transcript(
         text = Path(fixture_transcript).read_text(encoding="utf-8")
         transcript = parse_transcript_payload(text)
         return transcript, "ok" if transcript else "empty", f"fixture:{fixture_transcript}"
+
+    # Priority 1: Browser-based transcript extraction operator
+    if not fixture_watch:
+        try:
+            print(f"[fetch_transcript] Trying browser operator for video_id={video_id}...", flush=True)
+            text, status, source = fetch_transcript_via_browser_operator(video_id, timeout_seconds=timeout)
+            if text and status == "ok":
+                print(f"[fetch_transcript] Browser operator successfully retrieved transcript for {video_id}.", flush=True)
+                return text, status, source
+        except Exception as e:
+            print(f"[fetch_transcript] Browser operator failed, falling back to RSS/watch page. Error: {e}", flush=True)
+
     watch_url = f"https://www.youtube.com/watch?v={video_id}"
     page = Path(fixture_watch).read_text(encoding="utf-8") if fixture_watch else request_text(session, watch_url, timeout, user_agent)
     if not page:

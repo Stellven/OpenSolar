@@ -121,13 +121,27 @@
       "route_role": "none",
       "stage": "done",
       "reason": "terminal_status"
+    },
+    {
+      "ts": "2026-05-28T19:48:28Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260525-000730.task_graph.json"
+    },
+    {
+      "ts": "2026-05-29T20:39:49Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260525-000730.task_graph.json"
     }
   ],
   "status": "passed",
   "phase": "completed",
-  "handoff_to": "done",
-  "target_role": "done",
-  "updated_at": "2026-05-26T17:58:48Z",
+  "handoff_to": "",
+  "target_role": "",
+  "updated_at": "2026-05-29T20:39:49Z",
   "artifacts": {
     "autoresearch_optimizer": {
       "recorded_at": "2026-05-25T08:44:54Z",
@@ -172,7 +186,9 @@
     "planning_html": "sprints/sprint-20260525-000730.planning.html",
     "design": "sprints/sprint-20260525-000730.design.md",
     "plan": "sprints/sprint-20260525-000730.plan.md",
-    "task_graph": "sprints/sprint-20260525-000730.task_graph.json"
+    "task_graph": "sprints/sprint-20260525-000730.task_graph.json",
+    "prd_html": "sprints/sprint-20260525-000730.prd.html",
+    "design_html": "sprints/sprint-20260525-000730.design.html"
   },
   "event_count": 138,
   "last_event_ts": "2026-05-25T04:41:43Z",
@@ -192,14 +208,12 @@
   "knowledge_closure_status": "exported",
   "knowledge_export_error": null,
   "knowledge_closure_error": null,
-  "stage": "graph_in_progress",
+  "stage": "completed",
   "active_node": null,
-  "open_nodes": [],
-  "failed_nodes": [],
   "graph_parent_ready": {
     "ok": true,
     "sprint_id": "sprint-20260525-000730",
-    "ready": false,
+    "ready": true,
     "node_count": 8,
     "open_nodes": [],
     "failed_nodes": [],
@@ -213,17 +227,8 @@
       "G7",
       "G8"
     ],
-    "missing_gates": [
-      "G1",
-      "G2",
-      "G3",
-      "G4",
-      "G5",
-      "G6",
-      "G7",
-      "G8"
-    ]
+    "missing_gates": []
   },
-  "task_graph_status": "active",
-  "completed_at": null
+  "task_graph_status": "passed",
+  "completed_at": "2026-05-29T20:39:49Z"
 }

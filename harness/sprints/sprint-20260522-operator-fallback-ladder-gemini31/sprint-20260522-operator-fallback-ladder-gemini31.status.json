@@ -1,9 +1,9 @@
 {
   "sprint_id": "sprint-20260522-operator-fallback-ladder-gemini31",
   "status": "passed",
-  "phase": "finalized",
+  "phase": "completed",
   "task_graph": "/Users/lisihao/.solar/harness/sprints/sprint-20260522-operator-fallback-ladder-gemini31.task_graph.json",
-  "updated_at": "2026-05-24T01:51:14Z",
+  "updated_at": "2026-05-29T16:32:52Z",
   "id": "sprint-20260522-operator-fallback-ladder-gemini31",
   "history": [
     {
@@ -86,11 +86,70 @@
       "ts": "2026-05-22T18:49:35Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-26T17:56:55Z",
+      "event": "graph_parent_ready_revoked",
+      "by": "graph_scheduler",
+      "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache"
+    },
+    {
+      "ts": "2026-05-26T17:58:48Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "planner",
+      "stage": "prd_ready",
+      "reason": "pm_prd_ready"
+    },
+    {
+      "ts": "2026-05-28T19:48:27Z",
+      "event": "graph_parent_projection_refreshed",
+      "by": "solar-autopilot",
+      "note": "task_graph changed while in flight; refreshing legacy status projection"
+    },
+    {
+      "ts": "2026-05-29T14:59:17Z",
+      "event": "terminal_status_restored_from_finalized_marker",
+      "by": "codex",
+      "note": "Restored passed/completed status after legacy graph/status drift reopened finalized sprint."
+    },
+    {
+      "ts": "2026-05-29T15:24:34Z",
+      "event": "graph_parent_ready_revoked",
+      "by": "solar-autopilot",
+      "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache"
+    },
+    {
+      "ts": "2026-05-29T15:24:51Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "planner",
+      "stage": "prd_ready",
+      "reason": "pm_prd_ready"
+    },
+    {
+      "ts": "2026-05-29T16:18:04Z",
+      "event": "graph_parent_projection_refreshed",
+      "by": "graph_scheduler",
+      "note": "task_graph changed while in flight; refreshing legacy status projection"
+    },
+    {
+      "ts": "2026-05-29T16:32:16Z",
+      "event": "graph_parent_ready_passed",
+      "by": "graph-dispatch",
+      "note": "All DAG nodes and required gates passed via parent_ready_check."
+    },
+    {
+      "ts": "2026-05-29T16:32:52Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260522-operator-fallback-ladder-gemini31.task_graph.json"
     }
   ],
   "round": 3,
-  "handoff_to": "done",
-  "target_role": "done",
+  "handoff_to": "",
+  "target_role": "",
   "runtime_state_source": "activity_runtime",
   "event_count": 22,
   "last_event_ts": "2026-05-22T18:36:37Z",
@@ -137,7 +196,8 @@
         "execute_requires": "--execute",
         "replaces_builder": false
       }
-    }
+    },
+    "prd_html": "sprints/sprint-20260522-operator-fallback-ladder-gemini31.prd.html"
   },
   "knowledge_export_status": "exported",
   "knowledge_export_path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260522-operator-fallback-ladder-gemini31.accepted.md",
@@ -148,5 +208,24 @@
   "knowledge_source_artifact_index": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260522-operator-fallback-ladder-gemini31.source_artifact_index.md",
   "knowledge_summary_count": 3,
   "knowledge_closure_required": true,
-  "knowledge_closure_status": "exported"
+  "knowledge_closure_status": "exported",
+  "stage": "completed",
+  "active_node": null,
+  "graph_parent_ready": {
+    "ok": true,
+    "sprint_id": "sprint-20260522-operator-fallback-ladder-gemini31",
+    "ready": true,
+    "node_count": 5,
+    "open_nodes": [],
+    "failed_nodes": [],
+    "required_gates": [
+      "G_CATALOG",
+      "G_POLICY",
+      "G_GEMINI31",
+      "G_BRIDGE",
+      "G_REPORT"
+    ],
+    "missing_gates": []
+  },
+  "completed_at": "2026-05-29T16:32:16Z"
 }

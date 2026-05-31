@@ -5,11 +5,11 @@
   "title": "核心实现与数据模型",
   "status": "passed",
   "phase": "completed",
-  "handoff_to": "done",
-  "target_role": "done",
+  "handoff_to": "",
+  "target_role": "",
   "priority": "P0",
   "created_at": "2026-05-24T17:51:28Z",
-  "updated_at": "2026-05-28T06:22:11Z",
+  "updated_at": "2026-05-28T19:48:27Z",
   "dependency_policy": "activated_by_epic_dag",
   "history": [
     {
@@ -5156,15 +5156,41 @@
       "event": "graph_parent_ready_passed",
       "by": "graph-dispatch",
       "note": "All DAG nodes and required gates passed via parent_ready_check."
+    },
+    {
+      "ts": "2026-05-28T07:22:51Z",
+      "event": "eval_reviewed",
+      "by": "evaluator",
+      "verdict": "PASS"
+    },
+    {
+      "ts": "2026-05-28T07:22:51Z",
+      "event": "autoresearch_optimizer_recorded",
+      "by": "coordinator",
+      "trigger_level": "recommended",
+      "recommended": true,
+      "role": "planner"
+    },
+    {
+      "ts": "2026-05-28T07:26:40Z",
+      "event": "finalized",
+      "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-28T19:48:27Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260524-p0-ai-influence-github-project-intelligence-system-upgrade-s03-core-runtime.task_graph.json"
     }
   ],
-  "stage": "graph_in_progress",
+  "stage": "completed",
   "artifacts": {
     "design": "sprints/sprint-20260524-p0-ai-influence-github-project-intelligence-system-upgrade-s03-core-runtime.design.md",
     "plan": "sprints/sprint-20260524-p0-ai-influence-github-project-intelligence-system-upgrade-s03-core-runtime.plan.md",
     "task_graph": "sprints/sprint-20260524-p0-ai-influence-github-project-intelligence-system-upgrade-s03-core-runtime.task_graph.json",
     "autoresearch_optimizer": {
-      "recorded_at": "2026-05-27T17:22:31Z",
+      "recorded_at": "2026-05-28T07:22:51Z",
       "sid": "sprint-20260524-p0-ai-influence-github-project-intelligence-system-upgrade-s03-core-runtime",
       "role": "规划者",
       "canonical_role": "planner",
@@ -5172,13 +5198,12 @@
       "trigger_level": "recommended",
       "reasons": [
         "role:planner",
-        "telemetry:phase:eval_passed",
         "telemetry:round:5",
         "telemetry:eval_json:missing"
       ],
       "telemetry": {
         "status": "passed",
-        "phase": "eval_passed",
+        "phase": "completed",
         "round": 5,
         "eval_verdict": "",
         "failed_conditions": [],
@@ -5203,7 +5228,10 @@
         "execute_requires": "--execute",
         "replaces_builder": false
       }
-    }
+    },
+    "prd_html": "sprints/sprint-20260524-p0-ai-influence-github-project-intelligence-system-upgrade-s03-core-runtime.prd.html",
+    "design_html": "sprints/sprint-20260524-p0-ai-influence-github-project-intelligence-system-upgrade-s03-core-runtime.design.html",
+    "planning_html": "sprints/sprint-20260524-p0-ai-influence-github-project-intelligence-system-upgrade-s03-core-runtime.planning.html"
   },
   "round": 5,
   "event_count": 1286,
@@ -5224,8 +5252,8 @@
   },
   "active_node": null,
   "knowledge_closure_required": true,
-  "knowledge_closure_status": "failed",
-  "knowledge_closure_error": "{\"ok\": false, \"reason\": \"sprint 'sprint-20260524-p0-ai-influence-github-project-intelligence-system-upgrade-s03-core-runtime' is not passed/finalized: graph_parent_not_ready open_nodes=['C2_discovery_snapshot', 'C3_evidence_detectors', 'C4_cards_briefs_reports_pipeline', 'C5_core_runtime_release'] \\u2014 export skipped\"}",
+  "knowledge_closure_status": "exported",
+  "knowledge_closure_error": null,
   "graph_parent_ready": {
     "ok": true,
     "sprint_id": "sprint-20260524-p0-ai-influence-github-project-intelligence-system-upgrade-s03-core-runtime",
@@ -5236,6 +5264,14 @@
     "required_gates": [],
     "missing_gates": []
   },
-  "task_graph_status": "active",
-  "completed_at": "2026-05-28T06:22:11Z"
+  "task_graph_status": "passed",
+  "completed_at": "2026-05-28T06:22:11Z",
+  "knowledge_export_status": "exported",
+  "knowledge_export_path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260524-p0-ai-influence-github-project-intelligence-system-upgrade-s03-core-runtime.accepted.md",
+  "knowledge_source_artifact_index": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260524-p0-ai-influence-github-project-intelligence-system-upgrade-s03-core-runtime.source_artifact_index.md",
+  "knowledge_summary_count": 3,
+  "knowledge_ingest_dispatch": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260524-p0-ai-influence-github-project-intelligence-system-upgrade-s03-core-runtime.dispatch.md",
+  "knowledge_exported_at": "2026-05-28T07:24:33Z",
+  "knowledge_ingested_at": null,
+  "knowledge_export_error": null
 }

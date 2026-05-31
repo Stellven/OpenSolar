@@ -4,12 +4,12 @@
   "epic_id": "epic-20260527-p0-solar-harness-tui-pane-recover-与-clean-pane-生命周期治理",
   "title": "架构设计与接口契约",
   "status": "passed",
-  "phase": "finalized",
-  "handoff_to": "done",
-  "target_role": "done",
+  "phase": "completed",
+  "handoff_to": "",
+  "target_role": "",
   "priority": "P0",
   "created_at": "2026-05-27T17:09:16Z",
-  "updated_at": "2026-05-27T21:38:06Z",
+  "updated_at": "2026-05-29T01:45:25Z",
   "dependency_policy": "activated_by_epic_dag",
   "history": [
     {
@@ -318,6 +318,13 @@
       "ts": "2026-05-27T21:40:15Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-29T01:45:25Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260527-p0-solar-harness-tui-pane-recover-与-clean-pane-生命周期治理-s02-architecture.task_graph.json"
     }
   ],
   "round": 1,
@@ -372,7 +379,8 @@
         "execute_requires": "--execute",
         "replaces_builder": false
       }
-    }
+    },
+    "design_html": "sprints/sprint-20260527-p0-solar-harness-tui-pane-recover-与-clean-pane-生命周期治理-s02-architecture.design.html"
   },
   "completed_at": "2026-05-27T21:29:49Z",
   "graph_parent_ready": {
@@ -398,5 +406,7 @@
   "knowledge_closure_required": true,
   "knowledge_closure_status": "exported",
   "knowledge_export_error": null,
-  "knowledge_closure_error": null
+  "knowledge_closure_error": null,
+  "stage": "completed",
+  "task_graph_status": "passed"
 }

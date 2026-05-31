@@ -3,7 +3,7 @@
   "title": "P0: Knowledge Ingest Dispatcher 统一控制面：所有 raw、Obsidian vault、",
   "summary": "P0: Knowledge Ingest Dispatcher 统一控制面：所有 raw、Obsidian vault、accepted、YouTube、ChatGPT、Web、GitHub、Solar 产物必须进入同一状态机；QMD 继续确定性索引；ThunderOMLX 只做 L2 JSON-first 语义抽取；SQLite registry 作为事实",
   "status": "passed",
-  "phase": "finalized",
+  "phase": "completed",
   "handoff_to": "",
   "created_at": "2026-05-24T14:58:59Z",
   "round": 1,
@@ -164,6 +164,39 @@
       "ts": "2026-05-24T15:52:20Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-26T17:56:56Z",
+      "event": "graph_parent_ready_revoked",
+      "by": "graph_scheduler",
+      "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache"
+    },
+    {
+      "ts": "2026-05-26T17:58:48Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "builder_main",
+      "stage": "planning_complete",
+      "reason": "planner_artifacts_and_task_graph_ready"
+    },
+    {
+      "ts": "2026-05-28T19:48:27Z",
+      "event": "graph_parent_projection_refreshed",
+      "by": "solar-autopilot",
+      "note": "task_graph changed while in flight; refreshing legacy status projection"
+    },
+    {
+      "ts": "2026-05-28T21:47:23Z",
+      "event": "graph_parent_ready_passed",
+      "by": "graph-dispatch",
+      "note": "All DAG nodes and required gates passed via parent_ready_check."
+    },
+    {
+      "ts": "2026-05-28T21:47:23Z",
+      "event": "knowledge_ingest_dispatcher_auto_closeout",
+      "by": "knowledge_ingest_dispatcher_closeout",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260524-105859.task_graph.json"
     }
   ],
   "artifacts": {
@@ -213,10 +246,11 @@
         "execute_requires": "--execute",
         "replaces_builder": false
       }
-    }
+    },
+    "design_html": "sprints/sprint-20260524-105859.design.html"
   },
   "target_role": "",
-  "updated_at": "2026-05-24T15:52:54Z",
+  "updated_at": "2026-05-28T21:47:23Z",
   "event_count": 95,
   "last_event_ts": "2026-05-24T15:39:26Z",
   "projected_at": "2026-05-24T15:39:26Z",
@@ -256,5 +290,6 @@
   "knowledge_closure_required": true,
   "knowledge_closure_status": "exported",
   "knowledge_export_error": null,
-  "knowledge_closure_error": null
+  "knowledge_closure_error": null,
+  "completed_at": "2026-05-28T21:47:23Z"
 }

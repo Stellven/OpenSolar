@@ -12,7 +12,7 @@
   "title": "Managed Agent Runtime Foundation",
   "summary": "Make Solar-Harness event-sourced and async-capable: durable session log as truth, status/UI/panes as projections, tools/models/panes as activities.",
   "created_at": "2026-05-11T19:17:09Z",
-  "updated_at": "2026-05-26T17:56:53Z",
+  "updated_at": "2026-05-29T20:39:49Z",
   "task_graph": "/Users/lisihao/.solar/harness/sprints/sprint-20260511-managed-agent-runtime-foundation.task_graph.json",
   "contract": "/Users/lisihao/.solar/harness/sprints/sprint-20260511-managed-agent-runtime-foundation.contract.md",
   "history": [
@@ -188,6 +188,13 @@
       "by": "graph_scheduler",
       "graph_sync": true,
       "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260511-managed-agent-runtime-foundation.task_graph.json"
+    },
+    {
+      "ts": "2026-05-29T20:39:49Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260511-managed-agent-runtime-foundation.task_graph.json"
     }
   ],
   "round": 1,
@@ -226,5 +233,6 @@
     "missing_gates": []
   },
   "task_graph_status": "passed",
-  "runtime_state_source": "activity_runtime"
+  "runtime_state_source": "activity_runtime",
+  "completed_at": "2026-05-29T20:39:49Z"
 }

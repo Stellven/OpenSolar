@@ -88,13 +88,27 @@
       "ts": "2026-05-24T17:59:50Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-28T19:48:27Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260524-133807.task_graph.json"
+    },
+    {
+      "ts": "2026-05-29T20:39:49Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260524-133807.task_graph.json"
     }
   ],
   "status": "passed",
-  "phase": "finalized",
-  "handoff_to": "done",
-  "target_role": "done",
-  "updated_at": "2026-05-24T17:58:26Z",
+  "phase": "completed",
+  "handoff_to": "",
+  "target_role": "",
+  "updated_at": "2026-05-29T20:39:49Z",
   "event_count": 124,
   "last_event_ts": "2026-05-24T17:28:41Z",
   "projected_at": "2026-05-24T17:28:41Z",
@@ -103,7 +117,6 @@
   "auto_held": false,
   "runtime_state_source": "activity_runtime",
   "artifacts": {
-    "planning_html": "sprints/sprint-20260524-133807.planning.html",
     "prd": "sprints/sprint-20260524-133807.prd.md",
     "contract": "sprints/sprint-20260524-133807.contract.md",
     "design": "sprints/sprint-20260524-133807.design.md",
@@ -161,5 +174,24 @@
   "knowledge_closure_required": true,
   "knowledge_closure_status": "exported",
   "knowledge_export_error": null,
-  "knowledge_closure_error": null
+  "knowledge_closure_error": null,
+  "stage": "completed",
+  "active_node": null,
+  "graph_parent_ready": {
+    "ok": true,
+    "sprint_id": "sprint-20260524-133807",
+    "ready": true,
+    "node_count": 5,
+    "open_nodes": [],
+    "failed_nodes": [],
+    "required_gates": [
+      "G_PLAN",
+      "G_IMPL",
+      "G_VERIFY",
+      "G_REVIEW"
+    ],
+    "missing_gates": []
+  },
+  "task_graph_status": "passed",
+  "completed_at": "2026-05-29T20:39:49Z"
 }

@@ -4,12 +4,12 @@
   "epic_id": "epic-20260527-p0-solar-harness-tui-pane-recover-与-clean-pane-生命周期治理",
   "title": "调度、自动化与可视化",
   "status": "passed",
-  "phase": "finalized",
-  "handoff_to": "done",
-  "target_role": "done",
+  "phase": "completed",
+  "handoff_to": "",
+  "target_role": "",
   "priority": "P0",
   "created_at": "2026-05-27T17:09:16Z",
-  "updated_at": "2026-05-28T01:13:39Z",
+  "updated_at": "2026-05-29T01:45:25Z",
   "dependency_policy": "activated_by_epic_dag",
   "history": [
     {
@@ -608,6 +608,13 @@
       "ts": "2026-05-28T01:15:51Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-29T01:45:25Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260527-p0-solar-harness-tui-pane-recover-与-clean-pane-生命周期治理-s04-orchestration-ui.task_graph.json"
     }
   ],
   "round": 1,
@@ -661,7 +668,9 @@
         "execute_requires": "--execute",
         "replaces_builder": false
       }
-    }
+    },
+    "prd_html": "sprints/sprint-20260527-p0-solar-harness-tui-pane-recover-与-clean-pane-生命周期治理-s04-orchestration-ui.prd.html",
+    "design_html": "sprints/sprint-20260527-p0-solar-harness-tui-pane-recover-与-clean-pane-生命周期治理-s04-orchestration-ui.design.html"
   },
   "completed_at": "2026-05-28T00:43:58Z",
   "graph_parent_ready": {
@@ -687,5 +696,7 @@
   "knowledge_closure_required": true,
   "knowledge_closure_status": "exported",
   "knowledge_export_error": null,
-  "knowledge_closure_error": null
+  "knowledge_closure_error": null,
+  "stage": "completed",
+  "task_graph_status": "passed"
 }

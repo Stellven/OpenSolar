@@ -5,11 +5,11 @@
   "title": "验证、回归与发布证据",
   "status": "passed",
   "phase": "completed",
-  "handoff_to": "done",
-  "target_role": "done",
+  "handoff_to": "",
+  "target_role": "",
   "priority": "P0",
   "created_at": "2026-05-22T02:19:55Z",
-  "updated_at": "2026-05-27T13:03:15Z",
+  "updated_at": "2026-05-29T20:39:49Z",
   "dependency_policy": "activated_by_epic_dag",
   "history": [
     {
@@ -2646,6 +2646,202 @@
       "ts": "2026-05-27T13:04:54Z",
       "event": "parent_review_blocked_dag_not_ready",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-28T19:48:27Z",
+      "event": "graph_parent_ready_revoked",
+      "by": "solar-autopilot",
+      "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache"
+    },
+    {
+      "ts": "2026-05-28T19:48:30Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "none",
+      "stage": "done",
+      "reason": "terminal_status"
+    },
+    {
+      "ts": "2026-05-28T19:48:31Z",
+      "event": "graph_parent_ready_revoked",
+      "by": "solar-autopilot",
+      "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache"
+    },
+    {
+      "ts": "2026-05-28T19:49:24Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "none",
+      "stage": "done",
+      "reason": "terminal_status"
+    },
+    {
+      "ts": "2026-05-28T19:49:33Z",
+      "event": "graph_parent_ready_revoked",
+      "by": "solar-autopilot",
+      "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache"
+    },
+    {
+      "ts": "2026-05-28T19:49:36Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "none",
+      "stage": "done",
+      "reason": "terminal_status"
+    },
+    {
+      "ts": "2026-05-28T19:49:38Z",
+      "event": "graph_parent_ready_revoked",
+      "by": "solar-autopilot",
+      "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache"
+    },
+    {
+      "ts": "2026-05-28T19:50:31Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "none",
+      "stage": "done",
+      "reason": "terminal_status"
+    },
+    {
+      "ts": "2026-05-28T19:53:23Z",
+      "event": "graph_parent_ready_revoked",
+      "by": "solar-autopilot",
+      "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache"
+    },
+    {
+      "ts": "2026-05-28T19:53:27Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "none",
+      "stage": "done",
+      "reason": "terminal_status"
+    },
+    {
+      "ts": "2026-05-28T19:53:29Z",
+      "event": "graph_parent_ready_revoked",
+      "by": "solar-autopilot",
+      "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache"
+    },
+    {
+      "ts": "2026-05-28T19:53:55Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "none",
+      "stage": "done",
+      "reason": "terminal_status"
+    },
+    {
+      "ts": "2026-05-28T20:04:44Z",
+      "event": "graph_parent_ready_revoked",
+      "by": "solar-autopilot",
+      "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache"
+    },
+    {
+      "ts": "2026-05-28T20:04:47Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "none",
+      "stage": "done",
+      "reason": "terminal_status"
+    },
+    {
+      "ts": "2026-05-28T20:04:49Z",
+      "event": "graph_parent_ready_revoked",
+      "by": "solar-autopilot",
+      "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache"
+    },
+    {
+      "ts": "2026-05-28T20:05:21Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "none",
+      "stage": "done",
+      "reason": "terminal_status"
+    },
+    {
+      "ts": "2026-05-28T23:16:37Z",
+      "event": "graph_parent_ready_revoked",
+      "by": "solar-autopilot",
+      "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache"
+    },
+    {
+      "ts": "2026-05-28T23:16:39Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "none",
+      "stage": "done",
+      "reason": "terminal_status"
+    },
+    {
+      "ts": "2026-05-28T23:16:42Z",
+      "event": "graph_parent_ready_revoked",
+      "by": "solar-autopilot",
+      "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache"
+    },
+    {
+      "ts": "2026-05-28T23:18:31Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "none",
+      "stage": "done",
+      "reason": "terminal_status"
+    },
+    {
+      "ts": "2026-05-28T23:20:32Z",
+      "event": "graph_parent_ready_revoked",
+      "by": "solar-autopilot",
+      "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache"
+    },
+    {
+      "ts": "2026-05-28T23:21:46Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "none",
+      "stage": "done",
+      "reason": "terminal_status"
+    },
+    {
+      "ts": "2026-05-29T01:38:04Z",
+      "event": "graph_parent_ready_revoked",
+      "by": "codex",
+      "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache"
+    },
+    {
+      "ts": "2026-05-29T01:40:11Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "none",
+      "stage": "done",
+      "reason": "terminal_status"
+    },
+    {
+      "ts": "2026-05-29T01:42:49Z",
+      "event": "graph_parent_ready_revoked",
+      "by": "codex",
+      "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache"
+    },
+    {
+      "ts": "2026-05-29T01:44:04Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "none",
+      "stage": "done",
+      "reason": "terminal_status"
+    },
+    {
+      "ts": "2026-05-29T01:44:12Z",
+      "event": "thunderomlx_kvtc_s05_closeout",
+      "by": "thunderomlx_kvtc_s05_closeout",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release.task_graph.json"
+    },
+    {
+      "ts": "2026-05-29T20:39:49Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release.task_graph.json"
     }
   ],
   "round": 4,
@@ -2701,7 +2897,9 @@
         "execute_requires": "--execute",
         "replaces_builder": false
       }
-    }
+    },
+    "prd_html": "sprints/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release.prd.html",
+    "design_html": "sprints/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release.design.html"
   },
   "knowledge_export_status": "exported",
   "knowledge_export_path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release.accepted.md",
@@ -2713,27 +2911,21 @@
   "knowledge_summary_count": 2,
   "knowledge_closure_required": true,
   "knowledge_closure_status": "exported",
-  "stage": "graph_in_progress",
-  "active_node": "D0_ab_correctness_cli_upgrade",
-  "open_nodes": [
-    "D0_ab_correctness_cli_upgrade"
-  ],
-  "failed_nodes": [],
+  "stage": "completed",
+  "active_node": null,
   "graph_parent_ready": {
     "ok": true,
     "sprint_id": "sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s05-verification-release",
-    "ready": false,
+    "ready": true,
     "node_count": 7,
-    "open_nodes": [
-      "D0_ab_correctness_cli_upgrade"
-    ],
+    "open_nodes": [],
     "failed_nodes": [],
     "required_gates": [
       "G_S05_verification_release_passed"
     ],
     "missing_gates": []
   },
-  "task_graph_status": "active",
-  "completed_at": null,
+  "task_graph_status": "passed",
+  "completed_at": "2026-05-29T20:39:49Z",
   "last_handoff_mtime": 1779884727.0
 }

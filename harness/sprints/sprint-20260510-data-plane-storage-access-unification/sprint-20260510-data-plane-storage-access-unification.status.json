@@ -3,15 +3,15 @@
   "title": "Solar Data Plane Storage And Access Unification",
   "summary": "统一数据存储层和统一数据访问层：Knowledge/_sources canonical source library，Mirage 访问层，QMD 索引层，MinerU 后台处理层，Drive 冷备镜像。",
   "status": "passed",
-  "phase": "finalized",
-  "handoff_to": "done",
-  "target_role": "done",
+  "phase": "completed",
+  "handoff_to": "",
+  "target_role": "",
   "priority": "P0",
   "lane": "data-plane",
   "round": 1,
   "bypass_pm": true,
   "created_at": "2026-05-10T14:06:15Z",
-  "updated_at": "2026-05-24T01:51:13Z",
+  "updated_at": "2026-05-29T01:45:25Z",
   "history": [
     {
       "ts": "2026-05-10T14:06:15Z",
@@ -132,6 +132,13 @@
       "event": "parent_eval_passed_finalized",
       "by": "codex-controller",
       "note": "Parent eval.md/json and .finalized marker written after all DAG gates passed."
+    },
+    {
+      "ts": "2026-05-29T01:45:25Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260510-data-plane-storage-access-unification.task_graph.json"
     }
   ],
   "artifacts": [
@@ -167,5 +174,9 @@
   "knowledge_ingested_at": null,
   "knowledge_closure_required": true,
   "knowledge_closure_status": "exported",
-  "knowledge_export_error": null
+  "knowledge_export_error": null,
+  "stage": "completed",
+  "active_node": null,
+  "task_graph_status": "passed",
+  "runtime_state_source": "activity_runtime"
 }

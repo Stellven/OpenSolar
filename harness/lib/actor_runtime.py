@@ -161,12 +161,37 @@ class ActorRuntime:
             if not validation["valid"]:
                 return SubmitResult(success=False, error=f"capability_token_invalid: {validation['issues']}")
 
+        # Check safety boundaries
+        allowed, safety_err, requires_approval = self.check_safety_boundaries(task_envelope)
+        if not allowed:
+            return SubmitResult(success=False, error=safety_err)
+        if requires_approval and not task_envelope.get("human_approved"):
+            return SubmitResult(success=False, error="human_approval_required")
+
         # Resolve actor
         if not actor_id and logical_operator:
-            selected, rejected = self.router.select_actor(logical_operator)
-            if not selected:
-                return SubmitResult(success=False, error=f"no_available_actor_for_{logical_operator}")
-            actor_id = selected
+            is_browser_op = (
+                logical_operator in ("DeepResearchBrowser", "WebwrightPlaywright", "BrowserUseMcp") or
+                task_envelope.get("requires_replayable_evidence") or
+                task_envelope.get("is_long_horizon_web_task") or
+                task_envelope.get("is_localhost_smoke_or_quick_extract")
+            )
+            if is_browser_op:
+                if (
+                    task_envelope.get("requires_replayable_evidence") or
+                    task_envelope.get("is_long_horizon_web_task")
+                ):
+                    actor_id = "op.browser.webwright.playwright.01"
+                elif task_envelope.get("is_localhost_smoke_or_quick_extract"):
+                    actor_id = "op.browser.browser_use_mcp.quick.01"
+                else:
+                    # Default Fallback: Webwright
+                    actor_id = "op.browser.webwright.playwright.01"
+            else:
+                selected, rejected = self.router.select_actor(logical_operator)
+                if not selected:
+                    return SubmitResult(success=False, error=f"no_available_actor_for_{logical_operator}")
+                actor_id = selected
         elif not actor_id:
             return SubmitResult(success=False, error="no_actor_id_or_logical_operator")
 
@@ -248,3 +273,57 @@ class ActorRuntime:
             evidence_ledger_path=ledger_path,
             scheduler_decision=sched_decision,
         )
+
+    def check_safety_boundaries(
+        self,
+        task_envelope: Dict[str, Any],
+    ) -> Tuple[bool, Optional[str], bool]:
+        """Check task compliance with security boundaries.
+
+        Returns (allowed, error_message, requires_human_approval).
+        """
+        objective = str(task_envelope.get("objective", "")).lower()
+        action_type = str(task_envelope.get("action_type", "")).lower()
+
+        forbidden_types = {
+            "payment_action",
+            "credential_capture",
+            "cookie_export_without_approval",
+            "bot_detection_bypass",
+            "unauthorized_scraping",
+            "cookie heist",
+        }
+        requires_approval_types = {
+            "login",
+            "external_write",
+            "form_submit",
+            "account_action",
+        }
+
+        # Check explicit action type
+        if action_type in forbidden_types:
+            return False, f"security_violation: action_type '{action_type}' is forbidden", False
+        if action_type in requires_approval_types:
+            return True, None, True
+
+        # Check text content of objective
+        forbidden_keywords = {
+            "payment": "payment_action",
+            "cookie heist": "cookie_export_without_approval",
+            "export cookies": "cookie_export_without_approval",
+            "bot bypass": "bot_detection_bypass",
+            "bypass bot": "bot_detection_bypass",
+            "credential capture": "credential_capture",
+            "unauthorized scraping": "unauthorized_scraping",
+        }
+
+        for kw, classification in forbidden_keywords.items():
+            if kw in objective:
+                return False, f"security_violation: task objective contains keyword associated with forbidden action '{classification}'", False
+
+        approval_keywords = ["login", "submit form", "account action", "external write", "form_submit"]
+        for kw in approval_keywords:
+            if kw in objective:
+                return True, None, True
+
+        return True, None, False

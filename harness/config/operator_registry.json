@@ -1,0 +1,56 @@
+{
+  "schema_version": "solar.operator_registry.v1",
+  "lines": {
+    "x_social": {
+      "primary": "scripts/ai_influence_daily.py",
+      "executors": [
+        "tools/playwright_twitter_scraper.py"
+      ],
+      "fallback": [],
+      "schedule": "daily",
+      "output_dir": "reports/x-social/"
+    },
+    "github_trends": {
+      "primary": "scripts/github_trends_digest.py",
+      "executors": [],
+      "fallback": [],
+      "control": [
+        "tools/github_intelligence/pipeline.py"
+      ],
+      "schedule": "daily",
+      "output_dir": "reports/github/",
+      "dual_run": {
+        "enabled": true,
+        "comparison_view": true
+      }
+    },
+    "hf_papers": {
+      "primary": "scripts/tech_hotspot_radar.py",
+      "executors": [],
+      "fallback": [],
+      "helper": [
+        "scripts/run_tech_hotspot_radar.sh"
+      ],
+      "schedule": "daily",
+      "output_dir": "reports/hf-papers/"
+    },
+    "gemini_research": {
+      "primary": "tools/gemini_deep_research_operator.py",
+      "executors": [
+        "scripts/browser_agent_gemini_deep_research_wrapper.py"
+      ],
+      "fallback": [],
+      "schedule": "on_demand",
+      "output_dir": "reports/gemini/"
+    },
+    "youtube": {
+      "primary": "scripts/youtube_influence_digest.py",
+      "executors": [
+        "scripts/browser_agent_youtube_transcript_wrapper.py"
+      ],
+      "fallback": [],
+      "schedule": "daily",
+      "output_dir": "reports/youtube/"
+    }
+  }
+}

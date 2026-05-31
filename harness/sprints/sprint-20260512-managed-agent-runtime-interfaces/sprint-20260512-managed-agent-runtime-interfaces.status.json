@@ -157,9 +157,16 @@
       "by": "graph_scheduler",
       "graph_sync": true,
       "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260512-managed-agent-runtime-interfaces.task_graph.json"
+    },
+    {
+      "ts": "2026-05-29T20:39:49Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260512-managed-agent-runtime-interfaces.task_graph.json"
     }
   ],
-  "updated_at": "2026-05-26T17:56:53Z",
+  "updated_at": "2026-05-29T20:39:49Z",
   "event_count": 46,
   "last_event_ts": "2026-05-13T01:43:54Z",
   "projected_at": "2026-05-13T01:43:54Z",
@@ -198,5 +205,6 @@
     ],
     "missing_gates": []
   },
-  "task_graph_status": "passed"
+  "task_graph_status": "passed",
+  "completed_at": "2026-05-29T20:39:49Z"
 }

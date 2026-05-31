@@ -350,7 +350,6 @@ def cmd_run_pipeline(args: argparse.Namespace) -> int:
     )
     steps.append(extract_step)
     if not extract_step["ok"] and not args.continue_on_extract_failure:
-        steps.append(_run_cmd(["solar-harness", "wiki", "knowledge-health", "health"], timeout=args.timeout_sec))
         payload = {
             "ok": False,
             "stopped_after": "semantic-extract",
@@ -377,7 +376,7 @@ def cmd_run_pipeline(args: argparse.Namespace) -> int:
                 db,
                 "changed-only-reindex",
                 "--layers",
-                "raw,vault,extracted",
+                "raw,vault,semantic",
                 "--execute",
                 "--timeout-sec",
                 str(args.qmd_timeout_sec),
@@ -390,7 +389,6 @@ def cmd_run_pipeline(args: argparse.Namespace) -> int:
         steps.append(_run_cmd(["solar-harness", "wiki", "qmd-embed", "run-now"], timeout=args.qmd_timeout_sec))
 
     steps.append(_run_cmd(_python_lib_cmd("knowledge_qmd_indexer.py", "--db", db, "advance-indexed-states"), timeout=args.timeout_sec))
-    steps.append(_run_cmd(["solar-harness", "wiki", "knowledge-health", "health"], timeout=args.timeout_sec))
 
     ok = all(step["ok"] for step in steps)
     payload = {

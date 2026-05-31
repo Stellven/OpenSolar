@@ -14,9 +14,14 @@ import yaml
 
 from capability_capsules import (
     CAPSULE_REGISTRY_PATH,
+    classify_task_goal,
+    expand_logical_workflow,
+    resolve_skill_plan,
+    resolve_mcp_plan,
     default_capability_plan_for_logical_operator,
     get_registry_entry,
     load_capability_capsule_manifest,
+    query_capability_capsules,
 )
 
 HOME = Path.home()
@@ -432,6 +437,7 @@ def build_capsule_plan_node(
     request_type: str = "",
     lane_hint: str = "",
     registry_path: Optional[Path] = None,
+    goal_text: str = "",
 ) -> Dict[str, Any]:
     logical_operator = str(node.get("logical_operator") or "")
     adapter_registry_path = (
@@ -447,6 +453,7 @@ def build_capsule_plan_node(
             lane_hint=lane_hint,
             node=node,
             registry_path=registry_path or CAPSULE_REGISTRY_PATH,
+            goal_text=goal_text or str(node.get("goal") or ""),
         )
     if not base_plan:
         return {
@@ -850,18 +857,103 @@ def compile_execution_plan_for_node(
     require_dispatchable: bool = False,
     operators_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
+    goal_text = str(node.get("goal") or request_type or "")
+
+    # ── Stage 1: Task classification ─────────────────────────────────────────
+    task_classification = classify_task_goal(goal_text)
+
+    # ── Stage 2: Logical workflow expansion ───────────────────────────────────
+    logical_workflow = expand_logical_workflow(task_classification)
+
+    # ── Stage 3: Capsule plan (goal-driven via default_capability_plan_for_logical_operator) ──
     capsule_plan = build_capsule_plan_node(
         node,
         request_type=request_type,
         lane_hint=lane_hint,
         registry_path=registry_path,
+        goal_text=goal_text,
     )
+
+    # ── Stage 4: Physical plan ────────────────────────────────────────────────
     physical_plan = build_physical_plan_for_capsule_node(
         capsule_plan,
         prefer_operator=prefer_operator,
         require_dispatchable=require_dispatchable,
         operators_path=operators_path,
     )
+
+    # ── Stage 5: Skill plan + MCP plan (use capsule manifest if available) ────
+    selected_capsule_id = capsule_plan.get("capability_capsule_id") or capsule_plan.get("capsule_id")
+    capsule_manifest = None
+    if selected_capsule_id:
+        try:
+            entry = get_registry_entry(selected_capsule_id, path=registry_path, include_nonstable=True)
+            if entry:
+                capsule_manifest = load_capability_capsule_manifest(
+                    Path(entry.manifest_path)
+                )
+        except Exception:
+            pass
+
+    skill_plan = resolve_skill_plan(logical_workflow, capsule_manifest)
+    mcp_plan = resolve_mcp_plan(skill_plan, capsule_manifest)
+
+    # ── Build capsule_plan selection_rationale for artifact ───────────────────
+    all_capsule_candidates = []
+    if task_classification.get("primary_class"):
+        signals = [s["signal"] for s in task_classification.get("signals_detected", []) if s.get("weight", 0) > 0]
+        raw_candidates = query_capability_capsules(
+            task_type=task_classification["primary_class"],
+            signals=signals,
+            capsule_kind="capability",
+            registry_path=registry_path,
+        )
+        for cand in raw_candidates:
+            cid = cand["entry"]["capability_capsule_id"]
+            is_selected = cid == selected_capsule_id
+            all_capsule_candidates.append({
+                "capsule_id": cid,
+                "score": cand["score"],
+                "selected": is_selected,
+                "selection_rationale": f"Score {cand['score']} via signals {signals}" if is_selected else None,
+                "rejection_rationale": f"Score {cand['score']} — outscored by selected capsule" if not is_selected else None,
+            })
+
+    fallback_used = capsule_plan.get("fallback_used", False)
+    fallback_reason = capsule_plan.get("fallback_reason")
+    capsule_plan_artifact = {
+        "selected_capsule_id": selected_capsule_id,
+        "fallback_used": fallback_used,
+        "fallback_reason": fallback_reason,
+        "candidates": all_capsule_candidates,
+        "rationale": (
+            f"Selected via goal-driven classifier (class={task_classification.get('primary_class')}, "
+            f"confidence={task_classification.get('confidence')})"
+            if not fallback_used else
+            f"Static default fallback used. Reason: {fallback_reason}"
+        ),
+    }
+
+    # ── Build physical_plan artifact ──────────────────────────────────────────
+    physical_plan_artifact = {
+        "selected_operator_id": physical_plan.get("operator_id") or physical_plan.get("actor_id"),
+        "candidates": physical_plan.get("candidates", []),
+    }
+
+    # ── Evidence policy ───────────────────────────────────────────────────────
+    evidence_policy: Dict[str, Any] = {
+        "proof_obligations": [],
+        "ledger_event_names": [],
+        "verification_commands": [],
+    }
+    if capsule_manifest:
+        pass_conditions = capsule_manifest.get("verification", {}).get("pass_conditions", [])
+        evidence_policy["proof_obligations"] = [str(c) for c in pass_conditions]
+        evidence_policy["ledger_event_names"] = [
+            f"apo.{task_classification.get('primary_class', 'unknown')}.capsule_selected",
+            f"apo.node.{node.get('id', 'unknown')}.plan_compiled",
+        ]
+
     return {
         "logical_plan_node": {
             "node_id": node.get("id"),
@@ -869,6 +961,20 @@ def compile_execution_plan_for_node(
             "goal": node.get("goal"),
             "depends_on": list(node.get("depends_on", []) or []),
         },
+        "task_classification": task_classification,
+        "logical_workflow": logical_workflow,
+        "skill_plan": skill_plan,
+        "mcp_plan": mcp_plan,
         "capsule_plan": capsule_plan,
+        "capsule_plan_artifact": capsule_plan_artifact,
         "physical_plan": physical_plan,
+        "physical_plan_artifact": physical_plan_artifact,
+        "evidence_policy": evidence_policy,
+        "selection_rationale": {
+            "classification_confidence": task_classification.get("confidence"),
+            "primary_class": task_classification.get("primary_class"),
+            "capsule_selected": selected_capsule_id,
+            "fallback_used": fallback_used,
+            "fallback_reason": fallback_reason,
+        },
     }

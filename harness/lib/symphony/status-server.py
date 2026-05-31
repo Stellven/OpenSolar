@@ -31,9 +31,12 @@ import re
 import html
 import hashlib
 import importlib.util
+import shutil
 import time
 import datetime
 import urllib.parse
+import urllib.error
+import urllib.request
 from collections import deque
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -60,6 +63,8 @@ INTEGRATIONS_HEALTH = HARNESS_DIR / "lib" / "external-integrations-health.py"
 KNOWLEDGE_PROBE_HEALTH = HARNESS_DIR / "state" / "knowledge-probe-health.json"
 KNOWLEDGE_DIR = Path(os.environ.get("OBSIDIAN_VAULT_PATH", str(Path.home() / "Knowledge")))
 AI_INFLUENCE_RAW_DIR = Path(os.environ.get("AI_INFLUENCE_RAW_DIR", str(KNOWLEDGE_DIR / "_raw" / "ai-influence-daily-digest")))
+GITHUB_TRENDS_RAW_DIR = KNOWLEDGE_DIR / "_raw" / "github-trends-digest"
+HUGGINGFACE_PAPERS_RAW_DIR = KNOWLEDGE_DIR / "_raw" / "huggingface-papers-trending"
 YOUTUBE_DIGEST_CONFIG = HARNESS_DIR / "config" / "youtube-influence-digest.yaml"
 AI_INFLUENCE_ACCOUNTS = HARNESS_DIR / "ai-influence-digest" / "references" / "accounts_extended.txt"
 GITHUB_TRENDS_CONFIG = HARNESS_DIR / "config" / "github-trends.yaml"
@@ -69,11 +74,20 @@ AI_INFLUENCE_MAIL_CONFIG = HARNESS_DIR / "state" / "ai-influence-mail-config.jso
 ACCEPTED_ASSETS_DIR = KNOWLEDGE_DIR / "_raw" / "solar-harness" / "accepted"
 ACCEPTED_ASSETS_MANIFEST = KNOWLEDGE_DIR / "_raw" / "solar-harness" / ".manifest" / "accepted-artifacts.json"
 MODEL_DOCTOR_HEALTH = HARNESS_DIR / "state" / "model-registry-doctor-health.json"
+THUNDEROMLX_BASE_URL = os.environ.get("THUNDEROMLX_BASE_URL", "http://127.0.0.1:8002").rstrip("/")
+THUNDEROMLX_AUTH_TOKEN = os.environ.get("THUNDEROMLX_AUTH_TOKEN", "local-thunderomlx")
+THUNDEROMLX_START_SCRIPT = Path(os.environ.get("THUNDEROMLX_START_SCRIPT", str(HARNESS_DIR / "scripts" / "thunderomlx_start_8002.sh")))
+THUNDEROMLX_TMUX_SESSION = os.environ.get("THUNDEROMLX_TMUX_SESSION", "thunderomlx-qwen36")
+THUNDEROMLX_LOG_FILE = Path(os.environ.get("THUNDEROMLX_LOG_FILE", str(HARNESS_DIR / "logs" / "thunderomlx-8002.log")))
+THUNDEROMLX_STATUS_START_LOG = HARNESS_DIR / "logs" / "thunderomlx-start-from-status.log"
+THUNDEROMLX_STATUS_CACHE_TTL_SECONDS = 3.0
+_THUNDEROMLX_STATUS_CACHE = {}
 SKILLS_CERTIFICATION = HARNESS_DIR / "state" / "skills-certification.json"
 SKILLS_INVENTORY = HARNESS_DIR / "state" / "skills-inventory.json"
 CAPABILITY_ACTIVATION_PROOF = HARNESS_DIR / "reports" / "capability-activation-proof-latest.json"
 FINAL_CONTRACT_SUMMARY_DOC = HARNESS_DIR / "docs" / "pane-as-physical-operator-final-contract-summary.md"
 FINAL_CONTRACT_SUMMARY_SPRINT_ARTIFACT = HARNESS_DIR / "sprints" / "sprint-20260523-pane-as-physical-operator-final-contract-summary.md"
+LOGICAL_OPERATORS_CONFIG = HARNESS_DIR / "config" / "logical-operators.json"
 META_HARNESS_DIR = Path(os.environ.get("SOLAR_META_HARNESS_DIR", str(Path.home() / ".solar" / "meta-harness")))
 META_HARNESS_TOOL = Path(os.environ.get("SOLAR_META_HARNESS_TOOL", str(Path.home() / ".claude" / "core" / "solar-farm" / "meta-harness.ts")))
 META_HARNESS_SKILL = Path(os.environ.get("SOLAR_META_HARNESS_SKILL", str(Path.home() / ".claude" / "skills" / "meta-harness" / "SKILL.md")))
@@ -887,6 +901,93 @@ def _phase_report_item(run_dir: Path, phase_name: str) -> dict:
     }
 
 
+def _github_trends_item(run_dir: Path) -> dict:
+    report_id = _ai_influence_report_id("github_trends", run_dir)
+    digest_json_path = run_dir / "digest.json"
+    html_path = run_dir / "digest.html"
+    md_path = run_dir / "digest.md"
+    data = _read_json_file(digest_json_path)
+    
+    date_str = _ai_influence_date_from_path(run_dir) or run_dir.name
+    analysis = data.get("analysis") if isinstance(data.get("analysis"), dict) else {}
+    windows = analysis.get("windows") if isinstance(analysis.get("windows"), dict) else {}
+    items_count = sum(len(lst) for lst in windows.values() if isinstance(lst, list))
+
+    return {
+        "kind": "github_trends",
+        "id": report_id,
+        "module_key": "github_trends",
+        "module_label": "GitHub Trends",
+        "module_title": "GitHub 趋势分析",
+        "date": date_str,
+        "title": f"GitHub 趋势报告 — {date_str}",
+        "subtitle": "自动分析高优代码仓库",
+        "status": "ok" if md_path.exists() else "warn",
+        "primary": _ai_influence_public_artifact("digest_html", html_path, report_id) if html_path.exists() else _ai_influence_public_artifact("digest_md", md_path, report_id),
+        "artifacts": [
+            _ai_influence_public_artifact("digest_html", html_path, report_id),
+            _ai_influence_public_artifact("digest_md", md_path, report_id),
+            _ai_influence_public_artifact("digest_json", digest_json_path, report_id),
+        ],
+        "metrics": {
+            "爆发项目": items_count,
+        },
+        "filters": {
+            "themes": ["GitHub Trends"],
+            "technologies": ["GitHub", "Repo"],
+            "channels": [],
+        },
+        "resources": _ai_influence_resource_links(run_dir, [
+            "digest.html",
+            "digest.md",
+            "digest.json"
+        ], report_id),
+        "_report_dir": str(run_dir),
+        "mtime": max((p.stat().st_mtime for p in [html_path, md_path, digest_json_path] if p.exists()), default=run_dir.stat().st_mtime if run_dir.exists() else 0),
+    }
+
+
+def _huggingface_papers_item(run_dir: Path) -> dict:
+    report_id = _ai_influence_report_id("huggingface_papers", run_dir)
+    json_path = run_dir / "trending-papers.json"
+    md_path = run_dir / "trending-papers.md"
+    data = _read_json_file(json_path)
+    
+    date_str = _ai_influence_date_from_path(run_dir) or run_dir.name
+    papers_count = int(data.get("papers", 0)) if isinstance(data, dict) else 0
+
+    return {
+        "kind": "huggingface_papers",
+        "id": report_id,
+        "module_key": "huggingface_papers",
+        "module_label": "HF Papers",
+        "module_title": "Hugging Face 论文热点",
+        "date": date_str,
+        "title": f"Hugging Face 论文热点 — {date_str}",
+        "subtitle": "Hugging Face Daily & Trending",
+        "status": "ok" if md_path.exists() else "warn",
+        "primary": _ai_influence_public_artifact("trending_papers_md", md_path, report_id),
+        "artifacts": [
+            _ai_influence_public_artifact("trending_papers_md", md_path, report_id),
+            _ai_influence_public_artifact("trending_papers_json", json_path, report_id),
+        ],
+        "metrics": {
+            "收录论文": papers_count,
+        },
+        "filters": {
+            "themes": ["Hugging Face Papers"],
+            "technologies": ["HuggingFace", "Paper"],
+            "channels": [],
+        },
+        "resources": _ai_influence_resource_links(run_dir, [
+            "trending-papers.md",
+            "trending-papers.json"
+        ], report_id),
+        "_report_dir": str(run_dir),
+        "mtime": max((p.stat().st_mtime for p in [md_path, json_path] if p.exists()), default=run_dir.stat().st_mtime if run_dir.exists() else 0),
+    }
+
+
 def _ai_influence_group_summary(key: str, items: list[dict]) -> dict:
     if key == "planned":
         rows = []
@@ -1001,6 +1102,52 @@ def _ai_influence_group_summary(key: str, items: list[dict]) -> dict:
             "rows": rows[:24],
             "row_map": [("date", "日期"), ("source", "来源"), ("rule", "规则"), ("title", "标题"), ("time", "触发时间")],
         }
+    if key == "github_trends":
+        rows = []
+        total_items = 0
+        for item in items:
+            digest_path = Path(str(item.get("_report_dir") or "")) / "digest.json"
+            digest = _read_json_file(digest_path)
+            analysis = digest.get("analysis") if isinstance(digest.get("analysis"), dict) else {}
+            windows = analysis.get("windows") if isinstance(analysis.get("windows"), dict) else {}
+            items_list = windows.get("daily") if isinstance(windows.get("daily"), list) else []
+            total_items += sum(len(lst) for lst in windows.values() if isinstance(lst, list))
+            for row in items_list[:12]:
+                if isinstance(row, dict):
+                    repo_url = str(row.get("url") or "")
+                    repo_name = str(row.get("repo") or "N/A")
+                    rows.append({
+                        "date": item.get("date") or "N/A",
+                        "repo_html": f"<a href='{html.escape(repo_url)}' target='_blank' rel='noreferrer'>{html.escape(repo_name)}</a>" if repo_url else html.escape(repo_name),
+                        "stars": str(row.get("stars") or "N/A"),
+                        "category": str(row.get("category") or "N/A"),
+                    })
+        return {
+            "headline": f"{len(items)} 份 GitHub 趋势分析，共挖掘 {total_items} 个爆发级仓库。",
+            "metrics": {"报告": len(items), "高优仓库": total_items},
+            "columns": ["日期", "仓库", "Stars", "分类"],
+            "rows": rows[:24],
+            "row_map": [("date", "日期"), ("repo", "仓库"), ("stars", "Stars"), ("category", "分类")],
+        }
+    if key == "huggingface_papers":
+        rows = []
+        total_papers = 0
+        for item in items:
+            json_path = Path(str(item.get("_report_dir") or "")) / "trending-papers.json"
+            data = _read_json_file(json_path)
+            papers_count = data.get("papers", 0)
+            total_papers += papers_count
+            rows.append({
+                "date": item.get("date") or "N/A",
+                "papers": str(papers_count),
+            })
+        return {
+            "headline": f"{len(items)} 份 Hugging Face 论文快报，共捕获 {total_papers} 篇高引热点论文。",
+            "metrics": {"快报": len(items), "论文数": total_papers},
+            "columns": ["日期", "收录论文"],
+            "rows": rows[:24],
+            "row_map": [("date", "日期"), ("papers", "收录论文")],
+        }
     rows = []
     total_inputs = 0
     for item in items:
@@ -1094,6 +1241,16 @@ def _ai_influence_payload_internal(limit: int = 80, period: str = "30d") -> dict
             for child in sorted((p for p in phase_dir.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime, reverse=True):
                 if (child / "report.html").exists() and (child / "phase-report.json").exists():
                     items.append(_phase_report_item(child, phase_dir.name))
+                    
+    if GITHUB_TRENDS_RAW_DIR.exists():
+        for child in GITHUB_TRENDS_RAW_DIR.iterdir():
+            if child.is_dir() and re.match(r"^\d{4}-\d{2}-\d{2}$", child.name) and (child / "digest.md").exists():
+                items.append(_github_trends_item(child))
+
+    if HUGGINGFACE_PAPERS_RAW_DIR.exists():
+        for child in HUGGINGFACE_PAPERS_RAW_DIR.iterdir():
+            if child.is_dir() and re.match(r"^\d{4}-\d{2}-\d{2}$", child.name) and (child / "trending-papers.md").exists():
+                items.append(_huggingface_papers_item(child))
     items.sort(key=lambda item: item.get("mtime", 0), reverse=True)
     normalized_period, cutoff = _ai_influence_period_cutoff(period)
     if cutoff is not None:
@@ -1220,6 +1377,89 @@ def _ai_influence_send_report(data: dict) -> dict:
     if str(result.get("status") or "").lower() == "sent":
         (report_dir / "mail-result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return {"ok": str(result.get("status") or "").lower() in {"sent", "warn"}, "status": result.get("status", "warn"), "result": result}
+
+
+
+def _ai_influence_collectors_section() -> str:
+    import subprocess
+    import glob
+    
+    sections = []
+    
+    def get_log_tail(path_glob, lines=10):
+        try:
+            files = sorted(glob.glob(os.path.expanduser(path_glob)))
+            if not files:
+                return "没有找到日志文件。"
+            latest_file = files[-1]
+            out = subprocess.check_output(['tail', '-n', str(lines), latest_file], stderr=subprocess.STDOUT, text=True)
+            return html.escape(out)
+        except Exception as e:
+            return f"读取日志出错：{html.escape(str(e))}"
+            
+    def get_process_status(pattern):
+        try:
+            out = subprocess.check_output(['pgrep', '-f', pattern], text=True).strip()
+            if out:
+                return f"<span class='pill' style='background:var(--green);color:white;border:none;'>运行中 (PID: {out.split()[0]})</span>"
+            return "<span class='pill'>未运行</span>"
+        except subprocess.CalledProcessError:
+            return "<span class='pill'>未运行</span>"
+
+    # YouTube Backfill
+    yt_log = get_log_tail("~/Solar/harness/logs/youtube_backfill_*.log", lines=15)
+    yt_status = get_process_status("youtube_weekly_backfill.py")
+    
+    sections.append(f'''
+    <div class="group">
+        <div class="group-head">
+            <div>
+                <div class="group-kicker">Data Collector</div>
+                <h2>📺 YouTube 历史回溯</h2>
+            </div>
+            {yt_status}
+        </div>
+        <div class="summary-card">
+            <pre style="margin:0;font-size:12px;background:#17231f;color:#e8dcc8;padding:12px;border-radius:12px;overflow-x:auto;">{yt_log}</pre>
+        </div>
+    </div>
+    ''')
+
+    # Social Mention (Twitter)
+    social_log = get_log_tail("~/Solar/harness/logs/ai-influence-daily-digest.out.log", lines=15)
+    social_status = get_process_status("ai_influence_backfill.py")
+    sections.append(f'''
+    <div class="group">
+        <div class="group-head">
+            <div>
+                <div class="group-kicker">Data Collector</div>
+                <h2>🐦 社交大咖动态 (Twitter/X)</h2>
+            </div>
+            {social_status}
+        </div>
+        <div class="summary-card">
+            <pre style="margin:0;font-size:12px;background:#17231f;color:#e8dcc8;padding:12px;border-radius:12px;overflow-x:auto;">{social_log}</pre>
+        </div>
+    </div>
+    ''')
+
+    # Hugging Face
+    hf_log = get_log_tail("~/Solar/harness/logs/tech-hotspot-radar*.log", lines=15)
+    sections.append(f'''
+    <div class="group">
+        <div class="group-head">
+            <div>
+                <div class="group-kicker">Data Collector</div>
+                <h2>🤗 Hugging Face 每日论文</h2>
+            </div>
+        </div>
+        <div class="summary-card">
+            <pre style="margin:0;font-size:12px;background:#17231f;color:#e8dcc8;padding:12px;border-radius:12px;overflow-x:auto;">{hf_log}</pre>
+        </div>
+    </div>
+    ''')
+    
+    return "".join(sections)
 
 
 def _ai_influence_html(period: str = "30d") -> str:
@@ -1473,6 +1713,7 @@ def _ai_influence_html(period: str = "30d") -> str:
     <div class="tabs">
       <button class="tab-btn active" data-tab="reports" onclick="switchTab('reports', this)">报告汇总</button>
       <button class="tab-btn" data-tab="resources" onclick="switchTab('resources', this)">素材资源</button>
+      <button class="tab-btn" data-tab="collectors" onclick="switchTab('collectors', this)">采集调度中心</button>
     </div>
     <section id="mail-config" class="mail-config">
       <h2>配置发送邮箱</h2>
@@ -1545,6 +1786,9 @@ def _ai_influence_html(period: str = "30d") -> str:
     </section>
     <section id="tab-resources" class="tab-panel">
       {' '.join(resource_sections) if resource_sections else "<div class='empty'>当前还没有素材资源。</div>"}
+    </section>
+    <section id="tab-collectors" class="tab-panel">
+      {_ai_influence_collectors_section()}
     </section>
   </div>
   <script>
@@ -4374,7 +4618,11 @@ def _recent_operator_results(results_dir: Path, multi_task_dir: Path, limit: int
                 "exit_code": data.get("exit_code"),
                 "sprint_id": str(data.get("sprint_id") or ""),
                 "node_id": str(data.get("node_id") or ""),
-                "model": str(data.get("model") or data.get("operator_model") or ""),
+                "model": str(data.get("effective_model") or data.get("model") or data.get("operator_model") or ""),
+                "requested_model": str(data.get("requested_model") or data.get("operator_model") or ""),
+                "routing_model": str(data.get("routing_model") or ""),
+                "effective_provider": str(data.get("effective_provider") or ""),
+                "effective_model": str(data.get("effective_model") or ""),
                 "backend": str(data.get("backend") or ""),
                 "source": "operator-results",
             }))
@@ -4416,6 +4664,355 @@ def _recent_operator_results(results_dir: Path, multi_task_dir: Path, limit: int
     return [row for _, row in rows[:max_items]]
 
 
+def _parse_status_time(value: str) -> datetime.datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(datetime.timezone.utc)
+    except Exception:
+        return None
+
+
+def _status_reset_eta(value: str) -> str:
+    dt = _parse_status_time(value)
+    if dt is None:
+        return ""
+    delta = dt - datetime.datetime.now(datetime.timezone.utc)
+    seconds = int(delta.total_seconds())
+    if seconds <= 0:
+        return "soon"
+    hours, rem = divmod(seconds, 3600)
+    minutes = rem // 60
+    if hours > 0:
+        return f"~{hours}h{minutes:02d}m"
+    return f"~{minutes}m"
+
+
+def _operator_roles(cfg: dict) -> list[str]:
+    roles = cfg.get("roles")
+    if isinstance(roles, list):
+        cleaned = [str(item).strip().lower() for item in roles if str(item).strip()]
+        if cleaned:
+            return cleaned
+    role = str(cfg.get("role") or "unknown").strip().lower()
+    return [role or "unknown"]
+
+
+def _role_pool_summary(items: list[dict], role: str) -> dict:
+    role_items = [item for item in items if role in (item.get("roles") or [])]
+    counts = {
+        "idle": 0,
+        "leased": 0,
+        "running": 0,
+        "cooldown": 0,
+        "quota_exhausted": 0,
+        "auth_expired": 0,
+        "disabled": 0,
+        "other_blocked": 0,
+    }
+    dispatchable = 0
+    blocked = 0
+    next_available: str | None = None
+    for item in role_items:
+        state = str(item.get("runtime_state") or "unknown")
+        enabled = bool(item.get("enabled"))
+        available = bool(item.get("available"))
+        if state in counts:
+            counts[state] += 1
+        elif state != "idle":
+            counts["other_blocked"] += 1
+        if enabled and available and state == "idle":
+            dispatchable += 1
+        else:
+            blocked += 1
+        reset_at = str(item.get("reset_at") or "")
+        if state in {"cooldown", "quota_exhausted", "auth_expired"} and reset_at:
+            if next_available is None or reset_at < next_available:
+                next_available = reset_at
+    status = "ok" if dispatchable > 0 else "blocked" if role_items else "missing"
+    return {
+        "role": role,
+        "status": status,
+        "total": len(role_items),
+        "enabled": sum(1 for item in role_items if item.get("enabled")),
+        "available": sum(1 for item in role_items if item.get("available")),
+        "dispatchable": dispatchable,
+        "blocked": blocked,
+        "counts": counts,
+        "next_available_at": next_available or "",
+        "next_available_eta": _status_reset_eta(next_available or ""),
+        "items": role_items,
+    }
+
+
+def _operator_status_state(data: dict) -> str:
+    """Normalize runtime state from operator status files and older writers."""
+    if not isinstance(data, dict):
+        return ""
+    for key in ("runtime_state", "state", "operator_state", "current_state", "status"):
+        value = str(data.get(key) or "").strip().lower()
+        if value:
+            return value
+    return ""
+
+
+def _operator_status_reset_at(data: dict) -> str:
+    """Return the best reset/expiry timestamp exposed by status writers."""
+    if not isinstance(data, dict):
+        return ""
+    for key in ("expires_at", "cooldown_until", "quota_refresh_at", "reset_at", "next_available_at"):
+        value = str(data.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _operator_execution_class(operator_id: str, cfg: dict) -> str:
+    """Classify the execution surface instead of exposing only raw backend."""
+    probe = " ".join(
+        str(value or "").lower()
+        for value in (
+            operator_id,
+            cfg.get("role"),
+            cfg.get("backend"),
+            cfg.get("provider"),
+            cfg.get("model"),
+            cfg.get("command"),
+            cfg.get("operator_class"),
+        )
+    )
+    if any(token in probe for token in (
+        "browser",
+        "webwright",
+        "youtube",
+        "transcript",
+        "chatgpt_browser",
+        "deep_research",
+        "desktop_bridge",
+    )):
+        return "browser_agent"
+    if any(token in probe for token in (
+        "claude-cli",
+        "codex",
+        "reasonix",
+        "antigravity",
+        "glm",
+        "deepseek",
+        "gpt-",
+        "gemini",
+        "thunderomlx",
+        "openai_compatible",
+    )):
+        return "tui_pane"
+    if str(cfg.get("backend") or "").lower() in {"local", "shell", "command"}:
+        return "local_system"
+    return "service_worker"
+
+
+def _operator_scenario(cfg: dict) -> str:
+    role = str(cfg.get("role") or "").strip().lower()
+    roles = {str(item).strip().lower() for item in (cfg.get("roles") or []) if str(item).strip()}
+    command = str(cfg.get("command") or "").lower()
+    model = str(cfg.get("model") or "").lower()
+    if "youtube" in command or "transcript" in command or "youtube" in model:
+        return "youtube_transcript"
+    if "chatgpt" in command or "chatgpt" in model:
+        return "chatgpt_browser_reasoning"
+    if "deep_research" in command or "deep-research" in model:
+        return "deep_research"
+    if role in {"browser_task_operator", "browser_tool_operator"}:
+        return "browser_automation"
+    if "knowledge-extractor" in roles or role == "knowledge-extractor":
+        return "knowledge_extraction"
+    if "planner" in roles or role == "planner":
+        return "planning_architecture"
+    if "evaluator" in roles or role == "evaluator":
+        return "review_verification"
+    if "builder" in roles or role == "builder":
+        return "implementation_build"
+    return role or "general_execution"
+
+
+def _operator_vendor(provider: str) -> str:
+    mapping = {
+        "anthropic": "Anthropic",
+        "openai": "OpenAI",
+        "glm": "Zhipu GLM",
+        "deepseek": "DeepSeek",
+        "google": "Google",
+        "local": "Local",
+        "browser": "Browser",
+    }
+    key = str(provider or "").strip().lower()
+    return mapping.get(key, provider or "N/A")
+
+
+def _operator_model_parts(cfg: dict) -> tuple[str, str]:
+    model = str(cfg.get("model") or cfg.get("provider") or "").strip()
+    command = str(cfg.get("command") or "")
+    lowered = model.lower()
+    if "local_llm_model=" in command.lower():
+        match = re.search(r"LOCAL_LLM_MODEL=([^\s]+)", command)
+        if match:
+            return ("ThunderOMLX", match.group(1))
+    if "opus" in lowered:
+        return ("Claude", "Opus")
+    if "sonnet" in lowered:
+        return ("Claude", "Sonnet")
+    if "glm" in lowered:
+        return ("GLM", model)
+    if "deepseek" in lowered:
+        return ("DeepSeek", model.replace("deepseek-", ""))
+    if "gpt" in lowered:
+        effort = "medium" if "medium" in command.lower() else ""
+        return ("Codex GPT", f"{model} {effort}".strip())
+    if "gemini" in lowered:
+        return ("Gemini", model.replace("gemini-", ""))
+    if "thunderomlx" in lowered:
+        return ("ThunderOMLX", "Qwen3.6")
+    if "browser" in lowered or "youtube" in lowered or "webwright" in lowered:
+        return ("Browser Agent", model)
+    return (model or "N/A", model or "N/A")
+
+
+def _logical_operator_scenario(logical_operator: str, entry: dict) -> str:
+    text = f"{logical_operator} {entry.get('description') or ''}".lower()
+    if "browser" in text or "deepresearch" in text:
+        return "browser_research"
+    if "research" in text:
+        return "research_synthesis"
+    if "architecture" in text or "design" in text:
+        return "planning_architecture"
+    if "debug" in text or "root cause" in text:
+        return "debug_rca"
+    if "implementation" in text or "patch" in text or "code" in text:
+        return "implementation_build"
+    if "test" in text or "benchmark" in text or "verify" in text:
+        return "review_verification"
+    if "quota" in text:
+        return "resource_broker"
+    if "context" in text:
+        return "context_compression"
+    return "general_execution"
+
+
+def _logical_operator_summary(operators: dict[str, Any]) -> tuple[dict, dict[str, list[dict]]]:
+    """Load logical->physical bindings and invert them for the execution page."""
+    empty = {
+        "status": "missing",
+        "count": 0,
+        "supported": 0,
+        "missing_candidates": 0,
+        "items": [],
+        "sources": {"logical_operators": str(LOGICAL_OPERATORS_CONFIG)},
+    }
+    if not LOGICAL_OPERATORS_CONFIG.exists():
+        return empty, {}
+    try:
+        payload = json.loads(LOGICAL_OPERATORS_CONFIG.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {**empty, "status": "error", "errors": [f"{type(exc).__name__}: {exc}"]}, {}
+    logical_defs = payload.get("logical_operators", {}) if isinstance(payload, dict) else {}
+    bindings = payload.get("bindings", {}) if isinstance(payload, dict) else {}
+    if not isinstance(logical_defs, dict) or not isinstance(bindings, dict):
+        return {**empty, "status": "error", "errors": ["invalid logical operators registry shape"]}, {}
+
+    by_actor: dict[str, list[dict]] = {}
+    items = []
+    missing_candidates = 0
+    supported = 0
+    for name, binding in sorted(bindings.items()):
+        binding = binding if isinstance(binding, dict) else {}
+        entry = logical_defs.get(name, {}) if isinstance(logical_defs.get(name), dict) else {}
+        candidates = []
+        for raw_candidate in binding.get("candidates", []) or []:
+            if not isinstance(raw_candidate, dict):
+                continue
+            actor_id = str(raw_candidate.get("actor_id") or "").strip()
+            if not actor_id:
+                continue
+            registered = actor_id in operators
+            if not registered:
+                missing_candidates += 1
+            candidate = {
+                "actor_id": actor_id,
+                "priority": raw_candidate.get("priority"),
+                "condition": str(raw_candidate.get("condition") or "always"),
+                "registered": registered,
+            }
+            candidates.append(candidate)
+            by_actor.setdefault(actor_id, []).append({
+                "logical_operator": name,
+                "scenario": _logical_operator_scenario(name, entry),
+                "priority": raw_candidate.get("priority"),
+                "condition": str(raw_candidate.get("condition") or "always"),
+                "description": str(entry.get("description") or ""),
+            })
+        registered_count = sum(1 for item in candidates if item.get("registered"))
+        if registered_count:
+            supported += 1
+        items.append({
+            "logical_operator": name,
+            "operator_type": str(binding.get("operator_type") or entry.get("operator_type") or name),
+            "scenario": _logical_operator_scenario(name, entry),
+            "description": str(entry.get("description") or ""),
+            "selection_policy": str(binding.get("selection_policy") or ""),
+            "fallback_policy": str(binding.get("fallback_policy") or ""),
+            "candidate_count": len(candidates),
+            "registered_candidate_count": registered_count,
+            "missing_candidate_count": max(0, len(candidates) - registered_count),
+            "candidates": candidates,
+        })
+    return {
+        "status": "ok",
+        "count": len(items),
+        "supported": supported,
+        "missing_candidates": missing_candidates,
+        "items": items,
+        "sources": {"logical_operators": str(LOGICAL_OPERATORS_CONFIG)},
+    }, by_actor
+
+
+def _inferred_logical_operators(role: str, roles: list[str], scenario: str, execution_class: str) -> list[dict]:
+    """Fallback logical capabilities when a physical slot is pool-selected rather than statically bound."""
+    role_set = {str(item).lower() for item in roles}
+    role_set.add(str(role or "").lower())
+    inferred: list[dict] = []
+
+    def add(name: str, description: str, priority: int = 90) -> None:
+        inferred.append({
+            "logical_operator": name,
+            "scenario": scenario,
+            "priority": priority,
+            "condition": "inferred_by_role",
+            "description": description,
+            "source": "inferred",
+        })
+
+    if scenario == "youtube_transcript":
+        add("YouTubeTranscriptExtractor", "Browser agent pipeline for YouTube transcript capture and transcript fallback.", 1)
+    elif scenario == "chatgpt_browser_reasoning":
+        add("ChatGPTProReasoning", "Browser agent pipeline for ChatGPT Pro / advanced reasoning sessions.", 1)
+        add("DeepResearchChatGPT", "Premium ChatGPT browser research and synthesis path.", 2)
+    elif scenario == "deep_research":
+        add("DeepResearchBrowser", "Long-horizon browser-mediated deep research.", 1)
+    elif scenario == "browser_automation" or execution_class == "browser_agent":
+        add("DeepResearchBrowser", "Browser/session automation surface for research or webapp tasks.", 1)
+    elif "planner" in role_set:
+        add("DeepArchitect", "Architecture and plan generation.", 1)
+        add("ParallelExplorer", "Parallel planning and alternative exploration.", 2)
+    elif "evaluator" in role_set:
+        add("Verifier", "Independent implementation and evidence verification.", 1)
+        add("Critic", "Adversarial review of plans and outputs.", 2)
+    elif "builder" in role_set:
+        add("ImplementationWorker", "General-purpose implementation work.", 1)
+        add("PatchWorker", "Targeted patches and low-latency fixes.", 2)
+        add("ArtifactCurator", "Artifacts, handoffs, and evidence packaging.", 3)
+    elif "knowledge-extractor" in role_set:
+        add("ResearchScout", "Fast source gathering and knowledge extraction.", 1)
+    return inferred
+
+
 def _physical_operator_summary(limit: int = 8) -> dict:
     """Summarize physical operator fleet state for the main status dashboard."""
     registry_path = HARNESS_DIR / "config" / "physical-operators.json"
@@ -4432,6 +5029,7 @@ def _physical_operator_summary(limit: int = 8) -> dict:
         "dispatchable": 0,
         "busy": 0,
         "roles": {},
+        "role_pools": {},
         "items": [],
         "alerts": [],
         "recent_results": [],
@@ -4450,6 +5048,7 @@ def _physical_operator_summary(limit: int = 8) -> dict:
         operators = raw.get("operators", {}) if isinstance(raw, dict) else {}
         if not isinstance(operators, dict):
             return {**empty, "status": "error", "errors": ["invalid operators registry shape"]}
+        logical_summary, logical_by_actor = _logical_operator_summary(operators)
 
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         leases = {}
@@ -4482,26 +5081,63 @@ def _physical_operator_summary(limit: int = 8) -> dict:
         busy_count = 0
         for operator_id, cfg in operators.items():
             cfg = cfg if isinstance(cfg, dict) else {}
-            role = str(cfg.get("role") or "unknown")
-            roles[role] = roles.get(role, 0) + 1
+            op_roles = _operator_roles(cfg)
+            role = str(cfg.get("role") or (op_roles[0] if op_roles else "unknown") or "unknown")
+            provider = str(cfg.get("provider") or "")
+            model_family, model_variant = _operator_model_parts(cfg)
+            execution_class = _operator_execution_class(operator_id, cfg)
+            scenario = _operator_scenario(cfg)
+            logical_ops = sorted(
+                logical_by_actor.get(operator_id, []),
+                key=lambda item: (int(item.get("priority") or 999), str(item.get("logical_operator") or "")),
+            )
+            if not logical_ops:
+                logical_ops = _inferred_logical_operators(role, op_roles, scenario, execution_class)
+            for op_role in op_roles:
+                roles[op_role] = roles.get(op_role, 0) + 1
             enabled = bool(cfg.get("enabled", True))
             available = bool(cfg.get("available", True))
+            status_override = overrides.get(operator_id) or {}
+            override_state = _operator_status_state(status_override)
+            override_reset_at = _operator_status_reset_at(status_override)
             if enabled:
                 enabled_count += 1
             if available:
                 available_count += 1
             reg_state = cfg.get("state") if isinstance(cfg.get("state"), dict) else {}
             runtime_state = "idle"
+            reset_at = ""
+            runtime_state_source = "default"
+            quota_state = str(cfg.get("quota_guard_state") or "").strip().lower()
+            quota_reset_at = str(cfg.get("quota_refresh_at") or reg_state.get("cooldown_until") or "")
+            quota_reset_dt = _parse_status_time(quota_reset_at)
+            quota_block_active = (
+                quota_state
+                and quota_state not in {"ok", "ready"}
+                and (quota_reset_dt is None or quota_reset_dt > datetime.datetime.now(datetime.timezone.utc))
+            )
             if not enabled:
                 runtime_state = "disabled"
+                runtime_state_source = "registry"
             elif reg_state.get("availability") == "disabled" or reg_state.get("runtime_state") == "disabled":
                 runtime_state = "disabled"
+                runtime_state_source = "registry"
             elif operator_id in leases:
                 runtime_state = str(leases[operator_id].get("state") or "leased")
-            elif operator_id in overrides:
-                runtime_state = str(overrides[operator_id].get("runtime_state") or "idle")
+                reset_at = str(leases[operator_id].get("expires_at") or "")
+                runtime_state_source = "lease"
+            elif override_state:
+                runtime_state = override_state
+                reset_at = override_reset_at
+                runtime_state_source = "operator_status"
+            elif quota_block_active:
+                runtime_state = quota_state
+                reset_at = quota_reset_at
+                runtime_state_source = "registry_quota"
             elif str(reg_state.get("runtime_state") or ""):
                 runtime_state = str(reg_state.get("runtime_state"))
+                reset_at = str(reg_state.get("cooldown_until") or "")
+                runtime_state_source = "registry_state"
 
             is_busy = runtime_state in {"leased", "running", "draining", "cooldown", "quota_exhausted", "auth_expired"}
             if is_busy:
@@ -4520,15 +5156,46 @@ def _physical_operator_summary(limit: int = 8) -> dict:
             items.append({
                 "operator_id": operator_id,
                 "role": role,
+                "roles": op_roles,
                 "backend": str(cfg.get("backend") or "unknown"),
+                "provider": provider,
+                "vendor": _operator_vendor(provider),
+                "display_name": str(cfg.get("display_name") or operator_id),
+                "operator_class": str(cfg.get("operator_class") or ""),
+                "execution_class": execution_class,
+                "execution_surface": {
+                    "tui_pane": "TUI Pane",
+                    "browser_agent": "Browser Agent",
+                    "local_system": "Local/System",
+                    "service_worker": "Service Worker",
+                }.get(execution_class, execution_class),
+                "scenario": scenario,
+                "model_family": model_family,
+                "model_variant": model_variant,
+                "max_concurrency": cfg.get("max_concurrency", 1),
+                "logical_operators": logical_ops,
                 "enabled": enabled,
                 "available": available,
                 "runtime_state": runtime_state,
+                "runtime_state_source": runtime_state_source,
+                "reset_at": reset_at,
+                "reset_eta": _status_reset_eta(reset_at),
+                "quota_guard_state": quota_state or "ok",
                 "persona": str(cfg.get("persona") or ""),
                 "model": str(cfg.get("model") or cfg.get("provider") or ""),
-                "sprint_id": str(lease.get("sprint_id") or ""),
-                "task_id": str(lease.get("task_id") or ""),
-                "expires_at": str(lease.get("expires_at") or ""),
+                "sprint_id": str(
+                    lease.get("sprint_id")
+                    or status_override.get("sprint_id")
+                    or status_override.get("current_sprint_id")
+                    or ""
+                ),
+                "task_id": str(
+                    lease.get("task_id")
+                    or status_override.get("task_id")
+                    or status_override.get("current_task_id")
+                    or ""
+                ),
+                "expires_at": str(lease.get("expires_at") or reset_at or ""),
             })
 
         recent_results = _recent_operator_results(results_dir, multi_task_dir, limit=limit)
@@ -4537,11 +5204,11 @@ def _physical_operator_summary(limit: int = 8) -> dict:
             runtime_state = str(item.get("runtime_state") or "")
             enabled = bool(item.get("enabled"))
             available = bool(item.get("available"))
-            if enabled and available and runtime_state == "idle":
-                return (0, 0, str(item.get("operator_id") or ""))
             if runtime_state in {"leased", "running", "draining"}:
-                return (1, 0, str(item.get("operator_id") or ""))
+                return (0, 0, str(item.get("operator_id") or ""))
             if runtime_state in {"cooldown", "quota_exhausted", "auth_expired", "error"}:
+                return (1, 0, str(item.get("operator_id") or ""))
+            if enabled and available and runtime_state == "idle":
                 return (2, 0, str(item.get("operator_id") or ""))
             if runtime_state == "disabled" or not enabled:
                 return (3, 0, str(item.get("operator_id") or ""))
@@ -4564,6 +5231,11 @@ def _physical_operator_summary(limit: int = 8) -> dict:
             "dispatchable": dispatchable_count,
             "busy": busy_count,
             "roles": roles,
+            "role_pools": {
+                "planner": _role_pool_summary(items, "planner"),
+                "evaluator": _role_pool_summary(items, "evaluator"),
+            },
+            "logical_operators": logical_summary,
             "items": items,
             "alerts": alerts[:limit],
             "recent_results": recent_results,
@@ -4816,11 +5488,9 @@ def _multi_task_shell_panes_info() -> list:
         task_meta = latest_by_window.get(w_name) or {}
         task_status = str(task_meta.get("status") or "").lower()
         
-        status = "idle"
+        status = _headless_pane_status(p_cmd, p_title)
         if lease:
             status = "leased"
-        elif p_cmd not in {"zsh", "bash", "sh", "fish"}:
-            status = "running"
         elif task_status in {"completed", "completed_aligned", "failed", "failed_missing_handoff", "cancelled", "reaped", "reaped_stale_active"} or task_status.startswith("reaped"):
             status = "historical_active" if w_active == "1" else "reusable_idle"
             
@@ -4860,14 +5530,7 @@ def _builder_lab_panes_info() -> list:
         if len(parts) < 8:
             continue
         w_idx, w_name, w_active, p_idx, p_cmd, p_title, p_active, p_id = parts[:8]
-        status = "idle"
-        title_l = (p_title or "").lower()
-        if p_cmd not in {"zsh", "bash", "sh", "fish"}:
-            status = "running"
-        elif "leased" in title_l or "running" in title_l:
-            status = "running"
-        elif "idle" in title_l or "no active sprint" in title_l:
-            status = "idle"
+        status = _headless_pane_status(p_cmd, p_title)
         panes_list.append({
             "pane": f"{session}:0.{p_idx}",
             "session": session,
@@ -4895,6 +5558,45 @@ def _multi_task_panes_info() -> list:
     return _builder_lab_panes_info() + _multi_task_shell_panes_info()
 
 
+def _headless_pane_status(current_command: str, title: str) -> str:
+    cmd = str(current_command or "").strip().lower()
+    title_l = str(title or "").strip().lower()
+    if cmd and cmd not in {"zsh", "bash", "sh", "fish"}:
+        return "running"
+    if any(token in title_l for token in ("auth_expired", "quota_exhausted")):
+        return "auth_expired"
+    if "cooldown" in title_l:
+        return "cooldown"
+    if any(token in title_l for token in (
+        "prompt_blocked",
+        "permissions_prompt_blocked",
+        "survey_blocked",
+        "human_required",
+        "blocked",
+    )):
+        return "blocked"
+    if any(token in title_l for token in (
+        "leased",
+        "assigned",
+    )):
+        return "leased"
+    if any(token in title_l for token in (
+        "working/",
+        "running",
+        "ready_for_",
+        "pending_artifact",
+        "graph_node_",
+    )):
+        return "running"
+    if "reusable_idle" in title_l:
+        return "reusable_idle"
+    if "historical_active" in title_l:
+        return "historical_active"
+    if "idle" in title_l or "no active sprint" in title_l:
+        return "idle"
+    return "idle"
+
+
 def _multi_task_pane_pool_summary(panes: list[dict]) -> dict:
     counts = {
         "total": len(panes),
@@ -4903,18 +5605,216 @@ def _multi_task_pane_pool_summary(panes: list[dict]) -> dict:
         "historical_active": 0,
         "leased": 0,
         "running": 0,
+        "blocked": 0,
+        "auth_expired": 0,
+        "cooldown": 0,
     }
     for pane in panes:
         status = str(pane.get("status") or "idle")
         if status in counts:
             counts[status] += 1
         else:
-            counts["idle"] += 1
+            counts["blocked"] += 1
     counts["target_keep"] = max(0, int(os.environ.get("SOLAR_MULTI_TASK_IDLE_WINDOW_POOL_TARGET", "1") or "1"))
     counts["reuse_enabled"] = str(os.environ.get("SOLAR_MULTI_TASK_REUSE_TERMINAL_WINDOWS", "1") or "1").lower() not in {"0", "false", "no", "off"}
     counts["auto_close_enabled"] = str(os.environ.get("SOLAR_MULTI_TASK_AUTO_CLOSE_TERMINAL_WINDOWS", "1") or "1").lower() not in {"0", "false", "no", "off"}
     counts["compact_recommended"] = counts["historical_active"] > 0 or counts["reusable_idle"] > counts["target_keep"]
     return counts
+
+
+def _tail_text(path: Path, lines: int = 16, chars: int = 4000) -> str:
+    try:
+        if not path.exists():
+            return ""
+        data = path.read_text(encoding="utf-8", errors="replace")
+        return "\n".join(data[-chars:].splitlines()[-lines:])
+    except Exception:
+        return ""
+
+
+def _thunderomlx_endpoint_parts(base_url: str = THUNDEROMLX_BASE_URL) -> tuple[str, int]:
+    parsed = urllib.parse.urlparse(base_url)
+    host = parsed.hostname or "127.0.0.1"
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    return host, port
+
+
+def _http_json(url: str, *, timeout: float = 0.8, api_key: str = "") -> tuple[int | str, object]:
+    headers = {"accept": "application/json"}
+    if api_key:
+        headers["x-api-key"] = api_key
+        headers["authorization"] = f"Bearer {api_key}"
+    req = urllib.request.Request(url, headers=headers, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+            try:
+                return resp.status, json.loads(raw)
+            except Exception:
+                return resp.status, raw[:500]
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        try:
+            body = json.loads(raw)
+        except Exception:
+            body = raw[:500]
+        return exc.code, body
+    except Exception as exc:
+        return f"error:{type(exc).__name__}", str(exc)
+
+
+def _thunderomlx_listening_pids(port: int) -> list[int]:
+    if not shutil.which("lsof"):
+        return []
+    try:
+        proc = subprocess.run(
+            ["lsof", "-tiTCP:%s" % port, "-sTCP:LISTEN"],
+            text=True,
+            capture_output=True,
+            timeout=0.8,
+            check=False,
+        )
+        pids = []
+        for line in (proc.stdout or "").splitlines():
+            try:
+                pids.append(int(line.strip()))
+            except ValueError:
+                continue
+        return pids
+    except Exception:
+        return []
+
+
+def _thunderomlx_tmux_alive(session: str = THUNDEROMLX_TMUX_SESSION) -> bool:
+    if not shutil.which("tmux"):
+        return False
+    try:
+        proc = subprocess.run(
+            ["tmux", "has-session", "-t", session],
+            text=True,
+            capture_output=True,
+            timeout=0.8,
+            check=False,
+        )
+        return proc.returncode == 0
+    except Exception:
+        return False
+
+
+def _thunderomlx_status(*, refresh: bool = False) -> dict:
+    now = time.monotonic()
+    cached = _THUNDEROMLX_STATUS_CACHE.get("value")
+    if not refresh and cached and now - cached.get("_ts", 0.0) <= THUNDEROMLX_STATUS_CACHE_TTL_SECONDS:
+        value = dict(cached)
+        value.pop("_ts", None)
+        value["cache"] = "hit"
+        return value
+
+    host, port = _thunderomlx_endpoint_parts()
+    pids = _thunderomlx_listening_pids(port)
+    tmux_alive = _thunderomlx_tmux_alive()
+    health_code, health_body = _http_json(f"{THUNDEROMLX_BASE_URL}/health", timeout=0.8, api_key=THUNDEROMLX_AUTH_TOKEN)
+    models_code, models_body = _http_json(f"{THUNDEROMLX_BASE_URL}/v1/models", timeout=0.8, api_key=THUNDEROMLX_AUTH_TOKEN)
+
+    status = "stopped"
+    ok = False
+    reason = "port_not_listening"
+    model_count = None
+    default_model = None
+    loaded_models: list[str] = []
+
+    if isinstance(health_body, dict):
+        default_model = health_body.get("default_model")
+        engine_pool = health_body.get("engine_pool") if isinstance(health_body.get("engine_pool"), dict) else {}
+        for item in engine_pool.get("models") or []:
+            if isinstance(item, dict) and item.get("loaded"):
+                loaded_models.append(str(item.get("id") or ""))
+        if health_code == 200 and health_body.get("status") == "healthy":
+            status = "ok"
+            ok = True
+            reason = "health_endpoint_healthy"
+
+    if models_code == 200 and isinstance(models_body, dict) and isinstance(models_body.get("data"), list):
+        model_count = len(models_body["data"])
+        if not ok:
+            status = "ok"
+            ok = True
+            reason = "models_endpoint_ok"
+    elif models_code == 401 and pids:
+        status = "auth_required_alive"
+        ok = True
+        reason = "models_endpoint_requires_auth"
+
+    if not ok and pids:
+        status = "listening_unhealthy"
+        reason = "port_listening_but_health_failed"
+    elif not ok and tmux_alive:
+        status = "starting"
+        reason = "tmux_session_present_no_healthy_port"
+
+    value = {
+        "ok": ok,
+        "status": status,
+        "reason": reason,
+        "base_url": THUNDEROMLX_BASE_URL,
+        "host": host,
+        "port": port,
+        "port_listening": bool(pids),
+        "pids": pids,
+        "tmux_session": THUNDEROMLX_TMUX_SESSION,
+        "tmux_alive": tmux_alive,
+        "health_http": health_code,
+        "models_http": models_code,
+        "default_model": default_model,
+        "model_count": model_count,
+        "loaded_models": [m for m in loaded_models if m],
+        "start_script": str(THUNDEROMLX_START_SCRIPT),
+        "start_script_exists": THUNDEROMLX_START_SCRIPT.exists(),
+        "log_file": str(THUNDEROMLX_LOG_FILE),
+        "log_tail": _tail_text(THUNDEROMLX_LOG_FILE, lines=12),
+        "start_log": str(THUNDEROMLX_STATUS_START_LOG),
+        "start_log_tail": _tail_text(THUNDEROMLX_STATUS_START_LOG, lines=10),
+        "cache": "miss",
+        "_ts": now,
+    }
+    _THUNDEROMLX_STATUS_CACHE["value"] = dict(value)
+    value.pop("_ts", None)
+    return value
+
+
+def _start_thunderomlx_from_status() -> dict:
+    current = _thunderomlx_status(refresh=True)
+    if current.get("ok"):
+        return {"ok": True, "status": "already_running", "message": "ThunderOMLX is already reachable.", "thunderomlx": current}
+    if not THUNDEROMLX_START_SCRIPT.exists():
+        return {
+            "ok": False,
+            "status": "missing_start_script",
+            "error": f"start script not found: {THUNDEROMLX_START_SCRIPT}",
+            "thunderomlx": current,
+        }
+    THUNDEROMLX_STATUS_START_LOG.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        log = open(THUNDEROMLX_STATUS_START_LOG, "ab")
+        proc = subprocess.Popen(
+            ["/bin/bash", str(THUNDEROMLX_START_SCRIPT)],
+            cwd=str(HARNESS_DIR),
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+            env={**os.environ, "HARNESS_DIR": str(HARNESS_DIR)},
+        )
+        _THUNDEROMLX_STATUS_CACHE.clear()
+        _STATUS_PAYLOAD_CACHE.clear()
+        return {
+            "ok": True,
+            "status": "starting",
+            "pid": proc.pid,
+            "message": "ThunderOMLX start requested; watch status/log tail for readiness.",
+            "log": str(THUNDEROMLX_STATUS_START_LOG),
+        }
+    except Exception as exc:
+        return {"ok": False, "status": "error", "error": f"{type(exc).__name__}: {exc}", "thunderomlx": current}
 
 
 def _status_payload(limit: int = 50, sprint_id: str = "") -> dict:
@@ -4946,6 +5846,7 @@ def _status_payload(limit: int = 50, sprint_id: str = "") -> dict:
         "lab_screen": _lab_screen(capability_health, include_model_call=False),
         "multi_task_panes": multi_task_panes,
         "multi_task_pane_pool": _multi_task_pane_pool_summary(multi_task_panes),
+        "thunderomlx": _thunderomlx_status(),
         "recent_events": _read_jsonl(ALL_EVENTS, limit=limit, filter_synthetic=True),
         "kpi": _kpi(),
         "obsidian_wiki": _obsidian_wiki_readiness(),
@@ -5907,7 +6808,7 @@ tr:hover td {
 <nav class="tabbar" role="tablist">
   <button class="tab active" data-tab="overview">总览</button>
   <button class="tab" data-tab="sprint">Sprint</button>
-  <button class="tab" data-tab="main">物理算子</button>
+  <button class="tab" data-tab="main">算子执行</button>
   <button class="tab" data-tab="lab">Pane监控/无头池</button>
   <button class="tab" data-tab="events">事件</button>
   <button class="tab" data-tab="knowledge">知识库</button>
@@ -5922,6 +6823,8 @@ tr:hover td {
 
 <main>
   <section class="panel active" id="tab-overview">
+    <div class="card" style="margin-bottom: 1rem;"><h2>ThunderOMLX 本地模型</h2><div id="overview-thunderomlx">Loading...</div></div>
+    <div class="card" style="margin-bottom: 1rem;"><h2>Planner / Evaluator Pool</h2><div id="overview-role-pools">Loading...</div></div>
     <div class="overview-shell">
       <div class="card"><h2>当前主线</h2><div id="overview-sprint">Loading...</div></div>
       <div class="overview-stack">
@@ -5938,7 +6841,7 @@ tr:hover td {
       <div class="card"><h3>Knowledge Routing</h3><div id="overview-knowledge-routing">Loading...</div></div>
       <div class="card"><h3>Meta-Harness</h3><div id="overview-meta-harness">Loading...</div></div>
       <div class="card"><h3>PM Dispatch</h3><div id="overview-pm-dispatch">Loading...</div></div>
-      <div class="card"><h3>Physical Operators</h3><div id="overview-physical-operators">Loading...</div></div>
+      <div class="card"><h3>Operator Execution</h3><div id="overview-physical-operators">Loading...</div></div>
       <div class="card"><h3>DeepResearch Human Search</h3><div id="overview-human-search">Loading...</div></div>
       <div class="card"><h3>DeepResearch Quality</h3><div id="overview-research">Loading...</div></div>
       <div class="card"><h3>Contract Summary</h3><div id="overview-contract-summary">Loading...</div></div>
@@ -5958,7 +6861,7 @@ tr:hover td {
     <div class="card" id="meta-harness-card">Loading...</div>
     <h2>PM Dispatch</h2>
     <div class="card" id="pm-dispatch-card">Loading...</div>
-    <h2>Physical Operators</h2>
+    <h2>Operator Execution</h2>
     <div class="card" id="physical-operators-card">Loading...</div>
     <h2>DeepResearch Human Search</h2>
     <div class="card" id="human-search-card">Loading...</div>
@@ -5969,9 +6872,19 @@ tr:hover td {
   </section>
 
   <section class="panel" id="tab-main">
-    <h2>物理算子状态监控 (Physical Operators)</h2>
+    <h2>算子执行状态 (Operator Execution Status)</h2>
     <div class="card" id="operator-metrics-container">Loading...</div>
     <div class="card" style="margin-top: 1rem; padding: 0.85rem; background: rgba(255, 252, 244, 0.48); display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; border-radius: 18px; border: 1px solid var(--line);">
+      <div>
+        <label style="font-weight:900; font-size:0.85rem; margin-right:0.4rem;">执行载体:</label>
+        <select id="op-filter-class" onchange="window.opFilterClass=this.value; renderOperatorsPage();" style="padding:0.4rem; border-radius:8px; border:1px solid var(--line); font-weight:800; background: rgba(255, 255, 255, 0.76); color: var(--ink);">
+          <option value="all">全部载体</option>
+          <option value="tui_pane">TUI Pane</option>
+          <option value="browser_agent">Browser Agent</option>
+          <option value="local_system">Local/System</option>
+          <option value="service_worker">Service Worker</option>
+        </select>
+      </div>
       <div>
         <label style="font-weight:900; font-size:0.85rem; margin-right:0.4rem;">角色过滤:</label>
         <select id="op-filter-role" onchange="window.opFilterRole=this.value; renderOperatorsPage();" style="padding:0.4rem; border-radius:8px; border:1px solid var(--line); font-weight:800; background: rgba(255, 255, 255, 0.76); color: var(--ink);">
@@ -5992,16 +6905,19 @@ tr:hover td {
         </select>
       </div>
       <div style="flex-grow: 1;">
-        <input type="text" id="op-search" placeholder="搜索算子 ID、模型、Sprint..." oninput="window.opSearch=this.value; renderOperatorsPage();" style="width: 100%; max-width: 320px; padding:0.45rem 0.8rem; border-radius:8px; border:1px solid var(--line); font-weight:800; background: rgba(255, 255, 255, 0.76); color: var(--ink);" />
+        <input type="text" id="op-search" placeholder="搜索算子 ID、模型、厂家、逻辑算子、Sprint..." oninput="window.opSearch=this.value; renderOperatorsPage();" style="width: 100%; max-width: 380px; padding:0.45rem 0.8rem; border-radius:8px; border:1px solid var(--line); font-weight:800; background: rgba(255, 255, 255, 0.76); color: var(--ink);" />
       </div>
     </div>
     <div id="operator-cards-container" style="margin-top: 1rem;">Loading...</div>
+    <h2 style="margin-top: 2rem;">逻辑算子映射 (Logical Operators)</h2>
+    <div class="card" id="logical-operators-container">Loading...</div>
     <h2 style="margin-top: 2rem;">最近执行结果 (Operator Results)</h2>
     <div class="card" id="operator-results-detailed">Loading...</div>
   </section>
 
   <section class="panel" id="tab-lab">
-    <h2>Headless Pool 执行监控 (builder-lab + multi-task)</h2>
+    <h2>Headless Pool 与 Builder Runtime 监控</h2>
+    <div class="card" id="thunderomlx-card">Loading...</div>
     <div class="card" id="pane-metrics-container">Loading...</div>
     <div class="card" id="pane-pool-contract-card" style="margin-top: 1rem;">Loading...</div>
     <div class="card" style="margin-top: 1rem; padding: 0.85rem; background: rgba(255, 252, 244, 0.48); display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; border-radius: 18px; border: 1px solid var(--line);">
@@ -6014,6 +6930,9 @@ tr:hover td {
           <option value="historical_active">Historical Active (当前选中的历史壳)</option>
           <option value="leased">Leased (已租用)</option>
           <option value="running">Running command (执行中)</option>
+          <option value="blocked">Blocked (卡住/待人处理)</option>
+          <option value="auth_expired">Auth Expired (鉴权过期)</option>
+          <option value="cooldown">Cooldown (冷却中)</option>
         </select>
       </div>
       <div style="flex-grow: 1;">
@@ -6356,6 +7275,100 @@ function renderPhysicalOperators(data, compact) {
         '<td>' + esc(item.finished_at || item.started_at || '-') + '</td>' +
       '</tr>').join('') + '</table>' : '<div class="muted" style="margin-top:.8rem">Recent Results: none</div>');
 }
+
+function renderRolePools(data, compact) {
+  data = data || {};
+  const pools = data.role_pools || {};
+  const roles = ['planner', 'evaluator'];
+  if (!roles.some(role => pools[role])) {
+    return '<div class="muted">暂无 planner/evaluator pool 数据。</div>';
+  }
+  const poolCard = (role) => {
+    const p = pools[role] || {};
+    const items = p.items || [];
+    const blocked = Number(p.blocked || 0);
+    const dispatchable = Number(p.dispatchable || 0);
+    const status = p.status || (dispatchable > 0 ? 'ok' : 'blocked');
+    const color = dispatchable > 0 ? '#10b981' : '#fbbf24';
+    const line = items.slice(0, compact ? 3 : 8).map(item => {
+      const state = item.runtime_state || 'unknown';
+      const eta = item.reset_eta ? ' · ' + item.reset_eta : '';
+      return '<div class="research-path"><span class="tech-id">' + esc(item.operator_id || '-') + '</span><span>' +
+        statusBadge(state === 'idle' ? 'ok' : state === 'disabled' ? 'error' : 'warn') +
+        '<span class="muted" style="margin-left:.35rem;">' + esc(state + eta) + '</span></span></div>';
+    }).join('') || '<div class="muted">无该角色算子。</div>';
+    return '<div class="task-block">' +
+      '<div class="task-head"><div class="task-title">' + esc(role) + '</div><div>' + statusBadge(status === 'ok' ? 'ok' : 'warn') + '</div></div>' +
+      '<div class="health-metrics">' +
+        '<div class="mini-metric"><div class="kv-label">可调度</div><span class="num" style="color:' + color + ';">' + esc(dispatchable) + '/' + esc(p.total || 0) + '</span></div>' +
+        '<div class="mini-metric"><div class="kv-label">阻塞</div><span class="num">' + esc(blocked) + '</span></div>' +
+        '<div class="mini-metric"><div class="kv-label">下次可用</div><span class="num">' + esc(p.next_available_eta || 'N/A') + '</span></div>' +
+      '</div>' +
+      '<div class="muted" style="margin-top:.45rem;">idle ' + esc((p.counts || {}).idle || 0) +
+        ' · running ' + esc((p.counts || {}).running || 0) +
+        ' · cooldown ' + esc((p.counts || {}).cooldown || 0) +
+        ' · auth ' + esc((p.counts || {}).auth_expired || 0) + '</div>' +
+      (compact ? '' : '<div style="margin-top:.6rem;">' + line + '</div>') +
+      (compact && dispatchable === 0 ? '<div class="warn" style="margin-top:.45rem;">池子无可调度算子；planner/evaluator handoff 会排队，不会退回固定 pane。</div>' : '') +
+      '</div>';
+  };
+  return '<div class="research-shell"><div class="research-overview" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">' +
+    roles.map(poolCard).join('') +
+    '</div></div>';
+}
+
+function renderThunderOMLX(t, compact) {
+  t = t || {};
+  const ok = !!t.ok;
+  const badge = statusBadge(ok ? 'ok' : (t.status === 'starting' ? 'warn' : 'error'));
+  const loaded = (t.loaded_models || []).length ? (t.loaded_models || []).join(' · ') : 'N/A';
+  const pidText = (t.pids || []).length ? (t.pids || []).join(',') : 'N/A';
+  const metrics = '<div class="health-metrics">' +
+    '<div class="mini-metric"><div class="kv-label">Status</div><span class="num" style="color:' + (ok ? '#10b981' : '#fbbf24') + ';">' + esc(t.status || 'unknown') + '</span></div>' +
+    '<div class="mini-metric"><div class="kv-label">Port</div><span class="num">' + esc(String(t.port || 8002)) + '</span></div>' +
+    '<div class="mini-metric"><div class="kv-label">Listen</div><span class="num" style="color:' + (t.port_listening ? '#10b981' : '#fbbf24') + ';">' + esc(t.port_listening ? 'yes' : 'no') + '</span></div>' +
+    '<div class="mini-metric"><div class="kv-label">TMUX</div><span class="num" style="color:' + (t.tmux_alive ? '#10b981' : '#fbbf24') + ';">' + esc(t.tmux_alive ? 'on' : 'off') + '</span></div>' +
+    '</div>';
+  const details = '<div class="kv-grid">' +
+    kv('Base URL', t.base_url || 'N/A') +
+    kv('PID', pidText) +
+    kv('Health HTTP', String(t.health_http ?? 'N/A')) +
+    kv('Models HTTP', String(t.models_http ?? 'N/A')) +
+    kv('Model Count', String(t.model_count ?? 'N/A')) +
+    kv('Default Model', t.default_model || 'N/A') +
+    kv('Loaded Models', loaded) +
+    kv('Reason', t.reason || 'N/A') +
+    '</div>';
+  const actions = '<div class="actions">' +
+    '<button class="btn primary" onclick="startThunderOMLX()">启动 ThunderOMLX</button>' +
+    '<button class="btn" onclick="refresh()">刷新状态</button>' +
+    '<button class="btn" data-copy="' + esc(t.start_script || 'solar-harness scripts/thunderomlx_start_8002.sh') + '" onclick="copyText(this.dataset.copy)">复制启动脚本</button>' +
+    '</div><div id="thunderomlx-action-result" class="muted"></div>';
+  const logTail = t.log_tail ? '<details style="margin-top:.8rem"><summary class="tech-id">最近日志</summary><pre class="codebox" style="margin-top:.5rem; max-height:220px;">' + esc(t.log_tail) + '</pre></details>' : '';
+  if (compact) {
+    return badge + '<div class="muted" style="margin-top:.45rem">' + esc(t.reason || 'N/A') + '</div>' +
+      '<div class="tech-id" style="margin-top:.35rem">' + esc(t.base_url || 'N/A') + ' · pid=' + esc(pidText) + '</div>' +
+      '<div style="margin-top:.65rem"><button class="btn primary" onclick="startThunderOMLX()">启动</button></div>';
+  }
+  return '<div class="task-block">' +
+    '<div class="task-head"><div><div class="task-title">ThunderOMLX / Qwen3.6 本地服务</div><div class="muted">' + esc(t.base_url || 'N/A') + '</div></div><div>' + badge + '</div></div>' +
+    metrics + details + actions + logTail +
+    '<div class="muted">说明：页面只在你点击按钮时启动服务；普通刷新只做端口、tmux 和 API 健康探测。</div>' +
+    '</div>';
+}
+window.startThunderOMLX = function() {
+  const el = document.getElementById('thunderomlx-action-result');
+  if (el) el.textContent = 'starting...';
+  fetch('/api/thunderomlx/start', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'})
+    .then(r => r.json())
+    .then(data => {
+      if (el) el.textContent = (data.ok ? 'ok: ' : 'error: ') + (data.message || data.error || data.status || 'N/A');
+      setTimeout(refresh, 1400);
+    })
+    .catch(err => {
+      if (el) el.textContent = 'error: ' + (err && err.message ? err.message : String(err));
+    });
+};
 function clip(v, limit) {
   const s = String(v || '').replace(/\\s+/g, ' ').trim();
   return s.length > limit ? s.slice(0, limit - 1).trim() + '…' : s;
@@ -7236,13 +8249,224 @@ window.addEventListener('hashchange', () => activateTab((location.hash || '#over
 
 window.opFilterRole = 'all';
 window.opFilterState = 'all';
+window.opFilterClass = 'all';
 window.opSearch = '';
 window.paneFilterState = 'all';
 window.paneSearch = '';
 
+function opExecutionClassLabel(value) {
+  return ({
+    tui_pane: 'TUI Pane',
+    browser_agent: 'Browser Agent',
+    local_system: 'Local/System',
+    service_worker: 'Service Worker'
+  })[value] || value || 'N/A';
+}
+
+function opScenarioLabel(value) {
+  return ({
+    planning_architecture: '规划 / 架构',
+    implementation_build: '实现 / 构建',
+    review_verification: '评审 / 验证',
+    knowledge_extraction: '知识抽取',
+    browser_automation: '浏览器自动化',
+    youtube_transcript: 'YouTube Transcript',
+    chatgpt_browser_reasoning: 'ChatGPT Pro 进阶思考',
+    deep_research: 'Deep Research',
+    browser_research: 'Browser Research',
+    research_synthesis: '研究综合',
+    debug_rca: '根因分析',
+    resource_broker: '资源调度',
+    context_compression: '上下文压缩',
+    general_execution: '通用执行'
+  })[value] || value || 'N/A';
+}
+
+function opStateClass(item) {
+  const state = item.runtime_state || 'unknown';
+  if (!item.enabled || state === 'disabled') return 'missing';
+  if (state === 'idle') return 'ok';
+  if (state === 'leased' || state === 'running') return 'default';
+  return 'warn';
+}
+
+function opStateRank(item) {
+  const state = item.runtime_state || 'unknown';
+  if (state === 'running' || state === 'leased' || state === 'draining') return 0;
+  if (state === 'auth_expired' || state === 'quota_exhausted' || state === 'cooldown' || state === 'error') return 1;
+  if (state === 'idle' && item.enabled) return 2;
+  if (state === 'disabled' || !item.enabled) return 3;
+  return 4;
+}
+
+function opClassRank(item) {
+  return ({tui_pane: 0, browser_agent: 1, local_system: 2, service_worker: 3})[item.execution_class] ?? 9;
+}
+
+function opLogicalChips(item, limit) {
+  const logical = item.logical_operators || [];
+  if (!logical.length) return '<span class="muted">未绑定逻辑算子</span>';
+  const shown = logical.slice(0, limit || 3).map(lo =>
+    '<span class="badge default" style="background: rgba(255,255,255,0.05); margin:0 0.25rem 0.25rem 0;">' +
+    esc(lo.logical_operator || '-') + '</span>'
+  ).join('');
+  const more = logical.length > (limit || 3) ? '<span class="muted">+' + esc(logical.length - (limit || 3)) + '</span>' : '';
+  return shown + more;
+}
+
+function renderOperatorExecutionPage(po) {
+  po = po || {};
+  const items = po.items || [];
+  const logical = (po.logical_operators || {});
+  const logicalItems = logical.items || [];
+  const byClass = {};
+  const counts = {total: items.length, running: 0, blocked: 0, idle: 0, disabled: 0, tui: 0, browser: 0, logical: logicalItems.length};
+
+  items.forEach(item => {
+    const cls = item.execution_class || 'service_worker';
+    byClass[cls] = byClass[cls] || [];
+    byClass[cls].push(item);
+    if (cls === 'tui_pane') counts.tui++;
+    if (cls === 'browser_agent') counts.browser++;
+    if (!item.enabled || item.runtime_state === 'disabled') counts.disabled++;
+    else if (item.runtime_state === 'running' || item.runtime_state === 'leased' || item.runtime_state === 'draining') counts.running++;
+    else if (item.runtime_state === 'idle') counts.idle++;
+    else counts.blocked++;
+  });
+
+  document.getElementById('operator-metrics-container').innerHTML = `
+    <div class="health-metrics">
+      <div class="mini-metric"><div class="kv-label">总物理算子</div><span class="num">${counts.total}</span></div>
+      <div class="mini-metric"><div class="kv-label">TUI Pane</div><span class="num">${counts.tui}</span></div>
+      <div class="mini-metric"><div class="kv-label">Browser Agent</div><span class="num">${counts.browser}</span></div>
+      <div class="mini-metric"><div class="kv-label">Running / Leased</div><span class="num" style="color:#06b6d4;">${counts.running}</span></div>
+      <div class="mini-metric"><div class="kv-label">Blocked</div><span class="num" style="color:#f59e0b;">${counts.blocked}</span></div>
+      <div class="mini-metric"><div class="kv-label">Idle</div><span class="num" style="color:#10b981;">${counts.idle}</span></div>
+      <div class="mini-metric"><div class="kv-label">逻辑算子</div><span class="num">${counts.logical}</span></div>
+    </div>
+    <div class="muted" style="margin-top:0.55rem;">排序规则：执行载体 → 场景 → 厂家 → 模型族 → 型号 → 运行状态。物理算子负责“谁来跑”，逻辑算子负责“这一步是什么能力”。</div>
+  `;
+
+  const filtered = items.filter(item => {
+    const roles = Array.isArray(item.roles) ? item.roles.map(r => String(r).toLowerCase()) : [];
+    if (window.opFilterClass !== 'all' && item.execution_class !== window.opFilterClass) return false;
+    if (window.opFilterRole !== 'all' && item.role !== window.opFilterRole && !roles.includes(window.opFilterRole)) return false;
+    if (window.opFilterState !== 'all') {
+      const state = item.runtime_state || '';
+      if (window.opFilterState === 'disabled' && !(state === 'disabled' || !item.enabled)) return false;
+      if (window.opFilterState === 'leased' && state !== 'leased') return false;
+      if (window.opFilterState === 'busy' && !(state === 'leased' || state === 'running' || state === 'draining')) return false;
+      if (window.opFilterState === 'idle' && !(state === 'idle' && item.enabled)) return false;
+    }
+    if (window.opSearch) {
+      const q = window.opSearch.toLowerCase();
+      const haystack = [
+        item.operator_id, item.display_name, item.execution_class, item.scenario, item.vendor,
+        item.model_family, item.model_variant, item.model, item.backend, item.provider, item.role,
+        item.persona, item.runtime_state, item.sprint_id, item.task_id,
+        ...(item.logical_operators || []).map(lo => lo.logical_operator + ' ' + lo.scenario)
+      ].join(' ').toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  }).sort((a, b) => (
+    opClassRank(a) - opClassRank(b) ||
+    String(a.scenario || '').localeCompare(String(b.scenario || '')) ||
+    String(a.vendor || '').localeCompare(String(b.vendor || '')) ||
+    String(a.model_family || '').localeCompare(String(b.model_family || '')) ||
+    String(a.model_variant || '').localeCompare(String(b.model_variant || '')) ||
+    opStateRank(a) - opStateRank(b) ||
+    String(a.operator_id || '').localeCompare(String(b.operator_id || ''))
+  ));
+
+  const grouped = {};
+  filtered.forEach(item => {
+    const cls = item.execution_class || 'service_worker';
+    grouped[cls] = grouped[cls] || [];
+    grouped[cls].push(item);
+  });
+  const order = ['tui_pane', 'browser_agent', 'local_system', 'service_worker'];
+  const groupHtml = order.filter(cls => grouped[cls] && grouped[cls].length).map(cls => {
+    const rows = grouped[cls].map((item, idx) => {
+      const detailId = 'op-details-row-' + esc(String(cls + '-' + idx + '-' + (item.operator_id || '')).replace(/[^a-zA-Z0-9_-]/g, '-'));
+      const expires = item.expires_at ? new Date(item.expires_at).toLocaleTimeString() : 'N/A';
+      const leaseText = (item.sprint_id || item.task_id)
+        ? '<div><span class="tech-id">' + esc(item.sprint_id || '-') + '</span><div class="muted" style="font-size:0.72rem;">' + esc(item.task_id || '-') + ' · expires ' + esc(expires) + '</div></div>'
+        : '<span class="muted">N/A</span>';
+      return `
+        <div class="op-row" style="grid-template-columns: 1.35fr 1.05fr 1.1fr 1.25fr 0.85fr 1.2fr 0.55fr; gap:0.65rem; ${opStateRank(item) === 0 ? 'background: rgba(6,182,212,0.05);' : ''}">
+          <div><b style="font-size:0.92rem;color:#fff;">${esc(item.operator_id || '-')}</b><div class="muted" style="font-size:0.72rem;">${esc(item.display_name || '')}</div></div>
+          <div><span class="badge default" style="background:rgba(255,255,255,0.05);">${esc(opExecutionClassLabel(item.execution_class))}</span><div class="muted" style="font-size:0.72rem;margin-top:0.18rem;">${esc(opScenarioLabel(item.scenario))}</div></div>
+          <div><b>${esc(item.vendor || 'N/A')}</b><div class="tech-id" style="font-size:0.72rem;">${esc(item.model_family || 'N/A')} · ${esc(item.model_variant || 'N/A')}</div></div>
+          <div>${opLogicalChips(item, 4)}</div>
+          <div><span class="level-badge ${opStateClass(item)}">${esc(item.runtime_state || 'unknown')}</span><div class="muted" style="font-size:0.7rem;">${esc(item.runtime_state_source || 'N/A')}</div></div>
+          <div>${leaseText}</div>
+          <div><button class="btn" onclick="toggleOpDetails('${detailId}')" style="padding:4px 8px;font-size:0.72rem;border-radius:8px;">JSON</button></div>
+        </div>
+        <div id="${detailId}" class="op-row-details">
+          <div style="font-weight:900;font-size:0.8rem;color:var(--accent-2);margin-bottom:0.4rem;">执行状态详情</div>
+          <pre class="codebox" style="margin:0;padding:0.8rem;font-size:0.74rem;line-height:1.4;border-radius:10px;">${esc(JSON.stringify(item, null, 2))}</pre>
+        </div>
+      `;
+    }).join('');
+    return `
+      <div class="task-block" style="margin-bottom:1rem;">
+        <div class="task-head"><div><div class="task-title">${esc(opExecutionClassLabel(cls))}</div><div class="muted">${esc(grouped[cls].length)} 个物理执行载体</div></div><div>${statusBadge(grouped[cls].some(i => opStateRank(i) === 0) ? 'ok' : 'warn')}</div></div>
+        <div class="op-list" style="margin-top:0.7rem;">
+          <div class="op-row" style="grid-template-columns: 1.35fr 1.05fr 1.1fr 1.25fr 0.85fr 1.2fr 0.55fr; background:transparent;border:none;padding:0.2rem 1.2rem;box-shadow:none;pointer-events:none;">
+            <div class="muted" style="font-weight:900;">物理算子</div><div class="muted" style="font-weight:900;">类型 / 场景</div><div class="muted" style="font-weight:900;">厂家 / 模型 / 型号</div><div class="muted" style="font-weight:900;">承载逻辑算子</div><div class="muted" style="font-weight:900;">状态</div><div class="muted" style="font-weight:900;">Lease / 当前任务</div><div></div>
+          </div>
+          ${rows}
+        </div>
+      </div>
+    `;
+  }).join('');
+  document.getElementById('operator-cards-container').innerHTML = groupHtml || '<div class="muted" style="padding:2rem;text-align:center;">没有找到符合过滤条件的算子。</div>';
+
+  const logicalHtml = logicalItems.length ? `
+    <div class="health-metrics">
+      <div class="mini-metric"><div class="kv-label">逻辑算子</div><span class="num">${esc(logical.count || logicalItems.length)}</span></div>
+      <div class="mini-metric"><div class="kv-label">已绑定</div><span class="num">${esc(logical.supported || 0)}</span></div>
+      <div class="mini-metric"><div class="kv-label">缺失候选</div><span class="num" style="color:#f59e0b;">${esc(logical.missing_candidates || 0)}</span></div>
+    </div>
+    <table style="margin-top:0.8rem;"><tr><th>逻辑算子</th><th>场景</th><th>候选物理算子</th><th>策略</th></tr>
+      ${logicalItems.map(lo => {
+        const candidates = (lo.candidates || []).map(c => '<span class="badge ' + (c.registered ? 'default' : 'missing') + '" style="margin:0 0.25rem 0.25rem 0;">' + esc(c.actor_id || '-') + ' #' + esc(c.priority || '-') + '</span>').join('');
+        return '<tr><td><b class="tech-id">' + esc(lo.logical_operator || '-') + '</b><div class="muted" style="font-size:0.72rem;">' + esc((lo.description || '').slice(0, 120)) + '</div></td><td>' + esc(opScenarioLabel(lo.scenario)) + '</td><td>' + (candidates || 'N/A') + '</td><td>' + esc(lo.selection_policy || '-') + ' / ' + esc(lo.fallback_policy || '-') + '</td></tr>';
+      }).join('')}
+    </table>
+  ` : '<div class="muted">暂无 logical-operators.json 映射。</div>';
+  const logicalContainer = document.getElementById('logical-operators-container');
+  if (logicalContainer) logicalContainer.innerHTML = logicalHtml;
+
+  const recentResults = po.recent_results || [];
+  if (!recentResults.length) {
+    document.getElementById('operator-results-detailed').innerHTML = '<div class="muted">暂无最近执行结果记录。</div>';
+  } else {
+    let t = '<table><tr><th>Operator</th><th>模型 / 后端</th><th>Task</th><th>Sprint</th><th>Verdict / Status</th><th>Started</th><th>Finished</th></tr>';
+    recentResults.forEach(item => {
+      const finished = item.finished_at ? new Date(item.finished_at).toLocaleString() : (item.started_at ? 'running' : 'N/A');
+      const started = item.started_at ? new Date(item.started_at).toLocaleString() : 'N/A';
+      t += '<tr>' +
+        '<td><b class="tech-id" style="display:inline;">' + esc(item.operator_id || '-') + '</b><div class="muted" style="font-size:0.72rem;margin-top:0.15rem;">' + esc(item.source || 'operator-results') + '</div></td>' +
+        '<td><div style="font-weight:800;font-size:0.78rem;">' + esc(item.model || 'N/A') + '</div><div class="tech-id" style="font-size:0.72rem;margin-top:0.12rem;">' + esc(item.effective_provider || item.backend || 'N/A') + ' · route=' + esc(item.routing_model || 'N/A') + '</div><div class="muted" style="font-size:0.72rem;">requested=' + esc(item.requested_model || 'N/A') + '</div></td>' +
+        '<td><span class="tech-id">' + esc(item.task_id || '-') + '</span></td>' +
+        '<td><span class="tech-id">' + esc(item.sprint_id || '-') + '</span></td>' +
+        '<td>' + statusBadge(item.status || 'unknown') + '</td>' +
+        '<td>' + esc(started) + '</td>' +
+        '<td>' + esc(finished) + '</td>' +
+      '</tr>';
+    });
+    t += '</table>';
+    document.getElementById('operator-results-detailed').innerHTML = t;
+  }
+}
+
 function renderOperatorsPage() {
   const data = window.globalStatusData;
   if (!data || !data.physical_operators) return;
+  renderOperatorExecutionPage(data.physical_operators);
+  return;
   const po = data.physical_operators;
   const items = po.items || [];
   
@@ -7406,7 +8630,7 @@ function renderOperatorsPage() {
       const started = item.started_at ? new Date(item.started_at).toLocaleString() : 'N/A';
       t += '<tr>' +
         '<td><b class="tech-id" style="display:inline;">' + esc(item.operator_id || '-') + '</b><div class="muted" style="font-size:0.72rem; margin-top:0.15rem;">' + esc(item.source || 'operator-results') + '</div></td>' +
-        '<td><div style="font-weight:800; font-size:0.78rem;">' + esc(item.model || 'N/A') + '</div><div class="tech-id" style="font-size:0.72rem; margin-top:0.12rem;">' + esc(item.backend || 'N/A') + '</div></td>' +
+        '<td><div style="font-weight:800; font-size:0.78rem;">' + esc(item.model || 'N/A') + '</div><div class="tech-id" style="font-size:0.72rem; margin-top:0.12rem;">' + esc(item.effective_provider || item.backend || 'N/A') + ' · route=' + esc(item.routing_model || 'N/A') + '</div><div class="muted" style="font-size:0.72rem;">requested=' + esc(item.requested_model || 'N/A') + '</div></td>' +
         '<td><span class="tech-id">' + esc(item.task_id || '-') + '</span></td>' +
         '<td><span class="tech-id">' + esc(item.sprint_id || '-') + '</span></td>' +
         '<td>' + statusBadge(item.status || 'unknown') + '</td>' +
@@ -7420,7 +8644,8 @@ function renderOperatorsPage() {
 }
 
 window.toggleOpDetails = function(idx) {
-  const row = document.getElementById('op-details-row-' + idx);
+  const key = String(idx || '');
+  const row = document.getElementById(key.startsWith('op-details-row-') ? key : 'op-details-row-' + key);
   if (row) {
     if (row.style.display === 'none') {
       row.style.display = 'block';
@@ -7435,6 +8660,11 @@ function renderPanesPage() {
   if (!data || !data.multi_task_panes) return;
   const panes = data.multi_task_panes;
   const pool = data.multi_task_pane_pool || {};
+  const physical = data.physical_operators || {};
+  const builderOperators = (physical.items || []).filter(item => {
+    const roles = Array.isArray(item.roles) ? item.roles : [];
+    return item.role === 'builder' || roles.includes('builder');
+  });
   const modelCounts = {};
   const operatorTypeCounts = {};
   panes.forEach(p => {
@@ -7458,20 +8688,44 @@ function renderPanesPage() {
   const historicalActive = pool.historical_active ?? panes.filter(p => p.status === 'historical_active').length;
   const leased = pool.leased ?? panes.filter(p => p.status === 'leased').length;
   const running = pool.running ?? panes.filter(p => p.status === 'running').length;
+  const blocked = pool.blocked ?? panes.filter(p => p.status === 'blocked').length;
+  const authExpired = pool.auth_expired ?? panes.filter(p => p.status === 'auth_expired').length;
+  const cooldown = pool.cooldown ?? panes.filter(p => p.status === 'cooldown').length;
+  const runtimeTruth = {
+    total: builderOperators.length,
+    running: builderOperators.filter(item => item.runtime_state === 'running').length,
+    leased: builderOperators.filter(item => item.runtime_state === 'leased').length,
+    idle: builderOperators.filter(item => item.runtime_state === 'idle' && item.enabled).length,
+    cooldown: builderOperators.filter(item => item.runtime_state === 'cooldown').length,
+    authExpired: builderOperators.filter(item => item.runtime_state === 'auth_expired').length,
+    disabled: builderOperators.filter(item => item.runtime_state === 'disabled' || !item.enabled).length,
+  };
+  const runtimeBusy = runtimeTruth.running + runtimeTruth.leased;
+  const mismatch = runtimeBusy > 0 && running === 0;
   
   // Render metrics container
   document.getElementById('pane-metrics-container').innerHTML = `
     <div class="health-metrics">
-      <div class="mini-metric"><div class="kv-label">Total Panes</div><span class="num">${total}</span></div>
-      <div class="mini-metric"><div class="kv-label">Idle (未使用)</div><span class="num" style="color:#1f6f5b;">${idle}</span></div>
+      <div class="mini-metric"><div class="kv-label">Builder Runtime</div><span class="num">${runtimeTruth.total}</span></div>
+      <div class="mini-metric"><div class="kv-label">Runtime Busy</div><span class="num" style="color:#8b4a1d;">${runtimeBusy}</span></div>
+      <div class="mini-metric"><div class="kv-label">Runtime Idle</div><span class="num" style="color:#1f6f5b;">${runtimeTruth.idle}</span></div>
+      <div class="mini-metric"><div class="kv-label">Auth Expired</div><span class="num" style="color:#b45309;">${runtimeTruth.authExpired}</span></div>
+      <div class="mini-metric"><div class="kv-label">Cooldown</div><span class="num" style="color:#254f91;">${runtimeTruth.cooldown}</span></div>
+      <div class="mini-metric"><div class="kv-label">Disabled</div><span class="num" style="color:#6b7280;">${runtimeTruth.disabled}</span></div>
+    </div>
+    <div class="health-metrics" style="margin-top:0.7rem;">
+      <div class="mini-metric"><div class="kv-label">Headless Panes</div><span class="num">${total}</span></div>
+      <div class="mini-metric"><div class="kv-label">Pane Idle (壳空闲)</div><span class="num" style="color:#1f6f5b;">${idle}</span></div>
       <div class="mini-metric"><div class="kv-label">Reusable Idle</div><span class="num" style="color:#254f91;">${reusableIdle}</span></div>
       <div class="mini-metric"><div class="kv-label">Historical Active</div><span class="num" style="color:#8b4a1d;">${historicalActive}</span></div>
-      <div class="mini-metric"><div class="kv-label">Leased (已租用)</div><span class="num" style="color:#254f91;">${leased}</span></div>
-      <div class="mini-metric"><div class="kv-label">Running Command (执行中)</div><span class="num" style="color:#8b4a1d;">${running}</span></div>
+      <div class="mini-metric"><div class="kv-label">Pane Leased</div><span class="num" style="color:#254f91;">${leased}</span></div>
+      <div class="mini-metric"><div class="kv-label">Pane Running</div><span class="num" style="color:#8b4a1d;">${running}</span></div>
     </div>
     <div class="muted" style="margin-top:0.5rem;">模型分布：${modelSummary}</div>
     <div class="muted" style="margin-top:0.35rem;">算子类型：${operatorTypeSummary}</div>
-    <div class="muted" style="margin-top:0.5rem;">说明：'reusable_idle' 是可安全复用的历史 shell 窗口；'historical_active' 是当前 tmux 选中的历史壳，出于安全默认不自动杀。</div>
+    ${mismatch ? '<div class="warn" style="margin-top:0.45rem;">runtime truth 显示仍有 builder 正在执行；如果 pane running 很低，这是页面过去把 shell 型工作窗误判为 idle 的典型症状。</div>' : ''}
+    <div class="muted" style="margin-top:0.5rem;">说明：上排是 builder operator runtime truth；下排是 headless pane hygiene。'reusable_idle' 是可安全复用的历史 shell 窗口；'historical_active' 是当前 tmux 选中的历史壳，出于安全默认不自动杀。</div>
+    <div class="muted" style="margin-top:0.35rem;">补充：pane 池不等于完整 operator fleet；真正有没有人在干活，优先看 runtime truth。</div>
   `;
   document.getElementById('pane-pool-contract-card').innerHTML = `
     <div class="health-metrics">
@@ -7520,6 +8774,7 @@ function renderPanesPage() {
       else if (p.status === 'reusable_idle') statusClass = "default";
       else if (p.status === 'historical_active') statusClass = "warn";
       else if (p.status === 'leased') statusClass = "default";
+      else if (p.status === 'blocked' || p.status === 'auth_expired' || p.status === 'cooldown') statusClass = "warn";
       else statusClass = "warn";
       
       let leaseText = "-";
@@ -7666,6 +8921,8 @@ function render(data) {
   document.getElementById('overview-runtime').innerHTML = renderRuntimeInterfaces(data.runtime_interfaces || {});
   document.getElementById('overview-capabilities').innerHTML = renderCapabilityHealthSummary(data.capability_health || {});
   document.getElementById('overview-knowledge-routing').innerHTML = renderKnowledgeRouting(data.knowledge_routing || {}, true);
+  document.getElementById('overview-thunderomlx').innerHTML = renderThunderOMLX(data.thunderomlx || {}, true);
+  document.getElementById('thunderomlx-card').innerHTML = renderThunderOMLX(data.thunderomlx || {}, false);
   document.getElementById('knowledge-routing-card').innerHTML = renderKnowledgeRouting(data.knowledge_routing || {}, false);
   document.getElementById('overview-autoresearch-impact').innerHTML = renderAutoresearchImpact(data.autoresearch_impact || {}, true);
   document.getElementById('autoresearch-impact-card').innerHTML = renderAutoresearchImpact(data.autoresearch_impact || {}, false);
@@ -7673,6 +8930,7 @@ function render(data) {
   document.getElementById('meta-harness-card').innerHTML = renderMetaHarness(data.meta_harness || {}, false);
   document.getElementById('overview-pm-dispatch').innerHTML = renderPmDispatches(data.pm_dispatches || {}, true);
   document.getElementById('pm-dispatch-card').innerHTML = renderPmDispatches(data.pm_dispatches || {}, false);
+  document.getElementById('overview-role-pools').innerHTML = renderRolePools(data.physical_operators || {}, true);
   document.getElementById('overview-physical-operators').innerHTML = renderPhysicalOperators(data.physical_operators || {}, true);
   document.getElementById('physical-operators-card').innerHTML = renderPhysicalOperators(data.physical_operators || {}, false);
   document.getElementById('overview-contract-summary').innerHTML = renderContractSummary(data.contract_summary || {}, true);
@@ -7780,6 +9038,8 @@ class StatusHandler(BaseHTTPRequestHandler):
                 self._send_json(_save_ai_influence_mail_config(data))
             elif path == "/ai-influence/send":
                 self._send_json(_ai_influence_send_report(data))
+            elif path == "/api/thunderomlx/start":
+                self._send_json(_start_thunderomlx_from_status())
             else:
                 self._send_json({"ok": False, "error": "not found"}, status=404)
         except Exception as exc:
@@ -7801,6 +9061,10 @@ class StatusHandler(BaseHTTPRequestHandler):
             target = params.get("target", [""])[0]
             pane_id = params.get("pane_id", [""])[0]
             self._send_json(_pane_model_call_detail(target, pane_id))
+
+        elif path == "/api/thunderomlx/status":
+            refresh = params.get("refresh", ["0"])[0].lower() in ("1", "true", "yes")
+            self._send_json(_thunderomlx_status(refresh=refresh))
 
         elif path == "/contract-summary":
             self._send_text(_final_contract_summary_html(), content_type="text/html; charset=utf-8")

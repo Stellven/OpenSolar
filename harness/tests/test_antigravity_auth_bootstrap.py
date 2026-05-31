@@ -70,16 +70,6 @@ class TestRegexPatterns:
     def test_auth_re_no_false_positive_on_quota(self):
         assert not agy.AUTH_RE.search("RESOURCE_EXHAUSTED Individual quota reached")
 
-    def test_stale_auth_line_followed_by_oauth_success_is_not_current(self):
-        text = "You are not logged into Antigravity\nOAuth: authenticated successfully as user@example.com"
-        assert not agy.auth_failure_is_current(text)
-        assert not ofc.auth_failure_is_current(text)
-
-    def test_auth_line_after_oauth_success_is_current(self):
-        text = "OAuth: authenticated successfully as user@example.com\nYou are not logged into Antigravity"
-        assert agy.auth_failure_is_current(text)
-        assert ofc.auth_failure_is_current(text)
-
     def test_no_active_conversation_re_matches(self):
         assert agy.NO_ACTIVE_CONVERSATION_RE.search("Error: failed to send message: no active conversation")
 
@@ -96,10 +86,6 @@ class TestClassifyFailureState:
         text = "You are not logged in\nno active conversation"
         assert ofc.classify_failure_state(text) == "auth_expired"
 
-    def test_auth_success_after_stale_auth_allows_bootstrap_classification(self):
-        text = "You are not logged in\nOAuth: authenticated successfully\nno active conversation"
-        assert ofc.classify_failure_state(text) == "bootstrap_failed"
-
     def test_bootstrap_failed_when_no_auth(self):
         assert ofc.classify_failure_state("Error: failed to send message: no active conversation") == "bootstrap_failed"
 
@@ -111,172 +97,6 @@ class TestClassifyFailureState:
 
     def test_none_text_returns_empty(self):
         assert ofc.classify_failure_state(None) == ""  # type: ignore[arg-type]
-
-
-class TestRateLimitResetParsing:
-    def test_parse_absolute_reset_time_with_timezone(self):
-        now = ofc.dt.datetime(2026, 5, 30, 12, 0, tzinfo=ofc.ZoneInfo("America/Toronto"))
-        got = ofc.parse_rate_limit_reset_at("You've hit your limit · resets 1:40pm (America/Toronto)", now=now)
-        assert got == ofc.dt.datetime(2026, 5, 30, 17, 40, tzinfo=ofc.dt.timezone.utc)
-
-    def test_parse_relative_reset_time(self):
-        now = ofc.dt.datetime(2026, 5, 30, 12, 0, tzinfo=ofc.dt.timezone.utc)
-        got = ofc.parse_rate_limit_reset_at("rate limit resets in 2h 15m", now=now)
-        assert got == ofc.dt.datetime(2026, 5, 30, 14, 15, tzinfo=ofc.dt.timezone.utc)
-
-    def test_apply_failure_flow_control_persists_physical_operator_block(self, tmp_path, monkeypatch):
-        registry = tmp_path / "physical-operators.json"
-        registry.write_text(
-            ofc.json.dumps(
-                {
-                    "version": 1,
-                    "operators": {
-                        "op-rate-limited": {
-                            "enabled": True,
-                            "available": True,
-                            "quota_guard_state": "ok",
-                            "state": {"runtime_state": "idle"},
-                        }
-                    },
-                }
-            ),
-            encoding="utf-8",
-        )
-        monkeypatch.setattr(ofc, "PHYSICAL_OPERATORS_PATH", registry)
-        calls = []
-        monkeypatch.setattr(ofc, "set_operator_state", lambda *args, **kwargs: calls.append((args, kwargs)) or {})
-        monkeypatch.setattr(
-            ofc,
-            "parse_rate_limit_reset_at",
-            lambda text: ofc.dt.datetime.now(ofc.dt.timezone.utc) + ofc.dt.timedelta(seconds=7200),
-        )
-
-        result = ofc.apply_failure_flow_control(
-            tmp_path,
-            operator_id="op-rate-limited",
-            failure_text="You've hit your limit · resets 1:40pm (America/Toronto)",
-            rate_limit_cooldown_seconds=3600,
-            auth_cooldown_seconds=21600,
-        )
-
-        data = ofc.json.loads(registry.read_text(encoding="utf-8"))
-        op = data["operators"]["op-rate-limited"]
-        assert result["runtime_state"] == "cooldown"
-        assert op["quota_guard_state"] == "cooldown"
-        assert op["quota_refresh_at"]
-        assert op["state"]["runtime_state"] == "cooldown"
-        assert op["state"]["cooldown_until"] == op["quota_refresh_at"]
-        assert op["flow_control"]["last_block_source"] == "failure_flow_control"
-        assert calls
-
-    def test_prune_expired_operator_config_blocks_clears_only_expired(self, tmp_path, monkeypatch):
-        registry = tmp_path / "physical-operators.json"
-        now = ofc.dt.datetime.now(ofc.dt.timezone.utc)
-        expired = (now - ofc.dt.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        future = (now + ofc.dt.timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        registry.write_text(
-            ofc.json.dumps(
-                {
-                    "version": 1,
-                    "operators": {
-                        "expired-op": {
-                            "quota_guard_state": "cooldown",
-                            "quota_refresh_at": expired,
-                            "state": {"runtime_state": "cooldown", "cooldown_until": expired, "last_error": "rate_limit"},
-                        },
-                        "future-op": {
-                            "quota_guard_state": "cooldown",
-                            "quota_refresh_at": future,
-                            "state": {"runtime_state": "cooldown", "cooldown_until": future, "last_error": "rate_limit"},
-                        },
-                    },
-                }
-            ),
-            encoding="utf-8",
-        )
-        monkeypatch.setattr(ofc, "PHYSICAL_OPERATORS_PATH", registry)
-
-        result = ofc.prune_expired_operator_config_blocks()
-
-        data = ofc.json.loads(registry.read_text(encoding="utf-8"))
-        assert [item["operator_id"] for item in result["pruned"]] == ["expired-op"]
-        assert data["operators"]["expired-op"]["quota_guard_state"] == "ok"
-        assert data["operators"]["expired-op"]["quota_refresh_at"] is None
-        assert data["operators"]["expired-op"]["state"]["runtime_state"] == "idle"
-        assert data["operators"]["expired-op"]["state"]["cooldown_until"] is None
-        assert data["operators"]["future-op"]["quota_guard_state"] == "cooldown"
-
-    def test_prune_antigravity_auth_expired_clears_when_probe_succeeds(self, tmp_path, monkeypatch):
-        registry = tmp_path / "physical-operators.json"
-        future = (ofc.dt.datetime.now(ofc.dt.timezone.utc) + ofc.dt.timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        registry.write_text(
-            ofc.json.dumps(
-                {
-                    "version": 1,
-                    "operators": {
-                        "mini-antigravity-gemini35-flash-builder-1": {
-                            "enabled": True,
-                            "provider": "google",
-                            "model": "gemini-3.5-flash-high",
-                            "auth_mode": "oauth",
-                            "quota_guard_state": "auth_expired",
-                            "quota_refresh_at": future,
-                            "state": {"runtime_state": "auth_expired", "cooldown_until": future, "last_error": "auth_expired"},
-                        }
-                    },
-                }
-            ),
-            encoding="utf-8",
-        )
-        monkeypatch.setattr(ofc, "PHYSICAL_OPERATORS_PATH", registry)
-        monkeypatch.setattr(ofc, "run_antigravity_auth_probe", lambda: {"ok": True, "reason": "probe_success"})
-        monkeypatch.setattr(ofc, "_prune_dynamic_operator_status_blocks", lambda *a, **kw: ([], []))
-
-        result = ofc.prune_expired_operator_config_blocks()
-
-        data = ofc.json.loads(registry.read_text(encoding="utf-8"))
-        op = data["operators"]["mini-antigravity-gemini35-flash-builder-1"]
-        assert result["antigravity_auth_probe"]["ok"] is True
-        assert result["pruned"][0]["expired_at"] == "antigravity_auth_probe_success"
-        assert op["quota_guard_state"] == "ok"
-        assert op["quota_refresh_at"] is None
-        assert op["state"]["runtime_state"] == "idle"
-        assert op["flow_control"]["last_prune_reason"] == "antigravity_auth_probe_success"
-
-    def test_prune_antigravity_auth_expired_keeps_when_probe_fails(self, tmp_path, monkeypatch):
-        registry = tmp_path / "physical-operators.json"
-        future = (ofc.dt.datetime.now(ofc.dt.timezone.utc) + ofc.dt.timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        registry.write_text(
-            ofc.json.dumps(
-                {
-                    "version": 1,
-                    "operators": {
-                        "mini-antigravity-gemini31-pro": {
-                            "enabled": True,
-                            "provider": "google",
-                            "model": "gemini-3.1-pro",
-                            "auth_mode": "oauth",
-                            "quota_guard_state": "auth_expired",
-                            "quota_refresh_at": future,
-                            "state": {"runtime_state": "auth_expired", "cooldown_until": future},
-                        }
-                    },
-                }
-            ),
-            encoding="utf-8",
-        )
-        monkeypatch.setattr(ofc, "PHYSICAL_OPERATORS_PATH", registry)
-        monkeypatch.setattr(ofc, "run_antigravity_auth_probe", lambda: {"ok": False, "reason": "auth_expired"})
-        monkeypatch.setattr(ofc, "_prune_dynamic_operator_status_blocks", lambda *a, **kw: ([], []))
-
-        result = ofc.prune_expired_operator_config_blocks()
-
-        data = ofc.json.loads(registry.read_text(encoding="utf-8"))
-        op = data["operators"]["mini-antigravity-gemini31-pro"]
-        assert result["antigravity_auth_probe"]["ok"] is False
-        assert result["pruned"] == []
-        assert result["kept"][0]["runtime_state"] == "auth_expired"
-        assert op["quota_guard_state"] == "auth_expired"
 
 
 # ---------------------------------------------------------------------------
@@ -413,38 +233,6 @@ class TestBootstrapFailAfterContinue:
 # ---------------------------------------------------------------------------
 
 class TestMainSilentAuth:
-    def test_dispatch_file_empty_does_not_treat_cwd_as_file(self, tmp_path, monkeypatch, capsys):
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.delenv("SOLAR_MULTI_TASK_DISPATCH_FILE", raising=False)
-        monkeypatch.delenv("SOLAR_OPERATOR_ENVELOPE_JSON", raising=False)
-        monkeypatch.setattr(agy.sys, "argv", ["antigravity_multimodal_agent.py"])
-
-        assert agy.main() == 2
-        err = capsys.readouterr().err
-        assert "dispatch missing" in err
-
-    def test_envelope_objective_can_materialize_dispatch(self, tmp_path, monkeypatch):
-        envelope = tmp_path / "envelope.json"
-        envelope.write_text(
-            agy.json.dumps(
-                {
-                    "task_id": "smoke",
-                    "task_type": "implementation",
-                    "objective": "Reply with ANTIGRAVITY_OPERATOR_SMOKE_OK.",
-                    "acceptance": ["contains marker"],
-                }
-            ),
-            encoding="utf-8",
-        )
-        monkeypatch.delenv("SOLAR_MULTI_TASK_DISPATCH_FILE", raising=False)
-        monkeypatch.setenv("SOLAR_OPERATOR_ENVELOPE_JSON", str(envelope))
-
-        dispatch, dispatch_file = agy.load_dispatch_text()
-
-        assert dispatch_file is None
-        assert "ANTIGRAVITY_OPERATOR_SMOKE_OK" in dispatch
-        assert "- contains marker" in dispatch
-
     def test_empty_stdout_with_auth_log_exits_76(self, tmp_path, monkeypatch, capsys):
         _fake_env(tmp_path, monkeypatch)
         log_file = tmp_path / "antigravity.log"

@@ -33,8 +33,9 @@
   - bad_chars=false
 - Final Chinese report with current problem and next step.
 
-## Definition of Done
-- Graph all nodes passed.
-- Final report exists.
-- ThunderOMLX 8002 remains healthy.
-
+## Definition of Done (Planner — Quantified)
+- [ ] D1: Anthropic 响应 usage 中 cache_read_input_tokens 在缓存命中时 > 0（非流式 + 流式路径）
+- [ ] D2: 单元/回归测试 >= 3 条覆盖 cached_tokens 转换路径，pytest 全通过
+- [ ] D3: 活测试 HTTP 200 + bad_chars=false + 日志 Cache HIT 与 JSON usage cache_read_input_tokens 一致
+- [ ] D4: ThunderOMLX 8002 保持健康，缓存策略未变（Partial/Full/Approx Skip 均关闭）
+- [ ] D5: 最终中文报告写入 monitor-reports/thunderomlx-anthropic-cache-usage-observability.md

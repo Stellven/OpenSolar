@@ -84,12 +84,12 @@ planner_opus="$(SOLAR_USER_CONFIG="$tmp_cfg" bash "$HARNESS_DIR/lib/persona-conf
 builder_opus="$(SOLAR_USER_CONFIG="$tmp_cfg" bash "$HARNESS_DIR/lib/persona-config.sh" --print-config builder)"
 evaluator_opus="$(SOLAR_USER_CONFIG="$tmp_cfg" bash "$HARNESS_DIR/lib/persona-config.sh" --print-config evaluator)"
 rm -f "$tmp_cfg"
-assert_contains "$pm_opus" "MODEL_FLAG='--model opus'" "PM reads main config and resolves to Opus"
+assert_contains "$pm_opus" "MODEL_FLAG='--model claude-opus-4-8'" "PM reads main config and resolves to Opus"
 assert_contains "$pm_opus" "MODEL_ID='claude-opus'" "PM exposes registry model id"
-assert_contains "$planner_opus" "MODEL_FLAG='--model opus'" "planner reads main config and resolves to Opus"
-assert_contains "$builder_opus" "MODEL_FLAG='--model opus'" "builder reads main config and resolves to Opus"
-assert_contains "$evaluator_opus" "MODEL_FLAG='--model opus'" "evaluator reads main config and resolves to Opus"
-assert_contains "$pm_opus" "DISPLAY_MODEL='Claude Opus 4.7 (Anthropic)'" "PM display shows configured Opus route"
+assert_contains "$planner_opus" "MODEL_FLAG='--model claude-opus-4-8'" "planner reads main config and resolves to Opus"
+assert_contains "$builder_opus" "MODEL_FLAG='--model claude-opus-4-8'" "builder reads main config and resolves to Opus"
+assert_contains "$evaluator_opus" "MODEL_FLAG='--model claude-opus-4-8'" "evaluator reads main config and resolves to Opus"
+assert_contains "$pm_opus" "DISPLAY_MODEL='Claude Opus 4.8 (Anthropic)'" "PM display shows configured Opus route"
 
 printf '=== RESULT: PASS=%d FAIL=%d ===\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]]

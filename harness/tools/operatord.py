@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import fcntl
 import json
 import os
 import shlex
@@ -35,6 +36,7 @@ from typing import Any, Optional
 HOME = Path.home()
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
 PERSONAS_DIR = HARNESS_DIR / "personas"
+OPERATOR_DAEMON_DIR = HARNESS_DIR / "run" / "operator-daemons"
 PHYSICAL_OPERATORS_PATH = Path(
     os.environ.get(
         "SOLAR_MULTI_TASK_OPERATORS",
@@ -85,12 +87,84 @@ def _get_operator(operator_id: str) -> dict[str, Any]:
 
 
 def _die(msg: str) -> None:
-    print(f"[operatord] ERROR: {msg}", file=sys.stderr)
+    print(f"[operatord] ERROR: {msg}", file=sys.stderr, flush=True)
     sys.exit(1)
 
 
 def _info(msg: str) -> None:
-    print(f"[operatord] {msg}")
+    print(f"[operatord] {msg}", flush=True)
+
+
+def _daemon_lock_path(operator_id: str) -> Path:
+    OPERATOR_DAEMON_DIR.mkdir(parents=True, exist_ok=True)
+    return OPERATOR_DAEMON_DIR / f"{operator_id}.lock"
+
+
+def _daemon_pid_path(operator_id: str) -> Path:
+    OPERATOR_DAEMON_DIR.mkdir(parents=True, exist_ok=True)
+    return OPERATOR_DAEMON_DIR / f"{operator_id}.json"
+
+
+def _acquire_daemon_slot(operator_id: str, *, once: bool) -> tuple[Any | None, Path]:
+    lock_path = _daemon_lock_path(operator_id)
+    pid_path = _daemon_pid_path(operator_id)
+    lock_fh = open(lock_path, "a+", encoding="utf-8")
+    try:
+        fcntl.flock(lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        owner = {}
+        try:
+            owner = json.loads(pid_path.read_text(encoding="utf-8"))
+        except Exception:
+            owner = {}
+        owner_pid = owner.get("pid", "unknown")
+        owner_mode = "once" if owner.get("once") else "daemon"
+        _info(
+            f"Another operatord instance is already active for {operator_id} "
+            f"(pid={owner_pid}, mode={owner_mode})"
+        )
+        lock_fh.close()
+        return None, pid_path
+
+    pid_payload = {
+        "operator_id": operator_id,
+        "pid": os.getpid(),
+        "once": bool(once),
+        "started_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    pid_path.write_text(json.dumps(pid_payload, indent=2), encoding="utf-8")
+    return lock_fh, pid_path
+
+
+def _release_daemon_slot(lock_fh: Any | None, pid_path: Path) -> None:
+    try:
+        if pid_path.exists():
+            try:
+                payload = json.loads(pid_path.read_text(encoding="utf-8"))
+            except Exception:
+                payload = {}
+            if str(payload.get("pid") or "") == str(os.getpid()):
+                pid_path.unlink()
+    finally:
+        if lock_fh is not None:
+            try:
+                fcntl.flock(lock_fh, fcntl.LOCK_UN)
+            except Exception:
+                pass
+            try:
+                lock_fh.close()
+            except Exception:
+                pass
+
+
+def _read_status_snapshot(operator_id: str) -> dict[str, Any]:
+    path = HARNESS_DIR / "run" / "operator-status" / f"{operator_id}.json"
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -109,11 +183,38 @@ def _configured_launch_command(config: dict) -> str:
 
 def _claude_model_arg(model: str) -> str:
     value = str(model or "sonnet").strip().lower()
+    if value in {"glm", "glm-5", "glm-5.1", "zhipu", "zhipu-glm-5.1"}:
+        return "opus"
     if "opus" in value:
         return "opus"
     if "sonnet" in value or value in {"claude", "anthropic"}:
         return "sonnet"
     return value or "sonnet"
+
+
+def _model_route_metadata(config: dict[str, Any]) -> dict[str, str]:
+    requested_model = str(config.get("model") or "").strip()
+    provider = str(config.get("provider") or config.get("vendor") or "").strip().lower()
+    backend = str(config.get("backend") or "").strip().lower()
+    routing_model = requested_model
+    effective_provider = provider or str(config.get("backend") or "").strip()
+    effective_model = requested_model
+
+    if backend == "claude-cli":
+        routing_model = _claude_model_arg(requested_model)
+        if provider in {"glm", "zhipu", "zhipuai"}:
+            effective_provider = "zhipu"
+            effective_model = "glm-5.1"
+        elif provider in {"anthropic", "claude"}:
+            effective_provider = "anthropic"
+            effective_model = requested_model or routing_model
+
+    return {
+        "requested_model": requested_model or "N/A",
+        "routing_model": routing_model or "N/A",
+        "effective_provider": effective_provider or "N/A",
+        "effective_model": effective_model or "N/A",
+    }
 
 
 def _dispatch_file_for_env(result_dir: Path, envelope: dict[str, Any]) -> Path | None:
@@ -159,6 +260,8 @@ def _materialize_envelope_context(result_dir: Path, envelope: dict) -> dict[str,
         env["GRAPH"] = graph_path
     if str(envelope.get("node_id") or "").strip():
         env["NODE_ID"] = str(envelope["node_id"])
+    if str(envelope.get("task_id") or "").strip():
+        env["TASK_ID"] = str(envelope["task_id"])
     if str(envelope.get("sprint_id") or "").strip():
         env["SID"] = str(envelope["sprint_id"])
     result_path = str(envelope.get("result_path") or "").strip()
@@ -178,7 +281,17 @@ def _materialize_envelope_context(result_dir: Path, envelope: dict) -> dict[str,
 def _claude_print_command(config: dict[str, Any]) -> list[str]:
     model = _claude_model_arg(str(config.get("model") or "sonnet"))
     empty_mcp = HARNESS_DIR / "config" / "empty-mcp.json"
+    provider = str(config.get("provider") or "").strip().lower()
+    provider_env: list[str] = []
+    if provider in {"glm", "zhipu", "zhipuai"}:
+        provider_env = [
+            'source "$HARNESS_DIR/model-config.sh" 2>/dev/null || true',
+            'export ANTHROPIC_BASE_URL="${ZHIPU_BASE_URL:-https://api.z.ai/api/anthropic}"',
+            'export ANTHROPIC_API_KEY="${ZHIPU_API_KEY:-${ZHIPU_AUTH_TOKEN:-}}"',
+            'export ANTHROPIC_DEFAULT_OPUS_MODEL="${ZHIPU_MODEL:-GLM-5.1}"',
+        ]
     command = "\n".join([
+        *provider_env,
         "export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
         "export CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1",
         "export DISABLE_NON_ESSENTIAL_MODEL_CALLS=1",
@@ -328,6 +441,7 @@ def _apply_failure_runtime_override(
 
 def cmd_daemon(args: argparse.Namespace) -> int:
     """Run the operator as a persistent daemon (or process one task with --once)."""
+    import selectors
     import signal
     import subprocess
     import time
@@ -338,6 +452,7 @@ def cmd_daemon(args: argparse.Namespace) -> int:
         get_operator_runtime_state,
         list_inbox_tasks,
         release_operator_lease,
+        update_operator_lease_metadata,
         update_operator_lease_state,
         write_heartbeat,
         write_result,
@@ -348,6 +463,10 @@ def cmd_daemon(args: argparse.Namespace) -> int:
     operator_id: str = args.operator
     once: bool = args.once
     poll_interval: float = args.poll_interval
+    once_max_wait_seconds: float = float(args.once_max_wait_seconds)
+    task_timeout_seconds: float = float(
+        os.environ.get("SOLAR_OPERATORD_TASK_TIMEOUT_SECONDS", "3600")
+    )
     config = _get_operator(operator_id)
 
     if not config.get("enabled", False) and not args.force:
@@ -358,22 +477,74 @@ def cmd_daemon(args: argparse.Namespace) -> int:
         return 1
 
     resolved_persona: str = config.get("persona") or config.get("role", "")
+    model_route = _model_route_metadata(config)
 
     # ── Signal handling ───────────────────────────────────────────────────────
     _state: dict[str, Any] = {
         "drain": False,
         "current_state": "idle",
         "current_proc": None,
+        "current_task_id": None,
     }
+
+    def _pid_exists(pid: int | None) -> bool:
+        if not pid or pid <= 0:
+            return False
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            return False
+        return True
+
+    def _terminate_worker(pid: int | None, *, reason: str) -> bool:
+        if not _pid_exists(pid):
+            return False
+        try:
+            os.killpg(pid, signal.SIGTERM)
+            _info(f"Sent SIGTERM to worker process group pid={pid} ({reason})")
+            return True
+        except Exception:
+            try:
+                os.kill(pid, signal.SIGTERM)
+                _info(f"Sent SIGTERM to worker pid={pid} ({reason})")
+                return True
+            except Exception as exc:
+                _info(f"Unable to terminate worker pid={pid} ({reason}): {exc}")
+                return False
+
+    def _kill_worker_force(pid: int | None, *, reason: str) -> bool:
+        if not _pid_exists(pid):
+            return False
+        try:
+            os.killpg(pid, signal.SIGKILL)
+            _info(f"Sent SIGKILL to worker process group pid={pid} ({reason})")
+            return True
+        except Exception:
+            try:
+                os.kill(pid, signal.SIGKILL)
+                _info(f"Sent SIGKILL to worker pid={pid} ({reason})")
+                return True
+            except Exception as exc:
+                _info(f"Unable to force kill worker pid={pid} ({reason}): {exc}")
+                return False
 
     def _handle_signal(signum: int, frame: Any) -> None:
         _info(f"Signal {signum} received — transitioning to draining")
         _state["drain"] = True
         _state["current_state"] = "draining"
+        proc = _state.get("current_proc")
+        if proc is not None:
+            try:
+                _terminate_worker(int(proc.pid), reason=f"signal:{signum}")
+            except Exception:
+                pass
         write_heartbeat(
             operator_id,
             "draining",
+            current_task_id=_state.get("current_task_id"),
+            worker_pid=int(proc.pid) if proc is not None else None,
             resolved_persona=resolved_persona,
+            model_route=model_route,
         )
 
     signal.signal(signal.SIGTERM, _handle_signal)
@@ -383,249 +554,430 @@ def cmd_daemon(args: argparse.Namespace) -> int:
         f"Daemon starting — operator_id={operator_id} "
         f"once={once} poll_interval={poll_interval}s"
     )
-    write_heartbeat(operator_id, "idle", resolved_persona=resolved_persona)
+    daemon_lock_fh, daemon_pid_path = _acquire_daemon_slot(operator_id, once=once)
+    if daemon_lock_fh is None:
+        return 0
+    write_heartbeat(operator_id, "idle", resolved_persona=resolved_persona, model_route=model_route)
     _state["current_state"] = "idle"
 
     processed: int = 0
+    loop_started_at = time.monotonic()
 
-    while True:
-        # ── Drain check ───────────────────────────────────────────────────────
-        if _state["drain"]:
-            _info("Drain flag set — exiting daemon loop")
-            write_heartbeat(operator_id, "idle", resolved_persona=resolved_persona)
-            break
+    def _once_wait_expired() -> bool:
+        if not once or processed > 0:
+            return False
+        if once_max_wait_seconds <= 0:
+            return False
+        return (time.monotonic() - loop_started_at) >= once_max_wait_seconds
 
-        # ── Heartbeat ─────────────────────────────────────────────────────────
-        write_heartbeat(
-            operator_id,
-            _state["current_state"],
-            resolved_persona=resolved_persona,
-        )
+    try:
+        while True:
+            # ── Drain check ───────────────────────────────────────────────────────
+            if _state["drain"]:
+                _info("Drain flag set — exiting daemon loop")
+                write_heartbeat(operator_id, "idle", resolved_persona=resolved_persona, model_route=model_route)
+                break
 
-        # ── Poll inbox ────────────────────────────────────────────────────────
-        tasks = list_inbox_tasks(operator_id)
+            lease_for_telemetry = get_operator_lease(operator_id)
+            telemetry_task_id = None
+            if lease_for_telemetry and _state["current_state"] != "running":
+                telemetry_task_id = str(lease_for_telemetry.get("task_id") or "") or None
 
-        if not tasks:
-            if once:
-                if processed > 0:
-                    # Already processed the one task; exit normally.
-                    break
-                # Nothing yet — keep waiting.
-            time.sleep(poll_interval)
-            continue
+            # ── Heartbeat ─────────────────────────────────────────────────────────
+            write_heartbeat(
+                operator_id,
+                _state["current_state"],
+                current_task_id=telemetry_task_id,
+                worker_pid=int(lease_for_telemetry.get("worker_pid")) if lease_for_telemetry and str(lease_for_telemetry.get("worker_pid") or "").isdigit() else None,
+                resolved_persona=resolved_persona,
+                model_route=model_route,
+            )
 
-        # ── Claim first available task ────────────────────────────────────────
-        task_id, envelope, envelope_path = tasks[0]
+            # ── Poll inbox ────────────────────────────────────────────────────────
+            tasks = list_inbox_tasks(operator_id)
 
-        lease = get_operator_lease(operator_id)
-        if lease is None or lease.get("task_id") != task_id:
-            recovered_lease = None
-            if lease is None:
-                try:
-                    recovered_lease = acquire_operator_lease(
-                        operator_id=operator_id,
-                        task_id=task_id,
-                        sprint_id=str(envelope.get("sprint_id") or ""),
-                        node_id=str(envelope.get("node_id") or ""),
-                        ttl_seconds=int(envelope.get("lease_ttl_seconds") or 3600),
-                        initial_state="leased",
-                    )
-                    lease = recovered_lease
-                    _info(f"Recovered missing/expired lease for task {task_id}")
-                except Exception as exc:
-                    _info(f"Lease recovery failed for task {task_id}: {exc}")
-            # Lease missing or for a different task; skip and wait.
-            if lease is not None and lease.get("task_id") == task_id:
-                pass
-            else:
-                _info(
-                    f"No valid lease found for task {task_id} "
-                    f"(current lease task: {lease.get('task_id') if lease else 'none'})"
-                )
+            if not tasks:
+                if once:
+                    if processed > 0:
+                        # Already processed the one task; exit normally.
+                        break
+                    if _once_wait_expired():
+                        _info(
+                            f"Once mode max wait exceeded with no inbox task "
+                            f"(operator_id={operator_id}, waited={once_max_wait_seconds}s)"
+                        )
+                        break
+                    # Nothing yet — keep waiting.
                 time.sleep(poll_interval)
                 continue
 
-        if lease.get("state") not in ("leased",):
-            _info(f"Task {task_id} lease state={lease.get('state')} — skipping")
-            time.sleep(poll_interval)
-            continue
+            # ── Claim first available task ────────────────────────────────────────
+            # If we already hold a lease for a specific task, prioritise that task
+            # from the inbox so a stale head (leftover from a previous failed run)
+            # cannot block the queue forever.
+            lease = get_operator_lease(operator_id)
+            leased_task_id = lease.get("task_id") if lease else None
 
-        _info(f"Claiming task {task_id}")
-        try:
-            update_operator_lease_state(operator_id, "running")
-        except RuntimeError as exc:
-            _info(f"Cannot transition lease to running: {exc}")
-            time.sleep(poll_interval)
-            continue
-
-        _state["current_state"] = "running"
-        write_heartbeat(
-            operator_id,
-            "running",
-            current_task_id=task_id,
-            resolved_persona=resolved_persona,
-        )
-
-        # ── Execute ───────────────────────────────────────────────────────────
-        sprint_id: str = str(envelope.get("sprint_id", ""))
-        node_id: str = str(envelope.get("node_id", ""))
-        started_at: str = _now_utc()
-        result_status: str = "failed"
-        exit_code: int = -1
-        log_lines: list[str] = []
-
-        result_dir = OPERATOR_RESULTS_DIR / operator_id / task_id
-        result_dir.mkdir(parents=True, exist_ok=True)
-        log_path = result_dir / "output.log"
-        exec_env = os.environ.copy()
-        exec_env.update(_materialize_envelope_context(result_dir, envelope))
-        pm_result_path = _pm_result_path(envelope) if _is_pm_dispatch_task(envelope) else None
-        if pm_result_path is not None:
-            try:
-                pm_result_path.parent.mkdir(parents=True, exist_ok=True)
-                if pm_result_path.exists():
-                    pm_result_path.unlink()
-            except Exception as exc:
-                _info(f"Unable to clear stale pm result {pm_result_path}: {exc}")
-
-        cmd = _build_command(config, envelope)
-        _info(f"Executing: {' '.join(shlex.quote(part) for part in cmd[:8])}")
-
-        try:
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                env=exec_env,
-            )
-            _state["current_proc"] = proc
-
-            with open(log_path, "w", encoding="utf-8") as log_f:
-                assert proc.stdout is not None
-                for line in proc.stdout:
-                    from operator_runtime import scrub_secrets  # noqa: E402
-                    scrubbed = scrub_secrets(line)
-                    log_f.write(scrubbed)
-                    log_lines.append(scrubbed.rstrip())
-
-            proc.wait()
-            exit_code = proc.returncode
-            result_status = "completed" if exit_code == 0 else "failed"
-
-        except Exception as exc:
-            _info(f"Execution error: {exc}")
-            log_lines.append(f"[ERROR] {exc}")
-            result_status = "error"
-        finally:
-            _state["current_proc"] = None
-
-        if _state["drain"]:
-            # Signal arrived mid-execution; mark draining then tidy up.
-            result_status = "draining"
-            _state["current_state"] = "draining"
-
-        finished_at: str = _now_utc()
-
-        if result_status == "completed" and pm_result_path is not None:
-            if not pm_result_path.exists():
-                log_lines.append(f"[ERROR] missing pm_result: {pm_result_path}")
-                result_status = "failed_missing_pm_result"
-                exit_code = exit_code or 65
-            else:
-                try:
-                    started_dt = _parse_utc(started_at)
-                    result_dt = dt.datetime.fromtimestamp(
-                        pm_result_path.stat().st_mtime,
-                        tz=dt.timezone.utc,
+            if leased_task_id and leased_task_id != tasks[0][0]:
+                # Active lease is for a task that is NOT at the head.
+                matching = [(tid, env, p) for tid, env, p in tasks if tid == leased_task_id]
+                if matching:
+                    # Re-order: leased task first.
+                    tasks = matching + [t for t in tasks if t[0] != leased_task_id]
+                    _info(
+                        f"Leased task {leased_task_id} is not inbox head; "
+                        f"re-ordered tasks to process leased task first"
                     )
-                    if result_dt < started_dt:
-                        log_lines.append(f"[ERROR] stale pm_result predates current run: {pm_result_path}")
-                        result_status = "failed_stale_pm_result"
-                        exit_code = exit_code or 66
-                except Exception:
+                else:
+                    # Orphaned lease — leased task is absent from inbox (already
+                    # processed or never arrived).  Release the stale lease so the
+                    # head can be claimed on the next cycle.
+                    _info(
+                        f"Releasing orphaned lease for task {leased_task_id} "
+                        f"(task not found in inbox)"
+                    )
+                    release_operator_lease(operator_id, reason="orphaned_lease_absent_task")
+                    lease = None
+                    leased_task_id = None
+
+            task_id, envelope, envelope_path = tasks[0]
+
+            if lease is None or lease.get("task_id") != task_id:
+                recovered_lease = None
+                if lease is None:
+                    try:
+                        recovered_lease = acquire_operator_lease(
+                            operator_id=operator_id,
+                            task_id=task_id,
+                            sprint_id=str(envelope.get("sprint_id") or ""),
+                            node_id=str(envelope.get("node_id") or ""),
+                            ttl_seconds=int(envelope.get("lease_ttl_seconds") or 3600),
+                            initial_state="leased",
+                        )
+                        lease = recovered_lease
+                        _info(f"Recovered missing/expired lease for task {task_id}")
+                    except Exception as exc:
+                        _info(f"Lease recovery failed for task {task_id}: {exc}")
+                # Lease missing or for a different task; skip and wait.
+                if lease is not None and lease.get("task_id") == task_id:
                     pass
-
-        if result_status == "completed" and pm_result_path is not None:
-            try:
-                completed = subprocess.run(
-                    _pm_dispatch_complete_command(task_id),
-                    capture_output=True,
-                    text=True,
-                    env=exec_env,
-                    timeout=30,
-                )
-                stdout = completed.stdout.strip()
-                stderr = completed.stderr.strip()
-                if stdout:
-                    log_lines.append(stdout)
-                if stderr:
-                    log_lines.append(stderr)
-                if completed.returncode != 0:
-                    log_lines.append(
-                        f"[WARN] pm_dispatch complete returned {completed.returncode} for {task_id}"
+                else:
+                    _info(
+                        f"No valid lease found for task {task_id} "
+                        f"(current lease task: {lease.get('task_id') if lease else 'none'})"
                     )
-            except Exception as exc:
-                log_lines.append(f"[WARN] pm_dispatch complete hook failed: {exc}")
+                    if _once_wait_expired():
+                        _info(
+                            f"Once mode max wait exceeded while waiting for valid lease "
+                            f"(operator_id={operator_id}, task_id={task_id})"
+                        )
+                        break
+                    time.sleep(poll_interval)
+                    continue
 
-        # ── Write result artifact ─────────────────────────────────────────────
-        log_tail = "\n".join(log_lines[-50:])
-        flow_control_decision: dict[str, Any] | None = None
-        if result_status not in {"completed", "draining"} and log_tail.strip():
+            if lease.get("state") == "running":
+                status_snapshot = _read_status_snapshot(operator_id)
+                status_state = str(status_snapshot.get("state") or "").strip().lower()
+                status_task_id = str(status_snapshot.get("current_task_id") or "").strip()
+                worker_pid_raw = lease.get("worker_pid")
+                daemon_pid_raw = lease.get("daemon_pid")
+                try:
+                    worker_pid = int(worker_pid_raw) if worker_pid_raw is not None else None
+                except Exception:
+                    worker_pid = None
+                try:
+                    daemon_pid = int(daemon_pid_raw) if daemon_pid_raw is not None else None
+                except Exception:
+                    daemon_pid = None
+
+                stale_reasons: list[str] = []
+                if status_state != "running":
+                    stale_reasons.append(f"status.state={status_state or 'N/A'}")
+                if status_task_id != task_id:
+                    stale_reasons.append(f"status.current_task_id={status_task_id or 'N/A'}")
+                if worker_pid is not None and not _pid_exists(worker_pid):
+                    stale_reasons.append(f"worker_pid_dead={worker_pid}")
+                if daemon_pid is not None and not _pid_exists(daemon_pid):
+                    stale_reasons.append(f"daemon_pid_dead={daemon_pid}")
+
+                if stale_reasons:
+                    _info(
+                        f"Recovering stale running lease for task {task_id} "
+                        f"({' ; '.join(stale_reasons)})"
+                    )
+                    if worker_pid is not None and _pid_exists(worker_pid):
+                        _terminate_worker(worker_pid, reason="stale_running_lease_recovery")
+                    try:
+                        update_operator_lease_metadata(
+                            operator_id,
+                            worker_pid=None,
+                            daemon_pid=None,
+                        )
+                        update_operator_lease_state(operator_id, "leased")
+                    except RuntimeError as exc:
+                        _info(f"Unable to recover stale running lease: {exc}")
+                    else:
+                        time.sleep(poll_interval)
+                        continue
+
+            if lease.get("state") not in ("leased",):
+                _info(f"Task {task_id} lease state={lease.get('state')} — skipping")
+                if _once_wait_expired():
+                    _info(
+                        f"Once mode max wait exceeded while lease state remained "
+                        f"{lease.get('state')} for task {task_id}"
+                    )
+                    break
+                time.sleep(poll_interval)
+                continue
+
+            _info(f"Claiming task {task_id}")
             try:
-                flow_control_decision = _apply_failure_runtime_override(
-                    operator_id=operator_id,
-                    config=config,
-                    envelope=envelope,
-                    task_dir=result_dir,
-                    failure_text=log_tail,
+                update_operator_lease_state(operator_id, "running")
+            except RuntimeError as exc:
+                _info(f"Cannot transition lease to running: {exc}")
+                if _once_wait_expired():
+                    _info(
+                        f"Once mode max wait exceeded while transitioning to running "
+                        f"(operator_id={operator_id}, task_id={task_id})"
+                    )
+                    break
+                time.sleep(poll_interval)
+                continue
+
+            _state["current_state"] = "running"
+            write_heartbeat(
+                operator_id,
+                "running",
+                current_task_id=task_id,
+                resolved_persona=resolved_persona,
+                model_route=model_route,
+            )
+
+            # ── Execute ───────────────────────────────────────────────────────────
+            sprint_id: str = str(envelope.get("sprint_id", ""))
+            node_id: str = str(envelope.get("node_id", ""))
+            started_at: str = _now_utc()
+            result_status: str = "failed"
+            exit_code: int = -1
+            log_lines: list[str] = []
+
+            result_dir = OPERATOR_RESULTS_DIR / operator_id / task_id
+            result_dir.mkdir(parents=True, exist_ok=True)
+            log_path = result_dir / "output.log"
+            exec_env = os.environ.copy()
+            exec_env.update(_materialize_envelope_context(result_dir, envelope))
+            pm_result_path = _pm_result_path(envelope) if _is_pm_dispatch_task(envelope) else None
+            if pm_result_path is not None:
+                try:
+                    pm_result_path.parent.mkdir(parents=True, exist_ok=True)
+                    if pm_result_path.exists():
+                        pm_result_path.unlink()
+                except Exception as exc:
+                    _info(f"Unable to clear stale pm result {pm_result_path}: {exc}")
+
+            cmd = _build_command(config, envelope)
+            _info(f"Executing: {' '.join(shlex.quote(part) for part in cmd[:8])}")
+
+            try:
+                timed_out = False
+                proc = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                    env=exec_env,
+                    start_new_session=True,
                 )
+                _state["current_proc"] = proc
+                _state["current_task_id"] = task_id
+                update_operator_lease_metadata(
+                    operator_id,
+                    worker_pid=int(proc.pid),
+                    daemon_pid=int(os.getpid()),
+                )
+                write_heartbeat(
+                    operator_id,
+                    "running",
+                    current_task_id=task_id,
+                    worker_pid=int(proc.pid),
+                    resolved_persona=resolved_persona,
+                    model_route=model_route,
+                )
+
+                with open(log_path, "w", encoding="utf-8") as log_f:
+                    assert proc.stdout is not None
+                    selector = selectors.DefaultSelector()
+                    selector.register(proc.stdout, selectors.EVENT_READ)
+                    proc_started_at = time.monotonic()
+
+                    while True:
+                        if task_timeout_seconds > 0 and (time.monotonic() - proc_started_at) >= task_timeout_seconds:
+                            timed_out = True
+                            log_lines.append(
+                                f"[ERROR] task timeout after {int(task_timeout_seconds)}s"
+                            )
+                            _terminate_worker(int(proc.pid), reason="task_timeout")
+                            try:
+                                proc.wait(timeout=5)
+                            except subprocess.TimeoutExpired:
+                                _kill_worker_force(int(proc.pid), reason="task_timeout_escalation")
+                                proc.wait(timeout=5)
+                            break
+
+                        events = selector.select(timeout=0.5)
+                        if not events:
+                            if proc.poll() is not None:
+                                break
+                            continue
+
+                        for key, _mask in events:
+                            line = key.fileobj.readline()
+                            if not line:
+                                continue
+                            from operator_runtime import scrub_secrets  # noqa: E402
+                            scrubbed = scrub_secrets(line)
+                            log_f.write(scrubbed)
+                            log_f.flush()
+                            log_lines.append(scrubbed.rstrip())
+
+                        if proc.poll() is not None:
+                            break
+
+                proc.wait()
+                exit_code = proc.returncode if proc.returncode is not None else -1
+                if timed_out:
+                    exit_code = 124
+                    result_status = "failed_timeout"
+                else:
+                    result_status = "completed" if exit_code == 0 else "failed"
+
             except Exception as exc:
-                log_lines.append(f"[WARN] failure flow control hook failed: {exc}")
-            else:
-                runtime_state = str((flow_control_decision or {}).get("runtime_state") or "").strip()
-                if runtime_state:
-                    log_lines.append(f"[flow-control] runtime_state={runtime_state}")
+                _info(f"Execution error: {exc}")
+                log_lines.append(f"[ERROR] {exc}")
+                result_status = "error"
+            finally:
+                _state["current_proc"] = None
+                _state["current_task_id"] = None
+
+            if _state["drain"]:
+                # Signal arrived mid-execution; mark draining then tidy up.
+                result_status = "draining"
+                _state["current_state"] = "draining"
+
+            finished_at: str = _now_utc()
+
+            if result_status == "completed" and pm_result_path is not None:
+                if not pm_result_path.exists():
+                    log_lines.append(f"[ERROR] missing pm_result: {pm_result_path}")
+                    result_status = "failed_missing_pm_result"
+                    exit_code = exit_code or 65
+                else:
+                    try:
+                        started_dt = _parse_utc(started_at)
+                        result_dt = dt.datetime.fromtimestamp(
+                            pm_result_path.stat().st_mtime,
+                            tz=dt.timezone.utc,
+                        )
+                        if result_dt < started_dt:
+                            log_lines.append(f"[ERROR] stale pm_result predates current run: {pm_result_path}")
+                            result_status = "failed_stale_pm_result"
+                            exit_code = exit_code or 66
+                    except Exception:
+                        pass
+
+            if result_status == "completed" and pm_result_path is not None:
+                try:
+                    completed = subprocess.run(
+                        _pm_dispatch_complete_command(task_id),
+                        capture_output=True,
+                        text=True,
+                        env=exec_env,
+                        timeout=30,
+                    )
+                    stdout = completed.stdout.strip()
+                    stderr = completed.stderr.strip()
+                    if stdout:
+                        log_lines.append(stdout)
+                    if stderr:
+                        log_lines.append(stderr)
+                    if completed.returncode != 0:
+                        log_lines.append(
+                            f"[WARN] pm_dispatch complete returned {completed.returncode} for {task_id}"
+                        )
+                except Exception as exc:
+                    log_lines.append(f"[WARN] pm_dispatch complete hook failed: {exc}")
+
+            # ── Write result artifact ─────────────────────────────────────────────
             log_tail = "\n".join(log_lines[-50:])
-        result_path = write_result(
-            operator_id=operator_id,
-            task_id=task_id,
-            sprint_id=sprint_id,
-            node_id=node_id,
-            status=result_status,
-            exit_code=exit_code,
-            started_at=started_at,
-            finished_at=finished_at,
-            log_tail=log_tail,
-        )
-        _info(f"Result written: {result_path}")
+            flow_control_decision: dict[str, Any] | None = None
+            if result_status not in {"completed", "draining"} and log_tail.strip():
+                try:
+                    flow_control_decision = _apply_failure_runtime_override(
+                        operator_id=operator_id,
+                        config=config,
+                        envelope=envelope,
+                        task_dir=result_dir,
+                        failure_text=log_tail,
+                    )
+                except Exception as exc:
+                    log_lines.append(f"[WARN] failure flow control hook failed: {exc}")
+                else:
+                    runtime_state = str((flow_control_decision or {}).get("runtime_state") or "").strip()
+                    if runtime_state:
+                        log_lines.append(f"[flow-control] runtime_state={runtime_state}")
+                log_tail = "\n".join(log_lines[-50:])
+            result_path = write_result(
+                operator_id=operator_id,
+                task_id=task_id,
+                sprint_id=sprint_id,
+                node_id=node_id,
+                status=result_status,
+                exit_code=exit_code,
+                started_at=started_at,
+                finished_at=finished_at,
+                log_tail=log_tail,
+                model_route=model_route,
+            )
+            _info(f"Result written: {result_path}")
 
-        # ── Cleanup ───────────────────────────────────────────────────────────
-        try:
-            envelope_path.unlink()
-        except Exception:
-            pass
+            # ── Cleanup ───────────────────────────────────────────────────────────
+            try:
+                envelope_path.unlink()
+            except Exception:
+                pass
 
-        try:
-            release_operator_lease(operator_id, reason=result_status)
-        except Exception:
-            pass
+            try:
+                update_operator_lease_metadata(
+                    operator_id,
+                    worker_pid=None,
+                    daemon_pid=None,
+                )
+            except Exception:
+                pass
 
-        processed += 1
-        _state["current_state"] = "idle"
-        write_heartbeat(operator_id, "idle", resolved_persona=resolved_persona)
-        _info(f"Task {task_id} done: {result_status} (exit={exit_code})")
+            try:
+                release_operator_lease(operator_id, reason=result_status)
+            except Exception:
+                pass
 
-        if once:
-            break
+            processed += 1
+            _state["current_state"] = "idle"
+            write_heartbeat(operator_id, "idle", resolved_persona=resolved_persona, model_route=model_route)
+            _info(f"Task {task_id} done: {result_status} (exit={exit_code})")
 
-        if _state["drain"]:
-            break
+            if once:
+                break
 
-        time.sleep(poll_interval)
+            if _state["drain"]:
+                break
 
-    write_heartbeat(operator_id, "idle", resolved_persona=resolved_persona)
+            time.sleep(poll_interval)
+    finally:
+        write_heartbeat(operator_id, "idle", resolved_persona=resolved_persona, model_route=model_route)
+        _release_daemon_slot(daemon_lock_fh, daemon_pid_path)
+
     return 0
 
 
@@ -861,6 +1213,13 @@ def _build_parser() -> argparse.ArgumentParser:
         default=1.0,
         metavar="SECS",
         help="Seconds between inbox polls (default: 1.0).",
+    )
+    daemon_p.add_argument(
+        "--once-max-wait-seconds",
+        type=float,
+        default=float(os.environ.get("SOLAR_OPERATORD_ONCE_MAX_WAIT_SECONDS", "15")),
+        metavar="SECS",
+        help="Maximum seconds a --once daemon waits before exiting if it never claims work (default: 15).",
     )
     daemon_p.add_argument(
         "--force",

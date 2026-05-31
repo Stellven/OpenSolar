@@ -261,8 +261,9 @@ def test_ready_for_planner_queue_bypasses_fixed_pane_busy(tmp_path, monkeypatch)
     monkeypatch.setattr(mod, "pane_gate", lambda target, sid: (True, "ok", {}))
     monkeypatch.setattr(mod, "pane_is_busy", lambda target: True)
     monkeypatch.setattr(mod, "clear_current_prompt", lambda target: None)
-    wake_calls: list[str] = []
-    monkeypatch.setattr(mod, "wake_sid", lambda s: wake_calls.append(s) or True)
+    role_calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(mod, "dispatch_role_handoff", lambda s, t: role_calls.append((s, t)) or (True, {"role": "planner"}))
+    monkeypatch.setattr(mod, "wake_sid", lambda s: False)
     mod.SPRINTS.mkdir(parents=True)
     (mod.SPRINTS / f"{sid}.status.json").write_text(json.dumps({
         "sprint_id": sid,
@@ -279,8 +280,9 @@ def test_ready_for_planner_queue_bypasses_fixed_pane_busy(tmp_path, monkeypatch)
 
     actions = mod.retry_queue({"actions": {}, "target_actions": {}}, dispatch=True, cooldown=0)
 
-    assert wake_calls == [sid]
+    assert role_calls == [(sid, "ready_for_planner")]
     assert actions[0]["dispatched_from_queue"] is True
+    assert actions[0]["role_pool_dispatch"]["role"] == "planner"
     assert mod.load_queue() == []
 
 
@@ -308,10 +310,81 @@ def test_ready_for_planner_finding_bypasses_fixed_pane_busy(monkeypatch) -> None
         "handoff_to": "planner",
     })
     monkeypatch.setattr(mod, "mark_action", lambda *args, **kwargs: None)
+    role_calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(mod, "dispatch_role_handoff", lambda s, t: role_calls.append((s, t)) or (True, {"role": "planner"}))
+    monkeypatch.setattr(mod, "wake_sid", lambda s: False)
+
+    actions = mod.apply_findings([finding], dispatch=True, state=state, cooldown=0)
+
+    assert role_calls == [(sid, "ready_for_planner")]
+    assert actions[0]["dispatched"] is True
+    assert actions[0]["role_pool_dispatch"]["role"] == "planner"
+
+
+def test_role_pool_handoffs_do_not_share_fixed_target_cooldown(monkeypatch) -> None:
+    findings = [
+        {"sid": "sprint-a", "type": "ready_for_planner", "target": "solar-harness:0.1", "message": "a"},
+        {"sid": "sprint-b", "type": "ready_for_planner", "target": "solar-harness:0.1", "message": "b"},
+    ]
+    state: dict = {"actions": {}, "target_actions": {}}
+    monkeypatch.setattr(mod, "should_act", lambda state, f, cooldown: True)
+    monkeypatch.setattr(mod, "target_recently_dispatched", lambda state, target, cooldown: True)
+    monkeypatch.setattr(mod, "pane_gate", lambda target, sid: (False, "pane_leased", {}))
+    monkeypatch.setattr(mod, "pane_is_busy", lambda target: True)
+    monkeypatch.setattr(mod, "clear_current_prompt", lambda target: None)
+    monkeypatch.setattr(mod, "save_json", lambda *args, **kwargs: None)
+    monkeypatch.setattr(mod, "append_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(mod, "load_json", lambda path: {
+        "sprint_id": "x",
+        "status": "drafting",
+        "phase": "prd_ready",
+        "handoff_to": "planner",
+    })
+    monkeypatch.setattr(mod, "mark_action", lambda *args, **kwargs: None)
+    role_calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(mod, "dispatch_role_handoff", lambda s, t: role_calls.append((s, t)) or (True, {"role": "planner"}))
+
+    actions = mod.apply_findings(findings, dispatch=True, state=state, cooldown=300)
+
+    assert role_calls == [
+        ("sprint-a", "ready_for_planner"),
+        ("sprint-b", "ready_for_planner"),
+    ]
+    assert [item["dispatched"] for item in actions] == [True, True]
+
+
+def test_ready_for_planner_role_pool_failure_queues_without_wake(monkeypatch) -> None:
+    sid = "sprint-planner-no-capacity"
+    finding = {
+        "sid": sid,
+        "type": "ready_for_planner",
+        "target": "solar-harness:0.1",
+        "message": "planner dispatch",
+        "severity": "info",
+    }
+    state: dict = {"actions": {}, "target_actions": {}}
+    queued: list[tuple[dict, str, dict]] = []
+    monkeypatch.setattr(mod, "should_act", lambda state, f, cooldown: True)
+    monkeypatch.setattr(mod, "target_recently_dispatched", lambda state, target, cooldown: False)
+    monkeypatch.setattr(mod, "pane_gate", lambda target, sid: (False, "pane_leased", {}))
+    monkeypatch.setattr(mod, "pane_is_busy", lambda target: True)
+    monkeypatch.setattr(mod, "clear_current_prompt", lambda target: None)
+    monkeypatch.setattr(mod, "save_json", lambda *args, **kwargs: None)
+    monkeypatch.setattr(mod, "append_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(mod, "load_json", lambda path: {
+        "sprint_id": sid,
+        "status": "drafting",
+        "phase": "prd_ready",
+        "handoff_to": "planner",
+    })
+    monkeypatch.setattr(mod, "enqueue_action", lambda f, reason, detail=None: queued.append((f, reason, detail or {})))
+    monkeypatch.setattr(mod, "dispatch_role_handoff", lambda s, t: (False, {"role": "planner", "stderr": "no planner"}))
     wake_calls: list[str] = []
     monkeypatch.setattr(mod, "wake_sid", lambda s: wake_calls.append(s) or True)
 
     actions = mod.apply_findings([finding], dispatch=True, state=state, cooldown=0)
 
-    assert wake_calls == [sid]
-    assert actions[0]["dispatched"] is True
+    assert wake_calls == []
+    assert queued[0][1] == "role_pool_unavailable"
+    assert actions[0]["queued"] is True
+    assert actions[0]["reason"] == "role_pool_unavailable"

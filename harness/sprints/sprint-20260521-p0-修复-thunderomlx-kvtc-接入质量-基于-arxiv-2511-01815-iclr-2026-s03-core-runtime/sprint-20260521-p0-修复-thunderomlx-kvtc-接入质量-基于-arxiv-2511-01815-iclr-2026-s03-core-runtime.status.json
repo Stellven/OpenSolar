@@ -9,7 +9,7 @@
   "target_role": "",
   "priority": "P0",
   "created_at": "2026-05-22T02:19:55Z",
-  "updated_at": "2026-05-26T17:56:54Z",
+  "updated_at": "2026-05-29T20:39:49Z",
   "dependency_policy": "activated_by_epic_dag",
   "history": [
     {
@@ -758,6 +758,13 @@
       "by": "graph_scheduler",
       "graph_sync": true,
       "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime.task_graph.json"
+    },
+    {
+      "ts": "2026-05-29T20:39:49Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime.task_graph.json"
     }
   ],
   "round": 2,
@@ -768,7 +775,6 @@
   "auto_held": false,
   "runtime_state_source": "activity_runtime",
   "artifacts": {
-    "planning_html": "sprints/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime.planning.html",
     "design": "sprints/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime.design.md",
     "plan": "sprints/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime.plan.md",
     "task_graph": "sprints/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime.task_graph.json",
@@ -811,7 +817,9 @@
         "execute_requires": "--execute",
         "replaces_builder": false
       }
-    }
+    },
+    "prd_html": "sprints/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime.prd.html",
+    "design_html": "sprints/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime.design.html"
   },
   "knowledge_export_status": "exported",
   "knowledge_export_path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260521-p0-修复-thunderomlx-kvtc-接入质量-基于-arxiv-2511-01815-iclr-2026-s03-core-runtime.accepted.md",
@@ -837,5 +845,6 @@
     ],
     "missing_gates": []
   },
-  "task_graph_status": "passed"
+  "task_graph_status": "passed",
+  "completed_at": "2026-05-29T20:39:49Z"
 }

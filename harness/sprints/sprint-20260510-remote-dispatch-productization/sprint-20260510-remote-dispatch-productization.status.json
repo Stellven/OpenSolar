@@ -3,15 +3,15 @@
   "title": "Solar Remote Dispatch Productization",
   "summary": "把本地到 Mac mini 的 Solar Harness 远端派发从 beta 工程链路升级为产品级能力：配置、幂等、checksum、状态回收、pane submit ack、测试套、Mac mini e2e。",
   "status": "passed",
-  "phase": "eval_passed",
-  "handoff_to": "done",
-  "target_role": "done",
+  "phase": "completed",
+  "handoff_to": "",
+  "target_role": "",
   "priority": "P0",
   "lane": "reliability",
   "round": 3,
   "bypass_pm": true,
   "created_at": "2026-05-10T13:54:35Z",
-  "updated_at": "2026-05-24T01:51:13Z",
+  "updated_at": "2026-05-28T23:09:25Z",
   "history": [
     {
       "ts": "2026-05-10T13:54:35Z",
@@ -101,20 +101,51 @@
       "ts": "2026-05-11T00:56:54Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-26T17:56:52Z",
+      "event": "graph_parent_ready_revoked",
+      "by": "graph_scheduler",
+      "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache"
+    },
+    {
+      "ts": "2026-05-26T18:19:47Z",
+      "event": "active_blocked_missing_graph_phase",
+      "by": "coordinator",
+      "raw_extra": "{\"status_fields\":{\"phase\":\"prd_ready\",\"handoff_to\":\"planner\",\"target_role\":\"planner\"},\"note\":\"Single-builder fallback disabled; planner DAG is required.\"}}"
+    },
+    {
+      "ts": "2026-05-26T18:20:00Z",
+      "event": "graph_restored_by_builder",
+      "by": "solar-harness-lab:0.0",
+      "note": "Restored N1/N3 to passed (reverting graph_parent_ready_revoked); set phase=planning_complete, stage=graph_complete, open_nodes=[]. Original PASS confirmed by codex closeout 2026-05-11."
+    },
+    {
+      "ts": "2026-05-28T19:48:27Z",
+      "event": "graph_parent_projection_refreshed",
+      "by": "solar-autopilot",
+      "note": "task_graph changed while in flight; refreshing legacy status projection"
+    },
+    {
+      "ts": "2026-05-28T23:09:25Z",
+      "event": "graph_parent_ready_passed",
+      "by": "graph-dispatch",
+      "note": "All DAG nodes and required gates passed via parent_ready_check."
+    },
+    {
+      "ts": "2026-05-28T23:09:25Z",
+      "event": "remote_dispatch_productization_auto_closeout",
+      "by": "remote_dispatch_productization_closeout",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260510-remote-dispatch-productization.task_graph.json"
     }
   ],
-  "artifacts": [
-    "contract",
-    "prd",
-    "plan",
-    "task_graph",
-    "README-remote-dispatch",
-    "remote_cli_tests",
-    "integration_report",
-    "mac_mini_e2e"
-  ],
+  "artifacts": {
+    "prd_html": "sprints/sprint-20260510-remote-dispatch-productization.prd.html",
+    "planning_html": "sprints/sprint-20260510-remote-dispatch-productization.planning.html"
+  },
   "last_handoff_mtime": 1778421991.0,
-  "completed_at": "2026-05-11T00:51:54Z",
+  "completed_at": "2026-05-28T23:09:25Z",
   "knowledge_export_status": "exported",
   "knowledge_export_path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260510-remote-dispatch-productization.accepted.md",
   "knowledge_ingest_dispatch": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260510-remote-dispatch-productization.dispatch.md",
@@ -124,5 +155,26 @@
   "knowledge_source_artifact_index": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260510-remote-dispatch-productization.source_artifact_index.md",
   "knowledge_summary_count": 3,
   "knowledge_closure_required": true,
-  "knowledge_closure_status": "exported"
+  "knowledge_closure_status": "exported",
+  "stage": "completed",
+  "active_node": null,
+  "graph_parent_ready": {
+    "ok": true,
+    "sprint_id": "sprint-20260510-remote-dispatch-productization",
+    "ready": true,
+    "node_count": 6,
+    "open_nodes": [],
+    "failed_nodes": [],
+    "required_gates": [
+      "remote-core-pass",
+      "remote-state-pass",
+      "pane-submit-pass",
+      "test-suite-pass",
+      "docs-status-pass",
+      "e2e-pass"
+    ],
+    "missing_gates": []
+  },
+  "task_graph_status": "passed",
+  "runtime_state_source": "activity_runtime"
 }

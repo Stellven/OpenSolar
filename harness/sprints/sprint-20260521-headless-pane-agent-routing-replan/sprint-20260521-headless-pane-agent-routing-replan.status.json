@@ -1,10 +1,10 @@
 {
   "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan",
   "status": "passed",
-  "phase": "finalized",
-  "handoff_to": "done",
-  "target_role": "done",
-  "updated_at": "2026-05-24T01:51:13Z",
+  "phase": "completed",
+  "handoff_to": "",
+  "target_role": "",
+  "updated_at": "2026-05-30T03:30:31Z",
   "summary": "Planner replan complete: design.md, plan.md, task_graph.json (validated), planning.html registered. N4 reviewing, N5 pending.",
   "id": "sprint-20260521-headless-pane-agent-routing-replan",
   "history": [
@@ -130,9 +130,94 @@
       "ts": "2026-05-21T23:13:46Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-26T17:56:53Z",
+      "event": "graph_parent_ready_revoked",
+      "by": "graph_scheduler",
+      "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache"
+    },
+    {
+      "ts": "2026-05-26T17:58:48Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "planner",
+      "stage": "prd_ready",
+      "reason": "pm_prd_ready"
+    },
+    {
+      "ts": "2026-05-29T14:59:17Z",
+      "event": "terminal_status_restored_from_finalized_marker",
+      "by": "codex",
+      "note": "Restored passed/completed status after legacy graph/status drift reopened finalized sprint."
+    },
+    {
+      "ts": "2026-05-29T15:24:34Z",
+      "event": "graph_parent_ready_revoked",
+      "by": "solar-autopilot",
+      "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache"
+    },
+    {
+      "ts": "2026-05-29T15:24:39Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "planner",
+      "stage": "prd_ready",
+      "reason": "pm_prd_ready"
+    },
+    {
+      "ts": "2026-05-29T20:43:02Z",
+      "event": "autopilot_ready_for_planner",
+      "by": "solar-autopilot",
+      "note": "请接手 sprint-20260521-headless-pane-agent-routing-replan：读取 .prd.md 和 .contract.md，产出 sprint-20260521-headless-pane-agent-routing-replan.plan.md 和 sprint-20260521-headless-pane-agent-routing-replan.task_graph.json。task_graph 必须通过 solar-harness graph-scheduler validate。不要问用户拍板；这是 P0 reliability 默认推进。"
+    },
+    {
+      "ts": "2026-05-29T20:43:03Z",
+      "event": "wake_workflow_guard_to_planner",
+      "by": "wake",
+      "note": "Workflow guard: planner must produce design.md, plan.md, and task_graph.json before builder dispatch."
+    },
+    {
+      "ts": "2026-05-29T20:44:13Z",
+      "event": "autopilot_ready_for_planner",
+      "by": "solar-autopilot",
+      "note": "请接手 sprint-20260521-headless-pane-agent-routing-replan：读取 .prd.md 和 .contract.md，产出 sprint-20260521-headless-pane-agent-routing-replan.plan.md 和 sprint-20260521-headless-pane-agent-routing-replan.task_graph.json。task_graph 必须通过 solar-harness graph-scheduler validate。不要问用户拍板；这是 P0 reliability 默认推进。"
+    },
+    {
+      "ts": "2026-05-29T20:44:15Z",
+      "event": "wake_workflow_guard_to_planner",
+      "by": "wake",
+      "note": "Workflow guard: planner must produce design.md, plan.md, and task_graph.json before builder dispatch."
+    },
+    {
+      "ts": "2026-05-29T20:46:34Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "builder_main",
+      "stage": "planning_complete",
+      "reason": "planner_artifacts_and_task_graph_ready"
+    },
+    {
+      "ts": "2026-05-29T20:47:04Z",
+      "event": "planner_replan_artifacts_reconciled",
+      "by": "planner",
+      "note": "Filled missing plan.md (76 lines) to complete design.md+plan.md+task_graph.json triad; task_graph validates ok (errors=[],warnings=[]), layers [N1]->[N2,N3]->[N4]->[N5]. parent-check ready=false is reopen-drift: N1/N2/N3 planner nodes stuck reviewing (no per-node eval_json) while downstream N4/N5 already passed+finalized 2026-05-21. Did NOT fabricate eval_json or force-mark gates; G_AUDIT/G_MATRIX/G_POOL need evaluator/coordinator reconciliation, not planner action."
+    },
+    {
+      "ts": "2026-05-29T20:53:06Z",
+      "event": "graph_parent_ready_passed",
+      "by": "graph-dispatch",
+      "note": "All DAG nodes and required gates passed via parent_ready_check."
+    },
+    {
+      "ts": "2026-05-30T03:30:31Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260521-headless-pane-agent-routing-replan.task_graph.json"
     }
   ],
-  "round": 0,
+  "round": 1,
   "runtime_state_source": "activity_runtime",
   "artifacts": {
     "autoresearch_optimizer": {
@@ -174,10 +259,11 @@
         "replaces_builder": false
       }
     },
-    "planning_html": "sprints/sprint-20260521-headless-pane-agent-routing-replan.planning.html",
     "plan": "sprints/sprint-20260521-headless-pane-agent-routing-replan.plan.md",
     "design": "sprints/sprint-20260521-headless-pane-agent-routing-replan.design.md",
-    "task_graph": "sprints/sprint-20260521-headless-pane-agent-routing-replan.task_graph.json"
+    "task_graph": "sprints/sprint-20260521-headless-pane-agent-routing-replan.task_graph.json",
+    "prd_html": "sprints/sprint-20260521-headless-pane-agent-routing-replan.prd.html",
+    "design_html": "sprints/sprint-20260521-headless-pane-agent-routing-replan.design.html"
   },
   "knowledge_export_status": "exported",
   "knowledge_export_path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260521-headless-pane-agent-routing-replan.accepted.md",
@@ -188,5 +274,30 @@
   "knowledge_source_artifact_index": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260521-headless-pane-agent-routing-replan.source_artifact_index.md",
   "knowledge_summary_count": 2,
   "knowledge_closure_required": true,
-  "knowledge_closure_status": "exported"
+  "knowledge_closure_status": "exported",
+  "stage": "completed",
+  "active_node": null,
+  "graph_parent_ready": {
+    "ok": true,
+    "sprint_id": "sprint-20260521-headless-pane-agent-routing-replan",
+    "ready": true,
+    "node_count": 5,
+    "open_nodes": [],
+    "failed_nodes": [],
+    "required_gates": [
+      "G_AUDIT",
+      "G_MATRIX",
+      "G_POOL",
+      "G_BACKLOG",
+      "G_REPORT"
+    ],
+    "missing_gates": []
+  },
+  "task_graph_status": "passed",
+  "completed_at": "2026-05-29T20:53:06Z",
+  "event_count": 169,
+  "last_event_ts": "2026-05-29T20:44:13Z",
+  "projected_at": "2026-05-29T20:44:13Z",
+  "sid": "sprint-20260521-headless-pane-agent-routing-replan",
+  "auto_held": false
 }

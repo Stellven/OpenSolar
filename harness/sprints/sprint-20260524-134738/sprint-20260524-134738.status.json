@@ -99,13 +99,20 @@
       "ts": "2026-05-24T16:37:27Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-29T20:39:49Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260524-134738.task_graph.json"
     }
   ],
   "status": "passed",
-  "phase": "finalized",
+  "phase": "completed",
   "handoff_to": "",
   "target_role": "",
-  "updated_at": "2026-05-24T16:35:56Z",
+  "updated_at": "2026-05-29T20:39:49Z",
   "event_count": 10,
   "last_event_ts": "2026-05-24T13:59:11Z",
   "projected_at": "2026-05-24T13:57:29Z",
@@ -114,7 +121,6 @@
   "auto_held": false,
   "runtime_state_source": "activity_runtime",
   "artifacts": {
-    "planning_html": "sprints/sprint-20260524-134738.planning.html",
     "prd": "sprints/sprint-20260524-134738.prd.md",
     "contract": "sprints/sprint-20260524-134738.contract.md",
     "design": "sprints/sprint-20260524-134738.design.md",
@@ -189,5 +195,6 @@
   "knowledge_closure_required": true,
   "knowledge_closure_status": "exported",
   "knowledge_export_error": null,
-  "knowledge_closure_error": null
+  "knowledge_closure_error": null,
+  "completed_at": "2026-05-29T20:39:49Z"
 }

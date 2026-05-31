@@ -155,7 +155,7 @@
       "additionalProperties": false,
       "description": "Legacy aggregate capability scores (0-5). Prefer capability_profile for new actors.",
       "patternProperties": {
-        "^(planning|coding|debugging|testing|research|browser|shell|long_context|speed|cost_efficiency|reliability|multimodal|local_privacy|knowledge_extraction)$": {
+        "^(planning|coding|debugging|testing|research|browser|shell|long_context|speed|cost_efficiency|reliability|multimodal|local_privacy|knowledge_extraction|data_extraction)$": {
           "type": "integer",
           "minimum": 0,
           "maximum": 5
@@ -198,6 +198,10 @@
         "browser_use": {
           "type": "integer", "minimum": 0, "maximum": 5,
           "description": "Web browser automation and scraping capability."
+        },
+        "data_extraction": {
+          "type": "integer", "minimum": 0, "maximum": 5,
+          "description": "Information and structured data extraction from DOM/visual sources."
         },
         "gui_use": {
           "type": "integer", "minimum": 0, "maximum": 5,

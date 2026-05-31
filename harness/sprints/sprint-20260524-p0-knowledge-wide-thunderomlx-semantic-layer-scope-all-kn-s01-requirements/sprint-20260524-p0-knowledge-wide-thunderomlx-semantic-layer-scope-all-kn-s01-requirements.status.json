@@ -4,12 +4,12 @@
   "epic_id": "epic-20260524-p0-knowledge-wide-thunderomlx-semantic-layer-scope-all-kn",
   "title": "需求拆解与追踪矩阵",
   "status": "passed",
-  "phase": "finalized",
-  "handoff_to": "done",
-  "target_role": "done",
+  "phase": "completed",
+  "handoff_to": "",
+  "target_role": "",
   "priority": "P0",
   "created_at": "2026-05-24T17:20:15Z",
-  "updated_at": "2026-05-24T18:02:42Z",
+  "updated_at": "2026-05-29T20:39:49Z",
   "dependency_policy": "activated_by_epic_dag",
   "history": [
     {
@@ -130,6 +130,20 @@
       "ts": "2026-05-24T18:04:05Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-28T19:48:28Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260524-p0-knowledge-wide-thunderomlx-semantic-layer-scope-all-kn-s01-requirements.task_graph.json"
+    },
+    {
+      "ts": "2026-05-29T20:39:49Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260524-p0-knowledge-wide-thunderomlx-semantic-layer-scope-all-kn-s01-requirements.task_graph.json"
     }
   ],
   "round": 1,
@@ -140,7 +154,6 @@
   "auto_held": false,
   "runtime_state_source": "activity_runtime",
   "artifacts": {
-    "planning_html": "sprints/sprint-20260524-p0-knowledge-wide-thunderomlx-semantic-layer-scope-all-kn-s01-requirements.planning.html",
     "prd": "sprints/sprint-20260524-p0-knowledge-wide-thunderomlx-semantic-layer-scope-all-kn-s01-requirements.prd.md",
     "contract": "sprints/sprint-20260524-p0-knowledge-wide-thunderomlx-semantic-layer-scope-all-kn-s01-requirements.contract.md",
     "design": "sprints/sprint-20260524-p0-knowledge-wide-thunderomlx-semantic-layer-scope-all-kn-s01-requirements.design.md",
@@ -198,5 +211,24 @@
   "knowledge_closure_required": true,
   "knowledge_closure_status": "exported",
   "knowledge_export_error": null,
-  "knowledge_closure_error": null
+  "knowledge_closure_error": null,
+  "stage": "completed",
+  "active_node": null,
+  "graph_parent_ready": {
+    "ok": true,
+    "sprint_id": "sprint-20260524-p0-knowledge-wide-thunderomlx-semantic-layer-scope-all-kn-s01-requirements",
+    "ready": true,
+    "node_count": 4,
+    "open_nodes": [],
+    "failed_nodes": [],
+    "required_gates": [
+      "G_PLAN",
+      "G_IMPL",
+      "G_VERIFY",
+      "G_REVIEW"
+    ],
+    "missing_gates": []
+  },
+  "task_graph_status": "passed",
+  "completed_at": "2026-05-29T20:39:49Z"
 }

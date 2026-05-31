@@ -58,8 +58,27 @@ def _utc_now() -> str:
 
 
 def _tmux_send_keys(pane_id: str, keys: str, tmux_binary: str = "tmux") -> None:
+    """Submit a slash command after removing any live prompt residue.
+
+    Claude Code panes can retain an unsubmitted `/clear` or dispatch path in
+    the editable prompt. Sending another `/clear` without clearing first turns
+    that residue into a new malformed command and eventually marks a healthy
+    pane as `needs_respawn`. Use the same literal-send discipline as graph
+    dispatch: clear the input line, send the command as literal text, then
+    submit it.
+    """
     subprocess.run(
-        [tmux_binary, "send-keys", "-t", pane_id, keys, "Enter"],
+        [tmux_binary, "send-keys", "-t", pane_id, "C-u"],
+        capture_output=True,
+        timeout=5,
+    )
+    subprocess.run(
+        [tmux_binary, "send-keys", "-t", pane_id, "-l", keys],
+        capture_output=True,
+        timeout=5,
+    )
+    subprocess.run(
+        [tmux_binary, "send-keys", "-t", pane_id, "Enter"],
         capture_output=True,
         timeout=5,
     )

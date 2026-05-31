@@ -4,13 +4,13 @@
   "title": "Physical Operator Taxonomy Truthification",
   "summary": "把 10 类 physical operator taxonomy 从 PM addendum 物化为 schema、routing matrix、DAG acceptance 真值。",
   "status": "passed",
-  "phase": "finalized",
-  "handoff_to": "done",
-  "target_role": "done",
+  "phase": "completed",
+  "handoff_to": "",
+  "target_role": "",
   "priority": "P0",
   "parent_sprint_id": "sprint-20260523-pane-as-physical-operator-architecture",
   "created_at": "2026-05-23T19:36:04Z",
-  "updated_at": "2026-05-24T01:51:14Z",
+  "updated_at": "2026-05-29T01:45:25Z",
   "round": 1,
   "runtime_state_source": "activity_runtime",
   "history": [
@@ -149,6 +149,13 @@
       "ts": "2026-05-23T23:47:13Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-29T01:45:25Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260523-physical-operator-taxonomy-truthification.task_graph.json"
     }
   ],
   "artifacts": {
@@ -156,7 +163,6 @@
     "contract": "sprints/sprint-20260523-physical-operator-taxonomy-truthification.contract.md",
     "pm_order": "sprints/sprint-20260523-physical-operator-taxonomy-truthification.pm-order.md",
     "prd_html": "sprints/sprint-20260523-physical-operator-taxonomy-truthification.prd.html",
-    "planning_html": "sprints/sprint-20260523-physical-operator-taxonomy-truthification.planning.html",
     "design": "sprints/sprint-20260523-physical-operator-taxonomy-truthification.design.md",
     "plan": "sprints/sprint-20260523-physical-operator-taxonomy-truthification.plan.md",
     "task_graph": "sprints/sprint-20260523-physical-operator-taxonomy-truthification.task_graph.json",
@@ -234,5 +240,8 @@
   "knowledge_source_artifact_index": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260523-physical-operator-taxonomy-truthification.source_artifact_index.md",
   "knowledge_summary_count": 3,
   "knowledge_closure_required": true,
-  "knowledge_closure_status": "exported"
+  "knowledge_closure_status": "exported",
+  "stage": "completed",
+  "active_node": null,
+  "task_graph_status": "passed"
 }

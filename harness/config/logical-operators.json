@@ -12,7 +12,7 @@
         "multi_agent_coordination": 3
       },
       "cost_hint": "high",
-      "concurrency": {"max_parallel": 2, "singleton": false}
+      "concurrency": {"max_parallel": 3, "singleton": false}
     },
     "RootCauseDebugger": {
       "operator_type": "RootCauseDebugger",
@@ -82,7 +82,7 @@
         "allowed_shell_scope": "allowed"
       },
       "cost_hint": "medium",
-      "concurrency": {"max_parallel": 2, "singleton": false}
+      "concurrency": {"max_parallel": 3, "singleton": false}
     },
     "ParallelExplorer": {
       "operator_type": "ParallelExplorer",
@@ -93,7 +93,7 @@
         "research_synthesis": 3
       },
       "cost_hint": "high",
-      "concurrency": {"max_parallel": 2, "singleton": false}
+      "concurrency": {"max_parallel": 3, "singleton": false}
     },
     "ResearchScout": {
       "operator_type": "ResearchScout",
@@ -116,7 +116,7 @@
         "academic_critique": 3
       },
       "cost_hint": "high",
-      "concurrency": {"max_parallel": 2, "singleton": false}
+      "concurrency": {"max_parallel": 3, "singleton": false}
     },
     "Critic": {
       "operator_type": "Critic",
@@ -127,7 +127,7 @@
         "architecture_reasoning": 3
       },
       "cost_hint": "medium",
-      "concurrency": {"max_parallel": 3, "singleton": false}
+      "concurrency": {"max_parallel": 4, "singleton": false}
     },
     "Verifier": {
       "operator_type": "Verifier",
@@ -138,7 +138,7 @@
         "root_cause_debug": 3
       },
       "cost_hint": "medium",
-      "concurrency": {"max_parallel": 3, "singleton": false}
+      "concurrency": {"max_parallel": 4, "singleton": false}
     },
     "SecurityGate": {
       "operator_type": "SecurityGate",
@@ -186,7 +186,7 @@
         "research_synthesis": 2
       },
       "cost_hint": "low",
-      "concurrency": {"max_parallel": 3, "singleton": false}
+      "concurrency": {"max_parallel": 4, "singleton": false}
     },
     "DeepResearchBrowser": {
       "operator_type": "DeepResearchBrowser",
@@ -199,7 +199,7 @@
         "long_context": 4
       },
       "cost_hint": "high",
-      "concurrency": {"max_parallel": 1, "singleton": false}
+      "concurrency": {"max_parallel": 2, "singleton": false}
     },
     "DeepResearchGemini": {
       "operator_type": "DeepResearchGemini",
@@ -211,7 +211,7 @@
         "browser_use": 2
       },
       "cost_hint": "high",
-      "concurrency": {"max_parallel": 2, "singleton": false}
+      "concurrency": {"max_parallel": 3, "singleton": false}
     },
     "DeepResearchChatGPT": {
       "operator_type": "DeepResearchChatGPT",
@@ -223,7 +223,74 @@
         "long_context": 5
       },
       "cost_hint": "high",
-      "concurrency": {"max_parallel": 2, "singleton": false}
+      "concurrency": {"max_parallel": 3, "singleton": false}
+    }
+  },
+  "workflow_vocabulary": {
+    "_comment": "Workflow stage names used by APO logical workflow expander. Each stage maps to one or more existing logical_operators. Multiple operators may be selected per stage based on capsule and signal context.",
+    "ScanContext": {
+      "description": "Gather all relevant context: repository state, benchmark history, existing tickets, related code. Read-only phase.",
+      "maps_to_operators": ["ResearchScout", "ResearchSynthesizer"],
+      "stage_type": "read_only",
+      "position": 1
+    },
+    "DebugRCA": {
+      "description": "Root cause analysis: identify what changed, why performance degraded, or where the bug originates.",
+      "maps_to_operators": ["RootCauseDebugger"],
+      "stage_type": "analysis",
+      "position": 2
+    },
+    "DesignSolution": {
+      "description": "Architect the fix, optimization, or feature. May produce a design doc, interface sketch, or algorithm outline.",
+      "maps_to_operators": ["DeepArchitect"],
+      "stage_type": "design",
+      "position": 3
+    },
+    "ImplementPatch": {
+      "description": "Write the actual code change, patch, or module. Uses ImplementationWorker for features or PatchWorker for surgical fixes.",
+      "maps_to_operators": ["ImplementationWorker", "PatchWorker"],
+      "stage_type": "implementation",
+      "position": 4
+    },
+    "RunBenchmark": {
+      "description": "Execute the benchmark suite to measure before/after impact. Requires shell access.",
+      "maps_to_operators": ["BenchmarkRunner"],
+      "stage_type": "evaluation",
+      "position": 5
+    },
+    "ReviewPatch": {
+      "description": "Critical review of the patch/implementation: correctness, security, style, invariant preservation.",
+      "maps_to_operators": ["Critic", "SecurityGate"],
+      "stage_type": "review",
+      "position": 6
+    },
+    "VerifyEvidence": {
+      "description": "Final acceptance: confirm outputs exist, evidence matches pass_conditions, sign off for promotion.",
+      "maps_to_operators": ["Verifier", "ArtifactCurator"],
+      "stage_type": "verification",
+      "position": 7
+    }
+  },
+  "workflow_templates": {
+    "performance_debug_workflow": {
+      "description": "7-stage workflow for performance regression and kernel debug task classes.",
+      "stages": ["ScanContext", "DebugRCA", "DesignSolution", "ImplementPatch", "RunBenchmark", "ReviewPatch", "VerifyEvidence"],
+      "applicable_task_classes": ["PERFORMANCE_REGRESSION", "PERFORMANCE_KERNEL_DEBUG"]
+    },
+    "design_and_optimize_workflow": {
+      "description": "Workflow for software-hardware co-optimization tasks: design first, then implement and benchmark.",
+      "stages": ["ScanContext", "DesignSolution", "ImplementPatch", "RunBenchmark", "VerifyEvidence"],
+      "applicable_task_classes": ["SOFT_HW_OPT"]
+    },
+    "implementation_workflow": {
+      "description": "Standard feature implementation workflow.",
+      "stages": ["ScanContext", "DesignSolution", "ImplementPatch", "ReviewPatch", "VerifyEvidence"],
+      "applicable_task_classes": ["CODE_IMPL_REQUIRED"]
+    },
+    "prototype_workflow": {
+      "description": "Fast prototype: skip design formalism and review gates.",
+      "stages": ["ScanContext", "ImplementPatch", "VerifyEvidence"],
+      "applicable_task_classes": ["FAST_PROTOTYPE"]
     }
   },
   "bindings": {
@@ -241,8 +308,9 @@
       "operator_type": "RootCauseDebugger",
       "candidates": [
         {"actor_id": "mini-claude-opus-evaluator", "priority": 1, "condition": "always"},
-        {"actor_id": "mini-claude-opus-planner", "priority": 2, "condition": "quota_ok"},
-        {"actor_id": "mini-claude-opus-evaluator-print", "priority": 3, "condition": "quota_ok"}
+        {"actor_id": "mini-reasonix-deepseek-v4-builder", "priority": 2, "condition": "quota_ok"},
+        {"actor_id": "mini-claude-opus-planner", "priority": 3, "condition": "quota_ok"},
+        {"actor_id": "mini-claude-opus-evaluator-print", "priority": 4, "condition": "quota_ok"}
       ],
       "selection_policy": "priority_first",
       "fallback_policy": "queue"
@@ -251,8 +319,8 @@
       "operator_type": "ImplementationWorker",
       "candidates": [
         {"actor_id": "mini-claude-sonnet-builder", "priority": 1, "condition": "always"},
-        {"actor_id": "mini-claude-sonnet-builder-print", "priority": 2, "condition": "quota_ok"},
-        {"actor_id": "mini-antigravity-gemini31-pro", "priority": 3, "condition": "quota_ok"}
+        {"actor_id": "mini-claude-sonnet-builder-print", "priority": 3, "condition": "quota_ok"},
+        {"actor_id": "mini-antigravity-gemini31-pro", "priority": 4, "condition": "quota_ok"}
       ],
       "selection_policy": "priority_first",
       "fallback_policy": "queue"
@@ -261,8 +329,8 @@
       "operator_type": "PatchWorker",
       "candidates": [
         {"actor_id": "mini-claude-sonnet-builder", "priority": 1, "condition": "always"},
-        {"actor_id": "mini-antigravity-gemini35-flash-high", "priority": 2, "condition": "always"},
-        {"actor_id": "mini-claude-sonnet-builder-print", "priority": 3, "condition": "quota_ok"}
+        {"actor_id": "mini-antigravity-gemini35-flash-high", "priority": 3, "condition": "always"},
+        {"actor_id": "mini-claude-sonnet-builder-print", "priority": 4, "condition": "quota_ok"}
       ],
       "selection_policy": "cost_optimal",
       "fallback_policy": "queue"
@@ -271,7 +339,7 @@
       "operator_type": "TestDesigner",
       "candidates": [
         {"actor_id": "mini-claude-sonnet-builder", "priority": 1, "condition": "always"},
-        {"actor_id": "mini-claude-opus-evaluator", "priority": 2, "condition": "quota_ok"}
+        {"actor_id": "mini-claude-opus-evaluator", "priority": 3, "condition": "quota_ok"}
       ],
       "selection_policy": "priority_first",
       "fallback_policy": "queue"

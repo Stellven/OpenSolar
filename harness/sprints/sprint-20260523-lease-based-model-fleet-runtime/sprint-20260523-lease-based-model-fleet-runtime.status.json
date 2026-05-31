@@ -2,20 +2,19 @@
   "sprint_id": "sprint-20260523-lease-based-model-fleet-runtime",
   "title": "Lease-based Model Fleet Runtime",
   "status": "passed",
-  "phase": "eval_passed",
+  "phase": "completed",
   "handoff_to": "",
   "round": 4,
   "created_at": "2026-05-23T01:14:20Z",
-  "updated_at": "2026-05-24T01:51:14Z",
+  "updated_at": "2026-05-28T19:48:27Z",
   "artifacts": {
     "contract": "sprints/sprint-20260523-lease-based-model-fleet-runtime.contract.md",
     "prd": "sprints/sprint-20260523-lease-based-model-fleet-runtime.prd.md",
     "task_graph": "sprints/sprint-20260523-lease-based-model-fleet-runtime.task_graph.json",
-    "planning_html": "sprints/sprint-20260523-lease-based-model-fleet-runtime.planning.html",
     "design": "sprints/sprint-20260523-lease-based-model-fleet-runtime.design.md",
     "plan": "sprints/sprint-20260523-lease-based-model-fleet-runtime.plan.md",
     "autoresearch_optimizer": {
-      "recorded_at": "2026-05-23T15:36:52Z",
+      "recorded_at": "2026-05-28T14:06:38Z",
       "sid": "sprint-20260523-lease-based-model-fleet-runtime",
       "role": "规划者",
       "canonical_role": "planner",
@@ -23,17 +22,16 @@
       "trigger_level": "recommended",
       "reasons": [
         "role:planner",
-        "telemetry:round:4",
-        "telemetry:eval_json:missing"
+        "telemetry:round:4"
       ],
       "telemetry": {
-        "status": "passed",
-        "phase": "completed",
+        "status": "drafting",
+        "phase": "prd_ready",
         "round": 4,
-        "eval_verdict": "",
+        "eval_verdict": "PASS",
         "failed_conditions": [],
         "error_count": 0,
-        "warning_count": 0
+        "warning_count": 3
       },
       "quality_metrics": {
         "trigger_level": "recommended",
@@ -53,7 +51,10 @@
         "execute_requires": "--execute",
         "replaces_builder": false
       }
-    }
+    },
+    "prd_html": "sprints/sprint-20260523-lease-based-model-fleet-runtime.prd.html",
+    "design_html": "sprints/sprint-20260523-lease-based-model-fleet-runtime.design.html",
+    "planning_html": "sprints/sprint-20260523-lease-based-model-fleet-runtime.planning.html"
   },
   "history": [
     {
@@ -279,6 +280,55 @@
       "ts": "2026-05-23T15:38:55Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-26T17:56:56Z",
+      "event": "graph_parent_ready_revoked",
+      "by": "graph_scheduler",
+      "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache"
+    },
+    {
+      "ts": "2026-05-26T17:58:48Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "planner",
+      "stage": "prd_ready",
+      "reason": "pm_prd_ready"
+    },
+    {
+      "ts": "2026-05-28T14:06:38Z",
+      "event": "autoresearch_optimizer_recorded",
+      "by": "coordinator",
+      "trigger_level": "recommended",
+      "recommended": true,
+      "role": "planner"
+    },
+    {
+      "ts": "2026-05-28T14:12:30Z",
+      "event": "planner_plan_completed",
+      "by": "planner-pane-0.1",
+      "note": "LMF Planner round=4 backfill: plan.md (status claimed but missing) + planning.html (new) + task_graph patched (schema=solar.task_graph.v1 + 5 nodes standard fields). N1+N5 reviewing; N2-N4 + 5 gates 全 passed; N2/N3/N4 evaluator PASS. handoff_to=evaluator to confirm N1+N5 via sanctioned CLI. Validate ok 0 warnings."
+    },
+    {
+      "ts": "2026-05-28T14:12:47Z",
+      "event": "autopilot_workflow_route_normalized",
+      "by": "solar-autopilot",
+      "route_role": "builder_main",
+      "stage": "planning_complete",
+      "reason": "planner_artifacts_and_task_graph_ready"
+    },
+    {
+      "ts": "2026-05-28T17:01:53Z",
+      "event": "graph_parent_ready_passed",
+      "by": "graph-dispatch",
+      "note": "All DAG nodes and required gates passed via parent_ready_check."
+    },
+    {
+      "ts": "2026-05-28T19:48:27Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260523-lease-based-model-fleet-runtime.task_graph.json"
     }
   ],
   "id": "sprint-20260523-lease-based-model-fleet-runtime",
@@ -298,5 +348,25 @@
   "knowledge_source_artifact_index": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260523-lease-based-model-fleet-runtime.source_artifact_index.md",
   "knowledge_summary_count": 4,
   "knowledge_closure_required": true,
-  "knowledge_closure_status": "exported"
+  "knowledge_closure_status": "exported",
+  "stage": "completed",
+  "active_node": null,
+  "graph_parent_ready": {
+    "ok": true,
+    "sprint_id": "sprint-20260523-lease-based-model-fleet-runtime",
+    "ready": true,
+    "node_count": 5,
+    "open_nodes": [],
+    "failed_nodes": [],
+    "required_gates": [
+      "G_ARCH",
+      "G_SCHEMA",
+      "G_LEASE",
+      "G_OBSERVABILITY",
+      "G_REPORT"
+    ],
+    "missing_gates": []
+  },
+  "task_graph_status": "passed",
+  "completed_at": "2026-05-28T17:01:53Z"
 }

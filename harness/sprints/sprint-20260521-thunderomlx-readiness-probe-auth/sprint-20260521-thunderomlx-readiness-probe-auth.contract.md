@@ -41,5 +41,10 @@ Forbidden:
 - Final report:
   - `/Users/lisihao/.solar/harness/monitor-reports/thunderomlx-readiness-probe-auth.md`
 
-## Fallback
-If Claude org monthly limit prevents worker execution, use shell/API verification directly, write the required handoff/report, and mark a node passed only when its acceptance is met.
+## Definition of Done (Planner — Quantified)
+- [ ] D1: 新增 auth-aware readiness probe helper 区分 ok / auth_required_alive / error 三态
+- [ ] D2: 未鉴权 /v1/models 返回 401 不再被判为服务不健康，而是 auth_required_alive
+- [ ] D3: 已鉴权 /v1/models 返回 200 + model 列表（不打印 key/token）
+- [ ] D4: 单元测试 >= 2 条覆盖 401-as-alive 和 authenticated-success，pytest 全通过
+- [ ] D5: 活测试 cache_read_input_tokens > 0 + bad_chars=false + ThunderOMLX 8002 健康
+- [ ] D6: 最终中文报告写入 monitor-reports/thunderomlx-readiness-probe-auth.md，含回滚说明

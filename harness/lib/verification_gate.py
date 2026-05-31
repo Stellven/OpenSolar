@@ -101,6 +101,97 @@ class VerificationGate:
             return {"allowed": False, "reason": f"destructive_action_{action}_denied_by_policy"}
         return {"allowed": True, "reason": ""}
 
+    def verify_webwright(
+        self,
+        task_dir: Path,
+        domain_allowlist: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Verify Webwright operator execution outputs.
+
+        Checks:
+        1. final_script.py exists
+        2. trajectory.json exists
+        3. screenshots/ directory exists and is not empty
+        4. No forbidden actions are present in the final script
+        5. Script targets only domains in the allowlist (if provided)
+        """
+        reasons = []
+
+        script_path = task_dir / "final_script.py"
+        traj_path = task_dir / "trajectory.json"
+        screenshots_dir = task_dir / "screenshots"
+
+        if not script_path.exists():
+            reasons.append("missing_final_script")
+        else:
+            # Check for forbidden actions inside final_script.py
+            content = script_path.read_text(encoding="utf-8").lower()
+            forbidden_patterns = [
+                "cookie heist", "cookie_export", "payment", "bypass bot",
+                "bot_detection_bypass", "credential_capture", "unauthorized_scraping"
+            ]
+            for pat in forbidden_patterns:
+                if pat in content:
+                    reasons.append(f"forbidden_action_detected_in_script_{pat.replace(' ', '_')}")
+
+            # Check domain allowlist
+            if domain_allowlist:
+                import re
+                urls = re.findall(r'https?://([a-zA-Z0-9.-]+)', content)
+                for url in urls:
+                    matched = False
+                    for allowed in domain_allowlist:
+                        if url.endswith(allowed) or url == allowed:
+                            matched = True
+                            break
+                    if not matched:
+                        reasons.append(f"domain_not_in_allowlist_{url}")
+
+        if not traj_path.exists():
+            reasons.append("missing_trajectory_file")
+
+        if not screenshots_dir.exists() or not any(screenshots_dir.iterdir()):
+            reasons.append("screenshots_directory_empty_or_missing")
+
+        return {
+            "passed": len(reasons) == 0,
+            "reasons": reasons,
+        }
+
+    def verify_browser_use_mcp(
+        self,
+        task_dir: Path,
+    ) -> Dict[str, Any]:
+        """Verify Browser-use MCP operator execution outputs.
+
+        Checks:
+        1. screenshot_or_dom_snapshot exists
+        2. tool_trace.json exists and is valid
+        """
+        reasons = []
+
+        has_screenshot = (task_dir / "screenshot.png").exists() or (task_dir / "screenshot_or_dom_snapshot").exists()
+        has_dom = (task_dir / "dom_snapshot.html").exists() or (task_dir / "dom_snapshot.json").exists() or (task_dir / "dom_snapshot.txt").exists()
+
+        if not (has_screenshot or has_dom):
+            reasons.append("missing_screenshot_or_dom_snapshot")
+
+        trace_path = task_dir / "tool_trace.json"
+        if not trace_path.exists():
+            reasons.append("missing_tool_trace")
+        else:
+            try:
+                trace_data = json.loads(trace_path.read_text(encoding="utf-8"))
+                if not trace_data.get("url") or not trace_data.get("steps"):
+                    reasons.append("invalid_tool_trace_structure")
+            except Exception:
+                reasons.append("corrupt_tool_trace_file")
+
+        return {
+            "passed": len(reasons) == 0,
+            "reasons": reasons,
+        }
+
 
 def _extract_provider(actor_id: str) -> Optional[str]:
     """Extract provider from actor_id (e.g., 'mini-claude-opus-planner' -> 'claude')."""

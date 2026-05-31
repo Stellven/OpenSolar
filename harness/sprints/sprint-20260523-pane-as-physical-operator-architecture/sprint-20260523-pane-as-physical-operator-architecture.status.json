@@ -4,12 +4,12 @@
   "title": "Pane-as-Physical-Operator Architecture",
   "summary": "将 tmux 无头 pane 正式提升为 Physical Operator Runtime 的执行资源，统一 registry/runtime/scheduler 设计。",
   "status": "passed",
-  "phase": "finalized",
-  "handoff_to": "done",
-  "target_role": "done",
+  "phase": "completed",
+  "handoff_to": "",
+  "target_role": "",
   "priority": "P0",
   "created_at": "2026-05-23T19:06:00Z",
-  "updated_at": "2026-05-24T01:51:14Z",
+  "updated_at": "2026-05-29T01:45:25Z",
   "round": 2,
   "runtime_state_source": "activity_runtime",
   "history": [
@@ -202,6 +202,13 @@
       "ts": "2026-05-23T23:16:32Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-29T01:45:25Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260523-pane-as-physical-operator-architecture.task_graph.json"
     }
   ],
   "artifacts": {
@@ -249,7 +256,6 @@
       }
     },
     "prd_html": "sprints/sprint-20260523-pane-as-physical-operator-architecture.prd.html",
-    "planning_html": "sprints/sprint-20260523-pane-as-physical-operator-architecture.planning.html",
     "design": "sprints/sprint-20260523-pane-as-physical-operator-architecture.design.md",
     "plan": "sprints/sprint-20260523-pane-as-physical-operator-architecture.plan.md",
     "task_graph": "sprints/sprint-20260523-pane-as-physical-operator-architecture.task_graph.json",
@@ -287,5 +293,8 @@
   "knowledge_source_artifact_index": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260523-pane-as-physical-operator-architecture.source_artifact_index.md",
   "knowledge_summary_count": 3,
   "knowledge_closure_required": true,
-  "knowledge_closure_status": "exported"
+  "knowledge_closure_status": "exported",
+  "stage": "completed",
+  "active_node": null,
+  "task_graph_status": "passed"
 }

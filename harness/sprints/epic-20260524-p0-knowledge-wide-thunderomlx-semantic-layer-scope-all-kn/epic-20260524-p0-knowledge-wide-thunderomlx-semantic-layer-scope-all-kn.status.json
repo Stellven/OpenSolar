@@ -6,7 +6,7 @@
   "handoff_to": "",
   "round": 0,
   "created_at": "2026-05-24T18:12:43Z",
-  "updated_at": "2026-05-25T14:14:58Z",
+  "updated_at": "2026-05-29T20:42:31Z",
   "artifacts": {
     "task_graph": "/Users/lisihao/.solar/harness/sprints/epic-20260524-p0-knowledge-wide-thunderomlx-semantic-layer-scope-all-kn.task_graph.json"
   },
@@ -23,6 +23,22 @@
       "by": "graph_scheduler",
       "graph_sync": true,
       "graph_path": "sprints/epic-20260524-p0-knowledge-wide-thunderomlx-semantic-layer-scope-all-kn.task_graph.json"
+    },
+    {
+      "ts": "2026-05-29T17:55:44Z",
+      "event": "epic_projection_closeout",
+      "by": "epic_projection_closeout",
+      "graph_sync": false,
+      "all_passed": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/epic-20260524-p0-knowledge-wide-thunderomlx-semantic-layer-scope-all-kn.task_graph.json"
+    },
+    {
+      "ts": "2026-05-29T20:42:31Z",
+      "event": "epic_projection_closeout",
+      "by": "epic_projection_closeout",
+      "graph_sync": false,
+      "all_passed": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/epic-20260524-p0-knowledge-wide-thunderomlx-semantic-layer-scope-all-kn.task_graph.json"
     }
   ],
   "target_role": "",
@@ -30,20 +46,13 @@
   "active_node": null,
   "graph_parent_ready": {
     "ok": true,
-    "sprint_id": null,
+    "epic_id": "epic-20260524-p0-knowledge-wide-thunderomlx-semantic-layer-scope-all-kn",
     "ready": true,
     "node_count": 5,
     "open_nodes": [],
-    "failed_nodes": [],
-    "required_gates": [
-      "sprint-20260524-p0-knowledge-wide-thunderomlx-semantic-layer-scope-all-kn-s01-requirements:passed",
-      "sprint-20260524-p0-knowledge-wide-thunderomlx-semantic-layer-scope-all-kn-s02-architecture:passed",
-      "sprint-20260524-p0-knowledge-wide-thunderomlx-semantic-layer-scope-all-kn-s03-core-runtime:passed",
-      "sprint-20260524-p0-knowledge-wide-thunderomlx-semantic-layer-scope-all-kn-s04-orchestration-ui:passed",
-      "sprint-20260524-p0-knowledge-wide-thunderomlx-semantic-layer-scope-all-kn-s05-verification-release:passed"
-    ],
-    "missing_gates": []
+    "failed_nodes": []
   },
   "task_graph_status": "passed",
-  "runtime_state_source": "activity_runtime"
+  "runtime_state_source": "activity_runtime",
+  "task_graph": "/Users/lisihao/.solar/harness/sprints/epic-20260524-p0-knowledge-wide-thunderomlx-semantic-layer-scope-all-kn.task_graph.json"
 }

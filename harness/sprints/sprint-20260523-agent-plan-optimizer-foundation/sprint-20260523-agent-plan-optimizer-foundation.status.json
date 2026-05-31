@@ -4,7 +4,7 @@
   "title": "Agent Plan Optimizer Foundation (APO/AQO)",
   "summary": "把 Solar-harness 从 scheduler 升级为 APO/AQO（Agent Plan Optimizer / Agent Query Optimizer）：Intent IR → Logical Plan → Rule Rewrite → Physical Plan Enumeration → Cost/Risk/Quota 优化 → Adaptive Replan。首版 heuristic optimizer，blocked by 2 张前序 Requirement Compiler sprint。",
   "created_at": "2026-05-24T03:19:23Z",
-  "updated_at": "2026-05-24T19:12:27Z",
+  "updated_at": "2026-05-29T01:45:25Z",
   "round": 1,
   "history": [
     {
@@ -1821,12 +1821,19 @@
       "ts": "2026-05-24T19:13:48Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-29T01:45:25Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260523-agent-plan-optimizer-foundation.task_graph.json"
     }
   ],
   "status": "passed",
-  "phase": "finalized",
-  "handoff_to": "done",
-  "target_role": "done",
+  "phase": "completed",
+  "handoff_to": "",
+  "target_role": "",
   "dependency_policy": "manual_blocked_by_prerequisite_sprints",
   "blocked_by": null,
   "artifacts": {
@@ -1872,7 +1879,6 @@
         "replaces_builder": false
       }
     },
-    "planning_html": "sprints/sprint-20260523-agent-plan-optimizer-foundation.planning.html",
     "design": "sprints/sprint-20260523-agent-plan-optimizer-foundation.design.md",
     "plan": "sprints/sprint-20260523-agent-plan-optimizer-foundation.plan.md",
     "task_graph": "sprints/sprint-20260523-agent-plan-optimizer-foundation.task_graph.json",
@@ -1924,5 +1930,8 @@
   "knowledge_closure_required": true,
   "knowledge_closure_status": "exported",
   "knowledge_export_error": null,
-  "knowledge_closure_error": null
+  "knowledge_closure_error": null,
+  "stage": "completed",
+  "active_node": null,
+  "task_graph_status": "passed"
 }

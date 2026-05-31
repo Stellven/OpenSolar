@@ -71,13 +71,20 @@
       "ts": "2026-05-24T05:43:26Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-29T01:45:25Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260523-requirement-compiler-quality-loop.task_graph.json"
     }
   ],
   "status": "passed",
-  "phase": "finalized",
-  "handoff_to": "done",
-  "target_role": "done",
-  "updated_at": "2026-05-24T05:42:29Z",
+  "phase": "completed",
+  "handoff_to": "",
+  "target_role": "",
+  "updated_at": "2026-05-29T01:45:25Z",
   "event_count": 86,
   "last_event_ts": "2026-05-24T04:32:51Z",
   "projected_at": "2026-05-24T04:33:14Z",
@@ -86,7 +93,6 @@
   "auto_held": false,
   "runtime_state_source": "activity_runtime",
   "artifacts": {
-    "planning_html": "sprints/sprint-20260523-requirement-compiler-quality-loop.planning.html",
     "design": "sprints/sprint-20260523-requirement-compiler-quality-loop.design.md",
     "plan": "sprints/sprint-20260523-requirement-compiler-quality-loop.plan.md",
     "task_graph": "sprints/sprint-20260523-requirement-compiler-quality-loop.task_graph.json",
@@ -159,5 +165,8 @@
   "knowledge_closure_required": true,
   "knowledge_closure_status": "exported",
   "knowledge_export_error": null,
-  "knowledge_closure_error": null
+  "knowledge_closure_error": null,
+  "stage": "completed",
+  "active_node": null,
+  "task_graph_status": "passed"
 }

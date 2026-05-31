@@ -77,4 +77,4 @@ S02 architecture sprint 启动前必须完成以下步骤：
 
 ## 禁止乐观词声明
 
-本文档不使用以下词汇标记任何实施进度：已修复、稳定、完美、无需担忧、done、complete、implemented。所有 15 个 builder_eligible=false 的 outcome 仍处于需求规约阶段，未进入实施。
+本文档不使用 `task_graph.forbid_optimistic_terms` 定义的保留词来描述实施进度。所有 15 个 `builder_eligible=false` 的 outcome 仍处于需求规约阶段，未进入实施。
