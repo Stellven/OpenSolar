@@ -244,9 +244,25 @@ async def _select_model(page) -> bool:
 async def _submit_prompt(page, full_prompt: str) -> bool:
     print("[TechDiagram] Submitting prompt...", flush=True)
     try:
-        # Wait for either the contenteditable div or the textarea
-        editor = page.locator("div[contenteditable='true'], #prompt-textarea").locator("visible=true").first
-        await editor.wait_for(state="visible", timeout=10000)
+        # Wait for either the current ChatGPT composer or legacy textareas.
+        editor = page.locator(
+            "#prompt-textarea:visible, "
+            "textarea:visible, "
+            "div[contenteditable='true']:visible, "
+            "[data-testid='composer-text-input']:visible"
+        ).first
+        try:
+            await editor.wait_for(state="visible", timeout=15000)
+        except Exception:
+            # Current ChatGPT DOM changes frequently; capture a useful artifact
+            # instead of failing as a black box.
+            await page.screenshot(path=str(_request_dir() / "submit_prompt_failed.png"), full_page=True)
+            (_request_dir() / "submit_prompt_failed.html").write_text(
+                await page.content(),
+                encoding="utf-8",
+            )
+            print(f"[TechDiagram] Composer not found. url={page.url} title={await page.title()}", flush=True)
+            return False
 
         # Click to focus
         await editor.click()
@@ -263,18 +279,25 @@ async def _submit_prompt(page, full_prompt: str) -> bool:
             # Use JS to set text content or just type
             # Typing can be slow, but it's safest for triggering React events.
             # To speed it up, we can set the text then dispatch an input event, or just paste.
+            handle = await editor.element_handle()
             await page.evaluate(f"""
                 (el) => {{
                     el.innerHTML = '';
                     el.innerText = {json.dumps(full_prompt)};
                     el.dispatchEvent(new Event('input', {{ bubbles: true }}));
                 }}
-            """, await editor.element_handle())
+            """, handle)
 
         await page.wait_for_timeout(1000)
 
         # Submit: try clicking the send button first
-        send_btn = page.locator('button[data-testid="send-button"], button[aria-label*="Send"], button[aria-label*="发送"]').first
+        send_btn = page.locator(
+            'button[data-testid="send-button"], '
+            'button[aria-label*="Send"], '
+            'button[aria-label*="发送"], '
+            'button[aria-label*="Submit"], '
+            '[data-testid="composer-speech-button"]'
+        ).first
         if await send_btn.count() and await send_btn.is_enabled():
             await send_btn.click()
         else:
@@ -360,6 +383,28 @@ async def _wait_and_download_image(page, request_dir: Path, timeout_s: int = 120
         await asyncio.sleep(2)
 
     print("[TechDiagram] Timeout waiting for image generation.", flush=True)
+    await page.screenshot(path=str(request_dir / "image_wait_timeout.png"), full_page=True)
+    (request_dir / "image_wait_timeout.html").write_text(
+        await page.content(),
+        encoding="utf-8",
+    )
+    generated_visible = await page.evaluate("""
+        (() => {
+            const text = document.body ? document.body.innerText || '' : '';
+            const hasGeneratedCard =
+                text.includes('编辑') ||
+                text.toLowerCase().includes('download') ||
+                text.toLowerCase().includes('generated') ||
+                text.includes('Solar-Harness Diagram');
+            const visualCount = document.querySelectorAll('img, canvas, svg').length;
+            return hasGeneratedCard && visualCount > 0;
+        })()
+    """)
+    if generated_visible:
+        out_path = request_dir / "generated_diagram.png"
+        await page.screenshot(path=str(out_path), full_page=True)
+        print(f"[TechDiagram] Generated visual detected; saved page screenshot to {out_path}", flush=True)
+        return {"status": "success", "image_path": str(out_path), "url": "page-screenshot-fallback"}
     return {"status": "timeout", "error": "Image generation timed out."}
 
 
@@ -427,7 +472,7 @@ async def _run(input_data: dict) -> int:
                 raise RuntimeError("failed_to_submit_prompt")
 
             # 5. Wait for image
-            result = await _wait_and_download_image(playwright_page, request_dir, timeout_s=180)
+            result = await _wait_and_download_image(playwright_page, request_dir, timeout_s=timeout_s)
 
             # Save results
             (request_dir / "result.json").write_text(

@@ -249,14 +249,15 @@ def run_request(request: dict[str, Any], *, task_dir: Path) -> dict[str, Any]:
 
     env = os.environ.copy()
     if "BROWSER_AGENT_HEADLESS" not in env:
-        env["BROWSER_AGENT_HEADLESS"] = "true"
+        env["BROWSER_AGENT_HEADLESS"] = "false"
     env.update({
         "BROWSER_AGENT_REQUEST_DIR": str(request_dir),
         "BROWSER_AGENT_TIMEOUT": str(request.get("timeout_seconds") or 600),
     })
 
     timeout = ofc.int_value(request.get("timeout_seconds"), 600)
-    max_retries = ofc.int_value(request.get("max_retries"), 1)
+    subprocess_timeout = timeout + 90
+    max_retries = max(1, ofc.int_value(request.get("max_retries"), 1))
 
     last_exc = None
     for attempt in range(1, max_retries + 1):
@@ -268,7 +269,7 @@ def run_request(request: dict[str, Any], *, task_dir: Path) -> dict[str, Any]:
                 text=True,
                 capture_output=True,
                 env=env,
-                timeout=timeout,
+                timeout=subprocess_timeout,
             )
             combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
             (task_dir / f"tech-diagram-output-attempt{attempt}.txt").write_text(
@@ -297,6 +298,21 @@ def run_request(request: dict[str, Any], *, task_dir: Path) -> dict[str, Any]:
 
             print(_summary_markdown(result))
             return result
+        except subprocess.TimeoutExpired as exc:
+            last_exc = exc
+            combined = ((exc.stdout or "") + "\n" + (exc.stderr or "")).strip()
+            (task_dir / f"tech-diagram-output-attempt{attempt}.txt").write_text(
+                combined + ("\n" if combined else ""),
+                encoding="utf-8",
+            )
+            print(
+                f"[Tech Diagram Operator] Attempt {attempt} timed out after "
+                f"{subprocess_timeout}s: {exc}",
+                file=sys.stderr,
+                flush=True,
+            )
+            if attempt < max_retries:
+                time.sleep(5)
         except Exception as exc:
             last_exc = exc
             print(f"[Tech Diagram Operator] Attempt {attempt} failed: {exc}", file=sys.stderr, flush=True)
