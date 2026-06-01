@@ -13,6 +13,7 @@ commands are read from environment variables only.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import signal
@@ -27,6 +28,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PROJECT_NAME = "杂项"
 DEFAULT_WRAPPER = ROOT / "scripts" / "browser_agent_chatgpt_wrapper.py"
 DEFAULT_BROWSER_USE_PYTHON = Path.home() / ".claude" / "mcp-servers" / "browser-use" / ".venv" / "bin" / "python"
+DEFAULT_LOCAL_PROFILE_POLICY = Path.home() / ".solar" / "harness" / "browser-agent-chatgpt-local.json"
 
 
 def infer_kind(purpose: str, explicit: str = "") -> str:
@@ -48,6 +50,146 @@ def wrapper_cmd() -> list[str]:
     if DEFAULT_WRAPPER.exists() and DEFAULT_BROWSER_USE_PYTHON.exists():
         return [str(DEFAULT_BROWSER_USE_PYTHON), str(DEFAULT_WRAPPER)]
     return []
+
+
+def _profile_policy_path() -> Path | None:
+    disabled = (
+        os.environ.get("BROWSER_AGENT_CHATGPT_PROFILE_POLICY_DISABLED")
+        or os.environ.get("TECH_HOTSPOT_BROWSER_CHATGPT_PROFILE_POLICY_DISABLED")
+        or ""
+    ).strip().lower()
+    if disabled in {"1", "true", "yes", "on"}:
+        return None
+    raw = (
+        os.environ.get("BROWSER_AGENT_CHATGPT_PROFILE_POLICY_FILE")
+        or os.environ.get("TECH_HOTSPOT_BROWSER_CHATGPT_PROFILE_POLICY_FILE")
+        or ""
+    ).strip()
+    if raw:
+        return Path(raw).expanduser()
+    return DEFAULT_LOCAL_PROFILE_POLICY
+
+
+def _load_profile_policy() -> dict[str, Any]:
+    path = _profile_policy_path()
+    if path is None or not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise RuntimeError(f"invalid_browser_agent_profile_policy:{path}:{type(exc).__name__}:{exc}") from exc
+    if not isinstance(data, dict):
+        raise RuntimeError(f"invalid_browser_agent_profile_policy:{path}:root_not_object")
+    policies = data.get("policies") or {}
+    if not isinstance(policies, dict):
+        raise RuntimeError(f"invalid_browser_agent_profile_policy:{path}:policies_not_object")
+    return {
+        "path": str(path),
+        "version": data.get("version") or 1,
+        "policies": policies,
+    }
+
+
+def _policy_key_for_purpose(purpose: str) -> str:
+    lowered = str(purpose or "").strip().lower()
+    if lowered.startswith("hf-paper-l7-high-reasoning"):
+        return "hf_paper_insight"
+    if lowered.startswith("github-trend-report"):
+        return "github_trend_report"
+    if lowered.startswith("ai-influence-report"):
+        return "ai_influence_report"
+    return "default"
+
+
+def _merge_policy(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base or {})
+    for key, value in (override or {}).items():
+        merged[key] = value
+    return merged
+
+
+def _pick_profile_from_pool(purpose: str, allowed_profiles: list[str], selection: str) -> str:
+    clean = [item for item in allowed_profiles if str(item).strip()]
+    if not clean:
+        return ""
+    if len(clean) == 1:
+        return clean[0]
+    if selection == "first":
+        return clean[0]
+    digest = hashlib.sha256(str(purpose or "").encode("utf-8")).hexdigest()
+    index = int(digest[:8], 16) % len(clean)
+    return clean[index]
+
+
+def apply_profile_policy(env: dict[str, str], *, purpose: str) -> dict[str, Any]:
+    loaded = _load_profile_policy()
+    if not loaded:
+        return {
+            "enabled": False,
+            "policy_key": "default",
+            "policy_path": "",
+            "selected_profile_directory": env.get("BROWSER_AGENT_PROFILE_DIRECTORY") or "",
+            "selected_account_email": env.get("BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL")
+            or env.get("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL")
+            or "",
+            "allowed_profiles": [],
+        }
+
+    policies = loaded["policies"]
+    key = _policy_key_for_purpose(purpose)
+    default_policy = policies.get("default") if isinstance(policies.get("default"), dict) else {}
+    scoped_policy = policies.get(key) if isinstance(policies.get(key), dict) else {}
+    policy = _merge_policy(default_policy, scoped_policy)
+    allowed_profiles = [str(item).strip() for item in (policy.get("allowed_profiles") or []) if str(item).strip()]
+    expected_account_email = str(policy.get("expected_account_email") or "").strip()
+    selection = str(policy.get("selection") or "hash").strip().lower()
+    explicit_profile = str(env.get("BROWSER_AGENT_PROFILE_DIRECTORY") or "").strip()
+    explicit_account = str(
+        env.get("BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL")
+        or env.get("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL")
+        or ""
+    ).strip()
+
+    if expected_account_email and explicit_account and explicit_account.lower() != expected_account_email.lower():
+        raise RuntimeError(
+            "browser_agent_profile_policy_account_mismatch:"
+            f"purpose={purpose or 'N/A'}:expected={expected_account_email}:actual={explicit_account}"
+        )
+    if allowed_profiles and explicit_profile and explicit_profile not in allowed_profiles:
+        raise RuntimeError(
+            "browser_agent_profile_policy_profile_mismatch:"
+            f"purpose={purpose or 'N/A'}:allowed={','.join(allowed_profiles)}:actual={explicit_profile}"
+        )
+
+    resolved_profile = explicit_profile or _pick_profile_from_pool(purpose, allowed_profiles, selection)
+    resolved_account = explicit_account or expected_account_email
+    if allowed_profiles and not resolved_profile:
+        raise RuntimeError(
+            "browser_agent_profile_policy_missing_profile:"
+            f"purpose={purpose or 'N/A'}:allowed={','.join(allowed_profiles)}"
+        )
+    if expected_account_email and not resolved_account:
+        raise RuntimeError(
+            "browser_agent_profile_policy_missing_account:"
+            f"purpose={purpose or 'N/A'}:expected={expected_account_email}"
+        )
+
+    if resolved_profile:
+        env["BROWSER_AGENT_PROFILE_DIRECTORY"] = resolved_profile
+    if resolved_account:
+        env["BROWSER_AGENT_TARGET_ACCOUNT_EMAIL"] = resolved_account
+        env["BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL"] = resolved_account
+    env["BROWSER_AGENT_CHATGPT_PROFILE_POLICY_KEY"] = key
+
+    return {
+        "enabled": True,
+        "policy_key": key,
+        "policy_path": str(loaded.get("path") or ""),
+        "selected_profile_directory": resolved_profile,
+        "selected_account_email": resolved_account,
+        "allowed_profiles": allowed_profiles,
+        "selection": selection,
+    }
 
 
 def stage_policy(kind: str, expected: str) -> dict[str, Any]:
@@ -175,6 +317,11 @@ def main() -> int:
             "BROWSER_AGENT_CHATGPT_ACTION": action,
         }
     )
+    try:
+        policy_meta = apply_profile_policy(env, purpose=purpose)
+    except RuntimeError as exc:
+        print(f"chatgpt_report_operator: {exc}", file=sys.stderr)
+        return 2
     if kind == "deep_writer":
         env["BROWSER_AGENT_CHATGPT_REQUIRE_DEEP_RESEARCH"] = (
             env.get("BROWSER_AGENT_CHATGPT_REQUIRE_DEEP_RESEARCH") or "true"
@@ -202,6 +349,7 @@ def main() -> int:
                     "target_account_email": env.get("BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL")
                     or env.get("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL")
                     or "",
+                    "profile_policy": policy_meta,
                     "account_email_hint_present": bool(
                         env.get("BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL")
                         or env.get("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL")

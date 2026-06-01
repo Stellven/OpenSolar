@@ -63,6 +63,7 @@ def run_operator(
             "BROWSER_AGENT_REQUEST_DIR": str(tmp_path / "request"),
             "BROWSER_AGENT_PURPOSE": purpose,
             "BROWSER_AGENT_EXPECTED_OUTPUT": expected,
+            "BROWSER_AGENT_CHATGPT_PROFILE_POLICY_DISABLED": "1",
         }
     )
     if env_extra:
@@ -117,6 +118,105 @@ def test_explicit_profile_and_account_hints_are_forwarded(tmp_path):
     assert meta["profile_directory"] == "Default"
     assert meta["target_account_email"] == "haogege1977@gmail.com"
     assert meta["account_email_hint_present"] is True
+
+
+def test_local_profile_policy_can_fill_account_and_choose_from_pool(tmp_path):
+    policy = tmp_path / "browser-agent-chatgpt-local.json"
+    policy.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "policies": {
+                    "default": {
+                        "expected_account_email": "haogege1977@gmail.com",
+                        "allowed_profiles": ["Default", "Profile 1"],
+                        "selection": "first",
+                    }
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    proc = run_operator(
+        tmp_path,
+        purpose="hf-paper-l7-high-reasoning-demo",
+        env_extra={
+            "BROWSER_AGENT_CHATGPT_PROFILE_POLICY_DISABLED": "0",
+            "BROWSER_AGENT_CHATGPT_PROFILE_POLICY_FILE": str(policy),
+        },
+    )
+    payload = json.loads(proc.stdout)
+    assert payload["profile_directory"] == "Default"
+    assert payload["target_account_email"] == "haogege1977@gmail.com"
+    assert payload["chatgpt_account_email"] == "haogege1977@gmail.com"
+    meta = json.loads((tmp_path / "request" / "report-operator-request.json").read_text())
+    assert meta["profile_policy"]["enabled"] is True
+    assert meta["profile_policy"]["policy_key"] == "hf_paper_insight"
+    assert meta["profile_policy"]["selected_profile_directory"] == "Default"
+    assert meta["profile_policy"]["selected_account_email"] == "haogege1977@gmail.com"
+
+
+def test_local_profile_policy_rejects_profile_outside_allowed_pool(tmp_path):
+    policy = tmp_path / "browser-agent-chatgpt-local.json"
+    policy.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "policies": {
+                    "default": {
+                        "expected_account_email": "haogege1977@gmail.com",
+                        "allowed_profiles": ["Default", "Profile 2"],
+                    }
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    proc = run_operator(
+        tmp_path,
+        purpose="hf-paper-l7-high-reasoning-demo",
+        env_extra={
+            "BROWSER_AGENT_CHATGPT_PROFILE_POLICY_DISABLED": "0",
+            "BROWSER_AGENT_CHATGPT_PROFILE_POLICY_FILE": str(policy),
+            "BROWSER_AGENT_PROFILE_DIRECTORY": "Profile 1",
+        },
+        check=False,
+    )
+    assert proc.returncode == 2
+    assert "browser_agent_profile_policy_profile_mismatch" in proc.stderr
+
+
+def test_local_profile_policy_rejects_account_mismatch(tmp_path):
+    policy = tmp_path / "browser-agent-chatgpt-local.json"
+    policy.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "policies": {
+                    "default": {
+                        "expected_account_email": "haogege1977@gmail.com",
+                        "allowed_profiles": ["Default"],
+                    }
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    proc = run_operator(
+        tmp_path,
+        purpose="hf-paper-l7-high-reasoning-demo",
+        env_extra={
+            "BROWSER_AGENT_CHATGPT_PROFILE_POLICY_DISABLED": "0",
+            "BROWSER_AGENT_CHATGPT_PROFILE_POLICY_FILE": str(policy),
+            "BROWSER_AGENT_TARGET_ACCOUNT_EMAIL": "someone@example.com",
+        },
+        check=False,
+    )
+    assert proc.returncode == 2
+    assert "browser_agent_profile_policy_account_mismatch" in proc.stderr
 
 
 def test_chapter_writer_prompt_hides_internal_fields_instruction(tmp_path):
