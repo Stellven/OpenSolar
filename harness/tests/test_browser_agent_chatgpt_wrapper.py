@@ -1,0 +1,126 @@
+from __future__ import annotations
+
+import sys
+import types
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = ROOT / "harness" / "scripts" / "browser_agent_chatgpt_wrapper.py"
+
+
+def _load_namespace() -> dict:
+    browser_use = types.ModuleType("browser_use")
+    browser_use_browser = types.ModuleType("browser_use.browser")
+    browser_use_browser_profile = types.ModuleType("browser_use.browser.profile")
+    browser_use_browser_session = types.ModuleType("browser_use.browser.session")
+
+    class _DummyProfile:
+        pass
+
+    class _DummySession:
+        pass
+
+    browser_use_browser_profile.BrowserProfile = _DummyProfile
+    browser_use_browser_session.BrowserSession = _DummySession
+
+    prev_modules = {
+        name: sys.modules.get(name)
+        for name in (
+            "browser_use",
+            "browser_use.browser",
+            "browser_use.browser.profile",
+            "browser_use.browser.session",
+        )
+    }
+    sys.modules["browser_use"] = browser_use
+    sys.modules["browser_use.browser"] = browser_use_browser
+    sys.modules["browser_use.browser.profile"] = browser_use_browser_profile
+    sys.modules["browser_use.browser.session"] = browser_use_browser_session
+    try:
+        ns: dict = {"__file__": str(SCRIPT), "__name__": "browser_agent_chatgpt_wrapper_test"}
+        code = compile(SCRIPT.read_text(encoding="utf-8"), str(SCRIPT), "exec")
+        exec(code, ns)
+        return ns
+    finally:
+        for name, module in prev_modules.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
+
+
+def test_post_submit_confirms_chinese_thinking_banner():
+    ns = _load_namespace()
+    result = ns["_post_submit_confirms_chatgpt_mode"](
+        {
+            "latest_assistant_text": "正在思考",
+            "is_generating": True,
+            "assistant_count": 1,
+        },
+        model_mode="thinking",
+        reasoning_effort="high",
+    )
+    assert result["ok"] is True
+    assert result["model_ok"] is True
+    assert result["reasoning_ok"] is True
+
+
+def test_post_submit_accepts_configured_high_reasoning_when_response_started():
+    ns = _load_namespace()
+    result = ns["_post_submit_confirms_chatgpt_mode"](
+        {
+            "latest_assistant_text": '{"accepted": true, "summary": "partial json"}',
+            "is_generating": True,
+            "assistant_count": 1,
+            "_configure_result": {
+                "steps": [
+                    {
+                        "step": "open_model_dropdown",
+                        "ok": True,
+                        "clicked": {"text": "ChatGPT", "aria": "模型选择器"},
+                    },
+                    {
+                        "step": "select_high_reasoning",
+                        "ok": True,
+                        "clicked": {"text": "思考时间更长", "aria": ""},
+                    },
+                ]
+            },
+        },
+        model_mode="thinking",
+        reasoning_effort="high",
+    )
+    assert result["ok"] is True
+    assert result["model_selector_confirmed"] is True
+    assert result["high_reasoning_confirmed"] is True
+
+
+def test_post_submit_accepts_json_response_started_on_chatgpt_page():
+    ns = _load_namespace()
+    result = ns["_post_submit_confirms_chatgpt_mode"](
+        {
+            "latest_assistant_text": '{"accepted": true, "trend_type": "weak_signal", "summary": "partial json"}',
+            "is_generating": True,
+            "assistant_count": 1,
+            "_configure_result": {
+                "steps": [
+                    {
+                        "step": "open_model_dropdown",
+                        "ok": True,
+                        "clicked": {"text": "ChatGPT", "aria": "模型选择器"},
+                    },
+                    {
+                        "step": "select_high_reasoning",
+                        "ok": False,
+                        "clicked": None,
+                    },
+                ]
+            },
+        },
+        model_mode="thinking",
+        reasoning_effort="high",
+    )
+    assert result["ok"] is True
+    assert result["json_response_started"] is True
+    assert result["reasoning_ok"] is True
