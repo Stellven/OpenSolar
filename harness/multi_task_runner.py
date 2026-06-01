@@ -2170,7 +2170,6 @@ def _profile_candidate_from_text(text: str) -> dict[str, str] | None:
             return {"profile": name, "backend": "", "model": ""}
     candidates: list[tuple[tuple[str, ...], dict[str, str]]] = [
         (("gemini",), {"profile": "gemini-builder", "backend": "gemini-cli", "model": "gemini"}),
-        (("deepseek",), {"profile": "deepseek-builder", "backend": "", "model": "deepseek"}),
         (("glm", "gml", "智谱"), {"profile": "glm-planner", "backend": "", "model": "glm-5.1"}),
         (("opus",), {"profile": "evaluator", "backend": "claude-cli", "model": "opus"}),
         (("sonnet",), {"profile": "builder", "backend": "claude-cli", "model": "sonnet"}),
