@@ -5,6 +5,7 @@ import datetime as dt
 import importlib.util
 import json
 import sys
+import time
 from pathlib import Path
 
 
@@ -230,6 +231,53 @@ def test_planner_handoff_prefers_idle_planner_pool_candidate(monkeypatch) -> Non
     monkeypatch.setattr(mod, "pane_is_busy", lambda pane: False)
 
     assert mod.pane_target_for_handoff("planner") == "solar-harness-lab:0.4"
+
+
+def test_should_act_retries_role_handoff_soon_after_failed_pm_attempt(tmp_path, monkeypatch) -> None:
+    inbox = tmp_path / "pm-inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(mod, "PM_INBOX_DIR", inbox)
+    monkeypatch.setattr(mod, "ROLE_HANDOFF_RETRY_COOLDOWN_SEC", 30)
+    monkeypatch.setattr(mod, "_active_pm_task_ids", lambda: set())
+    now = dt.datetime.now(dt.timezone.utc)
+    payload = {
+        "task_id": "pm-sprint-yt-N0-deadbeef",
+        "sprint_id": "sprint-yt",
+        "requested_role": "planner",
+        "status": "failed_missing_pm_result",
+        "submitted_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    (inbox / "pm-sprint-yt-N0-deadbeef.json").write_text(json.dumps(payload), encoding="utf-8")
+    state = {"actions": {"sprint-yt:ready_for_planner:solar-harness:0.1": {"at": time.time() - 40}}}
+    finding = {"sid": "sprint-yt", "type": "ready_for_planner", "target": "solar-harness:0.1"}
+
+    assert mod.should_act(state, finding, 300) is True
+
+
+def test_apply_findings_skips_duplicate_role_handoff_when_live_pm_task_exists(tmp_path, monkeypatch) -> None:
+    inbox = tmp_path / "pm-inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(mod, "PM_INBOX_DIR", inbox)
+    monkeypatch.setattr(mod, "_active_pm_task_ids", lambda: {"pm-sprint-yt-N0-live"})
+    live = {
+        "task_id": "pm-sprint-yt-N0-live",
+        "sprint_id": "sprint-yt",
+        "requested_role": "planner",
+        "status": "submitted",
+        "submitted_at": _utc_after(60),
+    }
+    (inbox / "pm-sprint-yt-N0-live.json").write_text(json.dumps(live), encoding="utf-8")
+    monkeypatch.setattr(mod, "load_json", lambda path: {"sprint_id": "sprint-yt", "handoff_to": "planner", "phase": "prd_ready", "status": "active"})
+    monkeypatch.setattr(mod, "save_json", lambda *args, **kwargs: None)
+    monkeypatch.setattr(mod, "append_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(mod, "dispatch_role_handoff", lambda sid, ftype: (_ for _ in ()).throw(AssertionError("dispatch should be skipped")))
+
+    findings = [{"sid": "sprint-yt", "type": "ready_for_planner", "target": "solar-harness:0.1", "message": "retry"}]
+    state = {"actions": {}, "target_actions": {}}
+    actions = mod.apply_findings(findings, True, state, 300)
+
+    assert actions[0]["skipped"] == "live_pm_task_exists"
+    assert actions[0]["task_id"] == "pm-sprint-yt-N0-live"
 
 
 def test_evaluator_handoff_prefers_idle_evaluator_pool_candidate(monkeypatch) -> None:

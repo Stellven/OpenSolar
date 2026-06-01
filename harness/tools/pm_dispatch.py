@@ -1093,6 +1093,13 @@ def _active_pm_task_ids() -> set[str]:
     return active
 
 
+def _pm_status_is_terminal(status: str) -> bool:
+    value = str(status or "").strip().lower()
+    if not value:
+        return False
+    return value in {"completed", "cancelled"} or value.startswith("failed")
+
+
 def _pm_expected_artifacts(record: dict[str, Any]) -> list[Path]:
     """Artifacts that prove a PM role task actually satisfied its contract."""
     role = normalize_role(str(record.get("requested_role") or ""))
@@ -1367,6 +1374,9 @@ def cmd_submit(args: argparse.Namespace) -> int:
         except Exception:
             resolved_capsule = None
 
+    task_id = f"pm-{sprint_id}-{node_id}-{_short_id()}"
+    result_path = str(SPRINTS_DIR / f"{sprint_id}.{node_id}.pm-result.md")
+
     # 1. 选算子
     operator_id, operator, fallback_reason = select_operator_by_role(
         role=role,
@@ -1376,6 +1386,23 @@ def cmd_submit(args: argparse.Namespace) -> int:
         logical_operator=logical_operator,
     )
     if not operator_id:
+        failure_record: dict[str, Any] = {
+            "task_id": task_id,
+            "sprint_id": sprint_id,
+            "node_id": node_id,
+            "operator_id": "",
+            "objective": objective,
+            "result_path": result_path,
+            "status": "failed_no_dispatchable_operator",
+            "submitted_at": _now(),
+            "failed_at": _now(),
+            "requested_role": normalize_role(role),
+            "failure_reason": fallback_reason or "no_dispatchable_operator_for_role",
+        }
+        if capsule_submit.get("capability_capsule_id"):
+            failure_record["capability_capsule_id"] = capsule_submit["capability_capsule_id"]
+            failure_record["logical_operator"] = logical_operator
+        write_pm_task_record(task_id, failure_record)
         msg = f"ERROR: 没有可用算子 ({fallback_reason})"
         # Surface cooldown ETA when the fallback reason mentions cooldown/quota
         if any(kw in fallback_reason for kw in ("cooldown", "quota_exhausted", "auth_expired")):
@@ -1391,10 +1418,6 @@ def cmd_submit(args: argparse.Namespace) -> int:
                     msg += f" (until {_expires})"
         print(msg, file=sys.stderr)
         return 1
-
-    # 2. 构建 task_id 和结果路径
-    task_id = f"pm-{sprint_id}-{node_id}-{_short_id()}"
-    result_path = str(SPRINTS_DIR / f"{sprint_id}.{node_id}.pm-result.md")
 
     # 3. 构建 dispatch 文件
     dispatch_text = build_pm_dispatch_text(
@@ -1470,6 +1493,7 @@ def cmd_submit(args: argparse.Namespace) -> int:
         "operator_id": operator_id,
         "objective": objective,
         "dispatch_file": str(dispatch_file),
+        "dispatch_path": str(dispatch_file),
         "result_path": result_path,
         "status": "submitted",
         "submitted_at": _now(),
@@ -1511,6 +1535,11 @@ def cmd_submit(args: argparse.Namespace) -> int:
         try:
             result = submit(envelope)
         except Exception as exc:
+            record["status"] = "failed_submit_exception"
+            record["failed_at"] = _now()
+            record["failure_reason"] = f"operator_runtime.submit failed: {exc}"
+            record["submit_error"] = str(exc)
+            write_pm_task_record(task_id, record)
             print(f"ERROR: operator_runtime.submit failed: {exc}", file=sys.stderr)
             return 1
         record["status"] = "submitted"
@@ -1591,7 +1620,7 @@ def _pending_pm_backlog_count() -> int:
         except Exception:
             continue
         status = str(payload.get("status") or "").strip().lower()
-        if status not in {"completed", "cancelled", "failed"}:
+        if not _pm_status_is_terminal(status):
             count += 1
     return count
 
@@ -1975,7 +2004,7 @@ def cmd_reconcile(args: argparse.Namespace) -> int:
                 )
                 write_pm_task_record(task_id, record)
             continue
-        if status in {"cancelled", "failed", "failed_missing_pm_result", "failed_contract_closeout"}:
+        if _pm_status_is_terminal(status):
             continue
 
         result_path = Path(str(record.get("result_path") or ""))

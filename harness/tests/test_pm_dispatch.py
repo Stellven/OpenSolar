@@ -211,3 +211,52 @@ def test_cmd_compile_request_rejects_invalid_compiled_package(monkeypatch, tmp_p
     rc = pm_dispatch.cmd_compile_request(args)
     assert rc == 2
     assert touched["status"] is False
+
+
+def test_cmd_submit_persists_failed_record_when_no_operator_available(monkeypatch, tmp_path):
+    pm_dispatch = _load_pm_dispatch()
+    monkeypatch.setenv("SOLAR_PM_DISPATCH_ALLOW_DIRECT", "1")
+    monkeypatch.setattr(pm_dispatch, "HARNESS_DIR", tmp_path)
+    monkeypatch.setattr(pm_dispatch, "SPRINTS_DIR", tmp_path / "sprints")
+    monkeypatch.setattr(pm_dispatch, "PM_INBOX_DIR", tmp_path / "run" / "pm-inbox")
+    monkeypatch.setattr(pm_dispatch, "OPERATOR_INBOX_DIR", tmp_path / "run" / "operator-inbox")
+    monkeypatch.setattr(pm_dispatch, "OPERATOR_STATUS_DIR", tmp_path / "run" / "operator-status")
+    monkeypatch.setattr(
+        pm_dispatch,
+        "select_operator_by_role",
+        lambda **kwargs: ("", {}, "no_dispatchable_operator_for_role: planner"),
+    )
+
+    args = argparse.Namespace(
+        role="planner",
+        objective="Need planner handoff",
+        operator="",
+        sprint="sprint-no-operator",
+        node="N0",
+        task_type="planning",
+        context="",
+        dry_run=False,
+    )
+    rc = pm_dispatch.cmd_submit(args)
+    assert rc == 1
+    records = list((tmp_path / "run" / "pm-inbox").glob("pm-*.json"))
+    assert len(records) == 1
+    payload = json.loads(records[0].read_text(encoding="utf-8"))
+    assert payload["status"] == "failed_no_dispatchable_operator"
+    assert payload["failure_reason"] == "no_dispatchable_operator_for_role: planner"
+
+
+def test_pending_pm_backlog_count_ignores_failed_variants(monkeypatch, tmp_path):
+    pm_dispatch = _load_pm_dispatch()
+    inbox = tmp_path / "run" / "pm-inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(pm_dispatch, "PM_INBOX_DIR", inbox)
+    samples = {
+        "pm-a.json": {"status": "submitted"},
+        "pm-b.json": {"status": "failed_contract_closeout"},
+        "pm-c.json": {"status": "failed_missing_pm_result"},
+        "pm-d.json": {"status": "completed"},
+    }
+    for name, payload in samples.items():
+        (inbox / name).write_text(json.dumps(payload), encoding="utf-8")
+    assert pm_dispatch._pending_pm_backlog_count() == 1
