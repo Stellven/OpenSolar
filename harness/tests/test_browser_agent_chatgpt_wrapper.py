@@ -124,3 +124,17 @@ def test_post_submit_accepts_json_response_started_on_chatgpt_page():
     assert result["ok"] is True
     assert result["json_response_started"] is True
     assert result["reasoning_ok"] is True
+
+
+def test_headed_run_requires_explicit_opt_in(monkeypatch):
+    ns = _load_namespace()
+    monkeypatch.delenv("BROWSER_AGENT_CHATGPT_ALLOW_HEADED", raising=False)
+    monkeypatch.delenv("TECH_HOTSPOT_BROWSER_CHATGPT_ALLOW_HEADED", raising=False)
+    monkeypatch.delenv("BROWSER_AGENT_ALLOW_HEADED", raising=False)
+    assert ns["_headed_run_allowed"]() is False
+
+
+def test_headed_run_accepts_explicit_opt_in(monkeypatch):
+    ns = _load_namespace()
+    monkeypatch.setenv("BROWSER_AGENT_CHATGPT_ALLOW_HEADED", "true")
+    assert ns["_headed_run_allowed"]() is True
