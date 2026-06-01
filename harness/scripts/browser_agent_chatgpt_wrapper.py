@@ -27,6 +27,24 @@ DEFAULT_USER_DATA_DIR = Path.home() / "Library" / "Application Support" / "Googl
 DEFAULT_PROFILE_DIRECTORY = "Profile 1"
 DEFAULT_ALLOWED_DOMAINS = ["chatgpt.com", "auth.openai.com", "challenges.cloudflare.com"]
 
+
+def _env_flag(*names: str, default: bool = False) -> bool:
+    for name in names:
+        value = str(os.environ.get(name) or "").strip().lower()
+        if not value:
+            continue
+        return value in {"1", "true", "yes", "on"}
+    return default
+
+
+def _headed_run_allowed() -> bool:
+    return _env_flag(
+        "BROWSER_AGENT_CHATGPT_ALLOW_HEADED",
+        "TECH_HOTSPOT_BROWSER_CHATGPT_ALLOW_HEADED",
+        "BROWSER_AGENT_ALLOW_HEADED",
+        default=False,
+    )
+
 CAPTURE_JS = r"""() => {
   const clean = (value) => String(value || "")
     .replace(/\u00a0/g, " ")
@@ -1200,17 +1218,22 @@ async def _run(prompt: str) -> int:
         or os.environ.get("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL")
         or ""
     ).strip()
-    headless = str(os.environ.get("BROWSER_AGENT_HEADLESS") or "false").strip().lower() in {"1", "true", "yes", "on"}
+    headless = _env_flag("BROWSER_AGENT_HEADLESS", default=False)
+    headed_allowed = _headed_run_allowed()
     allowed_domains = [
         item.strip()
         for item in str(os.environ.get("BROWSER_AGENT_ALLOWED_DOMAINS") or ",".join(DEFAULT_ALLOWED_DOMAINS)).split(",")
         if item.strip()
     ]
-
-    staged_dir, cleanup_dir = bjrt._stage_browser_profile(user_data_dir, profile_directory)
-    if user_data_dir and not staged_dir:
-        raise RuntimeError("protected_browser_profile_cache_missing")
-    scrubbed_client_state = _scrub_chatgpt_client_state(staged_dir, profile_directory) if scrub_client_state else []
+    if not headless and not headed_allowed:
+        staged_dir = None
+        cleanup_dir = None
+        scrubbed_client_state = []
+    else:
+        staged_dir, cleanup_dir = bjrt._stage_browser_profile(user_data_dir, profile_directory)
+        if user_data_dir and not staged_dir:
+            raise RuntimeError("protected_browser_profile_cache_missing")
+        scrubbed_client_state = _scrub_chatgpt_client_state(staged_dir, profile_directory) if scrub_client_state else []
 
     meta = {
         "provider": "browser_agent_chatgpt",
@@ -1221,6 +1244,7 @@ async def _run(prompt: str) -> int:
         "action": action,
         "profile_directory": profile_directory,
         "headless": headless,
+        "headed_allowed": headed_allowed,
         "allowed_domains": allowed_domains,
         "project_name": project_name,
         "require_project": require_project,
@@ -1238,6 +1262,8 @@ async def _run(prompt: str) -> int:
         "started_at": bjrt._now(),
     }
     _write_json(request_dir / "wrapper-meta.json", meta)
+    if not headless and not headed_allowed:
+        raise RuntimeError("browser_agent_headed_run_requires_explicit_opt_in")
 
     browser = BrowserSession(
         browser_profile=BrowserProfile(
