@@ -19,6 +19,13 @@ SURVEY_TAIL = """
   (optional)
   1: Bad   2: Fine   3: Good  0:
                               Dismiss
+"""
+
+STALE_SURVEY_TAIL = """
+● How is Claude doing this session?
+  (optional)
+  1: Bad   2: Fine   3: Good  0:
+                              Dismiss
 ───────────────────────────────────────
 ❯
 ───────────────────────────────────────
@@ -28,6 +35,8 @@ SURVEY_TAIL = """
 def main() -> int:
     if not mod.pane_survey_blocked(SURVEY_TAIL):
         raise SystemExit("survey prompt was not detected")
+    if mod.pane_survey_blocked(STALE_SURVEY_TAIL):
+        raise SystemExit("stale survey scrollback was incorrectly detected as blocking")
 
     mod.tmux_capture = lambda target: SURVEY_TAIL
     mod.assigned_graph_node_for_pane = lambda target: {

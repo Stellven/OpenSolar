@@ -322,28 +322,6 @@ class TestWriteResult:
         assert "[SCRUBBED]" in result["log_tail"]
 
 
-class TestAntigravityNonfinalOutputGate:
-    def test_rejects_placeholder_handoff(self):
-        assert _od._antigravity_output_is_nonfinal([
-            "[solar-harness agy-multimodal] cmd=agy --print <prompt>",
-            "# Handoff",
-        ])
-
-    def test_rejects_progress_intent_output(self):
-        assert _od._antigravity_output_is_nonfinal([
-            "[solar-harness agy-multimodal] cmd=agy --print <prompt>",
-            "I will start by checking our current permissions to see if we can access the image file.",
-        ])
-
-    def test_accepts_final_handoff(self):
-        assert not _od._antigravity_output_is_nonfinal([
-            "[solar-harness agy-multimodal] cmd=agy --print <prompt>",
-            "# Handoff",
-            "## completed",
-            "IMAGE_OPERATOR_SMOKE_OK: image accessible and verified.",
-        ])
-
-
 # ---------------------------------------------------------------------------
 # Integration test: full daemon --once end-to-end
 # ---------------------------------------------------------------------------

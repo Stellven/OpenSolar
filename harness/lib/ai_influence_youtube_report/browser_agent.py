@@ -7,6 +7,10 @@ call ChatGPT directly; production integration is injected through provider.
 from __future__ import annotations
 
 import time
+import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Protocol
 from uuid import uuid4
@@ -20,6 +24,88 @@ class BrowserAgentProvider(Protocol):
 
 class LocalModelSubstitutionError(RuntimeError):
     pass
+
+
+class YoutubeTranscriptExtractor:
+    """Production adapter for the YouTube transcript browser-agent operator.
+
+    The report BrowserAgentClient below is for ChatGPT report planning/writing.
+    Transcript capture is a separate logical operator; this adapter exposes it
+    from the AI Influence YouTube module while reusing the existing operator
+    implementation instead of duplicating browser automation.
+    """
+
+    def __init__(
+        self,
+        *,
+        operator_script: str | Path | None = None,
+        python_executable: str | Path | None = None,
+        target_account_email: str | None = None,
+    ) -> None:
+        root = Path(__file__).resolve().parents[2]
+        self.operator_script = Path(operator_script or root / "tools" / "youtube_transcript_operator.py")
+        self.python_executable = str(python_executable or sys.executable)
+        self.target_account_email = target_account_email
+
+    def extract(
+        self,
+        youtube_url: str,
+        *,
+        task_dir: str | Path,
+        timeout_seconds: int = 300,
+        max_retries: int = 1,
+        output_format: str = "timestamped",
+        headless: bool = True,
+    ) -> dict[str, Any]:
+        url = str(youtube_url or "").strip()
+        if not url:
+            raise RuntimeError("YoutubeTranscriptExtractor requires youtube_url")
+        if not self.operator_script.exists():
+            raise RuntimeError(f"YouTube transcript operator not found: {self.operator_script}")
+
+        run_dir = Path(task_dir).expanduser()
+        run_dir.mkdir(parents=True, exist_ok=True)
+        envelope_path = run_dir / "envelope.json"
+        envelope_path.write_text(
+            json.dumps(
+                {
+                    "operator_id": "mini-youtube-transcript-extractor",
+                    "youtube_url": url,
+                    "timeout_seconds": max(int(timeout_seconds), 300),
+                    "max_retries": int(max_retries),
+                    "output_format": output_format,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        env = os.environ.copy()
+        env["SOLAR_OPERATOR_ENVELOPE_JSON"] = str(envelope_path)
+        env["TASK_DIR"] = str(run_dir)
+        env.setdefault("BROWSER_AGENT_HEADLESS", "true" if headless else "false")
+        if self.target_account_email:
+            env["BROWSER_AGENT_TARGET_ACCOUNT_EMAIL"] = self.target_account_email
+
+        proc = subprocess.run(
+            [self.python_executable, str(self.operator_script)],
+            env=env,
+            text=True,
+            capture_output=True,
+            timeout=max(int(timeout_seconds), 300) + 60,
+        )
+        (run_dir / "operator.stdout.txt").write_text(proc.stdout or "", encoding="utf-8")
+        (run_dir / "operator.stderr.txt").write_text(proc.stderr or "", encoding="utf-8")
+        result_path = run_dir / "youtube-transcript-result.json"
+        if proc.returncode != 0 or not result_path.exists():
+            combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+            raise RuntimeError(f"browser transcript operator failed rc={proc.returncode}: {combined[-1200:]}")
+        payload = json.loads(result_path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise RuntimeError("youtube-transcript-result.json must contain a JSON object")
+        return payload
 
 
 class BrowserAgentClient:

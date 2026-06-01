@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
 import os
 import subprocess
@@ -23,6 +24,9 @@ def harness_dir() -> Path:
 SESSION = os.environ.get("SOLAR_HARNESS_SESSION", "solar-harness")
 HARNESS_DIR = harness_dir()
 REGISTRY_PATH = HARNESS_DIR / "run" / "pane-hygiene.json"
+PHYSICAL_OPERATORS_PATH = Path(
+    os.environ.get("SOLAR_MULTI_TASK_OPERATORS", HARNESS_DIR / "config" / "physical-operators.json")
+)
 
 
 def list_tmux_panes() -> list[dict[str, str]]:
@@ -50,10 +54,64 @@ def _allowed_session(pane: str) -> bool:
     return pane.startswith(f"{SESSION}:") or pane.startswith("solar-harness-lab:") or pane.startswith("solar-harness-multi-task:")
 
 
+def _normalize_role(role: str) -> str:
+    return str(role or "").strip().lower().replace("_", "-")
+
+
+def _load_operator_registry() -> dict[str, Any]:
+    if not PHYSICAL_OPERATORS_PATH.exists():
+        return {"version": 1, "operators": {}}
+    try:
+        payload = json.loads(PHYSICAL_OPERATORS_PATH.read_text(encoding="utf-8"))
+        return payload if isinstance(payload, dict) else {"version": 1, "operators": {}}
+    except Exception:
+        return {"version": 1, "operators": {}}
+
+
+def _operator_roles(spec: dict[str, Any]) -> set[str]:
+    raw_roles = spec.get("roles")
+    values: list[str]
+    if isinstance(raw_roles, str):
+        values = [raw_roles]
+    elif isinstance(raw_roles, list):
+        values = [str(item) for item in raw_roles]
+    else:
+        values = []
+    role = str(spec.get("role") or "").strip()
+    if role:
+        values.append(role)
+    return {_normalize_role(item) for item in values if str(item or "").strip()}
+
+
+def _pane_pattern_matches(pattern: str, pane: str) -> bool:
+    raw = str(pattern or "").strip()
+    if not raw:
+        return False
+    if raw.endswith(":*"):
+        return pane.startswith(raw[:-1])
+    return fnmatch.fnmatch(pane, raw)
+
+
+def _registry_roles_for_pane(pane: str) -> set[str]:
+    registry = _load_operator_registry()
+    operators = registry.get("operators") if isinstance(registry.get("operators"), dict) else {}
+    roles: set[str] = set()
+    for spec in operators.values():
+        if not isinstance(spec, dict):
+            continue
+        if not bool(spec.get("enabled", False)) or not bool(spec.get("available", False)):
+            continue
+        if not _pane_pattern_matches(str(spec.get("pane") or ""), pane):
+            continue
+        roles.update(_operator_roles(spec))
+    return roles
+
+
 def infer_role(pane: str, title: str) -> str:
     normalized = title or ""
     base = normalized.split("|", 1)[0].strip()
     lowered = base.lower()
+    registry_roles = _registry_roles_for_pane(pane)
     if pane.endswith(":0.0") and pane.startswith(f"{SESSION}:") and ("pm" in lowered or "产品经理" in base):
         return "pm"
     if "planner" in lowered or "规划者" in base:
@@ -66,6 +124,9 @@ def infer_role(pane: str, title: str) -> str:
         return "observer"
     if "builder" in lowered or "建设者" in base or "lab-builder" in lowered:
         return "builder"
+    for candidate in ("planner", "evaluator", "architect", "builder", "pm"):
+        if candidate in registry_roles:
+            return candidate
     if pane.startswith("solar-harness-lab:") or pane.startswith("solar-harness-multi-task:"):
         return "builder"
     if pane == f"{SESSION}:0.0":
@@ -81,11 +142,15 @@ def _planner_rank(item: dict[str, str]) -> tuple[int, str]:
     role = item["host_role"]
     pane = item["pane"]
     if role == "planner":
+        if pane.startswith(f"{SESSION}:"):
+            return (0, pane)
+        if pane.startswith("solar-harness-multi-task:"):
+            return (1, pane)
         return (0, pane)
     if role == "architect":
-        return (1, pane)
-    if role == "builder":
         return (2, pane)
+    if role == "builder":
+        return (3, pane)
     return (9, pane)
 
 
@@ -93,9 +158,13 @@ def _evaluator_rank(item: dict[str, str]) -> tuple[int, str]:
     role = item["host_role"]
     pane = item["pane"]
     if role == "evaluator":
+        if pane.startswith(f"{SESSION}:"):
+            return (0, pane)
+        if pane.startswith("solar-harness-multi-task:"):
+            return (1, pane)
         return (0, pane)
     if role == "builder":
-        return (1, pane)
+        return (2, pane)
     return (9, pane)
 
 
@@ -114,19 +183,28 @@ def discover_role_pool(role: str) -> list[dict[str, str]]:
         pane = item["pane"]
         if not _allowed_session(pane):
             continue
+        registry_roles = _registry_roles_for_pane(pane)
         host_role = infer_role(pane, item["title"])
-        item = {"pane": pane, "title": item["title"], "host_role": host_role}
+        effective_host_role = host_role
+        if role in registry_roles:
+            effective_host_role = role
+        item = {
+            "pane": pane,
+            "title": item["title"],
+            "host_role": effective_host_role,
+            "registry_roles": sorted(registry_roles),
+        }
         if role == "pm":
-            if host_role in {"pm", "observer"}:
+            if effective_host_role in {"pm", "observer"} or role in registry_roles:
                 rows.append(item)
         elif role == "planner":
-            if host_role in {"planner", "architect", "builder"}:
+            if effective_host_role in {"planner", "architect", "builder"} or role in registry_roles:
                 rows.append(item)
         elif role == "builder":
-            if host_role == "builder":
+            if effective_host_role == "builder" or role in registry_roles:
                 rows.append(item)
         elif role == "evaluator":
-            if host_role in {"evaluator", "builder"}:
+            if effective_host_role in {"evaluator", "builder"} or role in registry_roles:
                 rows.append(item)
     if role == "planner":
         rows.sort(key=_planner_rank)

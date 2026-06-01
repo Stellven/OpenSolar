@@ -19,6 +19,11 @@ def test_build_request_reads_prompt_file(tmp_path):
     assert payload["prompt"] == "hello chatgpt"
     assert payload["project_name"] == "杂项"
     assert payload["expected_output"] == "markdown"
+    assert payload["model"] == "chatgpt-5.5"
+    assert payload["reasoning_effort"] == "high"
+    assert payload["model_mode"] == "thinking"
+    assert payload["tool_mode"] == "none"
+    assert payload["require_ui_mode"] is True
 
 
 def test_run_request_writes_result(monkeypatch, tmp_path, capsys):
@@ -28,9 +33,19 @@ def test_run_request_writes_result(monkeypatch, tmp_path, capsys):
         stderr = ""
 
     monkeypatch.setattr(cto, "_wrapper_cmd", lambda: ["fake-wrapper"])
-    monkeypatch.setattr(cto.subprocess, "run", lambda *args, **kwargs: Result())
+    seen_env = {}
+
+    def _fake_run(*args, **kwargs):
+        seen_env.update(kwargs.get("env") or {})
+        return Result()
+
+    monkeypatch.setattr(cto.subprocess, "run", _fake_run)
     result = cto.run_request({"prompt": "hello", "project_name": "杂项"}, task_dir=tmp_path)
     assert result["ok"] is True
+    assert seen_env["CHATGPT_MODEL"] == "chatgpt-5.5"
+    assert seen_env["CHATGPT_REASONING_EFFORT"] == "high"
+    assert seen_env["BROWSER_AGENT_CHATGPT_MODEL_MODE"] == "thinking"
+    assert seen_env["BROWSER_AGENT_CHATGPT_REQUIRE_UI_MODE"] == "true"
     assert (tmp_path / "chatgpt-browser-agent-request.json").exists()
     assert (tmp_path / "chatgpt-browser-agent-result.json").exists()
     assert "ChatGPT Browser Agent Result" in capsys.readouterr().out

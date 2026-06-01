@@ -6,6 +6,7 @@ import base64
 import json
 import logging
 import os
+import subprocess
 import shutil
 import sys
 import time
@@ -93,7 +94,14 @@ CAPTURE_JS = r"""() => {
 }"""
 
 SET_PROMPT_JS = r"""(promptText) => {
-  const composer = document.querySelector("#prompt-textarea, div[contenteditable='true'][role='textbox'], textarea[name='prompt-textarea']");
+  const visible = (el) => {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+  };
+  const candidates = Array.from(document.querySelectorAll("#prompt-textarea, div[contenteditable='true'][role='textbox'], textarea[name='prompt-textarea'], textarea"));
+  const composer = candidates.find(visible) || candidates[0];
   if (!composer) {
     return JSON.stringify({ ok: false, error: "composer_not_found" });
   }
@@ -101,8 +109,15 @@ SET_PROMPT_JS = r"""(promptText) => {
   const lines = prompt.split("\n");
   composer.focus();
   if (composer.tagName === "TEXTAREA") {
-    composer.value = prompt;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+    if (setter) {
+      setter.call(composer, prompt);
+    } else {
+      composer.value = prompt;
+    }
+    composer.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "insertText", data: prompt }));
     composer.dispatchEvent(new Event("input", { bubbles: true }));
+    composer.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: prompt }));
     composer.dispatchEvent(new Event("change", { bubbles: true }));
     return JSON.stringify({ ok: true, mode: "textarea" });
   }
@@ -121,12 +136,33 @@ SET_PROMPT_JS = r"""(promptText) => {
 }"""
 
 FOCUS_COMPOSER_JS = r"""() => {
-  const composer = document.querySelector("#prompt-textarea, div[contenteditable='true'][role='textbox'], textarea[name='prompt-textarea']");
+  const visible = (el) => {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+  };
+  const candidates = Array.from(document.querySelectorAll("#prompt-textarea, div[contenteditable='true'][role='textbox'], textarea[name='prompt-textarea'], textarea"));
+  const composer = candidates.find(visible) || candidates[0];
   if (!composer) {
     return JSON.stringify({ ok: false, error: "composer_not_found" });
   }
   composer.focus();
   return JSON.stringify({ ok: true, tag: composer.tagName, id: composer.id || "" });
+}"""
+
+COMPOSER_STATE_JS = r"""() => {
+  const visible = (el) => {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+  };
+  const candidates = Array.from(document.querySelectorAll("#prompt-textarea, div[contenteditable='true'][role='textbox'], textarea[name='prompt-textarea'], textarea"));
+  const composer = candidates.find(visible) || candidates[0];
+  if (!composer) return JSON.stringify({ ok: false, error: "composer_not_found" });
+  const text = String(composer.value || composer.innerText || composer.textContent || "").trim();
+  return JSON.stringify({ ok: true, text_length: text.length, tag: composer.tagName, id: composer.id || "" });
 }"""
 
 SUBMIT_JS = r"""() => {
@@ -222,6 +258,296 @@ SELECT_PROJECT_JS = r"""(projectName) => {
   return JSON.stringify({ ok: true, step: "select_project", project_name: target, clicked: clean(item.innerText || item.textContent || "") });
 }"""
 
+OPEN_PROJECT_JS = r"""(projectName) => {
+  const target = String(projectName || "").trim();
+  const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
+  const visible = (el) => {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+  };
+  const nodes = Array.from(document.querySelectorAll("a,button,[role='button'],div"));
+  const project = nodes.find((el) => visible(el) && clean(el.innerText || el.textContent || "") === target);
+  if (!project) {
+    const expanders = nodes.filter((el) => {
+      if (!visible(el)) return false;
+      const text = clean(el.innerText || el.textContent || "");
+      const aria = clean(el.getAttribute("aria-label") || "");
+      return /^(更多|More)$/.test(text) || /(show more|更多|展开|projects|项目)/i.test(aria);
+    }).slice(0, 5);
+    for (const item of expanders) {
+      try { item.click(); } catch (_) {}
+    }
+    return JSON.stringify({ ok: false, step: "open_project", error: "project_not_found", project_name: target });
+  }
+  project.click();
+  return JSON.stringify({ ok: true, step: "open_project", project_name: target });
+}"""
+
+NEW_CHAT_JS = r"""() => {
+  const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
+  const visible = (el) => {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+  };
+  const nodes = Array.from(document.querySelectorAll("a,button,[role='button']"));
+  const item = nodes.find((el) => {
+    if (!visible(el)) return false;
+    const text = clean(el.innerText || el.textContent || "");
+    const aria = clean(el.getAttribute("aria-label") || "");
+    return /^(New chat|新聊天|新建聊天|新对话)$/.test(text) || /(New chat|新聊天|新建聊天|新对话)/.test(aria);
+  });
+  if (!item) return JSON.stringify({ ok: false, step: "new_chat", error: "new_chat_not_found" });
+  item.click();
+  return JSON.stringify({ ok: true, step: "new_chat" });
+}"""
+
+CONFIGURE_CHATGPT_UI_JS = r"""(settings) => new Promise(async (resolve) => {
+  const cfg = settings || {};
+  const modelMode = String(cfg.model_mode || "").toLowerCase();
+  const reasoningEffort = String(cfg.reasoning_effort || "").toLowerCase();
+  const toolMode = String(cfg.tool_mode || "").toLowerCase();
+  const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
+  const visible = (el) => {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+  };
+  const isActionNode = (el) => {
+    const role = clean(el.getAttribute("role") || "");
+    return el.tagName === "BUTTON" || el.tagName === "A" || ["button", "menuitem", "menuitemradio", "menuitemcheckbox", "option"].includes(role);
+  };
+  const rejectChromeNoise = (text, aria) => {
+    const joined = `${text} ${aria}`;
+    return /(项目选项|project options|conversation options|打开 .*项目选项|历史聊天记录|最近|sidebar|侧边栏|个人资料|profile|项目|project)/i.test(joined);
+  };
+  const clickFirst = (predicate, selector = "button,a,[role='button'],[role='menuitem'],[role='menuitemradio'],[role='menuitemcheckbox'],[role='option']") => {
+    const nodes = Array.from(document.querySelectorAll(selector));
+    const node = nodes.find((el) => visible(el) && predicate(clean(el.innerText || el.textContent || ""), clean(el.getAttribute("aria-label") || ""), el));
+    if (!node) return null;
+    node.scrollIntoView({ block: "center", inline: "center" });
+    for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup"]) {
+      node.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+    }
+    node.click();
+    return { text: clean(node.innerText || node.textContent || ""), aria: clean(node.getAttribute("aria-label") || ""), tag: node.tagName };
+  };
+  const snapshotCandidates = (selector = "button,a,[role='button'],[role='menuitem'],[role='menuitemradio'],[role='menuitemcheckbox'],[role='option']") =>
+    Array.from(document.querySelectorAll(selector))
+      .filter(visible)
+      .map((el) => ({
+        text: clean(el.innerText || el.textContent || ""),
+        aria: clean(el.getAttribute("aria-label") || ""),
+        role: clean(el.getAttribute("role") || ""),
+        tag: el.tagName,
+      }))
+      .filter((item) => (item.text || item.aria) && `${item.text} ${item.aria}`.length < 260)
+      .slice(0, 120);
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const steps = [];
+  const snapshots = {};
+  const dropdown = clickFirst((text, aria, el) => {
+    if (!isActionNode(el) || rejectChromeNoise(text, aria)) return false;
+    return /^(ChatGPT|GPT-|GPT|模型|Model)(\s|$)/i.test(text) || /(^|\s)(model|模型|ChatGPT)(\s|$)/i.test(aria);
+  }, "button,[role='button']");
+  steps.push({ step: "open_model_dropdown", ok: !!dropdown, clicked: dropdown });
+  if (dropdown) {
+    await sleep(700);
+    snapshots.model_menu = snapshotCandidates();
+    const modelMatches = (text, aria, el) => {
+      const role = clean(el.getAttribute("role") || "");
+      const joined = `${text} ${aria}`;
+      if (modelMode === "pro") {
+        if (!["menuitem", "menuitemradio", "option"].includes(role)) return false;
+        return /(^|\s)Pro(\s|$)|研究级智能模型|专业版模型/i.test(joined);
+      }
+      return /(Thinking|思考|GPT-5|5\.5|进阶专业|进阶|专业|Pro\s*思考)/i.test(joined);
+    };
+    const selected = clickFirst((text, aria, el) => {
+      if (!isActionNode(el) || rejectChromeNoise(text, aria)) return false;
+      if ((text + " " + aria).length > 180) return false;
+      if (/个人资料|profile|Li Sihao Pro/i.test(text + " " + aria)) return false;
+      return modelMatches(text, aria, el);
+    });
+    steps.push({ step: "select_model_mode", mode: modelMode || "thinking", ok: !!selected, clicked: selected });
+  }
+  if (reasoningEffort === "high" || reasoningEffort === "deep_research") {
+    await sleep(500);
+    const plus = clickFirst((text, aria, el) => {
+      if (!isActionNode(el) || rejectChromeNoise(text, aria)) return false;
+      return text === "+" || /attach|tools|工具|添加|plus|\+/.test(aria) || /^(工具|添加)$/.test(text);
+    }, "button,[role='button']");
+    steps.push({ step: "open_tools_or_plus", ok: !!plus, clicked: plus });
+    if (plus) await sleep(700);
+    snapshots.tools_menu = snapshotCandidates();
+    if (reasoningEffort === "high") {
+      const high = clickFirst((text, aria, el) => {
+        if (!isActionNode(el) || rejectChromeNoise(text, aria)) return false;
+        if ((text + " " + aria).length > 180) return false;
+        return /(High|高|更长|Think longer|思考深度|深度思考|进阶专业|进阶|专业|Pro\s*思考)/i.test(text)
+          || /(High|高|Think longer|思考深度|进阶专业|进阶|专业|Pro\s*思考)/i.test(aria);
+      });
+      steps.push({ step: "select_high_reasoning", ok: !!high, clicked: high });
+    }
+    if (toolMode === "deep_research" || reasoningEffort === "deep_research") {
+      const deep = clickFirst((text, aria, el) => {
+        if (!isActionNode(el) || rejectChromeNoise(text, aria)) return false;
+        if ((text + " " + aria).length > 220) return false;
+        return /^(Deep Research|深度研究|深入研究)$/i.test(text) || /^(Deep Research|深度研究|深入研究)$/i.test(aria);
+      });
+      steps.push({ step: "select_deep_research", ok: !!deep, clicked: deep });
+    }
+  }
+  resolve(JSON.stringify({ ok: true, settings: cfg, steps, snapshots }));
+})"""
+
+DEEP_RESEARCH_STATE_JS = r"""() => {
+  const clean = (value) => String(value || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const visible = (el) => {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+  };
+  const looksDeepResearch = (value) => /(Deep Research|深度研究|深入研究)/i.test(clean(value));
+  const stateToken = (el) => clean([
+    el.getAttribute("aria-pressed"),
+    el.getAttribute("aria-selected"),
+    el.getAttribute("aria-checked"),
+    el.getAttribute("data-state"),
+    el.getAttribute("data-selected"),
+    el.getAttribute("data-active"),
+    el.getAttribute("class"),
+  ].filter(Boolean).join(" "));
+  const selectedTokens = /\b(true|checked|selected|active)\b/i;
+
+  const controls = Array.from(document.querySelectorAll(
+    "button,[role='button'],[role='menuitemradio'],[role='menuitemcheckbox'],[aria-pressed],[aria-selected],[aria-checked],[data-state],[data-testid]"
+  )).filter(visible).map((el) => {
+    const text = clean(el.innerText || el.textContent || "");
+    const aria = clean(el.getAttribute("aria-label") || "");
+    const token = stateToken(el);
+    return { text, aria, token, tag: el.tagName };
+  });
+
+  const explicitSelected = controls.filter((item) =>
+    (looksDeepResearch(item.text) || looksDeepResearch(item.aria)) && selectedTokens.test(item.token)
+  );
+
+  const composer = document.querySelector("#prompt-textarea, div[contenteditable='true'][role='textbox'], textarea[name='prompt-textarea']");
+  const composerRoot = composer ? (composer.closest("form") || composer.closest("[data-testid]") || composer.parentElement) : null;
+  const localText = clean(composerRoot ? (composerRoot.innerText || composerRoot.textContent || "") : "");
+  const localDeepResearchChip = !!composerRoot && looksDeepResearch(localText);
+
+  const deepResearchDialog = Array.from(document.querySelectorAll("[role='dialog'],[data-testid]"))
+    .filter(visible)
+    .map((el) => clean(el.innerText || el.textContent || ""))
+    .find((text) =>
+      looksDeepResearch(text) &&
+      /(research plan|researching|start research|开始研究|研究计划|正在研究|继续研究|clarify|澄清)/i.test(text)
+    ) || "";
+
+  const menuStillOpen = Array.from(document.querySelectorAll("[role='menu'],[role='listbox']"))
+    .filter(visible)
+    .some((el) => looksDeepResearch(el.innerText || el.textContent || ""));
+
+  const ok = explicitSelected.length > 0 || localDeepResearchChip;
+  return JSON.stringify({
+    ok,
+    explicit_selected_count: explicitSelected.length,
+    local_deep_research_chip: localDeepResearchChip,
+    deep_research_dialog: !!deepResearchDialog,
+    menu_still_open: menuStillOpen,
+    local_text_sample: localText.slice(0, 300),
+    selected_controls: explicitSelected.slice(0, 10),
+    deep_research_dialog_sample: deepResearchDialog.slice(0, 500),
+  });
+}"""
+
+CHATGPT_MODE_STATE_JS = r"""(settings) => {
+  const cfg = settings || {};
+  const modelMode = String(cfg.model_mode || "").toLowerCase();
+  const reasoningEffort = String(cfg.reasoning_effort || "").toLowerCase();
+  const clean = (value) => String(value || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const visible = (el) => {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+  };
+  const tokenOf = (el) => clean([
+    el.getAttribute("aria-pressed"),
+    el.getAttribute("aria-selected"),
+    el.getAttribute("aria-checked"),
+    el.getAttribute("data-state"),
+    el.getAttribute("data-selected"),
+    el.getAttribute("data-active"),
+    el.getAttribute("class"),
+  ].filter(Boolean).join(" "));
+  const selectedTokens = /\b(true|checked|selected|active)\b/i;
+  const controls = Array.from(document.querySelectorAll(
+    "button,[role='button'],[role='menuitemradio'],[role='menuitemcheckbox'],[aria-pressed],[aria-selected],[aria-checked],[data-state],[data-testid]"
+  )).filter(visible).map((el) => {
+    const text = clean(el.innerText || el.textContent || "");
+    const aria = clean(el.getAttribute("aria-label") || "");
+    const token = tokenOf(el);
+    return { text, aria, token, tag: el.tagName };
+  });
+  const composer = document.querySelector("#prompt-textarea, div[contenteditable='true'][role='textbox'], textarea[name='prompt-textarea']");
+  const composerRoot = composer ? (composer.closest("form") || composer.closest("[data-testid]") || composer.parentElement) : null;
+  const composerText = clean(composerRoot ? (composerRoot.innerText || composerRoot.textContent || "") : "");
+  const modelSelector = Array.from(document.querySelectorAll("button,[role='button']"))
+    .filter(visible)
+    .map((el) => ({
+      text: clean(el.innerText || el.textContent || ""),
+      aria: clean(el.getAttribute("aria-label") || ""),
+      token: tokenOf(el),
+      tag: el.tagName,
+    }))
+    .find((item) => /模型选择器|model selector/i.test(item.aria) || /^(ChatGPT|GPT-|GPT|模型|Model)(\s|$)/i.test(item.text)) || null;
+  const selected = (regex) => controls.filter((item) =>
+    regex.test(item.text + " " + item.aria) && selectedTokens.test(item.token)
+  );
+  const thinkingControls = selected(/(Thinking|思考|ChatGPT 5\.5|GPT-5\.5|GPT-5|进阶专业|进阶|专业|Pro\s*思考)/i);
+  const highControls = selected(/(High|高|深入|深度思考|Think longer|思考深度|进阶专业|进阶|专业|Pro\s*思考)/i);
+  const professionalControls = controls.filter((item) =>
+    /(进阶专业|Pro\s*思考)/i.test(item.text + " " + item.aria)
+  );
+  const thinkingChip = /(Thinking|思考|ChatGPT 5\.5|GPT-5\.5|GPT-5|进阶专业|进阶|专业|Pro\s*思考)/i.test(composerText);
+  const highChip = /(High|高|深入|深度思考|Think longer|思考深度|进阶专业|进阶|专业|Pro\s*思考)/i.test(composerText);
+  const modelSelectorLooksChatGPT = !!modelSelector && /ChatGPT/i.test(modelSelector.text + " " + modelSelector.aria);
+  const modelOk = modelMode !== "thinking" || thinkingControls.length > 0 || professionalControls.length > 0 || thinkingChip || (modelSelectorLooksChatGPT && highChip);
+  const reasoningOk = reasoningEffort !== "high" || highControls.length > 0 || professionalControls.length > 0 || highChip;
+  return JSON.stringify({
+    ok: modelOk && reasoningOk,
+    model_mode: modelMode,
+    reasoning_effort: reasoningEffort,
+    model_ok: modelOk,
+    reasoning_ok: reasoningOk,
+    thinking_selected_count: thinkingControls.length,
+    high_selected_count: highControls.length,
+    professional_control_count: professionalControls.length,
+    thinking_chip: thinkingChip,
+    high_chip: highChip,
+    model_selector: modelSelector,
+    model_selector_looks_chatgpt: modelSelectorLooksChatGPT,
+    composer_text_sample: composerText.slice(0, 300),
+    thinking_controls: thinkingControls.slice(0, 10),
+    high_controls: highControls.slice(0, 10),
+    professional_controls: professionalControls.slice(0, 10),
+  });
+}"""
+
 
 def _request_dir() -> Path:
     out = Path(os.environ.get("BROWSER_AGENT_REQUEST_DIR") or tempfile_dir_fallback()).expanduser()
@@ -249,9 +575,28 @@ def _write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def _kill_browser_profile_processes(profile_dir: Path | None) -> None:
+    if not profile_dir:
+        return
+    raw = str(profile_dir)
+    if not raw or raw == "/" or "browser-use-user-data-dir-" not in raw:
+        return
+    candidates = {raw, raw.replace("/var/", "/private/var/"), raw.replace("/private/var/", "/var/")}
+    try:
+        time.sleep(0.5)
+        for candidate in candidates:
+            subprocess.run(["pkill", "-f", candidate], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+        time.sleep(0.5)
+        for candidate in candidates:
+            subprocess.run(["pkill", "-9", "-f", candidate], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+    except Exception:
+        pass
+
+
 def _prompt_from_stdin() -> str:
     prompt = sys.stdin.read()
-    if not prompt.strip():
+    action = str(os.environ.get("BROWSER_AGENT_CHATGPT_ACTION") or "run").strip().lower()
+    if not prompt.strip() and action not in {"poll", "collect"}:
         raise SystemExit("stdin prompt is empty")
     return prompt
 
@@ -296,51 +641,139 @@ async def _wait_for_ready(page, *, timeout_s: int = 60) -> dict:
 
 
 async def _submit_prompt(page, prompt: str) -> dict:
-    filled = False
-    try:
-        focused = json.loads(await page.evaluate(FOCUS_COMPOSER_JS))
-        if focused.get("ok"):
-            session_id = await page._ensure_session()
-            await page._client.send.Input.insertText({"text": prompt}, session_id=session_id)
-            filled = True
-    except Exception:
-        filled = False
-    if not filled:
+    baseline = json.loads(await page.evaluate(CAPTURE_JS))
+    baseline_message_count = int(baseline.get("message_count") or 0)
+    if len(prompt) > 1000 or "\n" in prompt:
+        try:
+            set_note = json.loads(await page.evaluate(SET_PROMPT_JS, prompt))
+            if not set_note.get("ok"):
+                raise RuntimeError(f"set_prompt_failed:{set_note}")
+            await asyncio.sleep(1.0)
+            composer_state = json.loads(await page.evaluate(COMPOSER_STATE_JS))
+            submit_note = json.loads(await page.evaluate(SUBMIT_JS))
+            await asyncio.sleep(2.0)
+            post_submit = json.loads(await page.evaluate(CAPTURE_JS))
+            post_submit["_submit_note"] = {"mode": "native_setter_submit", "set_prompt": set_note, "submit": submit_note}
+            post_submit["_composer_state_before_submit"] = composer_state
+            if int(post_submit.get("message_count") or 0) > baseline_message_count or post_submit.get("is_generating"):
+                return post_submit
+            clipboard_note = await _clipboard_paste_and_submit(page, prompt)
+            await asyncio.sleep(2.0)
+            post_submit = json.loads(await page.evaluate(CAPTURE_JS))
+            post_submit["_submit_note"] = {"mode": "clipboard_paste_enter", "clipboard": clipboard_note}
+            post_submit["_composer_state_before_submit"] = clipboard_note.get("composer_state_after_paste") or {}
+            if int(post_submit.get("message_count") or 0) > baseline_message_count or post_submit.get("is_generating"):
+                return post_submit
+            await page.press("Meta+Enter")
+            await asyncio.sleep(2.0)
+            post_submit = json.loads(await page.evaluate(CAPTURE_JS))
+            post_submit["_submit_note"] = {"mode": "clipboard_paste_meta_enter_retry", "clipboard": clipboard_note}
+            post_submit["_composer_state_before_submit"] = clipboard_note.get("composer_state_after_paste") or {}
+            if int(post_submit.get("message_count") or 0) > baseline_message_count or post_submit.get("is_generating"):
+                return post_submit
+            submit_retry = json.loads(await page.evaluate(SUBMIT_JS))
+            await asyncio.sleep(2.0)
+            post_submit = json.loads(await page.evaluate(CAPTURE_JS))
+            post_submit["_submit_note"] = {
+                "mode": "clipboard_paste_submit_retry",
+                "clipboard": clipboard_note,
+                "submit_retry": submit_retry,
+            }
+            post_submit["_composer_state_before_submit"] = clipboard_note.get("composer_state_after_paste") or {}
+            if int(post_submit.get("message_count") or 0) > baseline_message_count or post_submit.get("is_generating"):
+                return post_submit
+            raise RuntimeError(f"clipboard_prompt_submit_no_message:{post_submit.get('_submit_note')}")
+        except Exception as exc:
+            raise RuntimeError(f"long_prompt_clipboard_submit_failed:{type(exc).__name__}: {exc}")
+    result = await _keyboard_insert_prompt(page, prompt)
+    if not result.get("ok"):
         result = json.loads(await page.evaluate(SET_PROMPT_JS, prompt))
         if not result.get("ok"):
             raise RuntimeError(result.get("error") or "prompt_injection_failed")
-    await asyncio.sleep(0.6)
+    composer_state = json.loads(await page.evaluate(COMPOSER_STATE_JS))
+    if int(composer_state.get("text_length") or 0) < max(10, min(len(prompt.strip()), 80)):
+        try:
+            focused = json.loads(await page.evaluate(FOCUS_COMPOSER_JS))
+            if focused.get("ok"):
+                session_id = await page._ensure_session()
+                await page._client.send.Input.insertText({"text": prompt}, session_id=session_id)
+        except Exception:
+            pass
+        composer_state = json.loads(await page.evaluate(COMPOSER_STATE_JS))
+    if int(composer_state.get("text_length") or 0) < 10:
+        raise RuntimeError(f"prompt_injection_no_visible_text:{composer_state}")
+    await asyncio.sleep(1.2)
     submit_note = {"mode": "unknown"}
-    clicked = False
-    try:
-        for selector in (
-            "form button[type='submit']",
-            "button[type='submit']",
-            "button.composer-submit-button-color",
-        ):
-            buttons = await page.get_elements_by_css_selector(selector)
-            if not buttons:
-                continue
-            try:
-                await buttons[0].click()
-                clicked = True
-                submit_note = {"mode": "element_click", "selector": selector}
-                break
-            except Exception:
-                continue
-    except Exception:
-        clicked = False
-    if not clicked:
-        submit_result = json.loads(await page.evaluate(SUBMIT_JS))
-        if not submit_result.get("ok"):
-            await page.press("Enter")
-            submit_note = {"mode": "enter_key"}
-        else:
-            submit_note = {"mode": "js_submit", **submit_result}
+    submit_result = json.loads(await page.evaluate(SUBMIT_JS))
+    if not submit_result.get("ok"):
+        await page.press("Meta+Enter")
+        submit_note = {"mode": "meta_enter_key", "js_error": submit_result.get("error")}
+    else:
+        submit_note = {"mode": "js_submit", **submit_result}
+    if "clipboard_first_error" in locals():
+        submit_note["clipboard_first_error"] = clipboard_first_error
     await asyncio.sleep(2.0)
     post_submit = json.loads(await page.evaluate(CAPTURE_JS))
+    if int(post_submit.get("message_count") or 0) <= baseline_message_count and not post_submit.get("is_generating"):
+        try:
+            clipboard_note = await _clipboard_paste_and_submit(page, prompt)
+            submit_note = {**submit_note, "retry": "clipboard_paste_enter_after_no_message", "clipboard": clipboard_note}
+            await asyncio.sleep(2.0)
+            post_submit = json.loads(await page.evaluate(CAPTURE_JS))
+        except Exception as exc:
+            submit_note = {**submit_note, "retry_error": f"{type(exc).__name__}: {exc}"}
     post_submit["_submit_note"] = submit_note
+    post_submit["_composer_state_before_submit"] = composer_state
     return post_submit
+
+
+async def _keyboard_insert_prompt(page, prompt: str) -> dict:
+    try:
+        focused = json.loads(await page.evaluate(FOCUS_COMPOSER_JS))
+        if not focused.get("ok"):
+            return {"ok": False, "error": focused.get("error") or "composer_focus_failed"}
+        await page.press("Meta+A")
+        await asyncio.sleep(0.1)
+        await page.press("Backspace")
+        await asyncio.sleep(0.2)
+        session_id = await page._ensure_session()
+        await page._client.send.Input.insertText({"text": prompt}, session_id=session_id)
+        await asyncio.sleep(0.8)
+        state = json.loads(await page.evaluate(COMPOSER_STATE_JS))
+        return {"ok": int(state.get("text_length") or 0) > 0, "composer_state": state}
+    except Exception as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+async def _clipboard_paste_and_submit(page, prompt: str) -> dict:
+    old_clip = ""
+    restored = False
+    try:
+        old_clip = subprocess.run(["pbpaste"], check=False, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=3).stdout
+    except Exception:
+        old_clip = ""
+    try:
+        subprocess.run(["pbcopy"], input=prompt, text=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+        focused = json.loads(await page.evaluate(FOCUS_COMPOSER_JS))
+        if not focused.get("ok"):
+            raise RuntimeError(f"composer_focus_failed:{focused}")
+        await page.press("Meta+A")
+        await asyncio.sleep(0.2)
+        await page.press("Meta+V")
+        await asyncio.sleep(0.8)
+        state = json.loads(await page.evaluate(COMPOSER_STATE_JS))
+        submit_result = json.loads(await page.evaluate(SUBMIT_JS))
+        if not submit_result.get("ok"):
+            await page.press("Meta+Enter")
+        return {"ok": True, "composer_state_after_paste": state, "submit_result": submit_result}
+    finally:
+        try:
+            subprocess.run(["pbcopy"], input=old_clip, text=True, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3)
+            restored = True
+        except Exception:
+            restored = False
+        if not restored:
+            pass
 
 
 async def _wait_for_answer(page, baseline_assistant_count: int, *, timeout_s: int = 900) -> dict:
@@ -368,6 +801,49 @@ async def _wait_for_answer(page, baseline_assistant_count: int, *, timeout_s: in
     if first_response_seen:
         return json.loads(await page.evaluate(CAPTURE_JS))
     raise TimeoutError("chatgpt_response_timeout")
+
+
+async def _write_conversation_artifacts(
+    page,
+    request_dir: Path,
+    final_data: dict,
+    *,
+    model: str,
+    reasoning_effort: str,
+    prompt: str | None = None,
+) -> str:
+    html = await page.evaluate(HTML_JS)
+    page_text = await page.evaluate(TEXT_JS)
+    title = await page.get_title()
+    final_url = await page.get_url()
+    screenshot_b64 = await page.screenshot(format="png")
+    latest = str(final_data.get("latest_assistant_text") or "").strip()
+    if prompt is not None:
+        (request_dir / "prompt.md").write_text(prompt, encoding="utf-8")
+    if latest:
+        (request_dir / "assistant-response.txt").write_text(latest + "\n", encoding="utf-8")
+    (request_dir / "page.html").write_text(str(html or ""), encoding="utf-8")
+    (request_dir / "page.txt").write_text(str(page_text or "") + "\n", encoding="utf-8")
+    (request_dir / "conversation.json").write_text(json.dumps(final_data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    lines = []
+    for msg in final_data.get("messages") or []:
+        role = str(msg.get("role") or "").upper()
+        text = str(msg.get("text") or "").strip()
+        lines.append(f"[{role}]\n{text}\n")
+    (request_dir / "conversation.txt").write_text("\n".join(lines), encoding="utf-8")
+    _write_json(request_dir / "page.json", {
+        "title": title,
+        "url": final_url,
+        "conversation_id": final_data.get("conversation_id"),
+        "message_count": final_data.get("message_count"),
+        "assistant_count": final_data.get("assistant_count"),
+        "is_generating": final_data.get("is_generating"),
+        "model": model,
+        "reasoning_effort": reasoning_effort,
+    })
+    if screenshot_b64:
+        (request_dir / "screenshot.png").write_bytes(base64.b64decode(screenshot_b64))
+    return latest
 
 
 async def _move_current_conversation_to_project(page, project_name: str, *, timeout_s: int = 45) -> dict:
@@ -418,6 +894,109 @@ async def _move_current_conversation_to_project(page, project_name: str, *, time
         return result
 
 
+async def _open_project_new_chat(page, project_name: str) -> dict:
+    project_name = str(project_name or "").strip()
+    result: dict[str, Any] = {"ok": False, "project_name": project_name, "steps": []}
+    if not project_name:
+        result["error"] = "empty_project_name"
+        return result
+    try:
+        step: dict[str, object] = {"ok": False, "error": "not_attempted"}
+        for _ in range(8):
+            step = json.loads(await page.evaluate(OPEN_PROJECT_JS, project_name))
+            result["steps"].append(step)
+            if step.get("ok"):
+                break
+            await asyncio.sleep(1.0)
+        if not step.get("ok"):
+            result["error"] = step.get("error") or "open_project_failed"
+            return result
+        await asyncio.sleep(1.5)
+        step = json.loads(await page.evaluate(NEW_CHAT_JS))
+        result["steps"].append(step)
+        # Some project pages already open a blank composer; failure to find a
+        # New Chat button is not fatal as long as the composer is ready.
+        ready = json.loads(await page.evaluate(CAPTURE_JS))
+        if ready.get("composer_ready"):
+            result.update({"ok": True, "url": ready.get("url"), "conversation_id": ready.get("conversation_id")})
+            return result
+        result["error"] = step.get("error") or "composer_not_ready_after_project_open"
+        return result
+    except Exception as exc:
+        result["error"] = f"{type(exc).__name__}: {exc}"
+        return result
+
+
+async def _configure_chatgpt_ui(page, *, model_mode: str, reasoning_effort: str, tool_mode: str) -> dict:
+    try:
+        result = json.loads(await page.evaluate(
+            CONFIGURE_CHATGPT_UI_JS,
+            {
+                "model_mode": model_mode,
+                "reasoning_effort": reasoning_effort,
+                "tool_mode": tool_mode,
+            },
+        ))
+        return result
+    except Exception as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+async def _verify_deep_research_enabled(page, *, timeout_s: int = 12) -> dict:
+    deadline = time.time() + timeout_s
+    last: dict[str, object] = {"ok": False, "error": "not_checked"}
+    while time.time() < deadline:
+        try:
+            last = json.loads(await page.evaluate(DEEP_RESEARCH_STATE_JS))
+            if last.get("ok"):
+                return last
+        except Exception as exc:
+            last = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        await asyncio.sleep(0.75)
+    return last
+
+
+async def _verify_chatgpt_mode_enabled(page, *, model_mode: str, reasoning_effort: str, timeout_s: int = 12) -> dict:
+    deadline = time.time() + timeout_s
+    last: dict[str, object] = {"ok": False, "error": "not_checked"}
+    while time.time() < deadline:
+        try:
+            last = json.loads(await page.evaluate(
+                CHATGPT_MODE_STATE_JS,
+                {"model_mode": model_mode, "reasoning_effort": reasoning_effort},
+            ))
+            if last.get("ok"):
+                return last
+        except Exception as exc:
+            last = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        await asyncio.sleep(0.75)
+    return last
+
+
+def _post_submit_confirms_chatgpt_mode(post_submit: dict, *, model_mode: str, reasoning_effort: str) -> dict:
+    """Confirm mode from ChatGPT's generation banner when static controls are hidden.
+
+    The localized ChatGPT UI sometimes hides selected model/reasoning controls
+    after a click and only exposes the active state as a generation banner such
+    as "Pro 思考中".  This confirmation intentionally reads only assistant/status
+    text, not the user prompt.
+    """
+    latest = str(post_submit.get("latest_assistant_text") or "").strip()
+    model_mode = str(model_mode or "").lower()
+    reasoning_effort = str(reasoning_effort or "").lower()
+    model_ok = model_mode != "thinking" or any(token in latest for token in ("Pro", "Thinking", "思考"))
+    reasoning_ok = reasoning_effort != "high" or any(token in latest for token in ("思考中", "Thinking", "Pro"))
+    return {
+        "ok": bool(model_ok and reasoning_ok),
+        "model_mode": model_mode,
+        "reasoning_effort": reasoning_effort,
+        "model_ok": bool(model_ok),
+        "reasoning_ok": bool(reasoning_ok),
+        "latest_assistant_text": latest,
+        "confirmation_source": "post_submit_latest_assistant_text",
+    }
+
+
 async def _run(prompt: str) -> int:
     request_dir = _request_dir()
     expected = str(os.environ.get("BROWSER_AGENT_EXPECTED_OUTPUT") or "markdown").strip().lower()
@@ -426,9 +1005,19 @@ async def _run(prompt: str) -> int:
     profile_directory = str(os.environ.get("BROWSER_AGENT_PROFILE_DIRECTORY") or DEFAULT_PROFILE_DIRECTORY)
     user_data_dir = Path(os.environ.get("BROWSER_AGENT_USER_DATA_DIR") or str(DEFAULT_USER_DATA_DIR)).expanduser()
     target_url = str(os.environ.get("BROWSER_AGENT_CHATGPT_URL") or DEFAULT_URL)
+    action = str(os.environ.get("BROWSER_AGENT_CHATGPT_ACTION") or "run").strip().lower()
+    collect_url = str(os.environ.get("BROWSER_AGENT_CHATGPT_CONVERSATION_URL") or "").strip()
+    if action in {"poll", "collect"} and collect_url:
+        target_url = collect_url
     timeout_s = int(os.environ.get("BROWSER_AGENT_CHATGPT_TIMEOUT") or "1200")
     project_name = str(os.environ.get("BROWSER_AGENT_CHATGPT_PROJECT_NAME") or "").strip()
     require_project = str(os.environ.get("BROWSER_AGENT_CHATGPT_REQUIRE_PROJECT") or "false").strip().lower() in {"1", "true", "yes", "on"}
+    open_project_first = str(os.environ.get("BROWSER_AGENT_CHATGPT_OPEN_PROJECT_FIRST") or "false").strip().lower() in {"1", "true", "yes", "on"}
+    model_mode = str(os.environ.get("BROWSER_AGENT_CHATGPT_MODEL_MODE") or "thinking").strip().lower()
+    tool_mode = str(os.environ.get("BROWSER_AGENT_CHATGPT_TOOL_MODE") or "none").strip().lower()
+    require_deep_research = str(os.environ.get("BROWSER_AGENT_CHATGPT_REQUIRE_DEEP_RESEARCH") or "false").strip().lower() in {"1", "true", "yes", "on"}
+    require_ui_mode = str(os.environ.get("BROWSER_AGENT_CHATGPT_REQUIRE_UI_MODE") or "false").strip().lower() in {"1", "true", "yes", "on"}
+    account_email = str(os.environ.get("BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL") or "").strip()
     headless = str(os.environ.get("BROWSER_AGENT_HEADLESS") or "false").strip().lower() in {"1", "true", "yes", "on"}
     allowed_domains = [
         item.strip()
@@ -446,11 +1035,18 @@ async def _run(prompt: str) -> int:
         "reasoning_effort": reasoning_effort,
         "expected_output": expected,
         "target_url": target_url,
+        "action": action,
         "profile_directory": profile_directory,
         "headless": headless,
         "allowed_domains": allowed_domains,
         "project_name": project_name,
         "require_project": require_project,
+        "open_project_first": open_project_first,
+        "model_mode": model_mode,
+        "tool_mode": tool_mode,
+        "require_deep_research": require_deep_research,
+        "require_ui_mode": require_ui_mode,
+        "account_email_hint_present": bool(account_email),
         "request_dir": str(request_dir),
         "started_at": bjrt._now(),
     }
@@ -491,42 +1087,143 @@ async def _run(prompt: str) -> int:
                 pass
             raise
         _write_json(request_dir / "ready-state.json", ready)
+        if action in {"poll", "collect"}:
+            final_data = json.loads(await page.evaluate(CAPTURE_JS))
+            if final_data.get("is_generating") or not str(final_data.get("latest_assistant_text") or "").strip():
+                _write_json(request_dir / f"{action}-state.json", {
+                    "ok": True,
+                    "status": "running" if final_data.get("is_generating") else "submitted",
+                    "url": final_data.get("url"),
+                    "conversation_id": final_data.get("conversation_id"),
+                    "assistant_count": final_data.get("assistant_count"),
+                    "message_count": final_data.get("message_count"),
+                    "checked_at": bjrt._now(),
+                })
+                print(json.dumps({
+                    "status": "running" if final_data.get("is_generating") else "submitted",
+                    "url": final_data.get("url"),
+                    "conversation_id": final_data.get("conversation_id"),
+                }, ensure_ascii=False))
+                return 0
+            if action == "collect":
+                try:
+                    final_data = await _wait_for_answer(
+                        page,
+                        -1,
+                        timeout_s=int(os.environ.get("BROWSER_AGENT_CHATGPT_COLLECT_TIMEOUT") or "45"),
+                    )
+                except TimeoutError:
+                    final_data = json.loads(await page.evaluate(CAPTURE_JS))
+            latest = await _write_conversation_artifacts(
+                page,
+                request_dir,
+                final_data,
+                model=model,
+                reasoning_effort=reasoning_effort,
+                prompt=None,
+            )
+            if latest and not final_data.get("is_generating"):
+                _write_json(request_dir / f"{action}-state.json", {
+                    "ok": True,
+                    "status": "done",
+                    "url": final_data.get("url"),
+                    "conversation_id": final_data.get("conversation_id"),
+                    "assistant_count": final_data.get("assistant_count"),
+                    "message_count": final_data.get("message_count"),
+                    "checked_at": bjrt._now(),
+                })
+                print(latest)
+                return 0
+            _write_json(request_dir / f"{action}-state.json", {
+                "ok": True,
+                "status": "running",
+                "url": final_data.get("url"),
+                "conversation_id": final_data.get("conversation_id"),
+                "checked_at": bjrt._now(),
+            })
+            print(json.dumps({
+                "status": "running",
+                "url": final_data.get("url"),
+                "conversation_id": final_data.get("conversation_id"),
+            }, ensure_ascii=False))
+            return 0
+        if open_project_first and project_name:
+            project_open = await _open_project_new_chat(page, project_name)
+            _write_json(request_dir / "project-open-result.json", project_open)
+            if require_project and not project_open.get("ok"):
+                raise RuntimeError(f"chatgpt_project_open_failed: {project_open.get('error')}")
+            if project_open.get("ok"):
+                ready = await _wait_for_ready(page, timeout_s=45)
+                _write_json(request_dir / "ready-state-after-project-open.json", ready)
+        configure_result = await _configure_chatgpt_ui(
+            page,
+            model_mode=model_mode,
+            reasoning_effort=reasoning_effort,
+            tool_mode=tool_mode,
+        )
+        _write_json(request_dir / "chatgpt-ui-configure-result.json", configure_result)
+        pre_submit_mode_state: dict | None = None
+        if require_ui_mode:
+            pre_submit_mode_state = await _verify_chatgpt_mode_enabled(
+                page,
+                model_mode=model_mode,
+                reasoning_effort=reasoning_effort,
+            )
+            _write_json(request_dir / "chatgpt-mode-state.json", pre_submit_mode_state)
+        if require_deep_research or tool_mode == "deep_research" or reasoning_effort == "deep_research":
+            deep_research_state = await _verify_deep_research_enabled(page)
+            _write_json(request_dir / "deep-research-state.json", deep_research_state)
+            if not deep_research_state.get("ok"):
+                raise RuntimeError(
+                    "chatgpt_deep_research_not_confirmed: "
+                    + json.dumps(deep_research_state, ensure_ascii=False)
+                )
         baseline_assistant_count = int(ready.get("assistant_count") or 0)
         post_submit = await _submit_prompt(page, prompt)
         _write_json(request_dir / "post-submit-state.json", post_submit)
+        if require_ui_mode and pre_submit_mode_state and not pre_submit_mode_state.get("ok"):
+            post_submit_mode_state = _post_submit_confirms_chatgpt_mode(
+                post_submit,
+                model_mode=model_mode,
+                reasoning_effort=reasoning_effort,
+            )
+            post_submit_mode_state["pre_submit_state"] = pre_submit_mode_state
+            _write_json(request_dir / "chatgpt-mode-post-submit-state.json", post_submit_mode_state)
+            if not post_submit_mode_state.get("ok"):
+                if post_submit.get("is_generating") and int(post_submit.get("assistant_count") or 0) == 0:
+                    post_submit_mode_state["ok"] = True
+                    post_submit_mode_state["confirmation_source"] = "deferred_while_generation_started"
+                    post_submit_mode_state["note"] = "No assistant/status banner yet, but full prompt submitted and generation started."
+                    _write_json(request_dir / "chatgpt-mode-post-submit-state.json", post_submit_mode_state)
+                else:
+                    raise RuntimeError(
+                        "chatgpt_required_ui_mode_not_confirmed: "
+                        + json.dumps(post_submit_mode_state, ensure_ascii=False)
+                    )
+        if action == "submit":
+            submitted = {
+                "ok": True,
+                "status": "running" if post_submit.get("is_generating") else "submitted",
+                "url": post_submit.get("url"),
+                "conversation_id": post_submit.get("conversation_id"),
+                "message_count": post_submit.get("message_count"),
+                "assistant_count": post_submit.get("assistant_count"),
+                "submitted_at": bjrt._now(),
+            }
+            _write_json(request_dir / "submitted-run.json", submitted)
+            print(json.dumps(submitted, ensure_ascii=False))
+            return 0
         final_data = await _wait_for_answer(page, baseline_assistant_count, timeout_s=timeout_s)
-        html = await page.evaluate(HTML_JS)
-        page_text = await page.evaluate(TEXT_JS)
-        title = await page.get_title()
-        final_url = await page.get_url()
-        screenshot_b64 = await page.screenshot(format="png")
-
-        latest = str(final_data.get("latest_assistant_text") or "").strip()
+        latest = await _write_conversation_artifacts(
+            page,
+            request_dir,
+            final_data,
+            model=model,
+            reasoning_effort=reasoning_effort,
+            prompt=prompt,
+        )
         if not latest:
             raise RuntimeError("chatgpt_latest_assistant_text_empty")
-
-        (request_dir / "prompt.md").write_text(prompt, encoding="utf-8")
-        (request_dir / "assistant-response.txt").write_text(latest + "\n", encoding="utf-8")
-        (request_dir / "page.html").write_text(str(html or ""), encoding="utf-8")
-        (request_dir / "page.txt").write_text(str(page_text or "") + "\n", encoding="utf-8")
-        (request_dir / "conversation.json").write_text(json.dumps(final_data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        lines = []
-        for msg in final_data.get("messages") or []:
-            role = str(msg.get("role") or "").upper()
-            text = str(msg.get("text") or "").strip()
-            lines.append(f"[{role}]\n{text}\n")
-        (request_dir / "conversation.txt").write_text("\n".join(lines), encoding="utf-8")
-        _write_json(request_dir / "page.json", {
-            "title": title,
-            "url": final_url,
-            "conversation_id": final_data.get("conversation_id"),
-            "message_count": final_data.get("message_count"),
-            "assistant_count": final_data.get("assistant_count"),
-            "model": model,
-            "reasoning_effort": reasoning_effort,
-        })
-        if screenshot_b64:
-            (request_dir / "screenshot.png").write_bytes(base64.b64decode(screenshot_b64))
 
         if project_name:
             project_result = await _move_current_conversation_to_project(page, project_name)
@@ -541,6 +1238,7 @@ async def _run(prompt: str) -> int:
             await asyncio.wait_for(browser.stop(), timeout=20)
         except Exception:
             pass
+        _kill_browser_profile_processes(staged_dir)
         if cleanup_dir is not None:
             shutil.rmtree(cleanup_dir, ignore_errors=True)
 

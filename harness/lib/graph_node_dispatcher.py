@@ -29,6 +29,8 @@ def _harness_dir() -> Path:
 
 
 HARNESS_DIR = _harness_dir()
+if str(HARNESS_DIR / "lib") not in sys.path:
+    sys.path.insert(0, str(HARNESS_DIR / "lib"))
 SPRINTS_DIR = HARNESS_DIR / "sprints"
 MULTI_TASK_RUN_DIR = HARNESS_DIR / "run" / "multi-task"
 SESSION = os.environ.get("SOLAR_HARNESS_SESSION", "solar-harness")
@@ -59,6 +61,7 @@ PANE_QUOTA_EXHAUSTED_RE = re.compile(
     re.I,
 )
 PANE_RATE_LIMIT_FALLBACK_SEC = int(os.environ.get("SOLAR_PANE_RATE_LIMIT_FALLBACK_SEC", "900"))
+OPERATOR_CONTRACT_CLOSEOUT_COOLDOWN_SEC = int(os.environ.get("SOLAR_GRAPH_OPERATOR_CONTRACT_CLOSEOUT_COOLDOWN_SEC", "900"))
 
 
 def _effective_graph_max_parallel(default: int = 8) -> int:
@@ -141,6 +144,14 @@ RECOVERABLE_PANE_BLOCKER_FRAGMENTS = {
     "dispatch prompt not dismissed",
     "late_settle_blocked",
 }
+
+try:
+    from pane_overlay_state import pane_overlay_detail, pane_overlay_blocked, prompt_match_is_stale, tail_has_idle_prompt_footer
+except Exception:  # pragma: no cover - keep dispatcher usable in partial installs
+    pane_overlay_detail = None  # type: ignore
+    pane_overlay_blocked = None  # type: ignore
+    prompt_match_is_stale = None  # type: ignore
+    tail_has_idle_prompt_footer = None  # type: ignore
 STATE_READ_PREFLIGHT = """<!-- SOLAR_STATE_READ_PREFLIGHT -->
 ## 必须先读状态 (防写入 hook 卡死)
 
@@ -1185,6 +1196,51 @@ def _scope_lines(values: Any) -> str:
     return "\n".join(f"- `{v}`" for v in values)
 
 
+def _write_scope_preflight_block(sid: str, node: dict[str, Any]) -> str:
+    """Warn builders when write-scope artifacts already exist from another sprint.
+
+    Several early S01 graphs use generic files such as
+    `sprints/s01-req-N5-handoff.md`. Those paths can survive from a different
+    sprint and must not be treated as current evidence.
+    """
+    scopes = node.get("write_scope") or []
+    if isinstance(scopes, str):
+        scopes = [scopes]
+    rows: list[str] = []
+    sprint_re = re.compile(r"sprint-[A-Za-z0-9_.\-\u4e00-\u9fff]+")
+    for raw in scopes:
+        scope = str(raw or "").strip()
+        if not scope or any(ch in scope for ch in "*?[]"):
+            continue
+        path = (HARNESS_DIR / scope).expanduser() if not scope.startswith("/") else Path(scope).expanduser()
+        if not path.exists() or not path.is_file():
+            continue
+        try:
+            stat = path.stat()
+            sample = path.read_text(encoding="utf-8", errors="replace")[:12000]
+        except Exception:
+            continue
+        refs = sorted(set(sprint_re.findall(sample)))
+        foreign_refs = [ref for ref in refs if ref != sid]
+        contains_current = sid in sample
+        if foreign_refs or not contains_current:
+            mtime = datetime.datetime.fromtimestamp(stat.st_mtime, tz=datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            rows.append(
+                f"- `{scope}` exists already (mtime={mtime}, size={stat.st_size}); "
+                f"contains_current_sprint={str(contains_current).lower()}; "
+                f"foreign_sprint_refs={', '.join(foreign_refs[:3]) if foreign_refs else 'N/A'}"
+            )
+    if not rows:
+        return "## Write Scope Preflight\n\n- No pre-existing stale write-scope artifacts detected."
+    return (
+        "## Write Scope Preflight\n\n"
+        "The following declared output paths already exist but do not clearly belong to this sprint. "
+        "Treat them as stale inputs, not as completion evidence. Overwrite with current-sprint content "
+        "or explain why a different scoped artifact is required.\n\n"
+        + "\n".join(rows)
+    )
+
+
 def _acceptance_lines(values: Any) -> str:
     if not values:
         return "- N/A"
@@ -1398,6 +1454,42 @@ def _operator_terminal_result_closeout(
     }
 
 
+def _cooldown_operator_after_contract_closeout(operator_id: str, closeout: dict[str, Any]) -> dict[str, Any]:
+    operator_id = str(operator_id or "").strip()
+    if not operator_id or OPERATOR_CONTRACT_CLOSEOUT_COOLDOWN_SEC <= 0:
+        return {"ok": False, "reason": "operator_cooldown_disabled_or_missing"}
+    try:
+        if str(HARNESS_DIR / "lib") not in sys.path:
+            sys.path.insert(0, str(HARNESS_DIR / "lib"))
+        import operator_flow_control as ofc  # type: ignore
+
+        expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+            seconds=OPERATOR_CONTRACT_CLOSEOUT_COOLDOWN_SEC
+        )
+        persisted = ofc.persist_operator_block(
+            operator_id,
+            "cooldown",
+            expires_at=expires_at,
+            reason="contract_closeout_failed",
+            source="graph_node_dispatcher",
+            evidence_text=json.dumps(closeout, ensure_ascii=False)[-4000:],
+        )
+        runtime = ofc.set_operator_state(
+            operator_id,
+            "cooldown",
+            ttl_seconds=OPERATOR_CONTRACT_CLOSEOUT_COOLDOWN_SEC,
+        )
+        return {
+            "ok": bool(runtime.get("runtime_state") == "cooldown" or persisted.get("ok")),
+            "operator_id": operator_id,
+            "cooldown_sec": OPERATOR_CONTRACT_CLOSEOUT_COOLDOWN_SEC,
+            "persisted": persisted,
+            "runtime": runtime,
+        }
+    except Exception as exc:
+        return {"ok": False, "reason": f"{type(exc).__name__}: {exc}", "operator_id": operator_id}
+
+
 def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path) -> list[dict[str, Any]]:
     sid = str(graph.get("sprint_id") or Path(graph_path).stem.replace(".task_graph", ""))
     repaired: list[dict[str, Any]] = []
@@ -1420,6 +1512,31 @@ def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path
             eval_verdict = "FAIL"
         else:
             eval_verdict = ""
+        if handoff_file and eval_verdict in {"PASS", "FAIL"} and status in {"passed", "failed"}:
+            stale_eval_keys = [
+                "eval_assigned_to",
+                "eval_dispatch_id",
+                "eval_retry_reason",
+                "last_eval_closeout_failure",
+                "last_eval_operator_cooldown_after_closeout",
+            ]
+            cleared = [key for key in stale_eval_keys if key in node]
+            if cleared:
+                for key in cleared:
+                    node.pop(key, None)
+                node["eval_json"] = eval_json_path
+                node["updated_at"] = _utc_now()
+                repaired.append(
+                    {
+                        "node": node_id,
+                        "status": status,
+                        "reason": "canonical_eval_verdict_cleared_stale_eval_state",
+                        "cleared": cleared,
+                        "eval_json": eval_json_path,
+                        "verdict": eval_verdict,
+                    }
+                )
+            continue
         if handoff_file and eval_verdict in {"PASS", "FAIL"} and status in {"pending", "queued", "blocked", "assigned", "dispatched", "in_progress", "running", "reviewing", "ready_for_review", "needs_human_review", "failed_review", ""}:
             pane = str(node.get("assigned_to") or "").strip()
             dispatch_id = str(node.get("dispatch_id") or "").strip()
@@ -1500,12 +1617,20 @@ def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path
             if closeout:
                 pane = str(node.get("assigned_to") or "").strip()
                 dispatch_id = str(node.get("dispatch_id") or "").strip()
+                operator_cooldown = {}
+                if closeout.get("reason") == "failed_contract_closeout":
+                    operator_cooldown = _cooldown_operator_after_contract_closeout(
+                        str(closeout.get("operator_id") or ""),
+                        closeout,
+                    )
                 if pane and dispatch_id:
                     release_lease(pane, dispatch_id, f"graph_dispatch_reconcile_{closeout['reason']}")
                 node.pop("assigned_to", None)
                 node.pop("dispatch_id", None)
                 node["dispatch_retry_reason"] = closeout["reason"]
                 node["last_operator_closeout_failure"] = closeout
+                if operator_cooldown:
+                    node["last_operator_cooldown_after_closeout"] = operator_cooldown
                 node["updated_at"] = _utc_now()
                 node["status"] = "pending"
                 graph.setdefault("node_results", {}).pop(node_id, None)
@@ -1514,7 +1639,7 @@ def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path
                     sid,
                     pane,
                     dispatch_id,
-                    {"node": node_id, **closeout},
+                    {"node": node_id, **closeout, "operator_cooldown": operator_cooldown},
                 )
                 repaired.append(
                     {
@@ -1525,6 +1650,7 @@ def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path
                         "reason": closeout["reason"],
                         "operator_status": closeout.get("operator_status"),
                         "result_json": closeout.get("result_json"),
+                        "operator_cooldown": operator_cooldown,
                     }
                 )
                 continue
@@ -1617,6 +1743,27 @@ def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path
                     # because no live lease exists.
                     set_node_status(graph, node_id, "dispatched", pane=pane, dispatch_id=dispatch_id)
                     continue
+                if lease_live and not unavailable_reason and not _pane_tui_busy(pane):
+                    acquired_at = _parse_utc(str((lease or {}).get("acquired_at") or ""))
+                    now = datetime.datetime.now(datetime.timezone.utc)
+                    if acquired_at and (now - acquired_at).total_seconds() > 120:
+                        release_lease(pane, dispatch_id, "graph_dispatch_reconcile_live_lease_idle_without_submit_ack")
+                        node.pop("assigned_to", None)
+                        node.pop("dispatch_id", None)
+                        node["dispatch_retry_reason"] = "live_lease_idle_without_submit_ack"
+                        node["updated_at"] = _utc_now()
+                        node["status"] = "pending"
+                        graph.setdefault("node_results", {}).pop(node_id, None)
+                        repaired.append(
+                            {
+                                "node": node_id,
+                                "pane": pane,
+                                "dispatch_id": dispatch_id,
+                                "status": "pending",
+                                "reason": "live_lease_idle_without_submit_ack",
+                            }
+                        )
+                        continue
                 if not lease_live:
                     release_lease(
                         pane,
@@ -1701,6 +1848,15 @@ def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path
                     }
                     break
             if terminal_operator_assignment:
+                operator_cooldown = {}
+                failed_operator = ""
+                pane_value = str(terminal_operator_assignment.get("pane") or "")
+                if pane_value.startswith("operator:"):
+                    failed_operator = pane_value.split(":", 1)[1].strip()
+                    operator_cooldown = _cooldown_operator_after_contract_closeout(
+                        failed_operator,
+                        terminal_operator_assignment,
+                    )
                 if terminal_operator_assignment["dispatch_id"]:
                     release_lease(
                         terminal_operator_assignment["pane"],
@@ -1710,6 +1866,8 @@ def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path
                 _clear_eval_assignments(node)
                 node["eval_retry_reason"] = terminal_operator_assignment["reason"]
                 node["last_eval_closeout_failure"] = terminal_operator_assignment
+                if operator_cooldown:
+                    node["last_eval_operator_cooldown_after_closeout"] = operator_cooldown
                 node["updated_at"] = _utc_now()
                 repaired.append(
                     {
@@ -1720,6 +1878,7 @@ def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path
                         "reason": terminal_operator_assignment["reason"],
                         "operator_status": terminal_operator_assignment.get("operator_status"),
                         "result_json": terminal_operator_assignment.get("result_json"),
+                        "operator_cooldown": operator_cooldown,
                     }
                 )
                 continue
@@ -2349,6 +2508,7 @@ def build_dispatch_text(payload: dict[str, Any], pane: str) -> str:
             plan_artifacts.get("physical_plan_ir_path", ""),
         ]
     )
+    write_scope_preflight = _write_scope_preflight_block(str(sid), node)
 
     return f"""{STATE_READ_PREFLIGHT}
 {DEFINITION_OF_DONE_POLICY}
@@ -2394,6 +2554,8 @@ Graph: `{graph_path}`
 ## Write Scope
 
 {_scope_lines(node.get("write_scope"))}
+
+{write_scope_preflight}
 
 {architecture_block}
 
@@ -2805,6 +2967,8 @@ def _prompt_match_followed_by_idle_default_prompt(text: str, match: re.Match[str
     """
     if match is None:
         return False
+    if prompt_match_is_stale:
+        return bool(prompt_match_is_stale(text, match))
     after = text[match.end():]
     return bool(re.search(r"❯[\s\u00a0]+Try\s+\"", after)) or _tail_has_idle_prompt_footer(after)
 
@@ -2816,6 +2980,8 @@ def _tail_has_idle_prompt_footer(text: str) -> bool:
     even after Claude returns to a clean prompt/footer. Treating that history as
     live state strands otherwise idle panes.
     """
+    if tail_has_idle_prompt_footer:
+        return bool(tail_has_idle_prompt_footer(text))
     lines = [line.rstrip() for line in text.splitlines()]
     footer_prefixes = (
         "⏵",
@@ -2878,6 +3044,7 @@ def _pane_prompt_residue_is_stale_scrollback(pane: str, text: str) -> bool:
 def _pane_tui_busy(pane: str) -> bool:
     tail = _pane_tail(pane)
     bottom = "\n".join(tail.splitlines()[-40:])
+    overlay = pane_overlay_detail(tail) if pane_overlay_detail else {"state": "none", "type": ""}
     prompt_is_empty = "❯" in bottom and not _pane_current_prompt_has_residue(bottom)
     if PANE_RATE_LIMIT_OPTIONS_MODAL_RE.search(bottom):
         if _dismiss_rate_limit_options_modal(pane):
@@ -2908,7 +3075,7 @@ def _pane_tui_busy(pane: str) -> bool:
             return False
         return True
     if PANE_SURVEY_PROMPT_RE.search(bottom):
-        if prompt_is_empty:
+        if overlay.get("state") == "stale_scrollback_ignored" or prompt_is_empty:
             return False
         return True
     confirmation_match = PANE_CONFIRMATION_PROMPT_RE.search(bottom)
@@ -2930,6 +3097,8 @@ def _pane_tui_busy(pane: str) -> bool:
     # to return busy here before `_pane_unavailable_reason()` could clear it,
     # which left panes permanently stranded.
     if PANE_QUEUED_PROMPT_RE.search(bottom):
+        if overlay.get("state") == "stale_scrollback_ignored":
+            return False
         if _clear_stale_prompt_residue(pane):
             time.sleep(0.3)
             tail = _pane_tail(pane)
@@ -3058,6 +3227,7 @@ def _pane_unavailable_reason(pane: str) -> str:
         return str(health.get("reason") or "provider_health_unavailable")
     tail = _pane_tail(pane)
     bottom = "\n".join(tail.splitlines()[-40:])
+    overlay = pane_overlay_detail(tail) if pane_overlay_detail else {"state": "none", "type": ""}
     if PANE_RATE_LIMIT_OPTIONS_MODAL_RE.search(bottom):
         if _dismiss_rate_limit_options_modal(pane):
             tail = _pane_tail(pane)
@@ -3083,10 +3253,12 @@ def _pane_unavailable_reason(pane: str) -> str:
     if PANE_TUI_UNAVAILABLE_RE.search(bottom):
         return "rate_limit_or_api_error"
     if PANE_SURVEY_PROMPT_RE.search(bottom):
-        if "❯" in bottom and not _pane_current_prompt_has_residue(bottom):
+        if overlay.get("state") == "stale_scrollback_ignored" or ("❯" in bottom and not _pane_current_prompt_has_residue(bottom)):
             return ""
         return "survey_prompt_blocked"
     if PANE_QUEUED_PROMPT_RE.search(bottom):
+        if overlay.get("state") == "stale_scrollback_ignored":
+            return ""
         if _clear_stale_prompt_residue(pane):
             tail = _pane_tail(pane)
             bottom = "\n".join(tail.splitlines()[-40:])
@@ -3116,7 +3288,18 @@ def _pane_hygiene_entries() -> dict[str, Any]:
     except Exception:
         return {}
     panes = payload.get("panes")
-    return panes if isinstance(panes, dict) else {}
+    if isinstance(panes, dict):
+        return panes
+    # Live registries may be stored as a flat map:
+    # {"session:win.pane": {"state": "needs_respawn", ...}}.
+    # Honor that shape so bad panes do not re-enter evaluator capacity.
+    if isinstance(payload, dict):
+        return {
+            str(key): value
+            for key, value in payload.items()
+            if isinstance(value, dict) and "state" in value
+        }
+    return {}
 
 
 def _recover_pane_hygiene_if_idle(pane: str, state: str) -> bool:
@@ -3200,6 +3383,9 @@ def _pane_has_matching_queued_prompt(pane: str, instruction_file: Path) -> bool:
 
 def _pane_dispatch_prompt_reason(tail: str) -> str:
     bottom = "\n".join((tail or "").splitlines()[-40:])
+    overlay = pane_overlay_detail(tail) if pane_overlay_detail else {"state": "none", "type": ""}
+    if overlay.get("state") == "stale_scrollback_ignored":
+        return ""
     edit_match = re.search(r"Do you want to make this edit|Do you want to overwrite|allow all edits during this session", bottom, re.I)
     if edit_match and not _prompt_match_followed_by_idle_default_prompt(bottom, edit_match):
         return "edit_confirmation_prompt"
@@ -4990,7 +5176,8 @@ def _discover_evaluators(dry_run: bool = False) -> list[dict[str, Any]]:
             rate_limit_blocks = _persist_pane_rate_limit_block(pane, title, tail, quota_exhausted) if quota_exhausted else []
             runtime_unavailable_reason = "" if cooldown_reason else _pane_runtime_unavailable_reason(pane, title)
             unavailable_reason = (
-                cooldown_reason
+                _pane_hygiene_unavailable_reason(pane)
+                or cooldown_reason
                 or _multi_task_direct_dispatch_unavailable_reason(pane, current_command=current_command)
                 or runtime_unavailable_reason
                 or _pane_unavailable_reason(pane)

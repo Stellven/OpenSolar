@@ -38,10 +38,47 @@ TERMINAL_GRAPH_FIELDS = {
     "passed": ("open_nodes", "failed_nodes"),
     "failed": ("open_nodes",),
 }
+TERMINAL_SPRINT_STATUSES = {"passed", "completed", "eval_passed", "failed", "cancelled", "archived", "skipped", "superseded"}
+
+
+def _is_epic_child(data: Dict[str, Any]) -> bool:
+    return bool(data.get("epic_id")) or str(data.get("dependency_policy") or "") == "activated_by_epic_dag"
+
+
+def _canonicalize_transition(
+    data: Dict[str, Any],
+    new_status: str,
+    status_fields: Dict[str, Any],
+) -> tuple[str, Dict[str, Any]]:
+    """Normalize legacy status writes into the current workflow semantics.
+
+    The main legacy hazard is planner-ready epic children being written as
+    `drafting + prd_ready + planner`, which makes the epic DAG repeatedly
+    "activate" the same child and starves real planner throughput.
+    """
+    normalized_status = str(new_status or "")
+    normalized_fields = dict(status_fields or {})
+    phase = str(normalized_fields.get("phase") or data.get("phase") or "")
+    handoff_to = str(normalized_fields.get("handoff_to") or data.get("handoff_to") or "")
+    target_role = str(normalized_fields.get("target_role") or data.get("target_role") or "")
+
+    if (
+        normalized_status == "drafting"
+        and phase == "prd_ready"
+        and (handoff_to == "planner" or target_role == "planner")
+        and _is_epic_child(data)
+    ):
+        normalized_status = "active"
+
+    return normalized_status, normalized_fields
 
 
 def _now_ts() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _is_terminal_sprint_status(status: str) -> bool:
+    return str(status or "").lower() in TERMINAL_SPRINT_STATUSES
 
 
 def _safe_extra(raw: str) -> Dict[str, Any]:
@@ -93,6 +130,44 @@ def transition_status(
     status_fields = extra.pop("status_fields", None) or extra.pop("_status_fields", None) or {}
     if not isinstance(status_fields, dict):
         status_fields = {}
+
+    new_status, status_fields = _canonicalize_transition(data, new_status, status_fields)
+    allow_reopen = bool(extra.pop("allow_reopen", False))
+    sticky_terminal = _is_terminal_sprint_status(old_status) and not _is_terminal_sprint_status(new_status)
+    if sticky_terminal and not allow_reopen:
+        hist: Dict[str, Any] = {
+            "ts": now,
+            "event": event,
+            "by": actor,
+            "note": "terminal_status_sticky: attempted downgrade ignored",
+            "attempted_status": new_status,
+        }
+        if bump_round:
+            hist["round"] = new_round
+        hist.update(extra)
+        data["updated_at"] = now
+        data["runtime_state_source"] = "activity_runtime"
+        data.setdefault("history", []).append(hist)
+
+        fd, tmp = tempfile.mkstemp(dir=str(status_path.parent), suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=2, ensure_ascii=False)
+            fh.write("\n")
+        os.replace(tmp, status_path)
+
+        harness_dir = _harness_dir_from_status_path(status_path)
+        rt = ActivityRuntime(sid, harness_dir=harness_dir)
+        rt.state_transition(
+            actor=actor,
+            from_status=old_status,
+            to_status=old_status,
+            round_num=new_round,
+            correlation_id=f"status:{sid}:{event}:{now}",
+        )
+        return data, (
+            f"OK: {sid} preserved terminal status {old_status}; "
+            f"ignored attempted downgrade to {new_status} (round={new_round})"
+        )
 
     data["status"] = new_status
     data.update(STATUS_FIELDS.get(new_status, {}))

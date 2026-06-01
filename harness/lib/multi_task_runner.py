@@ -1447,7 +1447,7 @@ def claude_agent_line(model: str, dispatch_expr: str = '"$(cat "$DISPATCH_FILE")
             "export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
             "export CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1",
             "export DISABLE_NON_ESSENTIAL_MODEL_CALLS=1",
-            "export CLAUDE_CODE_MAX_OUTPUT_TOKENS=${CLAUDE_CODE_MAX_OUTPUT_TOKENS:-4096}",
+            "export CLAUDE_CODE_MAX_OUTPUT_TOKENS=${CLAUDE_CODE_MAX_OUTPUT_TOKENS:-12000}",
             (
                 "claude --dangerously-skip-permissions "
                 "--permission-mode bypassPermissions "

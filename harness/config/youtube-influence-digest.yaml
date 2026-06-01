@@ -28,12 +28,12 @@ fetch:
   max_consecutive_transcript_failures: 8
   user_agent: Solar-YouTube-Influence-Digest/1.0 (+local transcript capture)
 asr:
-  enabled: true
-  # ASR is a fallback path. Browser-agent transcript capture is the primary path,
-  # so ASR backlog must not block /knowledge/progress health by default.
+  enabled: false
+  # Local/premium ASR is disabled. Browser-agent transcript capture is the only
+  # allowed no-caption fallback; failures must become metadata-only, not ASR jobs.
   blocking_for_knowledge_progress: false
   queue_health_policy: fallback_non_blocking
-  max_per_run: 1
+  max_per_run: 0
   queue_dir: /Users/lisihao/.solar/harness/state/youtube-influence-digest/asr-queue
   done_dir: /Users/lisihao/.solar/harness/state/youtube-influence-digest/asr-done
   audio_dir: /Users/lisihao/.solar/harness/state/youtube-influence-digest/asr-audio

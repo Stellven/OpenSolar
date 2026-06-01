@@ -17,6 +17,7 @@ from youtube.pollution_repair import audit_pollution, repair_pollution, verify_r
 from youtube.subtitle_discovery import SubtitleTrack, discover_subtitle_tracks
 from youtube.dashboard import aggregate
 from youtube.quality_gate import evaluate_quality, persist_quality_check
+from ai_influence_youtube_report.browser_agent import YoutubeTranscriptExtractor
 
 
 def _open_db(path: str) -> sqlite3.Connection:
@@ -62,7 +63,14 @@ def cmd_acquire(args: argparse.Namespace) -> int:
         )
     ]
     result = decide_ladder_path(args.video_id, tracks, priority=args.priority)
-    _print({"video_id": args.video_id, "resolved_level": result.resolved_level, "asr_route_needed": result.asr_route_needed}, args.json)
+    _print(
+        {
+            "video_id": args.video_id,
+            "resolved_level": result.resolved_level,
+            "browser_capture_needed": result.resolved_level == "L2_browser_capture",
+        },
+        args.json,
+    )
     return 0
 
 
@@ -77,10 +85,28 @@ def cmd_process_jobs(args: argparse.Namespace) -> int:
         if not args.dry_run:
             _ensure_subtitle_url_column(conn)
             for job in jobs:
+                if job.job_type in {"asr", "premium_asr"}:
+                    conn.execute(
+                        """UPDATE youtube_transcript_jobs
+                           SET status='metadata_only', error_code='max_attempts',
+                               error_message='local/premium ASR disabled; use browser_capture or metadata_only',
+                               finished_at=?
+                           WHERE job_id=?""",
+                        (_now(), job.job_id),
+                    )
+                    conn.commit()
+                    continue
                 if job.job_type == "caption_discovery":
                     _run_caption_discovery_job(conn, job, timeout=args.timeout)
                 elif job.job_type == "subtitle_download":
                     _run_subtitle_download_job(conn, job, state_dir=Path(args.state_dir).expanduser())
+                elif job.job_type == "browser_capture":
+                    _run_browser_capture_job(
+                        conn,
+                        job,
+                        state_dir=Path(args.state_dir).expanduser(),
+                        timeout=args.timeout,
+                    )
                 else:
                     continue
         payload = {
@@ -123,8 +149,9 @@ def cmd_transcript_status(args: argparse.Namespace) -> int:
 def cmd_ab_test_asr(args: argparse.Namespace) -> int:
     payload = {
         "video_id": args.video_id,
-        "candidate_backends": ["faster_whisper_large_v3", "premium"],
-        "status": "planned",
+        "candidate_backends": [],
+        "status": "disabled",
+        "reason": "local/premium ASR is disabled; use subtitle-first or browser_capture",
     }
     _print(payload, args.json)
     return 0
@@ -170,7 +197,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_transcript_status)
 
-    p = sub.add_parser("transcript-ab-test-asr")
+    p = sub.add_parser("transcript-ab-test-asr", help="Disabled: local/premium ASR is not used by the YouTube pipeline")
     p.add_argument("--video-id", required=True)
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_ab_test_asr)
@@ -257,13 +284,13 @@ def _run_caption_discovery_job(conn: sqlite3.Connection, job, *, timeout: int) -
                 ),
             )
         else:
-            asr_id = _job_id(job.video_id, "asr", "caption_unavailable")
+            capture_id = _job_id(job.video_id, "browser_capture", "caption_unavailable")
             conn.execute(
                 """INSERT INTO youtube_transcript_jobs
                    (job_id, video_id, job_type, priority, status, backend, max_attempts, error_code, error_message)
-                   VALUES (?, ?, 'asr', ?, 'pending', 'local-high-quality', 2, 'no_caption', 'caption unavailable after subtitle-first discovery')
+                   VALUES (?, ?, 'browser_capture', ?, 'pending', 'browser-agent', 2, 'no_caption', 'caption unavailable after subtitle-first discovery')
                    ON CONFLICT(job_id) DO NOTHING""",
-                (asr_id, job.video_id, job.priority),
+                (capture_id, job.video_id, job.priority),
             )
         conn.execute(
             "UPDATE youtube_transcript_jobs SET status='succeeded', finished_at=?, error_message=? WHERE job_id=?",
@@ -384,6 +411,126 @@ def _run_subtitle_download_job(conn: sqlite3.Connection, job, *, state_dir: Path
             (f"{type(exc).__name__}: {exc}"[:500], job.job_id),
         )
         conn.commit()
+
+
+def _run_browser_capture_job(conn: sqlite3.Connection, job, *, state_dir: Path, timeout: int) -> None:
+    now = _now()
+    conn.execute(
+        "UPDATE youtube_transcript_jobs SET status='running', started_at=? WHERE job_id=?",
+        (now, job.job_id),
+    )
+    run_dir = state_dir / "browser-capture-runs" / f"{job.video_id}-{now.replace(':', '').replace('.', '')}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        result_payload = YoutubeTranscriptExtractor().extract(
+            f"https://www.youtube.com/watch?v={job.video_id}",
+            task_dir=run_dir,
+            timeout_seconds=max(timeout, 300),
+            max_retries=1,
+            output_format="timestamped",
+            headless=True,
+        )
+        clean = _dedupe_lines(str(result_payload.get("text") or "").splitlines())
+        if len(clean) < 200:
+            raise RuntimeError("browser transcript text too short after cleaning")
+
+        week_dir = _transcript_week_dir(conn, job.video_id, state_dir)
+        raw_path = week_dir / f"{job.video_id}.browser.txt"
+        clean_path = week_dir / f"{job.video_id}.txt"
+        raw_path.write_text(str(result_payload.get("text") or "") + "\n", encoding="utf-8")
+        clean_path.write_text(clean + "\n", encoding="utf-8")
+        transcript_id = f"t-{job.video_id}-browser_caption-{hashlib.sha1(clean.encode()).hexdigest()[:12]}"
+        quality = evaluate_quality(
+            text=clean,
+            coverage_ratio=0.80,
+            hallucination_risk=0.20,
+            source_reliability=0.70,
+            vocab_terms=_vocab_terms(conn),
+            trigger_source="browser_caption",
+        )
+        conn.execute(
+            """INSERT INTO youtube_transcripts
+               (video_id, transcript_id, transcript_raw, transcript_clean, transcript_status,
+                source, language, fetched_at, char_count, is_auto_generated, raw_path, clean_path,
+                transcript_hash, quality_score, quality_tier, coverage_ratio, hallucination_risk, created_at)
+               VALUES (?, ?, ?, ?, 'fetched', 'browser_caption', '', ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(video_id) DO UPDATE SET
+                 transcript_id=excluded.transcript_id,
+                 transcript_raw=excluded.transcript_raw,
+                 transcript_clean=excluded.transcript_clean,
+                 transcript_status=excluded.transcript_status,
+                 source=excluded.source,
+                 fetched_at=excluded.fetched_at,
+                 char_count=excluded.char_count,
+                 is_auto_generated=excluded.is_auto_generated,
+                 raw_path=excluded.raw_path,
+                 clean_path=excluded.clean_path,
+                 transcript_hash=excluded.transcript_hash,
+                 quality_score=excluded.quality_score,
+                 quality_tier=excluded.quality_tier,
+                 coverage_ratio=excluded.coverage_ratio,
+                 hallucination_risk=excluded.hallucination_risk""",
+            (
+                job.video_id,
+                transcript_id,
+                str(result_payload.get("text") or ""),
+                clean,
+                now,
+                len(clean),
+                str(raw_path),
+                str(clean_path),
+                hashlib.sha256(clean.encode()).hexdigest(),
+                quality.final_score,
+                quality.final_tier,
+                quality.sub_scores.get("coverage_ratio"),
+                1.0 - quality.sub_scores.get("inverse_hallucination", 1.0),
+                now,
+            ),
+        )
+        persist_quality_check(conn, transcript_id=transcript_id, result=quality, commit=False)
+        conn.execute(
+            "UPDATE youtube_transcript_jobs SET status='succeeded', finished_at=?, error_message=? WHERE job_id=?",
+            (now, f"browser_caption quality={quality.final_tier}:{quality.final_score}", job.job_id),
+        )
+        conn.commit()
+    except Exception as exc:
+        next_attempt = int(job.attempt_count or 0) + 1
+        full_error_text = f"{type(exc).__name__}: {exc}"
+        error_text = full_error_text[:500]
+        terminal_no_transcript = any(
+            marker in full_error_text
+            for marker in (
+                "youtube_transcript_button_not_found",
+                "youtube_transcript_panel_not_loaded",
+                "youtube_transcript_empty",
+            )
+        )
+        if terminal_no_transcript:
+            conn.execute(
+                """UPDATE youtube_transcript_jobs
+                   SET status='metadata_only', attempt_count=?, next_retry_at=NULL,
+                       error_code='no_caption', error_message=?, finished_at=?
+                   WHERE job_id=?""",
+                (next_attempt, error_text, now, job.job_id),
+            )
+            conn.commit()
+        elif next_attempt >= int(job.max_attempts or 2):
+            conn.execute(
+                """UPDATE youtube_transcript_jobs
+                   SET status='metadata_only', attempt_count=?, next_retry_at=NULL,
+                       error_code='max_attempts', error_message=?, finished_at=?
+                   WHERE job_id=?""",
+                (next_attempt, error_text, now, job.job_id),
+            )
+            conn.commit()
+        else:
+            update = handle_job_failure(conn, job.job_id, "timeout", job.attempt_count, job.max_attempts)
+            apply_job_update(conn, update)
+            conn.execute(
+                "UPDATE youtube_transcript_jobs SET error_message=? WHERE job_id=?",
+                (error_text, job.job_id),
+            )
+            conn.commit()
 
 
 def _best_pending_track(conn: sqlite3.Connection, video_id: str):

@@ -123,6 +123,9 @@ def _retrieve_kb_hits(
                 "layer": hit.get("layer") or "",
                 "score": hit.get("score", 0),
                 "relevance_score": hit.get("score", 0),
+                "source_hash": hit.get("source_hash") or "",
+                "lineage": hit.get("lineage") or [],
+                "degraded_reason": hit.get("degraded_reason"),
             })
         for degraded in data.get("degraded_sources", []) or []:
             hits.append({
@@ -141,6 +144,42 @@ def _retrieve_kb_hits(
             "note": f"{type(exc).__name__}: {exc}",
             "degraded": True,
         }]
+
+
+def _source_counts(kb_hits: List[Dict[str, Any]]) -> Dict[str, int]:
+    counts: Dict[str, int] = {}
+    for hit in kb_hits:
+        source = str(hit.get("source") or "unknown")
+        if source == "degraded":
+            continue
+        counts[source] = counts.get(source, 0) + 1
+    return counts
+
+
+def _degraded_sources(kb_hits: List[Dict[str, Any]]) -> List[str]:
+    degraded: List[str] = []
+    for hit in kb_hits:
+        if hit.get("degraded") or hit.get("source") == "degraded":
+            degraded.append(str(hit.get("degraded_reason") or hit.get("title") or hit.get("source") or "unknown"))
+    return sorted(set(degraded))
+
+
+def _lineage_refs(kb_hits: List[Dict[str, Any]]) -> List[str]:
+    refs: List[str] = []
+    for hit in kb_hits:
+        lineage = hit.get("lineage") or []
+        if isinstance(lineage, list):
+            refs.extend(str(x) for x in lineage if x)
+        elif lineage:
+            refs.append(str(lineage))
+        path = hit.get("path")
+        if path:
+            refs.append(str(path))
+    return sorted(set(refs))[:50]
+
+
+def _source_hash_refs(kb_hits: List[Dict[str, Any]]) -> List[str]:
+    return sorted({str(hit.get("source_hash")) for hit in kb_hits if hit.get("source_hash")})[:50]
 
 
 class ContextProjection:
@@ -174,11 +213,15 @@ class ContextProjection:
         budget = budget_tokens or 8000  # default ~32K chars
         events = self._log.all_events()
         if not events:
+            kb_hits: List[Dict[str, Any]] = []
+            if query:
+                kb_hits = _retrieve_kb_hits(query)
             return ContextView(
                 session_id=self.session_id,
                 policy_name=policy_name,
                 built_at=_now_ts(),
                 budget_tokens=budget,
+                kb_hits=kb_hits,
             )
 
         included_ids: List[str] = []
@@ -396,6 +439,10 @@ class ContextProjection:
             "summarized_ranges": view.summarized_ranges,
             "dropped_ranges": view.dropped_ranges,
             "kb_hits": view.kb_hits[:8],
+            "context_sources": _source_counts(view.kb_hits),
+            "degraded_sources": _degraded_sources(view.kb_hits),
+            "lineage_refs": _lineage_refs(view.kb_hits),
+            "source_hash_refs": _source_hash_refs(view.kb_hits),
             "context_text": text,
             "redaction_policy": "default_secret_patterns",
             "provenance": "projection over append-only session events plus unified knowledge recall",

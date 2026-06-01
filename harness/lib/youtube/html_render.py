@@ -60,10 +60,10 @@ def render_dashboard_html(payload: dict[str, Any]) -> str:
     total_pending = sum(int(v or 0) for v in pending.values())
     total_failures = sum(int(v or 0) for v in failures.values())
     report_eligible = int(payload.get("report_eligible_count") or 0)
-    model_success = float(payload.get("model_success_rate") or 0.0)
+    browser_capture_success = float(payload.get("browser_capture_success_rate") or 0.0)
     low_quality = int(dist.get("lt_0_50") or 0)
 
-    quality_status = _status_class(model_success, warn=0.70, error=0.50)
+    quality_status = _status_class(browser_capture_success, warn=0.70, error=0.50)
     pending_status = _status_class(total_pending, warn=50, error=10, invert=True)
     failure_status = _status_class(total_failures, warn=10, error=3, invert=True)
     low_quality_status = _status_class(low_quality, warn=10, error=3, invert=True)
@@ -71,11 +71,11 @@ def render_dashboard_html(payload: dict[str, Any]) -> str:
     cards = "\n".join(
         [
             _metric_card("Report eligible", report_eligible, "ok", "T0/T1/T2 可进入报告池"),
-            _metric_card("Model success", f"{model_success:.1%}", quality_status, "ASR quality >= 0.50"),
+            _metric_card("Browser capture success", f"{browser_capture_success:.1%}", quality_status, "Browser Agent transcript capture"),
             _metric_card("Pending backlog", total_pending, pending_status, "按 P0/P1/P2/P3 调度"),
-            _metric_card("Failed jobs", total_failures, failure_status, "bot/no_caption/asr/timeout"),
+            _metric_card("Failed jobs", total_failures, failure_status, "bot/no_caption/transcript/timeout"),
             _metric_card("Low quality", low_quality, low_quality_status, "T3 不允许进核心报告"),
-            _metric_card("Premium cost today", f"${float(payload.get('premium_cost_today') or 0.0):.2f}", "ok", "gated escape hatch"),
+            _metric_card("Premium cost today", f"${float(payload.get('premium_cost_today') or 0.0):.2f}", "ok", "disabled"),
         ]
     )
 
@@ -150,7 +150,7 @@ def render_dashboard_html(payload: dict[str, Any]) -> str:
 <main>
   <header>
     <h1>AI Influence YouTube Transcript Dashboard</h1>
-    <p>Transcript ladder / ASR routing / quality gate / premium fallback 的运行态总览。</p>
+    <p>Transcript ladder / Browser Agent capture / quality gate 的运行态总览。</p>
   </header>
   <div class="grid">{cards}</div>
   <section><h2>Quality Tiers</h2><table>{_kv_rows(tiers)}</table></section>

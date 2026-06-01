@@ -154,9 +154,8 @@ def assert_mac_mini(config: dict[str, Any], force: bool = False) -> None:
         hostnames.add(socket.getfqdn())
     except Exception:
         pass
-    normalized_hostnames = {h.strip().lower() for h in hostnames if str(h).strip()}
-    allowed = {str(h).strip().lower() for h in (config.get("allowed_hostnames") or []) if str(h).strip()}
-    if not (normalized_hostnames & allowed):
+    allowed = set(config.get("allowed_hostnames") or [])
+    if not (hostnames & allowed):
         print(
             "skip: this job is Mac-mini-only; "
             f"host={sorted(hostnames)} allowed={sorted(allowed)}",

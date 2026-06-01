@@ -26,8 +26,9 @@
 - unsafe cache feature 状态。
 - 回滚说明和修改文件列表。
 
-## Definition of Done
-- 所有 graph 节点 passed。
-- 最终中文报告存在。
-- 报告里给出“当前问题 / 下一步”。
-
+## Definition of Done (Planner — Quantified)
+- [ ] D1: server.py 中 AnthropicProxy 路径的 disable_prefix_cache 不再无条件硬编码 True，改为读取 settings 开关
+- [ ] D2: settings_v2.py 新增 anthropic_prefix_cache_enabled 字段，默认 False（安全 fallback）
+- [ ] D3: 单元测试 >= 8 条覆盖开关逻辑（默认/opt-in/None fallback），pytest 全通过
+- [ ] D4: Pane4 等价 Anthropic 请求 HTTP 200 + bad_chars=false + 中文输出正常
+- [ ] D5: 最终中文报告写入 monitor-reports/thunderomlx-anthropic-prefix-cache-repair.md，含 before/after 对比和回滚说明

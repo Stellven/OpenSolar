@@ -4,12 +4,13 @@
 Pipeline:
 1. Connect via browser-use profile session (CDP).
 2. Navigate to the YouTube video URL.
-3. Verify logged in as target account (haogege1977@gmail.com).
-4. Expand video description if collapsed.
-5. Click "显示转写文稿" / "Show transcript" button to open transcript panel.
-6. Wait for transcript segments to load.
-7. Scroll through transcript panel and extract all text segments.
-8. Save transcript to output directory.
+3. Extract public captionTracks when available.
+4. Optionally verify logged-in account before UI fallback when strict mode is enabled.
+5. Expand video description if collapsed.
+6. Click "显示转写文稿" / "Show transcript" button to open transcript panel.
+7. Wait for transcript segments to load.
+8. Scroll through transcript panel and extract all text segments.
+9. Save transcript to output directory.
 """
 from __future__ import annotations
 
@@ -34,12 +35,18 @@ from playwright.async_api import async_playwright
 
 DEFAULT_URL = "https://www.youtube.com"
 DEFAULT_USER_DATA_DIR = Path.home() / "Library" / "Application Support" / "Google" / "Chrome"
-DEFAULT_PROFILE_DIRECTORY = "Profile 1"
+DEFAULT_PROFILE_DIRECTORY = "Default"
 DEFAULT_ALLOWED_DOMAINS = [
     "www.youtube.com", "youtube.com", "accounts.google.com",
     "google.com", "m.youtube.com",
 ]
-TARGET_ACCOUNT_EMAIL = "haogege1977@gmail.com"
+TARGET_ACCOUNT_EMAIL = os.environ.get("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL", "haogege1977@gmail.com")
+STRICT_ACCOUNT_FOR_PANEL = os.environ.get("BROWSER_AGENT_YT_REQUIRE_LOGIN_FOR_PANEL", "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 # ---------------------------------------------------------------------------
 # Logging helpers
@@ -520,6 +527,193 @@ async def _scroll_and_extract_transcript(page) -> dict:
     return result
 
 
+async def _extract_caption_tracks_from_page(page) -> list[dict]:
+    """Extract YouTube caption tracks exposed in ytInitialPlayerResponse.
+
+    This is still browser-agent acquisition: it uses the loaded YouTube page and
+    page JS state, but avoids depending on a brittle transcript-panel click path.
+    """
+    tracks = await page.evaluate("""
+        (() => {
+            const out = [];
+            const pushTracks = (tracks) => {
+                if (!Array.isArray(tracks)) return;
+                for (const t of tracks) {
+                    if (t && t.baseUrl) out.push(t);
+                }
+            };
+            try {
+                if (window.ytInitialPlayerResponse) {
+                    pushTracks(window.ytInitialPlayerResponse?.captions
+                        ?.playerCaptionsTracklistRenderer?.captionTracks);
+                }
+            } catch (e) {}
+            try {
+                if (window.ytplayer?.config?.args?.player_response) {
+                    const pr = JSON.parse(window.ytplayer.config.args.player_response);
+                    pushTracks(pr?.captions?.playerCaptionsTracklistRenderer?.captionTracks);
+                }
+            } catch (e) {}
+            if (out.length === 0) {
+                for (const script of document.querySelectorAll('script')) {
+                    const text = script.textContent || '';
+                    const marker = 'ytInitialPlayerResponse = ';
+                    const idx = text.indexOf(marker);
+                    if (idx < 0) continue;
+                    const start = idx + marker.length;
+                    const end = text.indexOf(';</script>', start);
+                    const raw = end > start ? text.slice(start, end) : text.slice(start);
+                    try {
+                        const pr = JSON.parse(raw.replace(/;\\s*$/, ''));
+                        pushTracks(pr?.captions?.playerCaptionsTracklistRenderer?.captionTracks);
+                    } catch (e) {}
+                }
+            }
+            const seen = new Set();
+            return out.filter((t) => {
+                const key = [t.baseUrl, t.languageCode, t.kind].join('|');
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+        })()
+    """)
+    return tracks if isinstance(tracks, list) else []
+
+
+def _parse_caption_payload(payload: str) -> dict:
+    """Parse json3/VTT caption payload into transcript segments."""
+    payload = payload or ""
+    segments: list[dict[str, str]] = []
+    if '"events"' in payload[:1000]:
+        try:
+            data = json.loads(payload)
+            for event in data.get("events", []):
+                parts = event.get("segs") or []
+                text = "".join(str(part.get("utf8") or "") for part in parts).strip()
+                if not text:
+                    continue
+                start_ms = int(event.get("tStartMs") or 0)
+                timestamp = _format_timestamp(start_ms / 1000)
+                segments.append({"timestamp": timestamp, "text": text})
+        except Exception:
+            segments = []
+    if not segments:
+        current_time = ""
+        for raw in payload.splitlines():
+            line = raw.strip()
+            if not line or line == "WEBVTT" or line.startswith(("Kind:", "Language:")):
+                continue
+            if "-->" in line:
+                current_time = line.split("-->", 1)[0].strip().split(".")[0]
+                continue
+            if re.match(r"^\\d+$", line):
+                continue
+            line = re.sub(r"<[^>]+>", "", line)
+            line = line.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+            if line:
+                segments.append({"timestamp": current_time, "text": line})
+                current_time = ""
+    deduped: list[dict[str, str]] = []
+    prev = ""
+    for seg in segments:
+        text = re.sub(r"\\s+", " ", str(seg.get("text") or "")).strip()
+        if not text or text == prev or len(text) <= 2:
+            continue
+        deduped.append({"timestamp": str(seg.get("timestamp") or ""), "text": text})
+        prev = text
+    full_text = "\n".join(
+        f"[{seg['timestamp']}] {seg['text']}" if seg.get("timestamp") else seg["text"]
+        for seg in deduped
+    )
+    return {"segments": deduped, "full_text": full_text, "segment_count": len(deduped)}
+
+
+def _format_timestamp(seconds: float) -> str:
+    total = max(0, int(seconds))
+    h, rem = divmod(total, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}:{m:02d}:{s:02d}"
+    return f"{m}:{s:02d}"
+
+
+async def _fetch_caption_track_from_page(page, track: dict) -> dict:
+    base_url = str(track.get("baseUrl") or "")
+    if not base_url:
+        return {"segments": [], "full_text": "", "segment_count": 0}
+    url = base_url + ("&fmt=json3" if "fmt=" not in base_url else "")
+    payload = await page.evaluate(
+        """async (url) => {
+            const resp = await fetch(url, { credentials: 'include' });
+            if (!resp.ok) throw new Error(`caption_fetch_${resp.status}`);
+            return await resp.text();
+        }""",
+        url,
+    )
+    return _parse_caption_payload(str(payload or ""))
+
+
+async def _extract_via_caption_tracks(page) -> dict:
+    tracks = await _extract_caption_tracks_from_page(page)
+    if not tracks:
+        return {"segments": [], "full_text": "", "segment_count": 0}
+    def rank(track: dict) -> tuple[int, int, str]:
+        lang = str(track.get("languageCode") or "").lower()
+        kind = str(track.get("kind") or "").lower()
+        lang_rank = 0 if lang in {"en", "en-us", "en-gb"} else 1 if lang.startswith("zh") else 2
+        kind_rank = 1 if kind == "asr" else 0
+        return (kind_rank, lang_rank, lang)
+    for track in sorted(tracks, key=rank):
+        try:
+            result = await _fetch_caption_track_from_page(page, track)
+            if result.get("full_text"):
+                print(
+                    f"[YT Transcript] Extracted via page captionTracks: "
+                    f"{track.get('languageCode') or 'unknown'} {track.get('kind') or 'standard'} "
+                    f"segments={result.get('segment_count')}",
+                    flush=True,
+                )
+                return result
+        except Exception as exc:
+            print(f"[YT Transcript] captionTracks fetch failed: {type(exc).__name__}: {exc}", flush=True)
+            continue
+    return {"segments": [], "full_text": "", "segment_count": 0}
+
+
+async def _save_outputs(page, *, request_dir: Path, video_id: str, youtube_url: str, transcript_data: dict) -> None:
+    full_text = str(transcript_data.get("full_text") or "").strip()
+    segments = transcript_data.get("segments", [])
+    segment_count = int(transcript_data.get("segment_count") or len(segments or []))
+    if not full_text:
+        raise RuntimeError("youtube_transcript_empty")
+    video_meta = await _get_video_metadata(page)
+    screenshot_bytes = await page.screenshot(type="png")
+    print(f"[YT Transcript] Saving {segment_count} segments ({len(full_text)} chars)...", flush=True)
+    (request_dir / "assistant-response.txt").write_text(full_text + "\n", encoding="utf-8")
+    _write_json(request_dir / "transcript.json", {
+        "video_id": video_id,
+        "video_url": youtube_url,
+        "video_title": video_meta.get("title", ""),
+        "channel": video_meta.get("channel", ""),
+        "segment_count": segment_count,
+        "segments": segments,
+        "full_text": full_text,
+        "extracted_at": bjrt._now(),
+    })
+    _write_json(request_dir / "page.json", {
+        "title": video_meta.get("title", ""),
+        "url": youtube_url,
+        "video_id": video_id,
+        "channel": video_meta.get("channel", ""),
+        "segment_count": segment_count,
+        "text_length": len(full_text),
+    })
+    if screenshot_bytes:
+        (request_dir / "screenshot.png").write_bytes(screenshot_bytes)
+    print(full_text)
+
+
 def _extract_video_id(url: str) -> str:
     """Extract YouTube video ID from URL."""
     patterns = [
@@ -637,13 +831,39 @@ async def _run(youtube_url: str) -> int:
                 pass
 
             # -----------------------------------------------------------------
-            # Stage 2: Verify account
+            # Stage 2: Browser-page captionTracks first
             # -----------------------------------------------------------------
-            print("[YT Transcript] Verifying account...", flush=True)
-            account_ok = await _verify_account(playwright_page)
-            if not account_ok:
-                # Don't raise immediately — still attempt extraction
-                print("[YT Transcript] WARNING: Account verification failed. Continuing with extraction attempt.", flush=True)
+            # Public caption tracks are available from the loaded watch page even
+            # when the automation profile cannot prove the exact Google account.
+            # Do not block this path on login; only require account verification
+            # for the more brittle transcript-panel UI fallback below.
+            caption_track_data = await _extract_via_caption_tracks(playwright_page)
+            if caption_track_data.get("full_text"):
+                await _save_outputs(
+                    playwright_page,
+                    request_dir=request_dir,
+                    video_id=video_id,
+                    youtube_url=youtube_url,
+                    transcript_data=caption_track_data,
+                )
+                return 0
+
+            # -----------------------------------------------------------------
+            # Stage 2.5: Optional account check before UI transcript-panel fallback
+            # -----------------------------------------------------------------
+            # The transcript panel itself is public for public YouTube videos.
+            # Requiring a specific Google account here turns a recoverable
+            # public-page fallback into a hard auth failure. Keep strict account
+            # verification available for locked-down runs, but default to
+            # continuing so W21/W22 can be completed by the Browser Agent
+            # transcript operator without falling back to local ASR.
+            if STRICT_ACCOUNT_FOR_PANEL:
+                print("[YT Transcript] Verifying account before transcript-panel fallback...", flush=True)
+                account_ok = await _verify_account(playwright_page)
+                if not account_ok:
+                    raise RuntimeError("youtube_auth_required_or_wrong_account")
+            else:
+                print("[YT Transcript] Skipping strict account verification for public transcript-panel fallback.", flush=True)
 
             # -----------------------------------------------------------------
             # Stage 3: Expand description
@@ -656,6 +876,16 @@ async def _run(youtube_url: str) -> int:
             # -----------------------------------------------------------------
             transcript_opened = await _click_show_transcript(playwright_page)
             if not transcript_opened:
+                caption_track_data = await _extract_via_caption_tracks(playwright_page)
+                if caption_track_data.get("full_text"):
+                    await _save_outputs(
+                        playwright_page,
+                        request_dir=request_dir,
+                        video_id=video_id,
+                        youtube_url=youtube_url,
+                        transcript_data=caption_track_data,
+                    )
+                    return 0
                 raise RuntimeError("youtube_transcript_button_not_found")
 
             # -----------------------------------------------------------------
@@ -663,6 +893,16 @@ async def _run(youtube_url: str) -> int:
             # -----------------------------------------------------------------
             panel_ready = await _wait_for_transcript_panel(playwright_page, timeout_s=30)
             if not panel_ready:
+                caption_track_data = await _extract_via_caption_tracks(playwright_page)
+                if caption_track_data.get("full_text"):
+                    await _save_outputs(
+                        playwright_page,
+                        request_dir=request_dir,
+                        video_id=video_id,
+                        youtube_url=youtube_url,
+                        transcript_data=caption_track_data,
+                    )
+                    return 0
                 raise RuntimeError("youtube_transcript_panel_not_loaded")
 
             # -----------------------------------------------------------------
@@ -673,51 +913,13 @@ async def _run(youtube_url: str) -> int:
             segments = transcript_data.get("segments", [])
             segment_count = transcript_data.get("segment_count", 0)
 
-            if not full_text:
-                raise RuntimeError("youtube_transcript_empty")
-
-            # Get video metadata
-            video_meta = await _get_video_metadata(playwright_page)
-
-            # Take screenshot of the transcript panel
-            screenshot_bytes = await playwright_page.screenshot(type="png")
-
-            # -----------------------------------------------------------------
-            # Stage 7: Save outputs
-            # -----------------------------------------------------------------
-            print(f"[YT Transcript] Saving {segment_count} segments ({len(full_text)} chars)...", flush=True)
-
-            # assistant-response.txt — the primary output (required by operator)
-            (request_dir / "assistant-response.txt").write_text(full_text + "\n", encoding="utf-8")
-
-            # Structured transcript JSON
-            transcript_output = {
-                "video_id": video_id,
-                "video_url": youtube_url,
-                "video_title": video_meta.get("title", ""),
-                "channel": video_meta.get("channel", ""),
-                "segment_count": segment_count,
-                "segments": segments,
-                "full_text": full_text,
-                "extracted_at": bjrt._now(),
-            }
-            _write_json(request_dir / "transcript.json", transcript_output)
-
-            # page.json — metadata (required by operator)
-            _write_json(request_dir / "page.json", {
-                "title": video_meta.get("title", ""),
-                "url": youtube_url,
-                "video_id": video_id,
-                "channel": video_meta.get("channel", ""),
-                "segment_count": segment_count,
-                "text_length": len(full_text),
-            })
-
-            if screenshot_bytes:
-                (request_dir / "screenshot.png").write_bytes(screenshot_bytes)
-
-            # Print transcript to stdout (operator reads this)
-            print(full_text)
+            await _save_outputs(
+                playwright_page,
+                request_dir=request_dir,
+                video_id=video_id,
+                youtube_url=youtube_url,
+                transcript_data=transcript_data,
+            )
             return 0
 
     finally:

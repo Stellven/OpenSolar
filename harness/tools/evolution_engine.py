@@ -19,6 +19,10 @@ sys.path.insert(0, str(HARNESS_DIR / "lib"))
 from capability_registry import LEVEL_REVERSE, _open_db as open_capability_db  # type: ignore  # noqa: E402
 from eval_runner import run_pack  # type: ignore  # noqa: E402
 from failure_miner import mine as mine_failures  # type: ignore  # noqa: E402
+try:
+    from runtime_bridge import record_legacy_event  # type: ignore  # noqa: E402
+except Exception:
+    record_legacy_event = None  # type: ignore
 
 LEVEL_RANK = {"dead_end": 1, "basic_usable": 2, "default_usable": 3, "closed_loop": 4}
 RANK_LEVEL = {v: k for k, v in LEVEL_RANK.items()}
@@ -177,6 +181,19 @@ def _append_event(sprint_id: str, event: str, severity: str, payload: dict[str, 
         sprint_events = SPRINTS_DIR / f"{sprint_id}.events.jsonl"
         with sprint_events.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(obj, ensure_ascii=False) + "\n")
+        if record_legacy_event is not None:
+            try:
+                # Bridge sprint-scoped legacy events into session-log v2 so
+                # evolution telemetry cannot drift away from runtime state.
+                record_legacy_event(
+                    sprint_id,
+                    event,
+                    "solar-evolution-engine",
+                    {"severity": severity, **payload},
+                    harness_dir=HARNESS_DIR,
+                )
+            except Exception:
+                pass
 
 
 def _event_counts(event_names: set[str]) -> dict[str, int]:

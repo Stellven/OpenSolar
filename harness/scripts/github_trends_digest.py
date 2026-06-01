@@ -87,18 +87,17 @@ def ensure_db(path: Path) -> sqlite3.Connection:
     return conn
 
 
-def last_source_run(conn: sqlite3.Connection, source: str, period: str) -> dict[str, Any] | None:
+def last_source_run(conn: sqlite3.Connection, source: str, period: str) -> dt.datetime | None:
     row = conn.execute(
-        "SELECT fetched_at, ok, status FROM source_runs WHERE source=? AND period=? ORDER BY fetched_at DESC LIMIT 1",
+        "SELECT fetched_at FROM source_runs WHERE source=? AND period=? ORDER BY fetched_at DESC LIMIT 1",
         (source, period),
     ).fetchone()
     if not row:
         return None
     try:
-        fetched_at = dt.datetime.fromisoformat(row[0].replace("Z", "+00:00")).astimezone(UTC)
+        return dt.datetime.fromisoformat(row[0].replace("Z", "+00:00")).astimezone(UTC)
     except Exception:
         return None
-    return {"fetched_at": fetched_at, "ok": bool(row[1]), "status": row[2]}
 
 
 def should_skip_source(conn: sqlite3.Connection, source: str, period: str, config: dict[str, Any], force: bool) -> bool:
@@ -106,53 +105,15 @@ def should_skip_source(conn: sqlite3.Connection, source: str, period: str, confi
         return False
     hours = float((config.get("fetch") or {}).get("min_source_interval_hours", 6))
     last = last_source_run(conn, source, period)
-    # Failed runs are not a valid cooldown marker. A transient DNS/rate/API
-    # failure must be retried on the next scheduler tick instead of poisoning
-    # the source for hours.
-    return bool(last and last.get("ok") and now_utc() - last["fetched_at"] < dt.timedelta(hours=hours))
+    return bool(last and now_utc() - last < dt.timedelta(hours=hours))
 
 
 def request_text(session: requests.Session, url: str, config: dict[str, Any]) -> str:
-    return request_with_retry(session, "GET", url, config).text
-
-
-def request_with_retry(
-    session: requests.Session,
-    method: str,
-    url: str,
-    config: dict[str, Any],
-    *,
-    headers: dict[str, str] | None = None,
-) -> requests.Response:
     fetch = config.get("fetch") or {}
-    merged_headers = {"User-Agent": fetch.get("user_agent", "Solar-GitHub-Trends/1.0")}
-    if headers:
-        merged_headers.update(headers)
-    timeout = int(fetch.get("timeout_seconds", 20))
-    attempts = max(1, int(fetch.get("retry_attempts", 3)))
-    backoff = float(fetch.get("retry_backoff_seconds", 3))
-    retry_statuses = {int(x) for x in fetch.get("retry_statuses", [408, 429, 500, 502, 503, 504])}
-    last_error: Exception | None = None
-    last_response: requests.Response | None = None
-    for attempt in range(1, attempts + 1):
-        try:
-            res = session.request(method, url, timeout=timeout, headers=merged_headers)
-            last_response = res
-            if res.status_code in retry_statuses and attempt < attempts:
-                time.sleep(backoff * attempt)
-                continue
-            res.raise_for_status()
-            return res
-        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
-            last_error = exc
-            if attempt >= attempts:
-                break
-            time.sleep(backoff * attempt)
-    if last_error is not None:
-        raise last_error
-    if last_response is not None:
-        last_response.raise_for_status()
-    raise RuntimeError(f"request failed without response: {url}")
+    headers = {"User-Agent": fetch.get("user_agent", "Solar-GitHub-Trends/1.0")}
+    res = session.get(url, timeout=int(fetch.get("timeout_seconds", 20)), headers=headers)
+    res.raise_for_status()
+    return res.text
 
 
 def parse_int(text: str) -> int:
@@ -270,7 +231,7 @@ def github_api_repo(session: requests.Session, repo: str, config: dict[str, Any]
     if token:
         headers["Authorization"] = f"Bearer {token}"
     url = f"https://api.github.com/repos/{repo}"
-    res = request_with_retry(session, "GET", url, config, headers=headers)
+    res = session.get(url, headers=headers, timeout=int((config.get("fetch") or {}).get("timeout_seconds", 20)))
     if res.status_code == 404:
         return None
     res.raise_for_status()
@@ -419,13 +380,7 @@ def analyze(config: dict[str, Any]) -> dict[str, Any]:
         "monthly": (30, ["daily", "weekly", "monthly", "tracked"]),
         "quarter": (90, ["daily", "weekly", "monthly", "tracked"]),
     }
-    result: dict[str, Any] = {
-        "generated_at": iso_z(),
-        "database": str(db),
-        "windows": {},
-        "categories": {},
-        "source_health": source_health(conn),
-    }
+    result: dict[str, Any] = {"generated_at": iso_z(), "database": str(db), "windows": {}, "categories": {}}
     for name, (days, periods) in windows.items():
         rows = [dict(row) for row in query_window(conn, days, periods, limit=60)]
         result["windows"][name] = rows
@@ -434,85 +389,6 @@ def analyze(config: dict[str, Any]) -> dict[str, Any]:
             result["categories"].setdefault(cat, {"daily": [], "weekly": [], "monthly": [], "quarter": []})
             result["categories"][cat][name].append(row)
     return result
-
-
-def source_health(conn: sqlite3.Connection) -> dict[str, Any]:
-    """Summarize latest source health from the ledger."""
-    conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        """
-        SELECT source, period, fetched_at, ok, status, item_count, error
-        FROM source_runs
-        WHERE fetched_at IN (
-          SELECT MAX(fetched_at)
-          FROM source_runs AS r2
-          WHERE r2.source = source_runs.source
-            AND r2.period = source_runs.period
-        )
-        ORDER BY fetched_at DESC
-        """
-    ).fetchall()
-    latest = [dict(row) for row in rows]
-    failures = [row for row in latest if not int(row.get("ok") or 0)]
-    latest_success = conn.execute("SELECT MAX(fetched_at) FROM source_runs WHERE ok=1").fetchone()[0]
-    latest_snapshot = conn.execute("SELECT MAX(collected_at) FROM repo_snapshots").fetchone()[0]
-    return {
-        "status": "warn" if failures else "ok",
-        "latest_success": latest_success or "",
-        "latest_snapshot": latest_snapshot or "",
-        "latest_runs": latest[:20],
-        "failure_count": len(failures),
-        "failures": failures[:12],
-    }
-
-
-def build_github_insights(analysis: dict[str, Any]) -> dict[str, Any]:
-    """Lightweight deterministic interpretation for the digest renderer."""
-    source = analysis.get("source_health") or {}
-    daily = analysis.get("windows", {}).get("daily", []) or []
-    weekly = analysis.get("windows", {}).get("weekly", []) or []
-    top_rows = weekly[:8] or daily[:8]
-    interpreted = []
-    for row in top_rows:
-        repo = row.get("repo") or "N/A"
-        category = row.get("category") or "uncategorized"
-        hits = int(row.get("source_hits") or 0)
-        delta = int(row.get("max_delta") or 0)
-        interpreted.append(
-            {
-                "repo": repo,
-                "url": row.get("url") or "",
-                "category": category,
-                "language": row.get("language") or "N/A",
-                "stars": int(row.get("stars") or 0),
-                "max_delta": delta,
-                "source_hits": hits,
-                "signal": f"{category} · source_hits={hits} · delta={delta}",
-                "judgment": "多源/持续出现，优先进入 watchlist" if hits >= 2 else "单源热点，先观察增长和外部提及",
-                "risk": "需验证 README/release/社媒来源，避免只看榜单",
-                "action": "进入 GitHub Intelligence 候选池并补 metadata/README",
-            }
-        )
-    judgments = []
-    if source.get("status") == "warn":
-        judgments.append("今日采集存在失败源，报告只应作为部分信号使用。")
-    elif daily or weekly:
-        judgments.append("GitHub/Trendshift 采集健康，当前 digest 可作为今日开源热点信号。")
-    else:
-        judgments.append("今日窗口暂无足够项目，需检查 source_runs 与 repo_snapshots。")
-    if interpreted:
-        judgments.append(f"Top 候选集中最高优先级项目是 {interpreted[0]['repo']}。")
-    return {
-        "status": source.get("status") or "ok",
-        "counts": {
-            "daily": len(daily),
-            "weekly": len(weekly),
-            "agent_related_top": sum(1 for row in top_rows if "agent" in " ".join(str(row.get(k) or "").lower() for k in ("repo", "category", "description"))),
-        },
-        "judgments": judgments,
-        "interpreted_repos": interpreted,
-        "source_health": source,
-    }
 
 
 def h(text: Any) -> str:

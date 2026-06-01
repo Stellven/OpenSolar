@@ -1679,7 +1679,7 @@ else:
     pm_actual=$(pane_process_persona_simple "$LIVE_PM" 2>/dev/null || true)
     [[ "$pm_actual" == "pm" ]] || LIVE_PM="$LIVE_PLANNER"
   fi
-  local target_pane="" target_task=""
+  local target_pane="" target_task="" dispatch_role="" dispatch_task_type=""
   local workflow_role workflow_stage workflow_reason workflow_violations
   workflow_role=$(python3 "$HARNESS_DIR/lib/workflow_guard.py" route "$sid" --field route_role 2>/dev/null || echo pm)
   workflow_stage=$(python3 "$HARNESS_DIR/lib/workflow_guard.py" route "$sid" --field stage 2>/dev/null || echo intake)
@@ -1702,16 +1702,22 @@ else:
         python3 "$HARNESS_DIR/lib/runtime_status.py" "$sf" "drafting" "wake_workflow_guard_to_planner" "wake" '{"status_fields":{"phase":"prd_ready","handoff_to":"planner","target_role":"planner","auto_held":false},"note":"Workflow guard: planner must produce design.md, plan.md, and task_graph.json before builder dispatch."}' >/dev/null 2>&1 || true
         st="drafting"
         target_pane="$LIVE_PLANNER"
+        dispatch_role="planner"
+        dispatch_task_type="planning"
         target_task="Sprint ${sid} 恢复：Workflow Guard 判定 PRD 已就绪，请 Planner 读取 PRD/contract，产出 design.md、plan.md、task_graph.json；完成后再进入 builder DAG 派发。原因: ${workflow_reason}; violations=${workflow_violations}"
         ;;
       builder|builder_main)
         python3 "$HARNESS_DIR/lib/runtime_status.py" "$sf" "active" "wake_workflow_guard_to_builder" "wake" '{"status_fields":{"phase":"planning_complete","handoff_to":"builder_main","target_role":"builder_main","auto_held":false},"note":"Workflow guard: PM PRD + planner design/plan/task_graph are ready; builder DAG dispatch is allowed."}' >/dev/null 2>&1 || true
         st="active"
         target_pane="$LIVE_BUILDER"
+        dispatch_role="builder"
+        dispatch_task_type="implementation"
         target_task="Sprint ${sid} 恢复：Workflow Guard 判定 PM+Planner 产物齐全，请读取 task_graph.json 并按 DAG/并行 builder 流程执行，不要绕开 graph scheduler。"
         ;;
       evaluator)
         target_pane="$LIVE_EVALUATOR"
+        dispatch_role="evaluator"
+        dispatch_task_type="review"
         target_task="Sprint ${sid} 恢复：Workflow Guard 判定已有 handoff，需要 Evaluator 评审。cat ~/.solar/harness/sprints/${sid}.handoff.md"
         ;;
       *)
@@ -1744,24 +1750,34 @@ else:
       ;;
     planning)
       target_pane="$LIVE_EVALUATOR"
+      dispatch_role="evaluator"
+      dispatch_task_type="review"
       target_task="Sprint ${sid} 恢复：建设者已提交计划，请审批。cat ~/.solar/harness/sprints/${sid}.plan.md"
       ;;
     approved)
       target_pane="$LIVE_BUILDER"
+      dispatch_role="builder"
+      dispatch_task_type="implementation"
       target_task="Sprint ${sid} 恢复：计划已批准，请继续实现。cat ~/.solar/harness/sprints/${sid}.plan.md"
       ;;
     reviewing|ready_for_review)
       target_pane="$LIVE_EVALUATOR"
+      dispatch_role="evaluator"
+      dispatch_task_type="review"
       target_task="Sprint ${sid} 恢复：建设者已提交，请评审。cat ~/.solar/harness/sprints/${sid}.handoff.md"
       ;;
     failed_review)
       target_pane="$LIVE_BUILDER"
+      dispatch_role="builder"
+      dispatch_task_type="implementation"
       target_task="Sprint ${sid} 恢复：评审未通过，请修复。cat ~/.solar/harness/sprints/${sid}.eval.md"
       ;;
     interrupted)
       # 被 kill_harness 打断，改回 reviewing 让 coordinator 重新派发
       python3 "$HARNESS_DIR/lib/runtime_status.py" "$sf" "reviewing" "wake_resumed_interrupted" "wake" '{}' >/dev/null 2>&1 || true
       target_pane="$LIVE_EVALUATOR"
+      dispatch_role="evaluator"
+      dispatch_task_type="review"
       target_task="Sprint ${sid} 恢复 (从 interrupted)：请评审。cat ~/.solar/harness/sprints/${sid}.handoff.md"
       ;;
     *)
@@ -1792,8 +1808,76 @@ ${target_task}
 DISPATCH_EOF
 
   if [[ "${SOLAR_NO_DISPATCH:-0}" == "1" || -f "$HARNESS_DIR/run/no-dispatch.flag" ]]; then
-    warn "no-dispatch flag active; wake wrote dispatch file but did not send to pane: ${target_pane}"
+    warn "no-dispatch flag active; wake wrote dispatch file but did not send: ${dispatch_role:+operator-pool:${dispatch_role}}${dispatch_role:+ / }${target_pane}"
     return 4
+  fi
+
+  dispatch_via_operator_pool() {
+    local role="$1"
+    local task_type="$2"
+    local fallback_pane="$3"
+    local objective="执行 Sprint 恢复任务。先完整读取并执行指令文件 ${SPRINTS_DIR}/${sid}.dispatch.md 中的全部步骤。"
+    local context
+    context=$(cat <<CTX
+wake_sprint recovery
+sprint_id=${sid}
+original_status=${original_st}
+current_status=${st}
+workflow_role=${workflow_role}
+workflow_stage=${workflow_stage}
+workflow_reason=${workflow_reason}
+fallback_pane=${fallback_pane}
+dispatch_md=${SPRINTS_DIR}/${sid}.dispatch.md
+CTX
+)
+    local submit_output="" attempt
+    for attempt in 1 2; do
+      if submit_output=$(SOLAR_PM_DISPATCH_ALLOW_DIRECT=1 python3 "$HARNESS_DIR/tools/pm_dispatch.py" submit \
+        --role "$role" \
+        --task-type "$task_type" \
+        --sprint "$sid" \
+        --node "wake-${role}" \
+        --objective "$objective" \
+        --context "$context" 2>&1); then
+        bash "$HARNESS_DIR/session.sh" append "$sid" "{\"event\":\"waked\",\"by\":\"wake\",\"data\":{\"from_status\":\"${original_st}\",\"target_pane\":\"operator-pool:${role}\",\"fallback_pane\":\"${fallback_pane}\",\"attempt\":${attempt}}}" 2>/dev/null || true
+        ok "Sprint ${sid} 已恢复 → operator-pool:${role} (从 ${original_st})"
+        [[ -n "$submit_output" ]] && printf '%s\n' "$submit_output"
+        return 0
+      fi
+      if [[ "$submit_output" != *"not dispatchable"* && "$submit_output" != *"state=leased"* && "$submit_output" != *"state=running"* ]]; then
+        break
+      fi
+      warn "operator pool 第 ${attempt} 次派发命中瞬时占用，重试选算子..."
+      sleep 0.2
+    done
+    warn "operator pool 派发失败，回退固定 pane ${fallback_pane}"
+    [[ -n "$submit_output" ]] && printf '%s\n' "$submit_output" >&2
+    return 1
+  }
+
+  if [[ -n "$dispatch_role" ]]; then
+    if dispatch_via_operator_pool "$dispatch_role" "$dispatch_task_type" "$target_pane"; then
+      _ensure_bash4 2>/dev/null || true
+      local coord_bash="${BASH4:-bash}"
+      if [[ -f "$HARNESS_DIR/.coordinator.pid" ]]; then
+        local pid
+        pid=$(cat "$HARNESS_DIR/.coordinator.pid")
+        if ! kill -0 "$pid" 2>/dev/null; then
+          warn "Coordinator PID ${pid} 已死，重启..."
+          rm -f "$HARNESS_DIR/.coordinator.pid"
+          nohup "$coord_bash" "$HARNESS_DIR/coordinator.sh" >> "$HARNESS_DIR/.coordinator.log" 2>&1 &
+          disown 2>/dev/null || true
+          ok "Coordinator 重启中..."
+        else
+          ok "Coordinator 运行中 (PID: ${pid})"
+        fi
+      else
+        warn "无 coordinator PID 文件，启动新的..."
+        nohup "$coord_bash" "$HARNESS_DIR/coordinator.sh" >> "$HARNESS_DIR/.coordinator.log" 2>&1 &
+        ok "Coordinator 启动中..."
+      fi
+      return 0
+    fi
   fi
 
   local short_cmd="读取并执行指令文件 $SPRINTS_DIR/${sid}.dispatch.md 中的所有步骤"
