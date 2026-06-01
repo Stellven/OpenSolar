@@ -77,6 +77,8 @@ def _model_key(op: dict[str, Any]) -> str:
         return "deepseek"
     if provider == "glm" or "glm" in model:
         return "glm-5.1" if "5.1" in model or "51" in model else "glm"
+    if provider == "openai" and "spark" in model:
+        return "codex-gpt-5.3-spark"
     if provider == "openai" or "gpt" in model or "codex" in model:
         return "codex-gpt-5.5"
     if provider == "google" or "gemini" in model:

@@ -175,6 +175,8 @@ def infer_builder_group(op: dict[str, Any]) -> str:
         return "thunderomlx"
     if "deepseek" in combined and "flash" in combined:
         return "deepseek-v4-flash"
+    if "spark" in combined and ("codex" in combined or "gpt-5.3" in combined):
+        return "codex-gpt-5.3-spark"
     if "codex" in combined or "gpt-5.5" in combined:
         return "codex-gpt-5.5-medium"
     if "antigravity" in combined or "gemini-3.5" in combined:
