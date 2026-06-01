@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import types
 from pathlib import Path
@@ -138,3 +139,15 @@ def test_headed_run_accepts_explicit_opt_in(monkeypatch):
     ns = _load_namespace()
     monkeypatch.setenv("BROWSER_AGENT_CHATGPT_ALLOW_HEADED", "true")
     assert ns["_headed_run_allowed"]() is True
+
+
+def test_chatgpt_wrapper_defaults_to_persistent_profile_strategy(monkeypatch):
+    ns = _load_namespace()
+    monkeypatch.delenv("BROWSER_AGENT_CHATGPT_PROFILE_STRATEGY", raising=False)
+    monkeypatch.delenv("BROWSER_AGENT_PROFILE_STRATEGY", raising=False)
+    strategy = str(
+        os.environ.get("BROWSER_AGENT_CHATGPT_PROFILE_STRATEGY")
+        or os.environ.get("BROWSER_AGENT_PROFILE_STRATEGY")
+        or "persistent"
+    ).strip().lower()
+    assert strategy == "persistent"

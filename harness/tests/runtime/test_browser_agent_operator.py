@@ -398,3 +398,45 @@ def test_stage_browser_profile_uses_cache_inside_tmux_for_protected_app_data(tmp
     assert (staged_root / "Local State").exists()
 
     shutil.rmtree(cleanup_dir, ignore_errors=True)
+
+
+def test_prepare_browser_profile_runtime_reuses_persistent_copy(tmp_path, monkeypatch):
+    root = tmp_path / "Chrome"
+    profile = root / "Profile 1"
+    profile.mkdir(parents=True)
+    (profile / "Cookies").write_text("cookie-db", encoding="utf-8")
+    (profile / "Current Tabs").write_text("tabs", encoding="utf-8")
+    (root / "Local State").write_text('{"profile":{"last_used":"Profile 1"}}', encoding="utf-8")
+
+    runtime_root = tmp_path / "runtime-cache"
+    monkeypatch.setattr(bjrt, "PROFILE_RUNTIME_ROOT", runtime_root)
+
+    first = bjrt.prepare_browser_profile_runtime(root, "Profile 1")
+    assert first is not None
+    first_profile = first / "Profile 1"
+    assert (first_profile / "Cookies").exists()
+    assert not (first_profile / "Current Tabs").exists()
+    marker = first_profile / "Automation Marker"
+    marker.write_text("persist-me", encoding="utf-8")
+
+    second = bjrt.prepare_browser_profile_runtime(root, "Profile 1")
+    assert second == first
+    assert (second / "Profile 1" / "Automation Marker").read_text(encoding="utf-8") == "persist-me"
+
+
+def test_stage_browser_profile_persistent_strategy_returns_reusable_runtime(tmp_path, monkeypatch):
+    root = tmp_path / "Chrome"
+    profile = root / "Profile 1"
+    profile.mkdir(parents=True)
+    (profile / "Cookies").write_text("cookie-db", encoding="utf-8")
+    (root / "Local State").write_text('{"profile":{"last_used":"Profile 1"}}', encoding="utf-8")
+
+    runtime_root = tmp_path / "runtime-cache"
+    monkeypatch.setattr(bjrt, "PROFILE_RUNTIME_ROOT", runtime_root)
+
+    staged_dir, cleanup_dir = bjrt._stage_browser_profile(root, "Profile 1", strategy="persistent")
+    assert cleanup_dir is None
+    assert staged_dir is not None
+    staged_root = Path(staged_dir)
+    assert (staged_root / "Profile 1" / "Cookies").exists()
+    assert "browser-use-persistent-user-data-dir-" in staged_root.name
