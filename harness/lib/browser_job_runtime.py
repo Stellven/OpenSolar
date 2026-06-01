@@ -29,10 +29,12 @@ OPERATOR_RESULTS_DIR = HARNESS_DIR / "run" / "operator-results"
 BROWSER_USE_ROOT = HOME / ".claude" / "mcp-servers" / "browser-use"
 BROWSER_USE_PYTHON = BROWSER_USE_ROOT / ".venv" / "bin" / "python"
 PROFILE_CACHE_ROOT = HARNESS_DIR / "state" / "browser-profile-cache"
+PROFILE_RUNTIME_ROOT = HARNESS_DIR / "state" / "browser-profile-runtime"
 _CHATGPT_CAPTURE_MODULE = HARNESS_DIR / "lib" / "chatgpt-conversation-ingest.py"
 CHATGPT_MONTHLY_PROJECT_PREFIX = "需求研究"
 CHATGPT_FRONTDOOR_URL = "https://chatgpt.com/"
 _STAGED_PROFILE_PREFIX = "browser-use-user-data-dir-"
+_PERSISTENT_PROFILE_PREFIX = "browser-use-persistent-user-data-dir-"
 _RESTORE_ARTIFACTS = {
     "Current Session",
     "Current Tabs",
@@ -423,6 +425,12 @@ def _browser_profile_cache_path(user_data_dir: str | Path, profile_directory: st
     return PROFILE_CACHE_ROOT / cache_key
 
 
+def _browser_profile_runtime_path(user_data_dir: str | Path, profile_directory: str) -> Path:
+    source_root = Path(user_data_dir).resolve()
+    runtime_key = hashlib.sha256(f"{source_root}::{profile_directory}".encode("utf-8")).hexdigest()[:16]
+    return PROFILE_RUNTIME_ROOT / f"{_PERSISTENT_PROFILE_PREFIX}{runtime_key}"
+
+
 def _remove_profile_restore_artifacts(root: Path, profile_directory: str) -> None:
     profile_dir = root / profile_directory
     for name in _RESTORE_ARTIFACTS | _LOCK_ARTIFACTS:
@@ -462,7 +470,66 @@ def refresh_browser_profile_cache(user_data_dir: str | Path | None, profile_dire
     return cache_root
 
 
-def _stage_browser_profile(user_data_dir: str | Path | None, profile_directory: str | None) -> tuple[str | Path | None, Optional[Path]]:
+def prepare_browser_profile_runtime(
+    user_data_dir: str | Path | None,
+    profile_directory: str | None,
+    *,
+    refresh: bool = False,
+) -> Optional[Path]:
+    if not user_data_dir or not profile_directory:
+        return None
+    source_root = Path(user_data_dir)
+    source_profile = source_root / profile_directory
+    if not source_root.exists() or not source_profile.exists():
+        return None
+    runtime_root = _browser_profile_runtime_path(source_root, profile_directory)
+    runtime_profile = runtime_root / profile_directory
+    if refresh and runtime_root.exists():
+        shutil.rmtree(runtime_root, ignore_errors=True)
+    if runtime_profile.exists():
+        _remove_profile_restore_artifacts(runtime_root, profile_directory)
+        return runtime_root
+
+    seed_root = source_root
+    if _is_protected_app_data_root(source_root):
+        if os.environ.get("TMUX"):
+            cache_root = _browser_profile_cache_path(source_root, profile_directory)
+            cache_profile = cache_root / profile_directory
+            if cache_profile.exists():
+                seed_root = cache_root
+            else:
+                return None
+        else:
+            refreshed = refresh_browser_profile_cache(source_root, profile_directory)
+            if refreshed is not None:
+                seed_root = refreshed
+
+    seed_profile = seed_root / profile_directory
+    if not seed_root.exists() or not seed_profile.exists():
+        return None
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(seed_profile, runtime_profile)
+    local_state_src = seed_root / "Local State"
+    if local_state_src.exists():
+        shutil.copy(local_state_src, runtime_root / "Local State")
+    _remove_profile_restore_artifacts(runtime_root, profile_directory)
+    manifest = {
+        "source_root": str(source_root),
+        "seed_root": str(seed_root),
+        "profile_directory": profile_directory,
+        "runtime_prepared_at": _now(),
+        "strategy": "persistent",
+    }
+    (runtime_root / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+    return runtime_root
+
+
+def _stage_browser_profile(
+    user_data_dir: str | Path | None,
+    profile_directory: str | None,
+    *,
+    strategy: str = "isolated",
+) -> tuple[str | Path | None, Optional[Path]]:
     """Create an isolated Chrome profile copy without session-restore artifacts.
 
     browser-use already copies Chrome profiles, but its raw copy keeps session restore
@@ -474,8 +541,11 @@ def _stage_browser_profile(user_data_dir: str | Path | None, profile_directory: 
         return user_data_dir, None
 
     source_root = Path(user_data_dir)
-    if _STAGED_PROFILE_PREFIX in str(source_root):
+    if _STAGED_PROFILE_PREFIX in str(source_root) or _PERSISTENT_PROFILE_PREFIX in str(source_root):
         return str(source_root), None
+    if strategy == "persistent":
+        runtime_root = prepare_browser_profile_runtime(source_root, profile_directory)
+        return (str(runtime_root), None) if runtime_root else (None, None)
     if _is_protected_app_data_root(source_root):
         cache_root = _browser_profile_cache_path(source_root, profile_directory)
         if os.environ.get("TMUX"):

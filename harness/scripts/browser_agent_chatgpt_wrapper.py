@@ -1220,6 +1220,13 @@ async def _run(prompt: str) -> int:
     ).strip()
     headless = _env_flag("BROWSER_AGENT_HEADLESS", default=False)
     headed_allowed = _headed_run_allowed()
+    profile_strategy = str(
+        os.environ.get("BROWSER_AGENT_CHATGPT_PROFILE_STRATEGY")
+        or os.environ.get("BROWSER_AGENT_PROFILE_STRATEGY")
+        or "persistent"
+    ).strip().lower()
+    if profile_strategy not in {"persistent", "isolated"}:
+        profile_strategy = "persistent"
     allowed_domains = [
         item.strip()
         for item in str(os.environ.get("BROWSER_AGENT_ALLOWED_DOMAINS") or ",".join(DEFAULT_ALLOWED_DOMAINS)).split(",")
@@ -1230,7 +1237,11 @@ async def _run(prompt: str) -> int:
         cleanup_dir = None
         scrubbed_client_state = []
     else:
-        staged_dir, cleanup_dir = bjrt._stage_browser_profile(user_data_dir, profile_directory)
+        staged_dir, cleanup_dir = bjrt._stage_browser_profile(
+            user_data_dir,
+            profile_directory,
+            strategy=profile_strategy,
+        )
         if user_data_dir and not staged_dir:
             raise RuntimeError("protected_browser_profile_cache_missing")
         scrubbed_client_state = _scrub_chatgpt_client_state(staged_dir, profile_directory) if scrub_client_state else []
@@ -1243,6 +1254,7 @@ async def _run(prompt: str) -> int:
         "target_url": target_url,
         "action": action,
         "profile_directory": profile_directory,
+        "profile_strategy": profile_strategy,
         "headless": headless,
         "headed_allowed": headed_allowed,
         "allowed_domains": allowed_domains,
