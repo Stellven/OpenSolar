@@ -2622,10 +2622,10 @@
       "quota_cycle": "api_balance",
       "quota_refresh_at": "unknown",
       "quota_guard_state": "ok",
-      "enabled": true,
+      "enabled": false,
       "enabled_at": "2026-05-30T00:00:00Z",
-      "available": true,
-      "health_status": "ok",
+      "available": false,
+      "health_status": "disabled",
       "roles": [
         "builder"
       ],
@@ -2676,16 +2676,18 @@
         "cache_seconds": 300
       },
       "builder_pool": {
-        "enabled": true,
+        "enabled": false,
         "group": "deepseek-v4-flash",
         "slot": 1,
-        "priority": 6
+        "priority": 6,
+        "disabled_reason": "disabled_by_policy_remove_deepseek_from_builder_future",
+        "disabled_at": "2026-06-01T20:50:00Z"
       },
       "state": {
-        "availability": "enabled",
+        "availability": "disabled",
         "runtime_state": "idle",
-        "last_error": "disabled_for_code_edit_until_file_execution_verified",
-        "last_error_at": "2026-05-31T01:10:53Z"
+        "last_error": "disabled_by_policy_remove_deepseek_from_builder_future",
+        "last_error_at": "2026-06-01T20:50:00Z"
       }
     },
     "mini-reasonix-deepseek-v4-flash-builder-2": {
@@ -2707,10 +2709,10 @@
       "quota_cycle": "api_balance",
       "quota_refresh_at": "unknown",
       "quota_guard_state": "ok",
-      "enabled": true,
+      "enabled": false,
       "enabled_at": "2026-05-30T00:00:00Z",
-      "available": true,
-      "health_status": "ok",
+      "available": false,
+      "health_status": "disabled",
       "roles": [
         "builder"
       ],
@@ -2761,16 +2763,18 @@
         "cache_seconds": 300
       },
       "builder_pool": {
-        "enabled": true,
+        "enabled": false,
         "group": "deepseek-v4-flash",
         "slot": 2,
-        "priority": 5
+        "priority": 5,
+        "disabled_reason": "disabled_by_policy_remove_deepseek_from_builder_future",
+        "disabled_at": "2026-06-01T20:50:00Z"
       },
       "state": {
-        "availability": "enabled",
+        "availability": "disabled",
         "runtime_state": "idle",
-        "last_error": "disabled_for_code_edit_until_file_execution_verified",
-        "last_error_at": "2026-05-31T01:10:53Z"
+        "last_error": "disabled_by_policy_remove_deepseek_from_builder_future",
+        "last_error_at": "2026-06-01T20:50:00Z"
       }
     },
     "mini-thunderomlx-qwen36-builder": {
