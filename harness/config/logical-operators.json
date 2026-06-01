@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-05-23T01:30:00Z",
+  "updated_at": "2026-06-01T20:45:00Z",
   "logical_operators": {
     "DeepArchitect": {
       "operator_type": "DeepArchitect",
@@ -383,9 +383,10 @@
     "ImplementationWorker": {
       "operator_type": "ImplementationWorker",
       "candidates": [
-        {"actor_id": "mini-claude-sonnet-builder", "priority": 1, "condition": "always"},
-        {"actor_id": "mini-claude-sonnet-builder-print", "priority": 3, "condition": "quota_ok"},
-        {"actor_id": "mini-antigravity-gemini31-pro", "priority": 4, "condition": "quota_ok"}
+        {"actor_id": "mini-codex-gpt53-spark-builder-1", "priority": 1, "condition": "always"},
+        {"actor_id": "mini-claude-sonnet-builder", "priority": 2, "condition": "always"},
+        {"actor_id": "mini-claude-sonnet-builder-print", "priority": 4, "condition": "quota_ok"},
+        {"actor_id": "mini-antigravity-gemini31-pro", "priority": 5, "condition": "quota_ok"}
       ],
       "selection_policy": "priority_first",
       "fallback_policy": "queue"
@@ -393,9 +394,10 @@
     "PatchWorker": {
       "operator_type": "PatchWorker",
       "candidates": [
-        {"actor_id": "mini-claude-sonnet-builder", "priority": 1, "condition": "always"},
-        {"actor_id": "mini-antigravity-gemini35-flash-high", "priority": 3, "condition": "always"},
-        {"actor_id": "mini-claude-sonnet-builder-print", "priority": 4, "condition": "quota_ok"}
+        {"actor_id": "mini-codex-gpt53-spark-builder-1", "priority": 1, "condition": "always"},
+        {"actor_id": "mini-claude-sonnet-builder", "priority": 2, "condition": "always"},
+        {"actor_id": "mini-antigravity-gemini35-flash-high", "priority": 4, "condition": "always"},
+        {"actor_id": "mini-claude-sonnet-builder-print", "priority": 5, "condition": "quota_ok"}
       ],
       "selection_policy": "cost_optimal",
       "fallback_policy": "queue"
@@ -403,8 +405,9 @@
     "TestDesigner": {
       "operator_type": "TestDesigner",
       "candidates": [
-        {"actor_id": "mini-claude-sonnet-builder", "priority": 1, "condition": "always"},
-        {"actor_id": "mini-claude-opus-evaluator", "priority": 3, "condition": "quota_ok"}
+        {"actor_id": "mini-codex-gpt53-spark-builder-1", "priority": 1, "condition": "always"},
+        {"actor_id": "mini-claude-sonnet-builder", "priority": 2, "condition": "always"},
+        {"actor_id": "mini-claude-opus-evaluator", "priority": 4, "condition": "quota_ok"}
       ],
       "selection_policy": "priority_first",
       "fallback_policy": "queue"

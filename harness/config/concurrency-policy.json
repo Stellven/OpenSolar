@@ -30,7 +30,7 @@
   },
   "builder_pool": {
     "enabled": true,
-    "desired_total": 13,
+    "desired_total": 14,
     "groups": {
       "glm-5.1": {
         "desired": 3,
@@ -51,6 +51,10 @@
       "codex-gpt-5.5-medium": {
         "desired": 2,
         "priority": 82
+      },
+      "codex-gpt-5.3-spark": {
+        "desired": 1,
+        "priority": 96
       },
       "antigravity-gemini-3.5-flash": {
         "desired": 2,
