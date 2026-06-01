@@ -48,6 +48,23 @@ def _derive_query(text: str, explicit: str = "") -> str:
     return cleaned[:300] or "solar harness runtime context"
 
 
+def _derive_task_kind(query: str) -> str:
+    lower = query.lower()
+    if any(token in lower for token in ("code", "runtime", "implementation", "python", "api", "调用链", "实现", "代码")):
+        return "code"
+    if any(token in lower for token in ("paper", "pdf", "document", "doc", "论文", "文档")):
+        return "paper"
+    return "general"
+
+
+def _required_sources(task_kind: str) -> list[str]:
+    if task_kind == "code":
+        return ["cocoindex"]
+    if task_kind in {"paper", "doc"}:
+        return ["understanding"]
+    return []
+
+
 def inject(
     path: Path,
     *,
@@ -74,6 +91,14 @@ def inject(
         correlation_id=dispatch_id or None,
         source="runtime_context_inject",
     )
+    payload = recorded.get("payload") or {}
+    context_sources = payload.get("context_sources") or {}
+    degraded_sources = payload.get("degraded_sources") or []
+    lineage_refs = payload.get("lineage_refs") or []
+    source_hash_refs = payload.get("source_hash_refs") or []
+    task_kind = _derive_task_kind(effective_query)
+    required_sources = _required_sources(task_kind)
+    used_sources = sorted(str(k) for k, v in context_sources.items() if int(v or 0) > 0)
 
     changed = False
     if START not in original:
@@ -90,6 +115,7 @@ def inject(
 
     evidence = {
         "ok": True,
+        "sidecar_version": 2,
         "dispatch_file": str(path),
         "session_id": session_id,
         "pane": pane,
@@ -100,6 +126,15 @@ def inject(
         "duplicate": recorded.get("duplicate", False),
         "kb_hit_count": len((recorded.get("payload") or {}).get("kb_hits") or []),
         "included_event_count": len((recorded.get("payload") or {}).get("included_event_ids") or []),
+        "context_sources": context_sources,
+        "source_counts": context_sources,
+        "degraded_sources": degraded_sources,
+        "lineage_refs": lineage_refs,
+        "source_hash_refs": source_hash_refs,
+        "task_kind": task_kind,
+        "required_sources": required_sources,
+        "used_sources": used_sources,
+        "required_source_policy_ok": all(source in used_sources for source in required_sources),
     }
     sidecar = path.with_suffix(path.suffix + ".runtime-context.json")
     sidecar.write_text(json.dumps(evidence, ensure_ascii=False, indent=2), encoding="utf-8")

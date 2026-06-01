@@ -324,7 +324,7 @@ def _claude_print_command(config: dict[str, Any]) -> list[str]:
         "export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
         "export CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1",
         "export DISABLE_NON_ESSENTIAL_MODEL_CALLS=1",
-        "export CLAUDE_CODE_MAX_OUTPUT_TOKENS=${CLAUDE_CODE_MAX_OUTPUT_TOKENS:-4096}",
+        "export CLAUDE_CODE_MAX_OUTPUT_TOKENS=${CLAUDE_CODE_MAX_OUTPUT_TOKENS:-12000}",
         (
             "claude --dangerously-skip-permissions "
             "--permission-mode bypassPermissions "
@@ -410,6 +410,20 @@ def _pm_result_path(envelope: dict[str, Any]) -> Path | None:
 
 def _pm_dispatch_complete_command(task_id: str) -> list[str]:
     return [sys.executable, str(HARNESS_DIR / "tools" / "pm_dispatch.py"), "complete", "--task-id", task_id]
+
+
+def _pm_dispatch_fail_command(task_id: str, status: str, reason: str) -> list[str]:
+    return [
+        sys.executable,
+        str(HARNESS_DIR / "tools" / "pm_dispatch.py"),
+        "fail",
+        "--task-id",
+        task_id,
+        "--status",
+        status,
+        "--reason",
+        reason[:2000],
+    ]
 
 
 def _parse_utc(value: str) -> dt.datetime:
@@ -840,8 +854,21 @@ def cmd_daemon(args: argparse.Namespace) -> int:
                     selector = selectors.DefaultSelector()
                     selector.register(proc.stdout, selectors.EVENT_READ)
                     proc_started_at = time.monotonic()
+                    last_runtime_heartbeat_at = proc_started_at
 
                     while True:
+                        now_monotonic = time.monotonic()
+                        if now_monotonic - last_runtime_heartbeat_at >= 15:
+                            write_heartbeat(
+                                operator_id,
+                                "running",
+                                current_task_id=task_id,
+                                worker_pid=int(proc.pid),
+                                resolved_persona=resolved_persona,
+                                model_route=model_route,
+                            )
+                            last_runtime_heartbeat_at = now_monotonic
+
                         if task_timeout_seconds > 0 and (time.monotonic() - proc_started_at) >= task_timeout_seconds:
                             timed_out = True
                             log_lines.append(
@@ -979,6 +1006,28 @@ def cmd_daemon(args: argparse.Namespace) -> int:
                 model_route=model_route,
             )
             _info(f"Result written: {result_path}")
+
+            if pm_result_path is not None and result_status not in {"completed", "draining"}:
+                try:
+                    failed = subprocess.run(
+                        _pm_dispatch_fail_command(task_id, result_status, log_tail or result_status),
+                        capture_output=True,
+                        text=True,
+                        env=exec_env,
+                        timeout=30,
+                    )
+                    stdout = failed.stdout.strip()
+                    stderr = failed.stderr.strip()
+                    if stdout:
+                        log_lines.append(stdout)
+                    if stderr:
+                        log_lines.append(stderr)
+                    if failed.returncode != 0:
+                        log_lines.append(
+                            f"[WARN] pm_dispatch fail returned {failed.returncode} for {task_id}"
+                        )
+                except Exception as exc:
+                    log_lines.append(f"[WARN] pm_dispatch fail hook failed: {exc}")
 
             # ── Cleanup ───────────────────────────────────────────────────────────
             try:

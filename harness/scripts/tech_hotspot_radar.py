@@ -54,6 +54,20 @@ DEFAULT_THUNDEROMLX_PAUSE_FILE = Path.home() / ".omlx" / "run" / "maintenance.js
 DEFAULT_MLX_WHISPER_SITE_PACKAGES = Path.home() / ".local/pipx/venvs/mlx-whisper/lib/python3.14/site-packages"
 TRANSCRIPT_LAYOUT_VERSION = "weekly-v1"
 _TRANSCRIPT_LAYOUT_MIGRATED: set[str] = set()
+_GITHUB_TOKEN_CACHE: dict[str, str] = {}
+
+
+class GitHubRateLimitError(RuntimeError):
+    """GitHub API quota is exhausted; retry only after reset/backoff."""
+
+    def __init__(self, message: str, *, reset_at: str = "", retry_after: int | None = None):
+        super().__init__(message)
+        self.reset_at = reset_at
+        self.retry_after = retry_after
+
+
+class GitHubApiError(RuntimeError):
+    """GitHub API request failed with a non-rate-limit HTTP error."""
 
 
 def thunderomlx_ingest_paused() -> dict[str, Any] | None:
@@ -133,7 +147,7 @@ CREATE TABLE IF NOT EXISTS youtube_transcripts (
     transcript_status    TEXT NOT NULL DEFAULT 'missing'
         CHECK(transcript_status IN ('missing','fetched','auto_generated','failed','pending','success','quarantined','metadata_only')),
     source               TEXT NOT NULL DEFAULT 'metadata'
-        CHECK(source IN ('standard_caption','youtube_asr_caption','browser_caption','faster_whisper','whisperx','mlx_whisper','premium','metadata','legacy_asr')),
+        CHECK(source IN ('standard_caption','youtube_asr_caption','browser_caption','metadata')),
     language             TEXT NOT NULL DEFAULT '',
     fetched_at           TEXT,
     char_count           INTEGER NOT NULL DEFAULT 0,
@@ -2845,11 +2859,14 @@ def cleanup_transcript_cache(config: dict[str, Any]) -> int:
 
 def cmd_process_transcripts(args: argparse.Namespace) -> int:
     config = load_config(resolve_config(args))
+    asr_config = (config.get("youtube") or {}).get("asr", {})
+    if not bool(asr_config.get("enabled", False)):
+        print("[process-transcripts] disabled: local ASR is off; use subtitle-first/browser_capture pipeline")
+        return 0
     db_path = resolve_db(args, config)
     conn = ensure_db(db_path)
     conn.executescript(SCHEMA_SQL)
     conn.row_factory = sqlite3.Row
-    asr_config = (config.get("youtube") or {}).get("asr", {})
     max_asr_per_run = int(asr_config.get("max_per_run", 1) or 1)
     limit = int(getattr(args, "limit", 0) or max_asr_per_run or 1)
     dry_run = bool(getattr(args, "dry_run", False))
@@ -7145,36 +7162,131 @@ def cmd_import_github_candidates(args: argparse.Namespace) -> int:
     return 0
 
 
-def github_api_json(path: str, config: dict[str, Any]) -> dict[str, Any]:
-    fetch = config.get("fetch") or {}
-    token_env = fetch.get("github_token_env", "GITHUB_TOKEN")
-    token = os.environ.get(token_env, "")
-    url = f"https://api.github.com{path}"
+def github_fetch_config(config: dict[str, Any]) -> dict[str, Any]:
+    fetch = dict(config.get("fetch") or {})
+    github_cfg = config.get("github") or {}
+    # Historical config stores github_token_env under github:, while older
+    # code only read fetch:. Preserve both so scheduled collectors are
+    # authenticated without requiring a config migration.
+    if not fetch.get("github_token_env") and github_cfg.get("github_token_env"):
+        fetch["github_token_env"] = github_cfg.get("github_token_env")
+    return fetch
+
+
+def github_resolve_token(config: dict[str, Any]) -> tuple[str, str]:
+    fetch = github_fetch_config(config)
+    token_env = str(fetch.get("github_token_env") or "GITHUB_TOKEN")
+    token = os.environ.get(token_env, "").strip()
+    if token:
+        return token, f"env:{token_env}"
+    token_file = os.environ.get("GITHUB_TOKEN_FILE") or str(fetch.get("github_token_file") or "")
+    if token_file:
+        try:
+            value = Path(token_file).expanduser().read_text(encoding="utf-8").strip()
+            if value:
+                return value, "file:GITHUB_TOKEN_FILE"
+        except Exception:
+            pass
+    if token_env not in _GITHUB_TOKEN_CACHE:
+        try:
+            proc = subprocess.run(
+                ["gh", "auth", "token"],
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=5,
+            )
+            _GITHUB_TOKEN_CACHE[token_env] = proc.stdout.strip() if proc.returncode == 0 else ""
+        except Exception:
+            _GITHUB_TOKEN_CACHE[token_env] = ""
+    if _GITHUB_TOKEN_CACHE.get(token_env):
+        return _GITHUB_TOKEN_CACHE[token_env], "gh-auth-token"
+    return "", "unauthenticated"
+
+
+def github_api_headers(config: dict[str, Any], *, accept: str) -> dict[str, str]:
+    fetch = github_fetch_config(config)
+    token, _source = github_resolve_token(config)
     headers = {
-        "Accept": "application/vnd.github+json",
+        "Accept": accept,
+        "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": fetch.get("user_agent", "Solar-Tech-Hotspot-Radar/1.0"),
     }
     if token:
         headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
+def github_rate_reset_iso(headers: Any) -> str:
+    reset_raw = ""
+    try:
+        reset_raw = str(headers.get("X-RateLimit-Reset") or "")
+    except Exception:
+        reset_raw = ""
+    if not reset_raw:
+        return ""
+    try:
+        return dt.datetime.fromtimestamp(int(reset_raw), tz=dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except (TypeError, ValueError, OSError):
+        return reset_raw
+
+
+def github_api_error_from_http(exc: urllib.error.HTTPError, path: str) -> Exception:
+    body = ""
+    try:
+        body = exc.read().decode("utf-8", errors="replace")
+    except Exception:
+        body = ""
+    headers = getattr(exc, "headers", {}) or {}
+    remaining = str(headers.get("X-RateLimit-Remaining") or "")
+    retry_after_raw = str(headers.get("Retry-After") or "")
+    retry_after = int(retry_after_raw) if retry_after_raw.isdigit() else None
+    reset_at = github_rate_reset_iso(headers)
+    body_lower = body.lower()
+    is_rate_limit = (
+        exc.code in {403, 429}
+        and (
+            remaining == "0"
+            or "rate limit" in body_lower
+            or "secondary rate limit" in body_lower
+            or "api rate limit exceeded" in body_lower
+        )
+    )
+    message = f"GitHub API {exc.code} {path}"
+    if reset_at:
+        message += f" reset_at={reset_at}"
+    if retry_after is not None:
+        message += f" retry_after={retry_after}s"
+    if body:
+        message += f" body={body[:240]}"
+    if is_rate_limit:
+        return GitHubRateLimitError(message, reset_at=reset_at, retry_after=retry_after)
+    return GitHubApiError(message)
+
+
+def github_api_json(path: str, config: dict[str, Any]) -> dict[str, Any]:
+    fetch = github_fetch_config(config)
+    url = f"https://api.github.com{path}"
+    headers = github_api_headers(config, accept="application/vnd.github+json")
     req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=int(fetch.get("timeout_seconds", 20))) as resp:
-        return json.loads(resp.read().decode("utf-8", errors="replace"))
+    try:
+        with urllib.request.urlopen(req, timeout=int(fetch.get("timeout_seconds", 20))) as resp:
+            return json.loads(resp.read().decode("utf-8", errors="replace"))
+    except urllib.error.HTTPError as exc:
+        raise github_api_error_from_http(exc, path) from exc
 
 
 def github_api_text(path: str, config: dict[str, Any]) -> str:
-    fetch = config.get("fetch") or {}
-    token_env = fetch.get("github_token_env", "GITHUB_TOKEN")
-    token = os.environ.get(token_env, "")
+    fetch = github_fetch_config(config)
     url = f"https://api.github.com{path}"
-    headers = {
-        "Accept": "application/vnd.github.raw",
-        "User-Agent": fetch.get("user_agent", "Solar-Tech-Hotspot-Radar/1.0"),
-    }
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+    headers = github_api_headers(config, accept="application/vnd.github.raw")
     req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=int(fetch.get("timeout_seconds", 20))) as resp:
-        return resp.read().decode("utf-8", errors="replace")
+    try:
+        with urllib.request.urlopen(req, timeout=int(fetch.get("timeout_seconds", 20))) as resp:
+            return resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        raise github_api_error_from_http(exc, path) from exc
 
 
 def hf_paper_tags(title: str, summary: str = "") -> list[str]:
@@ -7733,9 +7845,46 @@ def hf_paper_extract_github_repos(*texts: str) -> list[str]:
     return sorted(repos)
 
 
-def hf_paper_github_metadata(repo_full_name: str, config: dict[str, Any]) -> tuple[dict[str, Any], str]:
+def hf_paper_github_metadata(
+    repo_full_name: str,
+    config: dict[str, Any],
+    conn: sqlite3.Connection | None = None,
+    *,
+    live_api: bool = False,
+) -> tuple[dict[str, Any], str]:
     if not repo_full_name:
         return {}, "no_repo"
+    if conn is not None:
+        try:
+            row = conn.execute(
+                "SELECT full_name, html_url, description, stars, forks, open_issues, language, topics, license, pushed_at "
+                "FROM github_repos WHERE lower(full_name)=lower(?)",
+                (repo_full_name,),
+            ).fetchone()
+            if row:
+                return {
+                    "full_name": row["full_name"],
+                    "url": row["html_url"] or f"https://github.com/{row['full_name']}",
+                    "html_url": row["html_url"] or f"https://github.com/{row['full_name']}",
+                    "description": row["description"] or "",
+                    "stars": int(row["stars"] or 0),
+                    "forks": int(row["forks"] or 0),
+                    "open_issues": int(row["open_issues"] or 0),
+                    "language": row["language"] or "",
+                    "topics": [x for x in str(row["topics"] or "").split(",") if x],
+                    "license": row["license"] or "",
+                    "pushed_at": row["pushed_at"] or "",
+                    "metadata_source": "local_github_repos",
+                }, ""
+        except Exception:
+            pass
+    if not live_api:
+        return {
+            "full_name": repo_full_name,
+            "url": f"https://github.com/{repo_full_name}",
+            "html_url": f"https://github.com/{repo_full_name}",
+            "metadata_source": "link_only",
+        }, ""
     try:
         repo = github_api_json(f"/repos/{repo_full_name}", config)
     except Exception as exc:
@@ -7757,6 +7906,7 @@ def hf_paper_github_metadata(repo_full_name: str, config: dict[str, Any]) -> tup
         "topics": repo.get("topics") or [],
         "license": ((repo.get("license") or {}).get("spdx_id") or ""),
         "pushed_at": repo.get("pushed_at") or "",
+        "metadata_source": "github_api",
     }, ""
 
 
@@ -7788,8 +7938,10 @@ def cmd_materialize_hf_paper_insights(args: argparse.Namespace) -> int:
         scorer = SignalScorer()
         packet_builder = PacketBuilder()
         live_enrichment = not bool(getattr(args, "no_live_enrichment", False))
+        live_github_metadata = bool(getattr(args, "live_github_metadata", False))
         timeout_seconds = int(getattr(args, "timeout_seconds", 20) or 20)
         max_provider_retries = int(getattr(args, "provider_retries", 2) or 2)
+        provider_sleep_seconds = float(getattr(args, "sleep_seconds", 0.0) or 0.0)
 
         rows = conn.execute(
             """
@@ -7808,6 +7960,7 @@ def cmd_materialize_hf_paper_insights(args: argparse.Namespace) -> int:
         materialized = 0
         packets = 0
         gate_passed = 0
+        skipped_rate_limited = 0
         provider_success_counts: dict[str, int] = {}
         provider_failure_counts: dict[str, int] = {}
         for row in rows:
@@ -7867,6 +8020,10 @@ def cmd_materialize_hf_paper_insights(args: argparse.Namespace) -> int:
                     if hf_assets.get("total_assets"):
                         provider_success.append("hf_assets")
                 elif hf_error:
+                    if hf_error == "http_429":
+                        skipped_rate_limited += 1
+                        provider_failure_counts["huggingface_rate_limited"] = provider_failure_counts.get("huggingface_rate_limited", 0) + 1
+                        continue
                     provider_failures["huggingface"] = hf_error
 
                 arxiv_payload, arxiv_error = hf_paper_arxiv_metadata(canonical.arxiv_id or "", timeout_seconds=timeout_seconds)
@@ -7877,20 +8034,6 @@ def cmd_materialize_hf_paper_insights(args: argparse.Namespace) -> int:
                     provider_success.append("arxiv")
                 elif arxiv_error:
                     provider_failures["arxiv"] = arxiv_error
-
-                assets_payload, assets_error = (None, "")
-                if not hf_assets.get("total_assets"):
-                    assets_payload, assets_error = hf_paper_http_json(
-                        f"https://huggingface.co/api/papers/{canonical.paper_id}/repos",
-                        timeout_seconds=timeout_seconds,
-                        retries=max_provider_retries,
-                    )
-                if assets_payload is not None:
-                    hf_assets = hf_paper_normalize_assets(assets_payload)
-                    if hf_assets.get("total_assets"):
-                        provider_success.append("hf_assets")
-                elif assets_error and assets_error != "http_404":
-                    provider_failures["hf_assets"] = assets_error
 
             github_repos = hf_paper_extract_github_repos(
                 str(row["summary"] or ""),
@@ -7903,9 +8046,16 @@ def cmd_materialize_hf_paper_insights(args: argparse.Namespace) -> int:
                 provider_success.append("github_link")
                 github_repos_meta: list[dict[str, Any]] = []
                 for repo_name in github_repos[:3]:
-                    repo_meta, repo_error = hf_paper_github_metadata(repo_name, config) if live_enrichment else (
-                        {"full_name": repo_name, "url": f"https://github.com/{repo_name}", "html_url": f"https://github.com/{repo_name}"},
-                        "",
+                    owner, repo = repo_name.split("/", 1)
+                    conn.execute(
+                        "INSERT OR IGNORE INTO github_repos (full_name, owner, repo, html_url, fetched_at) VALUES (?, ?, ?, ?, ?)",
+                        (repo_name, owner, repo, f"https://github.com/{repo_name}", _utc_now()),
+                    )
+                    repo_meta, repo_error = hf_paper_github_metadata(
+                        repo_name,
+                        config,
+                        conn,
+                        live_api=live_enrichment and live_github_metadata,
                     )
                     github_repos_meta.append(repo_meta)
                     if repo_error:
@@ -7944,16 +8094,19 @@ def cmd_materialize_hf_paper_insights(args: argparse.Namespace) -> int:
                 provider_failure_counts[key] = provider_failure_counts.get(key, 0) + 1
             materialized += 1
             packets += 1
+            if provider_sleep_seconds > 0 and materialized < len(rows):
+                time.sleep(provider_sleep_seconds)
         finish_run(
             conn,
             run_id,
-            "ok",
+            "partial" if skipped_rate_limited else "ok",
             len(rows),
             materialized,
             json.dumps({
                 "store": store_path,
                 "packets": packets,
                 "gate_passed": gate_passed,
+                "skipped_rate_limited": skipped_rate_limited,
                 "provider_success": provider_success_counts,
                 "provider_failures": provider_failure_counts,
             }, ensure_ascii=False)[:900],
@@ -7966,6 +8119,7 @@ def cmd_materialize_hf_paper_insights(args: argparse.Namespace) -> int:
             "materialized": materialized,
             "packets": packets,
             "gate_passed": gate_passed,
+            "skipped_rate_limited": skipped_rate_limited,
             "store": store_path,
             "provider_success": provider_success_counts,
             "provider_failures": provider_failure_counts,
@@ -8047,6 +8201,12 @@ def cmd_collect_github(args: argparse.Namespace) -> int:
     fetched = 0
     new_items = 0
     failures: list[str] = []
+    rate_limited = False
+    token, token_source = github_resolve_token(config)
+    print(
+        f"[collect-github] auth={'token' if token else 'unauthenticated'} source={token_source} repos={len(rows)}",
+        flush=True,
+    )
     for idx, row in enumerate(rows, 1):
         full_name = row["full_name"]
         if idx == 1 or idx == len(rows) or idx % 10 == 0:
@@ -8057,11 +8217,15 @@ def cmd_collect_github(args: argparse.Namespace) -> int:
                 latest = github_api_json(f"/repos/{full_name}/releases/latest", config)
                 repo["latest_release_tag"] = latest.get("tag_name") or ""
                 repo["latest_release_at"] = latest.get("published_at") or latest.get("created_at") or ""
+            except GitHubRateLimitError:
+                raise
             except Exception:
                 repo["latest_release_tag"] = ""
                 repo["latest_release_at"] = ""
             try:
                 readme = github_api_text(f"/repos/{full_name}/readme", config)
+            except GitHubRateLimitError:
+                raise
             except Exception:
                 readme = ""
             changed = upsert_github_repo(conn, repo, readme, fetched_at)
@@ -8108,6 +8272,11 @@ def cmd_collect_github(args: argparse.Namespace) -> int:
             )
             github_materialize_project_intelligence(conn, full_name, force=True)
             conn.commit()
+        except GitHubRateLimitError as exc:
+            rate_limited = True
+            failures.append(f"{full_name}: {type(exc).__name__}: {exc}")
+            print(f"[collect-github] rate_limited repo={full_name} {exc}", flush=True)
+            break
         except Exception as exc:
             failures.append(f"{full_name}: {type(exc).__name__}: {exc}")
         if idx < len(rows):
@@ -8120,9 +8289,15 @@ def cmd_collect_github(args: argparse.Namespace) -> int:
         "partial" if failures else "ok",
         fetched,
         new_items,
-        json.dumps({"failures": failures[:5], "repo_master_synced": repo_master_synced}, ensure_ascii=False)[:900],
+        json.dumps({
+            "failures": failures[:5],
+            "repo_master_synced": repo_master_synced,
+            "rate_limited": rate_limited,
+            "auth": "token" if token else "unauthenticated",
+            "auth_source": token_source,
+        }, ensure_ascii=False)[:900],
     )
-    print(f"[collect-github] repos={len(rows)} fetched={fetched} changed={new_items} failures={len(failures)}")
+    print(f"[collect-github] repos={len(rows)} fetched={fetched} changed={new_items} failures={len(failures)} rate_limited={rate_limited}")
     print(f"[collect-github] repo_master_synced={repo_master_synced}")
     for failure in failures[:10]:
         print(f"  WARN {failure}")
@@ -9402,7 +9577,8 @@ def select_ai_influence_catalog_videos(conn: sqlite3.Connection, *, date_str: st
         "JOIN youtube_transcripts t ON t.video_id=v.video_id "
         "LEFT JOIN reasoning_packets rp ON rp.packet_id='yt-rp-' || v.video_id "
         "WHERE datetime(substr(v.published_at,1,19)) >= datetime(?) "
-        "AND coalesce(v.duration_seconds,0) >= 600 "
+        "AND (coalesce(v.duration_seconds,0) >= 600 "
+        "     OR (v.duration_seconds IS NULL AND coalesce(t.char_count,0) >= 12000)) "
         "AND t.transcript_status IN ('fetched','auto_generated') "
         "AND coalesce(t.char_count,0) > 0 "
         "AND length(coalesce(t.transcript_clean,'')) > 0 "
@@ -9445,8 +9621,8 @@ def select_ai_influence_catalog_videos(conn: sqlite3.Connection, *, date_str: st
 
 def build_ai_influence_grouping_materials(conn: sqlite3.Connection, catalog: list[dict[str, Any]],
                                           *,
-                                          per_video_chars: int = 12000,
-                                          total_chars: int = 180000) -> list[dict[str, Any]]:
+                                          per_video_chars: int = 1200,
+                                          total_chars: int = 18000) -> list[dict[str, Any]]:
     """Build transcript-backed materials for semantic grouping.
 
     The report planner should not group weekly videos by keyword/time alone.
@@ -9977,7 +10153,7 @@ def backfill_planned_report_evidence_from_existing(report_dir: Path,
 def build_planned_report_evidence_pack(conn: sqlite3.Connection, catalog: list[dict[str, Any]],
                                        report_spec: dict[str, Any], *,
                                        date_str: str, days: int,
-                                       transcript_char_limit: int = 90000) -> dict[str, Any]:
+                                       transcript_char_limit: int = 24000) -> dict[str, Any]:
     by_ref = {item["video_ref"]: item for item in catalog}
     selected_refs = [ref for ref in _plan_material_refs(report_spec) if ref in by_ref]
     videos: list[dict[str, Any]] = []
@@ -10110,6 +10286,216 @@ def build_planned_report_prompt(evidence_pack: dict[str, Any], *, model_name: st
 证据包 JSON：
 {json.dumps(public_pack, ensure_ascii=False, indent=2)}
 """
+
+
+def _public_planned_report_pack(evidence_pack: dict[str, Any]) -> dict[str, Any]:
+    public_pack = json.loads(json.dumps(evidence_pack, ensure_ascii=False))
+    for item in public_pack.get("videos") or []:
+        item.pop("video_id", None)
+    return public_pack
+
+
+def _chapter_refs_from_spec(spec: dict[str, Any], fallback_refs: list[str]) -> list[str]:
+    refs: list[str] = []
+    for key in ("material_video_refs", "selected_video_refs", "supporting_video_refs"):
+        refs.extend(str(ref) for ref in (spec.get(key) or []) if str(ref).strip())
+    for child_key in ("chapters", "subsections", "sections"):
+        for child in spec.get(child_key) or []:
+            if isinstance(child, dict):
+                refs.extend(_chapter_refs_from_spec(child, []))
+    seen: set[str] = set()
+    deduped = [ref for ref in refs if not (ref in seen or seen.add(ref))]
+    return deduped or list(fallback_refs)
+
+
+def build_ai_influence_report_ir(evidence_pack: dict[str, Any]) -> dict[str, Any]:
+    spec = evidence_pack.get("report_spec") or {}
+    all_refs = [str(v.get("video_ref")) for v in (evidence_pack.get("videos") or []) if str(v.get("video_ref") or "").strip()]
+    chapters: list[dict[str, Any]] = [
+        {
+            "chapter_id": "ch_00_one_page",
+            "title": "一页结论",
+            "output_heading": "## 一页结论",
+            "chapter_type": "executive_summary",
+            "purpose": "综合全篇，给出 4-7 段高层判断；不要写素材流水账。",
+            "material_video_refs": all_refs,
+        }
+    ]
+    idx = 1
+    trends = [t for t in (spec.get("trends") or []) if isinstance(t, dict)]
+    if trends:
+        for trend in trends:
+            trend_refs = _chapter_refs_from_spec(trend, all_refs)
+            nested = [c for c in (trend.get("chapters") or []) if isinstance(c, dict)]
+            if nested:
+                for chapter in nested:
+                    refs = _chapter_refs_from_spec(chapter, trend_refs)
+                    chapters.append({
+                        "chapter_id": f"ch_{idx:02d}",
+                        "title": str(chapter.get("title") or trend.get("title") or trend.get("trend_title") or f"核心趋势 {idx}").strip(),
+                        "output_heading": f"### {str(chapter.get('title') or trend.get('title') or trend.get('trend_title') or f'核心趋势 {idx}').strip()}",
+                        "chapter_type": "core_trend",
+                        "trend_context": trend,
+                        "chapter_spec": chapter,
+                        "purpose": str(chapter.get("purpose") or trend.get("reasoning") or "围绕该趋势给出判断、证据链、技术含义和不确定性。"),
+                        "material_video_refs": refs,
+                    })
+                    idx += 1
+            else:
+                chapters.append({
+                    "chapter_id": f"ch_{idx:02d}",
+                    "title": str(trend.get("title") or trend.get("trend_title") or f"核心趋势 {idx}").strip(),
+                    "output_heading": f"### {str(trend.get('title') or trend.get('trend_title') or f'核心趋势 {idx}').strip()}",
+                    "chapter_type": "core_trend",
+                    "trend_context": trend,
+                    "purpose": str(trend.get("reasoning") or "围绕该趋势给出判断、证据链、技术含义和不确定性。"),
+                    "material_video_refs": trend_refs,
+                })
+                idx += 1
+    else:
+        for chapter in [c for c in (spec.get("chapters") or []) if isinstance(c, dict)]:
+            refs = _chapter_refs_from_spec(chapter, all_refs)
+            title = str(chapter.get("title") or f"核心趋势 {idx}").strip()
+            chapters.append({
+                "chapter_id": f"ch_{idx:02d}",
+                "title": title,
+                "output_heading": f"### {title}",
+                "chapter_type": "core_trend",
+                "chapter_spec": chapter,
+                "purpose": str(chapter.get("purpose") or "围绕该章节问题给出判断、证据链、技术含义和不确定性。"),
+                "material_video_refs": refs,
+            })
+            idx += 1
+    chapters.extend([
+        {
+            "chapter_id": "ch_material_map",
+            "title": "关键视频证据",
+            "output_heading": "## 关键视频证据",
+            "chapter_type": "material_map",
+            "purpose": "按素材编号、频道、视频标题、发布时间说明每条素材支撑了哪个判断。",
+            "material_video_refs": all_refs,
+        },
+        {
+            "chapter_id": "ch_implications",
+            "title": "产品 / 研究 / 工程启示",
+            "output_heading": "## 产品 / 研究 / 工程启示",
+            "chapter_type": "implications",
+            "purpose": "提炼对产品、研究、工程和开源路线的具体启示。",
+            "material_video_refs": all_refs,
+        },
+        {
+            "chapter_id": "ch_open_questions",
+            "title": "Open Questions",
+            "output_heading": "## Open Questions",
+            "chapter_type": "open_questions",
+            "purpose": "列出反向证据、不确定性和未来 2-4 周观察指标。",
+            "material_video_refs": all_refs,
+        },
+    ])
+    return {
+        "report_id": slugify(str(spec.get("report_id") or spec.get("title") or "ai-influence-youtube-report"))[:80],
+        "title": str(spec.get("title") or "AI Influence 专题报告").strip(),
+        "date": evidence_pack.get("date"),
+        "lookback_days": evidence_pack.get("lookback_days"),
+        "global_scope": spec.get("scope"),
+        "reader_value": spec.get("reader_value"),
+        "source_group_ids": evidence_pack.get("source_group_ids") or [],
+        "material_video_refs": all_refs,
+        "operator_contract": {
+            "planner": "DeepResearchChatGPT / chatgpt_thinking_high / ChatGPT Report Planner",
+            "chapter_writer": "tools/chatgpt_report_operator.py / ChatGPT Report Chapter Writer / Thinking high",
+            "whole_report_writer": "disabled",
+        },
+        "chapters": chapters,
+    }
+
+
+def build_chapter_evidence_pack(evidence_pack: dict[str, Any], chapter_spec: dict[str, Any]) -> dict[str, Any]:
+    refs = set(str(ref) for ref in (chapter_spec.get("material_video_refs") or []) if str(ref).strip())
+    public_pack = _public_planned_report_pack(evidence_pack)
+    videos = [v for v in (public_pack.get("videos") or []) if str(v.get("video_ref") or "") in refs]
+    return {
+        "date": public_pack.get("date"),
+        "lookback_days": public_pack.get("lookback_days"),
+        "report_spec": public_pack.get("report_spec"),
+        "chapter_spec": chapter_spec,
+        "video_count": len(videos),
+        "videos": videos,
+        "provenance": {
+            "source": "per_chapter_evidence_pack",
+            "allowed_use": "current_chapter_only",
+            "transcript_policy": "Use only supplied T0/T1/T2 transcript-backed materials; do not invent external facts.",
+        },
+    }
+
+
+def build_planned_report_chapter_prompt(report_ir: dict[str, Any],
+                                        chapter_spec: dict[str, Any],
+                                        chapter_evidence_pack: dict[str, Any],
+                                        *,
+                                        model_name: str) -> str:
+    heading = str(chapter_spec.get("output_heading") or f"## {chapter_spec.get('title') or '章节'}").strip()
+    return f"""你是 AI Influence YouTube 报告流的单章作者。
+
+你必须使用 ChatGPT Report Chapter Writer 算子，模型 {model_name}，Thinking high。
+
+任务：只写当前章节，不写整份报告，不重写 Planner，不输出其它章节。
+
+当前报告：
+- 标题：{report_ir.get("title") or "AI Influence 专题报告"}
+- 全局范围：{report_ir.get("global_scope") or "N/A"}
+- 读者价值：{report_ir.get("reader_value") or "N/A"}
+
+当前章节契约：
+{json.dumps(chapter_spec, ensure_ascii=False, indent=2)}
+
+输出硬规则：
+1. 第一行必须是这个章节标题：{heading}
+2. 只基于 chapter_evidence_pack 写作；不得引入未提供事实。
+3. 不要暴露内部字段名、DB 字段、packet、backend、transcript_status、raw video_id。
+4. 可以使用 V001/V002 等素材编号，但必须同时写频道名和视频标题。
+5. 不能按视频流水账，要围绕章节问题组织论证。
+6. 如果证据不足，明确写“证据不足 / 暂不作为强结论”，不要强行拔高。
+7. 每章必须包含：判断、证据链、为什么重要、不确定性或后续观察。
+8. 输出 Markdown 正文片段，不要 JSON，不要代码块。
+
+chapter_evidence_pack:
+{json.dumps(chapter_evidence_pack, ensure_ascii=False, indent=2)}
+"""
+
+
+def synthesize_ai_influence_chapter_report(report_ir: dict[str, Any],
+                                           chapter_outputs: list[dict[str, Any]],
+                                           *,
+                                           model_name: str,
+                                           input_videos: int) -> str:
+    title = str(report_ir.get("title") or "AI Influence 专题报告").strip()
+    parts = [f"# {title}"]
+    core_chunks: list[str] = []
+    for item in chapter_outputs:
+        chapter = item.get("chapter_spec") or {}
+        markdown = str(item.get("markdown") or "").strip()
+        chapter_type = str(chapter.get("chapter_type") or "")
+        if not markdown:
+            continue
+        if chapter_type == "core_trend":
+            core_chunks.append(markdown)
+        else:
+            parts.append(markdown)
+    if core_chunks:
+        insert_at = 2 if len(parts) > 1 and parts[1].startswith("## 一页结论") else len(parts)
+        parts[insert_at:insert_at] = ["## 核心趋势", "\n\n".join(core_chunks)]
+    parts.append(
+        "\n".join([
+            "## Provenance",
+            f"- final_reasoner: {model_name}",
+            "- planner: DeepResearchChatGPT / chatgpt_thinking_high / ChatGPT Report Planner",
+            "- writer: ChatGPT Report Chapter Writer / Thinking high",
+            "- local_preprocess: ThunderOMLX/Qwen3.6 semantic packets",
+            f"- input_videos: {input_videos}",
+        ])
+    )
+    return "\n\n".join(part.strip() for part in parts if part and part.strip()).strip()
 
 
 def phase4_cross_source_counts(conn: sqlite3.Connection) -> dict[str, int]:
@@ -10252,6 +10638,9 @@ def browser_agent_chatgpt_cmd(config: dict[str, Any]) -> list[str]:
     ).strip()
     if cmd:
         return shlex.split(cmd)
+    operator = Path(__file__).resolve().parents[1] / "tools" / "chatgpt_report_operator.py"
+    if operator.exists():
+        return [sys.executable, str(operator)]
     wrapper = Path(__file__).resolve().with_name("browser_agent_chatgpt_wrapper.py")
     browser_use_python = Path.home() / ".claude" / "mcp-servers" / "browser-use" / ".venv" / "bin" / "python"
     if wrapper.exists() and browser_use_python.exists():
@@ -10294,7 +10683,8 @@ def _strip_browser_agent_noise(text: str) -> str:
 def call_browser_agent_chatgpt_text(prompt: str, config: dict[str, Any], *,
                                     purpose: str,
                                     expected: str = "markdown",
-                                    requested_model: str | None = None) -> dict[str, Any]:
+                                    requested_model: str | None = None,
+                                    operator_kind: str | None = None) -> dict[str, Any]:
     reasoner_cfg = ((config.get("youtube") or {}).get("phase_report_reasoner") or {})
     flow_cfg = ((config.get("youtube") or {}).get("ai_influence_report_flow") or {})
     writer_cfg = (flow_cfg.get("report_writer") or {})
@@ -10310,11 +10700,14 @@ def call_browser_agent_chatgpt_text(prompt: str, config: dict[str, Any], *,
         "purpose": purpose,
         "expected": expected,
         "provider": "browser_agent_chatgpt",
+        "logical_operator": "DeepResearchChatGPT",
+        "operator_line": "chatgpt_thinking_high",
+        "operator_kind": operator_kind or "auto",
         "model": model,
         "reasoning_effort": reasoning_effort,
         "created_at": iso_z(),
         "status": "pending_executor",
-        "note": "Final AI Influence reasoning must use Browser Agent + ChatGPT 5.5 Thinking high. No Codex/local fallback is allowed.",
+        "note": "AI Influence high-judgment stages must use DeepResearchChatGPT/chatgpt_thinking_high via Browser Agent + ChatGPT 5.5 Thinking high. No Codex/local fallback is allowed.",
     }
     (req_dir / "request.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     cmd = browser_agent_chatgpt_cmd(config)
@@ -10330,7 +10723,12 @@ def call_browser_agent_chatgpt_text(prompt: str, config: dict[str, Any], *,
         "CHATGPT_REASONING_EFFORT": reasoning_effort,
         "BROWSER_AGENT_EXPECTED_OUTPUT": expected,
         "BROWSER_AGENT_REQUEST_DIR": str(req_dir),
+        "BROWSER_AGENT_PURPOSE": purpose,
+        "BROWSER_AGENT_CHATGPT_MODEL_MODE": "thinking",
+        "BROWSER_AGENT_CHATGPT_REQUIRE_UI_MODE": "true",
     })
+    if operator_kind:
+        env["CHATGPT_REPORT_OPERATOR_KIND"] = operator_kind
     project_name = str(
         writer_cfg.get("chatgpt_project")
         or reasoner_cfg.get("chatgpt_project")
@@ -10435,13 +10833,15 @@ def extract_json_payload_lenient(text: str) -> dict[str, Any]:
 
 def call_browser_agent_chatgpt_markdown(prompt: str, config: dict[str, Any], *,
                                         purpose: str,
-                                        requested_model: str | None = None) -> dict[str, Any]:
+                                        requested_model: str | None = None,
+                                        operator_kind: str | None = None) -> dict[str, Any]:
     result = call_browser_agent_chatgpt_text(
         prompt,
         config,
         purpose=purpose,
         expected="markdown",
         requested_model=requested_model,
+        operator_kind=operator_kind,
     )
     markdown = str(result.pop("text") or "").strip()
     result["markdown"] = markdown
@@ -10683,13 +11083,15 @@ def validate_ai_influence_planned_report_dir(
 
 def call_browser_agent_chatgpt_json(prompt: str, config: dict[str, Any], *,
                                     purpose: str,
-                                    requested_model: str | None = None) -> dict[str, Any]:
+                                    requested_model: str | None = None,
+                                    operator_kind: str | None = None) -> dict[str, Any]:
     result = call_browser_agent_chatgpt_text(
         prompt,
         config,
         purpose=purpose,
         expected="json",
         requested_model=requested_model,
+        operator_kind=operator_kind,
     )
     payload = extract_json_payload_lenient(str(result.pop("text") or ""))
     payload["_backend"] = result["backend"]
@@ -12278,6 +12680,7 @@ def cmd_plan_ai_influence_reports(args: argparse.Namespace) -> int:
             config,
             purpose=f"ai-influence-video-grouping-{date_str}",
             requested_model=model_name,
+            operator_kind="planner",
         )
         group_plan = normalize_ai_influence_video_groups(raw_group_plan, catalog)
         group_plan["catalog_video_count"] = len(catalog)
@@ -12318,15 +12721,16 @@ def cmd_plan_ai_influence_reports(args: argparse.Namespace) -> int:
             config,
             purpose=f"ai-influence-report-plan-{date_str}",
             requested_model=model_name,
+            operator_kind="planner",
         )
         plan["catalog_video_count"] = len(catalog)
         plan["video_group_count"] = len(group_plan.get("video_groups") or [])
         plan["video_groups_path"] = str(out_dir / "video-groups.json")
         plan["catalog_policy"] = "planner receives catalog plus transcript-backed semantic groups; final writing receives selected transcripts."
         plan["fixed_flow"] = {
-            "video_grouping": "Browser Agent / ChatGPT 5.5 Thinking high over transcript-backed materials",
-            "planner": "Browser Agent / ChatGPT 5.5 Thinking high",
-            "writer": "Browser Agent / ChatGPT 5.5 Thinking high",
+            "video_grouping": "DeepResearchChatGPT / chatgpt_thinking_high / ChatGPT Report Planner",
+            "planner": "DeepResearchChatGPT / chatgpt_thinking_high / ChatGPT Report Planner",
+            "writer": "ChatGPT Report Chapter Writer per chapter; whole-report writer disabled",
             "local_preprocess": "ThunderOMLX/Qwen3.6",
             "codex_direct_reasoning": "disabled",
             "report_hierarchy": "video groups -> trends -> chapters -> subsections -> synthesis",
@@ -12444,7 +12848,7 @@ def cmd_run_ai_influence_planned_reports(args: argparse.Namespace) -> int:
                 spec,
                 date_str=date_str,
                 days=days,
-                transcript_char_limit=int(writer_cfg.get("transcript_char_limit") or 90000),
+                transcript_char_limit=int(writer_cfg.get("transcript_char_limit") or 24000),
             )
             evidence_pack = backfill_planned_report_evidence_from_existing(report_dir, evidence_pack)
             skipped_refs = [str(ref) for ref in evidence_pack.get("skipped_material_refs") or [] if str(ref).strip()]
@@ -12477,37 +12881,118 @@ def cmd_run_ai_influence_planned_reports(args: argparse.Namespace) -> int:
                 )
                 evidence_pack = attach_notebooklm_context_to_evidence_pack(evidence_pack, notebook_result)
             (report_dir / "evidence-pack.json").write_text(json.dumps(evidence_pack, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            prompt = build_planned_report_prompt(evidence_pack, model_name=model_name)
-            (report_dir / "writer-prompt.md").write_text(prompt, encoding="utf-8")
-            result = call_browser_agent_chatgpt_markdown(
-                prompt,
-                config,
-                purpose=f"ai-influence-report-{date_str}-{report_id}",
-                requested_model=model_name,
+            legacy_prompt = build_planned_report_prompt(evidence_pack, model_name=model_name)
+            (report_dir / "writer-prompt.legacy-disabled.md").write_text(legacy_prompt, encoding="utf-8")
+            report_ir = build_ai_influence_report_ir(evidence_pack)
+            (report_dir / "report-ir.json").write_text(
+                json.dumps(report_ir, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
             )
-            markdown = result["markdown"].strip()
+            chapters_dir = report_dir / "chapters"
+            chapter_prompts_dir = report_dir / "chapter-prompts"
+            chapter_evidence_dir = report_dir / "chapter-evidence-packs"
+            chapters_dir.mkdir(parents=True, exist_ok=True)
+            chapter_prompts_dir.mkdir(parents=True, exist_ok=True)
+            chapter_evidence_dir.mkdir(parents=True, exist_ok=True)
+            chapter_outputs: list[dict[str, Any]] = []
+            aggregate_tokens_in = 0
+            aggregate_tokens_out = 0
+            aggregate_latency_ms = 0
+            request_dirs: list[str] = []
+            for chapter_spec in report_ir.get("chapters") or []:
+                if not isinstance(chapter_spec, dict):
+                    continue
+                chapter_id = slugify(str(chapter_spec.get("chapter_id") or chapter_spec.get("title") or "chapter"))[:80] or "chapter"
+                chapter_evidence_pack = build_chapter_evidence_pack(evidence_pack, chapter_spec)
+                if chapter_spec.get("chapter_type") != "open_questions" and not chapter_evidence_pack.get("videos"):
+                    raise ValueError(f"ai_influence_chapter_evidence_empty:{chapter_id}")
+                chapter_prompt = build_planned_report_chapter_prompt(
+                    report_ir,
+                    chapter_spec,
+                    chapter_evidence_pack,
+                    model_name=model_name,
+                )
+                (chapter_evidence_dir / f"{chapter_id}.json").write_text(
+                    json.dumps(chapter_evidence_pack, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+                (chapter_prompts_dir / f"{chapter_id}.md").write_text(chapter_prompt, encoding="utf-8")
+                chapter_result = call_browser_agent_chatgpt_markdown(
+                    chapter_prompt,
+                    config,
+                    purpose=f"ai-influence-report-chapter-{date_str}-{report_id}-{chapter_id}",
+                    requested_model=model_name,
+                    operator_kind="chapter_writer",
+                )
+                chapter_markdown = str(chapter_result.get("markdown") or "").strip()
+                if len(chapter_markdown) < 120:
+                    raise ValueError(f"ai_influence_chapter_output_too_short:{chapter_id}")
+                (chapters_dir / f"{chapter_id}.md").write_text(chapter_markdown + "\n", encoding="utf-8")
+                (chapters_dir / f"{chapter_id}.result.json").write_text(
+                    json.dumps({k: v for k, v in chapter_result.items() if k != "markdown"}, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+                aggregate_tokens_in += int(chapter_result.get("input_token_count") or 0)
+                aggregate_tokens_out += int(chapter_result.get("output_token_count") or 0)
+                aggregate_latency_ms += int(chapter_result.get("latency_ms") or 0)
+                if chapter_result.get("request_dir"):
+                    request_dirs.append(str(chapter_result.get("request_dir")))
+                chapter_outputs.append({
+                    "chapter_spec": chapter_spec,
+                    "markdown": chapter_markdown,
+                    "result": {k: v for k, v in chapter_result.items() if k != "markdown"},
+                })
+            (report_dir / "chapter-outputs.json").write_text(
+                json.dumps(chapter_outputs, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            markdown = synthesize_ai_influence_chapter_report(
+                report_ir,
+                chapter_outputs,
+                model_name=model_name,
+                input_videos=len(evidence_pack.get("videos") or []),
+            )
             markdown = normalize_ai_influence_markdown_report(
                 markdown,
-                model_name=str(result.get("model") or model_name),
+                model_name=model_name,
                 input_videos=len(evidence_pack.get("videos") or []),
             )
             validate_ai_influence_markdown_report(markdown)
             report = {
                 "headline": spec.get("title") or report_id,
-                "subheadline": "Browser Agent / ChatGPT 5.5 Thinking high 按 AI Influence 固化流程生成",
+                "subheadline": "DeepResearchChatGPT 规划，ChatGPT Report Chapter Writer 逐章生成",
                 "_markdown_report": markdown,
                 "_backend": "browser_agent_chatgpt",
-                "_model": result.get("model") or model_name,
-                "_reasoning_effort": result.get("reasoning_effort") or "high",
+                "_model": model_name,
+                "_reasoning_effort": "high",
+                "_operator_line": "chatgpt_thinking_high",
+                "_chapter_writer": "tools/chatgpt_report_operator.py",
                 "_local_preprocess": "ThunderOMLX/Qwen3.6 semantic packets",
-                "_latency_ms": result.get("latency_ms"),
+                "_latency_ms": aggregate_latency_ms,
             }
             (report_dir / "report.md").write_text(markdown + "\n", encoding="utf-8")
             (report_dir / "report.html").write_text(
                 render_ai_influence_report_html_anything(markdown, evidence_pack, report),
                 encoding="utf-8",
             )
-            (report_dir / "report-result.json").write_text(json.dumps({**report, **{k: v for k, v in result.items() if k != "markdown"}}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            result = {
+                "backend": "browser_agent_chatgpt",
+                "model": model_name,
+                "reasoning_effort": "high",
+                "operator_line": "chatgpt_thinking_high",
+                "operator_kind": "chapter_writer",
+                "chapter_count": len(chapter_outputs),
+                "request_dirs": request_dirs,
+                "request_dir": request_dirs[-1] if request_dirs else "",
+                "latency_ms": aggregate_latency_ms,
+                "input_token_count": aggregate_tokens_in,
+                "output_token_count": aggregate_tokens_out,
+                "cost_estimate_usd": 0.0,
+            }
+            (report_dir / "report-result.json").write_text(
+                json.dumps({**report, **result}, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
             blocked_path = report_dir / "report.blocked.json"
             if blocked_path.exists():
                 blocked_path.unlink()
@@ -13419,8 +13904,10 @@ def build_parser() -> argparse.ArgumentParser:
     hf_insight = sub.add_parser("materialize-hf-paper-insights", help="Materialize HF paper canonical/signal/packet store without high-model reasoning")
     hf_insight.add_argument("--limit", type=int, default=80)
     hf_insight.add_argument("--no-live-enrichment", action="store_true", help="Use only local HF snapshots; skip HF/arXiv/GitHub live enrichment")
+    hf_insight.add_argument("--live-github-metadata", action="store_true", help="Fetch GitHub repo metadata live during HF enrichment; default uses local/link-only evidence to avoid rate limits")
     hf_insight.add_argument("--timeout-seconds", type=int, default=20, help="Per-provider HTTP timeout for live enrichment")
     hf_insight.add_argument("--provider-retries", type=int, default=2, help="Bounded retry count for HF live enrichment providers")
+    hf_insight.add_argument("--sleep-seconds", type=float, default=0.2, help="Small delay between live enrichment papers to avoid provider rate limits")
     gh_analyze = sub.add_parser("analyze-github-projects", help="Build GitHub repo evidence atoms, reasoning packets and analysis cards")
     gh_analyze.add_argument("--limit-repos", type=int, default=0)
     gh_analyze.add_argument("--force", action="store_true")

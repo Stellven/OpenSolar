@@ -36,6 +36,7 @@ fetch:
   sleep_between_requests_seconds: 3
   min_source_interval_hours: 6
   user_agent: Solar-Tech-Hotspot-Radar/1.0 (+local knowledge capture)
+  github_token_env: GITHUB_TOKEN
 
 # ── YouTube source ──────────────────────────────────────────────────
 youtube:
@@ -49,7 +50,7 @@ youtube:
   backfill_per_channel_limit: 100 # yt-dlp playlist cap per channel
   keep_seen_days: 45
   transcript_max_chars: 60000
-  min_transcript_duration_seconds: 600  # do not spend transcript/ASR budget on videos under 10 minutes
+  min_transcript_duration_seconds: 600  # do not spend transcript/browser-capture budget on videos under 10 minutes
   phase_report_reasoner:
     provider: browser_agent_chatgpt
     model: chatgpt-5.5
@@ -79,8 +80,8 @@ youtube:
       notebook_name: ""
       timeout_seconds: 1800
   asr:
-    enabled: true
-    max_per_run: 2
+    enabled: false
+    max_per_run: 0
     backend: mlx-whisper
     whisper_model: mlx-community/whisper-small-mlx
     openai_whisper_model: small

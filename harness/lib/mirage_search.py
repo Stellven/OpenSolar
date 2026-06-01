@@ -44,6 +44,22 @@ except Exception as exc:  # pragma: no cover - import safety
     ResultStatus = None  # type: ignore[assignment]
     _SANDBOX_IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
 
+try:
+    import cocoindex_adapter  # type: ignore  # noqa: E402
+except Exception as exc:  # pragma: no cover - optional adapter
+    cocoindex_adapter = None  # type: ignore[assignment]
+    _COCO_IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+else:
+    _COCO_IMPORT_ERROR = ""
+
+try:
+    import understand_anything_adapter  # type: ignore  # noqa: E402
+except Exception as exc:  # pragma: no cover - optional adapter
+    understand_anything_adapter = None  # type: ignore[assignment]
+    _UA_IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+else:
+    _UA_IMPORT_ERROR = ""
+
 # Last-route telemetry for callers/tests to assert sandbox routing.
 LAST_QMD_ROUTE: dict[str, Any] = {}
 
@@ -548,13 +564,33 @@ def search_solar_db(query: str, max_hits: int = 5) -> tuple[list[dict[str, Any]]
     return hits[:max_hits], True
 
 
+# ─── Source adapters: cocoindex / understanding ───────────────────────
+
+def search_cocoindex(query: str, max_hits: int = 5) -> tuple[list[dict[str, Any]], bool, str | None]:
+    if cocoindex_adapter is None:
+        return [], False, f"cocoindex:import_error:{_COCO_IMPORT_ERROR}"
+    try:
+        return cocoindex_adapter.search(query, limit=max_hits)
+    except Exception as exc:
+        return [], False, f"cocoindex:error:{type(exc).__name__}"
+
+
+def search_understanding(query: str, max_hits: int = 5) -> tuple[list[dict[str, Any]], bool, str | None]:
+    if understand_anything_adapter is None:
+        return [], False, f"understanding:import_error:{_UA_IMPORT_ERROR}"
+    try:
+        return understand_anything_adapter.search(query, limit=max_hits)
+    except Exception as exc:
+        return [], False, f"understanding:error:{type(exc).__name__}"
+
+
 # ─── Aggregation ──────────────────────────────────────────────────────
 
 def _dedup_key(hit: dict[str, Any]) -> str:
-    """Create a dedup key from path + snippet prefix."""
-    p = hit.get("path", "")
-    s = hit.get("snippet", "")[:40]
-    return f"{p}||{s}"
+    """Create a dedupe key that preserves distinct semantic layers."""
+    source_hash = hit.get("source_hash") or hit.get("path") or ""
+    layer = hit.get("layer") or _assign_layer(hit)
+    return f"{source_hash}||{layer}"
 
 
 def _hit_text(hit: dict[str, Any]) -> str:
@@ -587,7 +623,45 @@ def _topic_relevance(hit: dict[str, Any], query: str) -> float:
     return boost
 
 
+def _assign_layer(hit: dict[str, Any]) -> str:
+    source_type = str(hit.get("source_type", ""))
+    if source_type == "cocoindex":
+        return str(hit.get("layer") or "code-symbol")
+    if source_type == "understanding":
+        return str(hit.get("layer") or "understanding-summary")
+    if source_type == "qmd":
+        return "synthesis"
+    if source_type == "solar_db":
+        return "references"
+    text = _hit_text(hit)
+    if "qmd://solar-wiki/synthesis/" in text or "/knowledge/synthesis/" in text or "/synthesis/" in text:
+        return "synthesis"
+    if "qmd://solar-wiki/concepts/" in text or "/knowledge/concepts/" in text or "/concepts/" in text:
+        return "concepts"
+    if "qmd://solar-wiki/references/" in text or "/knowledge/references/" in text or "/references/" in text:
+        return "references"
+    if "qmd://solar-wiki/raw/" in text or "/knowledge/_raw/" in text or "/_raw/" in text or "/raw/" in text:
+        return "raw-evidence"
+    return "retrieval-evidence" if source_type == "mirage_path" else "raw-evidence"
+
+
 def _layer_priority(hit: dict[str, Any]) -> int:
+    layer = _assign_layer(hit)
+    priorities = {
+        "synthesis": 0,
+        "concepts": 1,
+        "references": 2,
+        "code-symbol": 3,
+        "code-callgraph": 4,
+        "code-chunk": 5,
+        "understanding-summary": 6,
+        "understanding-claim": 7,
+        "understanding-entity": 8,
+        "retrieval-evidence": 9,
+        "raw-evidence": 10,
+    }
+    if layer in priorities:
+        return priorities[layer]
     text = _hit_text(hit)
     if "qmd://solar-wiki/synthesis/" in text or "/knowledge/synthesis/" in text or "/synthesis/" in text:
         return 0
@@ -604,7 +678,33 @@ def _layer_priority(hit: dict[str, Any]) -> int:
 
 
 def _source_priority(hit: dict[str, Any]) -> int:
-    return {"qmd": 0, "solar_db": 1, "mirage_path": 2}.get(str(hit.get("source_type", "")), 9)
+    return {
+        "qmd": 0,
+        "solar_db": 1,
+        "cocoindex": 2,
+        "understanding": 3,
+        "mirage_path": 4,
+    }.get(str(hit.get("source_type", "")), 9)
+
+
+def _rank_score(hit: dict[str, Any], query: str) -> float:
+    layer_weights = {
+        "synthesis": 1.0,
+        "concepts": 0.95,
+        "references": 0.9,
+        "code-symbol": 0.85,
+        "code-callgraph": 0.82,
+        "code-chunk": 0.78,
+        "understanding-summary": 0.75,
+        "understanding-claim": 0.70,
+        "understanding-entity": 0.65,
+        "retrieval-evidence": 0.55,
+        "raw-evidence": 0.40,
+    }
+    layer_weight = layer_weights.get(_assign_layer(hit), 0.5)
+    semantic = float(hit.get("score_or_rank", 0.5) or 0.5)
+    degraded_penalty = 0.3 if hit.get("degraded") else 0.0
+    return layer_weight * 0.6 + semantic * 0.4 + _topic_relevance(hit, query) - degraded_penalty
 
 
 def unified_search(query: str,
@@ -626,7 +726,7 @@ def unified_search(query: str,
     """
     t0 = time.monotonic()
     if sources is None:
-        sources = ["mirage_path", "qmd", "solar_db"]
+        sources = ["mirage_path", "qmd", "solar_db", "cocoindex", "understanding"]
     if mounts is None:
         mounts = get_mounts()
 
@@ -668,6 +768,44 @@ def unified_search(query: str,
         if not db_any_ok:
             degraded.append("solar_db:unavailable")
 
+    # --- cocoindex ---
+    if "cocoindex" in sources:
+        coco_any_ok = False
+        coco_reasons: list[str] = []
+        for q in query_variants:
+            coco_hits, coco_ok, reason = search_cocoindex(q, per_source)
+            coco_any_ok = coco_any_ok or coco_ok
+            if reason:
+                coco_reasons.append(reason)
+            all_hits.extend(coco_hits)
+        if not coco_any_ok:
+            degraded.append(coco_reasons[0] if coco_reasons else "cocoindex:unavailable")
+        elif coco_reasons:
+            degraded.extend(sorted(set(coco_reasons))[:2])
+
+    # --- understanding ---
+    if "understanding" in sources:
+        ua_any_ok = False
+        ua_reasons: list[str] = []
+        for q in query_variants:
+            ua_hits, ua_ok, reason = search_understanding(q, per_source)
+            ua_any_ok = ua_any_ok or ua_ok
+            if reason:
+                ua_reasons.append(reason)
+            all_hits.extend(ua_hits)
+        if not ua_any_ok:
+            degraded.append(ua_reasons[0] if ua_reasons else "understanding:unavailable")
+        elif ua_reasons:
+            degraded.extend(sorted(set(ua_reasons))[:2])
+
+    for hit in all_hits:
+        hit["layer"] = _assign_layer(hit)
+        hit.setdefault("source_hash", hashlib.sha256(
+            f"{hit.get('source_type')}:{hit.get('path')}:{hit.get('snippet', '')[:120]}".encode("utf-8", errors="replace")
+        ).hexdigest())
+        hit.setdefault("lineage", [hit.get("path", "")])
+        hit.setdefault("degraded", False)
+
     # Deduplicate by path+snippet key
     seen: set[str] = set()
     unique: list[dict[str, Any]] = []
@@ -680,7 +818,7 @@ def unified_search(query: str,
     # Prefer compiled knowledge layers; keep raw material as evidence, not the
     # default synthesis context when both are available.
     unique.sort(key=lambda h: (
-        -_topic_relevance(h, query),
+        -_rank_score(h, query),
         _layer_priority(h),
         _source_priority(h),
         -float(h.get("score_or_rank", 0.0) or 0.0),
@@ -710,6 +848,12 @@ def unified_search(query: str,
     return {
         "hits": kept,
         "degraded_sources": degraded,
+        "source_counts": {
+            source: sum(1 for h in kept if h.get("source_type") == source)
+            for source in sorted({str(h.get("source_type", "")) for h in kept if h.get("source_type")})
+        },
+        "lineage_refs": sorted({str(x) for h in kept for x in (h.get("lineage") or []) if x})[:50],
+        "source_hash_refs": sorted({str(h.get("source_hash")) for h in kept if h.get("source_hash")})[:50],
         "total_chars": total_chars,
         "truncated": truncated,
         "query": query,
@@ -722,7 +866,7 @@ def unified_search(query: str,
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Mirage unified search — query across Mirage paths, QMD, and Solar DB",
+        description="Mirage unified search — query across Mirage paths, QMD, Solar DB, CocoIndex, and understanding artifacts",
     )
     parser.add_argument("query", help="Search query string")
     parser.add_argument("--json", dest="json_out", action="store_true",
@@ -731,8 +875,8 @@ def main() -> None:
                         help=f"Max hits to return (default: {DEFAULT_MAX_HITS})")
     parser.add_argument("--max-chars", type=int, default=DEFAULT_MAX_CHARS,
                         help=f"Max total snippet chars (default: {DEFAULT_MAX_CHARS})")
-    parser.add_argument("--sources", type=str, default="mirage_path,qmd,solar_db",
-                        help="Comma-separated source types (default: mirage_path,qmd,solar_db)")
+    parser.add_argument("--sources", type=str, default="mirage_path,qmd,solar_db,cocoindex,understanding",
+                        help="Comma-separated source types (default: mirage_path,qmd,solar_db,cocoindex,understanding)")
     parser.add_argument("--config", type=str, default=None,
                         help="Path to mirage.solar.yaml (optional)")
     args = parser.parse_args()

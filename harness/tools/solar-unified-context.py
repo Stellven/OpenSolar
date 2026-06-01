@@ -27,6 +27,22 @@ DEFAULT_MAX_HITS = int(os.environ.get("SOLAR_CONTEXT_MAX_HITS", "8"))
 DEFAULT_TIMEOUT_MS = int(os.environ.get("SOLAR_CONTEXT_TIMEOUT_MS", "8000"))
 DEFAULT_RAGFLOW_TIMEOUT_MS = int(os.environ.get("SOLAR_CONTEXT_RAGFLOW_TIMEOUT_MS", "1200"))
 
+LAYER_PRIORITY = {
+    "synthesis": 0,
+    "concepts": 1,
+    "references": 2,
+    "code-symbol": 3,
+    "code-callgraph": 4,
+    "code-chunk": 5,
+    "understanding-summary": 6,
+    "understanding-claim": 7,
+    "understanding-entity": 8,
+    "retrieval-evidence": 9,
+    "raw-evidence": 10,
+    "curated": 11,
+    "other": 40,
+}
+
 sys.path.insert(0, str(HARNESS / "lib"))
 try:
     from resource_telemetry import record_usage
@@ -34,12 +50,17 @@ except Exception:  # pragma: no cover - fail-open for hook paths
     record_usage = None  # type: ignore
 
 
-def _run_mirage(query: str, max_hits: int, max_chars: int, timeout_ms: int) -> dict:
+def _run_mirage(
+    query: str,
+    max_hits: int,
+    max_chars: int,
+    timeout_ms: int,
+    sources: list[str] | None = None,
+) -> dict:
     if not MIRAGE.exists():
         return {"hits": [], "degraded_sources": ["mirage:missing"], "query": query}
     try:
-        proc = subprocess.run(
-            [
+        cmd = [
                 sys.executable,
                 str(MIRAGE),
                 "search",
@@ -49,7 +70,11 @@ def _run_mirage(query: str, max_hits: int, max_chars: int, timeout_ms: int) -> d
                 str(max_hits),
                 "--max-chars",
                 str(max_chars),
-            ],
+        ]
+        if sources:
+            cmd.extend(["--sources", ",".join(sources)])
+        proc = subprocess.run(
+            cmd,
             text=True,
             capture_output=True,
             timeout=max(1.0, timeout_ms / 1000.0),
@@ -85,8 +110,12 @@ def _compact_hit(hit: dict) -> dict:
         "snippet": (hit.get("snippet") or "")[:450],
         "provenance": hit.get("provenance") or "",
         "score": hit.get("score_or_rank", 0),
+        "source_hash": hit.get("source_hash") or "",
+        "lineage": hit.get("lineage") or [],
+        "degraded": bool(hit.get("degraded", False)),
+        "degraded_reason": hit.get("degraded_reason"),
     }
-    compact["layer"] = _context_layer(compact)
+    compact["layer"] = hit.get("layer") or _context_layer(compact)
     return compact
 
 
@@ -174,6 +203,11 @@ def _filter_runtime_noise(hits: list[dict], query: str) -> list[dict]:
 
 def _context_layer(hit: dict) -> str:
     text = _context_path_text(hit)
+    source = str(hit.get("source") or "").lower()
+    if source == "cocoindex":
+        return str(hit.get("layer") or "code-symbol")
+    if source == "understanding":
+        return str(hit.get("layer") or "understanding-summary")
     if "qmd://solar-wiki/synthesis/" in text or "/knowledge/synthesis/" in text or "/synthesis/" in text:
         return "synthesis"
     if "qmd://solar-wiki/concepts/" in text or "/knowledge/concepts/" in text or "/concepts/" in text:
@@ -191,19 +225,11 @@ def _context_layer(hit: dict) -> str:
 
 
 def _layer_priority(layer: str) -> int:
-    return {
-        "synthesis": 0,
-        "concepts": 1,
-        "references": 2,
-        "curated": 3,
-        "other": 40,
-        "retrieval-evidence": 70,
-        "raw-evidence": 80,
-    }.get(layer, 50)
+    return LAYER_PRIORITY.get(layer, 50)
 
 
 def _sort_context_hits(hits: list[dict], query: str = "") -> list[dict]:
-    source_priority = {"qmd": 0, "solar_db": 1, "mirage_path": 2, "ragflow": 3}
+    source_priority = {"qmd": 0, "solar_db": 1, "cocoindex": 2, "understanding": 3, "mirage_path": 4, "ragflow": 5}
     for hit in hits:
         hit["layer"] = _context_layer(hit)
     return sorted(
@@ -284,12 +310,31 @@ def _compact_ragflow_hit(hit: dict) -> dict:
     return compact
 
 
-def retrieve(query: str, max_hits: int, max_chars: int, timeout_ms: int) -> dict:
+def retrieve(
+    query: str,
+    max_hits: int = DEFAULT_MAX_HITS,
+    max_chars: int = DEFAULT_MAX_CHARS,
+    timeout_ms: int = DEFAULT_TIMEOUT_MS,
+    *,
+    sources: list[str] | None = None,
+    layers: list[str] | None = None,
+    limit: int | None = None,
+    task_kind: str = "general",
+    token_budget: int | None = None,
+) -> dict:
     started = time.monotonic()
-    data = _run_mirage(query, max_hits=max_hits, max_chars=max_chars, timeout_ms=timeout_ms)
+    if limit is not None:
+        max_hits = limit
+    if token_budget is not None:
+        max_chars = min(max_chars, max(200, token_budget * 4))
+    if sources is None and task_kind == "code":
+        sources = ["mirage_path", "qmd", "solar_db", "cocoindex"]
+    elif sources is None and task_kind in {"paper", "doc"}:
+        sources = ["mirage_path", "qmd", "solar_db", "understanding"]
+    data = _run_mirage(query, max_hits=max_hits, max_chars=max_chars, timeout_ms=timeout_ms, sources=sources)
     if not data.get("hits") and any("\u4e00" <= ch <= "\u9fff" for ch in query):
         fallback_query = "obsidian wiki integration solar harness"
-        data = _run_mirage(fallback_query, max_hits=max_hits, max_chars=max_chars, timeout_ms=timeout_ms)
+        data = _run_mirage(fallback_query, max_hits=max_hits, max_chars=max_chars, timeout_ms=timeout_ms, sources=sources)
         data["fallback_query"] = fallback_query
     hits = [_compact_hit(h) for h in data.get("hits", []) if isinstance(h, dict)]
     ragflow_data = _run_ragflow(
@@ -298,6 +343,9 @@ def retrieve(query: str, max_hits: int, max_chars: int, timeout_ms: int) -> dict
         timeout_ms=DEFAULT_RAGFLOW_TIMEOUT_MS,
     )
     hits += [_compact_ragflow_hit(h) for h in ragflow_data.get("hits", []) if isinstance(h, dict)]
+    if layers:
+        allowed_layers = set(layers)
+        hits = [h for h in hits if h.get("layer") in allowed_layers]
     if not hits:
         hits = [
             {
@@ -332,6 +380,14 @@ def retrieve(query: str, max_hits: int, max_chars: int, timeout_ms: int) -> dict
             },
         ][:max_hits]
     hits = _filter_runtime_noise(_sort_context_hits(hits, query=query), query)
+    seen: dict[tuple[str, str], dict] = {}
+    for hit in hits:
+        key = (str(hit.get("source_hash") or hit.get("path") or ""), str(hit.get("layer") or ""))
+        current = seen.get(key)
+        if current is None or float(hit.get("score") or 0) > float(current.get("score") or 0):
+            seen[key] = hit
+    hits = list(seen.values())
+    hits = _filter_runtime_noise(_sort_context_hits(hits, query=query), query)
     total = 0
     kept = []
     for hit in hits:
@@ -340,13 +396,24 @@ def retrieve(query: str, max_hits: int, max_chars: int, timeout_ms: int) -> dict
             break
         kept.append(hit)
         total += len(payload)
+    source_counts: dict[str, int] = {}
+    degraded_sources = list(data.get("degraded_sources", [])) + list(ragflow_data.get("degraded", []))
+    for hit in kept:
+        source = str(hit.get("source") or "unknown")
+        source_counts[source] = source_counts.get(source, 0) + 1
+        if hit.get("degraded"):
+            reason = hit.get("degraded_reason") or f"{source}:degraded"
+            degraded_sources.append(str(reason))
     return {
         "query": query,
         "hits": kept,
-        "degraded_sources": list(data.get("degraded_sources", [])) + list(ragflow_data.get("degraded", [])),
+        "source_counts": source_counts,
+        "degraded_sources": sorted(set(str(x) for x in degraded_sources if x)),
+        "lineage_refs": sorted({str(x) for h in kept for x in (h.get("lineage") or []) if x})[:50],
+        "source_hash_refs": sorted({str(h.get("source_hash")) for h in kept if h.get("source_hash")})[:50],
         "elapsed_ms": round((time.monotonic() - started) * 1000, 1),
         "total_chars": total,
-        "backend": "mirage+qmd+solar_db+obsidian+ragflow_optional",
+        "backend": "mirage+qmd+solar_db+obsidian+cocoindex+understanding+ragflow_optional",
     }
 
 
@@ -356,15 +423,15 @@ def format_hook(data: dict, max_chars: int) -> str:
         return ""
     lines = [
         "<solar-unified-context>",
-        "来源: Mirage + QMD solar-wiki + Obsidian Vault + Solar DB + RAGFlow(optional)",
+        "来源: Mirage + QMD solar-wiki + Obsidian Vault + Solar DB + CocoIndex + Understanding + RAGFlow(optional)",
         "规则: 开始开发/设计/分析前，优先参考这些命中；如不足，再主动搜索 vault/qmd。",
-        "排序: synthesis/concepts/references 优先；raw 只作为证据层靠后。",
+        "排序: synthesis/concepts/references/code/understanding 分层融合；raw 只作为证据层靠后。",
     ]
     total = sum(len(x) for x in lines)
     for hit in hits:
         path = str(hit.get("path") or "")
         mount = "" if "://" in path or path.startswith(str(HOME)) or path.startswith("obsidian:") else str(hit.get("mount") or "")
-        entry = f"- [{hit.get('source')}] {hit.get('title') or 'N/A'} ({mount}{path}): {hit.get('snippet')}"
+        entry = f"- [{hit.get('source')}:{hit.get('layer') or 'N/A'}] {hit.get('title') or 'N/A'} ({mount}{path}): {hit.get('snippet')}"
         if total + len(entry) > max_chars:
             break
         lines.append(entry)
@@ -423,7 +490,7 @@ def main() -> int:
                     started_at=started,
                     description="Solar-Harness unified context injector over Mirage, QMD, Obsidian, Solar DB and optional RAGFlow.",
                     keywords=["context", "mirage", "qmd", "obsidian", "solar-db", "knowledge"],
-                    config={"backend": "mirage+qmd+solar_db+obsidian+ragflow_optional"},
+                    config={"backend": "mirage+qmd+solar_db+obsidian+cocoindex+understanding+ragflow_optional"},
                 )
             except Exception:
                 pass

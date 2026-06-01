@@ -54,6 +54,9 @@ SYSTEM_TELEMETRY_WRITERS = {
     "lib/skill_metrics.py",
     "lib/capability_registry.py",
     "lib/intent_engine_adapter.py",
+    "tools/mirage_events.py",
+    "tools/skill_metrics.py",
+    "tools/solar_monitor_bridge.py",
 }
 
 BRIDGE_TOKENS = (

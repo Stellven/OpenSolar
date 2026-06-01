@@ -482,7 +482,9 @@ def fetch_transcript_via_browser_operator(video_id: str, timeout_seconds: int = 
         env["SOLAR_OPERATOR_ENVELOPE_JSON"] = str(envelope_path)
         env["TASK_DIR"] = str(td_path)
         if "BROWSER_AGENT_HEADLESS" not in env:
-            env["BROWSER_AGENT_HEADLESS"] = "true"
+            env["BROWSER_AGENT_HEADLESS"] = "false"
+        env.setdefault("BROWSER_AGENT_PROFILE_DIRECTORY", "Default")
+        env.setdefault("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL", "haogege1977@gmail.com")
 
         operator_script = Path("/Users/lisihao/Solar/harness/tools/youtube_transcript_operator.py")
         if not operator_script.exists():
@@ -745,12 +747,12 @@ def asr_config(config: dict[str, Any]) -> dict[str, Any]:
     state_dir = Path(out_cfg.get("state_dir", "/Users/lisihao/.solar/harness/state/youtube-influence-digest")).expanduser()
     raw_dir = Path(out_cfg.get("raw_dir", str(Path.home() / "Knowledge/_raw/youtube-influence-digest"))).expanduser()
     cfg = dict(config.get("asr") or {})
-    cfg.setdefault("enabled", True)
+    cfg["enabled"] = False
     cfg.setdefault("queue_dir", str(state_dir / "asr-queue"))
     cfg.setdefault("done_dir", str(state_dir / "asr-done"))
     cfg.setdefault("audio_dir", str(state_dir / "asr-audio"))
     cfg.setdefault("raw_dir", str(raw_dir / "asr"))
-    cfg.setdefault("max_per_run", 1)
+    cfg["max_per_run"] = 0
     cfg.setdefault("yt_dlp_bin", "")
     cfg.setdefault("whisper_bin", "")
     cfg.setdefault("whisper_model", "base")
@@ -783,9 +785,8 @@ def asr_job_path(meta: dict[str, str], config: dict[str, Any]) -> Path:
 
 
 def enqueue_asr_job(meta: dict[str, str], transcript_status: str, transcript_source: str, config: dict[str, Any]) -> str:
+    return ""
     cfg = asr_config(config)
-    if not cfg.get("enabled", True):
-        return ""
     path = asr_job_path(meta, config)
     if path.exists():
         try:
@@ -1162,6 +1163,7 @@ def write_asr_markdown(job: dict[str, Any], transcript: str, transcript_source: 
 
 
 def run_asr_queue(config: dict[str, Any], limit: int = 0, dry_run: bool = False) -> dict[str, Any]:
+    return {"processed": 0, "completed": 0, "failed": 0, "skipped": 0, "status": "disabled"}
     cfg = asr_config(config)
     queue_dir = Path(cfg["queue_dir"]).expanduser()
     done_dir = Path(cfg["done_dir"]).expanduser()
@@ -1393,8 +1395,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fixture-feed", default="", help="test-only YouTube channel feed file")
     parser.add_argument("--fixture-transcript", default="", help="test-only transcript payload used for every video")
     parser.add_argument("--fixture-watch", default="", help="test-only watch page used for every video")
-    parser.add_argument("--asr-run-once", action="store_true", help="process queued no-caption videos with yt-dlp + whisper")
-    parser.add_argument("--asr-limit", type=int, default=0, help="max ASR queue jobs to process")
+    parser.add_argument("--asr-run-once", action="store_true", help="disabled compatibility flag; no local ASR is run")
+    parser.add_argument("--asr-limit", type=int, default=0, help="disabled compatibility flag")
     return parser
 
 
@@ -1405,7 +1407,7 @@ def main(argv: list[str] | None = None) -> int:
     CURRENT_CONFIG = config
     assert_mac_mini(config, force=args.force_host)
     if args.asr_run_once:
-        print(json.dumps(run_asr_queue(config, limit=args.asr_limit, dry_run=args.dry_run), ensure_ascii=False, indent=2))
+        print(json.dumps({"processed": 0, "completed": 0, "failed": 0, "skipped": 0, "status": "disabled"}, ensure_ascii=False, indent=2))
         return 0
 
     out_cfg = config.get("output", {})
@@ -1444,18 +1446,15 @@ def main(argv: list[str] | None = None) -> int:
                 fixture_watch=args.fixture_watch,
             )
             if status != "ok":
-                job_path = enqueue_asr_job(meta, status, transcript_source, config) if not args.dry_run else ""
-                if job_path:
-                    status = f"asr_queued:{status}"
-                    transcript_source = job_path
+                transcript_source = transcript_source or ""
             videos.append(build_video(meta, transcript, status, transcript_source, config))
         except Exception as exc:
             meta["fetched_at"] = fetched_at
             if not args.dry_run:
-                job_path = enqueue_asr_job(meta, f"error:{exc}", "", config)
+                job_path = ""
             else:
                 job_path = ""
-            status = f"asr_queued:error:{exc}" if job_path else f"error:{exc}"
+            status = f"error:{exc}"
             videos.append(build_video(meta, "", status, job_path, config))
         if sleep_video > 0 and not args.fixture_transcript and not args.fixture_watch:
             time.sleep(sleep_video)

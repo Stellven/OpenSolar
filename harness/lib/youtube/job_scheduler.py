@@ -1,7 +1,7 @@
 """Job scheduling and retry state machine module (R6).
 
 Implements next_retry_at polling + 5 error_code backoff state machine.
-Error codes: bot_check / no_caption / asr_low_quality / timeout / max_attempts.
+Error codes: bot_check / no_caption / transcript_low_quality / timeout / max_attempts.
 """
 from __future__ import annotations
 
@@ -36,14 +36,14 @@ class JobUpdate:
 
 # 5 error codes per R6
 VALID_ERROR_CODES = frozenset({
-    "bot_check", "no_caption", "asr_low_quality", "timeout", "max_attempts",
+    "bot_check", "no_caption", "transcript_low_quality", "timeout", "max_attempts",
 })
 
 # Backoff delays per error code and attempt number (seconds)
 _BACKOFF_SCHEDULE: dict[str, list[int]] = {
     "bot_check": [60, 300, 900],
     "no_caption": [0, 0, 0],
-    "asr_low_quality": [30, 120, 600],
+    "transcript_low_quality": [30, 120, 600],
     "timeout": [120, 600, 1800],
     "max_attempts": [],
 }

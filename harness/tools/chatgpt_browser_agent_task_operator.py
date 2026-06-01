@@ -19,7 +19,7 @@ if str(ROOT / "lib") not in sys.path:
 import operator_flow_control as ofc  # noqa: E402
 
 
-DEFAULT_OPERATOR_ID = "mini-browser-chatgpt"
+DEFAULT_OPERATOR_ID = "mini-chatgpt-deep-research"
 DEFAULT_PROJECT_NAME = "杂项"
 DEFAULT_WRAPPER = ROOT / "scripts" / "browser_agent_chatgpt_wrapper.py"
 DEFAULT_BROWSER_USE_PYTHON = Path.home() / ".claude" / "mcp-servers" / "browser-use" / ".venv" / "bin" / "python"
@@ -85,6 +85,12 @@ def build_request(envelope: dict[str, Any], *, task_dir: Path | None = None) -> 
                 "model",
                 "reasoning_effort",
                 "project_name",
+                "model_mode",
+                "tool_mode",
+                "require_ui_mode",
+                "require_deep_research",
+                "account_email",
+                "action",
                 "timeout_seconds",
             ):
                 if key in envelope:
@@ -98,6 +104,11 @@ def build_request(envelope: dict[str, Any], *, task_dir: Path | None = None) -> 
     request.setdefault("expected_output", "markdown")
     request.setdefault("model", "chatgpt-5.5")
     request.setdefault("reasoning_effort", "high")
+    request.setdefault("model_mode", "thinking")
+    request.setdefault("tool_mode", "none")
+    request.setdefault("require_ui_mode", True)
+    request.setdefault("require_deep_research", False)
+    request.setdefault("action", "run")
     request.setdefault("project_name", DEFAULT_PROJECT_NAME)
     return request
 
@@ -182,10 +193,22 @@ def run_request(request: dict[str, Any], *, task_dir: Path) -> dict[str, Any]:
             "BROWSER_AGENT_EXPECTED_OUTPUT": str(request.get("expected_output") or "markdown"),
             "CHATGPT_MODEL": str(request.get("model") or "chatgpt-5.5"),
             "CHATGPT_REASONING_EFFORT": str(request.get("reasoning_effort") or "high"),
+            "BROWSER_AGENT_CHATGPT_MODEL_MODE": str(request.get("model_mode") or "thinking"),
+            "BROWSER_AGENT_CHATGPT_TOOL_MODE": str(request.get("tool_mode") or "none"),
+            "BROWSER_AGENT_CHATGPT_REQUIRE_UI_MODE": "true"
+            if bool(request.get("require_ui_mode", True))
+            else "false",
+            "BROWSER_AGENT_CHATGPT_REQUIRE_DEEP_RESEARCH": "true"
+            if bool(request.get("require_deep_research", False))
+            else "false",
+            "BROWSER_AGENT_CHATGPT_ACTION": str(request.get("action") or "run"),
             "BROWSER_AGENT_CHATGPT_PROJECT_NAME": str(request.get("project_name") or DEFAULT_PROJECT_NAME),
             "BROWSER_AGENT_CHATGPT_REQUIRE_PROJECT": "true",
         }
     )
+    account_email = str(request.get("account_email") or "").strip()
+    if account_email:
+        env["BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL"] = account_email
     timeout = ofc.int_value(request.get("timeout_seconds") or os.environ.get("BROWSER_AGENT_CHATGPT_TIMEOUT"), 1800)
     proc = subprocess.run(
         cmd,

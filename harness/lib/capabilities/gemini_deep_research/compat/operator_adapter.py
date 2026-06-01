@@ -1,5 +1,9 @@
-"""Backward-compat adapter: bind core BrowserOperatorPort to the existing
-``browser_job_runtime`` (DeepResearchBrowser logical operator).
+"""Backward-compat adapters for Gemini Deep Research browser execution.
+
+The capability package is Gemini-specific, but it runs through the generic
+``browser_job_runtime`` substrate.  Keep ``DeepResearchBrowserAdapter`` for
+older callers, and expose ``DeepResearchGeminiAdapter`` so the logical operator
+binding can be proven without relying on comments/config convention.
 
 Does NOT modify PROTECTED_CORE. Integrates only through public functions of
 the existing operator runtime (submit/poll/collect_browser_job). Real Gemini
@@ -82,8 +86,14 @@ class DeepResearchBrowserAdapter:
         self,
         actor_id: str = "gemini_deep_research",
         mock_sequence: list[str] | None = None,
+        logical_operator: str = "DeepResearchBrowser",
+        ingress_channel: str = "gemini_deep_research",
+        artifact_kind: str = "gemini_deep_research",
     ) -> None:
         self.actor_id = actor_id
+        self.logical_operator = logical_operator
+        self.ingress_channel = ingress_channel
+        self.artifact_kind = artifact_kind
         # default safe mock trajectory; ignored when real calls are enabled
         self.mock_sequence = mock_sequence or ["planning", "running", "done"]
         self._rt = _import_runtime()
@@ -107,7 +117,7 @@ class DeepResearchBrowserAdapter:
     def _build_envelope(self, prompt: OptimizedPrompt) -> dict[str, Any]:
         return {
             "task_type": "RESEARCH",
-            "logical_operator": "DeepResearchBrowser",
+            "logical_operator": self.logical_operator,
             "objective": (
                 "Run Gemini Deep Research for the optimized research prompt and "
                 "return a classified, sourced research report."
@@ -115,9 +125,9 @@ class DeepResearchBrowserAdapter:
             "url": _GEMINI_URL,
             "target_url": _GEMINI_URL,
             "allowed_domains": ["gemini.google.com"],
-            "ingress_channel": "gemini_deep_research",
+            "ingress_channel": self.ingress_channel,
             "raw_request": prompt.prompt_text,
-            "artifact_kind": "gemini_deep_research",
+            "artifact_kind": self.artifact_kind,
             "capture_policy": {"mode": "whole_conversation", "messages_required": True},
         }
 
@@ -190,3 +200,20 @@ class DeepResearchBrowserAdapter:
             if isinstance(r, dict) and r.get("category") and r.get("title") and r.get("url"):
                 refs.append(Reference(category=r["category"], title=r["title"], url=r["url"]))
         return report_text, refs
+
+
+class DeepResearchGeminiAdapter(DeepResearchBrowserAdapter):
+    """Gemini-specific adapter bound to the DeepResearchGemini logical operator."""
+
+    def __init__(
+        self,
+        actor_id: str = "gemini_deep_research",
+        mock_sequence: list[str] | None = None,
+    ) -> None:
+        super().__init__(
+            actor_id=actor_id,
+            mock_sequence=mock_sequence,
+            logical_operator="DeepResearchGemini",
+            ingress_channel="gemini_deep_research",
+            artifact_kind="gemini_deep_research",
+        )

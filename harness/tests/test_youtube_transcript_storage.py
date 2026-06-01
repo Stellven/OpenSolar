@@ -56,7 +56,7 @@ class TestCreateTranscript:
             raw_path="/v1.raw", text_raw="hello",
         )
         tid2 = create_transcript(
-            db_conn, video_id="v1", source="faster_whisper",
+            db_conn, video_id="v1", source="browser_caption",
             raw_path="/v1.raw", text_raw="hello",
         )
         assert tid1 != tid2
@@ -65,13 +65,13 @@ class TestCreateTranscript:
 class TestGetTranscript:
     def test_returns_record(self, db_conn):
         tid = create_transcript(
-            db_conn, video_id="v1", source="faster_whisper",
+            db_conn, video_id="v1", source="browser_caption",
             raw_path="/v1.raw", text_raw="test text",
         )
         rec = get_transcript(db_conn, tid)
         assert rec is not None
         assert rec.video_id == "v1"
-        assert rec.source == "faster_whisper"
+        assert rec.source == "browser_caption"
 
     def test_returns_none_for_missing(self, db_conn):
         assert get_transcript(db_conn, "nonexistent") is None
@@ -80,7 +80,7 @@ class TestGetTranscript:
 class TestUpdateQuality:
     def test_updates_quality(self, db_conn):
         tid = create_transcript(
-            db_conn, video_id="v2", source="whisperx",
+            db_conn, video_id="v2", source="browser_caption",
             raw_path="/v2.raw", text_raw="quality test",
         )
         update_quality(db_conn, tid, 0.92, "T0", "v1")
@@ -110,7 +110,7 @@ class TestUpdateQuality:
 class TestListByTier:
     def test_filters_by_tier(self, db_conn):
         tid = create_transcript(
-            db_conn, video_id="v4", source="premium",
+            db_conn, video_id="v4", source="browser_caption",
             raw_path="/v4.raw", text_raw="tier filter",
         )
         update_quality(db_conn, tid, 0.75, "T1", "v1")

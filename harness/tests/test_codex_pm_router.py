@@ -169,21 +169,18 @@ def test_solar_handoff_view_uses_sprint_root_artifacts_for_sprint_packages():
         sprint_id="sprint-test",
         target_system="solar-harness",
     )
-    assert router._sprint_handoff_artifacts("sprint-test", "codex") == [
-        "sprint-test.request_envelope.json",
+    handoff_view = payload["requirement_ir"]["handoff_view"]
+    assert handoff_view["codex"]["artifacts"] == [
         "sprint-test.requirement_ir.json",
         "sprint-test.prd.md",
         "sprint-test.Contracts.yaml",
         "sprint-test.task_graph.json",
-        "sprint-test.task_dag.state.json",
     ]
-    assert router._sprint_handoff_artifacts("sprint-test", "solar_harness") == [
-        "sprint-test.request_envelope.json",
+    assert handoff_view["solar_harness"]["artifacts"] == [
         "sprint-test.requirement_ir.json",
         "sprint-test.prd.md",
         "sprint-test.Contracts.yaml",
         "sprint-test.task_graph.json",
-        "sprint-test.task_dag.state.json",
         "sprint-test.handoff.md",
     ]
     solar_handoff = payload["compiled_artifacts"]["handoff_markdown"]["solar_harness"]

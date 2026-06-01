@@ -150,13 +150,7 @@ class SignalScorer:
             reasons.append("no_abstract_or_description")
 
         # Code link check
-        has_repo = (
-            bool(hf_assets.get("linked_models"))
-            or bool(hf_assets.get("linked_datasets"))
-            or bool(hf_assets.get("linked_spaces"))
-            or bool(hf_assets.get("demo_urls"))
-            or bool(json.loads(enrichment.github_repo_json).get("url"))
-        )
+        has_repo = bool(hf_assets.get("linked_models")) or bool(json.loads(enrichment.github_repo_json).get("url"))
         checks["has_code_link"] = has_repo
         if not has_repo:
             reasons.append("no_code_link")

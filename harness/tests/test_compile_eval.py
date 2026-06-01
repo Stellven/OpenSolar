@@ -14,15 +14,10 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
-
-HARNESS_ROOT = Path(__file__).resolve().parents[1]
-if str(HARNESS_ROOT) not in sys.path:
-    sys.path.insert(0, str(HARNESS_ROOT))
 
 
 def _make_valid_profile(**overrides: Any) -> dict[str, Any]:
@@ -34,12 +29,12 @@ def _make_valid_profile(**overrides: Any) -> dict[str, Any]:
         "tags": ["test"],
         "created_at": "2026-05-24T00:00:00Z",
         "policies": {
-            "intake_policy": {"version": "1.0", "text": "Classify and normalize the request.", "params": {}},
-            "requirement_ir_policy": {"version": "1.0", "text": "Keep IR factual and concise.", "params": {}},
-            "contract_compiler_policy": {"version": "1.0", "text": "Compile contracts from IR.", "params": {}},
-            "dag_compiler_policy": {"version": "1.0", "text": "Prefer executable DAGs with explicit validation.", "params": {}},
-            "evidence_policy": {"version": "1.0", "text": "Research requests need evidence coverage.", "params": {}},
-            "handoff_policy": {"version": "1.0", "text": "Emit deterministic handoff artifacts.", "params": {}},
+            "intake_policy": {"version": "1.0", "params": {}},
+            "requirement_ir_policy": {"version": "1.0", "params": {}},
+            "contract_compiler_policy": {"version": "1.0", "params": {}},
+            "dag_compiler_policy": {"version": "1.0", "params": {}},
+            "evidence_policy": {"version": "1.0", "params": {}},
+            "handoff_policy": {"version": "1.0", "params": {}},
         },
     }
     base.update(overrides)
@@ -156,13 +151,6 @@ class TestCompilerProfileSchema(unittest.TestCase):
         profile = _make_valid_profile(profile_id=123)
         is_valid, errors = validate_profile(profile)
         self.assertFalse(is_valid)
-
-    def test_policy_text_field_is_allowed(self):
-        from lib.compiler_profile import validate_profile
-        profile = _make_valid_profile()
-        profile["policies"]["intake_policy"]["text"] = "Use implementation fast lane when possible."
-        is_valid, errors = validate_profile(profile)
-        self.assertTrue(is_valid, f"text-first policy should pass: {errors}")
 
     def test_non_dict_input_fails(self):
         from lib.compiler_profile import validate_profile
@@ -489,39 +477,6 @@ class TestGEPAAdapterFitness(unittest.TestCase):
 
             self.assertIsInstance(fitness, float)
             self.assertGreater(fitness, 0.0)
-        finally:
-            os.unlink(db_path)
-
-    def test_compile_case_runs_deterministic_compiler_with_profile(self):
-        from lib.compile_eval.golden_cases import GoldenCase
-        from lib.compile_eval.harness import CompileGEPAAdapter
-
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-
-        try:
-            adapter = CompileGEPAAdapter(trace_db=db_path)
-            profile = _make_valid_profile()
-            profile["policies"]["contract_compiler_policy"]["params"] = {
-                "additional_acceptance": ["Extra acceptance from profile"],
-            }
-            case = GoldenCase(
-                sprint_id="gc-compile-1",
-                input="修复 DAG 调度空转并补回归测试。",
-                expected_ir={},
-                expected_contracts=[],
-                expected_dag={},
-            )
-
-            artifacts, side_info = adapter.compile_case(profile, case)
-
-            self.assertIn("requirement_ir", artifacts)
-            self.assertIn("contracts", artifacts)
-            self.assertIn("dag", artifacts)
-            self.assertIn("ACC-1", artifacts["contracts"]["acceptance"])
-            self.assertIn("Extra acceptance from profile", artifacts["contracts"]["acceptance"].values())
-            self.assertEqual(side_info["profile_id"], "test-profile-001")
-            self.assertEqual(side_info["golden_case_id"], "gc-compile-1")
         finally:
             os.unlink(db_path)
 

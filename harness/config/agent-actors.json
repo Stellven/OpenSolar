@@ -1922,7 +1922,7 @@
     "mini-chatgpt-deep-research": {
       "actor_id": "mini-chatgpt-deep-research",
       "host_id": "mini",
-      "operator_alias": "mini-claude-opus-planner",
+      "operator_alias": "mini-chatgpt-deep-research",
       "aliases": ["mini-chatgpt-deep-research"],
       "role": "knowledge-extractor",
       "display_meta": {

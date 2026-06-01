@@ -87,6 +87,7 @@ class ModelCall:
         output_tokens: completion tokens billed
         cost_estimate: USD; 0.0 for local calls
         usage_extra: provider-specific usage payload (cache hit, ttft, etc.)
+        budget_exhausted: 1 when this row is an audit marker for a blocked call
         created_at: ISO-8601 UTC
     """
 
@@ -99,6 +100,7 @@ class ModelCall:
     output_tokens: int = 0
     cost_estimate: float = 0.0
     usage_extra: dict[str, Any] = field(default_factory=dict)
+    budget_exhausted: int = 0
     created_at: str = field(default_factory=utc_now_iso)
 
     JSON_FIELDS: ClassVar[tuple[str, ...]] = ("usage_extra",)
@@ -113,6 +115,8 @@ class ModelCall:
             raise ValueError("token counts must be >= 0")
         if self.cost_estimate < 0:
             raise ValueError("cost_estimate must be >= 0")
+        if self.budget_exhausted not in (0, 1):
+            raise ValueError("budget_exhausted must be 0 or 1")
 
     @property
     def tier(self) -> str:
@@ -133,6 +137,7 @@ class ModelCall:
         kwargs = {f.name: row.get(f.name) for f in fields(cls)}
         raw_usage = row.get("usage_extra")
         kwargs["usage_extra"] = json.loads(raw_usage) if raw_usage else {}
+        kwargs["budget_exhausted"] = int(row.get("budget_exhausted") or 0)
         return cls(**kwargs)
 
 
@@ -148,6 +153,7 @@ DDL_LEDGER: tuple[str, ...] = (
         output_tokens  INTEGER NOT NULL DEFAULT 0,
         cost_estimate  REAL NOT NULL DEFAULT 0.0,
         usage_extra    TEXT,
+        budget_exhausted INTEGER NOT NULL DEFAULT 0,
         created_at     TEXT NOT NULL
     )""",
     f"CREATE INDEX IF NOT EXISTS idx_{LEDGER_TABLE}_created_at ON {LEDGER_TABLE}(created_at)",
@@ -170,18 +176,40 @@ class ModelLedger:
         cur = self.conn.cursor()
         for stmt in DDL_LEDGER:
             cur.execute(stmt)
+        self._ensure_column(
+            cur,
+            LEDGER_TABLE,
+            "budget_exhausted",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+        cur.execute(
+            f"""UPDATE {LEDGER_TABLE}
+                   SET budget_exhausted = 1
+                 WHERE COALESCE(budget_exhausted, 0) = 0
+                   AND usage_extra LIKE ?""",
+            (f"%{self._budget_exhausted_marker()}%",),
+        )
         self.conn.commit()
+
+    @staticmethod
+    def _ensure_column(
+        cur: sqlite3.Cursor,
+        table: str,
+        column: str,
+        definition: str,
+    ) -> None:
+        cur.execute(f"PRAGMA table_info({table})")
+        existing = {row[1] for row in cur.fetchall()}
+        if column not in existing:
+            cur.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
     @staticmethod
     def _budget_exhausted_marker() -> str:
         return '"budget_exhausted": true'
 
     @classmethod
-    def _successful_usage_clause(cls, field: str = "usage_extra") -> str:
-        return (
-            f"({field} IS NULL OR {field} = '' "
-            f"OR {field} NOT LIKE '%{cls._budget_exhausted_marker()}%')"
-        )
+    def _successful_usage_clause(cls, field: str = "budget_exhausted") -> str:
+        return f"COALESCE({field}, 0) = 0"
 
     @staticmethod
     def make_call_id(model_name: str, full_name: str | None, created_at: str) -> str:
@@ -264,6 +292,7 @@ class ModelLedger:
             output_tokens=call.output_tokens,
             cost_estimate=0.0,
             usage_extra=flagged_usage,
+            budget_exhausted=1,
             created_at=call.created_at,
         )
         row = flagged.to_row()
@@ -587,6 +616,11 @@ def _self_test() -> dict[str, Any]:
             assert exhausted.usage_extra["budget_exhausted"] is True
             assert exhausted.usage_extra["budget_reason"] == "premium_daily_usd_cap"
             assert exhausted.usage_extra["attempted_cost_estimate"] == 0.02
+            cur = conn.execute(
+                f"SELECT budget_exhausted FROM {LEDGER_TABLE} WHERE call_id=?",
+                ("premium-overflow",),
+            )
+            assert cur.fetchone()[0] == 1
             _ok("ModelLedger.dollar_budget_cap_enforced")
             _ok("ModelLedger.budget_exhausted_row_persisted")
 

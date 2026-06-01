@@ -21,8 +21,7 @@ def test_browser_agent_chatgpt_cmd_falls_back_to_bundled_wrapper(monkeypatch):
     ns = _load_namespace()
     cmd = ns["browser_agent_chatgpt_cmd"]({})
     assert cmd, "expected bundled wrapper fallback command"
-    assert cmd[-1].endswith("browser_agent_chatgpt_wrapper.py")
-    assert "browser-use/.venv/bin/python" in cmd[0]
+    assert cmd[-1].endswith("chatgpt_report_operator.py")
 
 
 def test_browser_agent_chatgpt_cmd_prefers_explicit_env(monkeypatch):
@@ -319,6 +318,76 @@ def test_plan_material_refs_recurses_trends_chapters_subsections():
         ],
     })
     assert refs == ["V001", "V002", "V003", "V004", "V005"]
+
+
+def test_planned_report_ir_builds_per_chapter_contract():
+    ns = _load_namespace()
+    evidence_pack = {
+        "date": "2026-05-31",
+        "lookback_days": 7,
+        "report_spec": {
+            "report_id": "agent-platform",
+            "title": "Agent 平台化报告",
+            "scope": "分析 agent runtime",
+            "reader_value": "帮助判断趋势",
+            "trends": [
+                {
+                    "trend_title": "Agent 工具层基础设施化",
+                    "material_video_refs": ["V001"],
+                    "chapters": [
+                        {
+                            "title": "工具接口协议化",
+                            "purpose": "解释为什么重要",
+                            "material_video_refs": ["V001"],
+                        }
+                    ],
+                }
+            ],
+        },
+        "videos": [{"video_ref": "V001", "title": "Agent video"}],
+    }
+    report_ir = ns["build_ai_influence_report_ir"](evidence_pack)
+    assert report_ir["operator_contract"]["planner"].startswith("DeepResearchChatGPT")
+    assert report_ir["operator_contract"]["chapter_writer"].startswith("tools/chatgpt_report_operator.py")
+    assert report_ir["operator_contract"]["whole_report_writer"] == "disabled"
+    assert any(ch["chapter_type"] == "core_trend" and ch["title"] == "工具接口协议化" for ch in report_ir["chapters"])
+
+
+def test_chapter_prompt_requires_chapter_writer_only():
+    ns = _load_namespace()
+    report_ir = {
+        "title": "Agent 平台化报告",
+        "global_scope": "分析 agent runtime",
+        "reader_value": "帮助判断趋势",
+    }
+    chapter_spec = {
+        "chapter_id": "ch_01",
+        "title": "工具接口协议化",
+        "output_heading": "### 工具接口协议化",
+        "chapter_type": "core_trend",
+        "material_video_refs": ["V001"],
+    }
+    evidence = {
+        "videos": [
+            {
+                "video_ref": "V001",
+                "channel": "AI Engineer",
+                "title": "Agent Runtime",
+                "transcript_clean": "agent tools need stable protocol",
+            }
+        ]
+    }
+    prompt = ns["build_planned_report_chapter_prompt"](
+        report_ir,
+        chapter_spec,
+        evidence,
+        model_name="chatgpt-5.5",
+    )
+    assert "ChatGPT Report Chapter Writer" in prompt
+    assert "只写当前章节" in prompt
+    assert "不写整份报告" in prompt
+    assert "### 工具接口协议化" in prompt
+    assert "chapter_evidence_pack" in prompt
 
 
 def test_build_planned_report_evidence_pack_skips_missing_status_transcript(tmp_path):

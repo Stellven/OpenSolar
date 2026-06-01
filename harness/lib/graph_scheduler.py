@@ -398,6 +398,50 @@ def _status_path_for_graph(graph: dict[str, Any], graph_path: str | Path | None 
     return SPRINTS_DIR / f"{sid}.status.json"
 
 
+def _status_has_terminal_evidence(sid: str, status: dict[str, Any] | None = None, graph_path: str | Path | None = None) -> bool:
+    payload = status or {}
+    state = str(payload.get("status", "")).lower()
+    if state in {"passed", "completed", "eval_passed"}:
+        return True
+    base_dir = Path(graph_path).expanduser().parent if graph_path else SPRINTS_DIR
+    handoff = (base_dir / f"{sid}.handoff.md").exists() or any(base_dir.glob(f"{sid}.*-handoff.md"))
+    eval_exists = (
+        (base_dir / f"{sid}.eval.md").exists()
+        or (base_dir / f"{sid}.eval.json").exists()
+        or any(base_dir.glob(f"{sid}.*-eval.md"))
+        or any(base_dir.glob(f"{sid}.*-eval.json"))
+    )
+    return handoff and eval_exists
+
+
+def _project_status_via_runtime(
+    status_path: Path,
+    *,
+    new_status: str,
+    actor: str,
+    event: str,
+    graph_path: str | Path | None = None,
+    allow_reopen: bool = False,
+    status_fields: dict[str, Any] | None = None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    from runtime_status import transition_status  # noqa: WPS433
+
+    payload = dict(extra or {})
+    payload["graph_sync"] = True
+    payload["graph_path"] = str(graph_path or "")
+    payload["allow_reopen"] = allow_reopen
+    payload["status_fields"] = dict(status_fields or {})
+    updated, _message = transition_status(
+        status_path,
+        new_status,
+        event,
+        actor,
+        extra=payload,
+    )
+    return updated
+
+
 def _ensure_status_cache_exists_from_graph(
     graph: dict[str, Any],
     graph_path: str | Path | None,
@@ -439,19 +483,34 @@ def _ensure_status_cache_exists_from_graph(
         "active_node": open_nodes[0] if open_nodes else None,
         "open_nodes": open_nodes,
         "failed_nodes": failed_nodes,
-        "history": [
-            {
-                "ts": now,
-                "event": event,
-                "by": actor,
-                "note": "created missing status cache from task_graph",
-            }
-        ],
+        "history": [],
     }
+    # Seed legacy cache once, then immediately bridge through transition_status
+    # so session-log v2 and compatibility status.json stay aligned.
     tmp = status_path.with_suffix(status_path.suffix + ".tmp")
     tmp.write_text(json.dumps(status, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     os.replace(tmp, status_path)
-    return status
+    return _project_status_via_runtime(
+        status_path,
+        new_status="active",
+        actor=actor,
+        event=event,
+        graph_path=graph_path,
+        status_fields={
+            "phase": "graph_in_progress",
+            "handoff_to": "builder_main",
+            "target_role": "builder_main",
+            "task_graph": str(graph_path or ""),
+            "graph_status_cache": True,
+            "graph_parent_ready": status.get("graph_parent_ready", {}),
+            "active_node": status.get("active_node"),
+            "open_nodes": status.get("open_nodes", []),
+            "failed_nodes": status.get("failed_nodes", []),
+            "stage": "graph_in_progress",
+            "task_graph_status": "active",
+        },
+        extra={"note": "created missing status cache from task_graph"},
+    )
 
 
 def sync_status_cache_from_graph(
@@ -508,28 +567,43 @@ def sync_status_cache_from_graph(
         if not isinstance(history, list):
             history = []
         if str(current.get("status") or "").lower() == "passed":
-            history.append({
-                "ts": now,
-                "event": "graph_parent_ready_revoked",
-                "by": actor,
-                "note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache",
-            })
-            current.update({
-                "status": "active",
-                "phase": "graph_in_progress",
-                "stage": "graph_in_progress",
-                "active_node": desired_active_node,
-                "open_nodes": open_nodes,
-                "failed_nodes": failed_nodes,
-                "graph_parent_ready": parent,
-                "task_graph_status": "active",
-                "updated_at": now,
-                "completed_at": None,
-                "history": history,
-            })
-            tmp = status_path.with_suffix(status_path.suffix + ".tmp")
-            tmp.write_text(json.dumps(current, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-            os.replace(tmp, status_path)
+            if _status_has_terminal_evidence(sid, current, graph_path):
+                current = _project_status_via_runtime(
+                    status_path,
+                    new_status="passed",
+                    actor=actor,
+                    event="graph_parent_ready_preserved_terminal",
+                    graph_path=graph_path,
+                    status_fields={
+                        "phase": str(current.get("phase") or "completed"),
+                        "stage": str(current.get("stage") or "completed"),
+                        "graph_parent_ready": parent,
+                        "task_graph_status": str(current.get("task_graph_status") or "passed"),
+                        "active_node": None,
+                    },
+                    extra={"note": "terminal closeout evidence preserved while parent projection refreshed"},
+                )
+                result.update({"updated": True, "status": current, "reason": "terminal_evidence_preserved"})
+                return result
+            current = _project_status_via_runtime(
+                status_path,
+                new_status="active",
+                actor=actor,
+                event="graph_parent_ready_revoked",
+                graph_path=graph_path,
+                allow_reopen=True,
+                status_fields={
+                    "phase": "graph_in_progress",
+                    "stage": "graph_in_progress",
+                    "active_node": desired_active_node,
+                    "open_nodes": open_nodes,
+                    "failed_nodes": failed_nodes,
+                    "graph_parent_ready": parent,
+                    "task_graph_status": "active",
+                    "completed_at": None,
+                },
+                extra={"note": "task_graph no longer satisfies parent_ready_check; reopening legacy status cache"},
+            )
             result.update({"updated": True, "status": current, "reason": "parent_reopened"})
             return result
         projection_changed = any([
@@ -540,24 +614,23 @@ def sync_status_cache_from_graph(
             str(current.get("task_graph_status") or "") != "active",
         ])
         if projection_changed:
-            history.append({
-                "ts": now,
-                "event": "graph_parent_projection_refreshed",
-                "by": actor,
-                "note": "task_graph changed while in flight; refreshing legacy status projection",
-            })
-            current.update({
-                "active_node": desired_active_node,
-                "open_nodes": open_nodes,
-                "failed_nodes": failed_nodes,
-                "graph_parent_ready": parent,
-                "task_graph_status": "active",
-                "updated_at": now,
-                "history": history,
-            })
-            tmp = status_path.with_suffix(status_path.suffix + ".tmp")
-            tmp.write_text(json.dumps(current, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-            os.replace(tmp, status_path)
+            current = _project_status_via_runtime(
+                status_path,
+                new_status=str(current.get("status") or "active"),
+                actor=actor,
+                event="graph_parent_projection_refreshed",
+                graph_path=graph_path,
+                status_fields={
+                    "phase": str(current.get("phase") or "graph_in_progress"),
+                    "stage": str(current.get("stage") or "graph_in_progress"),
+                    "active_node": desired_active_node,
+                    "open_nodes": open_nodes,
+                    "failed_nodes": failed_nodes,
+                    "graph_parent_ready": parent,
+                    "task_graph_status": "active",
+                },
+                extra={"note": "task_graph changed while in flight; refreshing legacy status projection"},
+            )
             result.update({"updated": True, "status": current, "reason": "parent_projection_refreshed"})
             return result
         result["reason"] = "parent_not_ready"
