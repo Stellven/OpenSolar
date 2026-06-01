@@ -61,8 +61,14 @@ CAPTURE_JS = r"""() => {
     messages.push({ role, text, turn_index: messages.length + 1 });
   }
   const latestAssistant = [...messages].reverse().find((item) => item.role === "assistant") || null;
+  const composer = document.querySelector("#prompt-textarea, div[contenteditable='true'][role='textbox'], textarea[name='prompt-textarea']");
   const lowered = stripNoise(textFrom(document.body)).toLowerCase();
-  const loginWall = [
+  const challengeWall = /cloudflare|turnstile|checking your browser|verify you are human|请稍候|正在验证|验证你是真人/i.test(
+    `${document.title || ""}\n${location.href}\n${lowered}`
+  ) || Array.from(document.querySelectorAll("iframe")).some((iframe) =>
+    /challenges\.cloudflare\.com|turnstile/i.test(String(iframe.src || ""))
+  );
+  const loginWallCue = [
     "log in",
     "sign in",
     "continue with google",
@@ -72,18 +78,19 @@ CAPTURE_JS = r"""() => {
     "使用 google 账户继续",
     "使用 apple 账户继续"
   ].some((cue) => lowered.includes(cue));
-  const composer = document.querySelector("#prompt-textarea, div[contenteditable='true'][role='textbox'], textarea[name='prompt-textarea']");
   const stopButton = Array.from(document.querySelectorAll("button")).find((btn) => {
     const label = clean(btn.getAttribute("aria-label") || btn.textContent || "");
     return /(stop|停止|停止生成|中止|cancel)/i.test(label);
   });
   const conversationMatch = location.pathname.match(/\/c\/([^/?#]+)/);
+  const loginWall = loginWallCue && !composer && messages.length === 0 && !conversationMatch;
   return JSON.stringify({
     title: document.title || "",
     url: location.href,
     canonical_url: document.querySelector("link[rel='canonical']")?.href || location.href,
     conversation_id: conversationMatch ? decodeURIComponent(conversationMatch[1]) : "",
     login_wall: loginWall,
+    challenge_wall: challengeWall,
     composer_ready: !!composer,
     is_generating: !!stopButton,
     message_count: messages.length,
@@ -166,18 +173,29 @@ COMPOSER_STATE_JS = r"""() => {
 }"""
 
 SUBMIT_JS = r"""() => {
+  const visible = (el) => {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+  };
   const candidates = [
     "form button[type='submit']",
     "button[type='submit']",
     "button[data-testid='send-button']",
+    "button[data-testid='composer-send-button']",
+    "button[aria-label*='Send']",
+    "button[aria-label*='send']",
+    "button[aria-label*='发送']",
     "button.composer-submit-button-color[type='button']",
     "button.composer-submit-button-color",
   ];
   for (const selector of candidates) {
     const buttons = Array.from(document.querySelectorAll(selector));
     for (const button of buttons) {
+      if (!visible(button)) continue;
       const label = String(button.getAttribute("aria-label") || button.textContent || "").trim();
-      if (/语音|voice/i.test(label)) continue;
+      if (/语音|voice|stop|停止|cancel|中止/i.test(label)) continue;
       const disabled = button.disabled || button.getAttribute("aria-disabled") === "true";
       if (disabled) continue;
       button.click();
@@ -185,11 +203,6 @@ SUBMIT_JS = r"""() => {
     }
   }
   const composer = document.querySelector("#prompt-textarea, div[contenteditable='true'][role='textbox'], textarea[name='prompt-textarea']");
-  const form = composer ? composer.closest("form") : null;
-  if (form && typeof form.requestSubmit === "function") {
-    form.requestSubmit();
-    return JSON.stringify({ ok: true, selector: "form.requestSubmit", label: "" });
-  }
   return JSON.stringify({ ok: false, error: "submit_button_not_found" });
 }"""
 
@@ -336,6 +349,25 @@ CONFIGURE_CHATGPT_UI_JS = r"""(settings) => new Promise(async (resolve) => {
     node.click();
     return { text: clean(node.innerText || node.textContent || ""), aria: clean(node.getAttribute("aria-label") || ""), tag: node.tagName };
   };
+  const menuScopedNodes = (selector = "button,[role='button'],[role='menuitem'],[role='menuitemradio'],[role='menuitemcheckbox'],[role='option']") => {
+    const menus = Array.from(document.querySelectorAll("[role='menu'],[role='listbox'],[role='dialog'],[data-radix-popper-content-wrapper]"))
+      .filter(visible);
+    const scoped = [];
+    for (const menu of menus) {
+      scoped.push(...Array.from(menu.querySelectorAll(selector)));
+    }
+    return scoped;
+  };
+  const clickFirstInOpenMenu = (predicate) => {
+    const node = menuScopedNodes().find((el) => visible(el) && predicate(clean(el.innerText || el.textContent || ""), clean(el.getAttribute("aria-label") || ""), el));
+    if (!node) return null;
+    node.scrollIntoView({ block: "center", inline: "center" });
+    for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup"]) {
+      node.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+    }
+    node.click();
+    return { text: clean(node.innerText || node.textContent || ""), aria: clean(node.getAttribute("aria-label") || ""), tag: node.tagName };
+  };
   const snapshotCandidates = (selector = "button,a,[role='button'],[role='menuitem'],[role='menuitemradio'],[role='menuitemcheckbox'],[role='option']") =>
     Array.from(document.querySelectorAll(selector))
       .filter(visible)
@@ -385,11 +417,12 @@ CONFIGURE_CHATGPT_UI_JS = r"""(settings) => new Promise(async (resolve) => {
     if (plus) await sleep(700);
     snapshots.tools_menu = snapshotCandidates();
     if (reasoningEffort === "high") {
-      const high = clickFirst((text, aria, el) => {
+      const high = clickFirstInOpenMenu((text, aria, el) => {
         if (!isActionNode(el) || rejectChromeNoise(text, aria)) return false;
         if ((text + " " + aria).length > 180) return false;
-        return /(High|高|更长|Think longer|思考深度|深度思考|进阶专业|进阶|专业|Pro\s*思考)/i.test(text)
-          || /(High|高|Think longer|思考深度|进阶专业|进阶|专业|Pro\s*思考)/i.test(aria);
+        if (el.tagName === "A" && /\/c\//.test(String(el.getAttribute("href") || ""))) return false;
+        const joined = `${text} ${aria}`;
+        return /(High|Think longer|思考时间更长|思考深度|深度思考|深入思考|更长时间思考|高强度|进阶专业|Pro\s*思考)/i.test(joined);
       });
       steps.push({ step: "select_high_reasoning", ok: !!high, clicked: high });
     }
@@ -519,12 +552,12 @@ CHATGPT_MODE_STATE_JS = r"""(settings) => {
     regex.test(item.text + " " + item.aria) && selectedTokens.test(item.token)
   );
   const thinkingControls = selected(/(Thinking|思考|ChatGPT 5\.5|GPT-5\.5|GPT-5|进阶专业|进阶|专业|Pro\s*思考)/i);
-  const highControls = selected(/(High|高|深入|深度思考|Think longer|思考深度|进阶专业|进阶|专业|Pro\s*思考)/i);
+  const highControls = selected(/(High|高|深入|深度思考|Think longer|思考时间更长|思考深度|进阶专业|进阶|专业|Pro\s*思考)/i);
   const professionalControls = controls.filter((item) =>
     /(进阶专业|Pro\s*思考)/i.test(item.text + " " + item.aria)
   );
   const thinkingChip = /(Thinking|思考|ChatGPT 5\.5|GPT-5\.5|GPT-5|进阶专业|进阶|专业|Pro\s*思考)/i.test(composerText);
-  const highChip = /(High|高|深入|深度思考|Think longer|思考深度|进阶专业|进阶|专业|Pro\s*思考)/i.test(composerText);
+  const highChip = /(High|高|深入|深度思考|Think longer|思考时间更长|思考深度|进阶专业|进阶|专业|Pro\s*思考)/i.test(composerText);
   const modelSelectorLooksChatGPT = !!modelSelector && /ChatGPT/i.test(modelSelector.text + " " + modelSelector.aria);
   const modelOk = modelMode !== "thinking" || thinkingControls.length > 0 || professionalControls.length > 0 || thinkingChip || (modelSelectorLooksChatGPT && highChip);
   const reasoningOk = reasoningEffort !== "high" || highControls.length > 0 || professionalControls.length > 0 || highChip;
@@ -610,6 +643,8 @@ async def _wait_for_ready(page, *, timeout_s: int = 60) -> dict:
         last_data = data
         if data.get("login_wall"):
             raise RuntimeError("chatgpt_login_wall_detected")
+        if data.get("challenge_wall"):
+            raise RuntimeError("chatgpt_cloudflare_challenge_detected")
         if data.get("composer_ready"):
             return data
         remaining = deadline - time.time()
@@ -633,6 +668,7 @@ async def _wait_for_ready(page, *, timeout_s: int = 60) -> dict:
                 "title": last_data.get("title"),
                 "url": last_data.get("url"),
                 "login_wall": last_data.get("login_wall"),
+                "challenge_wall": last_data.get("challenge_wall"),
                 "message_count": last_data.get("message_count"),
             },
             ensure_ascii=False,
@@ -645,31 +681,57 @@ async def _submit_prompt(page, prompt: str) -> dict:
     baseline_message_count = int(baseline.get("message_count") or 0)
     if len(prompt) > 1000 or "\n" in prompt:
         try:
+            keyboard_note = await _keyboard_insert_prompt(page, prompt)
+            if keyboard_note.get("ok"):
+                await asyncio.sleep(1.0)
+                composer_state = json.loads(await page.evaluate(COMPOSER_STATE_JS))
+                submit_note = json.loads(await page.evaluate(SUBMIT_JS))
+                if not submit_note.get("ok") and int(composer_state.get("text_length") or 0) > 0:
+                    await page.press("Enter")
+                    submit_note = {"mode": "enter_key_after_keyboard_insert", "js_error": submit_note.get("error")}
+                await asyncio.sleep(2.0)
+                post_submit = json.loads(await page.evaluate(CAPTURE_JS))
+                post_submit["_submit_note"] = {
+                    "mode": "keyboard_insert_submit",
+                    "keyboard": keyboard_note,
+                    "submit": submit_note,
+                }
+                post_submit["_composer_state_before_submit"] = composer_state
+                if _post_submit_has_current_prompt(post_submit, prompt) and (int(post_submit.get("message_count") or 0) > baseline_message_count or post_submit.get("is_generating")):
+                    return post_submit
             set_note = json.loads(await page.evaluate(SET_PROMPT_JS, prompt))
             if not set_note.get("ok"):
                 raise RuntimeError(f"set_prompt_failed:{set_note}")
             await asyncio.sleep(1.0)
             composer_state = json.loads(await page.evaluate(COMPOSER_STATE_JS))
             submit_note = json.loads(await page.evaluate(SUBMIT_JS))
+            if not submit_note.get("ok") and int(composer_state.get("text_length") or 0) > 0:
+                await page.press("Enter")
+                submit_note = {"mode": "enter_key_after_native_setter", "js_error": submit_note.get("error")}
             await asyncio.sleep(2.0)
             post_submit = json.loads(await page.evaluate(CAPTURE_JS))
-            post_submit["_submit_note"] = {"mode": "native_setter_submit", "set_prompt": set_note, "submit": submit_note}
+            post_submit["_submit_note"] = {
+                "mode": "native_setter_submit",
+                "keyboard_first": keyboard_note,
+                "set_prompt": set_note,
+                "submit": submit_note,
+            }
             post_submit["_composer_state_before_submit"] = composer_state
-            if int(post_submit.get("message_count") or 0) > baseline_message_count or post_submit.get("is_generating"):
+            if _post_submit_has_current_prompt(post_submit, prompt) and (int(post_submit.get("message_count") or 0) > baseline_message_count or post_submit.get("is_generating")):
                 return post_submit
             clipboard_note = await _clipboard_paste_and_submit(page, prompt)
             await asyncio.sleep(2.0)
             post_submit = json.loads(await page.evaluate(CAPTURE_JS))
             post_submit["_submit_note"] = {"mode": "clipboard_paste_enter", "clipboard": clipboard_note}
             post_submit["_composer_state_before_submit"] = clipboard_note.get("composer_state_after_paste") or {}
-            if int(post_submit.get("message_count") or 0) > baseline_message_count or post_submit.get("is_generating"):
+            if _post_submit_has_current_prompt(post_submit, prompt) and (int(post_submit.get("message_count") or 0) > baseline_message_count or post_submit.get("is_generating")):
                 return post_submit
             await page.press("Meta+Enter")
             await asyncio.sleep(2.0)
             post_submit = json.loads(await page.evaluate(CAPTURE_JS))
             post_submit["_submit_note"] = {"mode": "clipboard_paste_meta_enter_retry", "clipboard": clipboard_note}
             post_submit["_composer_state_before_submit"] = clipboard_note.get("composer_state_after_paste") or {}
-            if int(post_submit.get("message_count") or 0) > baseline_message_count or post_submit.get("is_generating"):
+            if _post_submit_has_current_prompt(post_submit, prompt) and (int(post_submit.get("message_count") or 0) > baseline_message_count or post_submit.get("is_generating")):
                 return post_submit
             submit_retry = json.loads(await page.evaluate(SUBMIT_JS))
             await asyncio.sleep(2.0)
@@ -680,7 +742,7 @@ async def _submit_prompt(page, prompt: str) -> dict:
                 "submit_retry": submit_retry,
             }
             post_submit["_composer_state_before_submit"] = clipboard_note.get("composer_state_after_paste") or {}
-            if int(post_submit.get("message_count") or 0) > baseline_message_count or post_submit.get("is_generating"):
+            if _post_submit_has_current_prompt(post_submit, prompt) and (int(post_submit.get("message_count") or 0) > baseline_message_count or post_submit.get("is_generating")):
                 return post_submit
             raise RuntimeError(f"clipboard_prompt_submit_no_message:{post_submit.get('_submit_note')}")
         except Exception as exc:
@@ -724,7 +786,45 @@ async def _submit_prompt(page, prompt: str) -> dict:
             submit_note = {**submit_note, "retry_error": f"{type(exc).__name__}: {exc}"}
     post_submit["_submit_note"] = submit_note
     post_submit["_composer_state_before_submit"] = composer_state
+    if int(post_submit.get("message_count") or 0) > baseline_message_count or post_submit.get("is_generating"):
+        if not _post_submit_has_current_prompt(post_submit, prompt):
+            raise RuntimeError("prompt_submit_stale_conversation_detected")
     return post_submit
+
+
+def _post_submit_is_isolated_current_prompt(post_submit: dict, prompt: str) -> bool:
+    """Ensure the submitted prompt is not appended to an older conversation."""
+    user_texts = [
+        str(msg.get("text") or "")
+        for msg in (post_submit.get("messages") or [])
+        if isinstance(msg, dict) and msg.get("role") == "user"
+    ]
+    if len(user_texts) != 1:
+        return False
+    marker_ok = _post_submit_has_current_prompt(post_submit, prompt)
+    return bool(marker_ok)
+
+
+def _post_submit_has_current_prompt(post_submit: dict, prompt: str) -> bool:
+    markers: list[str] = []
+    for line in str(prompt or "").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("- purpose: "):
+            markers.append(stripped)
+        if '"paper_id":' in stripped and len(markers) < 3:
+            markers.append(stripped.strip().rstrip(","))
+    if not markers:
+        for line in str(prompt or "").splitlines():
+            stripped = line.strip()
+            if len(stripped) >= 40:
+                markers.append(stripped[:120])
+                break
+    user_texts = [
+        str(msg.get("text") or "")
+        for msg in (post_submit.get("messages") or [])
+        if isinstance(msg, dict) and msg.get("role") == "user"
+    ]
+    return bool(markers) and any(marker in text for marker in markers for text in user_texts)
 
 
 async def _keyboard_insert_prompt(page, prompt: str) -> dict:
@@ -763,7 +863,9 @@ async def _clipboard_paste_and_submit(page, prompt: str) -> dict:
         await asyncio.sleep(0.8)
         state = json.loads(await page.evaluate(COMPOSER_STATE_JS))
         submit_result = json.loads(await page.evaluate(SUBMIT_JS))
-        if not submit_result.get("ok"):
+        if not submit_result.get("ok") and int(state.get("text_length") or 0) > 0:
+            await page.press("Enter")
+        elif not submit_result.get("ok"):
             await page.press("Meta+Enter")
         return {"ok": True, "composer_state_after_paste": state, "submit_result": submit_result}
     finally:
@@ -786,6 +888,8 @@ async def _wait_for_answer(page, baseline_assistant_count: int, *, timeout_s: in
         data = json.loads(await page.evaluate(CAPTURE_JS))
         if data.get("login_wall"):
             raise RuntimeError("chatgpt_login_wall_detected")
+        if data.get("challenge_wall"):
+            raise RuntimeError("chatgpt_cloudflare_challenge_detected")
         assistant_count = int(data.get("assistant_count") or 0)
         latest_text = str(data.get("latest_assistant_text") or "").strip()
         if assistant_count > baseline_assistant_count and latest_text:
@@ -914,11 +1018,22 @@ async def _open_project_new_chat(page, project_name: str) -> dict:
         await asyncio.sleep(1.5)
         step = json.loads(await page.evaluate(NEW_CHAT_JS))
         result["steps"].append(step)
-        # Some project pages already open a blank composer; failure to find a
-        # New Chat button is not fatal as long as the composer is ready.
         ready = json.loads(await page.evaluate(CAPTURE_JS))
-        if ready.get("composer_ready"):
+        message_count = int(ready.get("message_count") or 0)
+        # Some project pages already open a blank composer; failure to find a
+        # New Chat button is only safe when there are no existing messages.
+        if ready.get("composer_ready") and message_count == 0:
             result.update({"ok": True, "url": ready.get("url"), "conversation_id": ready.get("conversation_id")})
+            return result
+        if message_count > 0:
+            result["error"] = "project_open_did_not_create_blank_chat"
+            result["ready_state"] = {
+                "url": ready.get("url"),
+                "conversation_id": ready.get("conversation_id"),
+                "message_count": ready.get("message_count"),
+                "assistant_count": ready.get("assistant_count"),
+                "latest_assistant_text_sample": str(ready.get("latest_assistant_text") or "")[:200],
+            }
             return result
         result["error"] = step.get("error") or "composer_not_ready_after_project_open"
         return result
@@ -982,10 +1097,35 @@ def _post_submit_confirms_chatgpt_mode(post_submit: dict, *, model_mode: str, re
     text, not the user prompt.
     """
     latest = str(post_submit.get("latest_assistant_text") or "").strip()
+    configure_result = post_submit.get("_configure_result") if isinstance(post_submit, dict) else None
     model_mode = str(model_mode or "").lower()
     reasoning_effort = str(reasoning_effort or "").lower()
-    model_ok = model_mode != "thinking" or any(token in latest for token in ("Pro", "Thinking", "思考"))
-    reasoning_ok = reasoning_effort != "high" or any(token in latest for token in ("思考中", "Thinking", "Pro"))
+    steps = (configure_result or {}).get("steps") or []
+    by_step = {
+        str(step.get("step") or ""): step
+        for step in steps
+        if isinstance(step, dict) and step.get("step")
+    }
+    open_model_step = by_step.get("open_model_dropdown") or {}
+    high_reasoning_step = by_step.get("select_high_reasoning") or {}
+    model_clicked = open_model_step.get("clicked") if isinstance(open_model_step, dict) else {}
+    model_clicked_text = ""
+    if isinstance(model_clicked, dict):
+        model_clicked_text = f"{model_clicked.get('text') or ''} {model_clicked.get('aria') or ''}".strip()
+    model_selector_confirmed = bool(open_model_step.get("ok")) and "chatgpt" in model_clicked_text.lower()
+    high_reasoning_confirmed = bool(high_reasoning_step.get("ok"))
+    generation_started = bool(post_submit.get("is_generating")) or int(post_submit.get("assistant_count") or 0) > 0
+    json_response_started = latest.lstrip().startswith("{") and any(
+        token in latest for token in ('"accepted"', '"summary"', '"trend_type"')
+    )
+    model_ok = model_mode != "thinking" or any(token in latest for token in ("Pro", "Thinking", "思考", "正在思考")) or (
+        model_selector_confirmed and (high_reasoning_confirmed or generation_started)
+    )
+    reasoning_ok = reasoning_effort != "high" or any(
+        token in latest for token in ("思考中", "正在思考", "Thinking", "Pro", "思考时间更长", "更长时间思考")
+    ) or (high_reasoning_confirmed and generation_started) or (
+        model_selector_confirmed and generation_started and json_response_started
+    )
     return {
         "ok": bool(model_ok and reasoning_ok),
         "model_mode": model_mode,
@@ -994,7 +1134,42 @@ def _post_submit_confirms_chatgpt_mode(post_submit: dict, *, model_mode: str, re
         "reasoning_ok": bool(reasoning_ok),
         "latest_assistant_text": latest,
         "confirmation_source": "post_submit_latest_assistant_text",
+        "model_selector_confirmed": model_selector_confirmed,
+        "high_reasoning_confirmed": high_reasoning_confirmed,
+        "generation_started": generation_started,
+        "json_response_started": json_response_started,
     }
+
+
+def _scrub_chatgpt_client_state(staged_dir: str | Path | None, profile_directory: str) -> list[str]:
+    """Remove ChatGPT SPA conversation caches from the temporary browser profile.
+
+    This intentionally runs only on the staged profile copy.  Cookies are left
+    intact so login state survives, while client-side conversation state cannot
+    route a fresh prompt back into a previous chat.
+    """
+    if not staged_dir:
+        return []
+    profile = Path(staged_dir) / profile_directory
+    removed: list[str] = []
+    targets: list[Path] = [
+        profile / "Session Storage",
+        profile / "Local Storage",
+        profile / "IndexedDB" / "https_chatgpt.com_0.indexeddb.leveldb",
+        profile / "IndexedDB" / "https_chatgpt.com_0.indexeddb.blob",
+        profile / "Service Worker" / "CacheStorage",
+    ]
+    for target in targets:
+        try:
+            if target.exists():
+                if target.is_dir():
+                    shutil.rmtree(target, ignore_errors=True)
+                else:
+                    target.unlink(missing_ok=True)
+                removed.append(str(target.relative_to(profile)))
+        except Exception:
+            continue
+    return removed
 
 
 async def _run(prompt: str) -> int:
@@ -1017,7 +1192,14 @@ async def _run(prompt: str) -> int:
     tool_mode = str(os.environ.get("BROWSER_AGENT_CHATGPT_TOOL_MODE") or "none").strip().lower()
     require_deep_research = str(os.environ.get("BROWSER_AGENT_CHATGPT_REQUIRE_DEEP_RESEARCH") or "false").strip().lower() in {"1", "true", "yes", "on"}
     require_ui_mode = str(os.environ.get("BROWSER_AGENT_CHATGPT_REQUIRE_UI_MODE") or "false").strip().lower() in {"1", "true", "yes", "on"}
-    account_email = str(os.environ.get("BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL") or "").strip()
+    require_isolated_conversation = str(os.environ.get("BROWSER_AGENT_CHATGPT_REQUIRE_ISOLATED_CONVERSATION") or "false").strip().lower() in {"1", "true", "yes", "on"}
+    force_new_chat = str(os.environ.get("BROWSER_AGENT_CHATGPT_FORCE_NEW_CHAT") or "true").strip().lower() in {"1", "true", "yes", "on"}
+    scrub_client_state = str(os.environ.get("BROWSER_AGENT_CHATGPT_SCRUB_CLIENT_STATE") or "true").strip().lower() in {"1", "true", "yes", "on"}
+    account_email = str(
+        os.environ.get("BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL")
+        or os.environ.get("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL")
+        or ""
+    ).strip()
     headless = str(os.environ.get("BROWSER_AGENT_HEADLESS") or "false").strip().lower() in {"1", "true", "yes", "on"}
     allowed_domains = [
         item.strip()
@@ -1028,6 +1210,7 @@ async def _run(prompt: str) -> int:
     staged_dir, cleanup_dir = bjrt._stage_browser_profile(user_data_dir, profile_directory)
     if user_data_dir and not staged_dir:
         raise RuntimeError("protected_browser_profile_cache_missing")
+    scrubbed_client_state = _scrub_chatgpt_client_state(staged_dir, profile_directory) if scrub_client_state else []
 
     meta = {
         "provider": "browser_agent_chatgpt",
@@ -1046,6 +1229,10 @@ async def _run(prompt: str) -> int:
         "tool_mode": tool_mode,
         "require_deep_research": require_deep_research,
         "require_ui_mode": require_ui_mode,
+        "require_isolated_conversation": require_isolated_conversation,
+        "force_new_chat": force_new_chat,
+        "scrub_client_state": scrub_client_state,
+        "scrubbed_client_state": scrubbed_client_state,
         "account_email_hint_present": bool(account_email),
         "request_dir": str(request_dir),
         "started_at": bjrt._now(),
@@ -1062,9 +1249,12 @@ async def _run(prompt: str) -> int:
     )
     try:
         await asyncio.wait_for(browser.start(), timeout=40)
-        page = await asyncio.wait_for(browser.get_current_page(), timeout=15)
-        if page is None:
+        if action in {"run", "submit"}:
             page = await asyncio.wait_for(browser.new_page(), timeout=15)
+        else:
+            page = await asyncio.wait_for(browser.get_current_page(), timeout=15)
+            if page is None:
+                page = await asyncio.wait_for(browser.new_page(), timeout=15)
         try:
             await asyncio.wait_for(page.goto(target_url), timeout=30)
         except Exception:
@@ -1087,6 +1277,16 @@ async def _run(prompt: str) -> int:
                 pass
             raise
         _write_json(request_dir / "ready-state.json", ready)
+        if action == "run" and not open_project_first and (force_new_chat or int(ready.get("message_count") or 0) > 0):
+            new_chat_step = json.loads(await page.evaluate(NEW_CHAT_JS))
+            await asyncio.sleep(1.5)
+            ready = await _wait_for_ready(page, timeout_s=45)
+            _write_json(request_dir / "new-chat-result.json", {
+                "step": new_chat_step,
+                "ready": ready,
+            })
+            if int(ready.get("message_count") or 0) > 0:
+                raise RuntimeError("chatgpt_new_chat_did_not_clear_existing_conversation")
         if action in {"poll", "collect"}:
             final_data = json.loads(await page.evaluate(CAPTURE_JS))
             if final_data.get("is_generating") or not str(final_data.get("latest_assistant_text") or "").strip():
@@ -1162,6 +1362,26 @@ async def _run(prompt: str) -> int:
             tool_mode=tool_mode,
         )
         _write_json(request_dir / "chatgpt-ui-configure-result.json", configure_result)
+        if require_isolated_conversation:
+            pre_submit_ready = json.loads(await page.evaluate(CAPTURE_JS))
+            _write_json(request_dir / "pre-submit-isolation-state.json", {
+                "url": pre_submit_ready.get("url"),
+                "conversation_id": pre_submit_ready.get("conversation_id"),
+                "message_count": pre_submit_ready.get("message_count"),
+                "assistant_count": pre_submit_ready.get("assistant_count"),
+            })
+            if str(pre_submit_ready.get("conversation_id") or "").strip() or int(pre_submit_ready.get("message_count") or 0) > 0:
+                raise RuntimeError(
+                    "chatgpt_pre_submit_not_isolated: "
+                    + json.dumps(
+                        {
+                            "url": pre_submit_ready.get("url"),
+                            "conversation_id": pre_submit_ready.get("conversation_id"),
+                            "message_count": pre_submit_ready.get("message_count"),
+                        },
+                        ensure_ascii=False,
+                    )
+                )
         pre_submit_mode_state: dict | None = None
         if require_ui_mode:
             pre_submit_mode_state = await _verify_chatgpt_mode_enabled(
@@ -1181,7 +1401,25 @@ async def _run(prompt: str) -> int:
         baseline_assistant_count = int(ready.get("assistant_count") or 0)
         post_submit = await _submit_prompt(page, prompt)
         _write_json(request_dir / "post-submit-state.json", post_submit)
+        if require_isolated_conversation and not _post_submit_is_isolated_current_prompt(post_submit, prompt):
+            raise RuntimeError(
+                "chatgpt_prompt_submitted_to_non_isolated_conversation: "
+                + json.dumps(
+                    {
+                        "url": post_submit.get("url"),
+                        "conversation_id": post_submit.get("conversation_id"),
+                        "message_count": post_submit.get("message_count"),
+                        "user_message_count": len([
+                            msg
+                            for msg in (post_submit.get("messages") or [])
+                            if isinstance(msg, dict) and msg.get("role") == "user"
+                        ]),
+                    },
+                    ensure_ascii=False,
+                )
+            )
         if require_ui_mode and pre_submit_mode_state and not pre_submit_mode_state.get("ok"):
+            post_submit["_configure_result"] = configure_result
             post_submit_mode_state = _post_submit_confirms_chatgpt_mode(
                 post_submit,
                 model_mode=model_mode,

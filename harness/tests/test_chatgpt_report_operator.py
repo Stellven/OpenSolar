@@ -20,6 +20,7 @@ def run_operator(
     sleep_seconds=0,
     action="run",
     stdin_text="write from this material",
+    env_extra=None,
     check=True,
 ):
     wrapper = tmp_path / "fake_wrapper.py"
@@ -48,6 +49,9 @@ def run_operator(
         "'require_ui_mode':os.environ.get('BROWSER_AGENT_CHATGPT_REQUIRE_UI_MODE'),"
         "'action':os.environ.get('BROWSER_AGENT_CHATGPT_ACTION'),"
         "'project':os.environ.get('BROWSER_AGENT_CHATGPT_PROJECT_NAME'),"
+        "'profile_directory':os.environ.get('BROWSER_AGENT_PROFILE_DIRECTORY'),"
+        "'target_account_email':os.environ.get('BROWSER_AGENT_TARGET_ACCOUNT_EMAIL'),"
+        "'chatgpt_account_email':os.environ.get('BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL'),"
         "'prompt':prompt[:1000]}\n"
         "print(json.dumps(out, ensure_ascii=False))\n",
         encoding="utf-8",
@@ -61,6 +65,8 @@ def run_operator(
             "BROWSER_AGENT_EXPECTED_OUTPUT": expected,
         }
     )
+    if env_extra:
+        env.update(env_extra)
     if kind:
         env["CHATGPT_REPORT_OPERATOR_KIND"] = kind
     env["CHATGPT_REPORT_ACTION"] = action
@@ -88,6 +94,29 @@ def test_planner_sets_thinking_high_and_project(tmp_path):
     assert "ChatGPT Report Planner" in payload["prompt"]
     meta = json.loads((tmp_path / "request" / "report-operator-request.json").read_text())
     assert meta["operator_kind"] == "planner"
+    assert meta["profile_directory"] == ""
+    assert meta["target_account_email"] == ""
+    assert meta["account_email_hint_present"] is False
+
+
+def test_explicit_profile_and_account_hints_are_forwarded(tmp_path):
+    proc = run_operator(
+        tmp_path,
+        purpose="hf-paper-l7-high-reasoning-demo",
+        env_extra={
+            "BROWSER_AGENT_PROFILE_DIRECTORY": "Default",
+            "BROWSER_AGENT_TARGET_ACCOUNT_EMAIL": "haogege1977@gmail.com",
+            "BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL": "haogege1977@gmail.com",
+        },
+    )
+    payload = json.loads(proc.stdout)
+    assert payload["profile_directory"] == "Default"
+    assert payload["target_account_email"] == "haogege1977@gmail.com"
+    assert payload["chatgpt_account_email"] == "haogege1977@gmail.com"
+    meta = json.loads((tmp_path / "request" / "report-operator-request.json").read_text())
+    assert meta["profile_directory"] == "Default"
+    assert meta["target_account_email"] == "haogege1977@gmail.com"
+    assert meta["account_email_hint_present"] is True
 
 
 def test_chapter_writer_prompt_hides_internal_fields_instruction(tmp_path):

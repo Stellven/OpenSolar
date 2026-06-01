@@ -198,7 +198,14 @@ def main() -> int:
                     "reasoning_effort": policy["reasoning_effort"],
                     "tool_mode": policy["tool_mode"],
                     "project_name": env.get("BROWSER_AGENT_CHATGPT_PROJECT_NAME") or DEFAULT_PROJECT_NAME,
-                    "account_email_hint_present": bool(env.get("BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL")),
+                    "profile_directory": env.get("BROWSER_AGENT_PROFILE_DIRECTORY") or "",
+                    "target_account_email": env.get("BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL")
+                    or env.get("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL")
+                    or "",
+                    "account_email_hint_present": bool(
+                        env.get("BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL")
+                        or env.get("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL")
+                    ),
                 },
                 ensure_ascii=False,
                 indent=2,
