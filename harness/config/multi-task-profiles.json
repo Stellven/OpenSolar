@@ -64,7 +64,7 @@
         "prioritization",
         "handoff"
       ],
-      "max_parallel": 2
+      "max_parallel": 4
     },
     "gemini-builder": {
       "role": "builder",
