@@ -8,6 +8,14 @@
   "properties": {
     "version": {"type": "integer", "minimum": 1},
     "updated_at": {"type": "string"},
+    "deprecated": {"type": "boolean", "const": true},
+    "deprecation_note": {"type": "string", "minLength": 1},
+    "transition_status": {
+      "type": "string",
+      "enum": ["read_only", "deprecated", "sunset"],
+      "const": "read_only"
+    },
+    "sunset_after_slice": {"type": "string", "const": "S05"},
     "operators": {
       "type": "object",
       "additionalProperties": {"$ref": "#/$defs/operator"}
@@ -232,4 +240,3 @@
     }
   }
 }
-
