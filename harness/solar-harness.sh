@@ -5063,7 +5063,7 @@ PLIST
       rate-limit-pruner-status|prune-launchd-status)
         bash "$HARNESS_DIR/scripts/operator-rate-limit-pruner.sh" status "$@"
         ;;
-      inbox|result|complete|submit|compile-request)
+      inbox|result|complete|submit|compile-request|drain-builder-ready)
         python3 "$_pm_dispatch_py" "$_pm_subcmd" "$@"
         ;;
       help|--help|-h)
@@ -5072,6 +5072,7 @@ PLIST
         echo "Usage:"
         echo "  $0 pm-fleet status"
         echo "  $0 pm-fleet builder-pool-status [--json]"
+        echo "  $0 pm-fleet drain-builder-ready [--dry-run] [--max-items N]"
         echo "  $0 pm-fleet prune-rate-limits [--json]"
         echo "  $0 pm-fleet quota-refresh [--json] [--apply]"
         echo "  $0 pm-fleet install-quota-refresh [--interval SECONDS]"
