@@ -40,8 +40,19 @@ from typing import Any
 
 HARNESS_SCRIPT_DIR = Path(__file__).resolve().parent
 HARNESS_LIB_DIR = HARNESS_SCRIPT_DIR.parent / "lib"
+HARNESS_TOOLS_DIR = HARNESS_SCRIPT_DIR.parent / "tools"
 if str(HARNESS_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(HARNESS_LIB_DIR))
+if str(HARNESS_TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(HARNESS_TOOLS_DIR))
+
+from report_evidence import append_chapter_event as runtime_append_chapter_event
+from report_evidence import build_chapter_evidence_pack as runtime_build_chapter_evidence_pack
+from report_evidence import rebuild_chapter_state as runtime_rebuild_chapter_state
+from report_evidence import run_chapter_writer as runtime_run_chapter_writer
+from report_ir import compile_report_ir as runtime_compile_report_ir
+from report_ir import create_chapter_jobs as runtime_create_chapter_jobs
+from report_synthesis import synthesize_report as runtime_synthesize_report
 
 try:
     import yaml
@@ -16325,6 +16336,219 @@ def cmd_plan_ai_influence_reports(args: argparse.Namespace) -> int:
 
 
 def cmd_run_ai_influence_planned_reports(args: argparse.Namespace) -> int:
+    if bool(getattr(args, "legacy", False)):
+        return _cmd_run_ai_influence_planned_reports_legacy(args)
+
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.row_factory = sqlite3.Row
+    date_str = getattr(args, "date", None) or iso_z().split("T", 1)[0]
+    days = int(getattr(args, "days", 7) or 7)
+    out_dir = _ai_influence_planned_base(config, args, date_str)
+    plan_path = Path(getattr(args, "plan_file", None) or out_dir / "report-plan.json").expanduser()
+    if not plan_path.exists():
+        conn.close()
+        print(f"[ai-influence-run-plan] missing plan file: {plan_path}", file=sys.stderr)
+        return 1
+    catalog_path = out_dir / "video-catalog.json"
+    if not catalog_path.exists():
+        conn.close()
+        print(f"[ai-influence-run-plan] missing catalog file: {catalog_path}", file=sys.stderr)
+        return 1
+
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+    video_groups_path = out_dir / "video-groups.json"
+    video_groups = json.loads(video_groups_path.read_text(encoding="utf-8")) if video_groups_path.exists() else {}
+    flow_cfg = ((config.get("youtube") or {}).get("ai_influence_report_flow") or {})
+    writer_cfg = flow_cfg.get("report_writer") or {}
+    model_name = str(getattr(args, "model", None) or writer_cfg.get("model") or "chatgpt-5.5")
+    selected_id = str(getattr(args, "report_id", None) or "").strip()
+    reports = [r for r in (plan.get("reports") or []) if isinstance(r, dict)]
+    if selected_id:
+        reports = [r for r in reports if str(r.get("report_id") or r.get("id") or "") == selected_id]
+    if not reports:
+        conn.close()
+        print(f"[ai-influence-run-plan] no reports selected report_id={selected_id or 'ALL'}", file=sys.stderr)
+        return 1
+
+    ok_count = 0
+    for spec in reports:
+        report_ir = runtime_compile_report_ir(plan, catalog, video_groups, flow_cfg, report_spec=spec)
+        report_id = slugify(str(report_ir.get("report_id") or spec.get("report_id") or spec.get("title") or f"report-{ok_count+1}"))[:80]
+        report_dir = out_dir / "reports" / report_id
+        report_dir.mkdir(parents=True, exist_ok=True)
+        run_id = begin_run(conn, "youtube", f"ai-influence-planned-report-{report_id}")
+        try:
+            evidence_pack = build_planned_report_evidence_pack(
+                conn,
+                catalog,
+                spec,
+                date_str=date_str,
+                days=days,
+                transcript_char_limit=int(writer_cfg.get("transcript_char_limit") or 24000),
+            )
+            evidence_pack = backfill_planned_report_evidence_from_existing(report_dir, evidence_pack)
+            skipped_refs = [str(ref) for ref in evidence_pack.get("skipped_material_refs") or [] if str(ref).strip()]
+            if skipped_refs:
+                raise ValueError(
+                    "ai_influence_evidence_pack_missing_or_bad_transcripts:"
+                    + ",".join(skipped_refs[:30])
+                )
+            if not evidence_pack.get("videos"):
+                raise ValueError("ai_influence_evidence_pack_empty_after_quality_gate")
+
+            legacy_prompt = build_planned_report_prompt(evidence_pack, model_name=model_name)
+            (report_dir / "writer-prompt.legacy-disabled.md").write_text(legacy_prompt, encoding="utf-8")
+            (report_dir / "evidence-pack.json").write_text(json.dumps(evidence_pack, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            (report_dir / "report-ir.json").write_text(json.dumps(report_ir, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            jobs = runtime_create_chapter_jobs(report_ir)
+            (report_dir / "chapter-jobs.json").write_text(json.dumps(jobs, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            events_path = report_dir / "events.jsonl"
+            if events_path.exists():
+                events_path.unlink()
+
+            request_dirs: list[str] = []
+            aggregate_tokens_in = 0
+            aggregate_tokens_out = 0
+            aggregate_latency_ms = 0
+
+            def writer_callable(chapter_spec: dict[str, Any], chapter_evidence_pack: dict[str, Any], writer_model: str) -> dict[str, Any]:
+                chapter_id = str(chapter_spec.get("chapter_id") or "chapter")
+                prompt = build_planned_report_chapter_prompt(
+                    report_ir,
+                    chapter_spec,
+                    chapter_evidence_pack,
+                    model_name=writer_model,
+                )
+                return call_ai_influence_chapter_writer_with_repair(
+                    prompt,
+                    config,
+                    purpose=f"ai-influence-report-chapter-{date_str}-{report_id}-{chapter_id}",
+                    model_name=writer_model,
+                    chapter_id=chapter_id,
+                )
+
+            for job in jobs:
+                chapter_id = str(job.get("chapter_id") or "")
+                chapter_spec = next((ch for ch in (report_ir.get("chapters") or []) if str(ch.get("chapter_id") or "") == chapter_id), None)
+                if not isinstance(chapter_spec, dict):
+                    raise ValueError(f"ai_influence_chapter_missing_in_ir:{chapter_id}")
+                runtime_append_chapter_event(events_path, chapter_id=chapter_id, from_status="queued", to_status="writing", reason="chapter_job_started")
+                chapter_evidence_pack = runtime_build_chapter_evidence_pack(evidence_pack, chapter_spec, report_ir.get("quality_targets") or {})
+                if chapter_spec.get("chapter_type") != "open_questions" and not (chapter_evidence_pack.get("core_evidence") or chapter_evidence_pack.get("support_evidence") or chapter_evidence_pack.get("selected_videos")):
+                    raise ValueError(f"ai_influence_chapter_evidence_empty:{chapter_id}")
+                writer_result = runtime_run_chapter_writer(
+                    report_dir,
+                    job,
+                    chapter_spec,
+                    chapter_evidence_pack,
+                    model_name=model_name,
+                    writer_callable=writer_callable,
+                )
+                runtime_append_chapter_event(events_path, chapter_id=chapter_id, from_status="writing", to_status="verifying", reason="chapter_writer_completed")
+                runtime_append_chapter_event(events_path, chapter_id=chapter_id, from_status="verifying", to_status="passed", reason="chapter_runtime_verified")
+                request_dir = str(writer_result.get("request_dir") or "")
+                if request_dir:
+                    request_dirs.append(request_dir)
+                aggregate_tokens_in += int(writer_result.get("input_token_count") or 0)
+                aggregate_tokens_out += int(writer_result.get("output_token_count") or 0)
+                aggregate_latency_ms += int(writer_result.get("latency_ms") or 0)
+
+            synthesis = runtime_synthesize_report(report_ir, report_dir)
+            markdown = normalize_ai_influence_markdown_report(
+                str(synthesis.get("markdown") or ""),
+                model_name=model_name,
+                input_videos=len(evidence_pack.get("videos") or []),
+            )
+            report = {
+                "headline": spec.get("title") or report_id,
+                "subheadline": "Report IR 逐章写作链路合成",
+                "_markdown_report": markdown,
+                "_backend": "browser_agent_chatgpt",
+                "_model": model_name,
+                "_reasoning_effort": "high",
+                "_operator_line": "chatgpt_thinking_high",
+                "_chapter_writer": "tools/chatgpt_report_operator.py",
+                "_local_preprocess": "ThunderOMLX/Qwen3.6 semantic packets",
+                "_latency_ms": aggregate_latency_ms,
+            }
+            (report_dir / "report.md").write_text(markdown + "\n", encoding="utf-8")
+            (report_dir / "report.html").write_text(
+                render_ai_influence_report_html_anything(markdown, evidence_pack, report),
+                encoding="utf-8",
+            )
+            result = {
+                "backend": "browser_agent_chatgpt",
+                "model": model_name,
+                "reasoning_effort": "high",
+                "operator_line": "chatgpt_thinking_high",
+                "operator_kind": "chapter_writer",
+                "pipeline": "report_ir_chapter_runtime",
+                "chapter_count": len(jobs),
+                "chapter_state": runtime_rebuild_chapter_state(events_path),
+                "synthesis_path": synthesis.get("path"),
+                "request_dirs": request_dirs,
+                "request_dir": request_dirs[-1] if request_dirs else "",
+                "latency_ms": aggregate_latency_ms,
+                "input_token_count": aggregate_tokens_in,
+                "output_token_count": aggregate_tokens_out,
+                "cost_estimate_usd": 0.0,
+            }
+            (report_dir / "report-result.json").write_text(json.dumps({**report, **result}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            blocked_path = report_dir / "report.blocked.json"
+            if blocked_path.exists():
+                blocked_path.unlink()
+            (report_dir / "transcripts.txt").write_text(phase_transcript_attachment(evidence_pack), encoding="utf-8")
+            (report_dir / "transcripts-cleaned.txt").write_text(phase_transcript_attachment_clean(evidence_pack), encoding="utf-8")
+            record_model_ledgers(
+                conn,
+                target_id=f"__ai_influence_planned_report__:{date_str}:{report_id}",
+                pipeline_stage="ai_influence_planned_report",
+                call_purpose="deep_analysis",
+                input_type="project_reasoning_packet",
+                packet_id=f"ai-influence-report:{date_str}:{report_id}",
+                evidence_atom_count=len(evidence_pack.get("videos") or []),
+                result=result,
+                success=True,
+            )
+            finish_run(conn, run_id, "ok", len(evidence_pack.get("videos") or []), 1, json.dumps({"report_id": report_id, "pipeline": result["pipeline"]}, ensure_ascii=False)[:900])
+            ok_count += 1
+            print(f"[ai-influence-run-plan] ok report_id={report_id} chapters={len(jobs)} pipeline=report_ir_chapter_runtime")
+        except Exception as exc:
+            (report_dir / "report.blocked.json").write_text(json.dumps({
+                "status": "blocked",
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+                "required_executor": "Browser Agent / ChatGPT 5.5 Thinking high",
+                "no_fallback_policy": "Codex/direct GPT/local Qwen final writing is disabled.",
+                "created_at": iso_z(),
+            }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            record_model_ledgers(
+                conn,
+                target_id=f"__ai_influence_planned_report__:{date_str}:{report_id}",
+                pipeline_stage="ai_influence_planned_report",
+                call_purpose="deep_analysis",
+                input_type="project_reasoning_packet",
+                packet_id=f"ai-influence-report:{date_str}:{report_id}",
+                evidence_atom_count=len(evidence_pack.get("videos") or []) if "evidence_pack" in locals() else 0,
+                result={"model": model_name, "backend": "browser_agent_chatgpt", "pipeline": "report_ir_chapter_runtime"},
+                success=False,
+                error_message=str(exc),
+            )
+            finish_run(conn, run_id, "failed", len(evidence_pack.get("videos") or []) if "evidence_pack" in locals() else 0, 0, f"{type(exc).__name__}: {exc}"[:900])
+            print(f"[ai-influence-run-plan] BLOCKED report_id={report_id}: {type(exc).__name__}: {exc}", file=sys.stderr)
+            if not bool(getattr(args, "continue_on_error", False)):
+                conn.close()
+                return 1
+
+    conn.close()
+    print(f"[ai-influence-run-plan] done date={date_str} ok={ok_count}/{len(reports)} out={out_dir / 'reports'}")
+    return 0 if ok_count == len(reports) else 1
+
+
+def _cmd_run_ai_influence_planned_reports_legacy(args: argparse.Namespace) -> int:
     config = load_config(resolve_config(args))
     db_path = resolve_db(args, config)
     conn = ensure_db(db_path)
@@ -17402,6 +17626,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_planned.add_argument("--output-base", default=None, help="Override output base directory")
     run_planned.add_argument("--model", default=None, help="Writer model override (default: chatgpt-5.5)")
     run_planned.add_argument("--send", action="store_true", help="Send each generated report by email")
+    run_planned.add_argument("--legacy", action="store_true", help="Use the previous whole-command implementation instead of the Report IR chapter runtime")
     run_planned.add_argument("--skip-notebooklm", action="store_true", help="Skip NotebookLM transcript+mindmap+infographic enrichment")
     run_planned.add_argument("--notebook-name", default=None, help="Override NotebookLM notebook name (default: AI Influence YYYY-MM)")
     run_planned.add_argument("--continue-on-error", action="store_true", help="Continue after one planned report fails")
