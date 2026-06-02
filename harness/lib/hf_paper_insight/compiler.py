@@ -49,7 +49,6 @@ class Compiler:
             "stack_layer": taxonomy.get("stack_layer", "model"),
             "research_route": taxonomy.get("research_route", "applied_research"),
             "resonance_level": resonance_level,
-            "reasoning_mode": reasoning.get("reasoning_mode", "fallback"),
             "top_dimensions": top_dim_text,
         }
 
@@ -75,7 +74,6 @@ class Compiler:
 - `stack_layer`: {base['stack_layer']}
 - `research_route`: {base['research_route']}
 - `resonance_level`: {base['resonance_level']}
-- `reasoning_mode`: {base['reasoning_mode']}
 - `top_dimensions`: {base['top_dimensions']}
 
 ## Judgment
@@ -97,7 +95,6 @@ class Compiler:
 - 标题: {base['title']}
 - 共振等级: {base['resonance_level']}
 - 候选资产: {', '.join(resonance.get('candidate_assets', []))}
-- 路由: {base['reasoning_mode']}
 - 速记: {reasoning.get('summary', 'N/A')}
 """
 

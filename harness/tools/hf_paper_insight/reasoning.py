@@ -110,7 +110,11 @@ class ResonanceMatcher:
 
 
 class HighReasoningEngine:
-    """Builds a Browser Agent compatible reasoning contract with fallback."""
+    """Builds a local fallback reasoning contract.
+
+    Real L7 premium insight is routed by tech_hotspot_radar.py through the
+    Browser Agent. This fallback must never label itself as browser_agent.
+    """
 
     def call_high_model(self, packet: PaperEvidencePacket, mode: str = "browser_agent") -> dict:
         canonical = _load_packet_json(packet, "canonical_summary_json")
@@ -119,7 +123,7 @@ class HighReasoningEngine:
         gate = _load_packet_json(packet, "packet_gate_json")
         passed = bool(gate.get("passed"))
 
-        effective_mode = mode if passed and mode == "browser_agent" else "fallback"
+        effective_mode = "fallback_report"
         title = str(canonical.get("title") or packet.paper_id)
         top_dimensions = sorted(
             [
@@ -146,13 +150,16 @@ class HighReasoningEngine:
         return {
             "accepted": passed,
             "reasoning_mode": effective_mode,
+            "requested_reasoning_mode": mode,
+            "premium_insight_available": False,
             "routing_contract": {
-                "actor_type": "browser_agent" if effective_mode == "browser_agent" else "batch_reasoning",
-                "requires_browser": effective_mode == "browser_agent",
+                "actor_type": "batch_reasoning",
+                "requires_browser": False,
+                "requested_actor_type": "browser_agent" if mode == "browser_agent" else mode,
                 "packet_id": packet.packet_id,
                 "paper_id": packet.paper_id,
             },
-            "summary": f"{title} 当前适合进入 {effective_mode} 路由，重点关注 {top_dimensions[0][0]} 与 {taxonomy.get('stack_layer', 'model')} 价值。",
+            "summary": f"{title} 当前适合进入 AI Influence 论文观察池，重点关注 {top_dimensions[0][0]} 与 {taxonomy.get('stack_layer', 'model')} 价值。",
             "hypotheses": hypotheses,
             "strategic_questions": strategic_questions,
             "top_dimensions": [{"name": name, "score": round(score, 3)} for name, score in top_dimensions[:3]],
