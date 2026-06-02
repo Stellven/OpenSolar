@@ -1,5 +1,6 @@
 import sqlite3
 import sys
+import datetime as dt
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
@@ -15,6 +16,7 @@ from youtube_010_premium_asr_calls import up as m010
 
 def test_dashboard_aggregate():
     conn = sqlite3.connect(":memory:")
+    today = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d")
     m001(conn)
     m002(conn)
     m004(conn)
@@ -34,7 +36,7 @@ def test_dashboard_aggregate():
         VALUES ('j1', 'v1', 'asr', 'P0', 'pending')""")
     conn.execute("""INSERT INTO youtube_premium_asr_calls
         (call_id, transcript_id, provider, model, cost_usd, budget_day, status)
-        VALUES ('c1', 't1', 'openai', 'gpt-4o-transcribe', 1.2, '2026-05-28', 'completed')""")
+        VALUES ('c1', 't1', 'openai', 'gpt-4o-transcribe', 1.2, ?, 'completed')""", (today,))
     conn.commit()
     payload = aggregate(conn)
     assert payload["subtitle_tracks_count"] == 1

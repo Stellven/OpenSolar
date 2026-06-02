@@ -19,6 +19,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,8 @@ DEFAULT_CONFIG = HARNESS_ROOT / "config/tech-hotspot-radar.yaml"
 DEFAULT_STATE_PATH = DEFAULT_STATE_DIR / "youtube-weekly-db-backfill-state.json"
 USABLE_SOURCES = {"standard_caption", "youtube_asr_caption", "browser_caption"}
 USABLE_TIERS = {"T0", "T1", "T2"}
+LOCAL_ASR_SOURCES = {"legacy_asr", "faster_whisper", "whisperx", "mlx_whisper", "premium"}
+DB_BUSY_TIMEOUT_MS = 300_000
 
 
 def iso_z(ts: dt.datetime | None = None) -> str:
@@ -75,9 +78,50 @@ def load_min_duration(config_path: Path) -> int:
 
 
 def open_db(path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(path, timeout=30)
+    conn = sqlite3.connect(path, timeout=DB_BUSY_TIMEOUT_MS / 1000)
     conn.row_factory = sqlite3.Row
+    conn.execute(f"PRAGMA busy_timeout={DB_BUSY_TIMEOUT_MS}")
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+    except sqlite3.OperationalError:
+        # Another writer may already hold the DB. busy_timeout still protects
+        # this connection; WAL can be established by a later clean connection.
+        pass
     return conn
+
+
+def classify_error(exc: BaseException) -> str:
+    message = str(exc).lower()
+    if isinstance(exc, sqlite3.OperationalError) and "database is locked" in message:
+        return "database_locked"
+    return exc.__class__.__name__
+
+
+def record_failed_state(
+    state_path: Path,
+    state: dict[str, Any],
+    *,
+    start_week: str,
+    end_week: str,
+    week: str | None,
+    exc: BaseException,
+) -> None:
+    state.update(
+        {
+            "last_run_at": iso_z(),
+            "status": "failed",
+            "active_week": week or state.get("active_week"),
+            "start_week": start_week,
+            "end_week": end_week,
+            "last_error": {
+                "error_code": classify_error(exc),
+                "error_type": exc.__class__.__name__,
+                "message": str(exc),
+                "traceback_tail": traceback.format_exc()[-4000:],
+            },
+        }
+    )
+    save_state(state_path, state)
 
 
 def is_usable(row: sqlite3.Row | None) -> bool:
@@ -197,6 +241,171 @@ def mark_short_metadata(conn: sqlite3.Connection, week: str, min_duration: int, 
         )
     conn.commit()
     return len(rows)
+
+
+def purge_local_asr_transcripts(conn: sqlite3.Connection, week: str, limit: int = 500) -> int:
+    """Remove local/legacy ASR text from evidence path for a week.
+
+    We keep the video row and a metadata-only transcript shell so the backfill
+    can re-acquire captions/browser transcript later. No ASR text remains
+    usable or readable from youtube_transcripts after this update.
+    """
+    start, end = week_bounds(week)
+    rows = conn.execute(
+        f"""SELECT t.video_id
+            FROM youtube_transcripts t
+            JOIN youtube_videos v USING(video_id)
+            WHERE date(v.published_at) >= date(?) AND date(v.published_at) < date(?)
+              AND t.source IN ({','.join('?' for _ in LOCAL_ASR_SOURCES)})
+            LIMIT ?""",
+        (start, end, *sorted(LOCAL_ASR_SOURCES), limit),
+    ).fetchall()
+    now = iso_z()
+    for row in rows:
+        conn.execute(
+            """UPDATE youtube_transcripts
+               SET transcript_id='metadata-' || video_id,
+                   transcript_raw='',
+                   transcript_clean='',
+                   transcript_status='metadata_only',
+                   source='metadata',
+                   language='',
+                   fetched_at=?,
+                   char_count=0,
+                   is_auto_generated=0,
+                   model=NULL,
+                   model_version=NULL,
+                   audio_hash=NULL,
+                   transcript_hash=NULL,
+                   raw_path=NULL,
+                   clean_path=NULL,
+                   segments_json_path=NULL,
+                   quality_score=0.0,
+                   quality_tier='T3',
+                   coverage_ratio=0.0,
+                   hallucination_risk=1.0
+               WHERE video_id=?""",
+            (now, row["video_id"]),
+        )
+    conn.commit()
+    return len(rows)
+
+
+def ensure_metadata_transcript(conn: sqlite3.Connection, video_id: str) -> None:
+    now = iso_z()
+    conn.execute(
+        """INSERT INTO youtube_transcripts
+           (video_id, transcript_id, transcript_raw, transcript_clean, transcript_status, source, language,
+            fetched_at, char_count, quality_score, quality_tier, coverage_ratio, hallucination_risk)
+           VALUES (?, 'metadata-' || ?, '', '', 'metadata_only', 'metadata', '', ?, 0, 0.0, 'T3', 0.0, 1.0)
+           ON CONFLICT(video_id) DO UPDATE SET
+             transcript_id='metadata-' || youtube_transcripts.video_id,
+             transcript_raw='',
+             transcript_clean='',
+             transcript_status='metadata_only',
+             source='metadata',
+             language='',
+             fetched_at=excluded.fetched_at,
+             char_count=0,
+             is_auto_generated=0,
+             model=NULL,
+             model_version=NULL,
+             audio_hash=NULL,
+             transcript_hash=NULL,
+             raw_path=NULL,
+             clean_path=NULL,
+             segments_json_path=NULL,
+             quality_score=0.0,
+             quality_tier='T3',
+             coverage_ratio=0.0,
+             hallucination_risk=1.0""",
+        (video_id, video_id, now),
+    )
+
+
+def enqueue_browser_capture(conn: sqlite3.Connection, video_id: str, priority: str, reason: str, message: str) -> None:
+    job_id = stable_job_id(video_id, "browser_capture", reason)
+    conn.execute(
+        """INSERT INTO youtube_transcript_jobs
+           (job_id, video_id, job_type, priority, status, backend, max_attempts, error_code, error_message, created_at)
+           VALUES (?, ?, 'browser_capture', ?, 'pending', 'browser-agent', 2, 'max_attempts', ?, ?)
+           ON CONFLICT(job_id) DO UPDATE SET
+             status=CASE
+               WHEN youtube_transcript_jobs.status IN ('succeeded','running','metadata_only','cancelled','quarantined')
+               THEN youtube_transcript_jobs.status ELSE 'pending' END,
+             next_retry_at=NULL,
+             backend='browser-agent',
+             priority=excluded.priority,
+             error_code=excluded.error_code,
+             error_message=excluded.error_message""",
+        (job_id, video_id, priority, message[:500], iso_z()),
+    )
+
+
+def reconcile_failed_jobs(conn: sqlite3.Connection, week: str, min_duration: int) -> dict[str, int]:
+    """Move exhausted failures to the next allowed non-ASR state.
+
+    subtitle/caption failures go to browser_capture. Browser failures and short
+    videos become metadata_only. ASR jobs are terminalized and scrubbed.
+    """
+    start, end = week_bounds(week)
+    rows = conn.execute(
+        """SELECT j.*, v.duration_seconds
+           FROM youtube_transcript_jobs j
+           JOIN youtube_videos v USING(video_id)
+           WHERE date(v.published_at) >= date(?) AND date(v.published_at) < date(?)
+             AND (
+               j.job_type IN ('asr','premium_asr')
+               OR (j.status='failed' AND (j.attempt_count >= j.max_attempts OR j.error_code='max_attempts'))
+             )""",
+        (start, end),
+    ).fetchall()
+    counts = {"to_browser_capture": 0, "to_metadata_only": 0, "asr_terminalized": 0}
+    now = iso_z()
+    for row in rows:
+        job_type = str(row["job_type"] or "")
+        duration = row["duration_seconds"]
+        is_short = duration is not None and int(duration) < min_duration
+        if job_type in {"asr", "premium_asr"}:
+            ensure_metadata_transcript(conn, row["video_id"])
+            conn.execute(
+                """UPDATE youtube_transcript_jobs
+                   SET status='metadata_only', next_retry_at=NULL, error_code='max_attempts',
+                       error_message='ASR disabled and scrubbed by weekly backfill', finished_at=?
+                   WHERE job_id=?""",
+                (now, row["job_id"]),
+            )
+            counts["asr_terminalized"] += 1
+        elif job_type in {"caption_discovery", "subtitle_download"} and not is_short:
+            enqueue_browser_capture(
+                conn,
+                row["video_id"],
+                str(row["priority"] or "P2"),
+                f"{job_type}_failed_exhausted",
+                f"{job_type} exhausted; routed to browser_capture: {row['error_message'] or row['error_code'] or 'failed'}",
+            )
+            conn.execute(
+                """UPDATE youtube_transcript_jobs
+                   SET status='cancelled', next_retry_at=NULL,
+                       error_message=COALESCE(error_message,'') || ' | routed_to_browser_capture',
+                       finished_at=?
+                   WHERE job_id=?""",
+                (now, row["job_id"]),
+            )
+            counts["to_browser_capture"] += 1
+        else:
+            ensure_metadata_transcript(conn, row["video_id"])
+            conn.execute(
+                """UPDATE youtube_transcript_jobs
+                   SET status='metadata_only', next_retry_at=NULL,
+                       error_message=COALESCE(error_message,'') || ' | terminal_metadata_only',
+                       finished_at=?
+                   WHERE job_id=?""",
+                (now, row["job_id"]),
+            )
+            counts["to_metadata_only"] += 1
+    conn.commit()
+    return counts
 
 
 def enqueue_caption_discovery(conn: sqlite3.Connection, week: str, min_duration: int, limit: int) -> int:
@@ -320,58 +529,97 @@ def main(argv: list[str] | None = None) -> int:
     min_duration = load_min_duration(Path(args.config).expanduser())
     weeks = week_labels_newest_first(args.start_week, args.end_week)
     state = load_state(state_path)
+    week: str | None = None
 
-    conn = open_db(db)
     try:
-        week, before_stats = pick_week(conn, weeks, min_duration, args.only_week)
-        if week is None:
-            state.update({"last_run_at": iso_z(), "status": "complete", "start_week": args.start_week, "end_week": args.end_week})
-            save_state(state_path, state)
-            print(json.dumps({"status": "complete", "message": "all target weeks complete"}, ensure_ascii=False, indent=2))
-            return 0
+        conn = open_db(db)
+        try:
+            week, before_stats = pick_week(conn, weeks, min_duration, args.only_week)
+            if week is None:
+                state.update({"last_run_at": iso_z(), "status": "complete", "start_week": args.start_week, "end_week": args.end_week})
+                save_state(state_path, state)
+                print(json.dumps({"status": "complete", "message": "all target weeks complete"}, ensure_ascii=False, indent=2))
+                return 0
 
-        short_marked = 0 if args.dry_run else mark_short_metadata(conn, week, min_duration, args.short_mark_limit)
-        enqueued = 0 if args.dry_run else enqueue_caption_discovery(conn, week, min_duration, args.enqueue_limit)
-    finally:
-        conn.close()
+            purged_local_asr = 0 if args.dry_run else purge_local_asr_transcripts(conn, week)
+            reconciled = {"to_browser_capture": 0, "to_metadata_only": 0, "asr_terminalized": 0}
+            if not args.dry_run:
+                reconciled = reconcile_failed_jobs(conn, week, min_duration)
+            before_stats = get_week_stats(conn, week, min_duration)
+            short_marked = 0 if args.dry_run else mark_short_metadata(conn, week, min_duration, args.short_mark_limit)
+            enqueued = 0 if args.dry_run else enqueue_caption_discovery(conn, week, min_duration, args.enqueue_limit)
+        finally:
+            conn.close()
 
-    caption = run_youtube_cli(db, state_dir, "caption_discovery", args.caption_limit, args.timeout, args.dry_run)
-    subtitle = run_youtube_cli(db, state_dir, "subtitle_download", args.subtitle_limit, args.timeout, args.dry_run)
-    browser = run_youtube_cli(db, state_dir, "browser_capture", args.browser_limit, args.timeout, args.dry_run)
+        caption = run_youtube_cli(db, state_dir, "caption_discovery", args.caption_limit, args.timeout, args.dry_run)
+        subtitle = run_youtube_cli(db, state_dir, "subtitle_download", args.subtitle_limit, args.timeout, args.dry_run)
+        browser = run_youtube_cli(db, state_dir, "browser_capture", args.browser_limit, args.timeout, args.dry_run)
 
-    conn = open_db(db)
-    try:
-        after_stats = get_week_stats(conn, week, min_duration)
-    finally:
-        conn.close()
+        conn = open_db(db)
+        try:
+            after_stats = get_week_stats(conn, week, min_duration)
+        finally:
+            conn.close()
 
-    result = {
-        "schema": "youtube-weekly-db-backfill-run.v1",
-        "ran_at": iso_z(),
-        "week": week,
-        "min_duration_seconds": min_duration,
-        "dry_run": bool(args.dry_run),
-        "before": before_stats,
-        "short_marked_metadata": short_marked,
-        "caption_discovery_enqueued": enqueued,
-        "processed": {
-            "caption_discovery": caption,
-            "subtitle_download": subtitle,
-            "browser_capture": browser,
-        },
-        "after": after_stats,
-    }
-    state.update({
-        "last_run_at": result["ran_at"],
-        "status": "running" if after_stats.get("needs_backfill", 0) else "week_drained",
-        "active_week": week,
-        "last_result": result,
-        "start_week": args.start_week,
-        "end_week": args.end_week,
-    })
-    save_state(state_path, state)
-    print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0
+        result = {
+            "schema": "youtube-weekly-db-backfill-run.v1",
+            "ran_at": iso_z(),
+            "week": week,
+            "min_duration_seconds": min_duration,
+            "dry_run": bool(args.dry_run),
+            "before": before_stats,
+            "purged_local_asr_transcripts": purged_local_asr,
+            "reconciled_failed_jobs": reconciled,
+            "short_marked_metadata": short_marked,
+            "caption_discovery_enqueued": enqueued,
+            "processed": {
+                "caption_discovery": caption,
+                "subtitle_download": subtitle,
+                "browser_capture": browser,
+            },
+            "after": after_stats,
+        }
+        next_status = "pending_next_run" if after_stats.get("needs_backfill", 0) else "week_drained"
+        completed_weeks = list(state.get("completed_weeks") or [])
+        if next_status == "week_drained" and week not in completed_weeks:
+            completed_weeks.append(week)
+        state.update({
+            "last_run_at": result["ran_at"],
+            "status": next_status,
+            "active_week": week,
+            "completed_weeks": completed_weeks,
+            "last_result": result,
+            "last_error": None,
+            "start_week": args.start_week,
+            "end_week": args.end_week,
+        })
+        save_state(state_path, state)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+    except Exception as exc:
+        record_failed_state(
+            state_path,
+            state,
+            start_week=args.start_week,
+            end_week=args.end_week,
+            week=week,
+            exc=exc,
+        )
+        print(
+            json.dumps(
+                {
+                    "status": "failed",
+                    "week": week,
+                    "error_code": classify_error(exc),
+                    "error_type": exc.__class__.__name__,
+                    "message": str(exc),
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            file=sys.stderr,
+        )
+        return 1
 
 
 if __name__ == "__main__":

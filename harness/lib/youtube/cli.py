@@ -284,13 +284,13 @@ def _run_caption_discovery_job(conn: sqlite3.Connection, job, *, timeout: int) -
                 ),
             )
         else:
-            capture_id = _job_id(job.video_id, "browser_capture", "caption_unavailable")
-            conn.execute(
-                """INSERT INTO youtube_transcript_jobs
-                   (job_id, video_id, job_type, priority, status, backend, max_attempts, error_code, error_message)
-                   VALUES (?, ?, 'browser_capture', ?, 'pending', 'browser-agent', 2, 'no_caption', 'caption unavailable after subtitle-first discovery')
-                   ON CONFLICT(job_id) DO NOTHING""",
-                (capture_id, job.video_id, job.priority),
+            _enqueue_browser_capture(
+                conn,
+                job.video_id,
+                job.priority,
+                reason="caption_unavailable",
+                error_code="no_caption",
+                error_message="caption unavailable after subtitle-first discovery",
             )
         conn.execute(
             "UPDATE youtube_transcript_jobs SET status='succeeded', finished_at=?, error_message=? WHERE job_id=?",
@@ -315,11 +315,21 @@ def _run_subtitle_download_job(conn: sqlite3.Connection, job, *, state_dir: Path
     )
     track = _best_pending_track(conn, job.video_id)
     if not track or not track["url"]:
-        update = handle_job_failure(conn, job.job_id, "no_caption", job.attempt_count, job.max_attempts)
-        apply_job_update(conn, update)
+        _enqueue_browser_capture(
+            conn,
+            job.video_id,
+            job.priority,
+            reason="subtitle_track_url_missing",
+            error_code="no_caption",
+            error_message="no downloadable subtitle track url; routed to browser_capture",
+        )
         conn.execute(
-            "UPDATE youtube_transcript_jobs SET error_message='no downloadable subtitle track url' WHERE job_id=?",
-            (job.job_id,),
+            """UPDATE youtube_transcript_jobs
+               SET status='cancelled', next_retry_at=NULL, error_code='no_caption',
+                   error_message='no downloadable subtitle track url; routed to browser_capture',
+                   finished_at=?
+               WHERE job_id=?""",
+            (now, job.job_id),
         )
         conn.commit()
         return
@@ -400,16 +410,35 @@ def _run_subtitle_download_job(conn: sqlite3.Connection, job, *, state_dir: Path
         )
         conn.commit()
     except Exception as exc:
-        update = handle_job_failure(conn, job.job_id, "timeout", job.attempt_count, job.max_attempts)
-        apply_job_update(conn, update)
+        next_attempt = int(job.attempt_count or 0) + 1
+        error_text = f"{type(exc).__name__}: {exc}"[:500]
         conn.execute(
             "UPDATE youtube_subtitle_tracks SET download_status='failed', error=? WHERE track_id=?",
-            (f"{type(exc).__name__}: {exc}"[:500], track["track_id"]),
+            (error_text, track["track_id"]),
         )
-        conn.execute(
-            "UPDATE youtube_transcript_jobs SET error_message=? WHERE job_id=?",
-            (f"{type(exc).__name__}: {exc}"[:500], job.job_id),
-        )
+        if next_attempt >= int(job.max_attempts or 3):
+            _enqueue_browser_capture(
+                conn,
+                job.video_id,
+                job.priority,
+                reason="subtitle_download_exhausted",
+                error_code="max_attempts",
+                error_message=f"subtitle_download exhausted; routed to browser_capture: {error_text}",
+            )
+            conn.execute(
+                """UPDATE youtube_transcript_jobs
+                   SET status='cancelled', attempt_count=?, next_retry_at=NULL,
+                       error_code='max_attempts', error_message=?, finished_at=?
+                   WHERE job_id=?""",
+                (next_attempt, error_text, now, job.job_id),
+            )
+        else:
+            update = handle_job_failure(conn, job.job_id, "timeout", job.attempt_count, job.max_attempts)
+            apply_job_update(conn, update)
+            conn.execute(
+                "UPDATE youtube_transcript_jobs SET error_message=? WHERE job_id=?",
+                (error_text, job.job_id),
+            )
         conn.commit()
 
 
@@ -547,6 +576,33 @@ def _best_pending_track(conn: sqlite3.Connection, video_id: str):
            LIMIT 1""",
         (video_id,),
     ).fetchone()
+
+
+def _enqueue_browser_capture(
+    conn: sqlite3.Connection,
+    video_id: str,
+    priority: str,
+    *,
+    reason: str,
+    error_code: str,
+    error_message: str,
+) -> None:
+    capture_id = _job_id(video_id, "browser_capture", reason)
+    conn.execute(
+        """INSERT INTO youtube_transcript_jobs
+           (job_id, video_id, job_type, priority, status, backend, max_attempts, error_code, error_message)
+           VALUES (?, ?, 'browser_capture', ?, 'pending', 'browser-agent', 2, ?, ?)
+           ON CONFLICT(job_id) DO UPDATE SET
+             status=CASE
+               WHEN youtube_transcript_jobs.status IN ('succeeded','running','metadata_only','cancelled','quarantined')
+               THEN youtube_transcript_jobs.status ELSE 'pending' END,
+             priority=excluded.priority,
+             backend='browser-agent',
+             next_retry_at=NULL,
+             error_code=excluded.error_code,
+             error_message=excluded.error_message""",
+        (capture_id, video_id, priority, error_code, error_message[:500]),
+    )
 
 
 def _download_text(url: str) -> str:
