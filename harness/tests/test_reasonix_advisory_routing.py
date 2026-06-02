@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PHYSICAL_OPERATORS = ROOT / "config" / "physical-operators.json"
 LOGICAL_OPERATORS = ROOT / "config" / "logical-operators.json"
 PM_DISPATCH = ROOT / "tools" / "pm_dispatch.py"
+DEEPSEEK_V4_PRO_PRD_EVALUATOR = "mini-reasonix-deepseek-v4-pro-prd-evaluator"
 
 CODE_LOGICAL_OPERATORS = {"ImplementationWorker", "PatchWorker", "TestDesigner"}
 CODE_TASK_MARKERS = {"implementation", "code-edit", "repo-modification"}
@@ -51,6 +52,18 @@ def test_reasonix_physical_operators_are_advisory_only():
         assert "file_execution" in str(pool.get("disabled_reason", "")), (
             f"{op_id}: disabled_reason should document missing file execution proof"
         )
+
+
+def test_deepseek_v4_pro_prd_evaluator_registered_for_prd_and_eval_only():
+    reasonix_ops = _reasonix_ops()
+    op = reasonix_ops.get(DEEPSEEK_V4_PRO_PRD_EVALUATOR)
+    assert op is not None, "DeepSeek V4 Pro PRD/eval advisory operator must be registered"
+    assert op.get("model") == "deepseek-v4-pro"
+    assert set(op.get("roles", [])) == {"planner", "evaluator"}
+    assert op.get("policy", {}).get("write_files") == "denied"
+    assert op.get("policy", {}).get("run_shell") == "denied"
+    assert "prd-review" in {str(item).lower() for item in op.get("preferred_for", [])}
+    assert "implementation" in {str(item).lower() for item in op.get("avoid_for", [])}
 
 
 def test_reasonix_not_bound_to_code_logical_operators():
@@ -121,3 +134,32 @@ def test_pm_dispatch_allows_reasonix_review_task(monkeypatch):
 
     assert reason == ""
     assert operator_id == "mini-reasonix-deepseek-v4-builder"
+
+
+def test_pm_dispatch_allows_deepseek_v4_pro_prd_review_task(monkeypatch):
+    pm_dispatch = _load_pm_dispatch()
+    reasonix_op = _reasonix_ops()[DEEPSEEK_V4_PRO_PRD_EVALUATOR]
+    monkeypatch.setattr(
+        pm_dispatch,
+        "load_registry",
+        lambda: {
+            "version": 1,
+            "operators": {
+                DEEPSEEK_V4_PRO_PRD_EVALUATOR: {
+                    **reasonix_op,
+                    "enabled": True,
+                    "available": True,
+                }
+            },
+        },
+    )
+    monkeypatch.setattr(pm_dispatch, "is_dispatchable", lambda op: (True, ""))
+
+    operator_id, _, reason = pm_dispatch.select_operator_by_role(
+        role="planner",
+        task_type="prd-review",
+        prefer_operator=DEEPSEEK_V4_PRO_PRD_EVALUATOR,
+    )
+
+    assert reason == ""
+    assert operator_id == DEEPSEEK_V4_PRO_PRD_EVALUATOR
