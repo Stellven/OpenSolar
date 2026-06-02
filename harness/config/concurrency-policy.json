@@ -109,6 +109,175 @@
     "available_ratio_burst": 0.65,
     "blocked_ratio_low": 0.7
   },
+  "backlog_autoscaling": {
+    "enabled": true,
+    "snapshot_path": "run/backlog-autoscale/latest.json",
+    "snapshot_ttl_seconds": 60,
+    "metrics": {
+      "drafting_spec": {
+        "status": "drafting",
+        "phase": "spec"
+      },
+      "active_prd_ready": {
+        "status": "active",
+        "phase": "prd_ready"
+      },
+      "active_planning_complete": {
+        "status": "active",
+        "phase": "planning_complete"
+      },
+      "reviewing_handoff_ready": {
+        "status": "reviewing",
+        "phase": "handoff_ready"
+      }
+    },
+    "profile_targets": {
+      "pm": {
+        "metric": "drafting_spec",
+        "base": 4,
+        "min": 2,
+        "max": 8,
+        "trigger_backlog": 24,
+        "backlog_per_step": 24,
+        "step": 1
+      },
+      "planner": {
+        "metric": "active_prd_ready",
+        "base": 2,
+        "min": 2,
+        "max": 6,
+        "trigger_backlog": 6,
+        "backlog_per_step": 4,
+        "step": 1
+      },
+      "builder": {
+        "metric": "active_planning_complete",
+        "base": 4,
+        "min": 3,
+        "max": 10,
+        "trigger_backlog": 8,
+        "backlog_per_step": 6,
+        "step": 1
+      },
+      "evaluator": {
+        "metric": "reviewing_handoff_ready",
+        "base": 2,
+        "min": 1,
+        "max": 5,
+        "trigger_backlog": 3,
+        "backlog_per_step": 2,
+        "step": 1
+      }
+    },
+    "logical_operator_targets": {
+      "DeepArchitect": {
+        "metric": "active_prd_ready",
+        "base": 6,
+        "min": 3,
+        "max": 10,
+        "trigger_backlog": 6,
+        "backlog_per_step": 4,
+        "step": 1
+      },
+      "ParallelExplorer": {
+        "metric": "active_prd_ready",
+        "base": 5,
+        "min": 2,
+        "max": 8,
+        "trigger_backlog": 8,
+        "backlog_per_step": 4,
+        "step": 1
+      },
+      "ImplementationWorker": {
+        "metric": "active_planning_complete",
+        "base": 5,
+        "min": 3,
+        "max": 10,
+        "trigger_backlog": 8,
+        "backlog_per_step": 6,
+        "step": 1
+      },
+      "PatchWorker": {
+        "metric": "active_planning_complete",
+        "base": 8,
+        "min": 4,
+        "max": 12,
+        "trigger_backlog": 10,
+        "backlog_per_step": 8,
+        "step": 1
+      },
+      "TestDesigner": {
+        "metric": "active_planning_complete",
+        "base": 4,
+        "min": 2,
+        "max": 8,
+        "trigger_backlog": 8,
+        "backlog_per_step": 6,
+        "step": 1
+      },
+      "Verifier": {
+        "metric": "reviewing_handoff_ready",
+        "base": 4,
+        "min": 2,
+        "max": 6,
+        "trigger_backlog": 3,
+        "backlog_per_step": 2,
+        "step": 1
+      }
+    },
+    "builder_pool_targets": {
+      "desired_total": {
+        "metric": "active_planning_complete",
+        "base": 14,
+        "min": 10,
+        "max": 20,
+        "trigger_backlog": 8,
+        "backlog_per_step": 6,
+        "step": 1
+      },
+      "groups": {
+        "codex-gpt-5.3-spark": {
+          "metric": "active_planning_complete",
+          "base": 1,
+          "min": 1,
+          "max": 4,
+          "trigger_backlog": 10,
+          "backlog_per_step": 8,
+          "step": 1
+        },
+        "codex-gpt-5.5-medium": {
+          "metric": "active_planning_complete",
+          "base": 2,
+          "min": 1,
+          "max": 4,
+          "trigger_backlog": 10,
+          "backlog_per_step": 8,
+          "step": 1
+        },
+        "sonnet": {
+          "metric": "active_planning_complete",
+          "base": 3,
+          "min": 2,
+          "max": 5,
+          "trigger_backlog": 10,
+          "backlog_per_step": 8,
+          "step": 1
+        }
+      }
+    },
+    "global_limits": {
+      "max_workers": {
+        "base": 4,
+        "cap": 16,
+        "profile_names": [
+          "pm",
+          "planner",
+          "builder",
+          "evaluator"
+        ]
+      }
+    }
+  },
   "recovery": {
     "high_backlog_pending_tasks": 6,
     "critical_backlog_pending_tasks": 12,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -110,6 +111,88 @@ def dynamic_concurrency_config(policy: dict[str, Any] | None = None) -> dict[str
     return dict(dynamic)
 
 
+def backlog_autoscaling_config(policy: dict[str, Any] | None = None) -> dict[str, Any]:
+    policy = policy or load_policy()
+    raw = policy.get("backlog_autoscaling") if isinstance(policy.get("backlog_autoscaling"), dict) else {}
+    return dict(raw)
+
+
+def _load_json(path: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _backlog_snapshot_path(config: dict[str, Any]) -> Path:
+    raw_path = str(config.get("snapshot_path") or "run/backlog-autoscale/latest.json").strip()
+    path = Path(raw_path).expanduser()
+    if not path.is_absolute():
+        path = HARNESS_DIR / path
+    return path
+
+
+def _backlog_autoscaling_snapshot(policy: dict[str, Any] | None = None) -> dict[str, Any]:
+    policy = policy or load_policy()
+    config = backlog_autoscaling_config(policy)
+    if not bool(config.get("enabled", False)):
+        return {}
+    path = _backlog_snapshot_path(config)
+    ttl = int(config.get("snapshot_ttl_seconds", 60) or 60)
+    needs_refresh = True
+    if path.exists():
+        try:
+            if ttl <= 0 or time.time() - path.stat().st_mtime <= ttl:
+                needs_refresh = False
+        except Exception:
+            needs_refresh = True
+    if needs_refresh:
+        try:
+            if str(THIS_HARNESS_DIR / "lib") not in sys.path:
+                sys.path.insert(0, str(THIS_HARNESS_DIR / "lib"))
+            import backlog_autoscaler  # type: ignore
+
+            backlog_autoscaler.refresh_snapshot(policy)
+        except Exception:
+            pass
+    return _load_json(path)
+
+
+def backlog_autoscaling_snapshot(policy: dict[str, Any] | None = None) -> dict[str, Any]:
+    return _backlog_autoscaling_snapshot(policy)
+
+
+def effective_profile_max_parallel(profile_name: str, default: int, policy: dict[str, Any] | None = None) -> int:
+    snapshot = _backlog_autoscaling_snapshot(policy)
+    targets = snapshot.get("profile_limits") if isinstance(snapshot.get("profile_limits"), dict) else {}
+    try:
+        value = int(targets.get(str(profile_name), default))
+    except Exception:
+        value = default
+    return max(1, value)
+
+
+def effective_logical_max_parallel(operator_type: str, default: int, policy: dict[str, Any] | None = None) -> int:
+    snapshot = _backlog_autoscaling_snapshot(policy)
+    targets = snapshot.get("logical_operator_limits") if isinstance(snapshot.get("logical_operator_limits"), dict) else {}
+    try:
+        value = int(targets.get(str(operator_type), default))
+    except Exception:
+        value = default
+    return max(1, value)
+
+
+def effective_global_max_workers(default: int, policy: dict[str, Any] | None = None) -> int:
+    snapshot = _backlog_autoscaling_snapshot(policy)
+    targets = snapshot.get("global_limits") if isinstance(snapshot.get("global_limits"), dict) else {}
+    try:
+        value = int(targets.get("max_workers", default))
+    except Exception:
+        value = default
+    return max(1, value)
+
+
 def _dynamic_snapshot_level(dynamic: dict[str, Any]) -> str:
     raw_path = str(dynamic.get("snapshot_path") or "").strip()
     if not raw_path:
@@ -205,10 +288,23 @@ def pool_group_desired(group: str, policy: dict[str, Any] | None = None) -> int:
     pool = builder_pool_config(policy)
     groups = pool.get("groups") if isinstance(pool.get("groups"), dict) else {}
     spec = groups.get(group) if isinstance(groups.get(group), dict) else {}
+    snapshot = _backlog_autoscaling_snapshot(policy)
+    dynamic_pool = snapshot.get("builder_pool") if isinstance(snapshot.get("builder_pool"), dict) else {}
+    dynamic_groups = dynamic_pool.get("groups") if isinstance(dynamic_pool.get("groups"), dict) else {}
     try:
-        return int(spec.get("desired", 0))
+        return int(dynamic_groups.get(group, spec.get("desired", 0)))
     except Exception:
         return 0
+
+
+def builder_pool_desired_total(policy: dict[str, Any] | None = None) -> int:
+    pool = builder_pool_config(policy)
+    snapshot = _backlog_autoscaling_snapshot(policy)
+    dynamic_pool = snapshot.get("builder_pool") if isinstance(snapshot.get("builder_pool"), dict) else {}
+    try:
+        return int(dynamic_pool.get("desired_total", pool.get("desired_total", 0)))
+    except Exception:
+        return int(pool.get("desired_total", 0) or 0)
 
 
 def builder_pool_enabled(policy: dict[str, Any] | None = None) -> bool:
