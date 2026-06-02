@@ -129,7 +129,7 @@ def test_local_profile_policy_can_fill_account_and_choose_from_pool(tmp_path):
                 "policies": {
                     "default": {
                         "expected_account_email": "haogege1977@gmail.com",
-                        "allowed_profiles": ["Default", "Profile 1"],
+                        "allowed_profiles": ["Profile 1", "Profile 2"],
                         "selection": "first",
                     }
                 },
@@ -147,14 +147,92 @@ def test_local_profile_policy_can_fill_account_and_choose_from_pool(tmp_path):
         },
     )
     payload = json.loads(proc.stdout)
-    assert payload["profile_directory"] == "Default"
+    assert payload["profile_directory"] == "Profile 1"
     assert payload["target_account_email"] == "haogege1977@gmail.com"
     assert payload["chatgpt_account_email"] == "haogege1977@gmail.com"
     meta = json.loads((tmp_path / "request" / "report-operator-request.json").read_text())
     assert meta["profile_policy"]["enabled"] is True
     assert meta["profile_policy"]["policy_key"] == "hf_paper_insight"
-    assert meta["profile_policy"]["selected_profile_directory"] == "Default"
+    assert meta["profile_policy"]["selected_profile_directory"] == "Profile 1"
     assert meta["profile_policy"]["selected_account_email"] == "haogege1977@gmail.com"
+
+
+def test_hf_report_planner_uses_hf_profile_policy_key(tmp_path):
+    policy = tmp_path / "browser-agent-chatgpt-local.json"
+    policy.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "policies": {
+                    "default": {
+                        "expected_account_email": "someone@example.com",
+                        "allowed_profiles": ["Profile X"],
+                        "selection": "first",
+                    },
+                    "hf_paper_insight": {
+                        "expected_account_email": "haogege1977@gmail.com",
+                        "allowed_profiles": ["Profile 1"],
+                        "selection": "first",
+                    },
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    proc = run_operator(
+        tmp_path,
+        purpose="hf-paper-report-plan-2026-06-01",
+        expected="json",
+        env_extra={
+            "BROWSER_AGENT_CHATGPT_PROFILE_POLICY_DISABLED": "0",
+            "BROWSER_AGENT_CHATGPT_PROFILE_POLICY_FILE": str(policy),
+        },
+    )
+    payload = json.loads(proc.stdout)
+    assert payload["profile_directory"] == "Profile 1"
+    assert payload["target_account_email"] == "haogege1977@gmail.com"
+    meta = json.loads((tmp_path / "request" / "report-operator-request.json").read_text())
+    assert meta["profile_policy"]["policy_key"] == "hf_paper_insight"
+
+
+def test_hf_report_section_uses_hf_profile_policy_key(tmp_path):
+    policy = tmp_path / "browser-agent-chatgpt-local.json"
+    policy.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "policies": {
+                    "default": {
+                        "expected_account_email": "someone@example.com",
+                        "allowed_profiles": ["Profile X"],
+                        "selection": "first",
+                    },
+                    "hf_paper_insight": {
+                        "expected_account_email": "haogege1977@gmail.com",
+                        "allowed_profiles": ["Profile 1"],
+                        "selection": "first",
+                    },
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    proc = run_operator(
+        tmp_path,
+        purpose="hf-paper-report-section-2026-06-01-doc-intel",
+        expected="json",
+        env_extra={
+            "BROWSER_AGENT_CHATGPT_PROFILE_POLICY_DISABLED": "0",
+            "BROWSER_AGENT_CHATGPT_PROFILE_POLICY_FILE": str(policy),
+        },
+    )
+    payload = json.loads(proc.stdout)
+    assert payload["profile_directory"] == "Profile 1"
+    assert payload["target_account_email"] == "haogege1977@gmail.com"
+    meta = json.loads((tmp_path / "request" / "report-operator-request.json").read_text())
+    assert meta["profile_policy"]["policy_key"] == "hf_paper_insight"
 
 
 def test_local_profile_policy_rejects_profile_outside_allowed_pool(tmp_path):

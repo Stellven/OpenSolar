@@ -151,3 +151,28 @@ def test_chatgpt_wrapper_defaults_to_persistent_profile_strategy(monkeypatch):
         or "persistent"
     ).strip().lower()
     assert strategy == "persistent"
+
+
+def test_chatgpt_wrapper_defaults_to_chrome_channel(monkeypatch):
+    ns = _load_namespace()
+    monkeypatch.delenv("BROWSER_AGENT_CHATGPT_BROWSER_CHANNEL", raising=False)
+    monkeypatch.delenv("BROWSER_AGENT_BROWSER_CHANNEL", raising=False)
+    assert ns["_browser_channel"]() == "chrome"
+
+
+def test_cloudflare_challenge_grace_defaults_and_expires(monkeypatch):
+    ns = _load_namespace()
+    monkeypatch.delenv("BROWSER_AGENT_CHATGPT_CHALLENGE_GRACE_SECONDS", raising=False)
+    monkeypatch.delenv("BROWSER_AGENT_CHALLENGE_GRACE_SECONDS", raising=False)
+    assert ns["_challenge_grace_seconds"]() == 20.0
+    assert ns["_challenge_persisted_too_long"](100.0, now=119.9, grace_s=20.0) is False
+    assert ns["_challenge_persisted_too_long"](100.0, now=120.0, grace_s=20.0) is True
+
+
+def test_browser_user_agent_defaults_to_non_headless_chrome(monkeypatch):
+    ns = _load_namespace()
+    monkeypatch.delenv("BROWSER_AGENT_CHATGPT_USER_AGENT", raising=False)
+    monkeypatch.delenv("BROWSER_AGENT_USER_AGENT", raising=False)
+    ua = ns["_browser_user_agent"](browser_channel="chrome")
+    assert "Chrome/" in ua
+    assert "HeadlessChrome/" not in ua
