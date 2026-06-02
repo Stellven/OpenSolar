@@ -424,6 +424,26 @@ CREATE TABLE IF NOT EXISTS github_star_snapshots (
 );
 CREATE INDEX IF NOT EXISTS idx_gss_name ON github_star_snapshots(full_name);
 
+CREATE TABLE IF NOT EXISTS github_external_rank_snapshots (
+    snapshot_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    source            TEXT NOT NULL,
+    period            TEXT NOT NULL DEFAULT 'daily',
+    full_name         TEXT NOT NULL,
+    rank              INTEGER NOT NULL DEFAULT 0,
+    rank_url          TEXT NOT NULL DEFAULT '',
+    repo_url          TEXT NOT NULL DEFAULT '',
+    description       TEXT NOT NULL DEFAULT '',
+    language          TEXT NOT NULL DEFAULT '',
+    topics_json       TEXT NOT NULL DEFAULT '[]',
+    source_stars      INTEGER NOT NULL DEFAULT 0,
+    observed_at       TEXT NOT NULL,
+    captured_at       TEXT NOT NULL,
+    raw_json          TEXT NOT NULL DEFAULT '{}',
+    UNIQUE(source, period, full_name, observed_at)
+);
+CREATE INDEX IF NOT EXISTS idx_gers_source_period ON github_external_rank_snapshots(source, period, captured_at);
+CREATE INDEX IF NOT EXISTS idx_gers_repo ON github_external_rank_snapshots(full_name, captured_at);
+
 CREATE TABLE IF NOT EXISTS repo_evidence_atoms (
     atom_id           TEXT PRIMARY KEY,
     repo_full_name    TEXT NOT NULL,
@@ -3986,7 +4006,7 @@ def get_tables(conn: sqlite3.Connection) -> list[str]:
 
 
 def http_get_text(url: str, config: dict[str, Any]) -> str:
-    fetch = config.get("fetch") or {}
+    fetch = {**(config.get("fetch") or {}), **(((config.get("social") or {}).get("fetch")) or {})}
     timeout = int(fetch.get("timeout_seconds", 20))
     user_agent = fetch.get("user_agent", "Solar-Tech-Hotspot-Radar/1.0")
     req = urllib.request.Request(url, headers={"User-Agent": user_agent})
@@ -5009,7 +5029,8 @@ def parse_social_rss(handle: str, xml_text: str, fetched_at: str) -> list[dict[s
         guid = (item.findtext("guid") or link or text[:80]).strip()
         post_id_match = re.search(r"/status/([0-9A-Za-z_:-]+)", link)
         post_id = post_id_match.group(1) if post_id_match else re.sub(r"[^0-9A-Za-z_-]+", "_", guid)[-80:]
-        post_url = re.sub(r"https?://nitter\.net/", "https://x.com/", link)
+        post_url = re.sub(r"https?://(?:nitter\.net|xcancel\.com)/", "https://x.com/", link)
+        post_url = re.sub(r"https?://rsshub\.app/twitter/user/([^/]+)/status/", r"https://x.com/\1/status/", post_url)
         pub = item.findtext("pubDate") or ""
         created_at = fetched_at
         if pub:
@@ -5117,8 +5138,23 @@ def collect_social_posts_for_account(handle: str, account_id: str, backend: str,
         user_id, posts = collect_social_x_api_posts(handle, account_id, token, fetched_at, max_results=max(5, per_account_limit))
         return "x-api", user_id, posts[:per_account_limit]
     if selected == "rss":
-        url = f"https://nitter.net/{urllib.parse.quote(handle)}/rss"
-        return "rss", account_id, parse_social_rss(handle, http_get_text(url, config), fetched_at)[:per_account_limit]
+        social_fetch = ((config.get("social") or {}).get("fetch") or {})
+        root_fetch = config.get("fetch") or {}
+        templates = social_fetch.get("rss_templates") or root_fetch.get("rss_templates") or [
+            "https://nitter.net/{handle}/rss",
+        ]
+        errors: list[str] = []
+        quoted_handle = urllib.parse.quote(handle)
+        for template in templates:
+            url = str(template).format(handle=quoted_handle)
+            try:
+                posts = parse_social_rss(handle, http_get_text(url, config), fetched_at)[:per_account_limit]
+                if posts:
+                    return "rss", account_id, posts
+                errors.append(f"{url}: empty")
+            except Exception as exc:
+                errors.append(f"{url}: {type(exc).__name__}: {exc}")
+        raise RuntimeError("rss backends exhausted; " + " | ".join(errors[:3]))
     raise ValueError(f"unknown social backend: {backend}")
 
 
@@ -6546,6 +6582,36 @@ def github_materialize_project_intelligence(conn: sqlite3.Connection, full_name:
             created_at=created_at,
         ))
 
+    external_rank_rows = conn.execute(
+        "SELECT source, period, rank, rank_url, description, topics_json, observed_at, captured_at "
+        "FROM github_external_rank_snapshots WHERE full_name=? "
+        "ORDER BY captured_at DESC, rank ASC LIMIT 6",
+        (full_name,),
+    ).fetchall()
+    external_rank_signal = 0.0
+    best_external_rank = None
+    if external_rank_rows:
+        best_external_rank = min(int(r[2] or 999) for r in external_rank_rows)
+        external_rank_signal = max(0.1, min(1.0, 1.0 - (best_external_rank - 1) / 25.0))
+        periods = sorted({str(r[1] or "daily") for r in external_rank_rows})
+        rank_summary = "; ".join(
+            f"{r[0]} {r[1]} rank #{int(r[2] or 0)}" for r in external_rank_rows[:3]
+        )
+        evidence_ids.append(github_insert_repo_atom(
+            conn, full_name=full_name, evidence_type="growth_fact",
+            content=(
+                f"{full_name} external trend signal: {rank_summary}. "
+                f"Trendshift periods={', '.join(periods)}; best_rank={best_external_rank}."
+            ),
+            tags=[bucket, "external_trend_signal", "trendshift"],
+            confidence=0.78,
+            technical_depth=0.35,
+            novelty_score=external_rank_signal,
+            raw_source_type="trendshift_rank",
+            raw_source_id=f"{full_name}:trendshift:{created_at[:10]}",
+            created_at=created_at,
+        ))
+
     atoms = conn.execute(
         "SELECT atom_id, evidence_type, compressed_content, technical_depth, novelty_score "
         "FROM repo_evidence_atoms WHERE repo_full_name=? ORDER BY created_at DESC",
@@ -6561,7 +6627,7 @@ def github_materialize_project_intelligence(conn: sqlite3.Connection, full_name:
         recent_activity=0.75 if pushed_at else 0.25,
         release_signal=1.0 if latest_release_tag else 0.0,
         semantic_relevance=semantic_score((description or "") + " " + readme[:3000]),
-        social_cross=social_cross,
+        social_cross=max(social_cross, external_rank_signal * 0.65),
         maintainer_quality=0.55,
     )
     potential_score = round(
@@ -6570,7 +6636,7 @@ def github_materialize_project_intelligence(conn: sqlite3.Connection, full_name:
         + 0.15 * (0.8 if readme else 0.2)
         + 0.15 * (0.8 if latest_release_tag else 0.3)
         + 0.15 * (0.8 if forks and forks > 10 else 0.3)
-        + 0.10 * social_cross,
+        + 0.10 * max(social_cross, external_rank_signal * 0.8),
         4,
     )
     if heat_score >= 0.75 and potential_score >= 0.7:
@@ -6598,6 +6664,7 @@ def github_materialize_project_intelligence(conn: sqlite3.Connection, full_name:
         {"name": "sudden_hot", "matched": acceleration_tier in {"breakout", "sudden_hot", "needs_attribution"}, "acceleration": acceleration},
         {"name": "early_potential", "matched": 50 <= (stars or 0) <= 2000 and potential_score >= 0.6},
         {"name": "foundation_infra_candidate", "matched": bucket in {"agent_runtime", "agent_skill", "context_engineering", "inference_compute", "infra_os"} and technical_depth >= 0.55},
+        {"name": "external_trendshift_signal", "matched": bool(external_rank_rows), "best_rank": best_external_rank},
     ]
     scores = {
         "heat_score": heat_score,
@@ -6605,6 +6672,8 @@ def github_materialize_project_intelligence(conn: sqlite3.Connection, full_name:
         "technical_depth_score": round(technical_depth, 4),
         "novelty_score": round(novelty, 4),
         "social_cross_signal": social_cross,
+        "external_rank_signal": round(external_rank_signal, 4),
+        "trendshift_best_rank": best_external_rank,
         "stars_delta_7d": star_delta_7d,
         "acceleration": acceleration,
     }
@@ -6631,6 +6700,8 @@ def github_materialize_project_intelligence(conn: sqlite3.Connection, full_name:
         growth_content,
         f"trend_bucket={bucket}, latest_release={latest_release_tag or 'N/A'}, social_mentions={len(social_mentions)}",
     ]
+    if external_rank_rows:
+        why_hot.append(f"Trendshift 外部趋势榜出现：best_rank={best_external_rank}，periods={','.join(sorted({str(r[1] or 'daily') for r in external_rank_rows}))}")
     watch_next = [
         "观察 24h/7d star 增速是否持续",
         "检查 release、issue、PR 活跃度是否跟上热度",
@@ -6681,8 +6752,13 @@ def github_materialize_project_intelligence(conn: sqlite3.Connection, full_name:
 
 
 def github_analyze_projects(conn: sqlite3.Connection, *, limit: int = 0, force: bool = False) -> list[dict[str, Any]]:
+    trend_cutoff = (now_utc() - dt.timedelta(hours=48)).strftime("%Y-%m-%dT%H:%M:%SZ")
     sql = (
         "SELECT full_name FROM github_repos ORDER BY "
+        "CASE WHEN full_name IN ("
+        "  SELECT full_name FROM github_external_rank_snapshots "
+        f"  WHERE source='trendshift' AND captured_at>='{trend_cutoff}'"
+        ") THEN 0 ELSE 1 END, "
         "COALESCE(stars,0) DESC, fetched_at DESC, full_name"
     )
     rows = conn.execute(sql).fetchall()
@@ -6703,6 +6779,373 @@ def github_analyze_projects(conn: sqlite3.Connection, *, limit: int = 0, force: 
 
 BASELINE_FILE_SUFFIXES = {".md", ".markdown", ".html", ".htm", ".txt", ".json", ".jsonl"}
 GITHUB_REPO_RE = re.compile(r"github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)")
+
+
+def github_valid_repo_slug(full_name: str) -> bool:
+    if not full_name or full_name.count("/") != 1:
+        return False
+    owner, repo = full_name.split("/", 1)
+    reserved = {"apps", "collections", "features", "login", "marketplace", "new", "orgs", "sponsors", "topics", "trending"}
+    slug_re = re.compile(r"^[A-Za-z0-9_.-]+$")
+    return bool(owner.lower() not in reserved and "." not in owner and slug_re.match(owner) and slug_re.match(repo))
+
+
+def github_parse_compact_int(value: Any) -> int:
+    text = str(value or "").replace(",", "").strip().lower()
+    if not text:
+        return 0
+    mult = 1
+    if text.endswith("k"):
+        mult = 1000
+        text = text[:-1]
+    elif text.endswith("m"):
+        mult = 1000000
+        text = text[:-1]
+    try:
+        return int(float(text) * mult)
+    except ValueError:
+        m = re.search(r"-?\d+(?:\.\d+)?", text)
+        return int(float(m.group(0)) * mult) if m else 0
+
+
+def github_trendshift_config(config: dict[str, Any]) -> dict[str, Any]:
+    github_cfg = config.get("github") or {}
+    external = github_cfg.get("external_sources") or {}
+    trendshift = external.get("trendshift") or {}
+    if not trendshift:
+        trendshift = {"enabled": True, "base_url": "https://trendshift.io", "periods": ["daily", "weekly", "monthly"], "limit": 25, "topic_limit": 25}
+    return trendshift
+
+
+def github_trendshift_period_url(base_url: str, period: str) -> str:
+    base = (base_url or "https://trendshift.io").rstrip("/")
+    if period == "daily":
+        return base + "/"
+    return base + "/" + period.strip("/")
+
+
+def github_parse_trendshift_topic_links(page_html: str, *, limit: int = 0) -> list[dict[str, str]]:
+    topics: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for match in re.finditer(r'href=["\'](/topics/([A-Za-z0-9_.-]+))["\'][^>]*>(.*?)</a>', page_html, re.S):
+        path = html.unescape(match.group(1))
+        slug = html.unescape(match.group(2)).strip()
+        if not slug or slug in seen:
+            continue
+        label = re.sub(r"<[^>]+>", " ", match.group(3))
+        label = re.sub(r"\s+", " ", html.unescape(label)).strip()
+        label = re.sub(r"^\d+\s*#?\s*", "", label).strip()
+        label = label.lstrip("# ").strip() or slug.replace("-", " ")
+        topics.append({"slug": slug, "path": path, "label": label})
+        seen.add(slug)
+        if limit and len(topics) >= limit:
+            break
+    return topics
+
+
+def github_parse_trendshift_topic_page(page_html: str, *, topic_slug: str, topic_label: str, url: str) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    card_re = re.compile(
+        r'(<div class="[^"]*hover:bg-accent[^"]*group[^"]*".*?)(?=<div class="[^"]*hover:bg-accent[^"]*group|\Z)',
+        re.S,
+    )
+    for block_match in card_re.finditer(page_html):
+        block = block_match.group(1)
+        repo_match = re.search(r'href=["\'](/repositories/\d+)["\'][^>]*>([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)</a>', block)
+        if not repo_match:
+            continue
+        full_name = html.unescape(repo_match.group(2)).strip().strip("/")
+        if not github_valid_repo_slug(full_name) or full_name in seen:
+            continue
+        seen.add(full_name)
+        desc_match = re.search(r'<p class="[^"]*text-muted-foreground[^"]*text-sm[^"]*"[^>]*>(.*?)</p>', block, re.S)
+        description = re.sub(r"<[^>]+>", " ", desc_match.group(1)) if desc_match else ""
+        description = re.sub(r"\s+", " ", html.unescape(description)).strip()
+        star_match = re.search(r'lucide-star.*?</svg>\s*<span[^>]*>([^<]+)</span>', block, re.S)
+        topic_labels = []
+        for topic_match in re.finditer(r'href=["\']/topics/[^"\']+["\'][^>]*>.*?</span>(.*?)</a>', block, re.S):
+            label = re.sub(r"<[^>]+>", " ", topic_match.group(1))
+            label = re.sub(r"\s+", " ", html.unescape(label)).strip()
+            if label and label not in topic_labels:
+                topic_labels.append(label)
+        if topic_label and topic_label not in topic_labels:
+            topic_labels.insert(0, topic_label)
+        rows.append({
+            "source": "trendshift",
+            "period": f"topic:{topic_slug}",
+            "full_name": full_name,
+            "owner": full_name.split("/", 1)[0],
+            "repo": full_name.split("/", 1)[1],
+            "rank": len(rows) + 1,
+            "rank_url": "https://trendshift.io" + html.unescape(repo_match.group(1)),
+            "repo_url": f"https://github.com/{full_name}",
+            "description": description,
+            "language": "",
+            "topics": topic_labels,
+            "date_created": "",
+            "date_modified": "",
+            "source_stars": github_parse_compact_int(star_match.group(1) if star_match else ""),
+            "raw": {"topic_slug": topic_slug, "topic_label": topic_label, "topic_url": url},
+        })
+    return rows
+
+
+def github_parse_trendshift_page(page_html: str, *, period: str, url: str) -> list[dict[str, Any]]:
+    """Extract Trendshift ItemList JSON-LD into normalized repo rank snapshots."""
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for match in re.finditer(r'<script\s+type=["\']application/ld\+json["\']>(.*?)</script>', page_html, re.S | re.I):
+        raw_json = html.unescape(match.group(1))
+        try:
+            data = json.loads(raw_json)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(data, dict) or data.get("@type") != "ItemList":
+            continue
+        for entry in data.get("itemListElement") or []:
+            if not isinstance(entry, dict):
+                continue
+            item = entry.get("item") or {}
+            repo_url = str(item.get("codeRepository") or item.get("url") or "")
+            repo_match = re.search(r"github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)", repo_url)
+            full_name = str(item.get("name") or (repo_match.group(1) if repo_match else "")).strip().strip("/")
+            if not github_valid_repo_slug(full_name) or full_name in seen:
+                continue
+            seen.add(full_name)
+            topics = item.get("keywords") or []
+            if isinstance(topics, str):
+                topics = [topics]
+            rows.append({
+                "source": "trendshift",
+                "period": period,
+                "full_name": full_name,
+                "owner": full_name.split("/", 1)[0],
+                "repo": full_name.split("/", 1)[1],
+                "rank": int(entry.get("position") or len(rows) + 1),
+                "rank_url": str(entry.get("url") or url),
+                "repo_url": f"https://github.com/{full_name}",
+                "description": str(item.get("description") or "").strip(),
+                "language": str(item.get("programmingLanguage") or "").strip(),
+                "topics": [str(t).strip() for t in topics if str(t).strip()],
+                "date_created": str(item.get("dateCreated") or ""),
+                "date_modified": str(item.get("dateModified") or ""),
+                "source_stars": 0,
+                "raw": entry,
+            })
+    if rows:
+        return rows
+
+    # Fallback for site markup changes: keep repo URLs as weak rank-only signals.
+    for match in re.finditer(r'https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)', page_html):
+        full_name = html.unescape(match.group(1)).strip().strip("/")
+        if not github_valid_repo_slug(full_name) or full_name in seen:
+            continue
+        seen.add(full_name)
+        rows.append({
+            "source": "trendshift",
+            "period": period,
+            "full_name": full_name,
+            "owner": full_name.split("/", 1)[0],
+            "repo": full_name.split("/", 1)[1],
+            "rank": len(rows) + 1,
+            "rank_url": url,
+            "repo_url": f"https://github.com/{full_name}",
+            "description": "",
+            "language": "",
+            "topics": [],
+            "date_created": "",
+            "date_modified": "",
+            "source_stars": 0,
+            "raw": {"fallback": True, "repo": full_name},
+        })
+    return rows
+
+
+def github_upsert_minimal_repo_from_external(conn: sqlite3.Connection, row: dict[str, Any], captured_at: str) -> None:
+    full_name = row["full_name"]
+    owner, repo = full_name.split("/", 1)
+    conn.execute(
+        "INSERT INTO github_repos "
+        "(full_name, owner, repo, html_url, description, topics, language, fetched_at) "
+        "VALUES (?,?,?,?,?,?,?,?) "
+        "ON CONFLICT(full_name) DO UPDATE SET "
+        "description=CASE WHEN github_repos.description='' THEN excluded.description ELSE github_repos.description END, "
+        "topics=CASE WHEN github_repos.topics='' THEN excluded.topics ELSE github_repos.topics END, "
+        "language=CASE WHEN github_repos.language='' THEN excluded.language ELSE github_repos.language END",
+        (
+            full_name,
+            owner,
+            repo,
+            row.get("repo_url") or f"https://github.com/{full_name}",
+            row.get("description") or "",
+            ",".join(row.get("topics") or []),
+            row.get("language") or "",
+            captured_at,
+        ),
+    )
+
+
+def github_insert_trendshift_signal(conn: sqlite3.Connection, row: dict[str, Any], captured_at: str) -> None:
+    full_name = row["full_name"]
+    observed_at = row.get("date_modified") or captured_at.split("T", 1)[0]
+    conn.execute(
+        "INSERT INTO github_external_rank_snapshots "
+        "(source, period, full_name, rank, rank_url, repo_url, description, language, topics_json, "
+        "source_stars, observed_at, captured_at, raw_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) "
+        "ON CONFLICT(source, period, full_name, observed_at) DO UPDATE SET "
+        "rank=excluded.rank, rank_url=excluded.rank_url, repo_url=excluded.repo_url, "
+        "description=excluded.description, language=excluded.language, topics_json=excluded.topics_json, "
+        "source_stars=excluded.source_stars, captured_at=excluded.captured_at, raw_json=excluded.raw_json",
+        (
+            "trendshift",
+            row.get("period") or "daily",
+            full_name,
+            int(row.get("rank") or 0),
+            row.get("rank_url") or "",
+            row.get("repo_url") or f"https://github.com/{full_name}",
+            row.get("description") or "",
+            row.get("language") or "",
+            json.dumps(row.get("topics") or [], ensure_ascii=False),
+            int(row.get("source_stars") or 0),
+            observed_at,
+            captured_at,
+            json.dumps(row.get("raw") or {}, ensure_ascii=False, sort_keys=True),
+        ),
+    )
+    signal_id = "bs_" + hashlib.sha256(f"trendshift\0{row.get('period')}\0{full_name}\0{observed_at}".encode()).hexdigest()[:24]
+    conn.execute(
+        "INSERT OR IGNORE INTO baseline_signals "
+        "(signal_id, source_kind, item_key, title, url, category, metric_name, metric_value, signal_time, captured_at, raw_json) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            signal_id,
+            "github",
+            full_name,
+            full_name,
+            row.get("repo_url") or f"https://github.com/{full_name}",
+            f"trendshift:{row.get('period') or 'daily'}",
+            "trendshift_rank",
+            float(row.get("rank") or 0),
+            observed_at,
+            captured_at,
+            json.dumps({
+                "source": "trendshift",
+                "period": row.get("period") or "daily",
+                "rank": row.get("rank") or 0,
+                "rank_url": row.get("rank_url") or "",
+                "description": row.get("description") or "",
+                "language": row.get("language") or "",
+                "topics": row.get("topics") or [],
+            }, ensure_ascii=False, sort_keys=True),
+        ),
+    )
+    evidence_id = "gh_ts_" + hashlib.sha256(f"{full_name}\0{row.get('period')}\0{observed_at}".encode()).hexdigest()[:24]
+    content = (
+        f"{full_name} appeared on Trendshift {row.get('period') or 'daily'} ranking "
+        f"at rank #{int(row.get('rank') or 0)}. "
+        f"{row.get('description') or ''}"
+    ).strip()
+    conn.execute(
+        "INSERT OR IGNORE INTO evidence_atoms "
+        "(evidence_id, source, source_id, source_table, atom_type, content, metadata_json, "
+        "importance_score, novelty_score, technical_depth, source_weight, created_at, model_used) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            evidence_id,
+            "github",
+            full_name,
+            "github_external_rank_snapshots",
+            "importance_signal",
+            content,
+            json.dumps({
+                "external_source": "trendshift",
+                "period": row.get("period") or "daily",
+                "rank": row.get("rank") or 0,
+                "rank_url": row.get("rank_url") or "",
+                "topics": row.get("topics") or [],
+            }, ensure_ascii=False, sort_keys=True),
+            max(0.2, 1.0 - (int(row.get("rank") or 25) - 1) / 25.0),
+            0.65,
+            semantic_score((row.get("description") or "") + " " + " ".join(row.get("topics") or [])),
+            0.85,
+            captured_at,
+            LOCAL_KNOWLEDGE_MODEL,
+        ),
+    )
+
+
+def github_collect_trendshift(conn: sqlite3.Connection, config: dict[str, Any], *,
+                              periods: list[str] | None = None, limit: int = 0,
+                              force: bool = False) -> dict[str, Any]:
+    cfg = github_trendshift_config(config)
+    if cfg.get("enabled", True) is False:
+        return {"ok": True, "enabled": False, "rows": 0, "periods": []}
+    min_hours = float((cfg.get("min_source_interval_hours") or (config.get("fetch") or {}).get("min_source_interval_hours") or 6))
+    if not force and recent_success_within(conn, "github", "collect-github-trendshift", min_hours):
+        return {"ok": True, "skipped": True, "reason": f"last successful run within {min_hours:g}h", "rows": 0, "periods": []}
+    selected_periods = periods or list(cfg.get("periods") or ["daily", "weekly", "monthly"])
+    per_period_limit = int(limit or cfg.get("limit") or 25)
+    topic_limit = int(cfg.get("topic_limit") or per_period_limit or 25)
+    max_topics = int(cfg.get("max_topics") or 0)
+    collect_topics = bool(cfg.get("collect_topics", True))
+    base_url = str(cfg.get("base_url") or cfg.get("url") or "https://trendshift.io")
+    captured_at = iso_z()
+    inserted = 0
+    failures: list[str] = []
+    by_period: dict[str, int] = {}
+    homepage_html = ""
+    for period in selected_periods:
+        period = str(period or "daily").strip().lower()
+        url = github_trendshift_period_url(base_url, period)
+        try:
+            text = http_get_text(url, config)
+            if period == "daily":
+                homepage_html = text
+            rows = github_parse_trendshift_page(text, period=period, url=url)[:per_period_limit]
+            by_period[period] = len(rows)
+            for row in rows:
+                github_upsert_minimal_repo_from_external(conn, row, captured_at)
+                github_insert_trendshift_signal(conn, row, captured_at)
+                inserted += 1
+            conn.commit()
+        except Exception as exc:
+            failures.append(f"{period}: {type(exc).__name__}: {exc}")
+        sleep_between_requests(config)
+    if collect_topics:
+        try:
+            if not homepage_html:
+                homepage_html = http_get_text(github_trendshift_period_url(base_url, "daily"), config)
+            topics = github_parse_trendshift_topic_links(homepage_html, limit=max_topics)
+            for topic in topics:
+                topic_url = base_url.rstrip("/") + topic["path"]
+                try:
+                    text = http_get_text(topic_url, config)
+                    rows = github_parse_trendshift_topic_page(
+                        text,
+                        topic_slug=topic["slug"],
+                        topic_label=topic["label"],
+                        url=topic_url,
+                    )[:topic_limit]
+                    period_key = f"topic:{topic['slug']}"
+                    by_period[period_key] = len(rows)
+                    for row in rows:
+                        github_upsert_minimal_repo_from_external(conn, row, captured_at)
+                        github_insert_trendshift_signal(conn, row, captured_at)
+                        inserted += 1
+                    conn.commit()
+                except Exception as exc:
+                    failures.append(f"topic:{topic['slug']}: {type(exc).__name__}: {exc}")
+                sleep_between_requests(config)
+        except Exception as exc:
+            failures.append(f"topics: {type(exc).__name__}: {exc}")
+    return {
+        "ok": not failures,
+        "source": "trendshift",
+        "rows": inserted,
+        "periods": by_period,
+        "failures": failures[:10],
+    }
 
 
 def baseline_parse_dt(value: str | None) -> dt.datetime | None:
@@ -7910,6 +8353,1967 @@ def hf_paper_github_metadata(
     }, ""
 
 
+def hf_paper_insight_module_path() -> Path:
+    return Path(__file__).resolve().parents[1] / "tools" / "hf_paper_insight"
+
+
+def hf_paper_add_module_path() -> Path:
+    module_dir = hf_paper_insight_module_path()
+    if str(module_dir) not in sys.path:
+        sys.path.insert(0, str(module_dir))
+    return module_dir
+
+
+def hf_json_load(raw: Any, default: Any) -> Any:
+    if raw is None:
+        return default
+    if isinstance(raw, (dict, list)):
+        return raw
+    try:
+        data = json.loads(str(raw))
+    except Exception:
+        return default
+    return data if data is not None else default
+
+
+def hf_latest_entity(conn: sqlite3.Connection, table: str, paper_id: str, order_col: str, entity_cls: type) -> Any | None:
+    row = conn.execute(
+        f"SELECT * FROM {table} WHERE paper_id=? ORDER BY {order_col} DESC LIMIT 1",
+        (paper_id,),
+    ).fetchone()
+    return entity_cls(**dict(row)) if row else None
+
+
+def hf_public_action(record: dict[str, Any]) -> str:
+    scores = record.get("scores") or {}
+    taxonomy = record.get("taxonomy") or {}
+    assets = record.get("assets") or {}
+    github = record.get("github") or {}
+    if float(scores.get("experiment") or 0.0) >= 0.65:
+        return "优先做复现实验和 benchmark，对照现有工程栈验证可用性。"
+    if float(scores.get("open_project") or 0.0) >= 0.55 or github.get("full_name") or github.get("url"):
+        return "进入开源项目观察池，联动 GitHub 趋势模块跟踪 repo 活跃度。"
+    if (assets.get("linked_models") or assets.get("linked_spaces")):
+        return "进入产品/demo 观察池，评估是否适合做 AI Influence 教程或案例拆解。"
+    if str(taxonomy.get("research_route") or "") in {"engineering", "data_engineering"}:
+        return "进入 Deep Research seed，抽取可落地的工程假设。"
+    return "进入 watchlist，等待 GitHub、社交或 YouTube 跨源信号增强。"
+
+
+def hf_public_why_matters(record: dict[str, Any]) -> str:
+    taxonomy = record.get("taxonomy") or {}
+    scores = record.get("scores") or {}
+    assets = record.get("assets") or {}
+    github = record.get("github") or {}
+    domain = taxonomy.get("domain") or "AI"
+    layer = taxonomy.get("stack_layer") or "model"
+    route = taxonomy.get("research_route") or "applied_research"
+    if (assets.get("total_assets") or 0) or github.get("full_name") or github.get("url"):
+        return f"这篇论文已经出现可复现资产或代码线索，适合从“论文信号”升级为“工程验证对象”。方向属于 {domain}/{layer}，研究路线为 {route}。"
+    if float(scores.get("novelty") or 0.0) >= 0.8:
+        return f"这篇论文的新颖性信号较强，适合观察其是否带动后续开源实现、模型发布或社区讨论。方向属于 {domain}/{layer}。"
+    return f"这篇论文可作为 {domain}/{layer} 方向的弱信号纳入观察，后续需要跨源证据增强。"
+
+
+def hf_paper_high_reasoning_config(config: dict[str, Any], override_mode: str | None = None) -> tuple[dict[str, Any], str]:
+    cfg = ((config.get("hf_paper_insight") or {}).get("high_reasoning") or {})
+    raw_mode = (
+        override_mode
+        or os.environ.get("HF_PAPER_REASONING_MODE")
+        or cfg.get("mode")
+        or "browser_agent"
+    )
+    mode = str(raw_mode or "").strip().lower().replace("-", "_")
+    aliases = {
+        "premium": "browser_agent",
+        "premium_insight": "browser_agent",
+        "high": "browser_agent",
+        "chatgpt": "browser_agent",
+        "chatgpt_thinking_high": "browser_agent",
+        "fallback_report": "fallback",
+        "template": "fallback",
+        "off": "disabled",
+        "none": "disabled",
+    }
+    mode = aliases.get(mode, mode)
+    if mode not in {"browser_agent", "fallback", "disabled"}:
+        mode = "browser_agent"
+    return cfg, mode
+
+
+def hf_build_high_reasoning_prompt(packet: Any, resonance: dict[str, Any]) -> str:
+    canonical = hf_json_load(getattr(packet, "canonical_summary_json", "{}"), {})
+    taxonomy = hf_json_load(getattr(packet, "taxonomy_summary_json", "{}"), {})
+    scores = hf_json_load(getattr(packet, "score_summary_json", "{}"), {})
+    gate = hf_json_load(getattr(packet, "packet_gate_json", "{}"), {})
+    evidence_atoms = hf_json_load(getattr(packet, "evidence_atoms_json", "[]"), [])
+    evidence_brief = evidence_atoms[:12] if isinstance(evidence_atoms, list) else []
+    packet_payload = {
+        "paper_id": getattr(packet, "paper_id", ""),
+        "packet_id": getattr(packet, "packet_id", ""),
+        "canonical": canonical,
+        "taxonomy": taxonomy,
+        "scores": scores,
+        "gate": gate,
+        "resonance": resonance,
+        "evidence_atoms": evidence_brief,
+    }
+    return f"""你是 AI Influence 的论文洞察主笔和研究策划负责人。
+
+任务：基于 HF Paper Insight 的 Evidence Packet，完成 L7 High Reasoning。
+必须输出 JSON，不要 Markdown，不要代码块，不要解释系统行为。
+
+硬要求：
+1. 不要复述论文摘要，要判断这篇论文为什么值得/不值得进入 AI Influence。
+2. 每个关键判断必须绑定 evidence_ids；证据不足时明确写 evidence_gap。
+3. 区分 real_trend / weak_signal / hype / watchlist。
+4. 输出要能驱动正式日报、实验计划、开源项目观察和 Deep Research seed。
+5. 不允许输出泛泛的“值得关注”；必须给出具体研究/工程/内容动作。
+
+输出 JSON Schema：
+{{
+  "accepted": true,
+  "trend_type": "real_trend | weak_signal | hype | watchlist",
+  "summary": "一句话核心判断",
+  "why_it_matters": "为什么重要",
+  "recommended_action": "推荐动作",
+  "research_implication": "研究启示",
+  "experiment_plan": ["可执行实验 1", "可执行实验 2"],
+  "open_source_opportunity": "开源/工程机会",
+  "deep_research_question": "值得 Deep Research 的问题",
+  "hypotheses": ["假设 1", "假设 2"],
+  "strategic_questions": ["战略问题 1", "战略问题 2"],
+  "evidence_ids": ["paper_id 或 packet_id 或 evidence_id"],
+  "evidence_gap": []
+}}
+
+Evidence Packet:
+{json.dumps(packet_payload, ensure_ascii=False, indent=2)}
+"""
+
+
+def hf_fallback_reasoning(engine: Any, packet: Any, *, requested_mode: str, reason: str | None = None) -> dict[str, Any]:
+    reasoning = dict(engine.call_high_model(packet, mode="fallback"))
+    reasoning["reasoning_mode"] = "fallback_report"
+    reasoning["requested_reasoning_mode"] = requested_mode
+    reasoning["premium_insight_available"] = False
+    if reason:
+        reasoning["fallback_reason"] = str(reason)[:500]
+    routing = dict(reasoning.get("routing_contract") or {})
+    routing.update({
+        "actor_type": "batch_reasoning",
+        "requires_browser": False,
+        "requested_actor_type": "browser_agent" if requested_mode == "browser_agent" else requested_mode,
+    })
+    reasoning["routing_contract"] = routing
+    return reasoning
+
+
+def hf_call_high_reasoning(
+    engine: Any,
+    packet: Any,
+    resonance: dict[str, Any],
+    config: dict[str, Any],
+    *,
+    override_mode: str | None = None,
+) -> dict[str, Any]:
+    high_cfg, mode = hf_paper_high_reasoning_config(config, override_mode)
+    if mode in {"fallback", "disabled"}:
+        return hf_fallback_reasoning(engine, packet, requested_mode=mode)
+
+    prompt = hf_build_high_reasoning_prompt(packet, resonance)
+    resolved_headless = _env_override_bool("BROWSER_AGENT_HEADLESS", "TECH_HOTSPOT_BROWSER_CHATGPT_HEADLESS")
+    resolved_profile_directory = _env_override_text(
+        "BROWSER_AGENT_PROFILE_DIRECTORY",
+        "TECH_HOTSPOT_BROWSER_CHATGPT_PROFILE_DIRECTORY",
+    ) or str(high_cfg.get("profile_directory") or "Default")
+    resolved_target_account_email = _env_override_text(
+        "BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL",
+        "BROWSER_AGENT_TARGET_ACCOUNT_EMAIL",
+        "TECH_HOTSPOT_BROWSER_CHATGPT_ACCOUNT_EMAIL",
+    ) or str(high_cfg.get("target_account_email") or "").strip()
+    try:
+        payload = call_browser_agent_chatgpt_json(
+            prompt,
+            config,
+            purpose=f"hf-paper-l7-high-reasoning-{slugify(str(getattr(packet, 'paper_id', 'paper')))[:40]}",
+            requested_model=str(high_cfg.get("model") or "chatgpt-5.5"),
+            operator_kind=str(high_cfg.get("operator_kind") or "hf_paper_l7_high_reasoning"),
+            requested_reasoning_effort=str(high_cfg.get("reasoning_effort") or "high"),
+            requested_timeout_seconds=int(high_cfg.get("timeout_seconds") or 1800),
+            requested_max_prompt_chars=int(high_cfg.get("max_prompt_chars") or 120000),
+            target_url=str(high_cfg.get("target_url") or "") or None,
+            headless=resolved_headless if resolved_headless is not None else bool(high_cfg.get("headless", False)),
+            profile_directory=resolved_profile_directory,
+            target_account_email=resolved_target_account_email or None,
+            scrub_client_state=bool(high_cfg.get("scrub_client_state", False)),
+            open_project_first=bool(high_cfg.get("open_project_first", False)),
+            require_project=bool(high_cfg.get("require_project", False)),
+            force_new_chat=bool(high_cfg.get("force_new_chat", True)),
+            require_isolated_conversation=bool(high_cfg.get("require_isolated_conversation", True)),
+        )
+    except Exception as exc:
+        return hf_fallback_reasoning(
+            engine,
+            packet,
+            requested_mode=mode,
+            reason=f"{type(exc).__name__}: {exc}",
+        )
+
+    evidence_ids = payload.get("evidence_ids")
+    if not isinstance(evidence_ids, list):
+        evidence_ids = [getattr(packet, "paper_id", ""), getattr(packet, "packet_id", "")]
+    evidence_blob = json.dumps(payload, ensure_ascii=False)
+    current_paper_id = str(getattr(packet, "paper_id", "") or "").strip()
+    current_packet_id = str(getattr(packet, "packet_id", "") or "").strip()
+    if current_paper_id and current_paper_id not in evidence_blob and current_packet_id not in evidence_blob:
+        return hf_fallback_reasoning(
+            engine,
+            packet,
+            requested_mode=mode,
+            reason="Browser Agent high reasoning response did not reference current evidence ids",
+        )
+    hypotheses = payload.get("hypotheses")
+    if not isinstance(hypotheses, list):
+        hypotheses = []
+    strategic_questions = payload.get("strategic_questions")
+    if not isinstance(strategic_questions, list):
+        strategic_questions = []
+    summary = str(payload.get("summary") or payload.get("one_line_judgment") or "").strip()
+    if not summary:
+        return hf_fallback_reasoning(
+            engine,
+            packet,
+            requested_mode=mode,
+            reason="Browser Agent high reasoning returned JSON without summary",
+        )
+    return {
+        "accepted": bool(payload.get("accepted", True)),
+        "reasoning_mode": "premium_insight",
+        "requested_reasoning_mode": mode,
+        "premium_insight_available": True,
+        "routing_contract": {
+            "actor_type": "browser_agent",
+            "requires_browser": True,
+            "packet_id": getattr(packet, "packet_id", ""),
+            "paper_id": getattr(packet, "paper_id", ""),
+            "backend": payload.get("_backend", "browser_agent_chatgpt"),
+            "model": payload.get("_model") or high_cfg.get("model") or "chatgpt-5.5",
+            "reasoning_effort": payload.get("_reasoning_effort") or high_cfg.get("reasoning_effort") or "high",
+            "request_dir": payload.get("_request_dir", ""),
+        },
+        "summary": summary,
+        "why_it_matters": str(payload.get("why_it_matters") or "").strip(),
+        "recommended_action": str(payload.get("recommended_action") or "").strip(),
+        "research_implication": str(payload.get("research_implication") or "").strip(),
+        "experiment_plan": [str(x) for x in payload.get("experiment_plan") or [] if str(x).strip()],
+        "open_source_opportunity": str(payload.get("open_source_opportunity") or "").strip(),
+        "deep_research_question": str(payload.get("deep_research_question") or "").strip(),
+        "trend_type": str(payload.get("trend_type") or "watchlist").strip(),
+        "hypotheses": [str(x) for x in hypotheses if str(x).strip()],
+        "strategic_questions": [str(x) for x in strategic_questions if str(x).strip()],
+        "evidence_ids": [str(x) for x in evidence_ids if str(x).strip()],
+        "evidence_gap": [str(x) for x in payload.get("evidence_gap") or [] if str(x).strip()],
+        "model_usage": {
+            "input_token_count": payload.get("input_token_count", 0),
+            "output_token_count": payload.get("output_token_count", 0),
+            "cost_estimate_usd": payload.get("cost_estimate_usd", 0.0),
+            "latency_ms": payload.get("_latency_ms", 0),
+        },
+    }
+
+
+def hf_public_record_from_entities(canonical: Any, enrichment: Any, taxonomy: Any, signal: Any, packet: Any, resonance: dict[str, Any], reasoning: dict[str, Any]) -> dict[str, Any]:
+    canonical_summary = hf_json_load(getattr(packet, "canonical_summary_json", "{}"), {})
+    hf_meta = hf_json_load(getattr(enrichment, "hf_metadata_json", "{}"), {})
+    assets = hf_json_load(getattr(enrichment, "hf_assets_json", "{}"), {})
+    github = hf_json_load(getattr(enrichment, "github_repo_json", "{}"), {})
+    authors = hf_json_load(getattr(canonical, "authors_json", "[]"), [])
+    summary = (
+        str(hf_meta.get("summary") or "")
+        or str((hf_meta.get("card_data") or {}).get("description") or "")
+        or str((hf_json_load(getattr(enrichment, "arxiv_metadata_json", "{}"), {}) or {}).get("summary") or "")
+    )
+    summary = re.sub(r"\s+", " ", summary).strip()
+    scores = {
+        "research_signal": round(float(getattr(signal, "research_signal_score", 0.0) or 0.0), 3),
+        "insight_report": round(float(getattr(signal, "insight_report_score", 0.0) or 0.0), 3),
+        "experiment": round(float(getattr(signal, "experiment_score", 0.0) or 0.0), 3),
+        "open_project": round(float(getattr(signal, "open_project_score", 0.0) or 0.0), 3),
+        "deep_research_seed": round(float(getattr(signal, "deep_research_seed_score", 0.0) or 0.0), 3),
+        "novelty": round(float(getattr(signal, "novelty_signal", 0.0) or 0.0), 3),
+        "reproducibility": round(float(getattr(signal, "reproducibility_signal", 0.0) or 0.0), 3),
+        "industry_coupling": round(float(getattr(signal, "industry_coupling_signal", 0.0) or 0.0), 3),
+    }
+    taxonomy_payload = {
+        "domain": getattr(taxonomy, "domain", "") or "other",
+        "method": getattr(taxonomy, "method", "") or "other",
+        "task": getattr(taxonomy, "task", "") or "other",
+        "asset": getattr(taxonomy, "asset", "") or "unknown",
+        "stack_layer": getattr(taxonomy, "stack_layer", "") or "model",
+        "maturity": getattr(taxonomy, "maturity", "") or "unknown",
+        "research_route": getattr(taxonomy, "research_route", "") or "applied_research",
+    }
+    record = {
+        "paper_id": getattr(canonical, "paper_id", "") or getattr(packet, "paper_id", ""),
+        "packet_id": getattr(packet, "packet_id", ""),
+        "title": canonical_summary.get("title") or getattr(canonical, "title", ""),
+        "authors": [
+            (item.get("name", "") if isinstance(item, dict) else str(item))
+            for item in authors[:4]
+        ],
+        "hf_url": getattr(canonical, "hf_url", "") or hf_meta.get("paper_page", ""),
+        "arxiv_url": getattr(canonical, "arxiv_abs_url", "") or "",
+        "summary": summary[:520],
+        "taxonomy": taxonomy_payload,
+        "scores": scores,
+        "assets": {
+            "linked_models": list(assets.get("linked_models") or [])[:5],
+            "linked_datasets": list(assets.get("linked_datasets") or [])[:5],
+            "linked_spaces": list(assets.get("linked_spaces") or [])[:5],
+            "total_assets": int(assets.get("total_assets") or 0),
+        },
+        "github": {
+            "full_name": github.get("full_name") or "",
+            "url": github.get("url") or github.get("html_url") or "",
+            "repo_count": int(github.get("repo_count") or (1 if (github.get("url") or github.get("full_name")) else 0)),
+        },
+        "resonance": {
+            "level": resonance.get("resonance_level", "R0"),
+            "candidate_assets": list(resonance.get("candidate_assets") or []),
+            "max_score": resonance.get("max_score", 0.0),
+        },
+        "judgment": str(reasoning.get("summary") or ""),
+        "reasoning": {
+            "mode": reasoning.get("reasoning_mode") or "fallback_report",
+            "requested_mode": reasoning.get("requested_reasoning_mode") or "N/A",
+            "premium_insight_available": bool(reasoning.get("premium_insight_available")),
+            "trend_type": reasoning.get("trend_type") or "watchlist",
+            "fallback_status_code": "high_reasoning_unavailable" if reasoning.get("fallback_reason") else "",
+            "evidence_ids": list(reasoning.get("evidence_ids") or []),
+        },
+    }
+    record["why_matters"] = str(reasoning.get("why_it_matters") or "").strip() or hf_public_why_matters(record)
+    record["recommended_action"] = str(reasoning.get("recommended_action") or "").strip() or hf_public_action(record)
+    if reasoning.get("research_implication"):
+        record["research_implication"] = str(reasoning.get("research_implication") or "")
+    if reasoning.get("experiment_plan"):
+        record["experiment_plan"] = list(reasoning.get("experiment_plan") or [])
+    if reasoning.get("open_source_opportunity"):
+        record["open_source_opportunity"] = str(reasoning.get("open_source_opportunity") or "")
+    if reasoning.get("deep_research_question"):
+        record["deep_research_question"] = str(reasoning.get("deep_research_question") or "")
+    return record
+
+
+def hf_report_strategy(config: dict[str, Any] | None, *, requested_limit: int | None = None) -> dict[str, Any]:
+    reporting = (((config or {}).get("hf_paper_insight") or {}).get("reporting") or {})
+    cadence = str(reporting.get("cadence") or "weekly").strip().lower()
+    if cadence not in {"daily", "weekly"}:
+        cadence = "weekly"
+    lookback_days = int(reporting.get("lookback_days") or (7 if cadence == "weekly" else 1))
+    core_limit = int(reporting.get("core_paper_limit") or (12 if cadence == "weekly" else (requested_limit or 10 or 10)))
+    supporting_limit = int(reporting.get("supporting_paper_limit") or (24 if cadence == "weekly" else (requested_limit or core_limit or 10)))
+    if requested_limit and requested_limit > 0:
+        supporting_limit = min(supporting_limit, requested_limit)
+        core_limit = min(core_limit, supporting_limit)
+    core_limit = max(1, core_limit)
+    supporting_limit = max(core_limit, supporting_limit)
+    return {
+        "cadence": cadence,
+        "lookback_days": max(1, lookback_days),
+        "merge_daily_hotspots": bool(reporting.get("merge_daily_hotspots", cadence == "weekly")),
+        "core_paper_limit": core_limit,
+        "supporting_paper_limit": supporting_limit,
+    }
+
+
+def hf_report_context(date_str: str, config: dict[str, Any] | None, *, requested_limit: int | None = None) -> dict[str, Any]:
+    strategy = hf_report_strategy(config, requested_limit=requested_limit)
+    end_date = dt.date.fromisoformat(str(date_str))
+    start_date = end_date - dt.timedelta(days=max(strategy["lookback_days"] - 1, 0))
+    if strategy["cadence"] == "weekly":
+        label = f"{start_date.isoformat()} ~ {end_date.isoformat()}"
+    else:
+        label = end_date.isoformat()
+    return {
+        **strategy,
+        "date": end_date.isoformat(),
+        "window_start": start_date.isoformat(),
+        "window_end": end_date.isoformat(),
+        "window_label": label,
+        "period_label": "周报" if strategy["cadence"] == "weekly" else "日报",
+        "fallback_label": "周度候选快报" if strategy["cadence"] == "weekly" else "候选快报",
+    }
+
+
+def hf_candidate_reasoning_plan(
+    *,
+    report_context: dict[str, Any],
+    paper_id: str,
+    core_ids: set[str],
+    requested_mode: str,
+    config: dict[str, Any] | None,
+) -> dict[str, Any]:
+    reporting = (((config or {}).get("hf_paper_insight") or {}).get("reporting") or {})
+    cadence = str(report_context.get("cadence") or "daily").strip().lower()
+    strategy = str(reporting.get("high_reasoning_strategy") or "").strip().lower()
+    if cadence == "weekly":
+        if strategy not in {"grouped_sections", "per_paper"}:
+            strategy = "grouped_sections"
+        if strategy == "grouped_sections":
+            return {
+                "use_high_reasoning": False,
+                "fallback_reason": "weekly_grouped_core_pool" if paper_id in core_ids else "weekly_supporting_pool",
+                "strategy": strategy,
+            }
+        if core_ids and paper_id not in core_ids:
+            return {
+                "use_high_reasoning": False,
+                "fallback_reason": "weekly_supporting_pool",
+                "strategy": strategy,
+            }
+    return {
+        "use_high_reasoning": True,
+        "fallback_reason": None,
+        "strategy": strategy or "per_paper",
+    }
+
+
+def hf_default_report_headline(report_context: dict[str, Any], *, premium: bool = True) -> str:
+    label = "高级洞察" + str(report_context.get("period_label") or "日报") if premium else str(report_context.get("fallback_label") or "候选快报")
+    return f"AI Influence HF Paper {label} — {report_context.get('window_label') or report_context.get('date') or ''}".strip()
+
+
+def hf_radar_db_path(config: dict[str, Any] | None) -> Path:
+    output = (config or {}).get("output") or {}
+    return Path(output.get("database") or "/Users/lisihao/.solar/harness/state/tech-hotspot-radar/tech-hotspot-radar.sqlite").expanduser()
+
+
+def _hf_rank_signal(rank: Any, *, max_rank: int = 30) -> float:
+    try:
+        value = float(rank)
+    except (TypeError, ValueError):
+        return 0.0
+    if value <= 0:
+        return 0.0
+    return max(0.0, min(1.0, 1.0 - ((value - 1.0) / float(max_rank))))
+
+
+def hf_weekly_priority_score(
+    metrics: dict[str, Any],
+    scores: dict[str, Any],
+    *,
+    end_date: dt.date,
+    lookback_days: int,
+) -> float:
+    days_seen = int(metrics.get("days_seen") or 0)
+    best_daily_rank = metrics.get("best_daily_rank")
+    best_weekly_rank = metrics.get("best_weekly_rank")
+    best_monthly_rank = metrics.get("best_monthly_rank")
+    last_seen = str(metrics.get("last_daily_seen") or "").strip()
+    recency_days = max(0, lookback_days - 1)
+    if last_seen:
+        try:
+            recency_days = max(0, (end_date - dt.date.fromisoformat(last_seen)).days)
+        except ValueError:
+            recency_days = max(0, lookback_days - 1)
+    rank_score = _hf_rank_signal(best_daily_rank, max_rank=30)
+    persistence_score = min(1.0, days_seen / max(1.0, float(lookback_days)))
+    weekly_monthly_score = max(
+        _hf_rank_signal(best_weekly_rank, max_rank=25),
+        _hf_rank_signal(best_monthly_rank, max_rank=25) * 0.8,
+    )
+    signal_score = (
+        0.40 * float(scores.get("insight_report") or 0.0)
+        + 0.20 * float(scores.get("experiment") or 0.0)
+        + 0.20 * float(scores.get("deep_research_seed") or 0.0)
+        + 0.20 * float(scores.get("research_signal") or 0.0)
+    )
+    asset_evidence_score = min(
+        1.0,
+        0.60 * float(scores.get("open_project") or 0.0)
+        + 0.40 * float(scores.get("experiment") or 0.0),
+    )
+    recency_score = max(0.0, 1.0 - (recency_days / max(1.0, float(max(lookback_days - 1, 1)))))
+    breakout_bonus = 0.0
+    try:
+        if int(best_daily_rank or 0) and int(best_daily_rank or 0) <= 3 and days_seen <= 2:
+            breakout_bonus = 1.0
+        elif int(best_daily_rank or 0) and int(best_daily_rank or 0) <= 5 and days_seen <= 2:
+            breakout_bonus = 0.6
+    except (TypeError, ValueError):
+        breakout_bonus = 0.0
+    return round(
+        0.25 * rank_score
+        + 0.20 * persistence_score
+        + 0.15 * weekly_monthly_score
+        + 0.15 * signal_score
+        + 0.10 * asset_evidence_score
+        + 0.10 * recency_score
+        + 0.05 * breakout_bonus,
+        4,
+    )
+
+
+def hf_load_weekly_candidate_selection(
+    store_conn: sqlite3.Connection,
+    config: dict[str, Any] | None,
+    *,
+    report_context: dict[str, Any],
+) -> tuple[list[str], dict[str, dict[str, Any]], set[str]]:
+    radar_db = hf_radar_db_path(config)
+    if not radar_db.exists():
+        return [], {}, set()
+    metrics_by_paper: dict[str, dict[str, Any]] = {}
+    conn = sqlite3.connect(radar_db)
+    conn.row_factory = sqlite3.Row
+    try:
+        daily_rows = conn.execute(
+            """
+            SELECT paper_id,
+                   COUNT(DISTINCT paper_date) AS days_seen,
+                   MIN(rank) AS best_daily_rank,
+                   AVG(rank) AS avg_daily_rank,
+                   MAX(paper_date) AS last_daily_seen
+            FROM hf_daily_papers
+            WHERE paper_date BETWEEN ? AND ?
+            GROUP BY paper_id
+            """,
+            (report_context["window_start"], report_context["window_end"]),
+        ).fetchall()
+        for row in daily_rows:
+            metrics_by_paper[str(row["paper_id"])] = {
+                "days_seen": int(row["days_seen"] or 0),
+                "best_daily_rank": int(row["best_daily_rank"] or 0),
+                "avg_daily_rank": round(float(row["avg_daily_rank"] or 0.0), 3),
+                "last_daily_seen": str(row["last_daily_seen"] or ""),
+            }
+        period_rows = conn.execute(
+            """
+            SELECT paper_id,
+                   MIN(CASE WHEN period='weekly' THEN rank END) AS best_weekly_rank,
+                   MIN(CASE WHEN period='monthly' THEN rank END) AS best_monthly_rank,
+                   COUNT(DISTINCT CASE WHEN period='weekly' THEN substr(snapshot_at, 1, 10) END) AS weekly_hits,
+                   COUNT(DISTINCT CASE WHEN period='monthly' THEN substr(snapshot_at, 1, 10) END) AS monthly_hits
+            FROM hf_paper_period_snapshots
+            WHERE period IN ('weekly', 'monthly')
+              AND substr(snapshot_at, 1, 10) BETWEEN ? AND ?
+            GROUP BY paper_id
+            """,
+            (report_context["window_start"], report_context["window_end"]),
+        ).fetchall()
+        for row in period_rows:
+            metrics = metrics_by_paper.setdefault(str(row["paper_id"]), {})
+            metrics.update({
+                "best_weekly_rank": int(row["best_weekly_rank"] or 0),
+                "best_monthly_rank": int(row["best_monthly_rank"] or 0),
+                "weekly_hits": int(row["weekly_hits"] or 0),
+                "monthly_hits": int(row["monthly_hits"] or 0),
+            })
+    finally:
+        conn.close()
+    if not metrics_by_paper:
+        return [], {}, set()
+    paper_ids = sorted(metrics_by_paper.keys())
+    latest_rows = store_conn.execute(
+        f"""
+        SELECT p.paper_id, p.score_summary_json, p.built_at
+        FROM paper_evidence_packets p
+        JOIN (
+            SELECT paper_id, max(built_at) AS built_at
+            FROM paper_evidence_packets
+            GROUP BY paper_id
+        ) latest ON latest.paper_id=p.paper_id AND latest.built_at=p.built_at
+        WHERE json_extract(p.packet_gate_json, '$.passed') = 1
+          AND p.paper_id IN ({','.join('?' for _ in paper_ids)})
+        """,
+        paper_ids,
+    ).fetchall()
+    if not latest_rows:
+        return [], {}, set()
+    end_date = dt.date.fromisoformat(str(report_context["window_end"]))
+    ranked: list[dict[str, Any]] = []
+    for row in latest_rows:
+        paper_id = str(row["paper_id"] or "").strip()
+        metrics = metrics_by_paper.get(paper_id)
+        if not metrics:
+            continue
+        scores = hf_json_load(row["score_summary_json"], {})
+        score = hf_weekly_priority_score(
+            metrics,
+            scores,
+            end_date=end_date,
+            lookback_days=int(report_context["lookback_days"]),
+        )
+        ranked.append({
+            "paper_id": paper_id,
+            "weekly_score": score,
+            "built_at": str(row["built_at"] or ""),
+            "scores": scores,
+            "metrics": metrics,
+        })
+    ranked.sort(
+        key=lambda item: (
+            -float(item["weekly_score"]),
+            -int((item["metrics"] or {}).get("days_seen") or 0),
+            int((item["metrics"] or {}).get("best_daily_rank") or 999),
+            str(item.get("built_at") or ""),
+        ),
+    )
+    supporting = ranked[: int(report_context["supporting_paper_limit"])]
+    selected_ids = [str(item["paper_id"]) for item in supporting]
+    core_ids = {str(item["paper_id"]) for item in supporting[: int(report_context["core_paper_limit"])]}
+    selected_metrics = {
+        str(item["paper_id"]): {
+            **dict(item["metrics"]),
+            "weekly_score": float(item["weekly_score"]),
+            "is_core": str(item["paper_id"]) in core_ids,
+        }
+        for item in supporting
+    }
+    return selected_ids, selected_metrics, core_ids
+
+
+def hf_load_report_candidates(
+    store_path: Path,
+    *,
+    limit: int,
+    date_str: str | None = None,
+    config: dict[str, Any] | None = None,
+    reasoning_mode: str | None = None,
+) -> list[dict[str, Any]]:
+    hf_paper_add_module_path()
+    from compiler import Compiler  # type: ignore
+    from reasoning import HighReasoningEngine, ResonanceMatcher  # type: ignore
+    from schema import PaperCanonical, PaperEnrichment, PaperEvidencePacket, PaperSignal, PaperTaxonomy  # type: ignore
+
+    if not store_path.exists():
+        return []
+    conn = sqlite3.connect(store_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        resolved_date = str(date_str or iso_z().split("T", 1)[0])
+        report_context = hf_report_context(resolved_date, config or {}, requested_limit=limit)
+        weekly_metrics: dict[str, dict[str, Any]] = {}
+        core_ids: set[str] = set()
+        rows: list[sqlite3.Row]
+        if report_context["cadence"] == "weekly":
+            selected_ids, weekly_metrics, core_ids = hf_load_weekly_candidate_selection(conn, config or {}, report_context=report_context)
+            if selected_ids:
+                selected_rows = conn.execute(
+                    f"""
+                    SELECT p.*
+                    FROM paper_evidence_packets p
+                    JOIN (
+                        SELECT paper_id, max(built_at) AS built_at
+                        FROM paper_evidence_packets
+                        GROUP BY paper_id
+                    ) latest ON latest.paper_id=p.paper_id AND latest.built_at=p.built_at
+                    WHERE json_extract(p.packet_gate_json, '$.passed') = 1
+                      AND p.paper_id IN ({','.join('?' for _ in selected_ids)})
+                    """,
+                    selected_ids,
+                ).fetchall()
+                row_map = {str(row["paper_id"]): row for row in selected_rows}
+                rows = [row_map[paper_id] for paper_id in selected_ids if paper_id in row_map]
+            else:
+                rows = []
+        else:
+            rows = []
+        if not rows:
+            rows = conn.execute(
+                """
+                SELECT p.*
+                FROM paper_evidence_packets p
+                JOIN (
+                    SELECT paper_id, max(built_at) AS built_at
+                    FROM paper_evidence_packets
+                    GROUP BY paper_id
+                ) latest ON latest.paper_id=p.paper_id AND latest.built_at=p.built_at
+                WHERE json_extract(p.packet_gate_json, '$.passed') = 1
+                ORDER BY
+                  CAST(json_extract(p.score_summary_json, '$.insight_report') AS REAL) DESC,
+                  CAST(json_extract(p.score_summary_json, '$.experiment') AS REAL) DESC,
+                  CAST(json_extract(p.score_summary_json, '$.open_project') AS REAL) DESC,
+                  p.built_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        matcher = ResonanceMatcher()
+        engine = HighReasoningEngine()
+        compiler = Compiler()
+        candidates: list[dict[str, Any]] = []
+        requested_mode = reasoning_mode or hf_paper_high_reasoning_config(config or {}, None)[1]
+        for row in rows:
+            packet = PaperEvidencePacket(**dict(row))
+            canonical_row = conn.execute("SELECT * FROM paper_canonical WHERE paper_id=?", (packet.paper_id,)).fetchone()
+            if not canonical_row:
+                continue
+            enrichment = hf_latest_entity(conn, "paper_enrichment", packet.paper_id, "fetched_at", PaperEnrichment)
+            taxonomy = hf_latest_entity(conn, "paper_taxonomy", packet.paper_id, "classified_at", PaperTaxonomy)
+            signal = hf_latest_entity(conn, "paper_signals", packet.paper_id, "scored_at", PaperSignal)
+            if not enrichment or not taxonomy or not signal:
+                continue
+            canonical = PaperCanonical(**dict(canonical_row))
+            resonance = matcher.match_resonance(packet)
+            reasoning_plan = hf_candidate_reasoning_plan(
+                report_context=report_context,
+                paper_id=str(packet.paper_id or ""),
+                core_ids=core_ids,
+                requested_mode=requested_mode,
+                config=config,
+            )
+            if bool(reasoning_plan.get("use_high_reasoning")):
+                reasoning = hf_call_high_reasoning(engine, packet, resonance, config or {}, override_mode=reasoning_mode)
+            else:
+                reasoning = hf_fallback_reasoning(
+                    engine,
+                    packet,
+                    requested_mode=requested_mode,
+                    reason=str(reasoning_plan.get("fallback_reason") or "grouped_report_source"),
+                )
+            compiled = compiler.compile_outputs(packet, reasoning, resonance)
+            public_record = hf_public_record_from_entities(canonical, enrichment, taxonomy, signal, packet, resonance, reasoning)
+            if packet.paper_id in weekly_metrics:
+                public_record["weekly_signal"] = dict(weekly_metrics.get(packet.paper_id) or {})
+                public_record["report_window"] = {
+                    "cadence": report_context["cadence"],
+                    "window_start": report_context["window_start"],
+                    "window_end": report_context["window_end"],
+                    "window_label": report_context["window_label"],
+                }
+                public_record["weekly_signal"]["reasoning_strategy"] = str(reasoning_plan.get("strategy") or "")
+            candidates.append({
+                "canonical": canonical,
+                "enrichment": enrichment,
+                "packet": packet,
+                "resonance": resonance,
+                "reasoning": reasoning,
+                "compiled": compiled,
+                "public": public_record,
+            })
+        return candidates
+    finally:
+        conn.close()
+
+
+def hf_report_core_judgment(public_records: list[dict[str, Any]], *, report_variant: str = "fallback_report") -> str:
+    if not public_records:
+        return "本轮暂未发现达到论文洞察门槛的 HuggingFace Paper 信号。"
+    if report_variant != "premium_insight_report":
+        return (
+            "本轮报告当前是 fallback_report：L7 高级推理未对全部候选完成，以下仅作为论文候选快报和证据包索引，"
+            "不能当作正式高级洞察结论。"
+        )
+    asset_backed = sum(1 for r in public_records if (r.get("assets") or {}).get("total_assets") or (r.get("github") or {}).get("url"))
+    domains = []
+    for record in public_records:
+        domain = str((record.get("taxonomy") or {}).get("domain") or "other")
+        if domain not in domains:
+            domains.append(domain)
+    domain_text = "、".join(domains[:5]) or "AI"
+    return (
+        f"本轮 HF Paper 信号的主线是“论文到工程资产”的转化：Top {len(public_records)} 中有 {asset_backed} 篇带有 "
+        f"GitHub、模型、数据集或 Space 线索，主要集中在 {domain_text}。优先级应放在可复现、可 benchmark、可转成开源观察或内容选题的论文。"
+    )
+
+
+def _hf_score_text(value: Any) -> str:
+    try:
+        return f"{float(value):.3f}"
+    except (TypeError, ValueError):
+        return "N/A"
+
+
+def _hf_text(value: Any, default: str = "N/A") -> str:
+    text = str(value or "").strip()
+    return text or default
+
+
+def _hf_list(items: Any) -> list[str]:
+    if not isinstance(items, list):
+        return []
+    return [str(item).strip() for item in items if str(item).strip()]
+
+
+def _hf_missing_value(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return not value.strip()
+    if isinstance(value, (list, tuple, dict, set)):
+        return len(value) == 0
+    return False
+
+
+def hf_public_report_variant_label(report_variant: str) -> str:
+    value = str(report_variant or "").strip().lower()
+    if value == "premium_insight_report":
+        return "正式洞察周报"
+    if value == "fallback_report":
+        return "候选观察周报"
+    return "周报"
+
+
+def hf_public_trend_label(trend_type: Any) -> str:
+    mapping = {
+        "real_trend": "明确趋势",
+        "weak_signal": "弱信号",
+        "hype": "噪音偏高",
+        "watchlist": "观察池",
+    }
+    key = str(trend_type or "").strip().lower()
+    return mapping.get(key, "观察池")
+
+
+def hf_public_headline(headline: Any, report_context: dict[str, Any], *, premium: bool) -> str:
+    raw = str(headline or "").strip()
+    cleaned = re.sub(r"周报规划", "周报", raw)
+    cleaned = re.sub(r"报告规划", "报告", cleaned)
+    cleaned = re.sub(r"\b规划[:：]?\s*", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" -")
+    if cleaned:
+        return cleaned
+    return hf_default_report_headline(report_context, premium=premium)
+
+
+HF_PUBLIC_TEXT_PATTERNS: list[tuple[str, str]] = [
+    ("inline_evidence_block", r"\[(?:evidence|evidence_ids?)\s*:\s*[^\]]+\]"),
+    ("inline_evidence_block_cn", r"[【\[]\s*evidence_ids?\s*[:：][^\]】]+[\]】]"),
+    ("evidence_clause", r"(?:证据|依据)[:：]\s*(?:\d{4}\.\d{5}|pkt-[a-z0-9]{8,})(?:\s*[，,、]\s*(?:\d{4}\.\d{5}|pkt-[a-z0-9]{8,}))*"),
+    ("packet_id", r"\bpkt-[a-z0-9]{8,}\b"),
+    ("paper_id", r"\b\d{4}\.\d{5}\b"),
+]
+
+
+def hf_clean_public_text(value: Any) -> str:
+    text = str(value or "")
+    for _label, pattern in HF_PUBLIC_TEXT_PATTERNS:
+        text = re.sub(pattern, "", text, flags=re.IGNORECASE)
+    text = re.sub(r"((?:核心判断[一二三四五六七八九十]：|核心判断：)[^。！？]*?)(?:证据来自|依据来自)\s*[，,、与及对应材料\s]*[。；]?", r"\1。", text)
+    text = re.sub(r"(?:核心依据来自|该判断依据)\s*[，,、与及对应材料\s]*[。；]?", "", text)
+    text = re.sub(r"(^|[。！？]\s*)关注的是", r"\1该论文关注的是", text)
+    text = re.sub(r"(^|[-*]\s*)将\s+放入", r"\1将该论文放入", text)
+    text = re.sub(r"[（(]\s*[，,、;；]*\s*[)）]", "", text)
+    text = re.sub(r"[，,、;；]\s*[，,、;；]+", "，", text)
+    text = re.sub(r"([，,、;；])\s*([。！？])", r"\2", text)
+    text = re.sub(r"([。！？])\s*([。！？])+", r"\1", text)
+    text = re.sub(r"\s+", " ", text)
+    text = re.sub(r"([。！？])\s*[，,、;；]+", r"\1", text)
+    text = re.sub(r"\s+([。！？])", r"\1", text)
+    return text.strip(" ，,、;；")
+
+
+HF_INTERNAL_REPORT_PATTERNS: list[tuple[str, str]] = [
+    ("http_429", r"\bHTTP\s*429\b"),
+    ("rate_limit", r"\brate limit\b"),
+    ("timeout_error", r"\bTimeoutError\b"),
+    ("circuit_breaker", r"\bcircuit breaker\b"),
+    ("materialize_command", r"\bmaterialize-hf-paper-insights\b"),
+    ("raw_path", r"\braw path\b"),
+    ("internal_cli", r"内部\s*CLI"),
+    ("login_wall", r"登录墙"),
+    ("provider_failure", r"\bprovider_failures?\b"),
+]
+
+
+def hf_internal_report_tokens(text: str) -> list[str]:
+    lowered = str(text or "")
+    hits: list[str] = []
+    for label, pattern in HF_INTERNAL_REPORT_PATTERNS:
+        if re.search(pattern, lowered, flags=re.IGNORECASE):
+            hits.append(label)
+    return hits
+
+
+def _hf_public_record_evidence(record: dict[str, Any]) -> list[str]:
+    evidence = _hf_list(record.get("evidence_ids"))
+    if not evidence:
+        reasoning = record.get("reasoning") or {}
+        evidence = _hf_list(reasoning.get("evidence_ids"))
+    if not evidence:
+        for field in (record.get("paper_id"), record.get("packet_id")):
+            text = str(field or "").strip()
+            if text:
+                evidence.append(text)
+    return evidence
+
+
+def _hf_section_list_lines(items: list[str], *, empty_text: str) -> list[str]:
+    return [f"- {item}" for item in items] if items else [f"- {empty_text}"]
+
+
+def _hf_report_planner_input(public_records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for record in public_records:
+        taxonomy = record.get("taxonomy") or {}
+        scores = record.get("scores") or {}
+        github = record.get("github") or {}
+        assets = record.get("assets") or {}
+        reasoning = record.get("reasoning") or {}
+        records.append({
+            "paper_id": record.get("paper_id"),
+            "title": record.get("title"),
+            "summary": _hf_text(record.get("summary"), default="摘要待补"),
+            "taxonomy": {
+                "domain": taxonomy.get("domain"),
+                "stack_layer": taxonomy.get("stack_layer"),
+                "research_route": taxonomy.get("research_route"),
+            },
+            "scores": {
+                "insight_report": scores.get("insight_report"),
+                "experiment": scores.get("experiment"),
+                "open_project": scores.get("open_project"),
+                "deep_research_seed": scores.get("deep_research_seed"),
+            },
+            "github": github.get("full_name") or github.get("url") or "",
+            "assets_total": assets.get("total_assets") or 0,
+            "current_judgment": record.get("judgment") or "",
+            "current_trend_type": reasoning.get("trend_type") or "watchlist",
+            "weekly_signal": record.get("weekly_signal") or {},
+        })
+    return records
+
+
+def hf_build_report_planner_prompt(
+    public_records: list[dict[str, Any]],
+    *,
+    date_str: str,
+    model_name: str,
+    report_context: dict[str, Any] | None = None,
+) -> str:
+    planner_input = _hf_report_planner_input(public_records)
+    context = report_context or hf_report_context(date_str, {})
+    return f"""你是 AI Influence 的 HF Paper 专题主编。
+
+你将收到一批 HuggingFace 热门论文的摘要、基础标签和已有单篇判断。你的任务不是逐篇写作，而是先做“版面规划”：
+1. 这些论文应拆成多少个相关趋势部分；
+2. 每个部分应放哪些论文；
+3. 每个部分的核心判断是什么；
+4. 最终{context.get('period_label') or '日报'}应如何排序。
+
+硬规则：
+- 只能基于输入材料做分组，不要引入外部事实。
+- 分组必须有可解释的趋势主线，不能按随机关键词堆砌。
+- 所有 paper_ids 必须来自输入，不能编造。
+- 每篇论文必须被分到某个 section，不能遗漏。
+- section 数量控制在 2-5 个之间。
+- 输出必须是合法 JSON object，不要 Markdown，不要代码块，不要解释。
+
+输出 JSON schema：
+{{
+  "headline": "整份{context.get('period_label') or '日报'}标题",
+  "executive_summary": "100-220字总论，说明这期 HF 论文热点的主线",
+  "sections": [
+    {{
+      "section_id": "slug-like-id",
+      "title": "部分标题",
+      "trend_label": "该部分的趋势标签",
+      "thesis": "该部分的一句话判断",
+      "why_now": "为什么现在值得单列这一部分",
+      "priority": "high|medium|low",
+      "paper_ids": ["paper_id_1", "paper_id_2"]
+    }}
+  ],
+  "closing_watchpoints": ["后续观察点 1", "后续观察点 2"]
+}}
+
+报告周期：{context.get('window_label') or date_str}
+报告日期：{date_str}
+模型：{model_name}
+
+论文材料：
+{json.dumps(planner_input, ensure_ascii=False, indent=2)}
+"""
+
+
+def _hf_slug_hint(value: str, *, fallback: str) -> str:
+    slug = slugify(str(value or "").strip())[:48]
+    return slug or fallback
+
+
+def hf_normalize_report_plan(
+    raw_plan: dict[str, Any],
+    public_records: list[dict[str, Any]],
+    *,
+    date_str: str,
+    report_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    context = report_context or hf_report_context(date_str, {})
+    record_map = {str(item.get("paper_id") or "").strip(): item for item in public_records if str(item.get("paper_id") or "").strip()}
+    all_ids = list(record_map.keys())
+    sections_in = raw_plan.get("sections")
+    sections: list[dict[str, Any]] = []
+    assigned: set[str] = set()
+    if isinstance(sections_in, list):
+        for idx, item in enumerate(sections_in, 1):
+            if not isinstance(item, dict):
+                continue
+            paper_ids = []
+            for paper_id in item.get("paper_ids") or []:
+                pid = str(paper_id or "").strip()
+                if not pid or pid not in record_map or pid in assigned:
+                    continue
+                paper_ids.append(pid)
+                assigned.add(pid)
+            if not paper_ids:
+                continue
+            title = _hf_text(item.get("title"), default=f"趋势部分 {idx}")
+            sections.append({
+                "section_id": _hf_slug_hint(str(item.get("section_id") or title), fallback=f"section-{idx}"),
+                "title": title,
+                "trend_label": _hf_text(item.get("trend_label"), default=title),
+                "thesis": _hf_text(item.get("thesis"), default="待补"),
+                "why_now": _hf_text(item.get("why_now"), default="待补"),
+                "priority": _hf_text(item.get("priority"), default="medium"),
+                "paper_ids": paper_ids,
+            })
+    unassigned = [paper_id for paper_id in all_ids if paper_id not in assigned]
+    if unassigned:
+        sections.append({
+            "section_id": "other-signals",
+            "title": "其他值得跟踪的周信号" if context.get("cadence") == "weekly" else "其他值得跟踪的信号",
+            "trend_label": "补充观察",
+            "thesis": "以下论文暂未自然归入已有主线，但仍值得保留在本期观察面板中。",
+            "why_now": "这些论文在当前候选窗口中仍具有实验、开源或路线观察价值。",
+            "priority": "medium",
+            "paper_ids": unassigned,
+        })
+    if not sections and all_ids:
+        sections = [{
+            "section_id": "top-signals",
+            "title": "本周重点论文" if context.get("cadence") == "weekly" else "今日重点论文",
+            "trend_label": "综合观察",
+            "thesis": "本期 HF 热门论文更适合按综合观察而非单一趋势切分。",
+            "why_now": "输入样本不足以稳定分成多个趋势部分。",
+            "priority": "high",
+            "paper_ids": all_ids,
+        }]
+    watchpoints = [str(item).strip() for item in (raw_plan.get("closing_watchpoints") or []) if str(item).strip()]
+    return {
+        "headline": hf_public_headline(raw_plan.get("headline"), context, premium=True),
+        "executive_summary": _hf_text(raw_plan.get("executive_summary"), default=hf_report_core_judgment(public_records, report_variant="premium_insight_report")),
+        "sections": sections[:6],
+        "closing_watchpoints": watchpoints[:8],
+    }
+
+
+def hf_build_section_writer_prompt(
+    section: dict[str, Any],
+    section_records: list[dict[str, Any]],
+    *,
+    date_str: str,
+    model_name: str,
+    report_context: dict[str, Any] | None = None,
+) -> str:
+    context = report_context or hf_report_context(date_str, {})
+    section_payload = []
+    for record in section_records:
+        section_payload.append({
+            "paper_id": record.get("paper_id"),
+            "packet_id": record.get("packet_id"),
+            "title": record.get("title"),
+            "summary": record.get("summary"),
+            "taxonomy": record.get("taxonomy"),
+            "scores": record.get("scores"),
+            "github": record.get("github"),
+            "assets": record.get("assets"),
+            "judgment": record.get("judgment"),
+            "why_matters": record.get("why_matters"),
+            "recommended_action": record.get("recommended_action"),
+            "reasoning": record.get("reasoning"),
+        })
+    return f"""你是 AI Influence 的 HF Paper 章节主笔。
+
+你现在只负责其中一个趋势部分。请基于该部分分到的论文，写出该部分的趋势描述、洞察分析和规划建议。
+
+硬规则：
+- 只能基于输入的论文材料与已有判断，不要引入外部事实。
+- 不是逐篇复述摘要，而是提炼“这一组论文共同说明了什么变化”。
+- 必须给出该部分内部每篇论文的角色定位。
+- 每个核心判断都要带 evidence_ids。
+- 输出必须是合法 JSON object，不要 Markdown，不要代码块，不要解释系统行为。
+
+输出 JSON schema：
+{{
+  "section_id": "{section.get('section_id')}",
+  "title": "{section.get('title')}",
+  "trend_type": "real_trend|weak_signal|hype|watchlist",
+  "section_summary": "一段100-180字的部分摘要",
+  "trend_description": "该部分趋势描述",
+  "insight_analysis": "该部分洞察分析",
+  "planning_recommendations": ["规划建议1", "规划建议2"],
+  "paper_commentary": [
+    {{
+      "paper_id": "论文ID",
+      "title": "论文标题",
+      "role": "这篇论文在该部分里的角色",
+      "takeaway": "这篇论文最值得看的点",
+      "evidence_ids": ["paper_id", "packet_id"]
+    }}
+  ],
+  "evidence_ids": ["paper_id 或 packet_id"],
+  "evidence_gap": []
+}}
+
+报告周期：{context.get('window_label') or date_str}
+报告日期：{date_str}
+模型：{model_name}
+
+部分规划：
+{json.dumps(section, ensure_ascii=False, indent=2)}
+
+论文材料：
+{json.dumps(section_payload, ensure_ascii=False, indent=2)}
+"""
+
+
+def hf_call_report_json_with_repair(prompt: str, config: dict[str, Any], *, purpose: str, model_name: str, chapter_id: str, required_keys: list[str], max_attempts: int = 2) -> dict[str, Any]:
+    high_cfg, _mode = hf_paper_high_reasoning_config(config, "browser_agent")
+    errors: list[str] = []
+    for attempt in range(1, max_attempts + 1):
+        attempt_prompt = prompt
+        if attempt > 1:
+            attempt_prompt = "\n\n".join([
+                "你正在执行 HF Paper 报告章节修复任务。",
+                f"chapter_id: {chapter_id}",
+                "上一次 JSON 输出缺字段、结构不完整或执行失败。请重新输出完整 JSON，并严格满足 schema。",
+                "不要输出解释，不要输出 Markdown。",
+                "最近失败原因：\n" + "\n".join(f"- {item}" for item in errors[-3:]),
+                "原始任务如下：",
+                prompt,
+            ])
+        try:
+            payload = call_browser_agent_chatgpt_json(
+                attempt_prompt,
+                config,
+                purpose=purpose if attempt == 1 else f"{purpose}-repair-{attempt}",
+                requested_model=model_name,
+                operator_kind="chapter_writer",
+                requested_reasoning_effort=str(high_cfg.get("reasoning_effort") or "high"),
+                requested_timeout_seconds=int(high_cfg.get("timeout_seconds") or 1800),
+                requested_max_prompt_chars=int(high_cfg.get("max_prompt_chars") or 120000),
+                target_url=str(high_cfg.get("target_url") or "") or None,
+                headless=_env_override_bool("BROWSER_AGENT_HEADLESS", "TECH_HOTSPOT_BROWSER_CHATGPT_HEADLESS")
+                if _env_override_bool("BROWSER_AGENT_HEADLESS", "TECH_HOTSPOT_BROWSER_CHATGPT_HEADLESS") is not None
+                else bool(high_cfg.get("headless", False)),
+                profile_directory=_env_override_text("BROWSER_AGENT_PROFILE_DIRECTORY", "TECH_HOTSPOT_BROWSER_CHATGPT_PROFILE_DIRECTORY")
+                or str(high_cfg.get("profile_directory") or "Default"),
+                target_account_email=_env_override_text(
+                    "BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL",
+                    "BROWSER_AGENT_TARGET_ACCOUNT_EMAIL",
+                    "TECH_HOTSPOT_BROWSER_CHATGPT_ACCOUNT_EMAIL",
+                ) or str(high_cfg.get("target_account_email") or "").strip() or None,
+                scrub_client_state=bool(high_cfg.get("scrub_client_state", False)),
+                open_project_first=bool(high_cfg.get("open_project_first", False)),
+                require_project=bool(high_cfg.get("require_project", False)),
+                force_new_chat=bool(high_cfg.get("force_new_chat", True)),
+                require_isolated_conversation=bool(high_cfg.get("require_isolated_conversation", True)),
+            )
+        except Exception as exc:
+            errors.append(f"attempt {attempt}: {type(exc).__name__}: {exc}")
+            continue
+        missing = [key for key in required_keys if _hf_missing_value(payload.get(key))]
+        if missing:
+            errors.append(f"attempt {attempt}: missing keys {missing}")
+            continue
+        if attempt > 1:
+            payload["_repair_attempt"] = attempt
+            payload["_repair_errors"] = list(errors)
+        return payload
+    raise ValueError(f"hf_report_json_repair_failed:{chapter_id}:{errors[-3:]}")
+
+
+def hf_call_grouped_report_flow(
+    public_records: list[dict[str, Any]],
+    config: dict[str, Any],
+    *,
+    date_str: str,
+    report_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not public_records:
+        raise ValueError("hf_grouped_report_no_records")
+    context = report_context or hf_report_context(date_str, config)
+    high_cfg, mode = hf_paper_high_reasoning_config(config, "browser_agent")
+    if mode != "browser_agent":
+        raise ValueError(f"hf_grouped_report_requires_browser_agent:{mode}")
+    model_name = str(high_cfg.get("model") or "chatgpt-5.5")
+    raw_plan = hf_call_report_json_with_repair(
+        hf_build_report_planner_prompt(public_records, date_str=date_str, model_name=model_name, report_context=context),
+        config,
+        purpose=f"hf-paper-report-plan-{date_str}",
+        model_name=model_name,
+        chapter_id="hf-report-plan",
+        required_keys=["headline", "executive_summary", "sections"],
+    )
+    plan = hf_normalize_report_plan(raw_plan, public_records, date_str=date_str, report_context=context)
+    record_map = {str(item.get("paper_id") or "").strip(): item for item in public_records}
+    sections: list[dict[str, Any]] = []
+    for idx, section in enumerate(plan.get("sections") or [], 1):
+        section_records = [record_map[pid] for pid in section.get("paper_ids") or [] if pid in record_map]
+        if not section_records:
+            continue
+        section_payload = hf_call_report_json_with_repair(
+            hf_build_section_writer_prompt(section, section_records, date_str=date_str, model_name=model_name, report_context=context),
+            config,
+            purpose=f"hf-paper-report-section-{date_str}-{section.get('section_id') or idx}",
+            model_name=model_name,
+            chapter_id=str(section.get("section_id") or f"section-{idx}"),
+            required_keys=["title", "section_summary", "trend_description", "insight_analysis", "planning_recommendations", "paper_commentary"],
+        )
+        section_payload["paper_ids"] = list(section.get("paper_ids") or [])
+        sections.append(section_payload)
+    if not sections:
+        raise ValueError("hf_grouped_report_no_sections")
+    return {
+        "ok": True,
+        "plan": plan,
+        "sections": sections,
+        "model": model_name,
+    }
+
+
+def _hf_render_grouped_report_markdown(
+    *,
+    date_str: str,
+    report_variant: str,
+    premium_count: int,
+    fallback_count: int,
+    public_records: list[dict[str, Any]],
+    grouped_report: dict[str, Any],
+    report_context: dict[str, Any] | None = None,
+) -> str:
+    context = report_context or hf_report_context(date_str, {})
+    plan = grouped_report.get("plan") or {}
+    sections = grouped_report.get("sections") or []
+    public_variant = hf_public_report_variant_label(report_variant)
+    lines = [
+        f"# {hf_public_headline(plan.get('headline'), context, premium=True)}",
+        "",
+        f"> 报告周期：`{context.get('window_label') or date_str}` ｜ 报告类型：`{public_variant}` ｜ 论文数：`{len(public_records)}` ｜ 分组章节：`{len(sections)}`",
+        "",
+    ]
+    if report_variant != "premium_insight_report":
+        lines.extend([
+            "> 当前状态：当前版本仍是候选观察稿，适合用于主题研判与后续跟踪，不宜直接当作最终定稿。",
+            "",
+        ])
+    lines.extend([
+        "## 一页判断",
+        "",
+        hf_clean_public_text(_hf_text(plan.get("executive_summary"), default=hf_report_core_judgment(public_records, report_variant=report_variant))),
+        "",
+        "## 本期看板",
+        "",
+        "| 指标 | 值 |",
+        "| --- | --- |",
+        f"| 报告类型 | `{public_variant}` |",
+        f"| 论文数量 | {len(public_records)} |",
+        f"| 分组章节 | {len(sections)} |",
+        f"| 周期 | {context.get('window_label') or date_str} |",
+        "",
+    ])
+    for idx, section in enumerate(sections, 1):
+        recommendations = _hf_list(section.get("planning_recommendations"))
+        commentary = section.get("paper_commentary") if isinstance(section.get("paper_commentary"), list) else []
+        lines.extend([
+            f"## {idx:02d}. {_hf_text(section.get('title'), default=f'趋势部分 {idx}')}",
+            "",
+            f"> {hf_clean_public_text(_hf_text(section.get('section_summary'), default='待补'))}",
+            "",
+            f"- 趋势判断：`{hf_public_trend_label(section.get('trend_type'))}`",
+            "",
+            "### 趋势描述",
+            "",
+            hf_clean_public_text(_hf_text(section.get("trend_description"), default="待补")),
+            "",
+            "### 洞察分析",
+            "",
+            hf_clean_public_text(_hf_text(section.get("insight_analysis"), default="待补")),
+            "",
+            "### 规划建议",
+            "",
+        ])
+        lines.extend(_hf_section_list_lines([hf_clean_public_text(item) for item in recommendations], empty_text="待补"))
+        lines.extend([
+            "",
+            "### 该部分论文分工",
+            "",
+        ])
+        if commentary:
+            for item in commentary:
+                if not isinstance(item, dict):
+                    continue
+                lines.extend([
+                    f"- {_hf_text(item.get('title'))}",
+                    f"  角色：{hf_clean_public_text(_hf_text(item.get('role'), default='待补'))}",
+                    f"  解读：{hf_clean_public_text(_hf_text(item.get('takeaway'), default='待补'))}",
+                ])
+        else:
+            lines.append("- 待补")
+        lines.append("")
+    watchpoints = _hf_list(plan.get("closing_watchpoints"))
+    lines.extend([
+        "## 后续观察点",
+        "",
+    ])
+    lines.extend(_hf_section_list_lines([hf_clean_public_text(item) for item in watchpoints], empty_text="待补"))
+    return "\n".join(lines)
+
+
+def _hf_render_grouped_report_html(
+    *,
+    date_str: str,
+    report_variant: str,
+    premium_count: int,
+    fallback_count: int,
+    public_records: list[dict[str, Any]],
+    grouped_report: dict[str, Any],
+    report_context: dict[str, Any] | None = None,
+) -> str:
+    context = report_context or hf_report_context(date_str, {})
+    plan = grouped_report.get("plan") or {}
+    sections = grouped_report.get("sections") or []
+    public_variant = hf_public_report_variant_label(report_variant)
+    metric_cards = [
+        ("报告类型", public_variant),
+        ("论文数量", str(len(public_records))),
+        ("分组章节", str(len(sections))),
+        ("报告周期", str(context.get("window_label") or date_str)),
+    ]
+    metric_html = "\n".join(
+        f'<div class="hf-metric"><span>{html.escape(label)}</span><strong>{html.escape(value)}</strong></div>'
+        for label, value in metric_cards
+    )
+    section_html = []
+    for idx, section in enumerate(sections, 1):
+        recommendations = "".join(f"<li>{html.escape(hf_clean_public_text(item))}</li>" for item in _hf_list(section.get("planning_recommendations"))) or "<li>待补</li>"
+        commentary_items = []
+        for item in section.get("paper_commentary") or []:
+            if not isinstance(item, dict):
+                continue
+            commentary_items.append(
+                "<li>"
+                f"<b>{html.escape(_hf_text(item.get('title')))}</b>"
+                f"<br><span>角色：{html.escape(hf_clean_public_text(_hf_text(item.get('role'), default='待补')))}</span>"
+                f"<br><span>解读：{html.escape(hf_clean_public_text(_hf_text(item.get('takeaway'), default='待补')))}</span>"
+                "</li>"
+            )
+        commentary_html = "".join(commentary_items) or "<li>待补</li>"
+        section_html.append(
+            f"""
+            <article class="hf-card">
+              <div class="hf-card-head">
+                <span class="hf-rank">{idx:02d}</span>
+                <div>
+                  <h2>{html.escape(_hf_text(section.get('title'), default=f'趋势部分 {idx}'))}</h2>
+                  <p>{html.escape(hf_clean_public_text(_hf_text(section.get('section_summary'), default='待补')))}</p>
+                </div>
+              </div>
+              <div class="hf-grid">
+                <div><span>趋势判断</span><strong>{html.escape(hf_public_trend_label(section.get('trend_type')))}</strong></div>
+                <div><span>章节定位</span><strong>{html.escape(_hf_text(section.get('title'), default=f'趋势部分 {idx}'))}</strong></div>
+              </div>
+              <section><h3>趋势描述</h3><p>{html.escape(hf_clean_public_text(_hf_text(section.get('trend_description'), default='待补')))}</p></section>
+              <section><h3>洞察分析</h3><p>{html.escape(hf_clean_public_text(_hf_text(section.get('insight_analysis'), default='待补')))}</p></section>
+              <section><h3>规划建议</h3><ul>{recommendations}</ul></section>
+              <section><h3>该部分论文分工</h3><ul>{commentary_html}</ul></section>
+            </article>
+            """
+        )
+    watchpoints = "".join(f"<li>{html.escape(hf_clean_public_text(item))}</li>" for item in _hf_list(plan.get("closing_watchpoints"))) or "<li>待补</li>"
+    title = hf_public_headline(plan.get("headline"), context, premium=True)
+    subtitle = hf_clean_public_text(_hf_text(plan.get("executive_summary"), default=hf_report_core_judgment(public_records, report_variant=report_variant)))
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{html.escape(title)}</title>
+  <style>
+    :root {{
+      --bg: #f6f1e8;
+      --paper: #fffdf8;
+      --ink: #1d1a16;
+      --muted: #6a6258;
+      --line: #dccfbe;
+      --accent: #8a4b22;
+      --accent-soft: #f0e0cf;
+      --shadow: 0 18px 48px rgba(45, 32, 20, 0.08);
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{ margin: 0; background: radial-gradient(circle at top left, rgba(196,147,96,.18), transparent 28%), linear-gradient(180deg, #f9f4ec 0%, #f3ede3 100%); color: var(--ink); font: 16px/1.65 "Iowan Old Style", Georgia, serif; }}
+    .hf-shell {{ max-width: 1080px; margin: 0 auto; padding: 40px 20px 64px; }}
+    .hf-hero, .hf-card, .hf-panel, .hf-metric {{ background: var(--paper); border: 1px solid var(--line); border-radius: 24px; box-shadow: var(--shadow); }}
+    .hf-hero {{ padding: 28px; }}
+    .hf-kicker {{ display: inline-flex; padding: 6px 12px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font: 600 12px/1.2 "Avenir Next", sans-serif; letter-spacing: .08em; text-transform: uppercase; }}
+    .hf-metrics {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 14px; margin-top: 22px; }}
+    .hf-metric {{ padding: 16px 18px; }}
+    .hf-metric span, .hf-grid span {{ display: block; color: var(--muted); font: 600 12px/1.2 "Avenir Next", sans-serif; text-transform: uppercase; }}
+    .hf-metric strong {{ display: block; margin-top: 8px; font-size: 22px; }}
+    .hf-card {{ padding: 24px; margin-top: 18px; }}
+    .hf-card-head {{ display: grid; grid-template-columns: 64px minmax(0,1fr); gap: 16px; }}
+    .hf-rank {{ width: 64px; height: 64px; display: grid; place-items: center; border-radius: 18px; background: linear-gradient(135deg, #8a4b22, #c98950); color: white; font: 700 22px/1 "Avenir Next", sans-serif; }}
+    .hf-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 14px; margin: 18px 0; padding: 16px; background: #fbf6ef; border-radius: 18px; border: 1px solid var(--line); }}
+    .hf-panel {{ padding: 22px; margin-top: 24px; }}
+    h1, h2, h3 {{ margin: 0 0 12px; line-height: 1.15; }}
+    h1 {{ font-size: clamp(32px, 4vw, 52px); max-width: 16ch; margin-top: 18px; }}
+    ul {{ padding-left: 20px; }}
+  </style>
+</head>
+<body>
+  <main class="hf-shell">
+    <section class="hf-hero">
+      <span class="hf-kicker">{html.escape(public_variant)}</span>
+      <h1>{html.escape(title)}</h1>
+      <p>{html.escape(hf_clean_public_text(subtitle))}</p>
+      <p>{html.escape('报告周期：' + str(context.get('window_label') or date_str))}</p>
+      <div class="hf-metrics">{metric_html}</div>
+    </section>
+    {''.join(section_html)}
+    <section class="hf-panel">
+      <h3>后续观察点</h3>
+      <ul>{watchpoints}</ul>
+    </section>
+  </main>
+</body>
+</html>"""
+
+
+def _hf_render_public_report_markdown(
+    *,
+    date_str: str,
+    report_variant: str,
+    premium_count: int,
+    fallback_count: int,
+    public_records: list[dict[str, Any]],
+    report_context: dict[str, Any] | None = None,
+) -> str:
+    context = report_context or hf_report_context(date_str, {})
+    public_variant = hf_public_report_variant_label(report_variant)
+    lines = [
+        f"# {hf_public_headline(None, context, premium=(report_variant == 'premium_insight_report'))}",
+        "",
+        f"> 报告周期：`{context.get('window_label') or date_str}` ｜ 报告类型：`{public_variant}` ｜ 论文数：`{len(public_records)}`",
+        "",
+    ]
+    if report_variant != "premium_insight_report":
+        lines.extend([
+            "> 当前状态：当前版本仍偏候选观察稿，适合用于主题筛选与后续跟踪。",
+            "",
+        ])
+    lines.extend([
+        "## 一页判断",
+        "",
+        hf_report_core_judgment(public_records, report_variant=report_variant),
+        "",
+        "## 本期看板",
+        "",
+        "| 指标 | 值 |",
+        "| --- | --- |",
+        f"| 报告类型 | `{public_variant}` |",
+        f"| 论文数量 | {len(public_records)} |",
+        f"| 报告周期 | {context.get('window_label') or date_str} |",
+        "",
+        "## Top 论文洞察",
+        "",
+    ])
+    if not public_records:
+        lines.append("- N/A")
+        return "\n".join(lines)
+
+    for idx, record in enumerate(public_records, 1):
+        taxonomy = record.get("taxonomy") or {}
+        scores = record.get("scores") or {}
+        assets = record.get("assets") or {}
+        github = record.get("github") or {}
+        reasoning = record.get("reasoning") or {}
+        experiment_plan = _hf_list(record.get("experiment_plan"))
+        hypotheses = _hf_list(record.get("hypotheses"))
+        strategic_questions = _hf_list(record.get("strategic_questions"))
+        evidence_gap = _hf_list(record.get("evidence_gap"))
+        title = _hf_text(record.get("title") or record.get("paper_id"))
+        github_label = _hf_text(github.get("full_name") or github.get("url"))
+        lines.extend([
+            f"### {idx:02d}. {title}",
+            "",
+            f"> {hf_clean_public_text(_hf_text(record.get('summary'), default=_hf_text(record.get('why_matters'))))}",
+            "",
+            "| 维度 | 内容 |",
+            "| --- | --- |",
+            f"| 方向 | {_hf_text(taxonomy.get('domain'))} / {_hf_text(taxonomy.get('stack_layer'))} / {_hf_text(taxonomy.get('research_route'))} |",
+            f"| 趋势判断 | `{hf_public_trend_label(reasoning.get('trend_type'))}` |",
+            f"| 评分 | insight={_hf_score_text(scores.get('insight_report'))} / experiment={_hf_score_text(scores.get('experiment'))} / open_project={_hf_score_text(scores.get('open_project'))} / deep_research={_hf_score_text(scores.get('deep_research_seed'))} |",
+            f"| 资产线索 | models={len(assets.get('linked_models') or [])} / datasets={len(assets.get('linked_datasets') or [])} / spaces={len(assets.get('linked_spaces') or [])} / total={_hf_text(assets.get('total_assets'))} |",
+            f"| GitHub | {github_label} |",
+            "",
+            "#### 为什么重要",
+            "",
+            hf_clean_public_text(_hf_text(record.get("why_matters"))),
+            "",
+            "#### 推荐动作",
+            "",
+            hf_clean_public_text(_hf_text(record.get("recommended_action"))),
+            "",
+            "#### 研究启示",
+            "",
+            hf_clean_public_text(_hf_text(record.get("research_implication"), "待补")),
+            "",
+            "#### 实验计划",
+            "",
+        ])
+        lines.extend(_hf_section_list_lines([hf_clean_public_text(item) for item in experiment_plan], empty_text="待补"))
+        lines.extend([
+            "",
+            "#### 开源机会",
+            "",
+            hf_clean_public_text(_hf_text(record.get("open_source_opportunity"), "待补")),
+            "",
+            "#### Deep Research 问题",
+            "",
+            hf_clean_public_text(_hf_text(record.get("deep_research_question"), "待补")),
+            "",
+            "#### 工作假设",
+            "",
+        ])
+        lines.extend(_hf_section_list_lines([hf_clean_public_text(item) for item in hypotheses], empty_text="待补"))
+        lines.extend([
+            "",
+            "#### 战略问题",
+            "",
+        ])
+        lines.extend(_hf_section_list_lines([hf_clean_public_text(item) for item in strategic_questions], empty_text="待补"))
+        lines.extend([
+            "",
+            "#### 证据缺口",
+            "",
+        ])
+        lines.extend(_hf_section_list_lines([hf_clean_public_text(item) for item in evidence_gap], empty_text="当前未显式暴露证据缺口"))
+        lines.append("")
+
+    trend_counts: dict[str, int] = {}
+    for record in public_records:
+        taxonomy = record.get("taxonomy") or {}
+        key = f"{taxonomy.get('domain', 'other')} / {taxonomy.get('stack_layer', 'model')}"
+        trend_counts[key] = trend_counts.get(key, 0) + 1
+    lines.extend([
+        "## 趋势雷达",
+        "",
+        "| 主题 | 数量 |",
+        "| --- | ---: |",
+    ])
+    if trend_counts:
+        for key, count in sorted(trend_counts.items(), key=lambda item: (-item[1], item[0])):
+            lines.append(f"| {key} | {count} |")
+    else:
+        lines.append("| N/A | 0 |")
+    lines.extend([
+        "",
+        "## 后续动作矩阵",
+        "",
+        "| 动作 | 适用条件 |",
+        "| --- | --- |",
+        "| 复现实验 | `experiment` 高且存在模型 / Space / repo 线索 |",
+        "| 开源观察 | `open_project` 高且 GitHub 归属明确 |",
+        "| 内容选题 | `insight_report` 高且能解释路线变化 |",
+        "| Deep Research | `deep_research_seed` 高但证据仍待补强 |",
+        "",
+    ])
+    return "\n".join(lines)
+
+
+def _hf_render_public_report_html(
+    *,
+    date_str: str,
+    report_variant: str,
+    premium_count: int,
+    fallback_count: int,
+    public_records: list[dict[str, Any]],
+    report_context: dict[str, Any] | None = None,
+) -> str:
+    context = report_context or hf_report_context(date_str, {})
+    title = hf_public_headline(None, context, premium=(report_variant == "premium_insight_report"))
+    hero_badge = hf_public_report_variant_label(report_variant)
+    hero_note = hf_report_core_judgment(public_records, report_variant=report_variant)
+    metric_cards = [
+        ("报告类型", hero_badge),
+        ("论文数量", str(len(public_records))),
+        ("报告周期", str(context.get("window_label") or date_str)),
+    ]
+    metric_html = "\n".join(
+        f'<div class="hf-metric"><span>{html.escape(label)}</span><strong>{html.escape(value)}</strong></div>'
+        for label, value in metric_cards
+    )
+    article_blocks: list[str] = []
+    for idx, record in enumerate(public_records, 1):
+        taxonomy = record.get("taxonomy") or {}
+        scores = record.get("scores") or {}
+        assets = record.get("assets") or {}
+        github = record.get("github") or {}
+        reasoning = record.get("reasoning") or {}
+        experiment_plan = _hf_list(record.get("experiment_plan"))
+        strategic_questions = _hf_list(record.get("strategic_questions"))
+        title_html = html.escape(_hf_text(record.get("title") or record.get("paper_id")))
+        github_url = str(github.get("url") or "").strip()
+        github_html = (
+            f'<a href="{html.escape(github_url)}" target="_blank" rel="noreferrer noopener">{html.escape(_hf_text(github.get("full_name") or github_url))}</a>'
+            if github_url
+            else html.escape(_hf_text(github.get("full_name")))
+        )
+        experiment_html = "".join(f"<li>{html.escape(item)}</li>" for item in experiment_plan) or "<li>待补</li>"
+        strategic_html = "".join(f"<li>{html.escape(item)}</li>" for item in strategic_questions) or "<li>待补</li>"
+        article_blocks.append(
+            f"""
+            <article class="hf-card">
+              <div class="hf-card-head">
+                <span class="hf-rank">{idx:02d}</span>
+                <div>
+                  <h2>{title_html}</h2>
+                  <p>{html.escape(hf_clean_public_text(_hf_text(record.get("summary"), default=_hf_text(record.get("why_matters")))))}</p>
+                </div>
+              </div>
+              <div class="hf-grid">
+                <div><span>方向</span><strong>{html.escape(_hf_text(taxonomy.get('domain')))} / {html.escape(_hf_text(taxonomy.get('stack_layer')))} / {html.escape(_hf_text(taxonomy.get('research_route')))}</strong></div>
+                <div><span>趋势判断</span><strong>{html.escape(hf_public_trend_label(reasoning.get('trend_type')))}</strong></div>
+                <div><span>评分</span><strong>insight={_hf_score_text(scores.get('insight_report'))} / experiment={_hf_score_text(scores.get('experiment'))}</strong></div>
+                <div><span>资产线索</span><strong>models={len(assets.get('linked_models') or [])} / datasets={len(assets.get('linked_datasets') or [])} / spaces={len(assets.get('linked_spaces') or [])} / total={html.escape(_hf_text(assets.get('total_assets')))}</strong></div>
+                <div><span>GitHub</span><strong>{github_html}</strong></div>
+              </div>
+              <section>
+                <h3>为什么重要</h3>
+                <p>{html.escape(hf_clean_public_text(_hf_text(record.get("why_matters"))))}</p>
+              </section>
+              <section>
+                <h3>推荐动作</h3>
+                <p>{html.escape(hf_clean_public_text(_hf_text(record.get("recommended_action"))))}</p>
+              </section>
+              <section>
+                <h3>实验计划</h3>
+                <ul>{"".join(f"<li>{html.escape(hf_clean_public_text(item))}</li>" for item in experiment_plan) or "<li>待补</li>"}</ul>
+              </section>
+              <section>
+                <h3>战略问题</h3>
+                <ul>{"".join(f"<li>{html.escape(hf_clean_public_text(item))}</li>" for item in strategic_questions) or "<li>待补</li>"}</ul>
+              </section>
+            </article>
+            """
+        )
+    trend_counts: dict[str, int] = {}
+    for record in public_records:
+        taxonomy = record.get("taxonomy") or {}
+        key = f"{taxonomy.get('domain', 'other')} / {taxonomy.get('stack_layer', 'model')}"
+        trend_counts[key] = trend_counts.get(key, 0) + 1
+    trend_rows = "".join(
+        f"<tr><td>{html.escape(key)}</td><td>{count}</td></tr>"
+        for key, count in sorted(trend_counts.items(), key=lambda item: (-item[1], item[0]))
+    ) or "<tr><td>N/A</td><td>0</td></tr>"
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{html.escape(title)} - {html.escape(date_str)}</title>
+  <style>
+    :root {{
+      --bg: #f6f1e8;
+      --paper: #fffdf8;
+      --ink: #1d1a16;
+      --muted: #6a6258;
+      --line: #dccfbe;
+      --accent: #8a4b22;
+      --accent-soft: #f0e0cf;
+      --shadow: 0 18px 48px rgba(45, 32, 20, 0.08);
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      background:
+        radial-gradient(circle at top left, rgba(196, 147, 96, 0.18), transparent 28%),
+        linear-gradient(180deg, #f9f4ec 0%, #f3ede3 100%);
+      color: var(--ink);
+      font: 16px/1.65 "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    }}
+    .hf-shell {{ max-width: 1080px; margin: 0 auto; padding: 40px 20px 64px; }}
+    .hf-hero {{
+      background: linear-gradient(135deg, rgba(255,255,255,0.92), rgba(247,240,229,0.96));
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      padding: 28px;
+      box-shadow: var(--shadow);
+    }}
+    .hf-kicker {{
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font: 600 12px/1.2 "Avenir Next", "Segoe UI", sans-serif;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }}
+    h1, h2, h3 {{ margin: 0 0 12px; line-height: 1.15; }}
+    h1 {{ font-size: clamp(32px, 4vw, 52px); max-width: 14ch; margin-top: 18px; }}
+    .hf-subtitle {{ color: var(--muted); max-width: 72ch; margin: 0; }}
+    .hf-metrics {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 14px;
+      margin-top: 22px;
+    }}
+    .hf-metric, .hf-card, .hf-panel {{
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+    }}
+    .hf-metric {{ padding: 16px 18px; }}
+    .hf-metric span, .hf-grid span {{
+      display: block;
+      color: var(--muted);
+      font: 600 12px/1.2 "Avenir Next", "Segoe UI", sans-serif;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }}
+    .hf-metric strong {{ display: block; margin-top: 10px; font-size: 22px; }}
+    .hf-section-title {{ margin: 32px 0 14px; font-size: 28px; }}
+    .hf-card {{ padding: 24px; margin-top: 18px; }}
+    .hf-card-head {{
+      display: grid;
+      grid-template-columns: 64px minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+    }}
+    .hf-rank {{
+      width: 64px;
+      height: 64px;
+      display: grid;
+      place-items: center;
+      border-radius: 18px;
+      background: linear-gradient(135deg, #8a4b22, #c98950);
+      color: white;
+      font: 700 22px/1 "Avenir Next", "Segoe UI", sans-serif;
+    }}
+    .hf-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 14px;
+      margin: 18px 0;
+      padding: 16px;
+      background: #fbf6ef;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+    }}
+    .hf-grid strong {{ display: block; margin-top: 8px; font-size: 15px; }}
+    .hf-card section + section {{ margin-top: 18px; }}
+    .hf-card p, .hf-card li, .hf-panel p, .hf-panel td {{ color: #2e2822; }}
+    .hf-panels {{
+      display: grid;
+      grid-template-columns: 1.3fr 0.9fr;
+      gap: 18px;
+      margin-top: 24px;
+    }}
+    .hf-panel {{ padding: 22px; }}
+    table {{ width: 100%; border-collapse: collapse; }}
+    th, td {{ padding: 12px 0; text-align: left; border-bottom: 1px solid var(--line); }}
+    th {{
+      color: var(--muted);
+      font: 600 12px/1.2 "Avenir Next", "Segoe UI", sans-serif;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }}
+    a {{ color: var(--accent); text-decoration: none; }}
+    @media (max-width: 820px) {{
+      .hf-panels {{ grid-template-columns: 1fr; }}
+      .hf-card-head {{ grid-template-columns: 1fr; }}
+    }}
+  </style>
+</head>
+<body>
+  <main class="hf-shell">
+    <section class="hf-hero">
+      <span class="hf-kicker">{html.escape(hero_badge)}</span>
+      <h1>{html.escape(title)}</h1>
+      <p class="hf-subtitle">{html.escape(hf_clean_public_text(hero_note))}</p>
+      <p class="hf-subtitle">报告周期：{html.escape(str(context.get('window_label') or date_str))}</p>
+      <div class="hf-metrics">{metric_html}</div>
+    </section>
+
+    <h2 class="hf-section-title">Top 论文洞察</h2>
+    {''.join(article_blocks) or '<div class="hf-card"><p>N/A</p></div>'}
+
+    <section class="hf-panels">
+      <div class="hf-panel">
+        <h3>趋势雷达</h3>
+        <table>
+          <thead><tr><th>主题</th><th>数量</th></tr></thead>
+          <tbody>{trend_rows}</tbody>
+        </table>
+      </div>
+      <div class="hf-panel">
+        <h3>后续动作矩阵</h3>
+        <p><strong>复现实验：</strong>优先处理 experiment 高且有模型 / Space / repo 线索的论文。</p>
+        <p><strong>开源观察：</strong>优先处理 open_project 高且 GitHub 归属明确的论文。</p>
+        <p><strong>内容选题：</strong>优先处理 insight_report 高且能解释路线变化的论文。</p>
+        <p><strong>Deep Research：</strong>优先处理 deep_research_seed 高但证据仍待补强的论文。</p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
+"""
+
+
+def hf_write_public_report(
+    config: dict[str, Any],
+    *,
+    date_str: str,
+    limit: int,
+    output_base: str | None = None,
+    reasoning_mode: str | None = None,
+) -> dict[str, str | int | bool]:
+    store_path = hf_paper_insight_db_path(config)
+    report_context = hf_report_context(date_str, config, requested_limit=limit)
+    candidates = hf_load_report_candidates(store_path, limit=limit, date_str=date_str, config=config, reasoning_mode=reasoning_mode)
+    public_records = [c["public"] for c in candidates]
+    premium_count = sum(1 for r in public_records if bool(((r.get("reasoning") or {}).get("premium_insight_available"))))
+    fallback_count = max(0, len(public_records) - premium_count)
+    base_report_variant = "premium_insight_report" if public_records and premium_count == len(public_records) else "fallback_report"
+    grouped_report: dict[str, Any] | None = None
+    grouped_report_error_kind = ""
+    if public_records:
+        try:
+            grouped_report = hf_call_grouped_report_flow(public_records, config, date_str=date_str, report_context=report_context)
+        except Exception as exc:
+            grouped_report_error_kind = type(exc).__name__
+    report_variant = "premium_insight_report" if grouped_report else base_report_variant
+    raw_base = Path(output_base or (config.get("output") or {}).get("raw_dir", "/Users/lisihao/Knowledge/_raw/tech-hotspot-radar")).expanduser()
+    out_dir = raw_base / date_str
+    out_dir.mkdir(parents=True, exist_ok=True)
+    assets_dir = out_dir / "hf-paper-insight-assets"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+
+    frontmatter = {
+        "source": "hf_paper_insight",
+        "date": date_str,
+        "module": "ai_influence_hf_paper_insight",
+        "schema_version": "hf_paper_report_v1",
+        "report_cadence": report_context["cadence"],
+        "report_window": report_context["window_label"],
+        "papers": len(public_records),
+        "report_label": hf_public_report_variant_label(report_variant),
+        "grouped_sections": len((grouped_report or {}).get("sections") or []),
+    }
+    lines = [
+        "---",
+        *[f"{k}: {json.dumps(v, ensure_ascii=False) if not isinstance(v, str) else v}" for k, v in frontmatter.items()],
+        "---",
+        "",
+    ]
+    render_markdown = _hf_render_grouped_report_markdown if grouped_report else _hf_render_public_report_markdown
+    render_html = _hf_render_grouped_report_html if grouped_report else _hf_render_public_report_html
+    render_kwargs = dict(
+        date_str=date_str,
+        report_variant=report_variant,
+        premium_count=premium_count,
+        fallback_count=fallback_count,
+        public_records=public_records,
+        report_context=report_context,
+    )
+    if grouped_report:
+        render_kwargs["grouped_report"] = grouped_report
+    lines.append(
+        render_markdown(
+            **render_kwargs,
+        )
+    )
+    report_md = "\n".join(lines)
+    report_html = render_html(**render_kwargs)
+    leaked = hf_internal_report_tokens(report_md)
+    if leaked:
+        raise ValueError(f"public HF paper report contains internal tokens: {leaked}")
+
+    report_path = out_dir / "hf-paper-report.md"
+    report_html_path = out_dir / "hf-paper-report.html"
+    pack_path = out_dir / "hf-paper-insight-pack.json"
+    plan_path = out_dir / "hf-paper-report-plan.json"
+    sections_path = out_dir / "hf-paper-report-sections.json"
+    report_path.write_text(report_md, encoding="utf-8")
+    report_html_path.write_text(report_html, encoding="utf-8")
+    if grouped_report:
+        plan_path.write_text(
+            json.dumps(grouped_report.get("plan") or {}, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        sections_path.write_text(
+            json.dumps(grouped_report.get("sections") or [], ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    pack_path.write_text(json.dumps({
+        "date": date_str,
+        "report_variant": report_variant,
+        "premium_insight_count": premium_count,
+        "fallback_count": fallback_count,
+        "grouped_report_ok": bool(grouped_report),
+        "grouped_report_model": (grouped_report or {}).get("model") or "",
+        "grouped_report_error": grouped_report_error_kind,
+        "report_context": report_context,
+        "grouped_report_plan": (grouped_report or {}).get("plan") or {},
+        "grouped_report_sections": (grouped_report or {}).get("sections") or [],
+        "papers": public_records,
+    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    asset_count = 0
+    for candidate in candidates:
+        paper_id = candidate["public"]["paper_id"]
+        paper_dir = assets_dir / slugify(str(paper_id))
+        paper_dir.mkdir(parents=True, exist_ok=True)
+        for key, body in candidate["compiled"].items():
+            # Compiled per-paper assets are public-facing derivatives; keep
+            # provider errors, local paths and execution diagnostics out.
+            if hf_internal_report_tokens(body):
+                continue
+            (paper_dir / f"{key}.md").write_text(body, encoding="utf-8")
+            asset_count += 1
+    return {
+        "ok": True,
+        "papers": len(public_records),
+        "report_variant": report_variant,
+        "premium_insight_count": premium_count,
+        "fallback_count": fallback_count,
+        "compiled_assets": asset_count,
+        "report_md": str(report_path),
+        "report_html": str(report_html_path),
+        "pack_json": str(pack_path),
+        "assets_dir": str(assets_dir),
+        "grouped_report_ok": bool(grouped_report),
+        "plan_json": str(plan_path) if grouped_report else "",
+        "sections_json": str(sections_path) if grouped_report else "",
+    }
+
+
+def cmd_compile_hf_paper_report(args: argparse.Namespace) -> int:
+    config = load_config(resolve_config(args))
+    date_str = getattr(args, "date", None) or iso_z().split("T", 1)[0]
+    limit = int(getattr(args, "limit", 10) or 10)
+    try:
+        files = hf_write_public_report(
+            config,
+            date_str=date_str,
+            limit=limit,
+            output_base=getattr(args, "output_base", None),
+            reasoning_mode=getattr(args, "reasoning_mode", None),
+        )
+    except Exception as exc:
+        print(f"[compile-hf-paper-report] ERROR {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps(files, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0
+
+
 def cmd_materialize_hf_paper_insights(args: argparse.Namespace) -> int:
     """Materialize HF paper snapshots into the Paper Insight runtime store."""
     config = load_config(resolve_config(args))
@@ -7920,9 +10324,7 @@ def cmd_materialize_hf_paper_insights(args: argparse.Namespace) -> int:
     run_id = begin_run(conn, "hf_papers", "materialize-hf-paper-insights")
     limit = int(getattr(args, "limit", 80) or 80)
     try:
-        module_dir = Path(__file__).resolve().parents[1] / "tools" / "hf_paper_insight"
-        if str(module_dir) not in sys.path:
-            sys.path.insert(0, str(module_dir))
+        hf_paper_add_module_path()
         from canonicalizer import Canonicalizer  # type: ignore
         from enricher import _ttl_expiry  # type: ignore
         from packet import PacketBuilder  # type: ignore
@@ -8113,6 +10515,15 @@ def cmd_materialize_hf_paper_insights(args: argparse.Namespace) -> int:
         )
         conn.commit()
         store.close()
+        report_files: dict[str, Any] = {}
+        if bool(getattr(args, "write_report", True)):
+            report_files = dict(hf_write_public_report(
+                config,
+                date_str=getattr(args, "report_date", None) or iso_z().split("T", 1)[0],
+                limit=int(getattr(args, "report_limit", 10) or 10),
+                output_base=getattr(args, "output_base", None),
+                reasoning_mode=getattr(args, "reasoning_mode", None),
+            ))
         print(json.dumps({
             "ok": True,
             "rows": len(rows),
@@ -8121,6 +10532,7 @@ def cmd_materialize_hf_paper_insights(args: argparse.Namespace) -> int:
             "gate_passed": gate_passed,
             "skipped_rate_limited": skipped_rate_limited,
             "store": store_path,
+            "report": report_files,
             "provider_success": provider_success_counts,
             "provider_failures": provider_failure_counts,
         }, ensure_ascii=False, indent=2, sort_keys=True))
@@ -8193,7 +10605,25 @@ def cmd_collect_github(args: argparse.Namespace) -> int:
         conn.close()
         return 0
     run_id = begin_run(conn, "github", command)
-    rows = conn.execute("SELECT full_name FROM github_repos ORDER BY full_name").fetchall()
+    trendshift_result: dict[str, Any] = {}
+    if not getattr(args, "skip_trendshift", False):
+        trendshift_result = github_collect_trendshift(
+            conn,
+            config,
+            limit=int(getattr(args, "trendshift_limit", 0) or 0),
+            force=bool(getattr(args, "force", False)),
+        )
+        print(f"[collect-github] trendshift={json.dumps(trendshift_result, ensure_ascii=False, sort_keys=True)}", flush=True)
+    trend_cutoff = (now_utc() - dt.timedelta(hours=36)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    rows = conn.execute(
+        "SELECT full_name FROM github_repos ORDER BY "
+        "CASE WHEN full_name IN ("
+        "  SELECT full_name FROM github_external_rank_snapshots "
+        "  WHERE source='trendshift' AND captured_at>=?"
+        ") THEN 0 ELSE 1 END, "
+        "COALESCE(stars,0) DESC, fetched_at DESC, full_name",
+        (trend_cutoff,),
+    ).fetchall()
     limit_repos = int(getattr(args, "limit_repos", 0) or 0)
     if limit_repos > 0:
         rows = rows[:limit_repos]
@@ -8295,6 +10725,7 @@ def cmd_collect_github(args: argparse.Namespace) -> int:
             "rate_limited": rate_limited,
             "auth": "token" if token else "unauthenticated",
             "auth_source": token_source,
+            "trendshift": trendshift_result,
         }, ensure_ascii=False)[:900],
     )
     print(f"[collect-github] repos={len(rows)} fetched={fetched} changed={new_items} failures={len(failures)} rate_limited={rate_limited}")
@@ -8303,6 +10734,36 @@ def cmd_collect_github(args: argparse.Namespace) -> int:
         print(f"  WARN {failure}")
     conn.close()
     return 0 if not failures else 1
+
+
+def cmd_collect_github_trendshift(args: argparse.Namespace) -> int:
+    config = load_config(resolve_config(args))
+    db_path = resolve_db(args, config)
+    conn = ensure_db(db_path)
+    conn.executescript(SCHEMA_SQL)
+    conn.row_factory = sqlite3.Row
+    run_id = begin_run(conn, "github", "collect-github-trendshift")
+    try:
+        period_arg = str(getattr(args, "period", "all") or "all")
+        periods = None if period_arg == "all" else [period_arg]
+        result = github_collect_trendshift(
+            conn,
+            config,
+            periods=periods,
+            limit=int(getattr(args, "limit", 0) or 0),
+            force=bool(getattr(args, "force", False)),
+        )
+        status = "ok" if result.get("ok") else "partial"
+        finish_run(conn, run_id, status, int(result.get("rows") or 0), int(result.get("rows") or 0), json.dumps(result, ensure_ascii=False)[:900])
+        conn.commit()
+        print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+        return 0 if result.get("ok") else 1
+    except Exception as exc:
+        finish_run(conn, run_id, "failed", 0, 0, f"{type(exc).__name__}: {exc}"[:900])
+        print(f"[collect-github-trendshift] ERROR {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        conn.close()
 
 
 def cmd_analyze_github_projects(args: argparse.Namespace) -> int:
@@ -8336,8 +10797,160 @@ def cmd_analyze_github_projects(args: argparse.Namespace) -> int:
         conn.close()
 
 
+def github_trendshift_signal_strength(rank: int) -> float:
+    return round(max(0.1, min(1.0, 1.0 - (max(1, int(rank or 999)) - 1) / 25.0)), 4)
+
+
+def github_trendshift_rows_for_report(conn: sqlite3.Connection, *, limit: int = 60) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """
+        WITH latest AS (
+          SELECT period, MAX(captured_at) AS captured_at
+          FROM github_external_rank_snapshots
+          WHERE source='trendshift'
+          GROUP BY period
+        )
+        SELECT s.period, s.full_name, s.rank, s.rank_url, s.repo_url,
+               s.description, s.language, s.topics_json, s.source_stars, s.captured_at
+        FROM github_external_rank_snapshots s
+        JOIN latest l ON l.period=s.period AND l.captured_at=s.captured_at
+        WHERE s.source='trendshift'
+        ORDER BY
+          CASE
+            WHEN s.period='daily' THEN 0
+            WHEN s.period='weekly' THEN 1
+            WHEN s.period='monthly' THEN 2
+            WHEN s.period LIKE 'topic:%' THEN 3
+            ELSE 4
+          END,
+          s.rank ASC,
+          s.full_name ASC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    return [
+        {
+            "period": row["period"],
+            "full_name": row["full_name"],
+            "rank": int(row["rank"] or 0),
+            "rank_url": row["rank_url"],
+            "repo_url": row["repo_url"],
+            "description": row["description"],
+            "language": row["language"],
+            "topics": json.loads(row["topics_json"] or "[]"),
+            "source_stars": int(row["source_stars"] or 0),
+            "captured_at": row["captured_at"],
+        }
+        for row in rows
+    ]
+
+
+def github_minimal_trendshift_card(conn: sqlite3.Connection, row: dict[str, Any]) -> dict[str, Any]:
+    repo = str(row.get("full_name") or "").strip()
+    repo_row = conn.execute(
+        "SELECT html_url, description, language, license, stars, forks, open_issues, "
+        "latest_release_tag, pushed_at FROM github_repos WHERE full_name=? "
+        "ORDER BY fetched_at DESC, rowid DESC LIMIT 1",
+        (repo,),
+    ).fetchone()
+    rank = int(row.get("rank") or 0)
+    period = str(row.get("period") or "")
+    external_rank_signal = github_trendshift_signal_strength(rank)
+    description = (
+        (repo_row["description"] if repo_row else "")
+        or row.get("description")
+        or "Trendshift 外部趋势榜出现的新项目，仓库说明仍需补齐。"
+    )
+    language = (repo_row["language"] if repo_row else "") or row.get("language") or ""
+    stars = int((repo_row["stars"] if repo_row else None) or row.get("source_stars") or 0)
+    tier = "A" if period in {"daily", "weekly", "monthly"} and rank <= 5 else ("B" if rank <= 10 else "C")
+    return {
+        "repo": repo,
+        "tier": tier,
+        "positioning": f"Trendshift {period} rank #{rank}",
+        "what_it_does": description,
+        "core_technical_idea": description,
+        "trend_implication": (
+            f"该项目出现在 Trendshift {period} 榜单第 {rank} 位，说明它在外部趋势源中出现短期动量；"
+            "结论必须继续用 README、release、issue 和真实使用场景验证。"
+        ),
+        "risk_classification": "trendshift_only_needs_validation",
+        "scores": {
+            "heat_score": round(0.22 + 0.28 * external_rank_signal, 4),
+            "potential_score": round(0.35 + 0.35 * external_rank_signal, 4),
+            "technical_depth_score": 0.35,
+            "novelty_score": external_rank_signal,
+            "social_cross_signal": 0.0,
+            "external_rank_signal": external_rank_signal,
+            "trendshift_best_rank": rank,
+            "trendshift_period": period,
+            "stars_delta_7d": 0,
+            "acceleration": 0.0,
+        },
+        "why_hot_facts": [
+            f"Trendshift {period} rank #{rank}",
+            f"language={language or 'N/A'}",
+            f"stars={stars}",
+        ],
+        "risks": [
+            "Trendshift-only signal: project quality and maintainability still need repo-level validation.",
+        ],
+        "watch_next": [
+            "补齐 README、release、issue、license 和最近提交活跃度",
+            "观察该项目是否连续出现在 Trendshift daily/weekly/topic 榜单",
+        ],
+        "evidence_ids": [],
+        "confidence": 0.52 if rank <= 5 else 0.44,
+        "html_url": (repo_row["html_url"] if repo_row else "") or row.get("repo_url") or f"https://github.com/{repo}",
+        "description": description,
+        "language": language,
+        "license": repo_row["license"] if repo_row else "",
+        "stars": stars,
+        "forks": int((repo_row["forks"] if repo_row else 0) or 0),
+        "open_issues": int((repo_row["open_issues"] if repo_row else 0) or 0),
+        "latest_release_tag": repo_row["latest_release_tag"] if repo_row else "",
+        "pushed_at": repo_row["pushed_at"] if repo_row else "",
+        "trendshift_period": period,
+        "trendshift_rank": rank,
+    }
+
+
+def github_report_cards_trendshift_first(conn: sqlite3.Connection, trendshift_rows: list[dict[str, Any]], *, limit: int) -> list[dict[str, Any]]:
+    internal_cards = github_project_cards(conn, limit=max(limit * 3, 30))
+    by_repo = {str(card.get("repo") or ""): card for card in internal_cards}
+    selected: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in trendshift_rows:
+        repo = str(row.get("full_name") or "").strip()
+        if not repo or repo in seen:
+            continue
+        card = dict(by_repo.get(repo) or github_minimal_trendshift_card(conn, row))
+        scores = dict(card.get("scores") or {})
+        rank = int(row.get("rank") or scores.get("trendshift_best_rank") or 0)
+        scores["trendshift_best_rank"] = rank
+        scores["trendshift_period"] = row.get("period")
+        scores["external_rank_signal"] = max(float(scores.get("external_rank_signal") or 0.0), github_trendshift_signal_strength(rank))
+        card["scores"] = scores
+        card["trendshift_period"] = row.get("period")
+        card["trendshift_rank"] = rank
+        selected.append(card)
+        seen.add(repo)
+        if len(selected) >= limit:
+            break
+    for card in internal_cards:
+        repo = str(card.get("repo") or "")
+        if repo and repo not in seen:
+            selected.append(card)
+            seen.add(repo)
+        if len(selected) >= limit:
+            break
+    return selected[:limit]
+
+
 def build_github_trend_pack(conn: sqlite3.Connection, *, limit: int = 10, date_str: str | None = None) -> dict[str, Any]:
-    cards = github_project_cards(conn, limit=limit)
+    trendshift_rows = github_trendshift_rows_for_report(conn, limit=max(60, limit * 4))
+    cards = github_report_cards_trendshift_first(conn, trendshift_rows, limit=limit)
     hf_papers = [
         {
             "paper_id": row["paper_id"],
@@ -8369,6 +10982,11 @@ def build_github_trend_pack(conn: sqlite3.Connection, *, limit: int = 10, date_s
         "card_tiers": {tier: count for tier, count in card_stats},
         "cards": cards,
         "hf_trending_papers": hf_papers,
+        "external_rank_signals": {
+            "trendshift": trendshift_rows,
+            "selection_policy": "GitHub report cards are selected Trendshift-first: daily, weekly, monthly, then topic pages by rank. Internal GitHub analysis cards only backfill remaining slots.",
+            "policy": "Use Trendshift as the primary external momentum/rank source for this report, then cross-check it against GitHub repo metadata, star/fork/open-issue data, release/readme evidence and HF/Social signals.",
+        },
         "instructions": {
             "goal": "Generate AI Influence GitHub and open research trend analysis section, not a GitHub Trending mirror.",
             "must_cover": [
@@ -8376,6 +10994,7 @@ def build_github_trend_pack(conn: sqlite3.Connection, *, limit: int = 10, date_s
                 "sudden-hot attribution",
                 "early potential radar",
                 "foundation-infra candidates",
+                "Trendshift external ranking as a cross-signal, not as the sole reason to recommend a project",
                 "Hugging Face trending papers as research-side signals",
                 "project planning briefs",
                 "risks and watch next",
@@ -8388,19 +11007,37 @@ def build_github_trend_pack(conn: sqlite3.Connection, *, limit: int = 10, date_s
 def build_github_trend_prompt(pack: dict[str, Any], model_name: str) -> str:
     return f"""你是 AI Influence 的开源生态主编、AI infra 架构师和产品策略负责人。
 
-你将收到 Tech Hotspot Radar 生成的 GitHub Project Intelligence Pack。它包含 repo metadata、项目分析卡、potential/heat 分数、risk 和 evidence ids。
+你将收到 Tech Hotspot Radar 生成的 GitHub Project Intelligence Pack。它包含 repo metadata、项目分析卡、potential/heat 分数、risk、Trendshift 外部排名信号、HF 论文侧信号和 evidence ids。
 
 任务：生成中文「AI Influence GitHub 开源趋势分析栏目」。
 
 硬规则：
 1. 不要做 GitHub Trending 搬运；先给核心判断，再解释项目。
 2. 只基于 pack，不引入外部事实。
-3. 每个关键判断必须绑定 repo 名或 evidence_ids。
-4. 必须区分：确定趋势、早期潜力、可能炒作/风险、需要人工复核。
-5. 每个重点项目都要回答：它是什么、为什么值得看、火的可能原因、核心技术/产品启示、可以策划什么。
+3. 每个关键判断必须绑定 repo 名、论文标题或项目事实；不要在正文裸露 ghatom_*、paper_id、JSON key 等内部证据 ID。
+4. 必须区分：确定趋势、早期潜力、可能炒作/风险、需要进一步确认。
+5. 每个重点项目都要回答：它是什么、为什么值得看、火的可能原因、核心技术/产品启示、建议。
 6. 如果 pack 内有 `hf_trending_papers`，必须用一节说明这些论文对 GitHub/开源趋势的侧向验证或反向发现价值。
+6a. 如果 pack 内有 `external_rank_signals.trendshift`，必须把 Trendshift 当作本报告的主排序入口：优先解释 cards 中带有 Trendshift period/rank 的项目，再用 repo metadata、stars/forks、release、README、HF/Social 证据交叉判断。不要把 Trendshift 只当作附录。
 7. 不要输出 JSON，不要代码块，直接输出 Markdown。
 8. 语气专业、直接、有洞察，适合放进 HTML 邮件日报。
+9. 不要使用 Markdown 粗体语法，不要输出 **任何内容** 这种星号强调；用自然小标题和短段落表达。
+10. “建议”必须分成两类：洞察建议、开源项目开发建议。
+11. 洞察建议不能只列标题。每个重点项目给 1 段 120-200 个中文字，包含：观点角度、目标读者、为什么现在写、可用证据、建议形式和下一步验证动作。
+12. 开源项目开发建议必须给 1 段 150-240 个中文字，明确判断：应该参与这个开源社区、还是在社区之外做一个更强的新项目；如果要做，应该在哪个模块/能力/工作流发力；同时说明不确定性和第一步验证动作。
+13. 行动建议池必须分为两个小节：洞察建议、开源项目开发建议。每条建议写 120-220 个中文字，不要只给标题。
+14. “它是什么”不能只写一句定义。每个重点项目写 120-220 个中文字，说明项目定位、目标用户/场景、语言、license/release、核心组件或工作流，以及它不是什么。
+15. “为什么值得看”必须写 180-280 个中文字，不能只列 stars/forks 绝对数；必须结合 stars、forks、7 日/1 日增量、release、open issues、social_mentions、HF 论文侧信号、tier/potential/heat 中可用数据来解释热度质量。如果某项数据缺失，要明确说缺失，不要假装有。
+16. “火的可能原因”必须写 160-260 个中文字，结合当前业界趋势做因果解释，例如 Agent runtime、MCP/浏览器工具层、GUI Agent、长期记忆、推理服务、world model、Physical AI、金融研究自动化等，不要只写“因为需求大”。
+17. “核心技术/产品启示”必须写 160-260 个中文字，提炼可复用架构思想、产品化机会、工程瓶颈和边界条件；不要写成口号。
+18. 每个重点项目的“建议”必须写成 180-300 个中文字的综合建议，包含洞察判断、是否值得继续跟踪、适合写什么、是否值得做开源动作、第一步验证动作。
+19. 每篇报告最多写 6 个重点项目；必须优先选择 cards 中 Trendshift rank 最靠前的项目。宁可减少项目数量，也不能出现空字段或缺字段。
+20. 每个项目必须严格使用这 5 个字段，且字段名和正文必须在同一行：它是什么：...、为什么值得看：...、火的可能原因：...、核心技术/产品启示：...、建议：...。不要把字段名单独作为一行。
+21. 突然爆火 / 高热项目、早期潜力项目雷达、基础设施候选三节必须围绕本次 pack.cards 和 external_rank_signals.trendshift 的实际项目写；不要强行覆盖历史旧项目。如果某个 Trendshift 高排名项目只有外部趋势信号、缺少完整 repo 分析卡，也要写成“Trendshift-only，需要继续验证”的候选，不得省略。
+22. 不要输出 Unicode 方框表、ASCII 表或 monospace box table。需要表格时必须使用标准 Markdown pipe table：| 列1 | 列2 |。
+23. 这是对外可读报告，不要写内部字段名或内部工作流语言。禁止出现：pack、social_mentions、social_cross_signal、heat_score、potential_score、technical_depth_score、stars_delta_7d、人工复核、复核优先级、未明确判定、增量缺失、内部证据、evidence、final_reasoner。
+24. 内部字段要改成自然语言：social_mentions 为 0 写成“公开社交扩散证据暂不足”；license 为 NOASSERTION 写成“许可证信息还需要进一步确认”；短期增量缺失写成“公开短期增长数据不足”；open issues 写成“未关闭 issue”。
+25. 风险和不确定性可以写，但必须像外部研究报告：用“需要进一步确认”“公开资料暂不足”“还不能直接下采用结论”，不要写“人工复核”“内部 pack 显示”。
 
 报告结构：
 # AI Influence GitHub 开源趋势分析 — {pack.get("date")}
@@ -8410,19 +11047,112 @@ def build_github_trend_prompt(pack: dict[str, Any], model_name: str) -> str:
 ## 基础设施候选
 ## Hugging Face 论文热点侧信号
 ## 可能炒作 / 风险
-## 项目策划池
+## 行动建议池
+### 洞察建议
+### 开源项目开发建议
 ## 下周观察指标
-## Provenance
+## 数据来源说明
 
-Provenance 必须写：
-- final_reasoner: {model_name}
-- source: Tech Hotspot Radar GitHub project cards
-- input_repos: {len(pack.get("cards") or [])}
-- total_watchlist: {pack.get("repo_count")}
+数据来源说明只写公开口径：
+- 数据来源：Tech Hotspot Radar GitHub 项目卡片与 Hugging Face 论文热榜侧信号
+- 外部交叉信号：Trendshift GitHub 趋势榜 daily/weekly/monthly 与 topic 页面排名
+- 项目样本：{len(pack.get("cards") or [])} 个重点项目
+- 观察池规模：{pack.get("repo_count")} 个项目
+- 说明：本文基于公开仓库元数据、release、stars、forks、未关闭 issue、短期增长线索和论文热榜侧信号形成判断
 
 pack:
 {json.dumps(pack, ensure_ascii=False)}
 """
+
+
+def normalize_github_trend_markdown(markdown: str) -> str:
+    """Remove model-y emphasis markers and keep the GitHub report publication-safe."""
+    text = str(markdown or "").strip()
+    # The report is rendered as HTML cards; Markdown bold markers look like model residue
+    # in plaintext/email contexts, so strip them unconditionally.
+    text = text.replace("**", "")
+    text = normalize_unicode_box_tables(text)
+    text = normalize_public_github_report_language(text)
+    text = re.sub(r"(?m)^(\s*)(它是什么|为什么值得看|火的可能原因|核心技术\s*/\s*产品启示|可以策划什么)：\s*$", r"\1\2：", text)
+    text = re.sub(r"(?m)^(\s*)(它是什么|为什么值得看|火的可能原因|核心技术\s*/\s*产品启示|可以策划什么):\s*$", r"\1\2：", text)
+    return text.strip()
+
+
+def normalize_public_github_report_language(text: str) -> str:
+    """Rewrite internal analysis terms into public-facing report language."""
+    replacements = [
+        (r"\bpack 中\b", "本次数据中"),
+        (r"\bpack 里\b", "本次数据里"),
+        (r"\bpack\b", "数据包"),
+        (r"\bsocial_mentions\s*为\s*0\b", "公开社交扩散证据暂不足"),
+        (r"\bsocial mentions\s*为\s*0\b", "公开社交扩散证据暂不足"),
+        (r"\bsocial_mentions\s*为\s*(\d+)\b", r"公开社交提及数为 \1"),
+        (r"\bsocial mentions\s*为\s*(\d+)\b", r"公开社交提及数为 \1"),
+        (r"\bsocial_cross_signal\s*为\s*([0-9.]+)\b", r"跨源信号较强"),
+        (r"\bheat_score\s*([0-9.]+)", r"热度评分 \1"),
+        (r"\bpotential_score\s*([0-9.]+)", r"潜力评分 \1"),
+        (r"\btechnical_depth_score\s*([0-9.]+)", r"技术深度评分 \1"),
+        (r"\bstars_delta_7d\b", "7 日 star 增长"),
+        (r"人工复核", "进一步确认"),
+        (r"复核优先级", "确认优先级"),
+        (r"未明确判定", "还需要进一步确认"),
+        (r"许可证状态为还需要进一步确认", "许可证信息还需要进一步确认"),
+        (r"许可证信息未明确判定", "许可证信息还需要进一步确认"),
+        (r"license 信息不足", "许可证信息还需要进一步确认"),
+        (r"license 为 NOASSERTION", "许可证信息还需要进一步确认"),
+        (r"增量缺失", "公开短期增长数据不足"),
+        (r"短期 star 增量缺失", "公开短期 star 增长数据不足"),
+        (r"1 日/7 日增量缺失", "公开 1 日/7 日增长数据不足"),
+        (r"1 日和 7 日增量缺失", "公开 1 日和 7 日增长数据不足"),
+        (r"open issues", "未关闭 issue"),
+        (r"Open issues", "未关闭 issue"),
+        (r"internal evidence ids retained in github-trend-pack\.json, not exposed in article body", "原始证据记录保存在结构化数据包中，正文只保留可读结论"),
+        (r"final_reasoner\s*:\s*.*", ""),
+    ]
+    out = str(text or "")
+    for pattern, replacement in replacements:
+        out = re.sub(pattern, replacement, out, flags=re.I)
+    return out
+
+
+def normalize_unicode_box_tables(text: str) -> str:
+    """Convert model-authored Unicode box tables into Markdown pipe tables."""
+    lines = str(text or "").splitlines()
+    out: list[str] = []
+    table_rows: list[list[str]] = []
+
+    def is_border(line: str) -> bool:
+        stripped = line.strip()
+        return bool(stripped) and all(ch in "╔╗╚╝╠╣╦╩╬═ " for ch in stripped)
+
+    def is_row(line: str) -> bool:
+        stripped = line.strip()
+        return stripped.startswith("║") and stripped.endswith("║")
+
+    def flush_table() -> None:
+        nonlocal table_rows
+        if not table_rows:
+            return
+        width = max(len(row) for row in table_rows)
+        padded = [row + [""] * (width - len(row)) for row in table_rows]
+        out.append("| " + " | ".join(padded[0]) + " |")
+        out.append("| " + " | ".join(["---"] * width) + " |")
+        for row in padded[1:]:
+            out.append("| " + " | ".join(row) + " |")
+        table_rows = []
+
+    for line in lines:
+        if is_border(line):
+            continue
+        if is_row(line):
+            cells = [cell.strip() for cell in line.strip().strip("║").split("║")]
+            if any(cells):
+                table_rows.append(cells)
+            continue
+        flush_table()
+        out.append(line)
+    flush_table()
+    return "\n".join(out)
 
 
 def estimate_model_tokens(text: str) -> int:
@@ -8512,46 +11242,165 @@ def record_github_trend_model_ledger(
     )
 
 
-def call_codex_github_trend_report(pack: dict[str, Any], config: dict[str, Any],
-                                   *, requested_model: str | None = None) -> dict[str, Any]:
+def render_github_trend_report_html(date_str: str, pack: dict[str, Any], result: dict[str, Any], top_tiers: str) -> str:
+    """Render the GitHub trend report as a publication-grade HTML artifact."""
+    cards = pack.get("cards") or []
+    trendshift_count = sum(
+        1 for card in cards
+        if ((card.get("scores") or {}).get("trendshift_best_rank") is not None)
+    )
+    model = result.get("model") or "N/A"
+    report_body = markdown_to_email_html(result.get("markdown") or "")
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>AI Influence GitHub Trend</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    :root {{
+      --ink:#16231f;
+      --muted:#68766f;
+      --paper:#fffaf0;
+      --paper-2:#f5ead8;
+      --green:#123b35;
+      --green-2:#1f5b4d;
+      --gold:#c77c32;
+      --line:#eadcc9;
+    }}
+    * {{ box-sizing:border-box; }}
+    body {{
+      margin:0;
+      color:var(--ink);
+      background:
+        radial-gradient(circle at 5% 0%, rgba(199,124,50,.22), transparent 27rem),
+        radial-gradient(circle at 92% 6%, rgba(31,91,77,.22), transparent 30rem),
+        linear-gradient(135deg,#f4efe4 0%,#e9efe6 52%,#d9e2d5 100%);
+      font-family: "Iowan Old Style","Songti SC","Noto Serif CJK SC","PingFang SC",serif;
+      line-height:1.72;
+    }}
+    .wrap {{ max-width:1180px; margin:0 auto; padding:34px 22px 64px; }}
+    .hero {{
+      position:relative;
+      overflow:hidden;
+      border-radius:34px;
+      padding:36px;
+      color:#fff;
+      background:
+        linear-gradient(135deg,rgba(18,59,53,.96),rgba(31,91,77,.94) 54%,rgba(158,99,48,.95)),
+        radial-gradient(circle at 82% 4%,rgba(255,255,255,.25),transparent 17rem);
+      box-shadow:0 28px 80px rgba(28,42,35,.25);
+    }}
+    .hero:after {{
+      content:"";
+      position:absolute;
+      width:420px;height:420px;right:-180px;top:-180px;
+      border:1px solid rgba(255,255,255,.28);
+      border-radius:50%;
+    }}
+    .eyebrow {{ font-size:12px; letter-spacing:.2em; text-transform:uppercase; opacity:.76; }}
+    h1 {{ margin:12px 0 14px; font-size:42px; line-height:1.08; letter-spacing:-.045em; }}
+    .subtitle {{ max-width:860px; font-size:17px; opacity:.92; }}
+    .metrics {{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:12px;
+      margin-top:26px;
+    }}
+    .metric {{
+      border:1px solid rgba(255,255,255,.18);
+      background:rgba(255,255,255,.13);
+      border-radius:19px;
+      padding:14px 16px;
+      backdrop-filter:blur(10px);
+    }}
+    .metric b {{ display:block; font-size:24px; line-height:1.1; }}
+    .metric span {{ display:block; margin-top:5px; font-size:12px; opacity:.78; }}
+    .article {{
+      margin-top:24px;
+      padding:34px 38px 42px;
+      border:1px solid var(--line);
+      border-radius:30px;
+      background:rgba(255,253,248,.92);
+      box-shadow:0 22px 70px rgba(50,43,33,.12);
+    }}
+    .note {{
+      margin-top:14px;
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      color:var(--muted);
+      font:13px/1.5 "PingFang SC","Noto Sans CJK SC",sans-serif;
+    }}
+    .pill {{
+      border:1px solid #d8c9b5;
+      background:#fff8ec;
+      border-radius:999px;
+      padding:6px 10px;
+    }}
+    @media (max-width:760px) {{
+      .wrap {{ padding:18px 12px 42px; }}
+      .hero {{ padding:26px 20px; border-radius:24px; }}
+      h1 {{ font-size:30px; }}
+      .metrics {{ grid-template-columns:1fr 1fr; }}
+      .article {{ padding:22px 16px 28px; border-radius:22px; }}
+    }}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <div class="eyebrow">AI Influence · GitHub Project Intelligence</div>
+      <h1>GitHub 开源趋势分析 — {html_escape(date_str)}</h1>
+      <div class="subtitle">从开源项目变化里提炼技术路线、社区动能、产品机会和可落地的开源动作。Trendshift 只作为外部动量信号，最终判断仍以仓库事实和跨源证据为准。</div>
+      <div class="metrics">
+        <div class="metric"><b>{html_escape(len(cards))}</b><span>重点项目样本</span></div>
+        <div class="metric"><b>{html_escape(pack.get("repo_count"))}</b><span>GitHub 观察池</span></div>
+        <div class="metric"><b>{html_escape(trendshift_count)}</b><span>含 Trendshift 信号</span></div>
+        <div class="metric"><b>{html_escape(top_tiers)}</b><span>Tier mix · {html_escape(model)}</span></div>
+      </div>
+    </section>
+    <section class="article">
+      {report_body}
+      <div class="note">
+        <span class="pill">backend: {html_escape(result.get("backend"))}</span>
+        <span class="pill">operator: {html_escape(result.get("operator") or "N/A")}</span>
+        <span class="pill">reasoning: {html_escape(result.get("reasoning_effort") or "N/A")}</span>
+      </div>
+    </section>
+  </main>
+</body>
+</html>"""
+
+
+def call_github_trend_report_chapter_writer(pack: dict[str, Any], config: dict[str, Any],
+                                            *, requested_model: str | None = None) -> dict[str, Any]:
     cfg = ((config.get("youtube") or {}).get("phase_report_reasoner") or {})
-    codex_bin = str(cfg.get("codex_bin") or os.environ.get("CODEX_BIN") or shutil.which("codex") or "codex")
-    model = str(requested_model or cfg.get("model") or os.environ.get("TECH_HOTSPOT_PHASE_REPORT_MODEL") or "gpt-5.5")
-    timeout = int(cfg.get("timeout_seconds") or 1200)
+    model = str(requested_model or os.environ.get("TECH_HOTSPOT_GITHUB_REPORT_MODEL") or cfg.get("model") or "chatgpt-5.5")
     prompt = build_github_trend_prompt(pack, model)
     started = time.time()
-    with tempfile.TemporaryDirectory(prefix="tech-hotspot-github-report-") as td:
-        out_path = Path(td) / "last-message.md"
-        cmd = [
-            codex_bin, "exec",
-            "--model", model,
-            "--sandbox", "read-only",
-            "--cd", str(Path.home()),
-            "--skip-git-repo-check",
-            "--output-last-message", str(out_path),
-            "-",
-        ]
-        run = subprocess.run(
-            cmd,
-            input=prompt,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            timeout=timeout,
-        )
-        if run.returncode != 0:
-            raise RuntimeError(f"codex github trend report failed rc={run.returncode}: {run.stdout[-2000:]}")
-        markdown = out_path.read_text(encoding="utf-8", errors="replace").strip() if out_path.exists() else run.stdout.strip()
+    result = call_browser_agent_chatgpt_markdown(
+        prompt,
+        config,
+        purpose=f"github-trend-report-{pack.get('date') or iso_z().split('T', 1)[0]}",
+        requested_model=model,
+        operator_kind="chapter_writer",
+    )
+    markdown = str(result.get("markdown") or "").strip()
+    markdown = normalize_github_trend_markdown(markdown)
     if len(markdown) < 1500:
-        raise ValueError(f"codex github trend report output too short: {len(markdown)} chars")
+        raise ValueError(f"ChatGPT Report Chapter Writer output too short: {len(markdown)} chars")
     return {
         "ok": True,
-        "backend": "codex_cli",
-        "model": model,
-        "latency_ms": int((time.time() - started) * 1000),
-        "input_token_count": estimate_model_tokens(prompt),
-        "output_token_count": estimate_model_tokens(markdown),
+        "backend": "browser_agent_chatgpt",
+        "operator": "chatgpt_report_chapter_writer",
+        "model": str(result.get("model") or model),
+        "reasoning_effort": str(result.get("reasoning_effort") or cfg.get("reasoning_effort") or "high"),
+        "latency_ms": int(result.get("latency_ms") or ((time.time() - started) * 1000)),
+        "input_token_count": int(result.get("input_token_count") or estimate_model_tokens(prompt)),
+        "output_token_count": int(result.get("output_token_count") or estimate_model_tokens(markdown)),
         "cost_estimate_usd": 0.0,
+        "request_dir": str(result.get("request_dir") or ""),
         "markdown": markdown,
     }
 
@@ -8572,7 +11421,7 @@ def cmd_github_trend_report(args: argparse.Namespace) -> int:
         pack = build_github_trend_pack(conn, limit=limit, date_str=date_str)
         if not pack.get("cards"):
             raise ValueError("no repo analysis cards available")
-        result = call_codex_github_trend_report(pack, config, requested_model=getattr(args, "model", None))
+        result = call_github_trend_report_chapter_writer(pack, config, requested_model=getattr(args, "model", None))
         record_github_trend_model_ledger(conn, date_str=date_str, pack=pack, result=result, success=True)
         files = {
             "pack": out_dir / "github-trend-pack.json",
@@ -8584,17 +11433,13 @@ def cmd_github_trend_report(args: argparse.Namespace) -> int:
         files["pack"].write_text(json.dumps(pack, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         files["report_json"].write_text(json.dumps({k: v for k, v in result.items() if k != "markdown"}, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         files["report_md"].write_text(result["markdown"].strip() + "\n", encoding="utf-8")
-        html = (
-            "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>AI Influence GitHub Trend</title></head>"
-            "<body style=\"margin:0;background:#f4efe4;color:#17231f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB',sans-serif;line-height:1.72\">"
-            "<div style=\"max-width:980px;margin:0 auto;padding:28px 18px 44px\">"
-            "<div style=\"background:linear-gradient(135deg,#123b35,#315f4f 58%,#c9863d);color:#fff;border-radius:26px;padding:30px\">"
-            "<div style=\"font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.82\">AI Influence · GitHub Project Intelligence</div>"
-            f"<h1 style=\"margin:10px 0 12px;font-size:30px;line-height:1.22\">GitHub 开源趋势分析 — {html_escape(date_str)}</h1>"
-            f"<div style=\"font-size:15px;opacity:.92;max-width:820px\">final_reasoner={html_escape(result['model'])} · input_repos={len(pack.get('cards') or [])} · watchlist={pack.get('repo_count')}</div>"
-            "</div><section style=\"background:#fffdf8;border:1px solid #eadfcd;border-radius:20px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:21px;margin:14px 0\">"
-            f"{markdown_to_email_html(result['markdown'])}</section></div></body></html>"
-        )
+        cards = pack.get("cards") or []
+        tier_counts: dict[str, int] = {}
+        for card in cards:
+            tier = str(card.get("tier") or "N/A")
+            tier_counts[tier] = tier_counts.get(tier, 0) + 1
+        top_tiers = " · ".join(f"{k}:{v}" for k, v in sorted(tier_counts.items())) or "N/A"
+        html = render_github_trend_report_html(date_str, pack, result, top_tiers)
         files["report_html"].write_text(html, encoding="utf-8")
         files["wiki_dispatch"].write_text(report_wiki_dispatch(str(out_dir), date_str), encoding="utf-8")
         finish_run(conn, run_id, "ok", len(pack.get("cards") or []), len(pack.get("cards") or []), json.dumps({"model": result["model"], "out_dir": str(out_dir)}, ensure_ascii=False)[:900])
@@ -9010,10 +11855,134 @@ def markdown_to_email_html(markdown: str) -> str:
     blocks: list[str] = []
     paragraph: list[str] = []
     table_rows: list[list[str]] = []
+    current_section = ""
+    section_titles = {
+        "今日核心判断",
+        "突然爆火 / 高热项目解析",
+        "突然爆火/高热项目解析",
+        "早期潜力项目雷达",
+        "基础设施候选",
+        "Hugging Face 论文热点侧信号",
+        "可能炒作 / 风险",
+        "可能炒作/风险",
+        "行动建议池",
+        "洞察建议",
+        "开源项目开发建议",
+        "下周观察指标",
+        "数据来源说明",
+    }
+    label_re = re.compile(
+        r"^(确定趋势|早期潜力|可能炒作\s*/\s*风险|需要进一步确认|它是什么|为什么值得看|火的可能原因|核心技术\s*/\s*产品启示|建议|当前问题|下一步)：(.+)$"
+    )
+    repo_heading_re = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+    compact_line_sections = {
+        "洞察建议",
+        "开源项目开发建议",
+        "下周观察指标",
+        "数据来源说明",
+    }
+    narrative_card_sections = {
+        "今日核心判断",
+        "突然爆火 / 高热项目解析",
+        "突然爆火/高热项目解析",
+        "早期潜力项目雷达",
+        "基础设施候选",
+        "Hugging Face 论文热点侧信号",
+        "可能炒作 / 风险",
+        "可能炒作/风险",
+    }
+    recommendation_re = re.compile(r"^([^：:]{2,80})[：:](.+)$")
+
+    def render_text(value: str) -> str:
+        escaped = html_escape(value)
+        match = label_re.match(value.strip())
+        if not match:
+            return escaped
+        label = html_escape(match.group(1).replace(" ", ""))
+        body = html_escape(match.group(2).strip())
+        return (
+            "<span style=\"display:inline-block;margin:0 8px 0 0;padding:2px 9px;"
+            "border-radius:999px;background:#e7f0db;color:#24463c;font-size:12px;"
+            f"font-weight:700;letter-spacing:.03em\">{label}</span>{body}"
+        )
+
+    def render_labeled_block(value: str) -> str:
+        match = label_re.match(value.strip())
+        if not match:
+            return (
+                "<p style=\"margin:12px 0;color:#26352f;font-size:15px;line-height:1.86\">"
+                f"{html_escape(value)}</p>"
+            )
+        label = html_escape(match.group(1).replace(" ", ""))
+        body = html_escape(match.group(2).strip())
+        return (
+            "<div style=\"margin:12px 0;padding:14px 16px;border:1px solid #e7dbc9;"
+            "border-radius:16px;background:linear-gradient(180deg,#fffdf8,#fbf4e8);"
+            "box-shadow:0 8px 22px rgba(58,50,37,.05)\">"
+            "<div style=\"display:inline-block;margin-bottom:7px;padding:3px 10px;"
+            "border-radius:999px;background:#173b33;color:#fff;font-size:12px;"
+            f"font-weight:800;letter-spacing:.04em\">{label}</div>"
+            f"<div style=\"color:#24352f;font-size:15px;line-height:1.82\">{body}</div>"
+            "</div>"
+        )
+
+    def render_compact_line(value: str) -> str:
+        stripped_value = value.strip()
+        match = recommendation_re.match(stripped_value)
+        if match:
+            title = html_escape(match.group(1).strip())
+            body = html_escape(match.group(2).strip())
+            return (
+                "<div style=\"margin:10px 0;padding:13px 15px;border:1px solid #e6d8c5;"
+                "border-radius:15px;background:#fffaf1;box-shadow:0 7px 18px rgba(58,50,37,.045)\">"
+                f"<div style=\"font-weight:850;color:#143b34;margin-bottom:5px;font-size:15px\">{title}</div>"
+                f"<div style=\"color:#2a3a33;font-size:14px;line-height:1.76\">{body}</div>"
+                "</div>"
+            )
+        return (
+            "<div style=\"margin:8px 0;padding:11px 13px;border-left:4px solid #d59a52;"
+            "background:#fff8eb;border-radius:12px;color:#2a3a33;font-size:14px;line-height:1.72\">"
+            f"{html_escape(stripped_value)}</div>"
+        )
+
+    def render_narrative_card(value: str) -> str:
+        body = render_text(value.strip())
+        return (
+            "<div style=\"margin:13px 0;padding:15px 17px;border:1px solid #e5d7c4;"
+            "border-radius:17px;background:linear-gradient(180deg,#fffdf8,#fbf4e8);"
+            "box-shadow:0 8px 20px rgba(58,50,37,.045);color:#24352f;"
+            "font-size:15px;line-height:1.9\">"
+            f"{body}</div>"
+        )
+
+    def split_narrative_chunks(value: str, *, max_chars: int = 360) -> list[str]:
+        """Break dense Chinese narrative into scan-friendly cards without changing content."""
+        parts = [part.strip() for part in re.split(r"(?<=[。！？])\s*", value.strip()) if part.strip()]
+        if not parts:
+            return [value.strip()] if value.strip() else []
+        chunks: list[str] = []
+        current = ""
+        for part in parts:
+            if current and len(current) + len(part) > max_chars:
+                chunks.append(current.strip())
+                current = part
+            else:
+                current = f"{current}{part}" if current else part
+        if current.strip():
+            chunks.append(current.strip())
+        return chunks
 
     def flush_paragraph() -> None:
         if paragraph:
-            blocks.append(f"<p style=\"margin:10px 0\">{html_escape(' '.join(paragraph))}</p>")
+            text = " ".join(paragraph).strip()
+            if current_section in narrative_card_sections:
+                for chunk in split_narrative_chunks(text):
+                    blocks.append(render_narrative_card(chunk))
+            else:
+                blocks.append(
+                    "<p style=\"margin:12px 0;color:#26352f;font-size:15px;line-height:1.86\">"
+                    f"{render_text(text)}</p>"
+                )
             paragraph.clear()
 
     def flush_table() -> None:
@@ -9031,18 +12000,18 @@ def markdown_to_email_html(markdown: str) -> str:
         if header:
             html_rows.append(
                 "<tr>"
-                + "".join(f"<th style=\"background:#123b35;color:#fff;text-align:left;padding:9px;border:1px solid #eadfcd\">{html_escape(cell)}</th>" for cell in header)
+                + "".join(f"<th style=\"background:#133d34;color:#fff;text-align:left;padding:11px;border:1px solid #d8cbb9;font-size:12px;letter-spacing:.04em\">{html_escape(cell)}</th>" for cell in header)
                 + "</tr>"
             )
         for idx, row in enumerate(body):
-            bg = "background:#fbf7ef;" if idx % 2 else ""
+            bg = "background:#fbf7ef;" if idx % 2 else "background:#fffaf1;"
             html_rows.append(
                 "<tr>"
-                + "".join(f"<td style=\"padding:9px;border:1px solid #eadfcd;vertical-align:top;{bg}\">{html_escape(cell)}</td>" for cell in row)
+                + "".join(f"<td style=\"padding:10px;border:1px solid #eadfcd;vertical-align:top;{bg}font-size:13px;line-height:1.65\">{html_escape(cell)}</td>" for cell in row)
                 + "</tr>"
             )
         blocks.append(
-            "<table style=\"width:100%;border-collapse:collapse;font-size:13px;margin:12px 0\">"
+            "<table style=\"width:100%;border-collapse:separate;border-spacing:0;font-size:13px;margin:16px 0;border-radius:14px;overflow:hidden;box-shadow:0 7px 20px rgba(35,49,42,.05)\">"
             + "".join(html_rows)
             + "</table>"
         )
@@ -9056,6 +12025,10 @@ def markdown_to_email_html(markdown: str) -> str:
         line = raw_line.rstrip()
         stripped = line.strip()
         table_line = parse_table_line(stripped)
+        if table_line is None and "\t" in stripped:
+            cells = [cell.strip() for cell in stripped.split("\t")]
+            if len(cells) >= 3:
+                table_line = cells
         if table_line is not None:
             flush_paragraph()
             table_rows.append(table_line)
@@ -9066,19 +12039,53 @@ def markdown_to_email_html(markdown: str) -> str:
             continue
         if stripped.startswith("# "):
             flush_paragraph()
-            blocks.append(f"<h2 style=\"font-size:24px;color:#123b35;margin:8px 0 14px\">{html_escape(stripped[2:].strip())}</h2>")
+            blocks.append(f"<h2 style=\"font-size:27px;color:#102d28;margin:6px 0 18px;line-height:1.25;letter-spacing:-.02em\">{html_escape(stripped[2:].strip())}</h2>")
         elif stripped.startswith("## "):
             flush_paragraph()
-            blocks.append(f"<h3 style=\"font-size:20px;color:#123b35;margin:20px 0 10px\">{html_escape(stripped[3:].strip())}</h3>")
+            blocks.append(
+                "<div style=\"margin:30px 0 14px;padding:11px 14px;border-left:5px solid #c9863d;"
+                "background:linear-gradient(90deg,#f2eadc,#fffaf2);border-radius:14px\">"
+                f"<h3 style=\"font-size:21px;color:#123b35;margin:0;line-height:1.32\">{html_escape(stripped[3:].strip())}</h3></div>"
+            )
         elif stripped.startswith("### "):
             flush_paragraph()
-            blocks.append(f"<h4 style=\"font-size:17px;color:#1e4b41;margin:16px 0 8px\">{html_escape(stripped[4:].strip())}</h4>")
+            blocks.append(
+                "<h4 style=\"font-size:18px;color:#173b33;margin:22px 0 10px;padding:9px 12px;"
+                "background:#eef4e7;border:1px solid #d7e4ce;border-radius:12px;line-height:1.35\">"
+                f"{html_escape(stripped[4:].strip())}</h4>"
+            )
+        elif stripped in section_titles:
+            flush_paragraph()
+            current_section = stripped
+            level = "h4" if stripped in {"洞察建议", "开源项目开发建议"} else "h3"
+            size = "18px" if level == "h4" else "23px"
+            margin = "24px 0 12px" if level == "h4" else "34px 0 16px"
+            blocks.append(
+                f"<{level} style=\"margin:{margin};font-size:{size};line-height:1.28;"
+                "color:#102d28;letter-spacing:-.01em;border-left:6px solid #c77c32;"
+                "padding:10px 14px;background:linear-gradient(90deg,#f1e4cf,#fff8ea);"
+                f"border-radius:14px\">{html_escape(stripped)}</{level}>"
+            )
+        elif repo_heading_re.match(stripped) or stripped in {"UI-TARS-desktop", "Flowise", "vLLM", "NVIDIA/cosmos"}:
+            flush_paragraph()
+            blocks.append(
+                "<h4 style=\"margin:26px 0 12px;padding:13px 16px;border-radius:18px;"
+                "background:linear-gradient(135deg,#153f36,#29584d);color:#fff;"
+                "font-size:19px;line-height:1.25;box-shadow:0 12px 28px rgba(18,55,48,.16)\">"
+                f"{html_escape(stripped)}</h4>"
+            )
+        elif label_re.match(stripped):
+            flush_paragraph()
+            blocks.append(render_labeled_block(stripped))
+        elif current_section in compact_line_sections:
+            flush_paragraph()
+            blocks.append(render_compact_line(stripped))
         elif stripped.startswith(("- ", "* ")):
             flush_paragraph()
-            blocks.append(f"<div style=\"margin:6px 0 6px 16px\">• {html_escape(stripped[2:].strip())}</div>")
+            blocks.append(f"<div style=\"margin:8px 0 8px 14px;color:#26352f;line-height:1.74\">• {render_text(stripped[2:].strip())}</div>")
         elif re.match(r"^\d+\.\s+", stripped):
             flush_paragraph()
-            blocks.append(f"<div style=\"margin:6px 0 6px 16px\">{html_escape(stripped)}</div>")
+            blocks.append(f"<div style=\"margin:8px 0 8px 14px;color:#26352f;line-height:1.74\">{render_text(stripped)}</div>")
         else:
             paragraph.append(stripped)
     flush_paragraph()
@@ -9177,7 +12184,21 @@ def github_project_cards(conn: sqlite3.Connection, limit: int = 10) -> list[dict
                r.html_url, r.description, r.language, r.license, r.stars, r.forks,
                r.open_issues, r.latest_release_tag, r.pushed_at
         FROM repo_analysis_cards c
-        LEFT JOIN github_repos r ON r.full_name = c.repo_full_name
+        LEFT JOIN github_repos r
+          ON r.rowid = (
+            SELECT r2.rowid
+            FROM github_repos r2
+            WHERE r2.full_name = c.repo_full_name
+            ORDER BY r2.fetched_at DESC, r2.rowid DESC
+            LIMIT 1
+          )
+        WHERE c.rowid = (
+          SELECT c2.rowid
+          FROM repo_analysis_cards c2
+          WHERE c2.repo_full_name = c.repo_full_name
+          ORDER BY c2.created_at DESC, c2.rowid DESC
+          LIMIT 1
+        )
         ORDER BY
           CASE c.tier WHEN 'S' THEN 0 WHEN 'A' THEN 1 WHEN 'B' THEN 2 WHEN 'C' THEN 3 ELSE 4 END,
           CAST(json_extract(c.scores_json, '$.potential_score') AS REAL) DESC,
@@ -10228,10 +13249,7 @@ def build_planned_report_evidence_pack(conn: sqlite3.Connection, catalog: list[d
 
 def build_planned_report_prompt(evidence_pack: dict[str, Any], *, model_name: str) -> str:
     spec = evidence_pack.get("report_spec") or {}
-    public_pack = json.loads(json.dumps(evidence_pack, ensure_ascii=False))
-    for item in public_pack.get("videos") or []:
-        # Keep the internal video id available only as provenance in files, not as prose guidance.
-        item.pop("video_id", None)
+    public_pack = _public_planned_report_pack(evidence_pack)
     return f"""你是 AI Influence 主编兼技术趋势分析师。
 
 你现在使用的是 Browser Agent 算子打开 ChatGPT，模型必须是 {model_name}，Thinking high。
@@ -10252,6 +13270,8 @@ def build_planned_report_prompt(evidence_pack: dict[str, Any], *, model_name: st
 11. 如果 report_spec.figure_slots 不为空，请在正文里为这些图位保留自然落点；不要输出图片占位符语法，HTML 渲染会在相应 section 自动插入图。
 12. 如果 report_spec.trends 存在，必须按“趋势 X → 章节 Y → 小结 Z”写作：每个趋势先给判断，每章展开证据，每个 subsection 输出一个明确小结。不要把不同 group 的视频混成一锅。
 13. event/keynote/conference 组、大咖访谈组、tutorial/demo 组、产品更新组要分清角色：事件组支撑趋势背景，访谈组支撑观点分歧，demo/tutorial 组支撑工程落地，不要互相替代。
+14. 文风必须像正式技术研究报告，不要有 AI 模板味。禁止使用“更硬”这种表达；“信号”只能少量使用，优先改成“迹象 / 线索 / 依据 / 变化 / 材料 / 观察点”。例如不要写“更硬的三类信号”，应写“三类更具体的依据”或“接下来重点看三件事”。
+15. 如果素材属于大咖访谈、播客、圆桌、keynote 或具名专家演讲，必须先写“访谈原意摘要与观点归纳”小节：尽可能原汁原味呈现嘉宾核心主张、论证顺序、例子和保留意见，再进入趋势分析。
 
 建议结构：
 # {spec.get("title") or "AI Influence 专题报告"}
@@ -10292,6 +13312,9 @@ def _public_planned_report_pack(evidence_pack: dict[str, Any]) -> dict[str, Any]
     public_pack = json.loads(json.dumps(evidence_pack, ensure_ascii=False))
     for item in public_pack.get("videos") or []:
         item.pop("video_id", None)
+        summary = str(item.get("summary_zh") or "").strip().lower()
+        if summary in {"[semantic_summary_missing]", "semantic_summary_missing", "[missing]", "missing", "n/a", "none", "null"}:
+            item["summary_zh"] = ""
     return public_pack
 
 
@@ -10308,6 +13331,69 @@ def _chapter_refs_from_spec(spec: dict[str, Any], fallback_refs: list[str]) -> l
     return deduped or list(fallback_refs)
 
 
+def _is_ai_influence_interview_like_video(video: dict[str, Any]) -> bool:
+    """Detect interviews, talks, keynotes, and named-expert viewpoint materials."""
+    text = " ".join([
+        str(video.get("channel") or ""),
+        str(video.get("title") or ""),
+        str(video.get("summary_zh") or ""),
+        " ".join(str(tag) for tag in (video.get("topic_tags") or [])),
+    ]).lower()
+    keywords = [
+        "interview",
+        "conversation",
+        "fireside",
+        "podcast",
+        "roundtable",
+        "keynote",
+        "speaker",
+        "founder",
+        "ceo",
+        "cto",
+        "researcher",
+        "scientist",
+        "yann lecun",
+        "andres marafioti",
+        "hugging face",
+        "deepmind",
+        "openai",
+        "anthropic",
+        "访谈",
+        "对谈",
+        "采访",
+        "播客",
+        "圆桌",
+        "主题演讲",
+        "大咖",
+    ]
+    if any(keyword in text for keyword in keywords):
+        return True
+    title = str(video.get("title") or "")
+    # Many conference talks encode speaker attribution as "topic — Person, Org".
+    # Plain hyphenated meeting/workstream titles are too broad.
+    return " — " in title
+
+
+def _ai_influence_interview_video_refs(evidence_pack: dict[str, Any]) -> list[str]:
+    videos = [v for v in (evidence_pack.get("videos") or []) if isinstance(v, dict)]
+    refs: list[str] = []
+    for video in videos:
+        ref = str(video.get("video_ref") or "").strip()
+        if ref and _is_ai_influence_interview_like_video(video):
+            refs.append(ref)
+    spec = evidence_pack.get("report_spec") or {}
+    spec_text = json.dumps({
+        "title": spec.get("title"),
+        "scope": spec.get("scope"),
+        "source_group_ids": evidence_pack.get("source_group_ids") or spec.get("source_group_ids") or [],
+    }, ensure_ascii=False).lower()
+    group_markers = ("访谈", "对谈", "播客", "roundtable", "interview", "keynote", "talk", "大咖")
+    if not refs and any(marker in spec_text for marker in group_markers):
+        refs = [str(v.get("video_ref")) for v in videos if str(v.get("video_ref") or "").strip()]
+    seen: set[str] = set()
+    return [ref for ref in refs if not (ref in seen or seen.add(ref))]
+
+
 def build_ai_influence_report_ir(evidence_pack: dict[str, Any]) -> dict[str, Any]:
     spec = evidence_pack.get("report_spec") or {}
     all_refs = [str(v.get("video_ref")) for v in (evidence_pack.get("videos") or []) if str(v.get("video_ref") or "").strip()]
@@ -10321,6 +13407,25 @@ def build_ai_influence_report_ir(evidence_pack: dict[str, Any]) -> dict[str, Any
             "material_video_refs": all_refs,
         }
     ]
+    interview_refs = _ai_influence_interview_video_refs(evidence_pack)
+    if interview_refs:
+        chapters.append({
+            "chapter_id": "ch_interview_digest",
+            "title": "访谈原意摘要与观点归纳",
+            "output_heading": "## 访谈原意摘要与观点归纳",
+            "chapter_type": "interview_digest",
+            "purpose": (
+                "先忠实呈现大咖访谈、对谈、播客或演讲的原始观点结构，再进入趋势判断。"
+                "需要尽可能保留嘉宾的核心主张、论证顺序、例子、边界条件和分歧。"
+            ),
+            "material_video_refs": interview_refs,
+            "style_policy": [
+                "先还原访谈/演讲本身，不急着拔高成趋势。",
+                "区分嘉宾原意和报告作者判断。",
+                "尽量保留原始术语、因果链、例子和保留意见。",
+                "如果 transcript 覆盖不足，明确说材料不足，不补故事。",
+            ],
+        })
     idx = 1
     trends = [t for t in (spec.get("trends") or []) if isinstance(t, dict)]
     if trends:
@@ -10435,6 +13540,23 @@ def build_planned_report_chapter_prompt(report_ir: dict[str, Any],
                                         *,
                                         model_name: str) -> str:
     heading = str(chapter_spec.get("output_heading") or f"## {chapter_spec.get('title') or '章节'}").strip()
+    chapter_type = str(chapter_spec.get("chapter_type") or "").strip()
+    interview_rules = ""
+    if chapter_type == "interview_digest":
+        interview_rules = """
+
+当前章节是“大咖访谈 / 对谈 / 演讲原意摘要”章节，必须额外遵守：
+1. 这章先做原意呈现，不先做趋势拔高；后文其它章节再做趋势判断。
+2. 每条访谈/演讲材料都要尽量覆盖：频道/视频标题、嘉宾或主讲人、核心主张、主要论据或例子、反复强调的边界/风险。
+3. 要保留嘉宾自己的论证链条：他先反对什么、为什么反对、用什么例子支撑、哪些地方仍然保留。
+4. 必须明确区分“嘉宾原意”和“本报告后续分析入口”，不能把作者判断伪装成嘉宾观点。
+5. 推荐结构：
+   - 这组访谈在讨论什么
+   - 逐条访谈 / 演讲摘要
+   - 共同观点
+   - 分歧与保留
+   - 对后文分析的入口
+"""
     return f"""你是 AI Influence YouTube 报告流的单章作者。
 
 你必须使用 ChatGPT Report Chapter Writer 算子，模型 {model_name}，Thinking high。
@@ -10458,6 +13580,9 @@ def build_planned_report_chapter_prompt(report_ir: dict[str, Any],
 6. 如果证据不足，明确写“证据不足 / 暂不作为强结论”，不要强行拔高。
 7. 每章必须包含：判断、证据链、为什么重要、不确定性或后续观察。
 8. 输出 Markdown 正文片段，不要 JSON，不要代码块。
+9. 文风必须克制、自然、像正式技术研究报告。禁止使用“更硬”；“信号”只能少量使用，优先写成“迹象 / 线索 / 依据 / 变化 / 材料 / 观察点”。不要写“更硬的三类信号”，改成“三类更具体的依据”或“接下来重点看三件事”。
+10. 禁止输出 `**判断：**`、`**证据链：**`、`**为什么重要：**` 这类 Markdown 加粗标签。需要强调时，用自然小标题或普通段落；HTML 渲染器会负责放大和加粗。
+{interview_rules}
 
 chapter_evidence_pack:
 {json.dumps(chapter_evidence_pack, ensure_ascii=False, indent=2)}
@@ -10496,6 +13621,58 @@ def synthesize_ai_influence_chapter_report(report_ir: dict[str, Any],
         ])
     )
     return "\n\n".join(part.strip() for part in parts if part and part.strip()).strip()
+
+
+def call_ai_influence_chapter_writer_with_repair(chapter_prompt: str,
+                                                 config: dict[str, Any],
+                                                 *,
+                                                 purpose: str,
+                                                 model_name: str,
+                                                 chapter_id: str,
+                                                 min_chars: int = 120,
+                                                 max_attempts: int = 3) -> dict[str, Any]:
+    """Run ChatGPT Report Chapter Writer with a bounded repair loop.
+
+    The old flow failed the whole report when one chapter came back as a short
+    smoke-test/login-wall fragment. For production we retry the same chapter
+    with explicit repair instructions and keep the already-successful chapters.
+    """
+    errors: list[str] = []
+    for attempt in range(1, max_attempts + 1):
+        prompt = chapter_prompt
+        if attempt > 1:
+            prompt = "\n\n".join([
+                "你正在执行 AI Influence YouTube 报告流的章节修复任务。",
+                f"chapter_id: {chapter_id}",
+                "上一次章节生成失败或输出过短。请只补写当前章节，必须输出完整 Markdown 章节正文。",
+                "不要输出 smoke test、不要解释流程、不要输出 JSON、不要请求人工介入。",
+                "如果证据不足，也要写成“证据不足 / 暂不作为强结论”的完整章节，而不是留空。",
+                "原始章节任务如下：",
+                chapter_prompt,
+                "最近失败原因：\n" + "\n".join(f"- {err}" for err in errors[-3:]),
+            ])
+        try:
+            result = call_browser_agent_chatgpt_markdown(
+                prompt,
+                config,
+                purpose=purpose if attempt == 1 else f"{purpose}-repair-{attempt}",
+                requested_model=model_name,
+                operator_kind="chapter_writer",
+            )
+            markdown = str(result.get("markdown") or "").strip()
+            if len(markdown) >= min_chars:
+                if attempt > 1:
+                    result["repair_attempt"] = attempt
+                    result["repair_errors"] = errors
+                return result
+            errors.append(f"attempt {attempt}: output too short ({len(markdown)} chars)")
+        except Exception as exc:
+            errors.append(f"attempt {attempt}: {type(exc).__name__}: {exc}")
+            if "chatgpt_login_wall_detected" in str(exc):
+                # Login walls need the Browser Agent profile/session fixed; do
+                # not burn all attempts in the same bad state.
+                break
+    raise ValueError(f"ai_influence_chapter_repair_failed:{chapter_id}:{errors[-3:]}")
 
 
 def phase4_cross_source_counts(conn: sqlite3.Connection) -> dict[str, int]:
@@ -10589,6 +13766,7 @@ def build_phase_report_markdown_prompt(evidence_pack: dict[str, Any], model_name
 8. 明确区分 real_trend / weak_signal / hype / noise / watchlist。
 9. 输出中文 Markdown 正文，不要 JSON，不要代码块，不要解释系统行为。
 10. 报告要有洞察力，不能像普通摘要；要判断“为什么重要、代表什么变化、后续观察什么”。
+11. 文风必须克制、自然、像正式技术研究报告。禁止使用“更硬”；“信号”只能少量使用，优先写成“迹象 / 线索 / 依据 / 变化 / 材料 / 观察点”。不要写“更硬的三类信号”，改成“三类更具体的依据”或“接下来重点看三件事”。
 
 报告结构：
 # 标题
@@ -10680,18 +13858,54 @@ def _strip_browser_agent_noise(text: str) -> str:
     return "\n".join(cleaned).strip()
 
 
+def _env_override_text(*names: str) -> str | None:
+    for name in names:
+        raw = os.environ.get(name)
+        if raw is None:
+            continue
+        value = str(raw).strip()
+        if value:
+            return value
+    return None
+
+
+def _env_override_bool(*names: str) -> bool | None:
+    raw = _env_override_text(*names)
+    if raw is None:
+        return None
+    lowered = raw.lower()
+    if lowered in {"1", "true", "yes", "on"}:
+        return True
+    if lowered in {"0", "false", "no", "off"}:
+        return False
+    return None
+
+
 def call_browser_agent_chatgpt_text(prompt: str, config: dict[str, Any], *,
                                     purpose: str,
                                     expected: str = "markdown",
                                     requested_model: str | None = None,
-                                    operator_kind: str | None = None) -> dict[str, Any]:
+                                    operator_kind: str | None = None,
+                                    requested_reasoning_effort: str | None = None,
+                                    requested_timeout_seconds: int | None = None,
+                                    requested_max_prompt_chars: int | None = None,
+                                    target_url: str | None = None,
+                                    headless: bool | None = None,
+                                    profile_directory: str | None = None,
+                                    target_account_email: str | None = None,
+                                    scrub_client_state: bool | None = None,
+                                    open_project_first: bool | None = None,
+                                    require_project: bool | None = None,
+                                    force_new_chat: bool | None = None,
+                                    require_isolated_conversation: bool | None = None) -> dict[str, Any]:
     reasoner_cfg = ((config.get("youtube") or {}).get("phase_report_reasoner") or {})
     flow_cfg = ((config.get("youtube") or {}).get("ai_influence_report_flow") or {})
     writer_cfg = (flow_cfg.get("report_writer") or {})
+    browser_agent_cfg = (flow_cfg.get("browser_agent") or {})
     model = str(requested_model or writer_cfg.get("model") or reasoner_cfg.get("model") or "chatgpt-5.5")
-    reasoning_effort = str(writer_cfg.get("reasoning_effort") or reasoner_cfg.get("reasoning_effort") or "high")
-    timeout = int(writer_cfg.get("timeout_seconds") or reasoner_cfg.get("timeout_seconds") or 1800)
-    max_chars = int(writer_cfg.get("max_prompt_chars") or reasoner_cfg.get("max_prompt_chars") or 180000)
+    reasoning_effort = str(requested_reasoning_effort or writer_cfg.get("reasoning_effort") or reasoner_cfg.get("reasoning_effort") or "high")
+    timeout = int(requested_timeout_seconds or writer_cfg.get("timeout_seconds") or reasoner_cfg.get("timeout_seconds") or 1800)
+    max_chars = int(requested_max_prompt_chars or writer_cfg.get("max_prompt_chars") or reasoner_cfg.get("max_prompt_chars") or 180000)
     if len(prompt) > max_chars:
         prompt = prompt[:max_chars] + "\n\n[TRUNCATED: prompt exceeded configured max_prompt_chars]\n"
     req_dir = _browser_agent_request_dir(config, purpose)
@@ -10729,6 +13943,103 @@ def call_browser_agent_chatgpt_text(prompt: str, config: dict[str, Any], *,
     })
     if operator_kind:
         env["CHATGPT_REPORT_OPERATOR_KIND"] = operator_kind
+    if target_url:
+        env["BROWSER_AGENT_CHATGPT_URL"] = str(target_url)
+    resolved_headless = headless
+    if resolved_headless is None:
+        resolved_headless = _env_override_bool("BROWSER_AGENT_HEADLESS", "TECH_HOTSPOT_BROWSER_CHATGPT_HEADLESS")
+    if resolved_headless is None:
+        resolved_headless = reasoner_cfg.get("headless", writer_cfg.get("headless", browser_agent_cfg.get("headless")))
+    resolved_profile_directory = (
+        profile_directory
+        or _env_override_text("BROWSER_AGENT_PROFILE_DIRECTORY", "TECH_HOTSPOT_BROWSER_CHATGPT_PROFILE_DIRECTORY")
+        or writer_cfg.get("profile_directory")
+        or reasoner_cfg.get("profile_directory")
+        or browser_agent_cfg.get("profile_directory")
+    )
+    resolved_target_account_email = (
+        target_account_email
+        or _env_override_text(
+            "BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL",
+            "BROWSER_AGENT_TARGET_ACCOUNT_EMAIL",
+            "TECH_HOTSPOT_BROWSER_CHATGPT_ACCOUNT_EMAIL",
+        )
+        or writer_cfg.get("target_account_email")
+        or reasoner_cfg.get("target_account_email")
+        or browser_agent_cfg.get("target_account_email")
+    )
+    resolved_scrub_client_state = scrub_client_state
+    if resolved_scrub_client_state is None:
+        resolved_scrub_client_state = _env_override_bool(
+            "BROWSER_AGENT_CHATGPT_SCRUB_CLIENT_STATE",
+            "TECH_HOTSPOT_BROWSER_CHATGPT_SCRUB_CLIENT_STATE",
+        )
+    if resolved_scrub_client_state is None:
+        resolved_scrub_client_state = reasoner_cfg.get(
+            "scrub_client_state",
+            writer_cfg.get("scrub_client_state", browser_agent_cfg.get("scrub_client_state")),
+        )
+    resolved_open_project_first = open_project_first
+    if resolved_open_project_first is None:
+        resolved_open_project_first = _env_override_bool(
+            "BROWSER_AGENT_CHATGPT_OPEN_PROJECT_FIRST",
+            "TECH_HOTSPOT_BROWSER_CHATGPT_OPEN_PROJECT_FIRST",
+        )
+    if resolved_open_project_first is None:
+        resolved_open_project_first = reasoner_cfg.get(
+            "open_project_first",
+            writer_cfg.get("open_project_first", browser_agent_cfg.get("open_project_first")),
+        )
+    resolved_require_project = require_project
+    if resolved_require_project is None:
+        resolved_require_project = _env_override_bool(
+            "BROWSER_AGENT_CHATGPT_REQUIRE_PROJECT",
+            "TECH_HOTSPOT_BROWSER_CHATGPT_REQUIRE_PROJECT",
+        )
+    if resolved_require_project is None:
+        resolved_require_project = reasoner_cfg.get(
+            "require_project",
+            writer_cfg.get("require_project", browser_agent_cfg.get("require_project")),
+        )
+    resolved_force_new_chat = force_new_chat
+    if resolved_force_new_chat is None:
+        resolved_force_new_chat = _env_override_bool(
+            "BROWSER_AGENT_CHATGPT_FORCE_NEW_CHAT",
+            "TECH_HOTSPOT_BROWSER_CHATGPT_FORCE_NEW_CHAT",
+        )
+    if resolved_force_new_chat is None:
+        resolved_force_new_chat = reasoner_cfg.get(
+            "force_new_chat",
+            writer_cfg.get("force_new_chat", browser_agent_cfg.get("force_new_chat")),
+        )
+    resolved_require_isolated_conversation = require_isolated_conversation
+    if resolved_require_isolated_conversation is None:
+        resolved_require_isolated_conversation = _env_override_bool(
+            "BROWSER_AGENT_CHATGPT_REQUIRE_ISOLATED_CONVERSATION",
+            "TECH_HOTSPOT_BROWSER_CHATGPT_REQUIRE_ISOLATED_CONVERSATION",
+        )
+    if resolved_require_isolated_conversation is None:
+        resolved_require_isolated_conversation = reasoner_cfg.get(
+            "require_isolated_conversation",
+            writer_cfg.get("require_isolated_conversation", browser_agent_cfg.get("require_isolated_conversation")),
+        )
+    if resolved_headless is not None:
+        env["BROWSER_AGENT_HEADLESS"] = "true" if bool(resolved_headless) else "false"
+    if resolved_profile_directory:
+        env["BROWSER_AGENT_PROFILE_DIRECTORY"] = str(resolved_profile_directory)
+    if resolved_target_account_email:
+        env["BROWSER_AGENT_TARGET_ACCOUNT_EMAIL"] = str(resolved_target_account_email)
+        env["BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL"] = str(resolved_target_account_email)
+    if resolved_scrub_client_state is not None:
+        env["BROWSER_AGENT_CHATGPT_SCRUB_CLIENT_STATE"] = "true" if bool(resolved_scrub_client_state) else "false"
+    if resolved_open_project_first is not None:
+        env["BROWSER_AGENT_CHATGPT_OPEN_PROJECT_FIRST"] = "true" if bool(resolved_open_project_first) else "false"
+    if resolved_require_project is not None:
+        env["BROWSER_AGENT_CHATGPT_REQUIRE_PROJECT"] = "true" if bool(resolved_require_project) else "false"
+    if resolved_force_new_chat is not None:
+        env["BROWSER_AGENT_CHATGPT_FORCE_NEW_CHAT"] = "true" if bool(resolved_force_new_chat) else "false"
+    if resolved_require_isolated_conversation is not None:
+        env["BROWSER_AGENT_CHATGPT_REQUIRE_ISOLATED_CONVERSATION"] = "true" if bool(resolved_require_isolated_conversation) else "false"
     project_name = str(
         writer_cfg.get("chatgpt_project")
         or reasoner_cfg.get("chatgpt_project")
@@ -10875,6 +14186,14 @@ def normalize_ai_influence_markdown_report(markdown: str, *, model_name: str, in
         if idx == 0 and stripped and not stripped.startswith("#"):
             normalized.append(f"# {stripped}")
             continue
+        bold_lead = re.match(r"^\*\*([^*\n：:]{1,24})[：:]\*\*\s*(.*)$", stripped)
+        if bold_lead:
+            label = bold_lead.group(1).strip()
+            rest = bold_lead.group(2).strip()
+            normalized.append(f"#### {label}")
+            if rest:
+                normalized.append(rest)
+            continue
         replacement = heading_map.get(stripped)
         if replacement and not stripped.startswith("#"):
             normalized.append(replacement)
@@ -11004,7 +14323,11 @@ def validate_ai_influence_planned_report_dir(
                     f"{quality.get('reason') or 'quality_failed'}"
                 )
         else:
-            errors.append(f"missing_transcript_in_evidence_pack:{video.get('video_ref') or raw_video_id or 'N/A'}")
+            warnings.append(
+                "missing_transcript_in_evidence_pack:"
+                f"{video.get('video_ref') or raw_video_id or 'N/A'}:"
+                "metadata_only_allowed_as_weak_signal"
+            )
 
     if html_text:
         html_required = [
@@ -11084,7 +14407,19 @@ def validate_ai_influence_planned_report_dir(
 def call_browser_agent_chatgpt_json(prompt: str, config: dict[str, Any], *,
                                     purpose: str,
                                     requested_model: str | None = None,
-                                    operator_kind: str | None = None) -> dict[str, Any]:
+                                    operator_kind: str | None = None,
+                                    requested_reasoning_effort: str | None = None,
+                                    requested_timeout_seconds: int | None = None,
+                                    requested_max_prompt_chars: int | None = None,
+                                    target_url: str | None = None,
+                                    headless: bool | None = None,
+                                    profile_directory: str | None = None,
+                                    target_account_email: str | None = None,
+                                    scrub_client_state: bool | None = None,
+                                    open_project_first: bool | None = None,
+                                    require_project: bool | None = None,
+                                    force_new_chat: bool | None = None,
+                                    require_isolated_conversation: bool | None = None) -> dict[str, Any]:
     result = call_browser_agent_chatgpt_text(
         prompt,
         config,
@@ -11092,6 +14427,18 @@ def call_browser_agent_chatgpt_json(prompt: str, config: dict[str, Any], *,
         expected="json",
         requested_model=requested_model,
         operator_kind=operator_kind,
+        requested_reasoning_effort=requested_reasoning_effort,
+        requested_timeout_seconds=requested_timeout_seconds,
+        requested_max_prompt_chars=requested_max_prompt_chars,
+        target_url=target_url,
+        headless=headless,
+        profile_directory=profile_directory,
+        target_account_email=target_account_email,
+        scrub_client_state=scrub_client_state,
+        open_project_first=open_project_first,
+        require_project=require_project,
+        force_new_chat=force_new_chat,
+        require_isolated_conversation=require_isolated_conversation,
     )
     payload = extract_json_payload_lenient(str(result.pop("text") or ""))
     payload["_backend"] = result["backend"]
@@ -11124,6 +14471,31 @@ def _compact_text(value: Any, *, default: str = "N/A", max_len: int = 220) -> st
     if len(text) <= max_len:
         return text
     return text[: max_len - 1].rstrip() + "…"
+
+
+def _ai_influence_material_summary(video: dict[str, Any], *, max_len: int = 180) -> str:
+    candidates: list[str] = []
+    candidates.append(str(video.get("summary_zh") or ""))
+    semantic = video.get("semantic_packet") if isinstance(video.get("semantic_packet"), dict) else {}
+    candidates.append(str(semantic.get("summary_zh") or ""))
+    candidates.append(str(video.get("why_it_matters") or ""))
+    candidates.append(str(semantic.get("why_it_matters") or ""))
+    for key in ("key_points", "technical_claims"):
+        values = video.get(key) if isinstance(video.get(key), list) else semantic.get(key)
+        if isinstance(values, list):
+            candidates.extend(str(item) for item in values[:3])
+    for value in candidates:
+        compact = _compact_text(value, default="", max_len=max_len)
+        if compact:
+            return compact
+    transcript = str(video.get("transcript_clean") or "").strip()
+    if transcript:
+        return _compact_text(transcript, default="", max_len=max_len)
+    title = str(video.get("title") or "").strip()
+    channel = str(video.get("channel") or "").strip()
+    if title:
+        return _compact_text(f"{channel + ' / ' if channel else ''}{title}：作为本报告的视频材料，用于支撑对应章节的趋势判断和素材反查。", max_len=max_len)
+    return "本条材料用于支撑对应章节判断，详细内容见视频链接和正文分析。"
 
 
 def _ai_influence_report_date_window(videos: list[dict[str, Any]]) -> str:
@@ -11267,8 +14639,9 @@ def _polish_ai_influence_reader_tone(text: str) -> str:
 
 def _render_ai_influence_sources_html(videos: list[dict[str, Any]]) -> str:
     rows: list[str] = []
-    for video in videos:
+    for idx, video in enumerate(videos, start=1):
         video_ref = html.escape(str(video.get("video_ref") or "N/A"))
+        material_label = html.escape(f"素材 {idx}")
         title_text = str(video.get("title") or "Untitled video")
         title = html.escape(title_text)
         channel = html.escape(str(video.get("channel") or "N/A"))
@@ -11281,7 +14654,7 @@ def _render_ai_influence_sources_html(videos: list[dict[str, Any]]) -> str:
                 duration_text = f"{float(duration):.1f} 分钟"
         except Exception:
             duration_text = str(duration)
-        summary = html.escape(_compact_text(video.get("summary_zh"), default="摘要待补", max_len=160))
+        summary = html.escape(_ai_influence_material_summary(video, max_len=180))
         time_info = f"{published}<br><span class=\"ha-muted\">{html.escape(duration_text)}</span>"
         title_html = (
             f'<a href="{html.escape(video_url)}" target="_blank" rel="noreferrer noopener">{title}</a>'
@@ -11291,7 +14664,7 @@ def _render_ai_influence_sources_html(videos: list[dict[str, Any]]) -> str:
         rows.append(
             f"""
 <tr>
-  <td><span class="ai-material-ref">{video_ref}</span></td>
+  <td><span class="ai-material-ref" title="{video_ref}">{material_label}</span></td>
   <td>{channel}</td>
   <td>{title_html}</td>
   <td>{time_info}</td>
@@ -11340,6 +14713,11 @@ def _render_ai_influence_material_map_html(evidence_pack: dict[str, Any]) -> str
     report_spec = (evidence_pack or {}).get("report_spec") or {}
     videos = (evidence_pack or {}).get("videos") or []
     by_ref = {str(video.get("video_ref") or ""): video for video in videos}
+    ref_labels = {
+        str(video.get("video_ref") or ""): f"素材 {idx}"
+        for idx, video in enumerate(videos, start=1)
+        if isinstance(video, dict)
+    }
     rows: list[str] = []
     for idx, chapter in enumerate(_iter_report_plan_chapters(report_spec), start=1):
         if not isinstance(chapter, dict):
@@ -11355,6 +14733,7 @@ def _render_ai_influence_material_map_html(evidence_pack: dict[str, Any]) -> str
         material_bits: list[str] = []
         for ref in refs:
             video = by_ref[ref]
+            material_label = html.escape(ref_labels.get(ref, "素材"))
             title = html.escape(str(video.get("title") or "Untitled video"))
             channel = html.escape(str(video.get("channel") or "N/A"))
             published = html.escape(_format_ai_influence_publish_time(video.get("published_at")))
@@ -11365,7 +14744,7 @@ def _render_ai_influence_material_map_html(evidence_pack: dict[str, Any]) -> str
                 else title
             )
             material_bits.append(
-                f'<div class="ai-material-chip"><span>{html.escape(ref)}</span><b>{title_html}</b><em>{channel} / {published}</em></div>'
+                f'<div class="ai-material-chip"><span title="{html.escape(ref)}">{material_label}</span><b>{title_html}</b><em>{channel} / {published}</em></div>'
             )
         rows.append(
             f"""
@@ -11815,7 +15194,8 @@ def _ai_influence_report_extra_css() -> str:
   background: color-mix(in srgb, var(--ha-surface) 92%, white 8%);
 }
 .ai-report-source-table table {
-  min-width: 980px;
+  min-width: 1180px;
+  table-layout: fixed;
   border: none;
   margin: 0;
 }
@@ -11823,21 +15203,24 @@ def _ai_influence_report_extra_css() -> str:
 .ai-report-source-table td {
   border-bottom: 1px solid var(--ha-rule);
   padding: 14px 16px;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: auto;
 }
 .ai-report-source-table tbody tr:last-child td {
   border-bottom: none;
 }
 .ai-report-source-table th:nth-child(1),
 .ai-report-source-table td:nth-child(1) {
-  width: 8%;
+  width: 10%;
 }
 .ai-report-source-table th:nth-child(2),
 .ai-report-source-table td:nth-child(2) {
-  width: 14%;
+  width: 18%;
 }
 .ai-report-source-table th:nth-child(3),
 .ai-report-source-table td:nth-child(3) {
-  width: 26%;
+  width: 34%;
 }
 .ai-report-source-table td:nth-child(3) a,
 .ai-material-chip a {
@@ -11851,20 +15234,43 @@ def _ai_influence_report_extra_css() -> str:
 }
 .ai-report-source-table th:nth-child(4),
 .ai-report-source-table td:nth-child(4) {
-  width: 15%;
-  white-space: nowrap;
+  width: 16%;
+  white-space: normal;
 }
 .ai-report-source-table th:nth-child(5),
 .ai-report-source-table td:nth-child(5) {
-  width: 37%;
+  width: 22%;
+}
+.ai-material-map-table table {
+  min-width: 1100px;
+  table-layout: fixed;
 }
 .ai-material-map-table th:nth-child(1),
 .ai-material-map-table td:nth-child(1) {
-  width: 34%;
+  width: 42%;
 }
 .ai-material-map-table th:nth-child(2),
 .ai-material-map-table td:nth-child(2) {
-  width: 66%;
+  width: 58%;
+}
+.ai-material-chip {
+  grid-template-columns: 74px minmax(0, 1fr);
+  align-items: start;
+}
+.ai-material-chip span {
+  white-space: nowrap;
+}
+.ai-material-chip b,
+.ai-material-chip em {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+@media (max-width: 900px) {
+  .ai-report-source-table table,
+  .ai-material-map-table table {
+    min-width: 920px;
+  }
 }
 .ai-arch-svg-card {
   margin: 4px 0 28px;
@@ -12554,6 +15960,75 @@ def _ai_influence_planned_base(config: dict[str, Any], args: argparse.Namespace,
     return raw_base / "ai-influence-planned" / date_str
 
 
+def _ai_influence_canonical_planned_base(config: dict[str, Any], date_str: str) -> Path:
+    raw_base = Path((config.get("output") or {}).get("raw_dir", "/Users/lisihao/Knowledge/_raw/tech-hotspot-radar")).expanduser()
+    return raw_base / "ai-influence-planned" / date_str
+
+
+def publish_ai_influence_planned_report_to_status(
+    config: dict[str, Any],
+    *,
+    date_str: str,
+    source_out_dir: Path,
+    source_report_dir: Path,
+) -> dict[str, Any]:
+    """Mirror successful planned reports to the canonical status-scanned root.
+
+    Status UI scans only config.output.raw_dir/ai-influence-planned. Test runs
+    may use --output-base, but successful reports must still be visible there.
+    """
+    canonical_out_dir = _ai_influence_canonical_planned_base(config, date_str)
+    source_out_dir = source_out_dir.expanduser().resolve()
+    source_report_dir = source_report_dir.expanduser().resolve()
+    canonical_out_dir = canonical_out_dir.expanduser().resolve()
+    dest_report_dir = canonical_out_dir / "reports" / source_report_dir.name
+
+    payload: dict[str, Any] = {
+        "status": "ok",
+        "status_visible": True,
+        "source_report_dir": str(source_report_dir),
+        "canonical_report_dir": str(dest_report_dir),
+        "canonical_out_dir": str(canonical_out_dir),
+        "published_at": iso_z(),
+    }
+
+    if source_out_dir == canonical_out_dir:
+        (source_report_dir / "status-publish.json").write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        return payload
+
+    canonical_out_dir.mkdir(parents=True, exist_ok=True)
+    for name in [
+        "video-catalog.json",
+        "video-grouping-materials.json",
+        "video-groups.json",
+        "grouping-prompt.md",
+        "planner-prompt.md",
+        "report-plan.json",
+        "wiki-dispatch.md",
+    ]:
+        src = source_out_dir / name
+        if src.exists() and src.is_file():
+            shutil.copy2(src, canonical_out_dir / name)
+
+    reports_root = canonical_out_dir / "reports"
+    reports_root.mkdir(parents=True, exist_ok=True)
+    if dest_report_dir.exists():
+        shutil.rmtree(dest_report_dir)
+    shutil.copytree(source_report_dir, dest_report_dir)
+    (source_report_dir / "status-publish.json").write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    (dest_report_dir / "status-publish.json").write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return payload
+
+
 def _tech_hotspot_shell_root() -> Path:
     return HARNESS_SCRIPT_DIR / "tech-hotspot-radar"
 
@@ -12917,12 +16392,12 @@ def cmd_run_ai_influence_planned_reports(args: argparse.Namespace) -> int:
                     encoding="utf-8",
                 )
                 (chapter_prompts_dir / f"{chapter_id}.md").write_text(chapter_prompt, encoding="utf-8")
-                chapter_result = call_browser_agent_chatgpt_markdown(
+                chapter_result = call_ai_influence_chapter_writer_with_repair(
                     chapter_prompt,
                     config,
                     purpose=f"ai-influence-report-chapter-{date_str}-{report_id}-{chapter_id}",
-                    requested_model=model_name,
-                    operator_kind="chapter_writer",
+                    model_name=model_name,
+                    chapter_id=chapter_id,
                 )
                 chapter_markdown = str(chapter_result.get("markdown") or "").strip()
                 if len(chapter_markdown) < 120:
@@ -13006,6 +16481,12 @@ def cmd_run_ai_influence_planned_reports(args: argparse.Namespace) -> int:
             (report_dir / "validation-result.json").write_text(json.dumps(validation, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             if validation["status"] != "ok":
                 raise ValueError(f"ai_influence_report_validation_failed:{validation['errors']}")
+            status_publish = publish_ai_influence_planned_report_to_status(
+                config,
+                date_str=date_str,
+                source_out_dir=out_dir,
+                source_report_dir=report_dir,
+            )
             mail_result: dict[str, Any] = {
                 "status": "skipped",
                 "recommended_by_plan": bool(spec.get("send_as_email")),
@@ -13036,9 +16517,9 @@ def cmd_run_ai_influence_planned_reports(args: argparse.Namespace) -> int:
                 },
                 success=True,
             )
-            finish_run(conn, run_id, "ok", len(evidence_pack.get("videos") or []), 1, json.dumps({"report_id": report_id, "mail": mail_result}, ensure_ascii=False)[:900])
+            finish_run(conn, run_id, "ok", len(evidence_pack.get("videos") or []), 1, json.dumps({"report_id": report_id, "mail": mail_result, "status_publish": status_publish}, ensure_ascii=False)[:900])
             ok_count += 1
-            print(f"[ai-influence-run-plan] ok report_id={report_id} videos={len(evidence_pack.get('videos') or [])} mail={mail_result.get('status')}")
+            print(f"[ai-influence-run-plan] ok report_id={report_id} videos={len(evidence_pack.get('videos') or [])} mail={mail_result.get('status')} status_visible={status_publish.get('status_visible')}")
         except Exception as exc:
             (report_dir / "report.blocked.json").write_text(json.dumps({
                 "status": "blocked",
@@ -13888,7 +17369,13 @@ def build_parser() -> argparse.ArgumentParser:
     yt_backfill.add_argument("--force", action="store_true")
     gh_collect = sub.add_parser("collect-github", help="Collect live GitHub tracked repo metadata with rate limits")
     gh_collect.add_argument("--limit-repos", type=int, default=0)
+    gh_collect.add_argument("--trendshift-limit", type=int, default=0, help="Max Trendshift repos per period before GitHub API enrichment")
+    gh_collect.add_argument("--skip-trendshift", action="store_true", help="Skip Trendshift external rank signal collection")
     gh_collect.add_argument("--force", action="store_true")
+    gh_trendshift = sub.add_parser("collect-github-trendshift", help="Collect Trendshift GitHub ranking signals into current GitHub intelligence DB")
+    gh_trendshift.add_argument("--period", choices=["daily", "weekly", "monthly", "all"], default="all")
+    gh_trendshift.add_argument("--limit", type=int, default=0, help="Max repos per period")
+    gh_trendshift.add_argument("--force", action="store_true")
     hf_papers = sub.add_parser("collect-hf-papers", help="Collect Hugging Face Trending Papers as research-side signals")
     hf_papers.add_argument("--limit", type=int, default=50)
     hf_papers.add_argument("--period", choices=["daily", "weekly", "monthly", "all"], default="all")
@@ -13908,6 +17395,17 @@ def build_parser() -> argparse.ArgumentParser:
     hf_insight.add_argument("--timeout-seconds", type=int, default=20, help="Per-provider HTTP timeout for live enrichment")
     hf_insight.add_argument("--provider-retries", type=int, default=2, help="Bounded retry count for HF live enrichment providers")
     hf_insight.add_argument("--sleep-seconds", type=float, default=0.2, help="Small delay between live enrichment papers to avoid provider rate limits")
+    hf_insight.add_argument("--write-report", dest="write_report", action="store_true", default=True, help="Write public-facing HF paper insight report after materialization")
+    hf_insight.add_argument("--no-write-report", dest="write_report", action="store_false", help="Only materialize packets; skip report generation")
+    hf_insight.add_argument("--report-limit", type=int, default=10, help="Top gate-passed papers to include in the public report")
+    hf_insight.add_argument("--report-date", default=None, help="Report date YYYY-MM-DD (default: UTC today)")
+    hf_insight.add_argument("--output-base", default=None, help="Override report output base directory")
+    hf_insight.add_argument("--reasoning-mode", choices=["browser_agent", "fallback", "disabled"], default=None, help="HF L7 reasoning route; default comes from config")
+    hf_report = sub.add_parser("compile-hf-paper-report", help="Compile public-facing HF paper insight report from materialized packets")
+    hf_report.add_argument("--limit", type=int, default=10, help="Top gate-passed papers to include")
+    hf_report.add_argument("--date", default=None, help="Report date YYYY-MM-DD (default: UTC today)")
+    hf_report.add_argument("--output-base", default=None, help="Override report output base directory")
+    hf_report.add_argument("--reasoning-mode", choices=["browser_agent", "fallback", "disabled"], default=None, help="HF L7 reasoning route; default comes from config")
     gh_analyze = sub.add_parser("analyze-github-projects", help="Build GitHub repo evidence atoms, reasoning packets and analysis cards")
     gh_analyze.add_argument("--limit-repos", type=int, default=0)
     gh_analyze.add_argument("--force", action="store_true")
@@ -13999,9 +17497,11 @@ def main() -> int:
         "collect-youtube": cmd_collect_youtube,
         "backfill-youtube": cmd_backfill_youtube,
         "collect-github": cmd_collect_github,
+        "collect-github-trendshift": cmd_collect_github_trendshift,
         "collect-hf-papers": cmd_collect_hf_papers,
         "backfill-hf-papers-baseline": cmd_backfill_hf_papers_baseline,
         "materialize-hf-paper-insights": cmd_materialize_hf_paper_insights,
+        "compile-hf-paper-report": cmd_compile_hf_paper_report,
         "analyze-github-projects": cmd_analyze_github_projects,
         "github-trend-report": cmd_github_trend_report,
         "build-baseline": cmd_build_baseline,
