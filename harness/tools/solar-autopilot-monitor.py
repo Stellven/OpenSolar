@@ -42,6 +42,8 @@ KB_PROBE_TIMEOUT_SEC = int(os.environ.get("SOLAR_KB_PROBE_TIMEOUT_SEC", "120"))
 MODEL_DOCTOR_HEALTH = HARNESS / "state" / "model-registry-doctor-health.json"
 MODEL_DOCTOR_INTERVAL_SEC = int(os.environ.get("SOLAR_MODEL_DOCTOR_INTERVAL_SEC", "1800"))
 MODEL_DOCTOR_TIMEOUT_SEC = int(os.environ.get("SOLAR_MODEL_DOCTOR_TIMEOUT_SEC", "120"))
+PM_INBOX_DIR = HARNESS / "run" / "pm-inbox"
+ROLE_HANDOFF_RETRY_COOLDOWN_SEC = int(os.environ.get("SOLAR_ROLE_HANDOFF_RETRY_COOLDOWN_SEC", "30"))
 
 REAL_HARNESS = Path(os.environ.get("REAL_HARNESS_DIR", HARNESS))
 sys.path.insert(0, str(REAL_HARNESS / "lib"))
@@ -1394,6 +1396,93 @@ def _append_status_history_once(status: dict, event: str, note: str = "", **extr
     payload.update(extra)
     hist.append(payload)
     return True
+
+
+def _pm_status_is_terminal(status: str) -> bool:
+    value = str(status or "").strip().lower()
+    if not value:
+        return False
+    return value in {"completed", "cancelled"} or value.startswith("failed")
+
+
+def _active_pm_task_ids() -> set[str]:
+    active: set[str] = set()
+    for directory in (HARNESS / "run" / "operator-status", HARNESS / "run" / "operator-leases"):
+        for path in directory.glob("*.json"):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            for key in ("task_id", "current_task_id", "lease_id"):
+                value = str(payload.get(key) or "").strip()
+                if value.startswith("pm-"):
+                    active.add(value)
+            lease = payload.get("lease")
+            if isinstance(lease, dict):
+                value = str(lease.get("task_id") or "").strip()
+                if value.startswith("pm-"):
+                    active.add(value)
+    return active
+
+
+def _pm_record_age_seconds(record: dict) -> float:
+    for key in ("submitted_at", "created_at", "updated_at", "ts"):
+        parsed = parse_utc(str(record.get(key) or ""))
+        if parsed:
+            return max(0.0, time.time() - parsed)
+    return 0.0
+
+
+def _pm_inbox_records_for_sprint_role(sid: str, role: str) -> list[dict]:
+    if not sid or not role or not PM_INBOX_DIR.exists():
+        return []
+    records: list[dict] = []
+    for path in PM_INBOX_DIR.glob("pm-*.json"):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if str(payload.get("sprint_id") or "") != sid:
+            continue
+        if str(payload.get("requested_role") or "").strip().lower() != role:
+            continue
+        payload["_path"] = str(path)
+        records.append(payload)
+    records.sort(key=lambda item: str(item.get("submitted_at") or item.get("created_at") or item.get("updated_at") or ""), reverse=True)
+    return records
+
+
+def _live_pm_task_for_sprint_role(sid: str, role: str) -> dict | None:
+    active_ids = _active_pm_task_ids()
+    for record in _pm_inbox_records_for_sprint_role(sid, role):
+        task_id = str(record.get("task_id") or "")
+        status = str(record.get("status") or "")
+        age_sec = _pm_record_age_seconds(record)
+        if task_id and task_id in active_ids:
+            return record
+        if not _pm_status_is_terminal(status) and age_sec <= 300:
+            return record
+    return None
+
+
+def _latest_pm_record_for_sprint_role(sid: str, role: str) -> dict | None:
+    records = _pm_inbox_records_for_sprint_role(sid, role)
+    return records[0] if records else None
+
+
+def _role_handoff_action_cooldown(finding: dict, default_cooldown: int) -> int:
+    role = role_for_handoff_finding(str(finding.get("type") or ""))
+    sid = str(finding.get("sid") or "")
+    if not sid or not role:
+        return default_cooldown
+    if _live_pm_task_for_sprint_role(sid, role):
+        return default_cooldown
+    latest = _latest_pm_record_for_sprint_role(sid, role)
+    if not latest:
+        return default_cooldown
+    if str(latest.get("status") or "").startswith("failed"):
+        return min(default_cooldown, ROLE_HANDOFF_RETRY_COOLDOWN_SEC)
+    return default_cooldown
 
 
 def finding_uses_operator_role_pool(ftype: str) -> bool:
@@ -3041,7 +3130,8 @@ def inspect_model_registry(state: dict) -> list[dict]:
 def should_act(state: dict, finding: dict, cooldown: int) -> bool:
     key = f"{finding.get('sid','')}:{finding.get('type','')}:{finding.get('target','')}"
     last = float(state["actions"].get(key, {}).get("at", 0))
-    return (time.time() - last) >= cooldown
+    effective_cooldown = _role_handoff_action_cooldown(finding, cooldown)
+    return (time.time() - last) >= effective_cooldown
 
 
 def mark_action(state: dict, finding: dict, result: dict) -> None:
@@ -3432,6 +3522,19 @@ def apply_findings(findings: list[dict], dispatch: bool, state: dict, cooldown: 
             sent = False
             role_dispatch_detail: dict = {}
             if dispatch and sid and role_pool_handoff:
+                live_task = _live_pm_task_for_sprint_role(sid, role_for_handoff_finding(ftype))
+                if live_task is not None:
+                    result = {
+                        "sid": sid,
+                        "action": ftype,
+                        "skipped": "live_pm_task_exists",
+                        "target": f.get("target", ""),
+                        "task_id": str(live_task.get("task_id") or ""),
+                        "pm_status": str(live_task.get("status") or ""),
+                    }
+                    mark_action(state, f, result)
+                    actions.append(result)
+                    continue
                 sent, role_dispatch_detail = dispatch_role_handoff(sid, ftype)
                 if not sent:
                     append_event(sid, "autopilot_role_pool_dispatch_failed", "warn", {"target": target, "type": ftype, **role_dispatch_detail})
